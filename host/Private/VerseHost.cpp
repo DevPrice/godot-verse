@@ -1,6 +1,11 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "AutoRTFM.h"
+
+// The ABI entry points below are AutoRTFM-disabled: they call engine boot and Solaris code that
+// is itself disabled, and nothing outside ever calls them from inside a transaction.
+#define VH_ATTR AUTORTFM_DISABLE
+
 #include "Containers/StringConv.h"
 #include "Containers/UnrealString.h"
 #include "HostEventLoop.h"
@@ -10,6 +15,7 @@
 #include "Misc/CommandLine.h"
 #include "Misc/CoreDelegates.h"
 #include "Modules/ModuleManager.h"
+#include "UObject/GCObject.h"
 #include "RequiredProgramMainCPPInclude.h"
 #include "VerseString.h"
 #include "VerseVM/VVMSocketDebugger.h"
@@ -35,7 +41,7 @@ extern "C" int32_t vh_abi_version(void)
     return VH_ABI_VERSION;
 }
 
-extern "C" AUTORTFM_DISABLE int32_t vh_init(const vh_init_desc* Desc)
+extern "C" int32_t vh_init(const vh_init_desc* Desc)
 {
     if (!Desc || Desc->StructSize != static_cast<int32_t>(sizeof(vh_init_desc)) || Desc->AbiVersion != VH_ABI_VERSION)
     {
@@ -89,7 +95,7 @@ extern "C" AUTORTFM_DISABLE int32_t vh_init(const vh_init_desc* Desc)
     return VH_OK;
 }
 
-extern "C" AUTORTFM_DISABLE void vh_shutdown(void)
+extern "C" void vh_shutdown(void)
 {
     GodotVerse::FHostState& Host = GetHost();
     if (!Host.bInitialized)
@@ -97,7 +103,9 @@ extern "C" AUTORTFM_DISABLE void vh_shutdown(void)
         return;
     }
 
-    GodotVerse::LeaveContentScope();
+    GodotVerse::ResetScriptState();
+    GodotVerse::ResetEventLoop();
+    GDebuggerScope = Verse::SocketDebugger::FDebuggerScope{};
 
     FCoreDelegates::OnEnginePreExit.Broadcast();
     FCoreDelegates::OnPreExit.Broadcast();
@@ -107,10 +115,13 @@ extern "C" AUTORTFM_DISABLE void vh_shutdown(void)
     RequestEngineExit(TEXT("verse_host shutting down."));
     FEngineLoop::AppExit();
 
+    // Nothing allocated through GMalloc may survive AppExit into static destruction.
+    GEngineDirOverride.Empty();
+    GForeignEngineDir = nullptr;
     Host = GodotVerse::FHostState{};
 }
 
-extern "C" AUTORTFM_DISABLE void vh_tick(double BudgetSeconds)
+extern "C" void vh_tick(double BudgetSeconds)
 {
     if (!GetHost().bInitialized)
     {
@@ -119,7 +130,7 @@ extern "C" AUTORTFM_DISABLE void vh_tick(double BudgetSeconds)
     GodotVerse::TickScripts(BudgetSeconds);
 }
 
-extern "C" AUTORTFM_DISABLE int32_t vh_compile_file(const char* PathUtf8, vh_script** OutScript)
+extern "C" int32_t vh_compile_file(const char* PathUtf8, vh_script** OutScript)
 {
     if (!PathUtf8 || !OutScript)
     {
@@ -142,12 +153,12 @@ extern "C" AUTORTFM_DISABLE int32_t vh_compile_file(const char* PathUtf8, vh_scr
     return VH_OK;
 }
 
-extern "C" AUTORTFM_DISABLE void vh_release_script(vh_script* Script)
+extern "C" void vh_release_script(vh_script* Script)
 {
     GodotVerse::ReleaseScript(reinterpret_cast<GodotVerse::FScript*>(Script));
 }
 
-extern "C" AUTORTFM_DISABLE vh_bool vh_script_has_function(vh_script* Script, const char* DecoratedName)
+extern "C" vh_bool vh_script_has_function(vh_script* Script, const char* DecoratedName)
 {
     if (!Script || !DecoratedName || !GetHost().bInitialized)
     {
@@ -156,7 +167,7 @@ extern "C" AUTORTFM_DISABLE vh_bool vh_script_has_function(vh_script* Script, co
     return GodotVerse::HasFunction(Cstr(DecoratedName)) ? 1 : 0;
 }
 
-extern "C" AUTORTFM_DISABLE int32_t vh_run_main(vh_script* Script,
+extern "C" int32_t vh_run_main(vh_script* Script,
                                                 const char* const* Args,
                                                 int32_t ArgCount,
                                                 int64_t* OutExitCode)
@@ -186,7 +197,7 @@ extern "C" AUTORTFM_DISABLE int32_t vh_run_main(vh_script* Script,
     return Status;
 }
 
-extern "C" AUTORTFM_DISABLE int32_t vh_call_void(vh_script* Script, const char* DecoratedName)
+extern "C" int32_t vh_call_void(vh_script* Script, const char* DecoratedName)
 {
     if (!Script || !DecoratedName)
     {
@@ -199,7 +210,7 @@ extern "C" AUTORTFM_DISABLE int32_t vh_call_void(vh_script* Script, const char* 
     return GodotVerse::CallVoid(Cstr(DecoratedName));
 }
 
-extern "C" AUTORTFM_DISABLE int32_t vh_call_void_float(vh_script* Script, const char* DecoratedName, double Arg)
+extern "C" int32_t vh_call_void_float(vh_script* Script, const char* DecoratedName, double Arg)
 {
     if (!Script || !DecoratedName)
     {

@@ -106,10 +106,11 @@ int main(int argc, char** argv)
 	fs::path VerseBase = argc > 3 ? fs::path(argv[3]) : ExeDir.parent_path();
 	fs::path VersePath = VerseBase / "tests" / "host_smoke" / "hello.verse";
 
-	HMODULE Module = LoadLibraryW(DllPath.c_str());
+	// LOAD_WITH_ALTERED_SEARCH_PATH: the host's own directory holds tbbmalloc.dll.
+	HMODULE Module = LoadLibraryExW(DllPath.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
 	if (!Step("LoadLibraryW", Module != nullptr))
 	{
-		fprintf(stderr, "[smoke] could not load %ls\n", DllPath.c_str());
+		fprintf(stderr, "[smoke] could not load %ls (GetLastError=%lu)\n", DllPath.c_str(), GetLastError());
 		return 1;
 	}
 

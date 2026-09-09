@@ -27,12 +27,14 @@ def collect_src_files(src: Path) -> dict[str, Path]:
     return files
 
 
-def mirror_host(src: Path, dst: Path) -> tuple[int, int]:
+def mirror_host(src: Path, dst: Path, extra: dict[str, Path] | None = None) -> tuple[int, int]:
     if dst.name != "VerseHost":
         raise RuntimeError(f"refusing to mirror into unexpected destination: {dst}")
     dst.mkdir(parents=True, exist_ok=True)
 
     src_files = collect_src_files(src)
+    if extra:
+        src_files.update(extra)
 
     copied = 0
     for rel, src_path in src_files.items():
@@ -108,6 +110,14 @@ def collect_outputs(engine: Path, repo: Path) -> None:
         shutil.copy2(pdb_path, out_dir / "verse_host.pdb")
         print(f"[build_host] copied {pdb_path} -> {out_dir / 'verse_host.pdb'}")
 
+    # The only non-system dependency the monolithic host imports.
+    tbb = bin_dir / "tbbmalloc.dll"
+    if tbb.exists():
+        shutil.copy2(tbb, out_dir / tbb.name)
+        print(f"[build_host] copied {tbb} -> {out_dir / tbb.name}")
+    else:
+        print(f"warning: {tbb} not found; verse_host.dll will fail to load", file=sys.stderr)
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -135,7 +145,10 @@ def main() -> None:
         print(f"[build_host] removing staged copy at {dst}")
         shutil.rmtree(dst)
 
-    copied, removed = mirror_host(src, dst)
+    # Both DLLs compile against the same ABI header, so it lives outside host/ and is staged in.
+    shared_header = {"Public/verse_host_abi.h": repo / "include" / "verse_host_abi.h"}
+
+    copied, removed = mirror_host(src, dst, shared_header)
     print(f"[build_host] staged {src} -> {dst} ({copied} copied, {removed} removed)")
 
     if args.stage_only:

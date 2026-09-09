@@ -36,7 +36,7 @@ TArray<TSharedRef<ISolIdeDataSource>> GDataSources;
 TSharedPtr<verse::FContentScope> GContentScope;
 TOptional<verse::FContentScopeGuard> GContentScopeGuard;
 
-void ForwardSolDiagnostic(const FSolDiagnostic& Diagnostic)
+AUTORTFM_DISABLE void ForwardSolDiagnostic(const FSolDiagnostic& Diagnostic)
 {
     vh_severity Severity = VH_SEVERITY_INFO;
     switch (Diagnostic.Info.Severity)
@@ -65,7 +65,7 @@ void ForwardSolDiagnostic(const FSolDiagnostic& Diagnostic)
                                  static_cast<int32>(Diagnostic.Info.ReferenceCode));
 }
 
-bool EnsureIde()
+AUTORTFM_DISABLE bool EnsureIde()
 {
     if (GIde.IsValid())
     {
@@ -84,7 +84,7 @@ bool EnsureIde()
 
     const FSolIdeConfig IdeConfig{.Flags = ESolIdeFlags::WithPackageUsage,
                                   .VersePath = ScriptVersePath,
-                                  .VerseScope = uLang::EVerseScope::PublicUser,
+                                  .VerseScope = uLang::EVerseScope::InternalUser,
                                   .VerseVersion = Verse::Version::LatestUnstable,
                                   .bAllowExperimental = true};
 
@@ -116,6 +116,13 @@ AUTORTFM_DISABLE void GodotVerse::LeaveContentScope()
 {
     GContentScopeGuard.Reset();
     GContentScope.Reset();
+}
+
+AUTORTFM_DISABLE void GodotVerse::ResetScriptState()
+{
+    LeaveContentScope();
+    GDataSources.Empty();
+    GIde.Reset();
 }
 
 AUTORTFM_DISABLE GodotVerse::FScript* GodotVerse::CompileFile(const FUtf8String& Path)
@@ -158,6 +165,7 @@ AUTORTFM_DISABLE bool GodotVerse::HasFunction(FUtf8StringView DecoratedName)
 }
 
 namespace {
+// Await invokes this from a closed transactional nest, so it must stay AutoRTFM-enabled.
 void OnMainFinished(FVerseTask Task)
 {
     if (Task.Completed())
@@ -206,7 +214,7 @@ AUTORTFM_DISABLE int32 GodotVerse::RunMain(const TArray<verse::string>& Args, in
 
 namespace {
 template <typename FunctionType, typename... ArgTypes>
-int32 CallFunction(FUtf8StringView DecoratedName, ArgTypes... Args)
+AUTORTFM_DISABLE int32 CallFunction(FUtf8StringView DecoratedName, ArgTypes... Args)
 {
     const verse::FExecutionContext Context = verse::FExecutionContext::GetActiveContext();
 

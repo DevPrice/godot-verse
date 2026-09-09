@@ -38,6 +38,12 @@ GodotVerse::FRunExit GodotVerse::ConsumeExit()
     return Exit;
 }
 
+AUTORTFM_DISABLE void GodotVerse::ResetEventLoop()
+{
+    GEnqueuedAsyncJobs.Empty();
+    GPendingExit.Reset();
+}
+
 AUTORTFM_DISABLE static void TickGC()
 {
     const int32 ObjectArrayFreeSlots = GUObjectArray.GetObjectArrayEstimatedAvailable();

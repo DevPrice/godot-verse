@@ -40,4 +40,7 @@ FRunExit ConsumeExit();
 /// A budget <= 0 means run to completion.
 AUTORTFM_DISABLE void PumpEventLoop(const verse::FExecutionContext& ExecContext, double BudgetSeconds);
 
+/// Drops queued work while the allocator is still alive. Nothing here may outlive AppExit.
+AUTORTFM_DISABLE void ResetEventLoop();
+
 } // namespace GodotVerse

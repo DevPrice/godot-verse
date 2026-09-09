@@ -28,4 +28,8 @@ AUTORTFM_DISABLE int32 CallVoidFloat(FUtf8StringView DecoratedName, double Arg);
 
 AUTORTFM_DISABLE void TickScripts(double BudgetSeconds);
 
+/// Releases the IDE, its data sources and the content scope. Must run before the engine tears
+/// down: these objects free through GMalloc, which AppExit takes with it.
+AUTORTFM_DISABLE void ResetScriptState();
+
 } // namespace GodotVerse

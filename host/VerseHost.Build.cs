@@ -6,7 +6,9 @@ public class VerseHost : ModuleRules
 {
 	public VerseHost(ReadOnlyTargetRules Target) : base(Target)
 	{
-		SetupVerse("/Godot.org/Godot", VerseScope.PublicAPI);
+		// InternalUser, not PublicAPI: `<native>` is epic_internal, and outside Epic's own verse
+		// path domains InternalUser is the only scope permitted to reach it.
+		SetupVerse("/Godot.org/Godot", VerseScope.InternalUser);
 
 		PublicIncludePathModuleNames.Add("Launch");
 

@@ -179,25 +179,31 @@ typedef struct vh_script vh_script;
 #	define VH_API
 #endif
 
+/* The host is compiled by the AutoRTFM clang driver, which requires these entry points to carry
+ * AUTORTFM_DISABLE on their first declaration. The host defines VH_ATTR before including this. */
+#ifndef VH_ATTR
+#	define VH_ATTR
+#endif
+
 VH_API int32_t vh_abi_version(void);
 
-VH_API int32_t vh_init(const vh_init_desc* Desc);
-VH_API void vh_shutdown(void);
+VH_ATTR VH_API int32_t vh_init(const vh_init_desc* Desc);
+VH_ATTR VH_API void vh_shutdown(void);
 
 /* Runs queued Verse work for at most BudgetSeconds. Call once per frame. */
-VH_API void vh_tick(double BudgetSeconds);
+VH_ATTR VH_API void vh_tick(double BudgetSeconds);
 
 /* Compiles one .verse file as a standalone snippet. Diagnostics go to the init callback. */
-VH_API int32_t vh_compile_file(const char* PathUtf8, vh_script** OutScript);
-VH_API void vh_release_script(vh_script* Script);
+VH_ATTR VH_API int32_t vh_compile_file(const char* PathUtf8, vh_script** OutScript);
+VH_ATTR VH_API void vh_release_script(vh_script* Script);
 
-VH_API vh_bool vh_script_has_function(vh_script* Script, const char* DecoratedName);
+VH_ATTR VH_API vh_bool vh_script_has_function(vh_script* Script, const char* DecoratedName);
 
 /* Calls a suspending Main(:[]string, :[string]string) and pumps until it completes. */
-VH_API int32_t vh_run_main(vh_script* Script, const char* const* Args, int32_t ArgCount, int64_t* OutExitCode);
+VH_ATTR VH_API int32_t vh_run_main(vh_script* Script, const char* const* Args, int32_t ArgCount, int64_t* OutExitCode);
 
-VH_API int32_t vh_call_void(vh_script* Script, const char* DecoratedName);
-VH_API int32_t vh_call_void_float(vh_script* Script, const char* DecoratedName, double Arg);
+VH_ATTR VH_API int32_t vh_call_void(vh_script* Script, const char* DecoratedName);
+VH_ATTR VH_API int32_t vh_call_void_float(vh_script* Script, const char* DecoratedName, double Arg);
 
 /* Signatures for GetProcAddress on the consumer side. */
 typedef int32_t (*vh_abi_version_fn)(void);
