@@ -17,8 +17,9 @@ Two DLLs meet at a C ABI:
     include/     the C ABI header, shared by both sides
     host/        Unreal Program target sources (staged into the engine tree to build)
     src/         GDExtension sources
-    tools/       build_host.py, the keyword generator and friends
-    tests/       host smoke test (loads verse_host.dll with no Godot involved)
+    tools/       build_host.py, the API and keyword generators and friends
+    tests/       host smoke test (loads verse_host.dll with no Godot involved), lexer test
+    docs/        notes on the editor toolchain
     demo/        Godot project
 
 ## Building
@@ -28,7 +29,9 @@ Godot 4.7, and Python with SCons.
 
     python tools/build_host.py            # stages host/ into the engine tree, runs UBT
     scons target=editor                   # builds the GDExtension
+    python tools/gen_verse_api.py         # regenerates the Verse mirror of Godot'''s API
     python tools/build_smoke.py           # builds the standalone ABI test
+    python tools/build_lexer_test.py      # builds the standalone lexer test
 
 Run the smoke test (no Godot involved), then the demo:
 
@@ -48,15 +51,43 @@ when the project loads, its `Ready()` runs on `_ready`, and its `Update(Delta:fl
 frame. `PhysicsUpdate(:float)` maps to `_physics_process`. Several scripts on several nodes work
 independently.
 
-Compiler diagnostics land in Godot's output with file, line and column, and reach the script
-editor through `_validate`. Syntax highlighting comes free from the language's metadata virtuals,
-over 156 reserved words generated from the Verse compiler's own `ReservedSymbols.inl` by
-`tools/gen_verse_keywords.py`.
+A script defines a class named after its own file, and the node it is attached to is `Self`:
 
-The Verse side reaches Godot through a hand-written module at `/Godot.org/Godot`
-(`host/Verse/Godot.native.verse`) — free functions over instance-id handles, covering `logic`,
-`int`, `float`, `char`, `string`, `[]t`, `[k]v`, `tuple` and `<decides>` in both directions. Real
-class hierarchies — `player := class(godot_node2d)` — are Phase 4.
+```verse
+using { /Godot.org/Godot }
+
+mover := class(godot_node2d):
+
+    Speed<public>:float = 60.0
+
+    Ready<override>():void =
+        Print("Verse is running inside Godot, as a class.")
+
+    Update<override>(Delta:float):void =
+        if (P := GetPosition[]):
+            SetPosition(vector2{X := P.X + Delta * Speed, Y := P.Y})
+```
+
+Godot's API is mirrored as a Verse class hierarchy under `/Godot.org/Godot`, generated from
+`extension_api.json` by `tools/gen_verse_api.py`. Only `godot_object` is a `<native>` class with a
+C++ shadow; everything above it is ordinary Verse whose methods bottom out in a handful of native
+primitives, so mirroring another hundred Godot classes costs no C++ at all. A method that can fail
+carries Verse's `<decides>` effect, and one that mutates the scene defers its write to transaction
+commit.
+
+**A reference to a freed node fails rather than dangles.** Verse has no null, so this had to be
+given a meaning. A `godot_object` holds a Godot instance id, every accessor is `<decides>`, and
+once Godot frees the object those accessors stop resolving — `demo/scripts/lifetime.verse` holds a
+child, frees it, and keeps calling.
+
+A script may still be written the older way, as a `module` of free functions that find their own
+node by path; the host picks between the two shapes on whether the class exists.
+
+Compiler diagnostics land in Godot's output with file, line and column, and the script editor gets
+them live: `_validate` re-analyses the project against the unsaved buffer rather than replaying
+what the last build said. Syntax highlighting is a real lexer — nested `<# #>` block comments,
+dedent-terminated `<#>` comments and comments inside string interpolation all colour correctly,
+which no delimiter matcher can do.
 
 `VerseTicker` from Phase 2 still works, but nothing needs it: the script language pumps `vh_tick`
 from `_frame`, so every scripted node is driven rather than one hand-placed one.
@@ -90,18 +121,23 @@ way to run the language server at all.
 
 ## Five constraints worth knowing
 
-**The project is the compilation unit, not the file.** Verse compiles a whole package at once,
-and the host can only do it once per process — a second `BuildAll` re-notifies already-loaded
-native Verse packages and aborts inside UE's async loader. So the first script that needs
-compiling scans `res://` for every `.verse` file and builds them together. Scripts added while
-the editor is running are not picked up until it restarts.
+**The project is the compilation unit, not the file.** Verse compiles a whole package at once, and
+the host can only *generate* once per process: publishing a compiled package sets
+`EInternalObjectFlags::LoaderImport` on every export, and a second pass over the already-loaded
+native Verse packages trips an assertion on that flag inside UE's async loader. So the first script
+that needs compiling scans `res://` for every `.verse` file and builds them together, and scripts
+added while the editor is running are not picked up until it restarts.
 
-**Each script wraps itself in a module named after its file.** Every file in the project shares
-one flat `/user@localhost` scope and Verse forbids shadowing, so two scripts that both define a
-top-level `Ready()` are a compile error rather than two scripts. `mover.verse` opens with
-`mover := module:` and its functions resolve under `(/user@localhost/mover:)`. A lone unwrapped
-script still works — the host falls back to the flat scope — which is why the smoke test's
-`hello.verse` needs no module.
+Analysis is not subject to that. A build configured with `bSemanticAnalysisOnly` and no digests,
+code or bytecode publishes nothing and can be run as often as you like, which is what gives the
+script editor live diagnostics. What it cannot do is replace the bytecode a running program is
+already executing, so hot reload is narrower than it looks rather than flatly impossible.
+
+**One top-level name per file.** Every file in the project shares one flat `/user@localhost` scope
+and Verse forbids shadowing, so two files that both define a top-level `Ready()` are a compile
+error rather than two scripts. Naming the class after the file is what keeps that from happening —
+file names are already unique. A script written as a `module` instead needs the same treatment for
+the same reason, which is why `mover := module:` was the shape before classes existed.
 
 **The host must be loaded from `Engine/Binaries/Win64`.** VNI records each Verse package's source
 directory relative to the loaded module, and the Verse compiler reads those `.verse` files at
