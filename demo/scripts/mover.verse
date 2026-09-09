@@ -1,14 +1,16 @@
 using { /Godot.org/Godot }
 
-mover := module:
+# Named after the file. A script that defines a class named after itself is attached to a node as
+# that class: the host instantiates it against the node and Ready/Update are its methods, not
+# free functions, so `Self` is the node and no GetNode lookup is needed.
+mover := class(godot_node2d):
 
-	Ready<public>():void =
-		Print("Verse is running inside Godot.")
+    Speed<public>:float = 60.0
 
-	Update<public>(Delta:float):void =
-		if:
-			Node := GetNode["/root/Main/Mover"]
-			P := GetVector2[Node, "position"]
-		then:
-			SetVector2(Node, "position", P(0) + Delta * 60.0, P(1))
-			Print("Mover x = {P(0)}")
+    Ready<override>():void =
+        Print("Verse is running inside Godot, as a class.")
+
+    Update<override>(Delta:float):void =
+        if (P := GetPosition[]):
+            SetPosition(vector2{X := P.X + Delta * Speed, Y := P.Y})
+            Print("Mover x = {P.X}")

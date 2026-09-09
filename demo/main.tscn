@@ -3,6 +3,7 @@
 [ext_resource type="Texture2D" uid="uid://c086ugpvc058w" path="res://icon.svg" id="1_icon"]
 [ext_resource type="Script" uid="uid://c2pbcjv47o5ma" path="res://scripts/mover.verse" id="2_mover"]
 [ext_resource type="Script" uid="uid://cb3yoempo2wjj" path="res://scripts/spinner.verse" id="3_spinner"]
+[ext_resource type="Script" path="res://scripts/lifetime.verse" id="4_lifetime"]
 
 [node name="Main" type="Node2D" unique_id=1366467292]
 
@@ -12,3 +13,8 @@ script = ExtResource("2_mover")
 [node name="Sprite2D" type="Sprite2D" parent="Mover" unique_id=35239555]
 texture = ExtResource("1_icon")
 script = ExtResource("3_spinner")
+
+[node name="Lifetime" type="Node2D" parent="." unique_id=911240001]
+script = ExtResource("4_lifetime")
+
+[node name="Victim" type="Node2D" parent="Lifetime" unique_id=911240002]
