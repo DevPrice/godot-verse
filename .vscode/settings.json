@@ -1,0 +1,10 @@
+{
+	"files.associations": {
+		"*.verse": "verse"
+	},
+	"[verse]": {
+		"editor.tabSize": 4,
+		"editor.insertSpaces": true,
+		"editor.detectIndentation": false
+	}
+}

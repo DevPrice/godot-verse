@@ -1,0 +1,13 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Attach to Verse socket debugger",
+			"type": "verse",
+			"request": "attach",
+			"port": 1963,
+			"comment": "Start the game with the Godot project setting verse/host/enable_debugger = true first. That is what makes vh_init call Verse::SocketDebugger::Listen(), which binds this port (host/Private/VerseHost.cpp:84-87; default port and the verse.DebuggerPort console variable are set in Engine/Plugins/VerseVM/Source/VerseVMSocketDebugger/Private/VerseVM/VVMSocketDebugger.cpp:377-379). See docs/editor-tooling.md.",
+			"note": "UNVERIFIED: 'type': 'verse' does not name any known installed VS Code debug extension -- none was found. The socket speaks a custom protocol (4-byte big-endian length prefix + raw JSON, Engine/Plugins/VerseVM/Source/VerseVMSocketDebugger/Private/VerseVM/VVMSocketUtil.cpp:132-168), not the Content-Length-framed transport VS Code's generic DAP client expects, and uLangDAP (the DAP struct library) is not used by this server. No adapter bridging the two is known to exist in the UE checkout. This configuration records the port and the flag to enable; it will not attach as written until such an adapter exists."
+		}
+	]
+}
