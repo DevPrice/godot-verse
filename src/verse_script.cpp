@@ -173,7 +173,10 @@ Variant VerseScript::_get_script_method_argument_count(const StringName &p_metho
 }
 
 bool VerseScript::_can_instantiate() const {
-	return is_compiled();
+	// Without the editor check a non-tool script gets a real instance in the editor and its
+	// Ready() runs while the scene is merely open, which is what Script::can_instantiate guards
+	// against for GDScript. Godot falls back to a placeholder instance when this is false.
+	return is_compiled() && (_is_tool() || !Engine::get_singleton()->is_editor_hint());
 }
 
 bool VerseScript::_is_valid() const {
