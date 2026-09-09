@@ -15,6 +15,13 @@
 #include "verse_script_language.h"
 #include "verse_ticker.h"
 
+#ifdef TOOLS_ENABLED
+#include "verse_editor_plugin.h"
+#include "verse_syntax_highlighter.h"
+
+#include <godot_cpp/classes/editor_plugin_registration.hpp>
+#endif
+
 using namespace godot;
 
 static VerseRuntime *verse_runtime_singleton = nullptr;
@@ -23,32 +30,44 @@ static Ref<VerseResourceFormatLoader> verse_loader;
 static Ref<VerseResourceFormatSaver> verse_saver;
 
 void initialize_gdextension_types(const ModuleInitializationLevel p_level) {
-	if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
-		return;
+	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
+		GDREGISTER_CLASS(VerseRuntime);
+		GDREGISTER_CLASS(VerseTicker);
+		GDREGISTER_CLASS(VerseScriptLanguage);
+		GDREGISTER_CLASS(VerseScript);
+		GDREGISTER_CLASS(VerseResourceFormatLoader);
+		GDREGISTER_CLASS(VerseResourceFormatSaver);
+
+		verse_runtime_singleton = memnew(VerseRuntime);
+		Engine::get_singleton()->register_singleton("VerseRuntime", verse_runtime_singleton);
+
+		// The language before the loader: ResourceLoader hands a freshly loaded VerseScript to
+		// VerseScript::compile(), which reports diagnostics through the language singleton.
+		verse_script_language = memnew(VerseScriptLanguage);
+		Engine::get_singleton()->register_script_language(verse_script_language);
+
+		verse_loader.instantiate();
+		ResourceLoader::get_singleton()->add_resource_format_loader(verse_loader);
+		verse_saver.instantiate();
+		ResourceSaver::get_singleton()->add_resource_format_saver(verse_saver);
 	}
 
-	GDREGISTER_CLASS(VerseRuntime);
-	GDREGISTER_CLASS(VerseTicker);
-	GDREGISTER_CLASS(VerseScriptLanguage);
-	GDREGISTER_CLASS(VerseScript);
-	GDREGISTER_CLASS(VerseResourceFormatLoader);
-	GDREGISTER_CLASS(VerseResourceFormatSaver);
-
-	verse_runtime_singleton = memnew(VerseRuntime);
-	Engine::get_singleton()->register_singleton("VerseRuntime", verse_runtime_singleton);
-
-	// The language before the loader: ResourceLoader hands a freshly loaded VerseScript to
-	// VerseScript::compile(), which reports diagnostics through the language singleton.
-	verse_script_language = memnew(VerseScriptLanguage);
-	Engine::get_singleton()->register_script_language(verse_script_language);
-
-	verse_loader.instantiate();
-	ResourceLoader::get_singleton()->add_resource_format_loader(verse_loader);
-	verse_saver.instantiate();
-	ResourceSaver::get_singleton()->add_resource_format_saver(verse_saver);
+#ifdef TOOLS_ENABLED
+	if (p_level == MODULE_INITIALIZATION_LEVEL_EDITOR) {
+		GDREGISTER_CLASS(VerseSyntaxHighlighter);
+		GDREGISTER_CLASS(VerseEditorPlugin);
+		EditorPlugins::add_by_type<VerseEditorPlugin>();
+	}
+#endif
 }
 
 void uninitialize_gdextension_types(const ModuleInitializationLevel p_level) {
+#ifdef TOOLS_ENABLED
+	if (p_level == MODULE_INITIALIZATION_LEVEL_EDITOR) {
+		EditorPlugins::remove_by_type<VerseEditorPlugin>();
+	}
+#endif
+
 	if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
 		return;
 	}
