@@ -36,6 +36,14 @@ vh_value StringValue(const FUtf8StringView& View)
     return Value;
 }
 
+/// Every Godot callback lives in a DLL the AutoRTFM compiler never saw, so it has no instrumented
+/// clone and cannot be called from closed code. AutoRTFM::Open is the sanctioned way across.
+template <typename CallableType>
+decltype(auto) CallGodot(CallableType&& Callable)
+{
+    return AutoRTFM::Open(Forward<CallableType>(Callable));
+}
+
 /// Reads one property through the Godot callback table. Returns false if the property is
 /// missing, the host is not wired up, or the value did not come back at all.
 bool ReadProperty(int64 Handle, const verse::string& Property, FCallArena& Arena, vh_value& OutValue)
@@ -47,7 +55,9 @@ bool ReadProperty(int64 Handle, const verse::string& Property, FCallArena& Arena
     }
 
     const FUtf8StringView Name = ToView(Property);
-    return Host.Godot.GetProperty(Host.Godot.Ctx, Handle, Bytes(Name), Name.Len(), &Arena, &OutValue) != 0;
+    return CallGodot([&] {
+        return Host.Godot.GetProperty(Host.Godot.Ctx, Handle, Bytes(Name), Name.Len(), &Arena, &OutValue) != 0;
+    });
 }
 
 /// Godot mutations are deferred to transaction commit: a Verse failure must not leave the scene
@@ -55,6 +65,7 @@ bool ReadProperty(int64 Handle, const verse::string& Property, FCallArena& Arena
 template <typename CallableType>
 void DeferToCommit(CallableType&& Callable)
 {
+    // Commit handlers already run outside the transaction, so no Open is needed (nor allowed) here.
     AutoRTFM::OnCommit(Forward<CallableType>(Callable));
 }
 
@@ -101,7 +112,7 @@ TOptional<int64> GetNode(verse::string const& Path)
     }
 
     const FUtf8StringView View = ToView(Path);
-    const vh_handle Handle = Host.Godot.GetNode(Host.Godot.Ctx, Bytes(View), View.Len());
+    const vh_handle Handle = CallGodot([&] { return Host.Godot.GetNode(Host.Godot.Ctx, Bytes(View), View.Len()); });
     if (Handle == 0)
     {
         return {};
@@ -112,7 +123,7 @@ TOptional<int64> GetNode(verse::string const& Path)
 bool IsValid(int64 Handle)
 {
     FHostState& Host = GetHost();
-    return Host.Godot.IsValid && Host.Godot.IsValid(Host.Godot.Ctx, Handle) != 0;
+    return Host.Godot.IsValid && CallGodot([&] { return Host.Godot.IsValid(Host.Godot.Ctx, Handle) != 0; });
 }
 
 TArray<int64> GetChildren(int64 Handle)
@@ -125,11 +136,11 @@ TArray<int64> GetChildren(int64 Handle)
         return Children;
     }
 
-    const int32 Count = Host.Godot.GetChildCount(Host.Godot.Ctx, Handle);
+    const int32 Count = CallGodot([&] { return Host.Godot.GetChildCount(Host.Godot.Ctx, Handle); });
     Children.Reserve(Count);
     for (int32 Index = 0; Index < Count; ++Index)
     {
-        const vh_handle Child = Host.Godot.GetChild(Host.Godot.Ctx, Handle, Index);
+        const vh_handle Child = CallGodot([&] { return Host.Godot.GetChild(Host.Godot.Ctx, Handle, Index); });
         if (Child != 0)
         {
             Children.Add(Child);
@@ -327,7 +338,7 @@ TMap<verse::string, verse::string> GetMeta(int64 Handle)
 
     FCallArena Arena;
     vh_value Value{};
-    if (!Host.Godot.GetMeta(Host.Godot.Ctx, Handle, &Arena, &Value))
+    if (!CallGodot([&] { return Host.Godot.GetMeta(Host.Godot.Ctx, Handle, &Arena, &Value) != 0; }))
     {
         return Meta;
     }

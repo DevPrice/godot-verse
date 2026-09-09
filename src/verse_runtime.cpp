@@ -50,7 +50,10 @@ Error VerseRuntime::load_host() {
 	ProjectSettings *settings = ProjectSettings::get_singleton();
 
 	const String dll_setting_name = "verse/host/dll_path";
-	const String dll_default = "res://../bin/verse_host.dll";
+	// The host must be loaded from the engine's own Binaries/Win64: VNI records each Verse
+	// package's source directory relative to the loaded module, and the compiler reads those
+	// .verse files at runtime. A copy anywhere else compiles against an empty package set.
+	const String dll_default = "C:/UnrealEngine/Engine/Binaries/Win64/verse_host.dll";
 	if (!settings->has_setting(dll_setting_name)) {
 		settings->set_setting(dll_setting_name, dll_default);
 	}
@@ -363,7 +366,9 @@ void VerseRuntime::on_diagnostic(void *p_ctx, const vh_diagnostic *p_diagnostic)
 
 	if (p_diagnostic->Severity == VH_SEVERITY_ERROR) {
 		UtilityFunctions::push_error(formatted);
-	} else {
+	} else if (p_diagnostic->Severity == VH_SEVERITY_WARNING) {
 		UtilityFunctions::push_warning(formatted);
+	} else {
+		UtilityFunctions::print(formatted);
 	}
 }

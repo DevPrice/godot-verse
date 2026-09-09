@@ -19,6 +19,9 @@
 #include "VerseTask.h"
 #include "VerseVM/VVMCoroutine.h"
 #include "VerseVM/VVMNativeFunction.h"
+#include "VerseVM/VVMPackage.h"
+#include "VerseVM/VVMProgram.h"
+#include "VerseVM/VVMUniqueString.h"
 #include "uLang/SourceProject/VerseVersion.h"
 #include "uLang/Toolchain/ProgramBuildManager.h"
 
@@ -63,6 +66,27 @@ AUTORTFM_DISABLE void ForwardSolDiagnostic(const FSolDiagnostic& Diagnostic)
                                  Diagnostic.Location.RowSpan.Y,
                                  Diagnostic.Location.ColSpan.Y,
                                  static_cast<int32>(Diagnostic.Info.ReferenceCode));
+}
+
+/// Lists what the snippet package actually defines. Callers address Verse functions by decorated
+/// name, and a name that is one character off just silently fails to resolve.
+AUTORTFM_DISABLE void ReportPackageDefinitions()
+{
+    Verse::VPackage* Package = Verse::GlobalProgram ? Verse::GlobalProgram->LookupPackage(ScriptPackageName) : nullptr;
+    if (!Package)
+    {
+        GodotVerse::ReportInfo(UTF8TEXT("No script package is loaded."));
+        return;
+    }
+
+    FUtf8String Line(UTF8TEXT("Verse definitions:"));
+    const uint32 Count = Package->NumDefinitions();
+    for (uint32 Index = 0; Index < Count; ++Index)
+    {
+        Line += UTF8TEXT("\n  ");
+        Line += Package->GetDefinitionName(Index).AsStringView();
+    }
+    GodotVerse::ReportInfo(Line);
 }
 
 AUTORTFM_DISABLE bool EnsureIde()
@@ -149,6 +173,8 @@ AUTORTFM_DISABLE GodotVerse::FScript* GodotVerse::CompileFile(const FUtf8String&
 
     IVerseModule::Get(); // Runs VerseModule::StartupModule; VerseCmd does the same before calling in.
 
+    ReportPackageDefinitions();
+
     return new FScript{Path};
 }
 
@@ -157,11 +183,28 @@ AUTORTFM_DISABLE void GodotVerse::ReleaseScript(FScript* Script)
     delete Script;
 }
 
+namespace {
+/// Snippet functions are stored under a name that is already decorated with their own scope path,
+/// and FVerseFunction decorates once more on lookup - so a plain `Update(:float)` resolves only
+/// for some definitions. Try the bare name first, then the pre-decorated one.
+AUTORTFM_DISABLE FVerseFunction LookupFunction(FUtf8StringView DecoratedName)
+{
+    const verse::FExecutionContext Context = verse::FExecutionContext::GetActiveContext();
+
+    FVerseFunction Function(Context, ScriptPackageName, ScriptVersePath, DecoratedName);
+    if (Function.IsValid())
+    {
+        return Function;
+    }
+
+    FUtf8String Prefixed = FUtf8String(UTF8TEXT("(")) + ScriptVersePath + UTF8TEXT(":)") + FUtf8String(DecoratedName);
+    return FVerseFunction(Context, ScriptPackageName, ScriptVersePath, Prefixed);
+}
+}
+
 AUTORTFM_DISABLE bool GodotVerse::HasFunction(FUtf8StringView DecoratedName)
 {
-    const FVerseFunction Function(
-        verse::FExecutionContext::GetActiveContext(), ScriptPackageName, ScriptVersePath, DecoratedName);
-    return Function.IsValid();
+    return LookupFunction(DecoratedName).IsValid();
 }
 
 namespace {
@@ -218,7 +261,7 @@ AUTORTFM_DISABLE int32 CallFunction(FUtf8StringView DecoratedName, ArgTypes... A
 {
     const verse::FExecutionContext Context = verse::FExecutionContext::GetActiveContext();
 
-    FunctionType Function{FVerseFunction(Context, ScriptPackageName, ScriptVersePath, DecoratedName)};
+    FunctionType Function{LookupFunction(DecoratedName)};
     if (!Function.IsValid())
     {
         return VH_ERR_NOT_FOUND;

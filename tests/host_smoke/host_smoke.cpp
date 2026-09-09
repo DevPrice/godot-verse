@@ -125,10 +125,6 @@ int main(int argc, char** argv)
 	auto RunMainFn = Resolve<vh_run_main_fn>(Module, "vh_run_main", &ResolveOk);
 	auto CallVoidFn = Resolve<vh_call_void_fn>(Module, "vh_call_void", &ResolveOk);
 	auto CallVoidFloatFn = Resolve<vh_call_void_float_fn>(Module, "vh_call_void_float", &ResolveOk);
-	(void)TickFn;
-	(void)ScriptHasFunctionFn;
-	(void)CallVoidFn;
-	(void)CallVoidFloatFn;
 	if (!Step("resolve exports", ResolveOk))
 	{
 		return 1;
@@ -177,10 +173,17 @@ int main(int argc, char** argv)
 	Step("vh_run_main", RunOk);
 	printf("[smoke] exit code: %lld\n", static_cast<long long>(ExitCode));
 
+	bool CallsOk = Step("vh_script_has_function Ready", ScriptHasFunctionFn(Script, "Ready") != 0);
+	CallsOk = Step("vh_script_has_function Update(:float)", ScriptHasFunctionFn(Script, "Update(:float)") != 0) && CallsOk;
+	CallsOk = Step("vh_call_void Ready", CallVoidFn(Script, "Ready") == VH_OK) && CallsOk;
+	CallsOk = Step("vh_call_void_float Update", CallVoidFloatFn(Script, "Update(:float)", 0.016) == VH_OK) && CallsOk;
+	TickFn(0.0);
+	Step("vh_tick", true);
+
 	ReleaseScriptFn(Script);
 	Step("vh_release_script", true);
 	ShutdownFn();
 	Step("vh_shutdown", true);
 
-	return RunOk ? 0 : 1;
+	return RunOk && CallsOk ? 0 : 1;
 }

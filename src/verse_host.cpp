@@ -45,9 +45,12 @@ bool VerseHostLibrary::load(const String &p_dll_path, String &r_error) {
 		unload();
 	}
 
-	HMODULE handle = LoadLibraryW((LPCWSTR)p_dll_path.utf16().get_data());
+	// LOAD_WITH_ALTERED_SEARCH_PATH puts the host's own directory (which holds tbbmalloc.dll)
+	// on the search path, but only for a fully qualified native path - forward slashes are not.
+	const String native_path = p_dll_path.replace("/", "\\");
+	HMODULE handle = LoadLibraryExW((LPCWSTR)native_path.utf16().get_data(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
 	if (handle == nullptr) {
-		r_error = String("failed to load ") + p_dll_path;
+		r_error = String("failed to load ") + p_dll_path + String(" (GetLastError=") + String::num_int64(GetLastError()) + String(")");
 		return false;
 	}
 
@@ -87,11 +90,11 @@ bool VerseHostLibrary::load(const String &p_dll_path, String &r_error) {
 }
 
 void VerseHostLibrary::unload() {
+	// The module is deliberately never freed. A monolithic UE runtime cannot survive
+	// FreeLibrary: its static destructors and DllMain(DETACH) run after the engine has already
+	// torn itself down in vh_shutdown, and the process hangs on the way out.
 #ifdef _WIN32
-	if (module != nullptr) {
-		FreeLibrary(module);
-		module = nullptr;
-	}
+	module = nullptr;
 #endif
 	clear_function_pointers();
 	loaded = false;
