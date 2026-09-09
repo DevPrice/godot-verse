@@ -111,9 +111,9 @@ than a config presented as working.
 you exactly why it can't find one: `uLangLSP` in the UE checkout is a message-type library
 (`LSP.h`/`LSP.cpp`), not a Program target, and nothing links it into a binary. There is no build
 command for it, unlike `verse_host.dll`. `.vscode/settings.json` still associates `*.verse` with a
-`verse` language id and matches `demo/scripts`' indentation (4 spaces — one of its three files
-uses literal tabs instead, which is inconsistent, not a style choice to follow), so syntax
-association and formatting work independently of the language server question.
+`verse` language id and sets tab indentation to match what Godot's own script editor writes back
+into a `.verse` file when it saves one — the two editors have to agree, because Verse rejects a
+file that mixes tabs and spaces.
 
 **Known to work:** the debugger's port and the flag that opens it. **Not known to work:**
 whether any VS Code debug extension can speak this socket's framing, and there is currently no
