@@ -45,7 +45,7 @@ void VerseRuntime::release_current_script() {
 }
 
 Error VerseRuntime::load_host(const String &p_dll_path) {
-	return load_host_internal(p_dll_path, String());
+	return load_host_internal(p_dll_path, String(), false);
 }
 
 Error VerseRuntime::load_host() {
@@ -80,13 +80,27 @@ Error VerseRuntime::load_host() {
 	engine_property_info["hint_string"] = String();
 	settings->add_property_info(engine_property_info);
 
+	const String debugger_setting_name = "verse/host/enable_debugger";
+	const bool debugger_default = false;
+	if (!settings->has_setting(debugger_setting_name)) {
+		settings->set_setting(debugger_setting_name, debugger_default);
+	}
+	settings->set_initial_value(debugger_setting_name, debugger_default);
+	Dictionary debugger_property_info;
+	debugger_property_info["name"] = debugger_setting_name;
+	debugger_property_info["type"] = (int64_t)Variant::BOOL;
+	debugger_property_info["hint"] = (int64_t)PROPERTY_HINT_NONE;
+	debugger_property_info["hint_string"] = String();
+	settings->add_property_info(debugger_property_info);
+
 	const String dll_path = settings->globalize_path(settings->get_setting(dll_setting_name));
 	const String engine_dir = settings->globalize_path(settings->get_setting(engine_setting_name));
+	const bool enable_debugger = settings->get_setting(debugger_setting_name);
 
-	return load_host_internal(dll_path, engine_dir);
+	return load_host_internal(dll_path, engine_dir, enable_debugger);
 }
 
-Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p_engine_dir) {
+Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p_engine_dir, bool p_enable_debugger) {
 	if (host.is_loaded()) {
 		unload_host();
 	}
@@ -122,7 +136,7 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 	init_desc.Godot = godot_api;
 	init_desc.OnDiagnostic = &VerseRuntime::on_diagnostic;
 	init_desc.DiagnosticCtx = this;
-	init_desc.EnableDebugger = 0;
+	init_desc.EnableDebugger = p_enable_debugger ? 1 : 0;
 
 	const int32_t status = host.Init(&init_desc);
 	if (status != VH_OK) {
