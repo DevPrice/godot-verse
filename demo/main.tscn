@@ -1,3 +1,13 @@
-[gd_scene format=3]
+[gd_scene load_steps=2 format=3]
 
-[node name="Mover" type="Node2D"]
+[ext_resource type="Texture2D" path="res://icon.svg" id="1_icon"]
+
+[node name="Main" type="Node2D"]
+
+[node name="Mover" type="Node2D" parent="."]
+
+[node name="Sprite2D" type="Sprite2D" parent="Mover"]
+texture = ExtResource("1_icon")
+
+[node name="VerseTicker" type="VerseTicker" parent="."]
+verse_script = "res://scripts/mover.verse"
