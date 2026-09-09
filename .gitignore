@@ -1,0 +1,27 @@
+.sconsign.dblite
+__pycache__/
+*.pyc
+
+# scons intermediates
+*.os
+*.obj
+*.o
+*.lib
+*.exp
+*.pdb
+*.ilk
+
+# build outputs
+bin/
+build/
+demo/addons/*/bin/
+addons/*/bin/
+
+# godot
+.godot/
+*.import
+
+# unreal host build products
+host/Intermediate/
+custom.py
+compile_commands.json
