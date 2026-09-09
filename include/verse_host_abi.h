@@ -115,6 +115,9 @@ typedef struct vh_godot_api
 
 	int32_t (*GetChildCount)(void* Ctx, vh_handle Handle);
 	vh_handle (*GetChild)(void* Ctx, vh_handle Handle, int32_t Index);
+
+	/* Writes a VH_TYPE_MAP of string->string describing the object (name, class, path). */
+	vh_bool (*GetMeta)(void* Ctx, vh_handle Handle, vh_arena* Arena, vh_value* OutValue);
 } vh_godot_api;
 
 /* ----------------------------------------------------------- diagnostics -- */
