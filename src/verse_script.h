@@ -10,6 +10,7 @@
 #include <godot_cpp/variant/typed_array.hpp>
 
 struct vh_script;
+struct vh_instance;
 
 // A .verse file as a Godot Resource. Owns one vh_script handle from the host plus the source
 // text the script editor edits.
@@ -74,10 +75,23 @@ public:
 	godot::Error call_verse_void(const char *p_decorated_name);
 	godot::Error call_verse_void_float(const char *p_decorated_name, double p_arg);
 
+	// A script defines a class when it declares a top-level Verse class named after its own file
+	// deriving from godot_object. Such a script is driven through one instance of that class per
+	// node; one that does not is driven through its module's free functions, as in Phase 3.
+	bool is_class_shaped() const;
+	godot::String verse_class_name() const;
+
+	vh_instance *make_instance(int64_t p_object_id) const;
+	void free_instance(vh_instance *p_instance) const;
+	bool instance_has_function(vh_instance *p_instance, const char *p_decorated_name) const;
+	godot::Error call_instance_void(vh_instance *p_instance, const char *p_decorated_name) const;
+	godot::Error call_instance_void_float(vh_instance *p_instance, const char *p_decorated_name, double p_arg) const;
+
 private:
 	godot::String source_code;
 	vh_script *handle = nullptr;
 	bool valid = false;
+	bool class_shaped = false;
 
 	void release_handle();
 };

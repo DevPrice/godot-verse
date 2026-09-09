@@ -4,6 +4,7 @@
 #include "AutoRTFM.h"
 #include "Containers/Map.h"
 #include "Containers/UnrealString.h"
+#include "GodotClasses.h"
 #include "HostEventLoop.h"
 #include "HostRuntime.h"
 #include "ISolarisIde.h"
@@ -18,10 +19,14 @@
 #include "VerseContentScope.h"
 #include "VerseString.h"
 #include "VerseTask.h"
+#include "UObject/StrongObjectPtr.h"
+#include "VerseVM/VVMClass.h"
 #include "VerseVM/VVMCoroutine.h"
+#include "VerseVM/VVMGlobalProgram.h"
 #include "VerseVM/VVMNativeFunction.h"
 #include "VerseVM/VVMPackage.h"
 #include "VerseVM/VVMProgram.h"
+#include "VerseVM/VVMContext.h"
 #include "VerseVM/VVMUniqueString.h"
 #include "uLang/SourceProject/VerseVersion.h"
 #include "uLang/Toolchain/ProgramBuildManager.h"
@@ -223,11 +228,23 @@ AUTORTFM_DISABLE void GodotVerse::ReleaseScript(FScript* Script)
 }
 
 namespace {
+/// FVerseFunction's package constructor dereferences the result of LookupPackage without checking
+/// it, so asking for a function when the build failed crashes rather than returning invalid.
+AUTORTFM_DISABLE bool ScriptPackageLoaded()
+{
+    return Verse::GlobalProgram && Verse::GlobalProgram->LookupPackage(ScriptPackageName) != nullptr;
+}
+
 /// Snippet functions are stored under a name that is already decorated with their own scope path,
 /// and FVerseFunction decorates once more on lookup - so a plain `Update(:float)` resolves only
 /// for some definitions. Try the bare name first, then the pre-decorated one.
 AUTORTFM_DISABLE FVerseFunction LookupInScope(const FUtf8String& VersePath, FUtf8StringView DecoratedName)
 {
+    if (!ScriptPackageLoaded())
+    {
+        return FVerseFunction(EDefaultConstructVerseFunction::UnsafeDoNotUse);
+    }
+
     const verse::FExecutionContext Context = verse::FExecutionContext::GetActiveContext();
 
     FVerseFunction Function(Context, ScriptPackageName, VersePath, DecoratedName);
@@ -261,6 +278,140 @@ AUTORTFM_DISABLE bool GodotVerse::HasFunction(const FScript* Script, FUtf8String
     return LookupFunction(Script, DecoratedName).IsValid();
 }
 
+struct GodotVerse::FInstance
+{
+    TStrongObjectPtr<UObject> Object;
+};
+
+namespace {
+/// The UClass behind a script's top-level Verse class, or null if there is no such class or it
+/// does not derive from godot_object. A class that does not derive from godot_object has no
+/// native representation at all, so `Cast<UClass>` is itself most of the check.
+AUTORTFM_DISABLE UClass* FindGodotClass(FUtf8StringView ClassName)
+{
+    Verse::VPackage* Package = Verse::GlobalProgram ? Verse::GlobalProgram->LookupPackage(ScriptPackageName) : nullptr;
+    if (!Package)
+    {
+        return nullptr;
+    }
+
+    const FUtf8String Decorated = FUtf8String(UTF8TEXT("(")) + ScriptVersePath + UTF8TEXT(":)") + FUtf8String(ClassName);
+
+    UClass* Found = nullptr;
+    Verse::FRunningContext Context = Verse::FRunningContextPromise{};
+    Context.EnterVM([&] {
+        Verse::VClass* Class = Package->LookupDefinition<Verse::VClass>(FUtf8StringView(Decorated));
+        if (!Class)
+        {
+            return;
+        }
+        UClass* NativeClass = Cast<UClass>(Class->GetOrCreateNativeType(Context));
+        if (NativeClass && NativeClass->IsChildOf(verse::godot_object::StaticClass()))
+        {
+            Found = NativeClass;
+        }
+    });
+    return Found;
+}
+}
+
+AUTORTFM_DISABLE bool GodotVerse::HasClass(FUtf8StringView ClassName)
+{
+    return FindGodotClass(ClassName) != nullptr;
+}
+
+AUTORTFM_DISABLE GodotVerse::FInstance* GodotVerse::Instantiate(FUtf8StringView ClassName, int64 Handle)
+{
+    UClass* NativeClass = FindGodotClass(ClassName);
+    if (!NativeClass)
+    {
+        ReportError(FUtf8String(UTF8TEXT("Could not instantiate ")) + FUtf8String(ClassName)
+                    + UTF8TEXT(": no such class deriving from godot_object at ") + ScriptVersePath);
+        return nullptr;
+    }
+
+    // UVerseClass::PostInitInstance runs the Verse constructor from inside NewObject, so fields
+    // are initialised by the time this returns.
+    UObject* Instance = NewObject<UObject>(GetTransientPackage(), NativeClass);
+    if (!Instance)
+    {
+        return nullptr;
+    }
+
+    verse::godot_object* Shadow = CastChecked<verse::godot_object>(Instance);
+    Shadow->Handle.Init(Handle, Shadow);
+
+    return new FInstance{TStrongObjectPtr<UObject>(Instance)};
+}
+
+AUTORTFM_DISABLE void GodotVerse::ReleaseInstance(FInstance* Instance)
+{
+    delete Instance;
+}
+
+namespace {
+AUTORTFM_DISABLE FVerseFunction LookupMethod(const GodotVerse::FInstance* Instance, FUtf8StringView DecoratedName)
+{
+    if (!Instance || !Instance->Object.IsValid())
+    {
+        return FVerseFunction(EDefaultConstructVerseFunction::UnsafeDoNotUse);
+    }
+    const verse::FExecutionContext Context = verse::FExecutionContext::GetActiveContext();
+    return FVerseFunction(Context, Instance->Object.Get(), DecoratedName);
+}
+}
+
+/// Whether the script actually implements this lifecycle method.
+///
+/// `godot_object` gives Ready, Update and PhysicsUpdate empty bodies so a script can <override>
+/// them and so a script that wants only one of the three still compiles -- which means a plain
+/// "does it resolve" test is true for every instance. Comparing the resolved function against
+/// the one the base class resolves to is what distinguishes an override from the inherited
+/// no-op, and it decides whether Godot puts this node in the per-frame process list at all.
+AUTORTFM_DISABLE bool GodotVerse::InstanceHasFunction(const FInstance* Instance, FUtf8StringView DecoratedName)
+{
+    FVerseFunction Resolved = LookupMethod(Instance, DecoratedName);
+    if (!Resolved.IsValid())
+    {
+        return false;
+    }
+
+    const verse::FExecutionContext Context = verse::FExecutionContext::GetActiveContext();
+    FVerseFunction Base(Context, verse::godot_object::StaticClass()->GetDefaultObject(), DecoratedName);
+    return !Base.IsValid() || Base.Function.Get() != Resolved.Function.Get();
+}
+
+namespace {
+template <typename FunctionType, typename... ArgTypes>
+AUTORTFM_DISABLE int32 CallMethod(const GodotVerse::FInstance* Instance, FUtf8StringView DecoratedName, ArgTypes... Args)
+{
+    const verse::FExecutionContext Context = verse::FExecutionContext::GetActiveContext();
+
+    FunctionType Function{LookupMethod(Instance, DecoratedName)};
+    if (!Function.IsValid())
+    {
+        GodotVerse::ReportError(FUtf8String(UTF8TEXT("Could not resolve ")) + FUtf8String(DecoratedName)
+                                + UTF8TEXT(" on the script instance."));
+        return VH_ERR_NOT_FOUND;
+    }
+
+    const AutoRTFM::ETransactionResult TransactionResult =
+        AutoRTFM::Transact([&] { Function(Context, Args...); });
+
+    return TransactionResult == AutoRTFM::ETransactionResult::Committed ? VH_OK : VH_ERR_RUNTIME;
+}
+}
+
+AUTORTFM_DISABLE int32 GodotVerse::InstanceCallVoid(const FInstance* Instance, FUtf8StringView DecoratedName)
+{
+    return CallMethod<TVerseFunction<void()>>(Instance, DecoratedName);
+}
+
+AUTORTFM_DISABLE int32 GodotVerse::InstanceCallVoidFloat(const FInstance* Instance, FUtf8StringView DecoratedName, double Arg)
+{
+    return CallMethod<TVerseFunction<void(double)>>(Instance, DecoratedName, Arg);
+}
+
 namespace {
 // Await invokes this from a closed transactional nest, so it must stay AutoRTFM-enabled.
 void OnMainFinished(FVerseTask Task)
@@ -276,7 +427,9 @@ AUTORTFM_DISABLE int32 GodotVerse::RunMain(const TArray<verse::string>& Args, in
 {
     const verse::FExecutionContext Context = verse::FExecutionContext::GetActiveContext();
 
-    FMainFunction MainFunction{FVerseFunction(Context, ScriptPackageName, ScriptVersePath, MainFunctionName)};
+    FMainFunction MainFunction{ScriptPackageLoaded()
+                                   ? FVerseFunction(Context, ScriptPackageName, ScriptVersePath, MainFunctionName)
+                                   : FVerseFunction(EDefaultConstructVerseFunction::UnsafeDoNotUse)};
     if (!MainFunction.IsValid())
     {
         ReportError(UTF8TEXT("The script has no Main(:[]string, :[string]string) function."));

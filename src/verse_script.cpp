@@ -82,7 +82,43 @@ Error VerseScript::compile() {
 
 	handle = runtime->open_script(ProjectSettings::get_singleton()->globalize_path(path));
 	valid = handle != nullptr && build_status == OK && language->diagnostics_for(path).is_empty();
+	class_shaped = valid && runtime->has_class(verse_class_name());
 	return valid ? OK : ERR_COMPILATION_FAILED;
+}
+
+bool VerseScript::is_class_shaped() const {
+	return class_shaped;
+}
+
+String VerseScript::verse_class_name() const {
+	return get_path().get_file().get_basename();
+}
+
+vh_instance *VerseScript::make_instance(int64_t p_object_id) const {
+	VerseRuntime *runtime = get_runtime();
+	return runtime != nullptr ? runtime->instantiate(verse_class_name(), p_object_id) : nullptr;
+}
+
+void VerseScript::free_instance(vh_instance *p_instance) const {
+	VerseRuntime *runtime = get_runtime();
+	if (runtime != nullptr) {
+		runtime->release_instance(p_instance);
+	}
+}
+
+bool VerseScript::instance_has_function(vh_instance *p_instance, const char *p_decorated_name) const {
+	VerseRuntime *runtime = get_runtime();
+	return runtime != nullptr && runtime->instance_has_function(p_instance, p_decorated_name);
+}
+
+Error VerseScript::call_instance_void(vh_instance *p_instance, const char *p_decorated_name) const {
+	VerseRuntime *runtime = get_runtime();
+	return runtime != nullptr ? runtime->call_instance_void(p_instance, p_decorated_name) : ERR_UNAVAILABLE;
+}
+
+Error VerseScript::call_instance_void_float(vh_instance *p_instance, const char *p_decorated_name, double p_arg) const {
+	VerseRuntime *runtime = get_runtime();
+	return runtime != nullptr ? runtime->call_instance_void_float(p_instance, p_decorated_name, p_arg) : ERR_UNAVAILABLE;
 }
 
 bool VerseScript::is_compiled() const {

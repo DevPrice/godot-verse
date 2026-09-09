@@ -20,7 +20,7 @@
 extern "C" {
 #endif
 
-#define VH_ABI_VERSION 2
+#define VH_ABI_VERSION 3
 
 typedef int32_t vh_bool;
 
@@ -54,9 +54,59 @@ typedef enum vh_type
 typedef struct vh_value vh_value;
 typedef struct vh_pair vh_pair;
 
+/* Godot's Variant::Type, as the wire carries it. vh_type says how the payload is laid out;
+ * this says which Godot type to rebuild from it, which vh_type alone cannot express -- a
+ * two-float tuple is equally a Vector2, a Vector2i or a plain array.
+ *
+ * 0 (Godot's TYPE_NIL) means "infer from vh_type", which is what every pre-v3 caller wants.
+ * The values are Godot's own and must not be renumbered; extension_api.json is the source. */
+typedef enum vh_variant_tag
+{
+	VH_VARIANT_NIL = 0,
+	VH_VARIANT_BOOL = 1,
+	VH_VARIANT_INT = 2,
+	VH_VARIANT_FLOAT = 3,
+	VH_VARIANT_STRING = 4,
+	VH_VARIANT_VECTOR2 = 5,
+	VH_VARIANT_VECTOR2I = 6,
+	VH_VARIANT_RECT2 = 7,
+	VH_VARIANT_RECT2I = 8,
+	VH_VARIANT_VECTOR3 = 9,
+	VH_VARIANT_VECTOR3I = 10,
+	VH_VARIANT_TRANSFORM2D = 11,
+	VH_VARIANT_VECTOR4 = 12,
+	VH_VARIANT_VECTOR4I = 13,
+	VH_VARIANT_PLANE = 14,
+	VH_VARIANT_QUATERNION = 15,
+	VH_VARIANT_AABB = 16,
+	VH_VARIANT_BASIS = 17,
+	VH_VARIANT_TRANSFORM3D = 18,
+	VH_VARIANT_PROJECTION = 19,
+	VH_VARIANT_COLOR = 20,
+	VH_VARIANT_STRING_NAME = 21,
+	VH_VARIANT_NODE_PATH = 22,
+	VH_VARIANT_RID = 23,
+	VH_VARIANT_OBJECT = 24,
+	VH_VARIANT_CALLABLE = 25,
+	VH_VARIANT_SIGNAL = 26,
+	VH_VARIANT_DICTIONARY = 27,
+	VH_VARIANT_ARRAY = 28,
+	VH_VARIANT_PACKED_BYTE_ARRAY = 29,
+	VH_VARIANT_PACKED_INT32_ARRAY = 30,
+	VH_VARIANT_PACKED_INT64_ARRAY = 31,
+	VH_VARIANT_PACKED_FLOAT32_ARRAY = 32,
+	VH_VARIANT_PACKED_FLOAT64_ARRAY = 33,
+	VH_VARIANT_PACKED_STRING_ARRAY = 34,
+	VH_VARIANT_PACKED_VECTOR2_ARRAY = 35,
+	VH_VARIANT_PACKED_VECTOR3_ARRAY = 36,
+	VH_VARIANT_PACKED_COLOR_ARRAY = 37,
+	VH_VARIANT_PACKED_VECTOR4_ARRAY = 38
+} vh_variant_tag;
+
 struct vh_value
 {
-	int32_t Type; /* vh_type */
+	int32_t Type;       /* vh_type */
+	int32_t VariantTag; /* vh_variant_tag */
 	union
 	{
 		vh_bool Logic;
@@ -118,6 +168,14 @@ typedef struct vh_godot_api
 
 	/* Writes a VH_TYPE_MAP of string->string describing the object (name, class, path). */
 	vh_bool (*GetMeta)(void* Ctx, vh_handle Handle, vh_arena* Arena, vh_value* OutValue);
+
+	/* ClassDB::instantiate. 0 if the class is unknown or not instantiable. The caller owns the
+	 * result: a Node that is never added to a tree leaks unless it is freed. */
+	vh_handle (*Instantiate)(void* Ctx, const char* ClassNameUtf8, int32_t ClassNameLen);
+
+	/* Engine::get_singleton, for Input, Time, and the rest of Godot's global objects. 0 if
+	 * there is no such singleton. */
+	vh_handle (*GetSingleton)(void* Ctx, const char* NameUtf8, int32_t NameLen);
 } vh_godot_api;
 
 /* ----------------------------------------------------------- diagnostics -- */
@@ -220,6 +278,28 @@ VH_ATTR VH_API int32_t vh_run_main(vh_script* Script, const char* const* Args, i
 VH_ATTR VH_API int32_t vh_call_void(vh_script* Script, const char* DecoratedName);
 VH_ATTR VH_API int32_t vh_call_void_float(vh_script* Script, const char* DecoratedName, double Arg);
 
+/* ------------------------------------------------------- class instances -- */
+
+/* One live Verse object: a script's `class(godot_node2d)` bound to one Godot object.
+ *
+ * The class-per-script shape supersedes the module-per-file one: a script may instead define a
+ * top-level class named after its file, in which case the host instantiates that class and calls
+ * its methods rather than the module's free functions. Both shapes are supported. */
+typedef struct vh_instance vh_instance;
+
+/* Whether the compiled project defines a top-level class of that name deriving from
+ * `godot_object`. This is how a class-shaped script is told from a module-shaped one. */
+VH_ATTR VH_API vh_bool vh_has_class(const char* ClassNameUtf8);
+
+/* Instantiates the top-level Verse class ClassNameUtf8 (undecorated) and binds it to Handle.
+ * The class must derive from `godot_object`. */
+VH_ATTR VH_API int32_t vh_instantiate(const char* ClassNameUtf8, vh_handle Handle, vh_instance** OutInstance);
+VH_ATTR VH_API void vh_release_instance(vh_instance* Instance);
+
+VH_ATTR VH_API vh_bool vh_instance_has_function(vh_instance* Instance, const char* DecoratedName);
+VH_ATTR VH_API int32_t vh_instance_call_void(vh_instance* Instance, const char* DecoratedName);
+VH_ATTR VH_API int32_t vh_instance_call_void_float(vh_instance* Instance, const char* DecoratedName, double Arg);
+
 /* Signatures for GetProcAddress on the consumer side. */
 typedef int32_t (*vh_abi_version_fn)(void);
 typedef int32_t (*vh_init_fn)(const vh_init_desc*);
@@ -233,6 +313,12 @@ typedef vh_bool (*vh_script_has_function_fn)(vh_script*, const char*);
 typedef int32_t (*vh_run_main_fn)(vh_script*, const char* const*, int32_t, int64_t*);
 typedef int32_t (*vh_call_void_fn)(vh_script*, const char*);
 typedef int32_t (*vh_call_void_float_fn)(vh_script*, const char*, double);
+typedef vh_bool (*vh_has_class_fn)(const char*);
+typedef int32_t (*vh_instantiate_fn)(const char*, vh_handle, vh_instance**);
+typedef void (*vh_release_instance_fn)(vh_instance*);
+typedef vh_bool (*vh_instance_has_function_fn)(vh_instance*, const char*);
+typedef int32_t (*vh_instance_call_void_fn)(vh_instance*, const char*);
+typedef int32_t (*vh_instance_call_void_float_fn)(vh_instance*, const char*, double);
 
 #ifdef __cplusplus
 }

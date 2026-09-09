@@ -39,6 +39,12 @@ void VerseHostLibrary::clear_function_pointers() {
 	RunMain = nullptr;
 	CallVoid = nullptr;
 	CallVoidFloat = nullptr;
+	HasClass = nullptr;
+	Instantiate = nullptr;
+	ReleaseInstance = nullptr;
+	InstanceHasFunction = nullptr;
+	InstanceCallVoid = nullptr;
+	InstanceCallVoidFloat = nullptr;
 }
 
 bool VerseHostLibrary::load(const String &p_dll_path, String &r_error) {
@@ -69,6 +75,12 @@ bool VerseHostLibrary::load(const String &p_dll_path, String &r_error) {
 	ok = ok && resolve(handle, "vh_run_main", RunMain, r_error);
 	ok = ok && resolve(handle, "vh_call_void", CallVoid, r_error);
 	ok = ok && resolve(handle, "vh_call_void_float", CallVoidFloat, r_error);
+	ok = ok && resolve(handle, "vh_has_class", HasClass, r_error);
+	ok = ok && resolve(handle, "vh_instantiate", Instantiate, r_error);
+	ok = ok && resolve(handle, "vh_release_instance", ReleaseInstance, r_error);
+	ok = ok && resolve(handle, "vh_instance_has_function", InstanceHasFunction, r_error);
+	ok = ok && resolve(handle, "vh_instance_call_void", InstanceCallVoid, r_error);
+	ok = ok && resolve(handle, "vh_instance_call_void_float", InstanceCallVoidFloat, r_error);
 
 	if (!ok) {
 		clear_function_pointers();

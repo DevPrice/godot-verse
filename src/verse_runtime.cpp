@@ -109,6 +109,8 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 	godot_api.GetChildCount = &VerseRuntime::api_get_child_count;
 	godot_api.GetChild = &VerseRuntime::api_get_child;
 	godot_api.GetMeta = &VerseRuntime::api_get_meta;
+	godot_api.Instantiate = &VerseRuntime::api_instantiate;
+	godot_api.GetSingleton = &VerseRuntime::api_get_singleton;
 
 	// EngineDirUtf8 only needs to stay alive for the duration of host.Init below.
 	const CharString engine_dir_utf8 = p_engine_dir.is_empty() ? CharString() : p_engine_dir.utf8();
@@ -302,6 +304,59 @@ Error VerseRuntime::call_handle_void_float(vh_script *p_script, const char *p_de
 	return OK;
 }
 
+bool VerseRuntime::has_class(const String &p_class_name) const {
+	if (!host.is_loaded()) {
+		return false;
+	}
+	return host.HasClass(p_class_name.utf8().get_data()) != 0;
+}
+
+vh_instance *VerseRuntime::instantiate(const String &p_class_name, int64_t p_object_id) {
+	if (!host.is_loaded()) {
+		return nullptr;
+	}
+	vh_instance *instance = nullptr;
+	host.Instantiate(p_class_name.utf8().get_data(), p_object_id, &instance);
+	return instance;
+}
+
+void VerseRuntime::release_instance(vh_instance *p_instance) {
+	if (p_instance != nullptr && host.ReleaseInstance != nullptr) {
+		host.ReleaseInstance(p_instance);
+	}
+}
+
+bool VerseRuntime::instance_has_function(vh_instance *p_instance, const char *p_decorated_name) const {
+	if (!host.is_loaded() || p_instance == nullptr) {
+		return false;
+	}
+	return host.InstanceHasFunction(p_instance, p_decorated_name) != 0;
+}
+
+Error VerseRuntime::call_instance_void(vh_instance *p_instance, const char *p_decorated_name) {
+	if (!host.is_loaded() || p_instance == nullptr) {
+		return ERR_UNAVAILABLE;
+	}
+	const int32_t status = host.InstanceCallVoid(p_instance, p_decorated_name);
+	if (status != VH_OK) {
+		UtilityFunctions::push_error(String("VerseRuntime: ") + String(p_decorated_name) + String(" failed with status ") + String::num_int64(status));
+		return FAILED;
+	}
+	return OK;
+}
+
+Error VerseRuntime::call_instance_void_float(vh_instance *p_instance, const char *p_decorated_name, double p_arg) {
+	if (!host.is_loaded() || p_instance == nullptr) {
+		return ERR_UNAVAILABLE;
+	}
+	const int32_t status = host.InstanceCallVoidFloat(p_instance, p_decorated_name, p_arg);
+	if (status != VH_OK) {
+		UtilityFunctions::push_error(String("VerseRuntime: ") + String(p_decorated_name) + String(" failed with status ") + String::num_int64(status));
+		return FAILED;
+	}
+	return OK;
+}
+
 void VerseRuntime::tick(double p_budget_seconds) {
 	if (!host.is_loaded()) {
 		UtilityFunctions::push_warning("VerseRuntime: tick called with no host loaded");
@@ -432,6 +487,23 @@ vh_bool VerseRuntime::api_get_meta(void *p_ctx, vh_handle p_handle, vh_arena *p_
 	}
 
 	return variant_to_vh(meta, p_arena, *r_value) ? 1 : 0;
+}
+
+vh_handle VerseRuntime::api_instantiate(void *p_ctx, const char *p_class_name_utf8, int32_t p_class_name_len) {
+	const StringName class_name(String::utf8(p_class_name_utf8, p_class_name_len));
+	if (!ClassDB::class_exists(class_name) || !ClassDB::can_instantiate(class_name)) {
+		return 0;
+	}
+	Object *obj = ClassDB::instantiate(class_name);
+	if (obj == nullptr) {
+		return 0;
+	}
+	return obj->get_instance_id();
+}
+
+vh_handle VerseRuntime::api_get_singleton(void *p_ctx, const char *p_name_utf8, int32_t p_name_len) {
+	Object *singleton = Engine::get_singleton()->get_singleton(StringName(String::utf8(p_name_utf8, p_name_len)));
+	return singleton != nullptr ? singleton->get_instance_id() : 0;
 }
 
 void VerseRuntime::on_diagnostic(void *p_ctx, const vh_diagnostic *p_diagnostic) {

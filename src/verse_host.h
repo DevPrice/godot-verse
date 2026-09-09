@@ -40,6 +40,12 @@ public:
 	vh_run_main_fn RunMain = nullptr;
 	vh_call_void_fn CallVoid = nullptr;
 	vh_call_void_float_fn CallVoidFloat = nullptr;
+	vh_has_class_fn HasClass = nullptr;
+	vh_instantiate_fn Instantiate = nullptr;
+	vh_release_instance_fn ReleaseInstance = nullptr;
+	vh_instance_has_function_fn InstanceHasFunction = nullptr;
+	vh_instance_call_void_fn InstanceCallVoid = nullptr;
+	vh_instance_call_void_float_fn InstanceCallVoidFloat = nullptr;
 
 private:
 	void clear_function_pointers();

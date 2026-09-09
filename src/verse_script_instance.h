@@ -24,6 +24,11 @@ struct VerseScriptInstance {
 	godot::Ref<VerseScript> script;
 	godot::Object *owner = nullptr; // borrowed; the owner outlives its own script instance
 
+	// Non-null when the script is class-shaped: one Verse object per node, holding this node's
+	// instance id, released with the instance. Null means the Phase 3 shape, where the script's
+	// module-level functions are called with no receiver at all.
+	vh_instance *verse_object = nullptr;
+
 	// Resolved once at attach time rather than looked up per frame.
 	bool has_ready = false;
 	bool has_process = false;

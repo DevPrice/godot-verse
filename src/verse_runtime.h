@@ -55,6 +55,16 @@ public:
 	godot::Error call_handle_void(vh_script *p_script, const char *p_decorated_name);
 	godot::Error call_handle_void_float(vh_script *p_script, const char *p_decorated_name, double p_arg);
 
+	// A script that defines a top-level class named after its file is driven through an instance
+	// of that class rather than through the module's free functions. Returns null when the class
+	// does not exist, which is how VerseScript tells the two shapes apart.
+	bool has_class(const godot::String &p_class_name) const;
+	vh_instance *instantiate(const godot::String &p_class_name, int64_t p_object_id);
+	void release_instance(vh_instance *p_instance);
+	bool instance_has_function(vh_instance *p_instance, const char *p_decorated_name) const;
+	godot::Error call_instance_void(vh_instance *p_instance, const char *p_decorated_name);
+	godot::Error call_instance_void_float(vh_instance *p_instance, const char *p_decorated_name, double p_arg);
+
 private:
 	VerseHostLibrary host;
 	vh_init_desc init_desc = {};
@@ -74,6 +84,8 @@ private:
 	static int32_t api_get_child_count(void *p_ctx, vh_handle p_handle);
 	static vh_handle api_get_child(void *p_ctx, vh_handle p_handle, int32_t p_index);
 	static vh_bool api_get_meta(void *p_ctx, vh_handle p_handle, vh_arena *p_arena, vh_value *r_value);
+	static vh_handle api_instantiate(void *p_ctx, const char *p_class_name_utf8, int32_t p_class_name_len);
+	static vh_handle api_get_singleton(void *p_ctx, const char *p_name_utf8, int32_t p_name_len);
 
 	static void on_diagnostic(void *p_ctx, const vh_diagnostic *p_diagnostic);
 };

@@ -32,6 +32,26 @@ AUTORTFM_DISABLE bool CompileProject(const TArray<FUtf8String>& Paths);
 AUTORTFM_DISABLE FScript* OpenScript(const FUtf8String& Path);
 AUTORTFM_DISABLE void ReleaseScript(FScript* Script);
 
+/// One live Verse object: a script's `class(godot_node2d)` bound to one Godot instance id.
+struct FInstance;
+
+/// Instantiates the class ClassName defines at the top level of the compiled project and binds
+/// it to a Godot object. ClassName is undecorated -- `player`, not `(/user@localhost:)player`.
+///
+/// The class must derive from `godot_object`, which is what gives the instance the UObject
+/// representation everything below needs; a class that does not will fail to instantiate here
+/// rather than at the first call.
+/// Whether the compiled project defines such a class. Cheap enough to ask per script, and it is
+/// how a class-shaped script is told from a module-shaped one.
+AUTORTFM_DISABLE bool HasClass(FUtf8StringView ClassName);
+
+AUTORTFM_DISABLE FInstance* Instantiate(FUtf8StringView ClassName, int64 Handle);
+AUTORTFM_DISABLE void ReleaseInstance(FInstance* Instance);
+
+AUTORTFM_DISABLE bool InstanceHasFunction(const FInstance* Instance, FUtf8StringView DecoratedName);
+AUTORTFM_DISABLE int32 InstanceCallVoid(const FInstance* Instance, FUtf8StringView DecoratedName);
+AUTORTFM_DISABLE int32 InstanceCallVoidFloat(const FInstance* Instance, FUtf8StringView DecoratedName, double Arg);
+
 AUTORTFM_DISABLE bool HasFunction(const FScript* Script, FUtf8StringView DecoratedName);
 AUTORTFM_DISABLE int32 RunMain(const TArray<verse::string>& Args, int64& OutExitCode);
 AUTORTFM_DISABLE int32 CallVoid(const FScript* Script, FUtf8StringView DecoratedName);

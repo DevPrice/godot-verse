@@ -16,6 +16,24 @@ constexpr const char *kVerseReadyName = "Ready";
 constexpr const char *kVerseProcessName = "Update(:float)";
 constexpr const char *kVersePhysicsProcessName = "PhysicsUpdate(:float)";
 
+// A class-shaped script overrides methods declared on godot_object, and the VM registers an
+// override under the *declaring* class's decorated name, not the overriding one. Looking up the
+// undecorated name instead does not fail politely — UVerseClass::PeekField asserts on a field
+// the shape does not have.
+constexpr const char *kMethodReadyName = "(/Godot.org/Godot/godot_object:)Ready";
+constexpr const char *kMethodProcessName = "(/Godot.org/Godot/godot_object:)Update(:float)";
+constexpr const char *kMethodPhysicsProcessName = "(/Godot.org/Godot/godot_object:)PhysicsUpdate(:float)";
+
+const char *method_name_for(const char *p_function_name) {
+	if (p_function_name == kVerseReadyName) {
+		return kMethodReadyName;
+	}
+	if (p_function_name == kVerseProcessName) {
+		return kMethodProcessName;
+	}
+	return kMethodPhysicsProcessName;
+}
+
 GDExtensionBool set_func(GDExtensionScriptInstanceDataPtr p_instance, GDExtensionConstStringNamePtr p_name, GDExtensionConstVariantPtr p_value) {
 	return false;
 }
@@ -96,7 +114,11 @@ void call_func(GDExtensionScriptInstanceDataPtr p_self, GDExtensionConstStringNa
 	}
 
 	if (verse_name == kVerseReadyName) {
-		self->script->call_verse_void(verse_name);
+		if (self->verse_object != nullptr) {
+			self->script->call_instance_void(self->verse_object, method_name_for(verse_name));
+		} else {
+			self->script->call_verse_void(verse_name);
+		}
 	} else {
 		if (p_argument_count < 1) {
 			r_error->error = GDEXTENSION_CALL_ERROR_TOO_FEW_ARGUMENTS;
@@ -105,7 +127,11 @@ void call_func(GDExtensionScriptInstanceDataPtr p_self, GDExtensionConstStringNa
 			return;
 		}
 		const double delta = *reinterpret_cast<const Variant *>(p_args[0]);
-		self->script->call_verse_void_float(verse_name, delta);
+		if (self->verse_object != nullptr) {
+			self->script->call_instance_void_float(self->verse_object, method_name_for(verse_name), delta);
+		} else {
+			self->script->call_verse_void_float(verse_name, delta);
+		}
 	}
 
 	r_error->error = GDEXTENSION_CALL_OK;
@@ -142,7 +168,11 @@ GDExtensionScriptLanguagePtr get_language_func(GDExtensionScriptInstanceDataPtr 
 void free_func(GDExtensionScriptInstanceDataPtr p_instance) {
 	// Godot owns this pointer and frees it exactly once, when the owner drops the script;
 	// nothing else may delete the instance.
-	memdelete(static_cast<VerseScriptInstance *>(p_instance));
+	VerseScriptInstance *self = static_cast<VerseScriptInstance *>(p_instance);
+	if (self->verse_object != nullptr) {
+		self->script->free_instance(self->verse_object);
+	}
+	memdelete(self);
 }
 
 const GDExtensionScriptInstanceInfo3 script_instance_info = {
@@ -205,9 +235,21 @@ GDExtensionScriptInstancePtr VerseScriptInstance::create(VerseScript *p_script, 
 	VerseScriptInstance *instance = memnew(VerseScriptInstance);
 	instance->script = Ref<VerseScript>(p_script);
 	instance->owner = p_owner;
-	instance->has_ready = p_script->verse_has_function(kVerseReadyName);
-	instance->has_process = p_script->verse_has_function(kVerseProcessName);
-	instance->has_physics_process = p_script->verse_has_function(kVersePhysicsProcessName);
+
+	if (p_script->is_class_shaped()) {
+		instance->verse_object = p_script->make_instance(p_owner->get_instance_id());
+		if (instance->verse_object == nullptr) {
+			memdelete(instance);
+			return nullptr;
+		}
+		instance->has_ready = p_script->instance_has_function(instance->verse_object, kMethodReadyName);
+		instance->has_process = p_script->instance_has_function(instance->verse_object, kMethodProcessName);
+		instance->has_physics_process = p_script->instance_has_function(instance->verse_object, kMethodPhysicsProcessName);
+	} else {
+		instance->has_ready = p_script->verse_has_function(kVerseReadyName);
+		instance->has_process = p_script->verse_has_function(kVerseProcessName);
+		instance->has_physics_process = p_script->verse_has_function(kVersePhysicsProcessName);
+	}
 
 	return create3(&script_instance_info, instance);
 }

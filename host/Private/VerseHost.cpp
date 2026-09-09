@@ -266,6 +266,77 @@ extern "C" int32_t vh_call_void_float(vh_script* Script, const char* DecoratedNa
     return GodotVerse::CallVoidFloat(reinterpret_cast<GodotVerse::FScript*>(Script), Cstr(DecoratedName), Arg);
 }
 
+extern "C" vh_bool vh_has_class(const char* ClassNameUtf8)
+{
+    if (!ClassNameUtf8 || !GetHost().bInitialized)
+    {
+        return 0;
+    }
+    return GodotVerse::HasClass(Cstr(ClassNameUtf8)) ? 1 : 0;
+}
+
+extern "C" int32_t vh_instantiate(const char* ClassNameUtf8, vh_handle Handle, vh_instance** OutInstance)
+{
+    if (!ClassNameUtf8 || !OutInstance)
+    {
+        return VH_ERR_ABI;
+    }
+    *OutInstance = nullptr;
+
+    if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+
+    GodotVerse::FInstance* Instance = GodotVerse::Instantiate(Cstr(ClassNameUtf8), Handle);
+    if (!Instance)
+    {
+        return VH_ERR_NOT_FOUND;
+    }
+    *OutInstance = reinterpret_cast<vh_instance*>(Instance);
+    return VH_OK;
+}
+
+extern "C" void vh_release_instance(vh_instance* Instance)
+{
+    GodotVerse::ReleaseInstance(reinterpret_cast<GodotVerse::FInstance*>(Instance));
+}
+
+extern "C" vh_bool vh_instance_has_function(vh_instance* Instance, const char* DecoratedName)
+{
+    if (!Instance || !DecoratedName || !GetHost().bInitialized)
+    {
+        return 0;
+    }
+    return GodotVerse::InstanceHasFunction(reinterpret_cast<GodotVerse::FInstance*>(Instance), Cstr(DecoratedName)) ? 1 : 0;
+}
+
+extern "C" int32_t vh_instance_call_void(vh_instance* Instance, const char* DecoratedName)
+{
+    if (!Instance || !DecoratedName)
+    {
+        return VH_ERR_ABI;
+    }
+    if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+    return GodotVerse::InstanceCallVoid(reinterpret_cast<GodotVerse::FInstance*>(Instance), Cstr(DecoratedName));
+}
+
+extern "C" int32_t vh_instance_call_void_float(vh_instance* Instance, const char* DecoratedName, double Arg)
+{
+    if (!Instance || !DecoratedName)
+    {
+        return VH_ERR_ABI;
+    }
+    if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+    return GodotVerse::InstanceCallVoidFloat(reinterpret_cast<GodotVerse::FInstance*>(Instance), Cstr(DecoratedName), Arg);
+}
+
 #if PLATFORM_WINDOWS
 #include "Windows/AllowWindowsPlatformTypes.h"
 
