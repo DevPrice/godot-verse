@@ -8,6 +8,7 @@
 #include <godot_cpp/godot.hpp>
 
 #include "verse_runtime.h"
+#include "verse_ticker.h"
 
 using namespace godot;
 
@@ -19,6 +20,7 @@ void initialize_gdextension_types(const ModuleInitializationLevel p_level) {
 	}
 
 	GDREGISTER_CLASS(VerseRuntime);
+	GDREGISTER_CLASS(VerseTicker);
 
 	verse_runtime_singleton = memnew(VerseRuntime);
 	Engine::get_singleton()->register_singleton("VerseRuntime", verse_runtime_singleton);
