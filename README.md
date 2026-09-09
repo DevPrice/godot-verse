@@ -61,6 +61,33 @@ class hierarchies — `player := class(godot_node2d)` — are Phase 4.
 `VerseTicker` from Phase 2 still works, but nothing needs it: the script language pumps `vh_tick`
 from `_frame`, so every scripted node is driven rather than one hand-placed one.
 
+## Editor tooling
+
+The Verse debugger the host links (`Verse::SocketDebugger`) is reachable, but not driven by
+anything yet. The language server is not reachable at all — the engine checkout has no build of
+it. Full research and citations are in `docs/editor-tooling.md`.
+
+**Debugger.** Set the project setting `verse/host/enable_debugger` to `true` (defaults to
+`false`) before the game starts. That makes `vh_init` call `Verse::SocketDebugger::Listen()`,
+which opens a socket on port 1963 (the engine's `verse.DebuggerPort` console variable). The port
+is real and confirmed by reading the engine source. Whether any VS Code extension can actually
+attach to it is not: the socket frames each message as a 4-byte length prefix plus raw JSON, not
+the `Content-Length`-framed transport the standard Debug Adapter Protocol uses, and no adapter
+bridging the two is known to exist. `.vscode/launch.json` records the port with this caveat rather
+than a config presented as working.
+
+**Language server.** `tools/run_verse_lsp.py` looks for a `uLangLSP`-derived executable and tells
+you exactly why it can't find one: `uLangLSP` in the UE checkout is a message-type library
+(`LSP.h`/`LSP.cpp`), not a Program target, and nothing links it into a binary. There is no build
+command for it, unlike `verse_host.dll`. `.vscode/settings.json` still associates `*.verse` with a
+`verse` language id and matches `demo/scripts`' indentation (4 spaces — one of its three files
+uses literal tabs instead, which is inconsistent, not a style choice to follow), so syntax
+association and formatting work independently of the language server question.
+
+**Known to work:** the debugger's port and the flag that opens it. **Not known to work:**
+whether any VS Code debug extension can speak this socket's framing, and there is currently no
+way to run the language server at all.
+
 ## Five constraints worth knowing
 
 **The project is the compilation unit, not the file.** Verse compiles a whole package at once,
