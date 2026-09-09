@@ -29,7 +29,7 @@ Godot 4.7, and Python with SCons.
 
     python tools/build_host.py            # stages host/ into the engine tree, runs UBT
     scons target=editor                   # builds the GDExtension
-    python tools/gen_verse_api.py         # regenerates the Verse mirror of Godot'''s API
+    python tools/gen_verse_api.py         # regenerates the Verse mirror of Godot's API
     python tools/build_smoke.py           # builds the standalone ABI test
     python tools/build_lexer_test.py      # builds the standalone lexer test
 
