@@ -23,8 +23,8 @@ public:
 	VerseRuntime() = default;
 	~VerseRuntime() override;
 
-	// Reads verse/host/dll_path and verse/host/engine_dir from ProjectSettings (creating them
-	// with defaults if absent) and loads the host from there.
+	// Reads verse/host/dll_path, verse/host/engine_dir and verse/host/enable_debugger from
+	// ProjectSettings (creating them with defaults if absent) and loads the host from there.
 	godot::Error load_host();
 	godot::Error load_host(const godot::String &p_dll_path);
 	void unload_host();
@@ -72,7 +72,7 @@ private:
 	vh_script *current_script = nullptr;
 	godot::Dictionary *diagnostic_sink = nullptr;
 
-	godot::Error load_host_internal(const godot::String &p_dll_path, const godot::String &p_engine_dir);
+	godot::Error load_host_internal(const godot::String &p_dll_path, const godot::String &p_engine_dir, bool p_enable_debugger);
 	void release_current_script();
 
 	static void api_print(void *p_ctx, const char *p_utf8, int32_t p_len);
