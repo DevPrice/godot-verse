@@ -29,6 +29,13 @@ AUTORTFM_DISABLE FScript* CompileFile(const FUtf8String& Path);
 /// a second BuildAll re-notifies already-loaded native Verse packages and aborts in the async
 /// loader, so a rebuild is refused with a diagnostic rather than attempted.
 AUTORTFM_DISABLE bool CompileProject(const TArray<FUtf8String>& Paths);
+/// Re-runs semantic analysis over the whole project with one file's text replaced by the
+/// editor's unsaved buffer, reporting fresh diagnostics through the init callback. Generates
+/// nothing, so the running program is untouched and this may be called as often as the editor
+/// asks -- it is the second BuildAll that CompileProject cannot do, minus the code generation
+/// that is what actually cannot happen twice.
+AUTORTFM_DISABLE bool CheckProject(const FUtf8String& Path, const FUtf8String& SourceText);
+
 AUTORTFM_DISABLE FScript* OpenScript(const FUtf8String& Path);
 AUTORTFM_DISABLE void ReleaseScript(FScript* Script);
 

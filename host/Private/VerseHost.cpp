@@ -179,6 +179,19 @@ extern "C" int32_t vh_compile_project(const char* const* PathsUtf8, int32_t Coun
     return GodotVerse::CompileProject(Paths) ? VH_OK : VH_ERR_COMPILE;
 }
 
+extern "C" int32_t vh_check_project(const char* PathUtf8, const char* SourceUtf8)
+{
+    if (!PathUtf8 || !SourceUtf8)
+    {
+        return VH_ERR_ABI;
+    }
+    if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+    return GodotVerse::CheckProject(FUtf8String(Cstr(PathUtf8)), FUtf8String(Cstr(SourceUtf8))) ? VH_OK : VH_ERR_COMPILE;
+}
+
 extern "C" int32_t vh_open_script(const char* PathUtf8, vh_script** OutScript)
 {
     if (!PathUtf8 || !OutScript)

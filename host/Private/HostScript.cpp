@@ -210,6 +210,34 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FUtf8String>& Path
     return true;
 }
 
+AUTORTFM_DISABLE bool GodotVerse::CheckProject(const FUtf8String& Path, const FUtf8String& SourceText)
+{
+    if (!GProjectBuilt || !GIde.IsValid())
+    {
+        return false;
+    }
+
+    for (const TSharedRef<ISolIdeDataSource>& DataSource : GDataSources)
+    {
+        if (FUtf8String(DataSource->GetPath().AsCString()) == Path)
+        {
+            DataSource->ResetFromSourceTextNoBroadcasts(FULangConversionUtils::FUtf8StringToULangStr(SourceText));
+            break;
+        }
+    }
+
+    // What cannot happen twice in a process is a build that *generates* -- it re-notifies the
+    // already-loaded native Verse packages and aborts inside the async loader. A build that only
+    // analyses publishes no packages and can be run as often as the editor types.
+    FSolIdeBuildSettings Settings{.LinkSettings = uLang::SBuildParams::ELinkParam::RequireComplete};
+    Settings.bSemanticAnalysisOnly = true;
+    Settings.bGenerateDigests = false;
+    Settings.bGenerateCode = false;
+    Settings.bGenerateAutoRTFMBytecode = false;
+
+    return GIde->BuildAll(Settings, MakeIdeDiagnostics(ForwardSolDiagnostic));
+}
+
 AUTORTFM_DISABLE GodotVerse::FScript* GodotVerse::OpenScript(const FUtf8String& Path)
 {
     return new FScript{Path, ModulePathFor(Path)};

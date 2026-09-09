@@ -265,6 +265,12 @@ VH_ATTR VH_API int32_t vh_compile_file(const char* PathUtf8, vh_script** OutScri
  * its own file stem or its definitions collide with every other script's. */
 VH_ATTR VH_API int32_t vh_compile_project(const char* const* PathsUtf8, int32_t Count);
 
+/* Re-runs semantic analysis over the already-compiled project with one file's text replaced,
+ * reporting diagnostics through the init callback. Generates no code, so the running program is
+ * unchanged and this is safe to call repeatedly -- unlike vh_compile_project, which may run once
+ * per process. Returns VH_OK when the project still analyses clean. */
+VH_ATTR VH_API int32_t vh_check_project(const char* PathUtf8, const char* SourceUtf8);
+
 /* Resolves a handle for one file of an already-compiled project. Does not compile. */
 VH_ATTR VH_API int32_t vh_open_script(const char* PathUtf8, vh_script** OutScript);
 
@@ -307,6 +313,7 @@ typedef void (*vh_shutdown_fn)(void);
 typedef void (*vh_tick_fn)(double);
 typedef int32_t (*vh_compile_file_fn)(const char*, vh_script**);
 typedef int32_t (*vh_compile_project_fn)(const char* const*, int32_t);
+typedef int32_t (*vh_check_project_fn)(const char*, const char*);
 typedef int32_t (*vh_open_script_fn)(const char*, vh_script**);
 typedef void (*vh_release_script_fn)(vh_script*);
 typedef vh_bool (*vh_script_has_function_fn)(vh_script*, const char*);
