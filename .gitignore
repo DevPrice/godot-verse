@@ -25,3 +25,7 @@ addons/*/bin/
 host/Intermediate/
 custom.py
 compile_commands.json
+
+# local tooling
+.claude/
+.idea/
