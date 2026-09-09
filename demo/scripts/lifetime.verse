@@ -11,7 +11,7 @@ lifetime := class(godot_node2d):
     var HeldHandle : int = 0
 
     Ready<override>():void =
-        if (Victim := GetChild[0, false]):
+        if (Victim := GetChild[0]):
             set HeldHandle = Victim.Handle
             Print("lifetime: holding a child node")
 

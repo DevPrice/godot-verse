@@ -76,16 +76,48 @@ def test_param_names():
     )
 
 
+def test_default_literals():
+    cases = [
+        ("logic", "false", "false"),
+        ("int", "-1", "-1"),
+        ("float", "-1", "-1.0"),
+        ("float", "0.0", "0.0"),
+        ("string", '&""', '""'),
+        ("string", 'NodePath("")', '""'),
+        ("color", "Color(1, 1, 1, 1)", "color{R := 1.0, G := 1.0, B := 1.0, A := 1.0}"),
+        ("vector2", "Vector2(0, -1)", "vector2{X := 0.0, Y := -1.0}"),
+        ("int", "null", None),
+        ("godot_node", "null", None),
+        ("[]string", "[]", None),
+    ]
+    for verse_type, default, want in cases:
+        check(f"default {verse_type} {default!r}", g.verse_default_literal(verse_type, default), want)
+
+    cm = g.ClassifiedMethod(
+        godot_name="get_child",
+        verse_name="GetChild",
+        params=[g.Param("Idx", g.SCALAR_TYPES["int"], None),
+                g.Param("IncludeInternal", g.SCALAR_TYPES["bool"], "false")],
+        return_type=None,
+        is_void=True,
+    )
+    check(
+        "a defaulted parameter is emitted as an optional named one",
+        "?IncludeInternal:logic = false" in g.emit_method(cm),
+        True,
+    )
+
+
 def test_emit_void_method():
     cm = g.ClassifiedMethod(
         godot_name="set_position",
         verse_name="SetPosition",
-        params=[g.Param("Position", g.SCALAR_TYPES["Vector2".lower() if False else "float"])],
+        params=[g.Param("Position", g.SCALAR_TYPES["float"], None)],
         return_type=None,
         is_void=True,
     )
     # Use the real Vector2 TypeInfo (SCALAR_TYPES keys on the Godot type spelling).
-    cm = cm._replace(params=[g.Param("Position", g.SCALAR_TYPES["Vector2"])])
+    cm = cm._replace(params=[g.Param("Position", g.SCALAR_TYPES["Vector2"], None)])
     want = '    SetPosition<public>(Position:vector2)<transacts>:void = VhCallVoid(Handle, "set_position", array{VhFromVector2(Position)})'
     check("emit void method (SetPosition)", g.emit_method(cm), want)
 
@@ -107,7 +139,7 @@ def test_emit_value_method_class_return():
     cm = g.ClassifiedMethod(
         godot_name="get_child",
         verse_name="GetChild",
-        params=[g.Param("Index", g.SCALAR_TYPES["int"])],
+        params=[g.Param("Index", g.SCALAR_TYPES["int"], None)],
         return_type=ti,
         is_void=False,
     )
@@ -334,6 +366,7 @@ def main():
     test_class_names()
     test_method_names()
     test_param_names()
+    test_default_literals()
     test_emit_void_method()
     test_emit_value_method_scalar()
     test_emit_value_method_class_return()

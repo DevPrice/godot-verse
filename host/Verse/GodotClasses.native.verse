@@ -43,13 +43,13 @@ godot_engine<public> := class(godot_object):
 
 godot_input<public> := class(godot_object):
 
-    ActionPress<public>(Action:string, Strength:float)<transacts>:void = VhCallVoid(Handle, "action_press", array{VhFromStringName(Action), VhFromFloat(Strength)})
+    ActionPress<public>(Action:string, ?Strength:float = 1.0)<transacts>:void = VhCallVoid(Handle, "action_press", array{VhFromStringName(Action), VhFromFloat(Strength)})
     ActionRelease<public>(Action:string)<transacts>:void = VhCallVoid(Handle, "action_release", array{VhFromStringName(Action)})
-    AddJoyMapping<public>(Mapping:string, UpdateExisting:logic)<transacts>:void = VhCallVoid(Handle, "add_joy_mapping", array{VhFromString(Mapping), VhFromLogic(UpdateExisting)})
+    AddJoyMapping<public>(Mapping:string, ?UpdateExisting:logic = false)<transacts>:void = VhCallVoid(Handle, "add_joy_mapping", array{VhFromString(Mapping), VhFromLogic(UpdateExisting)})
     FlushBufferedEvents<public>()<transacts>:void = VhCallVoid(Handle, "flush_buffered_events", array{})
     GetAccelerometer<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_accelerometer", array{}]]
-    GetActionRawStrength<public>(Action:string, ExactMatch:logic)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_action_raw_strength", array{VhFromStringName(Action), VhFromLogic(ExactMatch)}]]
-    GetActionStrength<public>(Action:string, ExactMatch:logic)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_action_strength", array{VhFromStringName(Action), VhFromLogic(ExactMatch)}]]
+    GetActionRawStrength<public>(Action:string, ?ExactMatch:logic = false)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_action_raw_strength", array{VhFromStringName(Action), VhFromLogic(ExactMatch)}]]
+    GetActionStrength<public>(Action:string, ?ExactMatch:logic = false)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_action_strength", array{VhFromStringName(Action), VhFromLogic(ExactMatch)}]]
     GetAxis<public>(NegativeAction:string, PositiveAction:string)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_axis", array{VhFromStringName(NegativeAction), VhFromStringName(PositiveAction)}]]
     GetCurrentCursorShape<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_current_cursor_shape", array{}]]
     GetGravity<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_gravity", array{}]]
@@ -64,13 +64,13 @@ godot_input<public> := class(godot_object):
     GetMagnetometer<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_magnetometer", array{}]]
     GetMouseButtonMask<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_mouse_button_mask", array{}]]
     GetMouseMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_mouse_mode", array{}]]
-    GetVector<public>(NegativeX:string, PositiveX:string, NegativeY:string, PositiveY:string, Deadzone:float)<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_vector", array{VhFromStringName(NegativeX), VhFromStringName(PositiveX), VhFromStringName(NegativeY), VhFromStringName(PositiveY), VhFromFloat(Deadzone)}]]
+    GetVector<public>(NegativeX:string, PositiveX:string, NegativeY:string, PositiveY:string, ?Deadzone:float = -1.0)<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_vector", array{VhFromStringName(NegativeX), VhFromStringName(PositiveX), VhFromStringName(NegativeY), VhFromStringName(PositiveY), VhFromFloat(Deadzone)}]]
     HasJoyLight<public>(Device:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_joy_light", array{VhFromInt(Device)}]]
-    IsActionJustPressed<public>(Action:string, ExactMatch:logic)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_action_just_pressed", array{VhFromStringName(Action), VhFromLogic(ExactMatch)}]]
-    IsActionJustPressedByEvent<public>(Action:string, Event:godot_resource, ExactMatch:logic)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_action_just_pressed_by_event", array{VhFromStringName(Action), VhFromObject(Event), VhFromLogic(ExactMatch)}]]
-    IsActionJustReleased<public>(Action:string, ExactMatch:logic)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_action_just_released", array{VhFromStringName(Action), VhFromLogic(ExactMatch)}]]
-    IsActionJustReleasedByEvent<public>(Action:string, Event:godot_resource, ExactMatch:logic)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_action_just_released_by_event", array{VhFromStringName(Action), VhFromObject(Event), VhFromLogic(ExactMatch)}]]
-    IsActionPressed<public>(Action:string, ExactMatch:logic)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_action_pressed", array{VhFromStringName(Action), VhFromLogic(ExactMatch)}]]
+    IsActionJustPressed<public>(Action:string, ?ExactMatch:logic = false)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_action_just_pressed", array{VhFromStringName(Action), VhFromLogic(ExactMatch)}]]
+    IsActionJustPressedByEvent<public>(Action:string, Event:godot_resource, ?ExactMatch:logic = false)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_action_just_pressed_by_event", array{VhFromStringName(Action), VhFromObject(Event), VhFromLogic(ExactMatch)}]]
+    IsActionJustReleased<public>(Action:string, ?ExactMatch:logic = false)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_action_just_released", array{VhFromStringName(Action), VhFromLogic(ExactMatch)}]]
+    IsActionJustReleasedByEvent<public>(Action:string, Event:godot_resource, ?ExactMatch:logic = false)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_action_just_released_by_event", array{VhFromStringName(Action), VhFromObject(Event), VhFromLogic(ExactMatch)}]]
+    IsActionPressed<public>(Action:string, ?ExactMatch:logic = false)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_action_pressed", array{VhFromStringName(Action), VhFromLogic(ExactMatch)}]]
     IsAnythingPressed<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_anything_pressed", array{}]]
     IsEmulatingMouseFromTouch<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_emulating_mouse_from_touch", array{}]]
     IsEmulatingTouchFromMouse<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_emulating_touch_from_mouse", array{}]]
@@ -84,8 +84,8 @@ godot_input<public> := class(godot_object):
     ParseInputEvent<public>(Event:godot_resource)<transacts>:void = VhCallVoid(Handle, "parse_input_event", array{VhFromObject(Event)})
     RemoveJoyMapping<public>(Guid:string)<transacts>:void = VhCallVoid(Handle, "remove_joy_mapping", array{VhFromString(Guid)})
     SetAccelerometer<public>(Value:vector3)<transacts>:void = VhCallVoid(Handle, "set_accelerometer", array{VhFromVector3(Value)})
-    SetCustomMouseCursor<public>(Image:godot_resource, Shape:int, Hotspot:vector2)<transacts>:void = VhCallVoid(Handle, "set_custom_mouse_cursor", array{VhFromObject(Image), VhFromInt(Shape), VhFromVector2(Hotspot)})
-    SetDefaultCursorShape<public>(Shape:int)<transacts>:void = VhCallVoid(Handle, "set_default_cursor_shape", array{VhFromInt(Shape)})
+    SetCustomMouseCursor<public>(Image:godot_resource, ?Shape:int = 0, ?Hotspot:vector2 = vector2{X := 0.0, Y := 0.0})<transacts>:void = VhCallVoid(Handle, "set_custom_mouse_cursor", array{VhFromObject(Image), VhFromInt(Shape), VhFromVector2(Hotspot)})
+    SetDefaultCursorShape<public>(?Shape:int = 0)<transacts>:void = VhCallVoid(Handle, "set_default_cursor_shape", array{VhFromInt(Shape)})
     SetEmulateMouseFromTouch<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_emulate_mouse_from_touch", array{VhFromLogic(Enable)})
     SetEmulateTouchFromMouse<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_emulate_touch_from_mouse", array{VhFromLogic(Enable)})
     SetGravity<public>(Value:vector3)<transacts>:void = VhCallVoid(Handle, "set_gravity", array{VhFromVector3(Value)})
@@ -95,31 +95,31 @@ godot_input<public> := class(godot_object):
     SetMouseMode<public>(Mode:int)<transacts>:void = VhCallVoid(Handle, "set_mouse_mode", array{VhFromInt(Mode)})
     SetUseAccumulatedInput<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_use_accumulated_input", array{VhFromLogic(Enable)})
     ShouldIgnoreDevice<public>(VendorId:int, ProductId:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "should_ignore_device", array{VhFromInt(VendorId), VhFromInt(ProductId)}]]
-    StartJoyVibration<public>(Device:int, WeakMagnitude:float, StrongMagnitude:float, Duration:float)<transacts>:void = VhCallVoid(Handle, "start_joy_vibration", array{VhFromInt(Device), VhFromFloat(WeakMagnitude), VhFromFloat(StrongMagnitude), VhFromFloat(Duration)})
+    StartJoyVibration<public>(Device:int, WeakMagnitude:float, StrongMagnitude:float, ?Duration:float = 0.0)<transacts>:void = VhCallVoid(Handle, "start_joy_vibration", array{VhFromInt(Device), VhFromFloat(WeakMagnitude), VhFromFloat(StrongMagnitude), VhFromFloat(Duration)})
     StopJoyVibration<public>(Device:int)<transacts>:void = VhCallVoid(Handle, "stop_joy_vibration", array{VhFromInt(Device)})
-    VibrateHandheld<public>(DurationMs:int, Amplitude:float)<transacts>:void = VhCallVoid(Handle, "vibrate_handheld", array{VhFromInt(DurationMs), VhFromFloat(Amplitude)})
+    VibrateHandheld<public>(?DurationMs:int = 500, ?Amplitude:float = -1.0)<transacts>:void = VhCallVoid(Handle, "vibrate_handheld", array{VhFromInt(DurationMs), VhFromFloat(Amplitude)})
     WarpMouse<public>(Position:vector2)<transacts>:void = VhCallVoid(Handle, "warp_mouse", array{VhFromVector2(Position)})
 
 godot_main_loop<public> := class(godot_object):
 
 godot_node<public> := class(godot_object):
 
-    AddChild<public>(Node:godot_node, ForceReadableName:logic, Internal:int)<transacts>:void = VhCallVoid(Handle, "add_child", array{VhFromObject(Node), VhFromLogic(ForceReadableName), VhFromInt(Internal)})
-    AddSibling<public>(Sibling:godot_node, ForceReadableName:logic)<transacts>:void = VhCallVoid(Handle, "add_sibling", array{VhFromObject(Sibling), VhFromLogic(ForceReadableName)})
-    AddToGroup<public>(Group:string, Persistent:logic)<transacts>:void = VhCallVoid(Handle, "add_to_group", array{VhFromStringName(Group), VhFromLogic(Persistent)})
-    Atr<public>(Message:string, Context:string)<decides><transacts>:string = VhToString[VhCallValue[Handle, "atr", array{VhFromString(Message), VhFromStringName(Context)}]]
-    AtrN<public>(Message:string, PluralMessage:string, N:int, Context:string)<decides><transacts>:string = VhToString[VhCallValue[Handle, "atr_n", array{VhFromString(Message), VhFromStringName(PluralMessage), VhFromInt(N), VhFromStringName(Context)}]]
+    AddChild<public>(Node:godot_node, ?ForceReadableName:logic = false, ?Internal:int = 0)<transacts>:void = VhCallVoid(Handle, "add_child", array{VhFromObject(Node), VhFromLogic(ForceReadableName), VhFromInt(Internal)})
+    AddSibling<public>(Sibling:godot_node, ?ForceReadableName:logic = false)<transacts>:void = VhCallVoid(Handle, "add_sibling", array{VhFromObject(Sibling), VhFromLogic(ForceReadableName)})
+    AddToGroup<public>(Group:string, ?Persistent:logic = false)<transacts>:void = VhCallVoid(Handle, "add_to_group", array{VhFromStringName(Group), VhFromLogic(Persistent)})
+    Atr<public>(Message:string, ?Context:string = "")<decides><transacts>:string = VhToString[VhCallValue[Handle, "atr", array{VhFromString(Message), VhFromStringName(Context)}]]
+    AtrN<public>(Message:string, PluralMessage:string, N:int, ?Context:string = "")<decides><transacts>:string = VhToString[VhCallValue[Handle, "atr_n", array{VhFromString(Message), VhFromStringName(PluralMessage), VhFromInt(N), VhFromStringName(Context)}]]
     CanAutoTranslate<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "can_auto_translate", array{}]]
     CanProcess<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "can_process", array{}]]
     CreateTween<public>()<decides><transacts>:godot_tween = godot_tween{Handle := VhToHandle[VhCallValue[Handle, "create_tween", array{}]]}
-    Duplicate<public>(Flags:int)<decides><transacts>:godot_node = godot_node{Handle := VhToHandle[VhCallValue[Handle, "duplicate", array{VhFromInt(Flags)}]]}
-    FindChild<public>(Pattern:string, Recursive:logic, Owned:logic)<decides><transacts>:godot_node = godot_node{Handle := VhToHandle[VhCallValue[Handle, "find_child", array{VhFromString(Pattern), VhFromLogic(Recursive), VhFromLogic(Owned)}]]}
+    Duplicate<public>(?Flags:int = 15)<decides><transacts>:godot_node = godot_node{Handle := VhToHandle[VhCallValue[Handle, "duplicate", array{VhFromInt(Flags)}]]}
+    FindChild<public>(Pattern:string, ?Recursive:logic = true, ?Owned:logic = true)<decides><transacts>:godot_node = godot_node{Handle := VhToHandle[VhCallValue[Handle, "find_child", array{VhFromString(Pattern), VhFromLogic(Recursive), VhFromLogic(Owned)}]]}
     FindParent<public>(Pattern:string)<decides><transacts>:godot_node = godot_node{Handle := VhToHandle[VhCallValue[Handle, "find_parent", array{VhFromString(Pattern)}]]}
     GetAutoTranslateMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_auto_translate_mode", array{}]]
-    GetChild<public>(Idx:int, IncludeInternal:logic)<decides><transacts>:godot_node = godot_node{Handle := VhToHandle[VhCallValue[Handle, "get_child", array{VhFromInt(Idx), VhFromLogic(IncludeInternal)}]]}
-    GetChildCount<public>(IncludeInternal:logic)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_child_count", array{VhFromLogic(IncludeInternal)}]]
+    GetChild<public>(Idx:int, ?IncludeInternal:logic = false)<decides><transacts>:godot_node = godot_node{Handle := VhToHandle[VhCallValue[Handle, "get_child", array{VhFromInt(Idx), VhFromLogic(IncludeInternal)}]]}
+    GetChildCount<public>(?IncludeInternal:logic = false)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_child_count", array{VhFromLogic(IncludeInternal)}]]
     GetEditorDescription<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_editor_description", array{}]]
-    GetIndex<public>(IncludeInternal:logic)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_index", array{VhFromLogic(IncludeInternal)}]]
+    GetIndex<public>(?IncludeInternal:logic = false)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_index", array{VhFromLogic(IncludeInternal)}]]
     GetLastExclusiveWindow<public>()<decides><transacts>:godot_window = godot_window{Handle := VhToHandle[VhCallValue[Handle, "get_last_exclusive_window", array{}]]}
     GetMultiplayer<public>()<decides><transacts>:godot_ref_counted = godot_ref_counted{Handle := VhToHandle[VhCallValue[Handle, "get_multiplayer", array{}]]}
     GetMultiplayerAuthority<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_multiplayer_authority", array{}]]
@@ -129,7 +129,7 @@ godot_node<public> := class(godot_object):
     GetOwner<public>()<decides><transacts>:godot_node = godot_node{Handle := VhToHandle[VhCallValue[Handle, "get_owner", array{}]]}
     GetParent<public>()<decides><transacts>:godot_node = godot_node{Handle := VhToHandle[VhCallValue[Handle, "get_parent", array{}]]}
     GetPath<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_path", array{}]]
-    GetPathTo<public>(Node:godot_node, UseUniquePath:logic)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_path_to", array{VhFromObject(Node), VhFromLogic(UseUniquePath)}]]
+    GetPathTo<public>(Node:godot_node, ?UseUniquePath:logic = false)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_path_to", array{VhFromObject(Node), VhFromLogic(UseUniquePath)}]]
     GetPhysicsInterpolationMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_physics_interpolation_mode", array{}]]
     GetPhysicsProcessDeltaTime<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_physics_process_delta_time", array{}]]
     GetPhysicsProcessPriority<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_physics_process_priority", array{}]]
@@ -178,15 +178,15 @@ godot_node<public> := class(godot_object):
     QueueFree<public>()<transacts>:void = VhCallVoid(Handle, "queue_free", array{})
     RemoveChild<public>(Node:godot_node)<transacts>:void = VhCallVoid(Handle, "remove_child", array{VhFromObject(Node)})
     RemoveFromGroup<public>(Group:string)<transacts>:void = VhCallVoid(Handle, "remove_from_group", array{VhFromStringName(Group)})
-    Reparent<public>(NewParent:godot_node, KeepGlobalTransform:logic)<transacts>:void = VhCallVoid(Handle, "reparent", array{VhFromObject(NewParent), VhFromLogic(KeepGlobalTransform)})
-    ReplaceBy<public>(Node:godot_node, KeepGroups:logic)<transacts>:void = VhCallVoid(Handle, "replace_by", array{VhFromObject(Node), VhFromLogic(KeepGroups)})
+    Reparent<public>(NewParent:godot_node, ?KeepGlobalTransform:logic = true)<transacts>:void = VhCallVoid(Handle, "reparent", array{VhFromObject(NewParent), VhFromLogic(KeepGlobalTransform)})
+    ReplaceBy<public>(Node:godot_node, ?KeepGroups:logic = false)<transacts>:void = VhCallVoid(Handle, "replace_by", array{VhFromObject(Node), VhFromLogic(KeepGroups)})
     RequestReady<public>()<transacts>:void = VhCallVoid(Handle, "request_ready", array{})
     ResetPhysicsInterpolation<public>()<transacts>:void = VhCallVoid(Handle, "reset_physics_interpolation", array{})
     SetAutoTranslateMode<public>(Mode:int)<transacts>:void = VhCallVoid(Handle, "set_auto_translate_mode", array{VhFromInt(Mode)})
     SetDisplayFolded<public>(Fold:logic)<transacts>:void = VhCallVoid(Handle, "set_display_folded", array{VhFromLogic(Fold)})
     SetEditableInstance<public>(Node:godot_node, IsEditable:logic)<transacts>:void = VhCallVoid(Handle, "set_editable_instance", array{VhFromObject(Node), VhFromLogic(IsEditable)})
     SetEditorDescription<public>(EditorDescription:string)<transacts>:void = VhCallVoid(Handle, "set_editor_description", array{VhFromString(EditorDescription)})
-    SetMultiplayerAuthority<public>(Id:int, Recursive:logic)<transacts>:void = VhCallVoid(Handle, "set_multiplayer_authority", array{VhFromInt(Id), VhFromLogic(Recursive)})
+    SetMultiplayerAuthority<public>(Id:int, ?Recursive:logic = true)<transacts>:void = VhCallVoid(Handle, "set_multiplayer_authority", array{VhFromInt(Id), VhFromLogic(Recursive)})
     SetName<public>(Name:string)<transacts>:void = VhCallVoid(Handle, "set_name", array{VhFromStringName(Name)})
     SetOwner<public>(Owner:godot_node)<transacts>:void = VhCallVoid(Handle, "set_owner", array{VhFromObject(Owner)})
     SetPhysicsInterpolationMode<public>(Mode:int)<transacts>:void = VhCallVoid(Handle, "set_physics_interpolation_mode", array{VhFromInt(Mode)})
@@ -219,14 +219,14 @@ godot_ref_counted<public> := class(godot_object):
 
 godot_time<public> := class(godot_object):
 
-    GetDateStringFromSystem<public>(Utc:logic)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_date_string_from_system", array{VhFromLogic(Utc)}]]
+    GetDateStringFromSystem<public>(?Utc:logic = false)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_date_string_from_system", array{VhFromLogic(Utc)}]]
     GetDateStringFromUnixTime<public>(UnixTimeVal:int)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_date_string_from_unix_time", array{VhFromInt(UnixTimeVal)}]]
-    GetDatetimeStringFromSystem<public>(Utc:logic, UseSpace:logic)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_datetime_string_from_system", array{VhFromLogic(Utc), VhFromLogic(UseSpace)}]]
-    GetDatetimeStringFromUnixTime<public>(UnixTimeVal:int, UseSpace:logic)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_datetime_string_from_unix_time", array{VhFromInt(UnixTimeVal), VhFromLogic(UseSpace)}]]
+    GetDatetimeStringFromSystem<public>(?Utc:logic = false, ?UseSpace:logic = false)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_datetime_string_from_system", array{VhFromLogic(Utc), VhFromLogic(UseSpace)}]]
+    GetDatetimeStringFromUnixTime<public>(UnixTimeVal:int, ?UseSpace:logic = false)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_datetime_string_from_unix_time", array{VhFromInt(UnixTimeVal), VhFromLogic(UseSpace)}]]
     GetOffsetStringFromOffsetMinutes<public>(OffsetMinutes:int)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_offset_string_from_offset_minutes", array{VhFromInt(OffsetMinutes)}]]
     GetTicksMsec<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_ticks_msec", array{}]]
     GetTicksUsec<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_ticks_usec", array{}]]
-    GetTimeStringFromSystem<public>(Utc:logic)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_time_string_from_system", array{VhFromLogic(Utc)}]]
+    GetTimeStringFromSystem<public>(?Utc:logic = false)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_time_string_from_system", array{VhFromLogic(Utc)}]]
     GetTimeStringFromUnixTime<public>(UnixTimeVal:int)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_time_string_from_unix_time", array{VhFromInt(UnixTimeVal)}]]
     GetUnixTimeFromDatetimeString<public>(Datetime:string)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_unix_time_from_datetime_string", array{VhFromString(Datetime)}]]
     GetUnixTimeFromSystem<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_unix_time_from_system", array{}]]
@@ -235,7 +235,7 @@ godot_animation_mixer<public> := class(godot_node):
 
     AddAnimationLibrary<public>(Name:string, Library:godot_resource)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "add_animation_library", array{VhFromStringName(Name), VhFromObject(Library)}]]
     Advance<public>(Delta:float)<transacts>:void = VhCallVoid(Handle, "advance", array{VhFromFloat(Delta)})
-    Capture<public>(Name:string, Duration:float, TransType:int, EaseType:int)<transacts>:void = VhCallVoid(Handle, "capture", array{VhFromStringName(Name), VhFromFloat(Duration), VhFromInt(TransType), VhFromInt(EaseType)})
+    Capture<public>(Name:string, Duration:float, ?TransType:int = 0, ?EaseType:int = 0)<transacts>:void = VhCallVoid(Handle, "capture", array{VhFromStringName(Name), VhFromFloat(Duration), VhFromInt(TransType), VhFromInt(EaseType)})
     ClearCaches<public>()<transacts>:void = VhCallVoid(Handle, "clear_caches", array{})
     FindAnimation<public>(Animation:godot_resource)<decides><transacts>:string = VhToString[VhCallValue[Handle, "find_animation", array{VhFromObject(Animation)}]]
     FindAnimationLibrary<public>(Animation:godot_resource)<decides><transacts>:string = VhToString[VhCallValue[Handle, "find_animation_library", array{VhFromObject(Animation)}]]
@@ -287,7 +287,7 @@ godot_audio_stream_player<public> := class(godot_node):
     HasStreamPlayback<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_stream_playback", array{}]]
     IsAutoplayEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_autoplay_enabled", array{}]]
     IsPlaying<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_playing", array{}]]
-    Play<public>(FromPosition:float)<transacts>:void = VhCallVoid(Handle, "play", array{VhFromFloat(FromPosition)})
+    Play<public>(?FromPosition:float = 0.0)<transacts>:void = VhCallVoid(Handle, "play", array{VhFromFloat(FromPosition)})
     Seek<public>(ToPosition:float)<transacts>:void = VhCallVoid(Handle, "seek", array{VhFromFloat(ToPosition)})
     SetAutoplay<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_autoplay", array{VhFromLogic(Enable)})
     SetBus<public>(Bus:string)<transacts>:void = VhCallVoid(Handle, "set_bus", array{VhFromStringName(Bus)})
@@ -304,23 +304,23 @@ godot_audio_stream_player<public> := class(godot_node):
 
 godot_canvas_item<public> := class(godot_node):
 
-    DrawAnimationSlice<public>(AnimationLength:float, SliceBegin:float, SliceEnd:float, Offset:float)<transacts>:void = VhCallVoid(Handle, "draw_animation_slice", array{VhFromFloat(AnimationLength), VhFromFloat(SliceBegin), VhFromFloat(SliceEnd), VhFromFloat(Offset)})
-    DrawArc<public>(Center:vector2, Radius:float, StartAngle:float, EndAngle:float, PointCount:int, Color:color, Width:float, Antialiased:logic)<transacts>:void = VhCallVoid(Handle, "draw_arc", array{VhFromVector2(Center), VhFromFloat(Radius), VhFromFloat(StartAngle), VhFromFloat(EndAngle), VhFromInt(PointCount), VhFromColor(Color), VhFromFloat(Width), VhFromLogic(Antialiased)})
-    DrawChar<public>(Font:godot_resource, Pos:vector2, Char:string, FontSize:int, Modulate:color, Oversampling:float)<transacts>:void = VhCallVoid(Handle, "draw_char", array{VhFromObject(Font), VhFromVector2(Pos), VhFromString(Char), VhFromInt(FontSize), VhFromColor(Modulate), VhFromFloat(Oversampling)})
-    DrawCharOutline<public>(Font:godot_resource, Pos:vector2, Char:string, FontSize:int, Size:int, Modulate:color, Oversampling:float)<transacts>:void = VhCallVoid(Handle, "draw_char_outline", array{VhFromObject(Font), VhFromVector2(Pos), VhFromString(Char), VhFromInt(FontSize), VhFromInt(Size), VhFromColor(Modulate), VhFromFloat(Oversampling)})
-    DrawCircle<public>(Position:vector2, Radius:float, Color:color, Filled:logic, Width:float, Antialiased:logic)<transacts>:void = VhCallVoid(Handle, "draw_circle", array{VhFromVector2(Position), VhFromFloat(Radius), VhFromColor(Color), VhFromLogic(Filled), VhFromFloat(Width), VhFromLogic(Antialiased)})
-    DrawDashedLine<public>(From:vector2, To:vector2, Color:color, Width:float, Dash:float, Aligned:logic, Antialiased:logic)<transacts>:void = VhCallVoid(Handle, "draw_dashed_line", array{VhFromVector2(From), VhFromVector2(To), VhFromColor(Color), VhFromFloat(Width), VhFromFloat(Dash), VhFromLogic(Aligned), VhFromLogic(Antialiased)})
-    DrawEllipse<public>(Position:vector2, Major:float, Minor:float, Color:color, Filled:logic, Width:float, Antialiased:logic)<transacts>:void = VhCallVoid(Handle, "draw_ellipse", array{VhFromVector2(Position), VhFromFloat(Major), VhFromFloat(Minor), VhFromColor(Color), VhFromLogic(Filled), VhFromFloat(Width), VhFromLogic(Antialiased)})
-    DrawEllipseArc<public>(Center:vector2, Major:float, Minor:float, StartAngle:float, EndAngle:float, PointCount:int, Color:color, Width:float, Antialiased:logic)<transacts>:void = VhCallVoid(Handle, "draw_ellipse_arc", array{VhFromVector2(Center), VhFromFloat(Major), VhFromFloat(Minor), VhFromFloat(StartAngle), VhFromFloat(EndAngle), VhFromInt(PointCount), VhFromColor(Color), VhFromFloat(Width), VhFromLogic(Antialiased)})
+    DrawAnimationSlice<public>(AnimationLength:float, SliceBegin:float, SliceEnd:float, ?Offset:float = 0.0)<transacts>:void = VhCallVoid(Handle, "draw_animation_slice", array{VhFromFloat(AnimationLength), VhFromFloat(SliceBegin), VhFromFloat(SliceEnd), VhFromFloat(Offset)})
+    DrawArc<public>(Center:vector2, Radius:float, StartAngle:float, EndAngle:float, PointCount:int, Color:color, ?Width:float = -1.0, ?Antialiased:logic = false)<transacts>:void = VhCallVoid(Handle, "draw_arc", array{VhFromVector2(Center), VhFromFloat(Radius), VhFromFloat(StartAngle), VhFromFloat(EndAngle), VhFromInt(PointCount), VhFromColor(Color), VhFromFloat(Width), VhFromLogic(Antialiased)})
+    DrawChar<public>(Font:godot_resource, Pos:vector2, Char:string, ?FontSize:int = 16, ?Modulate:color = color{R := 1.0, G := 1.0, B := 1.0, A := 1.0}, ?Oversampling:float = 0.0)<transacts>:void = VhCallVoid(Handle, "draw_char", array{VhFromObject(Font), VhFromVector2(Pos), VhFromString(Char), VhFromInt(FontSize), VhFromColor(Modulate), VhFromFloat(Oversampling)})
+    DrawCharOutline<public>(Font:godot_resource, Pos:vector2, Char:string, ?FontSize:int = 16, ?Size:int = -1, ?Modulate:color = color{R := 1.0, G := 1.0, B := 1.0, A := 1.0}, ?Oversampling:float = 0.0)<transacts>:void = VhCallVoid(Handle, "draw_char_outline", array{VhFromObject(Font), VhFromVector2(Pos), VhFromString(Char), VhFromInt(FontSize), VhFromInt(Size), VhFromColor(Modulate), VhFromFloat(Oversampling)})
+    DrawCircle<public>(Position:vector2, Radius:float, Color:color, ?Filled:logic = true, ?Width:float = -1.0, ?Antialiased:logic = false)<transacts>:void = VhCallVoid(Handle, "draw_circle", array{VhFromVector2(Position), VhFromFloat(Radius), VhFromColor(Color), VhFromLogic(Filled), VhFromFloat(Width), VhFromLogic(Antialiased)})
+    DrawDashedLine<public>(From:vector2, To:vector2, Color:color, ?Width:float = -1.0, ?Dash:float = 2.0, ?Aligned:logic = true, ?Antialiased:logic = false)<transacts>:void = VhCallVoid(Handle, "draw_dashed_line", array{VhFromVector2(From), VhFromVector2(To), VhFromColor(Color), VhFromFloat(Width), VhFromFloat(Dash), VhFromLogic(Aligned), VhFromLogic(Antialiased)})
+    DrawEllipse<public>(Position:vector2, Major:float, Minor:float, Color:color, ?Filled:logic = true, ?Width:float = -1.0, ?Antialiased:logic = false)<transacts>:void = VhCallVoid(Handle, "draw_ellipse", array{VhFromVector2(Position), VhFromFloat(Major), VhFromFloat(Minor), VhFromColor(Color), VhFromLogic(Filled), VhFromFloat(Width), VhFromLogic(Antialiased)})
+    DrawEllipseArc<public>(Center:vector2, Major:float, Minor:float, StartAngle:float, EndAngle:float, PointCount:int, Color:color, ?Width:float = -1.0, ?Antialiased:logic = false)<transacts>:void = VhCallVoid(Handle, "draw_ellipse_arc", array{VhFromVector2(Center), VhFromFloat(Major), VhFromFloat(Minor), VhFromFloat(StartAngle), VhFromFloat(EndAngle), VhFromInt(PointCount), VhFromColor(Color), VhFromFloat(Width), VhFromLogic(Antialiased)})
     DrawEndAnimation<public>()<transacts>:void = VhCallVoid(Handle, "draw_end_animation", array{})
-    DrawLine<public>(From:vector2, To:vector2, Color:color, Width:float, Antialiased:logic)<transacts>:void = VhCallVoid(Handle, "draw_line", array{VhFromVector2(From), VhFromVector2(To), VhFromColor(Color), VhFromFloat(Width), VhFromLogic(Antialiased)})
-    DrawMultilineString<public>(Font:godot_resource, Pos:vector2, Text:string, Alignment:int, Width:float, FontSize:int, MaxLines:int, Modulate:color, BrkFlags:int, JustificationFlags:int, Direction:int, Orientation:int, Oversampling:float)<transacts>:void = VhCallVoid(Handle, "draw_multiline_string", array{VhFromObject(Font), VhFromVector2(Pos), VhFromString(Text), VhFromInt(Alignment), VhFromFloat(Width), VhFromInt(FontSize), VhFromInt(MaxLines), VhFromColor(Modulate), VhFromInt(BrkFlags), VhFromInt(JustificationFlags), VhFromInt(Direction), VhFromInt(Orientation), VhFromFloat(Oversampling)})
-    DrawMultilineStringOutline<public>(Font:godot_resource, Pos:vector2, Text:string, Alignment:int, Width:float, FontSize:int, MaxLines:int, Size:int, Modulate:color, BrkFlags:int, JustificationFlags:int, Direction:int, Orientation:int, Oversampling:float)<transacts>:void = VhCallVoid(Handle, "draw_multiline_string_outline", array{VhFromObject(Font), VhFromVector2(Pos), VhFromString(Text), VhFromInt(Alignment), VhFromFloat(Width), VhFromInt(FontSize), VhFromInt(MaxLines), VhFromInt(Size), VhFromColor(Modulate), VhFromInt(BrkFlags), VhFromInt(JustificationFlags), VhFromInt(Direction), VhFromInt(Orientation), VhFromFloat(Oversampling)})
+    DrawLine<public>(From:vector2, To:vector2, Color:color, ?Width:float = -1.0, ?Antialiased:logic = false)<transacts>:void = VhCallVoid(Handle, "draw_line", array{VhFromVector2(From), VhFromVector2(To), VhFromColor(Color), VhFromFloat(Width), VhFromLogic(Antialiased)})
+    DrawMultilineString<public>(Font:godot_resource, Pos:vector2, Text:string, ?Alignment:int = 0, ?Width:float = -1.0, ?FontSize:int = 16, ?MaxLines:int = -1, ?Modulate:color = color{R := 1.0, G := 1.0, B := 1.0, A := 1.0}, ?BrkFlags:int = 3, ?JustificationFlags:int = 3, ?Direction:int = 0, ?Orientation:int = 0, ?Oversampling:float = 0.0)<transacts>:void = VhCallVoid(Handle, "draw_multiline_string", array{VhFromObject(Font), VhFromVector2(Pos), VhFromString(Text), VhFromInt(Alignment), VhFromFloat(Width), VhFromInt(FontSize), VhFromInt(MaxLines), VhFromColor(Modulate), VhFromInt(BrkFlags), VhFromInt(JustificationFlags), VhFromInt(Direction), VhFromInt(Orientation), VhFromFloat(Oversampling)})
+    DrawMultilineStringOutline<public>(Font:godot_resource, Pos:vector2, Text:string, ?Alignment:int = 0, ?Width:float = -1.0, ?FontSize:int = 16, ?MaxLines:int = -1, ?Size:int = 1, ?Modulate:color = color{R := 1.0, G := 1.0, B := 1.0, A := 1.0}, ?BrkFlags:int = 3, ?JustificationFlags:int = 3, ?Direction:int = 0, ?Orientation:int = 0, ?Oversampling:float = 0.0)<transacts>:void = VhCallVoid(Handle, "draw_multiline_string_outline", array{VhFromObject(Font), VhFromVector2(Pos), VhFromString(Text), VhFromInt(Alignment), VhFromFloat(Width), VhFromInt(FontSize), VhFromInt(MaxLines), VhFromInt(Size), VhFromColor(Modulate), VhFromInt(BrkFlags), VhFromInt(JustificationFlags), VhFromInt(Direction), VhFromInt(Orientation), VhFromFloat(Oversampling)})
     DrawMultimesh<public>(Multimesh:godot_resource, Texture:godot_texture2d)<transacts>:void = VhCallVoid(Handle, "draw_multimesh", array{VhFromObject(Multimesh), VhFromObject(Texture)})
-    DrawSetTransform<public>(Position:vector2, Rotation:float, Scale:vector2)<transacts>:void = VhCallVoid(Handle, "draw_set_transform", array{VhFromVector2(Position), VhFromFloat(Rotation), VhFromVector2(Scale)})
-    DrawString<public>(Font:godot_resource, Pos:vector2, Text:string, Alignment:int, Width:float, FontSize:int, Modulate:color, JustificationFlags:int, Direction:int, Orientation:int, Oversampling:float)<transacts>:void = VhCallVoid(Handle, "draw_string", array{VhFromObject(Font), VhFromVector2(Pos), VhFromString(Text), VhFromInt(Alignment), VhFromFloat(Width), VhFromInt(FontSize), VhFromColor(Modulate), VhFromInt(JustificationFlags), VhFromInt(Direction), VhFromInt(Orientation), VhFromFloat(Oversampling)})
-    DrawStringOutline<public>(Font:godot_resource, Pos:vector2, Text:string, Alignment:int, Width:float, FontSize:int, Size:int, Modulate:color, JustificationFlags:int, Direction:int, Orientation:int, Oversampling:float)<transacts>:void = VhCallVoid(Handle, "draw_string_outline", array{VhFromObject(Font), VhFromVector2(Pos), VhFromString(Text), VhFromInt(Alignment), VhFromFloat(Width), VhFromInt(FontSize), VhFromInt(Size), VhFromColor(Modulate), VhFromInt(JustificationFlags), VhFromInt(Direction), VhFromInt(Orientation), VhFromFloat(Oversampling)})
-    DrawTexture<public>(Texture:godot_texture2d, Position:vector2, Modulate:color)<transacts>:void = VhCallVoid(Handle, "draw_texture", array{VhFromObject(Texture), VhFromVector2(Position), VhFromColor(Modulate)})
+    DrawSetTransform<public>(Position:vector2, ?Rotation:float = 0.0, ?Scale:vector2 = vector2{X := 1.0, Y := 1.0})<transacts>:void = VhCallVoid(Handle, "draw_set_transform", array{VhFromVector2(Position), VhFromFloat(Rotation), VhFromVector2(Scale)})
+    DrawString<public>(Font:godot_resource, Pos:vector2, Text:string, ?Alignment:int = 0, ?Width:float = -1.0, ?FontSize:int = 16, ?Modulate:color = color{R := 1.0, G := 1.0, B := 1.0, A := 1.0}, ?JustificationFlags:int = 3, ?Direction:int = 0, ?Orientation:int = 0, ?Oversampling:float = 0.0)<transacts>:void = VhCallVoid(Handle, "draw_string", array{VhFromObject(Font), VhFromVector2(Pos), VhFromString(Text), VhFromInt(Alignment), VhFromFloat(Width), VhFromInt(FontSize), VhFromColor(Modulate), VhFromInt(JustificationFlags), VhFromInt(Direction), VhFromInt(Orientation), VhFromFloat(Oversampling)})
+    DrawStringOutline<public>(Font:godot_resource, Pos:vector2, Text:string, ?Alignment:int = 0, ?Width:float = -1.0, ?FontSize:int = 16, ?Size:int = 1, ?Modulate:color = color{R := 1.0, G := 1.0, B := 1.0, A := 1.0}, ?JustificationFlags:int = 3, ?Direction:int = 0, ?Orientation:int = 0, ?Oversampling:float = 0.0)<transacts>:void = VhCallVoid(Handle, "draw_string_outline", array{VhFromObject(Font), VhFromVector2(Pos), VhFromString(Text), VhFromInt(Alignment), VhFromFloat(Width), VhFromInt(FontSize), VhFromInt(Size), VhFromColor(Modulate), VhFromInt(JustificationFlags), VhFromInt(Direction), VhFromInt(Orientation), VhFromFloat(Oversampling)})
+    DrawTexture<public>(Texture:godot_texture2d, Position:vector2, ?Modulate:color = color{R := 1.0, G := 1.0, B := 1.0, A := 1.0})<transacts>:void = VhCallVoid(Handle, "draw_texture", array{VhFromObject(Texture), VhFromVector2(Position), VhFromColor(Modulate)})
     ForceUpdateTransform<public>()<transacts>:void = VhCallVoid(Handle, "force_update_transform", array{})
     GetCanvasLayerNode<public>()<decides><transacts>:godot_canvas_layer = godot_canvas_layer{Handle := VhToHandle[VhCallValue[Handle, "get_canvas_layer_node", array{}]]}
     GetClipChildrenMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_clip_children_mode", array{}]]
@@ -419,8 +419,8 @@ godot_node3d<public> := class(godot_node):
     IsTransformNotificationEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_transform_notification_enabled", array{}]]
     IsVisible<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_visible", array{}]]
     IsVisibleInTree<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_visible_in_tree", array{}]]
-    LookAt<public>(Target:vector3, Up:vector3, UseModelFront:logic)<transacts>:void = VhCallVoid(Handle, "look_at", array{VhFromVector3(Target), VhFromVector3(Up), VhFromLogic(UseModelFront)})
-    LookAtFromPosition<public>(Position:vector3, Target:vector3, Up:vector3, UseModelFront:logic)<transacts>:void = VhCallVoid(Handle, "look_at_from_position", array{VhFromVector3(Position), VhFromVector3(Target), VhFromVector3(Up), VhFromLogic(UseModelFront)})
+    LookAt<public>(Target:vector3, ?Up:vector3 = vector3{X := 0.0, Y := 1.0, Z := 0.0}, ?UseModelFront:logic = false)<transacts>:void = VhCallVoid(Handle, "look_at", array{VhFromVector3(Target), VhFromVector3(Up), VhFromLogic(UseModelFront)})
+    LookAtFromPosition<public>(Position:vector3, Target:vector3, ?Up:vector3 = vector3{X := 0.0, Y := 1.0, Z := 0.0}, ?UseModelFront:logic = false)<transacts>:void = VhCallVoid(Handle, "look_at_from_position", array{VhFromVector3(Position), VhFromVector3(Target), VhFromVector3(Up), VhFromLogic(UseModelFront)})
     Orthonormalize<public>()<transacts>:void = VhCallVoid(Handle, "orthonormalize", array{})
     Rotate<public>(Axis:vector3, Angle:float)<transacts>:void = VhCallVoid(Handle, "rotate", array{VhFromVector3(Axis), VhFromFloat(Angle)})
     RotateObjectLocal<public>(Axis:vector3, Angle:float)<transacts>:void = VhCallVoid(Handle, "rotate_object_local", array{VhFromVector3(Axis), VhFromFloat(Angle)})
@@ -458,7 +458,7 @@ godot_random_number_generator<public> := class(godot_ref_counted):
     GetState<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_state", array{}]]
     Randf<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "randf", array{}]]
     RandfRange<public>(From:float, To:float)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "randf_range", array{VhFromFloat(From), VhFromFloat(To)}]]
-    Randfn<public>(Mean:float, Deviation:float)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "randfn", array{VhFromFloat(Mean), VhFromFloat(Deviation)}]]
+    Randfn<public>(?Mean:float = 0.0, ?Deviation:float = 1.0)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "randfn", array{VhFromFloat(Mean), VhFromFloat(Deviation)}]]
     Randi<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "randi", array{}]]
     RandiRange<public>(From:int, To:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "randi_range", array{VhFromInt(From), VhFromInt(To)}]]
     Randomize<public>()<transacts>:void = VhCallVoid(Handle, "randomize", array{})
@@ -467,8 +467,8 @@ godot_random_number_generator<public> := class(godot_ref_counted):
 
 godot_resource<public> := class(godot_ref_counted):
 
-    Duplicate<public>(Deep:logic)<decides><transacts>:godot_resource = godot_resource{Handle := VhToHandle[VhCallValue[Handle, "duplicate", array{VhFromLogic(Deep)}]]}
-    DuplicateDeep<public>(DeepSubresourcesMode:int)<decides><transacts>:godot_resource = godot_resource{Handle := VhToHandle[VhCallValue[Handle, "duplicate_deep", array{VhFromInt(DeepSubresourcesMode)}]]}
+    Duplicate<public>(?Deep:logic = false)<decides><transacts>:godot_resource = godot_resource{Handle := VhToHandle[VhCallValue[Handle, "duplicate", array{VhFromLogic(Deep)}]]}
+    DuplicateDeep<public>(?DeepSubresourcesMode:int = 1)<decides><transacts>:godot_resource = godot_resource{Handle := VhToHandle[VhCallValue[Handle, "duplicate_deep", array{VhFromInt(DeepSubresourcesMode)}]]}
     EmitChanged<public>()<transacts>:void = VhCallVoid(Handle, "emit_changed", array{})
     GetIdForPath<public>(Path:string)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_id_for_path", array{VhFromString(Path)}]]
     GetLocalScene<public>()<decides><transacts>:godot_node = godot_node{Handle := VhToHandle[VhCallValue[Handle, "get_local_scene", array{}]]}
@@ -492,13 +492,13 @@ godot_scene_tree<public> := class(godot_main_loop):
     ChangeSceneToFile<public>(Path:string)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "change_scene_to_file", array{VhFromString(Path)}]]
     ChangeSceneToNode<public>(Node:godot_node)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "change_scene_to_node", array{VhFromObject(Node)}]]
     ChangeSceneToPacked<public>(PackedScene:godot_packed_scene)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "change_scene_to_packed", array{VhFromObject(PackedScene)}]]
-    CreateTimer<public>(TimeSec:float, ProcessAlways:logic, ProcessInPhysics:logic, IgnoreTimeScale:logic)<decides><transacts>:godot_ref_counted = godot_ref_counted{Handle := VhToHandle[VhCallValue[Handle, "create_timer", array{VhFromFloat(TimeSec), VhFromLogic(ProcessAlways), VhFromLogic(ProcessInPhysics), VhFromLogic(IgnoreTimeScale)}]]}
+    CreateTimer<public>(TimeSec:float, ?ProcessAlways:logic = true, ?ProcessInPhysics:logic = false, ?IgnoreTimeScale:logic = false)<decides><transacts>:godot_ref_counted = godot_ref_counted{Handle := VhToHandle[VhCallValue[Handle, "create_timer", array{VhFromFloat(TimeSec), VhFromLogic(ProcessAlways), VhFromLogic(ProcessInPhysics), VhFromLogic(IgnoreTimeScale)}]]}
     CreateTween<public>()<decides><transacts>:godot_tween = godot_tween{Handle := VhToHandle[VhCallValue[Handle, "create_tween", array{}]]}
     GetCurrentScene<public>()<decides><transacts>:godot_node = godot_node{Handle := VhToHandle[VhCallValue[Handle, "get_current_scene", array{}]]}
     GetEditedSceneRoot<public>()<decides><transacts>:godot_node = godot_node{Handle := VhToHandle[VhCallValue[Handle, "get_edited_scene_root", array{}]]}
     GetFirstNodeInGroup<public>(Group:string)<decides><transacts>:godot_node = godot_node{Handle := VhToHandle[VhCallValue[Handle, "get_first_node_in_group", array{VhFromStringName(Group)}]]}
     GetFrame<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_frame", array{}]]
-    GetMultiplayer<public>(ForPath:string)<decides><transacts>:godot_ref_counted = godot_ref_counted{Handle := VhToHandle[VhCallValue[Handle, "get_multiplayer", array{VhFromNodePath(ForPath)}]]}
+    GetMultiplayer<public>(?ForPath:string = "")<decides><transacts>:godot_ref_counted = godot_ref_counted{Handle := VhToHandle[VhCallValue[Handle, "get_multiplayer", array{VhFromNodePath(ForPath)}]]}
     GetNodeCount<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_node_count", array{}]]
     GetNodeCountInGroup<public>(Group:string)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_node_count_in_group", array{VhFromStringName(Group)}]]
     GetRoot<public>()<decides><transacts>:godot_window = godot_window{Handle := VhToHandle[VhCallValue[Handle, "get_root", array{}]]}
@@ -515,7 +515,7 @@ godot_scene_tree<public> := class(godot_main_loop):
     IsQuitOnGoBack<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_quit_on_go_back", array{}]]
     NotifyGroup<public>(Group:string, Notification:int)<transacts>:void = VhCallVoid(Handle, "notify_group", array{VhFromStringName(Group), VhFromInt(Notification)})
     NotifyGroupFlags<public>(CallFlags:int, Group:string, Notification:int)<transacts>:void = VhCallVoid(Handle, "notify_group_flags", array{VhFromInt(CallFlags), VhFromStringName(Group), VhFromInt(Notification)})
-    Quit<public>(ExitCode:int)<transacts>:void = VhCallVoid(Handle, "quit", array{VhFromInt(ExitCode)})
+    Quit<public>(?ExitCode:int = 0)<transacts>:void = VhCallVoid(Handle, "quit", array{VhFromInt(ExitCode)})
     ReloadCurrentScene<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "reload_current_scene", array{}]]
     SetAutoAcceptQuit<public>(Enabled:logic)<transacts>:void = VhCallVoid(Handle, "set_auto_accept_quit", array{VhFromLogic(Enabled)})
     SetCurrentScene<public>(ChildNode:godot_node)<transacts>:void = VhCallVoid(Handle, "set_current_scene", array{VhFromObject(ChildNode)})
@@ -523,7 +523,7 @@ godot_scene_tree<public> := class(godot_main_loop):
     SetDebugNavigationHint<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_debug_navigation_hint", array{VhFromLogic(Enable)})
     SetDebugPathsHint<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_debug_paths_hint", array{VhFromLogic(Enable)})
     SetEditedSceneRoot<public>(Scene:godot_node)<transacts>:void = VhCallVoid(Handle, "set_edited_scene_root", array{VhFromObject(Scene)})
-    SetMultiplayer<public>(Multiplayer:godot_ref_counted, RootPath:string)<transacts>:void = VhCallVoid(Handle, "set_multiplayer", array{VhFromObject(Multiplayer), VhFromNodePath(RootPath)})
+    SetMultiplayer<public>(Multiplayer:godot_ref_counted, ?RootPath:string = "")<transacts>:void = VhCallVoid(Handle, "set_multiplayer", array{VhFromObject(Multiplayer), VhFromNodePath(RootPath)})
     SetMultiplayerPollEnabled<public>(Enabled:logic)<transacts>:void = VhCallVoid(Handle, "set_multiplayer_poll_enabled", array{VhFromLogic(Enabled)})
     SetPause<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_pause", array{VhFromLogic(Enable)})
     SetPhysicsInterpolationEnabled<public>(Enabled:logic)<transacts>:void = VhCallVoid(Handle, "set_physics_interpolation_enabled", array{VhFromLogic(Enabled)})
@@ -546,7 +546,7 @@ godot_timer<public> := class(godot_node):
     SetPaused<public>(Paused:logic)<transacts>:void = VhCallVoid(Handle, "set_paused", array{VhFromLogic(Paused)})
     SetTimerProcessCallback<public>(Callback:int)<transacts>:void = VhCallVoid(Handle, "set_timer_process_callback", array{VhFromInt(Callback)})
     SetWaitTime<public>(TimeSec:float)<transacts>:void = VhCallVoid(Handle, "set_wait_time", array{VhFromFloat(TimeSec)})
-    Start<public>(TimeSec:float)<transacts>:void = VhCallVoid(Handle, "start", array{VhFromFloat(TimeSec)})
+    Start<public>(?TimeSec:float = -1.0)<transacts>:void = VhCallVoid(Handle, "start", array{VhFromFloat(TimeSec)})
     Stop<public>()<transacts>:void = VhCallVoid(Handle, "stop", array{})
 
 godot_tween<public> := class(godot_ref_counted):
@@ -563,9 +563,9 @@ godot_tween<public> := class(godot_ref_counted):
     Pause<public>()<transacts>:void = VhCallVoid(Handle, "pause", array{})
     Play<public>()<transacts>:void = VhCallVoid(Handle, "play", array{})
     SetEase<public>(Ease:int)<decides><transacts>:godot_tween = godot_tween{Handle := VhToHandle[VhCallValue[Handle, "set_ease", array{VhFromInt(Ease)}]]}
-    SetIgnoreTimeScale<public>(Ignore:logic)<decides><transacts>:godot_tween = godot_tween{Handle := VhToHandle[VhCallValue[Handle, "set_ignore_time_scale", array{VhFromLogic(Ignore)}]]}
-    SetLoops<public>(Loops:int)<decides><transacts>:godot_tween = godot_tween{Handle := VhToHandle[VhCallValue[Handle, "set_loops", array{VhFromInt(Loops)}]]}
-    SetParallel<public>(Arg0:logic)<decides><transacts>:godot_tween = godot_tween{Handle := VhToHandle[VhCallValue[Handle, "set_parallel", array{VhFromLogic(Arg0)}]]}
+    SetIgnoreTimeScale<public>(?Ignore:logic = true)<decides><transacts>:godot_tween = godot_tween{Handle := VhToHandle[VhCallValue[Handle, "set_ignore_time_scale", array{VhFromLogic(Ignore)}]]}
+    SetLoops<public>(?Loops:int = 0)<decides><transacts>:godot_tween = godot_tween{Handle := VhToHandle[VhCallValue[Handle, "set_loops", array{VhFromInt(Loops)}]]}
+    SetParallel<public>(?Arg0:logic = true)<decides><transacts>:godot_tween = godot_tween{Handle := VhToHandle[VhCallValue[Handle, "set_parallel", array{VhFromLogic(Arg0)}]]}
     SetPauseMode<public>(Mode:int)<decides><transacts>:godot_tween = godot_tween{Handle := VhToHandle[VhCallValue[Handle, "set_pause_mode", array{VhFromInt(Mode)}]]}
     SetProcessMode<public>(Mode:int)<decides><transacts>:godot_tween = godot_tween{Handle := VhToHandle[VhCallValue[Handle, "set_process_mode", array{VhFromInt(Mode)}]]}
     SetSpeedScale<public>(Speed:float)<decides><transacts>:godot_tween = godot_tween{Handle := VhToHandle[VhCallValue[Handle, "set_speed_scale", array{VhFromFloat(Speed)}]]}
@@ -643,9 +643,9 @@ godot_viewport<public> := class(godot_node):
     IsUsingXr<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_using_xr", array{}]]
     NotifyMouseEntered<public>()<transacts>:void = VhCallVoid(Handle, "notify_mouse_entered", array{})
     NotifyMouseExited<public>()<transacts>:void = VhCallVoid(Handle, "notify_mouse_exited", array{})
-    PushInput<public>(Event:godot_resource, InLocalCoords:logic)<transacts>:void = VhCallVoid(Handle, "push_input", array{VhFromObject(Event), VhFromLogic(InLocalCoords)})
+    PushInput<public>(Event:godot_resource, ?InLocalCoords:logic = false)<transacts>:void = VhCallVoid(Handle, "push_input", array{VhFromObject(Event), VhFromLogic(InLocalCoords)})
     PushTextInput<public>(Text:string)<transacts>:void = VhCallVoid(Handle, "push_text_input", array{VhFromString(Text)})
-    PushUnhandledInput<public>(Event:godot_resource, InLocalCoords:logic)<transacts>:void = VhCallVoid(Handle, "push_unhandled_input", array{VhFromObject(Event), VhFromLogic(InLocalCoords)})
+    PushUnhandledInput<public>(Event:godot_resource, ?InLocalCoords:logic = false)<transacts>:void = VhCallVoid(Handle, "push_unhandled_input", array{VhFromObject(Event), VhFromLogic(InLocalCoords)})
     SetAnisotropicFilteringLevel<public>(AnisotropicFilteringLevel:int)<transacts>:void = VhCallVoid(Handle, "set_anisotropic_filtering_level", array{VhFromInt(AnisotropicFilteringLevel)})
     SetAsAudioListener2d<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_as_audio_listener_2d", array{VhFromLogic(Enable)})
     SetAsAudioListener3d<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_as_audio_listener_3d", array{VhFromLogic(Enable)})
@@ -724,16 +724,16 @@ godot_animation_player<public> := class(godot_animation_mixer):
     IsMovieQuitOnFinishEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_movie_quit_on_finish_enabled", array{}]]
     IsPlaying<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_playing", array{}]]
     Pause<public>()<transacts>:void = VhCallVoid(Handle, "pause", array{})
-    Play<public>(Name:string, CustomBlend:float, CustomSpeed:float, FromEnd:logic)<transacts>:void = VhCallVoid(Handle, "play", array{VhFromStringName(Name), VhFromFloat(CustomBlend), VhFromFloat(CustomSpeed), VhFromLogic(FromEnd)})
-    PlayBackwards<public>(Name:string, CustomBlend:float)<transacts>:void = VhCallVoid(Handle, "play_backwards", array{VhFromStringName(Name), VhFromFloat(CustomBlend)})
-    PlaySection<public>(Name:string, StartTime:float, EndTime:float, CustomBlend:float, CustomSpeed:float, FromEnd:logic)<transacts>:void = VhCallVoid(Handle, "play_section", array{VhFromStringName(Name), VhFromFloat(StartTime), VhFromFloat(EndTime), VhFromFloat(CustomBlend), VhFromFloat(CustomSpeed), VhFromLogic(FromEnd)})
-    PlaySectionBackwards<public>(Name:string, StartTime:float, EndTime:float, CustomBlend:float)<transacts>:void = VhCallVoid(Handle, "play_section_backwards", array{VhFromStringName(Name), VhFromFloat(StartTime), VhFromFloat(EndTime), VhFromFloat(CustomBlend)})
-    PlaySectionWithMarkers<public>(Name:string, StartMarker:string, EndMarker:string, CustomBlend:float, CustomSpeed:float, FromEnd:logic)<transacts>:void = VhCallVoid(Handle, "play_section_with_markers", array{VhFromStringName(Name), VhFromStringName(StartMarker), VhFromStringName(EndMarker), VhFromFloat(CustomBlend), VhFromFloat(CustomSpeed), VhFromLogic(FromEnd)})
-    PlaySectionWithMarkersBackwards<public>(Name:string, StartMarker:string, EndMarker:string, CustomBlend:float)<transacts>:void = VhCallVoid(Handle, "play_section_with_markers_backwards", array{VhFromStringName(Name), VhFromStringName(StartMarker), VhFromStringName(EndMarker), VhFromFloat(CustomBlend)})
-    PlayWithCapture<public>(Name:string, Duration:float, CustomBlend:float, CustomSpeed:float, FromEnd:logic, TransType:int, EaseType:int)<transacts>:void = VhCallVoid(Handle, "play_with_capture", array{VhFromStringName(Name), VhFromFloat(Duration), VhFromFloat(CustomBlend), VhFromFloat(CustomSpeed), VhFromLogic(FromEnd), VhFromInt(TransType), VhFromInt(EaseType)})
+    Play<public>(?Name:string = "", ?CustomBlend:float = -1.0, ?CustomSpeed:float = 1.0, ?FromEnd:logic = false)<transacts>:void = VhCallVoid(Handle, "play", array{VhFromStringName(Name), VhFromFloat(CustomBlend), VhFromFloat(CustomSpeed), VhFromLogic(FromEnd)})
+    PlayBackwards<public>(?Name:string = "", ?CustomBlend:float = -1.0)<transacts>:void = VhCallVoid(Handle, "play_backwards", array{VhFromStringName(Name), VhFromFloat(CustomBlend)})
+    PlaySection<public>(?Name:string = "", ?StartTime:float = -1.0, ?EndTime:float = -1.0, ?CustomBlend:float = -1.0, ?CustomSpeed:float = 1.0, ?FromEnd:logic = false)<transacts>:void = VhCallVoid(Handle, "play_section", array{VhFromStringName(Name), VhFromFloat(StartTime), VhFromFloat(EndTime), VhFromFloat(CustomBlend), VhFromFloat(CustomSpeed), VhFromLogic(FromEnd)})
+    PlaySectionBackwards<public>(?Name:string = "", ?StartTime:float = -1.0, ?EndTime:float = -1.0, ?CustomBlend:float = -1.0)<transacts>:void = VhCallVoid(Handle, "play_section_backwards", array{VhFromStringName(Name), VhFromFloat(StartTime), VhFromFloat(EndTime), VhFromFloat(CustomBlend)})
+    PlaySectionWithMarkers<public>(?Name:string = "", ?StartMarker:string = "", ?EndMarker:string = "", ?CustomBlend:float = -1.0, ?CustomSpeed:float = 1.0, ?FromEnd:logic = false)<transacts>:void = VhCallVoid(Handle, "play_section_with_markers", array{VhFromStringName(Name), VhFromStringName(StartMarker), VhFromStringName(EndMarker), VhFromFloat(CustomBlend), VhFromFloat(CustomSpeed), VhFromLogic(FromEnd)})
+    PlaySectionWithMarkersBackwards<public>(?Name:string = "", ?StartMarker:string = "", ?EndMarker:string = "", ?CustomBlend:float = -1.0)<transacts>:void = VhCallVoid(Handle, "play_section_with_markers_backwards", array{VhFromStringName(Name), VhFromStringName(StartMarker), VhFromStringName(EndMarker), VhFromFloat(CustomBlend)})
+    PlayWithCapture<public>(?Name:string = "", ?Duration:float = -1.0, ?CustomBlend:float = -1.0, ?CustomSpeed:float = 1.0, ?FromEnd:logic = false, ?TransType:int = 0, ?EaseType:int = 0)<transacts>:void = VhCallVoid(Handle, "play_with_capture", array{VhFromStringName(Name), VhFromFloat(Duration), VhFromFloat(CustomBlend), VhFromFloat(CustomSpeed), VhFromLogic(FromEnd), VhFromInt(TransType), VhFromInt(EaseType)})
     Queue<public>(Name:string)<transacts>:void = VhCallVoid(Handle, "queue", array{VhFromStringName(Name)})
     ResetSection<public>()<transacts>:void = VhCallVoid(Handle, "reset_section", array{})
-    Seek<public>(Seconds:float, Arg1:logic, UpdateOnly:logic)<transacts>:void = VhCallVoid(Handle, "seek", array{VhFromFloat(Seconds), VhFromLogic(Arg1), VhFromLogic(UpdateOnly)})
+    Seek<public>(Seconds:float, ?Arg1:logic = false, ?UpdateOnly:logic = false)<transacts>:void = VhCallVoid(Handle, "seek", array{VhFromFloat(Seconds), VhFromLogic(Arg1), VhFromLogic(UpdateOnly)})
     SetAssignedAnimation<public>(Animation:string)<transacts>:void = VhCallVoid(Handle, "set_assigned_animation", array{VhFromStringName(Animation)})
     SetAutoCapture<public>(AutoCapture:logic)<transacts>:void = VhCallVoid(Handle, "set_auto_capture", array{VhFromLogic(AutoCapture)})
     SetAutoCaptureDuration<public>(AutoCaptureDuration:float)<transacts>:void = VhCallVoid(Handle, "set_auto_capture_duration", array{VhFromFloat(AutoCaptureDuration)})
@@ -747,10 +747,10 @@ godot_animation_player<public> := class(godot_animation_mixer):
     SetMovieQuitOnFinishEnabled<public>(Enabled:logic)<transacts>:void = VhCallVoid(Handle, "set_movie_quit_on_finish_enabled", array{VhFromLogic(Enabled)})
     SetProcessCallback<public>(Mode:int)<transacts>:void = VhCallVoid(Handle, "set_process_callback", array{VhFromInt(Mode)})
     SetRoot<public>(Path:string)<transacts>:void = VhCallVoid(Handle, "set_root", array{VhFromNodePath(Path)})
-    SetSection<public>(StartTime:float, EndTime:float)<transacts>:void = VhCallVoid(Handle, "set_section", array{VhFromFloat(StartTime), VhFromFloat(EndTime)})
-    SetSectionWithMarkers<public>(StartMarker:string, EndMarker:string)<transacts>:void = VhCallVoid(Handle, "set_section_with_markers", array{VhFromStringName(StartMarker), VhFromStringName(EndMarker)})
+    SetSection<public>(?StartTime:float = -1.0, ?EndTime:float = -1.0)<transacts>:void = VhCallVoid(Handle, "set_section", array{VhFromFloat(StartTime), VhFromFloat(EndTime)})
+    SetSectionWithMarkers<public>(?StartMarker:string = "", ?EndMarker:string = "")<transacts>:void = VhCallVoid(Handle, "set_section_with_markers", array{VhFromStringName(StartMarker), VhFromStringName(EndMarker)})
     SetSpeedScale<public>(Speed:float)<transacts>:void = VhCallVoid(Handle, "set_speed_scale", array{VhFromFloat(Speed)})
-    Stop<public>(KeepState:logic)<transacts>:void = VhCallVoid(Handle, "stop", array{VhFromLogic(KeepState)})
+    Stop<public>(?KeepState:logic = false)<transacts>:void = VhCallVoid(Handle, "stop", array{VhFromLogic(KeepState)})
 
 godot_audio_stream_player3d<public> := class(godot_node3d):
 
@@ -779,7 +779,7 @@ godot_audio_stream_player3d<public> := class(godot_node3d):
     IsAutoplayEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_autoplay_enabled", array{}]]
     IsEmissionAngleEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_emission_angle_enabled", array{}]]
     IsPlaying<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_playing", array{}]]
-    Play<public>(FromPosition:float)<transacts>:void = VhCallVoid(Handle, "play", array{VhFromFloat(FromPosition)})
+    Play<public>(?FromPosition:float = 0.0)<transacts>:void = VhCallVoid(Handle, "play", array{VhFromFloat(FromPosition)})
     Seek<public>(ToPosition:float)<transacts>:void = VhCallVoid(Handle, "seek", array{VhFromFloat(ToPosition)})
     SetAreaMask<public>(Mask:int)<transacts>:void = VhCallVoid(Handle, "set_area_mask", array{VhFromInt(Mask)})
     SetAttenuationFilterCutoffHz<public>(Degrees:float)<transacts>:void = VhCallVoid(Handle, "set_attenuation_filter_cutoff_hz", array{VhFromFloat(Degrees)})
@@ -807,7 +807,7 @@ godot_audio_stream_player3d<public> := class(godot_node3d):
 
 godot_camera3d<public> := class(godot_node3d):
 
-    ClearCurrent<public>(EnableNext:logic)<transacts>:void = VhCallVoid(Handle, "clear_current", array{VhFromLogic(EnableNext)})
+    ClearCurrent<public>(?EnableNext:logic = true)<transacts>:void = VhCallVoid(Handle, "clear_current", array{VhFromLogic(EnableNext)})
     GetAttributes<public>()<decides><transacts>:godot_resource = godot_resource{Handle := VhToHandle[VhCallValue[Handle, "get_attributes", array{}]]}
     GetCompositor<public>()<decides><transacts>:godot_resource = godot_resource{Handle := VhToHandle[VhCallValue[Handle, "get_compositor", array{}]]}
     GetCullMask<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_cull_mask", array{}]]
@@ -917,7 +917,7 @@ godot_control<public> := class(godot_canvas_item):
     GetBegin<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_begin", array{}]]
     GetCombinedMinimumSize<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_combined_minimum_size", array{}]]
     GetCombinedPivotOffset<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_combined_pivot_offset", array{}]]
-    GetCursorShape<public>(Position:vector2)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_cursor_shape", array{VhFromVector2(Position)}]]
+    GetCursorShape<public>(?Position:vector2 = vector2{X := 0.0, Y := 0.0})<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_cursor_shape", array{VhFromVector2(Position)}]]
     GetCustomMinimumSize<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_custom_minimum_size", array{}]]
     GetDefaultCursorShape<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_default_cursor_shape", array{}]]
     GetEnd<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_end", array{}]]
@@ -949,35 +949,35 @@ godot_control<public> := class(godot_canvas_item):
     GetSize<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_size", array{}]]
     GetStretchRatio<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_stretch_ratio", array{}]]
     GetTheme<public>()<decides><transacts>:godot_resource = godot_resource{Handle := VhToHandle[VhCallValue[Handle, "get_theme", array{}]]}
-    GetThemeColor<public>(Name:string, ThemeType:string)<decides><transacts>:color = VhToColor[VhCallValue[Handle, "get_theme_color", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
-    GetThemeConstant<public>(Name:string, ThemeType:string)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_theme_constant", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
+    GetThemeColor<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:color = VhToColor[VhCallValue[Handle, "get_theme_color", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
+    GetThemeConstant<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_theme_constant", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
     GetThemeDefaultBaseScale<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_theme_default_base_scale", array{}]]
     GetThemeDefaultFont<public>()<decides><transacts>:godot_resource = godot_resource{Handle := VhToHandle[VhCallValue[Handle, "get_theme_default_font", array{}]]}
     GetThemeDefaultFontSize<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_theme_default_font_size", array{}]]
-    GetThemeFont<public>(Name:string, ThemeType:string)<decides><transacts>:godot_resource = godot_resource{Handle := VhToHandle[VhCallValue[Handle, "get_theme_font", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]}
-    GetThemeFontSize<public>(Name:string, ThemeType:string)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_theme_font_size", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
-    GetThemeIcon<public>(Name:string, ThemeType:string)<decides><transacts>:godot_texture2d = godot_texture2d{Handle := VhToHandle[VhCallValue[Handle, "get_theme_icon", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]}
-    GetThemeStylebox<public>(Name:string, ThemeType:string)<decides><transacts>:godot_resource = godot_resource{Handle := VhToHandle[VhCallValue[Handle, "get_theme_stylebox", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]}
+    GetThemeFont<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:godot_resource = godot_resource{Handle := VhToHandle[VhCallValue[Handle, "get_theme_font", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]}
+    GetThemeFontSize<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_theme_font_size", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
+    GetThemeIcon<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:godot_texture2d = godot_texture2d{Handle := VhToHandle[VhCallValue[Handle, "get_theme_icon", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]}
+    GetThemeStylebox<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:godot_resource = godot_resource{Handle := VhToHandle[VhCallValue[Handle, "get_theme_stylebox", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]}
     GetThemeTypeVariation<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_theme_type_variation", array{}]]
-    GetTooltip<public>(AtPosition:vector2)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_tooltip", array{VhFromVector2(AtPosition)}]]
+    GetTooltip<public>(?AtPosition:vector2 = vector2{X := 0.0, Y := 0.0})<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_tooltip", array{VhFromVector2(AtPosition)}]]
     GetTooltipAutoTranslateMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_tooltip_auto_translate_mode", array{}]]
     GetTooltipText<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_tooltip_text", array{}]]
     GetVGrowDirection<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_v_grow_direction", array{}]]
     GetVSizeFlags<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_v_size_flags", array{}]]
     GrabClickFocus<public>()<transacts>:void = VhCallVoid(Handle, "grab_click_focus", array{})
-    GrabFocus<public>(HideFocus:logic)<transacts>:void = VhCallVoid(Handle, "grab_focus", array{VhFromLogic(HideFocus)})
-    HasFocus<public>(IgnoreHiddenFocus:logic)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_focus", array{VhFromLogic(IgnoreHiddenFocus)}]]
-    HasThemeColor<public>(Name:string, ThemeType:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_color", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
+    GrabFocus<public>(?HideFocus:logic = false)<transacts>:void = VhCallVoid(Handle, "grab_focus", array{VhFromLogic(HideFocus)})
+    HasFocus<public>(?IgnoreHiddenFocus:logic = false)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_focus", array{VhFromLogic(IgnoreHiddenFocus)}]]
+    HasThemeColor<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_color", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
     HasThemeColorOverride<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_color_override", array{VhFromStringName(Name)}]]
-    HasThemeConstant<public>(Name:string, ThemeType:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_constant", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
+    HasThemeConstant<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_constant", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
     HasThemeConstantOverride<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_constant_override", array{VhFromStringName(Name)}]]
-    HasThemeFont<public>(Name:string, ThemeType:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_font", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
+    HasThemeFont<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_font", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
     HasThemeFontOverride<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_font_override", array{VhFromStringName(Name)}]]
-    HasThemeFontSize<public>(Name:string, ThemeType:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_font_size", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
+    HasThemeFontSize<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_font_size", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
     HasThemeFontSizeOverride<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_font_size_override", array{VhFromStringName(Name)}]]
-    HasThemeIcon<public>(Name:string, ThemeType:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_icon", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
+    HasThemeIcon<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_icon", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
     HasThemeIconOverride<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_icon_override", array{VhFromStringName(Name)}]]
-    HasThemeStylebox<public>(Name:string, ThemeType:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_stylebox", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
+    HasThemeStylebox<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_stylebox", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
     HasThemeStyleboxOverride<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_stylebox_override", array{VhFromStringName(Name)}]]
     IsAutoTranslating<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_auto_translating", array{}]]
     IsClippingContents<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_clipping_contents", array{}]]
@@ -996,10 +996,10 @@ godot_control<public> := class(godot_canvas_item):
     SetAccessibilityDescription<public>(Description:string)<transacts>:void = VhCallVoid(Handle, "set_accessibility_description", array{VhFromString(Description)})
     SetAccessibilityLive<public>(Mode:int)<transacts>:void = VhCallVoid(Handle, "set_accessibility_live", array{VhFromInt(Mode)})
     SetAccessibilityName<public>(Name:string)<transacts>:void = VhCallVoid(Handle, "set_accessibility_name", array{VhFromString(Name)})
-    SetAnchor<public>(Side:int, Anchor:float, KeepOffset:logic, PushOppositeAnchor:logic)<transacts>:void = VhCallVoid(Handle, "set_anchor", array{VhFromInt(Side), VhFromFloat(Anchor), VhFromLogic(KeepOffset), VhFromLogic(PushOppositeAnchor)})
-    SetAnchorAndOffset<public>(Side:int, Anchor:float, Offset:float, PushOppositeAnchor:logic)<transacts>:void = VhCallVoid(Handle, "set_anchor_and_offset", array{VhFromInt(Side), VhFromFloat(Anchor), VhFromFloat(Offset), VhFromLogic(PushOppositeAnchor)})
-    SetAnchorsAndOffsetsPreset<public>(Preset:int, ResizeMode:int, Margin:int)<transacts>:void = VhCallVoid(Handle, "set_anchors_and_offsets_preset", array{VhFromInt(Preset), VhFromInt(ResizeMode), VhFromInt(Margin)})
-    SetAnchorsPreset<public>(Preset:int, KeepOffsets:logic)<transacts>:void = VhCallVoid(Handle, "set_anchors_preset", array{VhFromInt(Preset), VhFromLogic(KeepOffsets)})
+    SetAnchor<public>(Side:int, Anchor:float, ?KeepOffset:logic = false, ?PushOppositeAnchor:logic = true)<transacts>:void = VhCallVoid(Handle, "set_anchor", array{VhFromInt(Side), VhFromFloat(Anchor), VhFromLogic(KeepOffset), VhFromLogic(PushOppositeAnchor)})
+    SetAnchorAndOffset<public>(Side:int, Anchor:float, Offset:float, ?PushOppositeAnchor:logic = false)<transacts>:void = VhCallVoid(Handle, "set_anchor_and_offset", array{VhFromInt(Side), VhFromFloat(Anchor), VhFromFloat(Offset), VhFromLogic(PushOppositeAnchor)})
+    SetAnchorsAndOffsetsPreset<public>(Preset:int, ?ResizeMode:int = 0, ?Margin:int = 0)<transacts>:void = VhCallVoid(Handle, "set_anchors_and_offsets_preset", array{VhFromInt(Preset), VhFromInt(ResizeMode), VhFromInt(Margin)})
+    SetAnchorsPreset<public>(Preset:int, ?KeepOffsets:logic = false)<transacts>:void = VhCallVoid(Handle, "set_anchors_preset", array{VhFromInt(Preset), VhFromLogic(KeepOffsets)})
     SetAutoTranslate<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_auto_translate", array{VhFromLogic(Enable)})
     SetBegin<public>(Position:vector2)<transacts>:void = VhCallVoid(Handle, "set_begin", array{VhFromVector2(Position)})
     SetClipContents<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_clip_contents", array{VhFromLogic(Enable)})
@@ -1013,7 +1013,7 @@ godot_control<public> := class(godot_canvas_item):
     SetFocusNext<public>(Next:string)<transacts>:void = VhCallVoid(Handle, "set_focus_next", array{VhFromNodePath(Next)})
     SetFocusPrevious<public>(Previous:string)<transacts>:void = VhCallVoid(Handle, "set_focus_previous", array{VhFromNodePath(Previous)})
     SetForcePassScrollEvents<public>(ForcePassScrollEvents:logic)<transacts>:void = VhCallVoid(Handle, "set_force_pass_scroll_events", array{VhFromLogic(ForcePassScrollEvents)})
-    SetGlobalPosition<public>(Position:vector2, KeepOffsets:logic)<transacts>:void = VhCallVoid(Handle, "set_global_position", array{VhFromVector2(Position), VhFromLogic(KeepOffsets)})
+    SetGlobalPosition<public>(Position:vector2, ?KeepOffsets:logic = false)<transacts>:void = VhCallVoid(Handle, "set_global_position", array{VhFromVector2(Position), VhFromLogic(KeepOffsets)})
     SetHGrowDirection<public>(Direction:int)<transacts>:void = VhCallVoid(Handle, "set_h_grow_direction", array{VhFromInt(Direction)})
     SetHSizeFlags<public>(Flags:int)<transacts>:void = VhCallVoid(Handle, "set_h_size_flags", array{VhFromInt(Flags)})
     SetLayoutDirection<public>(Direction:int)<transacts>:void = VhCallVoid(Handle, "set_layout_direction", array{VhFromInt(Direction)})
@@ -1021,15 +1021,15 @@ godot_control<public> := class(godot_canvas_item):
     SetMouseBehaviorRecursive<public>(MouseBehaviorRecursive:int)<transacts>:void = VhCallVoid(Handle, "set_mouse_behavior_recursive", array{VhFromInt(MouseBehaviorRecursive)})
     SetMouseFilter<public>(Filter:int)<transacts>:void = VhCallVoid(Handle, "set_mouse_filter", array{VhFromInt(Filter)})
     SetOffset<public>(Side:int, Offset:float)<transacts>:void = VhCallVoid(Handle, "set_offset", array{VhFromInt(Side), VhFromFloat(Offset)})
-    SetOffsetsPreset<public>(Preset:int, ResizeMode:int, Margin:int)<transacts>:void = VhCallVoid(Handle, "set_offsets_preset", array{VhFromInt(Preset), VhFromInt(ResizeMode), VhFromInt(Margin)})
+    SetOffsetsPreset<public>(Preset:int, ?ResizeMode:int = 0, ?Margin:int = 0)<transacts>:void = VhCallVoid(Handle, "set_offsets_preset", array{VhFromInt(Preset), VhFromInt(ResizeMode), VhFromInt(Margin)})
     SetPivotOffset<public>(PivotOffset:vector2)<transacts>:void = VhCallVoid(Handle, "set_pivot_offset", array{VhFromVector2(PivotOffset)})
     SetPivotOffsetRatio<public>(Ratio:vector2)<transacts>:void = VhCallVoid(Handle, "set_pivot_offset_ratio", array{VhFromVector2(Ratio)})
-    SetPosition<public>(Position:vector2, KeepOffsets:logic)<transacts>:void = VhCallVoid(Handle, "set_position", array{VhFromVector2(Position), VhFromLogic(KeepOffsets)})
+    SetPosition<public>(Position:vector2, ?KeepOffsets:logic = false)<transacts>:void = VhCallVoid(Handle, "set_position", array{VhFromVector2(Position), VhFromLogic(KeepOffsets)})
     SetRotation<public>(Radians:float)<transacts>:void = VhCallVoid(Handle, "set_rotation", array{VhFromFloat(Radians)})
     SetRotationDegrees<public>(Degrees:float)<transacts>:void = VhCallVoid(Handle, "set_rotation_degrees", array{VhFromFloat(Degrees)})
     SetScale<public>(Scale:vector2)<transacts>:void = VhCallVoid(Handle, "set_scale", array{VhFromVector2(Scale)})
     SetShortcutContext<public>(Node:godot_node)<transacts>:void = VhCallVoid(Handle, "set_shortcut_context", array{VhFromObject(Node)})
-    SetSize<public>(Size:vector2, KeepOffsets:logic)<transacts>:void = VhCallVoid(Handle, "set_size", array{VhFromVector2(Size), VhFromLogic(KeepOffsets)})
+    SetSize<public>(Size:vector2, ?KeepOffsets:logic = false)<transacts>:void = VhCallVoid(Handle, "set_size", array{VhFromVector2(Size), VhFromLogic(KeepOffsets)})
     SetStretchRatio<public>(Ratio:float)<transacts>:void = VhCallVoid(Handle, "set_stretch_ratio", array{VhFromFloat(Ratio)})
     SetTheme<public>(Theme:godot_resource)<transacts>:void = VhCallVoid(Handle, "set_theme", array{VhFromObject(Theme)})
     SetThemeTypeVariation<public>(ThemeType:string)<transacts>:void = VhCallVoid(Handle, "set_theme_type_variation", array{VhFromStringName(ThemeType)})
@@ -1056,8 +1056,8 @@ godot_node2d<public> := class(godot_canvas_item):
     GetSkew<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_skew", array{}]]
     GlobalTranslate<public>(Offset:vector2)<transacts>:void = VhCallVoid(Handle, "global_translate", array{VhFromVector2(Offset)})
     LookAt<public>(Point:vector2)<transacts>:void = VhCallVoid(Handle, "look_at", array{VhFromVector2(Point)})
-    MoveLocalX<public>(Delta:float, Scaled:logic)<transacts>:void = VhCallVoid(Handle, "move_local_x", array{VhFromFloat(Delta), VhFromLogic(Scaled)})
-    MoveLocalY<public>(Delta:float, Scaled:logic)<transacts>:void = VhCallVoid(Handle, "move_local_y", array{VhFromFloat(Delta), VhFromLogic(Scaled)})
+    MoveLocalX<public>(Delta:float, ?Scaled:logic = false)<transacts>:void = VhCallVoid(Handle, "move_local_x", array{VhFromFloat(Delta), VhFromLogic(Scaled)})
+    MoveLocalY<public>(Delta:float, ?Scaled:logic = false)<transacts>:void = VhCallVoid(Handle, "move_local_y", array{VhFromFloat(Delta), VhFromLogic(Scaled)})
     Rotate<public>(Radians:float)<transacts>:void = VhCallVoid(Handle, "rotate", array{VhFromFloat(Radians)})
     SetGlobalPosition<public>(Position:vector2)<transacts>:void = VhCallVoid(Handle, "set_global_position", array{VhFromVector2(Position)})
     SetGlobalRotation<public>(Radians:float)<transacts>:void = VhCallVoid(Handle, "set_global_rotation", array{VhFromFloat(Radians)})
@@ -1077,7 +1077,7 @@ godot_packed_scene<public> := class(godot_resource):
 
     CanInstantiate<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "can_instantiate", array{}]]
     GetState<public>()<decides><transacts>:godot_ref_counted = godot_ref_counted{Handle := VhToHandle[VhCallValue[Handle, "get_state", array{}]]}
-    Instantiate<public>(EditState:int)<decides><transacts>:godot_node = godot_node{Handle := VhToHandle[VhCallValue[Handle, "instantiate", array{VhFromInt(EditState)}]]}
+    Instantiate<public>(?EditState:int = 0)<decides><transacts>:godot_node = godot_node{Handle := VhToHandle[VhCallValue[Handle, "instantiate", array{VhFromInt(EditState)}]]}
     Pack<public>(Path:godot_node)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "pack", array{VhFromObject(Path)}]]
 
 godot_texture<public> := class(godot_resource):
@@ -1120,31 +1120,31 @@ godot_window<public> := class(godot_viewport):
     GetLayoutDirection<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_layout_direction", array{}]]
     GetMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_mode", array{}]]
     GetTheme<public>()<decides><transacts>:godot_resource = godot_resource{Handle := VhToHandle[VhCallValue[Handle, "get_theme", array{}]]}
-    GetThemeColor<public>(Name:string, ThemeType:string)<decides><transacts>:color = VhToColor[VhCallValue[Handle, "get_theme_color", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
-    GetThemeConstant<public>(Name:string, ThemeType:string)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_theme_constant", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
+    GetThemeColor<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:color = VhToColor[VhCallValue[Handle, "get_theme_color", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
+    GetThemeConstant<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_theme_constant", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
     GetThemeDefaultBaseScale<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_theme_default_base_scale", array{}]]
     GetThemeDefaultFont<public>()<decides><transacts>:godot_resource = godot_resource{Handle := VhToHandle[VhCallValue[Handle, "get_theme_default_font", array{}]]}
     GetThemeDefaultFontSize<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_theme_default_font_size", array{}]]
-    GetThemeFont<public>(Name:string, ThemeType:string)<decides><transacts>:godot_resource = godot_resource{Handle := VhToHandle[VhCallValue[Handle, "get_theme_font", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]}
-    GetThemeFontSize<public>(Name:string, ThemeType:string)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_theme_font_size", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
-    GetThemeIcon<public>(Name:string, ThemeType:string)<decides><transacts>:godot_texture2d = godot_texture2d{Handle := VhToHandle[VhCallValue[Handle, "get_theme_icon", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]}
-    GetThemeStylebox<public>(Name:string, ThemeType:string)<decides><transacts>:godot_resource = godot_resource{Handle := VhToHandle[VhCallValue[Handle, "get_theme_stylebox", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]}
+    GetThemeFont<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:godot_resource = godot_resource{Handle := VhToHandle[VhCallValue[Handle, "get_theme_font", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]}
+    GetThemeFontSize<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_theme_font_size", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
+    GetThemeIcon<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:godot_texture2d = godot_texture2d{Handle := VhToHandle[VhCallValue[Handle, "get_theme_icon", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]}
+    GetThemeStylebox<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:godot_resource = godot_resource{Handle := VhToHandle[VhCallValue[Handle, "get_theme_stylebox", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]}
     GetThemeTypeVariation<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_theme_type_variation", array{}]]
     GetTitle<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_title", array{}]]
     GetWindowId<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_window_id", array{}]]
     GrabFocus<public>()<transacts>:void = VhCallVoid(Handle, "grab_focus", array{})
     HasFocus<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_focus", array{}]]
-    HasThemeColor<public>(Name:string, ThemeType:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_color", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
+    HasThemeColor<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_color", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
     HasThemeColorOverride<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_color_override", array{VhFromStringName(Name)}]]
-    HasThemeConstant<public>(Name:string, ThemeType:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_constant", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
+    HasThemeConstant<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_constant", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
     HasThemeConstantOverride<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_constant_override", array{VhFromStringName(Name)}]]
-    HasThemeFont<public>(Name:string, ThemeType:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_font", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
+    HasThemeFont<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_font", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
     HasThemeFontOverride<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_font_override", array{VhFromStringName(Name)}]]
-    HasThemeFontSize<public>(Name:string, ThemeType:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_font_size", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
+    HasThemeFontSize<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_font_size", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
     HasThemeFontSizeOverride<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_font_size_override", array{VhFromStringName(Name)}]]
-    HasThemeIcon<public>(Name:string, ThemeType:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_icon", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
+    HasThemeIcon<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_icon", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
     HasThemeIconOverride<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_icon_override", array{VhFromStringName(Name)}]]
-    HasThemeStylebox<public>(Name:string, ThemeType:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_stylebox", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
+    HasThemeStylebox<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_stylebox", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
     HasThemeStyleboxOverride<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_stylebox_override", array{VhFromStringName(Name)}]]
     Hide<public>()<transacts>:void = VhCallVoid(Handle, "hide", array{})
     IsAutoTranslating<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_auto_translating", array{}]]
@@ -1159,8 +1159,8 @@ godot_window<public> := class(godot_viewport):
     IsWrappingControls<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_wrapping_controls", array{}]]
     MoveToCenter<public>()<transacts>:void = VhCallVoid(Handle, "move_to_center", array{})
     MoveToForeground<public>()<transacts>:void = VhCallVoid(Handle, "move_to_foreground", array{})
-    PopupCenteredRatio<public>(Ratio:float)<transacts>:void = VhCallVoid(Handle, "popup_centered_ratio", array{VhFromFloat(Ratio)})
-    PopupExclusiveCenteredRatio<public>(FromNode:godot_node, Ratio:float)<transacts>:void = VhCallVoid(Handle, "popup_exclusive_centered_ratio", array{VhFromObject(FromNode), VhFromFloat(Ratio)})
+    PopupCenteredRatio<public>(?Ratio:float = 0.8)<transacts>:void = VhCallVoid(Handle, "popup_centered_ratio", array{VhFromFloat(Ratio)})
+    PopupExclusiveCenteredRatio<public>(FromNode:godot_node, ?Ratio:float = 0.8)<transacts>:void = VhCallVoid(Handle, "popup_exclusive_centered_ratio", array{VhFromObject(FromNode), VhFromFloat(Ratio)})
     RemoveThemeColorOverride<public>(Name:string)<transacts>:void = VhCallVoid(Handle, "remove_theme_color_override", array{VhFromStringName(Name)})
     RemoveThemeConstantOverride<public>(Name:string)<transacts>:void = VhCallVoid(Handle, "remove_theme_constant_override", array{VhFromStringName(Name)})
     RemoveThemeFontOverride<public>(Name:string)<transacts>:void = VhCallVoid(Handle, "remove_theme_font_override", array{VhFromStringName(Name)})
@@ -1213,8 +1213,8 @@ godot_animated_sprite2d<public> := class(godot_node2d):
     IsFlippedV<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_flipped_v", array{}]]
     IsPlaying<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_playing", array{}]]
     Pause<public>()<transacts>:void = VhCallVoid(Handle, "pause", array{})
-    Play<public>(Name:string, CustomSpeed:float, FromEnd:logic)<transacts>:void = VhCallVoid(Handle, "play", array{VhFromStringName(Name), VhFromFloat(CustomSpeed), VhFromLogic(FromEnd)})
-    PlayBackwards<public>(Name:string)<transacts>:void = VhCallVoid(Handle, "play_backwards", array{VhFromStringName(Name)})
+    Play<public>(?Name:string = "", ?CustomSpeed:float = 1.0, ?FromEnd:logic = false)<transacts>:void = VhCallVoid(Handle, "play", array{VhFromStringName(Name), VhFromFloat(CustomSpeed), VhFromLogic(FromEnd)})
+    PlayBackwards<public>(?Name:string = "")<transacts>:void = VhCallVoid(Handle, "play_backwards", array{VhFromStringName(Name)})
     SetAnimation<public>(Name:string)<transacts>:void = VhCallVoid(Handle, "set_animation", array{VhFromStringName(Name)})
     SetAutoplay<public>(Name:string)<transacts>:void = VhCallVoid(Handle, "set_autoplay", array{VhFromString(Name)})
     SetCentered<public>(Centered:logic)<transacts>:void = VhCallVoid(Handle, "set_centered", array{VhFromLogic(Centered)})
@@ -1298,7 +1298,7 @@ godot_audio_stream_player2d<public> := class(godot_node2d):
     HasStreamPlayback<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_stream_playback", array{}]]
     IsAutoplayEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_autoplay_enabled", array{}]]
     IsPlaying<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_playing", array{}]]
-    Play<public>(FromPosition:float)<transacts>:void = VhCallVoid(Handle, "play", array{VhFromFloat(FromPosition)})
+    Play<public>(?FromPosition:float = 0.0)<transacts>:void = VhCallVoid(Handle, "play", array{VhFromFloat(FromPosition)})
     Seek<public>(ToPosition:float)<transacts>:void = VhCallVoid(Handle, "seek", array{VhFromFloat(ToPosition)})
     SetAreaMask<public>(Mask:int)<transacts>:void = VhCallVoid(Handle, "set_area_mask", array{VhFromInt(Mask)})
     SetAttenuation<public>(Curve:float)<transacts>:void = VhCallVoid(Handle, "set_attenuation", array{VhFromFloat(Curve)})
@@ -1488,7 +1488,7 @@ godot_label<public> := class(godot_control):
     GetLabelSettings<public>()<decides><transacts>:godot_resource = godot_resource{Handle := VhToHandle[VhCallValue[Handle, "get_label_settings", array{}]]}
     GetLanguage<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_language", array{}]]
     GetLineCount<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_line_count", array{}]]
-    GetLineHeight<public>(Line:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_line_height", array{VhFromInt(Line)}]]
+    GetLineHeight<public>(?Line:int = -1)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_line_height", array{VhFromInt(Line)}]]
     GetLinesSkipped<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_lines_skipped", array{}]]
     GetMaxLinesVisible<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_max_lines_visible", array{}]]
     GetParagraphSeparator<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_paragraph_separator", array{}]]
@@ -1602,7 +1602,7 @@ godot_line_edit<public> := class(godot_control):
     DeleteCharAtCaret<public>()<transacts>:void = VhCallVoid(Handle, "delete_char_at_caret", array{})
     DeleteText<public>(FromColumn:int, ToColumn:int)<transacts>:void = VhCallVoid(Handle, "delete_text", array{VhFromInt(FromColumn), VhFromInt(ToColumn)})
     Deselect<public>()<transacts>:void = VhCallVoid(Handle, "deselect", array{})
-    Edit<public>(HideFocus:logic)<transacts>:void = VhCallVoid(Handle, "edit", array{VhFromLogic(HideFocus)})
+    Edit<public>(?HideFocus:logic = false)<transacts>:void = VhCallVoid(Handle, "edit", array{VhFromLogic(HideFocus)})
     GetCaretBlinkInterval<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_caret_blink_interval", array{}]]
     GetCaretColumn<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_caret_column", array{}]]
     GetDrawControlChars<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_draw_control_chars", array{}]]
@@ -1653,7 +1653,7 @@ godot_line_edit<public> := class(godot_control):
     IsShortcutKeysEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_shortcut_keys_enabled", array{}]]
     IsVirtualKeyboardEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_virtual_keyboard_enabled", array{}]]
     MenuOption<public>(Option:int)<transacts>:void = VhCallVoid(Handle, "menu_option", array{VhFromInt(Option)})
-    Select<public>(From:int, To:int)<transacts>:void = VhCallVoid(Handle, "select", array{VhFromInt(From), VhFromInt(To)})
+    Select<public>(?From:int = 0, ?To:int = -1)<transacts>:void = VhCallVoid(Handle, "select", array{VhFromInt(From), VhFromInt(To)})
     SelectAll<public>()<transacts>:void = VhCallVoid(Handle, "select_all", array{})
     SetBackspaceDeletesCompositeCharacterEnabled<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_backspace_deletes_composite_character_enabled", array{VhFromLogic(Enable)})
     SetCaretBlinkEnabled<public>(Enabled:logic)<transacts>:void = VhCallVoid(Handle, "set_caret_blink_enabled", array{VhFromLogic(Enabled)})
@@ -1699,7 +1699,7 @@ godot_physics_body3d<public> := class(godot_collision_object3d):
     AddCollisionExceptionWith<public>(Body:godot_node)<transacts>:void = VhCallVoid(Handle, "add_collision_exception_with", array{VhFromObject(Body)})
     GetAxisLock<public>(Axis:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_axis_lock", array{VhFromInt(Axis)}]]
     GetGravity<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_gravity", array{}]]
-    MoveAndCollide<public>(Motion:vector3, TestOnly:logic, SafeMargin:float, RecoveryAsCollision:logic, MaxCollisions:int)<decides><transacts>:godot_ref_counted = godot_ref_counted{Handle := VhToHandle[VhCallValue[Handle, "move_and_collide", array{VhFromVector3(Motion), VhFromLogic(TestOnly), VhFromFloat(SafeMargin), VhFromLogic(RecoveryAsCollision), VhFromInt(MaxCollisions)}]]}
+    MoveAndCollide<public>(Motion:vector3, ?TestOnly:logic = false, ?SafeMargin:float = 0.001, ?RecoveryAsCollision:logic = false, ?MaxCollisions:int = 1)<decides><transacts>:godot_ref_counted = godot_ref_counted{Handle := VhToHandle[VhCallValue[Handle, "move_and_collide", array{VhFromVector3(Motion), VhFromLogic(TestOnly), VhFromFloat(SafeMargin), VhFromLogic(RecoveryAsCollision), VhFromInt(MaxCollisions)}]]}
     RemoveCollisionExceptionWith<public>(Body:godot_node)<transacts>:void = VhCallVoid(Handle, "remove_collision_exception_with", array{VhFromObject(Body)})
     SetAxisLock<public>(Axis:int, Lock:logic)<transacts>:void = VhCallVoid(Handle, "set_axis_lock", array{VhFromInt(Axis), VhFromLogic(Lock)})
 
@@ -1731,7 +1731,7 @@ godot_range<public> := class(godot_control):
 
 godot_rich_text_label<public> := class(godot_control):
 
-    AddHr<public>(Width:int, Height:int, Color:color, Alignment:int, WidthInPercent:logic, HeightInPercent:logic)<transacts>:void = VhCallVoid(Handle, "add_hr", array{VhFromInt(Width), VhFromInt(Height), VhFromColor(Color), VhFromInt(Alignment), VhFromLogic(WidthInPercent), VhFromLogic(HeightInPercent)})
+    AddHr<public>(?Width:int = 90, ?Height:int = 2, ?Color:color = color{R := 1.0, G := 1.0, B := 1.0, A := 1.0}, ?Alignment:int = 1, ?WidthInPercent:logic = true, ?HeightInPercent:logic = false)<transacts>:void = VhCallVoid(Handle, "add_hr", array{VhFromInt(Width), VhFromInt(Height), VhFromColor(Color), VhFromInt(Alignment), VhFromLogic(WidthInPercent), VhFromLogic(HeightInPercent)})
     AddText<public>(Text:string)<transacts>:void = VhCallVoid(Handle, "add_text", array{VhFromString(Text)})
     AppendText<public>(Bbcode:string)<transacts>:void = VhCallVoid(Handle, "append_text", array{VhFromString(Bbcode)})
     Clear<public>()<transacts>:void = VhCallVoid(Handle, "clear", array{})
@@ -1800,22 +1800,22 @@ godot_rich_text_label<public> := class(godot_control):
     PushColor<public>(Color:color)<transacts>:void = VhCallVoid(Handle, "push_color", array{VhFromColor(Color)})
     PushContext<public>()<transacts>:void = VhCallVoid(Handle, "push_context", array{})
     PushFgcolor<public>(Fgcolor:color)<transacts>:void = VhCallVoid(Handle, "push_fgcolor", array{VhFromColor(Fgcolor)})
-    PushFont<public>(Font:godot_resource, FontSize:int)<transacts>:void = VhCallVoid(Handle, "push_font", array{VhFromObject(Font), VhFromInt(FontSize)})
+    PushFont<public>(Font:godot_resource, ?FontSize:int = 0)<transacts>:void = VhCallVoid(Handle, "push_font", array{VhFromObject(Font), VhFromInt(FontSize)})
     PushFontSize<public>(FontSize:int)<transacts>:void = VhCallVoid(Handle, "push_font_size", array{VhFromInt(FontSize)})
     PushHint<public>(Description:string)<transacts>:void = VhCallVoid(Handle, "push_hint", array{VhFromString(Description)})
     PushIndent<public>(Level:int)<transacts>:void = VhCallVoid(Handle, "push_indent", array{VhFromInt(Level)})
     PushItalics<public>()<transacts>:void = VhCallVoid(Handle, "push_italics", array{})
     PushLanguage<public>(Language:string)<transacts>:void = VhCallVoid(Handle, "push_language", array{VhFromString(Language)})
-    PushList<public>(Level:int, Type:int, Capitalize:logic, Bullet:string)<transacts>:void = VhCallVoid(Handle, "push_list", array{VhFromInt(Level), VhFromInt(Type), VhFromLogic(Capitalize), VhFromString(Bullet)})
+    PushList<public>(Level:int, Type:int, Capitalize:logic, ?Bullet:string = "•")<transacts>:void = VhCallVoid(Handle, "push_list", array{VhFromInt(Level), VhFromInt(Type), VhFromLogic(Capitalize), VhFromString(Bullet)})
     PushMono<public>()<transacts>:void = VhCallVoid(Handle, "push_mono", array{})
     PushNormal<public>()<transacts>:void = VhCallVoid(Handle, "push_normal", array{})
     PushOutlineColor<public>(Color:color)<transacts>:void = VhCallVoid(Handle, "push_outline_color", array{VhFromColor(Color)})
     PushOutlineSize<public>(OutlineSize:int)<transacts>:void = VhCallVoid(Handle, "push_outline_size", array{VhFromInt(OutlineSize)})
-    PushStrikethrough<public>(Color:color)<transacts>:void = VhCallVoid(Handle, "push_strikethrough", array{VhFromColor(Color)})
-    PushTable<public>(Columns:int, InlineAlign:int, AlignToRow:int, Name:string)<transacts>:void = VhCallVoid(Handle, "push_table", array{VhFromInt(Columns), VhFromInt(InlineAlign), VhFromInt(AlignToRow), VhFromString(Name)})
-    PushUnderline<public>(Color:color)<transacts>:void = VhCallVoid(Handle, "push_underline", array{VhFromColor(Color)})
+    PushStrikethrough<public>(?Color:color = color{R := 0.0, G := 0.0, B := 0.0, A := 0.0})<transacts>:void = VhCallVoid(Handle, "push_strikethrough", array{VhFromColor(Color)})
+    PushTable<public>(Columns:int, ?InlineAlign:int = 0, ?AlignToRow:int = -1, ?Name:string = "")<transacts>:void = VhCallVoid(Handle, "push_table", array{VhFromInt(Columns), VhFromInt(InlineAlign), VhFromInt(AlignToRow), VhFromString(Name)})
+    PushUnderline<public>(?Color:color = color{R := 0.0, G := 0.0, B := 0.0, A := 0.0})<transacts>:void = VhCallVoid(Handle, "push_underline", array{VhFromColor(Color)})
     ReloadEffects<public>()<transacts>:void = VhCallVoid(Handle, "reload_effects", array{})
-    RemoveParagraph<public>(Paragraph:int, NoInvalidate:logic)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "remove_paragraph", array{VhFromInt(Paragraph), VhFromLogic(NoInvalidate)}]]
+    RemoveParagraph<public>(Paragraph:int, ?NoInvalidate:logic = false)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "remove_paragraph", array{VhFromInt(Paragraph), VhFromLogic(NoInvalidate)}]]
     ScrollToLine<public>(Line:int)<transacts>:void = VhCallVoid(Handle, "scroll_to_line", array{VhFromInt(Line)})
     ScrollToParagraph<public>(Paragraph:int)<transacts>:void = VhCallVoid(Handle, "scroll_to_paragraph", array{VhFromInt(Paragraph)})
     ScrollToSelection<public>()<transacts>:void = VhCallVoid(Handle, "scroll_to_selection", array{})
@@ -1842,7 +1842,7 @@ godot_rich_text_label<public> := class(godot_control):
     SetShortcutKeysEnabled<public>(Enabled:logic)<transacts>:void = VhCallVoid(Handle, "set_shortcut_keys_enabled", array{VhFromLogic(Enabled)})
     SetStructuredTextBidiOverride<public>(Parser:int)<transacts>:void = VhCallVoid(Handle, "set_structured_text_bidi_override", array{VhFromInt(Parser)})
     SetTabSize<public>(Spaces:int)<transacts>:void = VhCallVoid(Handle, "set_tab_size", array{VhFromInt(Spaces)})
-    SetTableColumnExpand<public>(Column:int, Expand:logic, Ratio:int, Shrink:logic)<transacts>:void = VhCallVoid(Handle, "set_table_column_expand", array{VhFromInt(Column), VhFromLogic(Expand), VhFromInt(Ratio), VhFromLogic(Shrink)})
+    SetTableColumnExpand<public>(Column:int, Expand:logic, ?Ratio:int = 1, ?Shrink:logic = true)<transacts>:void = VhCallVoid(Handle, "set_table_column_expand", array{VhFromInt(Column), VhFromLogic(Expand), VhFromInt(Ratio), VhFromLogic(Shrink)})
     SetTableColumnName<public>(Column:int, Name:string)<transacts>:void = VhCallVoid(Handle, "set_table_column_name", array{VhFromInt(Column), VhFromString(Name)})
     SetText<public>(Text:string)<transacts>:void = VhCallVoid(Handle, "set_text", array{VhFromString(Text)})
     SetTextDirection<public>(Direction:int)<transacts>:void = VhCallVoid(Handle, "set_text_direction", array{VhFromInt(Direction)})
@@ -1881,34 +1881,34 @@ godot_text_edit<public> := class(godot_control):
 
     AddCaret<public>(Line:int, Column:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "add_caret", array{VhFromInt(Line), VhFromInt(Column)}]]
     AddCaretAtCarets<public>(Below:logic)<transacts>:void = VhCallVoid(Handle, "add_caret_at_carets", array{VhFromLogic(Below)})
-    AddGutter<public>(At:int)<transacts>:void = VhCallVoid(Handle, "add_gutter", array{VhFromInt(At)})
+    AddGutter<public>(?At:int = -1)<transacts>:void = VhCallVoid(Handle, "add_gutter", array{VhFromInt(At)})
     AddSelectionForNextOccurrence<public>()<transacts>:void = VhCallVoid(Handle, "add_selection_for_next_occurrence", array{})
     AdjustCaretsAfterEdit<public>(Caret:int, FromLine:int, FromCol:int, ToLine:int, ToCol:int)<transacts>:void = VhCallVoid(Handle, "adjust_carets_after_edit", array{VhFromInt(Caret), VhFromInt(FromLine), VhFromInt(FromCol), VhFromInt(ToLine), VhFromInt(ToCol)})
-    AdjustViewportToCaret<public>(CaretIndex:int)<transacts>:void = VhCallVoid(Handle, "adjust_viewport_to_caret", array{VhFromInt(CaretIndex)})
+    AdjustViewportToCaret<public>(?CaretIndex:int = 0)<transacts>:void = VhCallVoid(Handle, "adjust_viewport_to_caret", array{VhFromInt(CaretIndex)})
     ApplyIme<public>()<transacts>:void = VhCallVoid(Handle, "apply_ime", array{})
-    Backspace<public>(CaretIndex:int)<transacts>:void = VhCallVoid(Handle, "backspace", array{VhFromInt(CaretIndex)})
+    Backspace<public>(?CaretIndex:int = -1)<transacts>:void = VhCallVoid(Handle, "backspace", array{VhFromInt(CaretIndex)})
     BeginComplexOperation<public>()<transacts>:void = VhCallVoid(Handle, "begin_complex_operation", array{})
     BeginMulticaretEdit<public>()<transacts>:void = VhCallVoid(Handle, "begin_multicaret_edit", array{})
     CancelIme<public>()<transacts>:void = VhCallVoid(Handle, "cancel_ime", array{})
-    CenterViewportToCaret<public>(CaretIndex:int)<transacts>:void = VhCallVoid(Handle, "center_viewport_to_caret", array{VhFromInt(CaretIndex)})
+    CenterViewportToCaret<public>(?CaretIndex:int = 0)<transacts>:void = VhCallVoid(Handle, "center_viewport_to_caret", array{VhFromInt(CaretIndex)})
     Clear<public>()<transacts>:void = VhCallVoid(Handle, "clear", array{})
     ClearUndoHistory<public>()<transacts>:void = VhCallVoid(Handle, "clear_undo_history", array{})
-    CollapseCarets<public>(FromLine:int, FromColumn:int, ToLine:int, ToColumn:int, Inclusive:logic)<transacts>:void = VhCallVoid(Handle, "collapse_carets", array{VhFromInt(FromLine), VhFromInt(FromColumn), VhFromInt(ToLine), VhFromInt(ToColumn), VhFromLogic(Inclusive)})
-    Copy<public>(CaretIndex:int)<transacts>:void = VhCallVoid(Handle, "copy", array{VhFromInt(CaretIndex)})
-    Cut<public>(CaretIndex:int)<transacts>:void = VhCallVoid(Handle, "cut", array{VhFromInt(CaretIndex)})
-    DeleteSelection<public>(CaretIndex:int)<transacts>:void = VhCallVoid(Handle, "delete_selection", array{VhFromInt(CaretIndex)})
-    Deselect<public>(CaretIndex:int)<transacts>:void = VhCallVoid(Handle, "deselect", array{VhFromInt(CaretIndex)})
+    CollapseCarets<public>(FromLine:int, FromColumn:int, ToLine:int, ToColumn:int, ?Inclusive:logic = false)<transacts>:void = VhCallVoid(Handle, "collapse_carets", array{VhFromInt(FromLine), VhFromInt(FromColumn), VhFromInt(ToLine), VhFromInt(ToColumn), VhFromLogic(Inclusive)})
+    Copy<public>(?CaretIndex:int = -1)<transacts>:void = VhCallVoid(Handle, "copy", array{VhFromInt(CaretIndex)})
+    Cut<public>(?CaretIndex:int = -1)<transacts>:void = VhCallVoid(Handle, "cut", array{VhFromInt(CaretIndex)})
+    DeleteSelection<public>(?CaretIndex:int = -1)<transacts>:void = VhCallVoid(Handle, "delete_selection", array{VhFromInt(CaretIndex)})
+    Deselect<public>(?CaretIndex:int = -1)<transacts>:void = VhCallVoid(Handle, "deselect", array{VhFromInt(CaretIndex)})
     EndAction<public>()<transacts>:void = VhCallVoid(Handle, "end_action", array{})
     EndComplexOperation<public>()<transacts>:void = VhCallVoid(Handle, "end_complex_operation", array{})
     EndMulticaretEdit<public>()<transacts>:void = VhCallVoid(Handle, "end_multicaret_edit", array{})
     GetAutowrapMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_autowrap_mode", array{}]]
     GetCaretBlinkInterval<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_caret_blink_interval", array{}]]
-    GetCaretColumn<public>(CaretIndex:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_caret_column", array{VhFromInt(CaretIndex)}]]
+    GetCaretColumn<public>(?CaretIndex:int = 0)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_caret_column", array{VhFromInt(CaretIndex)}]]
     GetCaretCount<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_caret_count", array{}]]
-    GetCaretDrawPos<public>(CaretIndex:int)<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_caret_draw_pos", array{VhFromInt(CaretIndex)}]]
-    GetCaretLine<public>(CaretIndex:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_caret_line", array{VhFromInt(CaretIndex)}]]
+    GetCaretDrawPos<public>(?CaretIndex:int = 0)<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_caret_draw_pos", array{VhFromInt(CaretIndex)}]]
+    GetCaretLine<public>(?CaretIndex:int = 0)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_caret_line", array{VhFromInt(CaretIndex)}]]
     GetCaretType<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_caret_type", array{}]]
-    GetCaretWrapIndex<public>(CaretIndex:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_caret_wrap_index", array{VhFromInt(CaretIndex)}]]
+    GetCaretWrapIndex<public>(?CaretIndex:int = 0)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_caret_wrap_index", array{VhFromInt(CaretIndex)}]]
     GetCustomWordSeparators<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_custom_word_separators", array{}]]
     GetDrawControlChars<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_draw_control_chars", array{}]]
     GetFirstNonWhitespaceColumn<public>(Line:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_first_non_whitespace_column", array{VhFromInt(Line)}]]
@@ -1931,7 +1931,7 @@ godot_text_edit<public> := class(godot_control):
     GetLineGutterItemColor<public>(Line:int, Gutter:int)<decides><transacts>:color = VhToColor[VhCallValue[Handle, "get_line_gutter_item_color", array{VhFromInt(Line), VhFromInt(Gutter)}]]
     GetLineGutterText<public>(Line:int, Gutter:int)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_line_gutter_text", array{VhFromInt(Line), VhFromInt(Gutter)}]]
     GetLineHeight<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_line_height", array{}]]
-    GetLineWidth<public>(Line:int, WrapIndex:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_line_width", array{VhFromInt(Line), VhFromInt(WrapIndex)}]]
+    GetLineWidth<public>(Line:int, ?WrapIndex:int = -1)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_line_width", array{VhFromInt(Line), VhFromInt(WrapIndex)}]]
     GetLineWithIme<public>(Line:int)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_line_with_ime", array{VhFromInt(Line)}]]
     GetLineWrapCount<public>(Line:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_line_wrap_count", array{VhFromInt(Line)}]]
     GetLineWrapIndexAtColumn<public>(Line:int, Column:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_line_wrap_index_at_column", array{VhFromInt(Line), VhFromInt(Column)}]]
@@ -1946,18 +1946,18 @@ godot_text_edit<public> := class(godot_control):
     GetPlaceholder<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_placeholder", array{}]]
     GetPreviousCompositeCharacterColumn<public>(Line:int, Column:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_previous_composite_character_column", array{VhFromInt(Line), VhFromInt(Column)}]]
     GetSavedVersion<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_saved_version", array{}]]
-    GetScrollPosForLine<public>(Line:int, WrapIndex:int)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_scroll_pos_for_line", array{VhFromInt(Line), VhFromInt(WrapIndex)}]]
-    GetSelectedText<public>(CaretIndex:int)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_selected_text", array{VhFromInt(CaretIndex)}]]
-    GetSelectionAtLineColumn<public>(Line:int, Column:int, IncludeEdges:logic, OnlySelections:logic)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_at_line_column", array{VhFromInt(Line), VhFromInt(Column), VhFromLogic(IncludeEdges), VhFromLogic(OnlySelections)}]]
-    GetSelectionColumn<public>(CaretIndex:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_column", array{VhFromInt(CaretIndex)}]]
-    GetSelectionFromColumn<public>(CaretIndex:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_from_column", array{VhFromInt(CaretIndex)}]]
-    GetSelectionFromLine<public>(CaretIndex:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_from_line", array{VhFromInt(CaretIndex)}]]
-    GetSelectionLine<public>(CaretIndex:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_line", array{VhFromInt(CaretIndex)}]]
+    GetScrollPosForLine<public>(Line:int, ?WrapIndex:int = 0)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_scroll_pos_for_line", array{VhFromInt(Line), VhFromInt(WrapIndex)}]]
+    GetSelectedText<public>(?CaretIndex:int = -1)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_selected_text", array{VhFromInt(CaretIndex)}]]
+    GetSelectionAtLineColumn<public>(Line:int, Column:int, ?IncludeEdges:logic = true, ?OnlySelections:logic = true)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_at_line_column", array{VhFromInt(Line), VhFromInt(Column), VhFromLogic(IncludeEdges), VhFromLogic(OnlySelections)}]]
+    GetSelectionColumn<public>(?CaretIndex:int = 0)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_column", array{VhFromInt(CaretIndex)}]]
+    GetSelectionFromColumn<public>(?CaretIndex:int = 0)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_from_column", array{VhFromInt(CaretIndex)}]]
+    GetSelectionFromLine<public>(?CaretIndex:int = 0)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_from_line", array{VhFromInt(CaretIndex)}]]
+    GetSelectionLine<public>(?CaretIndex:int = 0)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_line", array{VhFromInt(CaretIndex)}]]
     GetSelectionMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_mode", array{}]]
-    GetSelectionOriginColumn<public>(CaretIndex:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_origin_column", array{VhFromInt(CaretIndex)}]]
-    GetSelectionOriginLine<public>(CaretIndex:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_origin_line", array{VhFromInt(CaretIndex)}]]
-    GetSelectionToColumn<public>(CaretIndex:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_to_column", array{VhFromInt(CaretIndex)}]]
-    GetSelectionToLine<public>(CaretIndex:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_to_line", array{VhFromInt(CaretIndex)}]]
+    GetSelectionOriginColumn<public>(?CaretIndex:int = 0)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_origin_column", array{VhFromInt(CaretIndex)}]]
+    GetSelectionOriginLine<public>(?CaretIndex:int = 0)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_origin_line", array{VhFromInt(CaretIndex)}]]
+    GetSelectionToColumn<public>(?CaretIndex:int = 0)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_to_column", array{VhFromInt(CaretIndex)}]]
+    GetSelectionToLine<public>(?CaretIndex:int = 0)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_to_line", array{VhFromInt(CaretIndex)}]]
     GetStructuredTextBidiOverride<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_structured_text_bidi_override", array{}]]
     GetSyntaxHighlighter<public>()<decides><transacts>:godot_resource = godot_resource{Handle := VhToHandle[VhCallValue[Handle, "get_syntax_highlighter", array{}]]}
     GetTabInputMode<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_tab_input_mode", array{}]]
@@ -1974,19 +1974,19 @@ godot_text_edit<public> := class(godot_control):
     GetVisibleLineCount<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_visible_line_count", array{}]]
     GetVisibleLineCountInRange<public>(FromLine:int, ToLine:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_visible_line_count_in_range", array{VhFromInt(FromLine), VhFromInt(ToLine)}]]
     GetWordAtPos<public>(Position:vector2)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_word_at_pos", array{VhFromVector2(Position)}]]
-    GetWordUnderCaret<public>(CaretIndex:int)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_word_under_caret", array{VhFromInt(CaretIndex)}]]
+    GetWordUnderCaret<public>(?CaretIndex:int = -1)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_word_under_caret", array{VhFromInt(CaretIndex)}]]
     HasImeText<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_ime_text", array{}]]
     HasRedo<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_redo", array{}]]
-    HasSelection<public>(CaretIndex:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_selection", array{VhFromInt(CaretIndex)}]]
+    HasSelection<public>(?CaretIndex:int = -1)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_selection", array{VhFromInt(CaretIndex)}]]
     HasUndo<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_undo", array{}]]
     InsertLineAt<public>(Line:int, Text:string)<transacts>:void = VhCallVoid(Handle, "insert_line_at", array{VhFromInt(Line), VhFromString(Text)})
-    InsertText<public>(Text:string, Line:int, Column:int, BeforeSelectionBegin:logic, BeforeSelectionEnd:logic)<transacts>:void = VhCallVoid(Handle, "insert_text", array{VhFromString(Text), VhFromInt(Line), VhFromInt(Column), VhFromLogic(BeforeSelectionBegin), VhFromLogic(BeforeSelectionEnd)})
-    InsertTextAtCaret<public>(Text:string, CaretIndex:int)<transacts>:void = VhCallVoid(Handle, "insert_text_at_caret", array{VhFromString(Text), VhFromInt(CaretIndex)})
+    InsertText<public>(Text:string, Line:int, Column:int, ?BeforeSelectionBegin:logic = true, ?BeforeSelectionEnd:logic = false)<transacts>:void = VhCallVoid(Handle, "insert_text", array{VhFromString(Text), VhFromInt(Line), VhFromInt(Column), VhFromLogic(BeforeSelectionBegin), VhFromLogic(BeforeSelectionEnd)})
+    InsertTextAtCaret<public>(Text:string, ?CaretIndex:int = -1)<transacts>:void = VhCallVoid(Handle, "insert_text_at_caret", array{VhFromString(Text), VhFromInt(CaretIndex)})
     IsBackspaceDeletesCompositeCharacterEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_backspace_deletes_composite_character_enabled", array{}]]
-    IsCaretAfterSelectionOrigin<public>(CaretIndex:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_caret_after_selection_origin", array{VhFromInt(CaretIndex)}]]
+    IsCaretAfterSelectionOrigin<public>(?CaretIndex:int = 0)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_caret_after_selection_origin", array{VhFromInt(CaretIndex)}]]
     IsCaretBlinkEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_caret_blink_enabled", array{}]]
     IsCaretMidGraphemeEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_caret_mid_grapheme_enabled", array{}]]
-    IsCaretVisible<public>(CaretIndex:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_caret_visible", array{VhFromInt(CaretIndex)}]]
+    IsCaretVisible<public>(?CaretIndex:int = 0)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_caret_visible", array{VhFromInt(CaretIndex)}]]
     IsContextMenuEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_context_menu_enabled", array{}]]
     IsCustomWordSeparatorsEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_custom_word_separators_enabled", array{}]]
     IsDefaultWordSeparatorsEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_default_word_separators_enabled", array{}]]
@@ -2013,7 +2013,7 @@ godot_text_edit<public> := class(godot_control):
     IsLineWrapped<public>(Line:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_line_wrapped", array{VhFromInt(Line)}]]
     IsMenuVisible<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_menu_visible", array{}]]
     IsMiddleMousePasteEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_middle_mouse_paste_enabled", array{}]]
-    IsMouseOverSelection<public>(Edges:logic, CaretIndex:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_mouse_over_selection", array{VhFromLogic(Edges), VhFromInt(CaretIndex)}]]
+    IsMouseOverSelection<public>(Edges:logic, ?CaretIndex:int = -1)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_mouse_over_selection", array{VhFromLogic(Edges), VhFromInt(CaretIndex)}]]
     IsMoveCaretOnRightClickEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_move_caret_on_right_click_enabled", array{}]]
     IsMultipleCaretsEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_multiple_carets_enabled", array{}]]
     IsOvertypeModeEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_overtype_mode_enabled", array{}]]
@@ -2026,23 +2026,23 @@ godot_text_edit<public> := class(godot_control):
     MergeGutters<public>(FromLine:int, ToLine:int)<transacts>:void = VhCallVoid(Handle, "merge_gutters", array{VhFromInt(FromLine), VhFromInt(ToLine)})
     MergeOverlappingCarets<public>()<transacts>:void = VhCallVoid(Handle, "merge_overlapping_carets", array{})
     MulticaretEditIgnoreCaret<public>(CaretIndex:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "multicaret_edit_ignore_caret", array{VhFromInt(CaretIndex)}]]
-    Paste<public>(CaretIndex:int)<transacts>:void = VhCallVoid(Handle, "paste", array{VhFromInt(CaretIndex)})
-    PastePrimaryClipboard<public>(CaretIndex:int)<transacts>:void = VhCallVoid(Handle, "paste_primary_clipboard", array{VhFromInt(CaretIndex)})
+    Paste<public>(?CaretIndex:int = -1)<transacts>:void = VhCallVoid(Handle, "paste", array{VhFromInt(CaretIndex)})
+    PastePrimaryClipboard<public>(?CaretIndex:int = -1)<transacts>:void = VhCallVoid(Handle, "paste_primary_clipboard", array{VhFromInt(CaretIndex)})
     Redo<public>()<transacts>:void = VhCallVoid(Handle, "redo", array{})
     RemoveCaret<public>(Caret:int)<transacts>:void = VhCallVoid(Handle, "remove_caret", array{VhFromInt(Caret)})
     RemoveGutter<public>(Gutter:int)<transacts>:void = VhCallVoid(Handle, "remove_gutter", array{VhFromInt(Gutter)})
-    RemoveLineAt<public>(Line:int, MoveCaretsDown:logic)<transacts>:void = VhCallVoid(Handle, "remove_line_at", array{VhFromInt(Line), VhFromLogic(MoveCaretsDown)})
+    RemoveLineAt<public>(Line:int, ?MoveCaretsDown:logic = true)<transacts>:void = VhCallVoid(Handle, "remove_line_at", array{VhFromInt(Line), VhFromLogic(MoveCaretsDown)})
     RemoveSecondaryCarets<public>()<transacts>:void = VhCallVoid(Handle, "remove_secondary_carets", array{})
     RemoveText<public>(FromLine:int, FromColumn:int, ToLine:int, ToColumn:int)<transacts>:void = VhCallVoid(Handle, "remove_text", array{VhFromInt(FromLine), VhFromInt(FromColumn), VhFromInt(ToLine), VhFromInt(ToColumn)})
-    Select<public>(OriginLine:int, OriginColumn:int, CaretLine:int, CaretColumn:int, CaretIndex:int)<transacts>:void = VhCallVoid(Handle, "select", array{VhFromInt(OriginLine), VhFromInt(OriginColumn), VhFromInt(CaretLine), VhFromInt(CaretColumn), VhFromInt(CaretIndex)})
+    Select<public>(OriginLine:int, OriginColumn:int, CaretLine:int, CaretColumn:int, ?CaretIndex:int = 0)<transacts>:void = VhCallVoid(Handle, "select", array{VhFromInt(OriginLine), VhFromInt(OriginColumn), VhFromInt(CaretLine), VhFromInt(CaretColumn), VhFromInt(CaretIndex)})
     SelectAll<public>()<transacts>:void = VhCallVoid(Handle, "select_all", array{})
-    SelectWordUnderCaret<public>(CaretIndex:int)<transacts>:void = VhCallVoid(Handle, "select_word_under_caret", array{VhFromInt(CaretIndex)})
+    SelectWordUnderCaret<public>(?CaretIndex:int = -1)<transacts>:void = VhCallVoid(Handle, "select_word_under_caret", array{VhFromInt(CaretIndex)})
     SetAutowrapMode<public>(AutowrapMode:int)<transacts>:void = VhCallVoid(Handle, "set_autowrap_mode", array{VhFromInt(AutowrapMode)})
     SetBackspaceDeletesCompositeCharacterEnabled<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_backspace_deletes_composite_character_enabled", array{VhFromLogic(Enable)})
     SetCaretBlinkEnabled<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_caret_blink_enabled", array{VhFromLogic(Enable)})
     SetCaretBlinkInterval<public>(Interval:float)<transacts>:void = VhCallVoid(Handle, "set_caret_blink_interval", array{VhFromFloat(Interval)})
-    SetCaretColumn<public>(Column:int, AdjustViewport:logic, CaretIndex:int)<transacts>:void = VhCallVoid(Handle, "set_caret_column", array{VhFromInt(Column), VhFromLogic(AdjustViewport), VhFromInt(CaretIndex)})
-    SetCaretLine<public>(Line:int, AdjustViewport:logic, CanBeHidden:logic, WrapIndex:int, CaretIndex:int)<transacts>:void = VhCallVoid(Handle, "set_caret_line", array{VhFromInt(Line), VhFromLogic(AdjustViewport), VhFromLogic(CanBeHidden), VhFromInt(WrapIndex), VhFromInt(CaretIndex)})
+    SetCaretColumn<public>(Column:int, ?AdjustViewport:logic = true, ?CaretIndex:int = 0)<transacts>:void = VhCallVoid(Handle, "set_caret_column", array{VhFromInt(Column), VhFromLogic(AdjustViewport), VhFromInt(CaretIndex)})
+    SetCaretLine<public>(Line:int, ?AdjustViewport:logic = true, ?CanBeHidden:logic = true, ?WrapIndex:int = 0, ?CaretIndex:int = 0)<transacts>:void = VhCallVoid(Handle, "set_caret_line", array{VhFromInt(Line), VhFromLogic(AdjustViewport), VhFromLogic(CanBeHidden), VhFromInt(WrapIndex), VhFromInt(CaretIndex)})
     SetCaretMidGraphemeEnabled<public>(Enabled:logic)<transacts>:void = VhCallVoid(Handle, "set_caret_mid_grapheme_enabled", array{VhFromLogic(Enabled)})
     SetCaretType<public>(Type:int)<transacts>:void = VhCallVoid(Handle, "set_caret_type", array{VhFromInt(Type)})
     SetContextMenuEnabled<public>(Enabled:logic)<transacts>:void = VhCallVoid(Handle, "set_context_menu_enabled", array{VhFromLogic(Enabled)})
@@ -2071,9 +2071,9 @@ godot_text_edit<public> := class(godot_control):
     SetIndentWrappedLines<public>(Enabled:logic)<transacts>:void = VhCallVoid(Handle, "set_indent_wrapped_lines", array{VhFromLogic(Enabled)})
     SetLanguage<public>(Language:string)<transacts>:void = VhCallVoid(Handle, "set_language", array{VhFromString(Language)})
     SetLine<public>(Line:int, NewText:string)<transacts>:void = VhCallVoid(Handle, "set_line", array{VhFromInt(Line), VhFromString(NewText)})
-    SetLineAsCenterVisible<public>(Line:int, WrapIndex:int)<transacts>:void = VhCallVoid(Handle, "set_line_as_center_visible", array{VhFromInt(Line), VhFromInt(WrapIndex)})
-    SetLineAsFirstVisible<public>(Line:int, WrapIndex:int)<transacts>:void = VhCallVoid(Handle, "set_line_as_first_visible", array{VhFromInt(Line), VhFromInt(WrapIndex)})
-    SetLineAsLastVisible<public>(Line:int, WrapIndex:int)<transacts>:void = VhCallVoid(Handle, "set_line_as_last_visible", array{VhFromInt(Line), VhFromInt(WrapIndex)})
+    SetLineAsCenterVisible<public>(Line:int, ?WrapIndex:int = 0)<transacts>:void = VhCallVoid(Handle, "set_line_as_center_visible", array{VhFromInt(Line), VhFromInt(WrapIndex)})
+    SetLineAsFirstVisible<public>(Line:int, ?WrapIndex:int = 0)<transacts>:void = VhCallVoid(Handle, "set_line_as_first_visible", array{VhFromInt(Line), VhFromInt(WrapIndex)})
+    SetLineAsLastVisible<public>(Line:int, ?WrapIndex:int = 0)<transacts>:void = VhCallVoid(Handle, "set_line_as_last_visible", array{VhFromInt(Line), VhFromInt(WrapIndex)})
     SetLineBackgroundColor<public>(Line:int, Color:color)<transacts>:void = VhCallVoid(Handle, "set_line_background_color", array{VhFromInt(Line), VhFromColor(Color)})
     SetLineGutterClickable<public>(Line:int, Gutter:int, Clickable:logic)<transacts>:void = VhCallVoid(Handle, "set_line_gutter_clickable", array{VhFromInt(Line), VhFromInt(Gutter), VhFromLogic(Clickable)})
     SetLineGutterIcon<public>(Line:int, Gutter:int, Icon:godot_texture2d)<transacts>:void = VhCallVoid(Handle, "set_line_gutter_icon", array{VhFromInt(Line), VhFromInt(Gutter), VhFromObject(Icon)})
@@ -2091,8 +2091,8 @@ godot_text_edit<public> := class(godot_control):
     SetSearchText<public>(SearchText:string)<transacts>:void = VhCallVoid(Handle, "set_search_text", array{VhFromString(SearchText)})
     SetSelectingEnabled<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_selecting_enabled", array{VhFromLogic(Enable)})
     SetSelectionMode<public>(Mode:int)<transacts>:void = VhCallVoid(Handle, "set_selection_mode", array{VhFromInt(Mode)})
-    SetSelectionOriginColumn<public>(Column:int, CaretIndex:int)<transacts>:void = VhCallVoid(Handle, "set_selection_origin_column", array{VhFromInt(Column), VhFromInt(CaretIndex)})
-    SetSelectionOriginLine<public>(Line:int, CanBeHidden:logic, WrapIndex:int, CaretIndex:int)<transacts>:void = VhCallVoid(Handle, "set_selection_origin_line", array{VhFromInt(Line), VhFromLogic(CanBeHidden), VhFromInt(WrapIndex), VhFromInt(CaretIndex)})
+    SetSelectionOriginColumn<public>(Column:int, ?CaretIndex:int = 0)<transacts>:void = VhCallVoid(Handle, "set_selection_origin_column", array{VhFromInt(Column), VhFromInt(CaretIndex)})
+    SetSelectionOriginLine<public>(Line:int, ?CanBeHidden:logic = true, ?WrapIndex:int = -1, ?CaretIndex:int = 0)<transacts>:void = VhCallVoid(Handle, "set_selection_origin_line", array{VhFromInt(Line), VhFromLogic(CanBeHidden), VhFromInt(WrapIndex), VhFromInt(CaretIndex)})
     SetShortcutKeysEnabled<public>(Enabled:logic)<transacts>:void = VhCallVoid(Handle, "set_shortcut_keys_enabled", array{VhFromLogic(Enabled)})
     SetSmoothScrollEnabled<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_smooth_scroll_enabled", array{VhFromLogic(Enable)})
     SetStructuredTextBidiOverride<public>(Parser:int)<transacts>:void = VhCallVoid(Handle, "set_structured_text_bidi_override", array{VhFromInt(Parser)})
@@ -2128,7 +2128,7 @@ godot_tile_map<public> := class(godot_node2d):
     Clear<public>()<transacts>:void = VhCallVoid(Handle, "clear", array{})
     ClearLayer<public>(Layer:int)<transacts>:void = VhCallVoid(Handle, "clear_layer", array{VhFromInt(Layer)})
     FixInvalidTiles<public>()<transacts>:void = VhCallVoid(Handle, "fix_invalid_tiles", array{})
-    ForceUpdate<public>(Layer:int)<transacts>:void = VhCallVoid(Handle, "force_update", array{VhFromInt(Layer)})
+    ForceUpdate<public>(?Layer:int = -1)<transacts>:void = VhCallVoid(Handle, "force_update", array{VhFromInt(Layer)})
     GetCollisionVisibilityMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_collision_visibility_mode", array{}]]
     GetLayerModulate<public>(Layer:int)<decides><transacts>:color = VhToColor[VhCallValue[Handle, "get_layer_modulate", array{VhFromInt(Layer)}]]
     GetLayerName<public>(Layer:int)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_layer_name", array{VhFromInt(Layer)}]]
@@ -2143,7 +2143,7 @@ godot_tile_map<public> := class(godot_node2d):
     IsLayerNavigationEnabled<public>(Layer:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_layer_navigation_enabled", array{VhFromInt(Layer)}]]
     IsLayerYSortEnabled<public>(Layer:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_layer_y_sort_enabled", array{VhFromInt(Layer)}]]
     MoveLayer<public>(Layer:int, ToPosition:int)<transacts>:void = VhCallVoid(Handle, "move_layer", array{VhFromInt(Layer), VhFromInt(ToPosition)})
-    NotifyRuntimeTileDataUpdate<public>(Layer:int)<transacts>:void = VhCallVoid(Handle, "notify_runtime_tile_data_update", array{VhFromInt(Layer)})
+    NotifyRuntimeTileDataUpdate<public>(?Layer:int = -1)<transacts>:void = VhCallVoid(Handle, "notify_runtime_tile_data_update", array{VhFromInt(Layer)})
     RemoveLayer<public>(Layer:int)<transacts>:void = VhCallVoid(Handle, "remove_layer", array{VhFromInt(Layer)})
     SetCollisionAnimatable<public>(Enabled:logic)<transacts>:void = VhCallVoid(Handle, "set_collision_animatable", array{VhFromLogic(Enabled)})
     SetCollisionVisibilityMode<public>(CollisionVisibilityMode:int)<transacts>:void = VhCallVoid(Handle, "set_collision_visibility_mode", array{VhFromInt(CollisionVisibilityMode)})
@@ -2236,7 +2236,7 @@ godot_button<public> := class(godot_base_button):
 godot_character_body3d<public> := class(godot_physics_body3d):
 
     ApplyFloorSnap<public>()<transacts>:void = VhCallVoid(Handle, "apply_floor_snap", array{})
-    GetFloorAngle<public>(UpDirection:vector3)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_floor_angle", array{VhFromVector3(UpDirection)}]]
+    GetFloorAngle<public>(?UpDirection:vector3 = vector3{X := 0.0, Y := 1.0, Z := 0.0})<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_floor_angle", array{VhFromVector3(UpDirection)}]]
     GetFloorMaxAngle<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_floor_max_angle", array{}]]
     GetFloorNormal<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_floor_normal", array{}]]
     GetFloorSnapLength<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_floor_snap_length", array{}]]
@@ -2308,7 +2308,7 @@ godot_mesh_instance3d<public> := class(godot_geometry_instance3d):
 
     BakeMeshFromCurrentBlendShapeMix<public>(Existing:godot_resource)<decides><transacts>:godot_resource = godot_resource{Handle := VhToHandle[VhCallValue[Handle, "bake_mesh_from_current_blend_shape_mix", array{VhFromObject(Existing)}]]}
     BakeMeshFromCurrentSkeletonPose<public>(Existing:godot_resource)<decides><transacts>:godot_resource = godot_resource{Handle := VhToHandle[VhCallValue[Handle, "bake_mesh_from_current_skeleton_pose", array{VhFromObject(Existing)}]]}
-    CreateConvexCollision<public>(Clean:logic, Simplify:logic)<transacts>:void = VhCallVoid(Handle, "create_convex_collision", array{VhFromLogic(Clean), VhFromLogic(Simplify)})
+    CreateConvexCollision<public>(?Clean:logic = true, ?Simplify:logic = false)<transacts>:void = VhCallVoid(Handle, "create_convex_collision", array{VhFromLogic(Clean), VhFromLogic(Simplify)})
     CreateDebugTangents<public>()<transacts>:void = VhCallVoid(Handle, "create_debug_tangents", array{})
     CreateMultipleConvexCollisions<public>(Settings:godot_ref_counted)<transacts>:void = VhCallVoid(Handle, "create_multiple_convex_collisions", array{VhFromObject(Settings)})
     CreateTrimeshCollision<public>()<transacts>:void = VhCallVoid(Handle, "create_trimesh_collision", array{})
@@ -2339,7 +2339,7 @@ godot_physics_body2d<public> := class(godot_collision_object2d):
 
     AddCollisionExceptionWith<public>(Body:godot_node)<transacts>:void = VhCallVoid(Handle, "add_collision_exception_with", array{VhFromObject(Body)})
     GetGravity<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_gravity", array{}]]
-    MoveAndCollide<public>(Motion:vector2, TestOnly:logic, SafeMargin:float, RecoveryAsCollision:logic)<decides><transacts>:godot_ref_counted = godot_ref_counted{Handle := VhToHandle[VhCallValue[Handle, "move_and_collide", array{VhFromVector2(Motion), VhFromLogic(TestOnly), VhFromFloat(SafeMargin), VhFromLogic(RecoveryAsCollision)}]]}
+    MoveAndCollide<public>(Motion:vector2, ?TestOnly:logic = false, ?SafeMargin:float = 0.08, ?RecoveryAsCollision:logic = false)<decides><transacts>:godot_ref_counted = godot_ref_counted{Handle := VhToHandle[VhCallValue[Handle, "move_and_collide", array{VhFromVector2(Motion), VhFromLogic(TestOnly), VhFromFloat(SafeMargin), VhFromLogic(RecoveryAsCollision)}]]}
     RemoveCollisionExceptionWith<public>(Body:godot_node)<transacts>:void = VhCallVoid(Handle, "remove_collision_exception_with", array{VhFromObject(Body)})
 
 godot_point_light2d<public> := class(godot_light2d):
@@ -2365,12 +2365,12 @@ godot_progress_bar<public> := class(godot_range):
 godot_rigid_body3d<public> := class(godot_physics_body3d):
 
     AddConstantCentralForce<public>(Force:vector3)<transacts>:void = VhCallVoid(Handle, "add_constant_central_force", array{VhFromVector3(Force)})
-    AddConstantForce<public>(Force:vector3, Position:vector3)<transacts>:void = VhCallVoid(Handle, "add_constant_force", array{VhFromVector3(Force), VhFromVector3(Position)})
+    AddConstantForce<public>(Force:vector3, ?Position:vector3 = vector3{X := 0.0, Y := 0.0, Z := 0.0})<transacts>:void = VhCallVoid(Handle, "add_constant_force", array{VhFromVector3(Force), VhFromVector3(Position)})
     AddConstantTorque<public>(Torque:vector3)<transacts>:void = VhCallVoid(Handle, "add_constant_torque", array{VhFromVector3(Torque)})
     ApplyCentralForce<public>(Force:vector3)<transacts>:void = VhCallVoid(Handle, "apply_central_force", array{VhFromVector3(Force)})
     ApplyCentralImpulse<public>(Impulse:vector3)<transacts>:void = VhCallVoid(Handle, "apply_central_impulse", array{VhFromVector3(Impulse)})
-    ApplyForce<public>(Force:vector3, Position:vector3)<transacts>:void = VhCallVoid(Handle, "apply_force", array{VhFromVector3(Force), VhFromVector3(Position)})
-    ApplyImpulse<public>(Impulse:vector3, Position:vector3)<transacts>:void = VhCallVoid(Handle, "apply_impulse", array{VhFromVector3(Impulse), VhFromVector3(Position)})
+    ApplyForce<public>(Force:vector3, ?Position:vector3 = vector3{X := 0.0, Y := 0.0, Z := 0.0})<transacts>:void = VhCallVoid(Handle, "apply_force", array{VhFromVector3(Force), VhFromVector3(Position)})
+    ApplyImpulse<public>(Impulse:vector3, ?Position:vector3 = vector3{X := 0.0, Y := 0.0, Z := 0.0})<transacts>:void = VhCallVoid(Handle, "apply_impulse", array{VhFromVector3(Impulse), VhFromVector3(Position)})
     ApplyTorque<public>(Torque:vector3)<transacts>:void = VhCallVoid(Handle, "apply_torque", array{VhFromVector3(Torque)})
     ApplyTorqueImpulse<public>(Impulse:vector3)<transacts>:void = VhCallVoid(Handle, "apply_torque_impulse", array{VhFromVector3(Impulse)})
     GetAngularDamp<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_angular_damp", array{}]]
@@ -2472,7 +2472,7 @@ godot_static_body3d<public> := class(godot_physics_body3d):
 godot_character_body2d<public> := class(godot_physics_body2d):
 
     ApplyFloorSnap<public>()<transacts>:void = VhCallVoid(Handle, "apply_floor_snap", array{})
-    GetFloorAngle<public>(UpDirection:vector2)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_floor_angle", array{VhFromVector2(UpDirection)}]]
+    GetFloorAngle<public>(?UpDirection:vector2 = vector2{X := 0.0, Y := -1.0})<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_floor_angle", array{VhFromVector2(UpDirection)}]]
     GetFloorMaxAngle<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_floor_max_angle", array{}]]
     GetFloorNormal<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_floor_normal", array{}]]
     GetFloorSnapLength<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_floor_snap_length", array{}]]
@@ -2525,12 +2525,12 @@ godot_h_box_container<public> := class(godot_box_container):
 godot_rigid_body2d<public> := class(godot_physics_body2d):
 
     AddConstantCentralForce<public>(Force:vector2)<transacts>:void = VhCallVoid(Handle, "add_constant_central_force", array{VhFromVector2(Force)})
-    AddConstantForce<public>(Force:vector2, Position:vector2)<transacts>:void = VhCallVoid(Handle, "add_constant_force", array{VhFromVector2(Force), VhFromVector2(Position)})
+    AddConstantForce<public>(Force:vector2, ?Position:vector2 = vector2{X := 0.0, Y := 0.0})<transacts>:void = VhCallVoid(Handle, "add_constant_force", array{VhFromVector2(Force), VhFromVector2(Position)})
     AddConstantTorque<public>(Torque:float)<transacts>:void = VhCallVoid(Handle, "add_constant_torque", array{VhFromFloat(Torque)})
     ApplyCentralForce<public>(Force:vector2)<transacts>:void = VhCallVoid(Handle, "apply_central_force", array{VhFromVector2(Force)})
-    ApplyCentralImpulse<public>(Impulse:vector2)<transacts>:void = VhCallVoid(Handle, "apply_central_impulse", array{VhFromVector2(Impulse)})
-    ApplyForce<public>(Force:vector2, Position:vector2)<transacts>:void = VhCallVoid(Handle, "apply_force", array{VhFromVector2(Force), VhFromVector2(Position)})
-    ApplyImpulse<public>(Impulse:vector2, Position:vector2)<transacts>:void = VhCallVoid(Handle, "apply_impulse", array{VhFromVector2(Impulse), VhFromVector2(Position)})
+    ApplyCentralImpulse<public>(?Impulse:vector2 = vector2{X := 0.0, Y := 0.0})<transacts>:void = VhCallVoid(Handle, "apply_central_impulse", array{VhFromVector2(Impulse)})
+    ApplyForce<public>(Force:vector2, ?Position:vector2 = vector2{X := 0.0, Y := 0.0})<transacts>:void = VhCallVoid(Handle, "apply_force", array{VhFromVector2(Force), VhFromVector2(Position)})
+    ApplyImpulse<public>(Impulse:vector2, ?Position:vector2 = vector2{X := 0.0, Y := 0.0})<transacts>:void = VhCallVoid(Handle, "apply_impulse", array{VhFromVector2(Impulse), VhFromVector2(Position)})
     ApplyTorque<public>(Torque:float)<transacts>:void = VhCallVoid(Handle, "apply_torque", array{VhFromFloat(Torque)})
     ApplyTorqueImpulse<public>(Torque:float)<transacts>:void = VhCallVoid(Handle, "apply_torque_impulse", array{VhFromFloat(Torque)})
     GetAngularDamp<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_angular_damp", array{}]]

@@ -139,7 +139,7 @@ class TypeResolver:
 ClassifiedMethod = namedtuple(
     "ClassifiedMethod", ["godot_name", "verse_name", "params", "return_type", "is_void"]
 )
-Param = namedtuple("Param", ["verse_name", "type_info"])
+Param = namedtuple("Param", ["verse_name", "type_info", "default"])
 
 
 def build_parent_map(classes: list) -> dict:
@@ -199,6 +199,45 @@ class Coverage:
             self.unsupported_types[t] += 1
 
 
+VECTOR_FIELDS = {"vector2": "XY", "vector3": "XYZ", "color": "RGBA"}
+
+
+def verse_default_literal(verse_type: str, default: str):
+    """Godot's default_value spelled as a Verse literal, or None when it has no spelling.
+
+    Unrepresentable defaults (null, Callable(), [], {}) leave the parameter required rather than
+    inventing a value, so the only cost is that the caller has to pass one.
+    """
+    if verse_type == "logic":
+        return default if default in ("true", "false") else None
+    if verse_type == "int":
+        return default if re.fullmatch(r"-?\d+", default) else None
+    if verse_type == "float":
+        if not re.fullmatch(r"-?\d+(\.\d+)?", default):
+            return None
+        # Godot writes some float defaults as integers, which Verse will not take for a float.
+        return default if "." in default else default + ".0"
+    if verse_type == "string":
+        if re.fullmatch(r'&?"[^"\\]*"', default):
+            return default.lstrip("&")
+        m = re.fullmatch(r'NodePath\("([^"\\]*)"\)', default)
+        return f'"{m.group(1)}"' if m else None
+
+    fields = VECTOR_FIELDS.get(verse_type)
+    if fields:
+        m = re.fullmatch(rf"{verse_type.capitalize()}\(([^)]*)\)", default)
+        if not m:
+            return None
+        parts = [p.strip() for p in m.group(1).split(",")]
+        if len(parts) != len(fields):
+            return None
+        numbers = [verse_default_literal("float", p) for p in parts]
+        if any(n is None for n in numbers):
+            return None
+        return verse_type + "{" + ", ".join(f"{f} := {n}" for f, n in zip(fields, numbers)) + "}"
+    return None
+
+
 def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members: set):
     """Returns a ClassifiedMethod, or None (and records why in coverage) if the method is skipped."""
     if m.get("is_virtual"):
@@ -230,11 +269,18 @@ def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members
             continue
         pname = verse_param_name(arg["name"], i, RESERVED_WORDS, used_param_names, members)
         used_param_names.add(pname)
-        params.append(Param(pname, info))
+        default = arg.get("default_value")
+        params.append(Param(pname, info, verse_default_literal(info.verse_type, default) if default else None))
 
     if unsupported_seen:
         coverage.unsupported(unsupported_seen)
         return None
+
+    # An optional parameter may not be followed by a required one, and a Godot default that had
+    # no Verse spelling leaves its parameter required, so trailing defaults only.
+    for i in range(len(params)):
+        if params[i].default is not None and any(p.default is None for p in params[i + 1:]):
+            params[i] = params[i]._replace(default=None)
 
     return ClassifiedMethod(
         godot_name=m["name"],
@@ -254,7 +300,11 @@ def emit_call_args(params) -> str:
 
 
 def emit_method(cm: ClassifiedMethod) -> str:
-    param_decl = ", ".join(f"{p.verse_name}:{p.type_info.verse_type}" for p in cm.params)
+    param_decl = ", ".join(
+        f"{p.verse_name}:{p.type_info.verse_type}" if p.default is None
+        else f"?{p.verse_name}:{p.type_info.verse_type} = {p.default}"
+        for p in cm.params
+    )
     args = emit_call_args(cm.params)
     call = f'VhCallValue[Handle, "{cm.godot_name}", array{{{args}}}]' if not cm.is_void else None
 
