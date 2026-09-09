@@ -65,32 +65,3 @@ ToVector2<public>(Value:godot_value)<decides><transacts>:vector2 = vector2{X := 
 ToVector3<public>(Value:godot_value)<decides><transacts>:vector3 = vector3{X := Value(2)[0], Y := Value(2)[1], Z := Value(2)[2]}
 ToColor<public>(Value:godot_value)<decides><transacts>:color = color{R := Value(2)[0], G := Value(2)[1], B := Value(2)[2], A := Value(2)[3]}
 ToHandle<public>(Value:godot_value)<decides><transacts>:int = Value(1)[0]
-
-# --- The class hierarchy -----------------------------------------------------
-
-godot_node<public> := class(godot_object):
-
-    GetName<public>()<decides><transacts>:string = ToString[CallValue[Handle, "get_name", array{}]]
-    IsInsideTree<public>()<decides><transacts>:logic = ToLogic[CallValue[Handle, "is_inside_tree", array{}]]
-    GetParent<public>()<decides><transacts>:godot_node = godot_node{Handle := ToHandle[CallValue[Handle, "get_parent", array{}]]}
-    GetChild<public>(Index:int)<decides><transacts>:godot_node = godot_node{Handle := ToHandle[CallValue[Handle, "get_child", array{FromInt(Index)}]]}
-    GetChildCount<public>()<decides><transacts>:int = ToInt[CallValue[Handle, "get_child_count", array{}]]
-
-    AddChild<public>(Node:godot_node)<transacts>:void = CallVoid(Handle, "add_child", array{FromObject(Node)})
-    QueueFree<public>()<transacts>:void = CallVoid(Handle, "queue_free", array{})
-
-godot_canvas_item<public> := class(godot_node):
-
-    IsVisible<public>()<decides><transacts>:logic = ToLogic[CallValue[Handle, "is_visible", array{}]]
-    SetVisible<public>(Visible:logic)<transacts>:void = CallVoid(Handle, "set_visible", array{FromLogic(Visible)})
-    GetModulate<public>()<decides><transacts>:color = ToColor[CallValue[Handle, "get_modulate", array{}]]
-    SetModulate<public>(Modulate:color)<transacts>:void = CallVoid(Handle, "set_modulate", array{FromColor(Modulate)})
-
-godot_node2d<public> := class(godot_canvas_item):
-
-    GetPosition<public>()<decides><transacts>:vector2 = ToVector2[CallValue[Handle, "get_position", array{}]]
-    SetPosition<public>(Position:vector2)<transacts>:void = CallVoid(Handle, "set_position", array{FromVector2(Position)})
-    GetRotation<public>()<decides><transacts>:float = ToFloat[CallValue[Handle, "get_rotation", array{}]]
-    SetRotation<public>(Radians:float)<transacts>:void = CallVoid(Handle, "set_rotation", array{FromFloat(Radians)})
-    GetScale<public>()<decides><transacts>:vector2 = ToVector2[CallValue[Handle, "get_scale", array{}]]
-    SetScale<public>(Scale:vector2)<transacts>:void = CallVoid(Handle, "set_scale", array{FromVector2(Scale)})
