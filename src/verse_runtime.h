@@ -49,6 +49,9 @@ public:
 	// While r_diagnostics_by_path is non-null every diagnostic the host reports is filed under
 	// its own source path as { line, column, message, path } instead of reaching the output log.
 	godot::Error compile_project(const godot::PackedStringArray &p_globalized_paths, godot::Dictionary *r_diagnostics_by_path);
+	// Re-runs semantic analysis with one file's text replaced, filing diagnostics the same way
+	// compile_project does. Generates nothing, so it is safe to call as often as the editor asks.
+	godot::Error check_project(const godot::String &p_globalized_path, const godot::String &p_source, godot::Dictionary *r_diagnostics_by_path);
 	vh_script *open_script(const godot::String &p_globalized_path);
 	void release_script_handle(vh_script *p_script);
 	bool handle_has_function(vh_script *p_script, const char *p_decorated_name) const;

@@ -1,5 +1,6 @@
 #include "verse_script_language.h"
 
+#include "verse_api_classes.h"
 #include "verse_keywords.h"
 #include "verse_runtime.h"
 #include "verse_script.h"
@@ -7,6 +8,7 @@
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
+#include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/memory.hpp>
 
 #include <iterator>
@@ -17,6 +19,27 @@ namespace {
 
 VerseRuntime *get_runtime() {
 	return Object::cast_to<VerseRuntime>(Engine::get_singleton()->get_singleton("VerseRuntime"));
+}
+
+const char *mirrored_class(const String &p_godot_class) {
+	for (size_t i = 0; i < std::size(verse_api::classes); i++) {
+		if (p_godot_class == verse_api::classes[i].godot_name) {
+			return verse_api::classes[i].verse_name;
+		}
+	}
+	return nullptr;
+}
+
+// Only a subset of Godot's classes is mirrored, so a node whose own class was not generated
+// inherits from the nearest ancestor that was. godot_node is the floor: every scripted node has
+// one, and a template that names a class the project does not define would not compile.
+String verse_base_class_for(const String &p_godot_class) {
+	for (String name = p_godot_class; !name.is_empty(); name = ClassDB::get_parent_class(name)) {
+		if (const char *mirrored = mirrored_class(name)) {
+			return String(mirrored);
+		}
+	}
+	return String("godot_node");
 }
 
 } // namespace
@@ -121,15 +144,15 @@ Ref<Script> VerseScriptLanguage::_make_template(const String &p_template, const 
 	String source =
 			"using { /Godot.org/Godot }\n"
 			"\n"
-			"# Every script in a project shares one Verse scope and Verse forbids shadowing, so\n"
-			"# each file wraps its definitions in a module. Name it after this file.\n"
-			"_CLASS_ := module:\n"
+			"# The class is named after this file, which is how the node it is attached to finds it.\n"
+			"_CLASS_ := class(_BASE_):\n"
 			"\n"
-			"    Ready<public>():void =\n"
+			"    Ready<override>():void =\n"
 			"        Print(\"_CLASS_ is ready\")\n"
 			"\n"
-			"    Update<public>(Delta:float):void =\n";
+			"    Update<override>(Delta:float):void =\n";
 	source = source.replace("_CLASS_", class_name.to_snake_case());
+	source = source.replace("_BASE_", verse_base_class_for(p_base_class_name));
 
 	VerseScript *script = memnew(VerseScript);
 	script->set_source_code(source);
@@ -145,7 +168,7 @@ Object *VerseScriptLanguage::_create_script() const {
 }
 
 Dictionary VerseScriptLanguage::_validate(const String &p_script, const String &p_path, bool p_validate_functions, bool p_validate_errors, bool p_validate_warnings, bool p_validate_safe_lines) const {
-	const TypedArray<Dictionary> errors = diagnostics_for(p_path);
+	const TypedArray<Dictionary> errors = check_buffer(p_path, p_script);
 
 	Dictionary result;
 	result["valid"] = errors.is_empty();
@@ -419,7 +442,27 @@ Error VerseScriptLanguage::ensure_project_built() {
 	}
 
 	project_built = true;
+
+
 	return status;
+}
+
+TypedArray<Dictionary> VerseScriptLanguage::check_buffer(const String &p_path, const String &p_source) const {
+	VerseRuntime *runtime = get_runtime();
+	if (!project_built || runtime == nullptr || !runtime->is_host_loaded()) {
+		return diagnostics_for(p_path);
+	}
+
+	const String globalized = ProjectSettings::get_singleton()->globalize_path(p_path);
+	Dictionary errors_by_globalized;
+	runtime->check_project(globalized, p_source, &errors_by_globalized);
+
+	// Analysis covers the whole project, so a broken file elsewhere reports against its own path;
+	// the editor asked about this one.
+	if (!errors_by_globalized.has(globalized)) {
+		return TypedArray<Dictionary>();
+	}
+	return TypedArray<Dictionary>(errors_by_globalized[globalized]);
 }
 
 TypedArray<Dictionary> VerseScriptLanguage::diagnostics_for(const String &p_path) const {

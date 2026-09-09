@@ -268,6 +268,21 @@ Error VerseRuntime::compile_project(const PackedStringArray &p_globalized_paths,
 	return status == VH_OK ? OK : ERR_COMPILATION_FAILED;
 }
 
+Error VerseRuntime::check_project(const String &p_globalized_path, const String &p_source, Dictionary *r_diagnostics_by_path) {
+	if (!host.is_loaded()) {
+		return ERR_UNAVAILABLE;
+	}
+
+	const CharString path_utf8 = p_globalized_path.utf8();
+	const CharString source_utf8 = p_source.utf8();
+
+	diagnostic_sink = r_diagnostics_by_path;
+	const int32_t status = host.CheckProject(path_utf8.get_data(), source_utf8.get_data());
+	diagnostic_sink = nullptr;
+
+	return status == VH_OK ? OK : ERR_COMPILATION_FAILED;
+}
+
 vh_script *VerseRuntime::open_script(const String &p_globalized_path) {
 	if (!host.is_loaded()) {
 		return nullptr;

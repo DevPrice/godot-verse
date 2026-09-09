@@ -122,6 +122,11 @@ public:
 	// Errors the project build reported against one script, in the shape _validate returns.
 	// The build is the only thing that ever produces them: asking the compiler again for a
 	// single file would report every other script's definitions as duplicates.
+	// Re-analyses the project with p_path's on-disk text replaced by the editor's buffer and
+	// returns just that file's diagnostics. Falls back to the diagnostics recorded at startup
+	// when there is no host to ask.
+	godot::TypedArray<godot::Dictionary> check_buffer(const godot::String &p_path, const godot::String &p_source) const;
+
 	godot::TypedArray<godot::Dictionary> diagnostics_for(const godot::String &p_path) const;
 
 private:
