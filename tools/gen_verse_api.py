@@ -21,6 +21,18 @@ EXTENSION_API = "godot-cpp/gdextension/extension_api.json"
 
 BASE_MEMBER_NAMES = {"Handle", "Ready", "Update", "PhysicsUpdate"}
 
+# /Verse.org/Verse is in scope in every generated body, and Verse reports an ambiguity rather
+# than shadowing, so a parameter named Min breaks any method that mentions it. The standard
+# library's names are compiler intrinsics rather than a .verse digest, so there is nothing to
+# enumerate; this list is what the full-API generation actually collided with, plus the obvious
+# siblings. Over-listing costs nothing but an ArgN parameter name.
+VERSE_STDLIB_NAMES = {
+    "Abs", "Ceil", "Floor", "Round", "Sqrt", "Min", "Max", "Sign", "Clamp", "Lerp", "Mod",
+    "Sin", "Cos", "Tan", "ArcSin", "ArcCos", "ArcTan", "Pow", "Exp", "Ln",
+    "Print", "Err", "Sleep", "Length", "Slice", "Reverse", "Shuffle", "Concatenate", "Fits",
+    "ToString", "ToDiagnostic", "ToInt", "ToFloat", "ToChar", "ToRational",
+}
+
 TypeInfo = namedtuple("TypeInfo", ["verse_type", "pack_fn", "pack_decides", "unpack_fn", "unpack_decides"])
 
 # Godot type -> (verse type, packer, packer<decides>, unpacker, unpacker<decides>). Packer/unpacker
@@ -97,7 +109,8 @@ def verse_param_name(godot_name: str, index: int, reserved_words: set, used: set
     # Tween.set_parallel(parallel) and Tween.parallel() collide, as does any argument named
     # `update` against godot_object's Update.
     candidate = verse_method_name(godot_name)
-    if not candidate or candidate in reserved_words or candidate in used or candidate in members:
+    if (not candidate or candidate in reserved_words or candidate in used
+            or candidate in members or candidate in VERSE_STDLIB_NAMES):
         return f"Arg{index}"
     return candidate
 
