@@ -55,12 +55,23 @@ def test_method_names():
 
 def test_param_names():
     reserved = g.load_reserved_words(REPO_ROOT / "src" / "verse_keywords.h")
-    check("param name 'position'", g.verse_param_name("position", 0, reserved, set()), "Position")
-    check("param name 'self' collides with reserved word", g.verse_param_name("self", 2, reserved, set()), "Arg2")
-    check("param name '' falls back on index", g.verse_param_name("", 3, reserved, set()), "Arg3")
+    check("param name 'position'", g.verse_param_name("position", 0, reserved, set(), set()), "Position")
+    check("param name 'to_position' splits like a method name", g.verse_param_name("to_position", 0, reserved, set(), set()), "ToPosition")
+    check("param name 'self' collides with reserved word", g.verse_param_name("self", 2, reserved, set(), set()), "Arg2")
+    check("param name '' falls back on index", g.verse_param_name("", 3, reserved, set(), set()), "Arg3")
     check(
         "param name colliding with an already-used name in this method",
-        g.verse_param_name("Foo", 1, reserved, {"Foo"}),
+        g.verse_param_name("Foo", 1, reserved, {"Foo"}, set()),
+        "Arg1",
+    )
+    check(
+        "param name colliding with a member of the enclosing class",
+        g.verse_param_name("parallel", 0, reserved, set(), {"Parallel"}),
+        "Arg0",
+    )
+    check(
+        "param name colliding with an inherited lifecycle method",
+        g.verse_param_name("update", 1, reserved, set(), g.BASE_MEMBER_NAMES),
         "Arg1",
     )
 
@@ -75,7 +86,7 @@ def test_emit_void_method():
     )
     # Use the real Vector2 TypeInfo (SCALAR_TYPES keys on the Godot type spelling).
     cm = cm._replace(params=[g.Param("Position", g.SCALAR_TYPES["Vector2"])])
-    want = '    SetPosition<public>(Position:vector2)<transacts>:void = CallVoid(Handle, "set_position", array{FromVector2(Position)})'
+    want = '    SetPosition<public>(Position:vector2)<transacts>:void = VhCallVoid(Handle, "set_position", array{VhFromVector2(Position)})'
     check("emit void method (SetPosition)", g.emit_method(cm), want)
 
 
@@ -87,12 +98,12 @@ def test_emit_value_method_scalar():
         return_type=g.SCALAR_TYPES["Vector2"],
         is_void=False,
     )
-    want = '    GetPosition<public>()<decides><transacts>:vector2 = ToVector2[CallValue[Handle, "get_position", array{}]]'
+    want = '    GetPosition<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_position", array{}]]'
     check("emit value method, scalar return (GetPosition)", g.emit_method(cm), want)
 
 
 def test_emit_value_method_class_return():
-    ti = g.TypeInfo("godot_node", "FromObject", False, "ToHandle", True)
+    ti = g.TypeInfo("godot_node", "VhFromObject", False, "VhToHandle", True)
     cm = g.ClassifiedMethod(
         godot_name="get_child",
         verse_name="GetChild",
@@ -102,7 +113,7 @@ def test_emit_value_method_class_return():
     )
     want = (
         '    GetChild<public>(Index:int)<decides><transacts>:godot_node = '
-        'godot_node{Handle := ToHandle[CallValue[Handle, "get_child", array{FromInt(Index)}]]}'
+        'godot_node{Handle := VhToHandle[VhCallValue[Handle, "get_child", array{VhFromInt(Index)}]]}'
     )
     check("emit value method, class return (GetChild)", g.emit_method(cm), want)
 
@@ -116,7 +127,7 @@ def test_emit_packed_string_array_return():
         return_type=ti,
         is_void=False,
     )
-    want = '    GetMetaList<public>()<decides><transacts>:[]string = ToStrings(CallValue[Handle, "get_meta_list", array{}])'
+    want = '    GetMetaList<public>()<decides><transacts>:[]string = VhToStrings(VhCallValue[Handle, "get_meta_list", array{}])'
     check("emit value method, PackedStringArray return uses non-decides unpacker", g.emit_method(cm), want)
 
 
@@ -238,7 +249,7 @@ def test_class_type_falls_back_to_nearest_emitted_ancestor():
     other_block = next(b for b in blocks if b.startswith("godot_other"))
     check_true(
         "unresolved class type falls back to nearest emitted ancestor (godot_base)",
-        "godot_base{Handle := ToHandle[" in other_block,
+        "godot_base{Handle := VhToHandle[" in other_block,
         other_block,
     )
 
@@ -275,12 +286,12 @@ def test_generated_file_matches_hand_written_slice():
     text = generated.read_text(encoding="utf-8")
     check_true("GodotClasses.native.verse exists", generated.is_file())
     hand_written_lines = [
-        '    GetPosition<public>()<decides><transacts>:vector2 = ToVector2[CallValue[Handle, "get_position", array{}]]',
-        '    SetPosition<public>(Position:vector2)<transacts>:void = CallVoid(Handle, "set_position", array{FromVector2(Position)})',
-        '    GetRotation<public>()<decides><transacts>:float = ToFloat[CallValue[Handle, "get_rotation", array{}]]',
-        '    SetRotation<public>(Radians:float)<transacts>:void = CallVoid(Handle, "set_rotation", array{FromFloat(Radians)})',
-        '    GetScale<public>()<decides><transacts>:vector2 = ToVector2[CallValue[Handle, "get_scale", array{}]]',
-        '    SetScale<public>(Scale:vector2)<transacts>:void = CallVoid(Handle, "set_scale", array{FromVector2(Scale)})',
+        '    GetPosition<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_position", array{}]]',
+        '    SetPosition<public>(Position:vector2)<transacts>:void = VhCallVoid(Handle, "set_position", array{VhFromVector2(Position)})',
+        '    GetRotation<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_rotation", array{}]]',
+        '    SetRotation<public>(Radians:float)<transacts>:void = VhCallVoid(Handle, "set_rotation", array{VhFromFloat(Radians)})',
+        '    GetScale<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_scale", array{}]]',
+        '    SetScale<public>(Scale:vector2)<transacts>:void = VhCallVoid(Handle, "set_scale", array{VhFromVector2(Scale)})',
     ]
     node2d_start = text.find("godot_node2d<public> := class(")
     check_true("godot_node2d is present", node2d_start != -1)

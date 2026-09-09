@@ -7,5 +7,5 @@ Ready():void =
     Print("Ready ran.")
 
 Update(Delta:float):void =
-    if (Handle := GetNode["/root/Main/Mover"]):
+    if (Handle := VhGetNode["/root/Main/Mover"]):
         Print("found a node")

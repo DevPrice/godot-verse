@@ -5,25 +5,25 @@ using {/Verse.org/Native}
 
 Print<public><native>(Message:string)<transacts>:void
 
-GetNode<public><native>(Path:string)<decides><transacts>:int
-IsValid<public><native>(Handle:int)<transacts>:logic
-GetChildren<public><native>(Handle:int)<transacts>:[]int
+VhGetNode<public><native>(Path:string)<decides><transacts>:int
+VhIsValid<public><native>(Handle:int)<transacts>:logic
+VhGetChildren<public><native>(Handle:int)<transacts>:[]int
 
-GetFloat<public><native>(Handle:int, Property:string)<decides><transacts>:float
-SetFloat<public><native>(Handle:int, Property:string, Value:float)<transacts>:void
-GetInt<public><native>(Handle:int, Property:string)<decides><transacts>:int
-SetInt<public><native>(Handle:int, Property:string, Value:int)<transacts>:void
-GetLogic<public><native>(Handle:int, Property:string)<decides><transacts>:logic
-SetLogic<public><native>(Handle:int, Property:string, Value:logic)<transacts>:void
-GetText<public><native>(Handle:int, Property:string)<decides><transacts>:string
-SetText<public><native>(Handle:int, Property:string, Value:string)<transacts>:void
+VhGetFloat<public><native>(Handle:int, Property:string)<decides><transacts>:float
+VhSetFloat<public><native>(Handle:int, Property:string, Value:float)<transacts>:void
+VhGetInt<public><native>(Handle:int, Property:string)<decides><transacts>:int
+VhSetInt<public><native>(Handle:int, Property:string, Value:int)<transacts>:void
+VhGetLogic<public><native>(Handle:int, Property:string)<decides><transacts>:logic
+VhSetLogic<public><native>(Handle:int, Property:string, Value:logic)<transacts>:void
+VhGetText<public><native>(Handle:int, Property:string)<decides><transacts>:string
+VhSetText<public><native>(Handle:int, Property:string, Value:string)<transacts>:void
 
-GetVector2<public><native>(Handle:int, Property:string)<decides><transacts>:tuple(float, float)
-SetVector2<public><native>(Handle:int, Property:string, X:float, Y:float)<transacts>:void
+VhGetVector2<public><native>(Handle:int, Property:string)<decides><transacts>:tuple(float, float)
+VhSetVector2<public><native>(Handle:int, Property:string, X:float, Y:float)<transacts>:void
 
-CallMethod<public><native>(Handle:int, Method:string, Args:[]float)<transacts>:void
-GetMeta<public><native>(Handle:int)<transacts>:[string]string
-FindChar<public><native>(Value:string, Index:int)<decides><transacts>:char
+VhCallMethod<public><native>(Handle:int, Method:string, Args:[]float)<transacts>:void
+VhGetMeta<public><native>(Handle:int)<transacts>:[string]string
+VhFindChar<public><native>(Value:string, Index:int)<decides><transacts>:char
 
 # One Godot Variant on the wire, as (Tag, Ints, Floats, Texts). Tag is Godot's own Variant::Type
 # and decides which payload slots are read: an int in Ints(0), a Vector2 as two Floats, an object
@@ -33,16 +33,16 @@ FindChar<public><native>(Value:string, Index:int)<decides><transacts>:char
 godot_value<public> := tuple(int, []int, []float, []string)
 
 # Reads and calls happen now; they observe a Godot the transaction cannot roll back.
-CallValue<public><native>(Handle:int, Method:string, Args:[]godot_value)<decides><transacts>:godot_value
-GetValue<public><native>(Handle:int, Property:string)<decides><transacts>:godot_value
+VhCallValue<public><native>(Handle:int, Method:string, Args:[]godot_value)<decides><transacts>:godot_value
+VhGetValue<public><native>(Handle:int, Property:string)<decides><transacts>:godot_value
 
 # Mutations defer to transaction commit, so a failed expression leaves the scene untouched.
-CallVoid<public><native>(Handle:int, Method:string, Args:[]godot_value)<transacts>:void
-SetValue<public><native>(Handle:int, Property:string, Value:godot_value)<transacts>:void
+VhCallVoid<public><native>(Handle:int, Method:string, Args:[]godot_value)<transacts>:void
+VhSetValue<public><native>(Handle:int, Property:string, Value:godot_value)<transacts>:void
 
 # ClassDB::instantiate. The caller owns the result until it is parented or freed.
-Instantiate<public><native>(ClassName:string)<decides><transacts>:int
-Singleton<public><native>(Name:string)<decides><transacts>:int
+VhInstantiate<public><native>(ClassName:string)<decides><transacts>:int
+VhSingleton<public><native>(Name:string)<decides><transacts>:int
 
 # The one native class in the API. Everything in GodotApi.native.verse derives from it as
 # ordinary Verse, which is what keeps a thousand mirrored classes from needing a thousand C++

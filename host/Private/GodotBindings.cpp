@@ -352,7 +352,7 @@ void Print(verse::string const& Message)
     });
 }
 
-TOptional<int64> GetNode(verse::string const& Path)
+TOptional<int64> VhGetNode(verse::string const& Path)
 {
     FHostState& Host = GetHost();
     if (!Host.Godot.GetNode)
@@ -369,13 +369,13 @@ TOptional<int64> GetNode(verse::string const& Path)
     return Handle;
 }
 
-bool IsValid(int64 Handle)
+bool VhIsValid(int64 Handle)
 {
     FHostState& Host = GetHost();
     return Host.Godot.IsValid && CallGodot([&] { return Host.Godot.IsValid(Host.Godot.Ctx, Handle) != 0; });
 }
 
-TArray<int64> GetChildren(int64 Handle)
+TArray<int64> VhGetChildren(int64 Handle)
 {
     TArray<int64> Children;
 
@@ -398,7 +398,7 @@ TArray<int64> GetChildren(int64 Handle)
     return Children;
 }
 
-TOptional<double> GetFloat(int64 Handle, verse::string const& Property)
+TOptional<double> VhGetFloat(int64 Handle, verse::string const& Property)
 {
     FCallArena Arena;
     vh_value Value{};
@@ -417,7 +417,7 @@ TOptional<double> GetFloat(int64 Handle, verse::string const& Property)
     return {};
 }
 
-void SetFloat(int64 Handle, verse::string const& Property, double Value)
+void VhSetFloat(int64 Handle, verse::string const& Property, double Value)
 {
     vh_value Wire{};
     Wire.Type = VH_TYPE_FLOAT;
@@ -425,7 +425,7 @@ void SetFloat(int64 Handle, verse::string const& Property, double Value)
     WriteProperty(Handle, Property, Wire, FUtf8String());
 }
 
-TOptional<int64> GetInt(int64 Handle, verse::string const& Property)
+TOptional<int64> VhGetInt(int64 Handle, verse::string const& Property)
 {
     FCallArena Arena;
     vh_value Value{};
@@ -444,7 +444,7 @@ TOptional<int64> GetInt(int64 Handle, verse::string const& Property)
     return {};
 }
 
-void SetInt(int64 Handle, verse::string const& Property, int64 Value)
+void VhSetInt(int64 Handle, verse::string const& Property, int64 Value)
 {
     vh_value Wire{};
     Wire.Type = VH_TYPE_INT;
@@ -452,7 +452,7 @@ void SetInt(int64 Handle, verse::string const& Property, int64 Value)
     WriteProperty(Handle, Property, Wire, FUtf8String());
 }
 
-TOptional<bool> GetLogic(int64 Handle, verse::string const& Property)
+TOptional<bool> VhGetLogic(int64 Handle, verse::string const& Property)
 {
     FCallArena Arena;
     vh_value Value{};
@@ -467,7 +467,7 @@ TOptional<bool> GetLogic(int64 Handle, verse::string const& Property)
     return Value.Logic != 0;
 }
 
-void SetLogic(int64 Handle, verse::string const& Property, bool Value)
+void VhSetLogic(int64 Handle, verse::string const& Property, bool Value)
 {
     vh_value Wire{};
     Wire.Type = VH_TYPE_LOGIC;
@@ -475,7 +475,7 @@ void SetLogic(int64 Handle, verse::string const& Property, bool Value)
     WriteProperty(Handle, Property, Wire, FUtf8String());
 }
 
-TOptional<verse::string> GetText(int64 Handle, verse::string const& Property)
+TOptional<verse::string> VhGetText(int64 Handle, verse::string const& Property)
 {
     FCallArena Arena;
     vh_value Value{};
@@ -490,14 +490,14 @@ TOptional<verse::string> GetText(int64 Handle, verse::string const& Property)
     return verse::string(GodotVerse::MakeView(Value.String.Utf8, Value.String.Len));
 }
 
-void SetText(int64 Handle, verse::string const& Property, verse::string const& Value)
+void VhSetText(int64 Handle, verse::string const& Property, verse::string const& Value)
 {
     vh_value Wire{};
     Wire.Type = VH_TYPE_STRING;
     WriteProperty(Handle, Property, Wire, FUtf8String(ToView(Value)));
 }
 
-TOptional<verse::tuple<double, double>> GetVector2(int64 Handle, verse::string const& Property)
+TOptional<verse::tuple<double, double>> VhGetVector2(int64 Handle, verse::string const& Property)
 {
     FCallArena Arena;
     vh_value Value{};
@@ -516,7 +516,7 @@ TOptional<verse::tuple<double, double>> GetVector2(int64 Handle, verse::string c
     return verse::tuple<double, double>(Value.Seq.Items[0].Float, Value.Seq.Items[1].Float);
 }
 
-void SetVector2(int64 Handle, verse::string const& Property, double X, double Y)
+void VhSetVector2(int64 Handle, verse::string const& Property, double X, double Y)
 {
     FUtf8String Name(ToView(Property));
     DeferToCommit([Handle, Name = MoveTemp(Name), X, Y] {
@@ -541,7 +541,7 @@ void SetVector2(int64 Handle, verse::string const& Property, double X, double Y)
     });
 }
 
-void CallMethod(int64 Handle, verse::string const& Method, TArray<double> const& Args)
+void VhCallMethod(int64 Handle, verse::string const& Method, TArray<double> const& Args)
 {
     FUtf8String Name(ToView(Method));
     TArray<double> OwnedArgs(Args);
@@ -575,7 +575,7 @@ void CallMethod(int64 Handle, verse::string const& Method, TArray<double> const&
     });
 }
 
-TMap<verse::string, verse::string> GetMeta(int64 Handle)
+TMap<verse::string, verse::string> VhGetMeta(int64 Handle)
 {
     TMap<verse::string, verse::string> Meta;
 
@@ -610,7 +610,7 @@ TMap<verse::string, verse::string> GetMeta(int64 Handle)
     return Meta;
 }
 
-TOptional<FGodotValue> CallValue(int64 Handle, verse::string const& Method, TArray<FGodotValue> const& Args)
+TOptional<FGodotValue> VhCallValue(int64 Handle, verse::string const& Method, TArray<FGodotValue> const& Args)
 {
     FHostState& Host = GetHost();
     if (!Host.Godot.CallMethod)
@@ -641,7 +641,7 @@ TOptional<FGodotValue> CallValue(int64 Handle, verse::string const& Method, TArr
     return FromWire(Result);
 }
 
-void CallVoid(int64 Handle, verse::string const& Method, TArray<FGodotValue> const& Args)
+void VhCallVoid(int64 Handle, verse::string const& Method, TArray<FGodotValue> const& Args)
 {
     FUtf8String Name(ToView(Method));
     TArray<FOwnedValue> Owned;
@@ -679,7 +679,7 @@ void CallVoid(int64 Handle, verse::string const& Method, TArray<FGodotValue> con
     });
 }
 
-TOptional<FGodotValue> GetValue(int64 Handle, verse::string const& Property)
+TOptional<FGodotValue> VhGetValue(int64 Handle, verse::string const& Property)
 {
     FCallArena Arena;
     vh_value Value{};
@@ -690,7 +690,7 @@ TOptional<FGodotValue> GetValue(int64 Handle, verse::string const& Property)
     return FromWire(Value);
 }
 
-void SetValue(int64 Handle, verse::string const& Property, FGodotValue const& Value)
+void VhSetValue(int64 Handle, verse::string const& Property, FGodotValue const& Value)
 {
     FUtf8String Name(ToView(Property));
     DeferToCommit([Handle, Name = MoveTemp(Name), Owned = Own(Value)] {
@@ -706,7 +706,7 @@ void SetValue(int64 Handle, verse::string const& Property, FGodotValue const& Va
     });
 }
 
-TOptional<int64> Instantiate(verse::string const& ClassName)
+TOptional<int64> VhInstantiate(verse::string const& ClassName)
 {
     FHostState& Host = GetHost();
     if (!Host.Godot.Instantiate)
@@ -723,7 +723,7 @@ TOptional<int64> Instantiate(verse::string const& ClassName)
     return Handle;
 }
 
-TOptional<int64> Singleton(verse::string const& Name)
+TOptional<int64> VhSingleton(verse::string const& Name)
 {
     FHostState& Host = GetHost();
     if (!Host.Godot.GetSingleton)
@@ -740,7 +740,7 @@ TOptional<int64> Singleton(verse::string const& Name)
     return Handle;
 }
 
-TOptional<verse::char8> FindChar(verse::string const& Value, int64 Index)
+TOptional<verse::char8> VhFindChar(verse::string const& Value, int64 Index)
 {
     const FUtf8StringView View = ToView(Value);
     if (Index < 0 || Index >= View.Len())

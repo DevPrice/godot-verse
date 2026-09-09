@@ -28,19 +28,19 @@ TypeInfo = namedtuple("TypeInfo", ["verse_type", "pack_fn", "pack_decides", "unp
 # <decides> function must itself be <decides>, but only a <decides> callee is invoked with [...]
 # rather than (...) -- see GodotApi.native.verse's bracket-discipline comment.
 SCALAR_TYPES = {
-    "bool": TypeInfo("logic", "FromLogic", False, "ToLogic", True),
-    "int": TypeInfo("int", "FromInt", False, "ToInt", True),
-    "int32": TypeInfo("int", "FromInt", False, "ToInt", True),
-    "int64": TypeInfo("int", "FromInt", False, "ToInt", True),
-    "uint32": TypeInfo("int", "FromInt", False, "ToInt", True),
-    "float": TypeInfo("float", "FromFloat", False, "ToFloat", True),
-    "String": TypeInfo("string", "FromString", False, "ToString", True),
-    "StringName": TypeInfo("string", "FromStringName", False, "ToString", True),
-    "NodePath": TypeInfo("string", "FromNodePath", False, "ToString", True),
-    "Vector2": TypeInfo("vector2", "FromVector2", False, "ToVector2", True),
-    "Vector3": TypeInfo("vector3", "FromVector3", False, "ToVector3", True),
-    "Color": TypeInfo("color", "FromColor", False, "ToColor", True),
-    "PackedStringArray": TypeInfo("[]string", None, False, "ToStrings", False),
+    "bool": TypeInfo("logic", "VhFromLogic", False, "VhToLogic", True),
+    "int": TypeInfo("int", "VhFromInt", False, "VhToInt", True),
+    "int32": TypeInfo("int", "VhFromInt", False, "VhToInt", True),
+    "int64": TypeInfo("int", "VhFromInt", False, "VhToInt", True),
+    "uint32": TypeInfo("int", "VhFromInt", False, "VhToInt", True),
+    "float": TypeInfo("float", "VhFromFloat", False, "VhToFloat", True),
+    "String": TypeInfo("string", "VhFromString", False, "VhToString", True),
+    "StringName": TypeInfo("string", "VhFromStringName", False, "VhToString", True),
+    "NodePath": TypeInfo("string", "VhFromNodePath", False, "VhToString", True),
+    "Vector2": TypeInfo("vector2", "VhFromVector2", False, "VhToVector2", True),
+    "Vector3": TypeInfo("vector3", "VhFromVector3", False, "VhToVector3", True),
+    "Color": TypeInfo("color", "VhFromColor", False, "VhToColor", True),
+    "PackedStringArray": TypeInfo("[]string", None, False, "VhToStrings", False),
 }
 
 
@@ -92,9 +92,12 @@ def verse_method_name(godot_name: str) -> str:
     return "".join(p[0].upper() + p[1:] for p in parts)
 
 
-def verse_param_name(godot_name: str, index: int, reserved_words: set, used: set) -> str:
-    candidate = godot_name[0].upper() + godot_name[1:] if godot_name else ""
-    if not candidate or candidate in reserved_words or candidate in used:
+def verse_param_name(godot_name: str, index: int, reserved_words: set, used: set, members: set) -> str:
+    # A parameter that matches a member of the enclosing class is ambiguous, not shadowing:
+    # Tween.set_parallel(parallel) and Tween.parallel() collide, as does any argument named
+    # `update` against godot_object's Update.
+    candidate = verse_method_name(godot_name)
+    if not candidate or candidate in reserved_words or candidate in used or candidate in members:
         return f"Arg{index}"
     return candidate
 
@@ -129,7 +132,7 @@ class TypeResolver:
             target = godot_type if godot_type in self.emitted else self.nearest_emitted_ancestor(godot_type)
             if target is None:
                 return None
-            return TypeInfo(verse_class_name(target), "FromObject", False, "ToHandle", True)
+            return TypeInfo(verse_class_name(target), "VhFromObject", False, "VhToHandle", True)
         return None
 
 
@@ -196,7 +199,7 @@ class Coverage:
             self.unsupported_types[t] += 1
 
 
-def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage):
+def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members: set):
     """Returns a ClassifiedMethod, or None (and records why in coverage) if the method is skipped."""
     if m.get("is_virtual"):
         coverage.skip("virtual")
@@ -225,7 +228,7 @@ def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage):
         if info is None or info.pack_fn is None:
             unsupported_seen.append(arg["type"])
             continue
-        pname = verse_param_name(arg["name"], i, RESERVED_WORDS, used_param_names)
+        pname = verse_param_name(arg["name"], i, RESERVED_WORDS, used_param_names, members)
         used_param_names.add(pname)
         params.append(Param(pname, info))
 
@@ -253,15 +256,15 @@ def emit_call_args(params) -> str:
 def emit_method(cm: ClassifiedMethod) -> str:
     param_decl = ", ".join(f"{p.verse_name}:{p.type_info.verse_type}" for p in cm.params)
     args = emit_call_args(cm.params)
-    call = f'CallValue[Handle, "{cm.godot_name}", array{{{args}}}]' if not cm.is_void else None
+    call = f'VhCallValue[Handle, "{cm.godot_name}", array{{{args}}}]' if not cm.is_void else None
 
     if cm.is_void:
-        body = f'CallVoid(Handle, "{cm.godot_name}", array{{{args}}})'
+        body = f'VhCallVoid(Handle, "{cm.godot_name}", array{{{args}}})'
         return f"    {cm.verse_name}<public>({param_decl})<transacts>:void = {body}"
 
     ti = cm.return_type
-    if ti.pack_fn == "FromObject":
-        unpack = f"ToHandle[{call}]"
+    if ti.pack_fn == "VhFromObject":
+        unpack = f"VhToHandle[{call}]"
         body = f"{ti.verse_type}{{Handle := {unpack}}}"
     elif ti.unpack_decides:
         body = f"{ti.unpack_fn}[{call}]"
@@ -292,9 +295,14 @@ def generate(api: dict, requested: list, coverage: Coverage):
         base_names = set(BASE_MEMBER_NAMES) if parent == "Object" else set(inherited_names[parent])
         base_verse = "godot_object" if parent == "Object" else verse_class_name(parent)
 
+        methods = classes_by_name[name].get("methods", [])
+        # Every name the class will carry, so a parameter can be checked against members that
+        # have not been classified yet as well as inherited ones.
+        member_names = base_names | {verse_method_name(m["name"]) for m in methods}
+
         candidates = []
-        for m in classes_by_name[name].get("methods", []):
-            cm = classify_method(m, resolver, coverage)
+        for m in methods:
+            cm = classify_method(m, resolver, coverage, member_names)
             if cm is not None:
                 candidates.append(cm)
         candidates.sort(key=lambda cm: (cm.verse_name, cm.godot_name))
