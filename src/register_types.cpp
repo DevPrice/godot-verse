@@ -2,17 +2,25 @@
 
 #include <gdextension_interface.h>
 #include <godot_cpp/classes/engine.hpp>
+#include <godot_cpp/classes/resource_loader.hpp>
+#include <godot_cpp/classes/resource_saver.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/defs.hpp>
 #include <godot_cpp/core/memory.hpp>
 #include <godot_cpp/godot.hpp>
 
+#include "verse_resource_format.h"
 #include "verse_runtime.h"
+#include "verse_script.h"
+#include "verse_script_language.h"
 #include "verse_ticker.h"
 
 using namespace godot;
 
 static VerseRuntime *verse_runtime_singleton = nullptr;
+static VerseScriptLanguage *verse_script_language = nullptr;
+static Ref<VerseResourceFormatLoader> verse_loader;
+static Ref<VerseResourceFormatSaver> verse_saver;
 
 void initialize_gdextension_types(const ModuleInitializationLevel p_level) {
 	if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
@@ -21,9 +29,23 @@ void initialize_gdextension_types(const ModuleInitializationLevel p_level) {
 
 	GDREGISTER_CLASS(VerseRuntime);
 	GDREGISTER_CLASS(VerseTicker);
+	GDREGISTER_CLASS(VerseScriptLanguage);
+	GDREGISTER_CLASS(VerseScript);
+	GDREGISTER_CLASS(VerseResourceFormatLoader);
+	GDREGISTER_CLASS(VerseResourceFormatSaver);
 
 	verse_runtime_singleton = memnew(VerseRuntime);
 	Engine::get_singleton()->register_singleton("VerseRuntime", verse_runtime_singleton);
+
+	// The language before the loader: ResourceLoader hands a freshly loaded VerseScript to
+	// VerseScript::compile(), which reports diagnostics through the language singleton.
+	verse_script_language = memnew(VerseScriptLanguage);
+	Engine::get_singleton()->register_script_language(verse_script_language);
+
+	verse_loader.instantiate();
+	ResourceLoader::get_singleton()->add_resource_format_loader(verse_loader);
+	verse_saver.instantiate();
+	ResourceSaver::get_singleton()->add_resource_format_saver(verse_saver);
 }
 
 void uninitialize_gdextension_types(const ModuleInitializationLevel p_level) {
@@ -31,13 +53,26 @@ void uninitialize_gdextension_types(const ModuleInitializationLevel p_level) {
 		return;
 	}
 
-	if (verse_runtime_singleton == nullptr) {
-		return;
+	if (verse_saver.is_valid()) {
+		ResourceSaver::get_singleton()->remove_resource_format_saver(verse_saver);
+		verse_saver.unref();
+	}
+	if (verse_loader.is_valid()) {
+		ResourceLoader::get_singleton()->remove_resource_format_loader(verse_loader);
+		verse_loader.unref();
 	}
 
-	Engine::get_singleton()->unregister_singleton("VerseRuntime");
-	memdelete(verse_runtime_singleton);
-	verse_runtime_singleton = nullptr;
+	if (verse_script_language != nullptr) {
+		Engine::get_singleton()->unregister_script_language(verse_script_language);
+		memdelete(verse_script_language);
+		verse_script_language = nullptr;
+	}
+
+	if (verse_runtime_singleton != nullptr) {
+		Engine::get_singleton()->unregister_singleton("VerseRuntime");
+		memdelete(verse_runtime_singleton);
+		verse_runtime_singleton = nullptr;
+	}
 }
 
 extern "C" {

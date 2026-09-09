@@ -1,13 +1,14 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://cslm5svbm1rho"]
 
-[ext_resource type="Texture2D" path="res://icon.svg" id="1_icon"]
+[ext_resource type="Texture2D" uid="uid://c086ugpvc058w" path="res://icon.svg" id="1_icon"]
+[ext_resource type="Script" uid="uid://c2pbcjv47o5ma" path="res://scripts/mover.verse" id="2_mover"]
+[ext_resource type="Script" uid="uid://cb3yoempo2wjj" path="res://scripts/spinner.verse" id="3_spinner"]
 
-[node name="Main" type="Node2D"]
+[node name="Main" type="Node2D" unique_id=1366467292]
 
-[node name="Mover" type="Node2D" parent="."]
+[node name="Mover" type="Node2D" parent="." unique_id=208524307]
+script = ExtResource("2_mover")
 
-[node name="Sprite2D" type="Sprite2D" parent="Mover"]
+[node name="Sprite2D" type="Sprite2D" parent="Mover" unique_id=35239555]
 texture = ExtResource("1_icon")
-
-[node name="VerseTicker" type="VerseTicker" parent="."]
-verse_script = "res://scripts/mover.verse"
+script = ExtResource("3_spinner")

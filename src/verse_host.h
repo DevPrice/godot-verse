@@ -33,6 +33,8 @@ public:
 	vh_shutdown_fn Shutdown = nullptr;
 	vh_tick_fn Tick = nullptr;
 	vh_compile_file_fn CompileFile = nullptr;
+	vh_compile_project_fn CompileProject = nullptr;
+	vh_open_script_fn OpenScript = nullptr;
 	vh_release_script_fn ReleaseScript = nullptr;
 	vh_script_has_function_fn ScriptHasFunction = nullptr;
 	vh_run_main_fn RunMain = nullptr;

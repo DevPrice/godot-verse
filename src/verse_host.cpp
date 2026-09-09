@@ -32,6 +32,8 @@ void VerseHostLibrary::clear_function_pointers() {
 	Shutdown = nullptr;
 	Tick = nullptr;
 	CompileFile = nullptr;
+	CompileProject = nullptr;
+	OpenScript = nullptr;
 	ReleaseScript = nullptr;
 	ScriptHasFunction = nullptr;
 	RunMain = nullptr;
@@ -60,6 +62,8 @@ bool VerseHostLibrary::load(const String &p_dll_path, String &r_error) {
 	ok = ok && resolve(handle, "vh_shutdown", Shutdown, r_error);
 	ok = ok && resolve(handle, "vh_tick", Tick, r_error);
 	ok = ok && resolve(handle, "vh_compile_file", CompileFile, r_error);
+	ok = ok && resolve(handle, "vh_compile_project", CompileProject, r_error);
+	ok = ok && resolve(handle, "vh_open_script", OpenScript, r_error);
 	ok = ok && resolve(handle, "vh_release_script", ReleaseScript, r_error);
 	ok = ok && resolve(handle, "vh_script_has_function", ScriptHasFunction, r_error);
 	ok = ok && resolve(handle, "vh_run_main", RunMain, r_error);

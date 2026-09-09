@@ -20,7 +20,7 @@
 extern "C" {
 #endif
 
-#define VH_ABI_VERSION 1
+#define VH_ABI_VERSION 2
 
 typedef int32_t vh_bool;
 
@@ -195,6 +195,21 @@ VH_ATTR VH_API void vh_tick(double BudgetSeconds);
 
 /* Compiles one .verse file as a standalone snippet. Diagnostics go to the init callback. */
 VH_ATTR VH_API int32_t vh_compile_file(const char* PathUtf8, vh_script** OutScript);
+
+/* Compiles every listed .verse file as ONE Verse program.
+ *
+ * Verse's compilation unit is the package, not the file, and this is not a preference: a second
+ * build in the same process re-notifies already-loaded native Verse packages and aborts inside
+ * the async loader. So this may be called once per process, and every script the host will ever
+ * run has to be in the list.
+ *
+ * All the files share one flat scope, so each must wrap its definitions in a module named after
+ * its own file stem or its definitions collide with every other script's. */
+VH_ATTR VH_API int32_t vh_compile_project(const char* const* PathsUtf8, int32_t Count);
+
+/* Resolves a handle for one file of an already-compiled project. Does not compile. */
+VH_ATTR VH_API int32_t vh_open_script(const char* PathUtf8, vh_script** OutScript);
+
 VH_ATTR VH_API void vh_release_script(vh_script* Script);
 
 VH_ATTR VH_API vh_bool vh_script_has_function(vh_script* Script, const char* DecoratedName);
@@ -211,6 +226,8 @@ typedef int32_t (*vh_init_fn)(const vh_init_desc*);
 typedef void (*vh_shutdown_fn)(void);
 typedef void (*vh_tick_fn)(double);
 typedef int32_t (*vh_compile_file_fn)(const char*, vh_script**);
+typedef int32_t (*vh_compile_project_fn)(const char* const*, int32_t);
+typedef int32_t (*vh_open_script_fn)(const char*, vh_script**);
 typedef void (*vh_release_script_fn)(vh_script*);
 typedef vh_bool (*vh_script_has_function_fn)(vh_script*, const char*);
 typedef int32_t (*vh_run_main_fn)(vh_script*, const char* const*, int32_t, int64_t*);

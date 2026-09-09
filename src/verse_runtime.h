@@ -5,7 +5,10 @@
 
 #include <godot_cpp/classes/global_constants.hpp>
 #include <godot_cpp/classes/object.hpp>
+#include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/string.hpp>
+#include <godot_cpp/variant/packed_string_array.hpp>
+#include <godot_cpp/variant/typed_array.hpp>
 
 // The "VerseRuntime" engine singleton. Owns the verse_host.dll loader, the vh_init_desc handed
 // to it, and the last compiled/run vh_script. Every method degrades to ERR_UNAVAILABLE plus a
@@ -37,11 +40,27 @@ public:
 
 	void tick(double p_budget_seconds);
 
+	// Multi-script API, used by VerseScript. Each VerseScript owns one handle; the
+	// single-script methods above stay for VerseTicker and the bound script API.
+	//
+	// Verse's compilation unit is the package, not the file, and the host can only build once
+	// per process, so every .verse file in the project is compiled together.
+	//
+	// While r_diagnostics_by_path is non-null every diagnostic the host reports is filed under
+	// its own source path as { line, column, message, path } instead of reaching the output log.
+	godot::Error compile_project(const godot::PackedStringArray &p_globalized_paths, godot::Dictionary *r_diagnostics_by_path);
+	vh_script *open_script(const godot::String &p_globalized_path);
+	void release_script_handle(vh_script *p_script);
+	bool handle_has_function(vh_script *p_script, const char *p_decorated_name) const;
+	godot::Error call_handle_void(vh_script *p_script, const char *p_decorated_name);
+	godot::Error call_handle_void_float(vh_script *p_script, const char *p_decorated_name, double p_arg);
+
 private:
 	VerseHostLibrary host;
 	vh_init_desc init_desc = {};
 	vh_godot_api godot_api = {};
 	vh_script *current_script = nullptr;
+	godot::Dictionary *diagnostic_sink = nullptr;
 
 	godot::Error load_host_internal(const godot::String &p_dll_path, const godot::String &p_engine_dir);
 	void release_current_script();

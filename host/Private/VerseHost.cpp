@@ -153,6 +153,49 @@ extern "C" int32_t vh_compile_file(const char* PathUtf8, vh_script** OutScript)
     return VH_OK;
 }
 
+extern "C" int32_t vh_compile_project(const char* const* PathsUtf8, int32_t Count)
+{
+    if (!PathsUtf8 || Count < 0)
+    {
+        return VH_ERR_ABI;
+    }
+
+    if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+
+    TArray<FUtf8String> Paths;
+    Paths.Reserve(Count);
+    for (int32_t Index = 0; Index < Count; ++Index)
+    {
+        if (!PathsUtf8[Index])
+        {
+            return VH_ERR_ABI;
+        }
+        Paths.Add(FUtf8String(Cstr(PathsUtf8[Index])));
+    }
+
+    return GodotVerse::CompileProject(Paths) ? VH_OK : VH_ERR_COMPILE;
+}
+
+extern "C" int32_t vh_open_script(const char* PathUtf8, vh_script** OutScript)
+{
+    if (!PathUtf8 || !OutScript)
+    {
+        return VH_ERR_ABI;
+    }
+    *OutScript = nullptr;
+
+    if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+
+    *OutScript = reinterpret_cast<vh_script*>(GodotVerse::OpenScript(FUtf8String(Cstr(PathUtf8))));
+    return VH_OK;
+}
+
 extern "C" void vh_release_script(vh_script* Script)
 {
     GodotVerse::ReleaseScript(reinterpret_cast<GodotVerse::FScript*>(Script));
@@ -164,7 +207,7 @@ extern "C" vh_bool vh_script_has_function(vh_script* Script, const char* Decorat
     {
         return 0;
     }
-    return GodotVerse::HasFunction(Cstr(DecoratedName)) ? 1 : 0;
+    return GodotVerse::HasFunction(reinterpret_cast<GodotVerse::FScript*>(Script), Cstr(DecoratedName)) ? 1 : 0;
 }
 
 extern "C" int32_t vh_run_main(vh_script* Script,
@@ -207,7 +250,7 @@ extern "C" int32_t vh_call_void(vh_script* Script, const char* DecoratedName)
     {
         return VH_ERR_STATE;
     }
-    return GodotVerse::CallVoid(Cstr(DecoratedName));
+    return GodotVerse::CallVoid(reinterpret_cast<GodotVerse::FScript*>(Script), Cstr(DecoratedName));
 }
 
 extern "C" int32_t vh_call_void_float(vh_script* Script, const char* DecoratedName, double Arg)
@@ -220,7 +263,7 @@ extern "C" int32_t vh_call_void_float(vh_script* Script, const char* DecoratedNa
     {
         return VH_ERR_STATE;
     }
-    return GodotVerse::CallVoidFloat(Cstr(DecoratedName), Arg);
+    return GodotVerse::CallVoidFloat(reinterpret_cast<GodotVerse::FScript*>(Script), Cstr(DecoratedName), Arg);
 }
 
 #if PLATFORM_WINDOWS

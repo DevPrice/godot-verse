@@ -17,7 +17,7 @@ Two DLLs meet at a C ABI:
     include/     the C ABI header, shared by both sides
     host/        Unreal Program target sources (staged into the engine tree to build)
     src/         GDExtension sources
-    tools/       build_host.py and friends
+    tools/       build_host.py, the keyword generator and friends
     tests/       host smoke test (loads verse_host.dll with no Godot involved)
     demo/        Godot project
 
@@ -43,14 +43,38 @@ relaxed rather than satisfied.
 
 ## What works
 
-A `.verse` file attached to a `VerseTicker` node compiles when the scene loads, its `Ready` runs
-once, and its `Update(Delta:float)` runs every frame. Compiler diagnostics land in Godot's output
-with file, line and column. The Verse side reaches Godot through a hand-written module at
-`/Godot.org/Godot` (`host/Verse/Godot.native.verse`) — free functions over instance-id handles,
-covering `logic`, `int`, `float`, `char`, `string`, `[]t`, `[k]v`, `tuple` and `<decides>` in both
-directions. Class hierarchies and `ScriptLanguageExtension` are Phases 3 and 4.
+A `.verse` file is a Godot script. Attach one to a node the way you would a GDScript: it compiles
+when the project loads, its `Ready()` runs on `_ready`, and its `Update(Delta:float)` runs every
+frame. `PhysicsUpdate(:float)` maps to `_physics_process`. Several scripts on several nodes work
+independently.
 
-## Three constraints worth knowing
+Compiler diagnostics land in Godot's output with file, line and column, and reach the script
+editor through `_validate`. Syntax highlighting comes free from the language's metadata virtuals,
+over 156 reserved words generated from the Verse compiler's own `ReservedSymbols.inl` by
+`tools/gen_verse_keywords.py`.
+
+The Verse side reaches Godot through a hand-written module at `/Godot.org/Godot`
+(`host/Verse/Godot.native.verse`) — free functions over instance-id handles, covering `logic`,
+`int`, `float`, `char`, `string`, `[]t`, `[k]v`, `tuple` and `<decides>` in both directions. Real
+class hierarchies — `player := class(godot_node2d)` — are Phase 4.
+
+`VerseTicker` from Phase 2 still works, but nothing needs it: the script language pumps `vh_tick`
+from `_frame`, so every scripted node is driven rather than one hand-placed one.
+
+## Five constraints worth knowing
+
+**The project is the compilation unit, not the file.** Verse compiles a whole package at once,
+and the host can only do it once per process — a second `BuildAll` re-notifies already-loaded
+native Verse packages and aborts inside UE's async loader. So the first script that needs
+compiling scans `res://` for every `.verse` file and builds them together. Scripts added while
+the editor is running are not picked up until it restarts.
+
+**Each script wraps itself in a module named after its file.** Every file in the project shares
+one flat `/user@localhost` scope and Verse forbids shadowing, so two scripts that both define a
+top-level `Ready()` are a compile error rather than two scripts. `mover.verse` opens with
+`mover := module:` and its functions resolve under `(/user@localhost/mover:)`. A lone unwrapped
+script still works — the host falls back to the flat scope — which is why the smoke test's
+`hello.verse` needs no module.
 
 **The host must be loaded from `Engine/Binaries/Win64`.** VNI records each Verse package's source
 directory relative to the loaded module, and the Verse compiler reads those `.verse` files at

@@ -15,6 +15,8 @@
 #include <godot_cpp/variant/string_name.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
+#include <vector>
+
 using namespace godot;
 
 void VerseRuntime::_bind_methods() {
@@ -227,6 +229,79 @@ Error VerseRuntime::call_void_float(const String &p_decorated_name, double p_arg
 	return OK;
 }
 
+Error VerseRuntime::compile_project(const PackedStringArray &p_globalized_paths, Dictionary *r_diagnostics_by_path) {
+	if (!host.is_loaded()) {
+		return ERR_UNAVAILABLE;
+	}
+
+	// The pointers handed to the host must outlive the call, so the CharStrings backing them
+	// have to stay alive alongside the pointer array.
+	std::vector<CharString> utf8_paths;
+	std::vector<const char *> raw_paths;
+	utf8_paths.reserve(p_globalized_paths.size());
+	raw_paths.reserve(p_globalized_paths.size());
+	for (int64_t i = 0; i < p_globalized_paths.size(); i++) {
+		utf8_paths.push_back(p_globalized_paths[i].utf8());
+		raw_paths.push_back(utf8_paths.back().get_data());
+	}
+
+	diagnostic_sink = r_diagnostics_by_path;
+	const int32_t status = host.CompileProject(raw_paths.data(), (int32_t)raw_paths.size());
+	diagnostic_sink = nullptr;
+
+	return status == VH_OK ? OK : ERR_COMPILATION_FAILED;
+}
+
+vh_script *VerseRuntime::open_script(const String &p_globalized_path) {
+	if (!host.is_loaded()) {
+		return nullptr;
+	}
+
+	const CharString utf8_path = p_globalized_path.utf8();
+	vh_script *script = nullptr;
+	if (host.OpenScript(utf8_path.get_data(), &script) != VH_OK) {
+		return nullptr;
+	}
+	return script;
+}
+
+void VerseRuntime::release_script_handle(vh_script *p_script) {
+	if (p_script != nullptr && host.ReleaseScript != nullptr) {
+		host.ReleaseScript(p_script);
+	}
+}
+
+bool VerseRuntime::handle_has_function(vh_script *p_script, const char *p_decorated_name) const {
+	if (!host.is_loaded() || p_script == nullptr) {
+		return false;
+	}
+	return host.ScriptHasFunction(p_script, p_decorated_name) != 0;
+}
+
+Error VerseRuntime::call_handle_void(vh_script *p_script, const char *p_decorated_name) {
+	if (!host.is_loaded() || p_script == nullptr) {
+		return ERR_UNAVAILABLE;
+	}
+	const int32_t status = host.CallVoid(p_script, p_decorated_name);
+	if (status != VH_OK) {
+		UtilityFunctions::push_error(String("VerseRuntime: ") + String(p_decorated_name) + String(" failed with status ") + String::num_int64(status));
+		return FAILED;
+	}
+	return OK;
+}
+
+Error VerseRuntime::call_handle_void_float(vh_script *p_script, const char *p_decorated_name, double p_arg) {
+	if (!host.is_loaded() || p_script == nullptr) {
+		return ERR_UNAVAILABLE;
+	}
+	const int32_t status = host.CallVoidFloat(p_script, p_decorated_name, p_arg);
+	if (status != VH_OK) {
+		UtilityFunctions::push_error(String("VerseRuntime: ") + String(p_decorated_name) + String(" failed with status ") + String::num_int64(status));
+		return FAILED;
+	}
+	return OK;
+}
+
 void VerseRuntime::tick(double p_budget_seconds) {
 	if (!host.is_loaded()) {
 		UtilityFunctions::push_warning("VerseRuntime: tick called with no host loaded");
@@ -362,6 +437,21 @@ vh_bool VerseRuntime::api_get_meta(void *p_ctx, vh_handle p_handle, vh_arena *p_
 void VerseRuntime::on_diagnostic(void *p_ctx, const vh_diagnostic *p_diagnostic) {
 	const String file = p_diagnostic->FilePathLen > 0 ? String::utf8(p_diagnostic->FilePathUtf8, p_diagnostic->FilePathLen) : String("<unknown>");
 	const String message = String::utf8(p_diagnostic->MessageUtf8, p_diagnostic->MessageLen);
+
+	VerseRuntime *runtime = static_cast<VerseRuntime *>(p_ctx);
+	if (runtime != nullptr && runtime->diagnostic_sink != nullptr && p_diagnostic->Severity == VH_SEVERITY_ERROR) {
+		Dictionary error;
+		error["line"] = p_diagnostic->Line;
+		error["column"] = p_diagnostic->Column;
+		error["message"] = message;
+		error["path"] = file;
+
+		Dictionary &sink = *runtime->diagnostic_sink;
+		TypedArray<Dictionary> for_file = sink.has(file) ? TypedArray<Dictionary>(sink[file]) : TypedArray<Dictionary>();
+		for_file.push_back(error);
+		sink[file] = for_file;
+	}
+
 	const String formatted = file + String(":") + String::num_int64(p_diagnostic->Line) + String(":") + String::num_int64(p_diagnostic->Column) + String(": ") + message;
 
 	if (p_diagnostic->Severity == VH_SEVERITY_ERROR) {
