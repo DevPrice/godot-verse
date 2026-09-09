@@ -1,0 +1,67 @@
+# Default class subset for tools/gen_verse_api.py.
+#
+# One Godot class name per line. `#` starts a comment; blank lines are ignored.
+# Ancestors of every listed class are pulled in automatically, so only the
+# leaf classes a 2D/3D gameplay script actually touches need to be named here.
+
+Node
+CanvasItem
+Node2D
+Node3D
+Sprite2D
+AnimatedSprite2D
+Camera2D
+Camera3D
+Label
+Control
+Button
+Timer
+Area2D
+CollisionObject2D
+CollisionShape2D
+PhysicsBody2D
+CharacterBody2D
+RigidBody2D
+StaticBody2D
+MeshInstance3D
+AudioStreamPlayer
+AudioStreamPlayer2D
+Viewport
+Window
+CanvasLayer
+Resource
+Texture2D
+PackedScene
+SceneTree
+Engine
+Input
+Time
+RandomNumberGenerator
+Tween
+AnimationPlayer
+
+# Additional common 2D/3D gameplay classes.
+Sprite3D
+RigidBody3D
+StaticBody3D
+CharacterBody3D
+CollisionShape3D
+CollisionObject3D
+PhysicsBody3D
+Area3D
+DirectionalLight2D
+DirectionalLight3D
+PointLight2D
+OmniLight3D
+SpotLight3D
+AudioStreamPlayer3D
+TileMap
+ProgressBar
+LineEdit
+TextEdit
+RichTextLabel
+Panel
+PanelContainer
+VBoxContainer
+HBoxContainer
+GridContainer
