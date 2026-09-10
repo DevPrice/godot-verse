@@ -10,7 +10,10 @@
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
 
+#include <vector>
+
 struct VerseClassDecl;
+class VerseScript;
 
 // Line endings normalised away. A buffer arrives through TextEdit, which need not hand back the
 // endings the file was written with, and Verse analyses identically either way.
@@ -144,6 +147,22 @@ public:
 
 	godot::TypedArray<godot::Dictionary> diagnostics_for(const godot::String &p_path) const;
 
+	// Whether the host's last analysis answered for exactly p_source as p_path's text, so
+	// diagnostics_for describes that text and not the one before it. True as well when there is
+	// no host to ask: the build's diagnostics are then the only answer there will ever be, and a
+	// caller that waits for a better one waits forever.
+	bool analysis_is_current(const godot::String &p_path, const godot::String &p_source) const;
+
+	// Hands p_source to the host as p_path's text and returns without waiting. The result lands
+	// in a later _frame, which is where every script awaiting one is told.
+	void queue_check(const godot::String &p_path, const godot::String &p_source) const;
+
+	// Scripts that read their validity and export list out of the analysis, so a result landing
+	// in _frame reaches them. Borrowed: a script adds itself on construction and removes itself
+	// on destruction.
+	void register_script(VerseScript *p_script);
+	void unregister_script(VerseScript *p_script);
+
 	// The class name every .verse file under res:// defines, which is its own stem: a script's
 	// class is named after its file, and one flat scope for the whole project is what forces
 	// that. Cheap enough to answer from a directory walk, and it needs no compiled program --
@@ -163,10 +182,11 @@ public:
 	};
 	BaseTypes base_types_for(const VerseClassDecl &p_decl) const;
 
-	// Blocks until every outstanding analysis has landed, so diagnostics_for answers for the
-	// current text rather than the text before the last edit. Saving and reloading are worth a
-	// wait: they are explicit, they are where a script's validity is decided, and answering them
-	// from a superseded analysis is how an already-undone error reaches the output log.
+	// Blocks until every outstanding analysis has landed. Only for the questions the host answers
+	// about a buffer it must already hold -- completion and the argument hint -- where starting
+	// the ask before the previous analysis lands would attribute its loci to the wrong text.
+	// Nothing on the save path may call this: a whole-project analysis is ~100ms, and the editor
+	// spends it frozen.
 	void settle_checks() const;
 
 private:
@@ -220,6 +240,8 @@ private:
 
 	// Reaps a finished analysis and starts whatever came in while it ran. Called once per frame.
 	void poll_check() const;
+
+	std::vector<VerseScript *> live_scripts;
 
 	// Formatted diagnostics last written to the output log, keyed by globalized path.
 	mutable godot::Dictionary logged_diagnostics;

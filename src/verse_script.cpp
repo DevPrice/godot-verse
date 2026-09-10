@@ -39,6 +39,20 @@ GDExtensionInterfacePlaceholderScriptInstanceCreate get_placeholder_instance_cre
 void VerseScript::_bind_methods() {
 }
 
+VerseScript::VerseScript() {
+	VerseScriptLanguage *language = VerseScriptLanguage::singleton();
+	if (language != nullptr) {
+		language->register_script(this);
+	}
+}
+
+VerseScript::~VerseScript() {
+	VerseScriptLanguage *language = VerseScriptLanguage::singleton();
+	if (language != nullptr) {
+		language->unregister_script(this);
+	}
+}
+
 Error VerseScript::compile() {
 	VerseRuntime *runtime = get_runtime();
 	if (runtime == nullptr) {
@@ -57,32 +71,66 @@ Error VerseScript::compile() {
 		return ERR_UNAVAILABLE;
 	}
 
-	valid = false;
-
 	const String path = get_path();
 	if (path.is_empty()) {
+		valid = false;
 		return ERR_UNCONFIGURED;
 	}
 
 	// One file cannot be compiled on its own: the whole project is built together, and it is
 	// built once. This script is only usable if that build succeeded outright — the linker
 	// requires a complete program, so one bad file leaves nothing assembled.
-	const Error build_status = language->ensure_project_built();
+	language->ensure_project_built();
 
-	// Reached on save and on reload, where the answer has to be about the text being saved. A
-	// background analysis started by the last keystroke may still be in flight, and its
-	// predecessor's diagnostics can describe an edit the author has already undone -- which would
-	// mark this script invalid over a mistake that is no longer in the file.
-	language->settle_checks();
+	// Reached on save and on reload, where the answer has to be about the text being saved. When
+	// the host is not already holding it, that costs a whole-project analysis -- ~100ms, which
+	// blocking here would spend with the editor frozen on every Ctrl+S. Queue it instead and keep
+	// the previous answer until poll_check publishes this one.
+	if (language->analysis_is_current(path, source_code)) {
+		awaiting_analysis = false;
+		refresh_from_analysis();
+	} else {
+		awaited_source = source_code;
+		awaiting_analysis = true;
+		language->queue_check(path, source_code);
+	}
+
+	return valid ? OK : ERR_COMPILATION_FAILED;
+}
+
+void VerseScript::analysis_landed() {
+	VerseScriptLanguage *language = VerseScriptLanguage::singleton();
+	if (!awaiting_analysis || language == nullptr) {
+		return;
+	}
+
+	// One analysis covers the project, but it is published against a single buffer: a result that
+	// landed for another file's buffer says nothing about the text this script asked about.
+	if (!language->analysis_is_current(get_path(), awaited_source)) {
+		return;
+	}
+
+	awaiting_analysis = false;
+	awaited_source = String();
+	refresh_from_analysis();
+}
+
+void VerseScript::refresh_from_analysis() {
+	VerseRuntime *runtime = get_runtime();
+	VerseScriptLanguage *language = VerseScriptLanguage::singleton();
+	if (runtime == nullptr || language == nullptr) {
+		return;
+	}
 
 	// A .verse file is only a script if the compiled project defines the class it is named after:
 	// there is no other shape a script can take, so a file without one cannot be attached.
-	valid = build_status == OK && language->diagnostics_for(path).is_empty() && runtime->has_class(verse_class_name());
+	valid = language->ensure_project_built() == OK
+			&& language->diagnostics_for(get_path()).is_empty()
+			&& runtime->has_class(verse_class_name());
 
 	// The export list only exists once the project has been analysed, and a placeholder created
 	// before that got an empty one.
 	update_placeholders();
-	return valid ? OK : ERR_COMPILATION_FAILED;
 }
 
 String VerseScript::verse_class_name() const {

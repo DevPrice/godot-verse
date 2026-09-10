@@ -26,7 +26,8 @@ protected:
 	static void _bind_methods();
 
 public:
-	VerseScript() = default;
+	VerseScript();
+	~VerseScript() override;
 
 	bool _editor_can_reload_from_file() override;
 	void _placeholder_erased(void *p_placeholder) override;
@@ -66,9 +67,17 @@ public:
 	bool _is_placeholder_fallback_enabled() const override;
 	godot::Variant _get_rpc_config() const override;
 
-	// Builds the project through the host and asks whether it defines this file's class. Safe to
+	// Builds the project through the host and queues an analysis of this file's source. Safe to
 	// call with no host loaded; leaves the script invalid rather than failing.
+	//
+	// Returns what the script is known to be *now*: the analysis it queues is not waited for, so
+	// a save whose result has not landed yet answers from the previous one and settles a few
+	// frames later through analysis_landed().
 	godot::Error compile();
+
+	// Re-derives validity and exports if the analysis just published is the one compile() asked
+	// for. Called on every live script when a result lands, since one analysis covers the project.
+	void analysis_landed();
 
 	bool is_compiled() const;
 	godot::String verse_class_name() const;
@@ -91,6 +100,15 @@ private:
 	// leaves the previous list standing and turns placeholder fallback on. GDScript::_update_exports
 	// is the same shape and for the same reason: see the note on placeholder_fallback_enabled.
 	void refresh_exports() const;
+
+	// Re-reads validity and the export list out of whatever analysis the host has published.
+	void refresh_from_analysis();
+
+	// The source compile() handed the language, while it is still waiting for the answer. Until
+	// that lands the script keeps the validity and exports the last analysis gave it: deriving
+	// them from the superseded one would flag a mistake the author has already undone.
+	godot::String awaited_source;
+	bool awaiting_analysis = false;
 
 	// Borrowed: Godot owns each placeholder and tells us through _placeholder_erased when one
 	// goes away.

@@ -283,10 +283,24 @@ retract a line, and an error the author already undid would sit in it for the re
 The log is written from the two places that are authoritative for the current text: a validate the
 cache answered, and the frame a fresh analysis lands on.
 
-Saving and reloading wait for the outstanding analysis instead of answering stale. Those are the
-points where a script's validity is decided and where the author has just asked for something
-explicitly, so a beat is worth more than a wrong answer -- at most one analysis, since a newer
-buffer replaces a queued one rather than joining a line behind it.
+**Saving does not block on it either.** Saving is where a script's validity and its export list
+are decided, so the answer has to be about the text being saved rather than the one before it --
+but waiting for that is a ~100ms freeze on every Ctrl+S, which is exactly the hitch GDScript does
+not have. So a save queues the analysis and returns, and the script keeps the validity and exports
+the previous one gave it until the new one lands. Nothing regresses in the meantime: a stale
+answer is the answer from a moment ago, not a wrong one, and it is never the *superseded* answer
+that would flag a mistake the author has already undone.
+
+`VerseScriptLanguage` keeps a list of the live `VerseScript`s for this, and tells each one when a
+result is published; a script that queued an analysis and recognises the published text as its own
+re-derives validity and republishes its export list then. Usually there is nothing to wait for at
+all: Godot validates the buffer on its idle timer well before the author reaches for Ctrl+S, so by
+the time the save arrives the host is already holding that exact text and the whole thing is a
+string compare.
+
+Completion is the one caller that still waits (`settle_checks`). It has to: it asks the host about
+a buffer the host must already be holding, and an analysis finishing afterwards would be recorded
+as the text the host holds when by then it would not be.
 
 The host will not execute Verse while an analysis is in flight, and enforces that itself rather
 than trusting callers: VerseVM blocks execution for the length of a build, so a `vh_tick` that ran

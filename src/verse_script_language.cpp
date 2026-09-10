@@ -17,6 +17,7 @@
 #include <godot_cpp/core/memory.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
+#include <algorithm>
 #include <iterator>
 
 using namespace godot;
@@ -1364,34 +1365,52 @@ TypedArray<Dictionary> VerseScriptLanguage::check_buffer(const String &p_path, c
 		return diagnostics_for(p_path);
 	}
 
-	const String globalized = ProjectSettings::get_singleton()->globalize_path(p_path);
-	const String normalized = verse_newline_normalized(p_source);
-
-	// The host still holds exactly this text, so its last analysis already answered for it. This
-	// is the common case by far: opening a file, switching to its tab and saving it all validate
-	// a buffer nothing has touched since the last analysis.
-	const bool analysis_is_current = analyzed_source_by_path.has(p_path)
-			&& String(analyzed_source_by_path[p_path]) == normalized;
-
-	// Anything else needs a fresh analysis, which takes about as long as three frames. Start it
-	// on the host's thread and answer from the last one: returning stale diagnostics for a moment
-	// is a far smaller cost than freezing the editor on every keystroke. _frame picks the result
-	// up, and Godot re-validates often enough that the fresh answer lands on its own.
+	// Anything the host does not already hold needs a fresh analysis, which takes about as long as
+	// three frames. Start it on the host's thread and answer from the last one: returning stale
+	// diagnostics for a moment is a far smaller cost than freezing the editor on every keystroke.
+	// _frame picks the result up, and Godot re-validates often enough that the fresh answer lands
+	// on its own.
 	//
 	// That answer is deliberately not logged. It describes whatever the file said before this
 	// edit, which may be a mistake the author has already undone, and the output log has no way
 	// to retract a line. The script editor's own error list is free to show it because Godot
 	// replaces it wholesale on the next validate; the log is not.
-	if (!analysis_is_current) {
-		request_check(p_path, normalized);
+	if (!analysis_is_current(p_path, p_source)) {
+		queue_check(p_path, p_source);
 		return diagnostics_for(p_path);
 	}
+
+	const String globalized = ProjectSettings::get_singleton()->globalize_path(p_path);
 
 	// Analysis covers the whole project, so a broken file elsewhere reports against its own path;
 	// the editor asked about this one.
 	const TypedArray<Dictionary> errors = diagnostics_for(p_path);
 	log_new_diagnostics(globalized, errors);
 	return errors;
+}
+
+bool VerseScriptLanguage::analysis_is_current(const String &p_path, const String &p_source) const {
+	VerseRuntime *runtime = get_runtime();
+	if (!project_built || runtime == nullptr || !runtime->is_host_loaded()) {
+		return true;
+	}
+
+	// The common case by far: opening a file, switching to its tab and saving it all ask about a
+	// buffer nothing has touched since the last analysis.
+	return analyzed_source_by_path.has(p_path)
+			&& String(analyzed_source_by_path[p_path]) == verse_newline_normalized(p_source);
+}
+
+void VerseScriptLanguage::queue_check(const String &p_path, const String &p_source) const {
+	request_check(p_path, verse_newline_normalized(p_source));
+}
+
+void VerseScriptLanguage::register_script(VerseScript *p_script) {
+	live_scripts.push_back(p_script);
+}
+
+void VerseScriptLanguage::unregister_script(VerseScript *p_script) {
+	live_scripts.erase(std::remove(live_scripts.begin(), live_scripts.end(), p_script), live_scripts.end());
 }
 
 void VerseScriptLanguage::settle_checks() const {
@@ -1425,7 +1444,7 @@ void VerseScriptLanguage::settle_checks() const {
 void VerseScriptLanguage::request_check(const String &p_path, const String &p_normalized_source) const {
 	// The analysis in flight is already for this exact text. Godot validates the same unchanged
 	// buffer several times over while one runs, and queueing behind it would buy the same answer
-	// a second time -- which a save then has to wait through.
+	// a second time -- putting a whole extra analysis between a save and the result it settles on.
 	if (p_path == in_flight_path && p_normalized_source == in_flight_source) {
 		return;
 	}
@@ -1478,6 +1497,15 @@ void VerseScriptLanguage::poll_check() const {
 
 		in_flight_path = String();
 		in_flight_source = String();
+
+		// Every script whose compile() declined to wait for this. Told one at a time rather than
+		// only the analysed file's script, because a save can be waiting on a result its own
+		// buffer did not start. Snapshotted: telling a script republishes its export list, and
+		// Godot is free to drop a script while that runs.
+		const std::vector<VerseScript *> scripts = live_scripts;
+		for (VerseScript *script : scripts) {
+			script->analysis_landed();
+		}
 	}
 
 	// A buffer that changed while that ran is still waiting.
