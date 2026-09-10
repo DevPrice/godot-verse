@@ -288,15 +288,22 @@ if there *is* a next validate, and Godot has no reason of its own to run one: it
 text changes and then stops. Fix the last error and the sequence is idle timer fires, we answer
 from the analysis before the fix, the fresh analysis lands 100ms later with nothing to report --
 and no one asks. The line stays underlined, the error bar stays red, and both clear only when the
-author types the next character. So the frame that lands a result whose diagnostics differ from the
-previous one asks the script editor to validate again. `CodeTextEditor::validate_script` is the
-signal its own idle timer emits for exactly this, and `CodeTextEditor` is reachable because the
-`CodeEdit` that `ScriptEditorBase::get_base_editor` hands out is its child. Neither is in the
-extension API, so the extension checks for the signal rather than assuming it: an engine build that
-moves it costs the stale underline back, not a crash. Only the visible editor is asked -- Godot
-validates a script when its tab is opened, so the rest come back current on their own. The ask is
-made from `_frame` rather than from the poll itself, because completion also reaps analyses, and
-re-entering the editor's validate from there would rebuild its error list mid-popup.
+author types the next character. Documentation has the same shape and a coarser timer: Godot
+republishes a script's class doc when the script is *saved*, so a doc built from the analysis a
+save did not wait for stays a save behind.
+
+So the frame that lands a result the editor has already drawn something from -- diagnostics that
+differ from the previous analysis, or a script that settled its validity on this one -- asks the
+script editor for both again. `CodeTextEditor::validate_script` is the signal its own idle timer
+emits for the first, and `CodeTextEditor` is reachable because the `CodeEdit` that
+`ScriptEditorBase::get_base_editor` hands out is its child; it is not in the extension API, so the
+extension checks for the signal rather than assuming it, and an engine build that moves it costs
+the stale underline back, not a crash. `update_docs_from_script` is the ask for the second, and is
+the same pair of calls a save makes. Only the visible editor is refreshed -- Godot validates a
+script when its tab is opened and republishes its documentation when it is saved, so the rest come
+back current on their own. The ask is made from `_frame` rather than from the poll itself, because
+completion also reaps analyses, and re-entering the editor from there would rebuild its error list
+mid-popup.
 
 **Saving does not block on it either.** Saving is where a script's validity and its export list
 are decided, so the answer has to be about the text being saved rather than the one before it --
@@ -312,6 +319,22 @@ re-derives validity and republishes its export list then. Usually there is nothi
 all: Godot validates the buffer on its idle timer well before the author reaches for Ctrl+S, so by
 the time the save arrives the host is already holding that exact text and the whole thing is a
 string compare.
+
+**Queueing an analysis is not the same as starting one, and only `_frame` may start one.** Every
+host entry point that reads the semantic program joins the analysis thread before it answers --
+`vh_has_class`, `vh_class_members`, `vh_class_export_list`, all of them. So an analysis started in
+the middle of the editor's work is one the editor waits out, and it does not matter that the call
+that started it returned immediately. Saving is where that bites, because
+`ScriptEditor::save_current_script` asks the script for its documentation the instant
+`save_resource` returns: an analysis begun inside the save is paid for by
+`update_docs_from_script`, three lines later, and Ctrl+S hitches for the full ~100ms with nothing
+in the extension appearing to block. So `request_check` only records the buffer, and `_frame`
+hands it to the host after its own poll, refresh and tick are done -- a queued buffer waits a
+frame; a blocked editor would wait the whole analysis.
+
+That leaves the documentation Godot published during the save describing the program from before
+it, so the frame that lands the result asks the script editor for both again -- see the note on
+re-validating above, which is the same mechanism and the same trigger.
 
 Completion is the one caller that still waits (`settle_checks`). It has to: it asks the host about
 a buffer the host must already be holding, and an analysis finishing afterwards would be recorded

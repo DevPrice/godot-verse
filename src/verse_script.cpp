@@ -98,21 +98,22 @@ Error VerseScript::compile() {
 	return valid ? OK : ERR_COMPILATION_FAILED;
 }
 
-void VerseScript::analysis_landed() {
+bool VerseScript::analysis_landed() {
 	VerseScriptLanguage *language = VerseScriptLanguage::singleton();
 	if (!awaiting_analysis || language == nullptr) {
-		return;
+		return false;
 	}
 
 	// One analysis covers the project, but it is published against a single buffer: a result that
 	// landed for another file's buffer says nothing about the text this script asked about.
 	if (!language->analysis_is_current(get_path(), awaited_source)) {
-		return;
+		return false;
 	}
 
 	awaiting_analysis = false;
 	awaited_source = String();
 	refresh_from_analysis();
+	return true;
 }
 
 void VerseScript::refresh_from_analysis() {

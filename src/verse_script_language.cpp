@@ -168,29 +168,41 @@ PackedStringArray flattened_diagnostics(const Dictionary &p_errors_by_path) {
 
 #ifdef TOOLS_ENABLED
 
-// Godot validates a script when its text changes and not once more after the author stops typing.
-// A result that arrives from a background analysis therefore has no way onto the screen: the
-// error list, the error bar and the marked line all keep describing the buffer as it was one
-// analysis ago, so an error the author has already fixed stays underlined until they type again.
-// This asks for the one more validate.
+// Everything the editor drew from an analysis older than the one that just landed.
 //
-// `validate_script` is the signal CodeTextEditor's own idle timer emits to ask for exactly that,
-// and CodeTextEditor is reachable because the CodeEdit ScriptEditorBase hands out is its child.
-// Neither is in the extension API, so both are checked rather than assumed: a build that moves
-// them costs the stale underline back, not a crash.
+// Godot validates a script when its text changes and not once more after the author stops typing,
+// and it republishes a script's documentation only when the script is saved. A result that arrives
+// from a background analysis therefore has no way onto the screen: the error list, the error bar
+// and the marked line keep describing the buffer as it was one analysis ago -- an error the author
+// has already fixed stays underlined until they type again -- and the class documentation keeps
+// describing the program as it was one save ago.
 //
-// Only the visible editor is asked. Godot validates a script when its tab is opened, so the rest
-// come back current on their own.
-void revalidate_current_script_editor() {
+// `validate_script` is the signal CodeTextEditor's own idle timer emits to ask for the first, and
+// CodeTextEditor is reachable because the CodeEdit ScriptEditorBase hands out is its child. It is
+// not in the extension API, so it is checked rather than assumed: a build that moves it costs the
+// stale underline back, not a crash. update_docs_from_script is the ask for the second, and it is
+// the same pair of calls ScriptEditor::save_current_script makes around a save.
+//
+// Only the visible editor is refreshed. Godot validates a script when its tab is opened and
+// republishes its documentation when it is saved, so the rest come back current on their own.
+void refresh_current_script_editor() {
 	EditorInterface *editor_interface = EditorInterface::get_singleton();
 	if (editor_interface == nullptr) {
 		return;
 	}
 
 	ScriptEditor *script_editor = editor_interface->get_script_editor();
-	if (script_editor == nullptr || Object::cast_to<VerseScript>(script_editor->get_current_script().ptr()) == nullptr) {
+	if (script_editor == nullptr) {
 		return;
 	}
+
+	const Ref<Script> script = script_editor->get_current_script();
+	if (Object::cast_to<VerseScript>(script.ptr()) == nullptr) {
+		return;
+	}
+
+	script_editor->clear_docs_from_script(script);
+	script_editor->update_docs_from_script(script);
 
 	ScriptEditorBase *current = script_editor->get_current_editor();
 	Control *code_edit = current != nullptr ? current->get_base_editor() : nullptr;
@@ -1328,15 +1340,19 @@ void VerseScriptLanguage::_frame() {
 
 #ifdef TOOLS_ENABLED
 		// Deliberately here rather than in poll_check: settle_checks reaps an analysis from the
-		// middle of a completion request, and re-entering the script editor's validate from there
-		// would rebuild its error list while it is drawing a popup.
-		if (diagnostics_changed) {
-			diagnostics_changed = false;
-			revalidate_current_script_editor();
+		// middle of a completion request, and re-entering the script editor from there would
+		// rebuild its error list while it is drawing a popup.
+		if (editor_refresh_pending) {
+			editor_refresh_pending = false;
+			refresh_current_script_editor();
 		}
 #endif
 
 		runtime->tick(frame_budget_ms / 1000.0);
+
+		// Last, so everything above answers against a host that is not mid-analysis. A queued
+		// buffer waits a frame for this; a blocked editor would wait the whole analysis.
+		start_pending_check();
 	}
 }
 
@@ -1541,7 +1557,14 @@ void VerseScriptLanguage::request_check(const String &p_path, const String &p_no
 	pending_check_path = p_path;
 	pending_check_source = p_normalized_source;
 	has_pending_check = true;
-	start_pending_check();
+
+	// Queued, not started. Every host entry point that reads the semantic program joins the
+	// analysis thread before it answers -- vh_has_class, vh_class_members, vh_class_export_list,
+	// all of them -- so an analysis begun here is one whatever the caller does next pays for.
+	// Saving is where that bites: ScriptEditor::save_current_script asks the script for its
+	// documentation the moment save_resource returns, and starting the analysis inside the save
+	// put the whole ~100ms right back into Ctrl+S. _frame starts it once the frame's own work is
+	// done instead.
 }
 
 void VerseScriptLanguage::start_pending_check() const {
@@ -1575,7 +1598,7 @@ void VerseScriptLanguage::poll_check() const {
 	if (runtime->poll_check_project(&errors_by_globalized)) {
 		// Only now does the host hold this text, so only now may a validate answer from cache.
 		analyzed_source_by_path[in_flight_path] = in_flight_source;
-		diagnostics_changed = record_diagnostics(errors_by_globalized) || diagnostics_changed;
+		editor_refresh_pending = record_diagnostics(errors_by_globalized) || editor_refresh_pending;
 
 		// This is the authoritative moment for the file that was analysed, and the only one a
 		// validate is not guaranteed to follow, so the log is written from here.
@@ -1591,12 +1614,9 @@ void VerseScriptLanguage::poll_check() const {
 		// Godot is free to drop a script while that runs.
 		const std::vector<VerseScript *> scripts = live_scripts;
 		for (VerseScript *script : scripts) {
-			script->analysis_landed();
+			editor_refresh_pending = script->analysis_landed() || editor_refresh_pending;
 		}
 	}
-
-	// A buffer that changed while that ran is still waiting.
-	start_pending_check();
 }
 
 bool VerseScriptLanguage::record_diagnostics(const Dictionary &p_errors_by_globalized) const {

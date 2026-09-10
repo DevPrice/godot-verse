@@ -153,8 +153,11 @@ public:
 	// caller that waits for a better one waits forever.
 	bool analysis_is_current(const godot::String &p_path, const godot::String &p_source) const;
 
-	// Hands p_source to the host as p_path's text and returns without waiting. The result lands
-	// in a later _frame, which is where every script awaiting one is told.
+	// Queues p_source as p_path's text for analysis and returns. _frame is what hands it to the
+	// host, and a later one is where the result lands and every script awaiting it is told.
+	// Nothing starts on this thread: while an analysis runs, every host call that reads the
+	// semantic program blocks until it finishes, so an analysis begun in the middle of the
+	// editor's work is one the editor waits out.
 	void queue_check(const godot::String &p_path, const godot::String &p_source) const;
 
 	// Scripts that read their validity and export list out of the analysis, so a result landing
@@ -251,10 +254,12 @@ private:
 	// anything the editor draws actually moved.
 	bool record_diagnostics(const godot::Dictionary &p_errors_by_globalized) const;
 
-	// Set by an analysis whose results differ from the last one's, cleared by the _frame that
-	// asks the script editor to validate again. Godot has no reason of its own to re-ask once the
-	// author stops typing, so without this an error survives its own fix on screen.
-	mutable bool diagnostics_changed = false;
+	// Set by an analysis that moved something the editor has already drawn -- diagnostics that
+	// differ from the last one's, or a script that settled its validity on this result -- and
+	// cleared by the _frame that asks the script editor to draw it again. Godot has no reason of
+	// its own to re-ask once the author stops typing, so without this an error survives its own
+	// fix on screen and the documentation stays a save behind.
+	mutable bool editor_refresh_pending = false;
 
 	void log_new_diagnostics(const godot::String &p_globalized_path, const godot::TypedArray<godot::Dictionary> &p_errors) const;
 

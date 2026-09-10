@@ -76,8 +76,9 @@ public:
 	godot::Error compile();
 
 	// Re-derives validity and exports if the analysis just published is the one compile() asked
-	// for. Called on every live script when a result lands, since one analysis covers the project.
-	void analysis_landed();
+	// for, and reports whether it did. Called on every live script when a result lands, since one
+	// analysis covers the project.
+	bool analysis_landed();
 
 	bool is_compiled() const;
 	godot::String verse_class_name() const;
