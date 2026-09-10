@@ -162,6 +162,9 @@ class TypeResolver:
 ClassifiedMethod = namedtuple(
     "ClassifiedMethod", ["godot_name", "verse_name", "params", "return_type", "is_void"]
 )
+ClassifiedProperty = namedtuple(
+    "ClassifiedProperty", ["godot_name", "verse_name", "type_info", "getter", "setter", "index"]
+)
 Param = namedtuple("Param", ["verse_name", "type_info", "default"])
 
 
@@ -210,6 +213,7 @@ class Coverage:
     def __init__(self):
         self.classes_emitted = 0
         self.methods_emitted = 0
+        self.properties_emitted = 0
         self.skip_reasons = Counter()
         self.unsupported_types = Counter()
 
@@ -347,6 +351,112 @@ def emit_method(cm: ClassifiedMethod) -> str:
     return f"    {cm.verse_name}<public>({param_decl}){effects}:{ti.verse_type} = {body}"
 
 
+# `string` is []char, so the compiler asks a string-typed property for (:accessor, :int):char and
+# (:accessor, :int, :char):void as well -- element accessors, to make `Node.Text[3]` resolve. What
+# a write past the end of the string should do has no answer that is not invented, and an accessor
+# may not fail, so these keep their get/set methods instead.
+CONTAINER_PROPERTY_TYPES = {"string", "[]string"}
+
+# Names the generated accessor bodies bind. A Godot member that lands on one of these (Range.value
+# does) would be ambiguous rather than shadowed at the point the body mentions it.
+ACCESSOR_LOCAL_NAMES = ("Accessor", "Field", "Value", "Current")
+
+
+def classify_property(p: dict, resolver: TypeResolver, coverage: Coverage):
+    """Returns a ClassifiedProperty, or None (and records why) if the property is skipped."""
+    if not p.get("getter") or not p.get("setter"):
+        coverage.skip("property_no_accessor_pair")
+        return None
+
+    info = resolver.classify(p["type"])
+    if info is None:
+        coverage.unsupported([p["type"]])
+        return None
+    if info.verse_type in CONTAINER_PROPERTY_TYPES:
+        coverage.skip("property_container_type")
+        return None
+    # An object-typed property would need a getter that cannot fail, and a null Godot object is
+    # exactly the absence VhToHandle reports as failure.
+    if info.pack_fn == "VhFromObject":
+        coverage.skip("property_object_type")
+        return None
+
+    return ClassifiedProperty(
+        godot_name=p["name"],
+        verse_name=verse_method_name(p["name"]),
+        type_info=info,
+        getter=p["getter"],
+        setter=p["setter"],
+        index=p.get("index"),
+    )
+
+
+def accessor_locals(members: set) -> dict:
+    """The names an accessor body binds, renamed away from anything the class already carries."""
+    chosen = {}
+    for i, base in enumerate(ACCESSOR_LOCAL_NAMES):
+        taken = base in members or base in RESERVED_WORDS or base in VERSE_STDLIB_NAMES
+        chosen[base] = f"Arg{i}" if taken else base
+    return chosen
+
+
+def emit_property(cp: ClassifiedProperty, names: dict) -> list:
+    """The var and the two-to-four accessor overloads the compiler requires for it."""
+    accessor, field, value, current = (
+        names["Accessor"], names["Field"], names["Value"], names["Current"]
+    )
+    ti = cp.type_info
+    index_arg = f"VhFromInt({cp.index})" if cp.index is not None else ""
+
+    read = f'{ti.unpack_fn}(VhCallValue(Handle, "{cp.getter}", array{{{index_arg}}}))'
+
+    def write(expr: str) -> str:
+        args = ", ".join(a for a in (index_arg, f"{ti.pack_fn}({expr})") if a)
+        return f'VhCallVoid(Handle, "{cp.setter}", array{{{args}}})'
+
+    get_name = f"{cp.verse_name}Getter"
+    set_name = f"{cp.verse_name}Setter"
+
+    # The accessors are epic_internal because their `accessor` parameter is: a definition may be
+    # no more accessible than what it depends on. Only the compiler ever names them, at the point
+    # it rewrites a read or a write of the public var above.
+    lines = [
+        f"    var {cp.verse_name}<public><getter({get_name})><setter({set_name})>"
+        f":{ti.verse_type} = external {{}}",
+        f"    {get_name}<epic_internal>({accessor}:accessor)<transacts>:{ti.verse_type} = {read}",
+        f"    {set_name}<epic_internal>({accessor}:accessor, {value}:{ti.verse_type})<transacts>:void"
+        f" = {write(value)}",
+    ]
+
+    # The compiler demands a field-named overload of each accessor for a struct-typed var, so that
+    # `set Node.Position.X = 1.0` could resolve to a read of the whole vector and a write back.
+    # Nothing can reach them: it walks a struct's fields without checking that any is assignable,
+    # and a Verse struct may not contain a `var`, so the path it is asking about cannot be written.
+    # They are emitted to satisfy the check and are dead.
+    fields = VECTOR_FIELDS.get(ti.verse_type)
+    if not fields:
+        return lines
+
+    selects = " else ".join(
+        f'if ({field} = "{f}") then {current}.{f}' for f in fields[:-1]
+    )
+    lines += [
+        f"    {get_name}<epic_internal>({accessor}:accessor, {field}:string)<transacts>:float =",
+        f"        {current} := {read}",
+        f"        {selects} else {current}.{fields[-1]}",
+        f"    {set_name}<epic_internal>({accessor}:accessor, {field}:string, {value}:float)<transacts>:void =",
+        f"        {current} := {read}",
+    ]
+    for i, f in enumerate(fields):
+        members = ", ".join(
+            f"{g} := {value}" if g == f else f"{g} := {current}.{g}" for g in fields
+        )
+        guard = "else" if i == len(fields) - 1 else f'{"else " if i else ""}if ({field} = "{f}")'
+        lines.append(f"        {guard}:")
+        lines.append(f"            {write(ti.verse_type + '{' + members + '}')}")
+    return lines
+
+
 def generate(api: dict, requested: list, coverage: Coverage):
     classes = api["classes"]
     parent_map = build_parent_map(classes)
@@ -370,12 +480,32 @@ def generate(api: dict, requested: list, coverage: Coverage):
         base_verse = "object" if parent == "Object" else verse_class_name(parent)
 
         methods = classes_by_name[name].get("methods", [])
+
+        properties = []
+        for p in classes_by_name[name].get("properties", []):
+            cp = classify_property(p, resolver, coverage)
+            if cp is not None:
+                properties.append(cp)
+        properties.sort(key=lambda cp: cp.verse_name)
+
+        # A property replaces the pair it was built from: `Position` is the point of the exercise,
+        # and leaving GetPosition beside it would be two spellings of one thing. Only the pairs
+        # that actually became properties are dropped -- a getter whose property was skipped is
+        # still the only way to read it.
+        superseded = {cp.getter for cp in properties} | {cp.setter for cp in properties}
+
         # Every name the class will carry, so a parameter can be checked against members that
         # have not been classified yet as well as inherited ones.
         member_names = base_names | {verse_method_name(m["name"]) for m in methods}
+        for cp in properties:
+            member_names |= {cp.verse_name, f"{cp.verse_name}Getter", f"{cp.verse_name}Setter"}
+        locals_for_accessors = accessor_locals(member_names)
 
         candidates = []
         for m in methods:
+            if m["name"] in superseded:
+                coverage.skip("superseded_by_property")
+                continue
             cm = classify_method(m, resolver, coverage, member_names)
             if cm is not None:
                 candidates.append(cm)
@@ -383,6 +513,16 @@ def generate(api: dict, requested: list, coverage: Coverage):
 
         used = set(base_names)
         emitted_lines = []
+        for cp in properties:
+            names = {cp.verse_name, f"{cp.verse_name}Getter", f"{cp.verse_name}Setter"}
+            if names & used:
+                coverage.skip("shadow")
+                continue
+            used |= names
+            emitted_lines.extend(emit_property(cp, locals_for_accessors))
+            method_map.append((name, verse_class_name(name), cp.godot_name, cp.verse_name))
+            coverage.properties_emitted += 1
+
         for cm in candidates:
             if cm.verse_name in used:
                 coverage.skip("shadow")
@@ -490,6 +630,7 @@ def format_report(coverage: Coverage, class_count_requested: int) -> str:
     lines.append(f"Classes requested (incl. ancestors pulled in): {class_count_requested}")
     lines.append(f"Classes emitted: {coverage.classes_emitted}")
     lines.append(f"Methods emitted: {coverage.methods_emitted}")
+    lines.append(f"Properties emitted: {coverage.properties_emitted}")
     lines.append("")
     lines.append("Note: Godot's Object class is always skipped -- its API is mostly")
     lines.append("Callable/Variant-typed reflection this bridge cannot marshal. Any class")

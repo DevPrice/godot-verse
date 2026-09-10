@@ -277,22 +277,24 @@ int main(int argc, char** argv)
 						&& LookupOk;
 			}
 
-			// A method resolves to the class that *declares* it, which is what lets the editor
-			// name the Godot original: the Verse name alone cannot be inverted, because the
-			// transform to PascalCase drops the underscores that separated the words.
-			const size_t ProbeUse = ExportsSource.find("GetPosition(");
-			if (Step("the fixture still calls a mirrored Godot method", ProbeUse != std::string::npos))
+			// A mirrored member resolves to the class that *declares* it, which is what lets the
+			// editor name the Godot original: the Verse name alone cannot be inverted, because
+			// the transform to PascalCase drops the underscores that separated the words. A
+			// property reports itself as the var it is, so the editor has to route on the owner
+			// rather than on the kind.
+			const size_t ProbeUse = ExportsSource.find("set Position");
+			if (Step("the fixture still writes a mirrored Godot property", ProbeUse != std::string::npos))
 			{
 				int32_t ProbeRow = 0;
 				int32_t ProbeColumn = 0;
-				RowColumnOf(ExportsSource, ProbeUse, ProbeRow, ProbeColumn);
+				RowColumnOf(ExportsSource, ProbeUse + 4, ProbeRow, ProbeColumn);
 				const vh_lookup_desc* ProbeLookup = nullptr;
-				if (Step("vh_lookup_symbol on a mirrored Godot method",
+				if (Step("vh_lookup_symbol on a mirrored Godot property",
 						LookupSymbolFn(ExportsPathUtf8.c_str(), ProbeRow, ProbeColumn, &ProbeLookup) == VH_OK)
 					&& ProbeLookup)
 				{
-					LookupOk = Step("it resolves to GetPosition", Text(ProbeLookup->NameUtf8, ProbeLookup->NameLen) == "GetPosition") && LookupOk;
-					LookupOk = Step("it is a function", ProbeLookup->Kind == VH_LOOKUP_FUNCTION) && LookupOk;
+					LookupOk = Step("it resolves to Position", Text(ProbeLookup->NameUtf8, ProbeLookup->NameLen) == "Position") && LookupOk;
+					LookupOk = Step("it is a var data definition", ProbeLookup->Kind == VH_LOOKUP_DATA && ProbeLookup->IsVar != 0) && LookupOk;
 					LookupOk = Step("it names the class that declares it", Text(ProbeLookup->OwnerUtf8, ProbeLookup->OwnerLen) == "node2d") && LookupOk;
 				}
 				else

@@ -21,6 +21,5 @@ mover := class(node2d):
 		Print(Greeting)
 
 	Update<override>(Delta:float):void =
-		P := GetPosition()
-		SetPosition(vector2{X := P.X + Delta * Speed, Y := P.Y})
-		Print("Mover x = {P.X}")
+		set Position = vector2{X := Position.X + Delta * Speed, Y := Position.Y}
+		Print("Mover x = {Position.X}")

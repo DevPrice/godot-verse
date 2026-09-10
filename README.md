@@ -71,8 +71,7 @@ mover := class(node2d):
         Print(Greeting)
 
     Update<override>(Delta:float):void =
-        P := GetPosition()
-        SetPosition(vector2{X := P.X + Delta * Speed, Y := P.Y})
+        set Position = vector2{X := Position.X + Delta * Speed, Y := Position.Y}
 ```
 
 Godot's API is mirrored as a Verse class hierarchy under `/Godot.org/Godot`, generated from
@@ -82,6 +81,24 @@ primitives, so mirroring another hundred Godot classes costs no C++ at all. A me
 the scene defers its write to transaction commit, and of the 1236 methods that used to carry
 Verse's `<decides>` effect only the 132 returning an object still do — see the lifetime note
 below for why the rest gave it up.
+
+**A Godot property is a writable Verse member**, not a get/set pair. 686 of them across the
+mirrored classes are emitted as `var Position<public>...:vector2`, and the `get_position` and
+`set_position` they were built from are gone — two spellings of one thing is worse than one.
+The mechanism is uLang's `<getter(...)>`/`<setter(...)>`, whose attribute classes are
+`epic_internal` and so reachable on the same footing as `@editable`: use, not authorship. The
+accessor functions themselves must be `epic_internal` too, since a definition may be no more
+accessible than the `accessor` type it takes.
+
+Three kinds stay methods. A read-only property has no setter and the attributes must come in
+pairs. An object-typed one would need a getter that cannot fail, which is exactly what a null
+Godot object is. And a `string` is `[]char`, so the compiler asks it for element accessors as
+well — what `set Node.Text[99] = 'x'` should do has no answer worth inventing.
+
+The compiler asks a *struct*-typed property for a field-named overload of each accessor, so that
+`set Node.Position.X = 1.0` could resolve. Those are emitted and are dead: it walks a struct's
+fields without checking any is assignable, and a Verse struct may not contain a `var`. Assign the
+whole vector.
 
 **Class names are unprefixed**, because `/Godot.org/Godot` is already the namespace: the mirror is
 `node2d`, `timer`, `control`. Verse reports a name that two `using`s both define at the *use* site
@@ -236,8 +253,10 @@ and describe — the click path never reads `type`, it jumps on `location` alone
 the two exactly.
 
 **A name from the mirrored API resolves to Godot's own documentation instead.** Ctrl+clicking
-`node2d` or `GetPosition` opens the class reference for `Node2D` or `Node2D.get_position`, and
-hovering either shows the description Godot already ships. Nothing here writes that prose: both
+`node2d`, `Position` or `GetChild` opens the class reference for `Node2D`, `Node2D.position` or
+`Node.get_child`, and hovering any of them shows the description Godot already ships. A mirrored
+property arrives as a `var` like any `@editable` member, so the routing keys off the *owner* —
+only a mirrored class appears in the table. Nothing here writes that prose: both
 paths key off `class_name`, which is precisely the key that diverts the click away from a jump
 and into the help viewer, and which the tooltip uses to fetch the description out of the same doc
 data. There is nothing to jump to anyway — the generated API is compiled from the engine tree,

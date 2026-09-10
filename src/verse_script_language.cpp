@@ -507,9 +507,13 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 			result["class_name"] = String(godot_class);
 			return result;
 		}
-	} else if (kind == VH_LOOKUP_FUNCTION) {
+	} else if (kind == VH_LOOKUP_FUNCTION || kind == VH_LOOKUP_DATA) {
+		// A mirrored property is a var, so the kind alone cannot separate it from a script's own
+		// @editable member; the owner does, since only a mirrored class appears in the table.
 		if (const verse_api::method_mapping *method = godot_method_for(found_owner, found_name)) {
-			result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS_METHOD;
+			result["type"] = (int64_t)(kind == VH_LOOKUP_FUNCTION
+							? ScriptLanguageExtension::LOOKUP_RESULT_CLASS_METHOD
+							: ScriptLanguageExtension::LOOKUP_RESULT_CLASS_PROPERTY);
 			result["class_name"] = String(method->godot_class);
 			result["class_member"] = String(method->godot_method);
 			return result;

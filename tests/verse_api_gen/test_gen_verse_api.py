@@ -297,6 +297,95 @@ def test_render_classes_header():
     )
 
 
+def test_emit_scalar_property():
+    cp = g.ClassifiedProperty(
+        godot_name="rotation",
+        verse_name="Rotation",
+        type_info=g.SCALAR_TYPES["float"],
+        getter="get_rotation",
+        setter="set_rotation",
+        index=None,
+    )
+    lines = g.emit_property(cp, g.accessor_locals(set()))
+    check("scalar property emits a var and one accessor pair", len(lines), 3)
+    check(
+        "the var names its accessors",
+        lines[0],
+        "    var Rotation<public><getter(RotationGetter)><setter(RotationSetter)>:float = external {}",
+    )
+    check(
+        "the setter writes through the Godot setter",
+        lines[2],
+        '    RotationSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void'
+        ' = VhCallVoid(Handle, "set_rotation", array{VhFromFloat(Value)})',
+    )
+
+
+def test_emit_indexed_property_passes_its_index():
+    cp = g.ClassifiedProperty(
+        godot_name="stretch_margin_top",
+        verse_name="StretchMarginTop",
+        type_info=g.SCALAR_TYPES["int"],
+        getter="get_stretch_margin",
+        setter="set_stretch_margin",
+        index=1,
+    )
+    lines = g.emit_property(cp, g.accessor_locals(set()))
+    check_true(
+        "an indexed property passes its index ahead of the value",
+        'array{VhFromInt(1), VhFromInt(Value)}' in lines[2],
+    )
+    check_true("and ahead of nothing on the read", 'array{VhFromInt(1)}' in lines[1])
+
+
+def test_struct_property_gets_the_field_overloads():
+    cp = g.ClassifiedProperty(
+        godot_name="position",
+        verse_name="Position",
+        type_info=g.SCALAR_TYPES["Vector2"],
+        getter="get_position",
+        setter="set_position",
+        index=None,
+    )
+    lines = g.emit_property(cp, g.accessor_locals(set()))
+    arities = [line for line in lines if "Field:string" in line]
+    check("a struct property carries the field-named overload of each accessor", len(arities), 2)
+
+
+def test_accessor_locals_dodge_a_colliding_member():
+    # Range.value would make a parameter named Value ambiguous where the body mentions it.
+    names = g.accessor_locals({"Value"})
+    check_true("a colliding accessor parameter is renamed", names["Value"].startswith("Arg"))
+    check("an uncontested one is not", names["Accessor"], "Accessor")
+
+
+def test_property_skips_have_reasons():
+    resolver = g.TypeResolver({"Node"}, {"Node": "Object"}, {"Node", "Texture2D"})
+    coverage = g.Coverage()
+    check_true(
+        "a read-only property is skipped",
+        g.classify_property({"name": "a", "type": "float", "getter": "get_a"}, resolver, coverage) is None,
+    )
+    check_true(
+        "a string property is skipped",
+        g.classify_property(
+            {"name": "b", "type": "String", "getter": "get_b", "setter": "set_b"}, resolver, coverage
+        ) is None,
+    )
+    check_true(
+        "an object property is skipped",
+        g.classify_property(
+            {"name": "c", "type": "Node", "getter": "get_c", "setter": "set_c"}, resolver, coverage
+        ) is None,
+    )
+    check_true(
+        "a float property is not",
+        g.classify_property(
+            {"name": "d", "type": "float", "getter": "get_d", "setter": "set_d"}, resolver, coverage
+        ) is not None,
+    )
+
+
 def test_method_map_names_the_godot_original():
     api = {"header": {"version_full_name": "Godot Engine v4.6.stable.official"}}
     method_map = [
@@ -316,9 +405,15 @@ def test_method_map_names_the_godot_original():
 
 def test_generated_method_map_covers_a_known_method():
     header = (REPO_ROOT / "src" / "verse_api_classes.h").read_text(encoding="utf-8")
+    # A property lands in the same table as a method: the editor routes both to Godot's own docs,
+    # and neither Verse name can be inverted back to the Godot one.
     check_true(
-        "the checked-in header maps node2d.GetPosition to Node2D.get_position",
-        '{ "node2d", "GetPosition", "Node2D", "get_position" },' in header,
+        "the checked-in header maps node2d.Position to Node2D.position",
+        '{ "node2d", "Position", "Node2D", "position" },' in header,
+    )
+    check_true(
+        "the checked-in header still maps a surviving method",
+        '{ "node", "GetChild", "Node", "get_child" },' in header,
     )
 
 
@@ -345,13 +440,15 @@ def test_generated_file_matches_hand_written_slice():
     generated = REPO_ROOT / "host" / "Verse" / "GodotClasses.native.verse"
     text = generated.read_text(encoding="utf-8")
     check_true("GodotClasses.native.verse exists", generated.is_file())
+    # position, rotation and scale are Godot properties, so node2d carries them as writable vars
+    # and the get/set pairs they were built from are gone.
     hand_written_lines = [
-        '    GetPosition<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_position", array{}))',
-        '    SetPosition<public>(Position:vector2)<transacts>:void = VhCallVoid(Handle, "set_position", array{VhFromVector2(Position)})',
-        '    GetRotation<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_rotation", array{}))',
-        '    SetRotation<public>(Radians:float)<transacts>:void = VhCallVoid(Handle, "set_rotation", array{VhFromFloat(Radians)})',
-        '    GetScale<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_scale", array{}))',
-        '    SetScale<public>(Scale:vector2)<transacts>:void = VhCallVoid(Handle, "set_scale", array{VhFromVector2(Scale)})',
+        '    var Position<public><getter(PositionGetter)><setter(PositionSetter)>:vector2 = external {}',
+        '    PositionGetter<epic_internal>(Accessor:accessor)<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_position", array{}))',
+        '    PositionSetter<epic_internal>(Accessor:accessor, Value:vector2)<transacts>:void = VhCallVoid(Handle, "set_position", array{VhFromVector2(Value)})',
+        '    var Rotation<public><getter(RotationGetter)><setter(RotationSetter)>:float = external {}',
+        '    RotationGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_rotation", array{}))',
+        '    RotationSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_rotation", array{VhFromFloat(Value)})',
     ]
     import re
 
@@ -368,7 +465,7 @@ def test_generated_file_matches_hand_written_slice():
         (mm.start(), mm.group(1), mm.group(2))
         for mm in re.finditer(r"^(\w+)<public> := class\((\w+)\):", text, re.MULTILINE)
     ]
-    method_re = re.compile(r"^\s{4}(\w+)<public>", re.MULTILINE)
+    method_re = re.compile(r"^\s{4}(?:var )?(\w+)<public>", re.MULTILINE)
     blocks = {}
     for i, (pos, name, base) in enumerate(class_positions):
         end = class_positions[i + 1][0] if i + 1 < len(class_positions) else len(text)
@@ -417,6 +514,11 @@ def main():
     test_packed_string_array_unsupported_as_parameter()
     test_class_type_falls_back_to_nearest_emitted_ancestor()
     test_render_classes_header()
+    test_emit_scalar_property()
+    test_emit_indexed_property_passes_its_index()
+    test_struct_property_gets_the_field_overloads()
+    test_accessor_locals_dodge_a_colliding_member()
+    test_property_skips_have_reasons()
     test_method_map_names_the_godot_original()
     test_generated_method_map_covers_a_known_method()
     test_classes_header_file_matches_generated_verse_file()
