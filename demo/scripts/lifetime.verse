@@ -25,7 +25,7 @@ lifetime := class(node2d):
 			Held.QueueFree()
 
 		if (Frames >= 4, Frames <= 8):
-			if (Held.IsInstanceValid()?, Name := Held.GetName[]):
-				Print("lifetime: frame {Frames}, still reachable as {Name}")
+			if (Held.IsInstanceValid()?):
+				Print("lifetime: frame {Frames}, still reachable as {Held.GetName()}")
 			else:
 				Print("lifetime: frame {Frames}, the held reference is no longer valid")

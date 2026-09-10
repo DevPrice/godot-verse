@@ -280,8 +280,8 @@ int main(int argc, char** argv)
 			// A method resolves to the class that *declares* it, which is what lets the editor
 			// name the Godot original: the Verse name alone cannot be inverted, because the
 			// transform to PascalCase drops the underscores that separated the words.
-			const size_t ProbeUse = ExportsSource.find("GetPosition[");
-			if (ProbeUse != std::string::npos)
+			const size_t ProbeUse = ExportsSource.find("GetPosition(");
+			if (Step("the fixture still calls a mirrored Godot method", ProbeUse != std::string::npos))
 			{
 				int32_t ProbeRow = 0;
 				int32_t ProbeColumn = 0;

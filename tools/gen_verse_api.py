@@ -43,19 +43,25 @@ TypeInfo = namedtuple("TypeInfo", ["verse_type", "pack_fn", "pack_decides", "unp
 # names and their <decides>-ness come straight from GodotApi.native.verse; a method that calls a
 # <decides> function must itself be <decides>, but only a <decides> callee is invoked with [...]
 # rather than (...) -- see GodotApi.native.verse's bracket-discipline comment.
+#
+# Every unpacker here is total. A dead receiver or a value the wire cannot carry raises inside the
+# host rather than failing, so a mirrored method that returns a *value* cannot fail and must not
+# claim it can -- `if (P := GetPosition[])` would otherwise read as handling a case that never
+# arrives. Object returns are the exception: a null Godot object is a real absence, and TypeResolver
+# gives those VhToHandle, which is the one unpacker still marked <decides>.
 SCALAR_TYPES = {
-    "bool": TypeInfo("logic", "VhFromLogic", False, "VhToLogic", True),
-    "int": TypeInfo("int", "VhFromInt", False, "VhToInt", True),
-    "int32": TypeInfo("int", "VhFromInt", False, "VhToInt", True),
-    "int64": TypeInfo("int", "VhFromInt", False, "VhToInt", True),
-    "uint32": TypeInfo("int", "VhFromInt", False, "VhToInt", True),
-    "float": TypeInfo("float", "VhFromFloat", False, "VhToFloat", True),
-    "String": TypeInfo("string", "VhFromString", False, "VhToString", True),
-    "StringName": TypeInfo("string", "VhFromStringName", False, "VhToString", True),
-    "NodePath": TypeInfo("string", "VhFromNodePath", False, "VhToString", True),
-    "Vector2": TypeInfo("vector2", "VhFromVector2", False, "VhToVector2", True),
-    "Vector3": TypeInfo("vector3", "VhFromVector3", False, "VhToVector3", True),
-    "Color": TypeInfo("color", "VhFromColor", False, "VhToColor", True),
+    "bool": TypeInfo("logic", "VhFromLogic", False, "VhToLogic", False),
+    "int": TypeInfo("int", "VhFromInt", False, "VhToInt", False),
+    "int32": TypeInfo("int", "VhFromInt", False, "VhToInt", False),
+    "int64": TypeInfo("int", "VhFromInt", False, "VhToInt", False),
+    "uint32": TypeInfo("int", "VhFromInt", False, "VhToInt", False),
+    "float": TypeInfo("float", "VhFromFloat", False, "VhToFloat", False),
+    "String": TypeInfo("string", "VhFromString", False, "VhToString", False),
+    "StringName": TypeInfo("string", "VhFromStringName", False, "VhToString", False),
+    "NodePath": TypeInfo("string", "VhFromNodePath", False, "VhToString", False),
+    "Vector2": TypeInfo("vector2", "VhFromVector2", False, "VhToVector2", False),
+    "Vector3": TypeInfo("vector3", "VhFromVector3", False, "VhToVector3", False),
+    "Color": TypeInfo("color", "VhFromColor", False, "VhToColor", False),
     "PackedStringArray": TypeInfo("[]string", None, False, "VhToStrings", False),
 }
 
@@ -323,7 +329,7 @@ def emit_method(cm: ClassifiedMethod) -> str:
         for p in cm.params
     )
     args = emit_call_args(cm.params)
-    call = f'VhCallValue[Handle, "{cm.godot_name}", array{{{args}}}]' if not cm.is_void else None
+    call = f'VhCallValue(Handle, "{cm.godot_name}", array{{{args}}})' if not cm.is_void else None
 
     if cm.is_void:
         body = f'VhCallVoid(Handle, "{cm.godot_name}", array{{{args}}})'
@@ -331,14 +337,14 @@ def emit_method(cm: ClassifiedMethod) -> str:
 
     ti = cm.return_type
     if ti.pack_fn == "VhFromObject":
-        unpack = f"VhToHandle[{call}]"
-        body = f"{ti.verse_type}{{Handle := {unpack}}}"
+        body = f"{ti.verse_type}{{Handle := VhToHandle[{call}]}}"
     elif ti.unpack_decides:
         body = f"{ti.unpack_fn}[{call}]"
     else:
         body = f"{ti.unpack_fn}({call})"
 
-    return f"    {cm.verse_name}<public>({param_decl})<decides><transacts>:{ti.verse_type} = {body}"
+    effects = "<decides><transacts>" if ti.unpack_decides else "<transacts>"
+    return f"    {cm.verse_name}<public>({param_decl}){effects}:{ti.verse_type} = {body}"
 
 
 def generate(api: dict, requested: list, coverage: Coverage):

@@ -130,8 +130,8 @@ def test_emit_value_method_scalar():
         return_type=g.SCALAR_TYPES["Vector2"],
         is_void=False,
     )
-    want = '    GetPosition<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_position", array{}]]'
-    check("emit value method, scalar return (GetPosition)", g.emit_method(cm), want)
+    want = '    GetPosition<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_position", array{}))'
+    check("emit value method, scalar return does not claim it can fail", g.emit_method(cm), want)
 
 
 def test_emit_value_method_class_return():
@@ -145,9 +145,9 @@ def test_emit_value_method_class_return():
     )
     want = (
         '    GetChild<public>(Index:int)<decides><transacts>:node = '
-        'node{Handle := VhToHandle[VhCallValue[Handle, "get_child", array{VhFromInt(Index)}]]}'
+        'node{Handle := VhToHandle[VhCallValue(Handle, "get_child", array{VhFromInt(Index)})]}'
     )
-    check("emit value method, class return (GetChild)", g.emit_method(cm), want)
+    check("emit value method, class return stays failable (GetChild)", g.emit_method(cm), want)
 
 
 def test_emit_packed_string_array_return():
@@ -159,7 +159,7 @@ def test_emit_packed_string_array_return():
         return_type=ti,
         is_void=False,
     )
-    want = '    GetMetaList<public>()<decides><transacts>:[]string = VhToStrings(VhCallValue[Handle, "get_meta_list", array{}])'
+    want = '    GetMetaList<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_meta_list", array{}))'
     check("emit value method, PackedStringArray return uses non-decides unpacker", g.emit_method(cm), want)
 
 
@@ -346,11 +346,11 @@ def test_generated_file_matches_hand_written_slice():
     text = generated.read_text(encoding="utf-8")
     check_true("GodotClasses.native.verse exists", generated.is_file())
     hand_written_lines = [
-        '    GetPosition<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_position", array{}]]',
+        '    GetPosition<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_position", array{}))',
         '    SetPosition<public>(Position:vector2)<transacts>:void = VhCallVoid(Handle, "set_position", array{VhFromVector2(Position)})',
-        '    GetRotation<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_rotation", array{}]]',
+        '    GetRotation<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_rotation", array{}))',
         '    SetRotation<public>(Radians:float)<transacts>:void = VhCallVoid(Handle, "set_rotation", array{VhFromFloat(Radians)})',
-        '    GetScale<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_scale", array{}]]',
+        '    GetScale<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_scale", array{}))',
         '    SetScale<public>(Scale:vector2)<transacts>:void = VhCallVoid(Handle, "set_scale", array{VhFromVector2(Scale)})',
     ]
     import re
@@ -375,7 +375,16 @@ def test_generated_file_matches_hand_written_slice():
         body = text[pos:end]
         blocks[name] = {"base": base, "names": method_re.findall(body)}
 
-    base_members = {"Handle", "Ready", "Update", "PhysicsUpdate"}
+    # A null Godot object is the only absence a mirrored method can report, so every remaining
+    # <decides> must be an object return. Anything else claiming failure is a method whose caller
+    # would have to write an `if` around a case that never arrives.
+    failable = [line for line in text.splitlines() if "<decides>" in line]
+    check_true(
+        "every failable generated method returns an object",
+        failable and all("VhToHandle[" in line for line in failable),
+    )
+
+    base_members = {"Handle", "IsInstanceValid", "Ready", "Update", "PhysicsUpdate"}
 
     def inherited(name):
         if name == "object":

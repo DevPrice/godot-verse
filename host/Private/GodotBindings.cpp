@@ -704,11 +704,23 @@ TMap<verse::string, verse::string> VhGetMeta(int64 Handle)
     return Meta;
 }
 
-TOptional<FGodotValue> VhCallValue(int64 Handle, verse::string const& Method, TArray<FGodotValue> const& Args)
+void VhTypeMismatch(verse::string const& Expected, FGodotValue const& Value)
+{
+    const FUtf8String Name(ToView(Expected));
+    RAISE_VERSE_RUNTIME_ERROR_FORMAT(
+        Verse::ERuntimeDiagnostic::ErrRuntime_NativeInternal,
+        TEXT("Godot returned a value tagged %lld where the Verse bridge expected `%hs`. The type "
+             "table in tools/gen_verse_api.py and this build of Godot disagree."),
+        Value.Get<0>(),
+        reinterpret_cast<const char*>(*Name));
+}
+
+FGodotValue VhCallValue(int64 Handle, verse::string const& Method, TArray<FGodotValue> const& Args)
 {
     FHostState& Host = GetHost();
     if (!Host.Godot.CallMethod)
     {
+        RAISE_VERSE_RUNTIME_ERROR_CODE(Verse::ERuntimeDiagnostic::ErrRuntime_NativeInternal);
         return {};
     }
 

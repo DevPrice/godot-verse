@@ -32,8 +32,18 @@ VhFindChar<public><native>(Value:string, Index:int)<decides><transacts>:char
 # encoding could not express.
 variant<public> := tuple(int, []int, []float, []string)
 
+# Raises a Verse runtime error naming the type that was expected. It never returns: the raise
+# unwinds to the root failure context, which is what lets the unpackers in GodotApi.native.verse
+# be total functions despite bottoming out in failable array indexing.
+VhTypeMismatch<public><native>(Expected:string, Value:variant)<transacts>:void
+
 # Reads and calls happen now; they observe a Godot the transaction cannot roll back.
-VhCallValue<public><native>(Handle:int, Method:string, Args:[]variant)<decides><transacts>:variant
+#
+# VhCallValue is total. A dead receiver, an unknown method and a value that does not fit the wire
+# all raise inside the host, and a null object comes back as an object-tagged zero rather than as
+# a missing value -- so there is nothing left for the caller to handle. Property reads keep their
+# failure: Godot cannot tell an absent property from a nil one.
+VhCallValue<public><native>(Handle:int, Method:string, Args:[]variant)<transacts>:variant
 VhGetValue<public><native>(Handle:int, Property:string)<decides><transacts>:variant
 
 # Mutations defer to transaction commit, so a failed expression leaves the scene untouched.

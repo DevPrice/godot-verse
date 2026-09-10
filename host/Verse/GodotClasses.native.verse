@@ -10,28 +10,28 @@ using {/Verse.org/Native}
 
 engine<public> := class(object):
 
-    GetArchitectureName<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_architecture_name", array{}]]
-    GetFramesDrawn<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_frames_drawn", array{}]]
-    GetFramesPerSecond<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_frames_per_second", array{}]]
-    GetLicenseText<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_license_text", array{}]]
-    GetMainLoop<public>()<decides><transacts>:main_loop = main_loop{Handle := VhToHandle[VhCallValue[Handle, "get_main_loop", array{}]]}
-    GetMaxFps<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_max_fps", array{}]]
-    GetMaxPhysicsStepsPerFrame<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_max_physics_steps_per_frame", array{}]]
-    GetPhysicsFrames<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_physics_frames", array{}]]
-    GetPhysicsInterpolationFraction<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_physics_interpolation_fraction", array{}]]
-    GetPhysicsJitterFix<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_physics_jitter_fix", array{}]]
-    GetPhysicsTicksPerSecond<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_physics_ticks_per_second", array{}]]
-    GetProcessFrames<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_process_frames", array{}]]
-    GetScriptLanguageCount<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_script_language_count", array{}]]
-    GetSingletonList<public>()<decides><transacts>:[]string = VhToStrings(VhCallValue[Handle, "get_singleton_list", array{}])
-    GetTimeScale<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_time_scale", array{}]]
-    GetWriteMoviePath<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_write_movie_path", array{}]]
-    HasSingleton<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_singleton", array{VhFromStringName(Name)}]]
-    IsEditorHint<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_editor_hint", array{}]]
-    IsEmbeddedInEditor<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_embedded_in_editor", array{}]]
-    IsInPhysicsFrame<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_in_physics_frame", array{}]]
-    IsPrintingErrorMessages<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_printing_error_messages", array{}]]
-    IsPrintingToStdout<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_printing_to_stdout", array{}]]
+    GetArchitectureName<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_architecture_name", array{}))
+    GetFramesDrawn<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_frames_drawn", array{}))
+    GetFramesPerSecond<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_frames_per_second", array{}))
+    GetLicenseText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_license_text", array{}))
+    GetMainLoop<public>()<decides><transacts>:main_loop = main_loop{Handle := VhToHandle[VhCallValue(Handle, "get_main_loop", array{})]}
+    GetMaxFps<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_max_fps", array{}))
+    GetMaxPhysicsStepsPerFrame<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_max_physics_steps_per_frame", array{}))
+    GetPhysicsFrames<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_physics_frames", array{}))
+    GetPhysicsInterpolationFraction<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_physics_interpolation_fraction", array{}))
+    GetPhysicsJitterFix<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_physics_jitter_fix", array{}))
+    GetPhysicsTicksPerSecond<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_physics_ticks_per_second", array{}))
+    GetProcessFrames<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_process_frames", array{}))
+    GetScriptLanguageCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_script_language_count", array{}))
+    GetSingletonList<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_singleton_list", array{}))
+    GetTimeScale<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_time_scale", array{}))
+    GetWriteMoviePath<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_write_movie_path", array{}))
+    HasSingleton<public>(Name:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_singleton", array{VhFromStringName(Name)}))
+    IsEditorHint<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_editor_hint", array{}))
+    IsEmbeddedInEditor<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_embedded_in_editor", array{}))
+    IsInPhysicsFrame<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_in_physics_frame", array{}))
+    IsPrintingErrorMessages<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_printing_error_messages", array{}))
+    IsPrintingToStdout<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_printing_to_stdout", array{}))
     SetMaxFps<public>(MaxFps:int)<transacts>:void = VhCallVoid(Handle, "set_max_fps", array{VhFromInt(MaxFps)})
     SetMaxPhysicsStepsPerFrame<public>(MaxPhysicsSteps:int)<transacts>:void = VhCallVoid(Handle, "set_max_physics_steps_per_frame", array{VhFromInt(MaxPhysicsSteps)})
     SetPhysicsJitterFix<public>(PhysicsJitterFix:float)<transacts>:void = VhCallVoid(Handle, "set_physics_jitter_fix", array{VhFromFloat(PhysicsJitterFix)})
@@ -47,40 +47,40 @@ input<public> := class(object):
     ActionRelease<public>(Action:string)<transacts>:void = VhCallVoid(Handle, "action_release", array{VhFromStringName(Action)})
     AddJoyMapping<public>(Mapping:string, ?UpdateExisting:logic = false)<transacts>:void = VhCallVoid(Handle, "add_joy_mapping", array{VhFromString(Mapping), VhFromLogic(UpdateExisting)})
     FlushBufferedEvents<public>()<transacts>:void = VhCallVoid(Handle, "flush_buffered_events", array{})
-    GetAccelerometer<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_accelerometer", array{}]]
-    GetActionRawStrength<public>(Action:string, ?ExactMatch:logic = false)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_action_raw_strength", array{VhFromStringName(Action), VhFromLogic(ExactMatch)}]]
-    GetActionStrength<public>(Action:string, ?ExactMatch:logic = false)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_action_strength", array{VhFromStringName(Action), VhFromLogic(ExactMatch)}]]
-    GetAxis<public>(NegativeAction:string, PositiveAction:string)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_axis", array{VhFromStringName(NegativeAction), VhFromStringName(PositiveAction)}]]
-    GetCurrentCursorShape<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_current_cursor_shape", array{}]]
-    GetGravity<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_gravity", array{}]]
-    GetGyroscope<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_gyroscope", array{}]]
-    GetJoyAxis<public>(Device:int, Axis:int)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_joy_axis", array{VhFromInt(Device), VhFromInt(Axis)}]]
-    GetJoyGuid<public>(Device:int)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_joy_guid", array{VhFromInt(Device)}]]
-    GetJoyName<public>(Device:int)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_joy_name", array{VhFromInt(Device)}]]
-    GetJoyVibrationDuration<public>(Device:int)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_joy_vibration_duration", array{VhFromInt(Device)}]]
-    GetJoyVibrationStrength<public>(Device:int)<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_joy_vibration_strength", array{VhFromInt(Device)}]]
-    GetLastMouseScreenVelocity<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_last_mouse_screen_velocity", array{}]]
-    GetLastMouseVelocity<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_last_mouse_velocity", array{}]]
-    GetMagnetometer<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_magnetometer", array{}]]
-    GetMouseButtonMask<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_mouse_button_mask", array{}]]
-    GetMouseMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_mouse_mode", array{}]]
-    GetVector<public>(NegativeX:string, PositiveX:string, NegativeY:string, PositiveY:string, ?Deadzone:float = -1.0)<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_vector", array{VhFromStringName(NegativeX), VhFromStringName(PositiveX), VhFromStringName(NegativeY), VhFromStringName(PositiveY), VhFromFloat(Deadzone)}]]
-    HasJoyLight<public>(Device:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_joy_light", array{VhFromInt(Device)}]]
-    IsActionJustPressed<public>(Action:string, ?ExactMatch:logic = false)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_action_just_pressed", array{VhFromStringName(Action), VhFromLogic(ExactMatch)}]]
-    IsActionJustPressedByEvent<public>(Action:string, Event:resource, ?ExactMatch:logic = false)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_action_just_pressed_by_event", array{VhFromStringName(Action), VhFromObject(Event), VhFromLogic(ExactMatch)}]]
-    IsActionJustReleased<public>(Action:string, ?ExactMatch:logic = false)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_action_just_released", array{VhFromStringName(Action), VhFromLogic(ExactMatch)}]]
-    IsActionJustReleasedByEvent<public>(Action:string, Event:resource, ?ExactMatch:logic = false)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_action_just_released_by_event", array{VhFromStringName(Action), VhFromObject(Event), VhFromLogic(ExactMatch)}]]
-    IsActionPressed<public>(Action:string, ?ExactMatch:logic = false)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_action_pressed", array{VhFromStringName(Action), VhFromLogic(ExactMatch)}]]
-    IsAnythingPressed<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_anything_pressed", array{}]]
-    IsEmulatingMouseFromTouch<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_emulating_mouse_from_touch", array{}]]
-    IsEmulatingTouchFromMouse<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_emulating_touch_from_mouse", array{}]]
-    IsJoyButtonPressed<public>(Device:int, Button:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_joy_button_pressed", array{VhFromInt(Device), VhFromInt(Button)}]]
-    IsJoyKnown<public>(Device:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_joy_known", array{VhFromInt(Device)}]]
-    IsKeyLabelPressed<public>(Keycode:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_key_label_pressed", array{VhFromInt(Keycode)}]]
-    IsKeyPressed<public>(Keycode:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_key_pressed", array{VhFromInt(Keycode)}]]
-    IsMouseButtonPressed<public>(Button:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_mouse_button_pressed", array{VhFromInt(Button)}]]
-    IsPhysicalKeyPressed<public>(Keycode:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_physical_key_pressed", array{VhFromInt(Keycode)}]]
-    IsUsingAccumulatedInput<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_using_accumulated_input", array{}]]
+    GetAccelerometer<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_accelerometer", array{}))
+    GetActionRawStrength<public>(Action:string, ?ExactMatch:logic = false)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_action_raw_strength", array{VhFromStringName(Action), VhFromLogic(ExactMatch)}))
+    GetActionStrength<public>(Action:string, ?ExactMatch:logic = false)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_action_strength", array{VhFromStringName(Action), VhFromLogic(ExactMatch)}))
+    GetAxis<public>(NegativeAction:string, PositiveAction:string)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_axis", array{VhFromStringName(NegativeAction), VhFromStringName(PositiveAction)}))
+    GetCurrentCursorShape<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_current_cursor_shape", array{}))
+    GetGravity<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_gravity", array{}))
+    GetGyroscope<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_gyroscope", array{}))
+    GetJoyAxis<public>(Device:int, Axis:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_joy_axis", array{VhFromInt(Device), VhFromInt(Axis)}))
+    GetJoyGuid<public>(Device:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_joy_guid", array{VhFromInt(Device)}))
+    GetJoyName<public>(Device:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_joy_name", array{VhFromInt(Device)}))
+    GetJoyVibrationDuration<public>(Device:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_joy_vibration_duration", array{VhFromInt(Device)}))
+    GetJoyVibrationStrength<public>(Device:int)<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_joy_vibration_strength", array{VhFromInt(Device)}))
+    GetLastMouseScreenVelocity<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_last_mouse_screen_velocity", array{}))
+    GetLastMouseVelocity<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_last_mouse_velocity", array{}))
+    GetMagnetometer<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_magnetometer", array{}))
+    GetMouseButtonMask<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_mouse_button_mask", array{}))
+    GetMouseMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_mouse_mode", array{}))
+    GetVector<public>(NegativeX:string, PositiveX:string, NegativeY:string, PositiveY:string, ?Deadzone:float = -1.0)<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_vector", array{VhFromStringName(NegativeX), VhFromStringName(PositiveX), VhFromStringName(NegativeY), VhFromStringName(PositiveY), VhFromFloat(Deadzone)}))
+    HasJoyLight<public>(Device:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_joy_light", array{VhFromInt(Device)}))
+    IsActionJustPressed<public>(Action:string, ?ExactMatch:logic = false)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_action_just_pressed", array{VhFromStringName(Action), VhFromLogic(ExactMatch)}))
+    IsActionJustPressedByEvent<public>(Action:string, Event:resource, ?ExactMatch:logic = false)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_action_just_pressed_by_event", array{VhFromStringName(Action), VhFromObject(Event), VhFromLogic(ExactMatch)}))
+    IsActionJustReleased<public>(Action:string, ?ExactMatch:logic = false)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_action_just_released", array{VhFromStringName(Action), VhFromLogic(ExactMatch)}))
+    IsActionJustReleasedByEvent<public>(Action:string, Event:resource, ?ExactMatch:logic = false)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_action_just_released_by_event", array{VhFromStringName(Action), VhFromObject(Event), VhFromLogic(ExactMatch)}))
+    IsActionPressed<public>(Action:string, ?ExactMatch:logic = false)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_action_pressed", array{VhFromStringName(Action), VhFromLogic(ExactMatch)}))
+    IsAnythingPressed<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_anything_pressed", array{}))
+    IsEmulatingMouseFromTouch<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_emulating_mouse_from_touch", array{}))
+    IsEmulatingTouchFromMouse<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_emulating_touch_from_mouse", array{}))
+    IsJoyButtonPressed<public>(Device:int, Button:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_joy_button_pressed", array{VhFromInt(Device), VhFromInt(Button)}))
+    IsJoyKnown<public>(Device:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_joy_known", array{VhFromInt(Device)}))
+    IsKeyLabelPressed<public>(Keycode:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_key_label_pressed", array{VhFromInt(Keycode)}))
+    IsKeyPressed<public>(Keycode:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_key_pressed", array{VhFromInt(Keycode)}))
+    IsMouseButtonPressed<public>(Button:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_mouse_button_pressed", array{VhFromInt(Button)}))
+    IsPhysicalKeyPressed<public>(Keycode:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_physical_key_pressed", array{VhFromInt(Keycode)}))
+    IsUsingAccumulatedInput<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_using_accumulated_input", array{}))
     ParseInputEvent<public>(Event:resource)<transacts>:void = VhCallVoid(Handle, "parse_input_event", array{VhFromObject(Event)})
     RemoveJoyMapping<public>(Guid:string)<transacts>:void = VhCallVoid(Handle, "remove_joy_mapping", array{VhFromString(Guid)})
     SetAccelerometer<public>(Value:vector3)<transacts>:void = VhCallVoid(Handle, "set_accelerometer", array{VhFromVector3(Value)})
@@ -94,7 +94,7 @@ input<public> := class(object):
     SetMagnetometer<public>(Value:vector3)<transacts>:void = VhCallVoid(Handle, "set_magnetometer", array{VhFromVector3(Value)})
     SetMouseMode<public>(Mode:int)<transacts>:void = VhCallVoid(Handle, "set_mouse_mode", array{VhFromInt(Mode)})
     SetUseAccumulatedInput<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_use_accumulated_input", array{VhFromLogic(Enable)})
-    ShouldIgnoreDevice<public>(VendorId:int, ProductId:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "should_ignore_device", array{VhFromInt(VendorId), VhFromInt(ProductId)}]]
+    ShouldIgnoreDevice<public>(VendorId:int, ProductId:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "should_ignore_device", array{VhFromInt(VendorId), VhFromInt(ProductId)}))
     StartJoyVibration<public>(Device:int, WeakMagnitude:float, StrongMagnitude:float, ?Duration:float = 0.0)<transacts>:void = VhCallVoid(Handle, "start_joy_vibration", array{VhFromInt(Device), VhFromFloat(WeakMagnitude), VhFromFloat(StrongMagnitude), VhFromFloat(Duration)})
     StopJoyVibration<public>(Device:int)<transacts>:void = VhCallVoid(Handle, "stop_joy_vibration", array{VhFromInt(Device)})
     VibrateHandheld<public>(?DurationMs:int = 500, ?Amplitude:float = -1.0)<transacts>:void = VhCallVoid(Handle, "vibrate_handheld", array{VhFromInt(DurationMs), VhFromFloat(Amplitude)})
@@ -107,67 +107,67 @@ node<public> := class(object):
     AddChild<public>(Node:node, ?ForceReadableName:logic = false, ?Internal:int = 0)<transacts>:void = VhCallVoid(Handle, "add_child", array{VhFromObject(Node), VhFromLogic(ForceReadableName), VhFromInt(Internal)})
     AddSibling<public>(Sibling:node, ?ForceReadableName:logic = false)<transacts>:void = VhCallVoid(Handle, "add_sibling", array{VhFromObject(Sibling), VhFromLogic(ForceReadableName)})
     AddToGroup<public>(Group:string, ?Persistent:logic = false)<transacts>:void = VhCallVoid(Handle, "add_to_group", array{VhFromStringName(Group), VhFromLogic(Persistent)})
-    Atr<public>(Message:string, ?Context:string = "")<decides><transacts>:string = VhToString[VhCallValue[Handle, "atr", array{VhFromString(Message), VhFromStringName(Context)}]]
-    AtrN<public>(Message:string, PluralMessage:string, N:int, ?Context:string = "")<decides><transacts>:string = VhToString[VhCallValue[Handle, "atr_n", array{VhFromString(Message), VhFromStringName(PluralMessage), VhFromInt(N), VhFromStringName(Context)}]]
-    CanAutoTranslate<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "can_auto_translate", array{}]]
-    CanProcess<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "can_process", array{}]]
-    CreateTween<public>()<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue[Handle, "create_tween", array{}]]}
-    Duplicate<public>(?Flags:int = 15)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue[Handle, "duplicate", array{VhFromInt(Flags)}]]}
-    FindChild<public>(Pattern:string, ?Recursive:logic = true, ?Owned:logic = true)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue[Handle, "find_child", array{VhFromString(Pattern), VhFromLogic(Recursive), VhFromLogic(Owned)}]]}
-    FindParent<public>(Pattern:string)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue[Handle, "find_parent", array{VhFromString(Pattern)}]]}
-    GetAutoTranslateMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_auto_translate_mode", array{}]]
-    GetChild<public>(Idx:int, ?IncludeInternal:logic = false)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue[Handle, "get_child", array{VhFromInt(Idx), VhFromLogic(IncludeInternal)}]]}
-    GetChildCount<public>(?IncludeInternal:logic = false)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_child_count", array{VhFromLogic(IncludeInternal)}]]
-    GetEditorDescription<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_editor_description", array{}]]
-    GetIndex<public>(?IncludeInternal:logic = false)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_index", array{VhFromLogic(IncludeInternal)}]]
-    GetLastExclusiveWindow<public>()<decides><transacts>:window = window{Handle := VhToHandle[VhCallValue[Handle, "get_last_exclusive_window", array{}]]}
-    GetMultiplayer<public>()<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue[Handle, "get_multiplayer", array{}]]}
-    GetMultiplayerAuthority<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_multiplayer_authority", array{}]]
-    GetName<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_name", array{}]]
-    GetNode<public>(Path:string)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue[Handle, "get_node", array{VhFromNodePath(Path)}]]}
-    GetNodeOrNull<public>(Path:string)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue[Handle, "get_node_or_null", array{VhFromNodePath(Path)}]]}
-    GetOwner<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue[Handle, "get_owner", array{}]]}
-    GetParent<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue[Handle, "get_parent", array{}]]}
-    GetPath<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_path", array{}]]
-    GetPathTo<public>(Node:node, ?UseUniquePath:logic = false)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_path_to", array{VhFromObject(Node), VhFromLogic(UseUniquePath)}]]
-    GetPhysicsInterpolationMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_physics_interpolation_mode", array{}]]
-    GetPhysicsProcessDeltaTime<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_physics_process_delta_time", array{}]]
-    GetPhysicsProcessPriority<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_physics_process_priority", array{}]]
-    GetProcessDeltaTime<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_process_delta_time", array{}]]
-    GetProcessMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_process_mode", array{}]]
-    GetProcessPriority<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_process_priority", array{}]]
-    GetProcessThreadGroup<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_process_thread_group", array{}]]
-    GetProcessThreadGroupOrder<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_process_thread_group_order", array{}]]
-    GetProcessThreadMessages<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_process_thread_messages", array{}]]
-    GetSceneFilePath<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_scene_file_path", array{}]]
-    GetSceneInstanceLoadPlaceholder<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_scene_instance_load_placeholder", array{}]]
-    GetTree<public>()<decides><transacts>:scene_tree = scene_tree{Handle := VhToHandle[VhCallValue[Handle, "get_tree", array{}]]}
-    GetTreeString<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_tree_string", array{}]]
-    GetTreeStringPretty<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_tree_string_pretty", array{}]]
-    GetViewport<public>()<decides><transacts>:viewport = viewport{Handle := VhToHandle[VhCallValue[Handle, "get_viewport", array{}]]}
-    GetWindow<public>()<decides><transacts>:window = window{Handle := VhToHandle[VhCallValue[Handle, "get_window", array{}]]}
-    HasNode<public>(Path:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_node", array{VhFromNodePath(Path)}]]
-    HasNodeAndResource<public>(Path:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_node_and_resource", array{VhFromNodePath(Path)}]]
-    IsAncestorOf<public>(Node:node)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_ancestor_of", array{VhFromObject(Node)}]]
-    IsDisplayedFolded<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_displayed_folded", array{}]]
-    IsEditableInstance<public>(Node:node)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_editable_instance", array{VhFromObject(Node)}]]
-    IsGreaterThan<public>(Node:node)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_greater_than", array{VhFromObject(Node)}]]
-    IsInGroup<public>(Group:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_in_group", array{VhFromStringName(Group)}]]
-    IsInsideTree<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_inside_tree", array{}]]
-    IsMultiplayerAuthority<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_multiplayer_authority", array{}]]
-    IsNodeReady<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_node_ready", array{}]]
-    IsPartOfEditedScene<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_part_of_edited_scene", array{}]]
-    IsPhysicsInterpolated<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_physics_interpolated", array{}]]
-    IsPhysicsInterpolatedAndEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_physics_interpolated_and_enabled", array{}]]
-    IsPhysicsProcessing<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_physics_processing", array{}]]
-    IsPhysicsProcessingInternal<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_physics_processing_internal", array{}]]
-    IsProcessing<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_processing", array{}]]
-    IsProcessingInput<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_processing_input", array{}]]
-    IsProcessingInternal<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_processing_internal", array{}]]
-    IsProcessingShortcutInput<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_processing_shortcut_input", array{}]]
-    IsProcessingUnhandledInput<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_processing_unhandled_input", array{}]]
-    IsProcessingUnhandledKeyInput<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_processing_unhandled_key_input", array{}]]
-    IsUniqueNameInOwner<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_unique_name_in_owner", array{}]]
+    Atr<public>(Message:string, ?Context:string = "")<transacts>:string = VhToString(VhCallValue(Handle, "atr", array{VhFromString(Message), VhFromStringName(Context)}))
+    AtrN<public>(Message:string, PluralMessage:string, N:int, ?Context:string = "")<transacts>:string = VhToString(VhCallValue(Handle, "atr_n", array{VhFromString(Message), VhFromStringName(PluralMessage), VhFromInt(N), VhFromStringName(Context)}))
+    CanAutoTranslate<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "can_auto_translate", array{}))
+    CanProcess<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "can_process", array{}))
+    CreateTween<public>()<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "create_tween", array{})]}
+    Duplicate<public>(?Flags:int = 15)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "duplicate", array{VhFromInt(Flags)})]}
+    FindChild<public>(Pattern:string, ?Recursive:logic = true, ?Owned:logic = true)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "find_child", array{VhFromString(Pattern), VhFromLogic(Recursive), VhFromLogic(Owned)})]}
+    FindParent<public>(Pattern:string)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "find_parent", array{VhFromString(Pattern)})]}
+    GetAutoTranslateMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_auto_translate_mode", array{}))
+    GetChild<public>(Idx:int, ?IncludeInternal:logic = false)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_child", array{VhFromInt(Idx), VhFromLogic(IncludeInternal)})]}
+    GetChildCount<public>(?IncludeInternal:logic = false)<transacts>:int = VhToInt(VhCallValue(Handle, "get_child_count", array{VhFromLogic(IncludeInternal)}))
+    GetEditorDescription<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_editor_description", array{}))
+    GetIndex<public>(?IncludeInternal:logic = false)<transacts>:int = VhToInt(VhCallValue(Handle, "get_index", array{VhFromLogic(IncludeInternal)}))
+    GetLastExclusiveWindow<public>()<decides><transacts>:window = window{Handle := VhToHandle[VhCallValue(Handle, "get_last_exclusive_window", array{})]}
+    GetMultiplayer<public>()<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue(Handle, "get_multiplayer", array{})]}
+    GetMultiplayerAuthority<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_multiplayer_authority", array{}))
+    GetName<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_name", array{}))
+    GetNode<public>(Path:string)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_node", array{VhFromNodePath(Path)})]}
+    GetNodeOrNull<public>(Path:string)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_node_or_null", array{VhFromNodePath(Path)})]}
+    GetOwner<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_owner", array{})]}
+    GetParent<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_parent", array{})]}
+    GetPath<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_path", array{}))
+    GetPathTo<public>(Node:node, ?UseUniquePath:logic = false)<transacts>:string = VhToString(VhCallValue(Handle, "get_path_to", array{VhFromObject(Node), VhFromLogic(UseUniquePath)}))
+    GetPhysicsInterpolationMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_physics_interpolation_mode", array{}))
+    GetPhysicsProcessDeltaTime<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_physics_process_delta_time", array{}))
+    GetPhysicsProcessPriority<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_physics_process_priority", array{}))
+    GetProcessDeltaTime<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_process_delta_time", array{}))
+    GetProcessMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_process_mode", array{}))
+    GetProcessPriority<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_process_priority", array{}))
+    GetProcessThreadGroup<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_process_thread_group", array{}))
+    GetProcessThreadGroupOrder<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_process_thread_group_order", array{}))
+    GetProcessThreadMessages<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_process_thread_messages", array{}))
+    GetSceneFilePath<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_scene_file_path", array{}))
+    GetSceneInstanceLoadPlaceholder<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_scene_instance_load_placeholder", array{}))
+    GetTree<public>()<decides><transacts>:scene_tree = scene_tree{Handle := VhToHandle[VhCallValue(Handle, "get_tree", array{})]}
+    GetTreeString<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_tree_string", array{}))
+    GetTreeStringPretty<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_tree_string_pretty", array{}))
+    GetViewport<public>()<decides><transacts>:viewport = viewport{Handle := VhToHandle[VhCallValue(Handle, "get_viewport", array{})]}
+    GetWindow<public>()<decides><transacts>:window = window{Handle := VhToHandle[VhCallValue(Handle, "get_window", array{})]}
+    HasNode<public>(Path:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_node", array{VhFromNodePath(Path)}))
+    HasNodeAndResource<public>(Path:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_node_and_resource", array{VhFromNodePath(Path)}))
+    IsAncestorOf<public>(Node:node)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_ancestor_of", array{VhFromObject(Node)}))
+    IsDisplayedFolded<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_displayed_folded", array{}))
+    IsEditableInstance<public>(Node:node)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_editable_instance", array{VhFromObject(Node)}))
+    IsGreaterThan<public>(Node:node)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_greater_than", array{VhFromObject(Node)}))
+    IsInGroup<public>(Group:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_in_group", array{VhFromStringName(Group)}))
+    IsInsideTree<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_inside_tree", array{}))
+    IsMultiplayerAuthority<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_multiplayer_authority", array{}))
+    IsNodeReady<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_node_ready", array{}))
+    IsPartOfEditedScene<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_part_of_edited_scene", array{}))
+    IsPhysicsInterpolated<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_physics_interpolated", array{}))
+    IsPhysicsInterpolatedAndEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_physics_interpolated_and_enabled", array{}))
+    IsPhysicsProcessing<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_physics_processing", array{}))
+    IsPhysicsProcessingInternal<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_physics_processing_internal", array{}))
+    IsProcessing<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_processing", array{}))
+    IsProcessingInput<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_processing_input", array{}))
+    IsProcessingInternal<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_processing_internal", array{}))
+    IsProcessingShortcutInput<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_processing_shortcut_input", array{}))
+    IsProcessingUnhandledInput<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_processing_unhandled_input", array{}))
+    IsProcessingUnhandledKeyInput<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_processing_unhandled_key_input", array{}))
+    IsUniqueNameInOwner<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_unique_name_in_owner", array{}))
     MoveChild<public>(ChildNode:node, ToIndex:int)<transacts>:void = VhCallVoid(Handle, "move_child", array{VhFromObject(ChildNode), VhFromInt(ToIndex)})
     NotifyDeferredThreadGroup<public>(What:int)<transacts>:void = VhCallVoid(Handle, "notify_deferred_thread_group", array{VhFromInt(What)})
     NotifyThreadSafe<public>(What:int)<transacts>:void = VhCallVoid(Handle, "notify_thread_safe", array{VhFromInt(What)})
@@ -212,52 +212,52 @@ node<public> := class(object):
 
 ref_counted<public> := class(object):
 
-    GetReferenceCount<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_reference_count", array{}]]
-    InitRef<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "init_ref", array{}]]
-    Reference<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "reference", array{}]]
-    Unreference<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "unreference", array{}]]
+    GetReferenceCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_reference_count", array{}))
+    InitRef<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "init_ref", array{}))
+    Reference<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "reference", array{}))
+    Unreference<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "unreference", array{}))
 
 time<public> := class(object):
 
-    GetDateStringFromSystem<public>(?Utc:logic = false)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_date_string_from_system", array{VhFromLogic(Utc)}]]
-    GetDateStringFromUnixTime<public>(UnixTimeVal:int)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_date_string_from_unix_time", array{VhFromInt(UnixTimeVal)}]]
-    GetDatetimeStringFromSystem<public>(?Utc:logic = false, ?UseSpace:logic = false)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_datetime_string_from_system", array{VhFromLogic(Utc), VhFromLogic(UseSpace)}]]
-    GetDatetimeStringFromUnixTime<public>(UnixTimeVal:int, ?UseSpace:logic = false)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_datetime_string_from_unix_time", array{VhFromInt(UnixTimeVal), VhFromLogic(UseSpace)}]]
-    GetOffsetStringFromOffsetMinutes<public>(OffsetMinutes:int)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_offset_string_from_offset_minutes", array{VhFromInt(OffsetMinutes)}]]
-    GetTicksMsec<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_ticks_msec", array{}]]
-    GetTicksUsec<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_ticks_usec", array{}]]
-    GetTimeStringFromSystem<public>(?Utc:logic = false)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_time_string_from_system", array{VhFromLogic(Utc)}]]
-    GetTimeStringFromUnixTime<public>(UnixTimeVal:int)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_time_string_from_unix_time", array{VhFromInt(UnixTimeVal)}]]
-    GetUnixTimeFromDatetimeString<public>(Datetime:string)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_unix_time_from_datetime_string", array{VhFromString(Datetime)}]]
-    GetUnixTimeFromSystem<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_unix_time_from_system", array{}]]
+    GetDateStringFromSystem<public>(?Utc:logic = false)<transacts>:string = VhToString(VhCallValue(Handle, "get_date_string_from_system", array{VhFromLogic(Utc)}))
+    GetDateStringFromUnixTime<public>(UnixTimeVal:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_date_string_from_unix_time", array{VhFromInt(UnixTimeVal)}))
+    GetDatetimeStringFromSystem<public>(?Utc:logic = false, ?UseSpace:logic = false)<transacts>:string = VhToString(VhCallValue(Handle, "get_datetime_string_from_system", array{VhFromLogic(Utc), VhFromLogic(UseSpace)}))
+    GetDatetimeStringFromUnixTime<public>(UnixTimeVal:int, ?UseSpace:logic = false)<transacts>:string = VhToString(VhCallValue(Handle, "get_datetime_string_from_unix_time", array{VhFromInt(UnixTimeVal), VhFromLogic(UseSpace)}))
+    GetOffsetStringFromOffsetMinutes<public>(OffsetMinutes:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_offset_string_from_offset_minutes", array{VhFromInt(OffsetMinutes)}))
+    GetTicksMsec<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_ticks_msec", array{}))
+    GetTicksUsec<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_ticks_usec", array{}))
+    GetTimeStringFromSystem<public>(?Utc:logic = false)<transacts>:string = VhToString(VhCallValue(Handle, "get_time_string_from_system", array{VhFromLogic(Utc)}))
+    GetTimeStringFromUnixTime<public>(UnixTimeVal:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_time_string_from_unix_time", array{VhFromInt(UnixTimeVal)}))
+    GetUnixTimeFromDatetimeString<public>(Datetime:string)<transacts>:int = VhToInt(VhCallValue(Handle, "get_unix_time_from_datetime_string", array{VhFromString(Datetime)}))
+    GetUnixTimeFromSystem<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_unix_time_from_system", array{}))
 
 animation_mixer<public> := class(node):
 
-    AddAnimationLibrary<public>(Name:string, Library:resource)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "add_animation_library", array{VhFromStringName(Name), VhFromObject(Library)}]]
+    AddAnimationLibrary<public>(Name:string, Library:resource)<transacts>:int = VhToInt(VhCallValue(Handle, "add_animation_library", array{VhFromStringName(Name), VhFromObject(Library)}))
     Advance<public>(Delta:float)<transacts>:void = VhCallVoid(Handle, "advance", array{VhFromFloat(Delta)})
     Capture<public>(Name:string, Duration:float, ?TransType:int = 0, ?EaseType:int = 0)<transacts>:void = VhCallVoid(Handle, "capture", array{VhFromStringName(Name), VhFromFloat(Duration), VhFromInt(TransType), VhFromInt(EaseType)})
     ClearCaches<public>()<transacts>:void = VhCallVoid(Handle, "clear_caches", array{})
-    FindAnimation<public>(Animation:resource)<decides><transacts>:string = VhToString[VhCallValue[Handle, "find_animation", array{VhFromObject(Animation)}]]
-    FindAnimationLibrary<public>(Animation:resource)<decides><transacts>:string = VhToString[VhCallValue[Handle, "find_animation_library", array{VhFromObject(Animation)}]]
-    GetAnimation<public>(Name:string)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_animation", array{VhFromStringName(Name)}]]}
-    GetAnimationLibrary<public>(Name:string)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_animation_library", array{VhFromStringName(Name)}]]}
-    GetAnimationList<public>()<decides><transacts>:[]string = VhToStrings(VhCallValue[Handle, "get_animation_list", array{}])
-    GetAudioMaxPolyphony<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_audio_max_polyphony", array{}]]
-    GetCallbackModeDiscrete<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_callback_mode_discrete", array{}]]
-    GetCallbackModeMethod<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_callback_mode_method", array{}]]
-    GetCallbackModeProcess<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_callback_mode_process", array{}]]
-    GetRootMotionPosition<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_root_motion_position", array{}]]
-    GetRootMotionPositionAccumulator<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_root_motion_position_accumulator", array{}]]
-    GetRootMotionScale<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_root_motion_scale", array{}]]
-    GetRootMotionScaleAccumulator<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_root_motion_scale_accumulator", array{}]]
-    GetRootMotionTrack<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_root_motion_track", array{}]]
-    GetRootNode<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_root_node", array{}]]
-    HasAnimation<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_animation", array{VhFromStringName(Name)}]]
-    HasAnimationLibrary<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_animation_library", array{VhFromStringName(Name)}]]
-    IsActive<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_active", array{}]]
-    IsDeterministic<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_deterministic", array{}]]
-    IsResetOnSaveEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_reset_on_save_enabled", array{}]]
-    IsRootMotionLocal<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_root_motion_local", array{}]]
+    FindAnimation<public>(Animation:resource)<transacts>:string = VhToString(VhCallValue(Handle, "find_animation", array{VhFromObject(Animation)}))
+    FindAnimationLibrary<public>(Animation:resource)<transacts>:string = VhToString(VhCallValue(Handle, "find_animation_library", array{VhFromObject(Animation)}))
+    GetAnimation<public>(Name:string)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_animation", array{VhFromStringName(Name)})]}
+    GetAnimationLibrary<public>(Name:string)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_animation_library", array{VhFromStringName(Name)})]}
+    GetAnimationList<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_animation_list", array{}))
+    GetAudioMaxPolyphony<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_audio_max_polyphony", array{}))
+    GetCallbackModeDiscrete<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_callback_mode_discrete", array{}))
+    GetCallbackModeMethod<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_callback_mode_method", array{}))
+    GetCallbackModeProcess<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_callback_mode_process", array{}))
+    GetRootMotionPosition<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_root_motion_position", array{}))
+    GetRootMotionPositionAccumulator<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_root_motion_position_accumulator", array{}))
+    GetRootMotionScale<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_root_motion_scale", array{}))
+    GetRootMotionScaleAccumulator<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_root_motion_scale_accumulator", array{}))
+    GetRootMotionTrack<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_root_motion_track", array{}))
+    GetRootNode<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_root_node", array{}))
+    HasAnimation<public>(Name:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_animation", array{VhFromStringName(Name)}))
+    HasAnimationLibrary<public>(Name:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_animation_library", array{VhFromStringName(Name)}))
+    IsActive<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_active", array{}))
+    IsDeterministic<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_deterministic", array{}))
+    IsResetOnSaveEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_reset_on_save_enabled", array{}))
+    IsRootMotionLocal<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_root_motion_local", array{}))
     RemoveAnimationLibrary<public>(Name:string)<transacts>:void = VhCallVoid(Handle, "remove_animation_library", array{VhFromStringName(Name)})
     RenameAnimationLibrary<public>(Name:string, Newname:string)<transacts>:void = VhCallVoid(Handle, "rename_animation_library", array{VhFromStringName(Name), VhFromStringName(Newname)})
     SetActive<public>(Active:logic)<transacts>:void = VhCallVoid(Handle, "set_active", array{VhFromLogic(Active)})
@@ -273,20 +273,20 @@ animation_mixer<public> := class(node):
 
 audio_stream_player<public> := class(node):
 
-    GetBus<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_bus", array{}]]
-    GetMaxPolyphony<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_max_polyphony", array{}]]
-    GetMixTarget<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_mix_target", array{}]]
-    GetPitchScale<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_pitch_scale", array{}]]
-    GetPlaybackPosition<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_playback_position", array{}]]
-    GetPlaybackType<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_playback_type", array{}]]
-    GetStream<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_stream", array{}]]}
-    GetStreamPaused<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_stream_paused", array{}]]
-    GetStreamPlayback<public>()<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue[Handle, "get_stream_playback", array{}]]}
-    GetVolumeDb<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_volume_db", array{}]]
-    GetVolumeLinear<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_volume_linear", array{}]]
-    HasStreamPlayback<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_stream_playback", array{}]]
-    IsAutoplayEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_autoplay_enabled", array{}]]
-    IsPlaying<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_playing", array{}]]
+    GetBus<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_bus", array{}))
+    GetMaxPolyphony<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_max_polyphony", array{}))
+    GetMixTarget<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_mix_target", array{}))
+    GetPitchScale<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_pitch_scale", array{}))
+    GetPlaybackPosition<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_playback_position", array{}))
+    GetPlaybackType<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_playback_type", array{}))
+    GetStream<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_stream", array{})]}
+    GetStreamPaused<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_stream_paused", array{}))
+    GetStreamPlayback<public>()<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue(Handle, "get_stream_playback", array{})]}
+    GetVolumeDb<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_volume_db", array{}))
+    GetVolumeLinear<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_volume_linear", array{}))
+    HasStreamPlayback<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_stream_playback", array{}))
+    IsAutoplayEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_autoplay_enabled", array{}))
+    IsPlaying<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_playing", array{}))
     Play<public>(?FromPosition:float = 0.0)<transacts>:void = VhCallVoid(Handle, "play", array{VhFromFloat(FromPosition)})
     Seek<public>(ToPosition:float)<transacts>:void = VhCallVoid(Handle, "seek", array{VhFromFloat(ToPosition)})
     SetAutoplay<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_autoplay", array{VhFromLogic(Enable)})
@@ -322,32 +322,32 @@ canvas_item<public> := class(node):
     DrawStringOutline<public>(Font:resource, Pos:vector2, Text:string, ?Alignment:int = 0, ?Width:float = -1.0, ?FontSize:int = 16, ?Size:int = 1, ?Modulate:color = color{R := 1.0, G := 1.0, B := 1.0, A := 1.0}, ?JustificationFlags:int = 3, ?Direction:int = 0, ?Orientation:int = 0, ?Oversampling:float = 0.0)<transacts>:void = VhCallVoid(Handle, "draw_string_outline", array{VhFromObject(Font), VhFromVector2(Pos), VhFromString(Text), VhFromInt(Alignment), VhFromFloat(Width), VhFromInt(FontSize), VhFromInt(Size), VhFromColor(Modulate), VhFromInt(JustificationFlags), VhFromInt(Direction), VhFromInt(Orientation), VhFromFloat(Oversampling)})
     DrawTexture<public>(Texture:texture2d, Position:vector2, ?Modulate:color = color{R := 1.0, G := 1.0, B := 1.0, A := 1.0})<transacts>:void = VhCallVoid(Handle, "draw_texture", array{VhFromObject(Texture), VhFromVector2(Position), VhFromColor(Modulate)})
     ForceUpdateTransform<public>()<transacts>:void = VhCallVoid(Handle, "force_update_transform", array{})
-    GetCanvasLayerNode<public>()<decides><transacts>:canvas_layer = canvas_layer{Handle := VhToHandle[VhCallValue[Handle, "get_canvas_layer_node", array{}]]}
-    GetClipChildrenMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_clip_children_mode", array{}]]
-    GetGlobalMousePosition<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_global_mouse_position", array{}]]
-    GetLightMask<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_light_mask", array{}]]
-    GetLocalMousePosition<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_local_mouse_position", array{}]]
-    GetMaterial<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_material", array{}]]}
-    GetModulate<public>()<decides><transacts>:color = VhToColor[VhCallValue[Handle, "get_modulate", array{}]]
-    GetSelfModulate<public>()<decides><transacts>:color = VhToColor[VhCallValue[Handle, "get_self_modulate", array{}]]
-    GetTextureFilter<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_texture_filter", array{}]]
-    GetTextureRepeat<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_texture_repeat", array{}]]
-    GetUseParentMaterial<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_use_parent_material", array{}]]
-    GetVisibilityLayer<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_visibility_layer", array{}]]
-    GetVisibilityLayerBit<public>(Layer:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_visibility_layer_bit", array{VhFromInt(Layer)}]]
-    GetWorld2d<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_world_2d", array{}]]}
-    GetZIndex<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_z_index", array{}]]
+    GetCanvasLayerNode<public>()<decides><transacts>:canvas_layer = canvas_layer{Handle := VhToHandle[VhCallValue(Handle, "get_canvas_layer_node", array{})]}
+    GetClipChildrenMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_clip_children_mode", array{}))
+    GetGlobalMousePosition<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_global_mouse_position", array{}))
+    GetLightMask<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_light_mask", array{}))
+    GetLocalMousePosition<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_local_mouse_position", array{}))
+    GetMaterial<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_material", array{})]}
+    GetModulate<public>()<transacts>:color = VhToColor(VhCallValue(Handle, "get_modulate", array{}))
+    GetSelfModulate<public>()<transacts>:color = VhToColor(VhCallValue(Handle, "get_self_modulate", array{}))
+    GetTextureFilter<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_texture_filter", array{}))
+    GetTextureRepeat<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_texture_repeat", array{}))
+    GetUseParentMaterial<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_use_parent_material", array{}))
+    GetVisibilityLayer<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_visibility_layer", array{}))
+    GetVisibilityLayerBit<public>(Layer:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_visibility_layer_bit", array{VhFromInt(Layer)}))
+    GetWorld2d<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_world_2d", array{})]}
+    GetZIndex<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_z_index", array{}))
     Hide<public>()<transacts>:void = VhCallVoid(Handle, "hide", array{})
-    IsDrawBehindParentEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_draw_behind_parent_enabled", array{}]]
-    IsLocalTransformNotificationEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_local_transform_notification_enabled", array{}]]
-    IsSetAsTopLevel<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_set_as_top_level", array{}]]
-    IsTransformNotificationEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_transform_notification_enabled", array{}]]
-    IsVisible<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_visible", array{}]]
-    IsVisibleInTree<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_visible_in_tree", array{}]]
-    IsYSortEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_y_sort_enabled", array{}]]
-    IsZRelative<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_z_relative", array{}]]
-    MakeCanvasPositionLocal<public>(ViewportPoint:vector2)<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "make_canvas_position_local", array{VhFromVector2(ViewportPoint)}]]
-    MakeInputLocal<public>(Event:resource)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "make_input_local", array{VhFromObject(Event)}]]}
+    IsDrawBehindParentEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_draw_behind_parent_enabled", array{}))
+    IsLocalTransformNotificationEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_local_transform_notification_enabled", array{}))
+    IsSetAsTopLevel<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_set_as_top_level", array{}))
+    IsTransformNotificationEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_transform_notification_enabled", array{}))
+    IsVisible<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_visible", array{}))
+    IsVisibleInTree<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_visible_in_tree", array{}))
+    IsYSortEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_y_sort_enabled", array{}))
+    IsZRelative<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_z_relative", array{}))
+    MakeCanvasPositionLocal<public>(ViewportPoint:vector2)<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "make_canvas_position_local", array{VhFromVector2(ViewportPoint)}))
+    MakeInputLocal<public>(Event:resource)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "make_input_local", array{VhFromObject(Event)})]}
     MoveToFront<public>()<transacts>:void = VhCallVoid(Handle, "move_to_front", array{})
     QueueRedraw<public>()<transacts>:void = VhCallVoid(Handle, "queue_redraw", array{})
     SetAsTopLevel<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_as_top_level", array{VhFromLogic(Enable)})
@@ -372,15 +372,15 @@ canvas_item<public> := class(node):
 
 canvas_layer<public> := class(node):
 
-    GetCustomViewport<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue[Handle, "get_custom_viewport", array{}]]}
-    GetFollowViewportScale<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_follow_viewport_scale", array{}]]
-    GetLayer<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_layer", array{}]]
-    GetOffset<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_offset", array{}]]
-    GetRotation<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_rotation", array{}]]
-    GetScale<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_scale", array{}]]
+    GetCustomViewport<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_custom_viewport", array{})]}
+    GetFollowViewportScale<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_follow_viewport_scale", array{}))
+    GetLayer<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_layer", array{}))
+    GetOffset<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_offset", array{}))
+    GetRotation<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_rotation", array{}))
+    GetScale<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_scale", array{}))
     Hide<public>()<transacts>:void = VhCallVoid(Handle, "hide", array{})
-    IsFollowingViewport<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_following_viewport", array{}]]
-    IsVisible<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_visible", array{}]]
+    IsFollowingViewport<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_following_viewport", array{}))
+    IsVisible<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_visible", array{}))
     SetCustomViewport<public>(Viewport:node)<transacts>:void = VhCallVoid(Handle, "set_custom_viewport", array{VhFromObject(Viewport)})
     SetFollowViewport<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_follow_viewport", array{VhFromLogic(Enable)})
     SetFollowViewportScale<public>(Scale:float)<transacts>:void = VhCallVoid(Handle, "set_follow_viewport_scale", array{VhFromFloat(Scale)})
@@ -397,28 +397,28 @@ node3d<public> := class(node):
     ClearGizmos<public>()<transacts>:void = VhCallVoid(Handle, "clear_gizmos", array{})
     ClearSubgizmoSelection<public>()<transacts>:void = VhCallVoid(Handle, "clear_subgizmo_selection", array{})
     ForceUpdateTransform<public>()<transacts>:void = VhCallVoid(Handle, "force_update_transform", array{})
-    GetGlobalPosition<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_global_position", array{}]]
-    GetGlobalRotation<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_global_rotation", array{}]]
-    GetGlobalRotationDegrees<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_global_rotation_degrees", array{}]]
-    GetParentNode3d<public>()<decides><transacts>:node3d = node3d{Handle := VhToHandle[VhCallValue[Handle, "get_parent_node_3d", array{}]]}
-    GetPosition<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_position", array{}]]
-    GetRotation<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_rotation", array{}]]
-    GetRotationDegrees<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_rotation_degrees", array{}]]
-    GetRotationEditMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_rotation_edit_mode", array{}]]
-    GetRotationOrder<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_rotation_order", array{}]]
-    GetScale<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_scale", array{}]]
-    GetVisibilityParent<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_visibility_parent", array{}]]
-    GetWorld3d<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_world_3d", array{}]]}
+    GetGlobalPosition<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_global_position", array{}))
+    GetGlobalRotation<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_global_rotation", array{}))
+    GetGlobalRotationDegrees<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_global_rotation_degrees", array{}))
+    GetParentNode3d<public>()<decides><transacts>:node3d = node3d{Handle := VhToHandle[VhCallValue(Handle, "get_parent_node_3d", array{})]}
+    GetPosition<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_position", array{}))
+    GetRotation<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_rotation", array{}))
+    GetRotationDegrees<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_rotation_degrees", array{}))
+    GetRotationEditMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_rotation_edit_mode", array{}))
+    GetRotationOrder<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_rotation_order", array{}))
+    GetScale<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_scale", array{}))
+    GetVisibilityParent<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_visibility_parent", array{}))
+    GetWorld3d<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_world_3d", array{})]}
     GlobalRotate<public>(Axis:vector3, Angle:float)<transacts>:void = VhCallVoid(Handle, "global_rotate", array{VhFromVector3(Axis), VhFromFloat(Angle)})
     GlobalScale<public>(Scale:vector3)<transacts>:void = VhCallVoid(Handle, "global_scale", array{VhFromVector3(Scale)})
     GlobalTranslate<public>(Offset:vector3)<transacts>:void = VhCallVoid(Handle, "global_translate", array{VhFromVector3(Offset)})
     Hide<public>()<transacts>:void = VhCallVoid(Handle, "hide", array{})
-    IsLocalTransformNotificationEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_local_transform_notification_enabled", array{}]]
-    IsScaleDisabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_scale_disabled", array{}]]
-    IsSetAsTopLevel<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_set_as_top_level", array{}]]
-    IsTransformNotificationEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_transform_notification_enabled", array{}]]
-    IsVisible<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_visible", array{}]]
-    IsVisibleInTree<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_visible_in_tree", array{}]]
+    IsLocalTransformNotificationEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_local_transform_notification_enabled", array{}))
+    IsScaleDisabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_scale_disabled", array{}))
+    IsSetAsTopLevel<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_set_as_top_level", array{}))
+    IsTransformNotificationEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_transform_notification_enabled", array{}))
+    IsVisible<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_visible", array{}))
+    IsVisibleInTree<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_visible_in_tree", array{}))
     LookAt<public>(Target:vector3, ?Up:vector3 = vector3{X := 0.0, Y := 1.0, Z := 0.0}, ?UseModelFront:logic = false)<transacts>:void = VhCallVoid(Handle, "look_at", array{VhFromVector3(Target), VhFromVector3(Up), VhFromLogic(UseModelFront)})
     LookAtFromPosition<public>(Position:vector3, Target:vector3, ?Up:vector3 = vector3{X := 0.0, Y := 1.0, Z := 0.0}, ?UseModelFront:logic = false)<transacts>:void = VhCallVoid(Handle, "look_at_from_position", array{VhFromVector3(Position), VhFromVector3(Target), VhFromVector3(Up), VhFromLogic(UseModelFront)})
     Orthonormalize<public>()<transacts>:void = VhCallVoid(Handle, "orthonormalize", array{})
@@ -446,37 +446,37 @@ node3d<public> := class(node):
     SetVisibilityParent<public>(Path:string)<transacts>:void = VhCallVoid(Handle, "set_visibility_parent", array{VhFromNodePath(Path)})
     SetVisible<public>(Visible:logic)<transacts>:void = VhCallVoid(Handle, "set_visible", array{VhFromLogic(Visible)})
     Show<public>()<transacts>:void = VhCallVoid(Handle, "show", array{})
-    ToGlobal<public>(LocalPoint:vector3)<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "to_global", array{VhFromVector3(LocalPoint)}]]
-    ToLocal<public>(GlobalPoint:vector3)<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "to_local", array{VhFromVector3(GlobalPoint)}]]
+    ToGlobal<public>(LocalPoint:vector3)<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "to_global", array{VhFromVector3(LocalPoint)}))
+    ToLocal<public>(GlobalPoint:vector3)<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "to_local", array{VhFromVector3(GlobalPoint)}))
     Translate<public>(Offset:vector3)<transacts>:void = VhCallVoid(Handle, "translate", array{VhFromVector3(Offset)})
     TranslateObjectLocal<public>(Offset:vector3)<transacts>:void = VhCallVoid(Handle, "translate_object_local", array{VhFromVector3(Offset)})
     UpdateGizmos<public>()<transacts>:void = VhCallVoid(Handle, "update_gizmos", array{})
 
 random_number_generator<public> := class(ref_counted):
 
-    GetSeed<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_seed", array{}]]
-    GetState<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_state", array{}]]
-    Randf<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "randf", array{}]]
-    RandfRange<public>(From:float, To:float)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "randf_range", array{VhFromFloat(From), VhFromFloat(To)}]]
-    Randfn<public>(?Mean:float = 0.0, ?Deviation:float = 1.0)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "randfn", array{VhFromFloat(Mean), VhFromFloat(Deviation)}]]
-    Randi<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "randi", array{}]]
-    RandiRange<public>(From:int, To:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "randi_range", array{VhFromInt(From), VhFromInt(To)}]]
+    GetSeed<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_seed", array{}))
+    GetState<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_state", array{}))
+    Randf<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "randf", array{}))
+    RandfRange<public>(From:float, To:float)<transacts>:float = VhToFloat(VhCallValue(Handle, "randf_range", array{VhFromFloat(From), VhFromFloat(To)}))
+    Randfn<public>(?Mean:float = 0.0, ?Deviation:float = 1.0)<transacts>:float = VhToFloat(VhCallValue(Handle, "randfn", array{VhFromFloat(Mean), VhFromFloat(Deviation)}))
+    Randi<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "randi", array{}))
+    RandiRange<public>(From:int, To:int)<transacts>:int = VhToInt(VhCallValue(Handle, "randi_range", array{VhFromInt(From), VhFromInt(To)}))
     Randomize<public>()<transacts>:void = VhCallVoid(Handle, "randomize", array{})
     SetSeed<public>(Seed:int)<transacts>:void = VhCallVoid(Handle, "set_seed", array{VhFromInt(Seed)})
     SetState<public>(State:int)<transacts>:void = VhCallVoid(Handle, "set_state", array{VhFromInt(State)})
 
 resource<public> := class(ref_counted):
 
-    Duplicate<public>(?Deep:logic = false)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "duplicate", array{VhFromLogic(Deep)}]]}
-    DuplicateDeep<public>(?DeepSubresourcesMode:int = 1)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "duplicate_deep", array{VhFromInt(DeepSubresourcesMode)}]]}
+    Duplicate<public>(?Deep:logic = false)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "duplicate", array{VhFromLogic(Deep)})]}
+    DuplicateDeep<public>(?DeepSubresourcesMode:int = 1)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "duplicate_deep", array{VhFromInt(DeepSubresourcesMode)})]}
     EmitChanged<public>()<transacts>:void = VhCallVoid(Handle, "emit_changed", array{})
-    GetIdForPath<public>(Path:string)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_id_for_path", array{VhFromString(Path)}]]
-    GetLocalScene<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue[Handle, "get_local_scene", array{}]]}
-    GetName<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_name", array{}]]
-    GetPath<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_path", array{}]]
-    GetSceneUniqueId<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_scene_unique_id", array{}]]
-    IsBuiltIn<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_built_in", array{}]]
-    IsLocalToScene<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_local_to_scene", array{}]]
+    GetIdForPath<public>(Path:string)<transacts>:string = VhToString(VhCallValue(Handle, "get_id_for_path", array{VhFromString(Path)}))
+    GetLocalScene<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_local_scene", array{})]}
+    GetName<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_name", array{}))
+    GetPath<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_path", array{}))
+    GetSceneUniqueId<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_scene_unique_id", array{}))
+    IsBuiltIn<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_built_in", array{}))
+    IsLocalToScene<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_local_to_scene", array{}))
     ResetState<public>()<transacts>:void = VhCallVoid(Handle, "reset_state", array{})
     SetIdForPath<public>(Path:string, Id:string)<transacts>:void = VhCallVoid(Handle, "set_id_for_path", array{VhFromString(Path), VhFromString(Id)})
     SetLocalToScene<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_local_to_scene", array{VhFromLogic(Enable)})
@@ -489,34 +489,34 @@ resource<public> := class(ref_counted):
 
 scene_tree<public> := class(main_loop):
 
-    ChangeSceneToFile<public>(Path:string)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "change_scene_to_file", array{VhFromString(Path)}]]
-    ChangeSceneToNode<public>(Node:node)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "change_scene_to_node", array{VhFromObject(Node)}]]
-    ChangeSceneToPacked<public>(PackedScene:packed_scene)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "change_scene_to_packed", array{VhFromObject(PackedScene)}]]
-    CreateTimer<public>(TimeSec:float, ?ProcessAlways:logic = true, ?ProcessInPhysics:logic = false, ?IgnoreTimeScale:logic = false)<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue[Handle, "create_timer", array{VhFromFloat(TimeSec), VhFromLogic(ProcessAlways), VhFromLogic(ProcessInPhysics), VhFromLogic(IgnoreTimeScale)}]]}
-    CreateTween<public>()<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue[Handle, "create_tween", array{}]]}
-    GetCurrentScene<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue[Handle, "get_current_scene", array{}]]}
-    GetEditedSceneRoot<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue[Handle, "get_edited_scene_root", array{}]]}
-    GetFirstNodeInGroup<public>(Group:string)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue[Handle, "get_first_node_in_group", array{VhFromStringName(Group)}]]}
-    GetFrame<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_frame", array{}]]
-    GetMultiplayer<public>(?ForPath:string = "")<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue[Handle, "get_multiplayer", array{VhFromNodePath(ForPath)}]]}
-    GetNodeCount<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_node_count", array{}]]
-    GetNodeCountInGroup<public>(Group:string)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_node_count_in_group", array{VhFromStringName(Group)}]]
-    GetRoot<public>()<decides><transacts>:window = window{Handle := VhToHandle[VhCallValue[Handle, "get_root", array{}]]}
-    HasGroup<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_group", array{VhFromStringName(Name)}]]
-    IsAccessibilityEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_accessibility_enabled", array{}]]
-    IsAccessibilitySupported<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_accessibility_supported", array{}]]
-    IsAutoAcceptQuit<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_auto_accept_quit", array{}]]
-    IsDebuggingCollisionsHint<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_debugging_collisions_hint", array{}]]
-    IsDebuggingNavigationHint<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_debugging_navigation_hint", array{}]]
-    IsDebuggingPathsHint<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_debugging_paths_hint", array{}]]
-    IsMultiplayerPollEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_multiplayer_poll_enabled", array{}]]
-    IsPaused<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_paused", array{}]]
-    IsPhysicsInterpolationEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_physics_interpolation_enabled", array{}]]
-    IsQuitOnGoBack<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_quit_on_go_back", array{}]]
+    ChangeSceneToFile<public>(Path:string)<transacts>:int = VhToInt(VhCallValue(Handle, "change_scene_to_file", array{VhFromString(Path)}))
+    ChangeSceneToNode<public>(Node:node)<transacts>:int = VhToInt(VhCallValue(Handle, "change_scene_to_node", array{VhFromObject(Node)}))
+    ChangeSceneToPacked<public>(PackedScene:packed_scene)<transacts>:int = VhToInt(VhCallValue(Handle, "change_scene_to_packed", array{VhFromObject(PackedScene)}))
+    CreateTimer<public>(TimeSec:float, ?ProcessAlways:logic = true, ?ProcessInPhysics:logic = false, ?IgnoreTimeScale:logic = false)<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue(Handle, "create_timer", array{VhFromFloat(TimeSec), VhFromLogic(ProcessAlways), VhFromLogic(ProcessInPhysics), VhFromLogic(IgnoreTimeScale)})]}
+    CreateTween<public>()<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "create_tween", array{})]}
+    GetCurrentScene<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_current_scene", array{})]}
+    GetEditedSceneRoot<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_edited_scene_root", array{})]}
+    GetFirstNodeInGroup<public>(Group:string)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_first_node_in_group", array{VhFromStringName(Group)})]}
+    GetFrame<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_frame", array{}))
+    GetMultiplayer<public>(?ForPath:string = "")<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue(Handle, "get_multiplayer", array{VhFromNodePath(ForPath)})]}
+    GetNodeCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_node_count", array{}))
+    GetNodeCountInGroup<public>(Group:string)<transacts>:int = VhToInt(VhCallValue(Handle, "get_node_count_in_group", array{VhFromStringName(Group)}))
+    GetRoot<public>()<decides><transacts>:window = window{Handle := VhToHandle[VhCallValue(Handle, "get_root", array{})]}
+    HasGroup<public>(Name:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_group", array{VhFromStringName(Name)}))
+    IsAccessibilityEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_accessibility_enabled", array{}))
+    IsAccessibilitySupported<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_accessibility_supported", array{}))
+    IsAutoAcceptQuit<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_auto_accept_quit", array{}))
+    IsDebuggingCollisionsHint<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_debugging_collisions_hint", array{}))
+    IsDebuggingNavigationHint<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_debugging_navigation_hint", array{}))
+    IsDebuggingPathsHint<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_debugging_paths_hint", array{}))
+    IsMultiplayerPollEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_multiplayer_poll_enabled", array{}))
+    IsPaused<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_paused", array{}))
+    IsPhysicsInterpolationEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_physics_interpolation_enabled", array{}))
+    IsQuitOnGoBack<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_quit_on_go_back", array{}))
     NotifyGroup<public>(Group:string, Notification:int)<transacts>:void = VhCallVoid(Handle, "notify_group", array{VhFromStringName(Group), VhFromInt(Notification)})
     NotifyGroupFlags<public>(CallFlags:int, Group:string, Notification:int)<transacts>:void = VhCallVoid(Handle, "notify_group_flags", array{VhFromInt(CallFlags), VhFromStringName(Group), VhFromInt(Notification)})
     Quit<public>(?ExitCode:int = 0)<transacts>:void = VhCallVoid(Handle, "quit", array{VhFromInt(ExitCode)})
-    ReloadCurrentScene<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "reload_current_scene", array{}]]
+    ReloadCurrentScene<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "reload_current_scene", array{}))
     SetAutoAcceptQuit<public>(Enabled:logic)<transacts>:void = VhCallVoid(Handle, "set_auto_accept_quit", array{VhFromLogic(Enabled)})
     SetCurrentScene<public>(ChildNode:node)<transacts>:void = VhCallVoid(Handle, "set_current_scene", array{VhFromObject(ChildNode)})
     SetDebugCollisionsHint<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_debug_collisions_hint", array{VhFromLogic(Enable)})
@@ -532,14 +532,14 @@ scene_tree<public> := class(main_loop):
 
 timer<public> := class(node):
 
-    GetTimeLeft<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_time_left", array{}]]
-    GetTimerProcessCallback<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_timer_process_callback", array{}]]
-    GetWaitTime<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_wait_time", array{}]]
-    HasAutostart<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_autostart", array{}]]
-    IsIgnoringTimeScale<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_ignoring_time_scale", array{}]]
-    IsOneShot<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_one_shot", array{}]]
-    IsPaused<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_paused", array{}]]
-    IsStopped<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_stopped", array{}]]
+    GetTimeLeft<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_time_left", array{}))
+    GetTimerProcessCallback<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_timer_process_callback", array{}))
+    GetWaitTime<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_wait_time", array{}))
+    HasAutostart<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_autostart", array{}))
+    IsIgnoringTimeScale<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_ignoring_time_scale", array{}))
+    IsOneShot<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_one_shot", array{}))
+    IsPaused<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_paused", array{}))
+    IsStopped<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_stopped", array{}))
     SetAutostart<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_autostart", array{VhFromLogic(Enable)})
     SetIgnoreTimeScale<public>(Ignore:logic)<transacts>:void = VhCallVoid(Handle, "set_ignore_time_scale", array{VhFromLogic(Ignore)})
     SetOneShot<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_one_shot", array{VhFromLogic(Enable)})
@@ -551,96 +551,96 @@ timer<public> := class(node):
 
 tween<public> := class(ref_counted):
 
-    BindNode<public>(Node:node)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue[Handle, "bind_node", array{VhFromObject(Node)}]]}
-    Chain<public>()<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue[Handle, "chain", array{}]]}
-    CustomStep<public>(Delta:float)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "custom_step", array{VhFromFloat(Delta)}]]
-    GetLoopsLeft<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_loops_left", array{}]]
-    GetTotalElapsedTime<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_total_elapsed_time", array{}]]
-    IsRunning<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_running", array{}]]
-    IsValid<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_valid", array{}]]
+    BindNode<public>(Node:node)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "bind_node", array{VhFromObject(Node)})]}
+    Chain<public>()<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "chain", array{})]}
+    CustomStep<public>(Delta:float)<transacts>:logic = VhToLogic(VhCallValue(Handle, "custom_step", array{VhFromFloat(Delta)}))
+    GetLoopsLeft<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_loops_left", array{}))
+    GetTotalElapsedTime<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_total_elapsed_time", array{}))
+    IsRunning<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_running", array{}))
+    IsValid<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_valid", array{}))
     Kill<public>()<transacts>:void = VhCallVoid(Handle, "kill", array{})
-    Parallel<public>()<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue[Handle, "parallel", array{}]]}
+    Parallel<public>()<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "parallel", array{})]}
     Pause<public>()<transacts>:void = VhCallVoid(Handle, "pause", array{})
     Play<public>()<transacts>:void = VhCallVoid(Handle, "play", array{})
-    SetEase<public>(Ease:int)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue[Handle, "set_ease", array{VhFromInt(Ease)}]]}
-    SetIgnoreTimeScale<public>(?Ignore:logic = true)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue[Handle, "set_ignore_time_scale", array{VhFromLogic(Ignore)}]]}
-    SetLoops<public>(?Loops:int = 0)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue[Handle, "set_loops", array{VhFromInt(Loops)}]]}
-    SetParallel<public>(?Arg0:logic = true)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue[Handle, "set_parallel", array{VhFromLogic(Arg0)}]]}
-    SetPauseMode<public>(Mode:int)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue[Handle, "set_pause_mode", array{VhFromInt(Mode)}]]}
-    SetProcessMode<public>(Mode:int)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue[Handle, "set_process_mode", array{VhFromInt(Mode)}]]}
-    SetSpeedScale<public>(Speed:float)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue[Handle, "set_speed_scale", array{VhFromFloat(Speed)}]]}
-    SetTrans<public>(Trans:int)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue[Handle, "set_trans", array{VhFromInt(Trans)}]]}
+    SetEase<public>(Ease:int)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "set_ease", array{VhFromInt(Ease)})]}
+    SetIgnoreTimeScale<public>(?Ignore:logic = true)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "set_ignore_time_scale", array{VhFromLogic(Ignore)})]}
+    SetLoops<public>(?Loops:int = 0)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "set_loops", array{VhFromInt(Loops)})]}
+    SetParallel<public>(?Arg0:logic = true)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "set_parallel", array{VhFromLogic(Arg0)})]}
+    SetPauseMode<public>(Mode:int)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "set_pause_mode", array{VhFromInt(Mode)})]}
+    SetProcessMode<public>(Mode:int)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "set_process_mode", array{VhFromInt(Mode)})]}
+    SetSpeedScale<public>(Speed:float)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "set_speed_scale", array{VhFromFloat(Speed)})]}
+    SetTrans<public>(Trans:int)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "set_trans", array{VhFromInt(Trans)})]}
     Stop<public>()<transacts>:void = VhCallVoid(Handle, "stop", array{})
-    TweenInterval<public>(Time:float)<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue[Handle, "tween_interval", array{VhFromFloat(Time)}]]}
-    TweenSubtween<public>(Subtween:tween)<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue[Handle, "tween_subtween", array{VhFromObject(Subtween)}]]}
+    TweenInterval<public>(Time:float)<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue(Handle, "tween_interval", array{VhFromFloat(Time)})]}
+    TweenSubtween<public>(Subtween:tween)<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue(Handle, "tween_subtween", array{VhFromObject(Subtween)})]}
 
 viewport<public> := class(node):
 
-    FindWorld2d<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "find_world_2d", array{}]]}
-    FindWorld3d<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "find_world_3d", array{}]]}
-    GetAnisotropicFilteringLevel<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_anisotropic_filtering_level", array{}]]
-    GetAudioListener2d<public>()<decides><transacts>:node2d = node2d{Handle := VhToHandle[VhCallValue[Handle, "get_audio_listener_2d", array{}]]}
-    GetAudioListener3d<public>()<decides><transacts>:node3d = node3d{Handle := VhToHandle[VhCallValue[Handle, "get_audio_listener_3d", array{}]]}
-    GetCamera2d<public>()<decides><transacts>:camera2d = camera2d{Handle := VhToHandle[VhCallValue[Handle, "get_camera_2d", array{}]]}
-    GetCamera3d<public>()<decides><transacts>:camera3d = camera3d{Handle := VhToHandle[VhCallValue[Handle, "get_camera_3d", array{}]]}
-    GetCanvasCullMask<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_canvas_cull_mask", array{}]]
-    GetCanvasCullMaskBit<public>(Layer:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_canvas_cull_mask_bit", array{VhFromInt(Layer)}]]
-    GetDebugDraw<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_debug_draw", array{}]]
-    GetDefaultCanvasItemTextureFilter<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_default_canvas_item_texture_filter", array{}]]
-    GetDefaultCanvasItemTextureRepeat<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_default_canvas_item_texture_repeat", array{}]]
-    GetDragThreshold<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_drag_threshold", array{}]]
-    GetFsrSharpness<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_fsr_sharpness", array{}]]
-    GetMeshLodThreshold<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_mesh_lod_threshold", array{}]]
-    GetMousePosition<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_mouse_position", array{}]]
-    GetMsaa2d<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_msaa_2d", array{}]]
-    GetMsaa3d<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_msaa_3d", array{}]]
-    GetOversampling<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_oversampling", array{}]]
-    GetOversamplingOverride<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_oversampling_override", array{}]]
-    GetPhysicsObjectPicking<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_physics_object_picking", array{}]]
-    GetPhysicsObjectPickingFirstOnly<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_physics_object_picking_first_only", array{}]]
-    GetPhysicsObjectPickingSort<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_physics_object_picking_sort", array{}]]
-    GetPositionalShadowAtlas16Bits<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_positional_shadow_atlas_16_bits", array{}]]
-    GetPositionalShadowAtlasQuadrantSubdiv<public>(Quadrant:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_positional_shadow_atlas_quadrant_subdiv", array{VhFromInt(Quadrant)}]]
-    GetPositionalShadowAtlasSize<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_positional_shadow_atlas_size", array{}]]
-    GetRenderInfo<public>(Type:int, Info:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_render_info", array{VhFromInt(Type), VhFromInt(Info)}]]
-    GetScaling3dMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_scaling_3d_mode", array{}]]
-    GetScaling3dScale<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_scaling_3d_scale", array{}]]
-    GetScreenSpaceAa<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_screen_space_aa", array{}]]
-    GetSdfOversize<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_sdf_oversize", array{}]]
-    GetSdfScale<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_sdf_scale", array{}]]
-    GetTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue[Handle, "get_texture", array{}]]}
-    GetTextureMipmapBias<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_texture_mipmap_bias", array{}]]
-    GetVrsMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_vrs_mode", array{}]]
-    GetVrsTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue[Handle, "get_vrs_texture", array{}]]}
-    GetVrsUpdateMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_vrs_update_mode", array{}]]
-    GetWorld2d<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_world_2d", array{}]]}
-    GetWorld3d<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_world_3d", array{}]]}
+    FindWorld2d<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "find_world_2d", array{})]}
+    FindWorld3d<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "find_world_3d", array{})]}
+    GetAnisotropicFilteringLevel<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_anisotropic_filtering_level", array{}))
+    GetAudioListener2d<public>()<decides><transacts>:node2d = node2d{Handle := VhToHandle[VhCallValue(Handle, "get_audio_listener_2d", array{})]}
+    GetAudioListener3d<public>()<decides><transacts>:node3d = node3d{Handle := VhToHandle[VhCallValue(Handle, "get_audio_listener_3d", array{})]}
+    GetCamera2d<public>()<decides><transacts>:camera2d = camera2d{Handle := VhToHandle[VhCallValue(Handle, "get_camera_2d", array{})]}
+    GetCamera3d<public>()<decides><transacts>:camera3d = camera3d{Handle := VhToHandle[VhCallValue(Handle, "get_camera_3d", array{})]}
+    GetCanvasCullMask<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_canvas_cull_mask", array{}))
+    GetCanvasCullMaskBit<public>(Layer:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_canvas_cull_mask_bit", array{VhFromInt(Layer)}))
+    GetDebugDraw<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_debug_draw", array{}))
+    GetDefaultCanvasItemTextureFilter<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_default_canvas_item_texture_filter", array{}))
+    GetDefaultCanvasItemTextureRepeat<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_default_canvas_item_texture_repeat", array{}))
+    GetDragThreshold<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_drag_threshold", array{}))
+    GetFsrSharpness<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_fsr_sharpness", array{}))
+    GetMeshLodThreshold<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_mesh_lod_threshold", array{}))
+    GetMousePosition<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_mouse_position", array{}))
+    GetMsaa2d<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_msaa_2d", array{}))
+    GetMsaa3d<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_msaa_3d", array{}))
+    GetOversampling<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_oversampling", array{}))
+    GetOversamplingOverride<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_oversampling_override", array{}))
+    GetPhysicsObjectPicking<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_physics_object_picking", array{}))
+    GetPhysicsObjectPickingFirstOnly<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_physics_object_picking_first_only", array{}))
+    GetPhysicsObjectPickingSort<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_physics_object_picking_sort", array{}))
+    GetPositionalShadowAtlas16Bits<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_positional_shadow_atlas_16_bits", array{}))
+    GetPositionalShadowAtlasQuadrantSubdiv<public>(Quadrant:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_positional_shadow_atlas_quadrant_subdiv", array{VhFromInt(Quadrant)}))
+    GetPositionalShadowAtlasSize<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_positional_shadow_atlas_size", array{}))
+    GetRenderInfo<public>(Type:int, Info:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_render_info", array{VhFromInt(Type), VhFromInt(Info)}))
+    GetScaling3dMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_scaling_3d_mode", array{}))
+    GetScaling3dScale<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_scaling_3d_scale", array{}))
+    GetScreenSpaceAa<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_screen_space_aa", array{}))
+    GetSdfOversize<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_sdf_oversize", array{}))
+    GetSdfScale<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_sdf_scale", array{}))
+    GetTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture", array{})]}
+    GetTextureMipmapBias<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_texture_mipmap_bias", array{}))
+    GetVrsMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_vrs_mode", array{}))
+    GetVrsTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_vrs_texture", array{})]}
+    GetVrsUpdateMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_vrs_update_mode", array{}))
+    GetWorld2d<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_world_2d", array{})]}
+    GetWorld3d<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_world_3d", array{})]}
     GuiCancelDrag<public>()<transacts>:void = VhCallVoid(Handle, "gui_cancel_drag", array{})
-    GuiGetDragDescription<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "gui_get_drag_description", array{}]]
-    GuiGetFocusOwner<public>()<decides><transacts>:control = control{Handle := VhToHandle[VhCallValue[Handle, "gui_get_focus_owner", array{}]]}
-    GuiGetHoveredControl<public>()<decides><transacts>:control = control{Handle := VhToHandle[VhCallValue[Handle, "gui_get_hovered_control", array{}]]}
-    GuiIsDragSuccessful<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "gui_is_drag_successful", array{}]]
-    GuiIsDragging<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "gui_is_dragging", array{}]]
+    GuiGetDragDescription<public>()<transacts>:string = VhToString(VhCallValue(Handle, "gui_get_drag_description", array{}))
+    GuiGetFocusOwner<public>()<decides><transacts>:control = control{Handle := VhToHandle[VhCallValue(Handle, "gui_get_focus_owner", array{})]}
+    GuiGetHoveredControl<public>()<decides><transacts>:control = control{Handle := VhToHandle[VhCallValue(Handle, "gui_get_hovered_control", array{})]}
+    GuiIsDragSuccessful<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "gui_is_drag_successful", array{}))
+    GuiIsDragging<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "gui_is_dragging", array{}))
     GuiReleaseFocus<public>()<transacts>:void = VhCallVoid(Handle, "gui_release_focus", array{})
     GuiSetDragDescription<public>(Description:string)<transacts>:void = VhCallVoid(Handle, "gui_set_drag_description", array{VhFromString(Description)})
-    HasTransparentBackground<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_transparent_background", array{}]]
-    Is3dDisabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_3d_disabled", array{}]]
-    IsAudioListener2d<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_audio_listener_2d", array{}]]
-    IsAudioListener3d<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_audio_listener_3d", array{}]]
-    IsEmbeddingSubwindows<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_embedding_subwindows", array{}]]
-    IsHandlingInputLocally<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_handling_input_locally", array{}]]
-    IsInputDisabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_input_disabled", array{}]]
-    IsInputHandled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_input_handled", array{}]]
-    IsSnap2dTransformsToPixelEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_snap_2d_transforms_to_pixel_enabled", array{}]]
-    IsSnap2dVerticesToPixelEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_snap_2d_vertices_to_pixel_enabled", array{}]]
-    IsSnapControlsToPixelsEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_snap_controls_to_pixels_enabled", array{}]]
-    IsUsingDebanding<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_using_debanding", array{}]]
-    IsUsingHdr2d<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_using_hdr_2d", array{}]]
-    IsUsingOcclusionCulling<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_using_occlusion_culling", array{}]]
-    IsUsingOversampling<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_using_oversampling", array{}]]
-    IsUsingOwnWorld3d<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_using_own_world_3d", array{}]]
-    IsUsingTaa<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_using_taa", array{}]]
-    IsUsingXr<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_using_xr", array{}]]
+    HasTransparentBackground<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_transparent_background", array{}))
+    Is3dDisabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_3d_disabled", array{}))
+    IsAudioListener2d<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_audio_listener_2d", array{}))
+    IsAudioListener3d<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_audio_listener_3d", array{}))
+    IsEmbeddingSubwindows<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_embedding_subwindows", array{}))
+    IsHandlingInputLocally<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_handling_input_locally", array{}))
+    IsInputDisabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_input_disabled", array{}))
+    IsInputHandled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_input_handled", array{}))
+    IsSnap2dTransformsToPixelEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_snap_2d_transforms_to_pixel_enabled", array{}))
+    IsSnap2dVerticesToPixelEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_snap_2d_vertices_to_pixel_enabled", array{}))
+    IsSnapControlsToPixelsEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_snap_controls_to_pixels_enabled", array{}))
+    IsUsingDebanding<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_using_debanding", array{}))
+    IsUsingHdr2d<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_using_hdr_2d", array{}))
+    IsUsingOcclusionCulling<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_using_occlusion_culling", array{}))
+    IsUsingOversampling<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_using_oversampling", array{}))
+    IsUsingOwnWorld3d<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_using_own_world_3d", array{}))
+    IsUsingTaa<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_using_taa", array{}))
+    IsUsingXr<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_using_xr", array{}))
     NotifyMouseEntered<public>()<transacts>:void = VhCallVoid(Handle, "notify_mouse_entered", array{})
     NotifyMouseExited<public>()<transacts>:void = VhCallVoid(Handle, "notify_mouse_exited", array{})
     PushInput<public>(Event:resource, ?InLocalCoords:logic = false)<transacts>:void = VhCallVoid(Handle, "push_input", array{VhFromObject(Event), VhFromLogic(InLocalCoords)})
@@ -698,31 +698,31 @@ viewport<public> := class(node):
 
 animation_player<public> := class(animation_mixer):
 
-    AnimationGetNext<public>(AnimationFrom:string)<decides><transacts>:string = VhToString[VhCallValue[Handle, "animation_get_next", array{VhFromStringName(AnimationFrom)}]]
+    AnimationGetNext<public>(AnimationFrom:string)<transacts>:string = VhToString(VhCallValue(Handle, "animation_get_next", array{VhFromStringName(AnimationFrom)}))
     AnimationSetNext<public>(AnimationFrom:string, AnimationTo:string)<transacts>:void = VhCallVoid(Handle, "animation_set_next", array{VhFromStringName(AnimationFrom), VhFromStringName(AnimationTo)})
     ClearQueue<public>()<transacts>:void = VhCallVoid(Handle, "clear_queue", array{})
-    GetAssignedAnimation<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_assigned_animation", array{}]]
-    GetAutoCaptureDuration<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_auto_capture_duration", array{}]]
-    GetAutoCaptureEaseType<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_auto_capture_ease_type", array{}]]
-    GetAutoCaptureTransitionType<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_auto_capture_transition_type", array{}]]
-    GetAutoplay<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_autoplay", array{}]]
-    GetBlendTime<public>(AnimationFrom:string, AnimationTo:string)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_blend_time", array{VhFromStringName(AnimationFrom), VhFromStringName(AnimationTo)}]]
-    GetCurrentAnimation<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_current_animation", array{}]]
-    GetCurrentAnimationLength<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_current_animation_length", array{}]]
-    GetCurrentAnimationPosition<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_current_animation_position", array{}]]
-    GetDefaultBlendTime<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_default_blend_time", array{}]]
-    GetMethodCallMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_method_call_mode", array{}]]
-    GetPlayingSpeed<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_playing_speed", array{}]]
-    GetProcessCallback<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_process_callback", array{}]]
-    GetRoot<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_root", array{}]]
-    GetSectionEndTime<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_section_end_time", array{}]]
-    GetSectionStartTime<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_section_start_time", array{}]]
-    GetSpeedScale<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_speed_scale", array{}]]
-    HasSection<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_section", array{}]]
-    IsAnimationActive<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_animation_active", array{}]]
-    IsAutoCapture<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_auto_capture", array{}]]
-    IsMovieQuitOnFinishEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_movie_quit_on_finish_enabled", array{}]]
-    IsPlaying<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_playing", array{}]]
+    GetAssignedAnimation<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_assigned_animation", array{}))
+    GetAutoCaptureDuration<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_auto_capture_duration", array{}))
+    GetAutoCaptureEaseType<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_auto_capture_ease_type", array{}))
+    GetAutoCaptureTransitionType<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_auto_capture_transition_type", array{}))
+    GetAutoplay<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_autoplay", array{}))
+    GetBlendTime<public>(AnimationFrom:string, AnimationTo:string)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_blend_time", array{VhFromStringName(AnimationFrom), VhFromStringName(AnimationTo)}))
+    GetCurrentAnimation<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_current_animation", array{}))
+    GetCurrentAnimationLength<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_current_animation_length", array{}))
+    GetCurrentAnimationPosition<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_current_animation_position", array{}))
+    GetDefaultBlendTime<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_default_blend_time", array{}))
+    GetMethodCallMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_method_call_mode", array{}))
+    GetPlayingSpeed<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_playing_speed", array{}))
+    GetProcessCallback<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_process_callback", array{}))
+    GetRoot<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_root", array{}))
+    GetSectionEndTime<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_section_end_time", array{}))
+    GetSectionStartTime<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_section_start_time", array{}))
+    GetSpeedScale<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_speed_scale", array{}))
+    HasSection<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_section", array{}))
+    IsAnimationActive<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_animation_active", array{}))
+    IsAutoCapture<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_auto_capture", array{}))
+    IsMovieQuitOnFinishEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_movie_quit_on_finish_enabled", array{}))
+    IsPlaying<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_playing", array{}))
     Pause<public>()<transacts>:void = VhCallVoid(Handle, "pause", array{})
     Play<public>(?Name:string = "", ?CustomBlend:float = -1.0, ?CustomSpeed:float = 1.0, ?FromEnd:logic = false)<transacts>:void = VhCallVoid(Handle, "play", array{VhFromStringName(Name), VhFromFloat(CustomBlend), VhFromFloat(CustomSpeed), VhFromLogic(FromEnd)})
     PlayBackwards<public>(?Name:string = "", ?CustomBlend:float = -1.0)<transacts>:void = VhCallVoid(Handle, "play_backwards", array{VhFromStringName(Name), VhFromFloat(CustomBlend)})
@@ -754,31 +754,31 @@ animation_player<public> := class(animation_mixer):
 
 audio_stream_player3d<public> := class(node3d):
 
-    GetAreaMask<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_area_mask", array{}]]
-    GetAttenuationFilterCutoffHz<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_attenuation_filter_cutoff_hz", array{}]]
-    GetAttenuationFilterDb<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_attenuation_filter_db", array{}]]
-    GetAttenuationModel<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_attenuation_model", array{}]]
-    GetBus<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_bus", array{}]]
-    GetDopplerTracking<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_doppler_tracking", array{}]]
-    GetEmissionAngle<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_emission_angle", array{}]]
-    GetEmissionAngleFilterAttenuationDb<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_emission_angle_filter_attenuation_db", array{}]]
-    GetMaxDb<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_max_db", array{}]]
-    GetMaxDistance<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_max_distance", array{}]]
-    GetMaxPolyphony<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_max_polyphony", array{}]]
-    GetPanningStrength<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_panning_strength", array{}]]
-    GetPitchScale<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_pitch_scale", array{}]]
-    GetPlaybackPosition<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_playback_position", array{}]]
-    GetPlaybackType<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_playback_type", array{}]]
-    GetStream<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_stream", array{}]]}
-    GetStreamPaused<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_stream_paused", array{}]]
-    GetStreamPlayback<public>()<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue[Handle, "get_stream_playback", array{}]]}
-    GetUnitSize<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_unit_size", array{}]]
-    GetVolumeDb<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_volume_db", array{}]]
-    GetVolumeLinear<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_volume_linear", array{}]]
-    HasStreamPlayback<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_stream_playback", array{}]]
-    IsAutoplayEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_autoplay_enabled", array{}]]
-    IsEmissionAngleEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_emission_angle_enabled", array{}]]
-    IsPlaying<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_playing", array{}]]
+    GetAreaMask<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_area_mask", array{}))
+    GetAttenuationFilterCutoffHz<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_attenuation_filter_cutoff_hz", array{}))
+    GetAttenuationFilterDb<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_attenuation_filter_db", array{}))
+    GetAttenuationModel<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_attenuation_model", array{}))
+    GetBus<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_bus", array{}))
+    GetDopplerTracking<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_doppler_tracking", array{}))
+    GetEmissionAngle<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_emission_angle", array{}))
+    GetEmissionAngleFilterAttenuationDb<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_emission_angle_filter_attenuation_db", array{}))
+    GetMaxDb<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_max_db", array{}))
+    GetMaxDistance<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_max_distance", array{}))
+    GetMaxPolyphony<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_max_polyphony", array{}))
+    GetPanningStrength<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_panning_strength", array{}))
+    GetPitchScale<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_pitch_scale", array{}))
+    GetPlaybackPosition<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_playback_position", array{}))
+    GetPlaybackType<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_playback_type", array{}))
+    GetStream<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_stream", array{})]}
+    GetStreamPaused<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_stream_paused", array{}))
+    GetStreamPlayback<public>()<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue(Handle, "get_stream_playback", array{})]}
+    GetUnitSize<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_unit_size", array{}))
+    GetVolumeDb<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_volume_db", array{}))
+    GetVolumeLinear<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_volume_linear", array{}))
+    HasStreamPlayback<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_stream_playback", array{}))
+    IsAutoplayEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_autoplay_enabled", array{}))
+    IsEmissionAngleEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_emission_angle_enabled", array{}))
+    IsPlaying<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_playing", array{}))
     Play<public>(?FromPosition:float = 0.0)<transacts>:void = VhCallVoid(Handle, "play", array{VhFromFloat(FromPosition)})
     Seek<public>(ToPosition:float)<transacts>:void = VhCallVoid(Handle, "seek", array{VhFromFloat(ToPosition)})
     SetAreaMask<public>(Mask:int)<transacts>:void = VhCallVoid(Handle, "set_area_mask", array{VhFromInt(Mask)})
@@ -808,29 +808,29 @@ audio_stream_player3d<public> := class(node3d):
 camera3d<public> := class(node3d):
 
     ClearCurrent<public>(?EnableNext:logic = true)<transacts>:void = VhCallVoid(Handle, "clear_current", array{VhFromLogic(EnableNext)})
-    GetAttributes<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_attributes", array{}]]}
-    GetCompositor<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_compositor", array{}]]}
-    GetCullMask<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_cull_mask", array{}]]
-    GetCullMaskValue<public>(LayerNumber:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_cull_mask_value", array{VhFromInt(LayerNumber)}]]
-    GetDopplerTracking<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_doppler_tracking", array{}]]
-    GetEnvironment<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_environment", array{}]]}
-    GetFar<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_far", array{}]]
-    GetFov<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_fov", array{}]]
-    GetFrustumOffset<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_frustum_offset", array{}]]
-    GetHOffset<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_h_offset", array{}]]
-    GetKeepAspectMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_keep_aspect_mode", array{}]]
-    GetNear<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_near", array{}]]
-    GetProjection<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_projection", array{}]]
-    GetSize<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_size", array{}]]
-    GetVOffset<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_v_offset", array{}]]
-    IsCurrent<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_current", array{}]]
-    IsPositionBehind<public>(WorldPoint:vector3)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_position_behind", array{VhFromVector3(WorldPoint)}]]
-    IsPositionInFrustum<public>(WorldPoint:vector3)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_position_in_frustum", array{VhFromVector3(WorldPoint)}]]
+    GetAttributes<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_attributes", array{})]}
+    GetCompositor<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_compositor", array{})]}
+    GetCullMask<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_cull_mask", array{}))
+    GetCullMaskValue<public>(LayerNumber:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_cull_mask_value", array{VhFromInt(LayerNumber)}))
+    GetDopplerTracking<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_doppler_tracking", array{}))
+    GetEnvironment<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_environment", array{})]}
+    GetFar<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_far", array{}))
+    GetFov<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_fov", array{}))
+    GetFrustumOffset<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_frustum_offset", array{}))
+    GetHOffset<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_h_offset", array{}))
+    GetKeepAspectMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_keep_aspect_mode", array{}))
+    GetNear<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_near", array{}))
+    GetProjection<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_projection", array{}))
+    GetSize<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_size", array{}))
+    GetVOffset<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_v_offset", array{}))
+    IsCurrent<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_current", array{}))
+    IsPositionBehind<public>(WorldPoint:vector3)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_position_behind", array{VhFromVector3(WorldPoint)}))
+    IsPositionInFrustum<public>(WorldPoint:vector3)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_position_in_frustum", array{VhFromVector3(WorldPoint)}))
     MakeCurrent<public>()<transacts>:void = VhCallVoid(Handle, "make_current", array{})
-    ProjectLocalRayNormal<public>(ScreenPoint:vector2)<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "project_local_ray_normal", array{VhFromVector2(ScreenPoint)}]]
-    ProjectPosition<public>(ScreenPoint:vector2, ZDepth:float)<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "project_position", array{VhFromVector2(ScreenPoint), VhFromFloat(ZDepth)}]]
-    ProjectRayNormal<public>(ScreenPoint:vector2)<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "project_ray_normal", array{VhFromVector2(ScreenPoint)}]]
-    ProjectRayOrigin<public>(ScreenPoint:vector2)<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "project_ray_origin", array{VhFromVector2(ScreenPoint)}]]
+    ProjectLocalRayNormal<public>(ScreenPoint:vector2)<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "project_local_ray_normal", array{VhFromVector2(ScreenPoint)}))
+    ProjectPosition<public>(ScreenPoint:vector2, ZDepth:float)<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "project_position", array{VhFromVector2(ScreenPoint), VhFromFloat(ZDepth)}))
+    ProjectRayNormal<public>(ScreenPoint:vector2)<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "project_ray_normal", array{VhFromVector2(ScreenPoint)}))
+    ProjectRayOrigin<public>(ScreenPoint:vector2)<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "project_ray_origin", array{VhFromVector2(ScreenPoint)}))
     SetAttributes<public>(Env:resource)<transacts>:void = VhCallVoid(Handle, "set_attributes", array{VhFromObject(Env)})
     SetCompositor<public>(Compositor:resource)<transacts>:void = VhCallVoid(Handle, "set_compositor", array{VhFromObject(Compositor)})
     SetCullMask<public>(Mask:int)<transacts>:void = VhCallVoid(Handle, "set_cull_mask", array{VhFromInt(Mask)})
@@ -850,19 +850,19 @@ camera3d<public> := class(node3d):
     SetProjection<public>(Mode:int)<transacts>:void = VhCallVoid(Handle, "set_projection", array{VhFromInt(Mode)})
     SetSize<public>(Size:float)<transacts>:void = VhCallVoid(Handle, "set_size", array{VhFromFloat(Size)})
     SetVOffset<public>(Offset:float)<transacts>:void = VhCallVoid(Handle, "set_v_offset", array{VhFromFloat(Offset)})
-    UnprojectPosition<public>(WorldPoint:vector3)<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "unproject_position", array{VhFromVector3(WorldPoint)}]]
+    UnprojectPosition<public>(WorldPoint:vector3)<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "unproject_position", array{VhFromVector3(WorldPoint)}))
 
 collision_object3d<public> := class(node3d):
 
-    GetCaptureInputOnDrag<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_capture_input_on_drag", array{}]]
-    GetCollisionLayer<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_collision_layer", array{}]]
-    GetCollisionLayerValue<public>(LayerNumber:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_collision_layer_value", array{VhFromInt(LayerNumber)}]]
-    GetCollisionMask<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_collision_mask", array{}]]
-    GetCollisionMaskValue<public>(LayerNumber:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_collision_mask_value", array{VhFromInt(LayerNumber)}]]
-    GetCollisionPriority<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_collision_priority", array{}]]
-    GetDisableMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_disable_mode", array{}]]
-    IsRayPickable<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_ray_pickable", array{}]]
-    IsShapeOwnerDisabled<public>(OwnerId:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_shape_owner_disabled", array{VhFromInt(OwnerId)}]]
+    GetCaptureInputOnDrag<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_capture_input_on_drag", array{}))
+    GetCollisionLayer<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_collision_layer", array{}))
+    GetCollisionLayerValue<public>(LayerNumber:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_collision_layer_value", array{VhFromInt(LayerNumber)}))
+    GetCollisionMask<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_collision_mask", array{}))
+    GetCollisionMaskValue<public>(LayerNumber:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_collision_mask_value", array{VhFromInt(LayerNumber)}))
+    GetCollisionPriority<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_collision_priority", array{}))
+    GetDisableMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_disable_mode", array{}))
+    IsRayPickable<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_ray_pickable", array{}))
+    IsShapeOwnerDisabled<public>(OwnerId:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_shape_owner_disabled", array{VhFromInt(OwnerId)}))
     RemoveShapeOwner<public>(OwnerId:int)<transacts>:void = VhCallVoid(Handle, "remove_shape_owner", array{VhFromInt(OwnerId)})
     SetCaptureInputOnDrag<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_capture_input_on_drag", array{VhFromLogic(Enable)})
     SetCollisionLayer<public>(Layer:int)<transacts>:void = VhCallVoid(Handle, "set_collision_layer", array{VhFromInt(Layer)})
@@ -872,21 +872,21 @@ collision_object3d<public> := class(node3d):
     SetCollisionPriority<public>(Priority:float)<transacts>:void = VhCallVoid(Handle, "set_collision_priority", array{VhFromFloat(Priority)})
     SetDisableMode<public>(Mode:int)<transacts>:void = VhCallVoid(Handle, "set_disable_mode", array{VhFromInt(Mode)})
     SetRayPickable<public>(RayPickable:logic)<transacts>:void = VhCallVoid(Handle, "set_ray_pickable", array{VhFromLogic(RayPickable)})
-    ShapeFindOwner<public>(ShapeIndex:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "shape_find_owner", array{VhFromInt(ShapeIndex)}]]
+    ShapeFindOwner<public>(ShapeIndex:int)<transacts>:int = VhToInt(VhCallValue(Handle, "shape_find_owner", array{VhFromInt(ShapeIndex)}))
     ShapeOwnerAddShape<public>(OwnerId:int, Shape:resource)<transacts>:void = VhCallVoid(Handle, "shape_owner_add_shape", array{VhFromInt(OwnerId), VhFromObject(Shape)})
     ShapeOwnerClearShapes<public>(OwnerId:int)<transacts>:void = VhCallVoid(Handle, "shape_owner_clear_shapes", array{VhFromInt(OwnerId)})
-    ShapeOwnerGetShape<public>(OwnerId:int, ShapeId:int)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "shape_owner_get_shape", array{VhFromInt(OwnerId), VhFromInt(ShapeId)}]]}
-    ShapeOwnerGetShapeCount<public>(OwnerId:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "shape_owner_get_shape_count", array{VhFromInt(OwnerId)}]]
-    ShapeOwnerGetShapeIndex<public>(OwnerId:int, ShapeId:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "shape_owner_get_shape_index", array{VhFromInt(OwnerId), VhFromInt(ShapeId)}]]
+    ShapeOwnerGetShape<public>(OwnerId:int, ShapeId:int)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "shape_owner_get_shape", array{VhFromInt(OwnerId), VhFromInt(ShapeId)})]}
+    ShapeOwnerGetShapeCount<public>(OwnerId:int)<transacts>:int = VhToInt(VhCallValue(Handle, "shape_owner_get_shape_count", array{VhFromInt(OwnerId)}))
+    ShapeOwnerGetShapeIndex<public>(OwnerId:int, ShapeId:int)<transacts>:int = VhToInt(VhCallValue(Handle, "shape_owner_get_shape_index", array{VhFromInt(OwnerId), VhFromInt(ShapeId)}))
     ShapeOwnerRemoveShape<public>(OwnerId:int, ShapeId:int)<transacts>:void = VhCallVoid(Handle, "shape_owner_remove_shape", array{VhFromInt(OwnerId), VhFromInt(ShapeId)})
     ShapeOwnerSetDisabled<public>(OwnerId:int, Disabled:logic)<transacts>:void = VhCallVoid(Handle, "shape_owner_set_disabled", array{VhFromInt(OwnerId), VhFromLogic(Disabled)})
 
 collision_shape3d<public> := class(node3d):
 
-    GetDebugColor<public>()<decides><transacts>:color = VhToColor[VhCallValue[Handle, "get_debug_color", array{}]]
-    GetEnableDebugFill<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_enable_debug_fill", array{}]]
-    GetShape<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_shape", array{}]]}
-    IsDisabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_disabled", array{}]]
+    GetDebugColor<public>()<transacts>:color = VhToColor(VhCallValue(Handle, "get_debug_color", array{}))
+    GetEnableDebugFill<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_enable_debug_fill", array{}))
+    GetShape<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_shape", array{})]}
+    IsDisabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_disabled", array{}))
     MakeConvexFromSiblings<public>()<transacts>:void = VhCallVoid(Handle, "make_convex_from_siblings", array{})
     ResourceChanged<public>(Resource:resource)<transacts>:void = VhCallVoid(Handle, "resource_changed", array{VhFromObject(Resource)})
     SetDebugColor<public>(Color:color)<transacts>:void = VhCallVoid(Handle, "set_debug_color", array{VhFromColor(Color)})
@@ -907,84 +907,84 @@ control<public> := class(canvas_item):
     AddThemeStyleboxOverride<public>(Name:string, Stylebox:resource)<transacts>:void = VhCallVoid(Handle, "add_theme_stylebox_override", array{VhFromStringName(Name), VhFromObject(Stylebox)})
     BeginBulkThemeOverride<public>()<transacts>:void = VhCallVoid(Handle, "begin_bulk_theme_override", array{})
     EndBulkThemeOverride<public>()<transacts>:void = VhCallVoid(Handle, "end_bulk_theme_override", array{})
-    FindNextValidFocus<public>()<decides><transacts>:control = control{Handle := VhToHandle[VhCallValue[Handle, "find_next_valid_focus", array{}]]}
-    FindPrevValidFocus<public>()<decides><transacts>:control = control{Handle := VhToHandle[VhCallValue[Handle, "find_prev_valid_focus", array{}]]}
-    FindValidFocusNeighbor<public>(Side:int)<decides><transacts>:control = control{Handle := VhToHandle[VhCallValue[Handle, "find_valid_focus_neighbor", array{VhFromInt(Side)}]]}
-    GetAccessibilityDescription<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_accessibility_description", array{}]]
-    GetAccessibilityLive<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_accessibility_live", array{}]]
-    GetAccessibilityName<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_accessibility_name", array{}]]
-    GetAnchor<public>(Side:int)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_anchor", array{VhFromInt(Side)}]]
-    GetBegin<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_begin", array{}]]
-    GetCombinedMinimumSize<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_combined_minimum_size", array{}]]
-    GetCombinedPivotOffset<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_combined_pivot_offset", array{}]]
-    GetCursorShape<public>(?Position:vector2 = vector2{X := 0.0, Y := 0.0})<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_cursor_shape", array{VhFromVector2(Position)}]]
-    GetCustomMinimumSize<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_custom_minimum_size", array{}]]
-    GetDefaultCursorShape<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_default_cursor_shape", array{}]]
-    GetEnd<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_end", array{}]]
-    GetFocusBehaviorRecursive<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_focus_behavior_recursive", array{}]]
-    GetFocusMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_focus_mode", array{}]]
-    GetFocusModeWithOverride<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_focus_mode_with_override", array{}]]
-    GetFocusNeighbor<public>(Side:int)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_focus_neighbor", array{VhFromInt(Side)}]]
-    GetFocusNext<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_focus_next", array{}]]
-    GetFocusPrevious<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_focus_previous", array{}]]
-    GetGlobalPosition<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_global_position", array{}]]
-    GetHGrowDirection<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_h_grow_direction", array{}]]
-    GetHSizeFlags<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_h_size_flags", array{}]]
-    GetLayoutDirection<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_layout_direction", array{}]]
-    GetMinimumSize<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_minimum_size", array{}]]
-    GetMouseBehaviorRecursive<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_mouse_behavior_recursive", array{}]]
-    GetMouseFilter<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_mouse_filter", array{}]]
-    GetMouseFilterWithOverride<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_mouse_filter_with_override", array{}]]
-    GetOffset<public>(Offset:int)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_offset", array{VhFromInt(Offset)}]]
-    GetParentAreaSize<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_parent_area_size", array{}]]
-    GetParentControl<public>()<decides><transacts>:control = control{Handle := VhToHandle[VhCallValue[Handle, "get_parent_control", array{}]]}
-    GetPivotOffset<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_pivot_offset", array{}]]
-    GetPivotOffsetRatio<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_pivot_offset_ratio", array{}]]
-    GetPosition<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_position", array{}]]
-    GetRotation<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_rotation", array{}]]
-    GetRotationDegrees<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_rotation_degrees", array{}]]
-    GetScale<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_scale", array{}]]
-    GetScreenPosition<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_screen_position", array{}]]
-    GetShortcutContext<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue[Handle, "get_shortcut_context", array{}]]}
-    GetSize<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_size", array{}]]
-    GetStretchRatio<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_stretch_ratio", array{}]]
-    GetTheme<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_theme", array{}]]}
-    GetThemeColor<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:color = VhToColor[VhCallValue[Handle, "get_theme_color", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
-    GetThemeConstant<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_theme_constant", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
-    GetThemeDefaultBaseScale<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_theme_default_base_scale", array{}]]
-    GetThemeDefaultFont<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_theme_default_font", array{}]]}
-    GetThemeDefaultFontSize<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_theme_default_font_size", array{}]]
-    GetThemeFont<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_theme_font", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]}
-    GetThemeFontSize<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_theme_font_size", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
-    GetThemeIcon<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue[Handle, "get_theme_icon", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]}
-    GetThemeStylebox<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_theme_stylebox", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]}
-    GetThemeTypeVariation<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_theme_type_variation", array{}]]
-    GetTooltip<public>(?AtPosition:vector2 = vector2{X := 0.0, Y := 0.0})<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_tooltip", array{VhFromVector2(AtPosition)}]]
-    GetTooltipAutoTranslateMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_tooltip_auto_translate_mode", array{}]]
-    GetTooltipText<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_tooltip_text", array{}]]
-    GetVGrowDirection<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_v_grow_direction", array{}]]
-    GetVSizeFlags<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_v_size_flags", array{}]]
+    FindNextValidFocus<public>()<decides><transacts>:control = control{Handle := VhToHandle[VhCallValue(Handle, "find_next_valid_focus", array{})]}
+    FindPrevValidFocus<public>()<decides><transacts>:control = control{Handle := VhToHandle[VhCallValue(Handle, "find_prev_valid_focus", array{})]}
+    FindValidFocusNeighbor<public>(Side:int)<decides><transacts>:control = control{Handle := VhToHandle[VhCallValue(Handle, "find_valid_focus_neighbor", array{VhFromInt(Side)})]}
+    GetAccessibilityDescription<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_accessibility_description", array{}))
+    GetAccessibilityLive<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_accessibility_live", array{}))
+    GetAccessibilityName<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_accessibility_name", array{}))
+    GetAnchor<public>(Side:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_anchor", array{VhFromInt(Side)}))
+    GetBegin<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_begin", array{}))
+    GetCombinedMinimumSize<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_combined_minimum_size", array{}))
+    GetCombinedPivotOffset<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_combined_pivot_offset", array{}))
+    GetCursorShape<public>(?Position:vector2 = vector2{X := 0.0, Y := 0.0})<transacts>:int = VhToInt(VhCallValue(Handle, "get_cursor_shape", array{VhFromVector2(Position)}))
+    GetCustomMinimumSize<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_custom_minimum_size", array{}))
+    GetDefaultCursorShape<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_default_cursor_shape", array{}))
+    GetEnd<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_end", array{}))
+    GetFocusBehaviorRecursive<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_focus_behavior_recursive", array{}))
+    GetFocusMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_focus_mode", array{}))
+    GetFocusModeWithOverride<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_focus_mode_with_override", array{}))
+    GetFocusNeighbor<public>(Side:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_focus_neighbor", array{VhFromInt(Side)}))
+    GetFocusNext<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_focus_next", array{}))
+    GetFocusPrevious<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_focus_previous", array{}))
+    GetGlobalPosition<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_global_position", array{}))
+    GetHGrowDirection<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_h_grow_direction", array{}))
+    GetHSizeFlags<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_h_size_flags", array{}))
+    GetLayoutDirection<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_layout_direction", array{}))
+    GetMinimumSize<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_minimum_size", array{}))
+    GetMouseBehaviorRecursive<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_mouse_behavior_recursive", array{}))
+    GetMouseFilter<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_mouse_filter", array{}))
+    GetMouseFilterWithOverride<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_mouse_filter_with_override", array{}))
+    GetOffset<public>(Offset:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_offset", array{VhFromInt(Offset)}))
+    GetParentAreaSize<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_parent_area_size", array{}))
+    GetParentControl<public>()<decides><transacts>:control = control{Handle := VhToHandle[VhCallValue(Handle, "get_parent_control", array{})]}
+    GetPivotOffset<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_pivot_offset", array{}))
+    GetPivotOffsetRatio<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_pivot_offset_ratio", array{}))
+    GetPosition<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_position", array{}))
+    GetRotation<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_rotation", array{}))
+    GetRotationDegrees<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_rotation_degrees", array{}))
+    GetScale<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_scale", array{}))
+    GetScreenPosition<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_screen_position", array{}))
+    GetShortcutContext<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_shortcut_context", array{})]}
+    GetSize<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_size", array{}))
+    GetStretchRatio<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_stretch_ratio", array{}))
+    GetTheme<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_theme", array{})]}
+    GetThemeColor<public>(Name:string, ?ThemeType:string = "")<transacts>:color = VhToColor(VhCallValue(Handle, "get_theme_color", array{VhFromStringName(Name), VhFromStringName(ThemeType)}))
+    GetThemeConstant<public>(Name:string, ?ThemeType:string = "")<transacts>:int = VhToInt(VhCallValue(Handle, "get_theme_constant", array{VhFromStringName(Name), VhFromStringName(ThemeType)}))
+    GetThemeDefaultBaseScale<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_theme_default_base_scale", array{}))
+    GetThemeDefaultFont<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_theme_default_font", array{})]}
+    GetThemeDefaultFontSize<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_theme_default_font_size", array{}))
+    GetThemeFont<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_theme_font", array{VhFromStringName(Name), VhFromStringName(ThemeType)})]}
+    GetThemeFontSize<public>(Name:string, ?ThemeType:string = "")<transacts>:int = VhToInt(VhCallValue(Handle, "get_theme_font_size", array{VhFromStringName(Name), VhFromStringName(ThemeType)}))
+    GetThemeIcon<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_theme_icon", array{VhFromStringName(Name), VhFromStringName(ThemeType)})]}
+    GetThemeStylebox<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_theme_stylebox", array{VhFromStringName(Name), VhFromStringName(ThemeType)})]}
+    GetThemeTypeVariation<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_theme_type_variation", array{}))
+    GetTooltip<public>(?AtPosition:vector2 = vector2{X := 0.0, Y := 0.0})<transacts>:string = VhToString(VhCallValue(Handle, "get_tooltip", array{VhFromVector2(AtPosition)}))
+    GetTooltipAutoTranslateMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_tooltip_auto_translate_mode", array{}))
+    GetTooltipText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_tooltip_text", array{}))
+    GetVGrowDirection<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_v_grow_direction", array{}))
+    GetVSizeFlags<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_v_size_flags", array{}))
     GrabClickFocus<public>()<transacts>:void = VhCallVoid(Handle, "grab_click_focus", array{})
     GrabFocus<public>(?HideFocus:logic = false)<transacts>:void = VhCallVoid(Handle, "grab_focus", array{VhFromLogic(HideFocus)})
-    HasFocus<public>(?IgnoreHiddenFocus:logic = false)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_focus", array{VhFromLogic(IgnoreHiddenFocus)}]]
-    HasThemeColor<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_color", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
-    HasThemeColorOverride<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_color_override", array{VhFromStringName(Name)}]]
-    HasThemeConstant<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_constant", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
-    HasThemeConstantOverride<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_constant_override", array{VhFromStringName(Name)}]]
-    HasThemeFont<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_font", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
-    HasThemeFontOverride<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_font_override", array{VhFromStringName(Name)}]]
-    HasThemeFontSize<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_font_size", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
-    HasThemeFontSizeOverride<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_font_size_override", array{VhFromStringName(Name)}]]
-    HasThemeIcon<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_icon", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
-    HasThemeIconOverride<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_icon_override", array{VhFromStringName(Name)}]]
-    HasThemeStylebox<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_stylebox", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
-    HasThemeStyleboxOverride<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_stylebox_override", array{VhFromStringName(Name)}]]
-    IsAutoTranslating<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_auto_translating", array{}]]
-    IsClippingContents<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_clipping_contents", array{}]]
-    IsDragSuccessful<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_drag_successful", array{}]]
-    IsForcePassScrollEvents<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_force_pass_scroll_events", array{}]]
-    IsLayoutRtl<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_layout_rtl", array{}]]
-    IsLocalizingNumeralSystem<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_localizing_numeral_system", array{}]]
+    HasFocus<public>(?IgnoreHiddenFocus:logic = false)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_focus", array{VhFromLogic(IgnoreHiddenFocus)}))
+    HasThemeColor<public>(Name:string, ?ThemeType:string = "")<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_theme_color", array{VhFromStringName(Name), VhFromStringName(ThemeType)}))
+    HasThemeColorOverride<public>(Name:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_theme_color_override", array{VhFromStringName(Name)}))
+    HasThemeConstant<public>(Name:string, ?ThemeType:string = "")<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_theme_constant", array{VhFromStringName(Name), VhFromStringName(ThemeType)}))
+    HasThemeConstantOverride<public>(Name:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_theme_constant_override", array{VhFromStringName(Name)}))
+    HasThemeFont<public>(Name:string, ?ThemeType:string = "")<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_theme_font", array{VhFromStringName(Name), VhFromStringName(ThemeType)}))
+    HasThemeFontOverride<public>(Name:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_theme_font_override", array{VhFromStringName(Name)}))
+    HasThemeFontSize<public>(Name:string, ?ThemeType:string = "")<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_theme_font_size", array{VhFromStringName(Name), VhFromStringName(ThemeType)}))
+    HasThemeFontSizeOverride<public>(Name:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_theme_font_size_override", array{VhFromStringName(Name)}))
+    HasThemeIcon<public>(Name:string, ?ThemeType:string = "")<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_theme_icon", array{VhFromStringName(Name), VhFromStringName(ThemeType)}))
+    HasThemeIconOverride<public>(Name:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_theme_icon_override", array{VhFromStringName(Name)}))
+    HasThemeStylebox<public>(Name:string, ?ThemeType:string = "")<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_theme_stylebox", array{VhFromStringName(Name), VhFromStringName(ThemeType)}))
+    HasThemeStyleboxOverride<public>(Name:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_theme_stylebox_override", array{VhFromStringName(Name)}))
+    IsAutoTranslating<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_auto_translating", array{}))
+    IsClippingContents<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_clipping_contents", array{}))
+    IsDragSuccessful<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_drag_successful", array{}))
+    IsForcePassScrollEvents<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_force_pass_scroll_events", array{}))
+    IsLayoutRtl<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_layout_rtl", array{}))
+    IsLocalizingNumeralSystem<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_localizing_numeral_system", array{}))
     ReleaseFocus<public>()<transacts>:void = VhCallVoid(Handle, "release_focus", array{})
     RemoveThemeColorOverride<public>(Name:string)<transacts>:void = VhCallVoid(Handle, "remove_theme_color_override", array{VhFromStringName(Name)})
     RemoveThemeConstantOverride<public>(Name:string)<transacts>:void = VhCallVoid(Handle, "remove_theme_constant_override", array{VhFromStringName(Name)})
@@ -1043,17 +1043,17 @@ control<public> := class(canvas_item):
 node2d<public> := class(canvas_item):
 
     ApplyScale<public>(Ratio:vector2)<transacts>:void = VhCallVoid(Handle, "apply_scale", array{VhFromVector2(Ratio)})
-    GetAngleTo<public>(Point:vector2)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_angle_to", array{VhFromVector2(Point)}]]
-    GetGlobalPosition<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_global_position", array{}]]
-    GetGlobalRotation<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_global_rotation", array{}]]
-    GetGlobalRotationDegrees<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_global_rotation_degrees", array{}]]
-    GetGlobalScale<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_global_scale", array{}]]
-    GetGlobalSkew<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_global_skew", array{}]]
-    GetPosition<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_position", array{}]]
-    GetRotation<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_rotation", array{}]]
-    GetRotationDegrees<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_rotation_degrees", array{}]]
-    GetScale<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_scale", array{}]]
-    GetSkew<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_skew", array{}]]
+    GetAngleTo<public>(Point:vector2)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_angle_to", array{VhFromVector2(Point)}))
+    GetGlobalPosition<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_global_position", array{}))
+    GetGlobalRotation<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_global_rotation", array{}))
+    GetGlobalRotationDegrees<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_global_rotation_degrees", array{}))
+    GetGlobalScale<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_global_scale", array{}))
+    GetGlobalSkew<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_global_skew", array{}))
+    GetPosition<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_position", array{}))
+    GetRotation<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_rotation", array{}))
+    GetRotationDegrees<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_rotation_degrees", array{}))
+    GetScale<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_scale", array{}))
+    GetSkew<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_skew", array{}))
     GlobalTranslate<public>(Offset:vector2)<transacts>:void = VhCallVoid(Handle, "global_translate", array{VhFromVector2(Offset)})
     LookAt<public>(Point:vector2)<transacts>:void = VhCallVoid(Handle, "look_at", array{VhFromVector2(Point)})
     MoveLocalX<public>(Delta:float, ?Scaled:logic = false)<transacts>:void = VhCallVoid(Handle, "move_local_x", array{VhFromFloat(Delta), VhFromLogic(Scaled)})
@@ -1069,25 +1069,25 @@ node2d<public> := class(canvas_item):
     SetRotationDegrees<public>(Degrees:float)<transacts>:void = VhCallVoid(Handle, "set_rotation_degrees", array{VhFromFloat(Degrees)})
     SetScale<public>(Scale:vector2)<transacts>:void = VhCallVoid(Handle, "set_scale", array{VhFromVector2(Scale)})
     SetSkew<public>(Radians:float)<transacts>:void = VhCallVoid(Handle, "set_skew", array{VhFromFloat(Radians)})
-    ToGlobal<public>(LocalPoint:vector2)<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "to_global", array{VhFromVector2(LocalPoint)}]]
-    ToLocal<public>(GlobalPoint:vector2)<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "to_local", array{VhFromVector2(GlobalPoint)}]]
+    ToGlobal<public>(LocalPoint:vector2)<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "to_global", array{VhFromVector2(LocalPoint)}))
+    ToLocal<public>(GlobalPoint:vector2)<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "to_local", array{VhFromVector2(GlobalPoint)}))
     Translate<public>(Offset:vector2)<transacts>:void = VhCallVoid(Handle, "translate", array{VhFromVector2(Offset)})
 
 packed_scene<public> := class(resource):
 
-    CanInstantiate<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "can_instantiate", array{}]]
-    GetState<public>()<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue[Handle, "get_state", array{}]]}
-    Instantiate<public>(?EditState:int = 0)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue[Handle, "instantiate", array{VhFromInt(EditState)}]]}
-    Pack<public>(Path:node)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "pack", array{VhFromObject(Path)}]]
+    CanInstantiate<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "can_instantiate", array{}))
+    GetState<public>()<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue(Handle, "get_state", array{})]}
+    Instantiate<public>(?EditState:int = 0)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "instantiate", array{VhFromInt(EditState)})]}
+    Pack<public>(Path:node)<transacts>:int = VhToInt(VhCallValue(Handle, "pack", array{VhFromObject(Path)}))
 
 texture<public> := class(resource):
 
 visual_instance3d<public> := class(node3d):
 
-    GetLayerMask<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_layer_mask", array{}]]
-    GetLayerMaskValue<public>(LayerNumber:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_layer_mask_value", array{VhFromInt(LayerNumber)}]]
-    GetSortingOffset<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_sorting_offset", array{}]]
-    IsSortingUseAabbCenter<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_sorting_use_aabb_center", array{}]]
+    GetLayerMask<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_layer_mask", array{}))
+    GetLayerMaskValue<public>(LayerNumber:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_layer_mask_value", array{VhFromInt(LayerNumber)}))
+    GetSortingOffset<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_sorting_offset", array{}))
+    IsSortingUseAabbCenter<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_sorting_use_aabb_center", array{}))
     SetLayerMask<public>(Mask:int)<transacts>:void = VhCallVoid(Handle, "set_layer_mask", array{VhFromInt(Mask)})
     SetLayerMaskValue<public>(LayerNumber:int, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_layer_mask_value", array{VhFromInt(LayerNumber), VhFromLogic(Value)})
     SetSortingOffset<public>(Offset:float)<transacts>:void = VhCallVoid(Handle, "set_sorting_offset", array{VhFromFloat(Offset)})
@@ -1102,61 +1102,61 @@ window<public> := class(viewport):
     AddThemeIconOverride<public>(Name:string, Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "add_theme_icon_override", array{VhFromStringName(Name), VhFromObject(Texture)})
     AddThemeStyleboxOverride<public>(Name:string, Stylebox:resource)<transacts>:void = VhCallVoid(Handle, "add_theme_stylebox_override", array{VhFromStringName(Name), VhFromObject(Stylebox)})
     BeginBulkThemeOverride<public>()<transacts>:void = VhCallVoid(Handle, "begin_bulk_theme_override", array{})
-    CanDraw<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "can_draw", array{}]]
+    CanDraw<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "can_draw", array{}))
     ChildControlsChanged<public>()<transacts>:void = VhCallVoid(Handle, "child_controls_changed", array{})
     EndBulkThemeOverride<public>()<transacts>:void = VhCallVoid(Handle, "end_bulk_theme_override", array{})
-    GetAccessibilityDescription<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_accessibility_description", array{}]]
-    GetAccessibilityName<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_accessibility_name", array{}]]
-    GetContentScaleAspect<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_content_scale_aspect", array{}]]
-    GetContentScaleFactor<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_content_scale_factor", array{}]]
-    GetContentScaleMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_content_scale_mode", array{}]]
-    GetContentScaleStretch<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_content_scale_stretch", array{}]]
-    GetContentsMinimumSize<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_contents_minimum_size", array{}]]
-    GetCurrentScreen<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_current_screen", array{}]]
-    GetFlag<public>(Flag:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_flag", array{VhFromInt(Flag)}]]
-    GetForceNative<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_force_native", array{}]]
-    GetInitialPosition<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_initial_position", array{}]]
-    GetKeepTitleVisible<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_keep_title_visible", array{}]]
-    GetLayoutDirection<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_layout_direction", array{}]]
-    GetMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_mode", array{}]]
-    GetTheme<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_theme", array{}]]}
-    GetThemeColor<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:color = VhToColor[VhCallValue[Handle, "get_theme_color", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
-    GetThemeConstant<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_theme_constant", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
-    GetThemeDefaultBaseScale<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_theme_default_base_scale", array{}]]
-    GetThemeDefaultFont<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_theme_default_font", array{}]]}
-    GetThemeDefaultFontSize<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_theme_default_font_size", array{}]]
-    GetThemeFont<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_theme_font", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]}
-    GetThemeFontSize<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_theme_font_size", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
-    GetThemeIcon<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue[Handle, "get_theme_icon", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]}
-    GetThemeStylebox<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_theme_stylebox", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]}
-    GetThemeTypeVariation<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_theme_type_variation", array{}]]
-    GetTitle<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_title", array{}]]
-    GetWindowId<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_window_id", array{}]]
+    GetAccessibilityDescription<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_accessibility_description", array{}))
+    GetAccessibilityName<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_accessibility_name", array{}))
+    GetContentScaleAspect<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_content_scale_aspect", array{}))
+    GetContentScaleFactor<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_content_scale_factor", array{}))
+    GetContentScaleMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_content_scale_mode", array{}))
+    GetContentScaleStretch<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_content_scale_stretch", array{}))
+    GetContentsMinimumSize<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_contents_minimum_size", array{}))
+    GetCurrentScreen<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_current_screen", array{}))
+    GetFlag<public>(Flag:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_flag", array{VhFromInt(Flag)}))
+    GetForceNative<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_force_native", array{}))
+    GetInitialPosition<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_initial_position", array{}))
+    GetKeepTitleVisible<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_keep_title_visible", array{}))
+    GetLayoutDirection<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_layout_direction", array{}))
+    GetMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_mode", array{}))
+    GetTheme<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_theme", array{})]}
+    GetThemeColor<public>(Name:string, ?ThemeType:string = "")<transacts>:color = VhToColor(VhCallValue(Handle, "get_theme_color", array{VhFromStringName(Name), VhFromStringName(ThemeType)}))
+    GetThemeConstant<public>(Name:string, ?ThemeType:string = "")<transacts>:int = VhToInt(VhCallValue(Handle, "get_theme_constant", array{VhFromStringName(Name), VhFromStringName(ThemeType)}))
+    GetThemeDefaultBaseScale<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_theme_default_base_scale", array{}))
+    GetThemeDefaultFont<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_theme_default_font", array{})]}
+    GetThemeDefaultFontSize<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_theme_default_font_size", array{}))
+    GetThemeFont<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_theme_font", array{VhFromStringName(Name), VhFromStringName(ThemeType)})]}
+    GetThemeFontSize<public>(Name:string, ?ThemeType:string = "")<transacts>:int = VhToInt(VhCallValue(Handle, "get_theme_font_size", array{VhFromStringName(Name), VhFromStringName(ThemeType)}))
+    GetThemeIcon<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_theme_icon", array{VhFromStringName(Name), VhFromStringName(ThemeType)})]}
+    GetThemeStylebox<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_theme_stylebox", array{VhFromStringName(Name), VhFromStringName(ThemeType)})]}
+    GetThemeTypeVariation<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_theme_type_variation", array{}))
+    GetTitle<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_title", array{}))
+    GetWindowId<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_window_id", array{}))
     GrabFocus<public>()<transacts>:void = VhCallVoid(Handle, "grab_focus", array{})
-    HasFocus<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_focus", array{}]]
-    HasThemeColor<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_color", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
-    HasThemeColorOverride<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_color_override", array{VhFromStringName(Name)}]]
-    HasThemeConstant<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_constant", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
-    HasThemeConstantOverride<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_constant_override", array{VhFromStringName(Name)}]]
-    HasThemeFont<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_font", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
-    HasThemeFontOverride<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_font_override", array{VhFromStringName(Name)}]]
-    HasThemeFontSize<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_font_size", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
-    HasThemeFontSizeOverride<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_font_size_override", array{VhFromStringName(Name)}]]
-    HasThemeIcon<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_icon", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
-    HasThemeIconOverride<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_icon_override", array{VhFromStringName(Name)}]]
-    HasThemeStylebox<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_stylebox", array{VhFromStringName(Name), VhFromStringName(ThemeType)}]]
-    HasThemeStyleboxOverride<public>(Name:string)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_theme_stylebox_override", array{VhFromStringName(Name)}]]
+    HasFocus<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_focus", array{}))
+    HasThemeColor<public>(Name:string, ?ThemeType:string = "")<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_theme_color", array{VhFromStringName(Name), VhFromStringName(ThemeType)}))
+    HasThemeColorOverride<public>(Name:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_theme_color_override", array{VhFromStringName(Name)}))
+    HasThemeConstant<public>(Name:string, ?ThemeType:string = "")<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_theme_constant", array{VhFromStringName(Name), VhFromStringName(ThemeType)}))
+    HasThemeConstantOverride<public>(Name:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_theme_constant_override", array{VhFromStringName(Name)}))
+    HasThemeFont<public>(Name:string, ?ThemeType:string = "")<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_theme_font", array{VhFromStringName(Name), VhFromStringName(ThemeType)}))
+    HasThemeFontOverride<public>(Name:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_theme_font_override", array{VhFromStringName(Name)}))
+    HasThemeFontSize<public>(Name:string, ?ThemeType:string = "")<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_theme_font_size", array{VhFromStringName(Name), VhFromStringName(ThemeType)}))
+    HasThemeFontSizeOverride<public>(Name:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_theme_font_size_override", array{VhFromStringName(Name)}))
+    HasThemeIcon<public>(Name:string, ?ThemeType:string = "")<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_theme_icon", array{VhFromStringName(Name), VhFromStringName(ThemeType)}))
+    HasThemeIconOverride<public>(Name:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_theme_icon_override", array{VhFromStringName(Name)}))
+    HasThemeStylebox<public>(Name:string, ?ThemeType:string = "")<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_theme_stylebox", array{VhFromStringName(Name), VhFromStringName(ThemeType)}))
+    HasThemeStyleboxOverride<public>(Name:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_theme_stylebox_override", array{VhFromStringName(Name)}))
     Hide<public>()<transacts>:void = VhCallVoid(Handle, "hide", array{})
-    IsAutoTranslating<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_auto_translating", array{}]]
-    IsEmbedded<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_embedded", array{}]]
-    IsExclusive<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_exclusive", array{}]]
-    IsLayoutRtl<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_layout_rtl", array{}]]
-    IsMaximizeAllowed<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_maximize_allowed", array{}]]
-    IsTransient<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_transient", array{}]]
-    IsTransientToFocused<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_transient_to_focused", array{}]]
-    IsUsingFontOversampling<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_using_font_oversampling", array{}]]
-    IsVisible<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_visible", array{}]]
-    IsWrappingControls<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_wrapping_controls", array{}]]
+    IsAutoTranslating<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_auto_translating", array{}))
+    IsEmbedded<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_embedded", array{}))
+    IsExclusive<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_exclusive", array{}))
+    IsLayoutRtl<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_layout_rtl", array{}))
+    IsMaximizeAllowed<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_maximize_allowed", array{}))
+    IsTransient<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_transient", array{}))
+    IsTransientToFocused<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_transient_to_focused", array{}))
+    IsUsingFontOversampling<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_using_font_oversampling", array{}))
+    IsVisible<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_visible", array{}))
+    IsWrappingControls<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_wrapping_controls", array{}))
     MoveToCenter<public>()<transacts>:void = VhCallVoid(Handle, "move_to_center", array{})
     MoveToForeground<public>()<transacts>:void = VhCallVoid(Handle, "move_to_foreground", array{})
     PopupCenteredRatio<public>(?Ratio:float = 0.8)<transacts>:void = VhCallVoid(Handle, "popup_centered_ratio", array{VhFromFloat(Ratio)})
@@ -1200,18 +1200,18 @@ window<public> := class(viewport):
 
 animated_sprite2d<public> := class(node2d):
 
-    GetAnimation<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_animation", array{}]]
-    GetAutoplay<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_autoplay", array{}]]
-    GetFrame<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_frame", array{}]]
-    GetFrameProgress<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_frame_progress", array{}]]
-    GetOffset<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_offset", array{}]]
-    GetPlayingSpeed<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_playing_speed", array{}]]
-    GetSpeedScale<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_speed_scale", array{}]]
-    GetSpriteFrames<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_sprite_frames", array{}]]}
-    IsCentered<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_centered", array{}]]
-    IsFlippedH<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_flipped_h", array{}]]
-    IsFlippedV<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_flipped_v", array{}]]
-    IsPlaying<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_playing", array{}]]
+    GetAnimation<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_animation", array{}))
+    GetAutoplay<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_autoplay", array{}))
+    GetFrame<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_frame", array{}))
+    GetFrameProgress<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_frame_progress", array{}))
+    GetOffset<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_offset", array{}))
+    GetPlayingSpeed<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_playing_speed", array{}))
+    GetSpeedScale<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_speed_scale", array{}))
+    GetSpriteFrames<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_sprite_frames", array{})]}
+    IsCentered<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_centered", array{}))
+    IsFlippedH<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_flipped_h", array{}))
+    IsFlippedV<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_flipped_v", array{}))
+    IsPlaying<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_playing", array{}))
     Pause<public>()<transacts>:void = VhCallVoid(Handle, "pause", array{})
     Play<public>(?Name:string = "", ?CustomSpeed:float = 1.0, ?FromEnd:logic = false)<transacts>:void = VhCallVoid(Handle, "play", array{VhFromStringName(Name), VhFromFloat(CustomSpeed), VhFromLogic(FromEnd)})
     PlayBackwards<public>(?Name:string = "")<transacts>:void = VhCallVoid(Handle, "play_backwards", array{VhFromStringName(Name)})
@@ -1230,32 +1230,32 @@ animated_sprite2d<public> := class(node2d):
 
 area3d<public> := class(collision_object3d):
 
-    GetAngularDamp<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_angular_damp", array{}]]
-    GetAngularDampSpaceOverrideMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_angular_damp_space_override_mode", array{}]]
-    GetAudioBusName<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_audio_bus_name", array{}]]
-    GetGravity<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_gravity", array{}]]
-    GetGravityDirection<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_gravity_direction", array{}]]
-    GetGravityPointCenter<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_gravity_point_center", array{}]]
-    GetGravityPointUnitDistance<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_gravity_point_unit_distance", array{}]]
-    GetGravitySpaceOverrideMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_gravity_space_override_mode", array{}]]
-    GetLinearDamp<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_linear_damp", array{}]]
-    GetLinearDampSpaceOverrideMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_linear_damp_space_override_mode", array{}]]
-    GetPriority<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_priority", array{}]]
-    GetReverbAmount<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_reverb_amount", array{}]]
-    GetReverbBusName<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_reverb_bus_name", array{}]]
-    GetReverbUniformity<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_reverb_uniformity", array{}]]
-    GetWindAttenuationFactor<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_wind_attenuation_factor", array{}]]
-    GetWindForceMagnitude<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_wind_force_magnitude", array{}]]
-    GetWindSourcePath<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_wind_source_path", array{}]]
-    HasOverlappingAreas<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_overlapping_areas", array{}]]
-    HasOverlappingBodies<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_overlapping_bodies", array{}]]
-    IsGravityAPoint<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_gravity_a_point", array{}]]
-    IsMonitorable<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_monitorable", array{}]]
-    IsMonitoring<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_monitoring", array{}]]
-    IsOverridingAudioBus<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_overriding_audio_bus", array{}]]
-    IsUsingReverbBus<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_using_reverb_bus", array{}]]
-    OverlapsArea<public>(Area:node)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "overlaps_area", array{VhFromObject(Area)}]]
-    OverlapsBody<public>(Body:node)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "overlaps_body", array{VhFromObject(Body)}]]
+    GetAngularDamp<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_angular_damp", array{}))
+    GetAngularDampSpaceOverrideMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_angular_damp_space_override_mode", array{}))
+    GetAudioBusName<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_audio_bus_name", array{}))
+    GetGravity<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_gravity", array{}))
+    GetGravityDirection<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_gravity_direction", array{}))
+    GetGravityPointCenter<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_gravity_point_center", array{}))
+    GetGravityPointUnitDistance<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_gravity_point_unit_distance", array{}))
+    GetGravitySpaceOverrideMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_gravity_space_override_mode", array{}))
+    GetLinearDamp<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_linear_damp", array{}))
+    GetLinearDampSpaceOverrideMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_linear_damp_space_override_mode", array{}))
+    GetPriority<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_priority", array{}))
+    GetReverbAmount<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_reverb_amount", array{}))
+    GetReverbBusName<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_reverb_bus_name", array{}))
+    GetReverbUniformity<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_reverb_uniformity", array{}))
+    GetWindAttenuationFactor<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_wind_attenuation_factor", array{}))
+    GetWindForceMagnitude<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_wind_force_magnitude", array{}))
+    GetWindSourcePath<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_wind_source_path", array{}))
+    HasOverlappingAreas<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_overlapping_areas", array{}))
+    HasOverlappingBodies<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_overlapping_bodies", array{}))
+    IsGravityAPoint<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_gravity_a_point", array{}))
+    IsMonitorable<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_monitorable", array{}))
+    IsMonitoring<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_monitoring", array{}))
+    IsOverridingAudioBus<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_overriding_audio_bus", array{}))
+    IsUsingReverbBus<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_using_reverb_bus", array{}))
+    OverlapsArea<public>(Area:node)<transacts>:logic = VhToLogic(VhCallValue(Handle, "overlaps_area", array{VhFromObject(Area)}))
+    OverlapsBody<public>(Body:node)<transacts>:logic = VhToLogic(VhCallValue(Handle, "overlaps_body", array{VhFromObject(Body)}))
     SetAngularDamp<public>(AngularDamp:float)<transacts>:void = VhCallVoid(Handle, "set_angular_damp", array{VhFromFloat(AngularDamp)})
     SetAngularDampSpaceOverrideMode<public>(SpaceOverrideMode:int)<transacts>:void = VhCallVoid(Handle, "set_angular_damp_space_override_mode", array{VhFromInt(SpaceOverrideMode)})
     SetAudioBusName<public>(Name:string)<transacts>:void = VhCallVoid(Handle, "set_audio_bus_name", array{VhFromStringName(Name)})
@@ -1281,23 +1281,23 @@ area3d<public> := class(collision_object3d):
 
 audio_stream_player2d<public> := class(node2d):
 
-    GetAreaMask<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_area_mask", array{}]]
-    GetAttenuation<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_attenuation", array{}]]
-    GetBus<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_bus", array{}]]
-    GetMaxDistance<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_max_distance", array{}]]
-    GetMaxPolyphony<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_max_polyphony", array{}]]
-    GetPanningStrength<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_panning_strength", array{}]]
-    GetPitchScale<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_pitch_scale", array{}]]
-    GetPlaybackPosition<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_playback_position", array{}]]
-    GetPlaybackType<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_playback_type", array{}]]
-    GetStream<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_stream", array{}]]}
-    GetStreamPaused<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_stream_paused", array{}]]
-    GetStreamPlayback<public>()<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue[Handle, "get_stream_playback", array{}]]}
-    GetVolumeDb<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_volume_db", array{}]]
-    GetVolumeLinear<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_volume_linear", array{}]]
-    HasStreamPlayback<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_stream_playback", array{}]]
-    IsAutoplayEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_autoplay_enabled", array{}]]
-    IsPlaying<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_playing", array{}]]
+    GetAreaMask<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_area_mask", array{}))
+    GetAttenuation<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_attenuation", array{}))
+    GetBus<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_bus", array{}))
+    GetMaxDistance<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_max_distance", array{}))
+    GetMaxPolyphony<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_max_polyphony", array{}))
+    GetPanningStrength<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_panning_strength", array{}))
+    GetPitchScale<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_pitch_scale", array{}))
+    GetPlaybackPosition<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_playback_position", array{}))
+    GetPlaybackType<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_playback_type", array{}))
+    GetStream<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_stream", array{})]}
+    GetStreamPaused<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_stream_paused", array{}))
+    GetStreamPlayback<public>()<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue(Handle, "get_stream_playback", array{})]}
+    GetVolumeDb<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_volume_db", array{}))
+    GetVolumeLinear<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_volume_linear", array{}))
+    HasStreamPlayback<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_stream_playback", array{}))
+    IsAutoplayEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_autoplay_enabled", array{}))
+    IsPlaying<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_playing", array{}))
     Play<public>(?FromPosition:float = 0.0)<transacts>:void = VhCallVoid(Handle, "play", array{VhFromFloat(FromPosition)})
     Seek<public>(ToPosition:float)<transacts>:void = VhCallVoid(Handle, "seek", array{VhFromFloat(ToPosition)})
     SetAreaMask<public>(Mask:int)<transacts>:void = VhCallVoid(Handle, "set_area_mask", array{VhFromInt(Mask)})
@@ -1318,18 +1318,18 @@ audio_stream_player2d<public> := class(node2d):
 
 base_button<public> := class(control):
 
-    GetActionMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_action_mode", array{}]]
-    GetButtonGroup<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_button_group", array{}]]}
-    GetButtonMask<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_button_mask", array{}]]
-    GetDrawMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_draw_mode", array{}]]
-    GetShortcut<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_shortcut", array{}]]}
-    IsDisabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_disabled", array{}]]
-    IsHovered<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_hovered", array{}]]
-    IsKeepPressedOutside<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_keep_pressed_outside", array{}]]
-    IsPressed<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_pressed", array{}]]
-    IsShortcutFeedback<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_shortcut_feedback", array{}]]
-    IsShortcutInTooltipEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_shortcut_in_tooltip_enabled", array{}]]
-    IsToggleMode<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_toggle_mode", array{}]]
+    GetActionMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_action_mode", array{}))
+    GetButtonGroup<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_button_group", array{})]}
+    GetButtonMask<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_button_mask", array{}))
+    GetDrawMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_draw_mode", array{}))
+    GetShortcut<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_shortcut", array{})]}
+    IsDisabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_disabled", array{}))
+    IsHovered<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_hovered", array{}))
+    IsKeepPressedOutside<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_keep_pressed_outside", array{}))
+    IsPressed<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_pressed", array{}))
+    IsShortcutFeedback<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_shortcut_feedback", array{}))
+    IsShortcutInTooltipEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_shortcut_in_tooltip_enabled", array{}))
+    IsToggleMode<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_toggle_mode", array{}))
     SetActionMode<public>(Mode:int)<transacts>:void = VhCallVoid(Handle, "set_action_mode", array{VhFromInt(Mode)})
     SetButtonGroup<public>(ButtonGroup:resource)<transacts>:void = VhCallVoid(Handle, "set_button_group", array{VhFromObject(ButtonGroup)})
     SetButtonMask<public>(Mask:int)<transacts>:void = VhCallVoid(Handle, "set_button_mask", array{VhFromInt(Mask)})
@@ -1346,32 +1346,32 @@ camera2d<public> := class(node2d):
 
     Align<public>()<transacts>:void = VhCallVoid(Handle, "align", array{})
     ForceUpdateScroll<public>()<transacts>:void = VhCallVoid(Handle, "force_update_scroll", array{})
-    GetAnchorMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_anchor_mode", array{}]]
-    GetCustomViewport<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue[Handle, "get_custom_viewport", array{}]]}
-    GetDragHorizontalOffset<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_drag_horizontal_offset", array{}]]
-    GetDragMargin<public>(Margin:int)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_drag_margin", array{VhFromInt(Margin)}]]
-    GetDragVerticalOffset<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_drag_vertical_offset", array{}]]
-    GetLimit<public>(Margin:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_limit", array{VhFromInt(Margin)}]]
-    GetOffset<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_offset", array{}]]
-    GetPositionSmoothingSpeed<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_position_smoothing_speed", array{}]]
-    GetProcessCallback<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_process_callback", array{}]]
-    GetRotationSmoothingSpeed<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_rotation_smoothing_speed", array{}]]
-    GetScreenCenterPosition<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_screen_center_position", array{}]]
-    GetScreenRotation<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_screen_rotation", array{}]]
-    GetTargetPosition<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_target_position", array{}]]
-    GetZoom<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_zoom", array{}]]
-    IsCurrent<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_current", array{}]]
-    IsDragHorizontalEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_drag_horizontal_enabled", array{}]]
-    IsDragVerticalEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_drag_vertical_enabled", array{}]]
-    IsEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_enabled", array{}]]
-    IsIgnoringRotation<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_ignoring_rotation", array{}]]
-    IsLimitDrawingEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_limit_drawing_enabled", array{}]]
-    IsLimitEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_limit_enabled", array{}]]
-    IsLimitSmoothingEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_limit_smoothing_enabled", array{}]]
-    IsMarginDrawingEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_margin_drawing_enabled", array{}]]
-    IsPositionSmoothingEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_position_smoothing_enabled", array{}]]
-    IsRotationSmoothingEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_rotation_smoothing_enabled", array{}]]
-    IsScreenDrawingEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_screen_drawing_enabled", array{}]]
+    GetAnchorMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_anchor_mode", array{}))
+    GetCustomViewport<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_custom_viewport", array{})]}
+    GetDragHorizontalOffset<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_drag_horizontal_offset", array{}))
+    GetDragMargin<public>(Margin:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_drag_margin", array{VhFromInt(Margin)}))
+    GetDragVerticalOffset<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_drag_vertical_offset", array{}))
+    GetLimit<public>(Margin:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_limit", array{VhFromInt(Margin)}))
+    GetOffset<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_offset", array{}))
+    GetPositionSmoothingSpeed<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_position_smoothing_speed", array{}))
+    GetProcessCallback<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_process_callback", array{}))
+    GetRotationSmoothingSpeed<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_rotation_smoothing_speed", array{}))
+    GetScreenCenterPosition<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_screen_center_position", array{}))
+    GetScreenRotation<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_screen_rotation", array{}))
+    GetTargetPosition<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_target_position", array{}))
+    GetZoom<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_zoom", array{}))
+    IsCurrent<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_current", array{}))
+    IsDragHorizontalEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_drag_horizontal_enabled", array{}))
+    IsDragVerticalEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_drag_vertical_enabled", array{}))
+    IsEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_enabled", array{}))
+    IsIgnoringRotation<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_ignoring_rotation", array{}))
+    IsLimitDrawingEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_limit_drawing_enabled", array{}))
+    IsLimitEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_limit_enabled", array{}))
+    IsLimitSmoothingEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_limit_smoothing_enabled", array{}))
+    IsMarginDrawingEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_margin_drawing_enabled", array{}))
+    IsPositionSmoothingEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_position_smoothing_enabled", array{}))
+    IsRotationSmoothingEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_rotation_smoothing_enabled", array{}))
+    IsScreenDrawingEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_screen_drawing_enabled", array{}))
     MakeCurrent<public>()<transacts>:void = VhCallVoid(Handle, "make_current", array{})
     ResetSmoothing<public>()<transacts>:void = VhCallVoid(Handle, "reset_smoothing", array{})
     SetAnchorMode<public>(AnchorMode:int)<transacts>:void = VhCallVoid(Handle, "set_anchor_mode", array{VhFromInt(AnchorMode)})
@@ -1399,16 +1399,16 @@ camera2d<public> := class(node2d):
 
 collision_object2d<public> := class(node2d):
 
-    GetCollisionLayer<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_collision_layer", array{}]]
-    GetCollisionLayerValue<public>(LayerNumber:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_collision_layer_value", array{VhFromInt(LayerNumber)}]]
-    GetCollisionMask<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_collision_mask", array{}]]
-    GetCollisionMaskValue<public>(LayerNumber:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_collision_mask_value", array{VhFromInt(LayerNumber)}]]
-    GetCollisionPriority<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_collision_priority", array{}]]
-    GetDisableMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_disable_mode", array{}]]
-    GetShapeOwnerOneWayCollisionMargin<public>(OwnerId:int)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_shape_owner_one_way_collision_margin", array{VhFromInt(OwnerId)}]]
-    IsPickable<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_pickable", array{}]]
-    IsShapeOwnerDisabled<public>(OwnerId:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_shape_owner_disabled", array{VhFromInt(OwnerId)}]]
-    IsShapeOwnerOneWayCollisionEnabled<public>(OwnerId:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_shape_owner_one_way_collision_enabled", array{VhFromInt(OwnerId)}]]
+    GetCollisionLayer<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_collision_layer", array{}))
+    GetCollisionLayerValue<public>(LayerNumber:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_collision_layer_value", array{VhFromInt(LayerNumber)}))
+    GetCollisionMask<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_collision_mask", array{}))
+    GetCollisionMaskValue<public>(LayerNumber:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_collision_mask_value", array{VhFromInt(LayerNumber)}))
+    GetCollisionPriority<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_collision_priority", array{}))
+    GetDisableMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_disable_mode", array{}))
+    GetShapeOwnerOneWayCollisionMargin<public>(OwnerId:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_shape_owner_one_way_collision_margin", array{VhFromInt(OwnerId)}))
+    IsPickable<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_pickable", array{}))
+    IsShapeOwnerDisabled<public>(OwnerId:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_shape_owner_disabled", array{VhFromInt(OwnerId)}))
+    IsShapeOwnerOneWayCollisionEnabled<public>(OwnerId:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_shape_owner_one_way_collision_enabled", array{VhFromInt(OwnerId)}))
     RemoveShapeOwner<public>(OwnerId:int)<transacts>:void = VhCallVoid(Handle, "remove_shape_owner", array{VhFromInt(OwnerId)})
     SetCollisionLayer<public>(Layer:int)<transacts>:void = VhCallVoid(Handle, "set_collision_layer", array{VhFromInt(Layer)})
     SetCollisionLayerValue<public>(LayerNumber:int, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_collision_layer_value", array{VhFromInt(LayerNumber), VhFromLogic(Value)})
@@ -1417,12 +1417,12 @@ collision_object2d<public> := class(node2d):
     SetCollisionPriority<public>(Priority:float)<transacts>:void = VhCallVoid(Handle, "set_collision_priority", array{VhFromFloat(Priority)})
     SetDisableMode<public>(Mode:int)<transacts>:void = VhCallVoid(Handle, "set_disable_mode", array{VhFromInt(Mode)})
     SetPickable<public>(Enabled:logic)<transacts>:void = VhCallVoid(Handle, "set_pickable", array{VhFromLogic(Enabled)})
-    ShapeFindOwner<public>(ShapeIndex:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "shape_find_owner", array{VhFromInt(ShapeIndex)}]]
+    ShapeFindOwner<public>(ShapeIndex:int)<transacts>:int = VhToInt(VhCallValue(Handle, "shape_find_owner", array{VhFromInt(ShapeIndex)}))
     ShapeOwnerAddShape<public>(OwnerId:int, Shape:resource)<transacts>:void = VhCallVoid(Handle, "shape_owner_add_shape", array{VhFromInt(OwnerId), VhFromObject(Shape)})
     ShapeOwnerClearShapes<public>(OwnerId:int)<transacts>:void = VhCallVoid(Handle, "shape_owner_clear_shapes", array{VhFromInt(OwnerId)})
-    ShapeOwnerGetShape<public>(OwnerId:int, ShapeId:int)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "shape_owner_get_shape", array{VhFromInt(OwnerId), VhFromInt(ShapeId)}]]}
-    ShapeOwnerGetShapeCount<public>(OwnerId:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "shape_owner_get_shape_count", array{VhFromInt(OwnerId)}]]
-    ShapeOwnerGetShapeIndex<public>(OwnerId:int, ShapeId:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "shape_owner_get_shape_index", array{VhFromInt(OwnerId), VhFromInt(ShapeId)}]]
+    ShapeOwnerGetShape<public>(OwnerId:int, ShapeId:int)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "shape_owner_get_shape", array{VhFromInt(OwnerId), VhFromInt(ShapeId)})]}
+    ShapeOwnerGetShapeCount<public>(OwnerId:int)<transacts>:int = VhToInt(VhCallValue(Handle, "shape_owner_get_shape_count", array{VhFromInt(OwnerId)}))
+    ShapeOwnerGetShapeIndex<public>(OwnerId:int, ShapeId:int)<transacts>:int = VhToInt(VhCallValue(Handle, "shape_owner_get_shape_index", array{VhFromInt(OwnerId), VhFromInt(ShapeId)}))
     ShapeOwnerRemoveShape<public>(OwnerId:int, ShapeId:int)<transacts>:void = VhCallVoid(Handle, "shape_owner_remove_shape", array{VhFromInt(OwnerId), VhFromInt(ShapeId)})
     ShapeOwnerSetDisabled<public>(OwnerId:int, Disabled:logic)<transacts>:void = VhCallVoid(Handle, "shape_owner_set_disabled", array{VhFromInt(OwnerId), VhFromLogic(Disabled)})
     ShapeOwnerSetOneWayCollision<public>(OwnerId:int, Enable:logic)<transacts>:void = VhCallVoid(Handle, "shape_owner_set_one_way_collision", array{VhFromInt(OwnerId), VhFromLogic(Enable)})
@@ -1430,11 +1430,11 @@ collision_object2d<public> := class(node2d):
 
 collision_shape2d<public> := class(node2d):
 
-    GetDebugColor<public>()<decides><transacts>:color = VhToColor[VhCallValue[Handle, "get_debug_color", array{}]]
-    GetOneWayCollisionMargin<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_one_way_collision_margin", array{}]]
-    GetShape<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_shape", array{}]]}
-    IsDisabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_disabled", array{}]]
-    IsOneWayCollisionEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_one_way_collision_enabled", array{}]]
+    GetDebugColor<public>()<transacts>:color = VhToColor(VhCallValue(Handle, "get_debug_color", array{}))
+    GetOneWayCollisionMargin<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_one_way_collision_margin", array{}))
+    GetShape<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_shape", array{})]}
+    IsDisabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_disabled", array{}))
+    IsOneWayCollisionEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_one_way_collision_enabled", array{}))
     SetDebugColor<public>(Color:color)<transacts>:void = VhCallVoid(Handle, "set_debug_color", array{VhFromColor(Color)})
     SetDisabled<public>(Disabled:logic)<transacts>:void = VhCallVoid(Handle, "set_disabled", array{VhFromLogic(Disabled)})
     SetOneWayCollision<public>(Enabled:logic)<transacts>:void = VhCallVoid(Handle, "set_one_way_collision", array{VhFromLogic(Enabled)})
@@ -1447,21 +1447,21 @@ container<public> := class(control):
 
 geometry_instance3d<public> := class(visual_instance3d):
 
-    GetCastShadowsSetting<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_cast_shadows_setting", array{}]]
-    GetExtraCullMargin<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_extra_cull_margin", array{}]]
-    GetGiMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_gi_mode", array{}]]
-    GetLightmapScale<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_lightmap_scale", array{}]]
-    GetLightmapTexelScale<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_lightmap_texel_scale", array{}]]
-    GetLodBias<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_lod_bias", array{}]]
-    GetMaterialOverlay<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_material_overlay", array{}]]}
-    GetMaterialOverride<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_material_override", array{}]]}
-    GetTransparency<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_transparency", array{}]]
-    GetVisibilityRangeBegin<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_visibility_range_begin", array{}]]
-    GetVisibilityRangeBeginMargin<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_visibility_range_begin_margin", array{}]]
-    GetVisibilityRangeEnd<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_visibility_range_end", array{}]]
-    GetVisibilityRangeEndMargin<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_visibility_range_end_margin", array{}]]
-    GetVisibilityRangeFadeMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_visibility_range_fade_mode", array{}]]
-    IsIgnoringOcclusionCulling<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_ignoring_occlusion_culling", array{}]]
+    GetCastShadowsSetting<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_cast_shadows_setting", array{}))
+    GetExtraCullMargin<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_extra_cull_margin", array{}))
+    GetGiMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_gi_mode", array{}))
+    GetLightmapScale<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_lightmap_scale", array{}))
+    GetLightmapTexelScale<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_lightmap_texel_scale", array{}))
+    GetLodBias<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_lod_bias", array{}))
+    GetMaterialOverlay<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_material_overlay", array{})]}
+    GetMaterialOverride<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_material_override", array{})]}
+    GetTransparency<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_transparency", array{}))
+    GetVisibilityRangeBegin<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_visibility_range_begin", array{}))
+    GetVisibilityRangeBeginMargin<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_visibility_range_begin_margin", array{}))
+    GetVisibilityRangeEnd<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_visibility_range_end", array{}))
+    GetVisibilityRangeEndMargin<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_visibility_range_end_margin", array{}))
+    GetVisibilityRangeFadeMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_visibility_range_fade_mode", array{}))
+    IsIgnoringOcclusionCulling<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_ignoring_occlusion_culling", array{}))
     SetCastShadowsSetting<public>(ShadowCastingSetting:int)<transacts>:void = VhCallVoid(Handle, "set_cast_shadows_setting", array{VhFromInt(ShadowCastingSetting)})
     SetExtraCullMargin<public>(Margin:float)<transacts>:void = VhCallVoid(Handle, "set_extra_cull_margin", array{VhFromFloat(Margin)})
     SetGiMode<public>(Mode:int)<transacts>:void = VhCallVoid(Handle, "set_gi_mode", array{VhFromInt(Mode)})
@@ -1480,30 +1480,30 @@ geometry_instance3d<public> := class(visual_instance3d):
 
 label<public> := class(control):
 
-    GetAutowrapMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_autowrap_mode", array{}]]
-    GetAutowrapTrimFlags<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_autowrap_trim_flags", array{}]]
-    GetEllipsisChar<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_ellipsis_char", array{}]]
-    GetHorizontalAlignment<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_horizontal_alignment", array{}]]
-    GetJustificationFlags<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_justification_flags", array{}]]
-    GetLabelSettings<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_label_settings", array{}]]}
-    GetLanguage<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_language", array{}]]
-    GetLineCount<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_line_count", array{}]]
-    GetLineHeight<public>(?Line:int = -1)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_line_height", array{VhFromInt(Line)}]]
-    GetLinesSkipped<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_lines_skipped", array{}]]
-    GetMaxLinesVisible<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_max_lines_visible", array{}]]
-    GetParagraphSeparator<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_paragraph_separator", array{}]]
-    GetStructuredTextBidiOverride<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_structured_text_bidi_override", array{}]]
-    GetText<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_text", array{}]]
-    GetTextDirection<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_text_direction", array{}]]
-    GetTextOverrunBehavior<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_text_overrun_behavior", array{}]]
-    GetTotalCharacterCount<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_total_character_count", array{}]]
-    GetVerticalAlignment<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_vertical_alignment", array{}]]
-    GetVisibleCharacters<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_visible_characters", array{}]]
-    GetVisibleCharactersBehavior<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_visible_characters_behavior", array{}]]
-    GetVisibleLineCount<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_visible_line_count", array{}]]
-    GetVisibleRatio<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_visible_ratio", array{}]]
-    IsClippingText<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_clipping_text", array{}]]
-    IsUppercase<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_uppercase", array{}]]
+    GetAutowrapMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_autowrap_mode", array{}))
+    GetAutowrapTrimFlags<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_autowrap_trim_flags", array{}))
+    GetEllipsisChar<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_ellipsis_char", array{}))
+    GetHorizontalAlignment<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_horizontal_alignment", array{}))
+    GetJustificationFlags<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_justification_flags", array{}))
+    GetLabelSettings<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_label_settings", array{})]}
+    GetLanguage<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_language", array{}))
+    GetLineCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_line_count", array{}))
+    GetLineHeight<public>(?Line:int = -1)<transacts>:int = VhToInt(VhCallValue(Handle, "get_line_height", array{VhFromInt(Line)}))
+    GetLinesSkipped<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_lines_skipped", array{}))
+    GetMaxLinesVisible<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_max_lines_visible", array{}))
+    GetParagraphSeparator<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_paragraph_separator", array{}))
+    GetStructuredTextBidiOverride<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_structured_text_bidi_override", array{}))
+    GetText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_text", array{}))
+    GetTextDirection<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_text_direction", array{}))
+    GetTextOverrunBehavior<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_text_overrun_behavior", array{}))
+    GetTotalCharacterCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_total_character_count", array{}))
+    GetVerticalAlignment<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_vertical_alignment", array{}))
+    GetVisibleCharacters<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_visible_characters", array{}))
+    GetVisibleCharactersBehavior<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_visible_characters_behavior", array{}))
+    GetVisibleLineCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_visible_line_count", array{}))
+    GetVisibleRatio<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_visible_ratio", array{}))
+    IsClippingText<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_clipping_text", array{}))
+    IsUppercase<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_uppercase", array{}))
     SetAutowrapMode<public>(AutowrapMode:int)<transacts>:void = VhCallVoid(Handle, "set_autowrap_mode", array{VhFromInt(AutowrapMode)})
     SetAutowrapTrimFlags<public>(AutowrapTrimFlags:int)<transacts>:void = VhCallVoid(Handle, "set_autowrap_trim_flags", array{VhFromInt(AutowrapTrimFlags)})
     SetClipText<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_clip_text", array{VhFromLogic(Enable)})
@@ -1527,22 +1527,22 @@ label<public> := class(control):
 
 light2d<public> := class(node2d):
 
-    GetBlendMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_blend_mode", array{}]]
-    GetColor<public>()<decides><transacts>:color = VhToColor[VhCallValue[Handle, "get_color", array{}]]
-    GetEnergy<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_energy", array{}]]
-    GetHeight<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_height", array{}]]
-    GetItemCullMask<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_item_cull_mask", array{}]]
-    GetItemShadowCullMask<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_item_shadow_cull_mask", array{}]]
-    GetLayerRangeMax<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_layer_range_max", array{}]]
-    GetLayerRangeMin<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_layer_range_min", array{}]]
-    GetShadowColor<public>()<decides><transacts>:color = VhToColor[VhCallValue[Handle, "get_shadow_color", array{}]]
-    GetShadowFilter<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_shadow_filter", array{}]]
-    GetShadowSmooth<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_shadow_smooth", array{}]]
-    GetZRangeMax<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_z_range_max", array{}]]
-    GetZRangeMin<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_z_range_min", array{}]]
-    IsEditorOnly<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_editor_only", array{}]]
-    IsEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_enabled", array{}]]
-    IsShadowEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_shadow_enabled", array{}]]
+    GetBlendMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_blend_mode", array{}))
+    GetColor<public>()<transacts>:color = VhToColor(VhCallValue(Handle, "get_color", array{}))
+    GetEnergy<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_energy", array{}))
+    GetHeight<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_height", array{}))
+    GetItemCullMask<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_item_cull_mask", array{}))
+    GetItemShadowCullMask<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_item_shadow_cull_mask", array{}))
+    GetLayerRangeMax<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_layer_range_max", array{}))
+    GetLayerRangeMin<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_layer_range_min", array{}))
+    GetShadowColor<public>()<transacts>:color = VhToColor(VhCallValue(Handle, "get_shadow_color", array{}))
+    GetShadowFilter<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_shadow_filter", array{}))
+    GetShadowSmooth<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_shadow_smooth", array{}))
+    GetZRangeMax<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_z_range_max", array{}))
+    GetZRangeMin<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_z_range_min", array{}))
+    IsEditorOnly<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_editor_only", array{}))
+    IsEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_enabled", array{}))
+    IsShadowEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_shadow_enabled", array{}))
     SetBlendMode<public>(Mode:int)<transacts>:void = VhCallVoid(Handle, "set_blend_mode", array{VhFromInt(Mode)})
     SetColor<public>(Color:color)<transacts>:void = VhCallVoid(Handle, "set_color", array{VhFromColor(Color)})
     SetEditorOnly<public>(EditorOnly:logic)<transacts>:void = VhCallVoid(Handle, "set_editor_only", array{VhFromLogic(EditorOnly)})
@@ -1562,22 +1562,22 @@ light2d<public> := class(node2d):
 
 light3d<public> := class(visual_instance3d):
 
-    GetBakeMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_bake_mode", array{}]]
-    GetColor<public>()<decides><transacts>:color = VhToColor[VhCallValue[Handle, "get_color", array{}]]
-    GetCorrelatedColor<public>()<decides><transacts>:color = VhToColor[VhCallValue[Handle, "get_correlated_color", array{}]]
-    GetCullMask<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_cull_mask", array{}]]
-    GetDistanceFadeBegin<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_distance_fade_begin", array{}]]
-    GetDistanceFadeLength<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_distance_fade_length", array{}]]
-    GetDistanceFadeShadow<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_distance_fade_shadow", array{}]]
-    GetParam<public>(Param:int)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_param", array{VhFromInt(Param)}]]
-    GetProjector<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue[Handle, "get_projector", array{}]]}
-    GetShadowCasterMask<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_shadow_caster_mask", array{}]]
-    GetShadowReverseCullFace<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_shadow_reverse_cull_face", array{}]]
-    GetTemperature<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_temperature", array{}]]
-    HasShadow<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_shadow", array{}]]
-    IsDistanceFadeEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_distance_fade_enabled", array{}]]
-    IsEditorOnly<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_editor_only", array{}]]
-    IsNegative<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_negative", array{}]]
+    GetBakeMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_bake_mode", array{}))
+    GetColor<public>()<transacts>:color = VhToColor(VhCallValue(Handle, "get_color", array{}))
+    GetCorrelatedColor<public>()<transacts>:color = VhToColor(VhCallValue(Handle, "get_correlated_color", array{}))
+    GetCullMask<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_cull_mask", array{}))
+    GetDistanceFadeBegin<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_distance_fade_begin", array{}))
+    GetDistanceFadeLength<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_distance_fade_length", array{}))
+    GetDistanceFadeShadow<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_distance_fade_shadow", array{}))
+    GetParam<public>(Param:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_param", array{VhFromInt(Param)}))
+    GetProjector<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_projector", array{})]}
+    GetShadowCasterMask<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_shadow_caster_mask", array{}))
+    GetShadowReverseCullFace<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_shadow_reverse_cull_face", array{}))
+    GetTemperature<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_temperature", array{}))
+    HasShadow<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_shadow", array{}))
+    IsDistanceFadeEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_distance_fade_enabled", array{}))
+    IsEditorOnly<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_editor_only", array{}))
+    IsNegative<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_negative", array{}))
     SetBakeMode<public>(BakeMode:int)<transacts>:void = VhCallVoid(Handle, "set_bake_mode", array{VhFromInt(BakeMode)})
     SetColor<public>(Color:color)<transacts>:void = VhCallVoid(Handle, "set_color", array{VhFromColor(Color)})
     SetCullMask<public>(CullMask:int)<transacts>:void = VhCallVoid(Handle, "set_cull_mask", array{VhFromInt(CullMask)})
@@ -1603,55 +1603,55 @@ line_edit<public> := class(control):
     DeleteText<public>(FromColumn:int, ToColumn:int)<transacts>:void = VhCallVoid(Handle, "delete_text", array{VhFromInt(FromColumn), VhFromInt(ToColumn)})
     Deselect<public>()<transacts>:void = VhCallVoid(Handle, "deselect", array{})
     Edit<public>(?HideFocus:logic = false)<transacts>:void = VhCallVoid(Handle, "edit", array{VhFromLogic(HideFocus)})
-    GetCaretBlinkInterval<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_caret_blink_interval", array{}]]
-    GetCaretColumn<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_caret_column", array{}]]
-    GetDrawControlChars<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_draw_control_chars", array{}]]
-    GetHorizontalAlignment<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_horizontal_alignment", array{}]]
-    GetIconExpandMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_icon_expand_mode", array{}]]
-    GetLanguage<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_language", array{}]]
-    GetMaxLength<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_max_length", array{}]]
-    GetMenu<public>()<decides><transacts>:window = window{Handle := VhToHandle[VhCallValue[Handle, "get_menu", array{}]]}
-    GetNextCompositeCharacterColumn<public>(Column:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_next_composite_character_column", array{VhFromInt(Column)}]]
-    GetPlaceholder<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_placeholder", array{}]]
-    GetPreviousCompositeCharacterColumn<public>(Column:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_previous_composite_character_column", array{VhFromInt(Column)}]]
-    GetRightIcon<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue[Handle, "get_right_icon", array{}]]}
-    GetRightIconScale<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_right_icon_scale", array{}]]
-    GetScrollOffset<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_scroll_offset", array{}]]
-    GetSecretCharacter<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_secret_character", array{}]]
-    GetSelectedText<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_selected_text", array{}]]
-    GetSelectionFromColumn<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_from_column", array{}]]
-    GetSelectionToColumn<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_to_column", array{}]]
-    GetStructuredTextBidiOverride<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_structured_text_bidi_override", array{}]]
-    GetText<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_text", array{}]]
-    GetTextDirection<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_text_direction", array{}]]
-    GetVirtualKeyboardShowOnFocus<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_virtual_keyboard_show_on_focus", array{}]]
-    GetVirtualKeyboardType<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_virtual_keyboard_type", array{}]]
-    HasImeText<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_ime_text", array{}]]
-    HasRedo<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_redo", array{}]]
-    HasSelection<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_selection", array{}]]
-    HasUndo<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_undo", array{}]]
+    GetCaretBlinkInterval<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_caret_blink_interval", array{}))
+    GetCaretColumn<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_caret_column", array{}))
+    GetDrawControlChars<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_draw_control_chars", array{}))
+    GetHorizontalAlignment<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_horizontal_alignment", array{}))
+    GetIconExpandMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_icon_expand_mode", array{}))
+    GetLanguage<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_language", array{}))
+    GetMaxLength<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_max_length", array{}))
+    GetMenu<public>()<decides><transacts>:window = window{Handle := VhToHandle[VhCallValue(Handle, "get_menu", array{})]}
+    GetNextCompositeCharacterColumn<public>(Column:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_next_composite_character_column", array{VhFromInt(Column)}))
+    GetPlaceholder<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_placeholder", array{}))
+    GetPreviousCompositeCharacterColumn<public>(Column:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_previous_composite_character_column", array{VhFromInt(Column)}))
+    GetRightIcon<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_right_icon", array{})]}
+    GetRightIconScale<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_right_icon_scale", array{}))
+    GetScrollOffset<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_scroll_offset", array{}))
+    GetSecretCharacter<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_secret_character", array{}))
+    GetSelectedText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_selected_text", array{}))
+    GetSelectionFromColumn<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_selection_from_column", array{}))
+    GetSelectionToColumn<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_selection_to_column", array{}))
+    GetStructuredTextBidiOverride<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_structured_text_bidi_override", array{}))
+    GetText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_text", array{}))
+    GetTextDirection<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_text_direction", array{}))
+    GetVirtualKeyboardShowOnFocus<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_virtual_keyboard_show_on_focus", array{}))
+    GetVirtualKeyboardType<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_virtual_keyboard_type", array{}))
+    HasImeText<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_ime_text", array{}))
+    HasRedo<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_redo", array{}))
+    HasSelection<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_selection", array{}))
+    HasUndo<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_undo", array{}))
     InsertTextAtCaret<public>(Text:string)<transacts>:void = VhCallVoid(Handle, "insert_text_at_caret", array{VhFromString(Text)})
-    IsBackspaceDeletesCompositeCharacterEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_backspace_deletes_composite_character_enabled", array{}]]
-    IsCaretBlinkEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_caret_blink_enabled", array{}]]
-    IsCaretForceDisplayed<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_caret_force_displayed", array{}]]
-    IsCaretMidGraphemeEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_caret_mid_grapheme_enabled", array{}]]
-    IsClearButtonEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_clear_button_enabled", array{}]]
-    IsContextMenuEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_context_menu_enabled", array{}]]
-    IsDeselectOnFocusLossEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_deselect_on_focus_loss_enabled", array{}]]
-    IsDragAndDropSelectionEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_drag_and_drop_selection_enabled", array{}]]
-    IsEditable<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_editable", array{}]]
-    IsEditing<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_editing", array{}]]
-    IsEditingKeptOnTextSubmit<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_editing_kept_on_text_submit", array{}]]
-    IsEmojiMenuEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_emoji_menu_enabled", array{}]]
-    IsExpandToTextLengthEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_expand_to_text_length_enabled", array{}]]
-    IsFlat<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_flat", array{}]]
-    IsMenuVisible<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_menu_visible", array{}]]
-    IsMiddleMousePasteEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_middle_mouse_paste_enabled", array{}]]
-    IsSecret<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_secret", array{}]]
-    IsSelectAllOnFocus<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_select_all_on_focus", array{}]]
-    IsSelectingEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_selecting_enabled", array{}]]
-    IsShortcutKeysEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_shortcut_keys_enabled", array{}]]
-    IsVirtualKeyboardEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_virtual_keyboard_enabled", array{}]]
+    IsBackspaceDeletesCompositeCharacterEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_backspace_deletes_composite_character_enabled", array{}))
+    IsCaretBlinkEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_caret_blink_enabled", array{}))
+    IsCaretForceDisplayed<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_caret_force_displayed", array{}))
+    IsCaretMidGraphemeEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_caret_mid_grapheme_enabled", array{}))
+    IsClearButtonEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_clear_button_enabled", array{}))
+    IsContextMenuEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_context_menu_enabled", array{}))
+    IsDeselectOnFocusLossEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_deselect_on_focus_loss_enabled", array{}))
+    IsDragAndDropSelectionEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_drag_and_drop_selection_enabled", array{}))
+    IsEditable<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_editable", array{}))
+    IsEditing<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_editing", array{}))
+    IsEditingKeptOnTextSubmit<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_editing_kept_on_text_submit", array{}))
+    IsEmojiMenuEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_emoji_menu_enabled", array{}))
+    IsExpandToTextLengthEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_expand_to_text_length_enabled", array{}))
+    IsFlat<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_flat", array{}))
+    IsMenuVisible<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_menu_visible", array{}))
+    IsMiddleMousePasteEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_middle_mouse_paste_enabled", array{}))
+    IsSecret<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_secret", array{}))
+    IsSelectAllOnFocus<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_select_all_on_focus", array{}))
+    IsSelectingEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_selecting_enabled", array{}))
+    IsShortcutKeysEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_shortcut_keys_enabled", array{}))
+    IsVirtualKeyboardEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_virtual_keyboard_enabled", array{}))
     MenuOption<public>(Option:int)<transacts>:void = VhCallVoid(Handle, "menu_option", array{VhFromInt(Option)})
     Select<public>(?From:int = 0, ?To:int = -1)<transacts>:void = VhCallVoid(Handle, "select", array{VhFromInt(From), VhFromInt(To)})
     SelectAll<public>()<transacts>:void = VhCallVoid(Handle, "select_all", array{})
@@ -1697,24 +1697,24 @@ panel<public> := class(control):
 physics_body3d<public> := class(collision_object3d):
 
     AddCollisionExceptionWith<public>(Body:node)<transacts>:void = VhCallVoid(Handle, "add_collision_exception_with", array{VhFromObject(Body)})
-    GetAxisLock<public>(Axis:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_axis_lock", array{VhFromInt(Axis)}]]
-    GetGravity<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_gravity", array{}]]
-    MoveAndCollide<public>(Motion:vector3, ?TestOnly:logic = false, ?SafeMargin:float = 0.001, ?RecoveryAsCollision:logic = false, ?MaxCollisions:int = 1)<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue[Handle, "move_and_collide", array{VhFromVector3(Motion), VhFromLogic(TestOnly), VhFromFloat(SafeMargin), VhFromLogic(RecoveryAsCollision), VhFromInt(MaxCollisions)}]]}
+    GetAxisLock<public>(Axis:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_axis_lock", array{VhFromInt(Axis)}))
+    GetGravity<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_gravity", array{}))
+    MoveAndCollide<public>(Motion:vector3, ?TestOnly:logic = false, ?SafeMargin:float = 0.001, ?RecoveryAsCollision:logic = false, ?MaxCollisions:int = 1)<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue(Handle, "move_and_collide", array{VhFromVector3(Motion), VhFromLogic(TestOnly), VhFromFloat(SafeMargin), VhFromLogic(RecoveryAsCollision), VhFromInt(MaxCollisions)})]}
     RemoveCollisionExceptionWith<public>(Body:node)<transacts>:void = VhCallVoid(Handle, "remove_collision_exception_with", array{VhFromObject(Body)})
     SetAxisLock<public>(Axis:int, Lock:logic)<transacts>:void = VhCallVoid(Handle, "set_axis_lock", array{VhFromInt(Axis), VhFromLogic(Lock)})
 
 range<public> := class(control):
 
-    GetAsRatio<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_as_ratio", array{}]]
-    GetMax<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_max", array{}]]
-    GetMin<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_min", array{}]]
-    GetPage<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_page", array{}]]
-    GetStep<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_step", array{}]]
-    GetValue<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_value", array{}]]
-    IsGreaterAllowed<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_greater_allowed", array{}]]
-    IsLesserAllowed<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_lesser_allowed", array{}]]
-    IsRatioExp<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_ratio_exp", array{}]]
-    IsUsingRoundedValues<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_using_rounded_values", array{}]]
+    GetAsRatio<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_as_ratio", array{}))
+    GetMax<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_max", array{}))
+    GetMin<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_min", array{}))
+    GetPage<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_page", array{}))
+    GetStep<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_step", array{}))
+    GetValue<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_value", array{}))
+    IsGreaterAllowed<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_greater_allowed", array{}))
+    IsLesserAllowed<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_lesser_allowed", array{}))
+    IsRatioExp<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_ratio_exp", array{}))
+    IsUsingRoundedValues<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_using_rounded_values", array{}))
     SetAllowGreater<public>(Allow:logic)<transacts>:void = VhCallVoid(Handle, "set_allow_greater", array{VhFromLogic(Allow)})
     SetAllowLesser<public>(Allow:logic)<transacts>:void = VhCallVoid(Handle, "set_allow_lesser", array{VhFromLogic(Allow)})
     SetAsRatio<public>(Value:float)<transacts>:void = VhCallVoid(Handle, "set_as_ratio", array{VhFromFloat(Value)})
@@ -1736,57 +1736,57 @@ rich_text_label<public> := class(control):
     AppendText<public>(Bbcode:string)<transacts>:void = VhCallVoid(Handle, "append_text", array{VhFromString(Bbcode)})
     Clear<public>()<transacts>:void = VhCallVoid(Handle, "clear", array{})
     Deselect<public>()<transacts>:void = VhCallVoid(Handle, "deselect", array{})
-    GetAutowrapMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_autowrap_mode", array{}]]
-    GetAutowrapTrimFlags<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_autowrap_trim_flags", array{}]]
-    GetCharacterLine<public>(Character:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_character_line", array{VhFromInt(Character)}]]
-    GetCharacterParagraph<public>(Character:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_character_paragraph", array{VhFromInt(Character)}]]
-    GetContentHeight<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_content_height", array{}]]
-    GetContentWidth<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_content_width", array{}]]
-    GetHorizontalAlignment<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_horizontal_alignment", array{}]]
-    GetJustificationFlags<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_justification_flags", array{}]]
-    GetLanguage<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_language", array{}]]
-    GetLineCount<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_line_count", array{}]]
-    GetLineHeight<public>(Line:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_line_height", array{VhFromInt(Line)}]]
-    GetLineOffset<public>(Line:int)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_line_offset", array{VhFromInt(Line)}]]
-    GetLineWidth<public>(Line:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_line_width", array{VhFromInt(Line)}]]
-    GetMenu<public>()<decides><transacts>:window = window{Handle := VhToHandle[VhCallValue[Handle, "get_menu", array{}]]}
-    GetParagraphCount<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_paragraph_count", array{}]]
-    GetParagraphOffset<public>(Paragraph:int)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_paragraph_offset", array{VhFromInt(Paragraph)}]]
-    GetParsedText<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_parsed_text", array{}]]
-    GetProgressBarDelay<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_progress_bar_delay", array{}]]
-    GetSelectedText<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_selected_text", array{}]]
-    GetSelectionFrom<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_from", array{}]]
-    GetSelectionLineOffset<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_selection_line_offset", array{}]]
-    GetSelectionTo<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_to", array{}]]
-    GetStructuredTextBidiOverride<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_structured_text_bidi_override", array{}]]
-    GetTabSize<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_tab_size", array{}]]
-    GetText<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_text", array{}]]
-    GetTextDirection<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_text_direction", array{}]]
-    GetTotalCharacterCount<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_total_character_count", array{}]]
-    GetVScrollBar<public>()<decides><transacts>:range = range{Handle := VhToHandle[VhCallValue[Handle, "get_v_scroll_bar", array{}]]}
-    GetVerticalAlignment<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_vertical_alignment", array{}]]
-    GetVisibleCharacters<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_visible_characters", array{}]]
-    GetVisibleCharactersBehavior<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_visible_characters_behavior", array{}]]
-    GetVisibleLineCount<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_visible_line_count", array{}]]
-    GetVisibleParagraphCount<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_visible_paragraph_count", array{}]]
-    GetVisibleRatio<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_visible_ratio", array{}]]
-    InvalidateParagraph<public>(Paragraph:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "invalidate_paragraph", array{VhFromInt(Paragraph)}]]
-    IsContextMenuEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_context_menu_enabled", array{}]]
-    IsDeselectOnFocusLossEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_deselect_on_focus_loss_enabled", array{}]]
-    IsDragAndDropSelectionEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_drag_and_drop_selection_enabled", array{}]]
-    IsFinished<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_finished", array{}]]
-    IsFitContentEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_fit_content_enabled", array{}]]
-    IsHintUnderlined<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_hint_underlined", array{}]]
-    IsMenuVisible<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_menu_visible", array{}]]
-    IsMetaUnderlined<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_meta_underlined", array{}]]
-    IsReady<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_ready", array{}]]
-    IsScrollActive<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_scroll_active", array{}]]
-    IsScrollFollowing<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_scroll_following", array{}]]
-    IsScrollFollowingVisibleCharacters<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_scroll_following_visible_characters", array{}]]
-    IsSelectionEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_selection_enabled", array{}]]
-    IsShortcutKeysEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_shortcut_keys_enabled", array{}]]
-    IsThreaded<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_threaded", array{}]]
-    IsUsingBbcode<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_using_bbcode", array{}]]
+    GetAutowrapMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_autowrap_mode", array{}))
+    GetAutowrapTrimFlags<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_autowrap_trim_flags", array{}))
+    GetCharacterLine<public>(Character:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_character_line", array{VhFromInt(Character)}))
+    GetCharacterParagraph<public>(Character:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_character_paragraph", array{VhFromInt(Character)}))
+    GetContentHeight<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_content_height", array{}))
+    GetContentWidth<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_content_width", array{}))
+    GetHorizontalAlignment<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_horizontal_alignment", array{}))
+    GetJustificationFlags<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_justification_flags", array{}))
+    GetLanguage<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_language", array{}))
+    GetLineCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_line_count", array{}))
+    GetLineHeight<public>(Line:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_line_height", array{VhFromInt(Line)}))
+    GetLineOffset<public>(Line:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_line_offset", array{VhFromInt(Line)}))
+    GetLineWidth<public>(Line:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_line_width", array{VhFromInt(Line)}))
+    GetMenu<public>()<decides><transacts>:window = window{Handle := VhToHandle[VhCallValue(Handle, "get_menu", array{})]}
+    GetParagraphCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_paragraph_count", array{}))
+    GetParagraphOffset<public>(Paragraph:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_paragraph_offset", array{VhFromInt(Paragraph)}))
+    GetParsedText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_parsed_text", array{}))
+    GetProgressBarDelay<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_progress_bar_delay", array{}))
+    GetSelectedText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_selected_text", array{}))
+    GetSelectionFrom<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_selection_from", array{}))
+    GetSelectionLineOffset<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_selection_line_offset", array{}))
+    GetSelectionTo<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_selection_to", array{}))
+    GetStructuredTextBidiOverride<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_structured_text_bidi_override", array{}))
+    GetTabSize<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_tab_size", array{}))
+    GetText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_text", array{}))
+    GetTextDirection<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_text_direction", array{}))
+    GetTotalCharacterCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_total_character_count", array{}))
+    GetVScrollBar<public>()<decides><transacts>:range = range{Handle := VhToHandle[VhCallValue(Handle, "get_v_scroll_bar", array{})]}
+    GetVerticalAlignment<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_vertical_alignment", array{}))
+    GetVisibleCharacters<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_visible_characters", array{}))
+    GetVisibleCharactersBehavior<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_visible_characters_behavior", array{}))
+    GetVisibleLineCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_visible_line_count", array{}))
+    GetVisibleParagraphCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_visible_paragraph_count", array{}))
+    GetVisibleRatio<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_visible_ratio", array{}))
+    InvalidateParagraph<public>(Paragraph:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "invalidate_paragraph", array{VhFromInt(Paragraph)}))
+    IsContextMenuEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_context_menu_enabled", array{}))
+    IsDeselectOnFocusLossEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_deselect_on_focus_loss_enabled", array{}))
+    IsDragAndDropSelectionEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_drag_and_drop_selection_enabled", array{}))
+    IsFinished<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_finished", array{}))
+    IsFitContentEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_fit_content_enabled", array{}))
+    IsHintUnderlined<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_hint_underlined", array{}))
+    IsMenuVisible<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_menu_visible", array{}))
+    IsMetaUnderlined<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_meta_underlined", array{}))
+    IsReady<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_ready", array{}))
+    IsScrollActive<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_scroll_active", array{}))
+    IsScrollFollowing<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_scroll_following", array{}))
+    IsScrollFollowingVisibleCharacters<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_scroll_following_visible_characters", array{}))
+    IsSelectionEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_selection_enabled", array{}))
+    IsShortcutKeysEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_shortcut_keys_enabled", array{}))
+    IsThreaded<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_threaded", array{}))
+    IsUsingBbcode<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_using_bbcode", array{}))
     MenuOption<public>(Option:int)<transacts>:void = VhCallVoid(Handle, "menu_option", array{VhFromInt(Option)})
     Newline<public>()<transacts>:void = VhCallVoid(Handle, "newline", array{})
     ParseBbcode<public>(Bbcode:string)<transacts>:void = VhCallVoid(Handle, "parse_bbcode", array{VhFromString(Bbcode)})
@@ -1815,7 +1815,7 @@ rich_text_label<public> := class(control):
     PushTable<public>(Columns:int, ?InlineAlign:int = 0, ?AlignToRow:int = -1, ?Name:string = "")<transacts>:void = VhCallVoid(Handle, "push_table", array{VhFromInt(Columns), VhFromInt(InlineAlign), VhFromInt(AlignToRow), VhFromString(Name)})
     PushUnderline<public>(?Color:color = color{R := 0.0, G := 0.0, B := 0.0, A := 0.0})<transacts>:void = VhCallVoid(Handle, "push_underline", array{VhFromColor(Color)})
     ReloadEffects<public>()<transacts>:void = VhCallVoid(Handle, "reload_effects", array{})
-    RemoveParagraph<public>(Paragraph:int, ?NoInvalidate:logic = false)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "remove_paragraph", array{VhFromInt(Paragraph), VhFromLogic(NoInvalidate)}]]
+    RemoveParagraph<public>(Paragraph:int, ?NoInvalidate:logic = false)<transacts>:logic = VhToLogic(VhCallValue(Handle, "remove_paragraph", array{VhFromInt(Paragraph), VhFromLogic(NoInvalidate)}))
     ScrollToLine<public>(Line:int)<transacts>:void = VhCallVoid(Handle, "scroll_to_line", array{VhFromInt(Line)})
     ScrollToParagraph<public>(Paragraph:int)<transacts>:void = VhCallVoid(Handle, "scroll_to_paragraph", array{VhFromInt(Paragraph)})
     ScrollToSelection<public>()<transacts>:void = VhCallVoid(Handle, "scroll_to_selection", array{})
@@ -1855,17 +1855,17 @@ rich_text_label<public> := class(control):
 
 sprite2d<public> := class(node2d):
 
-    GetFrame<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_frame", array{}]]
-    GetHframes<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_hframes", array{}]]
-    GetOffset<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_offset", array{}]]
-    GetTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue[Handle, "get_texture", array{}]]}
-    GetVframes<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_vframes", array{}]]
-    IsCentered<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_centered", array{}]]
-    IsFlippedH<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_flipped_h", array{}]]
-    IsFlippedV<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_flipped_v", array{}]]
-    IsPixelOpaque<public>(Pos:vector2)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_pixel_opaque", array{VhFromVector2(Pos)}]]
-    IsRegionEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_region_enabled", array{}]]
-    IsRegionFilterClipEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_region_filter_clip_enabled", array{}]]
+    GetFrame<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_frame", array{}))
+    GetHframes<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_hframes", array{}))
+    GetOffset<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_offset", array{}))
+    GetTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture", array{})]}
+    GetVframes<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_vframes", array{}))
+    IsCentered<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_centered", array{}))
+    IsFlippedH<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_flipped_h", array{}))
+    IsFlippedV<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_flipped_v", array{}))
+    IsPixelOpaque<public>(Pos:vector2)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_pixel_opaque", array{VhFromVector2(Pos)}))
+    IsRegionEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_region_enabled", array{}))
+    IsRegionFilterClipEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_region_filter_clip_enabled", array{}))
     SetCentered<public>(Centered:logic)<transacts>:void = VhCallVoid(Handle, "set_centered", array{VhFromLogic(Centered)})
     SetFlipH<public>(FlipH:logic)<transacts>:void = VhCallVoid(Handle, "set_flip_h", array{VhFromLogic(FlipH)})
     SetFlipV<public>(FlipV:logic)<transacts>:void = VhCallVoid(Handle, "set_flip_v", array{VhFromLogic(FlipV)})
@@ -1879,7 +1879,7 @@ sprite2d<public> := class(node2d):
 
 text_edit<public> := class(control):
 
-    AddCaret<public>(Line:int, Column:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "add_caret", array{VhFromInt(Line), VhFromInt(Column)}]]
+    AddCaret<public>(Line:int, Column:int)<transacts>:int = VhToInt(VhCallValue(Handle, "add_caret", array{VhFromInt(Line), VhFromInt(Column)}))
     AddCaretAtCarets<public>(Below:logic)<transacts>:void = VhCallVoid(Handle, "add_caret_at_carets", array{VhFromLogic(Below)})
     AddGutter<public>(?At:int = -1)<transacts>:void = VhCallVoid(Handle, "add_gutter", array{VhFromInt(At)})
     AddSelectionForNextOccurrence<public>()<transacts>:void = VhCallVoid(Handle, "add_selection_for_next_occurrence", array{})
@@ -1901,131 +1901,131 @@ text_edit<public> := class(control):
     EndAction<public>()<transacts>:void = VhCallVoid(Handle, "end_action", array{})
     EndComplexOperation<public>()<transacts>:void = VhCallVoid(Handle, "end_complex_operation", array{})
     EndMulticaretEdit<public>()<transacts>:void = VhCallVoid(Handle, "end_multicaret_edit", array{})
-    GetAutowrapMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_autowrap_mode", array{}]]
-    GetCaretBlinkInterval<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_caret_blink_interval", array{}]]
-    GetCaretColumn<public>(?CaretIndex:int = 0)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_caret_column", array{VhFromInt(CaretIndex)}]]
-    GetCaretCount<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_caret_count", array{}]]
-    GetCaretDrawPos<public>(?CaretIndex:int = 0)<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_caret_draw_pos", array{VhFromInt(CaretIndex)}]]
-    GetCaretLine<public>(?CaretIndex:int = 0)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_caret_line", array{VhFromInt(CaretIndex)}]]
-    GetCaretType<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_caret_type", array{}]]
-    GetCaretWrapIndex<public>(?CaretIndex:int = 0)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_caret_wrap_index", array{VhFromInt(CaretIndex)}]]
-    GetCustomWordSeparators<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_custom_word_separators", array{}]]
-    GetDrawControlChars<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_draw_control_chars", array{}]]
-    GetFirstNonWhitespaceColumn<public>(Line:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_first_non_whitespace_column", array{VhFromInt(Line)}]]
-    GetFirstVisibleLine<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_first_visible_line", array{}]]
-    GetGutterCount<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_gutter_count", array{}]]
-    GetGutterName<public>(Gutter:int)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_gutter_name", array{VhFromInt(Gutter)}]]
-    GetGutterType<public>(Gutter:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_gutter_type", array{VhFromInt(Gutter)}]]
-    GetGutterWidth<public>(Gutter:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_gutter_width", array{VhFromInt(Gutter)}]]
-    GetHScroll<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_h_scroll", array{}]]
-    GetHScrollBar<public>()<decides><transacts>:range = range{Handle := VhToHandle[VhCallValue[Handle, "get_h_scroll_bar", array{}]]}
-    GetIndentLevel<public>(Line:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_indent_level", array{VhFromInt(Line)}]]
-    GetLanguage<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_language", array{}]]
-    GetLastFullVisibleLine<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_last_full_visible_line", array{}]]
-    GetLastFullVisibleLineWrapIndex<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_last_full_visible_line_wrap_index", array{}]]
-    GetLastUnhiddenLine<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_last_unhidden_line", array{}]]
-    GetLine<public>(Line:int)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_line", array{VhFromInt(Line)}]]
-    GetLineBackgroundColor<public>(Line:int)<decides><transacts>:color = VhToColor[VhCallValue[Handle, "get_line_background_color", array{VhFromInt(Line)}]]
-    GetLineCount<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_line_count", array{}]]
-    GetLineGutterIcon<public>(Line:int, Gutter:int)<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue[Handle, "get_line_gutter_icon", array{VhFromInt(Line), VhFromInt(Gutter)}]]}
-    GetLineGutterItemColor<public>(Line:int, Gutter:int)<decides><transacts>:color = VhToColor[VhCallValue[Handle, "get_line_gutter_item_color", array{VhFromInt(Line), VhFromInt(Gutter)}]]
-    GetLineGutterText<public>(Line:int, Gutter:int)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_line_gutter_text", array{VhFromInt(Line), VhFromInt(Gutter)}]]
-    GetLineHeight<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_line_height", array{}]]
-    GetLineWidth<public>(Line:int, ?WrapIndex:int = -1)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_line_width", array{VhFromInt(Line), VhFromInt(WrapIndex)}]]
-    GetLineWithIme<public>(Line:int)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_line_with_ime", array{VhFromInt(Line)}]]
-    GetLineWrapCount<public>(Line:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_line_wrap_count", array{VhFromInt(Line)}]]
-    GetLineWrapIndexAtColumn<public>(Line:int, Column:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_line_wrap_index_at_column", array{VhFromInt(Line), VhFromInt(Column)}]]
-    GetLineWrappedText<public>(Line:int)<decides><transacts>:[]string = VhToStrings(VhCallValue[Handle, "get_line_wrapped_text", array{VhFromInt(Line)}])
-    GetLineWrappingMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_line_wrapping_mode", array{}]]
-    GetLocalMousePos<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_local_mouse_pos", array{}]]
-    GetMenu<public>()<decides><transacts>:window = window{Handle := VhToHandle[VhCallValue[Handle, "get_menu", array{}]]}
-    GetMinimapVisibleLines<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_minimap_visible_lines", array{}]]
-    GetMinimapWidth<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_minimap_width", array{}]]
-    GetNextCompositeCharacterColumn<public>(Line:int, Column:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_next_composite_character_column", array{VhFromInt(Line), VhFromInt(Column)}]]
-    GetNextVisibleLineOffsetFrom<public>(Line:int, VisibleAmount:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_next_visible_line_offset_from", array{VhFromInt(Line), VhFromInt(VisibleAmount)}]]
-    GetPlaceholder<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_placeholder", array{}]]
-    GetPreviousCompositeCharacterColumn<public>(Line:int, Column:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_previous_composite_character_column", array{VhFromInt(Line), VhFromInt(Column)}]]
-    GetSavedVersion<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_saved_version", array{}]]
-    GetScrollPosForLine<public>(Line:int, ?WrapIndex:int = 0)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_scroll_pos_for_line", array{VhFromInt(Line), VhFromInt(WrapIndex)}]]
-    GetSelectedText<public>(?CaretIndex:int = -1)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_selected_text", array{VhFromInt(CaretIndex)}]]
-    GetSelectionAtLineColumn<public>(Line:int, Column:int, ?IncludeEdges:logic = true, ?OnlySelections:logic = true)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_at_line_column", array{VhFromInt(Line), VhFromInt(Column), VhFromLogic(IncludeEdges), VhFromLogic(OnlySelections)}]]
-    GetSelectionColumn<public>(?CaretIndex:int = 0)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_column", array{VhFromInt(CaretIndex)}]]
-    GetSelectionFromColumn<public>(?CaretIndex:int = 0)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_from_column", array{VhFromInt(CaretIndex)}]]
-    GetSelectionFromLine<public>(?CaretIndex:int = 0)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_from_line", array{VhFromInt(CaretIndex)}]]
-    GetSelectionLine<public>(?CaretIndex:int = 0)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_line", array{VhFromInt(CaretIndex)}]]
-    GetSelectionMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_mode", array{}]]
-    GetSelectionOriginColumn<public>(?CaretIndex:int = 0)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_origin_column", array{VhFromInt(CaretIndex)}]]
-    GetSelectionOriginLine<public>(?CaretIndex:int = 0)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_origin_line", array{VhFromInt(CaretIndex)}]]
-    GetSelectionToColumn<public>(?CaretIndex:int = 0)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_to_column", array{VhFromInt(CaretIndex)}]]
-    GetSelectionToLine<public>(?CaretIndex:int = 0)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_selection_to_line", array{VhFromInt(CaretIndex)}]]
-    GetStructuredTextBidiOverride<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_structured_text_bidi_override", array{}]]
-    GetSyntaxHighlighter<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_syntax_highlighter", array{}]]}
-    GetTabInputMode<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_tab_input_mode", array{}]]
-    GetTabSize<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_tab_size", array{}]]
-    GetText<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_text", array{}]]
-    GetTextDirection<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_text_direction", array{}]]
-    GetTotalGutterWidth<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_total_gutter_width", array{}]]
-    GetTotalVisibleLineCount<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_total_visible_line_count", array{}]]
-    GetVScroll<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_v_scroll", array{}]]
-    GetVScrollBar<public>()<decides><transacts>:range = range{Handle := VhToHandle[VhCallValue[Handle, "get_v_scroll_bar", array{}]]}
-    GetVScrollSpeed<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_v_scroll_speed", array{}]]
-    GetVersion<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_version", array{}]]
-    GetVirtualKeyboardShowOnFocus<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_virtual_keyboard_show_on_focus", array{}]]
-    GetVisibleLineCount<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_visible_line_count", array{}]]
-    GetVisibleLineCountInRange<public>(FromLine:int, ToLine:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_visible_line_count_in_range", array{VhFromInt(FromLine), VhFromInt(ToLine)}]]
-    GetWordAtPos<public>(Position:vector2)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_word_at_pos", array{VhFromVector2(Position)}]]
-    GetWordUnderCaret<public>(?CaretIndex:int = -1)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_word_under_caret", array{VhFromInt(CaretIndex)}]]
-    HasImeText<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_ime_text", array{}]]
-    HasRedo<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_redo", array{}]]
-    HasSelection<public>(?CaretIndex:int = -1)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_selection", array{VhFromInt(CaretIndex)}]]
-    HasUndo<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_undo", array{}]]
+    GetAutowrapMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_autowrap_mode", array{}))
+    GetCaretBlinkInterval<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_caret_blink_interval", array{}))
+    GetCaretColumn<public>(?CaretIndex:int = 0)<transacts>:int = VhToInt(VhCallValue(Handle, "get_caret_column", array{VhFromInt(CaretIndex)}))
+    GetCaretCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_caret_count", array{}))
+    GetCaretDrawPos<public>(?CaretIndex:int = 0)<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_caret_draw_pos", array{VhFromInt(CaretIndex)}))
+    GetCaretLine<public>(?CaretIndex:int = 0)<transacts>:int = VhToInt(VhCallValue(Handle, "get_caret_line", array{VhFromInt(CaretIndex)}))
+    GetCaretType<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_caret_type", array{}))
+    GetCaretWrapIndex<public>(?CaretIndex:int = 0)<transacts>:int = VhToInt(VhCallValue(Handle, "get_caret_wrap_index", array{VhFromInt(CaretIndex)}))
+    GetCustomWordSeparators<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_custom_word_separators", array{}))
+    GetDrawControlChars<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_draw_control_chars", array{}))
+    GetFirstNonWhitespaceColumn<public>(Line:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_first_non_whitespace_column", array{VhFromInt(Line)}))
+    GetFirstVisibleLine<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_first_visible_line", array{}))
+    GetGutterCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_gutter_count", array{}))
+    GetGutterName<public>(Gutter:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_gutter_name", array{VhFromInt(Gutter)}))
+    GetGutterType<public>(Gutter:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_gutter_type", array{VhFromInt(Gutter)}))
+    GetGutterWidth<public>(Gutter:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_gutter_width", array{VhFromInt(Gutter)}))
+    GetHScroll<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_h_scroll", array{}))
+    GetHScrollBar<public>()<decides><transacts>:range = range{Handle := VhToHandle[VhCallValue(Handle, "get_h_scroll_bar", array{})]}
+    GetIndentLevel<public>(Line:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_indent_level", array{VhFromInt(Line)}))
+    GetLanguage<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_language", array{}))
+    GetLastFullVisibleLine<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_last_full_visible_line", array{}))
+    GetLastFullVisibleLineWrapIndex<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_last_full_visible_line_wrap_index", array{}))
+    GetLastUnhiddenLine<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_last_unhidden_line", array{}))
+    GetLine<public>(Line:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_line", array{VhFromInt(Line)}))
+    GetLineBackgroundColor<public>(Line:int)<transacts>:color = VhToColor(VhCallValue(Handle, "get_line_background_color", array{VhFromInt(Line)}))
+    GetLineCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_line_count", array{}))
+    GetLineGutterIcon<public>(Line:int, Gutter:int)<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_line_gutter_icon", array{VhFromInt(Line), VhFromInt(Gutter)})]}
+    GetLineGutterItemColor<public>(Line:int, Gutter:int)<transacts>:color = VhToColor(VhCallValue(Handle, "get_line_gutter_item_color", array{VhFromInt(Line), VhFromInt(Gutter)}))
+    GetLineGutterText<public>(Line:int, Gutter:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_line_gutter_text", array{VhFromInt(Line), VhFromInt(Gutter)}))
+    GetLineHeight<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_line_height", array{}))
+    GetLineWidth<public>(Line:int, ?WrapIndex:int = -1)<transacts>:int = VhToInt(VhCallValue(Handle, "get_line_width", array{VhFromInt(Line), VhFromInt(WrapIndex)}))
+    GetLineWithIme<public>(Line:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_line_with_ime", array{VhFromInt(Line)}))
+    GetLineWrapCount<public>(Line:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_line_wrap_count", array{VhFromInt(Line)}))
+    GetLineWrapIndexAtColumn<public>(Line:int, Column:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_line_wrap_index_at_column", array{VhFromInt(Line), VhFromInt(Column)}))
+    GetLineWrappedText<public>(Line:int)<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_line_wrapped_text", array{VhFromInt(Line)}))
+    GetLineWrappingMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_line_wrapping_mode", array{}))
+    GetLocalMousePos<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_local_mouse_pos", array{}))
+    GetMenu<public>()<decides><transacts>:window = window{Handle := VhToHandle[VhCallValue(Handle, "get_menu", array{})]}
+    GetMinimapVisibleLines<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_minimap_visible_lines", array{}))
+    GetMinimapWidth<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_minimap_width", array{}))
+    GetNextCompositeCharacterColumn<public>(Line:int, Column:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_next_composite_character_column", array{VhFromInt(Line), VhFromInt(Column)}))
+    GetNextVisibleLineOffsetFrom<public>(Line:int, VisibleAmount:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_next_visible_line_offset_from", array{VhFromInt(Line), VhFromInt(VisibleAmount)}))
+    GetPlaceholder<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_placeholder", array{}))
+    GetPreviousCompositeCharacterColumn<public>(Line:int, Column:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_previous_composite_character_column", array{VhFromInt(Line), VhFromInt(Column)}))
+    GetSavedVersion<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_saved_version", array{}))
+    GetScrollPosForLine<public>(Line:int, ?WrapIndex:int = 0)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_scroll_pos_for_line", array{VhFromInt(Line), VhFromInt(WrapIndex)}))
+    GetSelectedText<public>(?CaretIndex:int = -1)<transacts>:string = VhToString(VhCallValue(Handle, "get_selected_text", array{VhFromInt(CaretIndex)}))
+    GetSelectionAtLineColumn<public>(Line:int, Column:int, ?IncludeEdges:logic = true, ?OnlySelections:logic = true)<transacts>:int = VhToInt(VhCallValue(Handle, "get_selection_at_line_column", array{VhFromInt(Line), VhFromInt(Column), VhFromLogic(IncludeEdges), VhFromLogic(OnlySelections)}))
+    GetSelectionColumn<public>(?CaretIndex:int = 0)<transacts>:int = VhToInt(VhCallValue(Handle, "get_selection_column", array{VhFromInt(CaretIndex)}))
+    GetSelectionFromColumn<public>(?CaretIndex:int = 0)<transacts>:int = VhToInt(VhCallValue(Handle, "get_selection_from_column", array{VhFromInt(CaretIndex)}))
+    GetSelectionFromLine<public>(?CaretIndex:int = 0)<transacts>:int = VhToInt(VhCallValue(Handle, "get_selection_from_line", array{VhFromInt(CaretIndex)}))
+    GetSelectionLine<public>(?CaretIndex:int = 0)<transacts>:int = VhToInt(VhCallValue(Handle, "get_selection_line", array{VhFromInt(CaretIndex)}))
+    GetSelectionMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_selection_mode", array{}))
+    GetSelectionOriginColumn<public>(?CaretIndex:int = 0)<transacts>:int = VhToInt(VhCallValue(Handle, "get_selection_origin_column", array{VhFromInt(CaretIndex)}))
+    GetSelectionOriginLine<public>(?CaretIndex:int = 0)<transacts>:int = VhToInt(VhCallValue(Handle, "get_selection_origin_line", array{VhFromInt(CaretIndex)}))
+    GetSelectionToColumn<public>(?CaretIndex:int = 0)<transacts>:int = VhToInt(VhCallValue(Handle, "get_selection_to_column", array{VhFromInt(CaretIndex)}))
+    GetSelectionToLine<public>(?CaretIndex:int = 0)<transacts>:int = VhToInt(VhCallValue(Handle, "get_selection_to_line", array{VhFromInt(CaretIndex)}))
+    GetStructuredTextBidiOverride<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_structured_text_bidi_override", array{}))
+    GetSyntaxHighlighter<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_syntax_highlighter", array{})]}
+    GetTabInputMode<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_tab_input_mode", array{}))
+    GetTabSize<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_tab_size", array{}))
+    GetText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_text", array{}))
+    GetTextDirection<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_text_direction", array{}))
+    GetTotalGutterWidth<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_total_gutter_width", array{}))
+    GetTotalVisibleLineCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_total_visible_line_count", array{}))
+    GetVScroll<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_v_scroll", array{}))
+    GetVScrollBar<public>()<decides><transacts>:range = range{Handle := VhToHandle[VhCallValue(Handle, "get_v_scroll_bar", array{})]}
+    GetVScrollSpeed<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_v_scroll_speed", array{}))
+    GetVersion<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_version", array{}))
+    GetVirtualKeyboardShowOnFocus<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_virtual_keyboard_show_on_focus", array{}))
+    GetVisibleLineCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_visible_line_count", array{}))
+    GetVisibleLineCountInRange<public>(FromLine:int, ToLine:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_visible_line_count_in_range", array{VhFromInt(FromLine), VhFromInt(ToLine)}))
+    GetWordAtPos<public>(Position:vector2)<transacts>:string = VhToString(VhCallValue(Handle, "get_word_at_pos", array{VhFromVector2(Position)}))
+    GetWordUnderCaret<public>(?CaretIndex:int = -1)<transacts>:string = VhToString(VhCallValue(Handle, "get_word_under_caret", array{VhFromInt(CaretIndex)}))
+    HasImeText<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_ime_text", array{}))
+    HasRedo<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_redo", array{}))
+    HasSelection<public>(?CaretIndex:int = -1)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_selection", array{VhFromInt(CaretIndex)}))
+    HasUndo<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_undo", array{}))
     InsertLineAt<public>(Line:int, Text:string)<transacts>:void = VhCallVoid(Handle, "insert_line_at", array{VhFromInt(Line), VhFromString(Text)})
     InsertText<public>(Text:string, Line:int, Column:int, ?BeforeSelectionBegin:logic = true, ?BeforeSelectionEnd:logic = false)<transacts>:void = VhCallVoid(Handle, "insert_text", array{VhFromString(Text), VhFromInt(Line), VhFromInt(Column), VhFromLogic(BeforeSelectionBegin), VhFromLogic(BeforeSelectionEnd)})
     InsertTextAtCaret<public>(Text:string, ?CaretIndex:int = -1)<transacts>:void = VhCallVoid(Handle, "insert_text_at_caret", array{VhFromString(Text), VhFromInt(CaretIndex)})
-    IsBackspaceDeletesCompositeCharacterEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_backspace_deletes_composite_character_enabled", array{}]]
-    IsCaretAfterSelectionOrigin<public>(?CaretIndex:int = 0)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_caret_after_selection_origin", array{VhFromInt(CaretIndex)}]]
-    IsCaretBlinkEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_caret_blink_enabled", array{}]]
-    IsCaretMidGraphemeEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_caret_mid_grapheme_enabled", array{}]]
-    IsCaretVisible<public>(?CaretIndex:int = 0)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_caret_visible", array{VhFromInt(CaretIndex)}]]
-    IsContextMenuEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_context_menu_enabled", array{}]]
-    IsCustomWordSeparatorsEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_custom_word_separators_enabled", array{}]]
-    IsDefaultWordSeparatorsEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_default_word_separators_enabled", array{}]]
-    IsDeselectOnFocusLossEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_deselect_on_focus_loss_enabled", array{}]]
-    IsDragAndDropSelectionEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_drag_and_drop_selection_enabled", array{}]]
-    IsDraggingCursor<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_dragging_cursor", array{}]]
-    IsDrawingCaretWhenEditableDisabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_drawing_caret_when_editable_disabled", array{}]]
-    IsDrawingMinimap<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_drawing_minimap", array{}]]
-    IsDrawingSpaces<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_drawing_spaces", array{}]]
-    IsDrawingTabs<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_drawing_tabs", array{}]]
-    IsEditable<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_editable", array{}]]
-    IsEmojiMenuEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_emoji_menu_enabled", array{}]]
-    IsEmptySelectionClipboardEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_empty_selection_clipboard_enabled", array{}]]
-    IsFitContentHeightEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_fit_content_height_enabled", array{}]]
-    IsFitContentWidthEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_fit_content_width_enabled", array{}]]
-    IsGutterClickable<public>(Gutter:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_gutter_clickable", array{VhFromInt(Gutter)}]]
-    IsGutterDrawn<public>(Gutter:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_gutter_drawn", array{VhFromInt(Gutter)}]]
-    IsGutterOverwritable<public>(Gutter:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_gutter_overwritable", array{VhFromInt(Gutter)}]]
-    IsHighlightAllOccurrencesEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_highlight_all_occurrences_enabled", array{}]]
-    IsHighlightCurrentLineEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_highlight_current_line_enabled", array{}]]
-    IsInMulitcaretEdit<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_in_mulitcaret_edit", array{}]]
-    IsIndentWrappedLines<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_indent_wrapped_lines", array{}]]
-    IsLineGutterClickable<public>(Line:int, Gutter:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_line_gutter_clickable", array{VhFromInt(Line), VhFromInt(Gutter)}]]
-    IsLineWrapped<public>(Line:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_line_wrapped", array{VhFromInt(Line)}]]
-    IsMenuVisible<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_menu_visible", array{}]]
-    IsMiddleMousePasteEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_middle_mouse_paste_enabled", array{}]]
-    IsMouseOverSelection<public>(Edges:logic, ?CaretIndex:int = -1)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_mouse_over_selection", array{VhFromLogic(Edges), VhFromInt(CaretIndex)}]]
-    IsMoveCaretOnRightClickEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_move_caret_on_right_click_enabled", array{}]]
-    IsMultipleCaretsEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_multiple_carets_enabled", array{}]]
-    IsOvertypeModeEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_overtype_mode_enabled", array{}]]
-    IsScrollPastEndOfFileEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_scroll_past_end_of_file_enabled", array{}]]
-    IsSelectingEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_selecting_enabled", array{}]]
-    IsShortcutKeysEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_shortcut_keys_enabled", array{}]]
-    IsSmoothScrollEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_smooth_scroll_enabled", array{}]]
-    IsVirtualKeyboardEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_virtual_keyboard_enabled", array{}]]
+    IsBackspaceDeletesCompositeCharacterEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_backspace_deletes_composite_character_enabled", array{}))
+    IsCaretAfterSelectionOrigin<public>(?CaretIndex:int = 0)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_caret_after_selection_origin", array{VhFromInt(CaretIndex)}))
+    IsCaretBlinkEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_caret_blink_enabled", array{}))
+    IsCaretMidGraphemeEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_caret_mid_grapheme_enabled", array{}))
+    IsCaretVisible<public>(?CaretIndex:int = 0)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_caret_visible", array{VhFromInt(CaretIndex)}))
+    IsContextMenuEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_context_menu_enabled", array{}))
+    IsCustomWordSeparatorsEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_custom_word_separators_enabled", array{}))
+    IsDefaultWordSeparatorsEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_default_word_separators_enabled", array{}))
+    IsDeselectOnFocusLossEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_deselect_on_focus_loss_enabled", array{}))
+    IsDragAndDropSelectionEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_drag_and_drop_selection_enabled", array{}))
+    IsDraggingCursor<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_dragging_cursor", array{}))
+    IsDrawingCaretWhenEditableDisabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_drawing_caret_when_editable_disabled", array{}))
+    IsDrawingMinimap<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_drawing_minimap", array{}))
+    IsDrawingSpaces<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_drawing_spaces", array{}))
+    IsDrawingTabs<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_drawing_tabs", array{}))
+    IsEditable<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_editable", array{}))
+    IsEmojiMenuEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_emoji_menu_enabled", array{}))
+    IsEmptySelectionClipboardEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_empty_selection_clipboard_enabled", array{}))
+    IsFitContentHeightEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_fit_content_height_enabled", array{}))
+    IsFitContentWidthEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_fit_content_width_enabled", array{}))
+    IsGutterClickable<public>(Gutter:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_gutter_clickable", array{VhFromInt(Gutter)}))
+    IsGutterDrawn<public>(Gutter:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_gutter_drawn", array{VhFromInt(Gutter)}))
+    IsGutterOverwritable<public>(Gutter:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_gutter_overwritable", array{VhFromInt(Gutter)}))
+    IsHighlightAllOccurrencesEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_highlight_all_occurrences_enabled", array{}))
+    IsHighlightCurrentLineEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_highlight_current_line_enabled", array{}))
+    IsInMulitcaretEdit<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_in_mulitcaret_edit", array{}))
+    IsIndentWrappedLines<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_indent_wrapped_lines", array{}))
+    IsLineGutterClickable<public>(Line:int, Gutter:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_line_gutter_clickable", array{VhFromInt(Line), VhFromInt(Gutter)}))
+    IsLineWrapped<public>(Line:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_line_wrapped", array{VhFromInt(Line)}))
+    IsMenuVisible<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_menu_visible", array{}))
+    IsMiddleMousePasteEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_middle_mouse_paste_enabled", array{}))
+    IsMouseOverSelection<public>(Edges:logic, ?CaretIndex:int = -1)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_mouse_over_selection", array{VhFromLogic(Edges), VhFromInt(CaretIndex)}))
+    IsMoveCaretOnRightClickEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_move_caret_on_right_click_enabled", array{}))
+    IsMultipleCaretsEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_multiple_carets_enabled", array{}))
+    IsOvertypeModeEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_overtype_mode_enabled", array{}))
+    IsScrollPastEndOfFileEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_scroll_past_end_of_file_enabled", array{}))
+    IsSelectingEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_selecting_enabled", array{}))
+    IsShortcutKeysEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_shortcut_keys_enabled", array{}))
+    IsSmoothScrollEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_smooth_scroll_enabled", array{}))
+    IsVirtualKeyboardEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_virtual_keyboard_enabled", array{}))
     MenuOption<public>(Option:int)<transacts>:void = VhCallVoid(Handle, "menu_option", array{VhFromInt(Option)})
     MergeGutters<public>(FromLine:int, ToLine:int)<transacts>:void = VhCallVoid(Handle, "merge_gutters", array{VhFromInt(FromLine), VhFromInt(ToLine)})
     MergeOverlappingCarets<public>()<transacts>:void = VhCallVoid(Handle, "merge_overlapping_carets", array{})
-    MulticaretEditIgnoreCaret<public>(CaretIndex:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "multicaret_edit_ignore_caret", array{VhFromInt(CaretIndex)}]]
+    MulticaretEditIgnoreCaret<public>(CaretIndex:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "multicaret_edit_ignore_caret", array{VhFromInt(CaretIndex)}))
     Paste<public>(?CaretIndex:int = -1)<transacts>:void = VhCallVoid(Handle, "paste", array{VhFromInt(CaretIndex)})
     PastePrimaryClipboard<public>(?CaretIndex:int = -1)<transacts>:void = VhCallVoid(Handle, "paste_primary_clipboard", array{VhFromInt(CaretIndex)})
     Redo<public>()<transacts>:void = VhCallVoid(Handle, "redo", array{})
@@ -2115,12 +2115,12 @@ text_edit<public> := class(control):
 
 texture2d<public> := class(texture):
 
-    CreatePlaceholder<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "create_placeholder", array{}]]}
-    GetHeight<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_height", array{}]]
-    GetImage<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_image", array{}]]}
-    GetSize<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_size", array{}]]
-    GetWidth<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_width", array{}]]
-    HasAlpha<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_alpha", array{}]]
+    CreatePlaceholder<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "create_placeholder", array{})]}
+    GetHeight<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_height", array{}))
+    GetImage<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_image", array{})]}
+    GetSize<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_size", array{}))
+    GetWidth<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_width", array{}))
+    HasAlpha<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_alpha", array{}))
 
 tile_map<public> := class(node2d):
 
@@ -2129,19 +2129,19 @@ tile_map<public> := class(node2d):
     ClearLayer<public>(Layer:int)<transacts>:void = VhCallVoid(Handle, "clear_layer", array{VhFromInt(Layer)})
     FixInvalidTiles<public>()<transacts>:void = VhCallVoid(Handle, "fix_invalid_tiles", array{})
     ForceUpdate<public>(?Layer:int = -1)<transacts>:void = VhCallVoid(Handle, "force_update", array{VhFromInt(Layer)})
-    GetCollisionVisibilityMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_collision_visibility_mode", array{}]]
-    GetLayerModulate<public>(Layer:int)<decides><transacts>:color = VhToColor[VhCallValue[Handle, "get_layer_modulate", array{VhFromInt(Layer)}]]
-    GetLayerName<public>(Layer:int)<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_layer_name", array{VhFromInt(Layer)}]]
-    GetLayerYSortOrigin<public>(Layer:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_layer_y_sort_origin", array{VhFromInt(Layer)}]]
-    GetLayerZIndex<public>(Layer:int)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_layer_z_index", array{VhFromInt(Layer)}]]
-    GetLayersCount<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_layers_count", array{}]]
-    GetNavigationVisibilityMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_navigation_visibility_mode", array{}]]
-    GetRenderingQuadrantSize<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_rendering_quadrant_size", array{}]]
-    GetTileset<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_tileset", array{}]]}
-    IsCollisionAnimatable<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_collision_animatable", array{}]]
-    IsLayerEnabled<public>(Layer:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_layer_enabled", array{VhFromInt(Layer)}]]
-    IsLayerNavigationEnabled<public>(Layer:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_layer_navigation_enabled", array{VhFromInt(Layer)}]]
-    IsLayerYSortEnabled<public>(Layer:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_layer_y_sort_enabled", array{VhFromInt(Layer)}]]
+    GetCollisionVisibilityMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_collision_visibility_mode", array{}))
+    GetLayerModulate<public>(Layer:int)<transacts>:color = VhToColor(VhCallValue(Handle, "get_layer_modulate", array{VhFromInt(Layer)}))
+    GetLayerName<public>(Layer:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_layer_name", array{VhFromInt(Layer)}))
+    GetLayerYSortOrigin<public>(Layer:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_layer_y_sort_origin", array{VhFromInt(Layer)}))
+    GetLayerZIndex<public>(Layer:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_layer_z_index", array{VhFromInt(Layer)}))
+    GetLayersCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_layers_count", array{}))
+    GetNavigationVisibilityMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_navigation_visibility_mode", array{}))
+    GetRenderingQuadrantSize<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_rendering_quadrant_size", array{}))
+    GetTileset<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_tileset", array{})]}
+    IsCollisionAnimatable<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_collision_animatable", array{}))
+    IsLayerEnabled<public>(Layer:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_layer_enabled", array{VhFromInt(Layer)}))
+    IsLayerNavigationEnabled<public>(Layer:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_layer_navigation_enabled", array{VhFromInt(Layer)}))
+    IsLayerYSortEnabled<public>(Layer:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_layer_y_sort_enabled", array{VhFromInt(Layer)}))
     MoveLayer<public>(Layer:int, ToPosition:int)<transacts>:void = VhCallVoid(Handle, "move_layer", array{VhFromInt(Layer), VhFromInt(ToPosition)})
     NotifyRuntimeTileDataUpdate<public>(?Layer:int = -1)<transacts>:void = VhCallVoid(Handle, "notify_runtime_tile_data_update", array{VhFromInt(Layer)})
     RemoveLayer<public>(Layer:int)<transacts>:void = VhCallVoid(Handle, "remove_layer", array{VhFromInt(Layer)})
@@ -2161,25 +2161,25 @@ tile_map<public> := class(node2d):
 
 area2d<public> := class(collision_object2d):
 
-    GetAngularDamp<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_angular_damp", array{}]]
-    GetAngularDampSpaceOverrideMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_angular_damp_space_override_mode", array{}]]
-    GetAudioBusName<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_audio_bus_name", array{}]]
-    GetGravity<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_gravity", array{}]]
-    GetGravityDirection<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_gravity_direction", array{}]]
-    GetGravityPointCenter<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_gravity_point_center", array{}]]
-    GetGravityPointUnitDistance<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_gravity_point_unit_distance", array{}]]
-    GetGravitySpaceOverrideMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_gravity_space_override_mode", array{}]]
-    GetLinearDamp<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_linear_damp", array{}]]
-    GetLinearDampSpaceOverrideMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_linear_damp_space_override_mode", array{}]]
-    GetPriority<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_priority", array{}]]
-    HasOverlappingAreas<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_overlapping_areas", array{}]]
-    HasOverlappingBodies<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "has_overlapping_bodies", array{}]]
-    IsGravityAPoint<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_gravity_a_point", array{}]]
-    IsMonitorable<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_monitorable", array{}]]
-    IsMonitoring<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_monitoring", array{}]]
-    IsOverridingAudioBus<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_overriding_audio_bus", array{}]]
-    OverlapsArea<public>(Area:node)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "overlaps_area", array{VhFromObject(Area)}]]
-    OverlapsBody<public>(Body:node)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "overlaps_body", array{VhFromObject(Body)}]]
+    GetAngularDamp<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_angular_damp", array{}))
+    GetAngularDampSpaceOverrideMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_angular_damp_space_override_mode", array{}))
+    GetAudioBusName<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_audio_bus_name", array{}))
+    GetGravity<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_gravity", array{}))
+    GetGravityDirection<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_gravity_direction", array{}))
+    GetGravityPointCenter<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_gravity_point_center", array{}))
+    GetGravityPointUnitDistance<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_gravity_point_unit_distance", array{}))
+    GetGravitySpaceOverrideMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_gravity_space_override_mode", array{}))
+    GetLinearDamp<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_linear_damp", array{}))
+    GetLinearDampSpaceOverrideMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_linear_damp_space_override_mode", array{}))
+    GetPriority<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_priority", array{}))
+    HasOverlappingAreas<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_overlapping_areas", array{}))
+    HasOverlappingBodies<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_overlapping_bodies", array{}))
+    IsGravityAPoint<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_gravity_a_point", array{}))
+    IsMonitorable<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_monitorable", array{}))
+    IsMonitoring<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_monitoring", array{}))
+    IsOverridingAudioBus<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_overriding_audio_bus", array{}))
+    OverlapsArea<public>(Area:node)<transacts>:logic = VhToLogic(VhCallValue(Handle, "overlaps_area", array{VhFromObject(Area)}))
+    OverlapsBody<public>(Body:node)<transacts>:logic = VhToLogic(VhCallValue(Handle, "overlaps_body", array{VhFromObject(Body)}))
     SetAngularDamp<public>(AngularDamp:float)<transacts>:void = VhCallVoid(Handle, "set_angular_damp", array{VhFromFloat(AngularDamp)})
     SetAngularDampSpaceOverrideMode<public>(SpaceOverrideMode:int)<transacts>:void = VhCallVoid(Handle, "set_angular_damp_space_override_mode", array{VhFromInt(SpaceOverrideMode)})
     SetAudioBusName<public>(Name:string)<transacts>:void = VhCallVoid(Handle, "set_audio_bus_name", array{VhFromStringName(Name)})
@@ -2198,27 +2198,27 @@ area2d<public> := class(collision_object2d):
 
 box_container<public> := class(container):
 
-    AddSpacer<public>(Begin:logic)<decides><transacts>:control = control{Handle := VhToHandle[VhCallValue[Handle, "add_spacer", array{VhFromLogic(Begin)}]]}
-    GetAlignment<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_alignment", array{}]]
-    IsVertical<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_vertical", array{}]]
+    AddSpacer<public>(Begin:logic)<decides><transacts>:control = control{Handle := VhToHandle[VhCallValue(Handle, "add_spacer", array{VhFromLogic(Begin)})]}
+    GetAlignment<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_alignment", array{}))
+    IsVertical<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_vertical", array{}))
     SetAlignment<public>(Alignment:int)<transacts>:void = VhCallVoid(Handle, "set_alignment", array{VhFromInt(Alignment)})
     SetVertical<public>(Vertical:logic)<transacts>:void = VhCallVoid(Handle, "set_vertical", array{VhFromLogic(Vertical)})
 
 button<public> := class(base_button):
 
-    GetAutowrapMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_autowrap_mode", array{}]]
-    GetAutowrapTrimFlags<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_autowrap_trim_flags", array{}]]
-    GetButtonIcon<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue[Handle, "get_button_icon", array{}]]}
-    GetClipText<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_clip_text", array{}]]
-    GetIconAlignment<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_icon_alignment", array{}]]
-    GetLanguage<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_language", array{}]]
-    GetText<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_text", array{}]]
-    GetTextAlignment<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_text_alignment", array{}]]
-    GetTextDirection<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_text_direction", array{}]]
-    GetTextOverrunBehavior<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_text_overrun_behavior", array{}]]
-    GetVerticalIconAlignment<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_vertical_icon_alignment", array{}]]
-    IsExpandIcon<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_expand_icon", array{}]]
-    IsFlat<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_flat", array{}]]
+    GetAutowrapMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_autowrap_mode", array{}))
+    GetAutowrapTrimFlags<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_autowrap_trim_flags", array{}))
+    GetButtonIcon<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_button_icon", array{})]}
+    GetClipText<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_clip_text", array{}))
+    GetIconAlignment<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_icon_alignment", array{}))
+    GetLanguage<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_language", array{}))
+    GetText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_text", array{}))
+    GetTextAlignment<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_text_alignment", array{}))
+    GetTextDirection<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_text_direction", array{}))
+    GetTextOverrunBehavior<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_text_overrun_behavior", array{}))
+    GetVerticalIconAlignment<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_vertical_icon_alignment", array{}))
+    IsExpandIcon<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_expand_icon", array{}))
+    IsFlat<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_flat", array{}))
     SetAutowrapMode<public>(AutowrapMode:int)<transacts>:void = VhCallVoid(Handle, "set_autowrap_mode", array{VhFromInt(AutowrapMode)})
     SetAutowrapTrimFlags<public>(AutowrapTrimFlags:int)<transacts>:void = VhCallVoid(Handle, "set_autowrap_trim_flags", array{VhFromInt(AutowrapTrimFlags)})
     SetButtonIcon<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_button_icon", array{VhFromObject(Texture)})
@@ -2236,39 +2236,39 @@ button<public> := class(base_button):
 character_body3d<public> := class(physics_body3d):
 
     ApplyFloorSnap<public>()<transacts>:void = VhCallVoid(Handle, "apply_floor_snap", array{})
-    GetFloorAngle<public>(?UpDirection:vector3 = vector3{X := 0.0, Y := 1.0, Z := 0.0})<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_floor_angle", array{VhFromVector3(UpDirection)}]]
-    GetFloorMaxAngle<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_floor_max_angle", array{}]]
-    GetFloorNormal<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_floor_normal", array{}]]
-    GetFloorSnapLength<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_floor_snap_length", array{}]]
-    GetLastMotion<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_last_motion", array{}]]
-    GetLastSlideCollision<public>()<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue[Handle, "get_last_slide_collision", array{}]]}
-    GetMaxSlides<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_max_slides", array{}]]
-    GetMotionMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_motion_mode", array{}]]
-    GetPlatformAngularVelocity<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_platform_angular_velocity", array{}]]
-    GetPlatformFloorLayers<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_platform_floor_layers", array{}]]
-    GetPlatformOnLeave<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_platform_on_leave", array{}]]
-    GetPlatformVelocity<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_platform_velocity", array{}]]
-    GetPlatformWallLayers<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_platform_wall_layers", array{}]]
-    GetPositionDelta<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_position_delta", array{}]]
-    GetRealVelocity<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_real_velocity", array{}]]
-    GetSafeMargin<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_safe_margin", array{}]]
-    GetSlideCollision<public>(SlideIdx:int)<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue[Handle, "get_slide_collision", array{VhFromInt(SlideIdx)}]]}
-    GetSlideCollisionCount<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_slide_collision_count", array{}]]
-    GetUpDirection<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_up_direction", array{}]]
-    GetVelocity<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_velocity", array{}]]
-    GetWallMinSlideAngle<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_wall_min_slide_angle", array{}]]
-    GetWallNormal<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_wall_normal", array{}]]
-    IsFloorBlockOnWallEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_floor_block_on_wall_enabled", array{}]]
-    IsFloorConstantSpeedEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_floor_constant_speed_enabled", array{}]]
-    IsFloorStopOnSlopeEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_floor_stop_on_slope_enabled", array{}]]
-    IsOnCeiling<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_on_ceiling", array{}]]
-    IsOnCeilingOnly<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_on_ceiling_only", array{}]]
-    IsOnFloor<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_on_floor", array{}]]
-    IsOnFloorOnly<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_on_floor_only", array{}]]
-    IsOnWall<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_on_wall", array{}]]
-    IsOnWallOnly<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_on_wall_only", array{}]]
-    IsSlideOnCeilingEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_slide_on_ceiling_enabled", array{}]]
-    MoveAndSlide<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "move_and_slide", array{}]]
+    GetFloorAngle<public>(?UpDirection:vector3 = vector3{X := 0.0, Y := 1.0, Z := 0.0})<transacts>:float = VhToFloat(VhCallValue(Handle, "get_floor_angle", array{VhFromVector3(UpDirection)}))
+    GetFloorMaxAngle<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_floor_max_angle", array{}))
+    GetFloorNormal<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_floor_normal", array{}))
+    GetFloorSnapLength<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_floor_snap_length", array{}))
+    GetLastMotion<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_last_motion", array{}))
+    GetLastSlideCollision<public>()<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue(Handle, "get_last_slide_collision", array{})]}
+    GetMaxSlides<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_max_slides", array{}))
+    GetMotionMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_motion_mode", array{}))
+    GetPlatformAngularVelocity<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_platform_angular_velocity", array{}))
+    GetPlatformFloorLayers<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_platform_floor_layers", array{}))
+    GetPlatformOnLeave<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_platform_on_leave", array{}))
+    GetPlatformVelocity<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_platform_velocity", array{}))
+    GetPlatformWallLayers<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_platform_wall_layers", array{}))
+    GetPositionDelta<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_position_delta", array{}))
+    GetRealVelocity<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_real_velocity", array{}))
+    GetSafeMargin<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_safe_margin", array{}))
+    GetSlideCollision<public>(SlideIdx:int)<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue(Handle, "get_slide_collision", array{VhFromInt(SlideIdx)})]}
+    GetSlideCollisionCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_slide_collision_count", array{}))
+    GetUpDirection<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_up_direction", array{}))
+    GetVelocity<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_velocity", array{}))
+    GetWallMinSlideAngle<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_wall_min_slide_angle", array{}))
+    GetWallNormal<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_wall_normal", array{}))
+    IsFloorBlockOnWallEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_floor_block_on_wall_enabled", array{}))
+    IsFloorConstantSpeedEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_floor_constant_speed_enabled", array{}))
+    IsFloorStopOnSlopeEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_floor_stop_on_slope_enabled", array{}))
+    IsOnCeiling<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_on_ceiling", array{}))
+    IsOnCeilingOnly<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_on_ceiling_only", array{}))
+    IsOnFloor<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_on_floor", array{}))
+    IsOnFloorOnly<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_on_floor_only", array{}))
+    IsOnWall<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_on_wall", array{}))
+    IsOnWallOnly<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_on_wall_only", array{}))
+    IsSlideOnCeilingEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_slide_on_ceiling_enabled", array{}))
+    MoveAndSlide<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "move_and_slide", array{}))
     SetFloorBlockOnWallEnabled<public>(Enabled:logic)<transacts>:void = VhCallVoid(Handle, "set_floor_block_on_wall_enabled", array{VhFromLogic(Enabled)})
     SetFloorConstantSpeedEnabled<public>(Enabled:logic)<transacts>:void = VhCallVoid(Handle, "set_floor_constant_speed_enabled", array{VhFromLogic(Enabled)})
     SetFloorMaxAngle<public>(Radians:float)<transacts>:void = VhCallVoid(Handle, "set_floor_max_angle", array{VhFromFloat(Radians)})
@@ -2287,41 +2287,41 @@ character_body3d<public> := class(physics_body3d):
 
 directional_light2d<public> := class(light2d):
 
-    GetMaxDistance<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_max_distance", array{}]]
+    GetMaxDistance<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_max_distance", array{}))
     SetMaxDistance<public>(Pixels:float)<transacts>:void = VhCallVoid(Handle, "set_max_distance", array{VhFromFloat(Pixels)})
 
 directional_light3d<public> := class(light3d):
 
-    GetShadowMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_shadow_mode", array{}]]
-    GetSkyMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_sky_mode", array{}]]
-    IsBlendSplitsEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_blend_splits_enabled", array{}]]
+    GetShadowMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_shadow_mode", array{}))
+    GetSkyMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_sky_mode", array{}))
+    IsBlendSplitsEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_blend_splits_enabled", array{}))
     SetBlendSplits<public>(Enabled:logic)<transacts>:void = VhCallVoid(Handle, "set_blend_splits", array{VhFromLogic(Enabled)})
     SetShadowMode<public>(Mode:int)<transacts>:void = VhCallVoid(Handle, "set_shadow_mode", array{VhFromInt(Mode)})
     SetSkyMode<public>(Mode:int)<transacts>:void = VhCallVoid(Handle, "set_sky_mode", array{VhFromInt(Mode)})
 
 grid_container<public> := class(container):
 
-    GetColumns<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_columns", array{}]]
+    GetColumns<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_columns", array{}))
     SetColumns<public>(Columns:int)<transacts>:void = VhCallVoid(Handle, "set_columns", array{VhFromInt(Columns)})
 
 mesh_instance3d<public> := class(geometry_instance3d):
 
-    BakeMeshFromCurrentBlendShapeMix<public>(Existing:resource)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "bake_mesh_from_current_blend_shape_mix", array{VhFromObject(Existing)}]]}
-    BakeMeshFromCurrentSkeletonPose<public>(Existing:resource)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "bake_mesh_from_current_skeleton_pose", array{VhFromObject(Existing)}]]}
+    BakeMeshFromCurrentBlendShapeMix<public>(Existing:resource)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "bake_mesh_from_current_blend_shape_mix", array{VhFromObject(Existing)})]}
+    BakeMeshFromCurrentSkeletonPose<public>(Existing:resource)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "bake_mesh_from_current_skeleton_pose", array{VhFromObject(Existing)})]}
     CreateConvexCollision<public>(?Clean:logic = true, ?Simplify:logic = false)<transacts>:void = VhCallVoid(Handle, "create_convex_collision", array{VhFromLogic(Clean), VhFromLogic(Simplify)})
     CreateDebugTangents<public>()<transacts>:void = VhCallVoid(Handle, "create_debug_tangents", array{})
     CreateMultipleConvexCollisions<public>(Settings:ref_counted)<transacts>:void = VhCallVoid(Handle, "create_multiple_convex_collisions", array{VhFromObject(Settings)})
     CreateTrimeshCollision<public>()<transacts>:void = VhCallVoid(Handle, "create_trimesh_collision", array{})
-    FindBlendShapeByName<public>(Name:string)<decides><transacts>:int = VhToInt[VhCallValue[Handle, "find_blend_shape_by_name", array{VhFromStringName(Name)}]]
-    GetActiveMaterial<public>(Surface:int)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_active_material", array{VhFromInt(Surface)}]]}
-    GetBlendShapeCount<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_blend_shape_count", array{}]]
-    GetBlendShapeValue<public>(BlendShapeIdx:int)<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_blend_shape_value", array{VhFromInt(BlendShapeIdx)}]]
-    GetMesh<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_mesh", array{}]]}
-    GetSkeletonPath<public>()<decides><transacts>:string = VhToString[VhCallValue[Handle, "get_skeleton_path", array{}]]
-    GetSkin<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_skin", array{}]]}
-    GetSkinReference<public>()<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue[Handle, "get_skin_reference", array{}]]}
-    GetSurfaceOverrideMaterial<public>(Surface:int)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_surface_override_material", array{VhFromInt(Surface)}]]}
-    GetSurfaceOverrideMaterialCount<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_surface_override_material_count", array{}]]
+    FindBlendShapeByName<public>(Name:string)<transacts>:int = VhToInt(VhCallValue(Handle, "find_blend_shape_by_name", array{VhFromStringName(Name)}))
+    GetActiveMaterial<public>(Surface:int)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_active_material", array{VhFromInt(Surface)})]}
+    GetBlendShapeCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_blend_shape_count", array{}))
+    GetBlendShapeValue<public>(BlendShapeIdx:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_blend_shape_value", array{VhFromInt(BlendShapeIdx)}))
+    GetMesh<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_mesh", array{})]}
+    GetSkeletonPath<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_skeleton_path", array{}))
+    GetSkin<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_skin", array{})]}
+    GetSkinReference<public>()<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue(Handle, "get_skin_reference", array{})]}
+    GetSurfaceOverrideMaterial<public>(Surface:int)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_surface_override_material", array{VhFromInt(Surface)})]}
+    GetSurfaceOverrideMaterialCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_surface_override_material_count", array{}))
     SetBlendShapeValue<public>(BlendShapeIdx:int, Value:float)<transacts>:void = VhCallVoid(Handle, "set_blend_shape_value", array{VhFromInt(BlendShapeIdx), VhFromFloat(Value)})
     SetMesh<public>(Mesh:resource)<transacts>:void = VhCallVoid(Handle, "set_mesh", array{VhFromObject(Mesh)})
     SetSkeletonPath<public>(SkeletonPath:string)<transacts>:void = VhCallVoid(Handle, "set_skeleton_path", array{VhFromNodePath(SkeletonPath)})
@@ -2330,7 +2330,7 @@ mesh_instance3d<public> := class(geometry_instance3d):
 
 omni_light3d<public> := class(light3d):
 
-    GetShadowMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_shadow_mode", array{}]]
+    GetShadowMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_shadow_mode", array{}))
     SetShadowMode<public>(Mode:int)<transacts>:void = VhCallVoid(Handle, "set_shadow_mode", array{VhFromInt(Mode)})
 
 panel_container<public> := class(container):
@@ -2338,25 +2338,25 @@ panel_container<public> := class(container):
 physics_body2d<public> := class(collision_object2d):
 
     AddCollisionExceptionWith<public>(Body:node)<transacts>:void = VhCallVoid(Handle, "add_collision_exception_with", array{VhFromObject(Body)})
-    GetGravity<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_gravity", array{}]]
-    MoveAndCollide<public>(Motion:vector2, ?TestOnly:logic = false, ?SafeMargin:float = 0.08, ?RecoveryAsCollision:logic = false)<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue[Handle, "move_and_collide", array{VhFromVector2(Motion), VhFromLogic(TestOnly), VhFromFloat(SafeMargin), VhFromLogic(RecoveryAsCollision)}]]}
+    GetGravity<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_gravity", array{}))
+    MoveAndCollide<public>(Motion:vector2, ?TestOnly:logic = false, ?SafeMargin:float = 0.08, ?RecoveryAsCollision:logic = false)<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue(Handle, "move_and_collide", array{VhFromVector2(Motion), VhFromLogic(TestOnly), VhFromFloat(SafeMargin), VhFromLogic(RecoveryAsCollision)})]}
     RemoveCollisionExceptionWith<public>(Body:node)<transacts>:void = VhCallVoid(Handle, "remove_collision_exception_with", array{VhFromObject(Body)})
 
 point_light2d<public> := class(light2d):
 
-    GetTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue[Handle, "get_texture", array{}]]}
-    GetTextureOffset<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_texture_offset", array{}]]
-    GetTextureScale<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_texture_scale", array{}]]
+    GetTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture", array{})]}
+    GetTextureOffset<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_texture_offset", array{}))
+    GetTextureScale<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_texture_scale", array{}))
     SetTexture<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_texture", array{VhFromObject(Texture)})
     SetTextureOffset<public>(TextureOffset:vector2)<transacts>:void = VhCallVoid(Handle, "set_texture_offset", array{VhFromVector2(TextureOffset)})
     SetTextureScale<public>(TextureScale:float)<transacts>:void = VhCallVoid(Handle, "set_texture_scale", array{VhFromFloat(TextureScale)})
 
 progress_bar<public> := class(range):
 
-    GetFillMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_fill_mode", array{}]]
-    IsEditorPreviewIndeterminateEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_editor_preview_indeterminate_enabled", array{}]]
-    IsIndeterminate<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_indeterminate", array{}]]
-    IsPercentageShown<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_percentage_shown", array{}]]
+    GetFillMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_fill_mode", array{}))
+    IsEditorPreviewIndeterminateEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_editor_preview_indeterminate_enabled", array{}))
+    IsIndeterminate<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_indeterminate", array{}))
+    IsPercentageShown<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_percentage_shown", array{}))
     SetEditorPreviewIndeterminate<public>(PreviewIndeterminate:logic)<transacts>:void = VhCallVoid(Handle, "set_editor_preview_indeterminate", array{VhFromLogic(PreviewIndeterminate)})
     SetFillMode<public>(Mode:int)<transacts>:void = VhCallVoid(Handle, "set_fill_mode", array{VhFromInt(Mode)})
     SetIndeterminate<public>(Indeterminate:logic)<transacts>:void = VhCallVoid(Handle, "set_indeterminate", array{VhFromLogic(Indeterminate)})
@@ -2373,30 +2373,30 @@ rigid_body3d<public> := class(physics_body3d):
     ApplyImpulse<public>(Impulse:vector3, ?Position:vector3 = vector3{X := 0.0, Y := 0.0, Z := 0.0})<transacts>:void = VhCallVoid(Handle, "apply_impulse", array{VhFromVector3(Impulse), VhFromVector3(Position)})
     ApplyTorque<public>(Torque:vector3)<transacts>:void = VhCallVoid(Handle, "apply_torque", array{VhFromVector3(Torque)})
     ApplyTorqueImpulse<public>(Impulse:vector3)<transacts>:void = VhCallVoid(Handle, "apply_torque_impulse", array{VhFromVector3(Impulse)})
-    GetAngularDamp<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_angular_damp", array{}]]
-    GetAngularDampMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_angular_damp_mode", array{}]]
-    GetAngularVelocity<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_angular_velocity", array{}]]
-    GetCenterOfMass<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_center_of_mass", array{}]]
-    GetCenterOfMassMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_center_of_mass_mode", array{}]]
-    GetConstantForce<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_constant_force", array{}]]
-    GetConstantTorque<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_constant_torque", array{}]]
-    GetContactCount<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_contact_count", array{}]]
-    GetFreezeMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_freeze_mode", array{}]]
-    GetGravityScale<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_gravity_scale", array{}]]
-    GetInertia<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_inertia", array{}]]
-    GetLinearDamp<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_linear_damp", array{}]]
-    GetLinearDampMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_linear_damp_mode", array{}]]
-    GetLinearVelocity<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_linear_velocity", array{}]]
-    GetMass<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_mass", array{}]]
-    GetMaxContactsReported<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_max_contacts_reported", array{}]]
-    GetPhysicsMaterialOverride<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_physics_material_override", array{}]]}
-    IsAbleToSleep<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_able_to_sleep", array{}]]
-    IsContactMonitorEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_contact_monitor_enabled", array{}]]
-    IsFreezeEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_freeze_enabled", array{}]]
-    IsLockRotationEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_lock_rotation_enabled", array{}]]
-    IsSleeping<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_sleeping", array{}]]
-    IsUsingContinuousCollisionDetection<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_using_continuous_collision_detection", array{}]]
-    IsUsingCustomIntegrator<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_using_custom_integrator", array{}]]
+    GetAngularDamp<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_angular_damp", array{}))
+    GetAngularDampMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_angular_damp_mode", array{}))
+    GetAngularVelocity<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_angular_velocity", array{}))
+    GetCenterOfMass<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_center_of_mass", array{}))
+    GetCenterOfMassMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_center_of_mass_mode", array{}))
+    GetConstantForce<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_constant_force", array{}))
+    GetConstantTorque<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_constant_torque", array{}))
+    GetContactCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_contact_count", array{}))
+    GetFreezeMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_freeze_mode", array{}))
+    GetGravityScale<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_gravity_scale", array{}))
+    GetInertia<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_inertia", array{}))
+    GetLinearDamp<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_linear_damp", array{}))
+    GetLinearDampMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_linear_damp_mode", array{}))
+    GetLinearVelocity<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_linear_velocity", array{}))
+    GetMass<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_mass", array{}))
+    GetMaxContactsReported<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_max_contacts_reported", array{}))
+    GetPhysicsMaterialOverride<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_physics_material_override", array{})]}
+    IsAbleToSleep<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_able_to_sleep", array{}))
+    IsContactMonitorEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_contact_monitor_enabled", array{}))
+    IsFreezeEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_freeze_enabled", array{}))
+    IsLockRotationEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_lock_rotation_enabled", array{}))
+    IsSleeping<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_sleeping", array{}))
+    IsUsingContinuousCollisionDetection<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_using_continuous_collision_detection", array{}))
+    IsUsingCustomIntegrator<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_using_custom_integrator", array{}))
     SetAngularDamp<public>(AngularDamp:float)<transacts>:void = VhCallVoid(Handle, "set_angular_damp", array{VhFromFloat(AngularDamp)})
     SetAngularDampMode<public>(AngularDampMode:int)<transacts>:void = VhCallVoid(Handle, "set_angular_damp_mode", array{VhFromInt(AngularDampMode)})
     SetAngularVelocity<public>(AngularVelocity:vector3)<transacts>:void = VhCallVoid(Handle, "set_angular_velocity", array{VhFromVector3(AngularVelocity)})
@@ -2426,23 +2426,23 @@ spot_light3d<public> := class(light3d):
 
 sprite_base3d<public> := class(geometry_instance3d):
 
-    GenerateTriangleMesh<public>()<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue[Handle, "generate_triangle_mesh", array{}]]}
-    GetAlphaAntialiasing<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_alpha_antialiasing", array{}]]
-    GetAlphaAntialiasingEdge<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_alpha_antialiasing_edge", array{}]]
-    GetAlphaCutMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_alpha_cut_mode", array{}]]
-    GetAlphaHashScale<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_alpha_hash_scale", array{}]]
-    GetAlphaScissorThreshold<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_alpha_scissor_threshold", array{}]]
-    GetAxis<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_axis", array{}]]
-    GetBillboardMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_billboard_mode", array{}]]
-    GetDrawFlag<public>(Flag:int)<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "get_draw_flag", array{VhFromInt(Flag)}]]
-    GetModulate<public>()<decides><transacts>:color = VhToColor[VhCallValue[Handle, "get_modulate", array{}]]
-    GetOffset<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_offset", array{}]]
-    GetPixelSize<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_pixel_size", array{}]]
-    GetRenderPriority<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_render_priority", array{}]]
-    GetTextureFilter<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_texture_filter", array{}]]
-    IsCentered<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_centered", array{}]]
-    IsFlippedH<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_flipped_h", array{}]]
-    IsFlippedV<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_flipped_v", array{}]]
+    GenerateTriangleMesh<public>()<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue(Handle, "generate_triangle_mesh", array{})]}
+    GetAlphaAntialiasing<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_alpha_antialiasing", array{}))
+    GetAlphaAntialiasingEdge<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_alpha_antialiasing_edge", array{}))
+    GetAlphaCutMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_alpha_cut_mode", array{}))
+    GetAlphaHashScale<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_alpha_hash_scale", array{}))
+    GetAlphaScissorThreshold<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_alpha_scissor_threshold", array{}))
+    GetAxis<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_axis", array{}))
+    GetBillboardMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_billboard_mode", array{}))
+    GetDrawFlag<public>(Flag:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_draw_flag", array{VhFromInt(Flag)}))
+    GetModulate<public>()<transacts>:color = VhToColor(VhCallValue(Handle, "get_modulate", array{}))
+    GetOffset<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_offset", array{}))
+    GetPixelSize<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_pixel_size", array{}))
+    GetRenderPriority<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_render_priority", array{}))
+    GetTextureFilter<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_texture_filter", array{}))
+    IsCentered<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_centered", array{}))
+    IsFlippedH<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_flipped_h", array{}))
+    IsFlippedV<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_flipped_v", array{}))
     SetAlphaAntialiasing<public>(AlphaAa:int)<transacts>:void = VhCallVoid(Handle, "set_alpha_antialiasing", array{VhFromInt(AlphaAa)})
     SetAlphaAntialiasingEdge<public>(Edge:float)<transacts>:void = VhCallVoid(Handle, "set_alpha_antialiasing_edge", array{VhFromFloat(Edge)})
     SetAlphaCutMode<public>(Mode:int)<transacts>:void = VhCallVoid(Handle, "set_alpha_cut_mode", array{VhFromInt(Mode)})
@@ -2462,9 +2462,9 @@ sprite_base3d<public> := class(geometry_instance3d):
 
 static_body3d<public> := class(physics_body3d):
 
-    GetConstantAngularVelocity<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_constant_angular_velocity", array{}]]
-    GetConstantLinearVelocity<public>()<decides><transacts>:vector3 = VhToVector3[VhCallValue[Handle, "get_constant_linear_velocity", array{}]]
-    GetPhysicsMaterialOverride<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_physics_material_override", array{}]]}
+    GetConstantAngularVelocity<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_constant_angular_velocity", array{}))
+    GetConstantLinearVelocity<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_constant_linear_velocity", array{}))
+    GetPhysicsMaterialOverride<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_physics_material_override", array{})]}
     SetConstantAngularVelocity<public>(Vel:vector3)<transacts>:void = VhCallVoid(Handle, "set_constant_angular_velocity", array{VhFromVector3(Vel)})
     SetConstantLinearVelocity<public>(Vel:vector3)<transacts>:void = VhCallVoid(Handle, "set_constant_linear_velocity", array{VhFromVector3(Vel)})
     SetPhysicsMaterialOverride<public>(PhysicsMaterialOverride:resource)<transacts>:void = VhCallVoid(Handle, "set_physics_material_override", array{VhFromObject(PhysicsMaterialOverride)})
@@ -2472,38 +2472,38 @@ static_body3d<public> := class(physics_body3d):
 character_body2d<public> := class(physics_body2d):
 
     ApplyFloorSnap<public>()<transacts>:void = VhCallVoid(Handle, "apply_floor_snap", array{})
-    GetFloorAngle<public>(?UpDirection:vector2 = vector2{X := 0.0, Y := -1.0})<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_floor_angle", array{VhFromVector2(UpDirection)}]]
-    GetFloorMaxAngle<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_floor_max_angle", array{}]]
-    GetFloorNormal<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_floor_normal", array{}]]
-    GetFloorSnapLength<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_floor_snap_length", array{}]]
-    GetLastMotion<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_last_motion", array{}]]
-    GetLastSlideCollision<public>()<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue[Handle, "get_last_slide_collision", array{}]]}
-    GetMaxSlides<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_max_slides", array{}]]
-    GetMotionMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_motion_mode", array{}]]
-    GetPlatformFloorLayers<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_platform_floor_layers", array{}]]
-    GetPlatformOnLeave<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_platform_on_leave", array{}]]
-    GetPlatformVelocity<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_platform_velocity", array{}]]
-    GetPlatformWallLayers<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_platform_wall_layers", array{}]]
-    GetPositionDelta<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_position_delta", array{}]]
-    GetRealVelocity<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_real_velocity", array{}]]
-    GetSafeMargin<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_safe_margin", array{}]]
-    GetSlideCollision<public>(SlideIdx:int)<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue[Handle, "get_slide_collision", array{VhFromInt(SlideIdx)}]]}
-    GetSlideCollisionCount<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_slide_collision_count", array{}]]
-    GetUpDirection<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_up_direction", array{}]]
-    GetVelocity<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_velocity", array{}]]
-    GetWallMinSlideAngle<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_wall_min_slide_angle", array{}]]
-    GetWallNormal<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_wall_normal", array{}]]
-    IsFloorBlockOnWallEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_floor_block_on_wall_enabled", array{}]]
-    IsFloorConstantSpeedEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_floor_constant_speed_enabled", array{}]]
-    IsFloorStopOnSlopeEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_floor_stop_on_slope_enabled", array{}]]
-    IsOnCeiling<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_on_ceiling", array{}]]
-    IsOnCeilingOnly<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_on_ceiling_only", array{}]]
-    IsOnFloor<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_on_floor", array{}]]
-    IsOnFloorOnly<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_on_floor_only", array{}]]
-    IsOnWall<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_on_wall", array{}]]
-    IsOnWallOnly<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_on_wall_only", array{}]]
-    IsSlideOnCeilingEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_slide_on_ceiling_enabled", array{}]]
-    MoveAndSlide<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "move_and_slide", array{}]]
+    GetFloorAngle<public>(?UpDirection:vector2 = vector2{X := 0.0, Y := -1.0})<transacts>:float = VhToFloat(VhCallValue(Handle, "get_floor_angle", array{VhFromVector2(UpDirection)}))
+    GetFloorMaxAngle<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_floor_max_angle", array{}))
+    GetFloorNormal<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_floor_normal", array{}))
+    GetFloorSnapLength<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_floor_snap_length", array{}))
+    GetLastMotion<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_last_motion", array{}))
+    GetLastSlideCollision<public>()<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue(Handle, "get_last_slide_collision", array{})]}
+    GetMaxSlides<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_max_slides", array{}))
+    GetMotionMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_motion_mode", array{}))
+    GetPlatformFloorLayers<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_platform_floor_layers", array{}))
+    GetPlatformOnLeave<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_platform_on_leave", array{}))
+    GetPlatformVelocity<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_platform_velocity", array{}))
+    GetPlatformWallLayers<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_platform_wall_layers", array{}))
+    GetPositionDelta<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_position_delta", array{}))
+    GetRealVelocity<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_real_velocity", array{}))
+    GetSafeMargin<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_safe_margin", array{}))
+    GetSlideCollision<public>(SlideIdx:int)<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue(Handle, "get_slide_collision", array{VhFromInt(SlideIdx)})]}
+    GetSlideCollisionCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_slide_collision_count", array{}))
+    GetUpDirection<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_up_direction", array{}))
+    GetVelocity<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_velocity", array{}))
+    GetWallMinSlideAngle<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_wall_min_slide_angle", array{}))
+    GetWallNormal<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_wall_normal", array{}))
+    IsFloorBlockOnWallEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_floor_block_on_wall_enabled", array{}))
+    IsFloorConstantSpeedEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_floor_constant_speed_enabled", array{}))
+    IsFloorStopOnSlopeEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_floor_stop_on_slope_enabled", array{}))
+    IsOnCeiling<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_on_ceiling", array{}))
+    IsOnCeilingOnly<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_on_ceiling_only", array{}))
+    IsOnFloor<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_on_floor", array{}))
+    IsOnFloorOnly<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_on_floor_only", array{}))
+    IsOnWall<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_on_wall", array{}))
+    IsOnWallOnly<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_on_wall_only", array{}))
+    IsSlideOnCeilingEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_slide_on_ceiling_enabled", array{}))
+    MoveAndSlide<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "move_and_slide", array{}))
     SetFloorBlockOnWallEnabled<public>(Enabled:logic)<transacts>:void = VhCallVoid(Handle, "set_floor_block_on_wall_enabled", array{VhFromLogic(Enabled)})
     SetFloorConstantSpeedEnabled<public>(Enabled:logic)<transacts>:void = VhCallVoid(Handle, "set_floor_constant_speed_enabled", array{VhFromLogic(Enabled)})
     SetFloorMaxAngle<public>(Radians:float)<transacts>:void = VhCallVoid(Handle, "set_floor_max_angle", array{VhFromFloat(Radians)})
@@ -2533,30 +2533,30 @@ rigid_body2d<public> := class(physics_body2d):
     ApplyImpulse<public>(Impulse:vector2, ?Position:vector2 = vector2{X := 0.0, Y := 0.0})<transacts>:void = VhCallVoid(Handle, "apply_impulse", array{VhFromVector2(Impulse), VhFromVector2(Position)})
     ApplyTorque<public>(Torque:float)<transacts>:void = VhCallVoid(Handle, "apply_torque", array{VhFromFloat(Torque)})
     ApplyTorqueImpulse<public>(Torque:float)<transacts>:void = VhCallVoid(Handle, "apply_torque_impulse", array{VhFromFloat(Torque)})
-    GetAngularDamp<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_angular_damp", array{}]]
-    GetAngularDampMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_angular_damp_mode", array{}]]
-    GetAngularVelocity<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_angular_velocity", array{}]]
-    GetCenterOfMass<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_center_of_mass", array{}]]
-    GetCenterOfMassMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_center_of_mass_mode", array{}]]
-    GetConstantForce<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_constant_force", array{}]]
-    GetConstantTorque<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_constant_torque", array{}]]
-    GetContactCount<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_contact_count", array{}]]
-    GetContinuousCollisionDetectionMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_continuous_collision_detection_mode", array{}]]
-    GetFreezeMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_freeze_mode", array{}]]
-    GetGravityScale<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_gravity_scale", array{}]]
-    GetInertia<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_inertia", array{}]]
-    GetLinearDamp<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_linear_damp", array{}]]
-    GetLinearDampMode<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_linear_damp_mode", array{}]]
-    GetLinearVelocity<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_linear_velocity", array{}]]
-    GetMass<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_mass", array{}]]
-    GetMaxContactsReported<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_max_contacts_reported", array{}]]
-    GetPhysicsMaterialOverride<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_physics_material_override", array{}]]}
-    IsAbleToSleep<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_able_to_sleep", array{}]]
-    IsContactMonitorEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_contact_monitor_enabled", array{}]]
-    IsFreezeEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_freeze_enabled", array{}]]
-    IsLockRotationEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_lock_rotation_enabled", array{}]]
-    IsSleeping<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_sleeping", array{}]]
-    IsUsingCustomIntegrator<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_using_custom_integrator", array{}]]
+    GetAngularDamp<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_angular_damp", array{}))
+    GetAngularDampMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_angular_damp_mode", array{}))
+    GetAngularVelocity<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_angular_velocity", array{}))
+    GetCenterOfMass<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_center_of_mass", array{}))
+    GetCenterOfMassMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_center_of_mass_mode", array{}))
+    GetConstantForce<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_constant_force", array{}))
+    GetConstantTorque<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_constant_torque", array{}))
+    GetContactCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_contact_count", array{}))
+    GetContinuousCollisionDetectionMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_continuous_collision_detection_mode", array{}))
+    GetFreezeMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_freeze_mode", array{}))
+    GetGravityScale<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_gravity_scale", array{}))
+    GetInertia<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_inertia", array{}))
+    GetLinearDamp<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_linear_damp", array{}))
+    GetLinearDampMode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_linear_damp_mode", array{}))
+    GetLinearVelocity<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_linear_velocity", array{}))
+    GetMass<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_mass", array{}))
+    GetMaxContactsReported<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_max_contacts_reported", array{}))
+    GetPhysicsMaterialOverride<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_physics_material_override", array{})]}
+    IsAbleToSleep<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_able_to_sleep", array{}))
+    IsContactMonitorEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_contact_monitor_enabled", array{}))
+    IsFreezeEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_freeze_enabled", array{}))
+    IsLockRotationEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_lock_rotation_enabled", array{}))
+    IsSleeping<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_sleeping", array{}))
+    IsUsingCustomIntegrator<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_using_custom_integrator", array{}))
     SetAngularDamp<public>(AngularDamp:float)<transacts>:void = VhCallVoid(Handle, "set_angular_damp", array{VhFromFloat(AngularDamp)})
     SetAngularDampMode<public>(AngularDampMode:int)<transacts>:void = VhCallVoid(Handle, "set_angular_damp_mode", array{VhFromInt(AngularDampMode)})
     SetAngularVelocity<public>(AngularVelocity:float)<transacts>:void = VhCallVoid(Handle, "set_angular_velocity", array{VhFromFloat(AngularVelocity)})
@@ -2584,11 +2584,11 @@ rigid_body2d<public> := class(physics_body2d):
 
 sprite3d<public> := class(sprite_base3d):
 
-    GetFrame<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_frame", array{}]]
-    GetHframes<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_hframes", array{}]]
-    GetTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue[Handle, "get_texture", array{}]]}
-    GetVframes<public>()<decides><transacts>:int = VhToInt[VhCallValue[Handle, "get_vframes", array{}]]
-    IsRegionEnabled<public>()<decides><transacts>:logic = VhToLogic[VhCallValue[Handle, "is_region_enabled", array{}]]
+    GetFrame<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_frame", array{}))
+    GetHframes<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_hframes", array{}))
+    GetTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture", array{})]}
+    GetVframes<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_vframes", array{}))
+    IsRegionEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_region_enabled", array{}))
     SetFrame<public>(Frame:int)<transacts>:void = VhCallVoid(Handle, "set_frame", array{VhFromInt(Frame)})
     SetHframes<public>(Hframes:int)<transacts>:void = VhCallVoid(Handle, "set_hframes", array{VhFromInt(Hframes)})
     SetRegionEnabled<public>(Enabled:logic)<transacts>:void = VhCallVoid(Handle, "set_region_enabled", array{VhFromLogic(Enabled)})
@@ -2597,9 +2597,9 @@ sprite3d<public> := class(sprite_base3d):
 
 static_body2d<public> := class(physics_body2d):
 
-    GetConstantAngularVelocity<public>()<decides><transacts>:float = VhToFloat[VhCallValue[Handle, "get_constant_angular_velocity", array{}]]
-    GetConstantLinearVelocity<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_constant_linear_velocity", array{}]]
-    GetPhysicsMaterialOverride<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue[Handle, "get_physics_material_override", array{}]]}
+    GetConstantAngularVelocity<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_constant_angular_velocity", array{}))
+    GetConstantLinearVelocity<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_constant_linear_velocity", array{}))
+    GetPhysicsMaterialOverride<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_physics_material_override", array{})]}
     SetConstantAngularVelocity<public>(Vel:float)<transacts>:void = VhCallVoid(Handle, "set_constant_angular_velocity", array{VhFromFloat(Vel)})
     SetConstantLinearVelocity<public>(Vel:vector2)<transacts>:void = VhCallVoid(Handle, "set_constant_linear_velocity", array{VhFromVector2(Vel)})
     SetPhysicsMaterialOverride<public>(PhysicsMaterialOverride:resource)<transacts>:void = VhCallVoid(Handle, "set_physics_material_override", array{VhFromObject(PhysicsMaterialOverride)})

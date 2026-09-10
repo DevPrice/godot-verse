@@ -71,16 +71,17 @@ mover := class(node2d):
         Print(Greeting)
 
     Update<override>(Delta:float):void =
-        if (P := GetPosition[]):
-            SetPosition(vector2{X := P.X + Delta * Speed, Y := P.Y})
+        P := GetPosition()
+        SetPosition(vector2{X := P.X + Delta * Speed, Y := P.Y})
 ```
 
 Godot's API is mirrored as a Verse class hierarchy under `/Godot.org/Godot`, generated from
 `extension_api.json` by `tools/gen_verse_api.py`. Only `object` is a `<native>` class with a
 C++ shadow; everything above it is ordinary Verse whose methods bottom out in a handful of native
-primitives, so mirroring another hundred Godot classes costs no C++ at all. A method that can fail
-carries Verse's `<decides>` effect, and one that mutates the scene defers its write to transaction
-commit.
+primitives, so mirroring another hundred Godot classes costs no C++ at all. A method that mutates
+the scene defers its write to transaction commit, and of the 1236 methods that used to carry
+Verse's `<decides>` effect only the 132 returning an object still do — see the lifetime note
+below for why the rest gave it up.
 
 **Class names are unprefixed**, because `/Godot.org/Godot` is already the namespace: the mirror is
 `node2d`, `timer`, `control`. Verse reports a name that two `using`s both define at the *use* site
@@ -254,7 +255,7 @@ Syntax highlighting is a real lexer, which is what lets nested `<# #>` block com
 dedent-terminated `<#>` comments and comments inside string interpolation all colour correctly —
 none of which a delimiter matcher can express. On top of the comment/string/number/keyword
 classes it colours operators and punctuation, call positions (`Print(`, the bracketed
-`GetPosition[` of a `<decides>` call, and a definition like `Ready<override>()` whose specifiers
+`GetChild[` of a `<decides>` call, and a definition like `Ready<override>()` whose specifiers
 sit between the name and its parameter list), `.member` accesses, and both attribute spellings —
 suffix `<public>` and prefix `@editable`.
 
