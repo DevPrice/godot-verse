@@ -144,7 +144,7 @@ VerseTokenKind classify_identifier(const std::string &p_line, int p_start, int p
 	if (is_call_position(p_line, p_end)) {
 		return VerseTokenKind::Function;
 	}
-	return p_after_dot ? VerseTokenKind::Member : VerseTokenKind::Text;
+	return p_after_dot ? VerseTokenKind::Member : VerseTokenKind::Identifier;
 }
 
 } // namespace

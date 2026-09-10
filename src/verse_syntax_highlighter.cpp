@@ -67,6 +67,7 @@ Color VerseSyntaxHighlighter::color_for(VerseTokenKind p_kind) const {
 		case VerseTokenKind::Member:
 			return member_color;
 		case VerseTokenKind::Text:
+		case VerseTokenKind::Identifier:
 		default:
 			return text_color;
 	}

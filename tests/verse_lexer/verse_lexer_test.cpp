@@ -118,7 +118,7 @@ bool TestIndentCommentDedent()
 	Ok = Ok && Results[2].StateAfter.indent_comment_column == 4;
 	Ok = Ok && Results[3].Tokens.size() == 1 && Results[3].Tokens[0].kind == VerseTokenKind::Comment;
 	Ok = Ok && Results[4].StateAfter.indent_comment_column == -1;
-	Ok = Ok && KindAt(Results[4].Tokens, 4) == VerseTokenKind::Text;
+	Ok = Ok && KindAt(Results[4].Tokens, 4) == VerseTokenKind::Identifier;
 
 	return Step("<#> comment ends at a dedent; a blank line does not end it", Ok);
 }
@@ -152,9 +152,9 @@ bool TestInterpolation()
 	auto Results = LexAll({ "\"sum is {A + {B}}\"" });
 	const auto& Tokens = Results[0].Tokens;
 	bool Ok = KindAt(Tokens, 8) == VerseTokenKind::Interpolation; // {
-	Ok = Ok && KindAt(Tokens, 9) == VerseTokenKind::Text; // A
+	Ok = Ok && KindAt(Tokens, 9) == VerseTokenKind::Identifier; // A
 	Ok = Ok && KindAt(Tokens, 13) == VerseTokenKind::Interpolation; // nested {
-	Ok = Ok && KindAt(Tokens, 14) == VerseTokenKind::Text; // B
+	Ok = Ok && KindAt(Tokens, 14) == VerseTokenKind::Identifier; // B
 	Ok = Ok && KindAt(Tokens, 15) == VerseTokenKind::Interpolation; // }}
 	Ok = Ok && KindAt(Tokens, 17) == VerseTokenKind::String; // closing "
 	Ok = Ok && !Results[0].StateAfter.in_string;
@@ -169,7 +169,7 @@ bool TestKeywordClassification()
 	const auto& Tokens = Results[0].Tokens;
 	bool Ok = KindAt(Tokens, 0) == VerseTokenKind::ControlKeyword;
 	Ok = Ok && KindAt(Tokens, 3) == VerseTokenKind::Keyword;
-	Ok = Ok && KindAt(Tokens, 9) == VerseTokenKind::Text;
+	Ok = Ok && KindAt(Tokens, 9) == VerseTokenKind::Identifier;
 
 	return Step("keyword vs. control-flow keyword vs. plain identifier", Ok);
 }
@@ -188,9 +188,9 @@ bool TestSymbols()
 	auto Results = LexAll({ "X := A + 1" });
 	auto& Tokens = Results[0].Tokens;
 
-	bool Ok = KindAt(Tokens, 0) == VerseTokenKind::Text; // X
+	bool Ok = KindAt(Tokens, 0) == VerseTokenKind::Identifier; // X
 	Ok = Ok && KindAt(Tokens, 2) == VerseTokenKind::Symbol; // :=
-	Ok = Ok && KindAt(Tokens, 5) == VerseTokenKind::Text; // A
+	Ok = Ok && KindAt(Tokens, 5) == VerseTokenKind::Identifier; // A
 	Ok = Ok && KindAt(Tokens, 7) == VerseTokenKind::Symbol; // +
 	Ok = Ok && KindAt(Tokens, 9) == VerseTokenKind::Number;
 
@@ -202,7 +202,7 @@ bool TestCallsAndMembers()
 	auto Results = LexAll({ "Print(P.X)", "if (Q := GetPosition[]):", "Ready<override>():void =" });
 
 	bool Ok = KindAt(Results[0].Tokens, 0) == VerseTokenKind::Function; // Print
-	Ok = Ok && KindAt(Results[0].Tokens, 6) == VerseTokenKind::Text; // P, not a call
+	Ok = Ok && KindAt(Results[0].Tokens, 6) == VerseTokenKind::Identifier; // P, not a call
 	Ok = Ok && KindAt(Results[0].Tokens, 8) == VerseTokenKind::Member; // .X
 
 	// A <decides> call is spelled with brackets, so those count as a call position too.
@@ -232,6 +232,41 @@ bool TestPrefixAttributes()
 	return Step("@name is an attribute; a bare @ is not", Ok);
 }
 
+bool TestBareIdentifier()
+{
+	auto Results = LexAll({ "Foo" });
+	bool Ok = KindAt(Results[0].Tokens, 0) == VerseTokenKind::Identifier;
+
+	return Step("a bare identifier is an Identifier token", Ok);
+}
+
+bool TestIdentifierTokensDoNotMerge()
+{
+	// Regression test: emit() coalesces adjacent same-kind tokens, so before Identifier existed
+	// this whole line was one Text run and "Bar"'s column was unrecoverable.
+	auto Results = LexAll({ "Foo Bar" });
+	const auto& Tokens = Results[0].Tokens;
+
+	bool Ok = Tokens.size() == 3;
+	Ok = Ok && Tokens[0].column == 0 && Tokens[0].kind == VerseTokenKind::Identifier;
+	Ok = Ok && Tokens[1].column == 3 && Tokens[1].kind == VerseTokenKind::Text;
+	Ok = Ok && Tokens[2].column == 4 && Tokens[2].kind == VerseTokenKind::Identifier;
+
+	return Step("two space-separated identifiers stay two separate Identifier tokens", Ok);
+}
+
+bool TestIdentifierInsideCommentOrString()
+{
+	auto Results = LexAll({ "# foo bar", "\"foo bar\"" });
+
+	bool Ok = HasKind(Results[0].Tokens, VerseTokenKind::Comment);
+	Ok = Ok && !HasKind(Results[0].Tokens, VerseTokenKind::Identifier);
+	Ok = Ok && HasKind(Results[1].Tokens, VerseTokenKind::String);
+	Ok = Ok && !HasKind(Results[1].Tokens, VerseTokenKind::Identifier);
+
+	return Step("identifier-shaped text inside a comment or string stays Comment/String", Ok);
+}
+
 } // namespace
 
 int main()
@@ -249,6 +284,9 @@ int main()
 	Ok = TestSymbols() && Ok;
 	Ok = TestCallsAndMembers() && Ok;
 	Ok = TestPrefixAttributes() && Ok;
+	Ok = TestBareIdentifier() && Ok;
+	Ok = TestIdentifierTokensDoNotMerge() && Ok;
+	Ok = TestIdentifierInsideCommentOrString() && Ok;
 
 	printf("[verse_lexer_test] %s\n", Ok ? "ALL PASS" : "FAILURES");
 	return Ok ? 0 : 1;

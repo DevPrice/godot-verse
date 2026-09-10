@@ -5,6 +5,7 @@
 
 enum class VerseTokenKind {
 	Text,
+	Identifier,
 	Comment,
 	String,
 	Escape,
