@@ -46,3 +46,23 @@ exports_probe := class(node2d):
     Probe<public>():void =
         if (IsInstanceValid()?):
             SetPosition(GetPosition())
+
+    # Spike for generated property accessors: proves <getter>/<setter> reach a Godot get/set pair,
+    # so `set Probe.Position = V` can replace SetPosition. The struct-typed var needs the second,
+    # field-named overload of each -- that is what makes `set Probe.Position.X = 1.0` resolve.
+    var Position<public><getter(PositionGetter)><setter(PositionSetter)>:vector2 = external {}
+
+    PositionGetter<public>(Accessor:accessor)<transacts>:vector2 = GetPosition()
+
+    PositionGetter<public>(Accessor:accessor, Field:string)<transacts>:float =
+        P := GetPosition()
+        if (Field = "X") then P.X else P.Y
+
+    PositionSetter<public>(Accessor:accessor, Value:vector2)<transacts>:void = SetPosition(Value)
+
+    PositionSetter<public>(Accessor:accessor, Field:string, Value:float)<transacts>:void =
+        P := GetPosition()
+        if (Field = "X"):
+            SetPosition(vector2{X := Value, Y := P.Y})
+        else:
+            SetPosition(vector2{X := P.X, Y := Value})
