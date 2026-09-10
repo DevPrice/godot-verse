@@ -86,6 +86,12 @@ Error VerseScript::compile() {
 	// requires a complete program, so one bad file leaves nothing assembled.
 	const Error build_status = language->ensure_project_built();
 
+	// Reached on save and on reload, where the answer has to be about the text being saved. A
+	// background analysis started by the last keystroke may still be in flight, and its
+	// predecessor's diagnostics can describe an edit the author has already undone -- which would
+	// mark this script invalid over a mistake that is no longer in the file.
+	language->settle_checks();
+
 	handle = runtime->open_script(ProjectSettings::get_singleton()->globalize_path(path));
 	valid = handle != nullptr && build_status == OK && language->diagnostics_for(path).is_empty();
 	class_shaped = valid && runtime->has_class(verse_class_name());

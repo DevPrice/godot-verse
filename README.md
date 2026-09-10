@@ -157,6 +157,17 @@ which is enough to make the editor feel broken. Two things keep it off the UI th
   / `_poll`), and `_validate` answers from the previous analysis until the new one lands a few
   frames later. Diagnostics lag the buffer by one analysis; the editor never stops drawing.
 
+A lagging answer is shown but never *logged*. The script editor's error list is replaced wholesale
+on the next validate, so a moment of staleness there costs nothing; the output log has no way to
+retract a line, and an error the author already undid would sit in it for the rest of the session.
+The log is written from the two places that are authoritative for the current text: a validate the
+cache answered, and the frame a fresh analysis lands on.
+
+Saving and reloading wait for the outstanding analysis instead of answering stale. Those are the
+points where a script's validity is decided and where the author has just asked for something
+explicitly, so a beat is worth more than a wrong answer -- at most one analysis, since a newer
+buffer replaces a queued one rather than joining a line behind it.
+
 The host will not execute Verse while an analysis is in flight, and enforces that itself rather
 than trusting callers: VerseVM blocks execution for the length of a build, so a `vh_tick` that ran
 anyway would trip `ensure(!bBlockAllExecution)` and then take the process down. A frame that lands

@@ -8,7 +8,9 @@
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/file_access.hpp>
+#include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
+#include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/memory.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
@@ -498,8 +500,14 @@ TypedArray<Dictionary> VerseScriptLanguage::check_buffer(const String &p_path, c
 	// on the host's thread and answer from the last one: returning stale diagnostics for a moment
 	// is a far smaller cost than freezing the editor on every keystroke. _frame picks the result
 	// up, and Godot re-validates often enough that the fresh answer lands on its own.
+	//
+	// That answer is deliberately not logged. It describes whatever the file said before this
+	// edit, which may be a mistake the author has already undone, and the output log has no way
+	// to retract a line. The script editor's own error list is free to show it because Godot
+	// replaces it wholesale on the next validate; the log is not.
 	if (!analysis_is_current) {
 		request_check(p_path, normalized);
+		return diagnostics_for(p_path);
 	}
 
 	// Analysis covers the whole project, so a broken file elsewhere reports against its own path;
@@ -509,7 +517,42 @@ TypedArray<Dictionary> VerseScriptLanguage::check_buffer(const String &p_path, c
 	return errors;
 }
 
+void VerseScriptLanguage::settle_checks() const {
+	VerseRuntime *runtime = get_runtime();
+	if (runtime == nullptr || !runtime->is_host_loaded()) {
+		return;
+	}
+
+	// Two passes is the whole outstanding set: one analysis in flight, and at most one queued
+	// buffer behind it, since a newer buffer replaces a waiting one rather than queueing.
+	for (int pass = 0; pass < 2; pass++) {
+		start_pending_check();
+		if (in_flight_path.is_empty()) {
+			return;
+		}
+
+		// An analysis of this project takes ~100ms. The cap is not a real duration so much as a
+		// promise that a wedged host costs a stale error list rather than an editor that never
+		// comes back.
+		const uint64_t deadline_ms = Time::get_singleton()->get_ticks_msec() + 5000;
+		while (runtime->is_check_project_busy()) {
+			if (Time::get_singleton()->get_ticks_msec() > deadline_ms) {
+				return;
+			}
+			OS::get_singleton()->delay_msec(1);
+		}
+		poll_check();
+	}
+}
+
 void VerseScriptLanguage::request_check(const String &p_path, const String &p_normalized_source) const {
+	// The analysis in flight is already for this exact text. Godot validates the same unchanged
+	// buffer several times over while one runs, and queueing behind it would buy the same answer
+	// a second time -- which a save then has to wait through.
+	if (p_path == in_flight_path && p_normalized_source == in_flight_source) {
+		return;
+	}
+
 	// Newest buffer wins: while an analysis runs the editor keeps typing, and every intermediate
 	// state is worth less than the one the author is looking at now.
 	pending_check_path = p_path;
@@ -550,6 +593,12 @@ void VerseScriptLanguage::poll_check() const {
 		// Only now does the host hold this text, so only now may a validate answer from cache.
 		analyzed_source_by_path[in_flight_path] = in_flight_source;
 		record_diagnostics(errors_by_globalized);
+
+		// This is the authoritative moment for the file that was analysed, and the only one a
+		// validate is not guaranteed to follow, so the log is written from here.
+		const String globalized = ProjectSettings::get_singleton()->globalize_path(in_flight_path);
+		log_new_diagnostics(globalized, diagnostics_for(in_flight_path));
+
 		in_flight_path = String();
 		in_flight_source = String();
 	}

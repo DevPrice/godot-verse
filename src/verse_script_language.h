@@ -130,6 +130,12 @@ public:
 
 	godot::TypedArray<godot::Dictionary> diagnostics_for(const godot::String &p_path) const;
 
+	// Blocks until every outstanding analysis has landed, so diagnostics_for answers for the
+	// current text rather than the text before the last edit. Saving and reloading are worth a
+	// wait: they are explicit, they are where a script's validity is decided, and answering them
+	// from a superseded analysis is how an already-undone error reaches the output log.
+	void settle_checks() const;
+
 private:
 	static VerseScriptLanguage *singleton_instance;
 	double frame_budget_ms = 4.0;
