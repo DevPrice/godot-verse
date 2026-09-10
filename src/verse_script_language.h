@@ -1,5 +1,8 @@
 #pragma once
 
+// _make_template returns a Ref<Script>, and Ref's destructor needs the complete type;
+// script_language_extension.hpp only forward-declares it.
+#include <godot_cpp/classes/script.hpp>
 #include <godot_cpp/classes/script_language_extension.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
@@ -129,6 +132,12 @@ public:
 	godot::TypedArray<godot::Dictionary> check_buffer(const godot::String &p_path, const godot::String &p_source) const;
 
 	godot::TypedArray<godot::Dictionary> diagnostics_for(const godot::String &p_path) const;
+
+	// The class name every .verse file under res:// defines, which is its own stem: a script's
+	// class is named after its file, and one flat scope for the whole project is what forces
+	// that. Cheap enough to answer from a directory walk, and it needs no compiled program --
+	// the syntax highlighter has to colour a script that has never been built.
+	godot::PackedStringArray script_class_names() const;
 
 	// Blocks until every outstanding analysis has landed, so diagnostics_for answers for the
 	// current text rather than the text before the last edit. Saving and reloading are worth a

@@ -226,12 +226,22 @@ classes it colours operators and punctuation, call positions (`Print(`, the brac
 sit between the name and its parameter list), `.member` accesses, and both attribute spellings —
 suffix `<public>` and prefix `@editable`.
 
-What the *colouring* does not do is resolve symbols: a bare identifier is a bare identifier, so
-type names read as plain text. The compiler can now answer that question — it is what ctrl+click
-above is built on — but not in the shape colouring wants. A lookup is one point query against
-loci that shift the moment the author types, whereas every visible line is recoloured on every
-keystroke; feeding it loci would make the colours crawl. What that path needs instead is the set
-of names in scope by kind, which does not move when a line is inserted.
+**Type names colour as types, from a set of names rather than from positions.** A bare identifier
+that names a class is coloured as one: the mirrored Godot API — `node2d`, `timer`, `control` —
+plus the class each `.verse` file in the project defines, which is its own stem. Verse's
+primitives need no help, being reserved words already.
+
+Deliberately not from the compiler, even though ctrl+click above proves it could answer. Every
+visible line is recoloured on every keystroke, and a source range goes stale the instant a line
+is inserted above it, so colouring from loci would make the colours crawl a line behind the text.
+A *name* does not move when a line is inserted. The two sources of names are also both available
+before anything has been compiled, which matters because the highlighter has to colour a script
+that has never been built — and neither one needs the host to be loaded at all.
+
+What that costs is precision the compiler would have given for free: a local shadowing a class
+name colours as the class, and a type alias or a nested class is not in the set, so it stays
+plain text. Those are the cases where the next step is the scope-aware name set the analysis
+could hand over per file.
 
 `VerseTicker` from Phase 2 still works, but nothing needs it: the script language pumps `vh_tick`
 from `_frame`, so every scripted node is driven rather than one hand-placed one.

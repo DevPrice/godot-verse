@@ -551,6 +551,15 @@ PackedStringArray VerseScriptLanguage::find_verse_sources(const String &p_dir) {
 	return found;
 }
 
+PackedStringArray VerseScriptLanguage::script_class_names() const {
+	const PackedStringArray sources = find_verse_sources("res://");
+	PackedStringArray names;
+	for (int64_t i = 0; i < sources.size(); i++) {
+		names.push_back(sources[i].get_file().get_basename());
+	}
+	return names;
+}
+
 Error VerseScriptLanguage::ensure_project_built() {
 	if (project_built) {
 		return OK;

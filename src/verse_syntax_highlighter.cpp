@@ -1,10 +1,16 @@
 #include "verse_syntax_highlighter.h"
 
+#include "verse_api_classes.h"
+#include "verse_script_language.h"
+
 #include <godot_cpp/classes/editor_interface.hpp>
 #include <godot_cpp/classes/editor_settings.hpp>
 #include <godot_cpp/classes/text_edit.hpp>
 #include <godot_cpp/variant/char_string.hpp>
+#include <godot_cpp/variant/packed_string_array.hpp>
 #include <godot_cpp/variant/variant.hpp>
+
+#include <iterator>
 
 using namespace godot;
 
@@ -115,7 +121,8 @@ Dictionary VerseSyntaxHighlighter::_get_line_syntax_highlighting(int32_t p_line)
 	int byte_cursor = 0;
 	int char_cursor = 0;
 
-	for (const VerseToken &token : tokens) {
+	for (size_t i = 0; i < tokens.size(); i++) {
+		const VerseToken &token = tokens[i];
 		int column = token.column;
 		if (byte_offsets_differ) {
 			while (byte_cursor < token.column && byte_cursor < utf8.length()) {
@@ -128,10 +135,23 @@ Dictionary VerseSyntaxHighlighter::_get_line_syntax_highlighting(int32_t p_line)
 		}
 
 		Dictionary entry;
-		entry["color"] = color_for(token.kind);
+		entry["color"] = token.kind == VerseTokenKind::Identifier
+				? color_for_identifier(utf8, token.column, (int)(i + 1 < tokens.size() ? tokens[i + 1].column : utf8.length()))
+				: color_for(token.kind);
 		result[column] = entry;
 	}
 	return result;
+}
+
+// A run of one kind ends where the next begins, and an identifier is never adjacent to another
+// identifier -- there is always a symbol or a space between them, and those are other kinds. So
+// the token's own extent falls out of the next token's column without the lexer carrying a length.
+godot::Color VerseSyntaxHighlighter::color_for_identifier(const CharString &p_utf8, int p_begin, int p_end) const {
+	if (p_end <= p_begin || p_end > p_utf8.length()) {
+		return text_color;
+	}
+	const std::string word(p_utf8.get_data() + p_begin, (size_t)(p_end - p_begin));
+	return type_names.count(word) > 0 ? type_color : text_color;
 }
 
 void VerseSyntaxHighlighter::_clear_highlighting_cache() {
@@ -151,4 +171,16 @@ void VerseSyntaxHighlighter::_update_cache() {
 	function_color = read_color(settings, "text_editor/theme/highlighting/function_color", function_color);
 	member_color = read_color(settings, "text_editor/theme/highlighting/member_variable_color", member_color);
 	text_color = read_color(settings, "text_editor/theme/highlighting/text_color", text_color);
+	type_color = read_color(settings, "text_editor/theme/highlighting/base_type_color", type_color);
+
+	type_names.clear();
+	for (size_t i = 0; i < std::size(verse_api::classes); i++) {
+		type_names.insert(verse_api::classes[i].verse_name);
+	}
+	if (VerseScriptLanguage *language = VerseScriptLanguage::singleton()) {
+		const PackedStringArray names = language->script_class_names();
+		for (int64_t i = 0; i < names.size(); i++) {
+			type_names.insert(names[i].utf8().get_data());
+		}
+	}
 }
