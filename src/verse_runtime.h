@@ -76,9 +76,10 @@ public:
 
 	// What could be written at p_line/p_column of p_source, as an array of
 	// { name, type, owner, kind, is_var } -- the members of the expression there when
-	// p_mode is VH_COMPLETE_MEMBERS, everything the scope admits when it is VH_COMPLETE_SCOPE.
-	// Positions are the compiler's, as above, and for members they are the *receiver's* last
-	// byte rather than the cursor.
+	// p_mode is VH_COMPLETE_MEMBERS, everything the scope admits when it is VH_COMPLETE_SCOPE,
+	// and the attributes among those when it is VH_COMPLETE_ATTRIBUTES. Positions are the
+	// compiler's, as above, and for members they are the *receiver's* last byte rather than the
+	// cursor.
 	//
 	// Takes the buffer because it analyses it: unlike lookup_symbol there is never an existing
 	// analysis of half-typed text to answer from. That analysis costs about as much as a

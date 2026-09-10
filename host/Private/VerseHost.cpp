@@ -531,7 +531,7 @@ extern "C" int32_t vh_complete_symbol(const char* PathUtf8,
     {
         return VH_ERR_STATE;
     }
-    if (Mode != VH_COMPLETE_MEMBERS && Mode != VH_COMPLETE_SCOPE)
+    if (Mode != VH_COMPLETE_MEMBERS && Mode != VH_COMPLETE_SCOPE && Mode != VH_COMPLETE_ATTRIBUTES)
     {
         return VH_ERR_ABI;
     }

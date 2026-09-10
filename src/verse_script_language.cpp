@@ -751,8 +751,9 @@ static String member_declaration_class(const String &p_source, int64_t p_line, i
 // Completion, answered by the compiler wherever it can be.
 //
 // Godot marks the cursor by splicing U+FFFF into the buffer, and everything here is derived from
-// where that landed: whether a `.` precedes it (so this completes members of whatever is to the
-// left) or not (so it completes names in scope), and what has been typed of the identifier so far.
+// where that landed: what precedes it -- a `.`, so this completes members of whatever is to the
+// left, an `@`, so it completes the attributes in scope, or neither, so it completes names -- and
+// what has been typed of the identifier so far.
 //
 // The buffer handed to the host has that half-typed identifier replaced by a fixed one that
 // nothing defines. Replacing rather than deleting keeps the line parsing as the identifier it
@@ -798,13 +799,22 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 			&& before[prefix_start - 1] == '.'
 			&& !ends_a_number_literal(before, receiver_end);
 
+	// An `@` means an attribute and nothing else, so the whole scope is the wrong answer there:
+	// `@e` is reaching for `editable`, not for every name in the project that contains an e.
+	//
+	// The names offered are bare, the `@` left where it is. Godot's own filter walks back over
+	// identifier characters and stops at the symbol, so the text it is matching against and the
+	// text it replaces on insert are both the part past it -- GDScript strips the `@` off its
+	// annotations for exactly this reason.
+	const bool completing_attribute = !completing_members && prefix_start > 0 && before[prefix_start - 1] == '@';
+
 	// The class this is adding a member to, when that is what the cursor is doing: nothing but
 	// indentation ahead of the prefix on its line, and that line belonging to the class body. An
 	// inherited method offered there is being declared rather than called, and completes to the
 	// whole declaration.
 	const int64_t line_start = before.rfind("\n") + 1;
 	const String ahead_of_prefix = before.substr(line_start, prefix_start - line_start);
-	const String declaring_in_class = !completing_members && !ahead_of_prefix.is_empty() && ahead_of_prefix.strip_edges().is_empty()
+	const String declaring_in_class = !completing_members && !completing_attribute && !ahead_of_prefix.is_empty() && ahead_of_prefix.strip_edges().is_empty()
 			? member_declaration_class(verse_newline_normalized(p_code), before.count("\n"), ahead_of_prefix.length())
 			: String();
 
@@ -857,10 +867,13 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 	}
 
 	// Without a dot, a bare cursor would offer every name in scope as one undifferentiated list;
-	// with one, the member set is bounded by the receiver's type and is exactly what was asked for.
-	if (!completing_members && prefix.is_empty()) {
+	// with one, the member set is bounded by the receiver's type and is exactly what was asked
+	// for. An `@` bounds it just as tightly, and is worth showing unprompted for the same reason:
+	// the attributes in scope are a short list and nothing else can follow it.
+	if (!completing_members && !completing_attribute && prefix.is_empty()) {
 		return result;
 	}
+	result["force"] = completing_attribute;
 
 	if (host_can_answer && (!completing_members || receiver_end >= 0)) {
 		// Members are asked about the receiver's last byte; a bare identifier about where it
@@ -870,7 +883,8 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 		int64_t line = 0;
 		int64_t column = 0;
 		position_of(position, line, column);
-		const int32_t mode = completing_members ? VH_COMPLETE_MEMBERS : VH_COMPLETE_SCOPE;
+		const int32_t mode = completing_members ? VH_COMPLETE_MEMBERS
+				: (completing_attribute ? VH_COMPLETE_ATTRIBUTES : VH_COMPLETE_SCOPE);
 
 		if (completion_cache_source != source || completion_cache_line != (int32_t)line
 				|| completion_cache_column != (int32_t)column || completion_cache_mode != mode) {
@@ -910,8 +924,9 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 		}
 	}
 
-	// A dot has answered everything it is going to; the sets below are names, not members.
-	if (completing_members) {
+	// A dot and an `@` have both answered everything they are going to; the sets below are names
+	// that could be written on their own, which is neither a member nor an attribute.
+	if (completing_members || completing_attribute) {
 		result["options"] = options;
 		return result;
 	}

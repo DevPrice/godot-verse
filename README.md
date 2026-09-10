@@ -513,13 +513,13 @@ name colours as the class, and a type alias or a nested class is not in the set,
 plain text. Those are the cases where the next step is the scope-aware name set the analysis
 could hand over per file.
 
-**Completion comes from the compiler, including after a `.`.** `vh_complete_symbol` answers two
-questions off the semantic program: the members of the expression at a position, and every name a
+**Completion comes from the compiler, including after a `.`.** `vh_complete_symbol` answers three
+questions off the semantic program: the members of the expression at a position, every name a
 scope there admits — the locals declared above the cursor, the enclosing class and its
-superclasses, and each scope's `using`, which is how the whole mirrored Godot API arrives. So
-`Position.` offers `X` and `Y` and nothing else, `Self.` offers the script's own methods beside
-`node2d`'s properties and `node`'s methods two classes up, and a bare identifier offers what is
-actually in scope rather than a list of every class that exists.
+superclasses, and each scope's `using`, which is how the whole mirrored Godot API arrives — and
+the attributes among those. So `Position.` offers `X` and `Y` and nothing else, `Self.` offers the
+script's own methods beside `node2d`'s properties and `node`'s methods two classes up, and a bare
+identifier offers what is actually in scope rather than a list of every class that exists.
 
 Completion is only ever asked about text that does not compile: the member being typed does not
 exist yet. Two things make that answerable.
@@ -540,6 +540,22 @@ identifier replaced by a fixed placeholder, so every prefix of one identifier is
 question and the whole of a completion context is one analysis. Substituting rather than deleting
 is deliberate: `set X = ` is a parse error that can take the enclosing function's AST down with
 it, while an identifier nothing defines costs one diagnostic nobody sees.
+
+**An `@` completes to attributes and nothing else.** The scope at that position is the same one a
+bare identifier completes against — three hundred names, of which four are legal after an `@` —
+so the mode exists to narrow it. What survives is two shapes: an attribute class, and the
+`<constructor>` function beside one that carries a payload. `@editable` names the class;
+`@clamp_min("0.0")` names the constructor, because Verse builds `clamp_min_attribute` out of its
+argument through a function of that name. The compiler-generated constructor every class has is
+dropped everywhere else for being unspellable, and this is the one place a constructor *is* what
+the author writes.
+
+The names are offered without the `@`. CodeEdit walks back over identifier characters to find the
+text it is filtering on and stops at the symbol, so the `@` is neither matched against nor
+replaced on insert — GDScript strips it off its own annotations for the same reason. What is not
+narrowed is where an attribute may be applied: `editable` is `@attribscope_data` and is offered
+above a class declaration all the same, because at the moment the question is asked the thing it
+would attach to has not been written yet.
 
 A call is completed with its brackets, and where the caret lands depends on whether there is
 anything to type between them: a function with parameters inserts only the opening bracket, so

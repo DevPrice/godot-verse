@@ -741,6 +741,57 @@ int main(int argc, char** argv)
 				}
 			}
 
+			// An `@`, which admits neither the scope nor the members of anything: the attributes
+			// alone, spelled without the `@` the editor has already got on screen.
+			const size_t AttributeUse = ExportsSource.find("    @editable");
+			CompleteOk = Step("located the fixture's attribute", AttributeUse != std::string::npos) && CompleteOk;
+			if (AttributeUse != std::string::npos)
+			{
+				std::string AttributeTyping = ExportsSource;
+				AttributeTyping.replace(AttributeUse + strlen("    @"), strlen("editable"), "VhCompletionCursor");
+				int32_t AttributeRow = 0;
+				int32_t AttributeColumn = 0;
+				RowColumnOf(AttributeTyping, AttributeUse + strlen("    @"), AttributeRow, AttributeColumn);
+				if (Step("vh_complete_symbol at an attribute",
+						CompleteSymbolFn(ExportsPathUtf8.c_str(), AttributeTyping.c_str(), AttributeRow, AttributeColumn,
+										 VH_COMPLETE_ATTRIBUTES, &Items, &Count) == VH_OK))
+				{
+					CompleteOk = Step("it offers editable", Offers(Items, Count, "editable") != nullptr) && CompleteOk;
+					CompleteOk = Step("and the bridge's own global_class",
+									 Offers(Items, Count, "global_class") != nullptr)
+							  && CompleteOk;
+					if (const vh_complete_item* Editable = Offers(Items, Count, "editable"))
+					{
+						CompleteOk = Step("an attribute is offered as the class it is", Editable->Kind == VH_LOOKUP_CLASS) && CompleteOk;
+					}
+					// The name an author writes for an attribute that carries a payload is the
+					// <constructor> beside the class, not the class -- `@clamp_min("0.0")`
+					// against clamp_min_attribute -- and it has to be offered as the call it is.
+					if (const vh_complete_item* ClampMin = Offers(Items, Count, "clamp_min"))
+					{
+						CompleteOk = Step("a payload attribute is offered as a function", ClampMin->Kind == VH_LOOKUP_FUNCTION) && CompleteOk;
+						CompleteOk = Step("taking the one argument it spells", ClampMin->ParamCount == 1) && CompleteOk;
+					}
+					else
+					{
+						CompleteOk = Step("a payload attribute is offered at all", false);
+					}
+					// The whole point of the mode: the scope this position sits in is the same one
+					// VH_COMPLETE_SCOPE answers with three hundred names, none of which are legal
+					// after an `@`.
+					CompleteOk = Step("but no name from the enclosing scope", Offers(Items, Count, "Print") == nullptr) && CompleteOk;
+					CompleteOk = Step("nor a member of the class being written", Offers(Items, Count, "Speed") == nullptr) && CompleteOk;
+					// Applying the base every attribute derives from means nothing, and the
+					// compiler-generated constructors are not spellable either.
+					CompleteOk = Step("nor attribute itself", Offers(Items, Count, "attribute") == nullptr) && CompleteOk;
+					CompleteOk = Step("nor a generated constructor", Offers(Items, Count, "Constructor") == nullptr) && CompleteOk;
+				}
+				else
+				{
+					CompleteOk = false;
+				}
+			}
+
 			// Whitespace has no members, and answering anyway would put the enclosing scope behind
 			// a dot the author never typed.
 			const vh_complete_item* NoItems = nullptr;

@@ -1515,10 +1515,52 @@ AUTORTFM_DISABLE bool IsOverridable(const uLang::CFunction& Function)
     return !Function.GetPrototypeDefinition()->HasAttributeClass(Program._finalClass, Program);
 }
 
+/// Which of a scope's definitions the walk keeps.
+enum class ECompleteFilter : uint8
+{
+    /// Every name the scope admits.
+    Any,
+    /// Only what may follow an `@`.
+    Attributes,
+};
+
+/// Whether a definition is a name an `@` could be followed by.
+///
+/// Two shapes, because Verse spells a payload-carrying attribute as a call: `editable` is the
+/// attribute class itself, while `@clamp_min("0.0")` names the `<constructor>` function beside
+/// clamp_min_attribute, which is what makes the class out of the argument. `attribute` itself is
+/// excluded -- it is the base every attribute derives from, and applying it means nothing.
+AUTORTFM_DISABLE bool IsAttributeName(const uLang::CDefinition& Definition)
+{
+    using namespace uLang;
+
+    const CClass* AttributeClass = Definition._EnclosingScope.GetProgram()._attributeClass;
+    if (!AttributeClass)
+    {
+        return false;
+    }
+
+    if (const CClass* Class = Definition.AsNullable<CClass>())
+    {
+        return Class != AttributeClass && Class->IsSubtypeOf(*AttributeClass);
+    }
+    if (const CFunction* Function = Definition.AsNullable<CFunction>())
+    {
+        if (!Function->IsConstructor())
+        {
+            return false;
+        }
+        const CFunctionType* Type = Function->_Signature.GetFunctionType();
+        const CClass* Result = Type ? Type->GetReturnType().GetNormalType().AsNullable<CClass>() : nullptr;
+        return Result && Result->IsSubtypeOf(*AttributeClass);
+    }
+    return false;
+}
+
 /// Fills one item from a definition, or returns false for a definition that is not a name the
 /// author could have written: the compiler generates a constructor and an archetype per class,
 /// and neither is spellable.
-AUTORTFM_DISABLE bool DescribeCompletion(const uLang::CDefinition& Definition, GodotVerse::FCompleteItem& OutItem)
+AUTORTFM_DISABLE bool DescribeCompletion(const uLang::CDefinition& Definition, ECompleteFilter Filter, GodotVerse::FCompleteItem& OutItem)
 {
     using namespace uLang;
 
@@ -1538,7 +1580,10 @@ AUTORTFM_DISABLE bool DescribeCompletion(const uLang::CDefinition& Definition, G
     }
     else if (const CFunction* Function = Definition.AsNullable<CFunction>())
     {
-        if (Function->IsConstructor())
+        // An attribute's `<constructor>` is the one the author writes -- `@clamp_min("0.0")` --
+        // and IsAttributeName has already established that this is one. Everywhere else a
+        // constructor is the copy the compiler generated per class, which has no spelling.
+        if (Function->IsConstructor() && Filter != ECompleteFilter::Attributes)
         {
             return false;
         }
@@ -1582,6 +1627,7 @@ AUTORTFM_DISABLE bool DescribeCompletion(const uLang::CDefinition& Definition, G
 /// Adds every definition a scope declares that the cursor's scope is allowed to see.
 AUTORTFM_DISABLE void CollectScope(const uLang::CLogicalScope& From,
                                    const uLang::CScope* AccessFrom,
+                                   ECompleteFilter Filter,
                                    TArray<GodotVerse::FCompleteItem>& OutItems)
 {
     for (const uLang::TSRef<uLang::CDefinition>& Definition : From.GetDefinitions())
@@ -1590,8 +1636,12 @@ AUTORTFM_DISABLE void CollectScope(const uLang::CLogicalScope& From,
         {
             continue;
         }
+        if (Filter == ECompleteFilter::Attributes && !IsAttributeName(*Definition))
+        {
+            continue;
+        }
         GodotVerse::FCompleteItem Item;
-        if (DescribeCompletion(*Definition, Item))
+        if (DescribeCompletion(*Definition, Filter, Item))
         {
             OutItems.Add(MoveTemp(Item));
         }
@@ -1602,18 +1652,19 @@ AUTORTFM_DISABLE void CollectScope(const uLang::CLogicalScope& From,
 /// wins by arriving first and the duplicate is dropped when the results are deduplicated.
 AUTORTFM_DISABLE void CollectClassAndSupers(const uLang::CClass& Class,
                                             const uLang::CScope* AccessFrom,
+                                            ECompleteFilter Filter,
                                             TArray<GodotVerse::FCompleteItem>& OutItems)
 {
     // An interface is a CClass too, so the same walk covers `class(a, b)` as well as a superclass
     // chain; a diamond is dropped by the deduplication downstream rather than tracked here.
     for (const uLang::CClass* Current = &Class; Current; Current = Current->GetSuperClass())
     {
-        CollectScope(*Current, AccessFrom, OutItems);
+        CollectScope(*Current, AccessFrom, Filter, OutItems);
         for (const uLang::CClass* Interface : Current->_SuperInterfaces)
         {
             if (Interface)
             {
-                CollectScope(*Interface, AccessFrom, OutItems);
+                CollectScope(*Interface, AccessFrom, Filter, OutItems);
             }
         }
     }
@@ -1691,25 +1742,34 @@ AUTORTFM_DISABLE bool GodotVerse::Complete(FUtf8StringView Path,
                 }
                 if (const uLang::CClass* Class = Type->AsNullable<uLang::CClass>())
                 {
-                    CollectClassAndSupers(*Class, Visitor.Scope, OutItems);
+                    CollectClassAndSupers(*Class, Visitor.Scope, ECompleteFilter::Any, OutItems);
                 }
                 else if (const uLang::CEnumeration* Enumeration = Type->AsNullable<uLang::CEnumeration>())
                 {
-                    CollectScope(*Enumeration, Visitor.Scope, OutItems);
+                    CollectScope(*Enumeration, Visitor.Scope, ECompleteFilter::Any, OutItems);
                 }
                 else if (const uLang::CModule* Module = Type->AsNullable<uLang::CModule>())
                 {
-                    CollectScope(*Module, Visitor.Scope, OutItems);
+                    CollectScope(*Module, Visitor.Scope, ECompleteFilter::Any, OutItems);
                 }
             }
             else
             {
-                for (const uLang::CDataDefinition* Local : Visitor.Locals)
+                const ECompleteFilter Filter = Mode == VH_COMPLETE_ATTRIBUTES
+                    ? ECompleteFilter::Attributes
+                    : ECompleteFilter::Any;
+
+                // A local is a value, and an attribute is a type applied to a declaration: no
+                // local is ever what follows an `@`.
+                if (Filter == ECompleteFilter::Any)
                 {
-                    FCompleteItem Item;
-                    if (DescribeCompletion(*Local, Item))
+                    for (const uLang::CDataDefinition* Local : Visitor.Locals)
                     {
-                        OutItems.Add(MoveTemp(Item));
+                        FCompleteItem Item;
+                        if (DescribeCompletion(*Local, Filter, Item))
+                        {
+                            OutItems.Add(MoveTemp(Item));
+                        }
                     }
                 }
 
@@ -1720,17 +1780,17 @@ AUTORTFM_DISABLE bool GodotVerse::Complete(FUtf8StringView Path,
                 {
                     if (Current->GetKind() == uLang::CScope::EKind::Class)
                     {
-                        CollectClassAndSupers(static_cast<const uLang::CClass&>(*Current), Visitor.Scope, OutItems);
+                        CollectClassAndSupers(static_cast<const uLang::CClass&>(*Current), Visitor.Scope, Filter, OutItems);
                     }
                     else
                     {
-                        CollectScope(Current->GetLogicalScope(), Visitor.Scope, OutItems);
+                        CollectScope(Current->GetLogicalScope(), Visitor.Scope, Filter, OutItems);
                     }
                     for (const uLang::CLogicalScope* Using : Current->GetUsingScopes())
                     {
                         if (Using)
                         {
-                            CollectScope(*Using, Visitor.Scope, OutItems);
+                            CollectScope(*Using, Visitor.Scope, Filter, OutItems);
                         }
                     }
                 }
@@ -1783,7 +1843,7 @@ AUTORTFM_DISABLE bool GodotVerse::ClassMembers(FUtf8StringView ClassName, TArray
 
     // The class' own scope only. What it inherits is documented by the class that declares it,
     // and for a mirrored Godot class that is Godot's own documentation rather than anything here.
-    CollectScope(*Class, nullptr, OutItems);
+    CollectScope(*Class, nullptr, ECompleteFilter::Any, OutItems);
     OutItems.Sort([](const FCompleteItem& Left, const FCompleteItem& Right) { return Left.Name < Right.Name; });
     return true;
 }
@@ -1851,7 +1911,7 @@ AUTORTFM_DISABLE bool GodotVerse::SignatureAt(FUtf8StringView Path,
     for (const uLang::CDataDefinition* Param : Function->_Signature.GetParams())
     {
         FCompleteItem Item;
-        if (Param && DescribeCompletion(*Param, Item))
+        if (Param && DescribeCompletion(*Param, ECompleteFilter::Any, Item))
         {
             OutDesc.Params.Add(MoveTemp(Item));
         }

@@ -22,7 +22,7 @@
 extern "C" {
 #endif
 
-#define VH_ABI_VERSION 19
+#define VH_ABI_VERSION 20
 
 typedef int32_t vh_bool;
 
@@ -495,7 +495,18 @@ typedef enum vh_complete_mode
 
 	/* What an identifier written at Line/Column could name: the locals ahead of it, the enclosing
 	 * class' members and its superclasses', and every scope the file has brought into view. */
-	VH_COMPLETE_SCOPE = 1
+	VH_COMPLETE_SCOPE = 1,
+
+	/* The same scopes, narrowed to what may follow an `@`: an attribute class, and the
+	 * <constructor> function that builds one where the attribute takes an argument --
+	 * `@editable` names the class, `@clamp_min("0.0")` the constructor beside it. The position is
+	 * where the name would be written, past the `@`, exactly as VH_COMPLETE_SCOPE takes it.
+	 *
+	 * Not filtered by where the attribute may be applied: `@attribscope_data` says `editable`
+	 * belongs on a data member, and this offers it anywhere an attribute can be written. What the
+	 * attribute is about to be attached to is not written yet at the moment the question is
+	 * asked. */
+	VH_COMPLETE_ATTRIBUTES = 2
 } vh_complete_mode;
 
 /* One name completion could insert. Laid out like vh_lookup_desc's first few fields, and read the
