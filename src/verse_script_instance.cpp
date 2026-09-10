@@ -17,12 +17,12 @@ namespace {
 // instead does not fail politely — UVerseClass::PeekField asserts on a field the shape does not
 // have.
 //
-// The argument mangling is the host's, not Godot's: a plain Update(Delta:float) in Verse source
-// is stored as Update(:float), so these must match it exactly or resolution silently fails
+// The argument mangling is the host's, not Godot's: a plain Process(Delta:float) in Verse source
+// is stored as Process(:float), so these must match it exactly or resolution silently fails
 // instead of erroring.
 constexpr const char *kMethodReadyName = "(/Godot.org/Godot/object:)Ready";
-constexpr const char *kMethodProcessName = "(/Godot.org/Godot/object:)Update(:float)";
-constexpr const char *kMethodPhysicsProcessName = "(/Godot.org/Godot/object:)PhysicsUpdate(:float)";
+constexpr const char *kMethodProcessName = "(/Godot.org/Godot/object:)Process(:float)";
+constexpr const char *kMethodPhysicsProcessName = "(/Godot.org/Godot/object:)PhysicsProcess(:float)";
 
 GDExtensionBool set_func(GDExtensionScriptInstanceDataPtr p_instance, GDExtensionConstStringNamePtr p_name, GDExtensionConstVariantPtr p_value) {
 	VerseScriptInstance *self = static_cast<VerseScriptInstance *>(p_instance);

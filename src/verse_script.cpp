@@ -298,7 +298,7 @@ Error VerseScript::_reload(bool p_keep_state) {
 }
 
 bool VerseScript::_has_method(const StringName &p_method) const {
-	// Every script class inherits Ready, Update and PhysicsUpdate from `object`, so a valid
+	// Every script class inherits Ready, Process and PhysicsProcess from `object`, so a valid
 	// script has all three whether or not it overrides them. Whether an override exists is an
 	// instance question, and VerseScriptInstance answers it — that is what decides whether Godot
 	// puts the node in the per-frame process list.

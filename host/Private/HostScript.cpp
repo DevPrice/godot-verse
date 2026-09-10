@@ -1034,7 +1034,7 @@ AUTORTFM_DISABLE bool IsDefinitionNode(uLang::EAstNodeType NodeType)
 /// Everything else a declaration is made of describes something other than the definition itself:
 /// `<public>` and `<override>` are specifiers, `:float` is a type, `(Delta:float)` is a list of
 /// other definitions. Only the name means "this one". Narrowing to the definition's first child is
-/// not enough -- for `PhysicsUpdate<override>(Delta:float):void` that child still spans the
+/// not enough -- for `PhysicsProcess<override>(Delta:float):void` that child still spans the
 /// specifier, the parameters and the return type, which is why hovering any of them used to
 /// describe the method.
 ///
@@ -1902,7 +1902,7 @@ AUTORTFM_DISABLE FVerseFunction LookupMethod(const GodotVerse::FInstance* Instan
 
 /// Whether the script actually implements this lifecycle method.
 ///
-/// `object` gives Ready, Update and PhysicsUpdate empty bodies so a script can <override>
+/// `object` gives Ready, Process and PhysicsProcess empty bodies so a script can <override>
 /// them and so a script that wants only one of the three still compiles -- which means a plain
 /// "does it resolve" test is true for every instance. Comparing the resolved function against
 /// the one the base class resolves to is what distinguishes an override from the inherited

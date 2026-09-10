@@ -61,5 +61,5 @@ object<public><native> := class:
     # Godot's _ready, _process and _physics_process. Defined here so a script overrides rather
     # than declares them, and so a script that wants only one of the three still compiles.
     Ready<public>():void = {}
-    Update<public>(Delta:float):void = {}
-    PhysicsUpdate<public>(Delta:float):void = {}
+    Process<public>(Delta:float):void = {}
+    PhysicsProcess<public>(Delta:float):void = {}

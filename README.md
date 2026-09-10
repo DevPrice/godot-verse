@@ -47,8 +47,8 @@ relaxed rather than satisfied.
 ## What works
 
 A `.verse` file is a Godot script. Attach one to a node the way you would a GDScript: it compiles
-when the project loads, its `Ready()` runs on `_ready`, and its `Update(Delta:float)` runs every
-frame. `PhysicsUpdate(:float)` maps to `_physics_process`. Several scripts on several nodes work
+when the project loads, its `Ready()` runs on `_ready`, and its `Process(Delta:float)` runs every
+frame. `PhysicsProcess(:float)` maps to `_physics_process`. Several scripts on several nodes work
 independently.
 
 A script *is* a class named after its own file, and the node it is attached to is `Self`. That is
@@ -72,7 +72,7 @@ mover := class(node2d):
     Ready<override>():void =
         Print(Greeting)
 
-    Update<override>(Delta:float):void =
+    Process<override>(Delta:float):void =
         set Position = vector2{X := Position.X + Delta * Speed, Y := Position.Y}
 ```
 
@@ -288,7 +288,7 @@ A definition answers at its own name too, so hovering `Ready` where it is declar
 rather than declining. That needs the locus narrowed all the way down to the name. A definition's
 own span runs from its first attribute to the end of its body, so matching against that would
 resolve every blank column inside a function to the function — but narrowing to its first VST
-child is not enough either: for `PhysicsUpdate<override>(Delta:float):void` that child still
+child is not enough either: for `PhysicsProcess<override>(Delta:float):void` that child still
 covers the specifier, the parameter list and the return type. None of those means "this
 definition", and hovering any of them used to describe the method. So the narrowing descends the
 leading edge of the tree — a type spec's first child is what is being typed, a call's is the
@@ -317,7 +317,7 @@ cursor, and the editor falls back to the parent's documentation when the declara
 comment of its own — a comment the author *did* write always wins. The click goes to the parent
 too, since this definition's own line is the one the cursor is already on.
 
-`object`'s `Ready`, `Update` and `PhysicsUpdate` are in the method map as `Node._ready`,
+`object`'s `Ready`, `Process` and `PhysicsProcess` are in the method map as `Node._ready`,
 `_process` and `_physics_process`. They are hand-written rather than mirrored — the generator
 skips virtuals — but they exist to be the Verse spelling of Godot's, so overriding one opens
 Godot's page for it.
@@ -477,7 +477,7 @@ and all, and it needs the parameter count to reach the editor with each completi
 **Inside a class body, a method completes to its whole declaration.** GDScript answers a name
 typed at class level with `func _ready() -> void:` rather than with `_ready`, and the Verse
 spelling of the same idea is the base's signature with `<override>` after the name: typing `Up`
-in a script's class body offers `Update<override>(Delta:float):void =`. The trailing ` =` is
+in a script's class body offers `Process<override>(Delta:float):void =`. The trailing ` =` is
 where the body goes; nothing inserts a newline, so the editor's own indent takes the caret there.
 
 That needs three things the compiler has and the editor does not. The first is the signature with
@@ -504,7 +504,7 @@ editor excludes the mirror wholesale, which the class table already answers, and
 sound only because every emitted class lands in that table — both come off `emit_order`.
 
 That leaves the two sets that mean something. `object` is hand-written rather than generated and
-so is not in the class table: its `Ready`, `Update` and `PhysicsUpdate` are the only Godot
+so is not in the class table: its `Ready`, `Process` and `PhysicsProcess` are the only Godot
 virtuals the bridge carries at all, and the generated method table names exactly those three as
 `object`'s — which is how `IsInstanceValid`, a helper on the same class that nothing dispatches
 to, stays out. Everything else is a class the author wrote, and the mirror never contains one of
@@ -529,7 +529,7 @@ after a `.` there is no such worry, because the member set is bounded by the rec
 
 Every one of those sets is trimmed against what has been typed before it is handed over, because
 Godot builds an option for each name it is given and re-asks on every keystroke. The trim is a
-case-insensitive subsequence — `Udt` reaches `Update` — rather than a prefix test, and that is
+case-insensitive subsequence — `Prcs` reaches `Process` — rather than a prefix test, and that is
 not a nicety: CodeEdit fuzzy-matches and ranks the options it receives, so a filter narrower than
 its own decides the answer by itself and drops candidates the editor would have offered. What is
 handed over is deliberately matched on the *name* rather than on the text the option displays,

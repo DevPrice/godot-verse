@@ -71,7 +71,7 @@ def test_param_names():
     )
     check(
         "param name colliding with an inherited lifecycle method",
-        g.verse_param_name("update", 1, reserved, set(), g.BASE_MEMBER_NAMES),
+        g.verse_param_name("process", 1, reserved, set(), g.BASE_MEMBER_NAMES),
         "Arg1",
     )
 
@@ -494,7 +494,7 @@ def test_generated_file_matches_hand_written_slice():
         failable and all("VhToHandle[" in line for line in failable),
     )
 
-    base_members = {"Handle", "IsInstanceValid", "Ready", "Update", "PhysicsUpdate"}
+    base_members = {"Handle", "IsInstanceValid", "Ready", "Process", "PhysicsProcess"}
 
     def inherited(name):
         if name == "object":

@@ -23,7 +23,7 @@ DEFAULT_CLASSES_FILE = "tools/verse_api_classes.txt"
 KEYWORDS_HEADER = "src/verse_keywords.h"
 EXTENSION_API = "godot-cpp/gdextension/extension_api.json"
 
-BASE_MEMBER_NAMES = {"Handle", "IsInstanceValid", "Ready", "Update", "PhysicsUpdate"}
+BASE_MEMBER_NAMES = {"Handle", "IsInstanceValid", "Ready", "Process", "PhysicsProcess"}
 
 # /Verse.org/Verse is in scope in every generated body, and Verse reports an ambiguity rather
 # than shadowing, so a parameter named Min breaks any method that mentions it. The standard
@@ -117,7 +117,7 @@ def verse_method_name(godot_name: str) -> str:
 def verse_param_name(godot_name: str, index: int, reserved_words: set, used: set, members: set) -> str:
     # A parameter that matches a member of the enclosing class is ambiguous, not shadowing:
     # Tween.set_parallel(parallel) and Tween.parallel() collide, as does any argument named
-    # `update` against `object`'s Update.
+    # `process` against `object`'s Process.
     candidate = verse_method_name(godot_name)
     if (not candidate or candidate in reserved_words or candidate in used
             or candidate in members or candidate in VERSE_STDLIB_NAMES):
@@ -618,8 +618,8 @@ VALUE_TYPE_CLASSES = {"Vector2": "vector2", "Vector3": "vector3", "Color": "colo
 # class, godot method), the shape the method map already carries.
 LIFECYCLE_METHODS = [
     ("object", "Ready", "Node", "_ready"),
-    ("object", "Update", "Node", "_process"),
-    ("object", "PhysicsUpdate", "Node", "_physics_process"),
+    ("object", "Process", "Node", "_process"),
+    ("object", "PhysicsProcess", "Node", "_physics_process"),
 ]
 
 # The fields of those hand-written value types, in the same shape. Listed rather than read out of

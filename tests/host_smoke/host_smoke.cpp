@@ -377,7 +377,7 @@ int main(int argc, char** argv)
 			// An override carries its parent, which is what lets the editor describe a method
 			// that says nothing about itself and send a click somewhere other than the line the
 			// cursor is already on.
-			const size_t ReadyDecl = ExportsSource.find("PhysicsUpdate<override>(");
+			const size_t ReadyDecl = ExportsSource.find("PhysicsProcess<override>(");
 			if (Step("the fixture still overrides a lifecycle method", ReadyDecl != std::string::npos))
 			{
 				int32_t ReadyRow = 0;
@@ -430,15 +430,15 @@ int main(int argc, char** argv)
 				const Spot Spots[] = {
 					{ "an access specifier resolves to nothing", "Speed<public>:float", strlen("Speed<pub"), nullptr, nullptr },
 					{ "nor does the bracket opening one", "Speed<public>:float", strlen("Speed"), nullptr, nullptr },
-					{ "nor does an override specifier", "PhysicsUpdate<override>(", strlen("PhysicsUpdate<over"), nullptr, nullptr },
+					{ "nor does an override specifier", "PhysicsProcess<override>(", strlen("PhysicsProcess<over"), nullptr, nullptr },
 					{ "the member's own name still does", "Speed<public>:float", 2, "Speed", "exports" },
-					{ "and so does the method's", "PhysicsUpdate<override>(", 2, "PhysicsUpdate", "exports_probe" },
+					{ "and so does the method's", "PhysicsProcess<override>(", 2, "PhysicsProcess", "exports_probe" },
 					// A parameter is described by itself rather than by the method it belongs to,
 					// which is what stops hovering an argument from documenting the whole call.
 					// The editor declines to show anything for one, but that is its policy: the
 					// host still has to resolve it, or the enclosing method would answer instead.
-					{ "a parameter resolves to the parameter", "PhysicsUpdate<override>(Delta:float)", strlen("PhysicsUpdate<override>(De"), "Delta", "PhysicsUpdate" },
-					{ "and its type still resolves to the type", "PhysicsUpdate<override>(Delta:float)", strlen("PhysicsUpdate<override>(Delta:fl"), "float", "Verse" },
+					{ "a parameter resolves to the parameter", "PhysicsProcess<override>(Delta:float)", strlen("PhysicsProcess<override>(De"), "Delta", "PhysicsProcess" },
+					{ "and its type still resolves to the type", "PhysicsProcess<override>(Delta:float)", strlen("PhysicsProcess<override>(Delta:fl"), "float", "Verse" },
 				};
 				for (const Spot& S : Spots)
 				{
@@ -468,8 +468,8 @@ int main(int argc, char** argv)
 				// that a definition has no documentation of its own to read.
 				struct Flagged { const char* What; const char* Needle; size_t Offset; bool Expect; };
 				const Flagged Flags[] = {
-					{ "a parameter is flagged as one", "PhysicsUpdate<override>(Delta:float)", strlen("PhysicsUpdate<override>(De"), true },
-					{ "a method is not", "PhysicsUpdate<override>(", 2, false },
+					{ "a parameter is flagged as one", "PhysicsProcess<override>(Delta:float)", strlen("PhysicsProcess<override>(De"), true },
+					{ "a method is not", "PhysicsProcess<override>(", 2, false },
 					{ "and neither is a data member", "Speed<public>:float", 2, false },
 				};
 				for (const Flagged& F : Flags)
@@ -604,9 +604,9 @@ int main(int argc, char** argv)
 					// between the brackets means the caret belongs past them.
 					CompleteOk = Step("and as one taking no arguments", Probe->ParamCount == 0) && CompleteOk;
 				}
-				if (const vh_complete_item* Update = Offers(Items, Count, "PhysicsUpdate"))
+				if (const vh_complete_item* Process = Offers(Items, Count, "PhysicsProcess"))
 				{
-					CompleteOk = Step("a method with an argument says so", Update->ParamCount == 1) && CompleteOk;
+					CompleteOk = Step("a method with an argument says so", Process->ParamCount == 1) && CompleteOk;
 				}
 				if (const vh_complete_item* Position = Offers(Items, Count, "Position"))
 				{
@@ -688,17 +688,17 @@ int main(int argc, char** argv)
 					{
 						CompleteOk = Step("an inherited method is offered at all", false);
 					}
-					if (const vh_complete_item* Update = Offers(Items, Count, "Update"))
+					if (const vh_complete_item* Process = Offers(Items, Count, "Process"))
 					{
 						// The parameter's own name, which is the whole reason the signature is not
 						// read off the function type: that spells this one "float->void".
 						CompleteOk = Step("a parameter is named in the signature",
-										 Text(Update->SignatureUtf8, Update->SignatureLen) == "(Delta:float):void")
+										 Text(Process->SignatureUtf8, Process->SignatureLen) == "(Delta:float):void")
 								  && CompleteOk;
 					}
 					// Already overridden by the fixture, so it comes back owned by the fixture's
 					// own class -- which is how the editor knows not to offer it a second time.
-					if (const vh_complete_item* Physics = Offers(Items, Count, "PhysicsUpdate"))
+					if (const vh_complete_item* Physics = Offers(Items, Count, "PhysicsProcess"))
 					{
 						CompleteOk = Step("an override already written is owned by the class that wrote it",
 										 Text(Physics->OwnerUtf8, Physics->OwnerLen) == "exports_probe")
@@ -745,7 +745,7 @@ int main(int argc, char** argv)
 
 			// The argument hint. Asked at the callee's last byte, for the same reason members are
 			// asked at the receiver's: the arguments being typed do not analyse.
-			const size_t Call = ExportsSource.find("PhysicsUpdate<override>(");
+			const size_t Call = ExportsSource.find("PhysicsProcess<override>(");
 			if (Step("located the fixture's method", Call != std::string::npos))
 			{
 				int32_t CalleeRow = 0;
@@ -756,7 +756,7 @@ int main(int argc, char** argv)
 						SignatureAtFn(ExportsPathUtf8.c_str(), ExportsSource.c_str(), CalleeRow, CalleeColumn, &Signature) == VH_OK)
 					&& Signature)
 				{
-					CompleteOk = Step("it names the method", Text(Signature->NameUtf8, Signature->NameLen) == "PhysicsUpdate") && CompleteOk;
+					CompleteOk = Step("it names the method", Text(Signature->NameUtf8, Signature->NameLen) == "PhysicsProcess") && CompleteOk;
 					CompleteOk = Step("and its return type", Text(Signature->ResultUtf8, Signature->ResultLen) == "void") && CompleteOk;
 					CompleteOk = Step("and its one parameter", Signature->ParamCount == 1) && CompleteOk;
 					if (Signature->ParamCount == 1)

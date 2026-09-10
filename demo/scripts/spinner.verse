@@ -7,5 +7,7 @@ spinner := class(sprite2d):
 	Ready<override>():void =
 		Print("Spinner is ready.")
 
-	Update<override>(Delta:float):void =
+	Process<override>(Delta:float):void =
 		set Rotation = Rotation + Delta
+	
+	PhysicsProcess<override>(Delta:float):void = {}

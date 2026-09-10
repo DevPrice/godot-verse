@@ -16,7 +16,7 @@ lifetime := class(node2d):
 			set HeldHandle = Victim.Handle
 			Print("lifetime: holding a child node")
 
-	Update<override>(Delta:float):void =
+	Process<override>(Delta:float):void =
 		set Frames = Frames + 1
 		Held := node{Handle := HeldHandle}
 

@@ -232,7 +232,7 @@ Ref<Script> VerseScriptLanguage::_make_template(const String &p_template, const 
 			"    Ready<override>():void =\n"
 			"        Print(\"_CLASS_ is ready\")\n"
 			"\n"
-			"    Update<override>(Delta:float):void =\n";
+			"    Process<override>(Delta:float):void =\n";
 	source = source.replace("_CLASS_", class_name.to_snake_case());
 	source = source.replace("_BASE_", verse_base_class_for(p_base_class_name));
 
@@ -389,7 +389,7 @@ static bool is_identifier_char(char32_t p_c) {
 }
 
 // Whether a name is a candidate for what has been typed: the typed characters appear in it in
-// order, ignoring case. `Udt` reaches `Update`.
+// order, ignoring case. `Prcs` reaches `Process`.
 //
 // This has to be at least as permissive as Godot's own filter or it decides the answer by itself.
 // CodeEdit fuzzy-matches and ranks the options it is handed, so a name trimmed here is one the
@@ -603,7 +603,7 @@ static Dictionary override_option_for(const Dictionary &p_item) {
 // is what the class table already answers.
 //
 // That leaves the two sets that mean something. `object` is hand-written rather than generated and
-// so is not in the class table: its Ready/Update/PhysicsUpdate are the only Godot virtuals the
+// so is not in the class table: its Ready/Process/PhysicsProcess are the only Godot virtuals the
 // bridge carries at all, and the method table names exactly those three as `object`'s -- which is
 // how IsInstanceValid, a helper on the same class that nothing dispatches to, stays out. Anything
 // else is a class the author wrote, and the mirror never contains one of those.

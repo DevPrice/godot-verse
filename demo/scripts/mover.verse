@@ -2,7 +2,7 @@ using { /Godot.org/Godot }
 using { /Verse.org/Simulation }
 
 # Named after the file. A script that defines a class named after itself is attached to a node as
-# that class: the host instantiates it against the node and Ready/Update are its methods, not
+# that class: the host instantiates it against the node and Ready/Process are its methods, not
 # free functions, so `Self` is the node and no GetNode lookup is needed.
 #
 # @global_class registers that name with Godot, so `Mover` appears in Create New Node and can be
@@ -25,6 +25,6 @@ mover := class(node2d):
 	Ready<override>():void =
 		Print(Greeting)
 
-	Update<override>(Delta:float):void =
+	Process<override>(Delta:float):void =
 		set Position = vector2{X := Position.X + Delta * Speed, Y := Position.Y}
 		Print("Mover x = {Position.X}")

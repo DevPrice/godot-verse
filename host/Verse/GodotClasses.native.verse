@@ -1005,7 +1005,7 @@ animation_player<public> := class(animation_mixer):
     PlayWithCapture<public>(?Name:string = "", ?Duration:float = -1.0, ?CustomBlend:float = -1.0, ?CustomSpeed:float = 1.0, ?FromEnd:logic = false, ?TransType:int = 0, ?EaseType:int = 0)<transacts>:void = VhCallVoid(Handle, "play_with_capture", array{VhFromStringName(Name), VhFromFloat(Duration), VhFromFloat(CustomBlend), VhFromFloat(CustomSpeed), VhFromLogic(FromEnd), VhFromInt(TransType), VhFromInt(EaseType)})
     Queue<public>(Name:string)<transacts>:void = VhCallVoid(Handle, "queue", array{VhFromStringName(Name)})
     ResetSection<public>()<transacts>:void = VhCallVoid(Handle, "reset_section", array{})
-    Seek<public>(Seconds:float, ?Arg1:logic = false, ?UpdateOnly:logic = false)<transacts>:void = VhCallVoid(Handle, "seek", array{VhFromFloat(Seconds), VhFromLogic(Arg1), VhFromLogic(UpdateOnly)})
+    Seek<public>(Seconds:float, ?Update:logic = false, ?UpdateOnly:logic = false)<transacts>:void = VhCallVoid(Handle, "seek", array{VhFromFloat(Seconds), VhFromLogic(Update), VhFromLogic(UpdateOnly)})
     SetAssignedAnimation<public>(Animation:string)<transacts>:void = VhCallVoid(Handle, "set_assigned_animation", array{VhFromStringName(Animation)})
     SetAutoplay<public>(Name:string)<transacts>:void = VhCallVoid(Handle, "set_autoplay", array{VhFromStringName(Name)})
     SetBlendTime<public>(AnimationFrom:string, AnimationTo:string, Sec:float)<transacts>:void = VhCallVoid(Handle, "set_blend_time", array{VhFromStringName(AnimationFrom), VhFromStringName(AnimationTo), VhFromFloat(Sec)})

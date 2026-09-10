@@ -37,7 +37,7 @@ struct VerseScriptInstance {
 	static GDExtensionScriptInstancePtr create(VerseScript *p_script, godot::Object *p_owner);
 
 	// Godot lifecycle name -> decorated Verse name, or nullptr for anything this phase does not
-	// dispatch. The decoration is the host's, not Godot's: a plain Update(Delta:float) is stored
-	// as Update(:float).
+	// dispatch. The decoration is the host's, not Godot's: a plain Process(Delta:float) is stored
+	// as Process(:float).
 	static const char *verse_name_for(const godot::StringName &p_method);
 };
