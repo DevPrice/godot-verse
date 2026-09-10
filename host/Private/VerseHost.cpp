@@ -51,7 +51,10 @@ vh_complete_item ToCompleteItem(const GodotVerse::FCompleteItem& Item)
         Item.Line,
         (int32_t)Item.Kind,
         Item.bIsVar ? 1 : 0,
-        Item.ParamCount};
+        Item.ParamCount,
+        reinterpret_cast<const char*>(*Item.Signature),
+        Item.Signature.Len(),
+        Item.bIsOverridable ? 1 : 0};
 }
 
 } // namespace

@@ -388,6 +388,35 @@ static bool is_identifier_char(char32_t p_c) {
 	return (p_c >= 'a' && p_c <= 'z') || (p_c >= 'A' && p_c <= 'Z') || (p_c >= '0' && p_c <= '9') || p_c == '_';
 }
 
+// Whether a name is a candidate for what has been typed: the typed characters appear in it in
+// order, ignoring case. `Udt` reaches `Update`.
+//
+// This has to be at least as permissive as Godot's own filter or it decides the answer by itself.
+// CodeEdit fuzzy-matches and ranks the options it is handed, so a name trimmed here is one the
+// editor would have offered and never sees -- and a prefix test trims most of what fuzzy matching
+// exists to find. A subsequence admits everything a fuzzy matcher would and leaves the ranking,
+// which is the half worth having, where it already lives. ASCII folding is the whole of the case
+// rule because a Verse identifier is ASCII.
+//
+// Deliberately narrower than Godot in one direction: this reads the name, while CodeEdit reads
+// the rendered display text. An option that displays a whole declaration would otherwise match on
+// its parameter types, and `flt` is not what someone typing `float` is looking for.
+static bool matches_typed_prefix(const String &p_name, const String &p_prefix) {
+	auto folded = [](char32_t p_c) { return p_c >= 'A' && p_c <= 'Z' ? p_c - 'A' + 'a' : p_c; };
+
+	int64_t at = 0;
+	for (int64_t i = 0; i < p_prefix.length(); i++) {
+		while (at < p_name.length() && folded(p_name[at]) != folded(p_prefix[i])) {
+			at++;
+		}
+		if (at >= p_name.length()) {
+			return false;
+		}
+		at++;
+	}
+	return true;
+}
+
 // Stands in for the identifier being typed while the completion buffer is analysed. A legal Verse
 // identifier, so the line parses; one no project would write, so it resolves to nothing and the
 // answer is about the position rather than about whatever it collided with.
@@ -547,6 +576,99 @@ static Dictionary completion_option_for(const Dictionary &p_item) {
 	return option;
 }
 
+// One inherited method as the declaration that would override it, which is what GDScript
+// completes inside a class body -- the whole `func _ready() -> void:` rather than the name.
+//
+// The Verse spelling of the same thing is the base's own signature with `<override>` after the
+// name, which is why the signature is asked of the compiler rather than rebuilt from the type:
+// an override must match what it overrides, parameter names included, and the function type
+// drops those. The trailing ` =` is where the body goes; the editor's auto-indent takes the
+// caret there on the next Enter, so nothing here inserts a newline of its own.
+//
+// LOCATION_LOCAL unconditionally, mirrored Godot class or not: at a position where a member is
+// being declared, an override is what was asked for and belongs above the rest of the scope.
+static Dictionary override_option_for(const Dictionary &p_item) {
+	const String declaration = String(p_item["name"]) + String("<override>") + String(p_item["signature"]) + String(" =");
+	return completion_option(declaration, ScriptLanguageExtension::CODE_COMPLETION_KIND_FUNCTION, ScriptLanguageExtension::LOCATION_LOCAL);
+}
+
+// Whether an option is an inherited method worth offering as a declaration -- one the compiler
+// would take the override of *and* something would dispatch to.
+//
+// `is_overridable` answers only the first half, and on its own it offers the whole mirrored Godot
+// API: every one of those methods is a class member the compiler would accept an override of. But
+// gen_verse_api.py skips Godot's virtuals, so a generated method is never the Verse spelling of
+// one -- it is a concrete shim that forwards into Godot through the handle. Overriding GetName
+// compiles and changes nothing about what Godot calls. So the mirror is excluded wholesale, which
+// is what the class table already answers.
+//
+// That leaves the two sets that mean something. `object` is hand-written rather than generated and
+// so is not in the class table: its Ready/Update/PhysicsUpdate are the only Godot virtuals the
+// bridge carries at all, and the method table names exactly those three as `object`'s -- which is
+// how IsInstanceValid, a helper on the same class that nothing dispatches to, stays out. Anything
+// else is a class the author wrote, and the mirror never contains one of those.
+//
+// A method the class already declares comes back owned by that class -- the host lets a subclass'
+// copy win over the superclass' and drops the duplicate -- so comparing the owner is what stops an
+// override that is already written from being offered again.
+static bool completes_as_override(const Dictionary &p_item, const String &p_enclosing_class) {
+	const String owner = p_item["owner"];
+	if (!(bool)p_item["is_overridable"] || String(p_item["signature"]).is_empty() || owner == p_enclosing_class) {
+		return false;
+	}
+	if (godot_class_for(owner) != nullptr) {
+		return false;
+	}
+	return owner != String("object") || godot_method_for(owner, p_item["name"]) != nullptr;
+}
+
+// A line's indentation width, or -1 for one carrying no code -- blank, or a comment, which sits
+// at whatever column it was written at and so says nothing about the block it is in.
+static int64_t code_line_indent(const String &p_line) {
+	int64_t i = 0;
+	while (i < p_line.length() && (p_line[i] == ' ' || p_line[i] == '\t')) {
+		i++;
+	}
+	if (i >= p_line.length() || p_line[i] == '#') {
+		return -1;
+	}
+	return i;
+}
+
+// The class whose members are declared at p_line/p_indent, or empty when the cursor is somewhere
+// a name is used rather than declared. Both answers come from one scan because an override option
+// needs them together: whether to offer declarations at all, and which class' own methods are
+// already written and so must not be offered again.
+//
+// Read from the text, because Godot asks for completion on every keystroke and an analysis of a
+// half-written declaration would not report the class it belongs to anyway. The test is the one
+// the indentation already encodes: every line of code between the class and the cursor is
+// indented at least as far as the cursor, since a line indented less would be the header of the
+// block the cursor is really inside.
+//
+// Only the file's top-level class is found, so a member of a nested one completes as an ordinary
+// name. That is the conservative direction, and one class per file is what the flat project scope
+// forces in the first place.
+static String member_declaration_class(const String &p_source, int64_t p_line, int64_t p_indent) {
+	const VerseClassDecl decl = verse_scan_class_decl(p_source.utf8().get_data());
+	if (decl.line < 0 || p_line <= decl.line) {
+		return String();
+	}
+
+	const PackedStringArray lines = p_source.split("\n");
+	if (decl.line >= lines.size() || p_line >= lines.size() || p_indent <= code_line_indent(lines[decl.line])) {
+		return String();
+	}
+
+	for (int64_t i = p_line - 1; i > decl.line; i--) {
+		const int64_t indent = code_line_indent(lines[i]);
+		if (indent >= 0 && indent < p_indent) {
+			return String();
+		}
+	}
+	return String(decl.name.c_str());
+}
+
 // Completion, answered by the compiler wherever it can be.
 //
 // Godot marks the cursor by splicing U+FFFF into the buffer, and everything here is derived from
@@ -563,6 +685,11 @@ static Dictionary completion_option_for(const Dictionary &p_item) {
 // The class-name and keyword sets are still offered alongside the compiler's answer for a bare
 // identifier. They cover what a scope walk cannot -- a class the author has not brought into
 // view, and the keywords, which are not definitions at all.
+//
+// One position answers differently: a bare identifier on a line of its own inside a class body is
+// a member being declared, and an inherited method offered there completes to the whole
+// declaration that overrides it rather than to a call. Everything else in scope is still offered,
+// so a misread of the position costs nothing beyond an option that was already going to be there.
 Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const String &p_path, Object *p_owner) const {
 	Dictionary result;
 	result["result"] = (int64_t)OK;
@@ -574,8 +701,9 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 		return result;
 	}
 
-	// Godot filters the returned options against what has been typed, but only after paying for
-	// every one of them; a thousand class names on each keystroke is worth trimming here first.
+	// What has been typed, which every set below is trimmed against before it is handed over.
+	// Godot filters again and does the ranking, but only after building an option for each of a
+	// thousand class names, on every keystroke.
 	const String before = p_code.substr(0, marker);
 	int64_t prefix_start = before.length();
 	while (prefix_start > 0 && is_identifier_char(before[prefix_start - 1])) {
@@ -590,6 +718,16 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 	const bool completing_members = prefix_start > 0
 			&& before[prefix_start - 1] == '.'
 			&& !ends_a_number_literal(before, receiver_end);
+
+	// The class this is adding a member to, when that is what the cursor is doing: nothing but
+	// indentation ahead of the prefix on its line, and that line belonging to the class body. An
+	// inherited method offered there is being declared rather than called, and completes to the
+	// whole declaration.
+	const int64_t line_start = before.rfind("\n") + 1;
+	const String ahead_of_prefix = before.substr(line_start, prefix_start - line_start);
+	const String declaring_in_class = !completing_members && !ahead_of_prefix.is_empty() && ahead_of_prefix.strip_edges().is_empty()
+			? member_declaration_class(verse_newline_normalized(p_code), before.count("\n"), ahead_of_prefix.length())
+			: String();
 
 	Array options;
 
@@ -682,7 +820,12 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 		for (int64_t i = 0; i < completion_cache_options.size(); i++) {
 			const Dictionary item = completion_cache_options[i];
 			const String name = item["name"];
-			if (prefix.is_empty() || name.begins_with(prefix)) {
+			if (!matches_typed_prefix(name, prefix)) {
+				continue;
+			}
+			if (!declaring_in_class.is_empty() && completes_as_override(item, declaring_in_class)) {
+				options.push_back(override_option_for(item));
+			} else {
 				options.push_back(completion_option_for(item));
 			}
 		}
@@ -696,21 +839,21 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 
 	for (size_t i = 0; i < std::size(verse_api::classes); i++) {
 		const String name = verse_api::classes[i].verse_name;
-		if (name.begins_with(prefix)) {
+		if (matches_typed_prefix(name, prefix)) {
 			options.push_back(completion_option(name, ScriptLanguageExtension::CODE_COMPLETION_KIND_CLASS, ScriptLanguageExtension::LOCATION_OTHER));
 		}
 	}
 
 	const PackedStringArray class_names = script_class_names();
 	for (int64_t i = 0; i < class_names.size(); i++) {
-		if (class_names[i].begins_with(prefix)) {
+		if (matches_typed_prefix(class_names[i], prefix)) {
 			options.push_back(completion_option(class_names[i], ScriptLanguageExtension::CODE_COMPLETION_KIND_CLASS, ScriptLanguageExtension::LOCATION_OTHER_USER_CODE));
 		}
 	}
 
 	for (size_t i = 0; i < std::size(verse_keywords::reserved_words); i++) {
 		const String word = verse_keywords::reserved_words[i];
-		if (word.begins_with(prefix)) {
+		if (matches_typed_prefix(word, prefix)) {
 			options.push_back(completion_option(word, ScriptLanguageExtension::CODE_COMPLETION_KIND_PLAIN_TEXT, ScriptLanguageExtension::LOCATION_OTHER));
 		}
 	}

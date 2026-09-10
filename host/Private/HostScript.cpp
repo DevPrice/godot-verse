@@ -1462,6 +1462,59 @@ AUTORTFM_DISABLE const uLang::CNormalType* UnwrapToMemberBearingType(const uLang
     return Normal;
 }
 
+/// Everything a function's declaration spells after its name, as Verse source:
+/// "(Delta:float)<transacts>:void". The function type cannot stand in for it -- the parameter
+/// names live on the signature, and the type spells the same definition "float->void".
+///
+/// Effects come out relative to the function default, which is why an ordinary method's
+/// signature carries no specifier at all: BuildEffectAttributeCode emits only what an author
+/// would have had to write.
+AUTORTFM_DISABLE FUtf8String SpellSignature(const uLang::CFunction& Function)
+{
+    const uLang::CFunctionType* Type = Function._Signature.GetFunctionType();
+    if (!Type)
+    {
+        return FUtf8String();
+    }
+
+    uLang::CUTF8StringBuilder Builder;
+    Builder.Append('(');
+    const char* Separator = "";
+    for (const uLang::CDataDefinition* Param : Function._Signature.GetParams())
+    {
+        if (!Param || !Param->GetType())
+        {
+            continue;
+        }
+        Builder.Append(Separator);
+        Separator = ", ";
+        Builder.Append(Param->AsNameCString());
+        Builder.Append(':');
+        Builder.Append(Param->GetType()->AsCode());
+    }
+    Builder.Append(')');
+    Type->BuildEffectAttributeCode(Builder);
+    Builder.Append(':');
+    Builder.Append(Type->GetReturnType().AsCode());
+    return FULangConversionUtils::ULangStrToFUtf8String(Builder.MoveToString());
+}
+
+/// Whether a subclass could redeclare a function with <override>, which is the three things the
+/// analyzer refuses one for: it has to be a class member -- a module-level function has nothing to
+/// override it from -- it must not be <final>, and it must not be a class var's <getter>/<setter>,
+/// which DetectIncorrectOverrideAttribute rejects by name. The generated Godot mirror is built out
+/// of those accessors, so leaving the last one out offers a few hundred overrides that do not
+/// compile.
+AUTORTFM_DISABLE bool IsOverridable(const uLang::CFunction& Function)
+{
+    if (Function._EnclosingScope.GetKind() != uLang::CScope::EKind::Class || Function._bIsAccessorOfSomeClassVar)
+    {
+        return false;
+    }
+    const uLang::CSemanticProgram& Program = Function._EnclosingScope.GetProgram();
+    return !Function.GetPrototypeDefinition()->HasAttributeClass(Program._finalClass, Program);
+}
+
 /// Fills one item from a definition, or returns false for a definition that is not a name the
 /// author could have written: the compiler generates a constructor and an archetype per class,
 /// and neither is spellable.
@@ -1491,6 +1544,8 @@ AUTORTFM_DISABLE bool DescribeCompletion(const uLang::CDefinition& Definition, G
         }
         OutItem.Kind = VH_LOOKUP_FUNCTION;
         OutItem.ParamCount = Function->_Signature.NumParams();
+        OutItem.Signature = SpellSignature(*Function);
+        OutItem.bIsOverridable = IsOverridable(*Function);
         if (const CFunctionType* Type = Function->_Signature.GetFunctionType())
         {
             OutItem.Type = FULangConversionUtils::ULangStrToFUtf8String(Type->AsCode());

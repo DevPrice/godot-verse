@@ -294,6 +294,8 @@ static Dictionary complete_item_to_dict(const vh_complete_item &p_item) {
 	entry["kind"] = (int64_t)p_item.Kind;
 	entry["is_var"] = p_item.IsVar != 0;
 	entry["param_count"] = (int64_t)p_item.ParamCount;
+	entry["signature"] = String::utf8(p_item.SignatureUtf8, p_item.SignatureLen);
+	entry["is_overridable"] = p_item.IsOverridable != 0;
 	return entry;
 }
 

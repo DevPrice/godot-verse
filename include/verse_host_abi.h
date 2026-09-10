@@ -22,7 +22,7 @@
 extern "C" {
 #endif
 
-#define VH_ABI_VERSION 17
+#define VH_ABI_VERSION 18
 
 typedef int32_t vh_bool;
 
@@ -539,6 +539,25 @@ typedef struct vh_complete_item
 	/* How many parameters it declares, or -1 for anything that is not a function. An editor needs
 	 * this to decide where to leave the caret after inserting a call. */
 	int32_t ParamCount;
+
+	/* Everything a function's declaration spells after its name, as Verse source: the parameter
+	 * list with the parameters' own names, the effect specifiers, and the result type --
+	 * "(Delta:float)<transacts>:void". Empty for anything that is not a function.
+	 *
+	 * Separate from TypeUtf8 because that is a function *type*, which drops the parameter names:
+	 * the same definition reads there as "float->void". An editor writing a declaration needs the
+	 * names, and only the compiler has them. */
+	const char* SignatureUtf8;
+	int32_t SignatureLen;
+
+	/* Whether a subclass could declare this with <override>: a class member that is neither
+	 * <final> nor a class var's accessor, the three things the analyzer refuses an override for.
+	 * False for a free function, and for anything that is not a function.
+	 *
+	 * Says only that the compiler would take the declaration. Whether overriding it *does*
+	 * anything is the consumer's question: a Verse method the bridge generated to forward into
+	 * Godot answers here, and overriding one changes nothing about what Godot dispatches. */
+	vh_bool IsOverridable;
 } vh_complete_item;
 
 /* Lists what could be written at Line/Column of PathUtf8, with that file's text replaced by

@@ -148,6 +148,12 @@ struct FCompleteItem
     bool bIsVar{false};
     /// Parameters declared, or -1 for anything that is not a function.
     int32 ParamCount{-1};
+    /// A function's declaration after its name, as Verse source: "(Delta:float)<transacts>:void".
+    /// The parameter names live on the signature rather than the function type, so Type cannot
+    /// carry them and an editor writing a declaration has nowhere else to get them.
+    FUtf8String Signature;
+    /// Whether a subclass could declare this with <override>.
+    bool bIsOverridable{false};
 };
 
 /// The parameters of one function, for an editor's argument hint.

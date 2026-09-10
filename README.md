@@ -474,11 +474,68 @@ CodeEdit's brace completion closes it and leaves the caret inside, while one wit
 pair and leaves the caret past it. That is GDScript's rule exactly, ellipsis in the displayed name
 and all, and it needs the parameter count to reach the editor with each completion item.
 
+**Inside a class body, a method completes to its whole declaration.** GDScript answers a name
+typed at class level with `func _ready() -> void:` rather than with `_ready`, and the Verse
+spelling of the same idea is the base's signature with `<override>` after the name: typing `Up`
+in a script's class body offers `Update<override>(Delta:float):void =`. The trailing ` =` is
+where the body goes; nothing inserts a newline, so the editor's own indent takes the caret there.
+
+That needs three things the compiler has and the editor does not. The first is the signature with
+its parameters' *own* names — an override must match what it overrides, and the function type
+`vh_complete_item` already carried spells the same definition `float->void`, names dropped. So
+the item carries a `SignatureUtf8` spelled from `CFunction::_Signature` alongside it, effect
+specifiers included, and those come out relative to the function default, which is why an
+ordinary method's declaration carries none. The second is whether the compiler would accept the
+override, which is `IsOverridable`: a class member — a module-level function has nothing to
+override it from — that is neither `<final>` nor a class var's `<getter>`/`<setter>`, the three
+things `DetectIncorrectOverrideAttribute` refuses one for. The accessors matter more than they
+sound: the generated mirror is built out of them, and `node2d` alone contributes a dozen. The
+third is free — a method the class has already overridden comes back owned by *that* class,
+because the scope walk lets a subclass' copy win over its superclass' and drops the duplicate, so
+comparing the owner against the class being edited is what stops an override that is already
+written from being offered again.
+
+**What the compiler would accept is not what is worth offering**, and the gap is the whole
+mirrored Godot API. Every generated method is a class member with no `<final>` on it, so the
+compiler would take an override of `GetName` — and it would do nothing, because
+`gen_verse_api.py` *skips* Godot's virtuals: a generated method is never the Verse spelling of
+one, only a concrete shim forwarding through the handle. Nothing dispatches back into it. So the
+editor excludes the mirror wholesale, which the class table already answers, and the exclusion is
+sound only because every emitted class lands in that table — both come off `emit_order`.
+
+That leaves the two sets that mean something. `object` is hand-written rather than generated and
+so is not in the class table: its `Ready`, `Update` and `PhysicsUpdate` are the only Godot
+virtuals the bridge carries at all, and the generated method table names exactly those three as
+`object`'s — which is how `IsInstanceValid`, a helper on the same class that nothing dispatches
+to, stays out. Everything else is a class the author wrote, and the mirror never contains one of
+those. So a script on `node2d` is offered three declarations, less whichever it has already
+written, plus whatever its own base script declares.
+
+Which position counts as a declaration is read out of the text rather than the analysis, because
+Godot asks on every keystroke and a half-written declaration does not report the class it belongs
+to anyway. The cursor has to be on a line with nothing but indentation ahead of it, under the
+file's class, and under nothing that class body itself opened — which the indentation already
+encodes, since a line of code between the two indented *less* than the cursor would be the header
+of the block the cursor is really inside. Only the file's top-level class is found, so a member
+of a nested one completes as an ordinary name; one class per file is what the flat project scope
+forces regardless. Everything else in scope is still offered there, so misreading the position
+costs an option that was going to be in the list anyway.
+
 The class-name and keyword sets are still offered alongside, for a bare identifier only. They
 cover what a scope walk cannot: a class the file has not brought into view, and the reserved
 words, which are not definitions at all. Completing on a bare cursor with no `.` before it is
 still declined — offering the whole mirrored API as one undifferentiated list is not help — but
 after a `.` there is no such worry, because the member set is bounded by the receiver's type.
+
+Every one of those sets is trimmed against what has been typed before it is handed over, because
+Godot builds an option for each name it is given and re-asks on every keystroke. The trim is a
+case-insensitive subsequence — `Udt` reaches `Update` — rather than a prefix test, and that is
+not a nicety: CodeEdit fuzzy-matches and ranks the options it receives, so a filter narrower than
+its own decides the answer by itself and drops candidates the editor would have offered. What is
+handed over is deliberately matched on the *name* rather than on the text the option displays,
+which is the one place this stays narrower than Godot: an option that displays a whole
+declaration would otherwise match on its parameter types, and `flt` is not what someone typing
+`float` is looking for.
 
 **A call shows its arguments while you write them.** `vh_signature_at` reports the parameters of
 the function being called, and the editor draws them above the caret with the argument the cursor

@@ -657,6 +657,83 @@ int main(int argc, char** argv)
 				}
 			}
 
+			// A member being declared rather than a name being used. The editor completes an
+			// inherited method there to the declaration that overrides it, which needs the base's
+			// signature spelled with its parameters' own names -- and needs to know which methods
+			// are still free to override.
+			const size_t MemberDecl = ExportsSource.find("    Probe<public>()");
+			CompleteOk = Step("located the fixture's member declarations", MemberDecl != std::string::npos) && CompleteOk;
+			if (MemberDecl != std::string::npos)
+			{
+				std::string DeclTyping = ExportsSource;
+				DeclTyping.insert(MemberDecl, "    VhCompletionCursor\n\n");
+				int32_t DeclRow = 0;
+				int32_t DeclColumn = 0;
+				RowColumnOf(DeclTyping, MemberDecl + strlen("    "), DeclRow, DeclColumn);
+				if (Step("vh_complete_symbol at a class member declaration",
+						CompleteSymbolFn(ExportsPathUtf8.c_str(), DeclTyping.c_str(), DeclRow, DeclColumn,
+										 VH_COMPLETE_SCOPE, &Items, &Count) == VH_OK))
+				{
+					if (const vh_complete_item* Ready = Offers(Items, Count, "Ready"))
+					{
+						CompleteOk = Step("an inherited method is offered as overridable", Ready->IsOverridable != 0) && CompleteOk;
+						CompleteOk = Step("owned by the class that declares it",
+										 Text(Ready->OwnerUtf8, Ready->OwnerLen) == "object")
+								  && CompleteOk;
+						CompleteOk = Step("and spelled as a declaration",
+										 Text(Ready->SignatureUtf8, Ready->SignatureLen) == "():void")
+								  && CompleteOk;
+					}
+					else
+					{
+						CompleteOk = Step("an inherited method is offered at all", false);
+					}
+					if (const vh_complete_item* Update = Offers(Items, Count, "Update"))
+					{
+						// The parameter's own name, which is the whole reason the signature is not
+						// read off the function type: that spells this one "float->void".
+						CompleteOk = Step("a parameter is named in the signature",
+										 Text(Update->SignatureUtf8, Update->SignatureLen) == "(Delta:float):void")
+								  && CompleteOk;
+					}
+					// Already overridden by the fixture, so it comes back owned by the fixture's
+					// own class -- which is how the editor knows not to offer it a second time.
+					if (const vh_complete_item* Physics = Offers(Items, Count, "PhysicsUpdate"))
+					{
+						CompleteOk = Step("an override already written is owned by the class that wrote it",
+										 Text(Physics->OwnerUtf8, Physics->OwnerLen) == "exports_probe")
+								  && CompleteOk;
+					}
+					// Nothing but a class' methods can be overridden, and nothing but a function
+					// has a declaration to spell.
+					if (const vh_complete_item* Position = Offers(Items, Count, "Position"))
+					{
+						CompleteOk = Step("a property is neither overridable nor spellable",
+										 Position->IsOverridable == 0 && Position->SignatureLen == 0)
+								  && CompleteOk;
+					}
+					if (const vh_complete_item* Print = Offers(Items, Count, "Print"))
+					{
+						CompleteOk = Step("and neither is a function no class declares", Print->IsOverridable == 0) && CompleteOk;
+					}
+					// A class var's <getter>/<setter> is a class member the analyzer nonetheless
+					// refuses an override of by name, and the generated mirror is built out of
+					// them -- node2d alone contributes a dozen.
+					if (const vh_complete_item* Accessor = Offers(Items, Count, "GlobalPositionGetter"))
+					{
+						CompleteOk = Step("nor is a class var's accessor", Accessor->IsOverridable == 0) && CompleteOk;
+					}
+					else
+					{
+						CompleteOk = Step("the mirror's accessors reach the scope at all", false);
+					}
+				}
+				else
+				{
+					CompleteOk = false;
+				}
+			}
+
 			// Whitespace has no members, and answering anyway would put the enclosing scope behind
 			// a dot the author never typed.
 			const vh_complete_item* NoItems = nullptr;
