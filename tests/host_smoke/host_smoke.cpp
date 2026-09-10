@@ -172,6 +172,9 @@ int main(int argc, char** argv)
 	auto GetFieldFn = Resolve<vh_instance_get_field_fn>(Module, "vh_instance_get_field", &ResolveOk);
 	auto SetFieldFn = Resolve<vh_instance_set_field_fn>(Module, "vh_instance_set_field", &ResolveOk);
 	auto LookupSymbolFn = Resolve<vh_lookup_symbol_fn>(Module, "vh_lookup_symbol", &ResolveOk);
+	auto CompleteSymbolFn = Resolve<vh_complete_symbol_fn>(Module, "vh_complete_symbol", &ResolveOk);
+	auto ClassMembersFn = Resolve<vh_class_members_fn>(Module, "vh_class_members", &ResolveOk);
+	auto SignatureAtFn = Resolve<vh_signature_at_fn>(Module, "vh_signature_at", &ResolveOk);
 	auto CheckProjectFn = Resolve<vh_check_project_fn>(Module, "vh_check_project", &ResolveOk);
 	auto CheckBeginFn = Resolve<vh_check_project_begin_fn>(Module, "vh_check_project_begin", &ResolveOk);
 	auto CheckProjectPollFn = Resolve<vh_check_project_poll_fn>(Module, "vh_check_project_poll", &ResolveOk);
@@ -419,6 +422,94 @@ int main(int argc, char** argv)
 					LookupOk = false;
 				}
 			}
+			// A declaration resolves at its name and nowhere else in its own declaration line.
+			// The specifiers, the parameter list and the return type all sit inside the span the
+			// compiler gives the definition, and none of them means "this definition".
+			{
+				struct Spot { const char* What; const char* Needle; size_t Offset; const char* Expect; const char* Owner; };
+				const Spot Spots[] = {
+					{ "an access specifier resolves to nothing", "Speed<public>:float", strlen("Speed<pub"), nullptr, nullptr },
+					{ "nor does the bracket opening one", "Speed<public>:float", strlen("Speed"), nullptr, nullptr },
+					{ "nor does an override specifier", "PhysicsUpdate<override>(", strlen("PhysicsUpdate<over"), nullptr, nullptr },
+					{ "the member's own name still does", "Speed<public>:float", 2, "Speed", "exports" },
+					{ "and so does the method's", "PhysicsUpdate<override>(", 2, "PhysicsUpdate", "exports_probe" },
+					// A parameter is described by itself rather than by the method it belongs to,
+					// which is what stops hovering an argument from documenting the whole call.
+					// The editor declines to show anything for one, but that is its policy: the
+					// host still has to resolve it, or the enclosing method would answer instead.
+					{ "a parameter resolves to the parameter", "PhysicsUpdate<override>(Delta:float)", strlen("PhysicsUpdate<override>(De"), "Delta", "PhysicsUpdate" },
+					{ "and its type still resolves to the type", "PhysicsUpdate<override>(Delta:float)", strlen("PhysicsUpdate<override>(Delta:fl"), "float", "Verse" },
+				};
+				for (const Spot& S : Spots)
+				{
+					const size_t At = ExportsSource.find(S.Needle);
+					if (!Step("located the fixture spot", At != std::string::npos)) { LookupOk = false; continue; }
+					int32_t Row = 0;
+					int32_t Column = 0;
+					RowColumnOf(ExportsSource, At + S.Offset, Row, Column);
+					const vh_lookup_desc* Found = nullptr;
+					const int32_t Status = LookupSymbolFn(ExportsPathUtf8.c_str(), Row, Column, &Found);
+					if (S.Expect == nullptr)
+					{
+						LookupOk = Step(S.What, Status == VH_ERR_NOT_FOUND) && LookupOk;
+					}
+					else
+					{
+						LookupOk = Step(S.What,
+									   Status == VH_OK && Found
+										   && Text(Found->NameUtf8, Found->NameLen) == S.Expect
+										   && Text(Found->OwnerUtf8, Found->OwnerLen) == S.Owner)
+								&& LookupOk;
+					}
+				}
+
+				// Only a parameter is flagged as one. A member and a method both live in a class
+				// scope and neither is in anyone's signature, so the flag is what tells an editor
+				// that a definition has no documentation of its own to read.
+				struct Flagged { const char* What; const char* Needle; size_t Offset; bool Expect; };
+				const Flagged Flags[] = {
+					{ "a parameter is flagged as one", "PhysicsUpdate<override>(Delta:float)", strlen("PhysicsUpdate<override>(De"), true },
+					{ "a method is not", "PhysicsUpdate<override>(", 2, false },
+					{ "and neither is a data member", "Speed<public>:float", 2, false },
+				};
+				for (const Flagged& F : Flags)
+				{
+					const size_t At = ExportsSource.find(F.Needle);
+					int32_t Row = 0;
+					int32_t Column = 0;
+					RowColumnOf(ExportsSource, At + F.Offset, Row, Column);
+					const vh_lookup_desc* Found = nullptr;
+					LookupOk = Step(F.What,
+								   LookupSymbolFn(ExportsPathUtf8.c_str(), Row, Column, &Found) == VH_OK
+									   && Found && (Found->IsParameter != 0) == F.Expect)
+							&& LookupOk;
+				}
+			}
+
+			// A member reached through a `.` resolves to the type that declares it rather than to
+			// whatever the receiver was. `X` belongs to vector2 even though `Position` is a
+			// property of node2d, and it is the owner that lets the editor name Godot's Vector2.x.
+			const size_t FieldUse = ExportsSource.find("Position.X");
+			if (Step("the fixture still reads a field off a value type", FieldUse != std::string::npos))
+			{
+				int32_t FieldRow = 0;
+				int32_t FieldColumn = 0;
+				RowColumnOf(ExportsSource, FieldUse + strlen("Position."), FieldRow, FieldColumn);
+				const vh_lookup_desc* FieldLookup = nullptr;
+				if (Step("vh_lookup_symbol on a field of a value type",
+						LookupSymbolFn(ExportsPathUtf8.c_str(), FieldRow, FieldColumn, &FieldLookup) == VH_OK)
+					&& FieldLookup)
+				{
+					LookupOk = Step("it resolves to X", Text(FieldLookup->NameUtf8, FieldLookup->NameLen) == "X") && LookupOk;
+					LookupOk = Step("declared by vector2, not by the receiver's class",
+								   Text(FieldLookup->OwnerUtf8, FieldLookup->OwnerLen) == "vector2")
+							&& LookupOk;
+				}
+				else
+				{
+					LookupOk = false;
+				}
+			}
 
 			// Past the end of a line nothing encloses the position, so the answer is a refusal
 			// rather than whichever definition happens to span the row.
@@ -427,6 +518,239 @@ int main(int argc, char** argv)
 						   LookupSymbolFn(ExportsPathUtf8.c_str(), DeclRow, 500, &Nothing) == VH_ERR_NOT_FOUND)
 					&& LookupOk;
 		}
+	}
+
+	// Completion. Every case asks about a buffer that does not analyse cleanly, because that is
+	// the only state completion is ever asked in: the member being typed does not exist yet.
+	{
+		const std::string ExportsSource = ReadFileUtf8(ExportsPath);
+		bool CompleteOk = Step("read exports.verse for completion", !ExportsSource.empty());
+
+		auto Text = [](const char* Utf8, int32_t Len) { return std::string(Utf8 ? Utf8 : "", Len); };
+
+		// Finds Name among the items, so a case can assert what must be offered without pinning
+		// the whole list -- which would break every time a Godot class gains a method.
+		auto Offers = [&Text](const vh_complete_item* Items, int32_t Count, const char* Name) -> const vh_complete_item* {
+			for (int32_t Index = 0; Index < Count; ++Index)
+			{
+				if (Text(Items[Index].NameUtf8, Items[Index].NameLen) == Name)
+				{
+					return &Items[Index];
+				}
+			}
+			return nullptr;
+		};
+
+		// The editor's buffer with the half-typed member standing in as the placeholder the
+		// GDExtension substitutes, which is what makes the answer survive the rest of the prefix.
+		// Every case below uses it, because it is the only buffer shape completion ever sees.
+		const size_t FieldUse = ExportsSource.find("Position.X");
+		CompleteOk = Step("located the fixture's field read", FieldUse != std::string::npos) && CompleteOk;
+
+		if (CompleteOk)
+		{
+			std::string Typing = ExportsSource;
+			Typing.replace(FieldUse, strlen("Position.X"), "Position.VhCompletionCursor");
+
+			// The position is the receiver's last byte, not the cursor's: `Position` is the only
+			// part of `Position.` that resolves to anything.
+			int32_t RecvRow = 0;
+			int32_t RecvColumn = 0;
+			RowColumnOf(Typing, FieldUse + strlen("Position") - 1, RecvRow, RecvColumn);
+
+			const vh_complete_item* Items = nullptr;
+			int32_t Count = 0;
+			if (Step("vh_complete_symbol on a half-typed member",
+					CompleteSymbolFn(ExportsPathUtf8.c_str(), Typing.c_str(), RecvRow, RecvColumn,
+									 VH_COMPLETE_MEMBERS, &Items, &Count) == VH_OK))
+			{
+				CompleteOk = Step("it offers vector2's X", Offers(Items, Count, "X") != nullptr) && CompleteOk;
+				CompleteOk = Step("and its Y", Offers(Items, Count, "Y") != nullptr) && CompleteOk;
+				if (const vh_complete_item* X = Offers(Items, Count, "X"))
+				{
+					CompleteOk = Step("X is named as vector2's", Text(X->OwnerUtf8, X->OwnerLen) == "vector2") && CompleteOk;
+					CompleteOk = Step("and typed", Text(X->TypeUtf8, X->TypeLen) == "float") && CompleteOk;
+				}
+				// A value type's fields are the whole of it, so this is the one case where the
+				// list can be pinned exactly -- and a leak of the enclosing scope would show here.
+				CompleteOk = Step("and nothing else", Count == 2) && CompleteOk;
+			}
+			else
+			{
+				CompleteOk = false;
+			}
+
+			// A node reached through `Self` completes to the mirrored class' surface, inherited
+			// members included: Position is node2d's and GetName is node's.
+			std::string SelfTyping = ExportsSource;
+			SelfTyping.replace(FieldUse, strlen("Position.X"), "Self.VhCompletionCursor");
+			RowColumnOf(SelfTyping, FieldUse + strlen("Self") - 1, RecvRow, RecvColumn);
+			if (Step("vh_complete_symbol on a node",
+					CompleteSymbolFn(ExportsPathUtf8.c_str(), SelfTyping.c_str(), RecvRow, RecvColumn,
+									 VH_COMPLETE_MEMBERS, &Items, &Count) == VH_OK))
+			{
+				CompleteOk = Step("it offers the class' own Probe", Offers(Items, Count, "Probe") != nullptr) && CompleteOk;
+				CompleteOk = Step("node2d's Position", Offers(Items, Count, "Position") != nullptr) && CompleteOk;
+				CompleteOk = Step("and node's GetName, two classes up", Offers(Items, Count, "GetName") != nullptr) && CompleteOk;
+				if (const vh_complete_item* Position = Offers(Items, Count, "Position"))
+				{
+					CompleteOk = Step("Position is offered as the var it is", Position->IsVar != 0) && CompleteOk;
+					CompleteOk = Step("and as a data definition", Position->Kind == VH_LOOKUP_DATA) && CompleteOk;
+				}
+				if (const vh_complete_item* Probe = Offers(Items, Count, "Probe"))
+				{
+					CompleteOk = Step("Probe is offered as a function", Probe->Kind == VH_LOOKUP_FUNCTION) && CompleteOk;
+					// Where the caret lands after inserting a call turns on this: nothing to type
+					// between the brackets means the caret belongs past them.
+					CompleteOk = Step("and as one taking no arguments", Probe->ParamCount == 0) && CompleteOk;
+				}
+				if (const vh_complete_item* Update = Offers(Items, Count, "PhysicsUpdate"))
+				{
+					CompleteOk = Step("a method with an argument says so", Update->ParamCount == 1) && CompleteOk;
+				}
+				if (const vh_complete_item* Position = Offers(Items, Count, "Position"))
+				{
+					CompleteOk = Step("and a property is not a function at all", Position->ParamCount == -1) && CompleteOk;
+				}
+			}
+			else
+			{
+				CompleteOk = false;
+			}
+
+			// A bare identifier completes against everything the cursor can see: the local above
+			// it, the enclosing class, and the packages the file brought in with `using`.
+			const size_t LocalUse = ExportsSource.find("X := Shifted");
+			CompleteOk = Step("located the fixture's local", LocalUse != std::string::npos) && CompleteOk;
+			if (LocalUse != std::string::npos)
+			{
+				int32_t ScopeRow = 0;
+				int32_t ScopeColumn = 0;
+				std::string ScopeTyping = ExportsSource;
+				ScopeTyping.replace(LocalUse + strlen("X := "), strlen("Shifted"), "VhCompletionCursor");
+				RowColumnOf(ScopeTyping, LocalUse + strlen("X := "), ScopeRow, ScopeColumn);
+				if (Step("vh_complete_symbol in a function body",
+						CompleteSymbolFn(ExportsPathUtf8.c_str(), ScopeTyping.c_str(), ScopeRow, ScopeColumn,
+										 VH_COMPLETE_SCOPE, &Items, &Count) == VH_OK))
+				{
+					CompleteOk = Step("it offers the local declared above", Offers(Items, Count, "Shifted") != nullptr) && CompleteOk;
+					CompleteOk = Step("the enclosing class' own method", Offers(Items, Count, "Probe") != nullptr) && CompleteOk;
+					CompleteOk = Step("an inherited property", Offers(Items, Count, "Position") != nullptr) && CompleteOk;
+					CompleteOk = Step("and Print, which arrived through a using",
+									 Offers(Items, Count, "Print") != nullptr)
+							  && CompleteOk;
+					CompleteOk = Step("with no name offered twice", [&]() {
+						for (int32_t Index = 1; Index < Count; ++Index)
+						{
+							if (Text(Items[Index].NameUtf8, Items[Index].NameLen)
+								== Text(Items[Index - 1].NameUtf8, Items[Index - 1].NameLen))
+							{
+								return false;
+							}
+						}
+						return true;
+					}()) && CompleteOk;
+				}
+				else
+				{
+					CompleteOk = false;
+				}
+			}
+
+			// Whitespace has no members, and answering anyway would put the enclosing scope behind
+			// a dot the author never typed.
+			const vh_complete_item* NoItems = nullptr;
+			int32_t NoCount = 0;
+			CompleteOk = Step("a position with no expression on it completes to nothing",
+							 CompleteSymbolFn(ExportsPathUtf8.c_str(), ExportsSource.c_str(), 0, 0,
+											  VH_COMPLETE_MEMBERS, &NoItems, &NoCount) == VH_ERR_NOT_FOUND)
+					  && CompleteOk;
+
+			// The argument hint. Asked at the callee's last byte, for the same reason members are
+			// asked at the receiver's: the arguments being typed do not analyse.
+			const size_t Call = ExportsSource.find("PhysicsUpdate<override>(");
+			if (Step("located the fixture's method", Call != std::string::npos))
+			{
+				int32_t CalleeRow = 0;
+				int32_t CalleeColumn = 0;
+				RowColumnOf(ExportsSource, Call + strlen("PhysicsUpdat"), CalleeRow, CalleeColumn);
+				const vh_signature_desc* Signature = nullptr;
+				if (Step("vh_signature_at on a method",
+						SignatureAtFn(ExportsPathUtf8.c_str(), ExportsSource.c_str(), CalleeRow, CalleeColumn, &Signature) == VH_OK)
+					&& Signature)
+				{
+					CompleteOk = Step("it names the method", Text(Signature->NameUtf8, Signature->NameLen) == "PhysicsUpdate") && CompleteOk;
+					CompleteOk = Step("and its return type", Text(Signature->ResultUtf8, Signature->ResultLen) == "void") && CompleteOk;
+					CompleteOk = Step("and its one parameter", Signature->ParamCount == 1) && CompleteOk;
+					if (Signature->ParamCount == 1)
+					{
+						CompleteOk = Step("named Delta", Text(Signature->Params[0].NameUtf8, Signature->Params[0].NameLen) == "Delta") && CompleteOk;
+						CompleteOk = Step("and typed float", Text(Signature->Params[0].TypeUtf8, Signature->Params[0].TypeLen) == "float") && CompleteOk;
+					}
+				}
+				else
+				{
+					CompleteOk = false;
+				}
+
+				// A name that is not a function has no argument list to describe.
+				const size_t NotCallable = ExportsSource.find("Speed<public>:float");
+				const vh_signature_desc* NoSignature = nullptr;
+				int32_t DataRow = 0;
+				int32_t DataColumn = 0;
+				RowColumnOf(ExportsSource, NotCallable + 2, DataRow, DataColumn);
+				CompleteOk = Step("a data member has no signature",
+								 SignatureAtFn(ExportsPathUtf8.c_str(), ExportsSource.c_str(), DataRow, DataColumn, &NoSignature) == VH_ERR_NOT_FOUND)
+						  && CompleteOk;
+			}
+
+			// Completion left the host holding a scratch buffer; everything below reads the
+			// semantic program and has to see the file as it is on disk.
+			CompleteOk = Step("the project analyses clean again",
+							 CheckProjectFn(ExportsPathUtf8.c_str(), ExportsSource.c_str()) == VH_OK)
+					  && CompleteOk;
+		}
+
+		// What a class declares itself, which is what becomes its documentation. Inherited names
+		// are deliberately absent: node2d's Position is Godot's to document, not this class'.
+		{
+			const vh_complete_item* Members = nullptr;
+			int32_t MemberCount = 0;
+			if (Step("vh_class_members on a script class",
+					ClassMembersFn("exports", &Members, &MemberCount) == VH_OK))
+			{
+				auto Find = [&Text](const vh_complete_item* Items, int32_t Count, const char* Name) -> const vh_complete_item* {
+					for (int32_t Index = 0; Index < Count; ++Index)
+					{
+						if (Text(Items[Index].NameUtf8, Items[Index].NameLen) == Name) { return &Items[Index]; }
+					}
+					return nullptr;
+				};
+				CompleteOk = Step("it lists an @editable member", Find(Members, MemberCount, "Speed") != nullptr) && CompleteOk;
+				CompleteOk = Step("and one carrying no attribute at all", Find(Members, MemberCount, "Hidden") != nullptr) && CompleteOk;
+				CompleteOk = Step("and its methods", Find(Members, MemberCount, "Bump") != nullptr) && CompleteOk;
+				CompleteOk = Step("but nothing it merely inherits", Find(Members, MemberCount, "Position") == nullptr) && CompleteOk;
+				if (const vh_complete_item* Speed = Find(Members, MemberCount, "Speed"))
+				{
+					// The line is what lets the consumer find the comment block above a member.
+					CompleteOk = Step("a member carries where it was declared",
+									 Speed->Line >= 0 && Text(Speed->PathUtf8, Speed->PathLen) == ExportsPathUtf8)
+							  && CompleteOk;
+				}
+			}
+			else
+			{
+				CompleteOk = false;
+			}
+
+			const vh_complete_item* Absent = nullptr;
+			int32_t AbsentCount = 0;
+			CompleteOk = Step("a class the program does not have reports not found",
+							 ClassMembersFn("no_such_class", &Absent, &AbsentCount) == VH_ERR_NOT_FOUND)
+					  && CompleteOk;
+		}
+
+		LookupOk = CompleteOk && LookupOk;
 	}
 
 	const char* RunArgs[1] = { VersePathUtf8.c_str() };

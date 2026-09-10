@@ -160,6 +160,15 @@ bool TestPascalCase()
 		&& Step("an empty name stays empty", verse_pascal_case("").empty());
 }
 
+bool TestDeclarationLine()
+{
+	// The row is what locates the comment block above the class, which is the class' own
+	// documentation -- so it has to count the attributes and comments the scan walks past.
+	const VerseClassDecl Decl = verse_scan_class_decl("using { /Godot.org/Godot }\n\n# what this is for\n@global_class\nmover := class(node2d):\n");
+	return Step("the declaration reports the row it is on", Decl.line == 4)
+		&& Step("a file with no class reports no row", verse_scan_class_decl("using { /Godot.org/Godot }\n").line == -1);
+}
+
 } // namespace
 
 int main()
@@ -183,6 +192,7 @@ int main()
 	Ok = TestModuleShapedFile() && Ok;
 	Ok = TestAttributeDoesNotLeakPastNonClass() && Ok;
 	Ok = TestCrlf() && Ok;
+	Ok = TestDeclarationLine() && Ok;
 	Ok = TestSpacingVariants() && Ok;
 	Ok = TestEmptySource() && Ok;
 	Ok = TestPascalCase() && Ok;

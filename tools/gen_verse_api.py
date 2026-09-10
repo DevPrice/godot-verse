@@ -622,6 +622,23 @@ LIFECYCLE_METHODS = [
     ("object", "PhysicsUpdate", "Node", "_physics_process"),
 ]
 
+# The fields of those hand-written value types, in the same shape. Listed rather than read out of
+# the API's builtin_classes because the structs are hand-written too: a field the JSON has and
+# GodotApi.native.verse does not would be a mapping to a name no Verse code can spell. Without
+# these a click on the `X` of `Position.X` reaches a definition in the engine tree, which has no
+# res:// file to jump to and no Godot doc page to fall back on, so it does nothing at all.
+VALUE_TYPE_MEMBERS = [
+    ("vector2", "X", "Vector2", "x"),
+    ("vector2", "Y", "Vector2", "y"),
+    ("vector3", "X", "Vector3", "x"),
+    ("vector3", "Y", "Vector3", "y"),
+    ("vector3", "Z", "Vector3", "z"),
+    ("color", "R", "Color", "r"),
+    ("color", "G", "Color", "g"),
+    ("color", "B", "Color", "b"),
+    ("color", "A", "Color", "a"),
+]
+
 
 def render_classes_header(api: dict, emit_order: list, method_map: list) -> str:
     version = api["header"]["version_full_name"]
@@ -629,7 +646,7 @@ def render_classes_header(api: dict, emit_order: list, method_map: list) -> str:
         [(name, verse_class_name(name)) for name in emit_order] + list(VALUE_TYPE_CLASSES.items())
     )
     entries = "\n".join(f'\t{{ "{godot_name}", "{verse_name}" }},' for godot_name, verse_name in pairs)
-    rows = [(m[1], m[3], m[0], m[2]) for m in method_map] + LIFECYCLE_METHODS
+    rows = [(m[1], m[3], m[0], m[2]) for m in method_map] + LIFECYCLE_METHODS + VALUE_TYPE_MEMBERS
     method_entries = "\n".join(
         f'\t{{ "{verse_class}", "{verse_method}", "{godot_class}", "{godot_method}" }},'
         for verse_class, verse_method, godot_class, godot_method in sorted(rows)

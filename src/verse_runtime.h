@@ -70,6 +70,29 @@ public:
 	// so the caller must have established that the text at p_globalized_path is the text that
 	// analysis saw, or every locus below an edit is off by the rows it added.
 	godot::Dictionary lookup_symbol(const godot::String &p_globalized_path, int32_t p_line, int32_t p_column) const;
+
+	// What could be written at p_line/p_column of p_source, as an array of
+	// { name, type, owner, kind, is_var } -- the members of the expression there when
+	// p_mode is VH_COMPLETE_MEMBERS, everything the scope admits when it is VH_COMPLETE_SCOPE.
+	// Positions are the compiler's, as above, and for members they are the *receiver's* last
+	// byte rather than the cursor.
+	//
+	// Takes the buffer because it analyses it: unlike lookup_symbol there is never an existing
+	// analysis of half-typed text to answer from. That analysis costs about as much as a
+	// validate and blocks for it, and it spends whatever analysis lookup_symbol was relying on
+	// -- see note_host_program_spent.
+	godot::TypedArray<godot::Dictionary> complete_symbol(const godot::String &p_globalized_path, const godot::String &p_source, int32_t p_line, int32_t p_column, int32_t p_mode) const;
+
+	// Every member p_class_name declares itself, as { name, type, owner, path, line, kind,
+	// is_var } -- broader than class_exports, which answers only for the inspector. Read off the
+	// last analysis, so it follows the editor's buffer.
+	godot::TypedArray<godot::Dictionary> class_members(const godot::String &p_class_name) const;
+
+	// The function called at p_line/p_column of p_source, as { name, result, params }. The
+	// position names the callee's last byte rather than the cursor, for the same reason
+	// complete_symbol's does. Analyses the buffer, and spends the analysis the same way.
+	godot::Dictionary signature_at(const godot::String &p_globalized_path, const godot::String &p_source, int32_t p_line, int32_t p_column) const;
+
 	vh_instance *instantiate(const godot::String &p_class_name, int64_t p_object_id);
 	void release_instance(vh_instance *p_instance);
 	bool instance_has_function(vh_instance *p_instance, const char *p_decorated_name) const;

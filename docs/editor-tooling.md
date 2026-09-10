@@ -42,6 +42,15 @@ single positional project-file path via uLang's own `CommandLine` parser and exi
 batch compile — but it does not depend on `uLangLSP` (`VerseCompilerCmd.Build.cs:9-17` lists no
 such dependency) and is not a server of any kind.
 
+`VerseAssist` is the part of that worth naming separately, because it is reachable without an LSP
+at all: `AccumulateSCompletionItemsFromVstNode` and `OnComplete`
+(`Engine/Source/Runtime/Solaris/VerseAssist/Public/VerseAssist.h:132-156`) answer completion over a
+`CSemanticProgram` the host already has. They are keyed by Vst node rather than by position, so a
+caller still has to find the node under the cursor itself, and they speak `LSP::ECompletionItemKind`
+— which is why `vh_complete_symbol` walks the AST directly instead. If completion ever needs the
+finer distinctions the compiler's own front end makes, linking `VerseAssist` into
+`VerseHost.Build.cs` is the step, not writing more of the walk.
+
 **What would have to be built:** a new UBT Program target (a `.Target.cs` + `.Build.cs` +
 `main`-equivalent source, analogous to `Engine/Source/Programs/Solaris/VerseCompilerCmd/`) that
 links `uLangLSP`, `VerseAssist`, `VerseCompiler`, `uLangCore`, and implements an LSP stdio loop

@@ -21,17 +21,11 @@
 
 using namespace godot;
 
-namespace {
-
-VerseRuntime *get_runtime() {
-	return Object::cast_to<VerseRuntime>(Engine::get_singleton()->get_singleton("VerseRuntime"));
-}
-
 // A validate's buffer arrives via TextEdit, which need not hand back the line endings the file
 // was written with, so a CRLF file compared raw would miss the cache on every keystroke and
 // every tab switch. Verse is newline-agnostic, so text differing only in line endings analyses
 // identically and is safe to treat as unchanged.
-String newline_normalized(const String &p_source) {
+String verse_newline_normalized(const String &p_source) {
 	return p_source.replace("\r\n", "\n").replace("\r", "\n");
 }
 
@@ -46,7 +40,7 @@ String newline_normalized(const String &p_source) {
 //
 // A `<# #>` block contributes only the lines that open with its delimiter; a continuation line
 // reads as ordinary text and stops the walk, which is the conservative direction to be wrong in.
-String doc_comment_above(const String &p_source, int64_t p_line) {
+String verse_doc_comment_above(const String &p_source, int64_t p_line) {
 	const PackedStringArray lines = p_source.split("\n");
 	PackedStringArray collected;
 
@@ -66,6 +60,12 @@ String doc_comment_above(const String &p_source, int64_t p_line) {
 
 	collected.reverse();
 	return String("\n").join(collected).strip_edges();
+}
+
+namespace {
+
+VerseRuntime *get_runtime() {
+	return Object::cast_to<VerseRuntime>(Engine::get_singleton()->get_singleton("VerseRuntime"));
 }
 
 // The Godot class a mirrored Verse class name stands for, or nullptr for a name that is not part
@@ -266,8 +266,17 @@ bool VerseScriptLanguage::_supports_builtin_mode() const {
 	return false;
 }
 
+// Turning this on is what registers a script's own documentation, and with it the difference
+// between the editor calling a member a property and calling it a local variable -- Godot reaches
+// for documentation for everything except its two local lookup results.
+//
+// It has a startup cost. Godot loads every file of a language that supports documentation during
+// the editor's filesystem scan, and loading a .verse resource builds the project, so the host now
+// boots when the project is opened rather than when the first script is opened. For a project
+// whose scene already runs Verse that is the same work moved earlier; for one where nothing does,
+// it is new.
 bool VerseScriptLanguage::_supports_documentation() const {
-	return false;
+	return true;
 }
 
 bool VerseScriptLanguage::_can_inherit_from_file() const {
@@ -375,13 +384,185 @@ static Dictionary completion_option(const String &p_text, int64_t p_kind, int64_
 	return option;
 }
 
-// Completes class names and reserved words, from the same two name sets the syntax highlighter
-// colours from. That is the whole of what can be offered without a scope: which names are in
-// scope at a point, and what a value's members are, are both questions only the compiler can
-// answer, and it can only answer them about text it has analysed.
+static bool is_identifier_char(char32_t p_c) {
+	return (p_c >= 'a' && p_c <= 'z') || (p_c >= 'A' && p_c <= 'Z') || (p_c >= '0' && p_c <= '9') || p_c == '_';
+}
+
+// Stands in for the identifier being typed while the completion buffer is analysed. A legal Verse
+// identifier, so the line parses; one no project would write, so it resolves to nothing and the
+// answer is about the position rather than about whatever it collided with.
+static const char *completion_placeholder = "VhCompletionCursor";
+
+// Whether the token ending at p_end is a number rather than a name, which is what tells the `.` of
+// `1.5` from the `.` of `Position.X`. An identifier may well end in a digit -- `node2d` does -- so
+// it is the whole token that has to be digits, not just the character before the dot.
+static bool ends_a_number_literal(const String &p_text, int64_t p_end) {
+	if (p_end < 0 || p_end >= p_text.length()) {
+		return false;
+	}
+	int64_t start = p_end + 1;
+	while (start > 0 && is_identifier_char(p_text[start - 1])) {
+		start--;
+	}
+	for (int64_t i = start; i <= p_end; i++) {
+		if (p_text[i] < '0' || p_text[i] > '9') {
+			return false;
+		}
+	}
+	return start <= p_end;
+}
+
+// The offset of the last character of the callee of the innermost call the cursor is inside, or
+// -1 when it is inside none.
 //
-// Offering nothing at all is worse than offering the coarse set -- Godot pops the completion box
-// on its own while typing, and `node2` completing to `node2d` is most of the value.
+// Scans back over the text before the cursor, closing every bracket it meets, so a nested call's
+// arguments do not count as the outer call's. Verse opens a call with `(` and a failable one with
+// `[`; `{` opens an archetype, which is a different construct and stops the scan rather than
+// answering for it.
+//
+// Strings and comments are not skipped: a bracket inside either would throw the balance off. The
+// cost is a wrong hint for a line with an unbalanced bracket inside a literal, which the host then
+// declines to answer for anyway -- the callee that comes out is not a function.
+static int64_t enclosing_call_callee_end(const String &p_before) {
+	int64_t depth = 0;
+	for (int64_t i = p_before.length() - 1; i >= 0; i--) {
+		const char32_t c = p_before[i];
+		if (c == ')' || c == ']' || c == '}') {
+			depth++;
+		} else if (c == '(' || c == '[') {
+			if (depth > 0) {
+				depth--;
+				continue;
+			}
+			// An opening bracket with nothing to close it is the call the cursor is inside. Its
+			// callee is whatever identifier ends immediately before it; a bracket that opens a
+			// group rather than a call has no name there and answers -1.
+			int64_t end = i - 1;
+			while (end >= 0 && (p_before[end] == ' ' || p_before[end] == '\t')) {
+				end--;
+			}
+			return end >= 0 && is_identifier_char(p_before[end]) ? end : -1;
+		} else if (c == '{') {
+			return -1;
+		} else if (c == '\n' && depth == 0) {
+			// Verse continues an argument list across lines, but a cursor on a line that opened no
+			// bracket of its own is not inside a call this scan can trust.
+			return -1;
+		}
+	}
+	return -1;
+}
+
+// Which argument the cursor sits in: the commas between the call's opening bracket and the cursor,
+// counted at bracket depth zero so a nested call's own commas do not advance the outer one.
+static int64_t argument_index_in_call(const String &p_before, int64_t p_callee_end) {
+	int64_t depth = 0;
+	int64_t index = 0;
+	for (int64_t i = p_callee_end + 1; i < p_before.length(); i++) {
+		const char32_t c = p_before[i];
+		if (c == '(' || c == '[' || c == '{') {
+			depth++;
+		} else if (c == ')' || c == ']' || c == '}') {
+			depth--;
+		} else if (c == ',' && depth == 1) {
+			index++;
+		}
+	}
+	return index;
+}
+
+// The signature as Verse spells it, with the argument the cursor is in wrapped in the markers
+// Godot highlights between. Verse's own order -- name, parameters, then `:type` -- rather than
+// GDScript's leading return type, because that is how the declaration reads in the file.
+static String call_hint_for(const Dictionary &p_signature, int64_t p_argument) {
+	const String name = p_signature["name"];
+	const String result_type = p_signature["result"];
+	const TypedArray<Dictionary> params = p_signature["params"];
+
+	String hint = name + String("(");
+	for (int64_t i = 0; i < params.size(); i++) {
+		if (i > 0) {
+			hint += ", ";
+		}
+		if (i == p_argument) {
+			hint += String::chr(0xFFFF);
+		}
+		const Dictionary param = params[i];
+		hint += String(param["name"]) + String(":") + String(param["type"]);
+		if (i == p_argument) {
+			hint += String::chr(0xFFFF);
+		}
+	}
+	hint += ")";
+	if (!result_type.is_empty()) {
+		hint += String(":") + result_type;
+	}
+	return hint;
+}
+
+// Godot's kind for a definition, so the completion box draws the right icon beside it.
+static int64_t completion_kind_for(int64_t p_lookup_kind) {
+	switch (p_lookup_kind) {
+		case VH_LOOKUP_FUNCTION:
+			return ScriptLanguageExtension::CODE_COMPLETION_KIND_FUNCTION;
+		case VH_LOOKUP_CLASS:
+		case VH_LOOKUP_TYPE_ALIAS:
+			return ScriptLanguageExtension::CODE_COMPLETION_KIND_CLASS;
+		case VH_LOOKUP_ENUM:
+			return ScriptLanguageExtension::CODE_COMPLETION_KIND_ENUM;
+		case VH_LOOKUP_MODULE:
+			return ScriptLanguageExtension::CODE_COMPLETION_KIND_FILE_PATH;
+		default:
+			return ScriptLanguageExtension::CODE_COMPLETION_KIND_MEMBER;
+	}
+}
+
+// Turns one vh_complete_item into an option.
+//
+// A call is completed with its brackets, and where the caret lands afterwards depends on whether
+// there is anything to type between them: a function with parameters inserts only the opening one,
+// so CodeEdit's brace completion closes it and leaves the caret inside, while one without inserts
+// the pair and leaves the caret past it. GDScript spells it exactly this way, ellipsis and all.
+static Dictionary completion_option_for(const Dictionary &p_item) {
+	const String name = p_item["name"];
+	const int64_t kind = p_item["kind"];
+	const int64_t param_count = p_item["param_count"];
+	const bool is_function = kind == VH_LOOKUP_FUNCTION;
+
+	// `location` is the only lever Godot offers over the order options appear in, and the one
+	// distinction worth making with it is the mirrored Godot API against everything else --
+	// which is a class the author wrote, a local, or a Verse standard-library name. All three
+	// are nearer to what is being typed than a thousand generated accessors.
+	const String owner = p_item["owner"];
+	const int64_t location = godot_class_for(owner) == nullptr
+			? ScriptLanguageExtension::LOCATION_LOCAL
+			: ScriptLanguageExtension::LOCATION_OTHER;
+
+	Dictionary option = completion_option(name, completion_kind_for(kind), location);
+	if (is_function) {
+		const bool takes_arguments = param_count > 0;
+		option["insert_text"] = name + (takes_arguments ? String("(") : String("()"));
+		option["display"] = name + (takes_arguments ? String::utf8("(…)") : String("()"));
+	}
+	return option;
+}
+
+// Completion, answered by the compiler wherever it can be.
+//
+// Godot marks the cursor by splicing U+FFFF into the buffer, and everything here is derived from
+// where that landed: whether a `.` precedes it (so this completes members of whatever is to the
+// left) or not (so it completes names in scope), and what has been typed of the identifier so far.
+//
+// The buffer handed to the host has that half-typed identifier replaced by a fixed one that
+// nothing defines. Replacing rather than deleting keeps the line parsing as the identifier it
+// was going to be -- `Position.` and `set X = ` are both syntax errors, and a parse error can
+// take the enclosing function's AST with it, while an unknown identifier costs one diagnostic
+// nobody sees. And the substitution is what makes every keystroke of one identifier the same
+// question, and so a cache hit: an analysis costs ~100ms and Godot re-asks on each of them.
+//
+// The class-name and keyword sets are still offered alongside the compiler's answer for a bare
+// identifier. They cover what a scope walk cannot -- a class the author has not brought into
+// view, and the keywords, which are not definitions at all.
 Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const String &p_path, Object *p_owner) const {
 	Dictionary result;
 	result["result"] = (int64_t)OK;
@@ -397,22 +578,122 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 	// every one of them; a thousand class names on each keystroke is worth trimming here first.
 	const String before = p_code.substr(0, marker);
 	int64_t prefix_start = before.length();
-	while (prefix_start > 0) {
-		const char32_t c = before[prefix_start - 1];
-		const bool is_ident = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
-		if (!is_ident) {
-			break;
-		}
+	while (prefix_start > 0 && is_identifier_char(before[prefix_start - 1])) {
 		prefix_start--;
 	}
 	const String prefix = before.substr(prefix_start);
 
-	// A bare cursor would otherwise offer the entire API as one undifferentiated list.
-	if (prefix.is_empty()) {
+	// The receiver is whatever ends immediately before the dot. Only a dot: `?` and `^` are
+	// postfix operators the host unwraps on its own, and a space between the two is not something
+	// Verse writes.
+	const int64_t receiver_end = prefix_start - 2;
+	const bool completing_members = prefix_start > 0
+			&& before[prefix_start - 1] == '.'
+			&& !ends_a_number_literal(before, receiver_end);
+
+	Array options;
+
+	VerseRuntime *runtime = get_runtime();
+	const bool host_can_answer = project_built && runtime != nullptr && runtime->is_host_loaded();
+
+	// The buffer as the compiler should see it: marker gone, and the identifier being typed
+	// standing in for whatever it will become. The same text for every prefix of one identifier,
+	// and one no script can collide with -- a name Verse code could define would make the
+	// substitution resolve to it. Shared by the options below and the argument hint, which is what
+	// lets the host answer both off one analysis.
+	const String source = verse_newline_normalized(before.substr(0, prefix_start) + String(completion_placeholder) + p_code.substr(marker + 1));
+
+	// The zero-based row and utf8 byte column of a character offset into that buffer, which is how
+	// the compiler counts and is not how Godot counts.
+	auto position_of = [&source](int64_t p_offset, int64_t &r_line, int64_t &r_column) {
+		const String up_to = source.substr(0, p_offset);
+		r_line = up_to.count("\n");
+		const int64_t line_start = up_to.rfind("\n") + 1;
+		r_column = up_to.substr(line_start).utf8().length();
+	};
+
+	// The argument hint, which is what Godot draws above the caret while a call is open. Asked
+	// before the options because it is the answer for a cursor with nothing typed at all -- the
+	// moment right after the `(` -- which is exactly where the options below decline.
+	if (host_can_answer) {
+		const int64_t callee_end = enclosing_call_callee_end(before);
+		if (callee_end >= 0) {
+			int64_t line = 0;
+			int64_t column = 0;
+			position_of(callee_end, line, column);
+
+			if (signature_cache_source != source || signature_cache_line != (int32_t)line
+					|| signature_cache_column != (int32_t)column) {
+				settle_checks();
+				const String globalized = ProjectSettings::get_singleton()->globalize_path(p_path);
+				signature_cache = runtime->signature_at(globalized, source, (int32_t)line, (int32_t)column);
+				signature_cache_source = source;
+				signature_cache_line = (int32_t)line;
+				signature_cache_column = (int32_t)column;
+				analyzed_source_by_path.erase(p_path);
+			}
+
+			if (!signature_cache.is_empty()) {
+				result["call_hint"] = call_hint_for(signature_cache, argument_index_in_call(before, callee_end));
+			}
+		}
+	}
+
+	// Without a dot, a bare cursor would offer every name in scope as one undifferentiated list;
+	// with one, the member set is bounded by the receiver's type and is exactly what was asked for.
+	if (!completing_members && prefix.is_empty()) {
 		return result;
 	}
 
-	Array options;
+	if (host_can_answer && (!completing_members || receiver_end >= 0)) {
+		// Members are asked about the receiver's last byte; a bare identifier about where it
+		// would be written, which is where the prefix started. Both sit before the substitution,
+		// so neither moves when the placeholder is a different length than what was typed.
+		const int64_t position = completing_members ? receiver_end : prefix_start;
+		int64_t line = 0;
+		int64_t column = 0;
+		position_of(position, line, column);
+		const int32_t mode = completing_members ? VH_COMPLETE_MEMBERS : VH_COMPLETE_SCOPE;
+
+		if (completion_cache_source != source || completion_cache_line != (int32_t)line
+				|| completion_cache_column != (int32_t)column || completion_cache_mode != mode) {
+			// Drain whatever validate had queued first. An analysis that finishes *after* this one
+			// would be reaped by a later poll_check, which records its buffer as the text the host
+			// holds -- and the host would by then be holding the completion buffer instead. Every
+			// locus a hover reads afterwards would be attributed to the wrong text. Settling costs
+			// the wait once per completion context rather than once per keystroke, because the
+			// cache above is what the rest of a prefix hits.
+			settle_checks();
+
+			const String globalized = ProjectSettings::get_singleton()->globalize_path(p_path);
+			completion_cache_options = runtime->complete_symbol(globalized, source, (int32_t)line, (int32_t)column, mode);
+			completion_cache_source = source;
+			completion_cache_line = (int32_t)line;
+			completion_cache_column = (int32_t)column;
+			completion_cache_mode = mode;
+
+			// The host now holds the completion buffer as this file's text, so the analysis every
+			// lookup and every cached validate was answering from is spent. Dropping the entry is
+			// what stops a hover from trusting loci that describe a buffer with a placeholder
+			// spliced into it; the next validate re-analyses and puts it back.
+			analyzed_source_by_path.erase(p_path);
+		}
+
+		for (int64_t i = 0; i < completion_cache_options.size(); i++) {
+			const Dictionary item = completion_cache_options[i];
+			const String name = item["name"];
+			if (prefix.is_empty() || name.begins_with(prefix)) {
+				options.push_back(completion_option_for(item));
+			}
+		}
+	}
+
+	// A dot has answered everything it is going to; the sets below are names, not members.
+	if (completing_members) {
+		result["options"] = options;
+		return result;
+	}
+
 	for (size_t i = 0; i < std::size(verse_api::classes); i++) {
 		const String name = verse_api::classes[i].verse_name;
 		if (name.begins_with(prefix)) {
@@ -480,7 +761,7 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 	// Answering from an analysis that predates the edit would be worse than not answering: the
 	// loci below an inserted row are all shifted, so the jump lands confidently on the wrong
 	// line. This is the same predicate check_buffer uses to decide a re-analysis is unnecessary.
-	const String normalized = newline_normalized(before + p_code.substr(marker + 1));
+	const String normalized = verse_newline_normalized(before + p_code.substr(marker + 1));
 	if (!analyzed_source_by_path.has(p_path) || String(analyzed_source_by_path[p_path]) != normalized) {
 		return result;
 	}
@@ -518,7 +799,16 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 	// call site already resolves to the implementation that will run, and sending that to the
 	// parent would be wrong rather than merely unhelpful.
 	const String overridden_owner = found["overridden_owner"];
-	const bool overrides_something = bool(found["is_definition"]) && !overridden_owner.is_empty();
+	const bool is_definition = bool(found["is_definition"]);
+	const bool overrides_something = is_definition && !overridden_owner.is_empty();
+
+	// A parameter where it is declared describes nothing the line does not already say, and it is
+	// the one place a jump has nowhere to go -- the declaration is the line the cursor is on. So
+	// the answer is a refusal, which is a hover with no tooltip at all, the way GDScript leaves it.
+	const bool is_parameter = bool(found["is_parameter"]);
+	if (is_parameter && is_definition) {
+		return result;
+	}
 
 	// The comment block above a definition, wherever it was written. A file the project does not
 	// own -- Godot.native.verse in the engine tree -- cannot be jumped to, but its comment is
@@ -530,18 +820,21 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 		// The buffer for the file being edited may be ahead of what is on disk; anything else is
 		// at worst as stale as the analysis that pointed here.
 		if (p_definition_path == globalized) {
-			return doc_comment_above(normalized, p_line);
+			return verse_doc_comment_above(normalized, p_line);
 		}
 		const String res_path = path_by_globalized.get(p_definition_path, String());
 		const String source = FileAccess::get_file_as_string(res_path.is_empty() ? p_definition_path : res_path);
-		return doc_comment_above(newline_normalized(source), p_line);
+		return verse_doc_comment_above(verse_newline_normalized(source), p_line);
 	};
 
 	const int64_t own_line = found["line"];
 	const String own_path = found["path"];
 	const int64_t overridden_line = found["overridden_line"];
 	const String overridden_path = found["overridden_path"];
-	const String own_description = comment_at(own_path, own_line);
+	// A parameter's source line is the line its whole function is declared on, so the comment
+	// "above" it is the function's -- describing an argument with the method's prose. It has no
+	// documentation of its own, and GDScript gives one none either.
+	const String own_description = is_parameter ? String() : comment_at(own_path, own_line);
 
 	if (kind == VH_LOOKUP_CLASS) {
 		if (const char *godot_class = godot_class_for(found_name)) {
@@ -568,6 +861,25 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 			result["class_name"] = String(method->godot_class);
 			result["class_member"] = String(method->godot_method);
 			return result;
+		}
+
+		// A member of a class the project itself declares is a property or a method, and saying so
+		// is the whole difference between the editor calling it that and calling it a local
+		// variable. It takes naming the class it belongs to, which is only safe because that name
+		// is registered as a *script* doc: the click path diverts a class_name into the help viewer
+		// only when the class is one of Godot's own, so this one still falls through to the jump
+		// below. The description comes from the same registered doc rather than from `description`,
+		// which Godot reads for the local results alone.
+		//
+		// Only a class: a parameter's owner is the function that declares it, and a local's is a
+		// block. Neither is a property of anything, and both keep the local results, which are the
+		// only ones that can carry prose this has read out of the source itself.
+		if (script_class_names().has(found_owner)) {
+			result["type"] = (int64_t)(kind == VH_LOOKUP_FUNCTION
+							? ScriptLanguageExtension::LOOKUP_RESULT_CLASS_METHOD
+							: ScriptLanguageExtension::LOOKUP_RESULT_CLASS_PROPERTY);
+			result["class_name"] = found_owner;
+			result["class_member"] = found_name;
 		}
 	}
 
@@ -861,7 +1173,7 @@ Error VerseScriptLanguage::ensure_project_built() {
 	for (int64_t i = 0; i < sources.size(); i++) {
 		const String text = FileAccess::get_file_as_string(sources[i]);
 		if (FileAccess::get_open_error() == OK) {
-			analyzed_source_by_path[sources[i]] = newline_normalized(text);
+			analyzed_source_by_path[sources[i]] = verse_newline_normalized(text);
 		}
 	}
 
@@ -883,7 +1195,7 @@ TypedArray<Dictionary> VerseScriptLanguage::check_buffer(const String &p_path, c
 	}
 
 	const String globalized = ProjectSettings::get_singleton()->globalize_path(p_path);
-	const String normalized = newline_normalized(p_source);
+	const String normalized = verse_newline_normalized(p_source);
 
 	// The host still holds exactly this text, so its last analysis already answered for it. This
 	// is the common case by far: opening a file, switching to its tab and saving it all validate

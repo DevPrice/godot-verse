@@ -12,6 +12,15 @@
 
 struct VerseClassDecl;
 
+// Line endings normalised away. A buffer arrives through TextEdit, which need not hand back the
+// endings the file was written with, and Verse analyses identically either way.
+godot::String verse_newline_normalized(const godot::String &p_source);
+
+// The run of comment lines immediately above p_line, delimiters removed. Verse has no doc-comment
+// form of its own, so this convention -- whatever precedes a definition documents it -- is the
+// whole of where a script's documentation comes from.
+godot::String verse_doc_comment_above(const godot::String &p_source, int64_t p_line);
+
 // The "Verse" ScriptLanguage. One instance, created and handed to
 // Engine::register_script_language by register_types.cpp, so singleton() is valid for the life
 // of the extension.
@@ -183,6 +192,24 @@ private:
 	mutable godot::String pending_check_source;
 	mutable godot::String in_flight_path;
 	mutable godot::String in_flight_source;
+
+	// The completion buffer the last vh_complete_symbol answered for, with its position, mode and
+	// answer. Godot re-asks on every keystroke while the popup is open, and each ask costs a
+	// whole-project analysis; normalizing the half-typed identifier out of the buffer is what
+	// makes the whole of one prefix the same question, and this is what makes it free to repeat.
+	mutable godot::String completion_cache_source;
+	mutable int32_t completion_cache_line = -1;
+	mutable int32_t completion_cache_column = -1;
+	mutable int32_t completion_cache_mode = -1;
+	mutable godot::TypedArray<godot::Dictionary> completion_cache_options;
+
+	// The same, for the argument hint. Kept apart because the two are asked about different
+	// positions in one buffer -- the callee for the hint, the cursor for the options -- and the
+	// host answers both off a single analysis, so caching them together would throw one away.
+	mutable godot::String signature_cache_source;
+	mutable int32_t signature_cache_line = -1;
+	mutable int32_t signature_cache_column = -1;
+	mutable godot::Dictionary signature_cache;
 
 	// Queues p_path's buffer for analysis and starts it if the host is free.
 	void request_check(const godot::String &p_path, const godot::String &p_normalized_source) const;

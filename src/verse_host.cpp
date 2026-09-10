@@ -47,6 +47,9 @@ void VerseHostLibrary::clear_function_pointers() {
 	ClassDefaultField = nullptr;
 	InstanceSetField = nullptr;
 	LookupSymbol = nullptr;
+	CompleteSymbol = nullptr;
+	ClassMembers = nullptr;
+	SignatureAt = nullptr;
 }
 
 bool VerseHostLibrary::load(const String &p_dll_path, String &r_error) {
@@ -85,6 +88,9 @@ bool VerseHostLibrary::load(const String &p_dll_path, String &r_error) {
 	ok = ok && resolve(handle, "vh_class_default_field", ClassDefaultField, r_error);
 	ok = ok && resolve(handle, "vh_instance_set_field", InstanceSetField, r_error);
 	ok = ok && resolve(handle, "vh_lookup_symbol", LookupSymbol, r_error);
+	ok = ok && resolve(handle, "vh_complete_symbol", CompleteSymbol, r_error);
+	ok = ok && resolve(handle, "vh_class_members", ClassMembers, r_error);
+	ok = ok && resolve(handle, "vh_signature_at", SignatureAt, r_error);
 
 	if (!ok) {
 		clear_function_pointers();

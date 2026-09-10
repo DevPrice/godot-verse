@@ -144,11 +144,75 @@ void VerseScript::_placeholder_erased(void *p_placeholder) {
 }
 
 StringName VerseScript::_get_doc_class_name() const {
-	return StringName();
+	// The Verse name rather than the PascalCase one @global_class registers. This is the name the
+	// lookup reports as a member's owner and the name the class is written under, and the two have
+	// to be the same string for a hover on a member to find the documentation below.
+	return StringName(verse_class_name());
 }
 
+// A script's own documentation, which is the only way the editor can describe a member of it.
+//
+// Registering it is what makes a hover on `Speed` say "Property" with the comment above it rather
+// than "Local Variable": Godot's tooltip reads a description straight off the lookup result only
+// for its two *local* results, and for a property or a method it goes to the documentation instead.
+// `is_script_doc` is the other half -- it is what keeps ctrl+click jumping to the declaration
+// rather than diverting into the help viewer the way a name from Godot's own API does.
+//
+// Safe to answer from here even during the editor's first file scan: loading a .verse resource
+// compiles the project on the way in, so by the time Godot asks there is an analysis to read.
+// With no host there is simply nothing to say, and Godot re-asks when the script is saved.
 TypedArray<Dictionary> VerseScript::_get_documentation() const {
-	return TypedArray<Dictionary>();
+	TypedArray<Dictionary> docs;
+
+	VerseRuntime *runtime = get_runtime();
+	const String class_name = verse_class_name();
+	if (class_name.is_empty() || runtime == nullptr || !runtime->is_host_loaded()) {
+		return docs;
+	}
+
+	const TypedArray<Dictionary> members = runtime->class_members(class_name);
+	const String source = verse_newline_normalized(source_code);
+	const VerseClassDecl decl = verse_scan_class_decl(source.utf8().get_data());
+
+	Array properties;
+	Array methods;
+	for (int64_t i = 0; i < members.size(); i++) {
+		const Dictionary member = members[i];
+		const String name = member["name"];
+		const int64_t kind = member["kind"];
+		const int64_t line = member["line"];
+
+		// Every member of this class is declared in this file, so the comment is in the buffer
+		// being edited rather than on disk -- which is what keeps documentation current with an
+		// unsaved edit, the same way the analysis behind it is.
+		const String description = verse_doc_comment_above(source, line);
+
+		Dictionary entry;
+		entry["name"] = name;
+		entry["description"] = description;
+		if (kind == VH_LOOKUP_FUNCTION) {
+			// The whole signature as Verse spells it. Godot's own doc renders `return_type` beside
+			// the name, and a Verse function type reads better there than a decomposition into
+			// Godot's argument shape would -- the parameter names live in the argument hint.
+			entry["return_type"] = member["type"];
+			methods.push_back(entry);
+		} else {
+			entry["type"] = member["type"];
+			properties.push_back(entry);
+		}
+	}
+
+	Dictionary doc;
+	doc["name"] = class_name;
+	doc["inherits"] = String(decl.base.c_str());
+	doc["brief_description"] = verse_doc_comment_above(source, decl.line);
+	doc["description"] = verse_doc_comment_above(source, decl.line);
+	doc["properties"] = properties;
+	doc["methods"] = methods;
+	doc["script_path"] = get_path();
+	doc["is_script_doc"] = true;
+	docs.push_back(doc);
+	return docs;
 }
 
 String VerseScript::_get_class_icon_path() const {

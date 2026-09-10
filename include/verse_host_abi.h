@@ -22,7 +22,7 @@
 extern "C" {
 #endif
 
-#define VH_ABI_VERSION 14
+#define VH_ABI_VERSION 17
 
 typedef int32_t vh_bool;
 
@@ -449,6 +449,11 @@ typedef struct vh_lookup_desc
 	int32_t Kind;  /* vh_lookup_kind */
 	vh_bool IsVar; /* declared with `var`, so assignable after the instance seals */
 
+	/* A parameter of the function that declares it, rather than a member or a local. Worth telling
+	 * apart because a parameter has no documentation of its own: its source line is the line its
+	 * whole function is declared on, so the comment block "above" it is the function's. */
+	vh_bool IsParameter;
+
 	/* The cursor was on the definition itself rather than on a reference to it. A consumer that
 	 * wants to jump somewhere useful needs this: at a declaration, the definition's own location
 	 * is where the cursor already is. */
@@ -489,6 +494,129 @@ typedef struct vh_lookup_desc
  * includes the ordinary cases of hovering whitespace, a keyword or a comment. */
 VH_ATTR VH_API int32_t vh_lookup_symbol(const char* PathUtf8, int32_t Line, int32_t Column, const vh_lookup_desc** OutResult);
 
+/* ------------------------------------------------------------- completion -- */
+
+/* Which question vh_complete_symbol is being asked. */
+typedef enum vh_complete_mode
+{
+	/* What the expression at Line/Column has members of -- the answer to a `.`. The position is
+	 * the *receiver's* last byte, not the cursor: the member being typed does not exist yet, and
+	 * asking about it would resolve nothing. */
+	VH_COMPLETE_MEMBERS = 0,
+
+	/* What an identifier written at Line/Column could name: the locals ahead of it, the enclosing
+	 * class' members and its superclasses', and every scope the file has brought into view. */
+	VH_COMPLETE_SCOPE = 1
+} vh_complete_mode;
+
+/* One name completion could insert. Laid out like vh_lookup_desc's first few fields, and read the
+ * same way: utf8, none null terminated. */
+typedef struct vh_complete_item
+{
+	const char* NameUtf8;
+	int32_t NameLen;
+
+	/* Spelled as Verse source -- a function's whole signature, a member's type. Empty when the
+	 * definition has no type to spell. */
+	const char* TypeUtf8;
+	int32_t TypeLen;
+
+	/* The scope that declares it, which is how the consumer recognises a name as belonging to a
+	 * mirrored Godot class. Empty at the top level. */
+	const char* OwnerUtf8;
+	int32_t OwnerLen;
+
+	/* Where it was declared, laid out like vh_lookup_desc's Path/Line and read the same way: the
+	 * path is empty and the line -1 for a definition with no source behind it. Here so that a
+	 * consumer can find the comment block above a name it is about to offer or document. */
+	const char* PathUtf8;
+	int32_t PathLen;
+	int32_t Line;
+
+	int32_t Kind;  /* vh_lookup_kind */
+	vh_bool IsVar;
+
+	/* How many parameters it declares, or -1 for anything that is not a function. An editor needs
+	 * this to decide where to leave the caret after inserting a call. */
+	int32_t ParamCount;
+} vh_complete_item;
+
+/* Lists what could be written at Line/Column of PathUtf8, with that file's text replaced by
+ * SourceUtf8 the way vh_check_project replaces it.
+ *
+ * Unlike vh_lookup_symbol this takes the buffer, because completion is asked about text that is
+ * mid-edit by definition and there is no moment at which an analysis of it already exists. It
+ * runs one, so it costs a whole-project analysis (~100ms) and blocks for it -- the caller is
+ * expected to ask only when the answer is about to be shown, and to cache it across the
+ * keystrokes that narrow a prefix rather than re-ask per character.
+ *
+ * The buffer does not have to analyse cleanly, which is the point: `Position.` is a syntax error
+ * and still answers, because uLang keeps the analysed sub-expressions of an expression it could
+ * not analyse. Diagnostics from this analysis are discarded rather than reported -- they describe
+ * a buffer the author is halfway through writing.
+ *
+ * Leaves the host holding SourceUtf8 as that file's text, so a vh_lookup_symbol afterwards
+ * answers for the completion buffer rather than the editor's. The caller has to treat any
+ * analysis it was relying on as spent.
+ *
+ * OutItems points into storage owned by the host, valid until the next call to this function.
+ * Returns VH_ERR_NOT_FOUND when nothing at that position has members, or when the position is
+ * not inside any scope the project owns. */
+VH_ATTR VH_API int32_t vh_complete_symbol(const char* PathUtf8,
+										  const char* SourceUtf8,
+										  int32_t Line,
+										  int32_t Column,
+										  int32_t Mode,
+										  const vh_complete_item** OutItems,
+										  int32_t* OutCount);
+
+/* Every member ClassNameUtf8 declares itself -- not what it inherits, which each superclass
+ * answers for on its own. Read out of the semantic program the last analysis left, exactly like
+ * vh_class_export_list, and with the same consequence: it describes the source as last analysed
+ * rather than the running program, which is what lets it refresh without a restart.
+ *
+ * Unlike vh_class_export_list this is not restricted to `@editable` members and does include
+ * methods -- it exists to be turned into documentation, where a member the inspector ignores is
+ * still a member the author wrote.
+ *
+ * OutItems points into storage owned by the host, valid until the next call to this function.
+ * Returns VH_ERR_NOT_FOUND when the class does not exist in the analysed program. */
+VH_ATTR VH_API int32_t vh_class_members(const char* ClassNameUtf8, const vh_complete_item** OutItems, int32_t* OutCount);
+
+/* ---------------------------------------------------------- call signature -- */
+
+/* The parameters of the function being called at a position, for an editor's argument hint. */
+typedef struct vh_signature_desc
+{
+	const char* NameUtf8;
+	int32_t NameLen;
+
+	/* The return type, spelled as Verse source. Empty when there is none to spell. */
+	const char* ResultUtf8;
+	int32_t ResultLen;
+
+	/* One per declared parameter, in order, each carrying the parameter's own name and type.
+	 * Points into storage owned by the host with the same lifetime as this descriptor. */
+	const vh_complete_item* Params;
+	int32_t ParamCount;
+} vh_signature_desc;
+
+/* Resolves the function called at Line/Column of PathUtf8, with that file's text replaced by
+ * SourceUtf8, and reports its parameters.
+ *
+ * Line and Column name the *callee's* last byte -- the `t` of `GetChild(` -- for the same reason
+ * vh_complete_symbol takes the receiver's: the argument list under construction does not analyse,
+ * and there is nothing at the cursor to resolve. Analyses the buffer and discards its diagnostics
+ * exactly as vh_complete_symbol does, and spends the caller's analysis the same way.
+ *
+ * OutResult points into storage owned by the host, valid until the next call to this function.
+ * Returns VH_ERR_NOT_FOUND when nothing at that position is a function. */
+VH_ATTR VH_API int32_t vh_signature_at(const char* PathUtf8,
+									   const char* SourceUtf8,
+									   int32_t Line,
+									   int32_t Column,
+									   const vh_signature_desc** OutResult);
+
 /* Signatures for GetProcAddress on the consumer side. */
 typedef int32_t (*vh_abi_version_fn)(void);
 typedef int32_t (*vh_init_fn)(const vh_init_desc*);
@@ -511,6 +639,9 @@ typedef int32_t (*vh_instance_get_field_fn)(vh_instance*, const char*, const vh_
 typedef int32_t (*vh_class_default_field_fn)(const char*, const char*, const vh_value**);
 typedef int32_t (*vh_instance_set_field_fn)(vh_instance*, const char*, const vh_value*);
 typedef int32_t (*vh_lookup_symbol_fn)(const char*, int32_t, int32_t, const vh_lookup_desc**);
+typedef int32_t (*vh_complete_symbol_fn)(const char*, const char*, int32_t, int32_t, int32_t, const vh_complete_item**, int32_t*);
+typedef int32_t (*vh_class_members_fn)(const char*, const vh_complete_item**, int32_t*);
+typedef int32_t (*vh_signature_at_fn)(const char*, const char*, int32_t, int32_t, const vh_signature_desc**);
 
 #ifdef __cplusplus
 }

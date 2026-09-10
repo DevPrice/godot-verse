@@ -156,7 +156,9 @@ VerseClassDecl verse_scan_class_decl(const std::string &p_source) {
 	VerseLexState state;
 	std::vector<VerseToken> tokens;
 
+	int row = -1;
 	for (const std::string &line : split_lines(p_source)) {
+		row++;
 		tokens.clear();
 		verse_lex_line(line, state, tokens);
 
@@ -199,6 +201,7 @@ VerseClassDecl verse_scan_class_decl(const std::string &p_source) {
 		pos = after_class;
 
 		decl.name = name;
+		decl.line = row;
 		decl.is_abstract = take_specifiers(line, pos);
 		decl.base = take_first_super(line, pos);
 		decl.is_global = pending_global;

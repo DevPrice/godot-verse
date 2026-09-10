@@ -268,10 +268,84 @@ Dictionary VerseRuntime::lookup_symbol(const String &p_globalized_path, int32_t 
 	result["owner"] = String::utf8(desc->OwnerUtf8, desc->OwnerLen);
 	result["kind"] = (int64_t)desc->Kind;
 	result["is_var"] = desc->IsVar != 0;
+	result["is_parameter"] = desc->IsParameter != 0;
 	result["is_definition"] = desc->IsDefinition != 0;
 	result["overridden_owner"] = String::utf8(desc->OverriddenOwnerUtf8, desc->OverriddenOwnerLen);
 	result["overridden_path"] = String::utf8(desc->OverriddenPathUtf8, desc->OverriddenPathLen);
 	result["overridden_line"] = (int64_t)desc->OverriddenLine;
+	return result;
+}
+
+// One ABI completion item as the Dictionary every consumer here reads. Shared because the item
+// shape is now returned by three entry points.
+static Dictionary complete_item_to_dict(const vh_complete_item &p_item) {
+	Dictionary entry;
+	entry["name"] = String::utf8(p_item.NameUtf8, p_item.NameLen);
+	entry["type"] = String::utf8(p_item.TypeUtf8, p_item.TypeLen);
+	entry["owner"] = String::utf8(p_item.OwnerUtf8, p_item.OwnerLen);
+	entry["path"] = String::utf8(p_item.PathUtf8, p_item.PathLen);
+	entry["line"] = (int64_t)p_item.Line;
+	entry["kind"] = (int64_t)p_item.Kind;
+	entry["is_var"] = p_item.IsVar != 0;
+	entry["param_count"] = (int64_t)p_item.ParamCount;
+	return entry;
+}
+
+TypedArray<Dictionary> VerseRuntime::complete_symbol(const String &p_globalized_path, const String &p_source, int32_t p_line, int32_t p_column, int32_t p_mode) const {
+	TypedArray<Dictionary> options;
+	if (!host.is_loaded()) {
+		return options;
+	}
+
+	const vh_complete_item *items = nullptr;
+	int32_t count = 0;
+	if (host.CompleteSymbol(p_globalized_path.utf8().get_data(), p_source.utf8().get_data(), p_line, p_column, p_mode, &items, &count) != VH_OK) {
+		return options;
+	}
+
+	for (int32_t i = 0; i < count; i++) {
+		options.push_back(complete_item_to_dict(items[i]));
+	}
+	return options;
+}
+
+TypedArray<Dictionary> VerseRuntime::class_members(const String &p_class_name) const {
+	TypedArray<Dictionary> members;
+	if (!host.is_loaded()) {
+		return members;
+	}
+
+	const vh_complete_item *items = nullptr;
+	int32_t count = 0;
+	if (host.ClassMembers(p_class_name.utf8().get_data(), &items, &count) != VH_OK) {
+		return members;
+	}
+
+	for (int32_t i = 0; i < count; i++) {
+		members.push_back(complete_item_to_dict(items[i]));
+	}
+	return members;
+}
+
+Dictionary VerseRuntime::signature_at(const String &p_globalized_path, const String &p_source, int32_t p_line, int32_t p_column) const {
+	Dictionary result;
+	if (!host.is_loaded()) {
+		return result;
+	}
+
+	const vh_signature_desc *desc = nullptr;
+	if (host.SignatureAt(p_globalized_path.utf8().get_data(), p_source.utf8().get_data(), p_line, p_column, &desc) != VH_OK || desc == nullptr) {
+		return result;
+	}
+
+	TypedArray<Dictionary> params;
+	for (int32_t i = 0; i < desc->ParamCount; i++) {
+		params.push_back(complete_item_to_dict(desc->Params[i]));
+	}
+
+	result["name"] = String::utf8(desc->NameUtf8, desc->NameLen);
+	result["result"] = String::utf8(desc->ResultUtf8, desc->ResultLen);
+	result["params"] = params;
 	return result;
 }
 

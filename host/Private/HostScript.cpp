@@ -159,6 +159,12 @@ bool GProgramIsAnalysisOnly = false;
 /// simply re-analyses what the IDE already holds.
 AUTORTFM_DISABLE bool RunCheck(const FUtf8String& Path, const FUtf8String& SourceText, TFunction<void(const FSolDiagnostic&)> Sink);
 
+/// The buffer the program the IDE holds was last built from -- see ProgramAlreadyDescribes.
+/// Written only from RunCheck, and read only after WaitForBackgroundCheck has joined the worker
+/// that may have written it.
+FUtf8String GAnalysedPath;
+FUtf8String GAnalysedSource;
+
 TArray<TSharedRef<ISolIdeDataSource>> GDataSources;
 TSharedPtr<verse::FContentScope> GContentScope;
 TOptional<verse::FContentScopeGuard> GContentScopeGuard;
@@ -411,7 +417,21 @@ AUTORTFM_DISABLE bool RunCheck(const FUtf8String& Path, const FUtf8String& Sourc
 
     const bool bAnalysed = GIde->BuildAll(Settings, MakeIdeDiagnostics(MoveTemp(Sink)));
     GProgramIsAnalysisOnly = GProgramIsAnalysisOnly || bAnalysed;
+
+    // Whatever the result, the program now describes this text. Recorded so that the two
+    // buffer-taking entry points -- completion and the argument hint -- can skip re-analysing
+    // when the editor asks both about one keystroke, which it does on every call it is inside.
+    GAnalysedPath = Path;
+    GAnalysedSource = SourceText;
     return bAnalysed;
+}
+
+/// Whether the program already describes this exact buffer, so an analysis of it would be work
+/// for the same answer. Only safe for a caller that wants the *program*: an analysis also reports
+/// diagnostics, and skipping it skips those too.
+AUTORTFM_DISABLE bool ProgramAlreadyDescribes(const FUtf8String& Path, const FUtf8String& SourceText)
+{
+    return !GAnalysedPath.IsEmpty() && GAnalysedPath == Path && GAnalysedSource == SourceText;
 }
 
 /// Body of the background thread. A free function rather than a lambda so it can carry
@@ -1009,18 +1029,47 @@ AUTORTFM_DISABLE bool IsDefinitionNode(uLang::EAstNodeType NodeType)
         || NodeType == EAstNodeType::Definition_TypeAlias;
 }
 
+/// The Vst node carrying just the *name* of a definition, given the node carrying the whole thing.
+///
+/// Everything else a declaration is made of describes something other than the definition itself:
+/// `<public>` and `<override>` are specifiers, `:float` is a type, `(Delta:float)` is a list of
+/// other definitions. Only the name means "this one". Narrowing to the definition's first child is
+/// not enough -- for `PhysicsUpdate<override>(Delta:float):void` that child still spans the
+/// specifier, the parameters and the return type, which is why hovering any of them used to
+/// describe the method.
+///
+/// The name is at the leading edge, so this descends first children: a TypeSpec's is what is being
+/// typed, a PrePostCall's is the callee, and both bottom out at the Identifier. An Identifier's own
+/// locus excludes its attributes, which hang off its Aux rather than its children.
+AUTORTFM_DISABLE const Verse::Vst::Node* DefinitionNameNode(const Verse::Vst::Node& Vst)
+{
+    const Verse::Vst::Node* Node = &Vst;
+    // Bounded rather than while(true): a malformed tree must not spin here.
+    for (int32 Depth = 0; Depth < 8; ++Depth)
+    {
+        if (Node->IsA<Verse::Vst::Identifier>())
+        {
+            return Node;
+        }
+        if (Node->GetChildCount() == 0)
+        {
+            return nullptr;
+        }
+        Node = &*Node->GetChildren()[0];
+    }
+    return nullptr;
+}
+
 /// A definition's own locus runs from its first attribute to the end of its body, so matching the
-/// cursor against it would resolve every blank column inside a function to that function. The name
-/// lives in the definition's first VST child -- the `Ready<override>()` of `Ready<override>():void
-/// = ...` -- which is tight enough to mean the author pointed at it. A parameter inside that span
-/// still wins, because its own node is deeper and the innermost hit is the one kept.
+/// cursor against it would resolve every blank column inside a function to that function. Only its
+/// name is tight enough to mean the author pointed at it.
 AUTORTFM_DISABLE const Verse::Vst::Node* NarrowedLocus(const uLang::CAstNode& AstNode, const Verse::Vst::Node& Vst)
 {
     if (!IsDefinitionNode(AstNode.GetNodeType()))
     {
         return &Vst;
     }
-    return Vst.GetChildCount() > 0 ? &*Vst.GetChildren()[0] : nullptr;
+    return Vst.GetChildCount() > 0 ? DefinitionNameNode(*Vst.GetChildren()[0]) : nullptr;
 }
 
 /// The definition an identifier node resolves to, or null for a node that is not one.
@@ -1134,6 +1183,30 @@ struct AUTORTFM_DISABLE FLookupVisitor : public uLang::SAstVisitor
                     bFoundIsDefinition = IsDefinitionNode(AstNode.GetNodeType());
                 }
             }
+
+            // A parameter is not in the tree this walks: analysis moves it onto the function's
+            // signature, leaving only its type behind in the AST. So it is asked of the function
+            // whose declaration the cursor is inside, which is also the only place it can be --
+            // and it is asked after the walk above, so it wins over the enclosing function.
+            if (AstNode.GetNodeType() == uLang::EAstNodeType::Definition_Function
+                && LocusContains(Vst->Whence(), Row, Column)
+                && FULangConversionUtils::ULangStrToFUtf8String(Vst->GetSnippetPath()).Equals(Path, ESearchCase::IgnoreCase))
+            {
+                const uLang::CFunction& Function = *static_cast<const uLang::CExprFunctionDefinition&>(AstNode)._Function;
+                for (const uLang::CDataDefinition* Param : Function._Signature.GetParams())
+                {
+                    const uLang::CExpressionBase* ParamAst = Param ? Param->GetAstNode() : nullptr;
+                    const Verse::Vst::Node* ParamVst = ParamAst ? ParamAst->GetMappedVstNode() : nullptr;
+                    const Verse::Vst::Node* ParamName = ParamVst ? DefinitionNameNode(*ParamVst) : nullptr;
+                    if (ParamName != nullptr && LocusContains(ParamName->Whence(), Row, Column))
+                    {
+                        Found = Param;
+                        FoundKind = VH_LOOKUP_DATA;
+                        bFoundIsDefinition = true;
+                        break;
+                    }
+                }
+            }
         }
         AstNode.VisitChildren(*this);
     }
@@ -1146,6 +1219,28 @@ struct AUTORTFM_DISABLE FLookupVisitor : public uLang::SAstVisitor
     vh_lookup_kind FoundKind{VH_LOOKUP_UNKNOWN};
     bool bFoundIsDefinition{false};
 };
+
+/// Whether a definition is one of its enclosing function's parameters. Locals live in a control
+/// scope rather than the function scope, so the scope kind alone nearly answers it -- but the
+/// signature is asked directly, because "nearly" is how a `where` clause's type variable would end
+/// up documented as an argument.
+AUTORTFM_DISABLE bool IsFunctionParameter(const uLang::CDefinition& Definition)
+{
+    const uLang::CDataDefinition* Data = Definition.AsNullable<uLang::CDataDefinition>();
+    if (!Data || Definition._EnclosingScope.GetKind() != uLang::CScope::EKind::Function)
+    {
+        return false;
+    }
+    const uLang::CFunction& Function = static_cast<const uLang::CFunction&>(Definition._EnclosingScope);
+    for (const uLang::CDataDefinition* Param : Function._Signature.GetParams())
+    {
+        if (Param == Data)
+        {
+            return true;
+        }
+    }
+    return false;
+}
 
 /// Where a definition was written, or nothing for one compiled from a package the project does
 /// not own -- the generated Godot API, Verse's own library. Those still describe fine.
@@ -1227,6 +1322,8 @@ AUTORTFM_DISABLE bool GodotVerse::LookupSymbol(FUtf8StringView Path, int32 Line,
         }
     }
 
+    OutDesc.bIsParameter = IsFunctionParameter(Definition);
+
     FillLocation(Definition, OutDesc.Path, OutDesc.Line, OutDesc.Column);
 
     // Only at a declaration. A call site already resolves to the implementation that will run,
@@ -1238,6 +1335,470 @@ AUTORTFM_DISABLE bool GodotVerse::LookupSymbol(FUtf8StringView Path, int32 Line,
         {
             OutDesc.OverriddenOwner = FUtf8String(Overridden->_EnclosingScope.GetScopeName().AsCString());
             FillLocation(*Overridden, OutDesc.OverriddenPath, OutDesc.OverriddenLine, OutDesc.OverriddenColumn);
+        }
+    }
+    return true;
+}
+
+namespace {
+
+/// Everything the completion walk needs out of one pass over the AST.
+struct AUTORTFM_DISABLE FCompletionVisitor : public uLang::SAstVisitor
+{
+    FCompletionVisitor(const FUtf8String& InPath, uint32 InRow, uint32 InColumn, const uLang::CScope* InDefaultScope)
+        : Path(InPath)
+        , Row(InRow)
+        , Column(InColumn)
+        , Scope(InDefaultScope)
+    {
+    }
+
+    virtual void Visit(const char* FieldName, uLang::CAstNode& AstNode) override { VisitElement(AstNode); }
+
+    virtual void VisitElement(uLang::CAstNode& AstNode) override
+    {
+        using namespace uLang;
+
+        const Verse::Vst::Node* Vst = AstNode.GetMappedVstNode();
+        if (Vst && FULangConversionUtils::ULangStrToFUtf8String(Vst->GetSnippetPath()).Equals(Path, ESearchCase::IgnoreCase))
+        {
+            bSawPath = true;
+            const bool bContainsCursor = LocusContains(Vst->Whence(), Row, Column);
+
+            // The scope to complete in, and the one to test accessibility against. A definition's
+            // locus spans its whole body, so this is the enclosing declaration rather than the
+            // thing under the cursor -- the opposite of the narrowing the lookup wants.
+            if (bContainsCursor)
+            {
+                if (AstNode.GetNodeType() == EAstNodeType::Definition_Function)
+                {
+                    Scope = &*static_cast<const CExprFunctionDefinition&>(AstNode)._Function;
+                    Locals.Empty();
+                }
+                else if (AstNode.GetNodeType() == EAstNodeType::Definition_Class)
+                {
+                    Scope = &static_cast<const CExprClassDefinition&>(AstNode)._Class;
+                    Locals.Empty();
+                }
+            }
+
+            // Anything declared earlier in the enclosing definition. Block scoping is not
+            // consulted: a local from a sibling `if` branch is offered too, which over-offers
+            // rather than hiding the name the author is reaching for.
+            if (AstNode.GetNodeType() == EAstNodeType::Definition_Data
+                && (Vst->Whence().BeginRow() < Row || (Vst->Whence().BeginRow() == Row && Vst->Whence().BeginColumn() < Column)))
+            {
+                Locals.AddUnique(&*static_cast<const CExprDataDefinition&>(AstNode)._DataMember);
+            }
+
+            // The receiver of a `.`, kept innermost-wins. Definition nodes span their bodies and
+            // so would swallow any cursor inside one; an error node's type is unknown by
+            // construction -- but its analysed children survive it, which is exactly what lets a
+            // half-typed member still name a receiver.
+            if (bContainsCursor && IsReceiverCandidate(AstNode.GetNodeType()))
+            {
+                Expr = &static_cast<const CExpressionBase&>(AstNode);
+            }
+        }
+        AstNode.VisitChildren(*this);
+    }
+
+    /// Everything but the containing contexts, the definitions and the error node is a
+    /// CExpressionBase, and the visitor only ever sees one node type per class.
+    static bool IsReceiverCandidate(uLang::EAstNodeType NodeType)
+    {
+        using namespace uLang;
+        return !IsDefinitionNode(NodeType)
+            && NodeType != EAstNodeType::Error_
+            && NodeType != EAstNodeType::Context_Project
+            && NodeType != EAstNodeType::Context_CompilationUnit
+            && NodeType != EAstNodeType::Context_Package
+            && NodeType != EAstNodeType::Context_Snippet
+            && NodeType != EAstNodeType::Definition_Module
+            && NodeType != EAstNodeType::Definition_Enum
+            && NodeType != EAstNodeType::Definition_Class;
+    }
+
+    FUtf8String Path;
+    uint32 Row;
+    uint32 Column;
+    const uLang::CExpressionBase* Expr{nullptr};
+    const uLang::CScope* Scope{nullptr};
+    TArray<const uLang::CDataDefinition*> Locals;
+    /// Whether this package holds the file at all. Without it the default scope would make every
+    /// other package answer with its own root module.
+    bool bSawPath{false};
+};
+
+/// Strips the wrappers a value picks up on its way out of a `var` member or an `option`, none of
+/// which have members of their own. `Position` reads as `^vector2`; what has an `X` is vector2.
+AUTORTFM_DISABLE const uLang::CNormalType* UnwrapToMemberBearingType(const uLang::CTypeBase* Type)
+{
+    using namespace uLang;
+    if (!Type)
+    {
+        return nullptr;
+    }
+    const CNormalType* Normal = &Type->GetNormalType();
+    for (int32 Depth = 0; Depth < 8; ++Depth)
+    {
+        if (const CPointerType* Pointer = Normal->AsNullable<CPointerType>())
+        {
+            Normal = &Pointer->PositiveValueType()->GetNormalType();
+        }
+        else if (const CReferenceType* Reference = Normal->AsNullable<CReferenceType>())
+        {
+            Normal = &Reference->PositiveValueType()->GetNormalType();
+        }
+        else if (const COptionType* Option = Normal->AsNullable<COptionType>())
+        {
+            Normal = &Option->GetValueType()->GetNormalType();
+        }
+        else
+        {
+            return Normal;
+        }
+    }
+    return Normal;
+}
+
+/// Fills one item from a definition, or returns false for a definition that is not a name the
+/// author could have written: the compiler generates a constructor and an archetype per class,
+/// and neither is spellable.
+AUTORTFM_DISABLE bool DescribeCompletion(const uLang::CDefinition& Definition, GodotVerse::FCompleteItem& OutItem)
+{
+    using namespace uLang;
+
+    if (Definition.GetName().IsNull())
+    {
+        return false;
+    }
+
+    if (const CDataDefinition* Data = Definition.AsNullable<CDataDefinition>())
+    {
+        OutItem.Kind = VH_LOOKUP_DATA;
+        OutItem.bIsVar = Data->IsVar();
+        if (const CTypeBase* Type = Data->GetType())
+        {
+            OutItem.Type = FULangConversionUtils::ULangStrToFUtf8String(Type->AsCode());
+        }
+    }
+    else if (const CFunction* Function = Definition.AsNullable<CFunction>())
+    {
+        if (Function->IsConstructor())
+        {
+            return false;
+        }
+        OutItem.Kind = VH_LOOKUP_FUNCTION;
+        OutItem.ParamCount = Function->_Signature.NumParams();
+        if (const CFunctionType* Type = Function->_Signature.GetFunctionType())
+        {
+            OutItem.Type = FULangConversionUtils::ULangStrToFUtf8String(Type->AsCode());
+        }
+    }
+    else if (Definition.AsNullable<CClass>())
+    {
+        OutItem.Kind = VH_LOOKUP_CLASS;
+    }
+    else if (Definition.AsNullable<CEnumeration>() || Definition.AsNullable<CEnumerator>())
+    {
+        OutItem.Kind = VH_LOOKUP_ENUM;
+    }
+    else if (Definition.AsNullable<CTypeAlias>())
+    {
+        OutItem.Kind = VH_LOOKUP_TYPE_ALIAS;
+    }
+    else if (Definition.AsNullable<CModule>() || Definition.AsNullable<CModuleAlias>())
+    {
+        OutItem.Kind = VH_LOOKUP_MODULE;
+    }
+    else
+    {
+        return false;
+    }
+
+    OutItem.Name = FUtf8String(Definition.AsNameCString());
+    OutItem.Owner = FUtf8String(Definition._EnclosingScope.GetScopeName().AsCString());
+    int32 UnusedColumn = -1;
+    FillLocation(Definition, OutItem.Path, OutItem.Line, UnusedColumn);
+    return true;
+}
+
+/// Adds every definition a scope declares that the cursor's scope is allowed to see.
+AUTORTFM_DISABLE void CollectScope(const uLang::CLogicalScope& From,
+                                   const uLang::CScope* AccessFrom,
+                                   TArray<GodotVerse::FCompleteItem>& OutItems)
+{
+    for (const uLang::TSRef<uLang::CDefinition>& Definition : From.GetDefinitions())
+    {
+        if (AccessFrom && !Definition->IsAccessibleFrom(*AccessFrom))
+        {
+            continue;
+        }
+        GodotVerse::FCompleteItem Item;
+        if (DescribeCompletion(*Definition, Item))
+        {
+            OutItems.Add(MoveTemp(Item));
+        }
+    }
+}
+
+/// A class and everything it inherits. An override is declared in both, so the subclass' copy
+/// wins by arriving first and the duplicate is dropped when the results are deduplicated.
+AUTORTFM_DISABLE void CollectClassAndSupers(const uLang::CClass& Class,
+                                            const uLang::CScope* AccessFrom,
+                                            TArray<GodotVerse::FCompleteItem>& OutItems)
+{
+    // An interface is a CClass too, so the same walk covers `class(a, b)` as well as a superclass
+    // chain; a diamond is dropped by the deduplication downstream rather than tracked here.
+    for (const uLang::CClass* Current = &Class; Current; Current = Current->GetSuperClass())
+    {
+        CollectScope(*Current, AccessFrom, OutItems);
+        for (const uLang::CClass* Interface : Current->_SuperInterfaces)
+        {
+            if (Interface)
+            {
+                CollectScope(*Interface, AccessFrom, OutItems);
+            }
+        }
+    }
+}
+
+} // namespace
+
+AUTORTFM_DISABLE bool GodotVerse::Complete(FUtf8StringView Path,
+                                           const FUtf8String& SourceText,
+                                           int32 Line,
+                                           int32 Column,
+                                           vh_complete_mode Mode,
+                                           TArray<FCompleteItem>& OutItems)
+{
+    OutItems.Empty();
+
+    if (!GIde.IsValid() || Line < 0 || Column < 0)
+    {
+        return false;
+    }
+
+    WaitForBackgroundCheck();
+
+    // The buffer is mid-edit, so this analysis reports what the author has not finished writing:
+    // discarding its diagnostics is the whole reason completion runs an analysis of its own rather
+    // than borrowing CheckProject's. The result is ignored for the same reason -- a buffer that
+    // does not analyse cleanly is the normal case here, and uLang keeps the sub-expressions it did
+    // analyse either way. Only a program with no AST at all is fatal, which the checks below catch.
+    if (!ProgramAlreadyDescribes(FUtf8String(Path), SourceText))
+    {
+        RunCheck(FUtf8String(Path), SourceText, [](const FSolDiagnostic&) {});
+    }
+
+    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
+    if (!BuildManager.IsValid())
+    {
+        return false;
+    }
+    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
+    if (!Program->_AstProject)
+    {
+        return false;
+    }
+
+    for (const uLang::CAstCompilationUnit* CompilationUnit : Program->_AstProject->OrderedCompilationUnits())
+    {
+        for (const uLang::CAstPackage* Package : CompilationUnit->Packages())
+        {
+            const bool bIsUserPackage = Package->_VerseScope == uLang::EVerseScope::PublicUser
+                || Package->_VerseScope == uLang::EVerseScope::InternalUser;
+            if (!bIsUserPackage || !Package->_RootModule || !Package->_RootModule->GetAstPackage())
+            {
+                continue;
+            }
+
+            // A file that declares nothing still sits in its package's root module, which is the
+            // scope a cursor at the top level of it completes in.
+            FCompletionVisitor Visitor(FUtf8String(Path), (uint32)Line, (uint32)Column, Package->_RootModule);
+            Package->_RootModule->GetAstPackage()->VisitChildren(Visitor);
+            if (!Visitor.bSawPath)
+            {
+                continue;
+            }
+
+            if (Mode == VH_COMPLETE_MEMBERS)
+            {
+                if (!Visitor.Expr)
+                {
+                    continue;
+                }
+                const uLang::CNormalType* Type = UnwrapToMemberBearingType(Visitor.Expr->GetResultType(*Program));
+                if (!Type)
+                {
+                    continue;
+                }
+                if (const uLang::CClass* Class = Type->AsNullable<uLang::CClass>())
+                {
+                    CollectClassAndSupers(*Class, Visitor.Scope, OutItems);
+                }
+                else if (const uLang::CEnumeration* Enumeration = Type->AsNullable<uLang::CEnumeration>())
+                {
+                    CollectScope(*Enumeration, Visitor.Scope, OutItems);
+                }
+                else if (const uLang::CModule* Module = Type->AsNullable<uLang::CModule>())
+                {
+                    CollectScope(*Module, Visitor.Scope, OutItems);
+                }
+            }
+            else
+            {
+                for (const uLang::CDataDefinition* Local : Visitor.Locals)
+                {
+                    FCompleteItem Item;
+                    if (DescribeCompletion(*Local, Item))
+                    {
+                        OutItems.Add(MoveTemp(Item));
+                    }
+                }
+
+                // Out through the enclosing class and its superclasses, then the modules above it,
+                // picking up each scope's `using` along the way -- which is where the whole
+                // mirrored Godot API enters, since a script reaches it through `using {/Godot.org/Godot}`.
+                for (const uLang::CScope* Current = Visitor.Scope; Current; Current = Current->GetParentScope())
+                {
+                    if (Current->GetKind() == uLang::CScope::EKind::Class)
+                    {
+                        CollectClassAndSupers(static_cast<const uLang::CClass&>(*Current), Visitor.Scope, OutItems);
+                    }
+                    else
+                    {
+                        CollectScope(Current->GetLogicalScope(), Visitor.Scope, OutItems);
+                    }
+                    for (const uLang::CLogicalScope* Using : Current->GetUsingScopes())
+                    {
+                        if (Using)
+                        {
+                            CollectScope(*Using, Visitor.Scope, OutItems);
+                        }
+                    }
+                }
+            }
+
+            if (!OutItems.IsEmpty())
+            {
+                // A name that is in scope twice -- an override, or a class member shadowing an
+                // imported one -- is one completion. The walk is ordered nearest-first, so the
+                // copy that survives is the one that would actually resolve.
+                TSet<FUtf8String> Seen;
+                OutItems.RemoveAll([&Seen](const FCompleteItem& Item) {
+                    bool bAlreadySeen = false;
+                    Seen.Add(Item.Name, &bAlreadySeen);
+                    return bAlreadySeen;
+                });
+                OutItems.Sort([](const FCompleteItem& Left, const FCompleteItem& Right) { return Left.Name < Right.Name; });
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+AUTORTFM_DISABLE bool GodotVerse::ClassMembers(FUtf8StringView ClassName, TArray<FCompleteItem>& OutItems)
+{
+    OutItems.Empty();
+
+    if (!GIde.IsValid())
+    {
+        return false;
+    }
+    WaitForBackgroundCheck();
+
+    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
+    if (!BuildManager.IsValid())
+    {
+        return false;
+    }
+    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
+
+    const FUtf8String ClassPath = FUtf8String(ScriptVersePath) + UTF8TEXT("/") + FUtf8String(ClassName);
+    const uLang::CClass* Class = Program->FindDefinitionByVersePath<uLang::CClass>(
+        FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath));
+    if (!Class)
+    {
+        return false;
+    }
+
+    // The class' own scope only. What it inherits is documented by the class that declares it,
+    // and for a mirrored Godot class that is Godot's own documentation rather than anything here.
+    CollectScope(*Class, nullptr, OutItems);
+    OutItems.Sort([](const FCompleteItem& Left, const FCompleteItem& Right) { return Left.Name < Right.Name; });
+    return true;
+}
+
+AUTORTFM_DISABLE bool GodotVerse::SignatureAt(FUtf8StringView Path,
+                                              const FUtf8String& SourceText,
+                                              int32 Line,
+                                              int32 Column,
+                                              FSignatureDesc& OutDesc)
+{
+    OutDesc = FSignatureDesc{};
+
+    if (!GIde.IsValid() || Line < 0 || Column < 0)
+    {
+        return false;
+    }
+
+    WaitForBackgroundCheck();
+    // Shares the analysis completion just paid for: the editor asks for both about one keystroke.
+    if (!ProgramAlreadyDescribes(FUtf8String(Path), SourceText))
+    {
+        RunCheck(FUtf8String(Path), SourceText, [](const FSolDiagnostic&) {});
+    }
+
+    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
+    if (!BuildManager.IsValid())
+    {
+        return false;
+    }
+    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
+    if (!Program->_AstProject)
+    {
+        return false;
+    }
+
+    // The callee resolves the way any other identifier does, so this reuses the lookup walk rather
+    // than the completion one: what is wanted is the definition at a position, not a scope.
+    FLookupVisitor Visitor(*Program, FUtf8String(Path), (uint32)Line, (uint32)Column);
+    for (const uLang::CAstCompilationUnit* CompilationUnit : Program->_AstProject->OrderedCompilationUnits())
+    {
+        for (const uLang::CAstPackage* Package : CompilationUnit->Packages())
+        {
+            const bool bIsUserPackage = Package->_VerseScope == uLang::EVerseScope::PublicUser
+                || Package->_VerseScope == uLang::EVerseScope::InternalUser;
+            if (!bIsUserPackage || !Package->_RootModule || !Package->_RootModule->GetAstPackage())
+            {
+                continue;
+            }
+            Package->_RootModule->GetAstPackage()->VisitChildren(Visitor);
+        }
+    }
+
+    const uLang::CFunction* Function = Visitor.Found ? Visitor.Found->AsNullable<uLang::CFunction>() : nullptr;
+    if (!Function)
+    {
+        return false;
+    }
+
+    OutDesc.Name = FUtf8String(Function->AsNameCString());
+    if (const uLang::CFunctionType* Type = Function->_Signature.GetFunctionType())
+    {
+        OutDesc.Result = FULangConversionUtils::ULangStrToFUtf8String(Type->GetReturnType().AsCode());
+    }
+
+    for (const uLang::CDataDefinition* Param : Function->_Signature.GetParams())
+    {
+        FCompleteItem Item;
+        if (Param && DescribeCompletion(*Param, Item))
+        {
+            OutDesc.Params.Add(MoveTemp(Item));
         }
     }
     return true;

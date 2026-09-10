@@ -48,7 +48,8 @@ exports_probe := class(node2d):
     # (a field cannot be written on its own -- see emit_property), and the scalar shape.
     Probe<public>():void =
         if (IsInstanceValid()?):
-            set Position = vector2{X := Position.X + 1.0, Y := Position.Y}
+            Shifted := Position.X + 1.0
+            set Position = vector2{X := Shifted, Y := Position.Y}
             set Rotation = Rotation + 1.0
 
     # PhysicsUpdate rather than Ready, which the module-shaped fixture already defines at the top

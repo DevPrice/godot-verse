@@ -110,6 +110,9 @@ struct FLookupDesc
     FUtf8String Owner;
     vh_lookup_kind Kind{VH_LOOKUP_UNKNOWN};
     bool bIsVar{false};
+    /// A parameter of the function that declares it. It has no documentation of its own: its
+    /// source line is the line the whole function is declared on.
+    bool bIsParameter{false};
     /// The cursor was on the definition itself, not on a reference to it.
     bool bIsDefinition{false};
     /// The definition this one immediately overrides, if any. An override cannot rename, so its
@@ -129,6 +132,67 @@ struct FLookupDesc
 /// Only ever valid on an analysis-only program. Code generation replaces a definition's AST node
 /// with an IR node, and the accessors this walks assert rather than fall back.
 AUTORTFM_DISABLE bool LookupSymbol(FUtf8StringView Path, int32 Line, int32 Column, FLookupDesc& OutDesc);
+
+/// One name completion could offer, described the way FLookupDesc describes a definition minus
+/// the location -- completion says what a name is, not where it was written.
+struct FCompleteItem
+{
+    FUtf8String Name;
+    FUtf8String Type;
+    FUtf8String Owner;
+    /// Where it was declared, empty and -1 for a definition with no source behind it. Carried so
+    /// a consumer can find the comment block above a name it is offering or documenting.
+    FUtf8String Path;
+    int32 Line{-1};
+    vh_lookup_kind Kind{VH_LOOKUP_UNKNOWN};
+    bool bIsVar{false};
+    /// Parameters declared, or -1 for anything that is not a function.
+    int32 ParamCount{-1};
+};
+
+/// The parameters of one function, for an editor's argument hint.
+struct FSignatureDesc
+{
+    FUtf8String Name;
+    FUtf8String Result;
+    TArray<FCompleteItem> Params;
+};
+
+/// Lists what could be written at Line/Column of Path, with that file's text replaced by
+/// SourceText -- the members of the expression there, or everything its scope admits.
+///
+/// Runs its own analysis rather than reading whatever the last one left, because the buffer
+/// completion is asked about is mid-edit by definition and no analysis of it exists yet. That
+/// analysis' diagnostics are discarded: they describe a half-written line. It does not have to
+/// succeed -- uLang keeps the analysed children of an expression it could not analyse, which is
+/// what lets `Position.` still name vector2 as the receiver.
+///
+/// Leaves the IDE holding SourceText as that file's text, so any analysis a caller was relying on
+/// for LookupSymbol is spent once this has run.
+/// Every member ClassName declares itself, read off the semantic program the last analysis left.
+/// Broader than GetClassExports -- methods included, `@editable` not required -- because this
+/// exists to become documentation rather than an inspector.
+///
+/// False means the class is not in the analysed program at all.
+AUTORTFM_DISABLE bool ClassMembers(FUtf8StringView ClassName, TArray<FCompleteItem>& OutItems);
+
+/// The function called at Line/Column of Path, with that file's text replaced by SourceText, and
+/// its parameters. Line/Column name the callee's last byte rather than the cursor: the argument
+/// list being typed does not analyse, so there is nothing at the cursor to resolve.
+///
+/// Analyses the buffer and spends the caller's analysis exactly as Complete does.
+AUTORTFM_DISABLE bool SignatureAt(FUtf8StringView Path,
+                                  const FUtf8String& SourceText,
+                                  int32 Line,
+                                  int32 Column,
+                                  FSignatureDesc& OutDesc);
+
+AUTORTFM_DISABLE bool Complete(FUtf8StringView Path,
+                               const FUtf8String& SourceText,
+                               int32 Line,
+                               int32 Column,
+                               vh_complete_mode Mode,
+                               TArray<FCompleteItem>& OutItems);
 
 /// Reads one data member off a live instance into the ABI's value shape.
 ///

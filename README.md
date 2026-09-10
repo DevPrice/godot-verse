@@ -270,10 +270,31 @@ around it. The definition's line is already known, the file's text is already to
 walking up from that line while the lines are comments needs none of that.
 
 A definition answers at its own name too, so hovering `Ready` where it is declared describes it
-rather than declining. That needs the locus narrowed: a definition's own span runs from its first
-attribute to the end of its body, and matching against that would resolve every blank column
-inside a function to the function. The name sits in the definition's first VST child, which is
-tight enough to mean the author pointed at it.
+rather than declining. That needs the locus narrowed all the way down to the name. A definition's
+own span runs from its first attribute to the end of its body, so matching against that would
+resolve every blank column inside a function to the function — but narrowing to its first VST
+child is not enough either: for `PhysicsUpdate<override>(Delta:float):void` that child still
+covers the specifier, the parameter list and the return type. None of those means "this
+definition", and hovering any of them used to describe the method. So the narrowing descends the
+leading edge of the tree — a type spec's first child is what is being typed, a call's is the
+callee — until it reaches the identifier, whose own locus excludes the attributes, which hang off
+its Aux rather than its children.
+
+What that leaves is exact: `<public>` and `<override>` resolve to nothing and so show no tooltip
+at all, which is right, because an access specifier is not a definition and this project has no
+documentation of Verse's own to offer for one.
+
+**A parameter is described by itself, not by the method it belongs to.** It is not in the AST the
+walk covers — analysis moves parameters onto the function's signature and leaves only their types
+behind — so they are asked of the enclosing function instead, after the walk, which is also the
+only place the cursor can be for one to matter.
+
+Where it is *declared*, though, the editor shows nothing at all, which is what GDScript does: the
+declaration is the line the cursor is already on, so there is nowhere to jump and nothing to say
+that the line does not. And a parameter carries no prose anywhere, because its source line is the
+line its whole function is declared on — the comment block "above" it is the function's, so
+reading one would describe an argument with the method's documentation. The host reports which
+definitions are parameters rather than leaving that to be guessed from the scope.
 
 **An override is documented by what it overrides.** `Ready<override>()` in a script has nothing
 to say about itself, so the lookup carries the definition it overrides alongside the one under the
@@ -313,22 +334,42 @@ Two things make that safe rather than merely possible.
   the caller, and `vh_compile_project` now ends by re-analysing what it just built, so a symbol
   resolves on the first hover of a session rather than only after the first edit.
 
-The result is reported as one of Godot's two *local* lookup results, which is not where it looks
-like it belongs. `SCRIPT_LOCATION` is the honest label and it jumps correctly, but the tooltip
-path drops it in a `// Nothing to do.` branch and shows nothing at all; the `CLASS_*` types do
-produce a tooltip, by routing into Godot's own class documentation, which has nothing to say
-about a Verse definition. `LOCAL_VARIABLE` and `LOCAL_CONSTANT` are the only pair that both jump
-and describe — the click path never reads `type`, it jumps on `location` alone as long as
-`class_name` is empty, so leaving that key unset is load-bearing. Verse's `var` split maps onto
-the two exactly.
+A local or a parameter is reported as one of Godot's two *local* lookup results, which is not
+where it looks like it belongs. `SCRIPT_LOCATION` is the honest label and it jumps correctly, but
+the tooltip path drops it in a `// Nothing to do.` branch and shows nothing at all. `LOCAL_VARIABLE`
+and `LOCAL_CONSTANT` are the only results that carry a description and a type straight off the
+lookup, rather than going to documentation for them — the click path never reads `type`, it jumps
+on `location` alone as long as `class_name` is empty, so leaving that key unset is load-bearing.
+Verse's `var` split maps onto the two exactly.
+
+**A member of the script's own class is a property, not a local.** Godot has the right labels —
+`CLASS_PROPERTY` and `CLASS_METHOD` — but they cost something: they describe the symbol out of
+*documentation* rather than out of the lookup result, so naming one without registering any leaves
+the tooltip saying "Property" and nothing else. So the script registers its own, out of
+`vh_class_members` and the comment blocks above each member, and the tooltip gets the label and
+the prose both.
+
+Naming the class is also what would normally divert ctrl+click into the help viewer instead of
+jumping. It does not here, and the reason is one flag: Godot diverts only for a class whose
+documentation is *not* a script doc, and `is_script_doc` is settable through the dictionary a
+GDExtension language returns. GDScript relies on exactly the same thing.
+
+The cost is at startup. Godot loads every file of a language that supports documentation during
+the editor's filesystem scan, and loading a `.verse` builds the project — so the host now boots
+when the project is opened rather than when the first script is. For a project whose scene already
+runs Verse that is the same work moved earlier; for one where nothing does, it is new. Setting
+`_supports_documentation` back to `false` gives the old startup and the old "Local Variable" label
+together; there is no way to have one without the other.
 
 **A name from the mirrored API resolves to Godot's own documentation instead.** Ctrl+clicking
 `node2d`, `Position` or `GetChild` opens the class reference for `Node2D`, `Node2D.position` or
 `Node.get_child`, and hovering any of them shows the description Godot already ships. A mirrored
 property arrives as a `var` like any `@editable` member, so the routing keys off the *owner* —
-only a mirrored class appears in the table. `vector2`, `vector3` and `color` are in it too: they
-are Godot builtins that happen to be hand-written in `GodotApi.native.verse` rather than
-generated, and without an entry the editor calls them local constants. Nothing here writes that
+only a mirrored class appears in the table. `vector2`, `vector3` and `color` are in it too, and so
+are their fields: they are Godot builtins that happen to be hand-written in
+`GodotApi.native.verse` rather than generated, and without an entry the editor calls them local
+constants and the `X` of `Position.X` does nothing at all when clicked — it resolves fine, but to
+a definition in the engine tree, which has no `res://` file to jump to. Nothing here writes that
 prose: both paths key off `class_name`, which is precisely the key that diverts the click away from a jump
 and into the help viewer, and which the tooltip uses to fetch the description out of the same doc
 data. There is nothing to jump to anyway — the generated API is compiled from the engine tree,
@@ -384,12 +425,70 @@ name colours as the class, and a type alias or a nested class is not in the set,
 plain text. Those are the cases where the next step is the scope-aware name set the analysis
 could hand over per file.
 
-**Completion offers the same two name sets, plus the reserved words.** It is coarse for the same
-reason and to the same extent: which names are in scope at a point, and what a value's members
-are, are questions only the compiler can answer, and only about text it has already analysed.
-Completing on a bare cursor is declined — offering the whole mirrored API as one undifferentiated
-list is not help — so an option appears once at least one character has been typed, and the
-prefix is filtered here rather than handed over in full for Godot to filter after paying for it.
+**Completion comes from the compiler, including after a `.`.** `vh_complete_symbol` answers two
+questions off the semantic program: the members of the expression at a position, and every name a
+scope there admits — the locals declared above the cursor, the enclosing class and its
+superclasses, and each scope's `using`, which is how the whole mirrored Godot API arrives. So
+`Position.` offers `X` and `Y` and nothing else, `Self.` offers the script's own methods beside
+`node2d`'s properties and `node`'s methods two classes up, and a bare identifier offers what is
+actually in scope rather than a list of every class that exists.
+
+Completion is only ever asked about text that does not compile: the member being typed does not
+exist yet. Two things make that answerable.
+
+- **The receiver survives an expression that fails.** uLang's `CExprError` holds onto its analysed
+  children precisely so that a well-formed sub-expression is still usable inside a parent that is
+  not, so `Position.` — a syntax error — still has `Position` in the tree with its type on it.
+  That is why the position handed over is the *receiver's* last byte and not the cursor's: the
+  cursor is on a name that resolves to nothing by construction.
+- **It runs its own analysis, and throws the diagnostics away.** There is no moment at which an
+  analysis of half-typed text already exists, so `vh_complete_symbol` takes the buffer the way
+  `vh_check_project` does and analyses it. Its errors describe a line the author is in the middle
+  of writing and are discarded rather than reported.
+
+That analysis costs the same ~100ms a validate does, and Godot re-asks on every keystroke while
+the box is open. What makes that affordable is that the buffer handed over has the half-typed
+identifier replaced by a fixed placeholder, so every prefix of one identifier is the same
+question and the whole of a completion context is one analysis. Substituting rather than deleting
+is deliberate: `set X = ` is a parse error that can take the enclosing function's AST down with
+it, while an identifier nothing defines costs one diagnostic nobody sees.
+
+A call is completed with its brackets, and where the caret lands depends on whether there is
+anything to type between them: a function with parameters inserts only the opening bracket, so
+CodeEdit's brace completion closes it and leaves the caret inside, while one without inserts the
+pair and leaves the caret past it. That is GDScript's rule exactly, ellipsis in the displayed name
+and all, and it needs the parameter count to reach the editor with each completion item.
+
+The class-name and keyword sets are still offered alongside, for a bare identifier only. They
+cover what a scope walk cannot: a class the file has not brought into view, and the reserved
+words, which are not definitions at all. Completing on a bare cursor with no `.` before it is
+still declined — offering the whole mirrored API as one undifferentiated list is not help — but
+after a `.` there is no such worry, because the member set is bounded by the receiver's type.
+
+**A call shows its arguments while you write them.** `vh_signature_at` reports the parameters of
+the function being called, and the editor draws them above the caret with the argument the cursor
+is in highlighted — the same hint GDScript gives, spelled the way Verse declares it:
+`GetChild(Index:int):object`, not the return type first.
+
+Finding the callee is text work rather than compiler work: the scan walks back from the cursor,
+closing brackets as it goes so a nested call's arguments do not read as the outer call's, and
+stops at the first `(` or `[` nothing closed. That bracket's callee is the identifier ending just
+before it. Counting the commas after it, again at depth zero, is which argument the cursor is in.
+The position handed to the host is the callee's last byte, for exactly the reason members use the
+receiver's: the arguments under construction do not analyse.
+
+The hint is asked for before the options are, because the interesting moment — right after the
+`(` — is a cursor with nothing typed, which is where completion itself declines. Both questions
+are asked about one buffer, and the host answers the second off the first one's analysis: it
+remembers which text the program it holds was built from and skips re-analysing when it matches.
+
+**Completion spends the analysis a hover was relying on.** Leaving the host holding the
+completion buffer is the price of analysing it, and every locus `vh_lookup_symbol` would then
+report describes text with a placeholder spliced into it. So the language drops its record of
+what the host holds for that file, which makes the lookup decline until the next validate
+re-analyses. It also settles any analysis already in flight *before* asking, because one
+finishing afterwards would be reaped later and recorded as the text the host holds — which by
+then it would not be.
 
 ## Editor tooling
 

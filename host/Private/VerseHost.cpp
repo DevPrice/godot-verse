@@ -34,6 +34,26 @@ FUtf8StringView Cstr(const char* Text)
     return Text ? FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(Text)) : FUtf8StringView();
 }
 
+/// Points a vh_complete_item at an FCompleteItem's strings. The item borrows them, so whichever
+/// array holds the source must outlive the descriptor array -- which is why both are static at
+/// every call site.
+vh_complete_item ToCompleteItem(const GodotVerse::FCompleteItem& Item)
+{
+    return vh_complete_item{
+        reinterpret_cast<const char*>(*Item.Name),
+        Item.Name.Len(),
+        reinterpret_cast<const char*>(*Item.Type),
+        Item.Type.Len(),
+        reinterpret_cast<const char*>(*Item.Owner),
+        Item.Owner.Len(),
+        reinterpret_cast<const char*>(*Item.Path),
+        Item.Path.Len(),
+        Item.Line,
+        (int32_t)Item.Kind,
+        Item.bIsVar ? 1 : 0,
+        Item.ParamCount};
+}
+
 } // namespace
 
 extern "C" int32_t vh_abi_version(void)
@@ -476,6 +496,7 @@ extern "C" int32_t vh_lookup_symbol(const char* PathUtf8, int32_t Line, int32_t 
         Lookup.Owner.Len(),
         (int32_t)Lookup.Kind,
         Lookup.bIsVar ? 1 : 0,
+        Lookup.bIsParameter ? 1 : 0,
         Lookup.bIsDefinition ? 1 : 0,
         reinterpret_cast<const char*>(*Lookup.OverriddenOwner),
         Lookup.OverriddenOwner.Len(),
@@ -483,6 +504,128 @@ extern "C" int32_t vh_lookup_symbol(const char* PathUtf8, int32_t Line, int32_t 
         Lookup.OverriddenPath.Len(),
         Lookup.OverriddenLine,
         Lookup.OverriddenColumn};
+
+    *OutResult = &Desc;
+    return VH_OK;
+}
+
+extern "C" int32_t vh_complete_symbol(const char* PathUtf8,
+                                      const char* SourceUtf8,
+                                      int32_t Line,
+                                      int32_t Column,
+                                      int32_t Mode,
+                                      const vh_complete_item** OutItems,
+                                      int32_t* OutCount)
+{
+    if (!PathUtf8 || !SourceUtf8 || !OutItems || !OutCount)
+    {
+        return VH_ERR_ABI;
+    }
+    *OutItems = nullptr;
+    *OutCount = 0;
+
+    if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+    if (Mode != VH_COMPLETE_MEMBERS && Mode != VH_COMPLETE_SCOPE)
+    {
+        return VH_ERR_ABI;
+    }
+
+    // Static for the same reason vh_lookup_symbol's descriptor is: the ABI promises the strings
+    // outlive the call, and the items only point at the harvest's.
+    static TArray<GodotVerse::FCompleteItem> Items;
+    static TArray<vh_complete_item> Descs;
+
+    if (!GodotVerse::Complete(Cstr(PathUtf8), FUtf8String(Cstr(SourceUtf8)), Line, Column, (vh_complete_mode)Mode, Items))
+    {
+        return VH_ERR_NOT_FOUND;
+    }
+
+    Descs.Reset(Items.Num());
+    for (const GodotVerse::FCompleteItem& Item : Items)
+    {
+        Descs.Add(ToCompleteItem(Item));
+    }
+
+    *OutItems = Descs.GetData();
+    *OutCount = Descs.Num();
+    return VH_OK;
+}
+
+extern "C" int32_t vh_class_members(const char* ClassNameUtf8, const vh_complete_item** OutItems, int32_t* OutCount)
+{
+    if (!ClassNameUtf8 || !OutItems || !OutCount)
+    {
+        return VH_ERR_ABI;
+    }
+    *OutItems = nullptr;
+    *OutCount = 0;
+
+    if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+
+    static TArray<GodotVerse::FCompleteItem> Members;
+    static TArray<vh_complete_item> MemberDescs;
+
+    if (!GodotVerse::ClassMembers(Cstr(ClassNameUtf8), Members))
+    {
+        return VH_ERR_NOT_FOUND;
+    }
+
+    MemberDescs.Reset(Members.Num());
+    for (const GodotVerse::FCompleteItem& Member : Members)
+    {
+        MemberDescs.Add(ToCompleteItem(Member));
+    }
+
+    *OutItems = MemberDescs.GetData();
+    *OutCount = MemberDescs.Num();
+    return VH_OK;
+}
+
+extern "C" int32_t vh_signature_at(const char* PathUtf8,
+                                   const char* SourceUtf8,
+                                   int32_t Line,
+                                   int32_t Column,
+                                   const vh_signature_desc** OutResult)
+{
+    if (!PathUtf8 || !SourceUtf8 || !OutResult)
+    {
+        return VH_ERR_ABI;
+    }
+    *OutResult = nullptr;
+
+    if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+
+    static GodotVerse::FSignatureDesc Signature;
+    static TArray<vh_complete_item> ParamDescs;
+    static vh_signature_desc Desc;
+
+    if (!GodotVerse::SignatureAt(Cstr(PathUtf8), FUtf8String(Cstr(SourceUtf8)), Line, Column, Signature))
+    {
+        return VH_ERR_NOT_FOUND;
+    }
+
+    ParamDescs.Reset(Signature.Params.Num());
+    for (const GodotVerse::FCompleteItem& Param : Signature.Params)
+    {
+        ParamDescs.Add(ToCompleteItem(Param));
+    }
+
+    Desc = vh_signature_desc{
+        reinterpret_cast<const char*>(*Signature.Name),
+        Signature.Name.Len(),
+        reinterpret_cast<const char*>(*Signature.Result),
+        Signature.Result.Len(),
+        ParamDescs.GetData(),
+        ParamDescs.Num()};
 
     *OutResult = &Desc;
     return VH_OK;

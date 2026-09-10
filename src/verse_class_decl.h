@@ -15,6 +15,9 @@ struct VerseClassDecl {
 	std::string base;
 	bool is_global = false;
 	bool is_abstract = false;
+	// Zero-based row the declaration is on, or -1 when there is none. The comment block above it
+	// is the class' documentation, and finding that block needs the row.
+	int line = -1;
 };
 
 // Scans for the first top-level `name := class(base):` and the attributes directly above it.
