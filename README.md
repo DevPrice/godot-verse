@@ -283,6 +283,21 @@ retract a line, and an error the author already undid would sit in it for the re
 The log is written from the two places that are authoritative for the current text: a validate the
 cache answered, and the frame a fresh analysis lands on.
 
+**A landed analysis asks the editor to look again.** "Replaced on the next validate" is only true
+if there *is* a next validate, and Godot has no reason of its own to run one: it validates when the
+text changes and then stops. Fix the last error and the sequence is idle timer fires, we answer
+from the analysis before the fix, the fresh analysis lands 100ms later with nothing to report --
+and no one asks. The line stays underlined, the error bar stays red, and both clear only when the
+author types the next character. So the frame that lands a result whose diagnostics differ from the
+previous one asks the script editor to validate again. `CodeTextEditor::validate_script` is the
+signal its own idle timer emits for exactly this, and `CodeTextEditor` is reachable because the
+`CodeEdit` that `ScriptEditorBase::get_base_editor` hands out is its child. Neither is in the
+extension API, so the extension checks for the signal rather than assuming it: an engine build that
+moves it costs the stale underline back, not a crash. Only the visible editor is asked -- Godot
+validates a script when its tab is opened, so the rest come back current on their own. The ask is
+made from `_frame` rather than from the poll itself, because completion also reaps analyses, and
+re-entering the editor's validate from there would rebuild its error list mid-popup.
+
 **Saving does not block on it either.** Saving is where a script's validity and its export list
 are decided, so the answer has to be about the text being saved rather than the one before it --
 but waiting for that is a ~100ms freeze on every Ctrl+S, which is exactly the hitch GDScript does

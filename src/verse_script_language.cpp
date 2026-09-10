@@ -17,6 +17,12 @@
 #include <godot_cpp/core/memory.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
+#ifdef TOOLS_ENABLED
+#include <godot_cpp/classes/editor_interface.hpp>
+#include <godot_cpp/classes/script_editor.hpp>
+#include <godot_cpp/classes/script_editor_base.hpp>
+#endif
+
 #include <algorithm>
 #include <iterator>
 
@@ -140,6 +146,61 @@ String verse_base_class_for(const String &p_godot_class) {
 	}
 	return String("node");
 }
+
+String formatted_diagnostic(const Dictionary &p_error) {
+	return String(p_error["path"]) + ":" + String::num_int64((int64_t)p_error["line"]) + ":"
+			+ String::num_int64((int64_t)p_error["column"]) + ": " + String(p_error["message"]);
+}
+
+// Every diagnostic in one comparable list. Dictionary's own == is reference equality, so telling
+// one analysis' results from the next means flattening them.
+PackedStringArray flattened_diagnostics(const Dictionary &p_errors_by_path) {
+	PackedStringArray flattened;
+	const Array paths = p_errors_by_path.keys();
+	for (int64_t i = 0; i < paths.size(); i++) {
+		const TypedArray<Dictionary> errors = p_errors_by_path[paths[i]];
+		for (int64_t e = 0; e < errors.size(); e++) {
+			flattened.push_back(formatted_diagnostic(errors[e]));
+		}
+	}
+	return flattened;
+}
+
+#ifdef TOOLS_ENABLED
+
+// Godot validates a script when its text changes and not once more after the author stops typing.
+// A result that arrives from a background analysis therefore has no way onto the screen: the
+// error list, the error bar and the marked line all keep describing the buffer as it was one
+// analysis ago, so an error the author has already fixed stays underlined until they type again.
+// This asks for the one more validate.
+//
+// `validate_script` is the signal CodeTextEditor's own idle timer emits to ask for exactly that,
+// and CodeTextEditor is reachable because the CodeEdit ScriptEditorBase hands out is its child.
+// Neither is in the extension API, so both are checked rather than assumed: a build that moves
+// them costs the stale underline back, not a crash.
+//
+// Only the visible editor is asked. Godot validates a script when its tab is opened, so the rest
+// come back current on their own.
+void revalidate_current_script_editor() {
+	EditorInterface *editor_interface = EditorInterface::get_singleton();
+	if (editor_interface == nullptr) {
+		return;
+	}
+
+	ScriptEditor *script_editor = editor_interface->get_script_editor();
+	if (script_editor == nullptr || Object::cast_to<VerseScript>(script_editor->get_current_script().ptr()) == nullptr) {
+		return;
+	}
+
+	ScriptEditorBase *current = script_editor->get_current_editor();
+	Control *code_edit = current != nullptr ? current->get_base_editor() : nullptr;
+	Node *code_text_editor = code_edit != nullptr ? code_edit->get_parent() : nullptr;
+	if (code_text_editor != nullptr && code_text_editor->has_signal("validate_script")) {
+		code_text_editor->emit_signal("validate_script");
+	}
+}
+
+#endif
 
 } // namespace
 
@@ -1249,6 +1310,17 @@ void VerseScriptLanguage::_frame() {
 	VerseRuntime *runtime = get_runtime();
 	if (runtime != nullptr && runtime->is_host_loaded()) {
 		poll_check();
+
+#ifdef TOOLS_ENABLED
+		// Deliberately here rather than in poll_check: settle_checks reaps an analysis from the
+		// middle of a completion request, and re-entering the script editor's validate from there
+		// would rebuild its error list while it is drawing a popup.
+		if (diagnostics_changed) {
+			diagnostics_changed = false;
+			revalidate_current_script_editor();
+		}
+#endif
+
 		runtime->tick(frame_budget_ms / 1000.0);
 	}
 }
@@ -1488,7 +1560,7 @@ void VerseScriptLanguage::poll_check() const {
 	if (runtime->poll_check_project(&errors_by_globalized)) {
 		// Only now does the host hold this text, so only now may a validate answer from cache.
 		analyzed_source_by_path[in_flight_path] = in_flight_source;
-		record_diagnostics(errors_by_globalized);
+		diagnostics_changed = record_diagnostics(errors_by_globalized) || diagnostics_changed;
 
 		// This is the authoritative moment for the file that was analysed, and the only one a
 		// validate is not guaranteed to follow, so the log is written from here.
@@ -1512,7 +1584,9 @@ void VerseScriptLanguage::poll_check() const {
 	start_pending_check();
 }
 
-void VerseScriptLanguage::record_diagnostics(const Dictionary &p_errors_by_globalized) const {
+bool VerseScriptLanguage::record_diagnostics(const Dictionary &p_errors_by_globalized) const {
+	const PackedStringArray previous = flattened_diagnostics(diagnostics_by_path);
+
 	diagnostics_by_path.clear();
 
 	const Array reported = p_errors_by_globalized.keys();
@@ -1531,6 +1605,8 @@ void VerseScriptLanguage::record_diagnostics(const Dictionary &p_errors_by_globa
 		}
 		diagnostics_by_path[path] = errors;
 	}
+
+	return flattened_diagnostics(diagnostics_by_path) != previous;
 }
 
 // Godot re-validates the edited buffer on an idle timer and again on save, so one compile error
@@ -1539,8 +1615,7 @@ void VerseScriptLanguage::record_diagnostics(const Dictionary &p_errors_by_globa
 void VerseScriptLanguage::log_new_diagnostics(const String &p_globalized_path, const TypedArray<Dictionary> &p_errors) const {
 	PackedStringArray formatted;
 	for (int64_t i = 0; i < p_errors.size(); i++) {
-		Dictionary error = p_errors[i];
-		formatted.push_back(String(error["path"]) + String(":") + String::num_int64((int64_t)error["line"]) + String(":") + String::num_int64((int64_t)error["column"]) + String(": ") + String(error["message"]));
+		formatted.push_back(formatted_diagnostic(p_errors[i]));
 	}
 
 	if (logged_diagnostics.has(p_globalized_path) && PackedStringArray(logged_diagnostics[p_globalized_path]) == formatted) {

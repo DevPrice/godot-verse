@@ -247,8 +247,14 @@ private:
 	mutable godot::Dictionary logged_diagnostics;
 
 	// Replaces diagnostics_by_path with one analysis' results. Analysis covers the whole project,
-	// so a file absent from the result has no errors and must lose any it had.
-	void record_diagnostics(const godot::Dictionary &p_errors_by_globalized) const;
+	// so a file absent from the result has no errors and must lose any it had. Returns whether
+	// anything the editor draws actually moved.
+	bool record_diagnostics(const godot::Dictionary &p_errors_by_globalized) const;
+
+	// Set by an analysis whose results differ from the last one's, cleared by the _frame that
+	// asks the script editor to validate again. Godot has no reason of its own to re-ask once the
+	// author stops typing, so without this an error survives its own fix on screen.
+	mutable bool diagnostics_changed = false;
 
 	void log_new_diagnostics(const godot::String &p_globalized_path, const godot::TypedArray<godot::Dictionary> &p_errors) const;
 
