@@ -909,7 +909,17 @@ void VerseScriptLanguage::record_diagnostics(const Dictionary &p_errors_by_globa
 	for (int64_t i = 0; i < reported.size(); i++) {
 		const String globalized = reported[i];
 		const String path = path_by_globalized.has(globalized) ? String(path_by_globalized[globalized]) : globalized;
-		diagnostics_by_path[path] = p_errors_by_globalized[globalized];
+		const TypedArray<Dictionary> errors = p_errors_by_globalized[globalized];
+
+		// The host reports the absolute path it was handed, but the script editor compares an
+		// error's path against the *script's* -- `res://scripts/mover.verse` -- and moves every
+		// error that does not match into its depended-errors list. Those are listed but never
+		// marked: the line highlight and the error bar both read the list this filters.
+		for (int64_t e = 0; e < errors.size(); e++) {
+			Dictionary error = errors[e];
+			error["path"] = path;
+		}
+		diagnostics_by_path[path] = errors;
 	}
 }
 

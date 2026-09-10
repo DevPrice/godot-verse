@@ -250,6 +250,13 @@ implementation that will run, and sending *that* to the parent would be wrong ra
 unhelpful, so the host reports whether the cursor was on a definition and only fills the override
 in that case.
 
+**An error marks its line**, in the gutter, the error bar and the line background. That is all
+Godot's, but it hinges on one detail: `ScriptTextEditor::_validate_script` moves every error whose
+path is not exactly the script's own — `res://scripts/mover.verse` — into a separate
+depended-errors list, which is *listed* but never marked. The host reports the absolute path it
+was handed, so diagnostics are rewritten to the `res://` path they came from before they reach
+Godot. Both the compile and the analysis path go through one function, so both mark.
+
 Two things make that safe rather than merely possible.
 
 - **A stale answer is refused rather than shown.** Diagnostics can lag the buffer by one analysis
