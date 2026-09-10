@@ -34,6 +34,39 @@ String newline_normalized(const String &p_source) {
 	return p_source.replace("\r\n", "\n").replace("\r", "\n");
 }
 
+// The run of comment lines immediately above p_line, with the delimiters taken off so a hover
+// shows prose rather than syntax. Verse has no doc-comment form of its own, so this is the whole
+// convention: whatever precedes a definition documents it.
+//
+// Read out of the source rather than asked of the compiler. The parser does keep comments, but it
+// hangs one off whichever node begins the construct, and for a member behind four lines of
+// `@editable` and friends that is the attribute clause rather than the member -- so recovering
+// the association costs more Vst archaeology than re-reading four lines of text.
+//
+// A `<# #>` block contributes only the lines that open with its delimiter; a continuation line
+// reads as ordinary text and stops the walk, which is the conservative direction to be wrong in.
+String doc_comment_above(const String &p_source, int64_t p_line) {
+	const PackedStringArray lines = p_source.split("\n");
+	PackedStringArray collected;
+
+	for (int64_t i = p_line - 1; i >= 0 && i < lines.size(); i--) {
+		String line = lines[i].strip_edges();
+		if (line.begins_with("<#>")) {
+			line = line.substr(3);
+		} else if (line.begins_with("<#")) {
+			line = line.substr(2).trim_suffix("#>");
+		} else if (line.begins_with("#")) {
+			line = line.substr(1);
+		} else {
+			break;
+		}
+		collected.push_back(line.strip_edges());
+	}
+
+	collected.reverse();
+	return String("\n").join(collected).strip_edges();
+}
+
 const char *mirrored_class(const String &p_godot_class) {
 	for (size_t i = 0; i < std::size(verse_api::classes); i++) {
 		if (p_godot_class == verse_api::classes[i].godot_name) {
@@ -366,23 +399,33 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 	const String definition_path = found["path"];
 	if (definition_line < 0 || definition_path.is_empty()) {
 		// A definition from the generated Godot API or Verse's own library: it describes, but
-		// there is no file in the project to open.
-		return result;
-	}
-
-	if (definition_path == globalized) {
-		result["location"] = definition_line + 1;
+		// there is no file in the project to open or to read a comment out of.
 		return result;
 	}
 
 	// A location with no script beside it is read as a line in the file being edited, so a
-	// cross-file definition we cannot name is left without one rather than jumping somewhere
-	// wrong in the current file.
-	const String definition_res_path = path_by_globalized.get(definition_path, String());
-	if (!definition_res_path.is_empty()) {
-		result["location"] = definition_line + 1;
+	// cross-file definition we cannot name gets no location at all rather than a jump to that
+	// line of the wrong file.
+	const bool same_file = definition_path == globalized;
+	const String definition_res_path = same_file ? p_path : String(path_by_globalized.get(definition_path, String()));
+	if (definition_res_path.is_empty()) {
+		return result;
+	}
+
+	result["location"] = definition_line + 1;
+	if (!same_file) {
 		result["script"] = ResourceLoader::get_singleton()->load(definition_res_path);
 		result["script_path"] = definition_res_path;
+	}
+
+	// The buffer for the file being edited, which may be ahead of what is on disk; anything else
+	// has to come off disk, and is at worst as stale as the analysis that pointed here.
+	const String definition_source = same_file
+			? normalized
+			: newline_normalized(FileAccess::get_file_as_string(definition_res_path));
+	const String description = doc_comment_above(definition_source, definition_line);
+	if (!description.is_empty()) {
+		result["description"] = description;
 	}
 	return result;
 }

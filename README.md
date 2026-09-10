@@ -182,6 +182,18 @@ program: it walks the AST for the innermost identifier node whose source range c
 cursor and reports what that identifier resolved to, with the definition's own location and its
 type spelled back as Verse source.
 
+The tooltip's prose is the comment block sitting immediately above the definition, which is as
+close as Verse gets to a doc comment — the language has no `///` form, so the convention is
+simply what precedes a definition.
+
+That is read out of the source rather than asked of the compiler, which is not where you would
+expect to find it. The parser does keep comments, hanging each one off the node that begins the
+construct it precedes — but for a member sitting behind four lines of `@editable`, `@clamp_min`
+and friends, the node that begins the construct is the attribute clause and not the member, and
+the comment is reachable from the definition only by guessing at the shape of the syntax tree
+around it. The definition's line is already known, the file's text is already to hand, and
+walking up from that line while the lines are comments needs none of that.
+
 Two things make that safe rather than merely possible.
 
 - **A stale answer is refused rather than shown.** Diagnostics can lag the buffer by one analysis
