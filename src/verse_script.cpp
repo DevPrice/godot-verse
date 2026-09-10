@@ -9,7 +9,6 @@
 
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/object.hpp>
-#include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/godot.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
@@ -40,23 +39,6 @@ GDExtensionInterfacePlaceholderScriptInstanceCreate get_placeholder_instance_cre
 void VerseScript::_bind_methods() {
 }
 
-VerseScript::~VerseScript() {
-	release_handle();
-}
-
-void VerseScript::release_handle() {
-	if (handle == nullptr) {
-		return;
-	}
-
-	VerseRuntime *runtime = get_runtime();
-	if (runtime != nullptr) {
-		runtime->release_script_handle(handle);
-	}
-	handle = nullptr;
-	valid = false;
-}
-
 Error VerseScript::compile() {
 	VerseRuntime *runtime = get_runtime();
 	if (runtime == nullptr) {
@@ -75,7 +57,7 @@ Error VerseScript::compile() {
 		return ERR_UNAVAILABLE;
 	}
 
-	release_handle();
+	valid = false;
 
 	const String path = get_path();
 	if (path.is_empty()) {
@@ -93,18 +75,14 @@ Error VerseScript::compile() {
 	// mark this script invalid over a mistake that is no longer in the file.
 	language->settle_checks();
 
-	handle = runtime->open_script(ProjectSettings::get_singleton()->globalize_path(path));
-	valid = handle != nullptr && build_status == OK && language->diagnostics_for(path).is_empty();
-	class_shaped = valid && runtime->has_class(verse_class_name());
+	// A .verse file is only a script if the compiled project defines the class it is named after:
+	// there is no other shape a script can take, so a file without one cannot be attached.
+	valid = build_status == OK && language->diagnostics_for(path).is_empty() && runtime->has_class(verse_class_name());
 
 	// The export list only exists once the project has been analysed, and a placeholder created
 	// before that got an empty one.
 	update_placeholders();
 	return valid ? OK : ERR_COMPILATION_FAILED;
-}
-
-bool VerseScript::is_class_shaped() const {
-	return class_shaped;
 }
 
 String VerseScript::verse_class_name() const {
@@ -149,31 +127,7 @@ Error VerseScript::call_instance_void_float(vh_instance *p_instance, const char 
 }
 
 bool VerseScript::is_compiled() const {
-	return valid && handle != nullptr;
-}
-
-bool VerseScript::verse_has_function(const char *p_decorated_name) const {
-	VerseRuntime *runtime = get_runtime();
-	if (runtime == nullptr || handle == nullptr) {
-		return false;
-	}
-	return runtime->handle_has_function(handle, p_decorated_name);
-}
-
-Error VerseScript::call_verse_void(const char *p_decorated_name) {
-	VerseRuntime *runtime = get_runtime();
-	if (runtime == nullptr || handle == nullptr) {
-		return ERR_UNAVAILABLE;
-	}
-	return runtime->call_handle_void(handle, p_decorated_name);
-}
-
-Error VerseScript::call_verse_void_float(const char *p_decorated_name, double p_arg) {
-	VerseRuntime *runtime = get_runtime();
-	if (runtime == nullptr || handle == nullptr) {
-		return ERR_UNAVAILABLE;
-	}
-	return runtime->call_handle_void_float(handle, p_decorated_name, p_arg);
+	return valid;
 }
 
 bool VerseScript::_editor_can_reload_from_file() {
@@ -280,11 +234,11 @@ Error VerseScript::_reload(bool p_keep_state) {
 }
 
 bool VerseScript::_has_method(const StringName &p_method) const {
-	const char *verse_name = VerseScriptInstance::verse_name_for(p_method);
-	if (verse_name == nullptr) {
-		return false;
-	}
-	return verse_has_function(verse_name);
+	// Every script class inherits Ready, Update and PhysicsUpdate from `object`, so a valid
+	// script has all three whether or not it overrides them. Whether an override exists is an
+	// instance question, and VerseScriptInstance answers it — that is what decides whether Godot
+	// puts the node in the per-frame process list.
+	return is_compiled() && VerseScriptInstance::verse_name_for(p_method) != nullptr;
 }
 
 bool VerseScript::_has_static_method(const StringName &p_method) const {
@@ -335,7 +289,7 @@ bool VerseScript::_has_property_default_value(const StringName &p_property) cons
 
 Variant VerseScript::_get_property_default_value(const StringName &p_property) const {
 	VerseRuntime *runtime = get_runtime();
-	if (!class_shaped || runtime == nullptr) {
+	if (!valid || runtime == nullptr) {
 		return Variant();
 	}
 	return runtime->class_default_field(verse_class_name(), String(p_property));
@@ -427,7 +381,7 @@ TypedArray<Dictionary> VerseScript::_get_script_property_list() const {
 	TypedArray<Dictionary> properties;
 
 	VerseRuntime *runtime = get_runtime();
-	if (!class_shaped || runtime == nullptr) {
+	if (!valid || runtime == nullptr) {
 		return properties;
 	}
 

@@ -11,7 +11,6 @@
 #include "ISolarisModule.h"
 #include "IVerseModule.h"
 #include "Misc/FileHelper.h"
-#include "Misc/Paths.h"
 #include "Modules/ModuleManager.h"
 #include "SolBuildDiagnostic.h"
 #include "Templates/Function.h"
@@ -333,17 +332,6 @@ AUTORTFM_DISABLE void GodotVerse::ResetScriptState()
     GProjectBuilt = false;
 }
 
-namespace {
-
-/// `/user@localhost/mover` for `.../scripts/mover.verse`.
-AUTORTFM_DISABLE FUtf8String ModulePathFor(const FUtf8String& Path)
-{
-    const FString Stem = FPaths::GetBaseFilename(FString(Path));
-    return FUtf8String(ScriptVersePath) + UTF8TEXT("/") + FUtf8String(Stem);
-}
-
-} // namespace
-
 AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FUtf8String>& Paths)
 {
     if (GProjectBuilt)
@@ -537,23 +525,6 @@ AUTORTFM_DISABLE void GodotVerse::WaitForBackgroundCheck()
     JoinBackgroundCheck();
 }
 
-AUTORTFM_DISABLE GodotVerse::FScript* GodotVerse::OpenScript(const FUtf8String& Path)
-{
-    return new FScript{Path, ModulePathFor(Path)};
-}
-
-AUTORTFM_DISABLE GodotVerse::FScript* GodotVerse::CompileFile(const FUtf8String& Path)
-{
-    TArray<FUtf8String> Paths;
-    Paths.Add(Path);
-    return CompileProject(Paths) ? OpenScript(Path) : nullptr;
-}
-
-AUTORTFM_DISABLE void GodotVerse::ReleaseScript(FScript* Script)
-{
-    delete Script;
-}
-
 namespace {
 /// FVerseFunction's package constructor dereferences the result of LookupPackage without checking
 /// it, so asking for a function when the build failed crashes rather than returning invalid.
@@ -561,48 +532,6 @@ AUTORTFM_DISABLE bool ScriptPackageLoaded()
 {
     return Verse::GlobalProgram && Verse::GlobalProgram->LookupPackage(ScriptPackageName) != nullptr;
 }
-
-/// Snippet functions are stored under a name that is already decorated with their own scope path,
-/// and FVerseFunction decorates once more on lookup - so a plain `Update(:float)` resolves only
-/// for some definitions. Try the bare name first, then the pre-decorated one.
-AUTORTFM_DISABLE FVerseFunction LookupInScope(const FUtf8String& VersePath, FUtf8StringView DecoratedName)
-{
-    if (!ScriptPackageLoaded())
-    {
-        return FVerseFunction(EDefaultConstructVerseFunction::UnsafeDoNotUse);
-    }
-
-    const verse::FExecutionContext Context = verse::FExecutionContext::GetActiveContext();
-
-    FVerseFunction Function(Context, ScriptPackageName, VersePath, DecoratedName);
-    if (Function.IsValid())
-    {
-        return Function;
-    }
-
-    FUtf8String Prefixed = FUtf8String(UTF8TEXT("(")) + VersePath + UTF8TEXT(":)") + FUtf8String(DecoratedName);
-    return FVerseFunction(Context, ScriptPackageName, VersePath, Prefixed);
-}
-
-/// A file that wraps itself in a module resolves under that module; one that does not resolves
-/// flat. Both shapes stay supported so a single-script project need not be wrapped.
-AUTORTFM_DISABLE FVerseFunction LookupFunction(const GodotVerse::FScript* Script, FUtf8StringView DecoratedName)
-{
-    if (Script && !Script->ModulePath.IsEmpty())
-    {
-        FVerseFunction Scoped = LookupInScope(Script->ModulePath, DecoratedName);
-        if (Scoped.IsValid())
-        {
-            return Scoped;
-        }
-    }
-    return LookupInScope(FUtf8String(ScriptVersePath), DecoratedName);
-}
-}
-
-AUTORTFM_DISABLE bool GodotVerse::HasFunction(const FScript* Script, FUtf8StringView DecoratedName)
-{
-    return LookupFunction(Script, DecoratedName).IsValid();
 }
 
 struct GodotVerse::FInstance
@@ -1456,38 +1385,6 @@ AUTORTFM_DISABLE int32 GodotVerse::RunMain(const TArray<verse::string>& Args, in
     const FRunExit Exit = ConsumeExit();
     OutExitCode = Exit.ExitCode;
     return Exit.Reason == FRunExit::EReason::Error ? VH_ERR_RUNTIME : VH_OK;
-}
-
-namespace {
-template <typename FunctionType, typename... ArgTypes>
-AUTORTFM_DISABLE int32 CallFunction(const GodotVerse::FScript* Script, FUtf8StringView DecoratedName, ArgTypes... Args)
-{
-    const verse::FExecutionContext Context = verse::FExecutionContext::GetActiveContext();
-
-    FunctionType Function{LookupFunction(Script, DecoratedName)};
-    if (!Function.IsValid())
-    {
-        GodotVerse::ReportError(FUtf8String(UTF8TEXT("Could not resolve ")) + FUtf8String(DecoratedName)
-                                + UTF8TEXT(" in ") + (Script ? Script->ModulePath : FUtf8String())
-                                + UTF8TEXT(" or ") + ScriptVersePath);
-        return VH_ERR_NOT_FOUND;
-    }
-
-    const AutoRTFM::ETransactionResult TransactionResult =
-        AutoRTFM::Transact([&] { Function(Context, Args...); });
-
-    return TransactionResult == AutoRTFM::ETransactionResult::Committed ? VH_OK : VH_ERR_RUNTIME;
-}
-}
-
-AUTORTFM_DISABLE int32 GodotVerse::CallVoid(const FScript* Script, FUtf8StringView DecoratedName)
-{
-    return CallFunction<TVerseFunction<void()>>(Script, DecoratedName);
-}
-
-AUTORTFM_DISABLE int32 GodotVerse::CallVoidFloat(const FScript* Script, FUtf8StringView DecoratedName, double Arg)
-{
-    return CallFunction<TVerseFunction<void(double)>>(Script, DecoratedName, Arg);
 }
 
 AUTORTFM_DISABLE void GodotVerse::TickScripts(double BudgetSeconds)

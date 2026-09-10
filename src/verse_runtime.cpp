@@ -24,24 +24,11 @@ void VerseRuntime::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("load_host_from_path", "dll_path"), static_cast<Error (VerseRuntime::*)(const String &)>(&VerseRuntime::load_host));
 	ClassDB::bind_method(D_METHOD("unload_host"), &VerseRuntime::unload_host);
 	ClassDB::bind_method(D_METHOD("is_host_loaded"), &VerseRuntime::is_host_loaded);
-	ClassDB::bind_method(D_METHOD("compile_file", "path"), &VerseRuntime::compile_file);
-	ClassDB::bind_method(D_METHOD("run_main", "path"), &VerseRuntime::run_main);
-	ClassDB::bind_method(D_METHOD("release_script"), &VerseRuntime::release_script);
-	ClassDB::bind_method(D_METHOD("script_has_function", "decorated_name"), &VerseRuntime::script_has_function);
-	ClassDB::bind_method(D_METHOD("call_void", "decorated_name"), &VerseRuntime::call_void);
-	ClassDB::bind_method(D_METHOD("call_void_float", "decorated_name", "arg"), &VerseRuntime::call_void_float);
 	ClassDB::bind_method(D_METHOD("tick", "budget_seconds"), &VerseRuntime::tick);
 }
 
 VerseRuntime::~VerseRuntime() {
 	unload_host();
-}
-
-void VerseRuntime::release_current_script() {
-	if (current_script != nullptr && host.ReleaseScript != nullptr) {
-		host.ReleaseScript(current_script);
-	}
-	current_script = nullptr;
 }
 
 Error VerseRuntime::load_host(const String &p_dll_path) {
@@ -153,7 +140,6 @@ void VerseRuntime::unload_host() {
 		return;
 	}
 
-	release_current_script();
 	if (host.Shutdown != nullptr) {
 		host.Shutdown();
 	}
@@ -162,87 +148,6 @@ void VerseRuntime::unload_host() {
 
 bool VerseRuntime::is_host_loaded() const {
 	return host.is_loaded();
-}
-
-Error VerseRuntime::compile_file(const String &p_path) {
-	if (!host.is_loaded()) {
-		UtilityFunctions::push_warning("VerseRuntime: compile_file called with no host loaded");
-		return ERR_UNAVAILABLE;
-	}
-
-	release_current_script();
-
-	const CharString utf8_path = p_path.utf8();
-	const int32_t status = host.CompileFile(utf8_path.get_data(), &current_script);
-	if (status != VH_OK) {
-		UtilityFunctions::push_error(String("VerseRuntime: vh_compile_file failed with status ") + String::num_int64(status));
-		return ERR_COMPILATION_FAILED;
-	}
-
-	return OK;
-}
-
-Error VerseRuntime::run_main(const String &p_path) {
-	if (!host.is_loaded()) {
-		UtilityFunctions::push_warning("VerseRuntime: run_main called with no host loaded");
-		return ERR_UNAVAILABLE;
-	}
-
-	const Error compile_status = compile_file(p_path);
-	if (compile_status != OK) {
-		return compile_status;
-	}
-
-	int64_t exit_code = 0;
-	const int32_t status = host.RunMain(current_script, nullptr, 0, &exit_code);
-	if (status != VH_OK) {
-		UtilityFunctions::push_error(String("VerseRuntime: vh_run_main failed with status ") + String::num_int64(status));
-		return FAILED;
-	}
-
-	return OK;
-}
-
-void VerseRuntime::release_script() {
-	release_current_script();
-}
-
-bool VerseRuntime::script_has_function(const String &p_decorated_name) const {
-	if (!host.is_loaded() || current_script == nullptr) {
-		return false;
-	}
-	const CharString name_utf8 = p_decorated_name.utf8();
-	return host.ScriptHasFunction(current_script, name_utf8.get_data()) != 0;
-}
-
-Error VerseRuntime::call_void(const String &p_decorated_name) {
-	if (!host.is_loaded() || current_script == nullptr) {
-		UtilityFunctions::push_warning("VerseRuntime: call_void called with no script loaded");
-		return ERR_UNAVAILABLE;
-	}
-
-	const CharString name_utf8 = p_decorated_name.utf8();
-	const int32_t status = host.CallVoid(current_script, name_utf8.get_data());
-	if (status != VH_OK) {
-		UtilityFunctions::push_error(String("VerseRuntime: vh_call_void failed with status ") + String::num_int64(status));
-		return FAILED;
-	}
-	return OK;
-}
-
-Error VerseRuntime::call_void_float(const String &p_decorated_name, double p_arg) {
-	if (!host.is_loaded() || current_script == nullptr) {
-		UtilityFunctions::push_warning("VerseRuntime: call_void_float called with no script loaded");
-		return ERR_UNAVAILABLE;
-	}
-
-	const CharString name_utf8 = p_decorated_name.utf8();
-	const int32_t status = host.CallVoidFloat(current_script, name_utf8.get_data(), p_arg);
-	if (status != VH_OK) {
-		UtilityFunctions::push_error(String("VerseRuntime: vh_call_void_float failed with status ") + String::num_int64(status));
-		return FAILED;
-	}
-	return OK;
 }
 
 Error VerseRuntime::compile_project(const PackedStringArray &p_globalized_paths, Dictionary *r_diagnostics_by_path) {
@@ -310,56 +215,6 @@ bool VerseRuntime::poll_check_project(Dictionary *r_diagnostics_by_path) {
 
 bool VerseRuntime::is_check_project_busy() const {
 	return host.is_loaded() && host.CheckProjectBusy() != 0;
-}
-
-vh_script *VerseRuntime::open_script(const String &p_globalized_path) {
-	if (!host.is_loaded()) {
-		return nullptr;
-	}
-
-	const CharString utf8_path = p_globalized_path.utf8();
-	vh_script *script = nullptr;
-	if (host.OpenScript(utf8_path.get_data(), &script) != VH_OK) {
-		return nullptr;
-	}
-	return script;
-}
-
-void VerseRuntime::release_script_handle(vh_script *p_script) {
-	if (p_script != nullptr && host.ReleaseScript != nullptr) {
-		host.ReleaseScript(p_script);
-	}
-}
-
-bool VerseRuntime::handle_has_function(vh_script *p_script, const char *p_decorated_name) const {
-	if (!host.is_loaded() || p_script == nullptr) {
-		return false;
-	}
-	return host.ScriptHasFunction(p_script, p_decorated_name) != 0;
-}
-
-Error VerseRuntime::call_handle_void(vh_script *p_script, const char *p_decorated_name) {
-	if (!host.is_loaded() || p_script == nullptr) {
-		return ERR_UNAVAILABLE;
-	}
-	const int32_t status = host.CallVoid(p_script, p_decorated_name);
-	if (status != VH_OK) {
-		UtilityFunctions::push_error(String("VerseRuntime: ") + String(p_decorated_name) + String(" failed with status ") + String::num_int64(status));
-		return FAILED;
-	}
-	return OK;
-}
-
-Error VerseRuntime::call_handle_void_float(vh_script *p_script, const char *p_decorated_name, double p_arg) {
-	if (!host.is_loaded() || p_script == nullptr) {
-		return ERR_UNAVAILABLE;
-	}
-	const int32_t status = host.CallVoidFloat(p_script, p_decorated_name, p_arg);
-	if (status != VH_OK) {
-		UtilityFunctions::push_error(String("VerseRuntime: ") + String(p_decorated_name) + String(" failed with status ") + String::num_int64(status));
-		return FAILED;
-	}
-	return OK;
 }
 
 bool VerseRuntime::has_class(const String &p_class_name) const {

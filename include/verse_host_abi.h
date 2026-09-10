@@ -22,7 +22,7 @@
 extern "C" {
 #endif
 
-#define VH_ABI_VERSION 13
+#define VH_ABI_VERSION 14
 
 typedef int32_t vh_bool;
 
@@ -241,8 +241,6 @@ typedef struct vh_init_desc
 	vh_bool EnableDebugger;
 } vh_init_desc;
 
-typedef struct vh_script vh_script;
-
 #if defined(_WIN32)
 #	define VH_EXPORT __declspec(dllexport)
 #else
@@ -269,9 +267,6 @@ VH_ATTR VH_API void vh_shutdown(void);
 /* Runs queued Verse work for at most BudgetSeconds. Call once per frame. */
 VH_ATTR VH_API void vh_tick(double BudgetSeconds);
 
-/* Compiles one .verse file as a standalone snippet. Diagnostics go to the init callback. */
-VH_ATTR VH_API int32_t vh_compile_file(const char* PathUtf8, vh_script** OutScript);
-
 /* Compiles every listed .verse file as ONE Verse program.
  *
  * Verse's compilation unit is the package, not the file, and this is not a preference: a second
@@ -279,8 +274,8 @@ VH_ATTR VH_API int32_t vh_compile_file(const char* PathUtf8, vh_script** OutScri
  * the async loader. So this may be called once per process, and every script the host will ever
  * run has to be in the list.
  *
- * All the files share one flat scope, so each must wrap its definitions in a module named after
- * its own file stem or its definitions collide with every other script's. */
+ * All the files share one flat scope, so each must name its class after its own file stem or its
+ * definitions collide with every other script's. */
 VH_ATTR VH_API int32_t vh_compile_project(const char* const* PathsUtf8, int32_t Count);
 
 /* Re-runs semantic analysis over the already-compiled project with one file's text replaced,
@@ -317,30 +312,20 @@ VH_ATTR VH_API int32_t vh_check_project_poll(vh_bool* OutFinished);
 /* Whether an analysis started by vh_check_project_begin is still running. */
 VH_ATTR VH_API vh_bool vh_check_project_busy(void);
 
-/* Resolves a handle for one file of an already-compiled project. Does not compile. */
-VH_ATTR VH_API int32_t vh_open_script(const char* PathUtf8, vh_script** OutScript);
-
-VH_ATTR VH_API void vh_release_script(vh_script* Script);
-
-VH_ATTR VH_API vh_bool vh_script_has_function(vh_script* Script, const char* DecoratedName);
-
-/* Calls a suspending Main(:[]string, :[string]string) and pumps until it completes. */
-VH_ATTR VH_API int32_t vh_run_main(vh_script* Script, const char* const* Args, int32_t ArgCount, int64_t* OutExitCode);
-
-VH_ATTR VH_API int32_t vh_call_void(vh_script* Script, const char* DecoratedName);
-VH_ATTR VH_API int32_t vh_call_void_float(vh_script* Script, const char* DecoratedName, double Arg);
+/* Calls the compiled project's suspending Main(:[]string, :[string]string) and pumps until it
+ * completes. A Godot scene has no use for it; it is how a project is run as a plain program. */
+VH_ATTR VH_API int32_t vh_run_main(const char* const* Args, int32_t ArgCount, int64_t* OutExitCode);
 
 /* ------------------------------------------------------- class instances -- */
 
 /* One live Verse object: a script's `class(node2d)` bound to one Godot object.
  *
- * The class-per-script shape supersedes the module-per-file one: a script may instead define a
- * top-level class named after its file, in which case the host instantiates that class and calls
- * its methods rather than the module's free functions. Both shapes are supported. */
+ * A script is a top-level class named after its own file. The host instantiates that class
+ * against the node the script is attached to and calls its methods. */
 typedef struct vh_instance vh_instance;
 
-/* Whether the compiled project defines a top-level class of that name deriving from
- * `object`. This is how a class-shaped script is told from a module-shaped one. */
+/* Whether the compiled project defines a top-level class of that name deriving from `object`,
+ * which is what makes a .verse file usable as a script at all. */
 VH_ATTR VH_API vh_bool vh_has_class(const char* ClassNameUtf8);
 
 /* Instantiates the top-level Verse class ClassNameUtf8 (undecorated) and binds it to Handle.
@@ -509,18 +494,12 @@ typedef int32_t (*vh_abi_version_fn)(void);
 typedef int32_t (*vh_init_fn)(const vh_init_desc*);
 typedef void (*vh_shutdown_fn)(void);
 typedef void (*vh_tick_fn)(double);
-typedef int32_t (*vh_compile_file_fn)(const char*, vh_script**);
 typedef int32_t (*vh_compile_project_fn)(const char* const*, int32_t);
 typedef int32_t (*vh_check_project_fn)(const char*, const char*);
 typedef int32_t (*vh_check_project_begin_fn)(const char*, const char*);
 typedef int32_t (*vh_check_project_poll_fn)(vh_bool*);
 typedef vh_bool (*vh_check_project_busy_fn)(void);
-typedef int32_t (*vh_open_script_fn)(const char*, vh_script**);
-typedef void (*vh_release_script_fn)(vh_script*);
-typedef vh_bool (*vh_script_has_function_fn)(vh_script*, const char*);
-typedef int32_t (*vh_run_main_fn)(vh_script*, const char* const*, int32_t, int64_t*);
-typedef int32_t (*vh_call_void_fn)(vh_script*, const char*);
-typedef int32_t (*vh_call_void_float_fn)(vh_script*, const char*, double);
+typedef int32_t (*vh_run_main_fn)(const char* const*, int32_t, int64_t*);
 typedef vh_bool (*vh_has_class_fn)(const char*);
 typedef int32_t (*vh_instantiate_fn)(const char*, vh_handle, vh_instance**);
 typedef void (*vh_release_instance_fn)(vh_instance*);

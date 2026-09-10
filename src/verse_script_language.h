@@ -111,8 +111,8 @@ public:
 	godot::Dictionary _get_public_constants() const override;
 	godot::TypedArray<godot::Dictionary> _get_public_annotations() const override;
 
-	// Pumps the Verse event loop once per frame for the whole language. Phase 2 did this from a
-	// VerseTicker node; doing it here is what makes every scripted node driven instead of one.
+	// Pumps the Verse event loop once per frame for the whole language, which is what makes
+	// every scripted node driven rather than one hand-placed one.
 	void _frame() override;
 
 	// Budget handed to vh_tick each frame, so a runaway Verse task costs frame rate rather than

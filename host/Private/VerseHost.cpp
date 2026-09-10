@@ -140,30 +140,6 @@ extern "C" void vh_tick(double BudgetSeconds)
     GodotVerse::TickScripts(BudgetSeconds);
 }
 
-extern "C" int32_t vh_compile_file(const char* PathUtf8, vh_script** OutScript)
-{
-    GodotVerse::WaitForBackgroundCheck();
-    if (!PathUtf8 || !OutScript)
-    {
-        return VH_ERR_ABI;
-    }
-    *OutScript = nullptr;
-
-    if (!GetHost().bInitialized)
-    {
-        return VH_ERR_STATE;
-    }
-
-    GodotVerse::FScript* Script = GodotVerse::CompileFile(FUtf8String(Cstr(PathUtf8)));
-    if (!Script)
-    {
-        return VH_ERR_COMPILE;
-    }
-
-    *OutScript = reinterpret_cast<vh_script*>(Script);
-    return VH_OK;
-}
-
 extern "C" int32_t vh_compile_project(const char* const* PathsUtf8, int32_t Count)
 {
     GodotVerse::WaitForBackgroundCheck();
@@ -242,47 +218,10 @@ extern "C" vh_bool vh_check_project_busy(void)
     return GetHost().bInitialized && GodotVerse::IsBackgroundCheckRunning() ? 1 : 0;
 }
 
-extern "C" int32_t vh_open_script(const char* PathUtf8, vh_script** OutScript)
+extern "C" int32_t vh_run_main(const char* const* Args, int32_t ArgCount, int64_t* OutExitCode)
 {
     GodotVerse::WaitForBackgroundCheck();
-    if (!PathUtf8 || !OutScript)
-    {
-        return VH_ERR_ABI;
-    }
-    *OutScript = nullptr;
-
-    if (!GetHost().bInitialized)
-    {
-        return VH_ERR_STATE;
-    }
-
-    *OutScript = reinterpret_cast<vh_script*>(GodotVerse::OpenScript(FUtf8String(Cstr(PathUtf8))));
-    return VH_OK;
-}
-
-extern "C" void vh_release_script(vh_script* Script)
-{
-    GodotVerse::WaitForBackgroundCheck();
-    GodotVerse::ReleaseScript(reinterpret_cast<GodotVerse::FScript*>(Script));
-}
-
-extern "C" vh_bool vh_script_has_function(vh_script* Script, const char* DecoratedName)
-{
-    GodotVerse::WaitForBackgroundCheck();
-    if (!Script || !DecoratedName || !GetHost().bInitialized)
-    {
-        return 0;
-    }
-    return GodotVerse::HasFunction(reinterpret_cast<GodotVerse::FScript*>(Script), Cstr(DecoratedName)) ? 1 : 0;
-}
-
-extern "C" int32_t vh_run_main(vh_script* Script,
-                                                const char* const* Args,
-                                                int32_t ArgCount,
-                                                int64_t* OutExitCode)
-{
-    GodotVerse::WaitForBackgroundCheck();
-    if (!Script)
+    if (!Args && ArgCount > 0)
     {
         return VH_ERR_ABI;
     }
@@ -305,34 +244,6 @@ extern "C" int32_t vh_run_main(vh_script* Script,
         *OutExitCode = ExitCode;
     }
     return Status;
-}
-
-extern "C" int32_t vh_call_void(vh_script* Script, const char* DecoratedName)
-{
-    GodotVerse::WaitForBackgroundCheck();
-    if (!Script || !DecoratedName)
-    {
-        return VH_ERR_ABI;
-    }
-    if (!GetHost().bInitialized)
-    {
-        return VH_ERR_STATE;
-    }
-    return GodotVerse::CallVoid(reinterpret_cast<GodotVerse::FScript*>(Script), Cstr(DecoratedName));
-}
-
-extern "C" int32_t vh_call_void_float(vh_script* Script, const char* DecoratedName, double Arg)
-{
-    GodotVerse::WaitForBackgroundCheck();
-    if (!Script || !DecoratedName)
-    {
-        return VH_ERR_ABI;
-    }
-    if (!GetHost().bInitialized)
-    {
-        return VH_ERR_STATE;
-    }
-    return GodotVerse::CallVoidFloat(reinterpret_cast<GodotVerse::FScript*>(Script), Cstr(DecoratedName), Arg);
 }
 
 extern "C" vh_bool vh_has_class(const char* ClassNameUtf8)

@@ -10,9 +10,9 @@
 #include <godot_cpp/variant/packed_string_array.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
 
-// The "VerseRuntime" engine singleton. Owns the verse_host.dll loader, the vh_init_desc handed
-// to it, and the last compiled/run vh_script. Every method degrades to ERR_UNAVAILABLE plus a
-// warning when no host is loaded; nothing here may crash for that reason.
+// The "VerseRuntime" engine singleton. Owns the verse_host.dll loader and the vh_init_desc handed
+// to it. Every method degrades to ERR_UNAVAILABLE plus a warning when no host is loaded; nothing
+// here may crash for that reason.
 class VerseRuntime : public godot::Object {
 	GDCLASS(VerseRuntime, godot::Object)
 
@@ -30,19 +30,8 @@ public:
 	void unload_host();
 	bool is_host_loaded() const;
 
-	godot::Error compile_file(const godot::String &p_path);
-	godot::Error run_main(const godot::String &p_path);
-	void release_script();
-
-	bool script_has_function(const godot::String &p_decorated_name) const;
-	godot::Error call_void(const godot::String &p_decorated_name);
-	godot::Error call_void_float(const godot::String &p_decorated_name, double p_arg);
-
 	void tick(double p_budget_seconds);
 
-	// Multi-script API, used by VerseScript. Each VerseScript owns one handle; the
-	// single-script methods above stay for VerseTicker and the bound script API.
-	//
 	// Verse's compilation unit is the package, not the file, and the host can only build once
 	// per process, so every .verse file in the project is compiled together.
 	//
@@ -62,15 +51,9 @@ public:
 	bool poll_check_project(godot::Dictionary *r_diagnostics_by_path);
 
 	bool is_check_project_busy() const;
-	vh_script *open_script(const godot::String &p_globalized_path);
-	void release_script_handle(vh_script *p_script);
-	bool handle_has_function(vh_script *p_script, const char *p_decorated_name) const;
-	godot::Error call_handle_void(vh_script *p_script, const char *p_decorated_name);
-	godot::Error call_handle_void_float(vh_script *p_script, const char *p_decorated_name, double p_arg);
-
-	// A script that defines a top-level class named after its file is driven through an instance
-	// of that class rather than through the module's free functions. Returns null when the class
-	// does not exist, which is how VerseScript tells the two shapes apart.
+	// A script is a top-level class named after its own file, driven through one instance of
+	// that class per node. False when the compiled project defines no such class, which is what
+	// makes the .verse file unusable as a script.
 	bool has_class(const godot::String &p_class_name) const;
 	// The `@editable` data members of a top-level class, as { name, type, is_var } entries
 	// where type is a vh_type. Read out of the last analysis pass rather than the running
@@ -106,11 +89,9 @@ private:
 	VerseHostLibrary host;
 	vh_init_desc init_desc = {};
 	vh_godot_api godot_api = {};
-	vh_script *current_script = nullptr;
 	godot::Dictionary *diagnostic_sink = nullptr;
 
 	godot::Error load_host_internal(const godot::String &p_dll_path, const godot::String &p_engine_dir, bool p_enable_debugger);
-	void release_current_script();
 
 	static void api_print(void *p_ctx, const char *p_utf8, int32_t p_len);
 	static vh_handle api_get_node(void *p_ctx, const char *p_path_utf8, int32_t p_path_len);

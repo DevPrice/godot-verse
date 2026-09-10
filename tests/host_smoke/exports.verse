@@ -1,8 +1,8 @@
 using { /Godot.org/Godot }
 using { /Verse.org/Simulation }
 
-# Fixture for the export-list checks. Named after the file, like any class-shaped script: the
-# host looks the class up at /user@localhost/exports.
+# Fixture for the export-list checks. Named after the file, like any script: the host looks the
+# class up at /user@localhost/exports.
 exports := class(object):
 
     # Not a var, so it is exported read-only and writes to it must be refused.

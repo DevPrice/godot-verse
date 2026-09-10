@@ -13,7 +13,6 @@
 #include "verse_runtime.h"
 #include "verse_script.h"
 #include "verse_script_language.h"
-#include "verse_ticker.h"
 
 #ifdef TOOLS_ENABLED
 #include "verse_editor_plugin.h"
@@ -32,7 +31,6 @@ static Ref<VerseResourceFormatSaver> verse_saver;
 void initialize_gdextension_types(const ModuleInitializationLevel p_level) {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
 		GDREGISTER_CLASS(VerseRuntime);
-		GDREGISTER_CLASS(VerseTicker);
 		GDREGISTER_CLASS(VerseScriptLanguage);
 		GDREGISTER_CLASS(VerseScript);
 		GDREGISTER_CLASS(VerseResourceFormatLoader);

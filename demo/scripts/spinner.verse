@@ -1,13 +1,11 @@
 using { /Godot.org/Godot }
 
-spinner := module:
+# The node this is attached to is `Self`, so a script reaches its own node's properties directly
+# rather than looking one up by scene path.
+spinner := class(sprite2d):
 
-	Ready<public>():void =
+	Ready<override>():void =
 		Print("Spinner is ready.")
 
-	Update<public>(Delta:float):void =
-		if:
-			Node := VhGetNode["/root/Main/Mover/Sprite2D"]
-			R := VhGetFloat[Node, "rotation"]
-		then:
-			VhSetFloat(Node, "rotation", R + Delta)
+	Update<override>(Delta:float):void =
+		set Rotation = Rotation + Delta

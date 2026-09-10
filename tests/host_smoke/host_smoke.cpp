@@ -163,7 +163,6 @@ int main(int argc, char** argv)
 	auto ShutdownFn = Resolve<vh_shutdown_fn>(Module, "vh_shutdown", &ResolveOk);
 	auto TickFn = Resolve<vh_tick_fn>(Module, "vh_tick", &ResolveOk);
 	auto CompileProjectFn = Resolve<vh_compile_project_fn>(Module, "vh_compile_project", &ResolveOk);
-	auto OpenScriptFn = Resolve<vh_open_script_fn>(Module, "vh_open_script", &ResolveOk);
 	auto HasClassFn = Resolve<vh_has_class_fn>(Module, "vh_has_class", &ResolveOk);
 	auto ClassExportListFn = Resolve<vh_class_export_list_fn>(Module, "vh_class_export_list", &ResolveOk);
 	auto ClassDefaultFieldFn = Resolve<vh_class_default_field_fn>(Module, "vh_class_default_field", &ResolveOk);
@@ -172,16 +171,12 @@ int main(int argc, char** argv)
 	auto CallInstanceVoidFn = Resolve<vh_instance_call_void_fn>(Module, "vh_instance_call_void", &ResolveOk);
 	auto GetFieldFn = Resolve<vh_instance_get_field_fn>(Module, "vh_instance_get_field", &ResolveOk);
 	auto SetFieldFn = Resolve<vh_instance_set_field_fn>(Module, "vh_instance_set_field", &ResolveOk);
-	auto ReleaseScriptFn = Resolve<vh_release_script_fn>(Module, "vh_release_script", &ResolveOk);
 	auto LookupSymbolFn = Resolve<vh_lookup_symbol_fn>(Module, "vh_lookup_symbol", &ResolveOk);
 	auto CheckProjectFn = Resolve<vh_check_project_fn>(Module, "vh_check_project", &ResolveOk);
 	auto CheckBeginFn = Resolve<vh_check_project_begin_fn>(Module, "vh_check_project_begin", &ResolveOk);
 	auto CheckProjectPollFn = Resolve<vh_check_project_poll_fn>(Module, "vh_check_project_poll", &ResolveOk);
 	auto CheckBusyFn = Resolve<vh_check_project_busy_fn>(Module, "vh_check_project_busy", &ResolveOk);
-	auto ScriptHasFunctionFn = Resolve<vh_script_has_function_fn>(Module, "vh_script_has_function", &ResolveOk);
 	auto RunMainFn = Resolve<vh_run_main_fn>(Module, "vh_run_main", &ResolveOk);
-	auto CallVoidFn = Resolve<vh_call_void_fn>(Module, "vh_call_void", &ResolveOk);
-	auto CallVoidFloatFn = Resolve<vh_call_void_float_fn>(Module, "vh_call_void_float", &ResolveOk);
 	if (!Step("resolve exports", ResolveOk))
 	{
 		return 1;
@@ -216,8 +211,8 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
-	// vh_compile_project rather than vh_compile_file: Verse builds a whole package at once and
-	// the host may only generate once per process, so both fixtures have to go in together.
+	// One call for both fixtures: Verse builds a whole package at once, and the host may only
+	// generate once per process.
 	std::string VersePathUtf8 = VersePath.string();
 	std::string ExportsPathUtf8 = ExportsPath.string();
 	const char* ProjectPaths[2] = { VersePathUtf8.c_str(), ExportsPathUtf8.c_str() };
@@ -434,27 +429,17 @@ int main(int argc, char** argv)
 		}
 	}
 
-	vh_script* Script = nullptr;
-	if (!Step("vh_open_script", OpenScriptFn(VersePathUtf8.c_str(), &Script) == VH_OK))
-	{
-		ShutdownFn();
-		return 1;
-	}
-
 	const char* RunArgs[1] = { VersePathUtf8.c_str() };
 	int64_t ExitCode = 0;
-	bool RunOk = RunMainFn(Script, RunArgs, 1, &ExitCode) == VH_OK;
+	bool RunOk = RunMainFn(RunArgs, 1, &ExitCode) == VH_OK;
 	Step("vh_run_main", RunOk);
 	printf("[smoke] exit code: %lld\n", static_cast<long long>(ExitCode));
 
-	bool CallsOk = Step("vh_script_has_function Ready", ScriptHasFunctionFn(Script, "Ready") != 0);
-	CallsOk = Step("vh_script_has_function Update(:float)", ScriptHasFunctionFn(Script, "Update(:float)") != 0) && CallsOk;
-	CallsOk = Step("vh_call_void Ready", CallVoidFn(Script, "Ready") == VH_OK) && CallsOk;
-	CallsOk = Step("vh_call_void_float Update", CallVoidFloatFn(Script, "Update(:float)", 0.016) == VH_OK) && CallsOk;
+	bool CallsOk = true;
 	TickFn(0.0);
-	// The class-shaped half. This is the check that the verse path the host builds for a script's
-	// class -- /user@localhost/<file stem> -- is the one the semantic program actually files it
-	// under; everything about exports depends on that string being right.
+	// The check that the verse path the host builds for a script's class --
+	// /user@localhost/<file stem> -- is the one the semantic program actually files it under;
+	// everything about exports depends on that string being right.
 	Step("vh_has_class exports", HasClassFn("exports") != 0);
 
 	const vh_export_desc* Exports = nullptr;
@@ -661,8 +646,6 @@ int main(int argc, char** argv)
 		CallsOk = AsyncOk && CallsOk;
 	}
 
-	ReleaseScriptFn(Script);
-	Step("vh_release_script", true);
 	ShutdownFn();
 	Step("vh_shutdown", true);
 

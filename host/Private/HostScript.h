@@ -10,21 +10,9 @@
 
 namespace GodotVerse {
 
-struct FScript
-{
-    FUtf8String Path;
-    /// Verse path of the module this file's definitions live in. Every snippet in a project
-    /// shares one flat scope and Verse forbids shadowing, so two files that both define a
-    /// top-level Ready() are a compile error; each file wraps its definitions in a module named
-    /// after its own stem instead.
-    FUtf8String ModulePath;
-};
-
 /// Creates the placeholder outer and enters the content scope Verse allocations need.
 AUTORTFM_DISABLE bool EnterContentScope();
 AUTORTFM_DISABLE void LeaveContentScope();
-
-AUTORTFM_DISABLE FScript* CompileFile(const FUtf8String& Path);
 
 /// Adds every path as a data source and builds them as one program. Callable once per process:
 /// a second BuildAll re-notifies already-loaded native Verse packages and aborts in the async
@@ -57,11 +45,12 @@ AUTORTFM_DISABLE bool IsBackgroundCheckRunning();
 /// `ensure(!bBlockAllExecution)` in VVMExecutionContext and then kills the process.
 AUTORTFM_DISABLE void WaitForBackgroundCheck();
 
-AUTORTFM_DISABLE FScript* OpenScript(const FUtf8String& Path);
-AUTORTFM_DISABLE void ReleaseScript(FScript* Script);
-
 /// One live Verse object: a script's `class(node2d)` bound to one Godot instance id.
 struct FInstance;
+
+/// Whether the compiled project defines a top-level class of that name deriving from `object`,
+/// which is what makes a .verse file usable as a script at all. Cheap enough to ask per script.
+AUTORTFM_DISABLE bool HasClass(FUtf8StringView ClassName);
 
 /// Instantiates the class ClassName defines at the top level of the compiled project and binds
 /// it to a Godot object. ClassName is undecorated -- `player`, not `(/user@localhost:)player`.
@@ -69,10 +58,6 @@ struct FInstance;
 /// The class must derive from `object`, which is what gives the instance the UObject
 /// representation everything below needs; a class that does not will fail to instantiate here
 /// rather than at the first call.
-/// Whether the compiled project defines such a class. Cheap enough to ask per script, and it is
-/// how a class-shaped script is told from a module-shaped one.
-AUTORTFM_DISABLE bool HasClass(FUtf8StringView ClassName);
-
 AUTORTFM_DISABLE FInstance* Instantiate(FUtf8StringView ClassName, int64 Handle);
 AUTORTFM_DISABLE void ReleaseInstance(FInstance* Instance);
 
@@ -165,10 +150,7 @@ AUTORTFM_DISABLE bool ReadClassDefaultField(FUtf8StringView ClassName, FUtf8Stri
 /// rather than a mutation. Sealing is one-way and happens on the first InstanceCall*.
 AUTORTFM_DISABLE bool WriteInstanceField(FInstance* Instance, FUtf8StringView FieldName, const vh_value& Value);
 
-AUTORTFM_DISABLE bool HasFunction(const FScript* Script, FUtf8StringView DecoratedName);
 AUTORTFM_DISABLE int32 RunMain(const TArray<verse::string>& Args, int64& OutExitCode);
-AUTORTFM_DISABLE int32 CallVoid(const FScript* Script, FUtf8StringView DecoratedName);
-AUTORTFM_DISABLE int32 CallVoidFloat(const FScript* Script, FUtf8StringView DecoratedName, double Arg);
 
 AUTORTFM_DISABLE void TickScripts(double BudgetSeconds);
 

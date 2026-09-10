@@ -32,14 +32,13 @@ surfaces at `vh_init`, not at compile time.
 | `verse_host.{h,cpp}` | `GetProcAddress` loader over the ABI; no Verse logic |
 | `verse_runtime.{h,cpp}` | the `VerseRuntime` singleton — `vh_init_desc`, the Godot callback table, `verse/host/*` project settings |
 | `verse_value.{h,cpp}` | `Variant` ⇄ `vh_value`, arena-allocated |
-| `verse_script.{h,cpp}` | a `.verse` file as a Godot `Resource`; one `vh_script` handle |
+| `verse_script.{h,cpp}` | a `.verse` file as a Godot `Resource`; valid only if it defines its own class |
 | `verse_script_instance.{h,cpp}` | one script bound to one node; raw `GDExtensionScriptInstanceInfo3` vtable, not a `godot::Object` |
 | `verse_script_language.{h,cpp}` | the `ScriptLanguage`: `_validate`, the analysis cache, `_frame` (which pumps `vh_tick` and reaps `vh_check_project_poll`) |
 | `verse_resource_format.{h,cpp}` | load/save, without which a `.verse` cannot be attached to a node |
 | `verse_lexer.{h,cpp}` | resumable per-line lexer; no godot-cpp dependency, so it is unit-testable standalone |
 | `verse_class_decl.{h,cpp}` | scans a `.verse` file's top-level class and its `@global_class` attribute out of the text; defers comments and strings to the lexer, and shares its lack of godot-cpp |
 | `verse_syntax_highlighter.*`, `verse_editor_plugin.*` | editor-only (`TOOLS_ENABLED`) |
-| `verse_ticker.{h,cpp}` | the pre-script-language Phase 2 node; still works, nothing needs it |
 
 `VerseScriptLanguage` overrides only the virtuals it actually answers — godot-cpp binds a virtual
 with Godot only when the subclass declares it, so **omitting one is how you say "unsupported."**

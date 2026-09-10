@@ -12,27 +12,17 @@ using namespace godot;
 
 namespace {
 
-constexpr const char *kVerseReadyName = "Ready";
-constexpr const char *kVerseProcessName = "Update(:float)";
-constexpr const char *kVersePhysicsProcessName = "PhysicsUpdate(:float)";
-
-// A class-shaped script overrides methods declared on `object`, and the VM registers an
-// override under the *declaring* class's decorated name, not the overriding one. Looking up the
-// undecorated name instead does not fail politely — UVerseClass::PeekField asserts on a field
-// the shape does not have.
+// A script overrides methods declared on `object`, and the VM registers an override under the
+// *declaring* class's decorated name, not the overriding one. Looking up the undecorated name
+// instead does not fail politely — UVerseClass::PeekField asserts on a field the shape does not
+// have.
+//
+// The argument mangling is the host's, not Godot's: a plain Update(Delta:float) in Verse source
+// is stored as Update(:float), so these must match it exactly or resolution silently fails
+// instead of erroring.
 constexpr const char *kMethodReadyName = "(/Godot.org/Godot/object:)Ready";
 constexpr const char *kMethodProcessName = "(/Godot.org/Godot/object:)Update(:float)";
 constexpr const char *kMethodPhysicsProcessName = "(/Godot.org/Godot/object:)PhysicsUpdate(:float)";
-
-const char *method_name_for(const char *p_function_name) {
-	if (p_function_name == kVerseReadyName) {
-		return kMethodReadyName;
-	}
-	if (p_function_name == kVerseProcessName) {
-		return kMethodProcessName;
-	}
-	return kMethodPhysicsProcessName;
-}
 
 GDExtensionBool set_func(GDExtensionScriptInstanceDataPtr p_instance, GDExtensionConstStringNamePtr p_name, GDExtensionConstVariantPtr p_value) {
 	VerseScriptInstance *self = static_cast<VerseScriptInstance *>(p_instance);
@@ -104,14 +94,14 @@ GDExtensionBool validate_property_func(GDExtensionScriptInstanceDataPtr p_instan
 
 GDExtensionBool has_method_func(GDExtensionScriptInstanceDataPtr p_instance, GDExtensionConstStringNamePtr p_name) {
 	VerseScriptInstance *self = static_cast<VerseScriptInstance *>(p_instance);
-	const char *verse_name = VerseScriptInstance::verse_name_for(*reinterpret_cast<const StringName *>(p_name));
-	if (verse_name == kVerseReadyName) {
+	const char *method = VerseScriptInstance::verse_name_for(*reinterpret_cast<const StringName *>(p_name));
+	if (method == kMethodReadyName) {
 		return self->has_ready;
 	}
-	if (verse_name == kVerseProcessName) {
+	if (method == kMethodProcessName) {
 		return self->has_process;
 	}
-	if (verse_name == kVersePhysicsProcessName) {
+	if (method == kMethodPhysicsProcessName) {
 		return self->has_physics_process;
 	}
 	return false;
@@ -126,18 +116,14 @@ void call_func(GDExtensionScriptInstanceDataPtr p_self, GDExtensionConstStringNa
 	*reinterpret_cast<Variant *>(r_return) = Variant();
 
 	VerseScriptInstance *self = static_cast<VerseScriptInstance *>(p_self);
-	const char *verse_name = VerseScriptInstance::verse_name_for(*reinterpret_cast<const StringName *>(p_method));
-	if (verse_name == nullptr) {
+	const char *method = VerseScriptInstance::verse_name_for(*reinterpret_cast<const StringName *>(p_method));
+	if (method == nullptr) {
 		r_error->error = GDEXTENSION_CALL_ERROR_INVALID_METHOD;
 		return;
 	}
 
-	if (verse_name == kVerseReadyName) {
-		if (self->verse_object != nullptr) {
-			self->script->call_instance_void(self->verse_object, method_name_for(verse_name));
-		} else {
-			self->script->call_verse_void(verse_name);
-		}
+	if (method == kMethodReadyName) {
+		self->script->call_instance_void(self->verse_object, method);
 	} else {
 		if (p_argument_count < 1) {
 			r_error->error = GDEXTENSION_CALL_ERROR_TOO_FEW_ARGUMENTS;
@@ -146,11 +132,7 @@ void call_func(GDExtensionScriptInstanceDataPtr p_self, GDExtensionConstStringNa
 			return;
 		}
 		const double delta = *reinterpret_cast<const Variant *>(p_args[0]);
-		if (self->verse_object != nullptr) {
-			self->script->call_instance_void_float(self->verse_object, method_name_for(verse_name), delta);
-		} else {
-			self->script->call_verse_void_float(verse_name, delta);
-		}
+		self->script->call_instance_void_float(self->verse_object, method, delta);
 	}
 
 	r_error->error = GDEXTENSION_CALL_OK;
@@ -226,17 +208,14 @@ const GDExtensionScriptInstanceInfo3 script_instance_info = {
 } // namespace
 
 const char *VerseScriptInstance::verse_name_for(const StringName &p_method) {
-	// The decoration is the host's, not Godot's: a plain Update(Delta:float) in Verse source is
-	// stored as Update(:float), so these right-hand sides must match the host's mangling exactly
-	// or resolution silently fails instead of erroring.
 	if (p_method == StringName("_ready")) {
-		return kVerseReadyName;
+		return kMethodReadyName;
 	}
 	if (p_method == StringName("_process")) {
-		return kVerseProcessName;
+		return kMethodProcessName;
 	}
 	if (p_method == StringName("_physics_process")) {
-		return kVersePhysicsProcessName;
+		return kMethodPhysicsProcessName;
 	}
 	return nullptr;
 }
@@ -255,20 +234,14 @@ GDExtensionScriptInstancePtr VerseScriptInstance::create(VerseScript *p_script, 
 	instance->script = Ref<VerseScript>(p_script);
 	instance->owner = p_owner;
 
-	if (p_script->is_class_shaped()) {
-		instance->verse_object = p_script->make_instance(p_owner->get_instance_id());
-		if (instance->verse_object == nullptr) {
-			memdelete(instance);
-			return nullptr;
-		}
-		instance->has_ready = p_script->instance_has_function(instance->verse_object, kMethodReadyName);
-		instance->has_process = p_script->instance_has_function(instance->verse_object, kMethodProcessName);
-		instance->has_physics_process = p_script->instance_has_function(instance->verse_object, kMethodPhysicsProcessName);
-	} else {
-		instance->has_ready = p_script->verse_has_function(kVerseReadyName);
-		instance->has_process = p_script->verse_has_function(kVerseProcessName);
-		instance->has_physics_process = p_script->verse_has_function(kVersePhysicsProcessName);
+	instance->verse_object = p_script->make_instance(p_owner->get_instance_id());
+	if (instance->verse_object == nullptr) {
+		memdelete(instance);
+		return nullptr;
 	}
+	instance->has_ready = p_script->instance_has_function(instance->verse_object, kMethodReadyName);
+	instance->has_process = p_script->instance_has_function(instance->verse_object, kMethodProcessName);
+	instance->has_physics_process = p_script->instance_has_function(instance->verse_object, kMethodPhysicsProcessName);
 
 	return create3(&script_instance_info, instance);
 }

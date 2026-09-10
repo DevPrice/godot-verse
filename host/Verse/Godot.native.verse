@@ -9,21 +9,7 @@ VhGetNode<public><native>(Path:string)<decides><transacts>:int
 VhIsValid<public><native>(Handle:int)<transacts>:logic
 VhGetChildren<public><native>(Handle:int)<transacts>:[]int
 
-VhGetFloat<public><native>(Handle:int, Property:string)<decides><transacts>:float
-VhSetFloat<public><native>(Handle:int, Property:string, Value:float)<transacts>:void
-VhGetInt<public><native>(Handle:int, Property:string)<decides><transacts>:int
-VhSetInt<public><native>(Handle:int, Property:string, Value:int)<transacts>:void
-VhGetLogic<public><native>(Handle:int, Property:string)<decides><transacts>:logic
-VhSetLogic<public><native>(Handle:int, Property:string, Value:logic)<transacts>:void
-VhGetText<public><native>(Handle:int, Property:string)<decides><transacts>:string
-VhSetText<public><native>(Handle:int, Property:string, Value:string)<transacts>:void
-
-VhGetVector2<public><native>(Handle:int, Property:string)<decides><transacts>:tuple(float, float)
-VhSetVector2<public><native>(Handle:int, Property:string, X:float, Y:float)<transacts>:void
-
-VhCallMethod<public><native>(Handle:int, Method:string, Args:[]float)<transacts>:void
 VhGetMeta<public><native>(Handle:int)<transacts>:[string]string
-VhFindChar<public><native>(Value:string, Index:int)<decides><transacts>:char
 
 # One Godot Variant on the wire, as (Tag, Ints, Floats, Texts). Tag is Godot's own Variant::Type
 # and decides which payload slots are read: an int in Ints(0), a Vector2 as two Floats, an object

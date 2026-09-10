@@ -11,11 +11,10 @@
 #include <godot_cpp/variant/string_name.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
 
-struct vh_script;
 struct vh_instance;
 
-// A .verse file as a Godot Resource. Owns one vh_script handle from the host plus the source
-// text the script editor edits.
+// A .verse file as a Godot Resource: one top-level Verse class named after the file, plus the
+// source text the script editor edits.
 //
 // The host compiles from a path, never a buffer, so compile() works off get_path() rather than
 // source_code — unsaved editor text reaches the compiler through
@@ -28,7 +27,6 @@ protected:
 
 public:
 	VerseScript() = default;
-	~VerseScript() override;
 
 	bool _editor_can_reload_from_file() override;
 	void _placeholder_erased(void *p_placeholder) override;
@@ -68,19 +66,11 @@ public:
 	bool _is_placeholder_fallback_enabled() const override;
 	godot::Variant _get_rpc_config() const override;
 
-	// Compiles get_path() through the host and caches which lifecycle functions the file
-	// defines. Safe to call with no host loaded; leaves the script invalid rather than failing.
+	// Builds the project through the host and asks whether it defines this file's class. Safe to
+	// call with no host loaded; leaves the script invalid rather than failing.
 	godot::Error compile();
 
 	bool is_compiled() const;
-	bool verse_has_function(const char *p_decorated_name) const;
-	godot::Error call_verse_void(const char *p_decorated_name);
-	godot::Error call_verse_void_float(const char *p_decorated_name, double p_arg);
-
-	// A script defines a class when it declares a top-level Verse class named after its own file
-	// deriving from `object`. Such a script is driven through one instance of that class per
-	// node; one that does not is driven through its module's free functions, as in Phase 3.
-	bool is_class_shaped() const;
 	godot::String verse_class_name() const;
 
 	vh_instance *make_instance(int64_t p_object_id) const;
@@ -102,9 +92,6 @@ private:
 	mutable std::vector<void *> placeholders;
 
 	godot::String source_code;
-	vh_script *handle = nullptr;
+	// The compiled project defines this file's class, so the file can be attached to a node.
 	bool valid = false;
-	bool class_shaped = false;
-
-	void release_handle();
 };

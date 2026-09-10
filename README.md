@@ -51,7 +51,9 @@ when the project loads, its `Ready()` runs on `_ready`, and its `Update(Delta:fl
 frame. `PhysicsUpdate(:float)` maps to `_physics_process`. Several scripts on several nodes work
 independently.
 
-A script defines a class named after its own file, and the node it is attached to is `Self`:
+A script *is* a class named after its own file, and the node it is attached to is `Self`. That is
+the only shape a script has: a `.verse` file the compiled project has no such class for is not a
+valid script, and Godot reports it as one that failed to compile.
 
 ```verse
 using { /Godot.org/Godot }
@@ -126,9 +128,6 @@ Test `IsInstanceValid()` before reaching through a handle the scene may have dro
 runtime error terminates the scope's task group — so one dead-object access kills every suspended
 async task in every script, not just the offending one. Per-script scopes (or per-invocation, if
 Godot ever reaches Verse off the main thread) are the right shape and are not built yet.
-
-A script may still be written the older way, as a `module` of free functions that find their own
-node by path; the host picks between the two shapes on whether the class exists.
 
 **`@editable` puts a data member in the inspector.** The property list Godot shows comes out of
 the *semantic program* the last analysis pass left behind, not out of the running bytecode —
@@ -392,9 +391,6 @@ Completing on a bare cursor is declined — offering the whole mirrored API as o
 list is not help — so an option appears once at least one character has been typed, and the
 prefix is filtered here rather than handed over in full for Godot to filter after paying for it.
 
-`VerseTicker` from Phase 2 still works, but nothing needs it: the script language pumps `vh_tick`
-from `_frame`, so every scripted node is driven rather than one hand-placed one.
-
 ## Editor tooling
 
 The Verse debugger the host links (`Verse::SocketDebugger`) is reachable, but not driven by
@@ -439,8 +435,7 @@ already executing, so hot reload is narrower than it looks rather than flatly im
 **One top-level name per file.** Every file in the project shares one flat `/user@localhost` scope
 and Verse forbids shadowing, so two files that both define a top-level `Ready()` are a compile
 error rather than two scripts. Naming the class after the file is what keeps that from happening —
-file names are already unique. A script written as a `module` instead needs the same treatment for
-the same reason, which is why `mover := module:` was the shape before classes existed.
+file names are already unique, and it is why a script is required to be shaped that way.
 
 **The host must be loaded from `Engine/Binaries/Win64`.** VNI records each Verse package's source
 directory relative to the loaded module, and the Verse compiler reads those `.verse` files at
