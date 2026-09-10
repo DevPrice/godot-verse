@@ -1,6 +1,7 @@
 #include "verse_script_language.h"
 
 #include "verse_api_classes.h"
+#include "verse_class_decl.h"
 #include "verse_keywords.h"
 #include "verse_runtime.h"
 #include "verse_script.h"
@@ -97,6 +98,18 @@ const char *mirrored_class(const String &p_godot_class) {
 		}
 	}
 	return nullptr;
+}
+
+// The Godot class a mirrored Verse class stands for, or empty when the name is not one of them --
+// which is how a superclass is told to be another script's class rather than a piece of the
+// generated API.
+String godot_class_for(const std::string &p_verse_class) {
+	for (size_t i = 0; i < std::size(verse_api::classes); i++) {
+		if (p_verse_class == verse_api::classes[i].verse_name) {
+			return String(verse_api::classes[i].godot_name);
+		}
+	}
+	return String();
 }
 
 // Only a subset of Godot's classes is mirrored, so a node whose own class was not generated
@@ -653,11 +666,98 @@ int32_t VerseScriptLanguage::_profiling_get_frame_data(ScriptLanguageExtensionPr
 }
 
 bool VerseScriptLanguage::_handles_global_class_type(const String &p_type) const {
-	return false;
+	return p_type == _get_type();
 }
 
+// Read from the file's text, never from the host.
+//
+// EditorFileSystem asks this from its scan thread, for every .verse in the project, during the
+// startup scan -- and both halves of that are out of the ABI's reach. Every vh_ entry point has
+// to be called on the vh_init thread, and vh_compile_project may run only once per process, so a
+// filesystem scan is the last thing that should be able to trigger a build. GDScript answers the
+// same question from a tokenizer-only pass for the same reason.
 Dictionary VerseScriptLanguage::_get_global_class_name(const String &p_path) const {
-	return Dictionary();
+	const String source = FileAccess::get_file_as_string(p_path);
+	if (FileAccess::get_open_error() != OK) {
+		return Dictionary();
+	}
+
+	const VerseClassDecl decl = verse_scan_class_decl(source.utf8().get_data());
+	if (decl.name.empty()) {
+		return Dictionary();
+	}
+
+	Dictionary result;
+	result["base_type"] = base_types_for(decl).registry_base;
+	result["is_abstract"] = decl.is_abstract;
+	result["is_tool"] = false;
+	// Presence of "name" is what registers the class: ScriptLanguageExtension::get_global_class_name
+	// returns empty the moment the key is absent, so a script without the attribute must not set
+	// it. The other keys are filled either way, as C#'s ScriptManagerBridge does.
+	if (decl.is_global) {
+		result["name"] = String(verse_pascal_case(decl.name).c_str());
+	}
+	return result;
+}
+
+String VerseScriptLanguage::script_path_for_class(const String &p_class_name) const {
+	const PackedStringArray sources = find_verse_sources("res://");
+	for (int64_t i = 0; i < sources.size(); i++) {
+		if (sources[i].get_file().get_basename() == p_class_name) {
+			return sources[i];
+		}
+	}
+	return String();
+}
+
+VerseScriptLanguage::BaseTypes VerseScriptLanguage::base_types_for(const VerseClassDecl &p_decl) const {
+	// The chain is walked rather than only its first link, so a script three deep still finds the
+	// mirrored class and the global ancestor above it. The bound is the cycle guard: Verse rejects
+	// a cyclic hierarchy, but this reads unbuilt text that may still contain one.
+	constexpr int max_depth = 32;
+
+	BaseTypes result;
+	result.instance_base = StringName("Node");
+	bool found_global = false;
+
+	VerseClassDecl decl = p_decl;
+	for (int depth = 0; depth < max_depth && !decl.base.empty(); depth++) {
+		// A name is either one of the generated Godot mirrors or another script's class; the two
+		// sets cannot overlap, so a mirror ends the walk.
+		const String mirrored = godot_class_for(decl.base);
+		if (!mirrored.is_empty()) {
+			result.instance_base = StringName(mirrored);
+			break;
+		}
+
+		const String base = String(decl.base.c_str());
+		const String base_path = script_path_for_class(base);
+		if (base_path.is_empty()) {
+			break;
+		}
+		const String base_source = FileAccess::get_file_as_string(base_path);
+		if (FileAccess::get_open_error() != OK) {
+			break;
+		}
+		const VerseClassDecl base_decl = verse_scan_class_decl(base_source.utf8().get_data());
+		if (base_decl.name.empty()) {
+			break;
+		}
+
+		// Nearest wins, so only the first global ancestor is recorded -- but the walk continues,
+		// because instance_base still needs the mirrored class further up. The registered name,
+		// not the Verse one: this has to name the ancestor as Godot knows it.
+		if (base_decl.is_global && !found_global) {
+			result.registry_base = String(verse_pascal_case(base_decl.name).c_str());
+			found_global = true;
+		}
+		decl = base_decl;
+	}
+
+	if (!found_global) {
+		result.registry_base = String(result.instance_base);
+	}
+	return result;
 }
 
 TypedArray<Dictionary> VerseScriptLanguage::_get_public_functions() const {

@@ -41,6 +41,7 @@ exports := class(object):
 
 # Exists only to give the symbol lookup a Godot API method to resolve against. Analysis never
 # needs a real node behind it, and nothing instantiates this.
+@global_class
 exports_probe := class(node2d):
 
     # Exercises the generated property accessors: reading a struct-typed one, writing it whole

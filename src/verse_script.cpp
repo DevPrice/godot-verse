@@ -1,5 +1,6 @@
 #include "verse_script.h"
 
+#include "verse_class_decl.h"
 #include "verse_runtime.h"
 #include "verse_script_instance.h"
 #include "verse_script_language.h"
@@ -224,9 +225,15 @@ bool VerseScript::_is_abstract() const {
 }
 
 StringName VerseScript::_get_instance_base_type() const {
-	// Real Verse base classes (node2d and friends) are Phase 3's other half, so until
-	// they exist every Verse script attaches at Node.
-	return "Node";
+	// From the declared Verse superclass, so a `class(node2d)` script attaches at Node2D rather
+	// than at the Node floor. Text again, not the host: this is asked of scripts the editor has
+	// merely scanned, well before anything is built.
+	VerseScriptLanguage *language = VerseScriptLanguage::singleton();
+	if (language == nullptr) {
+		return StringName("Node");
+	}
+	const VerseClassDecl decl = verse_scan_class_decl(source_code.utf8().get_data());
+	return language->base_types_for(decl).instance_base;
 }
 
 void *VerseScript::_instance_create(Object *p_for_object) const {
@@ -303,7 +310,11 @@ Ref<Script> VerseScript::_get_base_script() const {
 }
 
 StringName VerseScript::_get_global_name() const {
-	return StringName();
+	// Answered from the source text, like VerseScriptLanguage::_get_global_class_name and for the
+	// same reasons -- and it has to agree with it, because Godot compares the two when it decides
+	// whether the class cache is stale.
+	const VerseClassDecl decl = verse_scan_class_decl(source_code.utf8().get_data());
+	return decl.is_global ? StringName(String(verse_pascal_case(decl.name).c_str())) : StringName();
 }
 
 bool VerseScript::_inherits_script(const Ref<Script> &p_script) const {

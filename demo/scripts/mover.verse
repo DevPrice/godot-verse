@@ -4,6 +4,11 @@ using { /Verse.org/Simulation }
 # Named after the file. A script that defines a class named after itself is attached to a node as
 # that class: the host instantiates it against the node and Ready/Update are its methods, not
 # free functions, so `Self` is the node and no GetNode lookup is needed.
+#
+# @global_class registers that name with Godot, so `Mover` appears in Create New Node and can be
+# named as a type from GDScript -- the same thing C#'s [GlobalClass] does. Godot gets the
+# PascalCase spelling; Verse keeps this one.
+@global_class
 mover := class(node2d):
 
 	@editable

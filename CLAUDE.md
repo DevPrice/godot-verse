@@ -37,6 +37,7 @@ surfaces at `vh_init`, not at compile time.
 | `verse_script_language.{h,cpp}` | the `ScriptLanguage`: `_validate`, the analysis cache, `_frame` (which pumps `vh_tick` and reaps `vh_check_project_poll`) |
 | `verse_resource_format.{h,cpp}` | load/save, without which a `.verse` cannot be attached to a node |
 | `verse_lexer.{h,cpp}` | resumable per-line lexer; no godot-cpp dependency, so it is unit-testable standalone |
+| `verse_class_decl.{h,cpp}` | scans a `.verse` file's top-level class and its `@global_class` attribute out of the text; defers comments and strings to the lexer, and shares its lack of godot-cpp |
 | `verse_syntax_highlighter.*`, `verse_editor_plugin.*` | editor-only (`TOOLS_ENABLED`) |
 | `verse_ticker.{h,cpp}` | the pre-script-language Phase 2 node; still works, nothing needs it |
 
@@ -58,11 +59,13 @@ and the `VerseSimulationMetadata` dependency each exist for a reason spelled out
     python tools/gen_verse_api.py         # regenerates the Verse mirror of Godot's API
     python tools/build_smoke.py           # ABI test binary
     python tools/build_lexer_test.py      # lexer test binary
+    python tools/build_class_decl_test.py # class-declaration scanner test binary
 
 Run the tests:
 
     bin/host_smoke.exe <engine>/Engine/Binaries/Win64/verse_host.dll <engine>/Engine .
     bin/verse_lexer_test.exe
+    bin/verse_class_decl_test.exe
     python tests/verse_api_gen/test_gen_verse_api.py
 
 No test framework anywhere. Each test is a `main` (or a plain script) that prints one line per case
@@ -104,6 +107,14 @@ another Godot class should cost no C++ and no new native function.
   Verse code is a fatal "could not find function" at runtime, not a link error.
 - **One top-level name per file.** The whole project shares one flat `/user@localhost` scope and
   Verse forbids shadowing. A script's class is named after its own file for exactly this reason.
+- **The attribute package must be added before the first `AddDataSource`.** `@global_class` is
+  declared in a source package the host adds at runtime, not in `host/Verse` — VNI compiles that
+  at build time and rejects `class(attribute)`. `FSolarisIde::EnsureDataSourcePackageExists`
+  snapshots the project's other packages as the script package's dependencies exactly once, so a
+  package added after the first script is never depended on and the attribute stops resolving.
+  Authorship comes from a `IPreSemAnalysisInjection`, which must stay registered for the life of
+  the process: `CProgramBuildManager::Build` resets the semantic program on every compile *and*
+  every analysis, so a one-shot grant is gone by the first build.
 - **Verse rejects mixed tabs and spaces.** Godot's script editor writes tabs; `.vscode/settings.json`
   matches that. Keep `.verse` files tab-indented.
 

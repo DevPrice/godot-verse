@@ -10,6 +10,8 @@
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
 
+struct VerseClassDecl;
+
 // The "Verse" ScriptLanguage. One instance, created and handed to
 // Engine::register_script_language by register_types.cpp, so singleton() is valid for the life
 // of the extension.
@@ -139,6 +141,19 @@ public:
 	// the syntax highlighter has to colour a script that has never been built.
 	godot::PackedStringArray script_class_names() const;
 
+	// The Godot class a script attaches at, and the base_type its global-class registration
+	// records. One walk up the Verse superclass chain answers both, which is why they come back
+	// together: they differ only in where they stop.
+	struct BaseTypes {
+		// The nearest mirrored Godot class. "Node" when the chain reaches none, which is the
+		// floor for any scripted node.
+		godot::StringName instance_base;
+		// The nearest ancestor that is itself a global class, so the class picker nests them the
+		// way C# does; instance_base when there is no such ancestor.
+		godot::String registry_base;
+	};
+	BaseTypes base_types_for(const VerseClassDecl &p_decl) const;
+
 	// Blocks until every outstanding analysis has landed, so diagnostics_for answers for the
 	// current text rather than the text before the last edit. Saving and reloading are worth a
 	// wait: they are explicit, they are where a script's validity is decided, and answering them
@@ -186,4 +201,9 @@ private:
 	void log_new_diagnostics(const godot::String &p_globalized_path, const godot::TypedArray<godot::Dictionary> &p_errors) const;
 
 	static godot::PackedStringArray find_verse_sources(const godot::String &p_dir);
+
+	// The res:// path of the script defining p_class_name, or empty. A linear walk of the project
+	// rather than a cached map: it is only reached for a script whose superclass is another
+	// script, which the generated Godot API never is.
+	godot::String script_path_for_class(const godot::String &p_class_name) const;
 };

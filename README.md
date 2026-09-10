@@ -174,6 +174,48 @@ Full research, citations and the roadmap are in `docs/property-export.md`. `test
 covers both directions — including, because a read/write round-trip cannot catch a value written
 in the wrong representation, calling back into Verse to read and assign each member afterwards.
 
+**`@global_class` registers a script's class with Godot**, the way C#'s `[GlobalClass]` does: the
+class appears in Create New Node and can be named as a type from GDScript. It takes no argument
+because there is nothing to say — *One top-level name per file* already pins the class name to the
+file stem, so that name is what Godot registers. `<abstract>` on the class comes across as Godot's
+`is_abstract`.
+
+**The registered name is PascalCase**, so `player_controller` registers as `PlayerController`.
+This is the one place the bridge does not hand Godot the Verse spelling, and C# is no guide here
+because C# type names are already PascalCase. Godot's global class names share one namespace with
+the engine's own types, and a snake_case name both reads wrong beside them in the class picker and
+is what collides there. Only the Godot-facing name changes: the script still instantiates through
+its file stem, so nothing on the Verse side has to know. Words split on underscores, plus one
+narrow rule for Godot's dimensional suffix: a `d` closing a word with a digit before it
+uppercases, so `enemy2d` registers as `Enemy2D` the way `Node2D` and `Camera3D` are spelled.
+Nothing else about digits is special — `add` and `vector2i` come through untouched.
+
+This is the one attribute the bridge owns rather than borrows, and it could not have been declared
+beside the rest of the API. `AddSuperType` refuses `class(attribute)` unless the definition's
+verse path is in `CSemanticProgram::_EpicInternalModulePrefixes` — access to `epic_internal` is
+what the `InternalUser` package scope buys, and authorship is not. Adding `/Godot.org/` to that
+list is reachable, but only from inside this process, and `host/Verse` is compiled by VNI at build
+time where nothing the host does can reach. So the attribute lives in a second source package the
+host adds at runtime, sharing the verse path of the native one — which is why a script needs no
+import beyond the `using { /Godot.org/Godot }` it already has. `HostScript.cpp` carries the
+mechanism and the ordering constraint that goes with it.
+
+**The registry is answered from the file's text, not from the host.** `EditorFileSystem` asks for
+every `.verse` in the project, from its scan thread, during the startup scan — and every ABI entry
+point must be called on the `vh_init` thread, while `vh_compile_project` may run only once per
+process. A filesystem scan is the last thing that should be able to spend that one build. So
+`src/verse_class_decl.cpp` scans for the declaration directly, deferring every comment and string
+decision to the same lexer the highlighter uses, so `@global_class` inside a comment or a string
+is not mistaken for the attribute. GDScript answers the same question the same way, from a
+tokenizer-only pass; C# is the one that reads compiled metadata, and pays for it by needing a
+build before a new `[GlobalClass]` appears. `bin/verse_class_decl_test.exe` covers the scanner.
+
+**`base_type` is the nearest global ancestor**, following C#: a script deriving from another
+*global* script nests under it in the class picker, and only when no ancestor is global does the
+walk fall through to the Godot class the mirrored Verse superclass stands for. The same walk
+answers `_get_instance_base_type`, which is why a `class(node2d)` script now attaches at `Node2D`
+rather than at the `Node` floor.
+
 Compiler diagnostics land in Godot's output with file, line and column, and the script editor gets
 them live: `_validate` answers for the unsaved buffer rather than replaying what the last build
 said.

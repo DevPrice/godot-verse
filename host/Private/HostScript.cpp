@@ -54,7 +54,11 @@
 #include "uLang/Semantics/SemanticTypes.h"
 #include "uLang/Semantics/TypeAlias.h"
 #include "uLang/Syntax/VstNode.h"
+#include "uLang/SourceProject/SourceDataProject.h"
+#include "uLang/SourceProject/VerseScope.h"
 #include "uLang/SourceProject/VerseVersion.h"
+#include "uLang/CompilerPasses/ApiLayerInjections.h"
+#include "uLang/Toolchain/ModularFeatureManager.h"
 #include "uLang/Toolchain/ProgramBuildManager.h"
 
 #include <atomic>
@@ -66,11 +70,84 @@ constexpr const char* ScriptPackageName = "SolIdeDataSources";
 constexpr const char* ScriptVersePath = "/user@localhost";
 constexpr const char* MainFunctionName = "Main(:[][]char,:[[]char][]char)";
 
+/// A second package sharing the native package's verse path, so a script's existing
+/// `using { /Godot.org/Godot }` reaches these definitions with no extra import.
+constexpr const char* AttributePackageName = "GodotAttributes";
+constexpr const char* AttributePackageVersePath = "/Godot.org/Godot";
+constexpr const char* AttributeSnippetPath = "GodotAttributes.verse";
+
+/// The attributes this bridge owns, as Verse source compiled in this process.
+///
+/// They cannot ship in host/Verse with the rest of the package: `class(attribute)` is refused
+/// unless CScope::IsAuthoredByEpic(), which only FGodotAuthorshipInjection below grants -- and
+/// that runs here, while host/Verse is compiled by VNI at UBT time, which nothing we build can
+/// reach. Hence a runtime-only package for the one thing VNI will not accept.
+constexpr const char* AttributePackageSource =
+    "# Registers the class it is applied to as a Godot global class, the way C#'s [GlobalClass]\n"
+    "# does. A marker with no argument: the name Godot registers is the class's own, which the\n"
+    "# one-top-level-name-per-file rule already pins to the file stem.\n"
+    "@attribscope_class\n"
+    "global_class<public> := class<computes>(attribute) {}\n";
+
 using FMainFunction = TVerseFunction<FVerseResult(
     TVerseCall<void>, const TArray<verse::string>&, const TMap<verse::string, verse::string>&)>;
 
 TSharedPtr<ISolarisIde> GIde;
 bool GProjectBuilt = false;
+
+/// Lets `/Godot.org/` declare attributes of its own.
+///
+/// AddSuperType refuses `class(attribute)` unless CScope::IsAuthoredByEpic(), which tests the
+/// definition's verse path against CSemanticProgram::_EpicInternalModulePrefixes -- seeded with
+/// Epic's three domains by CSemanticProgram::Initialize and reachable no other way. Note this
+/// grants *authorship*, which the InternalUser package scope does not: that only unlocks access
+/// to epic_internal definitions, which is why `@editable` can be borrowed but not declared.
+///
+/// It has to run per build rather than once: CProgramBuildManager::Build calls
+/// ResetSemanticProgram() before every compile and every analysis, so the program -- and its
+/// prefix list -- is new each time. This is the first hook that runs after that reset and still
+/// ahead of analysis. The auto-qualify pre-pass builds a second program of its own, but routes
+/// through the same RunCompilerPrePass, so it is covered too.
+class FGodotAuthorshipInjection : public uLang::IPreSemAnalysisInjection
+{
+public:
+    AUTORTFM_DISABLE virtual bool Ingest(
+        const Verse::Vst::TNodeRef<Verse::Vst::Project>&,
+        const uLang::SProgramContext& ProgramContext,
+        const uLang::SBuildContext&) override
+    {
+        ProgramContext._Program->_EpicInternalModulePrefixes.AddUnique("/Godot.org/");
+        return false; // Do not halt the toolchain.
+    }
+};
+
+/// Adds the attribute package to the IDE's source project.
+///
+/// Must run before the first AddDataSource. FSolarisIde::EnsureDataSourcePackageExists snapshots
+/// the project's other packages as the script package's dependencies exactly once, guarded on that
+/// list being empty -- so a package added after the first script is never depended on, and its
+/// definitions do not resolve however the script spells the `using`.
+AUTORTFM_DISABLE void AddAttributePackage(ISolarisIde& Ide)
+{
+    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = Ide.GetBuildManager();
+    if (!BuildManager.IsValid())
+    {
+        GodotVerse::ReportError(UTF8TEXT("No build manager; Godot attributes will be unavailable."));
+        return;
+    }
+
+    const uLang::CSourceProject::SPackage& Package =
+        BuildManager->FindOrAddSourcePackage(AttributePackageName, AttributePackageVersePath);
+    Package._Package->SetVerseScope(uLang::EVerseScope::InternalUser);
+    Package._Package->SetVerseVersion(Verse::Version::LatestUnstable);
+    Package._Package->SetAllowExperimental(true);
+
+    BuildManager->AddSourceSnippet(
+        uLang::TSRef<uLang::CSourceDataSnippet>::New(
+            uLang::CUTF8String(AttributeSnippetPath), uLang::CUTF8String(AttributePackageSource)),
+        AttributePackageName,
+        AttributePackageVersePath);
+}
 
 /// Whether the semantic program the IDE currently holds came from an analysis-only build.
 /// Code generation hangs an IR package off every module, and the AST accessors the symbol
@@ -197,6 +274,10 @@ AUTORTFM_DISABLE bool EnsureIde()
     // linking the module does not run that -- nothing loads it unless asked.
     FModuleManager::Get().LoadModule(TEXT("VerseSimulationMetadata"));
 
+    // Registered for the life of the process, which is the life of the host: the handle
+    // unregisters the feature when it is destroyed, and every build after that loses authorship.
+    static uLang::TModularFeatureRegHandle<FGodotAuthorshipInjection> GodotAuthorship;
+
     ISolarisModule& SolarisModule = ISolarisModule::Get();
 
     TOptional<TSharedRef<ISolIdeSourceProject>> MaybeSourceProject = SolarisModule.CreateProjectSource(
@@ -215,6 +296,7 @@ AUTORTFM_DISABLE bool EnsureIde()
 
     TSharedRef<ISolarisIde> Ide = SolarisModule.MakeDevEnvironment(IdeConfig);
     Ide->SetSourceProject(*MaybeSourceProject);
+    AddAttributePackage(*Ide);
     GIde = Ide;
     return true;
 }
