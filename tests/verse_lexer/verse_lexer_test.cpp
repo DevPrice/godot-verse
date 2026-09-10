@@ -183,6 +183,55 @@ bool TestAttributes()
 	return Step("<public> and <decides> are Attribute tokens", Ok);
 }
 
+bool TestSymbols()
+{
+	auto Results = LexAll({ "X := A + 1" });
+	auto& Tokens = Results[0].Tokens;
+
+	bool Ok = KindAt(Tokens, 0) == VerseTokenKind::Text; // X
+	Ok = Ok && KindAt(Tokens, 2) == VerseTokenKind::Symbol; // :=
+	Ok = Ok && KindAt(Tokens, 5) == VerseTokenKind::Text; // A
+	Ok = Ok && KindAt(Tokens, 7) == VerseTokenKind::Symbol; // +
+	Ok = Ok && KindAt(Tokens, 9) == VerseTokenKind::Number;
+
+	return Step("operators and punctuation are symbols, not plain text", Ok);
+}
+
+bool TestCallsAndMembers()
+{
+	auto Results = LexAll({ "Print(P.X)", "if (Q := GetPosition[]):", "Ready<override>():void =" });
+
+	bool Ok = KindAt(Results[0].Tokens, 0) == VerseTokenKind::Function; // Print
+	Ok = Ok && KindAt(Results[0].Tokens, 6) == VerseTokenKind::Text; // P, not a call
+	Ok = Ok && KindAt(Results[0].Tokens, 8) == VerseTokenKind::Member; // .X
+
+	// A <decides> call is spelled with brackets, so those count as a call position too.
+	Ok = Ok && KindAt(Results[1].Tokens, 9) == VerseTokenKind::Function; // GetPosition
+
+	// A definition puts its specifiers between the name and the parameter list.
+	Ok = Ok && KindAt(Results[2].Tokens, 0) == VerseTokenKind::Function; // Ready
+	Ok = Ok && KindAt(Results[2].Tokens, 5) == VerseTokenKind::Attribute; // <override>
+
+	return Step("call positions and member accesses colour apart from plain identifiers", Ok);
+}
+
+bool TestPrefixAttributes()
+{
+	auto Results = LexAll({ "@editable", "@clamp_min(\"0.0\")" });
+
+	bool Ok = KindAt(Results[0].Tokens, 0) == VerseTokenKind::Attribute;
+	Ok = Ok && KindAt(Results[1].Tokens, 0) == VerseTokenKind::Attribute;
+	// The argument list is ordinary code, not part of the attribute token.
+	Ok = Ok && KindAt(Results[1].Tokens, 10) == VerseTokenKind::Symbol; // (
+	Ok = Ok && KindAt(Results[1].Tokens, 11) == VerseTokenKind::String;
+
+	// An email-ish `@` with no identifier after it stays a plain symbol.
+	auto Bare = LexAll({ "A @ B" });
+	Ok = Ok && KindAt(Bare[0].Tokens, 2) == VerseTokenKind::Symbol;
+
+	return Step("@name is an attribute; a bare @ is not", Ok);
+}
+
 } // namespace
 
 int main()
@@ -197,6 +246,9 @@ int main()
 	Ok = TestInterpolation() && Ok;
 	Ok = TestKeywordClassification() && Ok;
 	Ok = TestAttributes() && Ok;
+	Ok = TestSymbols() && Ok;
+	Ok = TestCallsAndMembers() && Ok;
+	Ok = TestPrefixAttributes() && Ok;
 
 	printf("[verse_lexer_test] %s\n", Ok ? "ALL PASS" : "FAILURES");
 	return Ok ? 0 : 1;

@@ -98,6 +98,30 @@ int scan_number_end(const std::string &p_line, int p_start) {
 	return end;
 }
 
+bool at_attribute(const std::string &p_line, int p_pos, int &r_end) {
+	if (!is_ident_start(char_at(p_line, p_pos + 1))) {
+		return false;
+	}
+	const int end = scan_identifier_end(p_line, p_pos + 1);
+	if (char_at(p_line, end) != '>') {
+		return false;
+	}
+	r_end = end + 1;
+	return true;
+}
+
+// `Print(` and `GetPosition[` are calls, and so is a definition like `Ready<override>()`, where
+// specifiers sit between the name and its parameter list. `[` counts because a <decides> call is
+// spelled with brackets.
+bool is_call_position(const std::string &p_line, int p_pos) {
+	int pos = p_pos;
+	int end = 0;
+	while (char_at(p_line, pos) == '<' && at_attribute(p_line, pos, end)) {
+		pos = end;
+	}
+	return char_at(p_line, pos) == '(' || char_at(p_line, pos) == '[';
+}
+
 VerseTokenKind classify_word(const std::string &p_word) {
 	for (size_t i = 0; i < std::size(verse_keywords::control_flow_words); i++) {
 		if (p_word == verse_keywords::control_flow_words[i]) {
@@ -110,6 +134,17 @@ VerseTokenKind classify_word(const std::string &p_word) {
 		}
 	}
 	return VerseTokenKind::Text;
+}
+
+VerseTokenKind classify_identifier(const std::string &p_line, int p_start, int p_end, bool p_after_dot) {
+	const VerseTokenKind word = classify_word(p_line.substr(p_start, p_end - p_start));
+	if (word != VerseTokenKind::Text) {
+		return word;
+	}
+	if (is_call_position(p_line, p_end)) {
+		return VerseTokenKind::Function;
+	}
+	return p_after_dot ? VerseTokenKind::Member : VerseTokenKind::Text;
 }
 
 } // namespace
@@ -150,6 +185,7 @@ void verse_lex_line(const std::string &p_line, VerseLexState &p_state, std::vect
 		}
 	}
 	int block_depth = p_state.block_comment_depth;
+	bool pending_member = false;
 
 	VerseTokenKind last_kind = VerseTokenKind::Text;
 	bool has_last = false;
@@ -220,6 +256,11 @@ void verse_lex_line(const std::string &p_line, VerseLexState &p_state, std::vect
 		// top == 'I' (interpolation code) and top == '\0' (top-level code) share the same
 		// expression-position grammar; only {}-matching is specific to being inside a string.
 		const char c = p_line[col];
+
+		// Only an identifier directly behind a dot is a member access, so any other token clears
+		// the flag -- whitespace included, which is why `A . B` does not colour B as a member.
+		const bool after_dot = pending_member;
+		pending_member = false;
 		if (top == 'I' && c == '{') {
 			frames.push_back('I');
 			emit(col, VerseTokenKind::Interpolation);
@@ -265,19 +306,28 @@ void verse_lex_line(const std::string &p_line, VerseLexState &p_state, std::vect
 			col = end;
 		} else if (is_ident_start(c)) {
 			const int end = scan_identifier_end(p_line, col);
-			emit(col, classify_word(p_line.substr(col, end - col)));
+			emit(col, classify_identifier(p_line, col, end, after_dot));
 			col = end;
+		} else if (c == '@' && is_ident_start(char_at(p_line, col + 1))) {
+			// The prefix attribute form: @editable, @clamp_min("0.0"). Its argument list, if any,
+			// falls out of the attribute token and lexes as ordinary code.
+			emit(col, VerseTokenKind::Attribute);
+			col = scan_identifier_end(p_line, col + 1);
 		} else if (c == '<' && is_ident_start(char_at(p_line, col + 1))) {
-			const int end = scan_identifier_end(p_line, col + 1);
-			if (char_at(p_line, end) == '>') {
+			int end = 0;
+			if (at_attribute(p_line, col, end)) {
 				emit(col, VerseTokenKind::Attribute);
-				col = end + 1;
+				col = end;
 			} else {
-				emit(col, VerseTokenKind::Text);
+				emit(col, VerseTokenKind::Symbol);
 				col += 1;
 			}
 		} else {
-			emit(col, VerseTokenKind::Text);
+			// Whitespace carries no glyph to colour, and calling it a symbol would split every
+			// run of plain text in two for nothing.
+			const bool is_space = c == ' ' || c == '\t' || c == '\r';
+			pending_member = c == '.';
+			emit(col, is_space ? VerseTokenKind::Text : VerseTokenKind::Symbol);
 			col += 1;
 		}
 	}

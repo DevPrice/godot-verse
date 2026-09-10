@@ -3,6 +3,7 @@
 #include <godot_cpp/classes/editor_interface.hpp>
 #include <godot_cpp/classes/editor_settings.hpp>
 #include <godot_cpp/classes/text_edit.hpp>
+#include <godot_cpp/variant/char_string.hpp>
 #include <godot_cpp/variant/variant.hpp>
 
 using namespace godot;
@@ -59,6 +60,12 @@ Color VerseSyntaxHighlighter::color_for(VerseTokenKind p_kind) const {
 			return control_flow_keyword_color;
 		case VerseTokenKind::Attribute:
 			return keyword_color;
+		case VerseTokenKind::Symbol:
+			return symbol_color;
+		case VerseTokenKind::Function:
+			return function_color;
+		case VerseTokenKind::Member:
+			return member_color;
 		case VerseTokenKind::Text:
 		default:
 			return text_color;
@@ -94,13 +101,34 @@ Dictionary VerseSyntaxHighlighter::_get_line_syntax_highlighting(int32_t p_line)
 	}
 
 	VerseLexState line_state = line_start_state[p_line];
+	const String line = text_edit->get_line(p_line);
+	const CharString utf8 = line.utf8();
 	std::vector<VerseToken> tokens;
-	verse_lex_line(text_edit->get_line(p_line).utf8().get_data(), line_state, tokens);
+	verse_lex_line(utf8.get_data(), line_state, tokens);
+
+	// The lexer counts bytes and Godot indexes this dictionary by character; the two agree only
+	// while the line is ASCII. One non-ASCII character would otherwise shift every colour
+	// boundary after it. Tokens come out in increasing column order, so one walk converts them
+	// all: the character index of a byte offset is the number of non-continuation bytes before it.
+	const bool byte_offsets_differ = utf8.length() != line.length();
+	int byte_cursor = 0;
+	int char_cursor = 0;
 
 	for (const VerseToken &token : tokens) {
+		int column = token.column;
+		if (byte_offsets_differ) {
+			while (byte_cursor < token.column && byte_cursor < utf8.length()) {
+				if ((static_cast<unsigned char>(utf8[byte_cursor]) & 0xC0) != 0x80) {
+					char_cursor++;
+				}
+				byte_cursor++;
+			}
+			column = char_cursor;
+		}
+
 		Dictionary entry;
 		entry["color"] = color_for(token.kind);
-		result[token.column] = entry;
+		result[column] = entry;
 	}
 	return result;
 }
@@ -119,5 +147,7 @@ void VerseSyntaxHighlighter::_update_cache() {
 	control_flow_keyword_color = read_color(settings, "text_editor/theme/highlighting/control_flow_keyword_color", control_flow_keyword_color);
 	number_color = read_color(settings, "text_editor/theme/highlighting/number_color", number_color);
 	symbol_color = read_color(settings, "text_editor/theme/highlighting/symbol_color", symbol_color);
+	function_color = read_color(settings, "text_editor/theme/highlighting/function_color", function_color);
+	member_color = read_color(settings, "text_editor/theme/highlighting/member_variable_color", member_color);
 	text_color = read_color(settings, "text_editor/theme/highlighting/text_color", text_color);
 }

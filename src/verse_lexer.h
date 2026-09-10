@@ -13,6 +13,9 @@ enum class VerseTokenKind {
 	Keyword,
 	ControlKeyword,
 	Attribute,
+	Symbol,
+	Function,
+	Member,
 };
 
 // column is a 0-based byte offset into the line.
