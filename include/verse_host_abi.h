@@ -22,7 +22,7 @@
 extern "C" {
 #endif
 
-#define VH_ABI_VERSION 18
+#define VH_ABI_VERSION 19
 
 typedef int32_t vh_bool;
 
@@ -171,7 +171,6 @@ typedef struct vh_godot_api
 	void* Ctx;
 
 	void (*Print)(void* Ctx, const char* Utf8, int32_t Len);
-	vh_handle (*GetNode)(void* Ctx, const char* PathUtf8, int32_t PathLen); /* 0 if absent */
 	vh_bool (*IsValid)(void* Ctx, vh_handle Handle);
 
 	/* All three answer vh_call_status. A dead handle must be reported as VH_CALL_DEAD_OBJECT
@@ -180,16 +179,6 @@ typedef struct vh_godot_api
 	int32_t (*GetProperty)(void* Ctx, vh_handle Handle, const char* NameUtf8, int32_t NameLen, vh_arena* Arena, vh_value* OutValue);
 	int32_t (*SetProperty)(void* Ctx, vh_handle Handle, const char* NameUtf8, int32_t NameLen, const vh_value* Value);
 	int32_t (*CallMethod)(void* Ctx, vh_handle Handle, const char* NameUtf8, int32_t NameLen, const vh_value* Args, int32_t ArgCount, vh_arena* Arena, vh_value* OutValue);
-
-	int32_t (*GetChildCount)(void* Ctx, vh_handle Handle);
-	vh_handle (*GetChild)(void* Ctx, vh_handle Handle, int32_t Index);
-
-	/* Writes a VH_TYPE_MAP of string->string describing the object (name, class, path). */
-	vh_bool (*GetMeta)(void* Ctx, vh_handle Handle, vh_arena* Arena, vh_value* OutValue);
-
-	/* ClassDB::instantiate. 0 if the class is unknown or not instantiable. The caller owns the
-	 * result: a Node that is never added to a tree leaks unless it is freed. */
-	vh_handle (*Instantiate)(void* Ctx, const char* ClassNameUtf8, int32_t ClassNameLen);
 
 	/* Engine::get_singleton, for Input, Time, and the rest of Godot's global objects. 0 if
 	 * there is no such singleton. */

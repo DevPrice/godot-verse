@@ -23,18 +23,22 @@ DEFAULT_CLASSES_FILE = "tools/verse_api_classes.txt"
 KEYWORDS_HEADER = "src/verse_keywords.h"
 EXTENSION_API = "godot-cpp/gdextension/extension_api.json"
 
-BASE_MEMBER_NAMES = {"Handle", "IsInstanceValid", "Ready", "Process", "PhysicsProcess"}
+BASE_MEMBER_NAMES = {"Handle", "Ready", "Process", "PhysicsProcess"}
 
 # /Verse.org/Verse is in scope in every generated body, and Verse reports an ambiguity rather
 # than shadowing, so a parameter named Min breaks any method that mentions it. The standard
 # library's names are compiler intrinsics rather than a .verse digest, so there is nothing to
 # enumerate; this list is what the full-API generation actually collided with, plus the obvious
 # siblings. Over-listing costs nothing but an ArgN parameter name.
+#
+# This package's own module-level names are in scope for the same reason and belong here too --
+# Print and IsInstanceValid, the two functions GodotApi.native.verse exports.
 VERSE_STDLIB_NAMES = {
     "Abs", "Ceil", "Floor", "Round", "Sqrt", "Min", "Max", "Sign", "Clamp", "Lerp", "Mod",
     "Sin", "Cos", "Tan", "ArcSin", "ArcCos", "ArcTan", "Pow", "Exp", "Ln",
     "Print", "Err", "Sleep", "Length", "Slice", "Reverse", "Shuffle", "Concatenate", "Fits",
     "ToString", "ToDiagnostic", "ToInt", "ToFloat", "ToChar", "ToRational",
+    "IsInstanceValid",
 }
 
 TypeInfo = namedtuple("TypeInfo", ["verse_type", "pack_fn", "pack_decides", "unpack_fn", "unpack_decides"])
@@ -556,10 +560,32 @@ HEADER_TEMPLATE = """using {{/Verse.org/Native}}
 """
 
 
-def render(api: dict, class_blocks: list) -> str:
+SINGLETONS_TEMPLATE = """
+# Godot hands a singleton out by name rather than through the scene, so a mirrored `input` or
+# `engine` would otherwise be a class no script can obtain an instance of. <decides> because
+# Engine::get_singleton answers nothing for a name this build did not register -- an editor-only
+# singleton asked for in an exported game, say.
+
+{accessors}
+"""
+
+
+def emit_singleton_accessors(api: dict, emit_order: list) -> list:
+    """One module-level accessor per emitted class that Godot registers as a singleton."""
+    singletons = {s["name"] for s in api.get("singletons", [])}
+    return [
+        f'Get{name}<public>()<decides><transacts>:{verse_class_name(name)}'
+        f' = {verse_class_name(name)}{{Handle := VhSingleton["{name}"]}}'
+        for name in sorted(n for n in emit_order if n in singletons)
+    ]
+
+
+def render(api: dict, class_blocks: list, singleton_accessors: list) -> str:
     version = api["header"]["version_full_name"]
     text = HEADER_TEMPLATE.format(version=version)
     text += "\n" + "\n\n".join(class_blocks) + "\n"
+    if singleton_accessors:
+        text += SINGLETONS_TEMPLATE.format(accessors="\n".join(singleton_accessors))
     return text
 
 
@@ -715,7 +741,7 @@ def main() -> int:
 
     coverage = Coverage()
     class_blocks, emit_order, method_map = generate(api, requested, coverage)
-    text = render(api, class_blocks)
+    text = render(api, class_blocks, emit_singleton_accessors(api, emit_order))
     classes_header_text = render_classes_header(api, emit_order, method_map)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)

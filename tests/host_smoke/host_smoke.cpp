@@ -17,11 +17,6 @@ static void SmokePrint(void*, const char* Utf8, int32_t Len)
 	fputc('\n', stdout);
 }
 
-static vh_handle SmokeGetNode(void*, const char*, int32_t)
-{
-	return 0;
-}
-
 static vh_bool SmokeIsValid(void*, vh_handle)
 {
 	return 0;
@@ -43,16 +38,6 @@ static int32_t SmokeSetProperty(void*, vh_handle, const char*, int32_t, const vh
 static int32_t SmokeCallMethod(void*, vh_handle, const char*, int32_t, const vh_value*, int32_t, vh_arena*, vh_value*)
 {
 	return VH_CALL_DEAD_OBJECT;
-}
-
-static int32_t SmokeGetChildCount(void*, vh_handle)
-{
-	return 0;
-}
-
-static vh_handle SmokeGetChild(void*, vh_handle, int32_t)
-{
-	return 0;
 }
 
 static const char* SeverityName(int32_t Severity)
@@ -198,13 +183,10 @@ int main(int argc, char** argv)
 	Desc.Godot.StructSize = sizeof(Desc.Godot);
 	Desc.Godot.Ctx = nullptr;
 	Desc.Godot.Print = &SmokePrint;
-	Desc.Godot.GetNode = &SmokeGetNode;
 	Desc.Godot.IsValid = &SmokeIsValid;
 	Desc.Godot.GetProperty = &SmokeGetProperty;
 	Desc.Godot.SetProperty = &SmokeSetProperty;
 	Desc.Godot.CallMethod = &SmokeCallMethod;
-	Desc.Godot.GetChildCount = &SmokeGetChildCount;
-	Desc.Godot.GetChild = &SmokeGetChild;
 	Desc.OnDiagnostic = &SmokeOnDiagnostic;
 	Desc.DiagnosticCtx = nullptr;
 	Desc.EnableDebugger = 0;

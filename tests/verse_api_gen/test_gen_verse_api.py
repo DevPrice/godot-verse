@@ -176,6 +176,16 @@ def test_ancestor_pull_in():
     check_true("Object never pulled in", "Object" not in order)
 
 
+def test_singleton_accessors_cover_only_emitted_classes():
+    api = {"singletons": [{"name": "Input"}, {"name": "RenderingServer"}]}
+    lines = g.emit_singleton_accessors(api, ["Node", "Input"])
+    check(
+        "an accessor for the emitted singleton and nothing else",
+        lines,
+        ['GetInput<public>()<decides><transacts>:input = input{Handle := VhSingleton["Input"]}'],
+    )
+
+
 def _method(name, ret_type=None, args=None):
     m = {"name": name, "is_virtual": False, "is_static": False, "is_vararg": False}
     m["return_value"] = {"type": ret_type} if ret_type else None
@@ -487,14 +497,29 @@ def test_generated_file_matches_hand_written_slice():
 
     # A null Godot object is the only absence a mirrored method can report, so every remaining
     # <decides> must be an object return. Anything else claiming failure is a method whose caller
-    # would have to write an `if` around a case that never arrives.
-    failable = [line for line in text.splitlines() if "<decides>" in line]
+    # would have to write an `if` around a case that never arrives. The singleton accessors are
+    # the file's other failable definitions, and fail for the one other real reason: the name is
+    # not registered in this build. They are told apart by being at module scope.
+    failable = [
+        line for line in text.splitlines()
+        if "<decides>" in line and not line.lstrip().startswith("#")
+    ]
     check_true(
         "every failable generated method returns an object",
-        failable and all("VhToHandle[" in line for line in failable),
+        any(line.startswith("    ") for line in failable)
+        and all("VhToHandle[" in line for line in failable if line.startswith("    ")),
+    )
+    accessors = [line for line in failable if not line.startswith("    ")]
+    check_true(
+        "the only failable free functions are the singleton accessors",
+        accessors and all("VhSingleton[" in line for line in accessors),
+    )
+    check_true(
+        "a mirrored singleton gets an accessor",
+        'GetInput<public>()<decides><transacts>:input = input{Handle := VhSingleton["Input"]}' in text,
     )
 
-    base_members = {"Handle", "IsInstanceValid", "Ready", "Process", "PhysicsProcess"}
+    base_members = {"Handle", "Ready", "Process", "PhysicsProcess"}
 
     def inherited(name):
         if name == "object":
@@ -521,6 +546,7 @@ def main():
     test_emit_value_method_class_return()
     test_emit_packed_string_array_return()
     test_ancestor_pull_in()
+    test_singleton_accessors_cover_only_emitted_classes()
     test_shadow_suppression_across_inheritance()
     test_base_member_shadow()
     test_unsupported_type_skipping()

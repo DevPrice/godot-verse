@@ -621,8 +621,9 @@ static Dictionary override_option_for(const Dictionary &p_item) {
 // That leaves the two sets that mean something. `object` is hand-written rather than generated and
 // so is not in the class table: its Ready/Process/PhysicsProcess are the only Godot virtuals the
 // bridge carries at all, and the method table names exactly those three as `object`'s -- which is
-// how IsInstanceValid, a helper on the same class that nothing dispatches to, stays out. Anything
-// else is a class the author wrote, and the mirror never contains one of those.
+// what the table lookup below is for, since anything else `object` ever grows would be a helper
+// nothing dispatches to. Anything else is a class the author wrote, and the mirror never contains
+// one of those.
 //
 // A method the class already declares comes back owned by that class -- the host lets a subclass'
 // copy win over the superclass' and drops the duplicate -- so comparing the owner is what stops an

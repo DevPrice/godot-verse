@@ -41,8 +41,8 @@ private:
 	// cache has to be mutable.
 	mutable std::vector<VerseLexState> line_start_state;
 
-	// Every class name a script could name: the mirrored Godot API, the two types the native
-	// package hand-writes, plus the class each .verse file in the project defines. A set of
+	// Every class name a script could name: the mirrored Godot API, the native package's
+	// hand-written `object`, plus the class each .verse file in the project defines. A set of
 	// names rather than source positions on purpose -- a
 	// name does not move when a line is inserted above it, so colouring stays put while the
 	// author types, which is the one thing per-keystroke recolouring cannot tolerate.

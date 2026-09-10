@@ -3989,3 +3989,12 @@ static_body2d<public> := class(physics_body2d):
     SetPhysicsMaterialOverride<public>(PhysicsMaterialOverride:resource)<transacts>:void = VhCallVoid(Handle, "set_physics_material_override", array{VhFromObject(PhysicsMaterialOverride)})
 
 v_box_container<public> := class(box_container):
+
+# Godot hands a singleton out by name rather than through the scene, so a mirrored `input` or
+# `engine` would otherwise be a class no script can obtain an instance of. <decides> because
+# Engine::get_singleton answers nothing for a name this build did not register -- an editor-only
+# singleton asked for in an exported game, say.
+
+GetEngine<public>()<decides><transacts>:engine = engine{Handle := VhSingleton["Engine"]}
+GetInput<public>()<decides><transacts>:input = input{Handle := VhSingleton["Input"]}
+GetTime<public>()<decides><transacts>:time = time{Handle := VhSingleton["Time"]}

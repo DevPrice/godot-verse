@@ -27,15 +27,15 @@ Color read_color(const Ref<EditorSettings> &p_settings, const String &p_name, co
 	return value;
 }
 
-// The two types /Godot.org/Godot exports that no generated entry stands behind. `object` is the
-// hand-written native base every mirrored class derives from -- gen_verse_api.py deliberately
-// mirrors nothing onto it, so Godot's Object is the one class absent from the table, and a script
-// naming it in its own class header is the commonest place a type name appears at all. `variant`
-// is the tuple the ABI packs a Godot Variant into. Everything else the package exports is either a
-// mirrored class, which the table already carries, or a call, which colours from its position.
+// The one type /Godot.org/Godot exports that no generated entry stands behind. It is hand-written
+// rather than mirrored precisely because Godot's Object is the single class gen_verse_api.py
+// skips, so it is absent from the table it belongs in -- and a script names it in its own class
+// header, which is the commonest place a type name appears at all. Everything else the package
+// exports to a script is either a mirrored class, which the table already carries, or a call,
+// which colours from its position. The `variant` tuple is not on either list because it is not
+// exported: a script cannot name it.
 constexpr const char *native_type_names[] = {
 	"object",
-	"variant",
 };
 
 } // namespace

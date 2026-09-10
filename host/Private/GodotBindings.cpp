@@ -60,7 +60,7 @@ void RaiseCallStatus(int32 Status, int64 Handle, const verse::string& Member, co
         RAISE_VERSE_RUNTIME_ERROR_FORMAT(
             Verse::ERuntimeDiagnostic::ErrRuntime_NativeInternal,
             TEXT("%s `%hs` on Godot object %lld, which Godot has already freed. Test "
-                 "IsInstanceValid() before reaching through a handle the scene may have dropped."),
+                 "IsInstanceValid(...) before reaching through a reference the scene may have dropped."),
             Verb,
             reinterpret_cast<const char*>(*Name),
             Handle);
@@ -413,85 +413,10 @@ void Print(verse::string const& Message)
     });
 }
 
-TOptional<int64> VhGetNode(verse::string const& Path)
-{
-    FHostState& Host = GetHost();
-    if (!Host.Godot.GetNode)
-    {
-        return {};
-    }
-
-    const FUtf8StringView View = ToView(Path);
-    const vh_handle Handle = CallGodot([&] { return Host.Godot.GetNode(Host.Godot.Ctx, Bytes(View), View.Len()); });
-    if (Handle == 0)
-    {
-        return {};
-    }
-    return Handle;
-}
-
 bool VhIsValid(int64 Handle)
 {
     FHostState& Host = GetHost();
     return Host.Godot.IsValid && CallGodot([&] { return Host.Godot.IsValid(Host.Godot.Ctx, Handle) != 0; });
-}
-
-TArray<int64> VhGetChildren(int64 Handle)
-{
-    TArray<int64> Children;
-
-    FHostState& Host = GetHost();
-    if (!Host.Godot.GetChildCount || !Host.Godot.GetChild)
-    {
-        return Children;
-    }
-
-    const int32 Count = CallGodot([&] { return Host.Godot.GetChildCount(Host.Godot.Ctx, Handle); });
-    Children.Reserve(Count);
-    for (int32 Index = 0; Index < Count; ++Index)
-    {
-        const vh_handle Child = CallGodot([&] { return Host.Godot.GetChild(Host.Godot.Ctx, Handle, Index); });
-        if (Child != 0)
-        {
-            Children.Add(Child);
-        }
-    }
-    return Children;
-}
-
-TMap<verse::string, verse::string> VhGetMeta(int64 Handle)
-{
-    TMap<verse::string, verse::string> Meta;
-
-    FHostState& Host = GetHost();
-    if (!Host.Godot.GetMeta)
-    {
-        return Meta;
-    }
-
-    FCallArena Arena;
-    vh_value Value{};
-    if (!CallGodot([&] { return Host.Godot.GetMeta(Host.Godot.Ctx, Handle, &Arena, &Value) != 0; }))
-    {
-        return Meta;
-    }
-    if (Value.Type != VH_TYPE_MAP || Value.Map.Pairs == nullptr)
-    {
-        return Meta;
-    }
-
-    Meta.Reserve(Value.Map.Count);
-    for (int32 Index = 0; Index < Value.Map.Count; ++Index)
-    {
-        const vh_pair& Pair = Value.Map.Pairs[Index];
-        if (Pair.Key.Type != VH_TYPE_STRING || Pair.Value.Type != VH_TYPE_STRING)
-        {
-            continue;
-        }
-        Meta.Add(verse::string(GodotVerse::MakeView(Pair.Key.String.Utf8, Pair.Key.String.Len)),
-                 verse::string(GodotVerse::MakeView(Pair.Value.String.Utf8, Pair.Value.String.Len)));
-    }
-    return Meta;
 }
 
 void VhTypeMismatch(verse::string const& Expected, FGodotValue const& Value)
@@ -610,23 +535,6 @@ void VhSetValue(int64 Handle, verse::string const& Property, FGodotValue const& 
         const vh_value Wire = Store.Wire(Owned);
         Host.Godot.SetProperty(Host.Godot.Ctx, Handle, reinterpret_cast<const char*>(*Name), Name.Len(), &Wire);
     });
-}
-
-TOptional<int64> VhInstantiate(verse::string const& ClassName)
-{
-    FHostState& Host = GetHost();
-    if (!Host.Godot.Instantiate)
-    {
-        return {};
-    }
-
-    const FUtf8StringView Name = ToView(ClassName);
-    const vh_handle Handle = CallGodot([&] { return Host.Godot.Instantiate(Host.Godot.Ctx, Bytes(Name), Name.Len()); });
-    if (Handle == 0)
-    {
-        return {};
-    }
-    return Handle;
 }
 
 TOptional<int64> VhSingleton(verse::string const& Name)

@@ -84,6 +84,36 @@ the scene defers its write to transaction commit, and of the 1236 methods that u
 Verse's `<decides>` effect only the 132 returning an object still do — see the lifetime note
 below for why the rest gave it up.
 
+**The package exports what a script should call and nothing else:** `Print`, `IsInstanceValid`,
+the three value types, and the mirrored classes with their singleton accessors. The plumbing under
+them carries no access specifier at all — the `Vh…` primitives, the `variant` tuple they pass, its
+`Tag…` constants, and `object`'s `Handle` — which in Verse means the enclosing module, and the
+enclosing module is exactly the three files in `host/Verse`. Reaching past the typed layer to call
+`VhSetValue(Handle, "position", …)` is the untyped spelling of `set Position`, trading a compile
+error for a runtime type mismatch. Hiding them also keeps some fifty names out of every completion
+list, and stops the wire tuple's shape from being an API commitment. The generator already worked
+this way — every accessor it emits is `epic_internal` — and this is that rule applied to what
+those accessors call. `Handle` is hidden for a second reason as well: it is the one thing that
+outlives what it names, so a script holding a handle rather than the object holds a number no
+guard can check.
+
+Godot hands a singleton out by name rather than through the scene, so `input` and `engine` would
+otherwise be classes no script could obtain an instance of. `gen_verse_api.py` reads
+`extension_api.json`'s singleton list and emits `GetInput()`, `GetEngine()` and `GetTime()` for
+the three mirrored classes that appear in it — `<decides>`, because `Engine::get_singleton`
+answers nothing for a name this build did not register.
+
+`IsInstanceValid` is a free function rather than a method, the way GDScript spells
+`is_instance_valid(node)`. It is hand-written rather than generated with the rest of
+`@GlobalScope`, for two reasons. Godot's own signature takes a `Variant`, so a faithful mirror
+would read `IsInstanceValid(Value:variant)` and hand a script the one type this package keeps to
+itself. And nothing can reach `@GlobalScope` at all yet: every mirrored call rides
+`VhCallValue(Handle, …)`, a utility function has no handle, and Godot's C interface exposes those
+functions only through `variant_get_ptr_utility_function`, a ptrcall needing per-signature
+marshalling. Little would survive the trip anyway — the 78 math and 8 random names collide with
+`/Verse.org/Simulation`, which every script imports, and 21 of the 28 general ones are
+`Variant`-typed or vararg.
+
 **A Godot property is a writable Verse member**, not a get/set pair. 686 of them across the
 mirrored classes are emitted as `var Position<public>...:vector2`, and the `get_position` and
 `set_position` they were built from are gone — two spellings of one thing is worse than one.
@@ -121,7 +151,7 @@ legitimate nor absent, and silently skipping the branch every frame is how a dea
 invisible. What is genuinely absent — `GetParent()` at the scene root, a `FindChild` that misses —
 returns an object and still fails, which is the one thing `<decides>` is left doing.
 
-Test `IsInstanceValid()` before reaching through a handle the scene may have dropped;
+Test `IsInstanceValid(Node)` before reaching through a reference the scene may have dropped;
 `demo/scripts/lifetime.verse` holds a child, frees it, and keeps looking.
 
 *Known limitation:* the host runs a single `verse::FContentScope` for the whole project, and a
@@ -427,12 +457,13 @@ that names a class is coloured as one: the mirrored Godot API — `node2d`, `tim
 plus the class each `.verse` file in the project defines, which is its own stem. Verse's
 primitives need no help, being reserved words already.
 
-Two names have to be spelled out beside the table: `object` and `variant`, the only types
-`/Godot.org/Godot` exports that no generated entry stands behind. `object` is the sharper of the
-two — it is hand-written rather than mirrored precisely because Godot's `Object` is the one class
-`gen_verse_api.py` skips, and it is also the type name a script is likeliest to write, since it is
-the base in its own class header. The rest of the package needs nothing: `Print` and the `Vh…`
-functions are calls, and a call is coloured from its position rather than from any list.
+One name has to be spelled out beside the table: `object`, the only type `/Godot.org/Godot`
+exports that no generated entry stands behind. It is hand-written rather than mirrored precisely
+because Godot's `Object` is the one class `gen_verse_api.py` skips, and it is also the type name a
+script is likeliest to write, since it is the base in its own class header. The rest of the
+package needs nothing: `Print`,
+`IsInstanceValid` and the singleton accessors are calls, and a call is coloured from its position
+rather than from any list.
 
 Deliberately not from the compiler, even though ctrl+click above proves it could answer. Every
 visible line is recoloured on every keystroke, and a source range goes stale the instant a line
@@ -519,9 +550,9 @@ sound only because every emitted class lands in that table — both come off `em
 That leaves the two sets that mean something. `object` is hand-written rather than generated and
 so is not in the class table: its `Ready`, `Process` and `PhysicsProcess` are the only Godot
 virtuals the bridge carries at all, and the generated method table names exactly those three as
-`object`'s — which is how `IsInstanceValid`, a helper on the same class that nothing dispatches
-to, stays out. Everything else is a class the author wrote, and the mirror never contains one of
-those. So a script on `node2d` is offered three declarations, less whichever it has already
+`object`'s — which is what the table lookup is for, since anything else that class ever grows
+would be a helper nothing dispatches to. Everything else is a class the author wrote, and the
+mirror never contains one of those. So a script on `node2d` is offered three declarations, less whichever it has already
 written, plus whatever its own base script declares.
 
 Which position counts as a declaration is read out of the text rather than the analysis, because

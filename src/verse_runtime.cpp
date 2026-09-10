@@ -102,15 +102,10 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 	godot_api.StructSize = sizeof(vh_godot_api);
 	godot_api.Ctx = this;
 	godot_api.Print = &VerseRuntime::api_print;
-	godot_api.GetNode = &VerseRuntime::api_get_node;
 	godot_api.IsValid = &VerseRuntime::api_is_valid;
 	godot_api.GetProperty = &VerseRuntime::api_get_property;
 	godot_api.SetProperty = &VerseRuntime::api_set_property;
 	godot_api.CallMethod = &VerseRuntime::api_call_method;
-	godot_api.GetChildCount = &VerseRuntime::api_get_child_count;
-	godot_api.GetChild = &VerseRuntime::api_get_child;
-	godot_api.GetMeta = &VerseRuntime::api_get_meta;
-	godot_api.Instantiate = &VerseRuntime::api_instantiate;
 	godot_api.GetSingleton = &VerseRuntime::api_get_singleton;
 
 	// EngineDirUtf8 only needs to stay alive for the duration of host.Init below.
@@ -475,24 +470,6 @@ void VerseRuntime::api_print(void *p_ctx, const char *p_utf8, int32_t p_len) {
 	UtilityFunctions::print(String::utf8(p_utf8, p_len));
 }
 
-vh_handle VerseRuntime::api_get_node(void *p_ctx, const char *p_path_utf8, int32_t p_path_len) {
-	SceneTree *tree = Object::cast_to<SceneTree>(Engine::get_singleton()->get_main_loop());
-	if (tree == nullptr) {
-		return 0;
-	}
-	Node *root = tree->get_root();
-	if (root == nullptr) {
-		return 0;
-	}
-
-	const NodePath path(String::utf8(p_path_utf8, p_path_len));
-	Node *node = root->get_node_or_null(path);
-	if (node == nullptr) {
-		return 0;
-	}
-	return node->get_instance_id();
-}
-
 vh_bool VerseRuntime::api_is_valid(void *p_ctx, vh_handle p_handle) {
 	return UtilityFunctions::is_instance_id_valid(p_handle) ? 1 : 0;
 }
@@ -553,62 +530,6 @@ int32_t VerseRuntime::api_call_method(void *p_ctx, vh_handle p_handle, const cha
 		return VH_CALL_OK;
 	}
 	return variant_to_vh(result, p_arena, *r_value) ? VH_CALL_OK : VH_CALL_BAD_VALUE;
-}
-
-int32_t VerseRuntime::api_get_child_count(void *p_ctx, vh_handle p_handle) {
-	Node *node = Object::cast_to<Node>(UtilityFunctions::instance_from_id(p_handle));
-	if (node == nullptr) {
-		return 0;
-	}
-	return node->get_child_count();
-}
-
-vh_handle VerseRuntime::api_get_child(void *p_ctx, vh_handle p_handle, int32_t p_index) {
-	Node *node = Object::cast_to<Node>(UtilityFunctions::instance_from_id(p_handle));
-	if (node == nullptr || p_index < 0 || p_index >= node->get_child_count()) {
-		return 0;
-	}
-	Node *child = node->get_child(p_index);
-	if (child == nullptr) {
-		return 0;
-	}
-	return child->get_instance_id();
-}
-
-vh_bool VerseRuntime::api_get_meta(void *p_ctx, vh_handle p_handle, vh_arena *p_arena, vh_value *r_value) {
-	if (r_value == nullptr) {
-		return 0;
-	}
-	Object *obj = UtilityFunctions::instance_from_id(p_handle);
-	if (obj == nullptr) {
-		return 0;
-	}
-
-	Dictionary meta;
-	Node *node = Object::cast_to<Node>(obj);
-	if (node != nullptr) {
-		meta["name"] = String(node->get_name());
-		meta["class"] = node->get_class();
-		meta["path"] = String(node->get_path());
-	} else {
-		meta["name"] = String();
-		meta["class"] = obj->get_class();
-		meta["path"] = String();
-	}
-
-	return variant_to_vh(meta, p_arena, *r_value) ? 1 : 0;
-}
-
-vh_handle VerseRuntime::api_instantiate(void *p_ctx, const char *p_class_name_utf8, int32_t p_class_name_len) {
-	const StringName class_name(String::utf8(p_class_name_utf8, p_class_name_len));
-	if (!ClassDB::class_exists(class_name) || !ClassDB::can_instantiate(class_name)) {
-		return 0;
-	}
-	Object *obj = ClassDB::instantiate(class_name);
-	if (obj == nullptr) {
-		return 0;
-	}
-	return obj->get_instance_id();
 }
 
 vh_handle VerseRuntime::api_get_singleton(void *p_ctx, const char *p_name_utf8, int32_t p_name_len) {
