@@ -243,6 +243,13 @@ name colours as the class, and a type alias or a nested class is not in the set,
 plain text. Those are the cases where the next step is the scope-aware name set the analysis
 could hand over per file.
 
+**Completion offers the same two name sets, plus the reserved words.** It is coarse for the same
+reason and to the same extent: which names are in scope at a point, and what a value's members
+are, are questions only the compiler can answer, and only about text it has already analysed.
+Completing on a bare cursor is declined — offering the whole mirrored API as one undifferentiated
+list is not help — so an option appears once at least one character has been typed, and the
+prefix is filtered here rather than handed over in full for Godot to filter after paying for it.
+
 `VerseTicker` from Phase 2 still works, but nothing needs it: the script language pumps `vh_tick`
 from `_frame`, so every scripted node is driven rather than one hand-placed one.
 

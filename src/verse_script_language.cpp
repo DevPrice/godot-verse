@@ -325,8 +325,81 @@ bool VerseScriptLanguage::_overrides_external_editor() {
 	return false;
 }
 
+// Godot drops an option that is missing any one of these keys and prints an error for it, so
+// every option is built here rather than assembled piecemeal by each caller.
+static Dictionary completion_option(const String &p_text, int64_t p_kind, int64_t p_location) {
+	Dictionary option;
+	option["kind"] = p_kind;
+	option["display"] = p_text;
+	option["insert_text"] = p_text;
+	option["font_color"] = Color(1, 1, 1);
+	option["icon"] = Variant();
+	option["default_value"] = Variant();
+	option["location"] = p_location;
+	return option;
+}
+
+// Completes class names and reserved words, from the same two name sets the syntax highlighter
+// colours from. That is the whole of what can be offered without a scope: which names are in
+// scope at a point, and what a value's members are, are both questions only the compiler can
+// answer, and it can only answer them about text it has analysed.
+//
+// Offering nothing at all is worse than offering the coarse set -- Godot pops the completion box
+// on its own while typing, and `node2` completing to `node2d` is most of the value.
 Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const String &p_path, Object *p_owner) const {
-	return Dictionary();
+	Dictionary result;
+	result["result"] = (int64_t)OK;
+	result["force"] = false;
+	result["call_hint"] = String();
+
+	const int64_t marker = p_code.find(String::chr(0xFFFF));
+	if (marker < 0) {
+		return result;
+	}
+
+	// Godot filters the returned options against what has been typed, but only after paying for
+	// every one of them; a thousand class names on each keystroke is worth trimming here first.
+	const String before = p_code.substr(0, marker);
+	int64_t prefix_start = before.length();
+	while (prefix_start > 0) {
+		const char32_t c = before[prefix_start - 1];
+		const bool is_ident = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
+		if (!is_ident) {
+			break;
+		}
+		prefix_start--;
+	}
+	const String prefix = before.substr(prefix_start);
+
+	// A bare cursor would otherwise offer the entire API as one undifferentiated list.
+	if (prefix.is_empty()) {
+		return result;
+	}
+
+	Array options;
+	for (size_t i = 0; i < std::size(verse_api::classes); i++) {
+		const String name = verse_api::classes[i].verse_name;
+		if (name.begins_with(prefix)) {
+			options.push_back(completion_option(name, ScriptLanguageExtension::CODE_COMPLETION_KIND_CLASS, ScriptLanguageExtension::LOCATION_OTHER));
+		}
+	}
+
+	const PackedStringArray class_names = script_class_names();
+	for (int64_t i = 0; i < class_names.size(); i++) {
+		if (class_names[i].begins_with(prefix)) {
+			options.push_back(completion_option(class_names[i], ScriptLanguageExtension::CODE_COMPLETION_KIND_CLASS, ScriptLanguageExtension::LOCATION_OTHER_USER_CODE));
+		}
+	}
+
+	for (size_t i = 0; i < std::size(verse_keywords::reserved_words); i++) {
+		const String word = verse_keywords::reserved_words[i];
+		if (word.begins_with(prefix)) {
+			options.push_back(completion_option(word, ScriptLanguageExtension::CODE_COMPLETION_KIND_PLAIN_TEXT, ScriptLanguageExtension::LOCATION_OTHER));
+		}
+	}
+
+	result["options"] = options;
+	return result;
 }
 
 // Ctrl+click, the ctrl-hover underline and the documentation tooltip are all this one call.
