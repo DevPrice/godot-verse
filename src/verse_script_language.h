@@ -135,5 +135,10 @@ private:
 	bool project_built = false;
 	godot::Dictionary diagnostics_by_path;
 
+	// Formatted diagnostics last written to the output log, keyed by globalized path.
+	mutable godot::Dictionary logged_diagnostics;
+
+	void log_new_diagnostics(const godot::String &p_globalized_path, const godot::TypedArray<godot::Dictionary> &p_errors) const;
+
 	static godot::PackedStringArray find_verse_sources(const godot::String &p_dir);
 };

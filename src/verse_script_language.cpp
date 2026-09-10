@@ -10,6 +10,7 @@
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/memory.hpp>
+#include <godot_cpp/variant/utility_functions.hpp>
 
 #include <iterator>
 
@@ -283,8 +284,14 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 	return Dictionary();
 }
 
+// Godot reads "result" and "type" back out unconditionally and logs ERR_UNAVAILABLE when either
+// is missing, so a language with no symbol lookup still has to answer in full. The script editor
+// asks on every hover, which is what made an empty dictionary here look like random log spam.
 Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String &p_symbol, const String &p_path, Object *p_owner) const {
-	return Dictionary();
+	Dictionary result;
+	result["result"] = (int64_t)ERR_UNAVAILABLE;
+	result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_MAX;
+	return result;
 }
 
 String VerseScriptLanguage::_debug_get_error() const {
@@ -441,6 +448,11 @@ Error VerseScriptLanguage::ensure_project_built() {
 		}
 	}
 
+	const Array reported = errors_by_globalized.keys();
+	for (int64_t i = 0; i < reported.size(); i++) {
+		log_new_diagnostics(reported[i], TypedArray<Dictionary>(errors_by_globalized[reported[i]]));
+	}
+
 	project_built = true;
 
 
@@ -459,10 +471,31 @@ TypedArray<Dictionary> VerseScriptLanguage::check_buffer(const String &p_path, c
 
 	// Analysis covers the whole project, so a broken file elsewhere reports against its own path;
 	// the editor asked about this one.
-	if (!errors_by_globalized.has(globalized)) {
-		return TypedArray<Dictionary>();
+	const TypedArray<Dictionary> errors = errors_by_globalized.has(globalized)
+			? TypedArray<Dictionary>(errors_by_globalized[globalized])
+			: TypedArray<Dictionary>();
+	log_new_diagnostics(globalized, errors);
+	return errors;
+}
+
+// Godot re-validates the edited buffer on an idle timer and again on save, so one compile error
+// reaches this several times over. The script editor shows every result itself; the output log
+// only wants a file's diagnostics when they change.
+void VerseScriptLanguage::log_new_diagnostics(const String &p_globalized_path, const TypedArray<Dictionary> &p_errors) const {
+	PackedStringArray formatted;
+	for (int64_t i = 0; i < p_errors.size(); i++) {
+		Dictionary error = p_errors[i];
+		formatted.push_back(String(error["path"]) + String(":") + String::num_int64((int64_t)error["line"]) + String(":") + String::num_int64((int64_t)error["column"]) + String(": ") + String(error["message"]));
 	}
-	return TypedArray<Dictionary>(errors_by_globalized[globalized]);
+
+	if (logged_diagnostics.has(p_globalized_path) && PackedStringArray(logged_diagnostics[p_globalized_path]) == formatted) {
+		return;
+	}
+	logged_diagnostics[p_globalized_path] = formatted;
+
+	for (int64_t i = 0; i < formatted.size(); i++) {
+		UtilityFunctions::push_error(formatted[i]);
+	}
 }
 
 TypedArray<Dictionary> VerseScriptLanguage::diagnostics_for(const String &p_path) const {
