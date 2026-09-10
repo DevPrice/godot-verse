@@ -27,6 +27,17 @@ Color read_color(const Ref<EditorSettings> &p_settings, const String &p_name, co
 	return value;
 }
 
+// The two types /Godot.org/Godot exports that no generated entry stands behind. `object` is the
+// hand-written native base every mirrored class derives from -- gen_verse_api.py deliberately
+// mirrors nothing onto it, so Godot's Object is the one class absent from the table, and a script
+// naming it in its own class header is the commonest place a type name appears at all. `variant`
+// is the tuple the ABI packs a Godot Variant into. Everything else the package exports is either a
+// mirrored class, which the table already carries, or a call, which colours from its position.
+constexpr const char *native_type_names[] = {
+	"object",
+	"variant",
+};
+
 } // namespace
 
 void VerseSyntaxHighlighter::_bind_methods() {
@@ -182,6 +193,9 @@ void VerseSyntaxHighlighter::_update_cache() {
 	type_names.clear();
 	for (size_t i = 0; i < std::size(verse_api::classes); i++) {
 		type_names.insert(verse_api::classes[i].verse_name);
+	}
+	for (size_t i = 0; i < std::size(native_type_names); i++) {
+		type_names.insert(native_type_names[i]);
 	}
 	if (VerseScriptLanguage *language = VerseScriptLanguage::singleton()) {
 		const PackedStringArray names = language->script_class_names();

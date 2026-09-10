@@ -344,6 +344,31 @@ int main(int argc, char** argv)
 				}
 			}
 
+			// The base in a class header, which is the one place every script names `object`.
+			// The editor documents it as Godot's Object -- the class gen_verse_api.py skips
+			// because this hand-written one already stands where it does -- and that mapping is
+			// only reachable if the base position answers as a class rather than as a use of
+			// some value called object.
+			const size_t BaseUse = ExportsSource.find("(object)");
+			if (Step("the fixture still derives from object", BaseUse != std::string::npos))
+			{
+				int32_t BaseRow = 0;
+				int32_t BaseColumn = 0;
+				RowColumnOf(ExportsSource, BaseUse + 1, BaseRow, BaseColumn);
+				const vh_lookup_desc* BaseLookup = nullptr;
+				if (Step("vh_lookup_symbol on a class header's base",
+						LookupSymbolFn(ExportsPathUtf8.c_str(), BaseRow, BaseColumn, &BaseLookup) == VH_OK)
+					&& BaseLookup)
+				{
+					LookupOk = Step("it resolves to object", Text(BaseLookup->NameUtf8, BaseLookup->NameLen) == "object") && LookupOk;
+					LookupOk = Step("object is a class", BaseLookup->Kind == VH_LOOKUP_CLASS) && LookupOk;
+				}
+				else
+				{
+					LookupOk = false;
+				}
+			}
+
 			// A definition resolves at its own name, so hovering a method where it is declared
 			// describes it. The narrowing this needs is what stops a blank column in the body
 			// from resolving to the enclosing function too.

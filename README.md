@@ -384,7 +384,13 @@ only a mirrored class appears in the table. `vector2`, `vector3` and `color` are
 are their fields: they are Godot builtins that happen to be hand-written in
 `GodotApi.native.verse` rather than generated, and without an entry the editor calls them local
 constants and the `X` of `Position.X` does nothing at all when clicked — it resolves fine, but to
-a definition in the engine tree, which has no `res://` file to jump to. Nothing here writes that
+a definition in the engine tree, which has no `res://` file to jump to. `object` — the base every
+script names in its own class header — is the same problem reached from the other end: Godot's
+`Object` is the one class `gen_verse_api.py` skips outright, because the hand-written `object` in
+`Godot.native.verse` already stands exactly where it stands, so the class it should be paired with
+is the one class the table cannot contain. It is named for the documentation lookup on its own,
+kept apart from the generated table because "part of the mirrored API" is a different question that
+the completion path asks and needs the old answer to. Nothing here writes that
 prose: both paths key off `class_name`, which is precisely the key that diverts the click away from a jump
 and into the help viewer, and which the tooltip uses to fetch the description out of the same doc
 data. There is nothing to jump to anyway — the generated API is compiled from the engine tree,
@@ -420,6 +426,13 @@ different ways.
 that names a class is coloured as one: the mirrored Godot API — `node2d`, `timer`, `control` —
 plus the class each `.verse` file in the project defines, which is its own stem. Verse's
 primitives need no help, being reserved words already.
+
+Two names have to be spelled out beside the table: `object` and `variant`, the only types
+`/Godot.org/Godot` exports that no generated entry stands behind. `object` is the sharper of the
+two — it is hand-written rather than mirrored precisely because Godot's `Object` is the one class
+`gen_verse_api.py` skips, and it is also the type name a script is likeliest to write, since it is
+the base in its own class header. The rest of the package needs nothing: `Print` and the `Vh…`
+functions are calls, and a call is coloured from its position rather than from any list.
 
 Deliberately not from the compiler, even though ctrl+click above proves it could answer. Every
 visible line is recoloured on every keystroke, and a source range goes stale the instant a line

@@ -79,6 +79,22 @@ const char *godot_class_for(const String &p_verse_class) {
 	return nullptr;
 }
 
+// The Godot class whose documentation describes a Verse class. That is the mirrored table plus the
+// one name missing from it: `object`. Godot's Object is the single class gen_verse_api.py skips
+// outright -- tools/verse_api_classes.txt says why -- because Godot.native.verse's hand-written
+// `object` already stands where it stands, as the base every mirrored class without a mirrored
+// parent derives from. Absent from the table, it would otherwise be reported as a local constant,
+// with a tooltip that says nothing and nowhere for a click to go.
+//
+// Deliberately not folded into godot_class_for: that one answers "is this name part of the
+// generated API", which `object` is not, and the completion path relies on the distinction.
+const char *godot_doc_class_for(const String &p_verse_class) {
+	if (p_verse_class == String("object")) {
+		return "Object";
+	}
+	return godot_class_for(p_verse_class);
+}
+
 // The Godot method a mirrored Verse method stands for, keyed by the class that declares it. The
 // Verse name cannot be inverted on its own: the transform to PascalCase drops the underscores
 // that separated the words, so `SetPosition` could have come from any of several spellings.
@@ -980,7 +996,7 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 	const String own_description = is_parameter ? String() : comment_at(own_path, own_line);
 
 	if (kind == VH_LOOKUP_CLASS) {
-		if (const char *godot_class = godot_class_for(found_name)) {
+		if (const char *godot_class = godot_doc_class_for(found_name)) {
 			result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS;
 			result["class_name"] = String(godot_class);
 			return result;
