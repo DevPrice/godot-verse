@@ -44,5 +44,5 @@ exports := class(object):
 exports_probe := class(node2d):
 
     Probe<public>():void =
-        if (P := GetPosition[]):
+        if (IsInstanceValid()?, P := GetPosition[]):
             SetPosition(P)

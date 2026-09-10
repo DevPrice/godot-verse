@@ -556,13 +556,13 @@ vh_bool VerseRuntime::api_is_valid(void *p_ctx, vh_handle p_handle) {
 	return UtilityFunctions::is_instance_id_valid(p_handle) ? 1 : 0;
 }
 
-vh_bool VerseRuntime::api_get_property(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, vh_arena *p_arena, vh_value *r_value) {
+int32_t VerseRuntime::api_get_property(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, vh_arena *p_arena, vh_value *r_value) {
 	if (r_value == nullptr) {
-		return 0;
+		return VH_CALL_BAD_VALUE;
 	}
 	Object *obj = UtilityFunctions::instance_from_id(p_handle);
 	if (obj == nullptr) {
-		return 0;
+		return VH_CALL_DEAD_OBJECT;
 	}
 
 	const StringName name(String::utf8(p_name_utf8, p_name_len));
@@ -570,33 +570,38 @@ vh_bool VerseRuntime::api_get_property(void *p_ctx, vh_handle p_handle, const ch
 	if (value.get_type() == Variant::NIL) {
 		// obj->get has no "does this property exist" signal of its own; NIL is the only miss
 		// indicator available, so a genuinely nil property also reads as absent.
-		return 0;
+		return VH_CALL_NO_SUCH_MEMBER;
 	}
 
-	return variant_to_vh(value, p_arena, *r_value) ? 1 : 0;
+	return variant_to_vh(value, p_arena, *r_value) ? VH_CALL_OK : VH_CALL_BAD_VALUE;
 }
 
-vh_bool VerseRuntime::api_set_property(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_value) {
+int32_t VerseRuntime::api_set_property(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_value) {
 	if (p_value == nullptr) {
-		return 0;
+		return VH_CALL_BAD_VALUE;
 	}
 	Object *obj = UtilityFunctions::instance_from_id(p_handle);
 	if (obj == nullptr) {
-		return 0;
+		return VH_CALL_DEAD_OBJECT;
 	}
 
+	// Object::set is void and silently ignores an unknown name, so a write has no miss to report.
 	const StringName name(String::utf8(p_name_utf8, p_name_len));
 	obj->set(name, vh_to_variant(*p_value));
-	return 1;
+	return VH_CALL_OK;
 }
 
-vh_bool VerseRuntime::api_call_method(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count, vh_arena *p_arena, vh_value *r_value) {
+int32_t VerseRuntime::api_call_method(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count, vh_arena *p_arena, vh_value *r_value) {
 	Object *obj = UtilityFunctions::instance_from_id(p_handle);
 	if (obj == nullptr) {
-		return 0;
+		return VH_CALL_DEAD_OBJECT;
 	}
 
 	const StringName name(String::utf8(p_name_utf8, p_name_len));
+	if (!obj->has_method(name)) {
+		return VH_CALL_NO_SUCH_MEMBER;
+	}
+
 	Array args;
 	for (int32_t i = 0; i < p_arg_count; i++) {
 		args.push_back(vh_to_variant(p_args[i]));
@@ -604,9 +609,9 @@ vh_bool VerseRuntime::api_call_method(void *p_ctx, vh_handle p_handle, const cha
 	const Variant result = obj->callv(name, args);
 
 	if (r_value == nullptr) {
-		return 1;
+		return VH_CALL_OK;
 	}
-	return variant_to_vh(result, p_arena, *r_value) ? 1 : 0;
+	return variant_to_vh(result, p_arena, *r_value) ? VH_CALL_OK : VH_CALL_BAD_VALUE;
 }
 
 int32_t VerseRuntime::api_get_child_count(void *p_ctx, vh_handle p_handle) {

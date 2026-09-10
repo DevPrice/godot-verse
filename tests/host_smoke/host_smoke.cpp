@@ -27,19 +27,22 @@ static vh_bool SmokeIsValid(void*, vh_handle)
 	return 0;
 }
 
-static vh_bool SmokeGetProperty(void*, vh_handle, const char*, int32_t, vh_arena*, vh_value*)
+/* There is no Godot behind this harness, so every handle is dead -- which is what SmokeIsValid
+ * reports, and these have to agree with it. Answering VH_CALL_OK (which is 0, and so is what a
+ * stubbed-out `return 0` would now mean) would claim a successful call that wrote no value. */
+static int32_t SmokeGetProperty(void*, vh_handle, const char*, int32_t, vh_arena*, vh_value*)
 {
-	return 0;
+	return VH_CALL_DEAD_OBJECT;
 }
 
-static vh_bool SmokeSetProperty(void*, vh_handle, const char*, int32_t, const vh_value*)
+static int32_t SmokeSetProperty(void*, vh_handle, const char*, int32_t, const vh_value*)
 {
-	return 0;
+	return VH_CALL_DEAD_OBJECT;
 }
 
-static vh_bool SmokeCallMethod(void*, vh_handle, const char*, int32_t, const vh_value*, int32_t, vh_arena*, vh_value*)
+static int32_t SmokeCallMethod(void*, vh_handle, const char*, int32_t, const vh_value*, int32_t, vh_arena*, vh_value*)
 {
-	return 0;
+	return VH_CALL_DEAD_OBJECT;
 }
 
 static int32_t SmokeGetChildCount(void*, vh_handle)

@@ -88,10 +88,26 @@ rather than at the import, and the fix belongs there too — `(/Godot.org/Godot:
 how Epic's own libraries keep their two `vector3` types apart. Across all 1023 Godot classes, no
 unprefixed name collides with a Verse reserved word or with any type Epic ships.
 
-**A reference to a freed node fails rather than dangles.** Verse has no null, so this had to be
-given a meaning. An `object` holds a Godot instance id, every accessor is `<decides>`, and
-once Godot frees the object those accessors stop resolving — `demo/scripts/lifetime.verse` holds a
-child, frees it, and keeps calling.
+**A reference to a freed node is an error, not a failure.** Verse has no null, so this had to be
+given a meaning. An `object` holds a Godot instance id, which outlives the object it names, and
+reaching through a stale one raises a Verse *runtime error* — the same unrecoverable class of
+fault as reading a `var` out of a dead UE object. It unwinds to the root failure context and
+aborts every enclosing transaction, so the deferred scene writes the call had already queued are
+discarded rather than half-applied.
+
+Failure was the wrong tool for it. `<decides>` is how Verse says *this value may legitimately be
+absent*, and an `if` that swallows it reads as handling a known case; a use-after-free is neither
+legitimate nor absent, and silently skipping the branch every frame is how a dead reference stays
+invisible. What is genuinely absent — `GetParent()` at the scene root, a `FindChild` that misses —
+returns an object and still fails, which is the one thing `<decides>` is left doing.
+
+Test `IsInstanceValid()` before reaching through a handle the scene may have dropped;
+`demo/scripts/lifetime.verse` holds a child, frees it, and keeps looking.
+
+*Known limitation:* the host runs a single `verse::FContentScope` for the whole project, and a
+runtime error terminates the scope's task group — so one dead-object access kills every suspended
+async task in every script, not just the offending one. Per-script scopes (or per-invocation, if
+Godot ever reaches Verse off the main thread) are the right shape and are not built yet.
 
 A script may still be written the older way, as a `module` of free functions that find their own
 node by path; the host picks between the two shapes on whether the class exists.

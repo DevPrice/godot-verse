@@ -23,7 +23,7 @@ DEFAULT_CLASSES_FILE = "tools/verse_api_classes.txt"
 KEYWORDS_HEADER = "src/verse_keywords.h"
 EXTENSION_API = "godot-cpp/gdextension/extension_api.json"
 
-BASE_MEMBER_NAMES = {"Handle", "Ready", "Update", "PhysicsUpdate"}
+BASE_MEMBER_NAMES = {"Handle", "IsInstanceValid", "Ready", "Update", "PhysicsUpdate"}
 
 # /Verse.org/Verse is in scope in every generated body, and Verse reports an ambiguity rather
 # than shadowing, so a parameter named Min breaks any method that mentions it. The standard

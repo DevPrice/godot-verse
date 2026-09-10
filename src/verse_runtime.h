@@ -115,9 +115,9 @@ private:
 	static void api_print(void *p_ctx, const char *p_utf8, int32_t p_len);
 	static vh_handle api_get_node(void *p_ctx, const char *p_path_utf8, int32_t p_path_len);
 	static vh_bool api_is_valid(void *p_ctx, vh_handle p_handle);
-	static vh_bool api_get_property(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, vh_arena *p_arena, vh_value *r_value);
-	static vh_bool api_set_property(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_value);
-	static vh_bool api_call_method(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count, vh_arena *p_arena, vh_value *r_value);
+	static int32_t api_get_property(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, vh_arena *p_arena, vh_value *r_value);
+	static int32_t api_set_property(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_value);
+	static int32_t api_call_method(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count, vh_arena *p_arena, vh_value *r_value);
 	static int32_t api_get_child_count(void *p_ctx, vh_handle p_handle);
 	static vh_handle api_get_child(void *p_ctx, vh_handle p_handle, int32_t p_index);
 	static vh_bool api_get_meta(void *p_ctx, vh_handle p_handle, vh_arena *p_arena, vh_value *r_value);

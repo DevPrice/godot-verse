@@ -53,8 +53,14 @@ VhSingleton<public><native>(Name:string)<decides><transacts>:int
 # UObject representation to be reached by.
 object<public><native> := class:
     # Godot instance id. The host writes it at construction; it never changes afterwards, and it
-    # keeps its value after Godot frees the object, which is why every accessor is <decides>.
+    # keeps its value after Godot frees the object -- which is what makes IsInstanceValid the only
+    # way to tell a live reference from a stale one.
     Handle<public><native>:int = 0
+
+    # Godot's is_instance_valid. False once Godot has freed the object; reaching through the handle
+    # after that is a runtime error, not a failure, so this is the guard to test first when a
+    # reference has been stored across frames.
+    IsInstanceValid<public>()<transacts>:logic = VhIsValid(Handle)
 
     # Godot's _ready, _process and _physics_process. Defined here so a script overrides rather
     # than declares them, and so a script that wants only one of the three still compiles.

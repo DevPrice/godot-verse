@@ -8,6 +8,7 @@
 #include "Templates/UniquePtr.h"
 #include "VerseString.h"
 #include "VerseValue.h"
+#include "VerseVM/VVMRuntimeError.h"
 
 #include "VerseHost.gen.h"
 #include "VerseHost.gen.ipp"
@@ -45,8 +46,76 @@ decltype(auto) CallGodot(CallableType&& Callable)
     return AutoRTFM::Open(Forward<CallableType>(Callable));
 }
 
-/// Reads one property through the Godot callback table. Returns false if the property is
-/// missing, the host is not wired up, or the value did not come back at all.
+/// Reaching through a handle Godot has freed is a bug in the script, not a value that happens to
+/// be absent, so it is reported the way Verse reports reading a var out of a dead object: an
+/// unrecoverable runtime error. Raising aborts every enclosing transaction -- which is what drops
+/// the mutations this call had already deferred -- unwinds to the root failure context, and does
+/// not return here in any way the caller can observe.
+void RaiseCallStatus(int32 Status, int64 Handle, const verse::string& Member, const TCHAR* Verb)
+{
+    const FUtf8String Name(ToView(Member));
+    switch (Status)
+    {
+    case VH_CALL_DEAD_OBJECT:
+        RAISE_VERSE_RUNTIME_ERROR_FORMAT(
+            Verse::ERuntimeDiagnostic::ErrRuntime_NativeInternal,
+            TEXT("%s `%hs` on Godot object %lld, which Godot has already freed. Test "
+                 "IsInstanceValid() before reaching through a handle the scene may have dropped."),
+            Verb,
+            reinterpret_cast<const char*>(*Name),
+            Handle);
+        break;
+
+    case VH_CALL_BAD_VALUE:
+        RAISE_VERSE_RUNTIME_ERROR_FORMAT(
+            Verse::ERuntimeDiagnostic::ErrRuntime_NativeInternal,
+            TEXT("%s `%hs` on Godot object %lld, and the value has no representation on the Verse "
+                 "bridge. This is a gap in the type table in tools/gen_verse_api.py."),
+            Verb,
+            reinterpret_cast<const char*>(*Name),
+            Handle);
+        break;
+
+    /* The mirror in GodotClasses.native.verse is generated from the same extension_api.json the
+     * engine was built from, so a member the live object does not have means the two have drifted
+     * apart. Failing quietly would leave that drift invisible until the call silently did nothing.
+     * Property *reads* are the exception and never arrive here -- Godot cannot tell an absent
+     * property from a nil one, so a miss there stays an ordinary failure. */
+    case VH_CALL_NO_SUCH_MEMBER:
+        RAISE_VERSE_RUNTIME_ERROR_FORMAT(
+            Verse::ERuntimeDiagnostic::ErrRuntime_NativeInternal,
+            TEXT("%s `%hs` on Godot object %lld, which has no such member. The generated Verse "
+                 "mirror and this build of Godot disagree; regenerate with tools/gen_verse_api.py."),
+            Verb,
+            reinterpret_cast<const char*>(*Name),
+            Handle);
+        break;
+
+    default:
+        break;
+    }
+}
+
+/// A deferred write reports nothing useful: by the time OnCommit runs, the transaction a runtime
+/// error would have rolled back has already committed. Probing the receiver up front is what lets
+/// a write to a freed object fail at the point the script actually made it.
+bool RaiseIfDead(int64 Handle, const verse::string& Member, const TCHAR* Verb)
+{
+    FHostState& Host = GetHost();
+    if (!Host.Godot.IsValid)
+    {
+        return false;
+    }
+    if (CallGodot([&] { return Host.Godot.IsValid(Host.Godot.Ctx, Handle) != 0; }))
+    {
+        return false;
+    }
+    RaiseCallStatus(VH_CALL_DEAD_OBJECT, Handle, Member, Verb);
+    return true;
+}
+
+/// Reads one property through the Godot callback table. Returns false if the property is missing
+/// or the host is not wired up; a dead receiver raises rather than returning.
 bool ReadProperty(int64 Handle, const verse::string& Property, FCallArena& Arena, vh_value& OutValue)
 {
     FHostState& Host = GetHost();
@@ -56,9 +125,19 @@ bool ReadProperty(int64 Handle, const verse::string& Property, FCallArena& Arena
     }
 
     const FUtf8StringView Name = ToView(Property);
-    return CallGodot([&] {
-        return Host.Godot.GetProperty(Host.Godot.Ctx, Handle, Bytes(Name), Name.Len(), &Arena, &OutValue) != 0;
+    const int32 Status = CallGodot([&] {
+        return Host.Godot.GetProperty(Host.Godot.Ctx, Handle, Bytes(Name), Name.Len(), &Arena, &OutValue);
     });
+    if (Status == VH_CALL_NO_SUCH_MEMBER)
+    {
+        return false;
+    }
+    if (Status != VH_CALL_OK)
+    {
+        RaiseCallStatus(Status, Handle, Property, TEXT("Read"));
+        return false;
+    }
+    return true;
 }
 
 /// Godot mutations are deferred to transaction commit: a Verse failure must not leave the scene
@@ -72,6 +151,11 @@ void DeferToCommit(CallableType&& Callable)
 
 void WriteProperty(int64 Handle, const verse::string& Property, vh_value Value, FUtf8String OwnedText)
 {
+    if (RaiseIfDead(Handle, Property, TEXT("Wrote")))
+    {
+        return;
+    }
+
     FUtf8String Name(ToView(Property));
     DeferToCommit([Handle, Name = MoveTemp(Name), Value, Text = MoveTemp(OwnedText)]() mutable {
         FHostState& Host = GetHost();
@@ -518,6 +602,11 @@ TOptional<verse::tuple<double, double>> VhGetVector2(int64 Handle, verse::string
 
 void VhSetVector2(int64 Handle, verse::string const& Property, double X, double Y)
 {
+    if (RaiseIfDead(Handle, Property, TEXT("Wrote")))
+    {
+        return;
+    }
+
     FUtf8String Name(ToView(Property));
     DeferToCommit([Handle, Name = MoveTemp(Name), X, Y] {
         FHostState& Host = GetHost();
@@ -543,6 +632,11 @@ void VhSetVector2(int64 Handle, verse::string const& Property, double X, double 
 
 void VhCallMethod(int64 Handle, verse::string const& Method, TArray<double> const& Args)
 {
+    if (RaiseIfDead(Handle, Method, TEXT("Called")))
+    {
+        return;
+    }
+
     FUtf8String Name(ToView(Method));
     TArray<double> OwnedArgs(Args);
     DeferToCommit([Handle, Name = MoveTemp(Name), OwnedArgs = MoveTemp(OwnedArgs)] {
@@ -629,13 +723,13 @@ TOptional<FGodotValue> VhCallValue(int64 Handle, verse::string const& Method, TA
     const FUtf8StringView Name = ToView(Method);
     FCallArena Arena;
     vh_value Result{};
-    const bool bCalled = CallGodot([&] {
+    const int32 Status = CallGodot([&] {
         return Host.Godot.CallMethod(
-                   Host.Godot.Ctx, Handle, Bytes(Name), Name.Len(), Wire.GetData(), Wire.Num(), &Arena, &Result)
-            != 0;
+            Host.Godot.Ctx, Handle, Bytes(Name), Name.Len(), Wire.GetData(), Wire.Num(), &Arena, &Result);
     });
-    if (!bCalled)
+    if (Status != VH_CALL_OK)
     {
+        RaiseCallStatus(Status, Handle, Method, TEXT("Called"));
         return {};
     }
     return FromWire(Result);
@@ -643,6 +737,11 @@ TOptional<FGodotValue> VhCallValue(int64 Handle, verse::string const& Method, TA
 
 void VhCallVoid(int64 Handle, verse::string const& Method, TArray<FGodotValue> const& Args)
 {
+    if (RaiseIfDead(Handle, Method, TEXT("Called")))
+    {
+        return;
+    }
+
     FUtf8String Name(ToView(Method));
     TArray<FOwnedValue> Owned;
     Owned.Reserve(Args.Num());
@@ -692,6 +791,11 @@ TOptional<FGodotValue> VhGetValue(int64 Handle, verse::string const& Property)
 
 void VhSetValue(int64 Handle, verse::string const& Property, FGodotValue const& Value)
 {
+    if (RaiseIfDead(Handle, Property, TEXT("Wrote")))
+    {
+        return;
+    }
+
     FUtf8String Name(ToView(Property));
     DeferToCommit([Handle, Name = MoveTemp(Name), Owned = Own(Value)] {
         FHostState& Host = GetHost();

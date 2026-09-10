@@ -22,7 +22,7 @@
 extern "C" {
 #endif
 
-#define VH_ABI_VERSION 11
+#define VH_ABI_VERSION 12
 
 typedef int32_t vh_bool;
 
@@ -36,6 +36,19 @@ typedef enum vh_status
 	VH_ERR_NOT_FOUND, /* no such function / file */
 	VH_ERR_RUNTIME    /* Verse raised a runtime error */
 } vh_status;
+
+/* Outcome of a property read/write or a method call. The distinction is load bearing: the host
+ * turns a dead receiver into a Verse runtime error -- which unwinds the whole call and rolls the
+ * transaction back -- while an absent value is an ordinary Verse failure the script can handle.
+ * Collapsing the two (as a plain success/failure bool does) makes a use-after-free look like a
+ * miss, which is how a freed node ends up silently doing nothing every frame. */
+typedef enum vh_call_status
+{
+	VH_CALL_OK = 0,
+	VH_CALL_DEAD_OBJECT,    /* the handle names a freed, or never valid, instance */
+	VH_CALL_NO_SUCH_MEMBER, /* the object is alive but has no such method or property */
+	VH_CALL_BAD_VALUE       /* an argument or the result has no representation on this wire */
+} vh_call_status;
 
 /* ---------------------------------------------------------------- values -- */
 
@@ -161,9 +174,12 @@ typedef struct vh_godot_api
 	vh_handle (*GetNode)(void* Ctx, const char* PathUtf8, int32_t PathLen); /* 0 if absent */
 	vh_bool (*IsValid)(void* Ctx, vh_handle Handle);
 
-	vh_bool (*GetProperty)(void* Ctx, vh_handle Handle, const char* NameUtf8, int32_t NameLen, vh_arena* Arena, vh_value* OutValue);
-	vh_bool (*SetProperty)(void* Ctx, vh_handle Handle, const char* NameUtf8, int32_t NameLen, const vh_value* Value);
-	vh_bool (*CallMethod)(void* Ctx, vh_handle Handle, const char* NameUtf8, int32_t NameLen, const vh_value* Args, int32_t ArgCount, vh_arena* Arena, vh_value* OutValue);
+	/* All three answer vh_call_status. A dead handle must be reported as VH_CALL_DEAD_OBJECT
+	 * rather than folded into a missing member: the host raises on the former and fails on the
+	 * latter. */
+	int32_t (*GetProperty)(void* Ctx, vh_handle Handle, const char* NameUtf8, int32_t NameLen, vh_arena* Arena, vh_value* OutValue);
+	int32_t (*SetProperty)(void* Ctx, vh_handle Handle, const char* NameUtf8, int32_t NameLen, const vh_value* Value);
+	int32_t (*CallMethod)(void* Ctx, vh_handle Handle, const char* NameUtf8, int32_t NameLen, const vh_value* Args, int32_t ArgCount, vh_arena* Arena, vh_value* OutValue);
 
 	int32_t (*GetChildCount)(void* Ctx, vh_handle Handle);
 	vh_handle (*GetChild)(void* Ctx, vh_handle Handle, int32_t Index);

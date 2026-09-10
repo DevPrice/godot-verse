@@ -1,8 +1,9 @@
 using { /Godot.org/Godot }
 
 # The lifetime experiment. Verse has no null, so a reference to a node Godot has freed has to
-# mean something. It means failure: the handle stays, and every accessor is <decides>, so a dead
-# reference stops resolving instead of dangling.
+# mean something. It means a runtime error: the handle outlives the object it names, so reaching
+# through a stale one unwinds rather than quietly failing, and IsInstanceValid is what tells a
+# live reference from a dead one before you do.
 lifetime := class(node2d):
 
 	var Frames : int = 0
@@ -24,7 +25,7 @@ lifetime := class(node2d):
 			Held.QueueFree()
 
 		if (Frames >= 4, Frames <= 8):
-			if (Name := Held.GetName[]):
+			if (Held.IsInstanceValid()?, Name := Held.GetName[]):
 				Print("lifetime: frame {Frames}, still reachable as {Name}")
 			else:
-				Print("lifetime: frame {Frames}, the held reference no longer resolves")
+				Print("lifetime: frame {Frames}, the held reference is no longer valid")
