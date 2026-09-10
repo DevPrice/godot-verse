@@ -173,6 +173,9 @@ private:
 	static VerseScriptLanguage *singleton_instance;
 	double frame_budget_ms = 4.0;
 	bool project_built = false;
+	// What the one build this process gets came back with. Remembered because there is no second
+	// attempt to ask again: every later ensure_project_built answers from here.
+	godot::Error project_build_status = godot::OK;
 	mutable godot::Dictionary diagnostics_by_path;
 
 	// The text the host currently holds for each script, keyed by res:// path. A validate whose

@@ -224,8 +224,11 @@ bool VerseRuntime::has_class(const String &p_class_name) const {
 	return host.HasClass(p_class_name.utf8().get_data()) != 0;
 }
 
-TypedArray<Dictionary> VerseRuntime::class_exports(const String &p_class_name) const {
+TypedArray<Dictionary> VerseRuntime::class_exports(const String &p_class_name, bool *r_found) const {
 	TypedArray<Dictionary> exports;
+	if (r_found != nullptr) {
+		*r_found = false;
+	}
 	if (!host.is_loaded()) {
 		return exports;
 	}
@@ -234,6 +237,9 @@ TypedArray<Dictionary> VerseRuntime::class_exports(const String &p_class_name) c
 	int32_t count = 0;
 	if (host.ClassExportList(p_class_name.utf8().get_data(), &descs, &count) != VH_OK) {
 		return exports;
+	}
+	if (r_found != nullptr) {
+		*r_found = true;
 	}
 
 	for (int32_t i = 0; i < count; i++) {

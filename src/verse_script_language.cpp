@@ -1135,7 +1135,7 @@ PackedStringArray VerseScriptLanguage::script_class_names() const {
 
 Error VerseScriptLanguage::ensure_project_built() {
 	if (project_built) {
-		return OK;
+		return project_build_status;
 	}
 
 	VerseRuntime *runtime = get_runtime();
@@ -1183,7 +1183,17 @@ Error VerseScriptLanguage::ensure_project_built() {
 	}
 
 	project_built = true;
+	project_build_status = status;
 
+	// Code generation gets one attempt per process and this was it, so no later edit can produce
+	// a runnable program -- however clean the file becomes, has_class keeps answering no. The
+	// diagnostics above say what is wrong; this says what fixing them will and will not buy.
+	if (status != OK) {
+		UtilityFunctions::push_warning(
+				"Verse: the project did not build. Fixing the errors restores the editor's analysis -- "
+				"exported properties, completion and lookup -- but a script cannot run until the editor "
+				"is restarted, because Verse generates code once per process.");
+	}
 
 	return status;
 }

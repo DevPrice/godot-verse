@@ -161,6 +161,21 @@ reference cell, a `var` of a container type keeps a *mutable* container, and a w
 the slot rather than through it corrupts the member silently — the read agrees, and only the
 interpreter ever objects.
 
+**A file that stops compiling keeps its inspector.** Godot gives a non-tool script a
+`PlaceHolderScriptInstance` in the editor, and that placeholder holds its own copy of the property
+list and the values on it — `update()` *erases every value whose name the new list omits*, so
+handing it an empty list over a typo clears the inspector and drops the values out of the `.tscn`
+on the next save. GDScript's answer is `placeholder_fallback_enabled`: an analysis that fails
+leaves the last good list standing and flips the flag, which is Godot's cue to read the inspector
+out of the placeholder's copy rather than asking the script. `VerseScript` does the same, from
+`refresh_exports`. Values typed before the break survive the break, and a scene loaded against a
+script that does not analyse hands its stored values back through `property_set_fallback` once it
+does.
+
+Because the list comes from the analysis rather than the build, it also comes back after a build
+that *never succeeded* — the case a one-shot code generator would otherwise strand for the whole
+session. The script still cannot run until the editor restarts, so the failed build says so once.
+
 **A non-var is an initializer, not a constant.** Both kinds of `@editable` are editable in the
 inspector and stored in the `.tscn`. The difference is when the value may be applied: an instance
 is *unsealed* between instantiation and the first call into it, which is exactly the window Godot

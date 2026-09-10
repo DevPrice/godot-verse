@@ -59,7 +59,10 @@ public:
 	// where type is a vh_type. Read out of the last analysis pass rather than the running
 	// program, so it follows the editor's buffer and refreshes without restarting -- unlike
 	// anything routed through the compiled bytecode, which may only be generated once.
-	godot::TypedArray<godot::Dictionary> class_exports(const godot::String &p_class_name) const;
+	//
+	// r_found separates a class that exports nothing from one the analysis never saw; both come
+	// back as an empty array, and only the second means the answer is not to be believed.
+	godot::TypedArray<godot::Dictionary> class_exports(const godot::String &p_class_name, bool *r_found = nullptr) const;
 
 	// The definition the identifier at p_line/p_column resolves to, as
 	// { name, path, line, column, type, kind, is_var }, or an empty dictionary when nothing

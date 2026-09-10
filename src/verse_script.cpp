@@ -359,20 +359,26 @@ Variant VerseScript::_get_property_default_value(const StringName &p_property) c
 	return runtime->class_default_field(verse_class_name(), String(p_property));
 }
 
-// The export list is recomputed from the semantic program on every _get_script_property_list, so
-// there is no cache here to invalidate -- but a placeholder holds its own copy and has to be
-// handed the new one.
 void VerseScript::_update_exports() {
 	update_placeholders();
 }
 
 void VerseScript::update_placeholders() {
+	refresh_exports();
+
 	GDExtensionInterfacePlaceholderScriptInstanceUpdate update = get_placeholder_instance_update_fn();
 	if (update == nullptr || placeholders.empty()) {
 		return;
 	}
 
-	const TypedArray<Dictionary> properties = _get_script_property_list();
+	// Nothing to hand over that would not be a downgrade. A placeholder keeps whatever it was
+	// last given, and fallback is what makes Godot read the inspector out of that copy instead of
+	// asking this script -- so the author sees the properties they had while they fix the file.
+	if (placeholder_fallback_enabled) {
+		return;
+	}
+
+	const TypedArray<Dictionary> properties = exports_cache;
 
 	Dictionary values;
 	for (int64_t i = 0; i < properties.size(); i++) {
@@ -382,7 +388,14 @@ void VerseScript::update_placeholders() {
 			continue;
 		}
 		const StringName name = property["name"];
-		values[name] = _get_property_default_value(name);
+		// A default only exists once code generation has run, and the export list outlives that:
+		// a project whose build failed can describe its members but cannot instantiate one to
+		// read them off. Omitting the name leaves the placeholder's own value alone, where a nil
+		// would overwrite it and then be written to the scene as the property's value.
+		const Variant default_value = _get_property_default_value(name);
+		if (default_value.get_type() != Variant::NIL) {
+			values[name] = default_value;
+		}
 	}
 
 	for (void *placeholder : placeholders) {
@@ -442,14 +455,39 @@ Dictionary property_for(const Dictionary &p_entry, Variant::Type p_type) {
 } // namespace
 
 TypedArray<Dictionary> VerseScript::_get_script_property_list() const {
-	TypedArray<Dictionary> properties;
+	refresh_exports();
+	return exports_cache;
+}
 
+// Deliberately not gated on valid(). The export list is read out of the semantic program the last
+// analysis left behind, and analysis re-runs on every edit, while code generation may only happen
+// once per process -- so a project whose *first* build failed can still describe its classes once
+// the author fixes them. Tying the inspector to the build instead would leave the properties gone
+// for the rest of the session, with nothing the author could do about it but restart.
+void VerseScript::refresh_exports() const {
 	VerseRuntime *runtime = get_runtime();
-	if (!valid || runtime == nullptr) {
-		return properties;
+	VerseScriptLanguage *language = VerseScriptLanguage::singleton();
+	if (runtime == nullptr || language == nullptr) {
+		placeholder_fallback_enabled = true;
+		return;
 	}
 
-	const TypedArray<Dictionary> exports = runtime->class_exports(verse_class_name());
+	// uLang recovers from an error and carries on, so a class that failed to analyse is still in
+	// the program -- with however many of its members the recovery managed to reach. Believing
+	// that list would drop the members it lost, and dropping a member is what erases its value.
+	if (!language->diagnostics_for(get_path()).is_empty()) {
+		placeholder_fallback_enabled = true;
+		return;
+	}
+
+	bool found = false;
+	const TypedArray<Dictionary> exports = runtime->class_exports(verse_class_name(), &found);
+	if (!found) {
+		placeholder_fallback_enabled = true;
+		return;
+	}
+
+	TypedArray<Dictionary> properties;
 
 	// Godot has no per-property group field: a group is a PROPERTY_USAGE_GROUP entry that claims
 	// every property listed after it, so members sharing an @category have to be emitted as one
@@ -494,7 +532,9 @@ TypedArray<Dictionary> VerseScript::_get_script_property_list() const {
 			properties.push_back(property_for(entry, type));
 		}
 	}
-	return properties;
+
+	exports_cache = properties;
+	placeholder_fallback_enabled = false;
 }
 
 int32_t VerseScript::_get_member_line(const StringName &p_member) const {
@@ -510,7 +550,7 @@ TypedArray<StringName> VerseScript::_get_members() const {
 }
 
 bool VerseScript::_is_placeholder_fallback_enabled() const {
-	return false;
+	return placeholder_fallback_enabled;
 }
 
 Variant VerseScript::_get_rpc_config() const {

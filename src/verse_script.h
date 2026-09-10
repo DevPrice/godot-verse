@@ -87,6 +87,11 @@ public:
 	void update_placeholders();
 
 private:
+	// Rebuilds exports from the last analysis, or -- when that analysis cannot be believed --
+	// leaves the previous list standing and turns placeholder fallback on. GDScript::_update_exports
+	// is the same shape and for the same reason: see the note on placeholder_fallback_enabled.
+	void refresh_exports() const;
+
 	// Borrowed: Godot owns each placeholder and tells us through _placeholder_erased when one
 	// goes away.
 	mutable std::vector<void *> placeholders;
@@ -94,4 +99,17 @@ private:
 	godot::String source_code;
 	// The compiled project defines this file's class, so the file can be attached to a node.
 	bool valid = false;
+
+	// The property list the last believable analysis produced. Kept rather than recomputed on
+	// demand so that a file which currently does not analyse still has an export list to show:
+	// PlaceHolderScriptInstance::update erases every value whose name the new list omits, so
+	// handing it an empty list over a typo would clear the inspector *and* drop the values out
+	// of the scene on the next save.
+	mutable godot::TypedArray<godot::Dictionary> exports_cache;
+
+	// Set while exports_cache describes a program older than the file. Godot reads this through
+	// _is_placeholder_fallback_enabled and switches every placeholder to serving its own stored
+	// properties and values -- which is how a node keeps what the inspector last showed, and how
+	// a scene loaded against a broken script hands its values back once the script builds again.
+	mutable bool placeholder_fallback_enabled = false;
 };
