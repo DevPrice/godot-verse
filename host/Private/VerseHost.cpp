@@ -564,7 +564,14 @@ extern "C" int32_t vh_lookup_symbol(const char* PathUtf8, int32_t Line, int32_t 
         reinterpret_cast<const char*>(*Lookup.Owner),
         Lookup.Owner.Len(),
         (int32_t)Lookup.Kind,
-        Lookup.bIsVar ? 1 : 0};
+        Lookup.bIsVar ? 1 : 0,
+        Lookup.bIsDefinition ? 1 : 0,
+        reinterpret_cast<const char*>(*Lookup.OverriddenOwner),
+        Lookup.OverriddenOwner.Len(),
+        reinterpret_cast<const char*>(*Lookup.OverriddenPath),
+        Lookup.OverriddenPath.Len(),
+        Lookup.OverriddenLine,
+        Lookup.OverriddenColumn};
 
     *OutResult = &Desc;
     return VH_OK;

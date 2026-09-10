@@ -415,6 +415,12 @@ def test_generated_method_map_covers_a_known_method():
         "the checked-in header still maps a surviving method",
         '{ "node", "GetChild", "Node", "get_child" },' in header,
     )
+    # object's lifecycle methods are hand-written rather than mirrored -- the generator skips
+    # virtuals -- but a script overriding one wants Godot's documentation for it.
+    check_true(
+        "the checked-in header maps object.Ready to Node._ready",
+        '{ "object", "Ready", "Node", "_ready" },' in header,
+    )
 
 
 def test_classes_header_file_matches_generated_verse_file():

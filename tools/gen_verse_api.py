@@ -612,6 +612,16 @@ inline constexpr method_mapping methods[] = {{
 # them the editor calls `vector2` a local constant.
 VALUE_TYPE_CLASSES = {"Vector2": "vector2", "Vector3": "vector3", "Color": "color"}
 
+# object's three lifecycle methods are hand-written in Godot.native.verse rather than mirrored --
+# the generator skips virtuals -- but they exist to be the Verse spelling of Godot's, and a script
+# overriding one wants Godot's documentation for it. Listed as (verse class, verse method, godot
+# class, godot method), the shape the method map already carries.
+LIFECYCLE_METHODS = [
+    ("object", "Ready", "Node", "_ready"),
+    ("object", "Update", "Node", "_process"),
+    ("object", "PhysicsUpdate", "Node", "_physics_process"),
+]
+
 
 def render_classes_header(api: dict, emit_order: list, method_map: list) -> str:
     version = api["header"]["version_full_name"]
@@ -619,11 +629,10 @@ def render_classes_header(api: dict, emit_order: list, method_map: list) -> str:
         [(name, verse_class_name(name)) for name in emit_order] + list(VALUE_TYPE_CLASSES.items())
     )
     entries = "\n".join(f'\t{{ "{godot_name}", "{verse_name}" }},' for godot_name, verse_name in pairs)
+    rows = [(m[1], m[3], m[0], m[2]) for m in method_map] + LIFECYCLE_METHODS
     method_entries = "\n".join(
         f'\t{{ "{verse_class}", "{verse_method}", "{godot_class}", "{godot_method}" }},'
-        for godot_class, verse_class, godot_method, verse_method in sorted(
-            method_map, key=lambda m: (m[1], m[3])
-        )
+        for verse_class, verse_method, godot_class, godot_method in sorted(rows)
     )
     return CLASSES_HEADER_TEMPLATE.format(
         version=version, entries=entries, method_entries=method_entries

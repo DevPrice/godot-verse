@@ -1120,6 +1120,7 @@ struct AUTORTFM_DISABLE FLookupVisitor : public uLang::SAstVisitor
                     // that still contains the cursor is the innermost -- last write wins.
                     Found = Definition;
                     FoundKind = Kind;
+                    bFoundIsDefinition = IsDefinitionNode(AstNode.GetNodeType());
                 }
             }
         }
@@ -1132,7 +1133,24 @@ struct AUTORTFM_DISABLE FLookupVisitor : public uLang::SAstVisitor
     uint32 Column;
     const uLang::CDefinition* Found{nullptr};
     vh_lookup_kind FoundKind{VH_LOOKUP_UNKNOWN};
+    bool bFoundIsDefinition{false};
 };
+
+/// Where a definition was written, or nothing for one compiled from a package the project does
+/// not own -- the generated Godot API, Verse's own library. Those still describe fine.
+AUTORTFM_DISABLE void FillLocation(const uLang::CDefinition& Definition, FUtf8String& OutPath, int32& OutLine, int32& OutColumn)
+{
+    if (const uLang::CExpressionBase* DefinitionNode = Definition.GetAstNode())
+    {
+        if (const Verse::Vst::Node* Vst = DefinitionNode->GetMappedVstNode())
+        {
+            const Verse::SLocus& Whence = Vst->Whence();
+            OutPath = FULangConversionUtils::ULangStrToFUtf8String(Vst->GetSnippetPath());
+            OutLine = (int32)Whence.BeginRow();
+            OutColumn = (int32)Whence.BeginColumn();
+        }
+    }
+}
 
 } // namespace
 
@@ -1198,16 +1216,17 @@ AUTORTFM_DISABLE bool GodotVerse::LookupSymbol(FUtf8StringView Path, int32 Line,
         }
     }
 
-    // A definition compiled from a package the project does not own has no file to point at.
-    // It still describes fine, which is what the hover card wants.
-    if (const uLang::CExpressionBase* DefinitionNode = Definition.GetAstNode())
+    FillLocation(Definition, OutDesc.Path, OutDesc.Line, OutDesc.Column);
+
+    // Only at a declaration. A call site already resolves to the implementation that will run,
+    // and redirecting that to the parent would be wrong rather than merely unhelpful.
+    OutDesc.bIsDefinition = Visitor.bFoundIsDefinition;
+    if (OutDesc.bIsDefinition)
     {
-        if (const Verse::Vst::Node* Vst = DefinitionNode->GetMappedVstNode())
+        if (const uLang::CDefinition* Overridden = Definition.GetOverriddenDefinition())
         {
-            const Verse::SLocus& Whence = Vst->Whence();
-            OutDesc.Path = FULangConversionUtils::ULangStrToFUtf8String(Vst->GetSnippetPath());
-            OutDesc.Line = (int32)Whence.BeginRow();
-            OutDesc.Column = (int32)Whence.BeginColumn();
+            OutDesc.OverriddenOwner = FUtf8String(Overridden->_EnclosingScope.GetScopeName().AsCString());
+            FillLocation(*Overridden, OutDesc.OverriddenPath, OutDesc.OverriddenLine, OutDesc.OverriddenColumn);
         }
     }
     return true;

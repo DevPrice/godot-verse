@@ -376,6 +376,55 @@ int main(int argc, char** argv)
 						&& LookupOk;
 			}
 
+			// An override carries its parent, which is what lets the editor describe a method
+			// that says nothing about itself and send a click somewhere other than the line the
+			// cursor is already on.
+			const size_t ReadyDecl = ExportsSource.find("PhysicsUpdate<override>(");
+			if (Step("the fixture still overrides a lifecycle method", ReadyDecl != std::string::npos))
+			{
+				int32_t ReadyRow = 0;
+				int32_t ReadyColumn = 0;
+				RowColumnOf(ExportsSource, ReadyDecl, ReadyRow, ReadyColumn);
+				const vh_lookup_desc* ReadyLookup = nullptr;
+				if (Step("vh_lookup_symbol on an override",
+						LookupSymbolFn(ExportsPathUtf8.c_str(), ReadyRow, ReadyColumn, &ReadyLookup) == VH_OK)
+					&& ReadyLookup)
+				{
+					LookupOk = Step("it knows the cursor is on a definition", ReadyLookup->IsDefinition != 0) && LookupOk;
+					LookupOk = Step("it names the class the override came from",
+								   Text(ReadyLookup->OverriddenOwnerUtf8, ReadyLookup->OverriddenOwnerLen) == "object")
+							&& LookupOk;
+					LookupOk = Step("and where that parent was written",
+								   ReadyLookup->OverriddenLine >= 0 && ReadyLookup->OverriddenPathLen > 0)
+							&& LookupOk;
+				}
+				else
+				{
+					LookupOk = false;
+				}
+			}
+
+			// A reference is not a declaration, so it must not be redirected to a parent: the
+			// call that runs is the one the script wrote.
+			const size_t ProbeCall = ExportsSource.find("Probe()");
+			if (ProbeCall != std::string::npos)
+			{
+				int32_t CallRow = 0;
+				int32_t CallColumn = 0;
+				RowColumnOf(ExportsSource, ProbeCall, CallRow, CallColumn);
+				const vh_lookup_desc* CallLookup = nullptr;
+				if (Step("vh_lookup_symbol on a call", LookupSymbolFn(ExportsPathUtf8.c_str(), CallRow, CallColumn, &CallLookup) == VH_OK)
+					&& CallLookup)
+				{
+					LookupOk = Step("a call site is not reported as a definition", CallLookup->IsDefinition == 0) && LookupOk;
+					LookupOk = Step("and carries no override to redirect to", CallLookup->OverriddenOwnerLen == 0) && LookupOk;
+				}
+				else
+				{
+					LookupOk = false;
+				}
+			}
+
 			// Past the end of a line nothing encloses the position, so the answer is a refusal
 			// rather than whichever definition happens to span the row.
 			const vh_lookup_desc* Nothing = nullptr;

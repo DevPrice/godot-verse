@@ -501,6 +501,35 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 	const String found_owner = found["owner"];
 	const int64_t kind = found["kind"];
 
+	// An override means something the declaration itself does not say. Only at a declaration: a
+	// call site already resolves to the implementation that will run, and sending that to the
+	// parent would be wrong rather than merely unhelpful.
+	const String overridden_owner = found["overridden_owner"];
+	const bool overrides_something = bool(found["is_definition"]) && !overridden_owner.is_empty();
+
+	// The comment block above a definition, wherever it was written. A file the project does not
+	// own -- Godot.native.verse in the engine tree -- cannot be jumped to, but its comment is
+	// still the best description of what a script is overriding.
+	auto comment_at = [&](const String &p_definition_path, int64_t p_line) -> String {
+		if (p_line < 0 || p_definition_path.is_empty()) {
+			return String();
+		}
+		// The buffer for the file being edited may be ahead of what is on disk; anything else is
+		// at worst as stale as the analysis that pointed here.
+		if (p_definition_path == globalized) {
+			return doc_comment_above(normalized, p_line);
+		}
+		const String res_path = path_by_globalized.get(p_definition_path, String());
+		const String source = FileAccess::get_file_as_string(res_path.is_empty() ? p_definition_path : res_path);
+		return doc_comment_above(newline_normalized(source), p_line);
+	};
+
+	const int64_t own_line = found["line"];
+	const String own_path = found["path"];
+	const int64_t overridden_line = found["overridden_line"];
+	const String overridden_path = found["overridden_path"];
+	const String own_description = comment_at(own_path, own_line);
+
 	if (kind == VH_LOOKUP_CLASS) {
 		if (const char *godot_class = godot_class_for(found_name)) {
 			result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS;
@@ -510,7 +539,16 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 	} else if (kind == VH_LOOKUP_FUNCTION || kind == VH_LOOKUP_DATA) {
 		// A mirrored property is a var, so the kind alone cannot separate it from a script's own
 		// @editable member; the owner does, since only a mirrored class appears in the table.
-		if (const verse_api::method_mapping *method = godot_method_for(found_owner, found_name)) {
+		const verse_api::method_mapping *method = godot_method_for(found_owner, found_name);
+
+		// An override is looked up under what it overrides: a script's own class is never in the
+		// table, and `Ready<override>()` means Godot's _ready however the script spells it. Only
+		// when the override says nothing itself, though -- routing into Godot's documentation
+		// hands the tooltip to Godot's doc data too, which would throw away prose written here.
+		if (method == nullptr && overrides_something && own_description.is_empty()) {
+			method = godot_method_for(overridden_owner, found_name);
+		}
+		if (method != nullptr) {
 			result["type"] = (int64_t)(kind == VH_LOOKUP_FUNCTION
 							? ScriptLanguageExtension::LOOKUP_RESULT_CLASS_METHOD
 							: ScriptLanguageExtension::LOOKUP_RESULT_CLASS_PROPERTY);
@@ -520,37 +558,35 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 		}
 	}
 
-	const int64_t definition_line = found["line"];
-	const String definition_path = found["path"];
-	if (definition_line < 0 || definition_path.is_empty()) {
-		// A definition from the generated Godot API or Verse's own library: it describes, but
-		// there is no file in the project to open or to read a comment out of.
+	String description = own_description;
+	if (description.is_empty() && overrides_something) {
+		description = comment_at(overridden_path, overridden_line);
+	}
+	if (!description.is_empty()) {
+		result["description"] = description;
+	}
+
+	// At a declaration that overrides, the parent is the only useful destination: this
+	// definition's own line is the one the cursor is already on.
+	const int64_t target_line = overrides_something ? overridden_line : own_line;
+	const String target_path = overrides_something ? overridden_path : own_path;
+	if (target_line < 0 || target_path.is_empty()) {
 		return result;
 	}
 
 	// A location with no script beside it is read as a line in the file being edited, so a
 	// cross-file definition we cannot name gets no location at all rather than a jump to that
 	// line of the wrong file.
-	const bool same_file = definition_path == globalized;
-	const String definition_res_path = same_file ? p_path : String(path_by_globalized.get(definition_path, String()));
-	if (definition_res_path.is_empty()) {
+	const bool same_file = target_path == globalized;
+	const String target_res_path = same_file ? p_path : String(path_by_globalized.get(target_path, String()));
+	if (target_res_path.is_empty()) {
 		return result;
 	}
 
-	result["location"] = definition_line + 1;
+	result["location"] = target_line + 1;
 	if (!same_file) {
-		result["script"] = ResourceLoader::get_singleton()->load(definition_res_path);
-		result["script_path"] = definition_res_path;
-	}
-
-	// The buffer for the file being edited, which may be ahead of what is on disk; anything else
-	// has to come off disk, and is at worst as stale as the analysis that pointed here.
-	const String definition_source = same_file
-			? normalized
-			: newline_normalized(FileAccess::get_file_as_string(definition_res_path));
-	const String description = doc_comment_above(definition_source, definition_line);
-	if (!description.is_empty()) {
-		result["description"] = description;
+		result["script"] = ResourceLoader::get_singleton()->load(target_res_path);
+		result["script_path"] = target_res_path;
 	}
 	return result;
 }

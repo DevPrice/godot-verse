@@ -125,6 +125,14 @@ struct FLookupDesc
     FUtf8String Owner;
     vh_lookup_kind Kind{VH_LOOKUP_UNKNOWN};
     bool bIsVar{false};
+    /// The cursor was on the definition itself, not on a reference to it.
+    bool bIsDefinition{false};
+    /// The definition this one immediately overrides, if any. An override cannot rename, so its
+    /// name is Name above.
+    FUtf8String OverriddenOwner;
+    FUtf8String OverriddenPath;
+    int32 OverriddenLine{-1};
+    int32 OverriddenColumn{-1};
 };
 
 /// Resolves the identifier at Line/Column of Path against the analysed program.

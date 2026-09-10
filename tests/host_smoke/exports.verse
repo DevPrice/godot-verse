@@ -49,3 +49,12 @@ exports_probe := class(node2d):
         if (IsInstanceValid()?):
             set Position = vector2{X := Position.X + 1.0, Y := Position.Y}
             set Rotation = Rotation + 1.0
+
+    # PhysicsUpdate rather than Ready, which the module-shaped fixture already defines at the top
+    # level -- the project shares one flat scope. The blank line below is load bearing: this has
+    # to reach the lookup with no comment of its own, because an override with nothing to say is
+    # what falls back to what it overrides, and a comment block runs up to the first line that is
+    # not one.
+
+    PhysicsUpdate<override>(Delta:float):void =
+        Probe()

@@ -234,6 +234,22 @@ attribute to the end of its body, and matching against that would resolve every 
 inside a function to the function. The name sits in the definition's first VST child, which is
 tight enough to mean the author pointed at it.
 
+**An override is documented by what it overrides.** `Ready<override>()` in a script has nothing
+to say about itself, so the lookup carries the definition it overrides alongside the one under the
+cursor, and the editor falls back to the parent's documentation when the declaration carries no
+comment of its own — a comment the author *did* write always wins. The click goes to the parent
+too, since this definition's own line is the one the cursor is already on.
+
+`object`'s `Ready`, `Update` and `PhysicsUpdate` are in the method map as `Node._ready`,
+`_process` and `_physics_process`. They are hand-written rather than mirrored — the generator
+skips virtuals — but they exist to be the Verse spelling of Godot's, so overriding one opens
+Godot's page for it.
+
+The redirect is deliberately confined to declarations. A call site already resolves to the
+implementation that will run, and sending *that* to the parent would be wrong rather than merely
+unhelpful, so the host reports whether the cursor was on a definition and only fills the override
+in that case.
+
 Two things make that safe rather than merely possible.
 
 - **A stale answer is refused rather than shown.** Diagnostics can lag the buffer by one analysis

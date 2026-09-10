@@ -413,6 +413,10 @@ Dictionary VerseRuntime::lookup_symbol(const String &p_globalized_path, int32_t 
 	result["owner"] = String::utf8(desc->OwnerUtf8, desc->OwnerLen);
 	result["kind"] = (int64_t)desc->Kind;
 	result["is_var"] = desc->IsVar != 0;
+	result["is_definition"] = desc->IsDefinition != 0;
+	result["overridden_owner"] = String::utf8(desc->OverriddenOwnerUtf8, desc->OverriddenOwnerLen);
+	result["overridden_path"] = String::utf8(desc->OverriddenPathUtf8, desc->OverriddenPathLen);
+	result["overridden_line"] = (int64_t)desc->OverriddenLine;
 	return result;
 }
 

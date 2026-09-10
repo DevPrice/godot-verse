@@ -22,7 +22,7 @@
 extern "C" {
 #endif
 
-#define VH_ABI_VERSION 12
+#define VH_ABI_VERSION 13
 
 typedef int32_t vh_bool;
 
@@ -463,6 +463,25 @@ typedef struct vh_lookup_desc
 
 	int32_t Kind;  /* vh_lookup_kind */
 	vh_bool IsVar; /* declared with `var`, so assignable after the instance seals */
+
+	/* The cursor was on the definition itself rather than on a reference to it. A consumer that
+	 * wants to jump somewhere useful needs this: at a declaration, the definition's own location
+	 * is where the cursor already is. */
+	vh_bool IsDefinition;
+
+	/* The definition this one overrides, laid out like the fields above. Empty when it overrides
+	 * nothing, and only ever filled when IsDefinition is set -- the immediate parent, not the
+	 * root of the chain. An override cannot rename, so the name is NameUtf8 above.
+	 *
+	 * This is what lets a consumer describe `Ready<override>()` with the parent's documentation
+	 * when the override itself carries no comment, and send a click to the parent rather than to
+	 * the line the cursor is already on. */
+	const char* OverriddenOwnerUtf8;
+	int32_t OverriddenOwnerLen;
+	const char* OverriddenPathUtf8;
+	int32_t OverriddenPathLen;
+	int32_t OverriddenLine;
+	int32_t OverriddenColumn;
 } vh_lookup_desc;
 
 /* Resolves the identifier at Line/Column of PathUtf8 to the definition it refers to.
