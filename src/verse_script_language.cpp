@@ -590,15 +590,28 @@ static int64_t argument_index_in_call(const String &p_before, int64_t p_callee_e
 	return index;
 }
 
+// Which bracket the call the cursor is inside was opened with. vh_signature_desc reports a
+// function's parameters but not its effects, so the hint takes the author's own answer: a call
+// already written with `[` is the fallible one, and spelling its hint with parentheses contradicts
+// the line it sits above.
+static bool call_opened_with_bracket(const String &p_before, int64_t p_callee_end) {
+	for (int64_t i = p_callee_end + 1; i < p_before.length(); i++) {
+		if (p_before[i] != ' ' && p_before[i] != '\t') {
+			return p_before[i] == '[';
+		}
+	}
+	return false;
+}
+
 // The signature as Verse spells it, with the argument the cursor is in wrapped in the markers
 // Godot highlights between. Verse's own order -- name, parameters, then `:type` -- rather than
 // GDScript's leading return type, because that is how the declaration reads in the file.
-static String call_hint_for(const Dictionary &p_signature, int64_t p_argument) {
+static String call_hint_for(const Dictionary &p_signature, int64_t p_argument, bool p_fallible) {
 	const String name = p_signature["name"];
 	const String result_type = p_signature["result"];
 	const TypedArray<Dictionary> params = p_signature["params"];
 
-	String hint = name + String("(");
+	String hint = name + (p_fallible ? String("[") : String("("));
 	for (int64_t i = 0; i < params.size(); i++) {
 		if (i > 0) {
 			hint += ", ";
@@ -612,7 +625,7 @@ static String call_hint_for(const Dictionary &p_signature, int64_t p_argument) {
 			hint += String::chr(0xFFFF);
 		}
 	}
-	hint += ")";
+	hint += p_fallible ? "]" : ")";
 	if (!result_type.is_empty()) {
 		hint += String(":") + result_type;
 	}
@@ -634,6 +647,29 @@ static int64_t completion_kind_for(int64_t p_lookup_kind) {
 		default:
 			return ScriptLanguageExtension::CODE_COMPLETION_KIND_MEMBER;
 	}
+}
+
+// Whether a call to a function has to be written with brackets rather than parentheses: Verse
+// spells a `<decides>` call `GetChild[0]`, and completing it with `(` is a compile error at the
+// moment it lands.
+//
+// Read off the effect specifiers alone rather than searched for anywhere in the signature, because
+// a parameter or the result type can be a fallible function *type* -- the infallible
+// `(Pred:(:int)<decides>->logic)<transacts>:void` spells `<decides>` too. SpellSignature puts the
+// specifiers between the parameter list's closing parenthesis and the `:` before the result type,
+// and emits no default values, so counting parentheses finds that one exactly.
+static bool is_fallible_call(const String &p_signature) {
+	int64_t depth = 0;
+	for (int64_t i = 0; i < p_signature.length(); i++) {
+		const char32_t c = p_signature[i];
+		if (c == '(') {
+			depth++;
+		} else if (c == ')' && --depth == 0) {
+			const int64_t result_type = p_signature.find(":", i);
+			return p_signature.substr(i, result_type < 0 ? -1 : result_type - i).find("<decides>") >= 0;
+		}
+	}
+	return false;
 }
 
 // Turns one vh_complete_item into an option.
@@ -660,8 +696,11 @@ static Dictionary completion_option_for(const Dictionary &p_item) {
 	Dictionary option = completion_option(name, completion_kind_for(kind), location);
 	if (is_function) {
 		const bool takes_arguments = param_count > 0;
-		option["insert_text"] = name + (takes_arguments ? String("(") : String("()"));
-		option["display"] = name + (takes_arguments ? String::utf8("(…)") : String("()"));
+		const bool fallible = is_fallible_call(p_item["signature"]);
+		const String open = fallible ? String("[") : String("(");
+		const String close = fallible ? String("]") : String(")");
+		option["insert_text"] = name + (takes_arguments ? open : open + close);
+		option["display"] = name + open + (takes_arguments ? String::utf8("…") : String()) + close;
 	}
 	return option;
 }
@@ -873,7 +912,7 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 			}
 
 			if (!signature_cache.is_empty()) {
-				result["call_hint"] = call_hint_for(signature_cache, argument_index_in_call(before, callee_end));
+				result["call_hint"] = call_hint_for(signature_cache, argument_index_in_call(before, callee_end), call_opened_with_bracket(before, callee_end));
 			}
 		}
 	}

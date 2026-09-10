@@ -586,6 +586,15 @@ CodeEdit's brace completion closes it and leaves the caret inside, while one wit
 pair and leaves the caret past it. That is GDScript's rule exactly, ellipsis in the displayed name
 and all, and it needs the parameter count to reach the editor with each completion item.
 
+*Which* bracket is a second question, and the one Verse asks that GDScript does not: a `<decides>`
+function is called `GetChild[0]`, so completing one with a parenthesis is an error the moment it
+lands. The answer comes off the signature the item already carries — from the effect specifiers
+alone, between the parameter list's closing parenthesis and the `:` before the result type, rather
+than from the signature as a whole, because a parameter or a result can itself be a fallible
+function *type* and spells `<decides>` too. The argument hint drawn above the caret has to agree
+with the line under it, and takes its own answer from the bracket already written there:
+`vh_signature_desc` reports a function's parameters but not its effects.
+
 **Inside a class body, a method completes to its whole declaration.** GDScript answers a name
 typed at class level with `func _ready() -> void:` rather than with `_ready`, and the Verse
 spelling of the same idea is the base's signature with `<override>` after the name: typing `Up`
