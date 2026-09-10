@@ -109,6 +109,32 @@ struct FExportDesc
 /// with an empty array.
 AUTORTFM_DISABLE bool GetClassExports(FUtf8StringView ClassName, TArray<FExportDesc>& OutExports);
 
+/// One definition an identifier resolved to, with the source location to jump to.
+struct FLookupDesc
+{
+    FUtf8String Name;
+    /// Empty for a definition the project has no file for -- the generated Godot API, the Verse
+    /// standard library -- which can be described but not jumped to.
+    FUtf8String Path;
+    /// Zero-based row; the column is a byte offset into it, which is how uLang counts and is not
+    /// how Godot counts.
+    int32 Line{-1};
+    int32 Column{-1};
+    FUtf8String Type;
+    vh_lookup_kind Kind{VH_LOOKUP_UNKNOWN};
+    bool bIsVar{false};
+};
+
+/// Resolves the identifier at Line/Column of Path against the analysed program.
+///
+/// Positions are the compiler's: zero-based rows, byte-offset columns. The caller is responsible
+/// for only asking about text the last analysis actually saw -- nothing here can detect an edit
+/// since, and a stale locus is a confident jump to the wrong line.
+///
+/// Only ever valid on an analysis-only program. Code generation replaces a definition's AST node
+/// with an IR node, and the accessors this walks assert rather than fall back.
+AUTORTFM_DISABLE bool LookupSymbol(FUtf8StringView Path, int32 Line, int32 Column, FLookupDesc& OutDesc);
+
 /// Reads one data member off a live instance into the ABI's value shape.
 ///
 /// String bytes are copied into OutStorage rather than pointed at: VArray::AsStringView points

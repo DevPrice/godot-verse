@@ -173,6 +173,39 @@ than trusting callers: VerseVM blocks execution for the length of a build, so a 
 anyway would trip `ensure(!bBlockAllExecution)` and then take the process down. A frame that lands
 mid-analysis skips its tick; everything that reads the semantic program waits instead.
 
+**Ctrl+click and hover resolve a symbol through the compiler.** Godot routes the ctrl-hover
+underline, ctrl+click and the documentation tooltip through one `_lookup_code` call, and the
+position arrives *inside* the buffer rather than beside it — the editor splices U+FFFF in at the
+cursor, which is the only thing that can tell two same-named locals apart, since the symbol Godot
+also passes is just the word under the pointer. `vh_lookup_symbol` answers off the semantic
+program: it walks the AST for the innermost identifier node whose source range contains the
+cursor and reports what that identifier resolved to, with the definition's own location and its
+type spelled back as Verse source.
+
+Two things make that safe rather than merely possible.
+
+- **A stale answer is refused rather than shown.** Diagnostics can lag the buffer by one analysis
+  because the editor replaces its error list wholesale, but a lagging *locus* is a confident jump
+  to the wrong line — every row below an insertion has moved. So the lookup answers only when the
+  buffer matches what analysis last saw, which is the same comparison `_validate` already uses to
+  skip a re-analysis, and otherwise declines. Declining costs an underline that does not appear
+  for a few frames.
+- **The host refuses unless the program it holds can be walked at all.** Code generation hangs an
+  IR package off every module, and the AST accessors this needs assert rather than degrade when
+  they find one — a lookup at the wrong moment would take the process down rather than return
+  nothing. The host tracks which kind of build produced its current program instead of trusting
+  the caller, and `vh_compile_project` now ends by re-analysing what it just built, so a symbol
+  resolves on the first hover of a session rather than only after the first edit.
+
+The result is reported as one of Godot's two *local* lookup results, which is not where it looks
+like it belongs. `SCRIPT_LOCATION` is the honest label and it jumps correctly, but the tooltip
+path drops it in a `// Nothing to do.` branch and shows nothing at all; the `CLASS_*` types do
+produce a tooltip, by routing into Godot's own class documentation, which has nothing to say
+about a Verse definition. `LOCAL_VARIABLE` and `LOCAL_CONSTANT` are the only pair that both jump
+and describe — the click path never reads `type`, it jumps on `location` alone as long as
+`class_name` is empty, so leaving that key unset is load-bearing. Verse's `var` split maps onto
+the two exactly.
+
 Syntax highlighting is a real lexer, which is what lets nested `<# #>` block comments,
 dedent-terminated `<#>` comments and comments inside string interpolation all colour correctly —
 none of which a delimiter matcher can express. On top of the comment/string/number/keyword
@@ -181,9 +214,12 @@ classes it colours operators and punctuation, call positions (`Print(`, the brac
 sit between the name and its parameter list), `.member` accesses, and both attribute spellings —
 suffix `<public>` and prefix `@editable`.
 
-What it does not do is resolve symbols: a bare identifier is a bare identifier, so type names
-read as plain text. Telling a local from a field from a class needs the compiler, which is the
-same thing the missing language server would provide.
+What the *colouring* does not do is resolve symbols: a bare identifier is a bare identifier, so
+type names read as plain text. The compiler can now answer that question — it is what ctrl+click
+above is built on — but not in the shape colouring wants. A lookup is one point query against
+loci that shift the moment the author types, whereas every visible line is recoloured on every
+keystroke; feeding it loci would make the colours crawl. What that path needs instead is the set
+of names in scope by kind, which does not move when a line is inserted.
 
 `VerseTicker` from Phase 2 still works, but nothing needs it: the script language pumps `vh_tick`
 from `_frame`, so every scripted node is driven rather than one hand-placed one.

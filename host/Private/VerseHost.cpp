@@ -528,6 +528,46 @@ extern "C" int32_t vh_class_default_field(const char* ClassNameUtf8, const char*
     return VH_OK;
 }
 
+extern "C" int32_t vh_lookup_symbol(const char* PathUtf8, int32_t Line, int32_t Column, const vh_lookup_desc** OutResult)
+{
+    GodotVerse::WaitForBackgroundCheck();
+    if (!PathUtf8 || !OutResult)
+    {
+        return VH_ERR_ABI;
+    }
+    *OutResult = nullptr;
+
+    if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+
+    // The ABI promises the strings outlive the call, and the descriptor only points at the
+    // harvest's -- so both are static rather than stack.
+    static GodotVerse::FLookupDesc Lookup;
+    static vh_lookup_desc Desc;
+
+    if (!GodotVerse::LookupSymbol(Cstr(PathUtf8), Line, Column, Lookup))
+    {
+        return VH_ERR_NOT_FOUND;
+    }
+
+    Desc = vh_lookup_desc{
+        reinterpret_cast<const char*>(*Lookup.Name),
+        Lookup.Name.Len(),
+        reinterpret_cast<const char*>(*Lookup.Path),
+        Lookup.Path.Len(),
+        Lookup.Line,
+        Lookup.Column,
+        reinterpret_cast<const char*>(*Lookup.Type),
+        Lookup.Type.Len(),
+        (int32_t)Lookup.Kind,
+        Lookup.bIsVar ? 1 : 0};
+
+    *OutResult = &Desc;
+    return VH_OK;
+}
+
 #if PLATFORM_WINDOWS
 #include "Windows/AllowWindowsPlatformTypes.h"
 

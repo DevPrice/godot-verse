@@ -22,7 +22,7 @@
 extern "C" {
 #endif
 
-#define VH_ABI_VERSION 9
+#define VH_ABI_VERSION 10
 
 typedef int32_t vh_bool;
 
@@ -396,6 +396,72 @@ VH_ATTR VH_API int32_t vh_class_default_field(const char* ClassNameUtf8, const c
  * on a sealed instance. */
 VH_ATTR VH_API int32_t vh_instance_set_field(vh_instance* Instance, const char* NameUtf8, const vh_value* Value);
 
+/* ---------------------------------------------------------- symbol lookup -- */
+
+/* What an identifier resolved to. The consumer needs the var/non-var split to say which of
+ * Godot's two local lookup results to report; the rest is for the text it shows. */
+typedef enum vh_lookup_kind
+{
+	VH_LOOKUP_UNKNOWN = 0,
+	VH_LOOKUP_DATA,
+	VH_LOOKUP_FUNCTION,
+	VH_LOOKUP_CLASS,
+	VH_LOOKUP_MODULE,
+	VH_LOOKUP_TYPE_ALIAS,
+	VH_LOOKUP_ENUM
+} vh_lookup_kind;
+
+/* Where an identifier's definition is, and what it is. All strings are utf8 and none is null
+ * terminated. */
+typedef struct vh_lookup_desc
+{
+	const char* NameUtf8;
+	int32_t NameLen;
+
+	/* The file the definition was read from. Empty for a definition with no file behind it --
+	 * the generated Godot API and Verse's own standard library are compiled from packages the
+	 * project never names -- which is a definition that can be described but not jumped to. */
+	const char* PathUtf8;
+	int32_t PathLen;
+
+	/* Where the definition starts. Zero-based row; the column is a byte offset into that row's
+	 * utf8, matching how the compiler counts and NOT how Godot counts. Both are -1 when there is
+	 * no source location.
+	 *
+	 * "Starts" includes any attributes applied to it, because that is where the compiler puts
+	 * the definition's source range -- so a member behind four lines of @editable and friends
+	 * reports the first of those rather than the row its name is on. */
+	int32_t Line;
+	int32_t Column;
+
+	/* The definition's type, spelled as Verse source. Empty when it has none to spell. */
+	const char* TypeUtf8;
+	int32_t TypeLen;
+
+	int32_t Kind;  /* vh_lookup_kind */
+	vh_bool IsVar; /* declared with `var`, so assignable after the instance seals */
+} vh_lookup_desc;
+
+/* Resolves the identifier at Line/Column of PathUtf8 to the definition it refers to.
+ *
+ * Line and Column are zero-based and Column is a byte offset into the line, as above.
+ *
+ * Answered from the semantic program the last analysis left behind, so the caller must only ask
+ * about a buffer that analysis actually saw: nothing here can tell that the file has been edited
+ * since, and every locus below an insertion would be off by the rows it added. The caller holds
+ * that contract -- it is the one that knows what the editor's buffer says.
+ *
+ * Only an analysis-only program can answer this. Code generation hangs an IR package off every
+ * module and the accessors this walks assert rather than degrade when they find one -- so the
+ * host tracks which kind of build produced the program it holds and answers VH_ERR_NOT_FOUND
+ * rather than trusting the caller to have asked at a safe moment. vh_compile_project leaves the
+ * program analysable for this reason.
+ *
+ * OutResult points into storage owned by the host, valid until the next call to this function.
+ * Returns VH_ERR_NOT_FOUND when no identifier at that position resolves to a definition, which
+ * includes the ordinary cases of hovering whitespace, a keyword or a comment. */
+VH_ATTR VH_API int32_t vh_lookup_symbol(const char* PathUtf8, int32_t Line, int32_t Column, const vh_lookup_desc** OutResult);
+
 /* Signatures for GetProcAddress on the consumer side. */
 typedef int32_t (*vh_abi_version_fn)(void);
 typedef int32_t (*vh_init_fn)(const vh_init_desc*);
@@ -423,6 +489,7 @@ typedef int32_t (*vh_class_export_list_fn)(const char*, const vh_export_desc**, 
 typedef int32_t (*vh_instance_get_field_fn)(vh_instance*, const char*, const vh_value**);
 typedef int32_t (*vh_class_default_field_fn)(const char*, const char*, const vh_value**);
 typedef int32_t (*vh_instance_set_field_fn)(vh_instance*, const char*, const vh_value*);
+typedef int32_t (*vh_lookup_symbol_fn)(const char*, int32_t, int32_t, const vh_lookup_desc**);
 
 #ifdef __cplusplus
 }

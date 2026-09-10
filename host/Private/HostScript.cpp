@@ -44,10 +44,16 @@
 #include "VerseVM/VVMUniqueString.h"
 #include "uLang/Semantics/Attributable.h"
 #include "uLang/Semantics/DataDefinition.h"
+#include "uLang/Semantics/Expression.h"
 #include "uLang/Semantics/FilteredDefinitionRange.h"
+#include "uLang/Semantics/ModuleAlias.h"
 #include "uLang/Semantics/SemanticClass.h"
+#include "uLang/Semantics/SemanticEnumeration.h"
+#include "uLang/Semantics/SemanticFunction.h"
 #include "uLang/Semantics/SemanticProgram.h"
 #include "uLang/Semantics/SemanticTypes.h"
+#include "uLang/Semantics/TypeAlias.h"
+#include "uLang/Syntax/VstNode.h"
 #include "uLang/SourceProject/VerseVersion.h"
 #include "uLang/Toolchain/ProgramBuildManager.h"
 
@@ -65,6 +71,18 @@ using FMainFunction = TVerseFunction<FVerseResult(
 
 TSharedPtr<ISolarisIde> GIde;
 bool GProjectBuilt = false;
+
+/// Whether the semantic program the IDE currently holds came from an analysis-only build.
+/// Code generation hangs an IR package off every module, and the AST accessors the symbol
+/// lookup walks assert rather than degrade when it finds one -- so the lookup has to be able
+/// to tell the two shapes apart itself instead of trusting that a caller only asks after an
+/// analysis.
+bool GProgramIsAnalysisOnly = false;
+
+/// Re-analyses the project with one file's text replaced. An empty Path replaces nothing and
+/// simply re-analyses what the IDE already holds.
+AUTORTFM_DISABLE bool RunCheck(const FUtf8String& Path, const FUtf8String& SourceText, TFunction<void(const FSolDiagnostic&)> Sink);
+
 TArray<TSharedRef<ISolIdeDataSource>> GDataSources;
 TSharedPtr<verse::FContentScope> GContentScope;
 TOptional<verse::FContentScopeGuard> GContentScopeGuard;
@@ -283,6 +301,12 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FUtf8String>& Path
 
     ReportPackageDefinitions();
 
+    // The build just done generated code, which leaves an IR package on every module and puts
+    // the AST out of reach. One analysis-only pass over the same sources puts it back, so a
+    // symbol resolves on the first hover rather than only after the author's first edit. Its
+    // diagnostics are dropped: the build above already reported every one of them.
+    RunCheck(FUtf8String(), FUtf8String(), [](const FSolDiagnostic&) {});
+
     return true;
 }
 
@@ -315,7 +339,9 @@ AUTORTFM_DISABLE bool RunCheck(const FUtf8String& Path, const FUtf8String& Sourc
     Settings.bGenerateCode = false;
     Settings.bGenerateAutoRTFMBytecode = false;
 
-    return GIde->BuildAll(Settings, MakeIdeDiagnostics(MoveTemp(Sink)));
+    const bool bAnalysed = GIde->BuildAll(Settings, MakeIdeDiagnostics(MoveTemp(Sink)));
+    GProgramIsAnalysisOnly = GProgramIsAnalysisOnly || bAnalysed;
+    return bAnalysed;
 }
 
 /// Body of the background thread. A free function rather than a lambda so it can carry
@@ -948,6 +974,204 @@ AUTORTFM_DISABLE bool GodotVerse::GetClassExports(FUtf8StringView ClassName, TAr
             AttributeText(*Member, ClampMinAttribute, *Program),
             AttributeText(*Member, ClampMaxAttribute, *Program),
             AttributeText(*Member, CategoryAttribute, *Program)});
+    }
+    return true;
+}
+
+namespace {
+
+/// An STextRange ends exclusively, so the position one past an identifier's last byte does not
+/// resolve to it. That is what makes hovering the `(` of a call miss the callee rather than hit it.
+AUTORTFM_DISABLE bool LocusContains(const Verse::SLocus& Range, uint32 Row, uint32 Column)
+{
+    const uLang::STextPosition Position{Row, Column};
+    return Range.GetBegin() <= Position && Position < Range.GetEnd();
+}
+
+/// The definition an identifier node resolves to, or null for a node that is not one.
+///
+/// Definition nodes are deliberately absent: a definition's locus spans its whole body, so
+/// treating one as a hit would resolve every blank column inside a function to the function.
+AUTORTFM_DISABLE const uLang::CDefinition* ReferencedDefinition(const uLang::CAstNode& AstNode,
+                                                                const uLang::CSemanticProgram& Program,
+                                                                vh_lookup_kind& OutKind)
+{
+    using namespace uLang;
+
+    switch (AstNode.GetNodeType())
+    {
+    case EAstNodeType::Identifier_Data:
+        OutKind = VH_LOOKUP_DATA;
+        return &static_cast<const CExprIdentifierData&>(AstNode)._DataDefinition;
+
+    case EAstNodeType::Identifier_Function:
+        OutKind = VH_LOOKUP_FUNCTION;
+        return &static_cast<const CExprIdentifierFunction&>(AstNode)._Function;
+
+    case EAstNodeType::Identifier_OverloadedFunction:
+        // No overload has been picked, and every candidate shares the name the author clicked.
+        // The first is a better answer than refusing to resolve at all.
+        for (const CFunction* Function : static_cast<const CExprIdentifierOverloadedFunction&>(AstNode)._FunctionOverloads)
+        {
+            if (Function)
+            {
+                OutKind = VH_LOOKUP_FUNCTION;
+                return Function;
+            }
+        }
+        return nullptr;
+
+    case EAstNodeType::Identifier_Class:
+        if (const CClass* Class = static_cast<const CExprIdentifierClass&>(AstNode).GetClass(Program))
+        {
+            OutKind = VH_LOOKUP_CLASS;
+            return Class->_Generalized;
+        }
+        return nullptr;
+
+    case EAstNodeType::Identifier_Enum:
+        if (const CEnumeration* Enumeration = static_cast<const CExprEnumerationType&>(AstNode).GetEnumeration(Program))
+        {
+            OutKind = VH_LOOKUP_ENUM;
+            return Enumeration;
+        }
+        return nullptr;
+
+    case EAstNodeType::Identifier_TypeAlias:
+        OutKind = VH_LOOKUP_TYPE_ALIAS;
+        return &static_cast<const CExprIdentifierTypeAlias&>(AstNode)._TypeAlias;
+
+    case EAstNodeType::Identifier_Module:
+        if (const CModule* Module = static_cast<const CExprIdentifierModule&>(AstNode).GetModule(Program))
+        {
+            OutKind = VH_LOOKUP_MODULE;
+            return Module;
+        }
+        return nullptr;
+
+    case EAstNodeType::Identifier_ModuleAlias:
+        OutKind = VH_LOOKUP_MODULE;
+        return &static_cast<const CExprIdentifierModuleAlias&>(AstNode)._ModuleAlias;
+
+    default:
+        return nullptr;
+    }
+}
+
+struct AUTORTFM_DISABLE FLookupVisitor : public uLang::SAstVisitor
+{
+    FLookupVisitor(const uLang::CSemanticProgram& InProgram, const FUtf8String& InPath, uint32 InRow, uint32 InColumn)
+        : Program(InProgram)
+        , Path(InPath)
+        , Row(InRow)
+        , Column(InColumn)
+    {
+    }
+
+    virtual void Visit(const char* FieldName, uLang::CAstNode& AstNode) override { VisitElement(AstNode); }
+
+    virtual void VisitElement(uLang::CAstNode& AstNode) override
+    {
+        if (const Verse::Vst::Node* Vst = AstNode.GetMappedVstNode())
+        {
+            if (LocusContains(Vst->Whence(), Row, Column)
+                && FULangConversionUtils::ULangStrToFUtf8String(Vst->GetSnippetPath()).Equals(Path, ESearchCase::IgnoreCase))
+            {
+                vh_lookup_kind Kind = VH_LOOKUP_UNKNOWN;
+                if (const uLang::CDefinition* Definition = ReferencedDefinition(AstNode, Program, Kind))
+                {
+                    // A child's locus is contained in its parent's, so the deepest node visited
+                    // that still contains the cursor is the innermost -- last write wins.
+                    Found = Definition;
+                    FoundKind = Kind;
+                }
+            }
+        }
+        AstNode.VisitChildren(*this);
+    }
+
+    const uLang::CSemanticProgram& Program;
+    FUtf8String Path;
+    uint32 Row;
+    uint32 Column;
+    const uLang::CDefinition* Found{nullptr};
+    vh_lookup_kind FoundKind{VH_LOOKUP_UNKNOWN};
+};
+
+} // namespace
+
+AUTORTFM_DISABLE bool GodotVerse::LookupSymbol(FUtf8StringView Path, int32 Line, int32 Column, FLookupDesc& OutDesc)
+{
+    OutDesc = FLookupDesc{};
+
+    if (!GIde.IsValid() || !GProgramIsAnalysisOnly || Line < 0 || Column < 0)
+    {
+        return false;
+    }
+    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
+    if (!BuildManager.IsValid())
+    {
+        return false;
+    }
+    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
+    if (!Program->_AstProject)
+    {
+        return false;
+    }
+
+    FLookupVisitor Visitor(*Program, FUtf8String(Path), (uint32)Line, (uint32)Column);
+    for (const uLang::CAstCompilationUnit* CompilationUnit : Program->_AstProject->OrderedCompilationUnits())
+    {
+        for (const uLang::CAstPackage* Package : CompilationUnit->Packages())
+        {
+            // Only the project's own packages have a file the editor could jump into; the
+            // generated Godot API and Verse's own library are compiled from elsewhere.
+            const bool bIsUserPackage = Package->_VerseScope == uLang::EVerseScope::PublicUser
+                || Package->_VerseScope == uLang::EVerseScope::InternalUser;
+            if (!bIsUserPackage || !Package->_RootModule || !Package->_RootModule->GetAstPackage())
+            {
+                continue;
+            }
+            Package->_RootModule->GetAstPackage()->VisitChildren(Visitor);
+        }
+    }
+
+    if (!Visitor.Found)
+    {
+        return false;
+    }
+
+    const uLang::CDefinition& Definition = *Visitor.Found;
+    OutDesc.Name = FUtf8String(Definition.AsNameCString());
+    OutDesc.Kind = Visitor.FoundKind;
+
+    if (const uLang::CDataDefinition* Data = Definition.AsNullable<uLang::CDataDefinition>())
+    {
+        OutDesc.bIsVar = Data->IsVar();
+        if (const uLang::CTypeBase* Type = Data->GetType())
+        {
+            OutDesc.Type = FULangConversionUtils::ULangStrToFUtf8String(Type->AsCode());
+        }
+    }
+    else if (const uLang::CFunction* Function = Definition.AsNullable<uLang::CFunction>())
+    {
+        if (const uLang::CFunctionType* Type = Function->_Signature.GetFunctionType())
+        {
+            OutDesc.Type = FULangConversionUtils::ULangStrToFUtf8String(Type->AsCode());
+        }
+    }
+
+    // A definition compiled from a package the project does not own has no file to point at.
+    // It still describes fine, which is what the hover card wants.
+    if (const uLang::CExpressionBase* DefinitionNode = Definition.GetAstNode())
+    {
+        if (const Verse::Vst::Node* Vst = DefinitionNode->GetMappedVstNode())
+        {
+            const Verse::SLocus& Whence = Vst->Whence();
+            OutDesc.Path = FULangConversionUtils::ULangStrToFUtf8String(Vst->GetSnippetPath());
+            OutDesc.Line = (int32)Whence.BeginRow();
+            OutDesc.Column = (int32)Whence.BeginColumn();
+        }
     }
     return true;
 }

@@ -94,6 +94,23 @@ static void SmokeOnDiagnostic(void*, const vh_diagnostic* Diagnostic)
 		Diagnostic->MessageLen, Diagnostic->MessageUtf8);
 }
 
+/// The zero-based row and byte-offset column of a byte offset, which is how the compiler counts
+/// and so how vh_lookup_symbol is asked and answered.
+static void RowColumnOf(const std::string& Text, size_t Offset, int32_t& OutRow, int32_t& OutColumn)
+{
+	OutRow = 0;
+	size_t LineStart = 0;
+	for (size_t i = 0; i < Offset && i < Text.size(); i++)
+	{
+		if (Text[i] == '\n')
+		{
+			OutRow++;
+			LineStart = i + 1;
+		}
+	}
+	OutColumn = static_cast<int32_t>(Offset - LineStart);
+}
+
 static bool Step(const char* Name, bool Result)
 {
 	printf("[smoke] %s: %s\n", Name, Result ? "ok" : "FAIL");
@@ -153,6 +170,7 @@ int main(int argc, char** argv)
 	auto GetFieldFn = Resolve<vh_instance_get_field_fn>(Module, "vh_instance_get_field", &ResolveOk);
 	auto SetFieldFn = Resolve<vh_instance_set_field_fn>(Module, "vh_instance_set_field", &ResolveOk);
 	auto ReleaseScriptFn = Resolve<vh_release_script_fn>(Module, "vh_release_script", &ResolveOk);
+	auto LookupSymbolFn = Resolve<vh_lookup_symbol_fn>(Module, "vh_lookup_symbol", &ResolveOk);
 	auto CheckProjectFn = Resolve<vh_check_project_fn>(Module, "vh_check_project", &ResolveOk);
 	auto CheckBeginFn = Resolve<vh_check_project_begin_fn>(Module, "vh_check_project_begin", &ResolveOk);
 	auto CheckProjectPollFn = Resolve<vh_check_project_poll_fn>(Module, "vh_check_project_poll", &ResolveOk);
@@ -204,6 +222,82 @@ int main(int argc, char** argv)
 	{
 		ShutdownFn();
 		return 1;
+	}
+
+	// Symbol lookup, asked before anything has edited a buffer. That is the state the editor is
+	// in at startup, and it is the interesting one: the build just done generated code, which
+	// hangs an IR package off every module and puts the AST the lookup walks out of reach. The
+	// host is supposed to put the program back into an analysable shape on its own rather than
+	// leave the first hover of a session unanswerable.
+	bool LookupOk = true;
+	{
+		const std::string ExportsSource = ReadFileUtf8(ExportsPath);
+		LookupOk = Step("read exports.verse", !ExportsSource.empty());
+
+		// The Speed in `set Scale = Scale + Speed` is a reference; its definition is the
+		// `Speed<public>:float` member declared far above it in the same file.
+		//
+		// A definition's source range starts at the first attribute applied to it rather than
+		// at its name, so Speed's begins on its `@editable` -- four lines above the name. That
+		// is the first `@editable` in the fixture, and it is the row a jump should land on.
+		const size_t UseOffset = ExportsSource.find("+ Speed");
+		const size_t DeclOffset = ExportsSource.find("@editable");
+		LookupOk = Step("located the fixture's Speed use and declaration",
+					   UseOffset != std::string::npos && DeclOffset != std::string::npos)
+				&& LookupOk;
+
+		if (LookupOk)
+		{
+			int32_t UseRow = 0;
+			int32_t UseColumn = 0;
+			RowColumnOf(ExportsSource, UseOffset + 2, UseRow, UseColumn);
+			int32_t DeclRow = 0;
+			int32_t DeclColumn = 0;
+			RowColumnOf(ExportsSource, DeclOffset, DeclRow, DeclColumn);
+
+			auto Text = [](const char* Utf8, int32_t Len) { return std::string(Utf8 ? Utf8 : "", Len); };
+
+			const vh_lookup_desc* Lookup = nullptr;
+			LookupOk = Step("vh_lookup_symbol", LookupSymbolFn(ExportsPathUtf8.c_str(), UseRow, UseColumn, &Lookup) == VH_OK) && LookupOk;
+			if (Lookup)
+			{
+				LookupOk = Step("the use resolves to Speed", Text(Lookup->NameUtf8, Lookup->NameLen) == "Speed") && LookupOk;
+				printf("[smoke] DEBUG lookup line=%d column=%d declrow=%d\n", Lookup->Line, Lookup->Column, DeclRow);
+				LookupOk = Step("it points at the start of the declaration",
+							   Lookup->Line == DeclRow && Lookup->Column == DeclColumn)
+						&& LookupOk;
+				LookupOk = Step("it points into exports.verse", Text(Lookup->PathUtf8, Lookup->PathLen) == ExportsPathUtf8) && LookupOk;
+				LookupOk = Step("Speed is not a var", Lookup->IsVar == 0) && LookupOk;
+				LookupOk = Step("Speed's type reads as float", Text(Lookup->TypeUtf8, Lookup->TypeLen) == "float") && LookupOk;
+				LookupOk = Step("Speed is a data definition", Lookup->Kind == VH_LOOKUP_DATA) && LookupOk;
+			}
+
+			// A var resolves the same way and says so, which is the whole of what the editor
+			// needs to tell Godot's two local lookup results apart.
+			const size_t ScaleUse = ExportsSource.find("set Scale");
+			if (ScaleUse != std::string::npos)
+			{
+				int32_t ScaleRow = 0;
+				int32_t ScaleColumn = 0;
+				RowColumnOf(ExportsSource, ScaleUse + 4, ScaleRow, ScaleColumn);
+				const vh_lookup_desc* ScaleLookup = nullptr;
+				if (Step("vh_lookup_symbol on a var", LookupSymbolFn(ExportsPathUtf8.c_str(), ScaleRow, ScaleColumn, &ScaleLookup) == VH_OK) && ScaleLookup)
+				{
+					LookupOk = Step("Scale is a var", ScaleLookup->IsVar != 0) && LookupOk;
+				}
+				else
+				{
+					LookupOk = false;
+				}
+			}
+
+			// Past the end of a line nothing encloses the position, so the answer is a refusal
+			// rather than whichever definition happens to span the row.
+			const vh_lookup_desc* Nothing = nullptr;
+			LookupOk = Step("a column past the end of a line resolves to nothing",
+						   LookupSymbolFn(ExportsPathUtf8.c_str(), DeclRow, 500, &Nothing) == VH_ERR_NOT_FOUND)
+					&& LookupOk;
+		}
 	}
 
 	vh_script* Script = nullptr;
@@ -438,5 +532,5 @@ int main(int argc, char** argv)
 	ShutdownFn();
 	Step("vh_shutdown", true);
 
-	return RunOk && CallsOk ? 0 : 1;
+	return RunOk && CallsOk && LookupOk ? 0 : 1;
 }

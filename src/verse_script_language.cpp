@@ -10,6 +10,7 @@
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
+#include <godot_cpp/classes/resource_loader.hpp>
 #include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/memory.hpp>
@@ -295,13 +296,94 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 	return Dictionary();
 }
 
+// Ctrl+click, the ctrl-hover underline and the documentation tooltip are all this one call.
+//
 // Godot reads "result" and "type" back out unconditionally and logs ERR_UNAVAILABLE when either
-// is missing, so a language with no symbol lookup still has to answer in full. The script editor
-// asks on every hover, which is what made an empty dictionary here look like random log spam.
+// is missing, so an answer is mandatory even when there is nothing to say. The refusal is spelled
+// with a real type rather than LOOKUP_RESULT_MAX because newer Godot bounds-checks the value and
+// would turn every hover into the error spam this used to be written to avoid.
+//
+// The two live types are the only ones that serve both features: SCRIPT_LOCATION jumps but shows
+// no tooltip at all, and the CLASS_* types route into Godot's own class documentation, which has
+// nothing to say about a Verse definition. LOCAL_VARIABLE and LOCAL_CONSTANT build a tooltip out
+// of doc_type/description, and the click path ignores `type` entirely -- it jumps on `location`
+// alone, provided `class_name` is empty. Leaving class_name unset is therefore load-bearing.
 Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String &p_symbol, const String &p_path, Object *p_owner) const {
 	Dictionary result;
 	result["result"] = (int64_t)ERR_UNAVAILABLE;
-	result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_MAX;
+	result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_LOCAL_VARIABLE;
+
+	VerseRuntime *runtime = get_runtime();
+	if (!project_built || runtime == nullptr || !runtime->is_host_loaded()) {
+		return result;
+	}
+
+	// The editor marks the cursor by splicing U+FFFF into the buffer it hands over, and that is
+	// the only place the position arrives: p_symbol is just the word under the pointer, which
+	// cannot tell two same-named locals in different functions apart. The underline path asks
+	// about the mouse rather than the caret and hands over an empty string when the pointer is
+	// off the end of the text, so a missing marker is ordinary rather than a fault.
+	const int64_t marker = p_code.find(String::chr(0xFFFF));
+	if (marker < 0) {
+		return result;
+	}
+
+	const String before = p_code.substr(0, marker);
+	const int64_t line = before.count("\n");
+	const int64_t line_start = before.rfind("\n") + 1;
+	// Godot counts the column in characters and the compiler counts it in utf8 bytes; one
+	// non-ASCII character earlier on the line is enough to make them disagree.
+	const int64_t column = before.substr(line_start).utf8().length();
+
+	// Answering from an analysis that predates the edit would be worse than not answering: the
+	// loci below an inserted row are all shifted, so the jump lands confidently on the wrong
+	// line. This is the same predicate check_buffer uses to decide a re-analysis is unnecessary.
+	const String normalized = newline_normalized(before + p_code.substr(marker + 1));
+	if (!analyzed_source_by_path.has(p_path) || String(analyzed_source_by_path[p_path]) != normalized) {
+		return result;
+	}
+
+	// The host blocks on an in-flight analysis before touching the semantic program, and this
+	// runs on the editor's thread. An analysis of some other file is the one case where the
+	// buffer can be current and the host still busy; declining costs an underline for a frame.
+	if (runtime->is_check_project_busy()) {
+		return result;
+	}
+
+	const String globalized = ProjectSettings::get_singleton()->globalize_path(p_path);
+	const Dictionary found = runtime->lookup_symbol(globalized, (int32_t)line, (int32_t)column);
+	if (found.is_empty()) {
+		return result;
+	}
+
+	result["result"] = (int64_t)OK;
+	result["type"] = (int64_t)(bool(found["is_var"])
+					? ScriptLanguageExtension::LOOKUP_RESULT_LOCAL_VARIABLE
+					: ScriptLanguageExtension::LOOKUP_RESULT_LOCAL_CONSTANT);
+	result["doc_type"] = found["type"];
+
+	const int64_t definition_line = found["line"];
+	const String definition_path = found["path"];
+	if (definition_line < 0 || definition_path.is_empty()) {
+		// A definition from the generated Godot API or Verse's own library: it describes, but
+		// there is no file in the project to open.
+		return result;
+	}
+
+	if (definition_path == globalized) {
+		result["location"] = definition_line + 1;
+		return result;
+	}
+
+	// A location with no script beside it is read as a line in the file being edited, so a
+	// cross-file definition we cannot name is left without one rather than jumping somewhere
+	// wrong in the current file.
+	const String definition_res_path = path_by_globalized.get(definition_path, String());
+	if (!definition_res_path.is_empty()) {
+		result["location"] = definition_line + 1;
+		result["script"] = ResourceLoader::get_singleton()->load(definition_res_path);
+		result["script_path"] = definition_res_path;
+	}
 	return result;
 }
 

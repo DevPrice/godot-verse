@@ -77,6 +77,16 @@ public:
 	// program, so it follows the editor's buffer and refreshes without restarting -- unlike
 	// anything routed through the compiled bytecode, which may only be generated once.
 	godot::TypedArray<godot::Dictionary> class_exports(const godot::String &p_class_name) const;
+
+	// The definition the identifier at p_line/p_column resolves to, as
+	// { name, path, line, column, type, kind, is_var }, or an empty dictionary when nothing
+	// there resolves. Positions in and out are the compiler's: zero-based rows, and columns
+	// that are byte offsets into the line rather than character counts.
+	//
+	// Answered from the last analysis, which cannot tell that the buffer has moved since --
+	// so the caller must have established that the text at p_globalized_path is the text that
+	// analysis saw, or every locus below an edit is off by the rows it added.
+	godot::Dictionary lookup_symbol(const godot::String &p_globalized_path, int32_t p_line, int32_t p_column) const;
 	vh_instance *instantiate(const godot::String &p_class_name, int64_t p_object_id);
 	void release_instance(vh_instance *p_instance);
 	bool instance_has_function(vh_instance *p_instance, const char *p_decorated_name) const;

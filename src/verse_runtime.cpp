@@ -394,6 +394,27 @@ TypedArray<Dictionary> VerseRuntime::class_exports(const String &p_class_name) c
 	return exports;
 }
 
+Dictionary VerseRuntime::lookup_symbol(const String &p_globalized_path, int32_t p_line, int32_t p_column) const {
+	Dictionary result;
+	if (!host.is_loaded()) {
+		return result;
+	}
+
+	const vh_lookup_desc *desc = nullptr;
+	if (host.LookupSymbol(p_globalized_path.utf8().get_data(), p_line, p_column, &desc) != VH_OK) {
+		return result;
+	}
+
+	result["name"] = String::utf8(desc->NameUtf8, desc->NameLen);
+	result["path"] = String::utf8(desc->PathUtf8, desc->PathLen);
+	result["line"] = (int64_t)desc->Line;
+	result["column"] = (int64_t)desc->Column;
+	result["type"] = String::utf8(desc->TypeUtf8, desc->TypeLen);
+	result["kind"] = (int64_t)desc->Kind;
+	result["is_var"] = desc->IsVar != 0;
+	return result;
+}
+
 Variant VerseRuntime::instance_field(vh_instance *p_instance, const String &p_name) const {
 	if (!host.is_loaded() || p_instance == nullptr) {
 		return Variant();
