@@ -52,6 +52,16 @@ public:
 	// Re-runs semantic analysis with one file's text replaced, filing diagnostics the same way
 	// compile_project does. Generates nothing, so it is safe to call as often as the editor asks.
 	godot::Error check_project(const godot::String &p_globalized_path, const godot::String &p_source, godot::Dictionary *r_diagnostics_by_path);
+
+	// The same analysis on the host's own thread, so the editor keeps drawing. ERR_BUSY when one
+	// is already running -- only one at a time.
+	godot::Error begin_check_project(const godot::String &p_globalized_path, const godot::String &p_source);
+
+	// Reaps a begin_check_project. True only on the call that reaps one, which is when
+	// r_diagnostics_by_path has been filled in. Cheap enough to call every frame.
+	bool poll_check_project(godot::Dictionary *r_diagnostics_by_path);
+
+	bool is_check_project_busy() const;
 	vh_script *open_script(const godot::String &p_globalized_path);
 	void release_script_handle(vh_script *p_script);
 	bool handle_has_function(vh_script *p_script, const char *p_decorated_name) const;

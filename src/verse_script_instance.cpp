@@ -16,13 +16,13 @@ constexpr const char *kVerseReadyName = "Ready";
 constexpr const char *kVerseProcessName = "Update(:float)";
 constexpr const char *kVersePhysicsProcessName = "PhysicsUpdate(:float)";
 
-// A class-shaped script overrides methods declared on godot_object, and the VM registers an
+// A class-shaped script overrides methods declared on `object`, and the VM registers an
 // override under the *declaring* class's decorated name, not the overriding one. Looking up the
 // undecorated name instead does not fail politely — UVerseClass::PeekField asserts on a field
 // the shape does not have.
-constexpr const char *kMethodReadyName = "(/Godot.org/Godot/godot_object:)Ready";
-constexpr const char *kMethodProcessName = "(/Godot.org/Godot/godot_object:)Update(:float)";
-constexpr const char *kMethodPhysicsProcessName = "(/Godot.org/Godot/godot_object:)PhysicsUpdate(:float)";
+constexpr const char *kMethodReadyName = "(/Godot.org/Godot/object:)Ready";
+constexpr const char *kMethodProcessName = "(/Godot.org/Godot/object:)Update(:float)";
+constexpr const char *kMethodPhysicsProcessName = "(/Godot.org/Godot/object:)PhysicsUpdate(:float)";
 
 const char *method_name_for(const char *p_function_name) {
 	if (p_function_name == kVerseReadyName) {

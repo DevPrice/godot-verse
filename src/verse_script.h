@@ -78,7 +78,7 @@ public:
 	godot::Error call_verse_void_float(const char *p_decorated_name, double p_arg);
 
 	// A script defines a class when it declares a top-level Verse class named after its own file
-	// deriving from godot_object. Such a script is driven through one instance of that class per
+	// deriving from `object`. Such a script is driven through one instance of that class per
 	// node; one that does not is driven through its module's free functions, as in Phase 3.
 	bool is_class_shaped() const;
 	godot::String verse_class_name() const;

@@ -4,7 +4,7 @@ using { /Verse.org/Simulation }
 # Named after the file. A script that defines a class named after itself is attached to a node as
 # that class: the host instantiates it against the node and Ready/Update are its methods, not
 # free functions, so `Self` is the node and no GetNode lookup is needed.
-mover := class(godot_node2d):
+mover := class(node2d):
 
 	@editable
 	@clamp_min("0.0")

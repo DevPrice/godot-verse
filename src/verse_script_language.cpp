@@ -7,6 +7,7 @@
 
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/engine.hpp>
+#include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/memory.hpp>
@@ -22,6 +23,14 @@ VerseRuntime *get_runtime() {
 	return Object::cast_to<VerseRuntime>(Engine::get_singleton()->get_singleton("VerseRuntime"));
 }
 
+// A validate's buffer arrives via TextEdit, which need not hand back the line endings the file
+// was written with, so a CRLF file compared raw would miss the cache on every keystroke and
+// every tab switch. Verse is newline-agnostic, so text differing only in line endings analyses
+// identically and is safe to treat as unchanged.
+String newline_normalized(const String &p_source) {
+	return p_source.replace("\r\n", "\n").replace("\r", "\n");
+}
+
 const char *mirrored_class(const String &p_godot_class) {
 	for (size_t i = 0; i < std::size(verse_api::classes); i++) {
 		if (p_godot_class == verse_api::classes[i].godot_name) {
@@ -32,7 +41,7 @@ const char *mirrored_class(const String &p_godot_class) {
 }
 
 // Only a subset of Godot's classes is mirrored, so a node whose own class was not generated
-// inherits from the nearest ancestor that was. godot_node is the floor: every scripted node has
+// inherits from the nearest ancestor that was. `node` is the floor: every scripted node has
 // one, and a template that names a class the project does not define would not compile.
 String verse_base_class_for(const String &p_godot_class) {
 	for (String name = p_godot_class; !name.is_empty(); name = ClassDB::get_parent_class(name)) {
@@ -40,7 +49,7 @@ String verse_base_class_for(const String &p_godot_class) {
 			return String(mirrored);
 		}
 	}
-	return String("godot_node");
+	return String("node");
 }
 
 } // namespace
@@ -378,6 +387,7 @@ TypedArray<Dictionary> VerseScriptLanguage::_get_public_annotations() const {
 void VerseScriptLanguage::_frame() {
 	VerseRuntime *runtime = get_runtime();
 	if (runtime != nullptr && runtime->is_host_loaded()) {
+		poll_check();
 		runtime->tick(frame_budget_ms / 1000.0);
 	}
 }
@@ -437,14 +447,24 @@ Error VerseScriptLanguage::ensure_project_built() {
 		globalized.push_back(settings->globalize_path(sources[i]));
 	}
 
-	diagnostics_by_path.clear();
+	// The host reports against the absolute path it was handed; scripts are keyed by res:// path.
+	path_by_globalized.clear();
+	for (int64_t i = 0; i < sources.size(); i++) {
+		path_by_globalized[globalized[i]] = sources[i];
+	}
+
 	Dictionary errors_by_globalized;
 	const Error status = runtime->compile_project(globalized, &errors_by_globalized);
 
-	// The host reports against the absolute path it was handed; scripts are keyed by res:// path.
+	record_diagnostics(errors_by_globalized);
+
+	// The host loaded each of these from disk just now, so this is the text it holds. Seeding it
+	// here is what makes the *first* validate of a file free rather than only the repeats.
+	analyzed_source_by_path.clear();
 	for (int64_t i = 0; i < sources.size(); i++) {
-		if (errors_by_globalized.has(globalized[i])) {
-			diagnostics_by_path[sources[i]] = errors_by_globalized[globalized[i]];
+		const String text = FileAccess::get_file_as_string(sources[i]);
+		if (FileAccess::get_open_error() == OK) {
+			analyzed_source_by_path[sources[i]] = newline_normalized(text);
 		}
 	}
 
@@ -466,16 +486,87 @@ TypedArray<Dictionary> VerseScriptLanguage::check_buffer(const String &p_path, c
 	}
 
 	const String globalized = ProjectSettings::get_singleton()->globalize_path(p_path);
-	Dictionary errors_by_globalized;
-	runtime->check_project(globalized, p_source, &errors_by_globalized);
+	const String normalized = newline_normalized(p_source);
+
+	// The host still holds exactly this text, so its last analysis already answered for it. This
+	// is the common case by far: opening a file, switching to its tab and saving it all validate
+	// a buffer nothing has touched since the last analysis.
+	const bool analysis_is_current = analyzed_source_by_path.has(p_path)
+			&& String(analyzed_source_by_path[p_path]) == normalized;
+
+	// Anything else needs a fresh analysis, which takes about as long as three frames. Start it
+	// on the host's thread and answer from the last one: returning stale diagnostics for a moment
+	// is a far smaller cost than freezing the editor on every keystroke. _frame picks the result
+	// up, and Godot re-validates often enough that the fresh answer lands on its own.
+	if (!analysis_is_current) {
+		request_check(p_path, normalized);
+	}
 
 	// Analysis covers the whole project, so a broken file elsewhere reports against its own path;
 	// the editor asked about this one.
-	const TypedArray<Dictionary> errors = errors_by_globalized.has(globalized)
-			? TypedArray<Dictionary>(errors_by_globalized[globalized])
-			: TypedArray<Dictionary>();
+	const TypedArray<Dictionary> errors = diagnostics_for(p_path);
 	log_new_diagnostics(globalized, errors);
 	return errors;
+}
+
+void VerseScriptLanguage::request_check(const String &p_path, const String &p_normalized_source) const {
+	// Newest buffer wins: while an analysis runs the editor keeps typing, and every intermediate
+	// state is worth less than the one the author is looking at now.
+	pending_check_path = p_path;
+	pending_check_source = p_normalized_source;
+	has_pending_check = true;
+	start_pending_check();
+}
+
+void VerseScriptLanguage::start_pending_check() const {
+	if (!has_pending_check) {
+		return;
+	}
+
+	VerseRuntime *runtime = get_runtime();
+	if (runtime == nullptr || !runtime->is_host_loaded() || runtime->is_check_project_busy()) {
+		return;
+	}
+
+	const String globalized = ProjectSettings::get_singleton()->globalize_path(pending_check_path);
+	if (runtime->begin_check_project(globalized, pending_check_source) != OK) {
+		return;
+	}
+
+	// The host has taken this text, so it is what the next result answers for.
+	in_flight_path = pending_check_path;
+	in_flight_source = pending_check_source;
+	has_pending_check = false;
+}
+
+void VerseScriptLanguage::poll_check() const {
+	VerseRuntime *runtime = get_runtime();
+	if (runtime == nullptr || !runtime->is_host_loaded()) {
+		return;
+	}
+
+	Dictionary errors_by_globalized;
+	if (runtime->poll_check_project(&errors_by_globalized)) {
+		// Only now does the host hold this text, so only now may a validate answer from cache.
+		analyzed_source_by_path[in_flight_path] = in_flight_source;
+		record_diagnostics(errors_by_globalized);
+		in_flight_path = String();
+		in_flight_source = String();
+	}
+
+	// A buffer that changed while that ran is still waiting.
+	start_pending_check();
+}
+
+void VerseScriptLanguage::record_diagnostics(const Dictionary &p_errors_by_globalized) const {
+	diagnostics_by_path.clear();
+
+	const Array reported = p_errors_by_globalized.keys();
+	for (int64_t i = 0; i < reported.size(); i++) {
+		const String globalized = reported[i];
+		const String path = path_by_globalized.has(globalized) ? String(path_by_globalized[globalized]) : globalized;
+		diagnostics_by_path[path] = p_errors_by_globalized[globalized];
+	}
 }
 
 // Godot re-validates the edited buffer on an idle timer and again on save, so one compile error

@@ -124,7 +124,8 @@ public:
 	// single file would report every other script's definitions as duplicates.
 	// Re-analyses the project with p_path's on-disk text replaced by the editor's buffer and
 	// returns just that file's diagnostics. Falls back to the diagnostics recorded at startup
-	// when there is no host to ask.
+	// when there is no host to ask, and skips the re-analysis entirely when the host already
+	// holds this exact text.
 	godot::TypedArray<godot::Dictionary> check_buffer(const godot::String &p_path, const godot::String &p_source) const;
 
 	godot::TypedArray<godot::Dictionary> diagnostics_for(const godot::String &p_path) const;
@@ -133,10 +134,39 @@ private:
 	static VerseScriptLanguage *singleton_instance;
 	double frame_budget_ms = 4.0;
 	bool project_built = false;
-	godot::Dictionary diagnostics_by_path;
+	mutable godot::Dictionary diagnostics_by_path;
+
+	// The text the host currently holds for each script, keyed by res:// path. A validate whose
+	// buffer already matches it needs no re-analysis: the host's last analysis answered for
+	// exactly these sources. Godot validates on open, on every tab switch, on an idle timer and
+	// on save, while a whole-project semantic analysis costs ~100ms whether anything changed or
+	// not, so without this the editor stalls on each of them.
+	mutable godot::Dictionary analyzed_source_by_path;
+
+	// res:// path for each absolute path the host reports diagnostics against.
+	godot::Dictionary path_by_globalized;
+
+	// The buffer waiting for an analysis, and the one an analysis is running for. Only one runs
+	// at a time, and a newer buffer replaces a waiting one rather than queueing behind it.
+	mutable bool has_pending_check = false;
+	mutable godot::String pending_check_path;
+	mutable godot::String pending_check_source;
+	mutable godot::String in_flight_path;
+	mutable godot::String in_flight_source;
+
+	// Queues p_path's buffer for analysis and starts it if the host is free.
+	void request_check(const godot::String &p_path, const godot::String &p_normalized_source) const;
+	void start_pending_check() const;
+
+	// Reaps a finished analysis and starts whatever came in while it ran. Called once per frame.
+	void poll_check() const;
 
 	// Formatted diagnostics last written to the output log, keyed by globalized path.
 	mutable godot::Dictionary logged_diagnostics;
+
+	// Replaces diagnostics_by_path with one analysis' results. Analysis covers the whole project,
+	// so a file absent from the result has no errors and must lose any it had.
+	void record_diagnostics(const godot::Dictionary &p_errors_by_globalized) const;
 
 	void log_new_diagnostics(const godot::String &p_globalized_path, const godot::TypedArray<godot::Dictionary> &p_errors) const;
 

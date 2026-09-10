@@ -29,15 +29,15 @@ def check_true(name, condition, detail=""):
 
 def test_class_names():
     cases = {
-        "Node": "godot_node",
-        "CanvasItem": "godot_canvas_item",
-        "Node2D": "godot_node2d",
-        "AnimatedSprite2D": "godot_animated_sprite2d",
-        "RigidBody3D": "godot_rigid_body3d",
-        "HTTPRequest": "godot_http_request",
-        "XRServer": "godot_xr_server",
-        "AABB": "godot_aabb",
-        "CPUParticles2D": "godot_cpu_particles2d",
+        "Node": "node",
+        "CanvasItem": "canvas_item",
+        "Node2D": "node2d",
+        "AnimatedSprite2D": "animated_sprite2d",
+        "RigidBody3D": "rigid_body3d",
+        "HTTPRequest": "http_request",
+        "XRServer": "xr_server",
+        "AABB": "aabb",
+        "CPUParticles2D": "cpu_particles2d",
     }
     for godot_name, want in cases.items():
         check(f"class name {godot_name}", g.verse_class_name(godot_name), want)
@@ -87,7 +87,7 @@ def test_default_literals():
         ("color", "Color(1, 1, 1, 1)", "color{R := 1.0, G := 1.0, B := 1.0, A := 1.0}"),
         ("vector2", "Vector2(0, -1)", "vector2{X := 0.0, Y := -1.0}"),
         ("int", "null", None),
-        ("godot_node", "null", None),
+        ("node", "null", None),
         ("[]string", "[]", None),
     ]
     for verse_type, default, want in cases:
@@ -135,7 +135,7 @@ def test_emit_value_method_scalar():
 
 
 def test_emit_value_method_class_return():
-    ti = g.TypeInfo("godot_node", "VhFromObject", False, "VhToHandle", True)
+    ti = g.TypeInfo("node", "VhFromObject", False, "VhToHandle", True)
     cm = g.ClassifiedMethod(
         godot_name="get_child",
         verse_name="GetChild",
@@ -144,8 +144,8 @@ def test_emit_value_method_class_return():
         is_void=False,
     )
     want = (
-        '    GetChild<public>(Index:int)<decides><transacts>:godot_node = '
-        'godot_node{Handle := VhToHandle[VhCallValue[Handle, "get_child", array{VhFromInt(Index)}]]}'
+        '    GetChild<public>(Index:int)<decides><transacts>:node = '
+        'node{Handle := VhToHandle[VhCallValue[Handle, "get_child", array{VhFromInt(Index)}]]}'
     )
     check("emit value method, class return (GetChild)", g.emit_method(cm), want)
 
@@ -199,7 +199,7 @@ def test_shadow_suppression_across_inheritance():
     blocks, _emit_order = g.generate(api, ["Derived"], coverage)
     check("shadowed method skipped once", coverage.skip_reasons["shadow"], 1)
     check("only the non-colliding method emitted on Derived", coverage.methods_emitted, 2)
-    derived_block = next(b for b in blocks if b.startswith("godot_derived"))
+    derived_block = next(b for b in blocks if b.startswith("derived"))
     check_true("Derived does not redeclare GetValue", "GetValue" not in derived_block, derived_block)
     check_true("Derived declares GetOther", "GetOther" in derived_block, derived_block)
 
@@ -214,7 +214,7 @@ def test_base_member_shadow():
     coverage = g.Coverage()
     g.generate(api, ["Thing"], coverage)
     check(
-        "method name colliding with godot_object's own Ready is shadowed",
+        "method name colliding with `object`'s own Ready is shadowed",
         coverage.skip_reasons["shadow"],
         1,
     )
@@ -278,10 +278,10 @@ def test_class_type_falls_back_to_nearest_emitted_ancestor():
     coverage = g.Coverage()
     # Base is emitted, but Mid/Leaf are not requested -- Other.GetLeaf must fall back to Base.
     blocks, _emit_order = g.generate(api, ["Base", "Other"], coverage)
-    other_block = next(b for b in blocks if b.startswith("godot_other"))
+    other_block = next(b for b in blocks if b.startswith("other"))
     check_true(
-        "unresolved class type falls back to nearest emitted ancestor (godot_base)",
-        "godot_base{Handle := VhToHandle[" in other_block,
+        "unresolved class type falls back to nearest emitted ancestor (base)",
+        "base{Handle := VhToHandle[" in other_block,
         other_block,
     )
 
@@ -293,7 +293,7 @@ def test_render_classes_header():
     check_true("classes header opens verse_api namespace", "namespace verse_api {" in text)
     check_true(
         "classes header sorts entries by Godot class name (Node before Node2D)",
-        text.index('{ "Node", "godot_node" }') < text.index('{ "Node2D", "godot_node2d" }'),
+        text.index('{ "Node", "node" }') < text.index('{ "Node2D", "node2d" }'),
     )
 
 
@@ -304,7 +304,7 @@ def test_classes_header_file_matches_generated_verse_file():
     import re
 
     verse_text = (REPO_ROOT / "host" / "Verse" / "GodotClasses.native.verse").read_text(encoding="utf-8")
-    verse_classes = set(re.findall(r"^(godot_\w+)<public> := class\(", verse_text, re.MULTILINE))
+    verse_classes = set(re.findall(r"^(\w+)<public> := class\(", verse_text, re.MULTILINE))
     header_classes = set(re.findall(r'"([^"]+)" \}', header_text))
     check(
         "verse_api_classes.h lists exactly the classes GodotClasses.native.verse emits",
@@ -325,14 +325,16 @@ def test_generated_file_matches_hand_written_slice():
         '    GetScale<public>()<decides><transacts>:vector2 = VhToVector2[VhCallValue[Handle, "get_scale", array{}]]',
         '    SetScale<public>(Scale:vector2)<transacts>:void = VhCallVoid(Handle, "set_scale", array{VhFromVector2(Scale)})',
     ]
-    node2d_start = text.find("godot_node2d<public> := class(")
-    check_true("godot_node2d is present", node2d_start != -1)
-    next_class = text.find("\n\ngodot_", node2d_start + 1)
-    node2d_block = text[node2d_start: next_class if next_class != -1 else len(text)]
-    for line in hand_written_lines:
-        check_true(f"godot_node2d contains: {line.strip()[:40]}...", line in node2d_block)
-
     import re
+
+    node2d_start = text.find("node2d<public> := class(")
+    check_true("node2d is present", node2d_start != -1)
+    # A blank line separates a class header from its own methods as well as from the next class,
+    # so the block ends at the next header rather than at the next blank line.
+    next_class = re.compile(r"^\w+<public> := class\(", re.MULTILINE).search(text, node2d_start + 1)
+    node2d_block = text[node2d_start: next_class.start() if next_class else len(text)]
+    for line in hand_written_lines:
+        check_true(f"node2d contains: {line.strip()[:40]}...", line in node2d_block)
 
     class_positions = [
         (mm.start(), mm.group(1), mm.group(2))
@@ -348,7 +350,7 @@ def test_generated_file_matches_hand_written_slice():
     base_members = {"Handle", "Ready", "Update", "PhysicsUpdate"}
 
     def inherited(name):
-        if name == "godot_object":
+        if name == "object":
             return set(base_members)
         info = blocks[name]
         return inherited(info["base"]) | set(info["names"])

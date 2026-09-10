@@ -97,6 +97,7 @@ extern "C" int32_t vh_init(const vh_init_desc* Desc)
 
 extern "C" void vh_shutdown(void)
 {
+    GodotVerse::WaitForBackgroundCheck();
     GodotVerse::FHostState& Host = GetHost();
     if (!Host.bInitialized)
     {
@@ -127,11 +128,21 @@ extern "C" void vh_tick(double BudgetSeconds)
     {
         return;
     }
+
+    // Ticking runs Verse, and VerseVM blocks execution for the length of a build. Waiting here
+    // would hand back the stall vh_check_project_begin exists to remove, so a frame that lands
+    // mid-analysis simply does not tick; the next one will.
+    if (GodotVerse::IsBackgroundCheckRunning())
+    {
+        return;
+    }
+
     GodotVerse::TickScripts(BudgetSeconds);
 }
 
 extern "C" int32_t vh_compile_file(const char* PathUtf8, vh_script** OutScript)
 {
+    GodotVerse::WaitForBackgroundCheck();
     if (!PathUtf8 || !OutScript)
     {
         return VH_ERR_ABI;
@@ -155,6 +166,7 @@ extern "C" int32_t vh_compile_file(const char* PathUtf8, vh_script** OutScript)
 
 extern "C" int32_t vh_compile_project(const char* const* PathsUtf8, int32_t Count)
 {
+    GodotVerse::WaitForBackgroundCheck();
     if (!PathsUtf8 || Count < 0)
     {
         return VH_ERR_ABI;
@@ -192,8 +204,47 @@ extern "C" int32_t vh_check_project(const char* PathUtf8, const char* SourceUtf8
     return GodotVerse::CheckProject(FUtf8String(Cstr(PathUtf8)), FUtf8String(Cstr(SourceUtf8))) ? VH_OK : VH_ERR_COMPILE;
 }
 
+extern "C" int32_t vh_check_project_begin(const char* PathUtf8, const char* SourceUtf8)
+{
+    if (!PathUtf8 || !SourceUtf8)
+    {
+        return VH_ERR_ABI;
+    }
+    if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+    return GodotVerse::BeginBackgroundCheck(FUtf8String(Cstr(PathUtf8)), FUtf8String(Cstr(SourceUtf8)))
+        ? VH_OK
+        : VH_ERR_STATE;
+}
+
+extern "C" int32_t vh_check_project_poll(vh_bool* OutFinished)
+{
+    if (!OutFinished)
+    {
+        return VH_ERR_ABI;
+    }
+    *OutFinished = 0;
+    if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+
+    bool bFinished = false;
+    const bool bResult = GodotVerse::PollBackgroundCheck(bFinished);
+    *OutFinished = bFinished ? 1 : 0;
+    return bResult ? VH_OK : VH_ERR_COMPILE;
+}
+
+extern "C" vh_bool vh_check_project_busy(void)
+{
+    return GetHost().bInitialized && GodotVerse::IsBackgroundCheckRunning() ? 1 : 0;
+}
+
 extern "C" int32_t vh_open_script(const char* PathUtf8, vh_script** OutScript)
 {
+    GodotVerse::WaitForBackgroundCheck();
     if (!PathUtf8 || !OutScript)
     {
         return VH_ERR_ABI;
@@ -211,11 +262,13 @@ extern "C" int32_t vh_open_script(const char* PathUtf8, vh_script** OutScript)
 
 extern "C" void vh_release_script(vh_script* Script)
 {
+    GodotVerse::WaitForBackgroundCheck();
     GodotVerse::ReleaseScript(reinterpret_cast<GodotVerse::FScript*>(Script));
 }
 
 extern "C" vh_bool vh_script_has_function(vh_script* Script, const char* DecoratedName)
 {
+    GodotVerse::WaitForBackgroundCheck();
     if (!Script || !DecoratedName || !GetHost().bInitialized)
     {
         return 0;
@@ -228,6 +281,7 @@ extern "C" int32_t vh_run_main(vh_script* Script,
                                                 int32_t ArgCount,
                                                 int64_t* OutExitCode)
 {
+    GodotVerse::WaitForBackgroundCheck();
     if (!Script)
     {
         return VH_ERR_ABI;
@@ -255,6 +309,7 @@ extern "C" int32_t vh_run_main(vh_script* Script,
 
 extern "C" int32_t vh_call_void(vh_script* Script, const char* DecoratedName)
 {
+    GodotVerse::WaitForBackgroundCheck();
     if (!Script || !DecoratedName)
     {
         return VH_ERR_ABI;
@@ -268,6 +323,7 @@ extern "C" int32_t vh_call_void(vh_script* Script, const char* DecoratedName)
 
 extern "C" int32_t vh_call_void_float(vh_script* Script, const char* DecoratedName, double Arg)
 {
+    GodotVerse::WaitForBackgroundCheck();
     if (!Script || !DecoratedName)
     {
         return VH_ERR_ABI;
@@ -281,6 +337,7 @@ extern "C" int32_t vh_call_void_float(vh_script* Script, const char* DecoratedNa
 
 extern "C" vh_bool vh_has_class(const char* ClassNameUtf8)
 {
+    GodotVerse::WaitForBackgroundCheck();
     if (!ClassNameUtf8 || !GetHost().bInitialized)
     {
         return 0;
@@ -290,6 +347,7 @@ extern "C" vh_bool vh_has_class(const char* ClassNameUtf8)
 
 extern "C" int32_t vh_instantiate(const char* ClassNameUtf8, vh_handle Handle, vh_instance** OutInstance)
 {
+    GodotVerse::WaitForBackgroundCheck();
     if (!ClassNameUtf8 || !OutInstance)
     {
         return VH_ERR_ABI;
@@ -312,11 +370,13 @@ extern "C" int32_t vh_instantiate(const char* ClassNameUtf8, vh_handle Handle, v
 
 extern "C" void vh_release_instance(vh_instance* Instance)
 {
+    GodotVerse::WaitForBackgroundCheck();
     GodotVerse::ReleaseInstance(reinterpret_cast<GodotVerse::FInstance*>(Instance));
 }
 
 extern "C" vh_bool vh_instance_has_function(vh_instance* Instance, const char* DecoratedName)
 {
+    GodotVerse::WaitForBackgroundCheck();
     if (!Instance || !DecoratedName || !GetHost().bInitialized)
     {
         return 0;
@@ -326,6 +386,7 @@ extern "C" vh_bool vh_instance_has_function(vh_instance* Instance, const char* D
 
 extern "C" int32_t vh_instance_call_void(vh_instance* Instance, const char* DecoratedName)
 {
+    GodotVerse::WaitForBackgroundCheck();
     if (!Instance || !DecoratedName)
     {
         return VH_ERR_ABI;
@@ -339,6 +400,7 @@ extern "C" int32_t vh_instance_call_void(vh_instance* Instance, const char* Deco
 
 extern "C" int32_t vh_instance_call_void_float(vh_instance* Instance, const char* DecoratedName, double Arg)
 {
+    GodotVerse::WaitForBackgroundCheck();
     if (!Instance || !DecoratedName)
     {
         return VH_ERR_ABI;
@@ -352,6 +414,7 @@ extern "C" int32_t vh_instance_call_void_float(vh_instance* Instance, const char
 
 extern "C" int32_t vh_class_export_list(const char* ClassNameUtf8, const vh_export_desc** OutExports, int32_t* OutCount)
 {
+    GodotVerse::WaitForBackgroundCheck();
     if (!ClassNameUtf8 || !OutExports || !OutCount)
     {
         return VH_ERR_ABI;
@@ -405,6 +468,7 @@ FUtf8String GFieldStorage;
 
 extern "C" int32_t vh_instance_get_field(vh_instance* Instance, const char* NameUtf8, const vh_value** OutValue)
 {
+    GodotVerse::WaitForBackgroundCheck();
     if (!Instance || !NameUtf8 || !OutValue)
     {
         return VH_ERR_ABI;
@@ -427,6 +491,7 @@ extern "C" int32_t vh_instance_get_field(vh_instance* Instance, const char* Name
 
 extern "C" int32_t vh_instance_set_field(vh_instance* Instance, const char* NameUtf8, const vh_value* Value)
 {
+    GodotVerse::WaitForBackgroundCheck();
     if (!Instance || !NameUtf8 || !Value)
     {
         return VH_ERR_ABI;
@@ -442,6 +507,7 @@ extern "C" int32_t vh_instance_set_field(vh_instance* Instance, const char* Name
 
 extern "C" int32_t vh_class_default_field(const char* ClassNameUtf8, const char* NameUtf8, const vh_value** OutValue)
 {
+    GodotVerse::WaitForBackgroundCheck();
     if (!ClassNameUtf8 || !NameUtf8 || !OutValue)
     {
         return VH_ERR_ABI;

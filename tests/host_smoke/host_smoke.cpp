@@ -63,8 +63,30 @@ static const char* SeverityName(int32_t Severity)
 	}
 }
 
+static int DiagnosticCount = 0;
+
+/// The file's bytes, for handing a buffer to the check entry points the way an editor would.
+static std::string ReadFileUtf8(const fs::path& Path)
+{
+	std::string Text;
+	FILE* File = nullptr;
+	if (fopen_s(&File, Path.string().c_str(), "rb") != 0 || !File)
+	{
+		return Text;
+	}
+	char Buffer[4096];
+	size_t Read = 0;
+	while ((Read = fread(Buffer, 1, sizeof(Buffer), File)) > 0)
+	{
+		Text.append(Buffer, Read);
+	}
+	fclose(File);
+	return Text;
+}
+
 static void SmokeOnDiagnostic(void*, const vh_diagnostic* Diagnostic)
 {
+	++DiagnosticCount;
 	fprintf(stderr, "%.*s:%d:%d: %s: %.*s\n",
 		Diagnostic->FilePathLen, Diagnostic->FilePathUtf8,
 		Diagnostic->Line, Diagnostic->Column,
@@ -131,6 +153,10 @@ int main(int argc, char** argv)
 	auto GetFieldFn = Resolve<vh_instance_get_field_fn>(Module, "vh_instance_get_field", &ResolveOk);
 	auto SetFieldFn = Resolve<vh_instance_set_field_fn>(Module, "vh_instance_set_field", &ResolveOk);
 	auto ReleaseScriptFn = Resolve<vh_release_script_fn>(Module, "vh_release_script", &ResolveOk);
+	auto CheckProjectFn = Resolve<vh_check_project_fn>(Module, "vh_check_project", &ResolveOk);
+	auto CheckBeginFn = Resolve<vh_check_project_begin_fn>(Module, "vh_check_project_begin", &ResolveOk);
+	auto CheckProjectPollFn = Resolve<vh_check_project_poll_fn>(Module, "vh_check_project_poll", &ResolveOk);
+	auto CheckBusyFn = Resolve<vh_check_project_busy_fn>(Module, "vh_check_project_busy", &ResolveOk);
 	auto ScriptHasFunctionFn = Resolve<vh_script_has_function_fn>(Module, "vh_script_has_function", &ResolveOk);
 	auto RunMainFn = Resolve<vh_run_main_fn>(Module, "vh_run_main", &ResolveOk);
 	auto CallVoidFn = Resolve<vh_call_void_fn>(Module, "vh_call_void", &ResolveOk);
@@ -357,6 +383,55 @@ int main(int argc, char** argv)
 	}
 
 	Step("vh_tick", true);
+
+	// Background analysis. The editor drives this from its frame loop, so the shape that matters
+	// is begin / tick+poll each frame / reap -- and the tick is the part with teeth: VerseVM
+	// blocks execution for the length of a build, and a tick that ran anyway used to trip
+	// `ensure(!bBlockAllExecution)` and then kill the process.
+	{
+		bool AsyncOk = true;
+		std::string CleanSource = ReadFileUtf8(ExportsPath);
+		AsyncOk = Step("vh_check_project_begin", CheckBeginFn(ExportsPathUtf8.c_str(), CleanSource.c_str()) == VH_OK) && AsyncOk;
+		AsyncOk = Step("vh_check_project_busy reports the analysis in flight", CheckBusyFn() != 0) && AsyncOk;
+		AsyncOk = Step("a second begin while one is in flight is refused",
+					   CheckBeginFn(ExportsPathUtf8.c_str(), CleanSource.c_str()) != VH_OK) && AsyncOk;
+
+		vh_bool Finished = 0;
+		const uint64_t Deadline = GetTickCount64() + 30000;
+		while (!Finished && GetTickCount64() < Deadline)
+		{
+			CheckProjectPollFn(&Finished);
+			TickFn(0.004);
+			Sleep(1); // a frame, roughly; the analysis takes ~100ms of them
+		}
+		AsyncOk = Step("the analysis finished while the frame loop kept ticking", Finished != 0) && AsyncOk;
+		AsyncOk = Step("ticking throughout did not block execution", CheckBusyFn() == 0) && AsyncOk;
+
+		// A poll with nothing in flight must be a harmless no-op, since that is every other frame.
+		vh_bool Spurious = 1;
+		CheckProjectPollFn(&Spurious);
+		AsyncOk = Step("polling with nothing in flight reports nothing", Spurious == 0) && AsyncOk;
+
+		// Diagnostics still have to come back, and only through the poll.
+		std::string BrokenSource = CleanSource + "\nthis is not verse <<<\n";
+		DiagnosticCount = 0;
+		if (CheckBeginFn(ExportsPathUtf8.c_str(), BrokenSource.c_str()) == VH_OK)
+		{
+			Finished = 0;
+			const uint64_t BrokenDeadline = GetTickCount64() + 30000;
+			while (!Finished && GetTickCount64() < BrokenDeadline)
+			{
+				CheckProjectPollFn(&Finished);
+				TickFn(0.004);
+				Sleep(1);
+			}
+		}
+		AsyncOk = Step("a broken buffer's diagnostics arrive from the poll", DiagnosticCount > 0) && AsyncOk;
+
+		// Put the good text back, so nothing after this sees the broken parse.
+		CheckProjectFn(ExportsPathUtf8.c_str(), CleanSource.c_str());
+		CallsOk = AsyncOk && CallsOk;
+	}
 
 	ReleaseScriptFn(Script);
 	Step("vh_release_script", true);

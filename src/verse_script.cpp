@@ -218,7 +218,7 @@ bool VerseScript::_is_abstract() const {
 }
 
 StringName VerseScript::_get_instance_base_type() const {
-	// Real Verse base classes (godot_node2d and friends) are Phase 3's other half, so until
+	// Real Verse base classes (node2d and friends) are Phase 3's other half, so until
 	// they exist every Verse script attaches at Node.
 	return "Node";
 }

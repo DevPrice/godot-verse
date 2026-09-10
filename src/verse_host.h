@@ -35,6 +35,9 @@ public:
 	vh_compile_file_fn CompileFile = nullptr;
 	vh_compile_project_fn CompileProject = nullptr;
 	vh_check_project_fn CheckProject = nullptr;
+	vh_check_project_begin_fn CheckProjectBegin = nullptr;
+	vh_check_project_poll_fn CheckProjectPoll = nullptr;
+	vh_check_project_busy_fn CheckProjectBusy = nullptr;
 	vh_open_script_fn OpenScript = nullptr;
 	vh_release_script_fn ReleaseScript = nullptr;
 	vh_script_has_function_fn ScriptHasFunction = nullptr;

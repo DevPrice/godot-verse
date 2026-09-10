@@ -2,9 +2,13 @@
 """Generates host/Verse/GodotClasses.native.verse from godot-cpp/gdextension/extension_api.json.
 
 Mirrors a subset of the Godot class hierarchy as ordinary Verse classes deriving from the
-hand-written native godot_object (see host/Verse/Godot.native.verse) and calling the packing
+hand-written native `object` (see host/Verse/Godot.native.verse) and calling the packing
 helpers in host/Verse/GodotApi.native.verse. See host/Verse/GodotApi.native.verse's own header
 comment for why that keeps a thousand mirrored classes from needing a thousand C++ shadows.
+
+Class names are unprefixed: `/Godot.org/Godot` is the namespace, and a name a script's other
+`using` also defines is disambiguated at the use site as `(/Godot.org/Godot:)node2d`, the way
+Epic's own libraries disambiguate their two `vector3` types.
 """
 
 import argparse
@@ -96,7 +100,7 @@ def split_pascal(name: str) -> list:
 
 
 def verse_class_name(godot_name: str) -> str:
-    return "godot_" + "_".join(t.lower() for t in split_pascal(godot_name))
+    return "_".join(t.lower() for t in split_pascal(godot_name))
 
 
 def verse_method_name(godot_name: str) -> str:
@@ -107,7 +111,7 @@ def verse_method_name(godot_name: str) -> str:
 def verse_param_name(godot_name: str, index: int, reserved_words: set, used: set, members: set) -> str:
     # A parameter that matches a member of the enclosing class is ambiguous, not shadowing:
     # Tween.set_parallel(parallel) and Tween.parallel() collide, as does any argument named
-    # `update` against godot_object's Update.
+    # `update` against `object`'s Update.
     candidate = verse_method_name(godot_name)
     if (not candidate or candidate in reserved_words or candidate in used
             or candidate in members or candidate in VERSE_STDLIB_NAMES):
@@ -356,7 +360,7 @@ def generate(api: dict, requested: list, coverage: Coverage):
     for name in emit_order:
         parent = parent_map[name]
         base_names = set(BASE_MEMBER_NAMES) if parent == "Object" else set(inherited_names[parent])
-        base_verse = "godot_object" if parent == "Object" else verse_class_name(parent)
+        base_verse = "object" if parent == "Object" else verse_class_name(parent)
 
         methods = classes_by_name[name].get("methods", [])
         # Every name the class will carry, so a parameter can be checked against members that
@@ -400,7 +404,7 @@ HEADER_TEMPLATE = """using {{/Verse.org/Native}}
 # Godot's Object class is skipped entirely: its own API is almost all Callable- and
 # Variant-typed reflection that this bridge cannot marshal (see the type table in
 # tools/gen_verse_api.py), so a class whose Godot parent is Object derives directly from
-# the hand-written native godot_object (see Godot.native.verse) instead of a generated one.
+# the hand-written native `object` (see Godot.native.verse) instead of a generated one.
 """
 
 
@@ -455,7 +459,7 @@ def format_report(coverage: Coverage, class_count_requested: int) -> str:
     lines.append("")
     lines.append("Note: Godot's Object class is always skipped -- its API is mostly")
     lines.append("Callable/Variant-typed reflection this bridge cannot marshal. Any class")
-    lines.append("whose Godot parent is Object derives from the native godot_object instead.")
+    lines.append("whose Godot parent is Object derives from the native `object` instead.")
     lines.append("")
     lines.append("Methods skipped, by reason:")
     total_skipped = sum(coverage.skip_reasons.values())

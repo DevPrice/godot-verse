@@ -5,7 +5,9 @@
  * that crosses the boundary is plain C.
  *
  * Threading: every entry point must be called from the thread that called vh_init (Godot's main
- * thread). UE binds its game thread there.
+ * thread). UE binds its game thread there. The one piece of work the host does off that thread
+ * is the analysis behind vh_check_project_begin, which it runs on a thread it owns; the callbacks
+ * in this header are still only ever invoked on the vh_init thread.
  *
  * Lifetimes: all pointers passed in are borrowed for the duration of the call. Values written
  * into a vh_arena are owned by the arena and valid until the call that supplied it returns.
@@ -20,7 +22,7 @@
 extern "C" {
 #endif
 
-#define VH_ABI_VERSION 8
+#define VH_ABI_VERSION 9
 
 typedef int32_t vh_bool;
 
@@ -268,8 +270,36 @@ VH_ATTR VH_API int32_t vh_compile_project(const char* const* PathsUtf8, int32_t 
 /* Re-runs semantic analysis over the already-compiled project with one file's text replaced,
  * reporting diagnostics through the init callback. Generates no code, so the running program is
  * unchanged and this is safe to call repeatedly -- unlike vh_compile_project, which may run once
- * per process. Returns VH_OK when the project still analyses clean. */
+ * per process. Returns VH_OK when the project still analyses clean.
+ *
+ * Blocks for the length of a whole-project analysis (~100ms on a three-file project), which is a
+ * visible stall if called from an editor's UI thread. Prefer the _begin/_poll pair below. */
 VH_ATTR VH_API int32_t vh_check_project(const char* PathUtf8, const char* SourceUtf8);
+
+/* The same analysis, started on a background thread so the caller's UI thread keeps running.
+ *
+ * Returns VH_OK once started, or VH_ERR_STATE when an analysis is already in flight -- only one
+ * runs at a time. Diagnostics are NOT reported from the worker: they are buffered and handed to
+ * the init callback from vh_check_project_poll, so the callback still only ever runs on the
+ * vh_init thread.
+ *
+ * While an analysis is in flight the host will not execute Verse. vh_tick becomes a no-op and
+ * returns VH_ERR_STATE, and every entry point that reads the semantic program blocks until the
+ * analysis finishes. Both are enforced here rather than asked of the caller because getting it
+ * wrong is not recoverable: VerseVM blocks execution for the duration of a build, and ticking
+ * anyway trips `ensure(!bBlockAllExecution)` and then takes the process down. */
+VH_ATTR VH_API int32_t vh_check_project_begin(const char* PathUtf8, const char* SourceUtf8);
+
+/* Reaps a vh_check_project_begin. Call from the vh_init thread, e.g. once per frame.
+ *
+ * Sets *OutFinished to 1 and reports the analysis' buffered diagnostics through the init callback
+ * when one had been started and has now completed; sets it to 0 while one is still running, or
+ * when none was started. The return value is the finished analysis' result -- VH_OK when the
+ * project analysed clean -- and VH_OK when there was nothing to reap. */
+VH_ATTR VH_API int32_t vh_check_project_poll(vh_bool* OutFinished);
+
+/* Whether an analysis started by vh_check_project_begin is still running. */
+VH_ATTR VH_API vh_bool vh_check_project_busy(void);
 
 /* Resolves a handle for one file of an already-compiled project. Does not compile. */
 VH_ATTR VH_API int32_t vh_open_script(const char* PathUtf8, vh_script** OutScript);
@@ -286,7 +316,7 @@ VH_ATTR VH_API int32_t vh_call_void_float(vh_script* Script, const char* Decorat
 
 /* ------------------------------------------------------- class instances -- */
 
-/* One live Verse object: a script's `class(godot_node2d)` bound to one Godot object.
+/* One live Verse object: a script's `class(node2d)` bound to one Godot object.
  *
  * The class-per-script shape supersedes the module-per-file one: a script may instead define a
  * top-level class named after its file, in which case the host instantiates that class and calls
@@ -294,11 +324,11 @@ VH_ATTR VH_API int32_t vh_call_void_float(vh_script* Script, const char* Decorat
 typedef struct vh_instance vh_instance;
 
 /* Whether the compiled project defines a top-level class of that name deriving from
- * `godot_object`. This is how a class-shaped script is told from a module-shaped one. */
+ * `object`. This is how a class-shaped script is told from a module-shaped one. */
 VH_ATTR VH_API vh_bool vh_has_class(const char* ClassNameUtf8);
 
 /* Instantiates the top-level Verse class ClassNameUtf8 (undecorated) and binds it to Handle.
- * The class must derive from `godot_object`. */
+ * The class must derive from `object`. */
 VH_ATTR VH_API int32_t vh_instantiate(const char* ClassNameUtf8, vh_handle Handle, vh_instance** OutInstance);
 VH_ATTR VH_API void vh_release_instance(vh_instance* Instance);
 
@@ -374,6 +404,9 @@ typedef void (*vh_tick_fn)(double);
 typedef int32_t (*vh_compile_file_fn)(const char*, vh_script**);
 typedef int32_t (*vh_compile_project_fn)(const char* const*, int32_t);
 typedef int32_t (*vh_check_project_fn)(const char*, const char*);
+typedef int32_t (*vh_check_project_begin_fn)(const char*, const char*);
+typedef int32_t (*vh_check_project_poll_fn)(vh_bool*);
+typedef vh_bool (*vh_check_project_busy_fn)(void);
 typedef int32_t (*vh_open_script_fn)(const char*, vh_script**);
 typedef void (*vh_release_script_fn)(vh_script*);
 typedef vh_bool (*vh_script_has_function_fn)(vh_script*, const char*);

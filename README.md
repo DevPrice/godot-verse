@@ -57,7 +57,7 @@ A script defines a class named after its own file, and the node it is attached t
 using { /Godot.org/Godot }
 using { /Verse.org/Simulation }
 
-mover := class(godot_node2d):
+mover := class(node2d):
 
     @editable
     @clamp_min("0.0")
@@ -76,14 +76,20 @@ mover := class(godot_node2d):
 ```
 
 Godot's API is mirrored as a Verse class hierarchy under `/Godot.org/Godot`, generated from
-`extension_api.json` by `tools/gen_verse_api.py`. Only `godot_object` is a `<native>` class with a
+`extension_api.json` by `tools/gen_verse_api.py`. Only `object` is a `<native>` class with a
 C++ shadow; everything above it is ordinary Verse whose methods bottom out in a handful of native
 primitives, so mirroring another hundred Godot classes costs no C++ at all. A method that can fail
 carries Verse's `<decides>` effect, and one that mutates the scene defers its write to transaction
 commit.
 
+**Class names are unprefixed**, because `/Godot.org/Godot` is already the namespace: the mirror is
+`node2d`, `timer`, `control`. Verse reports a name that two `using`s both define at the *use* site
+rather than at the import, and the fix belongs there too — `(/Godot.org/Godot:)timer` — which is
+how Epic's own libraries keep their two `vector3` types apart. Across all 1023 Godot classes, no
+unprefixed name collides with a Verse reserved word or with any type Epic ships.
+
 **A reference to a freed node fails rather than dangles.** Verse has no null, so this had to be
-given a meaning. A `godot_object` holds a Godot instance id, every accessor is `<decides>`, and
+given a meaning. An `object` holds a Godot instance id, every accessor is `<decides>`, and
 once Godot frees the object those accessors stop resolving — `demo/scripts/lifetime.verse` holds a
 child, frees it, and keeps calling.
 
@@ -135,8 +141,26 @@ covers both directions — including, because a read/write round-trip cannot cat
 in the wrong representation, calling back into Verse to read and assign each member afterwards.
 
 Compiler diagnostics land in Godot's output with file, line and column, and the script editor gets
-them live: `_validate` re-analyses the project against the unsaved buffer rather than replaying
-what the last build said.
+them live: `_validate` answers for the unsaved buffer rather than replaying what the last build
+said.
+
+**`_validate` never blocks the editor.** Verse's compilation unit is the package, so there is no
+such thing as re-analysing one file: the cheapest possible answer costs a whole-project semantic
+analysis, about 100ms. Godot asks on every open, every tab switch, every idle tick and every save,
+which is enough to make the editor feel broken. Two things keep it off the UI thread:
+
+- **The answer is memoised on the source the host currently holds.** Opening, switching tabs and
+  saving all validate a buffer nothing has touched, and those return the previous analysis for the
+  cost of a string compare. The map is seeded from disk after the project build, so the first open
+  of a file is free too, not just the repeats.
+- **A buffer that really did change is analysed on a thread the host owns** (`vh_check_project_begin`
+  / `_poll`), and `_validate` answers from the previous analysis until the new one lands a few
+  frames later. Diagnostics lag the buffer by one analysis; the editor never stops drawing.
+
+The host will not execute Verse while an analysis is in flight, and enforces that itself rather
+than trusting callers: VerseVM blocks execution for the length of a build, so a `vh_tick` that ran
+anyway would trip `ensure(!bBlockAllExecution)` and then take the process down. A frame that lands
+mid-analysis skips its tick; everything that reads the semantic program waits instead.
 
 Syntax highlighting is a real lexer, which is what lets nested `<# #>` block comments,
 dedent-terminated `<#>` comments and comments inside string interpolation all colour correctly —

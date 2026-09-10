@@ -178,8 +178,8 @@ member reads back uninitialized rather than raising a Verse runtime error.
 
     (/user@localhost/exports:)Speed
     (/user@localhost/exports:)Enabled
-    (/Godot.org/Godot/godot_object:)Handle
-    (/Godot.org/Godot/godot_object:)Ready
+    (/Godot.org/Godot/object:)Handle
+    (/Godot.org/Godot/object:)Ready
 
 **Defaults come from an instance, not the CDO.** `UVerseClass` runs the Verse constructor from
 `PostInitInstance`, which `NewObject` drives and class-default-object construction does not, so a

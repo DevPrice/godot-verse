@@ -37,16 +37,36 @@ AUTORTFM_DISABLE bool CompileProject(const TArray<FUtf8String>& Paths);
 /// that is what actually cannot happen twice.
 AUTORTFM_DISABLE bool CheckProject(const FUtf8String& Path, const FUtf8String& SourceText);
 
+/// Starts CheckProject on a thread we own. False when one is already in flight -- only one runs
+/// at a time, because they share the IDE and the semantic program it rebuilds.
+///
+/// Diagnostics are buffered rather than forwarded, so the Godot callback still only runs on the
+/// game thread, out of PollBackgroundCheck.
+AUTORTFM_DISABLE bool BeginBackgroundCheck(const FUtf8String& Path, const FUtf8String& SourceText);
+
+/// Reaps a finished BeginBackgroundCheck and forwards its diagnostics. OutFinished is true only
+/// on the call that reaps one; the return value is that analysis' result.
+AUTORTFM_DISABLE bool PollBackgroundCheck(bool& OutFinished);
+
+AUTORTFM_DISABLE bool IsBackgroundCheckRunning();
+
+/// Blocks until any in-flight background check finishes, then reaps it.
+///
+/// Every entry point that runs Verse or reads the semantic program calls this first. VerseVM
+/// blocks execution for the length of a build, so touching the VM while one runs trips
+/// `ensure(!bBlockAllExecution)` in VVMExecutionContext and then kills the process.
+AUTORTFM_DISABLE void WaitForBackgroundCheck();
+
 AUTORTFM_DISABLE FScript* OpenScript(const FUtf8String& Path);
 AUTORTFM_DISABLE void ReleaseScript(FScript* Script);
 
-/// One live Verse object: a script's `class(godot_node2d)` bound to one Godot instance id.
+/// One live Verse object: a script's `class(node2d)` bound to one Godot instance id.
 struct FInstance;
 
 /// Instantiates the class ClassName defines at the top level of the compiled project and binds
 /// it to a Godot object. ClassName is undecorated -- `player`, not `(/user@localhost:)player`.
 ///
-/// The class must derive from `godot_object`, which is what gives the instance the UObject
+/// The class must derive from `object`, which is what gives the instance the UObject
 /// representation everything below needs; a class that does not will fail to instantiate here
 /// rather than at the first call.
 /// Whether the compiled project defines such a class. Cheap enough to ask per script, and it is

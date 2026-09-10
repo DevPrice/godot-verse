@@ -283,6 +283,35 @@ Error VerseRuntime::check_project(const String &p_globalized_path, const String 
 	return status == VH_OK ? OK : ERR_COMPILATION_FAILED;
 }
 
+Error VerseRuntime::begin_check_project(const String &p_globalized_path, const String &p_source) {
+	if (!host.is_loaded()) {
+		return ERR_UNAVAILABLE;
+	}
+
+	const CharString path_utf8 = p_globalized_path.utf8();
+	const CharString source_utf8 = p_source.utf8();
+
+	// The host copies both before returning, so neither has to outlive this call.
+	return host.CheckProjectBegin(path_utf8.get_data(), source_utf8.get_data()) == VH_OK ? OK : ERR_BUSY;
+}
+
+bool VerseRuntime::poll_check_project(Dictionary *r_diagnostics_by_path) {
+	if (!host.is_loaded()) {
+		return false;
+	}
+
+	vh_bool finished = 0;
+	diagnostic_sink = r_diagnostics_by_path;
+	host.CheckProjectPoll(&finished);
+	diagnostic_sink = nullptr;
+
+	return finished != 0;
+}
+
+bool VerseRuntime::is_check_project_busy() const {
+	return host.is_loaded() && host.CheckProjectBusy() != 0;
+}
+
 vh_script *VerseRuntime::open_script(const String &p_globalized_path) {
 	if (!host.is_loaded()) {
 		return nullptr;

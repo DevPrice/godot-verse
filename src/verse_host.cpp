@@ -34,6 +34,9 @@ void VerseHostLibrary::clear_function_pointers() {
 	CompileFile = nullptr;
 	CompileProject = nullptr;
 	CheckProject = nullptr;
+	CheckProjectBegin = nullptr;
+	CheckProjectPoll = nullptr;
+	CheckProjectBusy = nullptr;
 	OpenScript = nullptr;
 	ReleaseScript = nullptr;
 	ScriptHasFunction = nullptr;
@@ -75,6 +78,9 @@ bool VerseHostLibrary::load(const String &p_dll_path, String &r_error) {
 	ok = ok && resolve(handle, "vh_compile_file", CompileFile, r_error);
 	ok = ok && resolve(handle, "vh_compile_project", CompileProject, r_error);
 	ok = ok && resolve(handle, "vh_check_project", CheckProject, r_error);
+	ok = ok && resolve(handle, "vh_check_project_begin", CheckProjectBegin, r_error);
+	ok = ok && resolve(handle, "vh_check_project_poll", CheckProjectPoll, r_error);
+	ok = ok && resolve(handle, "vh_check_project_busy", CheckProjectBusy, r_error);
 	ok = ok && resolve(handle, "vh_open_script", OpenScript, r_error);
 	ok = ok && resolve(handle, "vh_release_script", ReleaseScript, r_error);
 	ok = ok && resolve(handle, "vh_script_has_function", ScriptHasFunction, r_error);

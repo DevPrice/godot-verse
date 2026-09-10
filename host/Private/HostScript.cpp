@@ -14,6 +14,7 @@
 #include "Misc/Paths.h"
 #include "Modules/ModuleManager.h"
 #include "SolBuildDiagnostic.h"
+#include "Templates/Function.h"
 #include "TestUtils/PlaceholderObjectForContentScope.h"
 #include "ULangUEUtils.h"
 #include "VerseComputationLimitControl.h"
@@ -50,6 +51,9 @@
 #include "uLang/SourceProject/VerseVersion.h"
 #include "uLang/Toolchain/ProgramBuildManager.h"
 
+#include <atomic>
+#include <thread>
+
 namespace {
 
 constexpr const char* ScriptPackageName = "SolIdeDataSources";
@@ -64,6 +68,52 @@ bool GProjectBuilt = false;
 TArray<TSharedRef<ISolIdeDataSource>> GDataSources;
 TSharedPtr<verse::FContentScope> GContentScope;
 TOptional<verse::FContentScopeGuard> GContentScopeGuard;
+
+/// A diagnostic captured on the worker, owning its strings so it outlives the analysis that
+/// produced it and can be replayed on the game thread.
+struct FCapturedDiagnostic
+{
+    vh_severity Severity;
+    FUtf8String Message;
+    FUtf8String FilePath;
+    int32 Line;
+    int32 Column;
+    int32 EndLine;
+    int32 EndColumn;
+    int32 ReferenceCode;
+};
+
+struct FBackgroundCheck
+{
+    std::thread Thread;
+    std::atomic<bool> bRunning{false};
+
+    /// Written by the worker before bRunning clears, read by the game thread after joining, so
+    /// the join is the whole synchronisation.
+    TArray<FCapturedDiagnostic> Diagnostics;
+    bool bResult = false;
+
+    /// Joined but not yet delivered. Set by whoever joins, cleared by the poll that reports it.
+    bool bResultPending = false;
+
+    FUtf8String Path;
+    FUtf8String SourceText;
+};
+
+FBackgroundCheck GBackgroundCheck;
+
+AUTORTFM_DISABLE vh_severity ToVhSeverity(ELogVerbosity::Type Verbosity)
+{
+    switch (Verbosity)
+    {
+    case ELogVerbosity::Error:
+        return VH_SEVERITY_ERROR;
+    case ELogVerbosity::Warning:
+        return VH_SEVERITY_WARNING;
+    default:
+        return VH_SEVERITY_INFO;
+    }
+}
 
 AUTORTFM_DISABLE void ForwardSolDiagnostic(const FSolDiagnostic& Diagnostic)
 {
@@ -236,7 +286,11 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FUtf8String>& Path
     return true;
 }
 
-AUTORTFM_DISABLE bool GodotVerse::CheckProject(const FUtf8String& Path, const FUtf8String& SourceText)
+namespace {
+
+/// The analysis itself, with the diagnostics sink left to the caller: the foreground path
+/// forwards straight to Godot, the background one captures for replay on the game thread.
+AUTORTFM_DISABLE bool RunCheck(const FUtf8String& Path, const FUtf8String& SourceText, TFunction<void(const FSolDiagnostic&)> Sink)
 {
     if (!GProjectBuilt || !GIde.IsValid())
     {
@@ -261,7 +315,118 @@ AUTORTFM_DISABLE bool GodotVerse::CheckProject(const FUtf8String& Path, const FU
     Settings.bGenerateCode = false;
     Settings.bGenerateAutoRTFMBytecode = false;
 
-    return GIde->BuildAll(Settings, MakeIdeDiagnostics(ForwardSolDiagnostic));
+    return GIde->BuildAll(Settings, MakeIdeDiagnostics(MoveTemp(Sink)));
+}
+
+/// Body of the background thread. A free function rather than a lambda so it can carry
+/// AUTORTFM_DISABLE like everything else that reaches Solaris.
+AUTORTFM_DISABLE void BackgroundCheckMain()
+{
+    GBackgroundCheck.bResult = RunCheck(
+        GBackgroundCheck.Path,
+        GBackgroundCheck.SourceText,
+        [](const FSolDiagnostic& Diagnostic) {
+            GBackgroundCheck.Diagnostics.Add(FCapturedDiagnostic{
+                ToVhSeverity(Diagnostic.Info.Severity),
+                FUtf8String(Diagnostic.Info.Message),
+                FUtf8String(Diagnostic.Location.FilePath),
+                Diagnostic.Location.RowSpan.X,
+                Diagnostic.Location.ColSpan.X,
+                Diagnostic.Location.RowSpan.Y,
+                Diagnostic.Location.ColSpan.Y,
+                static_cast<int32>(Diagnostic.Info.ReferenceCode)});
+        });
+
+    // Last, so the game thread never observes bRunning false with the results half written.
+    GBackgroundCheck.bRunning.store(false, std::memory_order_release);
+}
+
+} // namespace
+
+AUTORTFM_DISABLE bool GodotVerse::CheckProject(const FUtf8String& Path, const FUtf8String& SourceText)
+{
+    WaitForBackgroundCheck();
+    return RunCheck(Path, SourceText, [](const FSolDiagnostic& Diagnostic) { ForwardSolDiagnostic(Diagnostic); });
+}
+
+AUTORTFM_DISABLE bool GodotVerse::BeginBackgroundCheck(const FUtf8String& Path, const FUtf8String& SourceText)
+{
+    if (GBackgroundCheck.Thread.joinable() || GBackgroundCheck.bRunning.load(std::memory_order_acquire)
+        || GBackgroundCheck.bResultPending)
+    {
+        return false;
+    }
+    if (!GProjectBuilt || !GIde.IsValid())
+    {
+        return false;
+    }
+
+    GBackgroundCheck.Path = Path;
+    GBackgroundCheck.SourceText = SourceText;
+    GBackgroundCheck.Diagnostics.Empty();
+    GBackgroundCheck.bResult = false;
+    GBackgroundCheck.bRunning.store(true, std::memory_order_release);
+    GBackgroundCheck.Thread = std::thread(&BackgroundCheckMain);
+    return true;
+}
+
+AUTORTFM_DISABLE bool GodotVerse::IsBackgroundCheckRunning()
+{
+    return GBackgroundCheck.bRunning.load(std::memory_order_acquire);
+}
+
+namespace {
+
+/// Joins the worker, leaving what it captured queued for the next poll. Joining is only about
+/// making it safe to touch Verse again; delivering the result is PollBackgroundCheck's job, and
+/// splitting the two is what stops a wait from swallowing an analysis the caller never heard
+/// about -- it would drop those diagnostics and leave the caller asking for the same analysis
+/// again on the next keystroke.
+AUTORTFM_DISABLE void JoinBackgroundCheck()
+{
+    if (GBackgroundCheck.Thread.joinable())
+    {
+        GBackgroundCheck.Thread.join();
+        GBackgroundCheck.bResultPending = true;
+    }
+}
+
+} // namespace
+
+AUTORTFM_DISABLE bool GodotVerse::PollBackgroundCheck(bool& OutFinished)
+{
+    OutFinished = false;
+    if (GBackgroundCheck.bRunning.load(std::memory_order_acquire))
+    {
+        return true;
+    }
+    JoinBackgroundCheck();
+    if (!GBackgroundCheck.bResultPending)
+    {
+        return true;
+    }
+
+    for (const FCapturedDiagnostic& Diagnostic : GBackgroundCheck.Diagnostics)
+    {
+        GodotVerse::ReportDiagnostic(Diagnostic.Severity,
+                                     Diagnostic.Message,
+                                     Diagnostic.FilePath,
+                                     Diagnostic.Line,
+                                     Diagnostic.Column,
+                                     Diagnostic.EndLine,
+                                     Diagnostic.EndColumn,
+                                     Diagnostic.ReferenceCode);
+    }
+    GBackgroundCheck.Diagnostics.Empty();
+    GBackgroundCheck.bResultPending = false;
+
+    OutFinished = true;
+    return GBackgroundCheck.bResult;
+}
+
+AUTORTFM_DISABLE void GodotVerse::WaitForBackgroundCheck()
+{
+    JoinBackgroundCheck();
 }
 
 AUTORTFM_DISABLE GodotVerse::FScript* GodotVerse::OpenScript(const FUtf8String& Path)
@@ -343,7 +508,7 @@ struct GodotVerse::FInstance
 
 namespace {
 /// The UClass behind a script's top-level Verse class, or null if there is no such class or it
-/// does not derive from godot_object. A class that does not derive from godot_object has no
+/// does not derive from object. A class that does not derive from object has no
 /// native representation at all, so `Cast<UClass>` is itself most of the check.
 AUTORTFM_DISABLE UClass* FindGodotClass(FUtf8StringView ClassName)
 {
@@ -364,7 +529,7 @@ AUTORTFM_DISABLE UClass* FindGodotClass(FUtf8StringView ClassName)
             return;
         }
         UClass* NativeClass = Cast<UClass>(Class->GetOrCreateNativeType(Context));
-        if (NativeClass && NativeClass->IsChildOf(verse::godot_object::StaticClass()))
+        if (NativeClass && NativeClass->IsChildOf(verse::object::StaticClass()))
         {
             Found = NativeClass;
         }
@@ -768,7 +933,7 @@ AUTORTFM_DISABLE bool GodotVerse::GetClassExports(FUtf8StringView ClassName, TAr
     const uLang::CClass* CategoryAttribute = Program->FindDefinitionByVersePath<uLang::CClass>(CategoryAttributePath);
 
     // Only the class's own members. An inherited export would have to be looked up through the
-    // godot_object hierarchy, and every one of those is generated API rather than script state.
+    // object hierarchy, and every one of those is generated API rather than script state.
     for (const uLang::TSRef<uLang::CDataDefinition>& Member : Class->GetDefinitionsOfKind<uLang::CDataDefinition>())
     {
         if (!Member->HasAttributeSubclass(EditableAttribute, *Program))
@@ -793,7 +958,7 @@ AUTORTFM_DISABLE GodotVerse::FInstance* GodotVerse::Instantiate(FUtf8StringView 
     if (!NativeClass)
     {
         ReportError(FUtf8String(UTF8TEXT("Could not instantiate ")) + FUtf8String(ClassName)
-                    + UTF8TEXT(": no such class deriving from godot_object at ") + ScriptVersePath);
+                    + UTF8TEXT(": no such class deriving from object at ") + ScriptVersePath);
         return nullptr;
     }
 
@@ -805,7 +970,7 @@ AUTORTFM_DISABLE GodotVerse::FInstance* GodotVerse::Instantiate(FUtf8StringView 
         return nullptr;
     }
 
-    verse::godot_object* Shadow = CastChecked<verse::godot_object>(Instance);
+    verse::object* Shadow = CastChecked<verse::object>(Instance);
     Shadow->Handle.Init(Handle, Shadow);
 
     return new FInstance{TStrongObjectPtr<UObject>(Instance)};
@@ -830,7 +995,7 @@ AUTORTFM_DISABLE FVerseFunction LookupMethod(const GodotVerse::FInstance* Instan
 
 /// Whether the script actually implements this lifecycle method.
 ///
-/// `godot_object` gives Ready, Update and PhysicsUpdate empty bodies so a script can <override>
+/// `object` gives Ready, Update and PhysicsUpdate empty bodies so a script can <override>
 /// them and so a script that wants only one of the three still compiles -- which means a plain
 /// "does it resolve" test is true for every instance. Comparing the resolved function against
 /// the one the base class resolves to is what distinguishes an override from the inherited
@@ -844,7 +1009,7 @@ AUTORTFM_DISABLE bool GodotVerse::InstanceHasFunction(const FInstance* Instance,
     }
 
     const verse::FExecutionContext Context = verse::FExecutionContext::GetActiveContext();
-    FVerseFunction Base(Context, verse::godot_object::StaticClass()->GetDefaultObject(), DecoratedName);
+    FVerseFunction Base(Context, verse::object::StaticClass()->GetDefaultObject(), DecoratedName);
     return !Base.IsValid() || Base.Function.Get() != Resolved.Function.Get();
 }
 

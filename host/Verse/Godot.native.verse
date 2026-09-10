@@ -30,15 +30,15 @@ VhFindChar<public><native>(Value:string, Index:int)<decides><transacts>:char
 # as its instance id in Ints(0), a PackedStringArray as the whole of Texts. Keeping the tag means
 # a two-float payload is a Vector2 rather than guessed at, which is what the untagged Phase 2
 # encoding could not express.
-godot_value<public> := tuple(int, []int, []float, []string)
+variant<public> := tuple(int, []int, []float, []string)
 
 # Reads and calls happen now; they observe a Godot the transaction cannot roll back.
-VhCallValue<public><native>(Handle:int, Method:string, Args:[]godot_value)<decides><transacts>:godot_value
-VhGetValue<public><native>(Handle:int, Property:string)<decides><transacts>:godot_value
+VhCallValue<public><native>(Handle:int, Method:string, Args:[]variant)<decides><transacts>:variant
+VhGetValue<public><native>(Handle:int, Property:string)<decides><transacts>:variant
 
 # Mutations defer to transaction commit, so a failed expression leaves the scene untouched.
-VhCallVoid<public><native>(Handle:int, Method:string, Args:[]godot_value)<transacts>:void
-VhSetValue<public><native>(Handle:int, Property:string, Value:godot_value)<transacts>:void
+VhCallVoid<public><native>(Handle:int, Method:string, Args:[]variant)<transacts>:void
+VhSetValue<public><native>(Handle:int, Property:string, Value:variant)<transacts>:void
 
 # ClassDB::instantiate. The caller owns the result until it is parented or freed.
 VhInstantiate<public><native>(ClassName:string)<decides><transacts>:int
@@ -51,7 +51,7 @@ VhSingleton<public><native>(Name:string)<decides><transacts>:int
 # It is native because a script's class has to reach C++ somehow -- the host instantiates a user
 # subclass and calls into it through a UObject, and only a native ancestor gives the instance a
 # UObject representation to be reached by.
-godot_object<public><native> := class:
+object<public><native> := class:
     # Godot instance id. The host writes it at construction; it never changes afterwards, and it
     # keeps its value after Godot frees the object, which is why every accessor is <decides>.
     Handle<public><native>:int = 0

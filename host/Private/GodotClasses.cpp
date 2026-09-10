@@ -2,4 +2,4 @@
 
 #include "GodotClasses.h"
 
-#include "Godot.godot_object.gen.ipp"
+#include "Godot.object.gen.ipp"

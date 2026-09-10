@@ -88,10 +88,10 @@ void WriteProperty(int64 Handle, const verse::string& Property, vh_value Value, 
     });
 }
 
-/// The C++ spelling of Verse's `godot_value`: (Tag, Ints, Floats, Texts).
+/// The C++ spelling of Verse's `variant`: (Tag, Ints, Floats, Texts).
 using FGodotValue = verse::tuple<int64, TArray<int64>, TArray<double>, TArray<verse::string>>;
 
-/// A godot_value detached from the VM. Deferred writes run after the transaction that produced
+/// A variant detached from the VM. Deferred writes run after the transaction that produced
 /// their arguments has committed, and a verse::string is not ours to hold across that boundary.
 struct FOwnedValue
 {
@@ -265,7 +265,7 @@ vh_value FWireStore::Wire(const FOwnedValue& Value)
     }
 
     // An untyped Array has no tag to disambiguate it, so the first non-empty payload wins.
-    // Heterogeneous arrays have no godot_value spelling; see the digest.
+    // Heterogeneous arrays have no variant spelling; see the digest.
     case VH_VARIANT_ARRAY:
         Out.Type = VH_TYPE_ARRAY;
         if (Ints.Num() > 0)
@@ -293,7 +293,7 @@ vh_value FWireStore::Wire(const FOwnedValue& Value)
     return Out;
 }
 
-/// Sorts a vh_value's payload into godot_value's three typed slots. A map has no godot_value
+/// Sorts a vh_value's payload into variant's three typed slots. A map has no variant
 /// spelling and comes back as an empty value of its own tag.
 FGodotValue FromWire(const vh_value& Value)
 {
