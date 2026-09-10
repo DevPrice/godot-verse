@@ -429,6 +429,13 @@ def test_classes_header_file_matches_generated_verse_file():
     # column is a Godot method name.
     class_table = header_text.split("class_mapping classes[] = {", 1)[1].split("};", 1)[0]
     header_classes = set(re.findall(r'"([^"]+)" \}', class_table))
+    # The builtin value types are hand-written in GodotApi.native.verse rather than generated, so
+    # they are in the table but never in the mirrored class file.
+    check_true(
+        "the header also carries the builtin value types",
+        set(g.VALUE_TYPE_CLASSES.values()) <= header_classes,
+    )
+    header_classes -= set(g.VALUE_TYPE_CLASSES.values())
     check(
         "verse_api_classes.h lists exactly the classes GodotClasses.native.verse emits",
         header_classes,

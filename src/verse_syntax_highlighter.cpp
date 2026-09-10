@@ -65,11 +65,13 @@ Color VerseSyntaxHighlighter::color_for(VerseTokenKind p_kind) const {
 		case VerseTokenKind::ControlKeyword:
 			return control_flow_keyword_color;
 		case VerseTokenKind::Attribute:
-			return keyword_color;
+			return annotation_color;
 		case VerseTokenKind::Symbol:
 			return symbol_color;
 		case VerseTokenKind::Function:
 			return function_color;
+		case VerseTokenKind::FunctionDefinition:
+			return function_definition_color;
 		case VerseTokenKind::Member:
 			return member_color;
 		case VerseTokenKind::Text:
@@ -169,6 +171,10 @@ void VerseSyntaxHighlighter::_update_cache() {
 	number_color = read_color(settings, "text_editor/theme/highlighting/number_color", number_color);
 	symbol_color = read_color(settings, "text_editor/theme/highlighting/symbol_color", symbol_color);
 	function_color = read_color(settings, "text_editor/theme/highlighting/function_color", function_color);
+	// Verse has no theme keys of its own, and matching GDScript is the point: a Verse file open
+	// beside a .gd one should not colour the same idea two different ways.
+	function_definition_color = read_color(settings, "text_editor/theme/highlighting/gdscript/function_definition_color", function_definition_color);
+	annotation_color = read_color(settings, "text_editor/theme/highlighting/gdscript/annotation_color", annotation_color);
 	member_color = read_color(settings, "text_editor/theme/highlighting/member_variable_color", member_color);
 	text_color = read_color(settings, "text_editor/theme/highlighting/text_color", text_color);
 	type_color = read_color(settings, "text_editor/theme/highlighting/base_type_color", type_color);

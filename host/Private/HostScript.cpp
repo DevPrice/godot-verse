@@ -988,10 +988,31 @@ AUTORTFM_DISABLE bool LocusContains(const Verse::SLocus& Range, uint32 Row, uint
     return Range.GetBegin() <= Position && Position < Range.GetEnd();
 }
 
+/// True for the node types whose locus spans a whole definition rather than just a reference to
+/// one. They resolve, but only against their name -- see NarrowedLocus.
+AUTORTFM_DISABLE bool IsDefinitionNode(uLang::EAstNodeType NodeType)
+{
+    using namespace uLang;
+    return NodeType == EAstNodeType::Definition_Function
+        || NodeType == EAstNodeType::Definition_Data
+        || NodeType == EAstNodeType::Definition_TypeAlias;
+}
+
+/// A definition's own locus runs from its first attribute to the end of its body, so matching the
+/// cursor against it would resolve every blank column inside a function to that function. The name
+/// lives in the definition's first VST child -- the `Ready<override>()` of `Ready<override>():void
+/// = ...` -- which is tight enough to mean the author pointed at it. A parameter inside that span
+/// still wins, because its own node is deeper and the innermost hit is the one kept.
+AUTORTFM_DISABLE const Verse::Vst::Node* NarrowedLocus(const uLang::CAstNode& AstNode, const Verse::Vst::Node& Vst)
+{
+    if (!IsDefinitionNode(AstNode.GetNodeType()))
+    {
+        return &Vst;
+    }
+    return Vst.GetChildCount() > 0 ? &*Vst.GetChildren()[0] : nullptr;
+}
+
 /// The definition an identifier node resolves to, or null for a node that is not one.
-///
-/// Definition nodes are deliberately absent: a definition's locus spans its whole body, so
-/// treating one as a hit would resolve every blank column inside a function to the function.
 AUTORTFM_DISABLE const uLang::CDefinition* ReferencedDefinition(const uLang::CAstNode& AstNode,
                                                                 const uLang::CSemanticProgram& Program,
                                                                 vh_lookup_kind& OutKind)
@@ -1000,6 +1021,20 @@ AUTORTFM_DISABLE const uLang::CDefinition* ReferencedDefinition(const uLang::CAs
 
     switch (AstNode.GetNodeType())
     {
+    // A definition is its own best answer at its name: hovering `Ready` where it is declared
+    // should describe Ready, not decline because nothing refers to it there.
+    case EAstNodeType::Definition_Function:
+        OutKind = VH_LOOKUP_FUNCTION;
+        return &*static_cast<const CExprFunctionDefinition&>(AstNode)._Function;
+
+    case EAstNodeType::Definition_Data:
+        OutKind = VH_LOOKUP_DATA;
+        return &*static_cast<const CExprDataDefinition&>(AstNode)._DataMember;
+
+    case EAstNodeType::Definition_TypeAlias:
+        OutKind = VH_LOOKUP_TYPE_ALIAS;
+        return &*static_cast<const CExprTypeAliasDefinition&>(AstNode)._TypeAlias;
+
     case EAstNodeType::Identifier_Data:
         OutKind = VH_LOOKUP_DATA;
         return &static_cast<const CExprIdentifierData&>(AstNode)._DataDefinition;
@@ -1074,7 +1109,8 @@ struct AUTORTFM_DISABLE FLookupVisitor : public uLang::SAstVisitor
     {
         if (const Verse::Vst::Node* Vst = AstNode.GetMappedVstNode())
         {
-            if (LocusContains(Vst->Whence(), Row, Column)
+            const Verse::Vst::Node* Locus = NarrowedLocus(AstNode, *Vst);
+            if (Locus != nullptr && LocusContains(Locus->Whence(), Row, Column)
                 && FULangConversionUtils::ULangStrToFUtf8String(Vst->GetSnippetPath()).Equals(Path, ESearchCase::IgnoreCase))
             {
                 vh_lookup_kind Kind = VH_LOOKUP_UNKNOWN;

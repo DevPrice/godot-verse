@@ -208,11 +208,39 @@ bool TestCallsAndMembers()
 	// A <decides> call is spelled with brackets, so those count as a call position too.
 	Ok = Ok && KindAt(Results[1].Tokens, 9) == VerseTokenKind::Function; // GetPosition
 
-	// A definition puts its specifiers between the name and the parameter list.
-	Ok = Ok && KindAt(Results[2].Tokens, 0) == VerseTokenKind::Function; // Ready
+	// A definition binds its name rather than calling it, and GDScript colours the two apart.
+	Ok = Ok && KindAt(Results[2].Tokens, 0) == VerseTokenKind::FunctionDefinition; // Ready
 	Ok = Ok && KindAt(Results[2].Tokens, 5) == VerseTokenKind::Attribute; // <override>
 
 	return Step("call positions and member accesses colour apart from plain identifiers", Ok);
+}
+
+bool TestDefinitionsColourApartFromCalls()
+{
+	auto Results = LexAll({
+			"\tBump():void =",
+			"\t\tPrint(\"x = {P}\")",
+			"\t\tSetPosition(GetPosition())",
+			"\tGetter<epic_internal>(A:accessor)<transacts>:float = VhToFloat(V)",
+			"\t\tif (Field = \"X\"):",
+	});
+
+	// No specifiers, so the `=` after the parameter list is the only thing marking a definition.
+	bool Ok = KindAt(Results[0].Tokens, 1) == VerseTokenKind::FunctionDefinition; // Bump
+
+	// A call whose argument holds an `=`, inside a string at that: the scan is already past the
+	// closing bracket before it looks, so neither reaches it.
+	Ok = Ok && KindAt(Results[1].Tokens, 2) == VerseTokenKind::Function; // Print
+	Ok = Ok && KindAt(Results[2].Tokens, 2) == VerseTokenKind::Function; // SetPosition
+	Ok = Ok && KindAt(Results[2].Tokens, 14) == VerseTokenKind::Function; // GetPosition, nested
+
+	Ok = Ok && KindAt(Results[3].Tokens, 1) == VerseTokenKind::FunctionDefinition; // Getter
+	Ok = Ok && KindAt(Results[3].Tokens, 54) == VerseTokenKind::Function; // VhToFloat, the body
+
+	// `if` is the first token here, so the comparison cannot be read as a definition.
+	Ok = Ok && KindAt(Results[4].Tokens, 2) == VerseTokenKind::ControlKeyword; // if
+
+	return Step("a definition's name colours apart from a call to it", Ok);
 }
 
 bool TestPrefixAttributes()
@@ -283,6 +311,7 @@ int main()
 	Ok = TestAttributes() && Ok;
 	Ok = TestSymbols() && Ok;
 	Ok = TestCallsAndMembers() && Ok;
+	Ok = TestDefinitionsColourApartFromCalls() && Ok;
 	Ok = TestPrefixAttributes() && Ok;
 	Ok = TestBareIdentifier() && Ok;
 	Ok = TestIdentifierTokensDoNotMerge() && Ok;

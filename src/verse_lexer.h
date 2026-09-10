@@ -16,6 +16,7 @@ enum class VerseTokenKind {
 	Attribute,
 	Symbol,
 	Function,
+	FunctionDefinition,
 	Member,
 };
 

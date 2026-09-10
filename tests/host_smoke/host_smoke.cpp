@@ -322,6 +322,60 @@ int main(int argc, char** argv)
 				}
 			}
 
+			// An archetype instantiation names its class, and the editor turns that into a Godot
+			// doc page. vector2 is a Godot builtin rather than a mirrored class, so it reaches
+			// the class table by a different route -- but it has to arrive as a class either way,
+			// or the editor falls back to calling it a local constant.
+			const size_t VectorUse = ExportsSource.find("vector2{");
+			if (Step("the fixture still instantiates a builtin value type", VectorUse != std::string::npos))
+			{
+				int32_t VectorRow = 0;
+				int32_t VectorColumn = 0;
+				RowColumnOf(ExportsSource, VectorUse, VectorRow, VectorColumn);
+				const vh_lookup_desc* VectorLookup = nullptr;
+				if (Step("vh_lookup_symbol on an archetype's class",
+						LookupSymbolFn(ExportsPathUtf8.c_str(), VectorRow, VectorColumn, &VectorLookup) == VH_OK)
+					&& VectorLookup)
+				{
+					LookupOk = Step("it resolves to vector2", Text(VectorLookup->NameUtf8, VectorLookup->NameLen) == "vector2") && LookupOk;
+					LookupOk = Step("it is a class", VectorLookup->Kind == VH_LOOKUP_CLASS) && LookupOk;
+				}
+				else
+				{
+					LookupOk = false;
+				}
+			}
+
+			// A definition resolves at its own name, so hovering a method where it is declared
+			// describes it. The narrowing this needs is what stops a blank column in the body
+			// from resolving to the enclosing function too.
+			const size_t BumpDecl = ExportsSource.find("Bump<public>()");
+			if (Step("the fixture still declares Bump", BumpDecl != std::string::npos))
+			{
+				int32_t BumpRow = 0;
+				int32_t BumpColumn = 0;
+				RowColumnOf(ExportsSource, BumpDecl, BumpRow, BumpColumn);
+				const vh_lookup_desc* BumpLookup = nullptr;
+				if (Step("vh_lookup_symbol on a method's own declaration",
+						LookupSymbolFn(ExportsPathUtf8.c_str(), BumpRow, BumpColumn, &BumpLookup) == VH_OK)
+					&& BumpLookup)
+				{
+					LookupOk = Step("it resolves to Bump", Text(BumpLookup->NameUtf8, BumpLookup->NameLen) == "Bump") && LookupOk;
+					LookupOk = Step("it is a function", BumpLookup->Kind == VH_LOOKUP_FUNCTION) && LookupOk;
+				}
+				else
+				{
+					LookupOk = false;
+				}
+
+				// The body is indented past the declaration, so a column inside it that holds
+				// nothing must not fall back to the function whose locus spans it.
+				const vh_lookup_desc* Inside = nullptr;
+				LookupOk = Step("a blank column in the body still resolves to nothing",
+							   LookupSymbolFn(ExportsPathUtf8.c_str(), BumpRow + 1, 0, &Inside) == VH_ERR_NOT_FOUND)
+						&& LookupOk;
+			}
+
 			// Past the end of a line nothing encloses the position, so the answer is a refusal
 			// rather than whichever definition happens to span the row.
 			const vh_lookup_desc* Nothing = nullptr;

@@ -54,6 +54,8 @@ private:
 	godot::Color number_color = godot::Color(0.63f, 0.82f, 0.99f);
 	godot::Color symbol_color = godot::Color(0.67f, 0.79f, 1.0f);
 	godot::Color function_color = godot::Color(0.34f, 0.7f, 1.0f);
+	godot::Color function_definition_color = godot::Color(0.4f, 0.9f, 1.0f);
+	godot::Color annotation_color = godot::Color(1.0f, 0.7f, 0.45f);
 	godot::Color type_color = godot::Color(0.15f, 0.85f, 0.76f);
 	godot::Color member_color = godot::Color(0.74f, 0.48f, 0.95f);
 	godot::Color text_color = godot::Color(0.85f, 0.85f, 0.85f);

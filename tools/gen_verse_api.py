@@ -607,9 +607,17 @@ inline constexpr method_mapping methods[] = {{
 """
 
 
+# Godot builtins rather than mirrored classes, so they are hand-written in GodotApi.native.verse
+# and never reach emit_order -- but they are Godot types with Godot documentation, and without
+# them the editor calls `vector2` a local constant.
+VALUE_TYPE_CLASSES = {"Vector2": "vector2", "Vector3": "vector3", "Color": "color"}
+
+
 def render_classes_header(api: dict, emit_order: list, method_map: list) -> str:
     version = api["header"]["version_full_name"]
-    pairs = sorted((name, verse_class_name(name)) for name in emit_order)
+    pairs = sorted(
+        [(name, verse_class_name(name)) for name in emit_order] + list(VALUE_TYPE_CLASSES.items())
+    )
     entries = "\n".join(f'\t{{ "{godot_name}", "{verse_name}" }},' for godot_name, verse_name in pairs)
     method_entries = "\n".join(
         f'\t{{ "{verse_class}", "{verse_method}", "{godot_class}", "{godot_method}" }},'

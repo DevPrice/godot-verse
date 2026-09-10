@@ -122,6 +122,73 @@ bool is_call_position(const std::string &p_line, int p_pos) {
 	return char_at(p_line, pos) == '(' || char_at(p_line, pos) == '[';
 }
 
+bool starts_line(const std::string &p_line, int p_start) {
+	for (int i = 0; i < p_start; i++) {
+		const char c = p_line[(size_t)i];
+		if (c != ' ' && c != '\t' && c != '\r') {
+			return false;
+		}
+	}
+	return true;
+}
+
+// One past the bracket matching the one at p_pos, or -1. String literals are skipped so that a
+// bracket inside one cannot unbalance the scan.
+int matching_bracket_end(const std::string &p_line, int p_pos) {
+	const char open = char_at(p_line, p_pos);
+	const char close = open == '(' ? ')' : ']';
+	int depth = 0;
+	bool in_string = false;
+	for (int i = p_pos; i < (int)p_line.size(); i++) {
+		const char c = p_line[(size_t)i];
+		if (in_string) {
+			if (c == '\\') {
+				i += 1;
+			} else if (c == '"') {
+				in_string = false;
+			}
+		} else if (c == '"') {
+			in_string = true;
+		} else if (c == open) {
+			depth += 1;
+		} else if (c == close) {
+			depth -= 1;
+			if (depth == 0) {
+				return i + 1;
+			}
+		}
+	}
+	return -1;
+}
+
+// A definition binds the name it starts with: `Ready<override>():void =`. Verse has no `func`
+// keyword, so the discriminator is the `=` after the parameter list -- a call never has one,
+// and the `=` of a comparison or of an interpolated string sits inside the brackets, which this
+// scan has already passed.
+bool is_definition_position(const std::string &p_line, int p_pos) {
+	int pos = p_pos;
+	int end = 0;
+	while (char_at(p_line, pos) == '<' && at_attribute(p_line, pos, end)) {
+		pos = end;
+	}
+	if (char_at(p_line, pos) != '(' && char_at(p_line, pos) != '[') {
+		return false;
+	}
+	pos = matching_bracket_end(p_line, pos);
+	if (pos < 0) {
+		return false;
+	}
+	for (int i = pos; i < (int)p_line.size(); i++) {
+		if (p_line[(size_t)i] != '=') {
+			continue;
+		}
+		// `<=`, `>=`, `!=` and `==` are comparisons, not the start of a body.
+		const char prev = i > 0 ? p_line[(size_t)i - 1] : '\0';
+		return prev != '<' && prev != '>' && prev != '!' && char_at(p_line, i + 1) != '=';
+	}
+	return false;
+}
+
 VerseTokenKind classify_word(const std::string &p_word) {
 	for (size_t i = 0; i < std::size(verse_keywords::control_flow_words); i++) {
 		if (p_word == verse_keywords::control_flow_words[i]) {
@@ -142,7 +209,9 @@ VerseTokenKind classify_identifier(const std::string &p_line, int p_start, int p
 		return word;
 	}
 	if (is_call_position(p_line, p_end)) {
-		return VerseTokenKind::Function;
+		return starts_line(p_line, p_start) && is_definition_position(p_line, p_end)
+				? VerseTokenKind::FunctionDefinition
+				: VerseTokenKind::Function;
 	}
 	return p_after_dot ? VerseTokenKind::Member : VerseTokenKind::Identifier;
 }

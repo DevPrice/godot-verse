@@ -228,6 +228,12 @@ the comment is reachable from the definition only by guessing at the shape of th
 around it. The definition's line is already known, the file's text is already to hand, and
 walking up from that line while the lines are comments needs none of that.
 
+A definition answers at its own name too, so hovering `Ready` where it is declared describes it
+rather than declining. That needs the locus narrowed: a definition's own span runs from its first
+attribute to the end of its body, and matching against that would resolve every blank column
+inside a function to the function. The name sits in the definition's first VST child, which is
+tight enough to mean the author pointed at it.
+
 Two things make that safe rather than merely possible.
 
 - **A stale answer is refused rather than shown.** Diagnostics can lag the buffer by one analysis
@@ -256,8 +262,10 @@ the two exactly.
 `node2d`, `Position` or `GetChild` opens the class reference for `Node2D`, `Node2D.position` or
 `Node.get_child`, and hovering any of them shows the description Godot already ships. A mirrored
 property arrives as a `var` like any `@editable` member, so the routing keys off the *owner* —
-only a mirrored class appears in the table. Nothing here writes that prose: both
-paths key off `class_name`, which is precisely the key that diverts the click away from a jump
+only a mirrored class appears in the table. `vector2`, `vector3` and `color` are in it too: they
+are Godot builtins that happen to be hand-written in `GodotApi.native.verse` rather than
+generated, and without an entry the editor calls them local constants. Nothing here writes that
+prose: both paths key off `class_name`, which is precisely the key that diverts the click away from a jump
 and into the help viewer, and which the tooltip uses to fetch the description out of the same doc
 data. There is nothing to jump to anyway — the generated API is compiled from the engine tree,
 not from the project.
@@ -273,10 +281,20 @@ inherited call resolves to the declaring class rather than the one it was called
 Syntax highlighting is a real lexer, which is what lets nested `<# #>` block comments,
 dedent-terminated `<#>` comments and comments inside string interpolation all colour correctly —
 none of which a delimiter matcher can express. On top of the comment/string/number/keyword
-classes it colours operators and punctuation, call positions (`Print(`, the bracketed
-`GetChild[` of a `<decides>` call, and a definition like `Ready<override>()` whose specifiers
-sit between the name and its parameter list), `.member` accesses, and both attribute spellings —
-suffix `<public>` and prefix `@editable`.
+classes it colours operators and punctuation, call positions (`Print(`, and the bracketed
+`GetChild[` of a `<decides>` call), `.member` accesses, and both attribute spellings — suffix
+`<public>` and prefix `@editable`.
+
+A definition's name colours apart from a call to it, the way GDScript separates `func foo` from
+`foo()`. Verse has no `func` keyword, so the discriminator is the `=` that follows the parameter
+list: a call never has one, and the `=` of a comparison or of an interpolated string sits inside
+the brackets the scan has already passed. The name must also start its line, which is where every
+Verse definition begins.
+
+The colours come from GDScript's theme keys — `gdscript/function_definition_color` and
+`gdscript/annotation_color` alongside the language-neutral ones. Verse has no keys of its own, and
+matching is the point: a `.verse` file open beside a `.gd` one should not colour the same idea two
+different ways.
 
 **Type names colour as types, from a set of names rather than from positions.** A bare identifier
 that names a class is coloured as one: the mirrored Godot API — `node2d`, `timer`, `control` —
@@ -289,6 +307,13 @@ is inserted above it, so colouring from loci would make the colours crawl a line
 A *name* does not move when a line is inserted. The two sources of names are also both available
 before anything has been compiled, which matters because the highlighter has to colour a script
 that has never been built — and neither one needs the host to be loaded at all.
+
+**Known limitation: ctrl+hover inside a string interpolation underlines the whole string.** The
+lookup itself is right — `{Position.X}` resolves to `Position` and clicking it navigates — but
+`CodeEdit::get_lookup_word` returns the entire literal whenever the cursor is inside a registered
+string delimiter, deliberately, so that `preload("res://…")` yields a path. The only lever from
+outside the engine is to stop declaring `"` a string delimiter, which also drives auto-closing
+quotes, string-aware folding, indentation and completion suppression. Not worth an underline.
 
 What that costs is precision the compiler would have given for free: a local shadowing a class
 name colours as the class, and a type alias or a nested class is not in the set, so it stays
