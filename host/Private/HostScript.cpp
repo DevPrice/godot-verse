@@ -12,6 +12,7 @@
 #include "IVerseModule.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Modules/ModuleManager.h"
 #include "SolBuildDiagnostic.h"
 #include "TestUtils/PlaceholderObjectForContentScope.h"
 #include "ULangUEUtils.h"
@@ -20,14 +21,32 @@
 #include "VerseString.h"
 #include "VerseTask.h"
 #include "UObject/StrongObjectPtr.h"
+#include "VerseVM/Inline/VVMRefInline.h"
+#include "VerseVM/Inline/VVMValueInline.h"
+#include "VerseVM/Inline/VVMVerseClassInline.h"
+#include "VerseVM/VVMArray.h"
+#include "VerseVM/VVMMutableArray.h"
+#include "VerseVM/VVMShape.h"
+#include "VerseVM/VVMNativeRef.h"
+#include "VerseVM/VVMRef.h"
+#include "VerseVM/VVMRestValue.h"
 #include "VerseVM/VVMClass.h"
 #include "VerseVM/VVMCoroutine.h"
+#include "VerseVM/VVMInt.h"
+#include "VerseVM/VVMOpResult.h"
+#include "VerseVM/VVMVerseClass.h"
 #include "VerseVM/VVMGlobalProgram.h"
 #include "VerseVM/VVMNativeFunction.h"
 #include "VerseVM/VVMPackage.h"
 #include "VerseVM/VVMProgram.h"
 #include "VerseVM/VVMContext.h"
 #include "VerseVM/VVMUniqueString.h"
+#include "uLang/Semantics/Attributable.h"
+#include "uLang/Semantics/DataDefinition.h"
+#include "uLang/Semantics/FilteredDefinitionRange.h"
+#include "uLang/Semantics/SemanticClass.h"
+#include "uLang/Semantics/SemanticProgram.h"
+#include "uLang/Semantics/SemanticTypes.h"
 #include "uLang/SourceProject/VerseVersion.h"
 #include "uLang/Toolchain/ProgramBuildManager.h"
 
@@ -102,6 +121,13 @@ AUTORTFM_DISABLE bool EnsureIde()
     {
         return true;
     }
+
+    // `editable` is declared @customattribhandler, so evaluating a module that applies it asks
+    // ICustomAttributeHandler::FindHandlerForAttribute for a handler and fails the whole build
+    // with "No custom handler for attribute: editable" when there is none. The handler is
+    // registered by FVerseSimulationMetadataModule::StartupModule, and in a monolithic program
+    // linking the module does not run that -- nothing loads it unless asked.
+    FModuleManager::Get().LoadModule(TEXT("VerseSimulationMetadata"));
 
     ISolarisModule& SolarisModule = ISolarisModule::Get();
 
@@ -309,6 +335,10 @@ AUTORTFM_DISABLE bool GodotVerse::HasFunction(const FScript* Script, FUtf8String
 struct GodotVerse::FInstance
 {
     TStrongObjectPtr<UObject> Object;
+
+    /// Set by the first call into the object, after which a non-var member can no longer be
+    /// given a value. See WriteInstanceField.
+    bool bSealed = false;
 };
 
 namespace {
@@ -346,6 +376,415 @@ AUTORTFM_DISABLE UClass* FindGodotClass(FUtf8StringView ClassName)
 AUTORTFM_DISABLE bool GodotVerse::HasClass(FUtf8StringView ClassName)
 {
     return FindGodotClass(ClassName) != nullptr;
+}
+
+namespace {
+/// Epic's own inspector attribute, borrowed rather than reimplemented: uLang guards inheriting
+/// from `attribute` behind CScope::IsAuthoredByEpic(), so `/Godot.org/Godot` cannot declare one
+/// of its own however it is scoped. `editable` is <public> in a PublicAPI package and carries
+/// @attribscope_data, so applying it to a script's data member is legal from anywhere.
+constexpr const char* EditableAttributePath = "/Verse.org/Simulation/editable";
+
+// Metadata attributes that carry an inspector hint. Each takes a single string argument, which is
+// the one attribute payload SOL-972 leaves readable. These name the attribute *class*, not the
+// <constructor> function beside it: GetAttributeTextValue matches on the invocation's return type.
+constexpr const char* ClampMinAttributePath = "/Verse.org/Simulation/clamp_min_attribute";
+constexpr const char* ClampMaxAttributePath = "/Verse.org/Simulation/clamp_max_attribute";
+constexpr const char* CategoryAttributePath = "/Verse.org/Simulation/category_attribute";
+
+/// The string a single-argument metadata attribute was spelled with, or empty when the member
+/// does not carry it.
+AUTORTFM_DISABLE FUtf8String AttributeText(const uLang::CDataDefinition& Member, const uLang::CClass* AttributeClass, const uLang::CSemanticProgram& Program)
+{
+    if (!AttributeClass)
+    {
+        return FUtf8String();
+    }
+    const uLang::TOptional<uLang::CUTF8String> Text = Member.GetAttributes().GetAttributeTextValue(AttributeClass, Program);
+    return Text.IsSet() ? FULangConversionUtils::ULangStrToFUtf8String(*Text) : FUtf8String();
+}
+
+/// The ABI tag for a member's declared type. Verse's `string` is `[]char`, so the array case has
+/// to ask about the element type before it can tell the two apart.
+AUTORTFM_DISABLE vh_type VhTypeForVerseType(const uLang::CTypeBase* Type)
+{
+    if (!Type)
+    {
+        return VH_TYPE_VOID;
+    }
+
+    // A `var` member's declared type is a pointer around the value type. Unwrap that specifically
+    // rather than through CNormalType::GetInnerType, which also unwraps an array -- and Verse's
+    // `string` is `[]char`, so that route reports every string as a char.
+    const uLang::CNormalType* Unwrapped = &Type->GetNormalType();
+    while (Unwrapped->GetKind() == uLang::ETypeKind::Pointer || Unwrapped->GetKind() == uLang::ETypeKind::Reference)
+    {
+        Unwrapped = &static_cast<const uLang::CInvariantValueType*>(Unwrapped)->PositiveValueType()->GetNormalType();
+    }
+
+    const uLang::CNormalType& Normal = *Unwrapped;
+    switch (Normal.GetKind())
+    {
+    case uLang::ETypeKind::Logic:
+        return VH_TYPE_LOGIC;
+    case uLang::ETypeKind::Int:
+        return VH_TYPE_INT;
+    case uLang::ETypeKind::Float:
+        return VH_TYPE_FLOAT;
+    case uLang::ETypeKind::Char8:
+    case uLang::ETypeKind::Char32:
+        return VH_TYPE_CHAR;
+    case uLang::ETypeKind::Array:
+        return static_cast<const uLang::CArrayType&>(Normal).IsStringType() ? VH_TYPE_STRING : VH_TYPE_ARRAY;
+    case uLang::ETypeKind::Map:
+        return VH_TYPE_MAP;
+    case uLang::ETypeKind::Tuple:
+        return VH_TYPE_TUPLE;
+    case uLang::ETypeKind::Option:
+        return VH_TYPE_OPTION;
+    default:
+        return VH_TYPE_VOID;
+    }
+}
+} // namespace
+
+namespace {
+
+/// Reads FieldName off Object. Returns false for a field the shape does not carry, and for any
+/// Verse type with no vh_value counterpart.
+/// The decorated shape key for a member of Object's own class. Factored out because the read and
+/// write paths must agree on it exactly.
+AUTORTFM_DISABLE FUtf8String ShapeKeyFor(UObject* Object, FUtf8StringView FieldName)
+{
+    return FUtf8String(UTF8TEXT("(")) + ScriptVersePath + UTF8TEXT("/")
+        + FUtf8String(Object->GetClass()->GetName()) + UTF8TEXT(":)") + FUtf8String(FieldName);
+}
+
+AUTORTFM_DISABLE bool ReadFieldOf(UObject* Object, FUtf8StringView FieldName, vh_value& OutValue, FUtf8String& OutStorage)
+{
+    if (!Object)
+    {
+        return false;
+    }
+
+    OutValue = vh_value{};
+    OutValue.VariantTag = VH_VARIANT_NIL;
+    OutStorage.Reset();
+
+    bool bRead = false;
+    Verse::FRunningContext Context = Verse::FRunningContextPromise{};
+    Context.EnterVM([&] {
+        // The shape lookup is done here rather than through LoadField's by-name overload, which
+        // passes Shape.GetField straight into PeekField -- and PeekField asserts on the null that
+        // a missing field returns. Asking the shape first is what makes "no such member" an
+        // answer instead of a crash.
+        //
+        // The shape keys a data member by its *declaring* class's decorated name --
+        // `(/user@localhost/exports:)Speed`, never a bare `Speed` -- the same decoration
+        // FindGodotClass applies to class names and VerseScriptInstance applies to methods.
+        // GetClassExports only ever harvests a class's own members, so the object's own class is
+        // always the right qualifier.
+        Verse::VShape& Shape = UVerseClass::GetShapeForLoadField(Context, Object->GetClass());
+        Verse::VUniqueString& Name = Verse::VUniqueString::New(Context, FUtf8StringView(ShapeKeyFor(Object, FieldName)));
+        const Verse::VShape::VEntry* Field = Shape.GetField(Name);
+        if (Field == nullptr)
+        {
+            return;
+        }
+
+        // PeekField over LoadField: an unset member reads as uninitialized here, where LoadField
+        // would raise a Verse runtime error. An inspector asking for a value it may not get is
+        // not an error condition.
+        //
+        // A `var` is stored as a reference, and PeekField hands the reference back rather than
+        // what it points at -- deliberately, since that is what an assignment needs. Both spellings
+        // have to be followed to reach a value: FPropertyVar answers PeekField with a fresh
+        // VNativeRef, and a var with no native representation holds a VRef in its VRestValue slot.
+        Verse::VValue Value = Field->Type == Verse::EFieldType::FPropertyVar
+            ? Verse::VNativeRef::Peek(Context, Object, Field->UProperty)
+            : UVerseClass::PeekField(Context, Object, Field);
+        if (Verse::VRef* Ref = Value.DynamicCast<Verse::VRef>())
+        {
+            Value = Ref->Get(Context);
+        }
+        if (Value.IsUninitialized())
+        {
+            return;
+        }
+
+        if (Value.IsLogic())
+        {
+            OutValue.Type = VH_TYPE_LOGIC;
+            OutValue.Logic = Value.AsBool() ? 1 : 0;
+        }
+        else if (Value.IsInt())
+        {
+            OutValue.Type = VH_TYPE_INT;
+            OutValue.Int = Value.AsInt().AsInt64();
+        }
+        else if (Value.IsFloat())
+        {
+            OutValue.Type = VH_TYPE_FLOAT;
+            OutValue.Float = Value.AsFloat().AsDouble();
+        }
+        else if (const Verse::VArrayBase* Array = Value.DynamicCast<Verse::VArrayBase>())
+        {
+            // Verse `string` is `[]char`, so a string arrives as an array of char8. VArrayBase
+            // rather than VArray because a `var` of a container type holds a VMutableArray -- the
+            // mutability lives in the container itself, not in a reference around it.
+            OutStorage = FUtf8String(Array->AsStringView());
+            OutValue.Type = VH_TYPE_STRING;
+            OutValue.String.Utf8 = reinterpret_cast<const char*>(*OutStorage);
+            OutValue.String.Len = OutStorage.Len();
+        }
+        else
+        {
+            return;
+        }
+
+        bRead = true;
+    });
+    return bRead;
+}
+
+} // namespace
+
+namespace {
+
+/// Whether ClassName declares FieldName as a `var`, per the semantic program.
+///
+/// The shape cannot answer this reliably -- its EFieldType says where a field is stored, not what
+/// Verse permits -- so the question goes back to the definition that declared it.
+AUTORTFM_DISABLE bool IsVarMember(FUtf8StringView ClassName, FUtf8StringView FieldName)
+{
+    if (!GIde.IsValid())
+    {
+        return false;
+    }
+    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
+    if (!BuildManager.IsValid())
+    {
+        return false;
+    }
+    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
+
+    const FUtf8String ClassPath = FUtf8String(ScriptVersePath) + UTF8TEXT("/") + FUtf8String(ClassName);
+    const uLang::CClass* Class = Program->FindDefinitionByVersePath<uLang::CClass>(
+        FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath));
+    if (!Class)
+    {
+        return false;
+    }
+
+    for (const uLang::TSRef<uLang::CDataDefinition>& Member : Class->GetDefinitionsOfKind<uLang::CDataDefinition>())
+    {
+        if (FUtf8StringView(Member->AsNameCString()).Equals(FieldName))
+        {
+            return Member->IsVar();
+        }
+    }
+    return false;
+}
+
+/// Assigning writes *through* a var's reference, the way `set X = ...` does. Initializing writes
+/// over the storage itself, the way the constructor does, which is the only way to give a non-var
+/// a value -- and is wrong for a var, because it would replace the reference with a bare value and
+/// leave the next `set` dereferencing something that is not a ref.
+enum class EFieldWrite : uint8
+{
+    Assign,
+    Initialize,
+};
+
+AUTORTFM_DISABLE bool WriteFieldOf(UObject* Object, FUtf8StringView FieldName, const vh_value& Value, EFieldWrite Mode)
+{
+    if (!Object)
+    {
+        return false;
+    }
+
+    if (Mode == EFieldWrite::Assign && !IsVarMember(FUtf8String(Object->GetClass()->GetName()), FieldName))
+    {
+        return false;
+    }
+
+    bool bWrote = false;
+    Verse::FRunningContext Context = Verse::FRunningContextPromise{};
+    Context.EnterVM([&] {
+        Verse::VShape& Shape = UVerseClass::GetShapeForLoadField(Context, Object->GetClass());
+        Verse::VUniqueString& Name = Verse::VUniqueString::New(Context, FUtf8StringView(ShapeKeyFor(Object, FieldName)));
+        const Verse::VShape::VEntry* Field = Shape.GetField(Name);
+
+        // A Constant entry lives in the shape itself rather than in the object, so it is shared by
+        // every instance and cannot be assigned to.
+        if (Field == nullptr || !Field->IsProperty())
+        {
+            return;
+        }
+
+        // A member's storage already holds a value in the exact representation the compiled code
+        // expects, and matching it is the whole job: the VM does not re-check a slot it is told
+        // holds a string, so a plausible-looking value of the wrong cell type reads back fine and
+        // dies later inside the interpreter. Everything below is chosen against Current.
+        Verse::VRestValue* const Slot = Field->Type == Verse::EFieldType::FVerseProperty
+            ? Field->UProperty->ContainerPtrToValuePtr<Verse::VRestValue>(Object)
+            : nullptr;
+        const Verse::VValue Current = Slot ? Slot->Get(Context)
+                                           : Verse::VNativeRef::Peek(Context, Object, Field->UProperty);
+
+        Verse::VValue NewValue;
+        switch (Value.Type)
+        {
+        case VH_TYPE_LOGIC:
+            NewValue = Verse::VValue::FromBool(Value.Logic != 0);
+            break;
+        case VH_TYPE_INT:
+            NewValue = Verse::VValue(Verse::VInt(Context, Value.Int));
+            break;
+        case VH_TYPE_FLOAT:
+            NewValue = Verse::VValue(Verse::VFloat(Value.Float));
+            break;
+        case VH_TYPE_STRING:
+        {
+            // Verse hangs the mutability of a container off the container, not off a reference
+            // around it: `var Label:string` holds a VMutableArray where a plain one holds a VArray.
+            const FUtf8StringView Utf8(reinterpret_cast<const UTF8CHAR*>(Value.String.Utf8), Value.String.Len);
+            Verse::VRef* const Box = Current.DynamicCast<Verse::VRef>();
+            const Verse::VValue Inner = Box ? Box->Get(Context) : Current;
+            NewValue = Inner.IsCellOfType<Verse::VMutableArray>()
+                ? Verse::VValue(Verse::VMutableArray::New(Context, Utf8))
+                : Verse::VValue(Verse::VArray::New(Context, Utf8));
+            break;
+        }
+        default:
+            return;
+        }
+
+        if (Slot)
+        {
+            // A var of a scalar type puts a VRef box in the slot and the value inside it; a var of
+            // a container type puts the mutable container straight in. Writing over the box is what
+            // the interpreter later dies on with "Unexpected ref type".
+            if (Verse::VRef* Ref = Current.DynamicCast<Verse::VRef>())
+            {
+                Ref->Set(Context, NewValue);
+            }
+            else
+            {
+                Slot->Set(Context, NewValue);
+            }
+            bWrote = true;
+        }
+        else
+        {
+            // Both FProperty and FPropertyVar are native storage behind an FProperty, and
+            // VNativeRef::Set is the write for either -- for a var it is the assignment, and for a
+            // non-var it is what the interpreter itself uses to initialize one.
+            const Verse::FOpResult Result = Verse::VNativeRef::New(Context, Object, Field->UProperty).Set(Context, NewValue);
+            bWrote = Result.IsReturn();
+        }
+    });
+    return bWrote;
+}
+
+} // namespace
+
+AUTORTFM_DISABLE bool GodotVerse::WriteInstanceField(FInstance* Instance, FUtf8StringView FieldName, const vh_value& Value)
+{
+    if (!Instance || !Instance->Object.IsValid())
+    {
+        return false;
+    }
+    return WriteFieldOf(Instance->Object.Get(), FieldName, Value,
+                        Instance->bSealed ? EFieldWrite::Assign : EFieldWrite::Initialize);
+}
+
+AUTORTFM_DISABLE bool GodotVerse::ReadInstanceField(const FInstance* Instance, FUtf8StringView FieldName, vh_value& OutValue, FUtf8String& OutStorage)
+{
+    if (!Instance || !Instance->Object.IsValid())
+    {
+        return false;
+    }
+    return ReadFieldOf(Instance->Object.Get(), FieldName, OutValue, OutStorage);
+}
+
+AUTORTFM_DISABLE bool GodotVerse::ReadClassDefaultField(FUtf8StringView ClassName, FUtf8StringView FieldName, vh_value& OutValue, FUtf8String& OutStorage)
+{
+    UClass* NativeClass = FindGodotClass(ClassName);
+    if (!NativeClass)
+    {
+        return false;
+    }
+    // A transient instance, not the CDO. UVerseClass runs the Verse constructor from
+    // PostInitInstance, which NewObject drives and class-default-object construction does not, so
+    // a CDO's members read back uninitialized. An instance is the only place a declared default
+    // actually exists. Handle is left unset: reading a plain data member never consults it.
+    TStrongObjectPtr<UObject> Defaults(NewObject<UObject>(GetTransientPackage(), NativeClass));
+    if (!Defaults.IsValid())
+    {
+        return false;
+    }
+    return ReadFieldOf(Defaults.Get(), FieldName, OutValue, OutStorage);
+}
+
+AUTORTFM_DISABLE bool GodotVerse::GetClassExports(FUtf8StringView ClassName, TArray<FExportDesc>& OutExports)
+{
+    OutExports.Reset();
+
+    if (!GIde.IsValid())
+    {
+        return false;
+    }
+
+    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
+    if (!BuildManager.IsValid())
+    {
+        return false;
+    }
+    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
+
+    // Absent when VerseSimulationMetadata is not in the package set, which also means no script
+    // could have applied the attribute -- an empty list would claim the script exports nothing,
+    // so this reports "cannot answer" instead.
+    const uLang::CClass* EditableAttribute =
+        Program->FindDefinitionByVersePath<uLang::CClass>(EditableAttributePath);
+    if (!EditableAttribute)
+    {
+        return false;
+    }
+
+    const FUtf8String ClassPath = FUtf8String(ScriptVersePath) + UTF8TEXT("/") + FUtf8String(ClassName);
+    const uLang::CClass* Class = Program->FindDefinitionByVersePath<uLang::CClass>(
+        FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath));
+    if (!Class)
+    {
+        return false;
+    }
+
+    // Absent when VerseSimulationMetadata predates these attributes; a member simply gets no hint
+    // rather than the whole harvest failing, which is why these are not checked like the one above.
+    const uLang::CClass* ClampMinAttribute = Program->FindDefinitionByVersePath<uLang::CClass>(ClampMinAttributePath);
+    const uLang::CClass* ClampMaxAttribute = Program->FindDefinitionByVersePath<uLang::CClass>(ClampMaxAttributePath);
+    const uLang::CClass* CategoryAttribute = Program->FindDefinitionByVersePath<uLang::CClass>(CategoryAttributePath);
+
+    // Only the class's own members. An inherited export would have to be looked up through the
+    // godot_object hierarchy, and every one of those is generated API rather than script state.
+    for (const uLang::TSRef<uLang::CDataDefinition>& Member : Class->GetDefinitionsOfKind<uLang::CDataDefinition>())
+    {
+        if (!Member->HasAttributeSubclass(EditableAttribute, *Program))
+        {
+            continue;
+        }
+
+        OutExports.Add(FExportDesc{
+            FUtf8String(Member->AsNameCString()),
+            VhTypeForVerseType(Member->GetType()),
+            Member->IsVar(),
+            AttributeText(*Member, ClampMinAttribute, *Program),
+            AttributeText(*Member, ClampMaxAttribute, *Program),
+            AttributeText(*Member, CategoryAttribute, *Program)});
+    }
+    return true;
 }
 
 AUTORTFM_DISABLE GodotVerse::FInstance* GodotVerse::Instantiate(FUtf8StringView ClassName, int64 Handle)
@@ -430,13 +869,15 @@ AUTORTFM_DISABLE int32 CallMethod(const GodotVerse::FInstance* Instance, FUtf8St
 }
 }
 
-AUTORTFM_DISABLE int32 GodotVerse::InstanceCallVoid(const FInstance* Instance, FUtf8StringView DecoratedName)
+AUTORTFM_DISABLE int32 GodotVerse::InstanceCallVoid(FInstance* Instance, FUtf8StringView DecoratedName)
 {
+    Instance->bSealed = true;
     return CallMethod<TVerseFunction<void()>>(Instance, DecoratedName);
 }
 
-AUTORTFM_DISABLE int32 GodotVerse::InstanceCallVoidFloat(const FInstance* Instance, FUtf8StringView DecoratedName, double Arg)
+AUTORTFM_DISABLE int32 GodotVerse::InstanceCallVoidFloat(FInstance* Instance, FUtf8StringView DecoratedName, double Arg)
 {
+    Instance->bSealed = true;
     return CallMethod<TVerseFunction<void(double)>>(Instance, DecoratedName, Arg);
 }
 

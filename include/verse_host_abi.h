@@ -20,7 +20,7 @@
 extern "C" {
 #endif
 
-#define VH_ABI_VERSION 3
+#define VH_ABI_VERSION 8
 
 typedef int32_t vh_bool;
 
@@ -306,6 +306,66 @@ VH_ATTR VH_API vh_bool vh_instance_has_function(vh_instance* Instance, const cha
 VH_ATTR VH_API int32_t vh_instance_call_void(vh_instance* Instance, const char* DecoratedName);
 VH_ATTR VH_API int32_t vh_instance_call_void_float(vh_instance* Instance, const char* DecoratedName, double Arg);
 
+/* ---------------------------------------------------------- class exports -- */
+
+/* One data member of a script's class carrying `@godot_export`. */
+typedef struct vh_export_desc
+{
+	const char* NameUtf8; /* not null terminated */
+	int32_t NameLen;
+	vh_type Type;
+	vh_bool IsVar; /* a `var` member; anything else can only be written before the instance seals */
+
+	/* Inspector hints, from the metadata attributes a member also carries. Each is empty when the
+	 * attribute is absent. These arrive as the strings Verse spelled them with -- `@clamp_min`
+	 * and friends take a string argument, not a number -- so the consumer parses them and a typo
+	 * is a bad hint rather than a compile error. */
+	const char* ClampMinUtf8;
+	int32_t ClampMinLen;
+	const char* ClampMaxUtf8;
+	int32_t ClampMaxLen;
+	const char* CategoryUtf8;
+	int32_t CategoryLen;
+} vh_export_desc;
+
+/* Lists the `@godot_export` data members of a top-level class.
+ *
+ * Read out of the semantic program the last analysis pass left behind, NOT out of the running
+ * bytecode -- so this answers for the source as vh_check_project last saw it, and a member added
+ * to a file since then shows up here while being absent from every live instance. That is the
+ * point: analysis may re-run as often as the editor types, while vh_compile_project may not run
+ * twice in a process, so this is the only export list that can refresh without a restart.
+ *
+ * OutExports points into storage owned by the host, valid until the next call to this function.
+ * Returns VH_ERR_NOT_FOUND when the class does not exist in the analysed program. */
+VH_ATTR VH_API int32_t vh_class_export_list(const char* ClassNameUtf8, const vh_export_desc** OutExports, int32_t* OutCount);
+
+/* Reads one data member off a live instance.
+ *
+ * Unlike the export list this does go through the VM, because a value only exists there. Only
+ * logic, int, float and string come across; a member of any other Verse type reports
+ * VH_ERR_NOT_FOUND rather than a half-converted value.
+ *
+ * OutValue points into storage owned by the host, valid until the next call to either field
+ * reader. Returns VH_ERR_NOT_FOUND for a field the instance's shape does not carry. */
+VH_ATTR VH_API int32_t vh_instance_get_field(vh_instance* Instance, const char* NameUtf8, const vh_value** OutValue);
+
+/* The same read against the class default object, whose Verse constructor has already run --
+ * which is the only place a member's declared default can be got. Same storage lifetime. */
+VH_ATTR VH_API int32_t vh_class_default_field(const char* ClassNameUtf8, const char* NameUtf8, const vh_value** OutValue);
+
+/* Writes one data member on a live instance. Same four types the reader covers.
+ *
+ * An instance is *unsealed* from vh_instantiate until the first vh_instance_call_*, and sealing is
+ * one-way. While unsealed, any exported member may be written: that is initialization, and it is
+ * how a scene's stored values reach the object. Once sealed, only a `var` may be written -- a
+ * non-var is immutable by the script author's own declaration, and no Verse code has yet run that
+ * could have observed the value being replaced.
+ *
+ * Returns VH_ERR_NOT_FOUND for a member that is absent, stored as a shape constant, or a non-var
+ * on a sealed instance. */
+VH_ATTR VH_API int32_t vh_instance_set_field(vh_instance* Instance, const char* NameUtf8, const vh_value* Value);
+
 /* Signatures for GetProcAddress on the consumer side. */
 typedef int32_t (*vh_abi_version_fn)(void);
 typedef int32_t (*vh_init_fn)(const vh_init_desc*);
@@ -326,6 +386,10 @@ typedef void (*vh_release_instance_fn)(vh_instance*);
 typedef vh_bool (*vh_instance_has_function_fn)(vh_instance*, const char*);
 typedef int32_t (*vh_instance_call_void_fn)(vh_instance*, const char*);
 typedef int32_t (*vh_instance_call_void_float_fn)(vh_instance*, const char*, double);
+typedef int32_t (*vh_class_export_list_fn)(const char*, const vh_export_desc**, int32_t*);
+typedef int32_t (*vh_instance_get_field_fn)(vh_instance*, const char*, const vh_value**);
+typedef int32_t (*vh_class_default_field_fn)(const char*, const char*, const vh_value**);
+typedef int32_t (*vh_instance_set_field_fn)(vh_instance*, const char*, const vh_value*);
 
 #ifdef __cplusplus
 }

@@ -6,6 +6,7 @@
 #include "Containers/Array.h"
 #include "Containers/UnrealString.h"
 #include "VerseString.h"
+#include "verse_host_abi.h"
 
 namespace GodotVerse {
 
@@ -56,8 +57,57 @@ AUTORTFM_DISABLE FInstance* Instantiate(FUtf8StringView ClassName, int64 Handle)
 AUTORTFM_DISABLE void ReleaseInstance(FInstance* Instance);
 
 AUTORTFM_DISABLE bool InstanceHasFunction(const FInstance* Instance, FUtf8StringView DecoratedName);
-AUTORTFM_DISABLE int32 InstanceCallVoid(const FInstance* Instance, FUtf8StringView DecoratedName);
-AUTORTFM_DISABLE int32 InstanceCallVoidFloat(const FInstance* Instance, FUtf8StringView DecoratedName, double Arg);
+
+/// Calling into the instance seals it: see WriteInstanceField.
+AUTORTFM_DISABLE int32 InstanceCallVoid(FInstance* Instance, FUtf8StringView DecoratedName);
+AUTORTFM_DISABLE int32 InstanceCallVoidFloat(FInstance* Instance, FUtf8StringView DecoratedName, double Arg);
+
+/// One `@godot_export` data member, harvested from the semantic program rather than the VM.
+struct FExportDesc
+{
+    FUtf8String Name;
+    vh_type Type;
+    bool bIsVar;
+
+    /// Inspector hints, empty when the member carries no such attribute. Strings because that is
+    /// what the attributes hold: `@clamp_min("0.0")` takes a string, and SOL-972 means a string
+    /// argument is the only attribute payload that can be read back at all.
+    FUtf8String ClampMin;
+    FUtf8String ClampMax;
+    FUtf8String Category;
+};
+
+/// Fills OutExports with the `@godot_export` data members ClassName declares, reading the
+/// semantic program the last analysis pass left behind.
+///
+/// This is deliberately not routed through the VM. Analysis re-runs on every keystroke while
+/// code generation may happen once per process, so the semantic program is the only view of a
+/// script's shape that can change without restarting the editor -- which is what lets Godot
+/// refresh a script's exports live. The cost is that it describes source, not running state.
+///
+/// False means the class is not in the analysed program at all; a class with no exports is true
+/// with an empty array.
+AUTORTFM_DISABLE bool GetClassExports(FUtf8StringView ClassName, TArray<FExportDesc>& OutExports);
+
+/// Reads one data member off a live instance into the ABI's value shape.
+///
+/// String bytes are copied into OutStorage rather than pointed at: VArray::AsStringView points
+/// into a GC-managed cell, and the vh_value outlives the VM scope it was read in.
+AUTORTFM_DISABLE bool ReadInstanceField(const FInstance* Instance, FUtf8StringView FieldName, vh_value& OutValue, FUtf8String& OutStorage);
+
+/// The same read against the class default object, whose Verse constructor has already run.
+/// That is where a member's declared default has to come from: the semantic program can say only
+/// that an initializer exists (CDataDefinition::HasInitializer), not what it evaluates to.
+AUTORTFM_DISABLE bool ReadClassDefaultField(FUtf8StringView ClassName, FUtf8StringView FieldName, vh_value& OutValue, FUtf8String& OutStorage);
+
+/// Writes one data member on a live instance. Covers the same four types the read path does.
+///
+/// A `var` may be written at any time. A non-var may be written only while the instance is
+/// *unsealed* -- between Instantiate and the first call into it -- which is the window Godot uses
+/// to apply the values a scene stored. That keeps Verse's immutability honest: a non-var still
+/// never changes once the script can observe it, so the inspector value reads as an initializer
+/// rather than a mutation. Sealing is one-way and happens on the first InstanceCall*.
+AUTORTFM_DISABLE bool WriteInstanceField(FInstance* Instance, FUtf8StringView FieldName, const vh_value& Value);
 
 AUTORTFM_DISABLE bool HasFunction(const FScript* Script, FUtf8StringView DecoratedName);
 AUTORTFM_DISABLE int32 RunMain(const TArray<verse::string>& Args, int64& OutExitCode);

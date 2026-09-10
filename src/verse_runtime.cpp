@@ -340,6 +340,90 @@ bool VerseRuntime::has_class(const String &p_class_name) const {
 	return host.HasClass(p_class_name.utf8().get_data()) != 0;
 }
 
+TypedArray<Dictionary> VerseRuntime::class_exports(const String &p_class_name) const {
+	TypedArray<Dictionary> exports;
+	if (!host.is_loaded()) {
+		return exports;
+	}
+
+	const vh_export_desc *descs = nullptr;
+	int32_t count = 0;
+	if (host.ClassExportList(p_class_name.utf8().get_data(), &descs, &count) != VH_OK) {
+		return exports;
+	}
+
+	for (int32_t i = 0; i < count; i++) {
+		Dictionary entry;
+		entry["name"] = String::utf8(descs[i].NameUtf8, descs[i].NameLen);
+		entry["type"] = (int64_t)descs[i].Type;
+		entry["is_var"] = descs[i].IsVar != 0;
+		entry["clamp_min"] = String::utf8(descs[i].ClampMinUtf8, descs[i].ClampMinLen);
+		entry["clamp_max"] = String::utf8(descs[i].ClampMaxUtf8, descs[i].ClampMaxLen);
+		entry["category"] = String::utf8(descs[i].CategoryUtf8, descs[i].CategoryLen);
+		exports.push_back(entry);
+	}
+	return exports;
+}
+
+Variant VerseRuntime::instance_field(vh_instance *p_instance, const String &p_name) const {
+	if (!host.is_loaded() || p_instance == nullptr) {
+		return Variant();
+	}
+	const vh_value *value = nullptr;
+	if (host.InstanceGetField(p_instance, p_name.utf8().get_data(), &value) != VH_OK || value == nullptr) {
+		return Variant();
+	}
+	return vh_to_variant(*value);
+}
+
+Variant VerseRuntime::class_default_field(const String &p_class_name, const String &p_name) const {
+	if (!host.is_loaded()) {
+		return Variant();
+	}
+	const vh_value *value = nullptr;
+	if (host.ClassDefaultField(p_class_name.utf8().get_data(), p_name.utf8().get_data(), &value) != VH_OK || value == nullptr) {
+		return Variant();
+	}
+	return vh_to_variant(*value);
+}
+
+bool VerseRuntime::set_instance_field(vh_instance *p_instance, const String &p_name, const Variant &p_value) {
+	if (!host.is_loaded() || p_instance == nullptr) {
+		return false;
+	}
+
+	vh_value value = {};
+	value.VariantTag = VH_VARIANT_NIL;
+
+	// Held until the call returns: vh_value borrows the bytes rather than owning them.
+	CharString text;
+
+	switch (p_value.get_type()) {
+		case Variant::BOOL:
+			value.Type = VH_TYPE_LOGIC;
+			value.Logic = ((bool)p_value) ? 1 : 0;
+			break;
+		case Variant::INT:
+			value.Type = VH_TYPE_INT;
+			value.Int = (int64_t)p_value;
+			break;
+		case Variant::FLOAT:
+			value.Type = VH_TYPE_FLOAT;
+			value.Float = (double)p_value;
+			break;
+		case Variant::STRING:
+			text = String(p_value).utf8();
+			value.Type = VH_TYPE_STRING;
+			value.String.Utf8 = text.get_data();
+			value.String.Len = text.length();
+			break;
+		default:
+			return false;
+	}
+
+	return host.InstanceSetField(p_instance, p_name.utf8().get_data(), &value) == VH_OK;
+}
+
 vh_instance *VerseRuntime::instantiate(const String &p_class_name, int64_t p_object_id) {
 	if (!host.is_loaded()) {
 		return nullptr;
@@ -551,6 +635,10 @@ void VerseRuntime::on_diagnostic(void *p_ctx, const vh_diagnostic *p_diagnostic)
 		TypedArray<Dictionary> for_file = sink.has(file) ? TypedArray<Dictionary>(sink[file]) : TypedArray<Dictionary>();
 		for_file.push_back(error);
 		sink[file] = for_file;
+
+		// Whoever installed the sink decides what reaches the log. Analysis re-runs on every
+		// keystroke and every save, so logging from here repeats one error indefinitely.
+		return;
 	}
 
 	const String formatted = file + String(":") + String::num_int64(p_diagnostic->Line) + String(":") + String::num_int64(p_diagnostic->Column) + String(": ") + message;

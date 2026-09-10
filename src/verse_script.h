@@ -3,6 +3,8 @@
 // _get_language returns a ScriptLanguage *, and GDCLASS's register_virtuals needs the complete
 // type to encode it; script_extension.hpp only forward-declares it.
 #include <godot_cpp/classes/script_extension.hpp>
+
+#include <vector>
 #include <godot_cpp/classes/script_language.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/string.hpp>
@@ -86,8 +88,19 @@ public:
 	bool instance_has_function(vh_instance *p_instance, const char *p_decorated_name) const;
 	godot::Error call_instance_void(vh_instance *p_instance, const char *p_decorated_name) const;
 	godot::Error call_instance_void_float(vh_instance *p_instance, const char *p_decorated_name, double p_arg) const;
+	godot::Variant instance_field(vh_instance *p_instance, const godot::StringName &p_name) const;
+	bool set_instance_field(vh_instance *p_instance, const godot::StringName &p_name, const godot::Variant &p_value) const;
+
+	// Pushes the export list and its default values into every placeholder instance this script
+	// has out. A non-tool script gets placeholders rather than real instances in the editor, and
+	// a placeholder shows nothing at all until it is told what to show.
+	void update_placeholders();
 
 private:
+	// Borrowed: Godot owns each placeholder and tells us through _placeholder_erased when one
+	// goes away.
+	mutable std::vector<void *> placeholders;
+
 	godot::String source_code;
 	vh_script *handle = nullptr;
 	bool valid = false;

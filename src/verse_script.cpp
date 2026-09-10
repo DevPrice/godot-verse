@@ -22,6 +22,12 @@ VerseRuntime *get_runtime() {
 	return Object::cast_to<VerseRuntime>(Engine::get_singleton()->get_singleton("VerseRuntime"));
 }
 
+GDExtensionInterfacePlaceholderScriptInstanceUpdate get_placeholder_instance_update_fn() {
+	static GDExtensionInterfacePlaceholderScriptInstanceUpdate fn = (GDExtensionInterfacePlaceholderScriptInstanceUpdate)
+			gdextension_interface::get_proc_address("placeholder_script_instance_update");
+	return fn;
+}
+
 GDExtensionInterfacePlaceholderScriptInstanceCreate get_placeholder_instance_create_fn() {
 	static GDExtensionInterfacePlaceholderScriptInstanceCreate fn = (GDExtensionInterfacePlaceholderScriptInstanceCreate)
 			gdextension_interface::get_proc_address("placeholder_script_instance_create");
@@ -83,6 +89,10 @@ Error VerseScript::compile() {
 	handle = runtime->open_script(ProjectSettings::get_singleton()->globalize_path(path));
 	valid = handle != nullptr && build_status == OK && language->diagnostics_for(path).is_empty();
 	class_shaped = valid && runtime->has_class(verse_class_name());
+
+	// The export list only exists once the project has been analysed, and a placeholder created
+	// before that got an empty one.
+	update_placeholders();
 	return valid ? OK : ERR_COMPILATION_FAILED;
 }
 
@@ -97,6 +107,16 @@ String VerseScript::verse_class_name() const {
 vh_instance *VerseScript::make_instance(int64_t p_object_id) const {
 	VerseRuntime *runtime = get_runtime();
 	return runtime != nullptr ? runtime->instantiate(verse_class_name(), p_object_id) : nullptr;
+}
+
+Variant VerseScript::instance_field(vh_instance *p_instance, const StringName &p_name) const {
+	VerseRuntime *runtime = get_runtime();
+	return runtime != nullptr ? runtime->instance_field(p_instance, String(p_name)) : Variant();
+}
+
+bool VerseScript::set_instance_field(vh_instance *p_instance, const StringName &p_name, const Variant &p_value) const {
+	VerseRuntime *runtime = get_runtime();
+	return runtime != nullptr && runtime->set_instance_field(p_instance, String(p_name), p_value);
 }
 
 void VerseScript::free_instance(vh_instance *p_instance) const {
@@ -154,6 +174,12 @@ bool VerseScript::_editor_can_reload_from_file() {
 }
 
 void VerseScript::_placeholder_erased(void *p_placeholder) {
+	for (size_t i = 0; i < placeholders.size(); i++) {
+		if (placeholders[i] == p_placeholder) {
+			placeholders.erase(placeholders.begin() + i);
+			return;
+		}
+	}
 }
 
 StringName VerseScript::_get_doc_class_name() const {
@@ -212,7 +238,12 @@ void *VerseScript::_placeholder_instance_create(Object *p_for_object) const {
 		return nullptr;
 	}
 
-	return create_placeholder(language->_owner, _owner, p_for_object->_owner);
+	void *placeholder = create_placeholder(language->_owner, _owner, p_for_object->_owner);
+	if (placeholder != nullptr) {
+		placeholders.push_back(placeholder);
+		const_cast<VerseScript *>(this)->update_placeholders();
+	}
+	return placeholder;
 }
 
 bool VerseScript::_instance_has(Object *p_object) const {
@@ -282,14 +313,46 @@ TypedArray<Dictionary> VerseScript::_get_script_signal_list() const {
 }
 
 bool VerseScript::_has_property_default_value(const StringName &p_property) const {
-	return false;
+	return _get_property_default_value(p_property).get_type() != Variant::NIL;
 }
 
 Variant VerseScript::_get_property_default_value(const StringName &p_property) const {
-	return Variant();
+	VerseRuntime *runtime = get_runtime();
+	if (!class_shaped || runtime == nullptr) {
+		return Variant();
+	}
+	return runtime->class_default_field(verse_class_name(), String(p_property));
 }
 
+// The export list is recomputed from the semantic program on every _get_script_property_list, so
+// there is no cache here to invalidate -- but a placeholder holds its own copy and has to be
+// handed the new one.
 void VerseScript::_update_exports() {
+	update_placeholders();
+}
+
+void VerseScript::update_placeholders() {
+	GDExtensionInterfacePlaceholderScriptInstanceUpdate update = get_placeholder_instance_update_fn();
+	if (update == nullptr || placeholders.empty()) {
+		return;
+	}
+
+	const TypedArray<Dictionary> properties = _get_script_property_list();
+
+	Dictionary values;
+	for (int64_t i = 0; i < properties.size(); i++) {
+		const Dictionary property = properties[i];
+		// A group header is a layout marker, not a property, and has no value to report.
+		if (((int64_t)property["usage"] & PROPERTY_USAGE_GROUP) != 0) {
+			continue;
+		}
+		const StringName name = property["name"];
+		values[name] = _get_property_default_value(name);
+	}
+
+	for (void *placeholder : placeholders) {
+		update(placeholder, (GDExtensionConstTypePtr)&properties, (GDExtensionConstTypePtr)&values);
+	}
 }
 
 TypedArray<Dictionary> VerseScript::_get_script_method_list() const {
@@ -304,8 +367,99 @@ TypedArray<Dictionary> VerseScript::_get_script_method_list() const {
 	return methods;
 }
 
+namespace {
+Variant::Type variant_type_for(int64_t p_vh_type) {
+	switch ((vh_type)p_vh_type) {
+		case VH_TYPE_LOGIC:
+			return Variant::BOOL;
+		case VH_TYPE_INT:
+			return Variant::INT;
+		case VH_TYPE_FLOAT:
+			return Variant::FLOAT;
+		case VH_TYPE_STRING:
+			return Variant::STRING;
+		default:
+			return Variant::NIL;
+	}
+}
+Dictionary property_for(const Dictionary &p_entry, Variant::Type p_type) {
+	const String clamp_min = p_entry["clamp_min"];
+	const String clamp_max = p_entry["clamp_max"];
+	// Godot's range hint needs both ends, and @clamp_min carries a string rather than a number,
+	// so a member is only ranged when both parse. Anything else falls back to a plain field.
+	const bool ranged = (p_type == Variant::FLOAT || p_type == Variant::INT) &&
+			clamp_min.is_valid_float() && clamp_max.is_valid_float();
+
+	Dictionary property;
+	property["name"] = p_entry["name"];
+	property["type"] = (int64_t)p_type;
+	property["hint"] = (int64_t)(ranged ? PROPERTY_HINT_RANGE : PROPERTY_HINT_NONE);
+	property["hint_string"] = ranged ? (clamp_min + String(",") + clamp_max) : String();
+	// A non-var is editable here too, because the host applies a stored value while the instance
+	// is still unsealed -- before any Verse code has run. That is initialization, not mutation, so
+	// it keeps the author's `var`/non-var distinction rather than reaching around it. The
+	// difference the inspector cannot show is that a non-var written *after* _ready is refused,
+	// which only a remote inspector on a running game can reach.
+	property["usage"] = (int64_t)(PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_SCRIPT_VARIABLE);
+	return property;
+}
+
+} // namespace
+
 TypedArray<Dictionary> VerseScript::_get_script_property_list() const {
-	return TypedArray<Dictionary>();
+	TypedArray<Dictionary> properties;
+
+	VerseRuntime *runtime = get_runtime();
+	if (!class_shaped || runtime == nullptr) {
+		return properties;
+	}
+
+	const TypedArray<Dictionary> exports = runtime->class_exports(verse_class_name());
+
+	// Godot has no per-property group field: a group is a PROPERTY_USAGE_GROUP entry that claims
+	// every property listed after it, so members sharing an @category have to be emitted as one
+	// run. The empty category goes first and stays ungrouped.
+	PackedStringArray categories;
+	categories.push_back(String());
+	for (int64_t i = 0; i < exports.size(); i++) {
+		const String category = Dictionary(exports[i])["category"];
+		if (!category.is_empty() && !categories.has(category)) {
+			categories.push_back(category);
+		}
+	}
+
+	for (int64_t c = 0; c < categories.size(); c++) {
+		const String category = categories[c];
+		bool group_emitted = category.is_empty();
+
+		for (int64_t i = 0; i < exports.size(); i++) {
+			const Dictionary entry = exports[i];
+			if (String(entry["category"]) != category) {
+				continue;
+			}
+
+			const Variant::Type type = variant_type_for(entry["type"]);
+			// A Verse type with no Variant counterpart -- char, a map, a tuple -- would reach the
+			// inspector as an untyped blank that silently swallows whatever is typed into it.
+			if (type == Variant::NIL) {
+				continue;
+			}
+
+			if (!group_emitted) {
+				Dictionary group;
+				group["name"] = category;
+				group["type"] = (int64_t)Variant::NIL;
+				group["hint"] = (int64_t)PROPERTY_HINT_NONE;
+				group["hint_string"] = String();
+				group["usage"] = (int64_t)PROPERTY_USAGE_GROUP;
+				properties.push_back(group);
+				group_emitted = true;
+			}
+
+			properties.push_back(property_for(entry, type));
+		}
+	}
+	return properties;
 }
 
 int32_t VerseScript::_get_member_line(const StringName &p_member) const {

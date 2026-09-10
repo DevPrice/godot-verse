@@ -35,11 +35,30 @@ const char *method_name_for(const char *p_function_name) {
 }
 
 GDExtensionBool set_func(GDExtensionScriptInstanceDataPtr p_instance, GDExtensionConstStringNamePtr p_name, GDExtensionConstVariantPtr p_value) {
-	return false;
+	VerseScriptInstance *self = static_cast<VerseScriptInstance *>(p_instance);
+	if (self->verse_object == nullptr) {
+		return false;
+	}
+	return self->script->set_instance_field(self->verse_object,
+			*reinterpret_cast<const StringName *>(p_name),
+			*reinterpret_cast<const Variant *>(p_value));
 }
 
 GDExtensionBool get_func(GDExtensionScriptInstanceDataPtr p_instance, GDExtensionConstStringNamePtr p_name, GDExtensionVariantPtr r_ret) {
-	return false;
+	VerseScriptInstance *self = static_cast<VerseScriptInstance *>(p_instance);
+	if (self->verse_object == nullptr) {
+		return false;
+	}
+
+	// Only logic, int, float and string cross the ABI, so a nil result is always a failure to
+	// read rather than a member that genuinely holds nil -- Verse has no nil to hold.
+	const Variant value = self->script->instance_field(self->verse_object, *reinterpret_cast<const StringName *>(p_name));
+	if (value.get_type() == Variant::NIL) {
+		return false;
+	}
+
+	*reinterpret_cast<Variant *>(r_ret) = value;
+	return true;
 }
 
 const GDExtensionPropertyInfo *get_property_list_func(GDExtensionScriptInstanceDataPtr p_instance, uint32_t *r_count) {

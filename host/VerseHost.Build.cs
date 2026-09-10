@@ -34,6 +34,13 @@ public class VerseHost : ModuleRules
 			"VerseNative",
 			"Verse",
 			"VerseSpatialMath",
+
+			// For `@editable` (/Verse.org/Simulation). Defining our own attribute is not an
+			// option: AddSuperType guards inheriting from `attribute` behind
+			// CScope::IsAuthoredByEpic(), which the InternalUser scope above does not satisfy --
+			// that only unlocks *access* to epic_internal definitions, not authorship. Every
+			// module this plugin depends on is already listed here.
+			"VerseSimulationMetadata",
 		});
 	}
 }

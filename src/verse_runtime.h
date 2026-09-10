@@ -62,11 +62,25 @@ public:
 	// of that class rather than through the module's free functions. Returns null when the class
 	// does not exist, which is how VerseScript tells the two shapes apart.
 	bool has_class(const godot::String &p_class_name) const;
+	// The `@editable` data members of a top-level class, as { name, type, is_var } entries
+	// where type is a vh_type. Read out of the last analysis pass rather than the running
+	// program, so it follows the editor's buffer and refreshes without restarting -- unlike
+	// anything routed through the compiled bytecode, which may only be generated once.
+	godot::TypedArray<godot::Dictionary> class_exports(const godot::String &p_class_name) const;
 	vh_instance *instantiate(const godot::String &p_class_name, int64_t p_object_id);
 	void release_instance(vh_instance *p_instance);
 	bool instance_has_function(vh_instance *p_instance, const char *p_decorated_name) const;
 	godot::Error call_instance_void(vh_instance *p_instance, const char *p_decorated_name);
 	godot::Error call_instance_void_float(vh_instance *p_instance, const char *p_decorated_name, double p_arg);
+
+	// One data member read off a live instance, and off the class default object respectively.
+	// Unlike class_exports these go through the VM, because a value exists nowhere else. A nil
+	// Variant means the field is absent or holds a Verse type with no Variant counterpart.
+	godot::Variant instance_field(vh_instance *p_instance, const godot::String &p_name) const;
+	godot::Variant class_default_field(const godot::String &p_class_name, const godot::String &p_name) const;
+	// Writes one data member on a live instance. Covers bool, int, float and String -- the same
+	// four types the reader covers -- and refuses anything else rather than truncating it.
+	bool set_instance_field(vh_instance *p_instance, const godot::String &p_name, const godot::Variant &p_value);
 
 private:
 	VerseHostLibrary host;

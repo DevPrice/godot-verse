@@ -350,6 +350,118 @@ extern "C" int32_t vh_instance_call_void_float(vh_instance* Instance, const char
     return GodotVerse::InstanceCallVoidFloat(reinterpret_cast<GodotVerse::FInstance*>(Instance), Cstr(DecoratedName), Arg);
 }
 
+extern "C" int32_t vh_class_export_list(const char* ClassNameUtf8, const vh_export_desc** OutExports, int32_t* OutCount)
+{
+    if (!ClassNameUtf8 || !OutExports || !OutCount)
+    {
+        return VH_ERR_ABI;
+    }
+    *OutExports = nullptr;
+    *OutCount = 0;
+
+    if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+
+    // The ABI promises the names stay valid until the next call, and the descriptors point into
+    // the strings the harvest returns -- so both outlive this function rather than the stack.
+    static TArray<GodotVerse::FExportDesc> Exports;
+    static TArray<vh_export_desc> Descs;
+
+    Descs.Reset();
+    if (!GodotVerse::GetClassExports(Cstr(ClassNameUtf8), Exports))
+    {
+        return VH_ERR_NOT_FOUND;
+    }
+
+    Descs.Reserve(Exports.Num());
+    for (const GodotVerse::FExportDesc& Export : Exports)
+    {
+        Descs.Add(vh_export_desc{
+            reinterpret_cast<const char*>(*Export.Name),
+            Export.Name.Len(),
+            Export.Type,
+            Export.bIsVar ? 1 : 0,
+            reinterpret_cast<const char*>(*Export.ClampMin),
+            Export.ClampMin.Len(),
+            reinterpret_cast<const char*>(*Export.ClampMax),
+            Export.ClampMax.Len(),
+            reinterpret_cast<const char*>(*Export.Category),
+            Export.Category.Len()});
+    }
+
+    *OutExports = Descs.GetData();
+    *OutCount = Descs.Num();
+    return VH_OK;
+}
+
+namespace {
+/// Backing store for both field readers. The ABI promises the value -- and any string it points
+/// at -- stays valid until the next read, so neither can live on the stack.
+vh_value GFieldValue{};
+FUtf8String GFieldStorage;
+} // namespace
+
+extern "C" int32_t vh_instance_get_field(vh_instance* Instance, const char* NameUtf8, const vh_value** OutValue)
+{
+    if (!Instance || !NameUtf8 || !OutValue)
+    {
+        return VH_ERR_ABI;
+    }
+    *OutValue = nullptr;
+
+    if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+
+    if (!GodotVerse::ReadInstanceField(reinterpret_cast<GodotVerse::FInstance*>(Instance), Cstr(NameUtf8), GFieldValue, GFieldStorage))
+    {
+        return VH_ERR_NOT_FOUND;
+    }
+
+    *OutValue = &GFieldValue;
+    return VH_OK;
+}
+
+extern "C" int32_t vh_instance_set_field(vh_instance* Instance, const char* NameUtf8, const vh_value* Value)
+{
+    if (!Instance || !NameUtf8 || !Value)
+    {
+        return VH_ERR_ABI;
+    }
+    if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+    return GodotVerse::WriteInstanceField(reinterpret_cast<GodotVerse::FInstance*>(Instance), Cstr(NameUtf8), *Value)
+        ? VH_OK
+        : VH_ERR_NOT_FOUND;
+}
+
+extern "C" int32_t vh_class_default_field(const char* ClassNameUtf8, const char* NameUtf8, const vh_value** OutValue)
+{
+    if (!ClassNameUtf8 || !NameUtf8 || !OutValue)
+    {
+        return VH_ERR_ABI;
+    }
+    *OutValue = nullptr;
+
+    if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+
+    if (!GodotVerse::ReadClassDefaultField(Cstr(ClassNameUtf8), Cstr(NameUtf8), GFieldValue, GFieldStorage))
+    {
+        return VH_ERR_NOT_FOUND;
+    }
+
+    *OutValue = &GFieldValue;
+    return VH_OK;
+}
+
 #if PLATFORM_WINDOWS
 #include "Windows/AllowWindowsPlatformTypes.h"
 

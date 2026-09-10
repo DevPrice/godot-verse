@@ -19,7 +19,7 @@ Two DLLs meet at a C ABI:
     src/         GDExtension sources
     tools/       build_host.py, the API and keyword generators and friends
     tests/       host smoke test (loads verse_host.dll with no Godot involved), lexer test
-    docs/        notes on the editor toolchain
+    docs/        editor toolchain and property-export research
     demo/        Godot project
 
 ## Building
@@ -55,13 +55,20 @@ A script defines a class named after its own file, and the node it is attached t
 
 ```verse
 using { /Godot.org/Godot }
+using { /Verse.org/Simulation }
 
 mover := class(godot_node2d):
 
-    Speed<public>:float = 60.0
+    @editable
+    @clamp_min("0.0")
+    @clamp_max("500.0")
+    var Speed<public>:float = 60.0
+
+    @editable
+    Greeting<public>:string = "Verse is running inside Godot, as a class."
 
     Ready<override>():void =
-        Print("Verse is running inside Godot, as a class.")
+        Print(Greeting)
 
     Update<override>(Delta:float):void =
         if (P := GetPosition[]):
@@ -83,11 +90,65 @@ child, frees it, and keeps calling.
 A script may still be written the older way, as a `module` of free functions that find their own
 node by path; the host picks between the two shapes on whether the class exists.
 
+**`@editable` puts a data member in the inspector.** The property list Godot shows comes out of
+the *semantic program* the last analysis pass left behind, not out of the running bytecode —
+`vh_class_export_list` walks `CClass::GetDefinitionsOfKind<CDataDefinition>()` and keeps the
+members whose `CDefinition::HasAttributeSubclass` matches `/Verse.org/Simulation/editable`. That
+choice is what makes the list refresh live: analysis re-runs on every keystroke, while code
+generation may happen once per process, so anything read from the VM would be frozen at startup.
+Subclasses count too, so `@editable_slider(float)` marks a member just as well as `@editable`.
+
+The attribute is Epic's rather than ours because uLang guards inheriting from *any* attribute type
+behind `CScope::IsAuthoredByEpic()` in `AddSuperType` — so neither a `godot_export` of our own nor
+a `class(editable)` alias compiles. The `InternalUser` scope this package builds under unlocks
+*access* to `epic_internal` definitions — which is what lets scripts say `<native>` — but not
+authorship. The host therefore links `VerseSimulationMetadata` (every module it depends on was
+already in the list) and scripts add `using { /Verse.org/Simulation }`. Authorship is only a
+prefix test against `/Verse.org/`, `/UnrealEngine.com/` and `/Fortnite.com/`, so a package named
+into one of those would pass the gate; `docs/property-export.md` records why that is not done.
+
+**Hints come from Epic's metadata attributes too.** `@clamp_min("0.0")` and `@clamp_max("500.0")`
+become a Godot range slider, `@category("Movement")` becomes an inspector group. They carry
+strings rather than numbers — a single string argument is the one attribute payload the compiler
+will hand back today — so godot-verse parses them, and a typo is a missing hint rather than a
+compile error.
+
+**Values cross both ways, through the VM's shape rather than the export list — a value exists
+nowhere but the VM.** `vh_instance_get_field` reads a member off a live instance,
+`vh_class_default_field` reads its declared default off a throwaway one (the Verse constructor
+runs in `NewObject`, not in CDO construction), and `vh_instance_set_field` writes one. Matching
+the VM's storage exactly is most of that work: a `var` of a scalar type keeps its value inside a
+reference cell, a `var` of a container type keeps a *mutable* container, and a write that lands on
+the slot rather than through it corrupts the member silently — the read agrees, and only the
+interpreter ever objects.
+
+**A non-var is an initializer, not a constant.** Both kinds of `@editable` are editable in the
+inspector and stored in the `.tscn`. The difference is when the value may be applied: an instance
+is *unsealed* between instantiation and the first call into it, which is exactly the window Godot
+uses to push a scene's stored values, and while unsealed anything may be written. The first call —
+`Ready`, in practice — seals it, and from then on only a `var` may be assigned. So Verse's
+immutability holds where it means something: a non-var never changes once a script can observe it.
+The host enforces this itself rather than trusting an inspector flag.
+
+Full research, citations and the roadmap are in `docs/property-export.md`. `tests/host_smoke`
+covers both directions — including, because a read/write round-trip cannot catch a value written
+in the wrong representation, calling back into Verse to read and assign each member afterwards.
+
 Compiler diagnostics land in Godot's output with file, line and column, and the script editor gets
 them live: `_validate` re-analyses the project against the unsaved buffer rather than replaying
-what the last build said. Syntax highlighting is a real lexer — nested `<# #>` block comments,
-dedent-terminated `<#>` comments and comments inside string interpolation all colour correctly,
-which no delimiter matcher can do.
+what the last build said.
+
+Syntax highlighting is a real lexer, which is what lets nested `<# #>` block comments,
+dedent-terminated `<#>` comments and comments inside string interpolation all colour correctly —
+none of which a delimiter matcher can express. On top of the comment/string/number/keyword
+classes it colours operators and punctuation, call positions (`Print(`, the bracketed
+`GetPosition[` of a `<decides>` call, and a definition like `Ready<override>()` whose specifiers
+sit between the name and its parameter list), `.member` accesses, and both attribute spellings —
+suffix `<public>` and prefix `@editable`.
+
+What it does not do is resolve symbols: a bare identifier is a bare identifier, so type names
+read as plain text. Telling a local from a field from a class needs the compiler, which is the
+same thing the missing language server would provide.
 
 `VerseTicker` from Phase 2 still works, but nothing needs it: the script language pumps `vh_tick`
 from `_frame`, so every scripted node is driven rather than one hand-placed one.

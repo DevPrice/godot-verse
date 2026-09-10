@@ -47,6 +47,10 @@ public:
 	vh_instance_has_function_fn InstanceHasFunction = nullptr;
 	vh_instance_call_void_fn InstanceCallVoid = nullptr;
 	vh_instance_call_void_float_fn InstanceCallVoidFloat = nullptr;
+	vh_class_export_list_fn ClassExportList = nullptr;
+	vh_instance_get_field_fn InstanceGetField = nullptr;
+	vh_class_default_field_fn ClassDefaultField = nullptr;
+	vh_instance_set_field_fn InstanceSetField = nullptr;
 
 private:
 	void clear_function_pointers();

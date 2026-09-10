@@ -105,6 +105,7 @@ int main(int argc, char** argv)
 	const char* EngineDirUtf8 = argc > 2 ? argv[2] : nullptr;
 	fs::path VerseBase = argc > 3 ? fs::path(argv[3]) : ExeDir.parent_path();
 	fs::path VersePath = VerseBase / "tests" / "host_smoke" / "hello.verse";
+	fs::path ExportsPath = VerseBase / "tests" / "host_smoke" / "exports.verse";
 
 	// LOAD_WITH_ALTERED_SEARCH_PATH: the host's own directory holds tbbmalloc.dll.
 	HMODULE Module = LoadLibraryExW(DllPath.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
@@ -119,7 +120,16 @@ int main(int argc, char** argv)
 	auto InitFn = Resolve<vh_init_fn>(Module, "vh_init", &ResolveOk);
 	auto ShutdownFn = Resolve<vh_shutdown_fn>(Module, "vh_shutdown", &ResolveOk);
 	auto TickFn = Resolve<vh_tick_fn>(Module, "vh_tick", &ResolveOk);
-	auto CompileFileFn = Resolve<vh_compile_file_fn>(Module, "vh_compile_file", &ResolveOk);
+	auto CompileProjectFn = Resolve<vh_compile_project_fn>(Module, "vh_compile_project", &ResolveOk);
+	auto OpenScriptFn = Resolve<vh_open_script_fn>(Module, "vh_open_script", &ResolveOk);
+	auto HasClassFn = Resolve<vh_has_class_fn>(Module, "vh_has_class", &ResolveOk);
+	auto ClassExportListFn = Resolve<vh_class_export_list_fn>(Module, "vh_class_export_list", &ResolveOk);
+	auto ClassDefaultFieldFn = Resolve<vh_class_default_field_fn>(Module, "vh_class_default_field", &ResolveOk);
+	auto InstantiateFn = Resolve<vh_instantiate_fn>(Module, "vh_instantiate", &ResolveOk);
+	auto ReleaseInstanceFn = Resolve<vh_release_instance_fn>(Module, "vh_release_instance", &ResolveOk);
+	auto CallInstanceVoidFn = Resolve<vh_instance_call_void_fn>(Module, "vh_instance_call_void", &ResolveOk);
+	auto GetFieldFn = Resolve<vh_instance_get_field_fn>(Module, "vh_instance_get_field", &ResolveOk);
+	auto SetFieldFn = Resolve<vh_instance_set_field_fn>(Module, "vh_instance_set_field", &ResolveOk);
 	auto ReleaseScriptFn = Resolve<vh_release_script_fn>(Module, "vh_release_script", &ResolveOk);
 	auto ScriptHasFunctionFn = Resolve<vh_script_has_function_fn>(Module, "vh_script_has_function", &ResolveOk);
 	auto RunMainFn = Resolve<vh_run_main_fn>(Module, "vh_run_main", &ResolveOk);
@@ -159,9 +169,19 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
+	// vh_compile_project rather than vh_compile_file: Verse builds a whole package at once and
+	// the host may only generate once per process, so both fixtures have to go in together.
 	std::string VersePathUtf8 = VersePath.string();
+	std::string ExportsPathUtf8 = ExportsPath.string();
+	const char* ProjectPaths[2] = { VersePathUtf8.c_str(), ExportsPathUtf8.c_str() };
+	if (!Step("vh_compile_project", CompileProjectFn(ProjectPaths, 2) == VH_OK))
+	{
+		ShutdownFn();
+		return 1;
+	}
+
 	vh_script* Script = nullptr;
-	if (!Step("vh_compile_file", CompileFileFn(VersePathUtf8.c_str(), &Script) == VH_OK))
+	if (!Step("vh_open_script", OpenScriptFn(VersePathUtf8.c_str(), &Script) == VH_OK))
 	{
 		ShutdownFn();
 		return 1;
@@ -178,6 +198,164 @@ int main(int argc, char** argv)
 	CallsOk = Step("vh_call_void Ready", CallVoidFn(Script, "Ready") == VH_OK) && CallsOk;
 	CallsOk = Step("vh_call_void_float Update", CallVoidFloatFn(Script, "Update(:float)", 0.016) == VH_OK) && CallsOk;
 	TickFn(0.0);
+	// The class-shaped half. This is the check that the verse path the host builds for a script's
+	// class -- /user@localhost/<file stem> -- is the one the semantic program actually files it
+	// under; everything about exports depends on that string being right.
+	Step("vh_has_class exports", HasClassFn("exports") != 0);
+
+	const vh_export_desc* Exports = nullptr;
+	int32_t ExportCount = 0;
+	bool ExportsOk = Step("vh_class_export_list", ClassExportListFn("exports", &Exports, &ExportCount) == VH_OK);
+	for (int32_t Index = 0; Index < ExportCount; ++Index)
+	{
+		printf("[smoke]   export %.*s type=%d is_var=%d\n",
+			   static_cast<int>(Exports[Index].NameLen), Exports[Index].NameUtf8,
+			   Exports[Index].Type, Exports[Index].IsVar);
+	}
+
+	auto FindExport = [&](const char* Name) -> const vh_export_desc* {
+		for (int32_t Index = 0; Index < ExportCount; ++Index)
+		{
+			if (std::string(Exports[Index].NameUtf8, Exports[Index].NameLen) == Name)
+			{
+				return &Exports[Index];
+			}
+		}
+		return nullptr;
+	};
+
+	ExportsOk = Step("four members are exported", ExportCount == 4) && ExportsOk;
+	const vh_export_desc* SpeedExport = FindExport("Speed");
+	const vh_export_desc* ScaleExport = FindExport("Scale");
+	const vh_export_desc* EnabledExport = FindExport("Enabled");
+	ExportsOk = Step("Speed is a float", SpeedExport && SpeedExport->Type == VH_TYPE_FLOAT) && ExportsOk;
+	ExportsOk = Step("Label is a string", FindExport("Label") && FindExport("Label")->Type == VH_TYPE_STRING) && ExportsOk;
+	ExportsOk = Step("Enabled is a var logic", EnabledExport && EnabledExport->Type == VH_TYPE_LOGIC && EnabledExport->IsVar != 0) && ExportsOk;
+	ExportsOk = Step("Speed is not a var", SpeedExport && SpeedExport->IsVar == 0) && ExportsOk;
+	ExportsOk = Step("Scale is a var float", ScaleExport && ScaleExport->Type == VH_TYPE_FLOAT && ScaleExport->IsVar != 0) && ExportsOk;
+	// The whole point of the attribute: an unmarked member stays out of the inspector.
+	Step("unmarked Hidden is not exported", FindExport("Hidden") == nullptr);
+
+	// Hint metadata. These attributes carry a single string, which is the only attribute payload
+	// SOL-972 leaves readable -- so "0.0" arrives as text and Godot parses it, not the compiler.
+	auto TextOf = [](const char* Utf8, int32_t Len) { return std::string(Utf8 ? Utf8 : "", Len); };
+	Step("Speed carries clamp_min", SpeedExport && TextOf(SpeedExport->ClampMinUtf8, SpeedExport->ClampMinLen) == "0.0");
+	Step("Speed carries clamp_max", SpeedExport && TextOf(SpeedExport->ClampMaxUtf8, SpeedExport->ClampMaxLen) == "500.0");
+	Step("Speed carries category", SpeedExport && TextOf(SpeedExport->CategoryUtf8, SpeedExport->CategoryLen) == "Movement");
+	Step("Label carries no hints", FindExport("Label") && FindExport("Label")->ClampMinLen == 0 && FindExport("Label")->CategoryLen == 0);
+
+	// Defaults come off the CDO, whose Verse constructor has already run -- the semantic program
+	// can only say that an initializer exists, not what it evaluates to.
+	const vh_value* SpeedDefault = nullptr;
+	const bool SpeedRead = ClassDefaultFieldFn("exports", "Speed", &SpeedDefault) == VH_OK && SpeedDefault != nullptr;
+	Step("vh_class_default_field Speed", SpeedRead);
+	Step("Speed defaults to 60.0", SpeedRead && SpeedDefault->Type == VH_TYPE_FLOAT && SpeedDefault->Float == 60.0);
+
+	const vh_value* ScaleDefault = nullptr;
+	const bool ScaleRead = ClassDefaultFieldFn("exports", "Scale", &ScaleDefault) == VH_OK && ScaleDefault != nullptr;
+	Step("vh_class_default_field Scale (var float)", ScaleRead);
+	Step("Scale defaults to 1.5", ScaleRead && ScaleDefault->Type == VH_TYPE_FLOAT && ScaleDefault->Float == 1.5);
+
+	const vh_value* EnabledDefault = nullptr;
+	const bool EnabledRead = ClassDefaultFieldFn("exports", "Enabled", &EnabledDefault) == VH_OK && EnabledDefault != nullptr;
+	Step("vh_class_default_field Enabled (var logic)", EnabledRead);
+
+	const vh_value* LabelDefault = nullptr;
+	const bool LabelRead = ClassDefaultFieldFn("exports", "Label", &LabelDefault) == VH_OK && LabelDefault != nullptr;
+	Step("vh_class_default_field Label", LabelRead);
+	Step("Label defaults to \"hello\"",
+		 LabelRead && LabelDefault->Type == VH_TYPE_STRING &&
+			 std::string(LabelDefault->String.Utf8, LabelDefault->String.Len) == "hello");
+
+	Step("absent field reports not found", ClassDefaultFieldFn("exports", "NoSuchMember", &SpeedDefault) == VH_ERR_NOT_FOUND);
+
+	// Write path, against a live instance. Handle 1 is never dereferenced here -- the smoke
+	// harness answers every Godot callback with a stub -- and reading a data member never
+	// consults it.
+	vh_instance* Instance = nullptr;
+	if (Step("vh_instantiate exports", InstantiateFn("exports", 1, &Instance) == VH_OK && Instance != nullptr))
+	{
+		auto RoundTrip = [&](const char* Name, const vh_value& In, auto Check) {
+			if (SetFieldFn(Instance, Name, &In) != VH_OK)
+			{
+				return false;
+			}
+			const vh_value* Out = nullptr;
+			return GetFieldFn(Instance, Name, &Out) == VH_OK && Out != nullptr && Check(*Out);
+		};
+
+		vh_value NewFloat{};
+		NewFloat.Type = VH_TYPE_FLOAT;
+		NewFloat.Float = 10.0;
+		Step("set/get float round-trips on a var member",
+			 RoundTrip("Scale", NewFloat, [](const vh_value& V) { return V.Type == VH_TYPE_FLOAT && V.Float == 10.0; }));
+
+		// Speed has no `var`, so this is the one window in which it may be given a value: the
+		// instance is unsealed until the first call into it, and nothing has run that could have
+		// read the declared default.
+		vh_value NewSpeed{};
+		NewSpeed.Type = VH_TYPE_FLOAT;
+		NewSpeed.Float = 3.0;
+		Step("a non-var member can be initialized before the instance seals",
+			 RoundTrip("Speed", NewSpeed, [](const vh_value& V) { return V.Type == VH_TYPE_FLOAT && V.Float == 3.0; }));
+
+		vh_value NewEnabled{};
+		NewEnabled.Type = VH_TYPE_LOGIC;
+		NewEnabled.Logic = 0;
+		Step("set/get logic round-trips on a var member",
+			 RoundTrip("Enabled", NewEnabled, [](const vh_value& V) { return V.Type == VH_TYPE_LOGIC && V.Logic == 0; }));
+
+		vh_value NewLabel{};
+		NewLabel.Type = VH_TYPE_STRING;
+		NewLabel.String.Utf8 = "changed";
+		NewLabel.String.Len = 7;
+		Step("set/get string round-trips",
+			 RoundTrip("Label", NewLabel, [](const vh_value& V) {
+				 return V.Type == VH_TYPE_STRING && std::string(V.String.Utf8, V.String.Len) == "changed";
+			 }));
+
+		Step("setting an absent member reports not found", SetFieldFn(Instance, "NoSuchMember", &NewFloat) == VH_ERR_NOT_FOUND);
+
+		// The round-trips above cannot see a value written in the wrong representation -- a bad
+		// write and a matching bad read agree. Bump reads and assigns each member from Verse, so
+		// the interpreter is the one checking, and a var whose reference was overwritten dies
+		// here rather than reporting a plausible number.
+		auto Read = [&](const char* Name) {
+			const vh_value* Out = nullptr;
+			return GetFieldFn(Instance, Name, &Out) == VH_OK && Out != nullptr ? Out : nullptr;
+		};
+
+		const bool BumpOk = CallInstanceVoidFn(Instance, "(/user@localhost/exports:)Bump") == VH_OK;
+		Step("Verse can read and assign the members it was handed", BumpOk);
+		const vh_value* ScaleAfterBump = Read("Scale");
+		Step("Verse read both a var and a non-var it was handed",
+			 BumpOk && ScaleAfterBump && ScaleAfterBump->Type == VH_TYPE_FLOAT && ScaleAfterBump->Float == 13.0);
+		const vh_value* EnabledAfterBump = Read("Enabled");
+		Step("a Verse assignment to a logic var is visible across the ABI",
+			 BumpOk && EnabledAfterBump && EnabledAfterBump->Type == VH_TYPE_LOGIC && EnabledAfterBump->Logic != 0);
+
+		// Separate from Bump because a string var is stored as a mutable container rather than as
+		// a box around an immutable one, so it is the case a scalar var cannot stand in for.
+		const bool BumpLabelOk = CallInstanceVoidFn(Instance, "(/user@localhost/exports:)BumpLabel") == VH_OK;
+		Step("Verse can read and assign a string var", BumpLabelOk);
+		const vh_value* LabelAfterBump = Read("Label");
+		Step("a Verse assignment to a string var is visible across the ABI",
+			 BumpLabelOk && LabelAfterBump && LabelAfterBump->Type == VH_TYPE_STRING &&
+				 std::string(LabelAfterBump->String.Utf8, LabelAfterBump->String.Len) == "changed!");
+
+		// Bump sealed the instance. From here Verse has observed the members, so the author's
+		// `var` is the whole of what may still change.
+		Step("writing a non-var member is refused once the instance is sealed",
+			 SetFieldFn(Instance, "Speed", &NewFloat) == VH_ERR_NOT_FOUND);
+		const vh_value* SpeedAfter = Read("Speed");
+		Step("the refused write left the value alone",
+			 SpeedAfter && SpeedAfter->Type == VH_TYPE_FLOAT && SpeedAfter->Float == 3.0);
+		Step("a var member is still writable once the instance is sealed",
+			 RoundTrip("Scale", NewFloat, [](const vh_value& V) { return V.Type == VH_TYPE_FLOAT && V.Float == 10.0; }));
+
+		ReleaseInstanceFn(Instance);
+	}
+
 	Step("vh_tick", true);
 
 	ReleaseScriptFn(Script);
