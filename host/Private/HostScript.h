@@ -121,6 +121,8 @@ struct FLookupDesc
     int32 Line{-1};
     int32 Column{-1};
     FUtf8String Type;
+    /// Name of the declaring scope: for a method, the class that declares it.
+    FUtf8String Owner;
     vh_lookup_kind Kind{VH_LOOKUP_UNKNOWN};
     bool bIsVar{false};
 };

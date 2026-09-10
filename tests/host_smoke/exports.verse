@@ -38,3 +38,11 @@ exports := class(object):
 
     BumpLabel<public>():void =
         set Label = Label + "!"
+
+# Exists only to give the symbol lookup a Godot API method to resolve against. Analysis never
+# needs a real node behind it, and nothing instantiates this.
+exports_probe := class(node2d):
+
+    Probe<public>():void =
+        if (P := GetPosition[]):
+            SetPosition(P)

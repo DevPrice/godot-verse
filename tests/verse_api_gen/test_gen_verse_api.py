@@ -196,7 +196,7 @@ def test_shadow_suppression_across_inheritance():
         ]
     }
     coverage = g.Coverage()
-    blocks, _emit_order = g.generate(api, ["Derived"], coverage)
+    blocks, _emit_order, _method_map = g.generate(api, ["Derived"], coverage)
     check("shadowed method skipped once", coverage.skip_reasons["shadow"], 1)
     check("only the non-colliding method emitted on Derived", coverage.methods_emitted, 2)
     derived_block = next(b for b in blocks if b.startswith("derived"))
@@ -235,7 +235,7 @@ def test_unsupported_type_skipping():
         ]
     }
     coverage = g.Coverage()
-    blocks, _emit_order = g.generate(api, ["Thing"], coverage)
+    blocks, _emit_order, _method_map = g.generate(api, ["Thing"], coverage)
     check("unsupported return type skips its method", coverage.skip_reasons["unsupported_type"], 1)
     check("unsupported type recorded by name", coverage.unsupported_types["Dictionary"], 1)
     check("the supported sibling method still emits", coverage.methods_emitted, 1)
@@ -277,7 +277,7 @@ def test_class_type_falls_back_to_nearest_emitted_ancestor():
     }
     coverage = g.Coverage()
     # Base is emitted, but Mid/Leaf are not requested -- Other.GetLeaf must fall back to Base.
-    blocks, _emit_order = g.generate(api, ["Base", "Other"], coverage)
+    blocks, _emit_order, _method_map = g.generate(api, ["Base", "Other"], coverage)
     other_block = next(b for b in blocks if b.startswith("other"))
     check_true(
         "unresolved class type falls back to nearest emitted ancestor (base)",
@@ -288,12 +288,37 @@ def test_class_type_falls_back_to_nearest_emitted_ancestor():
 
 def test_render_classes_header():
     api = {"header": {"version_full_name": "Godot Engine v4.6.stable.official"}}
-    text = g.render_classes_header(api, ["Node2D", "Node"])
+    text = g.render_classes_header(api, ["Node2D", "Node"], [])
     check_true("classes header has a #pragma once", text.startswith("#pragma once"))
     check_true("classes header opens verse_api namespace", "namespace verse_api {" in text)
     check_true(
         "classes header sorts entries by Godot class name (Node before Node2D)",
         text.index('{ "Node", "node" }') < text.index('{ "Node2D", "node2d" }'),
+    )
+
+
+def test_method_map_names_the_godot_original():
+    api = {"header": {"version_full_name": "Godot Engine v4.6.stable.official"}}
+    method_map = [
+        ("Node2D", "node2d", "set_position", "SetPosition"),
+        ("Node2D", "node2d", "get_position", "GetPosition"),
+    ]
+    text = g.render_classes_header(api, ["Node2D"], method_map)
+    check_true(
+        "method map carries the Godot spelling the Verse name cannot be inverted to",
+        '{ "node2d", "GetPosition", "Node2D", "get_position" },' in text,
+    )
+    check_true(
+        "method map sorts by Verse class then Verse method",
+        text.index('"GetPosition"') < text.index('"SetPosition"'),
+    )
+
+
+def test_generated_method_map_covers_a_known_method():
+    header = (REPO_ROOT / "src" / "verse_api_classes.h").read_text(encoding="utf-8")
+    check_true(
+        "the checked-in header maps node2d.GetPosition to Node2D.get_position",
+        '{ "node2d", "GetPosition", "Node2D", "get_position" },' in header,
     )
 
 
@@ -305,7 +330,10 @@ def test_classes_header_file_matches_generated_verse_file():
 
     verse_text = (REPO_ROOT / "host" / "Verse" / "GodotClasses.native.verse").read_text(encoding="utf-8")
     verse_classes = set(re.findall(r"^(\w+)<public> := class\(", verse_text, re.MULTILINE))
-    header_classes = set(re.findall(r'"([^"]+)" \}', header_text))
+    # Only the class table: the method table below it has rows of the same shape, and its last
+    # column is a Godot method name.
+    class_table = header_text.split("class_mapping classes[] = {", 1)[1].split("};", 1)[0]
+    header_classes = set(re.findall(r'"([^"]+)" \}', class_table))
     check(
         "verse_api_classes.h lists exactly the classes GodotClasses.native.verse emits",
         header_classes,
@@ -380,6 +408,8 @@ def main():
     test_packed_string_array_unsupported_as_parameter()
     test_class_type_falls_back_to_nearest_emitted_ancestor()
     test_render_classes_header()
+    test_method_map_names_the_godot_original()
+    test_generated_method_map_covers_a_known_method()
     test_classes_header_file_matches_generated_verse_file()
     test_generated_file_matches_hand_written_slice()
 

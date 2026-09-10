@@ -356,6 +356,7 @@ def generate(api: dict, requested: list, coverage: Coverage):
 
     inherited_names = {}  # godot class name -> set of Verse names visible to its subclasses
     class_blocks = []
+    method_map = []  # (godot class, verse class, godot method, verse method) per emitted method
 
     for name in emit_order:
         parent = parent_map[name]
@@ -382,6 +383,7 @@ def generate(api: dict, requested: list, coverage: Coverage):
                 continue
             used.add(cm.verse_name)
             emitted_lines.append(emit_method(cm))
+            method_map.append((name, verse_class_name(name), cm.godot_name, cm.verse_name))
             coverage.methods_emitted += 1
 
         inherited_names[name] = used
@@ -393,7 +395,7 @@ def generate(api: dict, requested: list, coverage: Coverage):
         else:
             class_blocks.append(header)
 
-    return class_blocks, emit_order
+    return class_blocks, emit_order, method_map
 
 
 HEADER_TEMPLATE = """using {{/Verse.org/Native}}
@@ -437,15 +439,41 @@ inline constexpr class_mapping classes[] = {{
 {entries}
 }};
 
+// Maps each emitted method back to the Godot method it mirrors, so a symbol the editor resolved
+// to a Verse name can be looked up in Godot's own class documentation. The Verse name alone is
+// not enough to invert: the transform drops the underscores that separated the words.
+//
+// Keyed by the class the method is *declared* on, which is what the compiler reports as a
+// resolved definition's enclosing scope -- an inherited call resolves to the declaring class,
+// not the one it was called through.
+struct method_mapping {{
+	const char *verse_class;
+	const char *verse_method;
+	const char *godot_class;
+	const char *godot_method;
+}};
+
+inline constexpr method_mapping methods[] = {{
+{method_entries}
+}};
+
 }} // namespace verse_api
 """
 
 
-def render_classes_header(api: dict, emit_order: list) -> str:
+def render_classes_header(api: dict, emit_order: list, method_map: list) -> str:
     version = api["header"]["version_full_name"]
     pairs = sorted((name, verse_class_name(name)) for name in emit_order)
     entries = "\n".join(f'\t{{ "{godot_name}", "{verse_name}" }},' for godot_name, verse_name in pairs)
-    return CLASSES_HEADER_TEMPLATE.format(version=version, entries=entries)
+    method_entries = "\n".join(
+        f'\t{{ "{verse_class}", "{verse_method}", "{godot_class}", "{godot_method}" }},'
+        for godot_class, verse_class, godot_method, verse_method in sorted(
+            method_map, key=lambda m: (m[1], m[3])
+        )
+    )
+    return CLASSES_HEADER_TEMPLATE.format(
+        version=version, entries=entries, method_entries=method_entries
+    )
 
 
 def format_report(coverage: Coverage, class_count_requested: int) -> str:
@@ -505,9 +533,9 @@ def main() -> int:
         requested = read_classes_file(classes_file)
 
     coverage = Coverage()
-    class_blocks, emit_order = generate(api, requested, coverage)
+    class_blocks, emit_order, method_map = generate(api, requested, coverage)
     text = render(api, class_blocks)
-    classes_header_text = render_classes_header(api, emit_order)
+    classes_header_text = render_classes_header(api, emit_order, method_map)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(text, encoding="utf-8", newline="\n")

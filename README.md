@@ -218,6 +218,22 @@ and describe — the click path never reads `type`, it jumps on `location` alone
 `class_name` is empty, so leaving that key unset is load-bearing. Verse's `var` split maps onto
 the two exactly.
 
+**A name from the mirrored API resolves to Godot's own documentation instead.** Ctrl+clicking
+`node2d` or `GetPosition` opens the class reference for `Node2D` or `Node2D.get_position`, and
+hovering either shows the description Godot already ships. Nothing here writes that prose: both
+paths key off `class_name`, which is precisely the key that diverts the click away from a jump
+and into the help viewer, and which the tooltip uses to fetch the description out of the same doc
+data. There is nothing to jump to anyway — the generated API is compiled from the engine tree,
+not from the project.
+
+Turning a Verse name back into a Godot one is a generator problem, not a runtime one. The class
+transform is reversible by table, but the method transform is not reversible at all: Verse's
+`SetPosition` came from `set_position` by dropping the underscores that separated the words, and
+nothing in the name says where they were. So `gen_verse_api.py` emits the mapping alongside the
+class table it already wrote, keyed by the class that *declares* the method — which is what the
+compiler reports as a resolved definition's enclosing scope, and is the right key, because an
+inherited call resolves to the declaring class rather than the one it was called through.
+
 Syntax highlighting is a real lexer, which is what lets nested `<# #>` block comments,
 dedent-terminated `<#>` comments and comments inside string interpolation all colour correctly —
 none of which a delimiter matcher can express. On top of the comment/string/number/keyword

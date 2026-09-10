@@ -410,6 +410,7 @@ Dictionary VerseRuntime::lookup_symbol(const String &p_globalized_path, int32_t 
 	result["line"] = (int64_t)desc->Line;
 	result["column"] = (int64_t)desc->Column;
 	result["type"] = String::utf8(desc->TypeUtf8, desc->TypeLen);
+	result["owner"] = String::utf8(desc->OwnerUtf8, desc->OwnerLen);
 	result["kind"] = (int64_t)desc->Kind;
 	result["is_var"] = desc->IsVar != 0;
 	return result;

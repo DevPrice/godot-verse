@@ -67,6 +67,29 @@ String doc_comment_above(const String &p_source, int64_t p_line) {
 	return String("\n").join(collected).strip_edges();
 }
 
+// The Godot class a mirrored Verse class name stands for, or nullptr for a name that is not part
+// of the generated API -- a class the author wrote, most often.
+const char *godot_class_for(const String &p_verse_class) {
+	for (size_t i = 0; i < std::size(verse_api::classes); i++) {
+		if (p_verse_class == verse_api::classes[i].verse_name) {
+			return verse_api::classes[i].godot_name;
+		}
+	}
+	return nullptr;
+}
+
+// The Godot method a mirrored Verse method stands for, keyed by the class that declares it. The
+// Verse name cannot be inverted on its own: the transform to PascalCase drops the underscores
+// that separated the words, so `SetPosition` could have come from any of several spellings.
+const verse_api::method_mapping *godot_method_for(const String &p_verse_class, const String &p_verse_method) {
+	for (size_t i = 0; i < std::size(verse_api::methods); i++) {
+		if (p_verse_method == verse_api::methods[i].verse_method && p_verse_class == verse_api::methods[i].verse_class) {
+			return &verse_api::methods[i];
+		}
+	}
+	return nullptr;
+}
+
 const char *mirrored_class(const String &p_godot_class) {
 	for (size_t i = 0; i < std::size(verse_api::classes); i++) {
 		if (p_godot_class == verse_api::classes[i].godot_name) {
@@ -467,6 +490,31 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 					? ScriptLanguageExtension::LOOKUP_RESULT_LOCAL_VARIABLE
 					: ScriptLanguageExtension::LOOKUP_RESULT_LOCAL_CONSTANT);
 	result["doc_type"] = found["type"];
+
+	// A definition that came from the mirrored Godot API is described by Godot's own class
+	// documentation, which is better than anything this could say and is already installed. Both
+	// paths key off class_name: the click sends it to the help viewer instead of jumping, and the
+	// tooltip fetches the description out of the same doc data. Naming it here is what turns a
+	// Verse identifier into a Godot doc page, and there is no source in the project to jump to
+	// anyway -- the generated API is compiled from the engine tree.
+	const String found_name = found["name"];
+	const String found_owner = found["owner"];
+	const int64_t kind = found["kind"];
+
+	if (kind == VH_LOOKUP_CLASS) {
+		if (const char *godot_class = godot_class_for(found_name)) {
+			result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS;
+			result["class_name"] = String(godot_class);
+			return result;
+		}
+	} else if (kind == VH_LOOKUP_FUNCTION) {
+		if (const verse_api::method_mapping *method = godot_method_for(found_owner, found_name)) {
+			result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS_METHOD;
+			result["class_name"] = String(method->godot_class);
+			result["class_member"] = String(method->godot_method);
+			return result;
+		}
+	}
 
 	const int64_t definition_line = found["line"];
 	const String definition_path = found["path"];

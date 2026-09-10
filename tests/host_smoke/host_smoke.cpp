@@ -262,7 +262,6 @@ int main(int argc, char** argv)
 			if (Lookup)
 			{
 				LookupOk = Step("the use resolves to Speed", Text(Lookup->NameUtf8, Lookup->NameLen) == "Speed") && LookupOk;
-				printf("[smoke] DEBUG lookup line=%d column=%d declrow=%d\n", Lookup->Line, Lookup->Column, DeclRow);
 				LookupOk = Step("it points at the start of the declaration",
 							   Lookup->Line == DeclRow && Lookup->Column == DeclColumn)
 						&& LookupOk;
@@ -270,6 +269,33 @@ int main(int argc, char** argv)
 				LookupOk = Step("Speed is not a var", Lookup->IsVar == 0) && LookupOk;
 				LookupOk = Step("Speed's type reads as float", Text(Lookup->TypeUtf8, Lookup->TypeLen) == "float") && LookupOk;
 				LookupOk = Step("Speed is a data definition", Lookup->Kind == VH_LOOKUP_DATA) && LookupOk;
+				LookupOk = Step("Speed's owner is the class it was declared in",
+							   Text(Lookup->OwnerUtf8, Lookup->OwnerLen) == "exports")
+						&& LookupOk;
+			}
+
+			// A method resolves to the class that *declares* it, which is what lets the editor
+			// name the Godot original: the Verse name alone cannot be inverted, because the
+			// transform to PascalCase drops the underscores that separated the words.
+			const size_t ProbeUse = ExportsSource.find("GetPosition[");
+			if (ProbeUse != std::string::npos)
+			{
+				int32_t ProbeRow = 0;
+				int32_t ProbeColumn = 0;
+				RowColumnOf(ExportsSource, ProbeUse, ProbeRow, ProbeColumn);
+				const vh_lookup_desc* ProbeLookup = nullptr;
+				if (Step("vh_lookup_symbol on a mirrored Godot method",
+						LookupSymbolFn(ExportsPathUtf8.c_str(), ProbeRow, ProbeColumn, &ProbeLookup) == VH_OK)
+					&& ProbeLookup)
+				{
+					LookupOk = Step("it resolves to GetPosition", Text(ProbeLookup->NameUtf8, ProbeLookup->NameLen) == "GetPosition") && LookupOk;
+					LookupOk = Step("it is a function", ProbeLookup->Kind == VH_LOOKUP_FUNCTION) && LookupOk;
+					LookupOk = Step("it names the class that declares it", Text(ProbeLookup->OwnerUtf8, ProbeLookup->OwnerLen) == "node2d") && LookupOk;
+				}
+				else
+				{
+					LookupOk = false;
+				}
 			}
 
 			// A var resolves the same way and says so, which is the whole of what the editor

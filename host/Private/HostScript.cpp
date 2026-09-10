@@ -1144,6 +1144,7 @@ AUTORTFM_DISABLE bool GodotVerse::LookupSymbol(FUtf8StringView Path, int32 Line,
     const uLang::CDefinition& Definition = *Visitor.Found;
     OutDesc.Name = FUtf8String(Definition.AsNameCString());
     OutDesc.Kind = Visitor.FoundKind;
+    OutDesc.Owner = FUtf8String(Definition._EnclosingScope.GetScopeName().AsCString());
 
     if (const uLang::CDataDefinition* Data = Definition.AsNullable<uLang::CDataDefinition>())
     {

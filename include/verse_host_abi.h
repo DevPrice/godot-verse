@@ -22,7 +22,7 @@
 extern "C" {
 #endif
 
-#define VH_ABI_VERSION 10
+#define VH_ABI_VERSION 11
 
 typedef int32_t vh_bool;
 
@@ -437,6 +437,13 @@ typedef struct vh_lookup_desc
 	/* The definition's type, spelled as Verse source. Empty when it has none to spell. */
 	const char* TypeUtf8;
 	int32_t TypeLen;
+
+	/* The name of the scope the definition was declared in -- for a method, the class that
+	 * declares it, which is the one an inherited call resolves to rather than the one it was
+	 * called through. Empty at the top level. This is what lets a consumer recognise a
+	 * definition as belonging to a mirrored Godot class and name the Godot original. */
+	const char* OwnerUtf8;
+	int32_t OwnerLen;
 
 	int32_t Kind;  /* vh_lookup_kind */
 	vh_bool IsVar; /* declared with `var`, so assignable after the instance seals */
