@@ -538,48 +538,37 @@ void VerseScript::refresh_exports() const {
 
 	TypedArray<Dictionary> properties;
 
-	// Godot has no per-property group field: a group is a PROPERTY_USAGE_GROUP entry that claims
-	// every property listed after it, so members sharing an @category have to be emitted as one
-	// run. The empty category goes first and stays ungrouped.
-	PackedStringArray categories;
-	categories.push_back(String());
+	// Godot has no per-property group field: a PROPERTY_USAGE_GROUP entry claims every property
+	// that follows it, up to the next group entry (or the end of the list) -- the same positional
+	// rule GDScript's @export_group and C#'s [ExportGroup] follow. So the export list is walked
+	// once, in the declaration order vh_class_export_list already returns, and a group header is
+	// inserted only when the category changes; that keeps the inspector, and the scene file Godot
+	// rewrites from it, in the order the author wrote the class rather than bucketed by category.
+	String group = String();
 	for (int64_t i = 0; i < exports.size(); i++) {
-		const String category = Dictionary(exports[i])["category"];
-		if (!category.is_empty() && !categories.has(category)) {
-			categories.push_back(category);
+		const Dictionary entry = exports[i];
+		const Variant::Type type = variant_type_for(entry["type"]);
+		// A Verse type with no Variant counterpart -- char, a map, a tuple -- would reach the
+		// inspector as an untyped blank that silently swallows whatever is typed into it. Skipping
+		// it before the group comparison below means it can't leave a group header stranded above
+		// nothing.
+		if (type == Variant::NIL) {
+			continue;
 		}
-	}
 
-	for (int64_t c = 0; c < categories.size(); c++) {
-		const String category = categories[c];
-		bool group_emitted = category.is_empty();
-
-		for (int64_t i = 0; i < exports.size(); i++) {
-			const Dictionary entry = exports[i];
-			if (String(entry["category"]) != category) {
-				continue;
-			}
-
-			const Variant::Type type = variant_type_for(entry["type"]);
-			// A Verse type with no Variant counterpart -- char, a map, a tuple -- would reach the
-			// inspector as an untyped blank that silently swallows whatever is typed into it.
-			if (type == Variant::NIL) {
-				continue;
-			}
-
-			if (!group_emitted) {
-				Dictionary group;
-				group["name"] = category;
-				group["type"] = (int64_t)Variant::NIL;
-				group["hint"] = (int64_t)PROPERTY_HINT_NONE;
-				group["hint_string"] = String();
-				group["usage"] = (int64_t)PROPERTY_USAGE_GROUP;
-				properties.push_back(group);
-				group_emitted = true;
-			}
-
-			properties.push_back(property_for(entry, type));
+		const String category = entry["category"];
+		if (category != group) {
+			Dictionary group_entry;
+			group_entry["name"] = category;
+			group_entry["type"] = (int64_t)Variant::NIL;
+			group_entry["hint"] = (int64_t)PROPERTY_HINT_NONE;
+			group_entry["hint_string"] = String();
+			group_entry["usage"] = (int64_t)PROPERTY_USAGE_GROUP;
+			properties.push_back(group_entry);
+			group = category;
 		}
+
+		properties.push_back(property_for(entry, type));
 	}
 
 	exports_cache = properties;

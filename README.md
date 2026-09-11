@@ -180,7 +180,9 @@ into one of those would pass the gate; `docs/property-export.md` records why tha
 become a Godot range slider, `@category("Movement")` becomes an inspector group. They carry
 strings rather than numbers — a single string argument is the one attribute payload the compiler
 will hand back today — so godot-verse parses them, and a typo is a missing hint rather than a
-compile error.
+compile error. Properties reach the inspector in the order the class declares them, since Godot has
+no per-property group field: a `@category` claims every member listed after it until another
+`@category` (or none) takes over, the same positional rule GDScript's `@export_group` follows.
 
 **Values cross both ways, through the VM's shape rather than the export list — a value exists
 nowhere but the VM.** `vh_instance_get_field` reads a member off a live instance,
