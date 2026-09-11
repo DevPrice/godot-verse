@@ -114,6 +114,63 @@ const verse_api::method_mapping *godot_method_for(const String &p_verse_class, c
 	return nullptr;
 }
 
+// The Godot function one of the bridge's globals stands for. Godot documents its global functions
+// on @GlobalScope -- a class its documentation has and ClassDB does not, and the one GDScript
+// sends a click on `print(` to -- so naming it is what gives a global the tooltip and the jump a
+// mirrored method already gets. Hand-written because the globals are: gen_verse_api.py mirrors
+// classes, and a global belongs to none.
+struct global_mapping {
+	const char *verse_name;
+	const char *godot_function;
+};
+
+constexpr global_mapping globals[] = {
+	{ "IsInstanceValid", "is_instance_valid" },
+	{ "Print", "print" },
+};
+
+const char *godot_global_for(const String &p_verse_name) {
+	for (size_t i = 0; i < std::size(globals); i++) {
+		if (p_verse_name == globals[i].verse_name) {
+			return globals[i].godot_function;
+		}
+	}
+	return nullptr;
+}
+
+// The Godot class a generated singleton accessor hands out -- GetEngine's Engine, which is the
+// only thing that accessor can be said to be. gen_verse_api.py spells one as `Get` and the Godot
+// class' own name, so inverting it is a lookup in the class table rather than a table of its own.
+String godot_singleton_class_for(const String &p_verse_name) {
+	if (!p_verse_name.begins_with("Get")) {
+		return String();
+	}
+	const String godot_class = p_verse_name.substr(3);
+	for (size_t i = 0; i < std::size(verse_api::classes); i++) {
+		if (godot_class == verse_api::classes[i].godot_name) {
+			return godot_class;
+		}
+	}
+	return String();
+}
+
+// Whether a definition is one of the Godot package's globals, rather than a member of one of its
+// classes or anything the project declares.
+//
+// A definition at the top level has no class to be owned by and reports the file it was written in
+// instead -- a snippet scope carries its path as its name -- so the owner agreeing with the path is
+// what says "top level". Which file it is then separates the package from the project, whose one
+// flat scope would otherwise let a script's own Print be documented as Godot's.
+bool is_godot_package_global(const String &p_owner, const String &p_path) {
+	if (p_owner != p_path) {
+		return false;
+	}
+	const String file = p_path.get_file();
+	return file == String("Godot.native.verse")
+			|| file == String("GodotApi.native.verse")
+			|| file == String("GodotClasses.native.verse");
+}
+
 const char *mirrored_class(const String &p_godot_class) {
 	for (size_t i = 0; i < std::size(verse_api::classes); i++) {
 		if (p_godot_class == verse_api::classes[i].godot_name) {
@@ -1131,6 +1188,24 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 			return result;
 		}
 	} else if (kind == VH_LOOKUP_FUNCTION || kind == VH_LOOKUP_DATA) {
+		// A global is a member of nothing, so the method table has no owner to answer it by, and
+		// the file it is declared in is in the engine tree rather than in the project -- leaving
+		// it, before this, described by its own comment and with nowhere to click through to.
+		if (is_godot_package_global(found_owner, own_path)) {
+			if (const char *global_function = godot_global_for(found_name)) {
+				result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS_METHOD;
+				result["class_name"] = String("@GlobalScope");
+				result["class_member"] = String(global_function);
+				return result;
+			}
+			const String singleton_class = godot_singleton_class_for(found_name);
+			if (!singleton_class.is_empty()) {
+				result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS;
+				result["class_name"] = singleton_class;
+				return result;
+			}
+		}
+
 		// A mirrored property is a var, so the kind alone cannot separate it from a script's own
 		// @editable member; the owner does, since only a mirrored class appears in the table.
 		const verse_api::method_mapping *method = godot_method_for(found_owner, found_name);

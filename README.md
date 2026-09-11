@@ -478,6 +478,22 @@ and into the help viewer, and which the tooltip uses to fetch the description ou
 data. There is nothing to jump to anyway — the generated API is compiled from the engine tree,
 not from the project.
 
+**A global function resolves the same way, through `@GlobalScope`.** `Print` and
+`IsInstanceValid` belong to no class, so there is no owner to key the method table on, and the
+file they are declared in is in the engine tree — which left them, before this, described by their
+own comment and with nowhere for a click to go. Godot keeps its global functions on
+`@GlobalScope`, a class the documentation has and `ClassDB` does not, and GDScript sends a click
+on `print(` to exactly that, so naming it costs nothing and gets the whole class reference entry.
+The three singleton accessors — `GetEngine`, `GetInput`, `GetTime` — are documented by the class
+they hand out instead, which is the only thing one of them can be said to be.
+
+Telling a global apart from a member is a question about the *owner*, again: a definition at the
+top level has no class to be owned by and reports the file it was written in instead, because a
+snippet scope carries its path as its name. So the owner agreeing with the path is what says "top
+level", and the path saying `Godot.native.verse`, `GodotApi.native.verse` or
+`GodotClasses.native.verse` is what separates the package from the project — whose one flat scope
+would otherwise let a script's own `Print` be documented as Godot's.
+
 Turning a Verse name back into a Godot one is a generator problem, not a runtime one. The class
 transform is reversible by table, but the method transform is not reversible at all: Verse's
 `SetPosition` came from `set_position` by dropping the underscores that separated the words, and

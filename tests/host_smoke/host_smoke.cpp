@@ -429,6 +429,43 @@ int main(int argc, char** argv)
 					LookupOk = false;
 				}
 			}
+			// A global function -- Print, IsInstanceValid, a singleton accessor -- is declared at
+			// the top level of the bridge's own package, where there is no class to be owned by.
+			// A definition there reports the file it was written in as its owner instead, since a
+			// snippet scope carries its path as its name, and the two agreeing is what lets the
+			// editor tell a global from a member and document it with Godot's own global.
+			{
+				const std::string HelloSource = ReadFileUtf8(VersePath);
+				const std::string HelloPathUtf8 = VersePath.string();
+				struct Global { const char* What; const std::string* Source; const char* Path; const char* Needle; const char* File; };
+				const Global Globals[] = {
+					{ "Print is declared by the native package", &HelloSource, HelloPathUtf8.c_str(), "Print(", "Godot.native.verse" },
+					{ "IsInstanceValid by the layer above it", &ExportsSource, ExportsPathUtf8.c_str(), "IsInstanceValid", "GodotApi.native.verse" },
+					{ "and a singleton accessor by the generated mirror", &HelloSource, HelloPathUtf8.c_str(), "GetEngine[", "GodotClasses.native.verse" },
+				};
+				for (const Global& G : Globals)
+				{
+					const size_t At = G.Source->find(G.Needle);
+					if (!Step("located the global's call site", At != std::string::npos))
+					{
+						LookupOk = false;
+						continue;
+					}
+					int32_t Row = 0;
+					int32_t Column = 0;
+					RowColumnOf(*G.Source, At + 1, Row, Column);
+					const vh_lookup_desc* Found = nullptr;
+					const bool Resolved = LookupSymbolFn(G.Path, Row, Column, &Found) == VH_OK && Found != nullptr;
+					const std::string Owner = Resolved ? Text(Found->OwnerUtf8, Found->OwnerLen) : std::string();
+					const std::string DeclaredIn = Resolved ? Text(Found->PathUtf8, Found->PathLen) : std::string();
+					LookupOk = Step(G.What,
+								   Resolved && Found->Kind == VH_LOOKUP_FUNCTION
+									   && fs::path(DeclaredIn).filename().string() == G.File)
+							&& LookupOk;
+					LookupOk = Step("owned by that file rather than by a class", !Owner.empty() && Owner == DeclaredIn) && LookupOk;
+				}
+			}
+
 			// A declaration resolves at its name and nowhere else in its own declaration line.
 			// The specifiers, the parameter list and the return type all sit inside the span the
 			// compiler gives the definition, and none of them means "this definition".
