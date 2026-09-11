@@ -838,16 +838,40 @@ way to run the language server at all.
 ## Five constraints worth knowing
 
 **The project is the compilation unit, not the file.** Verse compiles a whole package at once, and
-the host can only *generate* once per process: publishing a compiled package sets
-`EInternalObjectFlags::LoaderImport` on every export, and a second pass over the already-loaded
-native Verse packages trips an assertion on that flag inside UE's async loader. So the first script
-that needs compiling scans `res://` for every `.verse` file and builds them together, and scripts
-added while the editor is running are not picked up until it restarts.
+the host can only *generate* once per process. So the first script that needs compiling scans
+`res://` for every `.verse` file and builds them together; scripts added while the editor is running
+are not picked up until it restarts, and neither is a default an author changes in code — a declared
+default is evaluated by generated code, so refreshing one means generating again.
 
-Analysis is not subject to that. A build configured with `bSemanticAnalysisOnly` and no digests,
-code or bytecode publishes nothing and can be run as often as you like, which is what gives the
-script editor live diagnostics. What it cannot do is replace the bytecode a running program is
-already executing, so hot reload is narrower than it looks rather than flatly impossible.
+The reason is a single `#if` in engine code, and it is worth knowing precisely because it says what
+would have to change. `NotifyCompiledVersePackage`
+(`CoreUObject/Private/Serialization/AsyncLoading2.cpp`) hands the loader's package ref a `UPackage`
+only `#if !WITH_EDITOR`. Having one is what makes the *next* publish of that package call
+`PinPublicExportsForGC`, which asserts `checkObject(!LoaderImport)` over the previous publish's
+exports — and they carry that flag, because the previous publish set it on every one of them. The
+editor rebuilds Verse all day because it compiles with `WITH_EDITOR=1` and never takes that path.
+
+Three ways around it are closed. Unpinning first is the symmetric operation
+(`ReleasePackageRef` → `UnpinPublicExportsForGC`), but it is private to that file and nothing ever
+releases a *compiled* Verse package's ref, so the refcount never falls to 0. Renaming the old
+`UPackage` does make `AddPackageRef` drop the stale ref, but by way of
+`RemoveUnreferencedObsoletePackage`, which `check(PackageRefCount == 0)` as well. And
+`bCompileAgainstEditor` does get a Program target `WITH_EDITOR=1` — UBT grants exactly that
+combination — but it pulls the whole Engine in behind it and does not compile against
+`bCompileAgainstEngine = false`, so buying it means giving up the lean host this target is.
+
+What *does* work, and is worth knowing for anyone who picks this up: `IncrementalizeProjectSource`
+with `EBuildMode::All` keeps the already-loaded native packages out of a second build, exactly as it
+does for the editor. That narrows the obstacle from the whole program to the two packages the host
+compiles at runtime — its scripts and its attributes. The remaining move would be to publish each
+generation under a fresh package name so no ref is ever reused, at the price of leaking the previous
+generation's classes, which stay pinned for the life of the process.
+
+Analysis is not subject to any of this. A build configured with `bSemanticAnalysisOnly` and no
+digests, code or bytecode publishes nothing and can be run as often as you like, which is what gives
+the script editor live diagnostics — and why the *shape* of a script refreshes as you type while its
+values do not. What analysis cannot do is replace the bytecode a running program is already
+executing, so hot reload is narrower than it looks rather than flatly impossible.
 
 **One top-level name per file.** Every file in the project shares one flat `/user@localhost` scope
 and Verse forbids shadowing, so two files that both define a top-level `Ready()` are a compile

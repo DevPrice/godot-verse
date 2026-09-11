@@ -392,10 +392,10 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FUtf8String>& Path
 {
     if (GProjectBuilt)
     {
-        ReportError(UTF8TEXT("The Verse program has already been built in this process. Verse "
-                             "compiles a whole package at once and a second build aborts the "
-                             "engine, so scripts added after startup are not picked up until "
-                             "the process restarts."));
+        ReportError(UTF8TEXT("The Verse program has already been built in this process. A second "
+                             "generating build aborts the engine, so a script added after startup is "
+                             "not picked up, and neither is a declared default changed in code, "
+                             "until the process restarts."));
         return false;
     }
 
@@ -456,9 +456,12 @@ AUTORTFM_DISABLE bool RunCheck(const FUtf8String& Path, const FUtf8String& Sourc
         }
     }
 
-    // What cannot happen twice in a process is a build that *generates* -- it re-notifies the
-    // already-loaded native Verse packages and aborts inside the async loader. A build that only
-    // analyses publishes no packages and can be run as often as the editor types.
+    // What cannot happen twice in a process is a build that *generates*. Publishing a package marks
+    // each of its exports with EInternalObjectFlags::LoaderImport, and publishing that package again
+    // asserts on the flag the previous publish left -- for any package, not just the native ones,
+    // which are merely the first to get there. README.md's first constraint has the whole finding,
+    // including why WITH_EDITOR is what decides it. A build that only analyses publishes nothing and
+    // can be run as often as the editor types.
     FSolIdeBuildSettings Settings{.LinkSettings = uLang::SBuildParams::ELinkParam::RequireComplete};
     Settings.bSemanticAnalysisOnly = true;
     Settings.bGenerateDigests = false;

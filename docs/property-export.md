@@ -508,7 +508,12 @@ Ordered to front-load the cheap work. Bands, not estimates; item 4 is the one wi
    the stale number: `PlaceHolderScriptInstance::update` drops any stored value equal to the default
    (`core/object/script_language.cpp:748-754`), so it would show a new one the moment the VM had one.
    Nothing short of repeatable code generation fixes this, which is why it sits here rather than in
-   the list above.
+   the list above — and repeatable code generation was investigated and is not reachable from this
+   side of the boundary. `README.md`'s first constraint has the finding: a `#if !WITH_EDITOR` in
+   `NotifyCompiledVersePackage` decides whether a second publish pins the first publish's exports and
+   asserts, three ways around it are closed, and the one that is left trades the abort for a leak.
+   `IncrementalizeProjectSource` with `EBuildMode::All` is the part that does work, and narrows the
+   obstacle to the two packages the host compiles at runtime.
 
 A rejection reaches the author as a warning rather than as silence. `refresh_export_warnings` in
 `src/verse_script_language.cpp` turns each refused member into a `_validate` warning on the line it
