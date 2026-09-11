@@ -12,7 +12,8 @@ and `docs/editor-tooling.md` hold the full research and citations behind those s
 `docs/spec.md` is the requirements document — what the finished software must do, numbered so a
 commit can cite one. README describes today; the spec describes the target, and §14 holds the open
 questions that block the rest. Check a requirement's status there before assuming a gap is
-unexamined.
+unexamined. `docs/roadmap.md` sequences those requirements into phases and says which phase the
+work in front of you belongs to.
 
 This file is the map and the working rules; the reasoning lives there.
 

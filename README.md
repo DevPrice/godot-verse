@@ -13,7 +13,7 @@ Two DLLs meet at a C ABI:
 `include/verse_host_abi.h` is the contract between them. Nothing else crosses.
 
 This document describes what exists and why it is shaped that way. `docs/spec.md` describes what
-the finished software has to do, and what is still open.
+the finished software has to do, and what is still open; `docs/roadmap.md` sequences it.
 
 ## Layout
 
@@ -22,7 +22,7 @@ the finished software has to do, and what is still open.
     src/         GDExtension sources
     tools/       build_host.py, the API and keyword generators and friends
     tests/       host smoke test (loads verse_host.dll with no Godot involved), lexer test
-    docs/        spec.md, plus editor toolchain and property-export research
+    docs/        spec.md and roadmap.md, plus editor toolchain and property-export research
     demo/        Godot project
 
 ## Building
