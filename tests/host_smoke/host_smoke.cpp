@@ -1596,6 +1596,18 @@ int main(int argc, char** argv)
 
 		// Put the good text back, so nothing after this sees the broken parse.
 		CheckProjectFn(ExportsPathUtf8.c_str(), CleanSource.c_str());
+
+		// The demo's own script, analysed by standing in for this fixture's buffer: every type it
+		// names is in this package too, and its own top-level names do not collide with the ones it
+		// replaces. `demo/` is the worked example for every feature here and nothing else compiles
+		// it, so without this a change that breaks it surfaces only when the editor is opened.
+		const std::string DemoSource = ReadFileUtf8(VerseBase / "demo" / "scripts" / "mover.verse");
+		AsyncOk = Step("the demo's mover.verse analyses",
+					   !DemoSource.empty()
+						   && CheckProjectFn(ExportsPathUtf8.c_str(), DemoSource.c_str()) == VH_OK)
+			   && AsyncOk;
+		CheckProjectFn(ExportsPathUtf8.c_str(), CleanSource.c_str());
+
 		CallsOk = AsyncOk && CallsOk;
 	}
 
