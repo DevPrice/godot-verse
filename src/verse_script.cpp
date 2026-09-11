@@ -583,15 +583,15 @@ PropertyUsageFlags usage_for_group(int64_t p_kind) {
 	}
 }
 
-// The Godot class an export's class hint names. Both hints carry a Verse class name; they differ in
-// which table turns it into a Godot one.
+// The name an export's reference slot is filtered by: the Godot class for one of the mirrors, and the
+// registered class name for one of the project's own.
 //
-// A mirrored class is resolved through the generated API's, the only place the two spellings are
-// written down together. A script's class has no entry there -- nothing generated it -- and its
-// Godot name is instead the PascalCase form of the same name it registered with, which is derived
-// here through verse_pascal_case rather than sent across the ABI: the host would have to reimplement
-// the transform to send it, and two implementations of one naming rule are one too many.
-String godot_class_from_hint(const Dictionary &p_entry) {
+// A mirrored name is resolved through the generated API's table, the only place the two spellings are
+// written down together. A script's class has no entry there -- nothing generated it -- and the name
+// Godot knows it by is the PascalCase form of the same name it registered with, derived here through
+// verse_pascal_case rather than sent across the ABI: the host would have to reimplement the transform
+// to send it, and two implementations of one naming rule are one too many.
+String filter_class_from_hint(const Dictionary &p_entry) {
 	const String verse_class = p_entry["hint_string"];
 	if ((int64_t)p_entry["hint"] == VH_EXPORT_HINT_SCRIPT_CLASS) {
 		return String(verse_pascal_case(std::string(verse_class.utf8().get_data())).c_str());
@@ -612,16 +612,26 @@ Dictionary property_for(const Dictionary &p_entry, Variant::Type p_type) {
 			break;
 		case VH_EXPORT_HINT_CLASS:
 		case VH_EXPORT_HINT_SCRIPT_CLASS: {
-			// Godot filters a reference slot by class name, and which kind of filter it is depends
-			// on what that class is: a node is picked out of the scene and a resource off disk, so
-			// the two hints are different properties rather than one with a flag. ClassDB is asked
-			// because only Godot can answer it -- the host has none to check against, which is why
-			// it sends a Verse name and leaves the sorting here.
-			const String godot_class = godot_class_from_hint(p_entry);
-			property["hint_string"] = godot_class;
-			if (ClassDB::is_parent_class(godot_class, "Node")) {
+			// Two different questions, and answering them with one name is the mistake worth avoiding.
+			// What the slot is *filtered* by is the name Godot knows the class as, registered ones
+			// included. Which *kind* of slot it is comes from ClassDB -- a node is picked out of the
+			// scene and a resource off disk -- and ClassDB can only be asked about a class it has, so
+			// it is asked about the mirrored class the host named instead. A script's registered name
+			// is not one of those: asking whether `Mover` descends from Node gets "no", and an object
+			// property with no hint is drawn as a resource picker.
+			//
+			// This is the same split GDScript makes, with `native_type` deciding the hint and
+			// `_find_narrowest_native_or_global_class` the hint string
+			// (engine: modules/gdscript/gdscript_parser.cpp:4796-4811).
+			const char *native_class = verse_godot_class_for(p_entry["native_class"]);
+			property["hint_string"] = filter_class_from_hint(p_entry);
+			if (native_class == nullptr) {
+				// `object` and nothing else: the only mirrored class the generated table leaves out,
+				// and a reference to it says no more than "some Godot object".
+				property["hint"] = (int64_t)PROPERTY_HINT_NONE;
+			} else if (ClassDB::is_parent_class(native_class, "Node")) {
 				property["hint"] = (int64_t)PROPERTY_HINT_NODE_TYPE;
-			} else if (ClassDB::is_parent_class(godot_class, "Resource")) {
+			} else if (ClassDB::is_parent_class(native_class, "Resource")) {
 				property["hint"] = (int64_t)PROPERTY_HINT_RESOURCE_TYPE;
 			} else {
 				// Neither, which is most of Godot's singletons -- an Engine or a MainLoop. There is

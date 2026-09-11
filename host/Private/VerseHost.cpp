@@ -385,6 +385,8 @@ extern "C" int32_t vh_class_export_list(const char* ClassNameUtf8, const vh_expo
             Export.Hint,
             reinterpret_cast<const char*>(*Export.HintString),
             Export.HintString.Len(),
+            reinterpret_cast<const char*>(*Export.NativeClass),
+            Export.NativeClass.Len(),
             Export.RangeMin,
             Export.RangeMax,
             Export.bHasRangeMin ? 1 : 0,

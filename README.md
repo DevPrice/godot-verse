@@ -236,6 +236,14 @@ node two Verse objects, two sets of members, and no way for the author to tell w
 looking at. The rule then runs the other way too: a mirrored member assigned a node that *does* carry
 a Verse script holds that script's own object rather than a second wrapper around the same handle.
 
+Drawing the slot needs two names, not one, and that is worth separating carefully. What the slot
+*filters by* is the name Godot knows the class as — the registered `Mover` for a script class. Which
+*kind* of slot it is — a node picked out of the scene, or a resource off disk — Godot decides from the
+class's ClassDB ancestry, and a registered class is not in ClassDB: `is_parent_class("Mover", "Node")`
+is false, and an object property with neither hint is drawn as a resource picker. So the host sends the
+nearest mirrored class in the referenced class's own superclass chain (`node2d`) beside the registered
+name, which is a name ClassDB does know. GDScript splits the same two answers the same way.
+
 **A struct crosses as the numbers it is made of.** `vector2`, `vector3` and `color` are hand-written
 Verse structs, and each is carried as a tuple tagged with the Godot type to rebuild from it — the same
 encoding a method argument already used. Building one needs the only piece of real VM object

@@ -756,6 +756,29 @@ enum class EClassOrigin : uint8
     Script,
 };
 
+AUTORTFM_DISABLE EClassOrigin ClassOriginOf(const uLang::CClass& Class, const uLang::CSemanticProgram& Program);
+
+/// The nearest mirrored class in Class's own superclass chain, Class included.
+///
+/// This is what decides how a reference slot is drawn, and a class the project declares cannot answer
+/// it: ClassDB has never heard of the name that class registered with Godot, so asking whether `Mover`
+/// descends from Node gets "no" and the inspector falls back to a resource picker. Its nearest
+/// mirrored ancestor -- `node2d` -- is a name ClassDB does know.
+///
+/// Empty for a chain that reaches `object` without passing a mirror, which is a reference to something
+/// Godot draws no picker for either way.
+AUTORTFM_DISABLE FUtf8String NativeClassOf(const uLang::CClass& Class, const uLang::CSemanticProgram& Program)
+{
+    for (const uLang::CClass* Current = &Class; Current != nullptr; Current = Current->GetSuperClass())
+    {
+        if (ClassOriginOf(*Current, Program) == EClassOrigin::Mirrored)
+        {
+            return FUtf8String(Current->AsNameCString());
+        }
+    }
+    return FUtf8String();
+}
+
 AUTORTFM_DISABLE EClassOrigin ClassOriginOf(const uLang::CClass& Class, const uLang::CSemanticProgram& Program)
 {
     const FUtf8String Name = FUtf8String(Class.AsNameCString());
@@ -964,6 +987,7 @@ AUTORTFM_DISABLE void DescribeExportType(const uLang::CTypeBase* Type, const uLa
         OutDesc.VariantTag = VH_VARIANT_OBJECT;
         OutDesc.Hint = Origin == EClassOrigin::Script ? VH_EXPORT_HINT_SCRIPT_CLASS : VH_EXPORT_HINT_CLASS;
         OutDesc.HintString = FUtf8String(Class->AsNameCString());
+        OutDesc.NativeClass = NativeClassOf(*Class, Program);
 
         // Nothing can force a value into an inspector slot, so a member that cannot hold the empty
         // case has a declared type the scene can always violate. The Verse spelling that compiles

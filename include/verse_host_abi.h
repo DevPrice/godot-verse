@@ -22,7 +22,7 @@
 extern "C" {
 #endif
 
-#define VH_ABI_VERSION 26
+#define VH_ABI_VERSION 27
 
 typedef int32_t vh_bool;
 
@@ -412,9 +412,19 @@ typedef struct vh_export_desc
 
 	int32_t Hint; /* vh_export_hint */
 
-	/* VH_EXPORT_HINT_ENUM and VH_EXPORT_HINT_CLASS only; a range speaks through the fields below. */
+	/* VH_EXPORT_HINT_ENUM and the two class hints only; a range speaks through the fields below. */
 	const char* HintStringUtf8;
 	int32_t HintStringLen;
+
+	/* The two class hints only: the mirrored class whose Godot counterpart decides how the slot is
+	 * drawn -- a node is picked out of the scene and a resource off disk, and the consumer has to ask
+	 * ClassDB which this is. For VH_EXPORT_HINT_CLASS that is the class in HintStringUtf8 itself; for
+	 * VH_EXPORT_HINT_SCRIPT_CLASS it is the nearest mirrored class the referenced class derives from,
+	 * because ClassDB has never heard of a name a script registered and cannot place it. Empty when
+	 * the chain reaches `object` without passing a mirrored class, which is a reference to something
+	 * that is neither a node nor a resource. */
+	const char* NativeClassUtf8;
+	int32_t NativeClassLen;
 
 	/* VH_EXPORT_HINT_RANGE: the bounds the declared type carries, exactly as it carries them. A
 	 * bound the type does not constrain is absent rather than infinite, which is not the same

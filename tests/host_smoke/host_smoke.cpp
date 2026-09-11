@@ -1080,6 +1080,7 @@ int main(int argc, char** argv)
 	ExportsOk = Step("an optional node names the class its slot accepts",
 					TargetExport && TargetExport->Hint == VH_EXPORT_HINT_CLASS
 						&& TextOf(TargetExport->HintStringUtf8, TargetExport->HintStringLen) == "node2d"
+						&& TextOf(TargetExport->NativeClassUtf8, TargetExport->NativeClassLen) == "node2d"
 						&& TargetExport->VariantTag == VH_VARIANT_OBJECT)
 			 && ExportsOk;
 	const vh_export_desc* HeldExport = FindExport("Held");
@@ -1101,6 +1102,11 @@ int main(int argc, char** argv)
 						&& TextOf(FriendExport->HintStringUtf8, FriendExport->HintStringLen) == "exports_probe"
 						&& FriendExport->VariantTag == VH_VARIANT_OBJECT
 						&& FriendExport->Reject == VH_EXPORT_OK)
+			 && ExportsOk;
+	// Without this the slot cannot be drawn: ClassDB has never heard of the name exports_probe
+	// registered, so only the mirrored class it derives from says it is a node and not a resource.
+	ExportsOk = Step("and the mirrored class that says whether it is a node",
+					FriendExport && TextOf(FriendExport->NativeClassUtf8, FriendExport->NativeClassLen) == "node2d")
 			 && ExportsOk;
 	// A struct crosses as the numbers it is made of, tagged with which Godot type to rebuild from
 	// them -- the refusal Epic's `editable` gave these ("not concrete") is the reason the attribute

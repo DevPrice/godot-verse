@@ -86,6 +86,10 @@ struct FExportDesc
     int32 Hint{VH_EXPORT_HINT_NONE};
     /// The enumerators or the class name; a range speaks through the bounds below instead.
     FUtf8String HintString;
+    /// The mirrored class whose Godot counterpart says whether the slot picks a node or a resource:
+    /// the referenced class itself where that is one of the mirrors, and its nearest mirrored ancestor
+    /// where it is one of the project's own -- ClassDB cannot place a name a script registered.
+    FUtf8String NativeClass;
 
     /// The bounds of a constrained number as the type carries them, absent rather than infinite
     /// at an end the type leaves open. A strict inequality arrives already normalised to the

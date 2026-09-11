@@ -356,6 +356,22 @@ will. That check is also what lets a *mirrored* member take an instance: `?node2
 carrying a `mover` script holds the mover, which is both type-correct and the identity-preserving
 answer.
 
+**Which picker the slot gets is a different question from what it filters by, and conflating them is
+how the first version drew a resource picker for `?mover`.** Godot decides the *kind* of slot from the
+class's native — ClassDB — ancestry: `PROPERTY_HINT_RESOURCE_TYPE` under Resource,
+`PROPERTY_HINT_NODE_TYPE` under Node, and for an object property with neither hint the inspector falls
+back to a resource picker. It decides what the slot *accepts* from the narrowest name it can put in the
+hint string, which for a registered class is that name. GDScript keeps the two apart explicitly —
+`export_type.native_type` for the hint, `_find_narrowest_native_or_global_class` for the string
+(`modules/gdscript/gdscript_parser.cpp:4796-4811`).
+
+Only one of those the Godot side can work out on its own. `Mover` is registered with the script
+language, not with ClassDB, so `ClassDB::is_parent_class("Mover", "Node")` is false and nothing local
+can say otherwise. The host sends the answer instead: `NativeClassUtf8` carries the nearest *mirrored*
+class in the referenced class's own superclass chain — `node2d` for a `?mover` — which is a name
+ClassDB does know. For a mirrored reference it is the class itself, so the consumer has one rule rather
+than two.
+
 Referring to a script class at all requires `@global_class` on it. That is the one rejection in this
 set that is about Godot rather than about Verse: the inspector filters a slot by a Godot class name,
 an unregistered class has none, and Verse will happily let the member be declared anyway. The host
@@ -468,7 +484,7 @@ Ordered to front-load the cheap work. Bands, not estimates; item 4 is the one wi
    `@export` member may be written — that is initialization, and it is how a non-var gets a
    value at all. Sealed, only a `var` may be. The rule needs no new ABI call and no cooperation
    from the GDExtension: `InstanceCallVoid` sets the flag, and `Ready` is a call.
-5. ~~**Type coverage**~~ — **done** for everything the plan set out, at ABI 26: an optional reference
+5. ~~**Type coverage**~~ — **done** for everything the plan set out, at ABI 27: an optional reference
    to a mirrored class or to a registered script class, filtered in the inspector by node or resource
    type; `vector2`/`vector3`/`color` as tagged tuples; an array as the packed container Godot has for
    its element, or an `Array` naming what it holds; and an enum as its ordinal. What is left refused is
@@ -497,7 +513,7 @@ than an admission.
 
 Implemented and covered by `tests/host_smoke` (`exports.verse` fixture): the harvest
 (`HostScript.cpp` `GetClassExports`), `vh_class_export_list`, `vh_instance_get_field`,
-`vh_class_default_field`, `vh_instance_set_field` and `vh_instance_set_field_instance` at ABI 26,
+`vh_class_default_field`, `vh_instance_set_field` and `vh_instance_set_field_instance` at ABI 27,
 `VerseScript::_get_script_property_list` with type-derived hints, a class header and group headers,
 `_get_property_default_value`, and the script instance's `get_func` and `set_func`.
 
