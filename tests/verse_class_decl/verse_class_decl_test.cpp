@@ -160,6 +160,18 @@ bool TestPascalCase()
 		&& Step("an empty name stays empty", verse_pascal_case("").empty());
 }
 
+bool TestSnakeCase()
+{
+	return Step("a single word lowercases", verse_snake_case("Mover") == "mover")
+		&& Step("word boundaries join with an underscore", verse_snake_case("MyTestMethod") == "my_test_method")
+		&& Step("a trailing digit is kept", verse_snake_case("Enemy2") == "enemy2")
+		&& Step("a run of capitals is one word", verse_snake_case("GetHP") == "get_hp")
+		&& Step("a run of capitals breaks before the last if lowercase follows", verse_snake_case("GetHPValue") == "get_hp_value")
+		&& Step("already snake_case is left alone", verse_snake_case("already_snake") == "already_snake")
+		&& Step("an empty name stays empty", verse_snake_case("").empty())
+		&& Step("round-trips through verse_pascal_case for ordinary words", verse_pascal_case(verse_snake_case("MyTestMethod")) == "MyTestMethod");
+}
+
 bool TestDeclarationLine()
 {
 	// The row is what locates the comment block above the class, which is the class' own
@@ -196,6 +208,7 @@ int main()
 	Ok = TestSpacingVariants() && Ok;
 	Ok = TestEmptySource() && Ok;
 	Ok = TestPascalCase() && Ok;
+	Ok = TestSnakeCase() && Ok;
 
 	printf("[verse_class_decl_test] %s\n", Ok ? "ALL PASS" : "FAILURES");
 	return Ok ? 0 : 1;

@@ -36,3 +36,15 @@ VerseClassDecl verse_scan_class_decl(const std::string &p_source);
 // `Camera3D` are spelled. Nothing else about digits is special -- `add` and `vector2i` are left
 // exactly as they are.
 std::string verse_pascal_case(const std::string &p_verse_name);
+
+// The inverse split: `MyTestMethod` becomes `my_test_method`, the way Godot's own methods are
+// spelled and the way tools/gen_verse_api.py's verse_class_name() already lowers Godot's PascalCase
+// class names for the Verse side (the one other place this repo does this transform -- kept as the
+// reference for the word-boundary rule: a word starts at a lower-to-upper transition, or an
+// upper-to-upper transition immediately followed by a lowercase letter).
+//
+// Not exactly the inverse of verse_pascal_case: a run of capitals from an acronym (`HP2`) collapses
+// its case information going this way and verse_pascal_case cannot recover it, so a name is never
+// round-tripped through both -- a lookup goes through an explicit name map built by applying this to
+// every declared name once, not by guessing a PascalCase name back from what this returns.
+std::string verse_snake_case(const std::string &p_verse_name);

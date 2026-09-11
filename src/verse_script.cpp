@@ -15,6 +15,7 @@
 #include <godot_cpp/classes/object.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/godot.hpp>
+#include <godot_cpp/variant/packed_string_array.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 #include <godot_cpp/variant/variant.hpp>
 
@@ -24,6 +25,110 @@ namespace {
 
 VerseRuntime *get_runtime() {
 	return Object::cast_to<VerseRuntime>(Engine::get_singleton()->get_singleton("VerseRuntime"));
+}
+
+// The parameter names out of a function member's SignatureUtf8 -- "(Delta:float):void" -- in
+// declaration order. A comma only ends a parameter at depth zero: a parameter's own type can carry
+// one of its own, the way a tuple's does, and splitting on that would miscount the list.
+//
+// Types are deliberately left out. The signature spells them as Verse source, and there is no
+// table anywhere that maps arbitrary Verse type syntax to a Variant::Type the way vh_export_desc's
+// numeric Type does for an exported member -- guessing would report a type the argument doesn't
+// have, which is worse to a caller than reporting none.
+PackedStringArray function_signature_arg_names(const String &p_signature) {
+	PackedStringArray names;
+	const int64_t open = p_signature.find("(");
+	if (open < 0) {
+		return names;
+	}
+
+	int64_t depth = 0;
+	int64_t start = open + 1;
+	int64_t i = start;
+	for (; i < p_signature.length(); i++) {
+		const char32_t c = p_signature[i];
+		if (c == '(' || c == '[' || c == '{') {
+			depth++;
+		} else if (c == ')' || c == ']' || c == '}') {
+			if (depth == 0) {
+				break;
+			}
+			depth--;
+		} else if (c == ',' && depth == 0) {
+			names.push_back(p_signature.substr(start, i - start).strip_edges().get_slicec(':', 0).strip_edges());
+			start = i + 1;
+		}
+	}
+
+	const String last = p_signature.substr(start, i - start).strip_edges();
+	if (!last.is_empty()) {
+		names.push_back(last.get_slicec(':', 0).strip_edges());
+	}
+	return names;
+}
+
+// One argument slot in the Dictionary shape ScriptExtension::_get_method_info wants for MethodInfo.
+// Untyped, since function_signature_arg_names has no type to give it -- PROPERTY_USAGE_NIL_IS_VARIANT
+// is what tells Godot that is deliberate rather than a property nobody set a type on.
+Dictionary untyped_argument(const String &p_name) {
+	Dictionary arg;
+	arg["name"] = p_name;
+	arg["type"] = (int64_t)Variant::NIL;
+	arg["hint"] = (int64_t)PROPERTY_HINT_NONE;
+	arg["hint_string"] = String();
+	arg["usage"] = (int64_t)(PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_NIL_IS_VARIANT);
+	return arg;
+}
+
+// A vh_complete_item for a VH_LOOKUP_FUNCTION member, as the MethodInfo Dictionary
+// ScriptExtension::_get_method_info and _get_script_method_list share. Named the way Godot sees it
+// -- snake_case -- rather than the Verse-spelled PascalCase p_member["name"] itself carries.
+Dictionary method_info_for_function_member(const Dictionary &p_member) {
+	const String verse_name = p_member["name"];
+	Dictionary info;
+	info["name"] = String(verse_snake_case(std::string(verse_name.utf8().get_data())).c_str());
+	info["flags"] = (int64_t)METHOD_FLAG_NORMAL;
+	info["id"] = -1;
+	info["return"] = untyped_argument(String());
+	info["default_args"] = Array();
+
+	TypedArray<Dictionary> args;
+	const PackedStringArray names = function_signature_arg_names(p_member["signature"]);
+	for (int64_t i = 0; i < (int64_t)p_member["param_count"]; i++) {
+		const String name = i < names.size() && !String(names[i]).is_empty()
+				? String(names[i])
+				: String("arg") + String::num_int64(i + 1);
+		args.push_back(untyped_argument(name));
+	}
+	info["args"] = args;
+	return info;
+}
+
+// The class's own VH_LOOKUP_FUNCTION member Godot would call p_godot_name -- its Verse name lowered
+// through verse_snake_case, not the Verse name itself -- or an empty Dictionary when none of this
+// class's functions lower to that name, including when it declares no such class at all.
+//
+// A linear scan rather than a cached map: class_members() already re-walks the semantic program on
+// every call, so a name→member index built over it would go stale exactly as often as it would save
+// work, for a member count too small for the difference to matter.
+Dictionary find_function_member_by_godot_name(const String &p_class_name, const StringName &p_godot_name) {
+	VerseRuntime *runtime = get_runtime();
+	if (runtime == nullptr) {
+		return Dictionary();
+	}
+	const String godot_name = String(p_godot_name);
+	const TypedArray<Dictionary> members = runtime->class_members(p_class_name);
+	for (int64_t i = 0; i < members.size(); i++) {
+		const Dictionary member = members[i];
+		if ((int64_t)member["kind"] != VH_LOOKUP_FUNCTION) {
+			continue;
+		}
+		const String verse_name = member["name"];
+		if (String(verse_snake_case(std::string(verse_name.utf8().get_data())).c_str()) == godot_name) {
+			return member;
+		}
+	}
+	return Dictionary();
 }
 
 GDExtensionInterfacePlaceholderScriptInstanceUpdate get_placeholder_instance_update_fn() {
@@ -356,11 +461,19 @@ Error VerseScript::_reload(bool p_keep_state) {
 }
 
 bool VerseScript::_has_method(const StringName &p_method) const {
+	if (!is_compiled()) {
+		return false;
+	}
 	// Every script class inherits Ready, Process and PhysicsProcess from `object`, so a valid
-	// script has all three whether or not it overrides them. Whether an override exists is an
-	// instance question, and VerseScriptInstance answers it — that is what decides whether Godot
-	// puts the node in the per-frame process list.
-	return is_compiled() && VerseScriptInstance::verse_name_for(p_method) != nullptr;
+	// script answers yes to Godot's own names for them whether or not it overrides them. Whether an
+	// override exists is an instance question, and VerseScriptInstance answers that one instead —
+	// it is what decides whether Godot puts the node in the per-frame process list.
+	if (VerseScriptInstance::verse_name_for(p_method) != nullptr) {
+		return true;
+	}
+	// Anything else this class declares, under the snake_case name Godot sees it as rather than the
+	// Verse-spelled PascalCase it is declared with -- see find_function_member_by_godot_name.
+	return !find_function_member_by_godot_name(verse_class_name(), p_method).is_empty();
 }
 
 bool VerseScript::_has_static_method(const StringName &p_method) const {
@@ -369,12 +482,31 @@ bool VerseScript::_has_static_method(const StringName &p_method) const {
 
 Dictionary VerseScript::_get_method_info(const StringName &p_method) const {
 	Dictionary info;
-	if (!_has_method(p_method)) {
+	if (!is_compiled()) {
 		return info;
 	}
-	info["name"] = p_method;
-	info["flags"] = (int64_t)METHOD_FLAG_NORMAL;
-	return info;
+
+	if (VerseScriptInstance::verse_name_for(p_method) != nullptr) {
+		info["name"] = p_method;
+		info["flags"] = (int64_t)METHOD_FLAG_NORMAL;
+		info["id"] = -1;
+		info["default_args"] = Array();
+		info["return"] = untyped_argument(String());
+		TypedArray<Dictionary> args;
+		// Ready takes nothing; Process and PhysicsProcess both take the frame's delta, the one
+		// argument VerseScriptInstance::call_func always knows how to pack.
+		if (p_method != StringName("_ready")) {
+			args.push_back(untyped_argument("delta"));
+		}
+		info["args"] = args;
+		return info;
+	}
+
+	const Dictionary member = find_function_member_by_godot_name(verse_class_name(), p_method);
+	if (member.is_empty()) {
+		return info;
+	}
+	return method_info_for_function_member(member);
 }
 
 ScriptLanguage *VerseScript::_get_language() const {
@@ -471,6 +603,22 @@ TypedArray<Dictionary> VerseScript::_get_script_method_list() const {
 		const StringName method(method_name);
 		if (_has_method(method)) {
 			methods.push_back(_get_method_info(method));
+		}
+	}
+
+	VerseRuntime *runtime = get_runtime();
+	if (!is_compiled() || runtime == nullptr) {
+		return methods;
+	}
+
+	// Everything else this class declares, Ready/Process/PhysicsProcess included -- listed again
+	// here under their snake_case name ("ready" beside "_ready" above) rather than the Verse-spelled
+	// PascalCase they are declared with, the name Godot itself is expected to see a method under.
+	const TypedArray<Dictionary> members = runtime->class_members(verse_class_name());
+	for (int64_t i = 0; i < members.size(); i++) {
+		const Dictionary member = members[i];
+		if ((int64_t)member["kind"] == VH_LOOKUP_FUNCTION) {
+			methods.push_back(method_info_for_function_member(member));
 		}
 	}
 	return methods;

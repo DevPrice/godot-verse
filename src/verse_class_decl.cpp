@@ -149,6 +149,28 @@ std::string verse_pascal_case(const std::string &p_verse_name) {
 	return result;
 }
 
+std::string verse_snake_case(const std::string &p_verse_name) {
+	std::string result;
+	result.reserve(p_verse_name.size() + 4);
+
+	for (size_t i = 0; i < p_verse_name.size(); i++) {
+		const char c = p_verse_name[i];
+		const bool is_upper = c >= 'A' && c <= 'Z';
+		if (is_upper && i > 0) {
+			const char prev = p_verse_name[i - 1];
+			const bool prev_lower = prev >= 'a' && prev <= 'z';
+			const bool prev_upper = prev >= 'A' && prev <= 'Z';
+			const bool next_lower = i + 1 < p_verse_name.size()
+					&& p_verse_name[i + 1] >= 'a' && p_verse_name[i + 1] <= 'z';
+			if (prev_lower || (prev_upper && next_lower)) {
+				result.push_back('_');
+			}
+		}
+		result.push_back(is_upper ? static_cast<char>(c - 'A' + 'a') : c);
+	}
+	return result;
+}
+
 VerseClassDecl verse_scan_class_decl(const std::string &p_source) {
 	VerseClassDecl decl;
 	bool pending_global = false;

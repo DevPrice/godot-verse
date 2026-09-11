@@ -459,6 +459,26 @@ Dictionary VerseScriptLanguage::_validate(const String &p_script, const String &
 	if (p_validate_warnings && export_warnings_by_path.has(p_path)) {
 		result["warnings"] = export_warnings_by_path[p_path];
 	}
+
+	// ScriptTextEditor::get_functions() reads this key alone to build the script editor's method
+	// outline -- none of Script's own method-list virtuals are involved. Left unset when there is
+	// nothing to answer from, the same as every other optional key here.
+	VerseRuntime *runtime = get_runtime();
+	if (p_validate_functions && runtime != nullptr) {
+		PackedStringArray functions;
+		const TypedArray<Dictionary> members = runtime->class_members(p_path.get_file().get_basename());
+		for (int64_t i = 0; i < members.size(); i++) {
+			const Dictionary member = members[i];
+			const int64_t line = member["line"];
+			// No source location -- a member the host synthesised rather than one this file wrote --
+			// has no line for the outline to jump to.
+			if ((int64_t)member["kind"] == VH_LOOKUP_FUNCTION && line >= 0) {
+				functions.push_back(String(member["name"]) + ":" + String::num_int64(line + 1));
+			}
+		}
+		result["functions"] = functions;
+	}
+
 	return result;
 }
 
