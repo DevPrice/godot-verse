@@ -2,7 +2,9 @@
 """Stages host/ into the UE engine tree and builds the VerseHost program target."""
 
 import argparse
+import datetime
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -10,6 +12,12 @@ import time
 from pathlib import Path
 
 SKIP_DIRS = {"Intermediate", "Binaries"}
+
+# The path build_host.py itself writes into the engine tree. Engine changes are what the
+# provenance record is for, and our own staged copy is not one of them.
+STAGED_PREFIX = "Engine/Source/Programs/VerseHost/"
+
+PROVENANCE_NAME = "verse_host.build.txt"
 
 
 def repo_root() -> Path:
@@ -66,6 +74,82 @@ def mirror_host(src: Path, dst: Path, extra: dict[str, Path] | None = None) -> t
     return copied, removed
 
 
+def git(repo: Path, *args: str) -> str | None:
+    try:
+        result = subprocess.run(["git", "-C", str(repo), *args],
+                                capture_output=True, text=True, check=False)
+    except FileNotFoundError:
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip()
+
+
+def engine_local_changes(engine: Path) -> list[str]:
+    """Paths the engine checkout carries beyond its HEAD, excluding our own staged copy.
+
+    This is the patch set a second checkout would have to reproduce, so an empty list is the
+    claim that a stock checkout at `engine_commit` builds the same host.
+    """
+    status = git(engine, "status", "--porcelain")
+    if status is None:
+        return []
+    paths = []
+    for line in status.splitlines():
+        path = line[3:].strip().strip('"')
+        if path.startswith(STAGED_PREFIX) or path.endswith(PROVENANCE_NAME):
+            continue
+        paths.append(path)
+    return sorted(paths)
+
+
+def abi_version(repo: Path) -> str | None:
+    header = repo / "include" / "verse_host_abi.h"
+    try:
+        text = header.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    match = re.search(r"^#define\s+VH_ABI_VERSION\s+(\d+)", text, re.MULTILINE)
+    return match.group(1) if match else None
+
+
+def write_provenance(engine: Path, repo: Path, config: str, destinations: list[Path]) -> Path | None:
+    """Records which engine state produced this host, beside the binary it produced.
+
+    A spike result is only worth as much as the ability to reproduce the engine it ran on, and
+    the engine is not a dependency any manifest in this repo pins. The smoke test prints this
+    file back so a test log carries the engine revision with it.
+    """
+    changes = engine_local_changes(engine)
+    fields = [
+        ("abi_version", abi_version(repo) or "unknown"),
+        ("config", config),
+        ("built_utc", datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")),
+        ("engine_root", engine.as_posix()),
+        ("engine_commit", git(engine, "rev-parse", "HEAD") or "unknown"),
+        ("engine_branch", git(engine, "rev-parse", "--abbrev-ref", "HEAD") or "unknown"),
+        ("engine_local_changes", str(len(changes))),
+        ("godot_verse_commit", git(repo, "rev-parse", "HEAD") or "unknown"),
+        ("godot_verse_dirty", "1" if git(repo, "status", "--porcelain") else "0"),
+    ]
+    lines = [f"{key}={value}" for key, value in fields]
+    lines += [f"engine_change={path}" for path in changes]
+    text = "\n".join(lines) + "\n"
+
+    written = None
+    for destination in destinations:
+        try:
+            destination.write_text(text, encoding="utf-8")
+        except OSError as error:
+            print(f"warning: could not write {destination}: {error}", file=sys.stderr)
+            continue
+        written = written or destination
+    if written:
+        print(f"[build_host] engine {fields[4][1][:10]} ({fields[5][1]}), "
+              f"{len(changes)} local engine change(s)")
+    return written
+
+
 def run_ubt(engine: Path, config: str, clean: bool) -> None:
     build_bat = engine / "Engine" / "Build" / "BatchFiles" / "Build.bat"
     if not build_bat.exists():
@@ -83,7 +167,7 @@ def run_ubt(engine: Path, config: str, clean: bool) -> None:
         sys.exit(result.returncode)
 
 
-def collect_outputs(engine: Path, repo: Path) -> None:
+def collect_outputs(engine: Path, repo: Path, config: str) -> None:
     bin_dir = engine / "Engine" / "Binaries" / "Win64"
     dll_path = bin_dir / "verse_host.dll"
 
@@ -116,6 +200,8 @@ def collect_outputs(engine: Path, repo: Path) -> None:
         print(f"[build_host] copied {tbb} -> {out_dir / tbb.name}")
     else:
         print(f"warning: {tbb} not found; verse_host.dll will fail to load", file=sys.stderr)
+
+    write_provenance(engine, repo, config, [bin_dir / PROVENANCE_NAME, out_dir / PROVENANCE_NAME])
 
 
 def main() -> None:
@@ -161,7 +247,7 @@ def main() -> None:
         return
 
     run_ubt(engine, args.config, args.clean)
-    collect_outputs(engine, repo)
+    collect_outputs(engine, repo, args.config)
 
     elapsed = time.time() - start
     print(f"[build_host] done in {elapsed:.1f}s")

@@ -1,6 +1,6 @@
 # godot-verse — Roadmap
 
-**Status:** Draft 1 · 2026-09-11
+**Status:** Draft 2 · 2026-09-11 · Phase 0 complete
 **Companion to:** `docs/spec.md` (what must be true) and `README.md` (what is true now)
 
 ---
@@ -25,10 +25,10 @@ Four decisions shape the whole thing:
 **1.0 means: a Godot developer who is not the author can build a real project and not hit a wall.**
 Whatever subset that turns out to require is the 1.0 scope; everything before it is 0.x.
 
-Two things in here are not settled, and both are called out where they bite: **the order of
-Phases 3 and 4 is an output of Phase 0**, not an assumption of this document (§4), and **the 1.0
-bar may require a release process that no phase currently contains** (§"What this roadmap does not
-contain").
+One thing in here is not settled, and it is called out where it bites: **the 1.0 bar may require a
+release process that no phase currently contains** (§"What this roadmap does not contain"). The
+other open item in Draft 1 — the order of the iteration loop and the parity work — was Phase 0's to
+decide, and it decided: **the iteration loop comes first**, and this draft is edited to match.
 
 ### Standing rules
 
@@ -40,7 +40,19 @@ contain").
 
 ---
 
-## Phase 0 — Answer what could invalidate the design
+## Phase 0 — Answer what could invalidate the design ✅
+
+**Complete.** Findings: [`phase-0-spikes.md`](phase-0-spikes.md). Answers: spec §14.1. The three
+questions closed as follows, and the sections below are kept as written so the questions asked can
+be compared with the answers got:
+
+| | answer | what it moved |
+| --- | --- | --- |
+| **S-1** / OQ-2 | Precompiled Verse, runtime-only host. The artifact is a **cook**, which needs an editor-class binary, so `host/` becomes three targets. | R-DIST-8, R-DIST-11; narrowed OQ-3 and OQ-4; **opened OQ-10**; reshapes Phase 7 |
+| **S-2** / OQ-8 | Fresh package name per generation, with `IncrementalizeProjectSource` first. ~200 ms per reload, ~0.5 MB retained per generation. | All of §10; **moved the iteration loop ahead of parity** |
+| **S-3** / OQ-5 | Submodules inside the one user package, from the directory tree. Prototyped: two same-named classes in two directories. | R-LANG-6; stays in Phase 2 |
+
+No engine changes were needed for any of them, which also settled 0.1.
 
 **Why now.** Three unknowns in spec §14 can each change the shape of the host. Building features
 first means building them twice. Nothing here ships; the output is written answers and, where a
@@ -60,6 +72,15 @@ up first so a patch is a commit rather than a lost afternoon.
 - `build_host.py` learns which engine revision it built against, and the smoke test reports it.
 
 **Exit:** an engine change can be made, recorded, and reproduced by a second checkout.
+
+**Result: a documented patch set, and no patches.** All three spikes ran against a stock
+`ue6-main` checkout, including the one whose recorded cause was an engine `#if`. A fork imposes a
+second multi-gigabyte remote and a permanent merge obligation to solve a problem that does not
+currently exist. The reproducibility half was built anyway: `build_host.py` writes
+`verse_host.build.txt` beside the DLL — engine commit, branch, count and paths of local engine
+changes, ABI version, godot-verse commit — and `host_smoke` prints it first, so a test log carries
+the engine revision it was produced against. **Revisit the fork** when a shipped feature requires a
+patched engine, or when the patch set reaches three.
 
 ### 0.2 S-1 · Can VerseVM run precompiled Verse? (OQ-2)
 
@@ -82,6 +103,16 @@ converts them from "package it" into "build it", and that estimate is the actual
 **Exit:** OQ-2 answered in the spec, with the cost of the negative branch estimated well enough to
 choose in Phase 7.
 
+**Result: yes, and the cost is on the producing side.** A target built without editor-only data
+gets `WITH_VERSE_COMPILER=0` and loads Verse from cooked `.uasset` files; `SavePackage2` carries a
+VerseVM cell table for the write side. Producing that file is a **cook**, and a cook turned out to
+need more than the `ITargetPlatform` the assert first pointed at: `TargetPlatform` and
+`WindowsTargetPlatform` do link into the monolithic host and the manager does find Windows, but
+`FSaveContext`'s constructor then requires `WITH_EDITOR` and an `IPackageWriter`. So `host/` becomes
+three targets — today's **editor host**, a **cooker** that must be editor-class, and a **runtime
+host** that ships. Whether an editor-class Program target is buildable is the new **OQ-10**, and it
+is Phase 7's opening move.
+
 ### 0.3 S-2 · Which hot-reload mechanism? (OQ-8)
 
 **The question:** of the three surviving candidates in spec §10 — fresh package name per
@@ -98,9 +129,16 @@ out of a rebuild, so the bound is the project's own two packages.
 S-1 says a runtime-only host is viable, out-of-process stops being an expensive workaround and
 becomes the architecture.
 
-**What it changes:** all of §10, R-EXP-5 (`@tool`), and the position of Phase 4 below.
+**What it changes:** all of §10, R-EXP-5 (`@tool`), and the position of the iteration loop below.
 
 **Exit:** OQ-8 answered, with a chosen mechanism and the reason the other two lost.
+
+**Result: fresh package name per generation.** The first attempt failed for a reason the spike
+brief did not anticipate — the collision was in the *native* VNI packages, not ours, because
+nothing told the second build they were already compiled. `IncrementalizeProjectSource` before each
+build is the missing half; the `EBuildMode::All` note above was close but had the mechanism
+backwards. With both, 25 generations ran in one process at 161–220 ms each, ~0.5 MB retained per
+generation, and instances from earlier generations kept working against their own classes.
 
 ### 0.4 S-3 · How does a project escape one flat scope? (OQ-5)
 
@@ -120,14 +158,25 @@ the language surface rather than the architecture.
 
 **Exit:** OQ-5 answered, or explicitly deferred with the reason.
 
-### Phase 0 exit criteria
+**Result: answered, and the question was aimed slightly wrong.** Publishing a second package is
+possible and is not what modules are made of: a package carries a module tree, and the flat scope
+is simply that the host adds every snippet to the root module. The recipe is Epic's own
+`ResolveModuleForRelativeVersePath`. Prototyped and run: `gameplay/player.verse` and
+`ui/player.verse` compiled together as `(/user@localhost/gameplay:)player` and
+`(/user@localhost/ui:)player`, a third file read a member off each, and the smoke suite stayed at
+247/247. Building it for real stays in Phase 2 as the brief allowed.
 
-- OQ-2, OQ-8 and (OQ-5 or its deferral) have written answers in the spec.
-- The decision points the negative branches imply are recorded with criteria, not left open.
-- **The order of Phases 3 and 4 is decided**, per §4 below, and this document is edited to match.
-  Phase 0's job includes sequencing the phases after it.
-- Engine changes are reproducible.
-- No production code has changed.
+### Phase 0 exit criteria — met
+
+- OQ-2, OQ-8 and OQ-5 have written answers in the spec (§14.1). ✅
+- The decision points the negative branches imply are recorded with criteria, not left open — the
+  fork-vs-patches revisit trigger under 0.1, and the editor-class-target question S-1 opened, which
+  is now **OQ-10** with a fallback named and a phase to answer it in. ✅
+- **The order of Phases 3 and 4 is decided.** The iteration loop moved ahead of parity, and this
+  document is edited to match. ✅
+- Engine changes are reproducible: `verse_host.build.txt`, printed by the smoke test. ✅
+- No production code has changed. The spike prototypes were reverted; what remains is
+  `build_host.py`'s provenance record and the smoke test's report of it, which are tooling. ✅
 
 ---
 
@@ -188,8 +237,12 @@ convention has failed.
 parity features are built on top of them. The mirror in particular is blocked on Phase 1: reaching
 `@GlobalScope` needs the per-signature marshalling that Phase 1 builds.
 
-- **R-LANG-6** — modules, subdirectories, shared library code, per the S-3 answer. One top-level
-  name per file stops being a rule. If S-3 was deferred, it happens here.
+- **R-LANG-6** — modules, subdirectories, shared library code, per the S-3 answer (spec §14.1):
+  each `res://` subdirectory becomes a `CSourceModule` under the package's root module, so
+  `res://gameplay/player.verse` is `/user@localhost/gameplay/player`. One top-level name per file
+  narrows from a project-wide rule to a per-directory one. Two things S-3 left as design rather
+  than unknown land here too: whether a cross-module `using` is the author's to write or generated,
+  and what moving a file between directories does to everything that referenced it.
 - **R-SCN-1, R-SCN-2** — the mirror covers all 1023 classes rather than the curated list in
   `tools/verse_api_classes.txt`, the generator's type table is finished, and **a method the
   generator skips is visible with its reason** instead of silently absent. The failure mode
@@ -202,14 +255,42 @@ parity features are built on top of them. The mirror in particular is blocked on
 
 **Exit:** a Verse script can reach any Godot class and any method on it, or find out why not; a
 project is more than one flat namespace; `demo/` still runs. **First Dodge the Creeps port
-attempt** — not expected to complete. Record the wall it hits; that list is Phase 3's scope.
+attempt** — not expected to complete. Record the wall it hits; that list is Phase 4's scope.
 
 ---
 
-## Phase 3 — Parity: signals, virtuals, and the rest of Godot's model
+## Phase 3 — The iteration loop
 
-**Why now.** Everything here was blocked on Phase 1's dispatch and Phase 2's surface. This is the
-phase the yardstick measures.
+**Why now.** This phase and the next one swapped places, which is what Phase 0 was asked to decide.
+S-2 closed OQ-8 in favour of the fresh-package-name mechanism and measured it — ~200 ms per reload,
+about half a megabyte retained per generation, and instances from earlier generations still
+working. At that price the optimistic placement the previous draft described is the one taken: hot
+reload comes before parity, because parity is the longest phase in this document and building it
+with a restart in the loop is the expensive choice.
+
+- **R-ITER-1, R-ITER-2** — edit and run, indefinitely; files added, renamed and deleted live. The
+  mechanism is settled (spec §14.1). What this phase builds is everything around it: the host
+  owning its script package instead of borrowing the IDE's, an `ISourceSnippet` with settable text
+  so analysis and completion survive the change, `IncrementalizeProjectSource` before each build,
+  and Godot's side deciding *when* a reload happens.
+- **R-ITER-3 / R-EXP-4** — changed `@export` defaults refresh, which today requires generated code
+  and therefore a restart.
+- **R-ITER-4, R-ITER-5** — state preservation where Godot's contract allows; a failed reload leaves
+  the working code running. R-ITER-4 starts from a good default: an instance keeps its own
+  generation's class until something deliberately moves it.
+- **R-EXP-5** — `@tool` scripts, unblocked by the above.
+- The leak gets a bound and a test rather than an anecdote: a reload loop asserting that retained
+  memory per generation stays under a stated figure.
+
+**Exit:** no workflow requires restarting the editor. Dodge the Creeps port attempt — regression
+check, and the first one where the authoring experience is the thing being judged.
+
+---
+
+## Phase 4 — Parity: signals, virtuals, and the rest of Godot's model
+
+**Why now.** Everything here was blocked on Phase 1's dispatch and Phase 2's surface, and all of it
+is faster to build behind Phase 3's reload loop. This is the phase the yardstick measures.
 
 - **§5.3 in full** — signal declaration with typed arguments, emission, connection and
   disconnection, editor-side connection including the create-the-function flow (`_make_function`),
@@ -225,36 +306,13 @@ phase the yardstick measures.
   dynamically) is the one with no existing path and should be scoped early in the phase.
 
 **Exit:** **Dodge the Creeps runs with no GDScript in it.** That is the phase gate, and it is
-binary. `@tool` is deliberately absent — it is gated on Phase 4.
-
----
-
-## Phase 4 — The iteration loop
-
-**Why now, and a caveat.** Full hot reload (R-ITER-1 … R-ITER-5) and `@tool` (R-EXP-5) per the
-OQ-8 decision.
-
-**This phase may move ahead of Phase 3.** If S-2 found the fresh-package-name mechanism works, hot
-reload is comparatively cheap, every later phase's development loop benefits, and it should be
-done immediately after Phase 1. If the answer was out-of-process compilation — a restructure of
-the host, likely entangled with S-1 — it stays here, after the yardstick has proven the parity
-work. The Phase 0 decision sets the order; the roadmap is written with the pessimistic placement.
-
-- **R-ITER-1, R-ITER-2** — edit and run, indefinitely; files added, renamed and deleted live.
-- **R-ITER-3 / R-EXP-4** — changed `@export` defaults refresh, which today requires generated
-  code and therefore a restart.
-- **R-ITER-4, R-ITER-5** — state preservation where Godot's contract allows; a failed reload
-  leaves the working code running.
-- **R-EXP-5** — `@tool` scripts, unblocked by the above.
-
-**Exit:** no workflow requires restarting the editor. Dodge the Creeps port attempt — regression
-check, and the first one where the authoring experience is the thing being judged.
+binary.
 
 ---
 
 ## Phase 5 — Concurrency
 
-**Why now.** It needs Phase 1's ABI, Phase 3's signals, and a stable enough surface that the task
+**Why now.** It needs Phase 1's ABI, Phase 4's signals, and a stable enough surface that the task
 lifetime rules can be written down rather than discovered.
 
 - **R-ASYNC-4** — per-script-instance task scopes. Today one `verse::FContentScope` serves the
@@ -304,9 +362,17 @@ simultaneously rather than Windows-first and ported.
   built elsewhere.
 - **R-DIST-9, R-DIST-10** — exporting through Godot's ordinary dialog produces a game that runs on
   a machine with nothing installed.
-- **R-DIST-11** — precompiled Verse in exported games, per the S-1 answer. If S-1 was negative,
-  this is where its cost estimate gets spent or the requirement gets re-scoped in the spec.
+- **R-DIST-11 and the host split** — precompiled Verse in exported games, per the S-1 answer
+  (spec §14.1). `host/` becomes three targets over one set of sources: today's **editor host**, a
+  **cooker** that is editor-class and runs only at export, and a **runtime host** with
+  `WITH_VERSE_COMPILER=0`, which is what ships. Export cooks each Verse package to `.uasset` and the
+  runtime host loads it. This is the largest single item in the phase and the reason R-DIST-9 and
+  R-DIST-10 cannot be built before it.
 - **R-PLAT-4** — an unsupported platform fails at export time, not on a player's device.
+- **OQ-10, first** — whether an editor-class UBT Program target can be built at all. The cooker
+  depends on it, and so therefore do R-DIST-9, R-DIST-10 and R-DIST-11. If the answer is no, the
+  fallback is cooking through a real UE editor or commandlet process, and the phase is shaped around
+  that instead. Nothing else in this phase should start before this is known.
 - **R-PLAT-2, R-PLAT-3** — mobile and web, per Phase 0. These may land here, land later, or become
   written-down non-goals with a reason. They do not gate 1.0.
 - **R-DIST-4, R-DIST-5** — the build and the version-mismatch message become things a stranger can

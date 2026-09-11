@@ -13,7 +13,9 @@ and `docs/editor-tooling.md` hold the full research and citations behind those s
 commit can cite one. README describes today; the spec describes the target, and §14 holds the open
 questions that block the rest. Check a requirement's status there before assuming a gap is
 unexamined. `docs/roadmap.md` sequences those requirements into phases and says which phase the
-work in front of you belongs to.
+work in front of you belongs to. `docs/phase-0-spikes.md` is why three of those answers read
+the way they do — read it before re-deriving anything about hot reload, the export pipeline,
+or the flat scope.
 
 This file is the map and the working rules; the reasoning lives there.
 

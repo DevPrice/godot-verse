@@ -72,6 +72,39 @@ static std::string ReadFileUtf8(const fs::path& Path)
 	return Text;
 }
 
+/// Prints the provenance record build_host.py leaves beside the DLL, so a test log says which
+/// engine revision produced the host it just exercised. Absent when the DLL was copied by hand.
+static void ReportProvenance(const fs::path& DllPath)
+{
+	fs::path Path = DllPath;
+	Path.replace_filename("verse_host.build.txt");
+	const std::string Text = ReadFileUtf8(Path);
+	if (Text.empty())
+	{
+		printf("[smoke] provenance: none beside %ls\n", DllPath.filename().c_str());
+		return;
+	}
+	size_t Start = 0;
+	while (Start < Text.size())
+	{
+		size_t End = Text.find('\n', Start);
+		if (End == std::string::npos)
+		{
+			End = Text.size();
+		}
+		size_t Length = End - Start;
+		while (Length > 0 && Text[Start + Length - 1] == '\r')
+		{
+			Length--;
+		}
+		if (Length > 0)
+		{
+			printf("[smoke] provenance: %.*s\n", static_cast<int>(Length), Text.data() + Start);
+		}
+		Start = End + 1;
+	}
+}
+
 static void SmokeOnDiagnostic(void*, const vh_diagnostic* Diagnostic)
 {
 	++DiagnosticCount;
@@ -133,6 +166,8 @@ int main(int argc, char** argv)
 	fs::path VerseBase = argc > 3 ? fs::path(argv[3]) : ExeDir.parent_path();
 	fs::path VersePath = VerseBase / "tests" / "host_smoke" / "hello.verse";
 	fs::path ExportsPath = VerseBase / "tests" / "host_smoke" / "exports.verse";
+
+	ReportProvenance(DllPath);
 
 	// LOAD_WITH_ALTERED_SEARCH_PATH: the host's own directory holds tbbmalloc.dll.
 	HMODULE Module = LoadLibraryExW(DllPath.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);

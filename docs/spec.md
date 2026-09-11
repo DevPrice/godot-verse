@@ -1,6 +1,6 @@
 # godot-verse — Specification
 
-**Status:** Draft 1 · 2026-09-11 · targets no release yet
+**Status:** Draft 2 · 2026-09-11 · targets no release yet
 **Supersedes:** nothing. **Companion to:** `README.md`
 
 ---
@@ -121,7 +121,10 @@ from it. The spec commits to both states rather than waiting.
   host must load from `Engine/Binaries/Win64` because VNI records each package's source directory
   relative to the loaded module and the compiler reads those `.verse` files at runtime
   (README, "Five constraints"). An addon that must sit inside an engine tree is not an addon.
-  Status: **none**. Related: **OQ-2**.
+  Status: **none**. **OQ-2** resolves this for the shipped half: the runtime host reads `.uasset`,
+  not `.verse`, so it carries nothing from the engine tree. The editor host still does, and it is
+  the one an addon user would install — so this requirement is unchanged for the case it was
+  written about.
 
 **Exporting a game.**
 
@@ -135,7 +138,8 @@ from it. The spec commits to both states rather than waiting.
   compiler. This is the difference between a game that ships a language toolchain in its data
   directory and one that ships a program; it also removes compilation from startup time and is a
   precondition for §3's mobile and web targets, where shipping a compiler is not viable.
-  Status: **none**. Related: **OQ-2**.
+  Status: **none**, but no longer uncertain — **OQ-2** is closed in favour of it (§14.1), so this
+  reads as MUST in everything but its numbering.
 
 ---
 
@@ -159,12 +163,13 @@ analysis pipeline, the game may need only the VM (R-DIST-11).
   is a bug, not a platform limitation, unless §14 records why.
 - **R-PLAT-2 (MUST)** Android and iOS run exported games. Authoring on mobile is not required.
   *Known unknowns:* binary size of a monolithic UE Program target, and whether VerseVM's execution
-  strategy is compatible with iOS's prohibition on JIT. Recorded as **OQ-3**.
+  strategy is compatible with iOS's prohibition on JIT. Recorded as **OQ-3** — which OQ-2 has
+  narrowed to the **runtime** host, carrying no compiler.
 - **R-PLAT-3 (SHOULD, blocked)** Web export runs Verse. This is the stated ideal and it is
-  currently not known to be reachable: UBT has no wasm Program target, Godot's web export is a
-  constrained single-threaded-by-default wasm environment, and the host today assumes a filesystem
-  it can read `.verse` files from at runtime. The spec keeps the requirement so that decisions
-  elsewhere — particularly R-DIST-11 — do not foreclose it. Blocked on **OQ-4**.
+  currently not known to be reachable: UBT has no wasm Program target, and Godot's web export is a
+  constrained single-threaded-by-default wasm environment. OQ-2 removed the third obstacle — the
+  runtime host reads `.uasset`, not `.verse`, so it does not need a filesystem full of sources —
+  but the first two stand. Blocked on **OQ-4**.
 - **R-PLAT-4 (MUST)** A platform that is not supported fails at export time with a clear message,
   not at game startup on a user's device.
 - **R-PLAT-5 (MUST)** Nothing in the GDExtension assumes Windows. Status: **part** — the code is
@@ -201,7 +206,8 @@ and packages, never syntax.
   whole project shares one flat `/user@localhost` scope and Verse forbids shadowing, so a script's
   class is named after its file to keep collisions from happening (README, "Five constraints").
   This is the single largest structural gap between the prototype and a language a project can be
-  written in. Related: **OQ-5**.
+  written in. **OQ-5** is closed (§14.1): the escape is submodules built from the project's
+  directory tree, inside the one user package.
 - **R-LANG-7 (MUST)** Transactional semantics have a defined meaning at the Godot boundary, and
   it is documented as a language rule rather than as an implementation note. Today: every Godot
   callback is invoked through `AutoRTFM::Open` and writes defer to `AutoRTFM::OnCommit`, so a
@@ -462,20 +468,26 @@ An authoring loop with a restart in it is not a tool people use.
   reports the error; it does not leave the project in a half-loaded state. Status: **part** — a
   failed build reports once per session.
 
-The obstacle is documented precisely in README ("The project is the compilation unit") and in the
-`codegen-once-per-process` finding: `NotifyCompiledVersePackage` hands the loader's package ref a
-`UPackage` only `#if !WITH_EDITOR`, and the three obvious workarounds are each closed. Three
-candidate mechanisms survive, and **choosing between them is OQ-8**:
+**The mechanism is settled (OQ-8): a fresh package name per generation**, with
+`FSolarisModule::IncrementalizeProjectSource` called before each build so that everything already
+compiled in this process — the native packages above all — is marked external and skipped. The
+obstacle README describes ("The project is the compilation unit") is real but is only reachable by
+publishing the same package twice, which nothing obliges us to do.
 
-1. **Fresh package name per generation** — publish each build under a name never used before, so
-   no ref is reused. Costs a leak: the previous generation's classes stay pinned for the process's
-   life. `IncrementalizeProjectSource` with `EBuildMode::All` already keeps native packages out of
-   a rebuild, so the leak is bounded to the project's own two packages.
-2. **Out-of-process compilation** — move code generation into a short-lived process, so
-   "once per process" stops being a constraint. Largest architectural change; also the one that
-   most helps R-DIST-11 and §3, since it separates the compiler from the runtime.
-3. **An engine change** — upstream, or a documented patch users apply to their checkout. Cheapest
-   to implement, worst to depend on, and incompatible with R-DIST-6.
+Measured at 25 generations in one process: 161–220 ms per reload in steady state, ~0.5 MB retained
+per generation, and each generation running the edited code. §14.1 has the numbers and
+[`phase-0-spikes.md`](phase-0-spikes.md) the method. Two things that follow for the requirements
+above:
+
+- R-ITER-4 comes close to free. An instance created by an earlier generation keeps working against
+  its own generation's class, so a reload invalidates nothing under the engine's feet and adopting
+  the new class becomes a deliberate act.
+- The host must own its script package rather than borrow the IDE's, whose name is fixed. That
+  costs a small `ISourceSnippet` implementation with a settable text, without which analysis and
+  completion regress.
+
+*Out-of-process compilation* lost here but is the shape of the export pipeline under OQ-2. *An
+engine change* lost because none is needed.
 
 ---
 
@@ -567,19 +579,101 @@ draft, and no design decision in §§4–12 may be justified by an unmeasured pe
 Each blocks one or more requirements above. A question is closed by a written answer in this
 document, not by an implementation that assumes one.
 
+**OQ-2, OQ-5 and OQ-8 are closed**, by the Phase 0 spikes. Their answers are §14.1 below; the
+measurements and the code they were read out of are in [`phase-0-spikes.md`](phase-0-spikes.md).
+A closed question keeps its row so that the reason it is closed is not lost.
+
 | id | question | blocks | next step |
 | --- | --- | --- | --- |
 | **OQ-1** | When, if ever, is the Verse compiler toolchain licensed such that binaries built from it may be redistributed? No ETA is known. | R-DIST-6, R-DIST-7, R-QUAL-4 | Track Epic's announcements. Design so the answer changes packaging only, never architecture. |
-| **OQ-2** | Does an exported game ship the compiler and `.verse` sources, or precompiled Verse and a runtime-only host? | R-DIST-8, R-DIST-11, R-PLAT-2, R-PLAT-3 | Determine whether VerseVM can load serialised bytecode without the Solaris compiler and without the engine's package source tree. This is the highest-leverage unknown in the document — it decides the export story, mobile, and web at once. |
-| **OQ-3** | Is a monolithic UE Program target viable on Android and iOS — binary size, and whether VerseVM requires JIT that iOS forbids? | R-PLAT-2 | Attempt a UBT Program build for Android first; it is the permissive platform and answers the size question. |
-| **OQ-4** | Is Verse on wasm reachable at all? UBT has no wasm Program target; Godot's web export is constrained wasm. | R-PLAT-3 | Depends on OQ-2. Not actionable until the runtime/compiler split is understood. |
-| **OQ-5** | How does a project escape the single flat `/user@localhost` scope, so it can have modules, subdirectories and shared library code? | R-LANG-6 | Read how Solaris assigns package scopes at runtime and whether the host can publish more than one user package. |
+| **OQ-2** ✅ | Does an exported game ship the compiler and `.verse` sources, or precompiled Verse and a runtime-only host? | R-DIST-8, R-DIST-11, R-PLAT-2, R-PLAT-3 | **Closed: precompiled Verse and a runtime-only host.** See §14.1. |
+| **OQ-3** | Is a monolithic UE Program target viable on Android and iOS — binary size, and whether VerseVM requires JIT that iOS forbids? | R-PLAT-2 | Attempt a UBT Program build for Android first; it is the permissive platform and answers the size question. Narrowed by OQ-2: the question is only about the **runtime** host, which carries no compiler. |
+| **OQ-4** | Is Verse on wasm reachable at all? UBT has no wasm Program target; Godot's web export is constrained wasm. | R-PLAT-3 | Narrowed by OQ-2 — a web target would need only the runtime host, not Solaris — but still blocked on UBT having no wasm Program target at all. |
+| **OQ-5** ✅ | How does a project escape the single flat `/user@localhost` scope, so it can have modules, subdirectories and shared library code? | R-LANG-6 | **Closed: submodules within the one user package, built from the project's directory tree.** See §14.1. |
 | **OQ-6** | What is the correct interaction between Verse's task model and Godot's threading — `WorkerThreadPool`, threaded loading, calls into Verse off the main thread? | R-ASYNC-7 | Its own scoping document. Until it exists, §7 must not adopt a design that assumes single-threaded forever. |
 | **OQ-7** | Build our own LSP over `verse_host_abi.h`, or get `uLangLSP` into a linkable target? | R-TOOL-10 | Low priority — Godot's editor is primary (§9). |
-| **OQ-8** | Which hot-reload mechanism: fresh package name per generation, out-of-process compilation, or an engine change? | all of §10, and R-EXP-5 | Prototype the fresh-package-name approach first; it is the smallest change that proves the constraint is escapable. Note that out-of-process compilation is also the likely answer to OQ-2, which argues for evaluating them together. |
+| **OQ-8** ✅ | Which hot-reload mechanism: fresh package name per generation, out-of-process compilation, or an engine change? | all of §10, and R-EXP-5 | **Closed: fresh package name per generation**, with `IncrementalizeProjectSource` before each build. See §14.1. |
 | **OQ-9** | Can any DAP client speak `Verse::SocketDebugger`'s framing? | R-DIAG-6 | Only worth answering if R-DIAG-4 (Godot's own debugger) turns out to be blocked. |
+| **OQ-10** | Can an editor-class UBT Program target be built — `bCompileAgainstEditor`, and therefore `bCompileAgainstEngine`? Cooking Verse needs `WITH_EDITOR=1` (§14.1), and nothing else this project builds does. | R-DIST-9, R-DIST-10, R-DIST-11 | Opened by the S-1 answer. Attempt it at the start of Phase 7. The one prior attempt failed on Engine module links, but it was made for a *lean* host, where the weight was the objection; a cooker that runs only at export has no such constraint. Fallback: cook through a real UE editor or commandlet process. |
 | **RISK-1** | UE's licensing applies to games shipped with the host, including royalties. This is a permanent property of the current distribution model and may deter adoption regardless of anything built here. | adoption | Disclose prominently (R-DIST-3). No mitigation available. |
 | **RISK-2** | Tracking Godot `master` and UE `main` simultaneously means two moving dependencies with no compatibility window. | R-QUAL-7 | Accepted deliberately while pre-1.0; revisit at the first release. |
+
+### 14.1 Answers from the Phase 0 spikes
+
+Evidence, measurements and code citations: [`phase-0-spikes.md`](phase-0-spikes.md).
+
+**OQ-2 — an exported game ships precompiled Verse and a runtime-only host.**
+
+The engine already carries both halves. A target built without editor-only data gets
+`WITH_VERSE_COMPILER=0` and a `Solaris` module with no compiler in it; such a target obtains its
+Verse by `LoadPackage` on cooked `.uasset` files and `FCompiledPackageRegistry::AddCompiledUPackage`.
+`SavePackage2.cpp` carries a VerseVM cell import/export table for the write side.
+
+The producing side is a **cook, not a save**, and the cook is expensive.
+`FPackageHarvester::TryHarvestCellExport` asserts `SaveContext.IsCooking()`, so cells are only
+written when `FSavePackageArgs` carries an `ITargetPlatform`. Supplying one is cheap and was done —
+`TargetPlatform` and `WindowsTargetPlatform` link into the monolithic host and the manager finds
+Windows. `FSaveContext`'s constructor then refuses anyway:
+
+```cpp
+check(!IsCooking() || WITH_EDITOR);
+checkf(!IsCooking() || PackageWriter, TEXT("Cook saves require an IPackageWriter"));
+```
+
+**Cooking requires an editor-class binary.** So `host/` becomes three targets over one set of
+sources: today's **editor host** (compiler, runs in Godot), a **cooker** (editor-class, runs only
+at export, never ships), and a **runtime host** (no compiler, loads `.uasset`, ships with the game).
+Writing the cells outside SavePackage is not an escape: `FArchive::operator<<(Verse::VCell*&)` is a
+no-op on the base class, so cell identity comes from `FLinkerSave`'s import/export tables.
+
+Consequences: R-DIST-8 and R-DIST-11 resolve to "precompiled, no compiler shipped". R-PLAT-2 and
+R-PLAT-3 now ask about the runtime host only, which is a smaller binary with a smaller dependency
+set — OQ-3 and OQ-4 are narrowed but not closed. The artifact a player receives contains no Verse
+compiler, which is a materially different object from the one §2 assumed; whether that changes
+anything is for OQ-1 to say. And the cost of the export pipeline sits in building the cooker, not
+in loading what it produces — **OQ-10** is what remains of it.
+
+**OQ-8 — fresh package name per generation.**
+
+Each code-generating build publishes under a name never used before, and
+`FSolarisModule::IncrementalizeProjectSource` runs first so every package already compiled in this
+process is marked external and skipped. Both are required: without the second, the build
+republishes the *native* packages and aborts there, which is where the first attempt died.
+
+Measured over 25 generations in one process: every generation compiled and ran the edited code,
+161–220 ms each in steady state with no upward trend, and roughly 0.5 MB per generation retained
+for a one-class project. Instances created by an earlier generation keep working against their own
+generation's class, which is the behaviour R-ITER-4 wants.
+
+This closes the obstacle §10 describes. It also changes what §10 costs: full hot reload is a
+feature to build, not a constraint to escape. The one price not previously counted is that the
+host must own its script package rather than borrow the IDE's — whose name is fixed — which costs
+a small `ISourceSnippet` implementation to keep analysis and completion working.
+
+*Out-of-process compilation* lost for hot reload but remains the shape of the export pipeline under
+OQ-2. *An engine change* lost because none is needed.
+
+**OQ-5 — submodules inside the one user package.** *Prototyped and observed, not only read.*
+
+A `CSourcePackage` carries a module tree (`_RootModule`, `_Submodules`), the toolchain emits a
+`Vst::Module` per submodule, and the desugarer turns each into a real Verse module with its own
+scope. The flat scope is not a property of packages; it is that the host adds every snippet to the
+root module and never creates a submodule.
+
+So R-LANG-6 is met by mapping `res://` subdirectories onto submodules — `res://gameplay/player.verse`
+becomes `/user@localhost/gameplay/player` — and the one-top-level-name-per-file rule narrows from
+project-wide to directory-wide. Publishing additional *packages* is possible (the host already does
+it for its attribute package) but is not what modules need.
+
+The prototype compiled `root.verse`, `gameplay/player.verse` and `ui/player.verse` together —
+two files with the same top-level name — and `root` read a member off each. A directory-derived
+module needs no declaration of its own; only the definitions need `<public>`. One thing the run
+added: a module path is relative to the project root, and the ABI carries only absolute paths, so
+`res://` has to cross it (R-DIST-8's neighbour, and Phase 2's first task here).
+
+Two follow-ons, both design rather than unknown: whether godot-verse writes the cross-module `using`
+or the author does, and that moving a file between directories changes its Verse path and every
+reference to it.
 
 ---
 

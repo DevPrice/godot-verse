@@ -22,7 +22,8 @@ the finished software has to do, and what is still open; `docs/roadmap.md` seque
     src/         GDExtension sources
     tools/       build_host.py, the API and keyword generators and friends
     tests/       host smoke test (loads verse_host.dll with no Godot involved), lexer test
-    docs/        spec.md and roadmap.md, plus editor toolchain and property-export research
+    docs/        spec.md, roadmap.md and the Phase 0 spike findings, plus editor toolchain
+                 and property-export research
     demo/        Godot project
 
 ## Building
@@ -861,12 +862,16 @@ releases a *compiled* Verse package's ref, so the refcount never falls to 0. Ren
 combination — but it pulls the whole Engine in behind it and does not compile against
 `bCompileAgainstEngine = false`, so buying it means giving up the lean host this target is.
 
-What *does* work, and is worth knowing for anyone who picks this up: `IncrementalizeProjectSource`
-with `EBuildMode::All` keeps the already-loaded native packages out of a second build, exactly as it
-does for the editor. That narrows the obstacle from the whole program to the two packages the host
-compiles at runtime — its scripts and its attributes. The remaining move would be to publish each
-generation under a fresh package name so no ref is ever reused, at the price of leaking the previous
-generation's classes, which stay pinned for the life of the process.
+**This constraint is escapable, and the escape has been measured.** It is described above because it
+is what the code in this repository does today, not because it is a wall. Two changes together lift
+it: call `FSolarisModule::IncrementalizeProjectSource` before each build, so everything already
+compiled in this process — the native packages above all — is marked external and skipped; and give
+the host's own packages a fresh name each generation, which means owning the script package rather
+than borrowing the IDE's, whose name is fixed. Either alone fails, and the first attempt failed
+*inside the native packages* rather than in ours. 25 generations in one process cost 161–220 ms each
+and retained about half a megabyte per generation, and instances from earlier generations kept
+working against their own classes. `docs/phase-0-spikes.md` has the method and the numbers;
+`docs/roadmap.md` Phase 3 is where it gets built.
 
 Analysis is not subject to any of this. A build configured with `bSemanticAnalysisOnly` and no
 digests, code or bytecode publishes nothing and can be run as often as you like, which is what gives
