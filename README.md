@@ -204,7 +204,10 @@ lists every `@export` member whether or not it can reach the inspector, each wit
 declared on: a Godot reference must be spelled `?node2d`, because nothing can force a value into an
 inspector slot and the declaration that compiles without the option, `node2d{}`, is a handle of 0 —
 dead from birth and indistinguishable from one freed later; an `option` around anything else is
-refused the other way, since the inspector has no empty slot for a number.
+refused the other way, since the inspector has no empty slot for a number; and a reference to one of
+the project's own classes that never registered itself is refused with the fix, which is to register
+it — Verse will let a member be typed as any class in the project, but the inspector filters a slot
+by a *Godot* class name, and only `@global_class` gives the class one.
 
 Each refusal reaches the author as a warning on the line that declared it, the way the script
 editor marks a GDScript warning. Without one the member is simply absent: Godot draws the property
@@ -221,6 +224,30 @@ the VM's storage exactly is most of that work: a `var` of a scalar type keeps it
 reference cell, a `var` of a container type keeps a *mutable* container, and a write that lands on
 the slot rather than through it corrupts the member silently — the read agrees, and only the
 interpreter ever objects.
+
+**A reference is two mechanisms, told apart by which package declares the class.** A member typed
+`?sprite2d` names one of the generated mirrors, and its value is a Verse wrapper the host builds
+around the handle Godot hands over — `NewObject` against the class's `UClass`, the same call that
+instantiates a script, because a mirrored class is ordinary Verse over the one native `object` and so
+its instance *is* a UObject. A member typed `?mover` names a class the project declares, and there
+the object already exists: it is the one that node's own script instance built, and it crosses as an
+instance rather than as a handle (`vh_instance_set_field_instance`). Building a second would give one
+node two Verse objects, two sets of members, and no way for the author to tell which they were
+looking at. The rule then runs the other way too: a mirrored member assigned a node that *does* carry
+a Verse script holds that script's own object rather than a second wrapper around the same handle.
+
+Reading is uniform — the option is unwrapped and the handle reported — with one wrinkle that decides
+the shape of the whole read path. Verse spells an empty `option` and `logic` false with the same
+cell, so a member holding nothing cannot be told from a member holding false by looking at it. The
+read asks the semantic program what the author declared, the same way the write path asks whether a
+member is a `var`.
+
+A `.tscn` stores a node-typed property as a `NodePath` and applies it in the deferred pass at the end
+of `PackedScene::instantiate`, after every node exists — which falls inside the window where the
+instance is still unsealed, so even a non-`var` reference gets filled in. A resource needs one thing
+more: a Verse handle is a number and holds no reference, so the script instance keeps a
+`Ref<Resource>` per exported reference member. Without it, a resource whose only other holder was the
+inspector is freed the moment the write returns, leaving the script a handle to nothing.
 
 **A file that stops compiling keeps its inspector.** Godot gives a non-tool script a
 `PlaceHolderScriptInstance` in the editor, and that placeholder holds its own copy of the property

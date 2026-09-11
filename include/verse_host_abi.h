@@ -22,7 +22,7 @@
 extern "C" {
 #endif
 
-#define VH_ABI_VERSION 24
+#define VH_ABI_VERSION 25
 
 typedef int32_t vh_bool;
 
@@ -341,7 +341,12 @@ typedef enum vh_export_hint
 	VH_EXPORT_HINT_ENUM,
 	/* The Verse name of a mirrored class, which the consumer turns into Godot's own and sorts
 	 * into node or resource itself. */
-	VH_EXPORT_HINT_CLASS
+	VH_EXPORT_HINT_CLASS,
+	/* The Verse name of a class the project itself declares, carrying `@global_class`. Kept apart
+	 * from VH_EXPORT_HINT_CLASS because the two resolve through different tables: a mirrored name
+	 * is looked up in the generated API, while this one is a script's class, whose Godot name is
+	 * the PascalCase spelling of the name given here -- the same one the script registered. */
+	VH_EXPORT_HINT_SCRIPT_CLASS
 } vh_export_hint;
 
 /* The inspector section a member opens. Godot's three nesting depths, and Verse's three
@@ -375,7 +380,14 @@ typedef enum vh_export_reject
 
 	/* An `option` around something that is not a Godot reference. The inspector has no empty slot
 	 * for a number, so there is nothing for the option to mean. */
-	VH_EXPORT_OPTION_NOT_OBJECT
+	VH_EXPORT_OPTION_NOT_OBJECT,
+
+	/* A reference to a class the project declares, which did not register that class with Godot.
+	 * Verse will let a member be typed as any class in the project, but the inspector filters a
+	 * slot by a *Godot* class name, and an unregistered class has none -- so there is nothing to
+	 * filter by and nothing to put in the scene. `@global_class` on the class being referred to is
+	 * the whole of the fix. */
+	VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL
 } vh_export_reject;
 
 /* One data member of a script's class carrying `@export`. */
@@ -446,8 +458,13 @@ VH_ATTR VH_API int32_t vh_class_export_list(const char* ClassNameUtf8, const vh_
 /* Reads one data member off a live instance.
  *
  * Unlike the export list this does go through the VM, because a value only exists there. Only
- * logic, int, float and string come across; a member of any other Verse type reports
- * VH_ERR_NOT_FOUND rather than a half-converted value.
+ * logic, int, float, string and an optional Godot reference come across; a member of any other
+ * Verse type reports VH_ERR_NOT_FOUND rather than a half-converted value.
+ *
+ * A reference reads as its handle -- VH_TYPE_INT tagged VH_VARIANT_OBJECT -- and a reference
+ * holding nothing as the empty option, tagged the same way, which is the one read that has to be
+ * told the declared type to answer: Verse spells an empty option and `logic` false with the same
+ * cell, so the value alone cannot say which the author wrote.
  *
  * OutValue points into storage owned by the host, valid until the next call to either field
  * reader. Returns VH_ERR_NOT_FOUND for a field the instance's shape does not carry. */
@@ -457,7 +474,13 @@ VH_ATTR VH_API int32_t vh_instance_get_field(vh_instance* Instance, const char* 
  * which is the only place a member's declared default can be got. Same storage lifetime. */
 VH_ATTR VH_API int32_t vh_class_default_field(const char* ClassNameUtf8, const char* NameUtf8, const vh_value** OutValue);
 
-/* Writes one data member on a live instance. Same four types the reader covers.
+/* Writes one data member on a live instance. Same types the reader covers.
+ *
+ * A reference member is written with the handle of the object it should hold, tagged
+ * VH_VARIANT_OBJECT; a handle of 0 clears it to the empty option. The host builds the Verse
+ * wrapper for that handle itself, which it can only do for a mirrored class -- a member typed as
+ * one of the project's own classes is written through vh_instance_set_field_instance instead,
+ * because the object it should hold already exists.
  *
  * An instance is *unsealed* from vh_instantiate until the first vh_instance_call_*, and sealing is
  * one-way. While unsealed, any exported member may be written: that is initialization, and it is
@@ -468,6 +491,20 @@ VH_ATTR VH_API int32_t vh_class_default_field(const char* ClassNameUtf8, const c
  * Returns VH_ERR_NOT_FOUND for a member that is absent, stored as a shape constant, or a non-var
  * on a sealed instance. */
 VH_ATTR VH_API int32_t vh_instance_set_field(vh_instance* Instance, const char* NameUtf8, const vh_value* Value);
+
+/* Writes a reference member with an instance rather than a handle, which is the only way to give
+ * one node's script a reference to another node's.
+ *
+ * A handle is not enough there. The object a `?mover` member should hold is the one that node's own
+ * instance already is, and building a second from the handle would give one node two Verse objects:
+ * two sets of members, two identities, and whichever the author reached through would be the wrong
+ * one half the time. So the instance itself crosses.
+ *
+ * Value may be NULL, which clears the member to the empty option. Returns VH_ERR_NOT_FOUND for a
+ * member that is absent or unwritable, as vh_instance_set_field does, and for one whose declared
+ * class Value is not an instance of -- a slot holding a value of the wrong class is a fault the VM
+ * does not notice until compiled code reads it, so it is refused here rather than written. */
+VH_ATTR VH_API int32_t vh_instance_set_field_instance(vh_instance* Instance, const char* NameUtf8, vh_instance* Value);
 
 /* ---------------------------------------------------------- symbol lookup -- */
 
@@ -740,6 +777,7 @@ typedef int32_t (*vh_class_export_list_fn)(const char*, const vh_export_desc**, 
 typedef int32_t (*vh_instance_get_field_fn)(vh_instance*, const char*, const vh_value**);
 typedef int32_t (*vh_class_default_field_fn)(const char*, const char*, const vh_value**);
 typedef int32_t (*vh_instance_set_field_fn)(vh_instance*, const char*, const vh_value*);
+typedef int32_t (*vh_instance_set_field_instance_fn)(vh_instance*, const char*, vh_instance*);
 typedef int32_t (*vh_lookup_symbol_fn)(const char*, int32_t, int32_t, const vh_lookup_desc**);
 typedef int32_t (*vh_complete_symbol_fn)(const char*, const char*, int32_t, int32_t, int32_t, const vh_complete_item**, int32_t*);
 typedef int32_t (*vh_class_members_fn)(const char*, const vh_complete_item**, int32_t*);

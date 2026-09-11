@@ -26,11 +26,7 @@ constexpr const char *kMethodPhysicsProcessName = "(/Godot.org/Godot/object:)Phy
 
 GDExtensionBool set_func(GDExtensionScriptInstanceDataPtr p_instance, GDExtensionConstStringNamePtr p_name, GDExtensionConstVariantPtr p_value) {
 	VerseScriptInstance *self = static_cast<VerseScriptInstance *>(p_instance);
-	if (self->verse_object == nullptr) {
-		return false;
-	}
-	return self->script->set_instance_field(self->verse_object,
-			*reinterpret_cast<const StringName *>(p_name),
+	return self->set_field(*reinterpret_cast<const StringName *>(p_name),
 			*reinterpret_cast<const Variant *>(p_value));
 }
 
@@ -170,6 +166,9 @@ void free_func(GDExtensionScriptInstanceDataPtr p_instance) {
 	// Godot owns this pointer and frees it exactly once, when the owner drops the script;
 	// nothing else may delete the instance.
 	VerseScriptInstance *self = static_cast<VerseScriptInstance *>(p_instance);
+	if (VerseScriptLanguage *language = VerseScriptLanguage::singleton()) {
+		language->unregister_instance(self->owner_id);
+	}
 	if (self->verse_object != nullptr) {
 		self->script->free_instance(self->verse_object);
 	}
@@ -233,8 +232,9 @@ GDExtensionScriptInstancePtr VerseScriptInstance::create(VerseScript *p_script, 
 	VerseScriptInstance *instance = memnew(VerseScriptInstance);
 	instance->script = Ref<VerseScript>(p_script);
 	instance->owner = p_owner;
+	instance->owner_id = (int64_t)p_owner->get_instance_id();
 
-	instance->verse_object = p_script->make_instance(p_owner->get_instance_id());
+	instance->verse_object = p_script->make_instance(instance->owner_id);
 	if (instance->verse_object == nullptr) {
 		memdelete(instance);
 		return nullptr;
@@ -243,5 +243,44 @@ GDExtensionScriptInstancePtr VerseScriptInstance::create(VerseScript *p_script, 
 	instance->has_process = p_script->instance_has_function(instance->verse_object, kMethodProcessName);
 	instance->has_physics_process = p_script->instance_has_function(instance->verse_object, kMethodPhysicsProcessName);
 
+	if (VerseScriptLanguage *language = VerseScriptLanguage::singleton()) {
+		language->register_instance(instance->owner_id, instance);
+	}
+
 	return create3(&script_instance_info, instance);
+}
+
+bool VerseScriptInstance::set_field(const StringName &p_name, const Variant &p_value) {
+	if (verse_object == nullptr) {
+		return false;
+	}
+	if (p_value.get_type() != Variant::OBJECT) {
+		return script->set_instance_field(verse_object, p_name, p_value);
+	}
+
+	Object *target = p_value;
+
+	// Where the target carries a Verse script of its own, the object to hold is the one that script
+	// already built for it. Handing the handle over instead would have the host construct a second
+	// Verse object around the same node: two sets of members, and nothing to say which of them the
+	// author is looking at. A failure here is a class the member cannot hold, which the handle path
+	// would not fix -- it would only write the same wrong thing less visibly.
+	VerseScriptLanguage *language = VerseScriptLanguage::singleton();
+	VerseScriptInstance *held = language != nullptr && target != nullptr
+			? language->instance_for((int64_t)target->get_instance_id())
+			: nullptr;
+
+	const bool wrote = held != nullptr
+			? script->set_instance_field_instance(verse_object, p_name, held->verse_object)
+			: script->set_instance_field(verse_object, p_name, p_value);
+	if (!wrote) {
+		return false;
+	}
+
+	if (Resource *resource = Object::cast_to<Resource>(target)) {
+		held_resources[p_name] = Ref<Resource>(resource);
+	} else {
+		held_resources.erase(p_name);
+	}
+	return true;
 }

@@ -55,6 +55,21 @@ exports := class(object):
     @export
     var Maybe<public>:?float = false
 
+    # A reference to one of the project's own classes, which Godot knows only because that class
+    # registered itself. The value a member like this holds is the referenced node's own Verse
+    # object, handed over rather than rebuilt.
+    @export
+    var Friend<public>:?exports_probe = false
+
+    # The same without the registration. Verse is happy to let a member be typed as any class in
+    # the project; the inspector has no way to filter a slot by a class Godot has never heard of.
+    @export
+    var Stranger<public>:?exports_unregistered = false
+
+    # What ReadTarget saw, so the ABI can read back the interpreter's own answer.
+    @export
+    var TargetSeen<public>:logic = false
+
     # No attribute, so it must not appear in the export list.
     Hidden<public>:int = 7
 
@@ -72,6 +87,21 @@ exports := class(object):
 
     BumpLabel<public>():void =
         set Label = Label + "!"
+
+    # The assertion a read/write round-trip cannot make. A reference written in the wrong
+    # representation reads back as whatever was put there, so only the interpreter can tell a
+    # correct write from a plausible one -- and an option is two shapes rather than one, so the set
+    # case and the empty case are separate answers. Calling a method on what comes out dispatches
+    # through the object's own shape, which is what proves the payload is an object and not just
+    # something shaped like a pointer.
+    #
+    # The answer goes into a member rather than being returned: the ABI calls void functions only.
+    ReadTarget<public>():void =
+        if (Node := Target?):
+            Node.Ready()
+            set TargetSeen = true
+        else:
+            set TargetSeen = false
 
 # Exists only to give the symbol lookup a Godot API method to resolve against. Analysis never
 # needs a real node behind it, and nothing instantiates this.
@@ -94,3 +124,7 @@ exports_probe := class(node2d):
 
     PhysicsProcess<override>(Delta:float):void =
         Probe()
+
+# A class the project declares and does not register. It exists to be referred to: a reference to it
+# has to be refused, because the inspector filters a slot by a Godot class name and this has none.
+exports_unregistered := class(node2d) {}

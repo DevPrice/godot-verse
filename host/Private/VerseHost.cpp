@@ -447,6 +447,25 @@ extern "C" int32_t vh_instance_set_field(vh_instance* Instance, const char* Name
         : VH_ERR_NOT_FOUND;
 }
 
+extern "C" int32_t vh_instance_set_field_instance(vh_instance* Instance, const char* NameUtf8, vh_instance* Value)
+{
+    GodotVerse::WaitForBackgroundCheck();
+    if (!Instance || !NameUtf8)
+    {
+        return VH_ERR_ABI;
+    }
+    if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+    // Value is allowed to be null: that is how a reference member is cleared.
+    return GodotVerse::WriteInstanceFieldInstance(reinterpret_cast<GodotVerse::FInstance*>(Instance),
+                                                  Cstr(NameUtf8),
+                                                  reinterpret_cast<GodotVerse::FInstance*>(Value))
+        ? VH_OK
+        : VH_ERR_NOT_FOUND;
+}
+
 extern "C" int32_t vh_class_default_field(const char* ClassNameUtf8, const char* NameUtf8, const vh_value** OutValue)
 {
     GodotVerse::WaitForBackgroundCheck();

@@ -157,6 +157,11 @@ bool VerseScript::set_instance_field(vh_instance *p_instance, const StringName &
 	return runtime != nullptr && runtime->set_instance_field(p_instance, String(p_name), p_value);
 }
 
+bool VerseScript::set_instance_field_instance(vh_instance *p_instance, const StringName &p_name, vh_instance *p_value) const {
+	VerseRuntime *runtime = get_runtime();
+	return runtime != nullptr && runtime->set_instance_field_instance(p_instance, String(p_name), p_value);
+}
+
 void VerseScript::free_instance(vh_instance *p_instance) const {
 	VerseRuntime *runtime = get_runtime();
 	if (runtime != nullptr) {
@@ -578,6 +583,23 @@ PropertyUsageFlags usage_for_group(int64_t p_kind) {
 	}
 }
 
+// The Godot class an export's class hint names. Both hints carry a Verse class name; they differ in
+// which table turns it into a Godot one.
+//
+// A mirrored class is resolved through the generated API's, the only place the two spellings are
+// written down together. A script's class has no entry there -- nothing generated it -- and its
+// Godot name is instead the PascalCase form of the same name it registered with, which is derived
+// here through verse_pascal_case rather than sent across the ABI: the host would have to reimplement
+// the transform to send it, and two implementations of one naming rule are one too many.
+String godot_class_from_hint(const Dictionary &p_entry) {
+	const String verse_class = p_entry["hint_string"];
+	if ((int64_t)p_entry["hint"] == VH_EXPORT_HINT_SCRIPT_CLASS) {
+		return String(verse_pascal_case(std::string(verse_class.utf8().get_data())).c_str());
+	}
+	const char *godot_class = verse_godot_class_for(verse_class);
+	return godot_class != nullptr ? String(godot_class) : String();
+}
+
 Dictionary property_for(const Dictionary &p_entry, Variant::Type p_type) {
 	Dictionary property;
 	property["name"] = p_entry["name"];
@@ -588,12 +610,29 @@ Dictionary property_for(const Dictionary &p_entry, Variant::Type p_type) {
 			property["hint"] = (int64_t)PROPERTY_HINT_RANGE;
 			property["hint_string"] = range_hint_for(p_entry, p_type);
 			break;
-		case VH_EXPORT_HINT_ENUM:
 		case VH_EXPORT_HINT_CLASS:
-			// The host rejects a member carrying either hint until its *value*, not just its
-			// declared type, can cross the ABI -- an enum's ordinal, an object handle -- so no
-			// property is built from one yet. CLASS additionally needs the Verse-to-Godot class
-			// name mapping and the node-versus-resource split that belongs with that work.
+		case VH_EXPORT_HINT_SCRIPT_CLASS: {
+			// Godot filters a reference slot by class name, and which kind of filter it is depends
+			// on what that class is: a node is picked out of the scene and a resource off disk, so
+			// the two hints are different properties rather than one with a flag. ClassDB is asked
+			// because only Godot can answer it -- the host has none to check against, which is why
+			// it sends a Verse name and leaves the sorting here.
+			const String godot_class = godot_class_from_hint(p_entry);
+			property["hint_string"] = godot_class;
+			if (ClassDB::is_parent_class(godot_class, "Node")) {
+				property["hint"] = (int64_t)PROPERTY_HINT_NODE_TYPE;
+			} else if (ClassDB::is_parent_class(godot_class, "Resource")) {
+				property["hint"] = (int64_t)PROPERTY_HINT_RESOURCE_TYPE;
+			} else {
+				// Neither, which is most of Godot's singletons -- an Engine or a MainLoop. There is
+				// nothing to pick one of, so the slot is an object field with no picker behind it.
+				property["hint"] = (int64_t)PROPERTY_HINT_NONE;
+			}
+			break;
+		}
+		case VH_EXPORT_HINT_ENUM:
+			// The host rejects a member carrying this hint until its *value*, not just its declared
+			// type, can cross the ABI -- an enum's ordinal -- so no property is built from one yet.
 		case VH_EXPORT_HINT_NONE:
 		default:
 			property["hint"] = (int64_t)PROPERTY_HINT_NONE;

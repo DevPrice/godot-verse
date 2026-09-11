@@ -244,6 +244,18 @@ AUTORTFM_DISABLE bool ReadClassDefaultField(FUtf8StringView ClassName, FUtf8Stri
 /// rather than a mutation. Sealing is one-way and happens on the first InstanceCall*.
 AUTORTFM_DISABLE bool WriteInstanceField(FInstance* Instance, FUtf8StringView FieldName, const vh_value& Value);
 
+/// Writes a reference member with another instance rather than with a handle.
+///
+/// A handle would not do. The object a member typed as one of the project's own classes should hold
+/// is the one that node's own instance already is, and building a second from the handle would give
+/// one node two Verse objects -- two sets of members, and no way for the author to tell which of
+/// them they are looking at. A mirrored member takes one too, for the same reason read the other
+/// way round: where the object exists, holding it beats copying its handle.
+///
+/// Value may be null, which clears the member. False for a member that is not a reference, one that
+/// cannot be written, or one whose declared class Value is not an instance of.
+AUTORTFM_DISABLE bool WriteInstanceFieldInstance(FInstance* Instance, FUtf8StringView FieldName, const FInstance* Value);
+
 AUTORTFM_DISABLE int32 RunMain(const TArray<verse::string>& Args, int64& OutExitCode);
 
 AUTORTFM_DISABLE void TickScripts(double BudgetSeconds);

@@ -32,6 +32,8 @@
 #include "VerseVM/VVMRestValue.h"
 #include "VerseVM/VVMClass.h"
 #include "VerseVM/VVMCoroutine.h"
+#include "VerseVM/VVMFalse.h"
+#include "VerseVM/VVMOption.h"
 #include "VerseVM/VVMInt.h"
 #include "VerseVM/VVMOpResult.h"
 #include "VerseVM/VVMVerseClass.h"
@@ -69,10 +71,14 @@ constexpr const char* ScriptPackageName = "SolIdeDataSources";
 constexpr const char* ScriptVersePath = "/user@localhost";
 constexpr const char* MainFunctionName = "Main(:[][]char,:[[]char][]char)";
 
+/// Where the generated Godot API lives. A class resolving under this is one of the mirrors, which
+/// is what separates a reference ClassDB already knows the name of from one the project declared.
+constexpr const char* GodotVersePath = "/Godot.org/Godot";
+
 /// A second package sharing the native package's verse path, so a script's existing
 /// `using { /Godot.org/Godot }` reaches these definitions with no extra import.
 constexpr const char* AttributePackageName = "GodotAttributes";
-constexpr const char* AttributePackageVersePath = "/Godot.org/Godot";
+constexpr const char* AttributePackageVersePath = GodotVersePath;
 constexpr const char* AttributeSnippetPath = "GodotAttributes.verse";
 
 /// The attributes this bridge owns, as Verse source compiled in this process.
@@ -649,6 +655,12 @@ constexpr const char* ExportCategoryAttributePath = "/Godot.org/Godot/export_cat
 constexpr const char* ExportGroupAttributePath = "/Godot.org/Godot/export_group_attribute";
 constexpr const char* ExportSubgroupAttributePath = "/Godot.org/Godot/export_subgroup_attribute";
 
+/// Read here as well as by verse_scan_class_decl on the Godot side, which answers the same question
+/// off the source text because Godot asks it during the filesystem scan, before a host exists. The
+/// two must agree: one decides whether a reference to the class can be exported, the other decides
+/// whether Godot registers the name that reference would be filtered by.
+constexpr const char* GlobalClassAttributePath = "/Godot.org/Godot/global_class";
+
 /// The string a single-argument metadata attribute was spelled with, or empty when the member
 /// does not carry it.
 AUTORTFM_DISABLE FUtf8String AttributeText(const uLang::CDataDefinition& Member, const uLang::CClass* AttributeClass, const uLang::CSemanticProgram& Program)
@@ -701,6 +713,65 @@ AUTORTFM_DISABLE FUtf8String EnumeratorList(const uLang::CEnumeration& Enumerati
     return List;
 }
 
+/// The value type behind a member's declared type, with bOutIsOption saying whether an `option`
+/// was wrapped around it.
+///
+/// A `var` member's declared type is a pointer around the value type. That is unwrapped
+/// specifically rather than through CNormalType::GetInnerType, which also unwraps an array -- and
+/// Verse's `string` is `[]char`, so that route reports every string as a char.
+AUTORTFM_DISABLE const uLang::CNormalType& UnwrapDeclaredType(const uLang::CTypeBase& Type, bool& bOutIsOption)
+{
+    using namespace uLang;
+
+    const CNormalType* Normal = &Type.GetNormalType();
+    while (Normal->GetKind() == ETypeKind::Pointer || Normal->GetKind() == ETypeKind::Reference)
+    {
+        Normal = &static_cast<const CInvariantValueType*>(Normal)->PositiveValueType()->GetNormalType();
+    }
+
+    bOutIsOption = Normal->GetKind() == ETypeKind::Option;
+    if (bOutIsOption)
+    {
+        Normal = &static_cast<const COptionType&>(*Normal).GetValueType()->GetNormalType();
+    }
+    return *Normal;
+}
+
+/// Which package declares a class, as far as a reference to it is concerned.
+///
+/// The two kinds that can be exported differ in how Godot knows the class at all: a mirrored class
+/// names one ClassDB already has, while a class the project declares is known to Godot only if it
+/// registered itself with `@global_class`. Asking the program to resolve the class's own path is
+/// what proves which it is, and the third answer matters too -- a class nested inside another
+/// resolves as neither, and has no name an inspector slot could be filtered by.
+enum class EClassOrigin : uint8
+{
+    Other,
+    Mirrored,
+    Script,
+};
+
+AUTORTFM_DISABLE EClassOrigin ClassOriginOf(const uLang::CClass& Class, const uLang::CSemanticProgram& Program)
+{
+    const FUtf8String Name = FUtf8String(Class.AsNameCString());
+    const auto ResolvesAt = [&Class, &Program, &Name](const char* ScopePath) {
+        const FUtf8String Path = FUtf8String(ScopePath) + UTF8TEXT("/") + Name;
+        return Program.FindDefinitionByVersePath<uLang::CClass>(
+                   FULangConversionUtils::FUtf8StringViewToULangStringView(Path))
+            == &Class;
+    };
+
+    if (ResolvesAt(GodotVersePath))
+    {
+        return EClassOrigin::Mirrored;
+    }
+    if (ResolvesAt(ScriptVersePath))
+    {
+        return EClassOrigin::Script;
+    }
+    return EClassOrigin::Other;
+}
+
 /// What the inspector can make of a member's declared type: the value's shape on the wire, the
 /// Godot type to rebuild it as, the hint the declaration itself implies, and -- when the answer is
 /// that it cannot be exported at all -- why.
@@ -721,20 +792,8 @@ AUTORTFM_DISABLE void DescribeExportType(const uLang::CTypeBase* Type, const uLa
         return;
     }
 
-    // A `var` member's declared type is a pointer around the value type. Unwrap that specifically
-    // rather than through CNormalType::GetInnerType, which also unwraps an array -- and Verse's
-    // `string` is `[]char`, so that route reports every string as a char.
-    const CNormalType* Normal = &Type->GetNormalType();
-    while (Normal->GetKind() == ETypeKind::Pointer || Normal->GetKind() == ETypeKind::Reference)
-    {
-        Normal = &static_cast<const CInvariantValueType*>(Normal)->PositiveValueType()->GetNormalType();
-    }
-
-    const bool bIsOption = Normal->GetKind() == ETypeKind::Option;
-    if (bIsOption)
-    {
-        Normal = &static_cast<const COptionType&>(*Normal).GetValueType()->GetNormalType();
-    }
+    bool bIsOption = false;
+    const CNormalType* Normal = &UnwrapDeclaredType(*Type, bIsOption);
 
     if (const CClass* Class = Normal->AsNullable<CClass>())
     {
@@ -749,16 +808,34 @@ AUTORTFM_DISABLE void DescribeExportType(const uLang::CTypeBase* Type, const uLa
 
         // A reference crosses as the handle it is, which is an int the consumer rebuilds as an
         // object; an optional one crosses as an option around that.
+        const EClassOrigin Origin = ClassOriginOf(*Class, Program);
         OutDesc.Type = bIsOption ? VH_TYPE_OPTION : VH_TYPE_INT;
         OutDesc.VariantTag = VH_VARIANT_OBJECT;
-        OutDesc.Hint = VH_EXPORT_HINT_CLASS;
+        OutDesc.Hint = Origin == EClassOrigin::Script ? VH_EXPORT_HINT_SCRIPT_CLASS : VH_EXPORT_HINT_CLASS;
         OutDesc.HintString = FUtf8String(Class->AsNameCString());
 
         // Nothing can force a value into an inspector slot, so a member that cannot hold the empty
         // case has a declared type the scene can always violate. The Verse spelling that compiles
         // without an option, `node2d{}`, is a handle of 0: a reference dead from birth, and
         // indistinguishable from one freed later.
-        OutDesc.Reject = bIsOption ? VH_EXPORT_UNSUPPORTED_TYPE : VH_EXPORT_OBJECT_NOT_OPTIONAL;
+        if (!bIsOption)
+        {
+            OutDesc.Reject = VH_EXPORT_OBJECT_NOT_OPTIONAL;
+            return;
+        }
+
+        if (Origin == EClassOrigin::Script)
+        {
+            // Verse will let a member be typed as any class in the project, but the inspector
+            // filters a slot by a Godot class name, and only `@global_class` gives the class one.
+            const CClass* GlobalClassAttribute = Program.FindDefinitionByVersePath<CClass>(GlobalClassAttributePath);
+            OutDesc.Reject = Class->HasAttributeSubclass(GlobalClassAttribute, Program)
+                ? VH_EXPORT_OK
+                : VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL;
+            return;
+        }
+
+        OutDesc.Reject = Origin == EClassOrigin::Mirrored ? VH_EXPORT_OK : VH_EXPORT_UNSUPPORTED_TYPE;
         return;
     }
 
@@ -858,8 +935,77 @@ AUTORTFM_DISABLE void DescribeExportType(const uLang::CTypeBase* Type, const uLa
 
 namespace {
 
-/// Reads FieldName off Object. Returns false for a field the shape does not carry, and for any
-/// Verse type with no vh_value counterpart.
+/// What a script's class declares a member as, beyond what the value sitting in the slot can say.
+///
+/// Both marshalling directions need this, for the same reason in two shapes. A read cannot tell a
+/// `?node2d` holding nothing from a `logic` holding false, because Verse spells an empty option and
+/// false with the same cell. A write has to build a value of the member's declared class, and an
+/// empty slot does not name one.
+struct FMemberType
+{
+    const uLang::CDataDefinition* Member = nullptr;
+    /// The class an optional reference member holds, and which package declares it. Null and Other
+    /// for a member of any other type.
+    const uLang::CClass* ReferenceClass = nullptr;
+    EClassOrigin ReferenceOrigin = EClassOrigin::Other;
+};
+
+AUTORTFM_DISABLE FMemberType DescribeMemberType(FUtf8StringView ClassName, FUtf8StringView FieldName)
+{
+    FMemberType Result;
+    if (!GIde.IsValid())
+    {
+        return Result;
+    }
+    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
+    if (!BuildManager.IsValid())
+    {
+        return Result;
+    }
+    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
+
+    const FUtf8String ClassPath = FUtf8String(ScriptVersePath) + UTF8TEXT("/") + FUtf8String(ClassName);
+    const uLang::CClass* Class = Program->FindDefinitionByVersePath<uLang::CClass>(
+        FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath));
+    if (!Class)
+    {
+        return Result;
+    }
+
+    for (const uLang::TSRef<uLang::CDataDefinition>& Member : Class->GetDefinitionsOfKind<uLang::CDataDefinition>())
+    {
+        if (!FUtf8StringView(Member->AsNameCString()).Equals(FieldName))
+        {
+            continue;
+        }
+        Result.Member = &*Member;
+
+        bool bIsOption = false;
+        const uLang::CTypeBase* Type = Member->GetType();
+        const uLang::CNormalType* Normal = Type ? &UnwrapDeclaredType(*Type, bIsOption) : nullptr;
+        // Only the optional form is a reference this can marshal, which is the same rule
+        // DescribeExportType refuses a bare one by.
+        if (bIsOption && Normal)
+        {
+            if (const uLang::CClass* Referenced = Normal->AsNullable<uLang::CClass>())
+            {
+                Result.ReferenceClass = Referenced;
+                Result.ReferenceOrigin = ClassOriginOf(*Referenced, *Program);
+            }
+        }
+        break;
+    }
+    return Result;
+}
+
+/// The Godot handle a Verse wrapper carries, or 0 for a value that is not one.
+AUTORTFM_DISABLE int64 HandleOf(Verse::VValue Value)
+{
+    UObject* Wrapper = Value.ExtractUObject();
+    verse::object* Shadow = Wrapper ? Cast<verse::object>(Wrapper) : nullptr;
+    return Shadow ? Shadow->Handle.Get() : 0;
+}
+
 /// The decorated shape key for a member of Object's own class. Factored out because the read and
 /// write paths must agree on it exactly.
 AUTORTFM_DISABLE FUtf8String ShapeKeyFor(UObject* Object, FUtf8StringView FieldName)
@@ -868,6 +1014,8 @@ AUTORTFM_DISABLE FUtf8String ShapeKeyFor(UObject* Object, FUtf8StringView FieldN
         + FUtf8String(Object->GetClass()->GetName()) + UTF8TEXT(":)") + FUtf8String(FieldName);
 }
 
+/// Reads FieldName off Object. Returns false for a field the shape does not carry, and for any
+/// Verse type with no vh_value counterpart.
 AUTORTFM_DISABLE bool ReadFieldOf(UObject* Object, FUtf8StringView FieldName, vh_value& OutValue, FUtf8String& OutStorage)
 {
     if (!Object)
@@ -920,7 +1068,40 @@ AUTORTFM_DISABLE bool ReadFieldOf(UObject* Object, FUtf8StringView FieldName, vh
             return;
         }
 
-        if (Value.IsLogic())
+        // A reference, before the logic test rather than after it, because Verse's two spellings
+        // collide: `true` is an option around `false`, and an empty option *is* `false`. A set
+        // option wrapping a wrapper object is the one of the three the value alone identifies; an
+        // empty one has to be told what the author declared, and anything else falls through to
+        // the logic the cell equally well is.
+        int64 ReferenceHandle = 0;
+        bool bIsReference = false;
+        if (const Verse::VOption* Option = Value.DynamicCast<Verse::VOption>())
+        {
+            ReferenceHandle = HandleOf(Option->GetValue());
+            bIsReference = ReferenceHandle != 0;
+        }
+        else if (Value.IsFalse())
+        {
+            bIsReference = DescribeMemberType(FUtf8String(Object->GetClass()->GetName()), FieldName).ReferenceClass != nullptr;
+        }
+
+        if (bIsReference)
+        {
+            // A handle the consumer rebuilds an object from, and for the empty case the empty
+            // option -- which is a reference holding nothing, not a member that failed to read.
+            OutValue.VariantTag = VH_VARIANT_OBJECT;
+            if (ReferenceHandle != 0)
+            {
+                OutValue.Type = VH_TYPE_INT;
+                OutValue.Int = ReferenceHandle;
+            }
+            else
+            {
+                OutValue.Type = VH_TYPE_OPTION;
+                OutValue.Option = nullptr;
+            }
+        }
+        else if (Value.IsLogic())
         {
             OutValue.Type = VH_TYPE_LOGIC;
             OutValue.Logic = Value.AsBool() ? 1 : 0;
@@ -965,33 +1146,8 @@ namespace {
 /// Verse permits -- so the question goes back to the definition that declared it.
 AUTORTFM_DISABLE bool IsVarMember(FUtf8StringView ClassName, FUtf8StringView FieldName)
 {
-    if (!GIde.IsValid())
-    {
-        return false;
-    }
-    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
-    if (!BuildManager.IsValid())
-    {
-        return false;
-    }
-    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
-
-    const FUtf8String ClassPath = FUtf8String(ScriptVersePath) + UTF8TEXT("/") + FUtf8String(ClassName);
-    const uLang::CClass* Class = Program->FindDefinitionByVersePath<uLang::CClass>(
-        FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath));
-    if (!Class)
-    {
-        return false;
-    }
-
-    for (const uLang::TSRef<uLang::CDataDefinition>& Member : Class->GetDefinitionsOfKind<uLang::CDataDefinition>())
-    {
-        if (FUtf8StringView(Member->AsNameCString()).Equals(FieldName))
-        {
-            return Member->IsVar();
-        }
-    }
-    return false;
+    const uLang::CDataDefinition* Member = DescribeMemberType(ClassName, FieldName).Member;
+    return Member != nullptr && Member->IsVar();
 }
 
 /// Assigning writes *through* a var's reference, the way `set X = ...` does. Initializing writes
@@ -1004,7 +1160,69 @@ enum class EFieldWrite : uint8
     Initialize,
 };
 
-AUTORTFM_DISABLE bool WriteFieldOf(UObject* Object, FUtf8StringView FieldName, const vh_value& Value, EFieldWrite Mode)
+/// The UClass behind a mirrored Godot class -- node2d, texture2d -- which is what a reference to
+/// one has to be built from.
+///
+/// Looked up across every package in the program rather than in a named one. A script's class lives
+/// in the package the host itself compiles, whose name FindGodotClass can spell; a mirrored class
+/// comes from the package VNI built alongside the module, whose VM name is assembled out of the
+/// mount point and the C++ module name -- two things this file would be guessing at. The decorated
+/// name identifies the class on its own, so the package it is found in does not need predicting.
+AUTORTFM_DISABLE UClass* FindMirroredClass(FUtf8StringView ClassName)
+{
+    if (!Verse::GlobalProgram)
+    {
+        return nullptr;
+    }
+    const FUtf8String Decorated = FUtf8String(UTF8TEXT("(")) + GodotVersePath + UTF8TEXT(":)") + FUtf8String(ClassName);
+
+    UClass* Found = nullptr;
+    Verse::FRunningContext Context = Verse::FRunningContextPromise{};
+    Context.EnterVM([&] {
+        for (uint32 Index = 0; Index < Verse::GlobalProgram->NumPackages() && Found == nullptr; ++Index)
+        {
+            Verse::VPackage& Package = Verse::GlobalProgram->GetPackage(Index);
+            if (Verse::VClass* Class = Package.LookupDefinition<Verse::VClass>(FUtf8StringView(Decorated)))
+            {
+                Found = Cast<UClass>(Class->GetOrCreateNativeType(Context));
+            }
+        }
+    });
+    return Found;
+}
+
+/// A fresh Verse wrapper around a Godot handle, which is what a mirrored-class member holds.
+///
+/// Built the way Instantiate builds a script's own object, and buildable that way for the same
+/// reason: a mirrored class is ordinary Verse over the one native `object`, so its instance *is* a
+/// UObject and none of the VM's own object allocation comes into it.
+/// UVerseClass::PostInitInstance has run the class's Verse constructor by the time NewObject
+/// returns, which leaves only the field C++ owns to fill in.
+AUTORTFM_DISABLE UObject* NewMirroredWrapper(UClass* NativeClass, int64 Handle)
+{
+    UObject* Wrapper = NativeClass ? NewObject<UObject>(GetTransientPackage(), NativeClass) : nullptr;
+    verse::object* Shadow = Cast<verse::object>(Wrapper);
+    if (!Shadow)
+    {
+        return nullptr;
+    }
+    Shadow->Handle.Init(Handle, Shadow);
+    return Wrapper;
+}
+
+/// What an optional reference member holds: an option around the object, or Verse's `false` for one
+/// holding nothing.
+AUTORTFM_DISABLE Verse::VValue ReferenceOption(Verse::FRunningContext Context, UObject* Referenced)
+{
+    return Referenced ? Verse::VValue(Verse::VOption::New(Context, Verse::VValue(Referenced)))
+                      : Verse::VValue(Verse::GlobalFalse());
+}
+
+/// Builds the value to write, given the one already in the slot. An uninitialized return means the
+/// value has no representation in this member and nothing is written.
+using FFieldValueBuilder = TFunctionRef<Verse::VValue(Verse::FRunningContext Context, Verse::VValue Current)>;
+
+AUTORTFM_DISABLE bool WriteFieldWith(UObject* Object, FUtf8StringView FieldName, EFieldWrite Mode, FFieldValueBuilder MakeValue)
 {
     if (!Object)
     {
@@ -1033,38 +1251,16 @@ AUTORTFM_DISABLE bool WriteFieldOf(UObject* Object, FUtf8StringView FieldName, c
         // A member's storage already holds a value in the exact representation the compiled code
         // expects, and matching it is the whole job: the VM does not re-check a slot it is told
         // holds a string, so a plausible-looking value of the wrong cell type reads back fine and
-        // dies later inside the interpreter. Everything below is chosen against Current.
+        // dies later inside the interpreter. That is why the builder is handed Current.
         Verse::VRestValue* const Slot = Field->Type == Verse::EFieldType::FVerseProperty
             ? Field->UProperty->ContainerPtrToValuePtr<Verse::VRestValue>(Object)
             : nullptr;
         const Verse::VValue Current = Slot ? Slot->Get(Context)
                                            : Verse::VNativeRef::Peek(Context, Object, Field->UProperty);
 
-        Verse::VValue NewValue;
-        switch (Value.Type)
+        const Verse::VValue NewValue = MakeValue(Context, Current);
+        if (NewValue.IsUninitialized())
         {
-        case VH_TYPE_LOGIC:
-            NewValue = Verse::VValue::FromBool(Value.Logic != 0);
-            break;
-        case VH_TYPE_INT:
-            NewValue = Verse::VValue(Verse::VInt(Context, Value.Int));
-            break;
-        case VH_TYPE_FLOAT:
-            NewValue = Verse::VValue(Verse::VFloat(Value.Float));
-            break;
-        case VH_TYPE_STRING:
-        {
-            // Verse hangs the mutability of a container off the container, not off a reference
-            // around it: `var Label:string` holds a VMutableArray where a plain one holds a VArray.
-            const FUtf8StringView Utf8(reinterpret_cast<const UTF8CHAR*>(Value.String.Utf8), Value.String.Len);
-            Verse::VRef* const Box = Current.DynamicCast<Verse::VRef>();
-            const Verse::VValue Inner = Box ? Box->Get(Context) : Current;
-            NewValue = Inner.IsCellOfType<Verse::VMutableArray>()
-                ? Verse::VValue(Verse::VMutableArray::New(Context, Utf8))
-                : Verse::VValue(Verse::VArray::New(Context, Utf8));
-            break;
-        }
-        default:
             return;
         }
 
@@ -1095,6 +1291,75 @@ AUTORTFM_DISABLE bool WriteFieldOf(UObject* Object, FUtf8StringView FieldName, c
     return bWrote;
 }
 
+/// Writes the object an optional reference member should hold, or nothing for null.
+///
+/// The caller is the one that has checked Referenced against the member's declared class. Neither
+/// the shape nor the slot will: a slot told it holds a `?sprite2d` takes whatever object is put in
+/// it, and the mistake surfaces the first time compiled code calls a method that is not there.
+AUTORTFM_DISABLE bool WriteReferenceField(UObject* Object, FUtf8StringView FieldName, EFieldWrite Mode, UObject* Referenced)
+{
+    return WriteFieldWith(Object, FieldName, Mode, [Referenced](Verse::FRunningContext Context, Verse::VValue) {
+        return ReferenceOption(Context, Referenced);
+    });
+}
+
+AUTORTFM_DISABLE bool WriteFieldOf(UObject* Object, FUtf8StringView FieldName, const vh_value& Value, EFieldWrite Mode)
+{
+    if (!Object)
+    {
+        return false;
+    }
+
+    // A reference arrives as a handle, which names a Godot object and not a Verse one -- so the
+    // wrapper has to be built here, and only the declared type says what to build. A member typed
+    // as one of the project's own classes is refused: the object it should hold is the one that
+    // node's own instance already is, and WriteInstanceFieldInstance is the way to hand that over.
+    if (Value.VariantTag == VH_VARIANT_OBJECT)
+    {
+        const FMemberType Declared = DescribeMemberType(FUtf8String(Object->GetClass()->GetName()), FieldName);
+        if (Declared.ReferenceOrigin != EClassOrigin::Mirrored)
+        {
+            return false;
+        }
+        // Built before the VM scope is entered, because constructing it runs the class's Verse
+        // constructor through UVerseClass::PostInitInstance, which takes a context of its own.
+        const int64 Handle = Value.Type == VH_TYPE_INT ? Value.Int : 0;
+        UObject* Referenced = Handle != 0
+            ? NewMirroredWrapper(FindMirroredClass(FUtf8StringView(Declared.ReferenceClass->AsNameCString())), Handle)
+            : nullptr;
+        if (Handle != 0 && !Referenced)
+        {
+            return false;
+        }
+        return WriteReferenceField(Object, FieldName, Mode, Referenced);
+    }
+
+    return WriteFieldWith(Object, FieldName, Mode, [&Value](Verse::FRunningContext Context, Verse::VValue Current) {
+        switch (Value.Type)
+        {
+        case VH_TYPE_LOGIC:
+            return Verse::VValue::FromBool(Value.Logic != 0);
+        case VH_TYPE_INT:
+            return Verse::VValue(Verse::VInt(Context, Value.Int));
+        case VH_TYPE_FLOAT:
+            return Verse::VValue(Verse::VFloat(Value.Float));
+        case VH_TYPE_STRING:
+        {
+            // Verse hangs the mutability of a container off the container, not off a reference
+            // around it: `var Label:string` holds a VMutableArray where a plain one holds a VArray.
+            const FUtf8StringView Utf8(reinterpret_cast<const UTF8CHAR*>(Value.String.Utf8), Value.String.Len);
+            Verse::VRef* const Box = Current.DynamicCast<Verse::VRef>();
+            const Verse::VValue Inner = Box ? Box->Get(Context) : Current;
+            return Inner.IsCellOfType<Verse::VMutableArray>()
+                ? Verse::VValue(Verse::VMutableArray::New(Context, Utf8))
+                : Verse::VValue(Verse::VArray::New(Context, Utf8));
+        }
+        default:
+            return Verse::VValue();
+        }
+    });
+}
+
 } // namespace
 
 AUTORTFM_DISABLE bool GodotVerse::WriteInstanceField(FInstance* Instance, FUtf8StringView FieldName, const vh_value& Value)
@@ -1105,6 +1370,38 @@ AUTORTFM_DISABLE bool GodotVerse::WriteInstanceField(FInstance* Instance, FUtf8S
     }
     return WriteFieldOf(Instance->Object.Get(), FieldName, Value,
                         Instance->bSealed ? EFieldWrite::Assign : EFieldWrite::Initialize);
+}
+
+AUTORTFM_DISABLE bool GodotVerse::WriteInstanceFieldInstance(FInstance* Instance, FUtf8StringView FieldName, const FInstance* Value)
+{
+    if (!Instance || !Instance->Object.IsValid())
+    {
+        return false;
+    }
+
+    UObject* Referenced = Value && Value->Object.IsValid() ? Value->Object.Get() : nullptr;
+    const FMemberType Declared = DescribeMemberType(FUtf8String(Instance->Object->GetClass()->GetName()), FieldName);
+    if (!Declared.ReferenceClass)
+    {
+        return false;
+    }
+
+    // The class check the slot will not do. A mirrored member accepts an instance too, and should:
+    // a `?node2d` assigned a node that carries a script is better off holding that script's own
+    // object than a second wrapper around the same handle, which would give one node two identities.
+    if (Referenced)
+    {
+        UClass* MemberClass = Declared.ReferenceOrigin == EClassOrigin::Script
+            ? FindGodotClass(FUtf8StringView(Declared.ReferenceClass->AsNameCString()))
+            : FindMirroredClass(FUtf8StringView(Declared.ReferenceClass->AsNameCString()));
+        if (!MemberClass || !Referenced->GetClass()->IsChildOf(MemberClass))
+        {
+            return false;
+        }
+    }
+
+    return WriteReferenceField(Instance->Object.Get(), FieldName,
+                               Instance->bSealed ? EFieldWrite::Assign : EFieldWrite::Initialize, Referenced);
 }
 
 AUTORTFM_DISABLE bool GodotVerse::ReadInstanceField(const FInstance* Instance, FUtf8StringView FieldName, vh_value& OutValue, FUtf8String& OutStorage)

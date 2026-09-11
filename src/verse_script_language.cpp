@@ -70,21 +70,19 @@ String verse_doc_comment_above(const String &p_source, int64_t p_line) {
 	return String("\n").join(collected).strip_edges();
 }
 
-namespace {
-
-VerseRuntime *get_runtime() {
-	return Object::cast_to<VerseRuntime>(Engine::get_singleton()->get_singleton("VerseRuntime"));
-}
-
-// The Godot class a mirrored Verse class name stands for, or nullptr for a name that is not part
-// of the generated API -- a class the author wrote, most often.
-const char *godot_class_for(const String &p_verse_class) {
+const char *verse_godot_class_for(const String &p_verse_class) {
 	for (size_t i = 0; i < std::size(verse_api::classes); i++) {
 		if (p_verse_class == verse_api::classes[i].verse_name) {
 			return verse_api::classes[i].godot_name;
 		}
 	}
 	return nullptr;
+}
+
+namespace {
+
+VerseRuntime *get_runtime() {
+	return Object::cast_to<VerseRuntime>(Engine::get_singleton()->get_singleton("VerseRuntime"));
 }
 
 // The Godot class whose documentation describes a Verse class. That is the mirrored table plus the
@@ -94,13 +92,13 @@ const char *godot_class_for(const String &p_verse_class) {
 // parent derives from. Absent from the table, it would otherwise be reported as a local constant,
 // with a tooltip that says nothing and nowhere for a click to go.
 //
-// Deliberately not folded into godot_class_for: that one answers "is this name part of the
+// Deliberately not folded into verse_godot_class_for: that one answers "is this name part of the
 // generated API", which `object` is not, and the completion path relies on the distinction.
 const char *godot_doc_class_for(const String &p_verse_class) {
 	if (p_verse_class == String("object")) {
 		return "Object";
 	}
-	return godot_class_for(p_verse_class);
+	return verse_godot_class_for(p_verse_class);
 }
 
 // The Godot method a mirrored Verse method stands for, keyed by the class that declares it. The
@@ -185,12 +183,8 @@ const char *mirrored_class(const String &p_godot_class) {
 // which is how a superclass is told to be another script's class rather than a piece of the
 // generated API.
 String godot_class_for(const std::string &p_verse_class) {
-	for (size_t i = 0; i < std::size(verse_api::classes); i++) {
-		if (p_verse_class == verse_api::classes[i].verse_name) {
-			return String(verse_api::classes[i].godot_name);
-		}
-	}
-	return String();
+	const char *godot_name = verse_godot_class_for(String(p_verse_class.c_str()));
+	return godot_name != nullptr ? String(godot_name) : String();
 }
 
 // Only a subset of Godot's classes is mirrored, so a node whose own class was not generated
@@ -801,7 +795,7 @@ static Dictionary completion_option_for(const Dictionary &p_item) {
 	// which is a class the author wrote, a local, or a Verse standard-library name. All three
 	// are nearer to what is being typed than a thousand generated accessors.
 	const String owner = p_item["owner"];
-	const int64_t location = godot_class_for(owner) == nullptr
+	const int64_t location = verse_godot_class_for(owner) == nullptr
 			? ScriptLanguageExtension::LOCATION_LOCAL
 			: ScriptLanguageExtension::LOCATION_OTHER;
 
@@ -858,7 +852,7 @@ static bool completes_as_override(const Dictionary &p_item, const String &p_encl
 	if (!(bool)p_item["is_overridable"] || String(p_item["signature"]).is_empty() || owner == p_enclosing_class) {
 		return false;
 	}
-	if (godot_class_for(owner) != nullptr) {
+	if (verse_godot_class_for(owner) != nullptr) {
 		return false;
 	}
 	return owner != String("object") || godot_method_for(owner, p_item["name"]) != nullptr;
@@ -1699,6 +1693,19 @@ void VerseScriptLanguage::register_script(VerseScript *p_script) {
 	live_scripts.push_back(p_script);
 }
 
+void VerseScriptLanguage::register_instance(int64_t p_object_id, VerseScriptInstance *p_instance) {
+	live_instances[p_object_id] = p_instance;
+}
+
+void VerseScriptLanguage::unregister_instance(int64_t p_object_id) {
+	live_instances.erase(p_object_id);
+}
+
+VerseScriptInstance *VerseScriptLanguage::instance_for(int64_t p_object_id) const {
+	const auto found = live_instances.find(p_object_id);
+	return found != live_instances.end() ? found->second : nullptr;
+}
+
 void VerseScriptLanguage::unregister_script(VerseScript *p_script) {
 	live_scripts.erase(std::remove(live_scripts.begin(), live_scripts.end(), p_script), live_scripts.end());
 }
@@ -1823,6 +1830,10 @@ static String export_rejection_message(const Dictionary &p_entry) {
 		case VH_EXPORT_OPTION_NOT_OBJECT:
 			return name + String(" is an option around a value the inspector has no empty slot for. ")
 					+ String("Only a node or a resource can be left unassigned.");
+		case VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL:
+			return name + String(" refers to ") + class_name
+					+ String(", which is not registered with Godot. The inspector filters the slot by a ")
+					+ String("Godot class name, so add `@global_class` to ") + class_name + String(".");
 		default:
 			return name + String(" has a type godot-verse cannot carry to the inspector yet, so it is not exported.");
 	}
@@ -1834,6 +1845,8 @@ static String export_rejection_code(int64_t p_reject) {
 			return String("OBJECT_EXPORT_NOT_OPTIONAL");
 		case VH_EXPORT_OPTION_NOT_OBJECT:
 			return String("OPTION_EXPORT_NOT_OBJECT");
+		case VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL:
+			return String("SCRIPT_CLASS_EXPORT_NOT_GLOBAL");
 		default:
 			return String("EXPORT_TYPE_UNSUPPORTED");
 	}

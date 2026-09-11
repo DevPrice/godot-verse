@@ -10,9 +10,11 @@
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
 
+#include <unordered_map>
 #include <vector>
 
 struct VerseClassDecl;
+struct VerseScriptInstance;
 class VerseScript;
 
 // Line endings normalised away. A buffer arrives through TextEdit, which need not hand back the
@@ -23,6 +25,12 @@ godot::String verse_newline_normalized(const godot::String &p_source);
 // form of its own, so this convention -- whatever precedes a definition documents it -- is the
 // whole of where a script's documentation comes from.
 godot::String verse_doc_comment_above(const godot::String &p_source, int64_t p_line);
+
+// The Godot class a mirrored Verse class name stands for, or nullptr for a name that is not part of
+// the generated API -- a class the author wrote, most often. Shared rather than looked up twice:
+// verse_script.cpp turns an export's class hint into the name an inspector slot filters by, and
+// that has to be the same table the rest of the bridge resolves a Verse class name through.
+const char *verse_godot_class_for(const godot::String &p_verse_class);
 
 // The "Verse" ScriptLanguage. One instance, created and handed to
 // Engine::register_script_language by register_types.cpp, so singleton() is valid for the life
@@ -166,6 +174,17 @@ public:
 	void register_script(VerseScript *p_script);
 	void unregister_script(VerseScript *p_script);
 
+	// Live script instances, by the instance id of the object each is attached to. Borrowed, the
+	// way live_scripts is: an instance adds itself in create() and removes itself in free_func,
+	// which are the only two places one is born and dies.
+	//
+	// The table exists because an exported reference to another script's class has to hold *that*
+	// node's Verse object, and what the inspector hands over is a Godot Object -- so something has
+	// to map one to the other, and Godot's own script-instance pointer is not reachable from here.
+	void register_instance(int64_t p_object_id, VerseScriptInstance *p_instance);
+	void unregister_instance(int64_t p_object_id);
+	VerseScriptInstance *instance_for(int64_t p_object_id) const;
+
 	// The class name every .verse file under res:// defines, which is its own stem: a script's
 	// class is named after its file, and one flat scope for the whole project is what forces
 	// that. Cheap enough to answer from a directory walk, and it needs no compiled program --
@@ -255,6 +274,7 @@ private:
 	void refresh_export_warnings(const godot::String &p_path) const;
 
 	std::vector<VerseScript *> live_scripts;
+	std::unordered_map<int64_t, VerseScriptInstance *> live_instances;
 
 	// Formatted diagnostics last written to the output log, keyed by globalized path.
 	mutable godot::Dictionary logged_diagnostics;

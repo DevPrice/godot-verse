@@ -319,6 +319,52 @@ wrong representation agree with each other. Only the VM disagreed, and only when
 member. `exports.verse` now carries `Bump()` and `BumpLabel()`, which read and assign each member
 from Verse, and the test calls them — the interpreter is the oracle, not the ABI.
 
+### References
+
+**A mirrored class needs no VM object construction at all**, which is the thing that made this
+cheap. The fear going in was `VClass::NewVObject` and archetypes: building an instance field by
+field, against a shape whose slot order `VShape::New` assigns from a hash table
+(`VVMShape.h:105-107`), with the VM not re-checking a slot it was told holds one thing. None of that
+applies here. Every mirrored class derives from `object`, `object` is the one `<native>` class in the
+package, and a Verse class over a native ancestor compiles to a `UVerseClass` — so its instance is a
+UObject, and `NewObject<UObject>(GetTransientPackage(), NativeClass)` plus `Handle.Init` builds one.
+That is the same pair of lines `Instantiate` already uses for a script's own class, and
+`UVerseClass::PostInitInstance` has run the Verse constructor by the time `NewObject` returns. On the
+wire the value is then just `VValue(UObject*)` — `VVMValue.h:66` — which is why the storage
+discipline above has nothing extra to say about it.
+
+The `UClass` is found by decorated name across every package in the program rather than in a named
+one. `FindGodotClass` can spell the package the host compiles (`SolIdeDataSources`), but the Godot
+API is a VNI package whose VM name is assembled out of the mount point and the C++ module name
+(`Names::GetVersePackageNameForVni`, `VVMNames.cpp:304-307`), and `(/Godot.org/Godot:)node2d`
+identifies the class without anything having to predict that.
+
+**An empty option and `logic` false are the same cell.** `VValue::IsFalse()` is pointer identity
+against the `VFalse` singleton (`Inline/VVMValueInline.h:116-119`), and Verse's `false` *is* the empty
+option; `true` is `VOption(VFalse)`, so `IsLogic()` catches both logic values and a `DynamicCast` to
+`VOption` succeeds on `true` as well. A set option around an object is therefore the only one of the
+three the value identifies on its own. The empty case has to ask what the author declared, which
+`DescribeMemberType` does against the semantic program — the same place `IsVarMember` asks its
+question, and for the same reason: the storage says where a value lives, not what Verse permits there.
+
+**A script class's reference is the other node's own object, not a copy of its handle.** Constructing
+a second `mover` for a node that already has one would give it two Verse objects: two sets of members,
+two identities, and an author reaching through whichever one they happened to hold. So the instance
+itself crosses, through `vh_instance_set_field_instance`, and the host checks the class the slot
+expects before writing — `IsChildOf` against the member's declared class, because nothing downstream
+will. That check is also what lets a *mirrored* member take an instance: `?node2d` assigned a node
+carrying a `mover` script holds the mover, which is both type-correct and the identity-preserving
+answer.
+
+Referring to a script class at all requires `@global_class` on it. That is the one rejection in this
+set that is about Godot rather than about Verse: the inspector filters a slot by a Godot class name,
+an unregistered class has none, and Verse will happily let the member be declared anyway. The host
+reads the attribute off the `CClass` with `HasAttributeSubclass`, which makes two readers of
+`@global_class` — this one and `verse_scan_class_decl` on the Godot side, which answers from the
+source text because Godot asks during the filesystem scan, before a host exists. They have to agree:
+one decides whether the reference can be exported, the other decides whether the name it would be
+filtered by exists.
+
 ## Roadmap
 
 Ordered to front-load the cheap work. Bands, not estimates; item 4 is the one with real unknowns.
@@ -337,12 +383,12 @@ Ordered to front-load the cheap work. Bands, not estimates; item 4 is the one wi
    `@export` member may be written — that is initialization, and it is how a non-var gets a
    value at all. Sealed, only a `var` may be. The rule needs no new ABI call and no cooperation
    from the GDExtension: `InstanceCallVoid` sets the flag, and `Ready` is a call.
-5. **Type coverage** — incremental. Values cross today for logic/int/float/string only. An enum
-   and a mirrored-class reference are already classified — a hint, and for the class a name — but
-   held at `VH_EXPORT_UNSUPPORTED_TYPE` until a *value* can cross too, not just the type: an
-   enum's ordinal and an object's handle are the next 80% and follow the existing `vh_variant_tag`
-   pattern. Vector2, maps and options remain awkward on principle: Godot has no option type, so
-   `?float` becomes either a nullable Variant or a two-property pair.
+5. **Type coverage** — incremental, and references are done: an optional reference to a mirrored
+   class or to a registered script class carries its value both ways at ABI 25, filtered in the
+   inspector by node or resource type. An enum is still classified and held at
+   `VH_EXPORT_UNSUPPORTED_TYPE` until its ordinal can cross; structs (`vector2`, `color`) and arrays
+   are the rest. Maps remain awkward on principle, and `?float` stays refused: Godot has no option
+   type, so it would have to become either a nullable Variant or a two-property pair.
 6. **Per-instance values in the editor.** A non-tool script gets a `PlaceHolderScriptInstance`,
    which holds Godot's own copy of the values and never reaches Verse. Declared defaults and
    stored overrides both display correctly through it, but an `@export` member whose value the
@@ -364,8 +410,8 @@ than an admission.
 
 Implemented and covered by `tests/host_smoke` (`exports.verse` fixture): the harvest
 (`HostScript.cpp` `GetClassExports`), `vh_class_export_list`, `vh_instance_get_field`,
-`vh_class_default_field` and `vh_instance_set_field` at ABI 8,
-`VerseScript::_get_script_property_list` with type-derived hints and group headers,
+`vh_class_default_field`, `vh_instance_set_field` and `vh_instance_set_field_instance` at ABI 25,
+`VerseScript::_get_script_property_list` with type-derived hints, a class header and group headers,
 `_get_property_default_value`, and the script instance's `get_func` and `set_func`.
 
 The smoke test asserts the verse path resolves, that only `@export` members are listed, that a
@@ -378,6 +424,12 @@ initialized before the instance seals and not after, that a refused write leaves
 that a bare Godot reference and an option around a non-reference are both rejected — with the
 reason and the declaration's line — and, the assertion that matters, that Verse can read and
 assign each member afterwards.
+
+For references specifically: that a handle round-trips as a handle and a null as the empty option
+while a `logic` false still reads as false, that a script-class member refuses a handle and takes an
+instance, that a mirrored one takes either, that a non-reference member refuses an instance, that an
+unregistered script class is rejected with its own reason — and, again the one that counts, that
+Verse unwraps the written option and dispatches a method on what comes out.
 
 Properties are published `PROPERTY_USAGE_DEFAULT | SCRIPT_VARIABLE`: exported and stored, var or
 not. Verified in a running Godot 4.7 as well as the harness — `demo/main.tscn` stores a `var

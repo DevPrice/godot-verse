@@ -413,11 +413,28 @@ bool VerseRuntime::set_instance_field(vh_instance *p_instance, const String &p_n
 			value.String.Utf8 = text.get_data();
 			value.String.Len = text.length();
 			break;
+		case Variant::OBJECT: {
+			// The instance id, never a pointer -- the id is the only reference Verse can hold that
+			// stays checkable after Godot frees the object. The host builds the Verse wrapper for
+			// it; 0 is the null it turns into a reference holding nothing.
+			Object *object = p_value;
+			value.Type = VH_TYPE_INT;
+			value.VariantTag = VH_VARIANT_OBJECT;
+			value.Int = object != nullptr ? (int64_t)object->get_instance_id() : 0;
+			break;
+		}
 		default:
 			return false;
 	}
 
 	return host.InstanceSetField(p_instance, p_name.utf8().get_data(), &value) == VH_OK;
+}
+
+bool VerseRuntime::set_instance_field_instance(vh_instance *p_instance, const String &p_name, vh_instance *p_value) {
+	if (!host.is_loaded() || p_instance == nullptr) {
+		return false;
+	}
+	return host.InstanceSetFieldInstance(p_instance, p_name.utf8().get_data(), p_value) == VH_OK;
 }
 
 vh_instance *VerseRuntime::instantiate(const String &p_class_name, int64_t p_object_id) {

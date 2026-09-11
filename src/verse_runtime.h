@@ -108,9 +108,13 @@ public:
 	// Variant means the field is absent or holds a Verse type with no Variant counterpart.
 	godot::Variant instance_field(vh_instance *p_instance, const godot::String &p_name) const;
 	godot::Variant class_default_field(const godot::String &p_class_name, const godot::String &p_name) const;
-	// Writes one data member on a live instance. Covers bool, int, float and String -- the same
-	// four types the reader covers -- and refuses anything else rather than truncating it.
+	// Writes one data member on a live instance. Covers bool, int, float, String and an Object --
+	// the same types the reader covers -- and refuses anything else rather than truncating it.
+	// An Object crosses as its instance id, and a null one clears the member.
 	bool set_instance_field(vh_instance *p_instance, const godot::String &p_name, const godot::Variant &p_value);
+	// Writes a reference member with another script's instance rather than with a handle, which is
+	// what a member typed as one of the project's own classes holds. A null p_value clears it.
+	bool set_instance_field_instance(vh_instance *p_instance, const godot::String &p_name, vh_instance *p_value);
 
 private:
 	VerseHostLibrary host;

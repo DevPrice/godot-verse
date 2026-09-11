@@ -21,8 +21,17 @@ mover := class(node2d):
 	@export_group("Movement")
 	var Speed<public>:type{_X:float where 0.0 <= _X, _X <= 500.0} = 60.0
 
+	# A reference the scene fills in, which is why it is an option: nothing can force a value into
+	# an inspector slot, and `sprite2d{}` would be a handle of 0 -- dead before the scene loaded.
+	# The type is the whole of the hint, so the picker offers Sprite2D nodes and nothing else.
+	@export
+	@export_group("Sprite")
+	var Target<public>:?sprite2d = false
+
 	Ready<override>():void =
 		Print(Greeting)
+		if (Sprite := Target?):
+			set Sprite.FlipH = true
 
 	Process<override>(Delta:float):void =
 		set Position = vector2{X := Position.X + Delta * Speed, Y := Position.Y}

@@ -156,6 +156,7 @@ int main(int argc, char** argv)
 	auto CallInstanceVoidFn = Resolve<vh_instance_call_void_fn>(Module, "vh_instance_call_void", &ResolveOk);
 	auto GetFieldFn = Resolve<vh_instance_get_field_fn>(Module, "vh_instance_get_field", &ResolveOk);
 	auto SetFieldFn = Resolve<vh_instance_set_field_fn>(Module, "vh_instance_set_field", &ResolveOk);
+	auto SetFieldInstanceFn = Resolve<vh_instance_set_field_instance_fn>(Module, "vh_instance_set_field_instance", &ResolveOk);
 	auto LookupSymbolFn = Resolve<vh_lookup_symbol_fn>(Module, "vh_lookup_symbol", &ResolveOk);
 	auto CompleteSymbolFn = Resolve<vh_complete_symbol_fn>(Module, "vh_complete_symbol", &ResolveOk);
 	auto ClassMembersFn = Resolve<vh_class_members_fn>(Module, "vh_class_members", &ResolveOk);
@@ -1085,11 +1086,27 @@ int main(int argc, char** argv)
 	ExportsOk = Step("a node without an option around it is refused",
 					HeldExport && HeldExport->Reject == VH_EXPORT_OBJECT_NOT_OPTIONAL)
 			 && ExportsOk;
+	ExportsOk = Step("an optional node exports", TargetExport && TargetExport->Reject == VH_EXPORT_OK) && ExportsOk;
 	const vh_export_desc* MaybeExport = FindExport("Maybe");
 	ExportsOk = Step("and an option around a number is refused the other way",
 					MaybeExport && MaybeExport->Reject == VH_EXPORT_OPTION_NOT_OBJECT)
 			 && ExportsOk;
 	ExportsOk = Step("a member that exports says so", SpeedExport && SpeedExport->Reject == VH_EXPORT_OK) && ExportsOk;
+
+	// A reference to one of the project's own classes is a different hint, because the two names
+	// resolve through different tables: a mirrored name is in the generated API and this one is not.
+	const vh_export_desc* FriendExport = FindExport("Friend");
+	ExportsOk = Step("a reference to a registered script class carries its own hint",
+					FriendExport && FriendExport->Hint == VH_EXPORT_HINT_SCRIPT_CLASS
+						&& TextOf(FriendExport->HintStringUtf8, FriendExport->HintStringLen) == "exports_probe"
+						&& FriendExport->VariantTag == VH_VARIANT_OBJECT
+						&& FriendExport->Reject == VH_EXPORT_OK)
+			 && ExportsOk;
+	const vh_export_desc* StrangerExport = FindExport("Stranger");
+	ExportsOk = Step("a reference to an unregistered one is refused, and says which it was",
+					StrangerExport && StrangerExport->Reject == VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL
+						&& TextOf(StrangerExport->HintStringUtf8, StrangerExport->HintStringLen) == "exports_unregistered")
+			 && ExportsOk;
 
 	// The location is what a consumer needs to put a rejection where the author can see it.
 	ExportsOk = Step("a harvested member carries where it was declared",
@@ -1168,6 +1185,65 @@ int main(int argc, char** argv)
 
 		Step("setting an absent member reports not found", SetFieldFn(Instance, "NoSuchMember", &NewFloat) == VH_ERR_NOT_FOUND);
 
+		// A reference. The handle is never dereferenced -- every Godot callback here is a stub that
+		// reports a dead object -- and nothing below needs one to be alive: what is being checked is
+		// that a handle becomes a Verse wrapper of the declared class and reads back as itself.
+		vh_value NewTarget{};
+		NewTarget.Type = VH_TYPE_INT;
+		NewTarget.VariantTag = VH_VARIANT_OBJECT;
+		NewTarget.Int = 4242;
+		Step("set/get an optional node round-trips as its handle",
+			 RoundTrip("Target", NewTarget, [](const vh_value& V) {
+				 return V.Type == VH_TYPE_INT && V.VariantTag == VH_VARIANT_OBJECT && V.Int == 4242;
+			 }));
+
+		// The empty case is a different cell, not a handle of a different value -- and it is the
+		// same cell Verse spells `logic` false with, so reading it back as an option rather than as
+		// false is the whole of what says the declared type was consulted.
+		vh_value NoTarget{};
+		NoTarget.Type = VH_TYPE_INT;
+		NoTarget.VariantTag = VH_VARIANT_OBJECT;
+		NoTarget.Int = 0;
+		Step("a null reference reads back as the empty option, not as false",
+			 RoundTrip("Target", NoTarget, [](const vh_value& V) {
+				 return V.Type == VH_TYPE_OPTION && V.VariantTag == VH_VARIANT_OBJECT && V.Option == nullptr;
+			 }));
+
+		// ... while a logic member holding false still reads as logic, which is the half of that
+		// distinction a wrong answer here would break silently.
+		vh_value FalseLogic{};
+		FalseLogic.Type = VH_TYPE_LOGIC;
+		FalseLogic.Logic = 0;
+		Step("and a logic member holding false still reads as logic",
+			 RoundTrip("Enabled", FalseLogic, [](const vh_value& V) { return V.Type == VH_TYPE_LOGIC && V.Logic == 0; }));
+
+		// A member typed as one of the project's own classes refuses a handle: the object it should
+		// hold already exists, and vh_instance_set_field_instance is how it is handed over.
+		Step("a script-class reference refuses a bare handle",
+			 SetFieldFn(Instance, "Friend", &NewTarget) == VH_ERR_NOT_FOUND);
+
+		vh_instance* Friend = nullptr;
+		if (Step("vh_instantiate exports_probe", InstantiateFn("exports_probe", 2, &Friend) == VH_OK && Friend != nullptr))
+		{
+			Step("a script-class reference takes another instance",
+				 SetFieldInstanceFn(Instance, "Friend", Friend) == VH_OK);
+			const vh_value* FriendValue = nullptr;
+			Step("and reads back as that node's handle",
+				 GetFieldFn(Instance, "Friend", &FriendValue) == VH_OK && FriendValue != nullptr
+					 && FriendValue->Type == VH_TYPE_INT && FriendValue->Int == 2);
+			Step("a null clears it", SetFieldInstanceFn(Instance, "Friend", nullptr) == VH_OK);
+
+			// exports_probe is a node2d, so it is a value a `?node2d` may hold -- and holding the
+			// object that already exists beats building a second wrapper around its handle.
+			Step("a mirrored reference takes an instance too",
+				 SetFieldInstanceFn(Instance, "Target", Friend) == VH_OK);
+			// Maybe is a ?float, which no object is.
+			Step("a member that is not a reference refuses one",
+				 SetFieldInstanceFn(Instance, "Maybe", Friend) == VH_ERR_NOT_FOUND);
+			ReleaseInstanceFn(Friend);
+		}
+
+
 		// The round-trips above cannot see a value written in the wrong representation -- a bad
 		// write and a matching bad read agree. Bump reads and assigns each member from Verse, so
 		// the interpreter is the one checking, and a var whose reference was overwritten dies
@@ -1194,6 +1270,25 @@ int main(int argc, char** argv)
 		Step("a Verse assignment to a string var is visible across the ABI",
 			 BumpLabelOk && LabelAfterBump && LabelAfterBump->Type == VH_TYPE_STRING &&
 				 std::string(LabelAfterBump->String.Utf8, LabelAfterBump->String.Len) == "changed!");
+
+		// And what the interpreter makes of a written reference, which is the only check that
+		// counts for the same reason: a reference in the wrong representation round-trips through
+		// the ABI perfectly and dies inside the VM. Target is a var, so this still works sealed.
+		auto VerseSeesTarget = [&](const vh_value& Written) {
+			if (SetFieldFn(Instance, "Target", &Written) != VH_OK
+				|| CallInstanceVoidFn(Instance, "(/user@localhost/exports:)ReadTarget") != VH_OK)
+			{
+				return -1;
+			}
+			const vh_value* Seen = nullptr;
+			if (GetFieldFn(Instance, "TargetSeen", &Seen) != VH_OK || Seen == nullptr || Seen->Type != VH_TYPE_LOGIC)
+			{
+				return -1;
+			}
+			return Seen->Logic != 0 ? 1 : 0;
+		};
+		Step("Verse unwraps a reference it was handed and dispatches on it", VerseSeesTarget(NewTarget) == 1);
+		Step("and sees the empty case as empty", VerseSeesTarget(NoTarget) == 0);
 
 		// Bump sealed the instance. From here Verse has observed the members, so the author's
 		// `var` is the whole of what may still change.

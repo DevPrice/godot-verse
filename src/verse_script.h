@@ -90,6 +90,7 @@ public:
 	godot::Error call_instance_void_float(vh_instance *p_instance, const char *p_decorated_name, double p_arg) const;
 	godot::Variant instance_field(vh_instance *p_instance, const godot::StringName &p_name) const;
 	bool set_instance_field(vh_instance *p_instance, const godot::StringName &p_name, const godot::Variant &p_value) const;
+	bool set_instance_field_instance(vh_instance *p_instance, const godot::StringName &p_name, vh_instance *p_value) const;
 
 	// Pushes the export list and its default values into every placeholder instance this script
 	// has out. A non-tool script gets placeholders rather than real instances in the editor, and
