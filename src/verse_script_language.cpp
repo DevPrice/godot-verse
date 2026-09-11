@@ -397,8 +397,53 @@ Object *VerseScriptLanguage::_create_script() const {
 	return memnew(VerseScript);
 }
 
+// Every error moved onto a position that exists in p_source.
+//
+// Godot does not bounds-check a diagnostic against the buffer it is about to show it on:
+// CodeTextEditor walks `line_text[i]` for every i below the error's column to work out where the
+// caret goes once tabs are expanded, so a column past the end of that line is not a marker in the
+// wrong place, it is `CRASH_BAD_INDEX` in CowData::get and the editor is gone -- no dialog, no log
+// line, the whole process traps. (Godot 4.7, editor/code_editor.cpp; the crash reads
+// "Index p_index = N is out of bounds (size() = M)".)
+//
+// The compiler's answer can miss the buffer three ways, and none of them is worth that. It
+// describes the text the last analysis saw rather than the keystroke Godot is asking about --
+// check_buffer answers from the previous analysis by design. It counts columns in utf8 bytes
+// where Godot counts characters. And it may point one past the end of a line on purpose, which is
+// exactly the off-by-one the loop above cannot survive.
+//
+// So the line is pinned inside the buffer and the column inside that line, with one past the last
+// character allowed, which is what an "expected something here" error wants to say. Only the
+// editor's copy is moved: the log keeps the compiler's own numbers, which describe the file it
+// actually read.
+static TypedArray<Dictionary> errors_fitted_to(const TypedArray<Dictionary> &p_errors, const String &p_source) {
+	const PackedStringArray lines = verse_newline_normalized(p_source).split("\n");
+	if (lines.is_empty()) {
+		return p_errors;
+	}
+
+	TypedArray<Dictionary> fitted;
+	for (int64_t i = 0; i < p_errors.size(); i++) {
+		Dictionary error = Dictionary(p_errors[i]).duplicate();
+
+		// A diagnostic with no location at all reports 0, which belongs on the first line rather
+		// than one above it.
+		int64_t line = error["line"];
+		line = line < 1 ? 1 : (line > lines.size() ? lines.size() : line);
+
+		const CharString utf8 = lines[line - 1].utf8();
+		int64_t byte_column = (int64_t)error["column"] - 1;
+		byte_column = byte_column < 0 ? 0 : (byte_column > utf8.length() ? utf8.length() : byte_column);
+
+		error["line"] = line;
+		error["column"] = String::utf8(utf8.get_data(), (int)byte_column).length() + 1;
+		fitted.push_back(error);
+	}
+	return fitted;
+}
+
 Dictionary VerseScriptLanguage::_validate(const String &p_script, const String &p_path, bool p_validate_functions, bool p_validate_errors, bool p_validate_warnings, bool p_validate_safe_lines) const {
-	const TypedArray<Dictionary> errors = check_buffer(p_path, p_script);
+	const TypedArray<Dictionary> errors = errors_fitted_to(check_buffer(p_path, p_script), p_script);
 
 	Dictionary result;
 	result["valid"] = errors.is_empty();
