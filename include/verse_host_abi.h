@@ -22,7 +22,7 @@
 extern "C" {
 #endif
 
-#define VH_ABI_VERSION 23
+#define VH_ABI_VERSION 24
 
 typedef int32_t vh_bool;
 
@@ -398,25 +398,18 @@ typedef struct vh_export_desc
 	const char* HintStringUtf8;
 	int32_t HintStringLen;
 
-	/* VH_EXPORT_HINT_RANGE: the bounds the declared type carries. A bound the type does not
-	 * constrain is absent rather than infinite, which is not the same thing to an inspector -- one
-	 * end open is a spinbox that clamps on one side only.
+	/* VH_EXPORT_HINT_RANGE: the bounds the declared type carries, exactly as it carries them. A
+	 * bound the type does not constrain is absent rather than infinite, which is not the same
+	 * thing to an inspector -- one end open is a spinbox that clamps on one side only.
 	 *
-	 * Exclusive says the author wrote `<` rather than `<=`. The distinction survives here only for
-	 * floats, and only as a guess: the analyser normalises a strict bound to the adjacent double,
-	 * which is exactly right and indistinguishable from the bound itself at any precision an
-	 * inspector would show. An int needs no guess -- `0 < _X` normalises to `1 <= _X`, exactly --
-	 * so RangeMinExclusive is never set for one.
-	 *
-	 * The consumer is expected to move an exclusive bound inward by whatever step its inspector
-	 * uses, which is the smallest offset that both keeps the constraint and lands on a value the
-	 * editor can actually produce. */
+	 * A strict inequality arrives already normalised: `_X < 500.0` is the double immediately below
+	 * 500.0, and `0 < _X` on an int is simply 1. So there is nothing here to say which inequality
+	 * was written, and nothing that needs saying -- the consumer rounds each bound inward to its
+	 * own step, which lands on the last reachable value satisfying the constraint either way. */
 	double RangeMin;
 	double RangeMax;
 	vh_bool HasRangeMin;
 	vh_bool HasRangeMax;
-	vh_bool RangeMinExclusive;
-	vh_bool RangeMaxExclusive;
 
 	/* The inspector section this member opens, which every member listed after it joins until one
 	 * opens another. VH_EXPORT_GROUP_NONE for a member that opens none; a section is closed by

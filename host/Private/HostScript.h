@@ -83,14 +83,13 @@ struct FExportDesc
     /// The enumerators or the class name; a range speaks through the bounds below instead.
     FUtf8String HintString;
 
-    /// The bounds of a constrained number, absent rather than infinite at an end the type leaves
-    /// open. Exclusive is a guess and only ever a float's: see LooksLikeStrictBound.
+    /// The bounds of a constrained number as the type carries them, absent rather than infinite
+    /// at an end the type leaves open. A strict inequality arrives already normalised to the
+    /// adjacent value, which is all the consumer needs.
     double RangeMin{0.0};
     double RangeMax{0.0};
     bool bHasRangeMin{false};
     bool bHasRangeMax{false};
-    bool bRangeMinExclusive{false};
-    bool bRangeMaxExclusive{false};
 
     /// The inspector section this member opens, and vh_export_group saying at which of Godot's
     /// three nesting depths. Every member after it joins that section until one opens another.

@@ -489,13 +489,9 @@ Variant::Type variant_type_for(int64_t p_vh_type, int64_t p_variant_tag) {
 			return Variant::NIL;
 	}
 }
-// The smallest change the inspector will make to a value of this type, which is what an exclusive
-// bound has to be moved by: `_X < 500.0` admits every float below 500, and the largest one the
-// editor can actually produce is a step short of it.
-//
-// Godot's own default for a float field, so a bound moved by it lands where the spinbox was going
-// to land anyway. An integer field steps by one, and an integer bound is never exclusive in the
-// first place -- the compiler normalises `0 < _X` to `1 <= _X` exactly.
+// The smallest change the inspector will make to a value of this type. Godot's own default for a
+// float field, so a bound rounded to it lands where the spinbox was going to land anyway; an
+// integer field steps by one.
 static double inspector_step_for(Variant::Type p_type) {
 	if (p_type == Variant::INT) {
 		return 1.0;
@@ -513,6 +509,27 @@ static double inspector_step_for(Variant::Type p_type) {
 	return 0.001;
 }
 
+// A bound moved onto the inspector's step grid, inward, so that it is a value the inspector can
+// actually produce.
+//
+// Every value a spinbox hands back is a multiple of its step, so a bound that falls between two of
+// them is a bound the editor can never quite reach -- and rounding it the wrong way would make the
+// field offer a value the type rejects. Inward is therefore the only safe direction, and it is
+// also what makes a strict inequality work without being told about one: `_X < 500.0` reaches here
+// as the double immediately below 500.0 and rounds to 499.999, while `_X <= 500.0` is already on
+// the grid and does not move. A bound finer than one step -- `_X <= 0.0005` against a step of
+// 0.001 -- rounds down to 0, which reads as harsh and is right: every other value the field could
+// produce violates the constraint.
+//
+// The arithmetic is Godot's own Math::snapped, minus the half-step that rounds to nearest.
+static double rounded_inward(double p_value, double p_step, bool p_is_min) {
+	if (p_step <= 0.0) {
+		return p_value;
+	}
+	const double steps = p_value / p_step;
+	return (p_is_min ? Math::ceil(steps) : Math::floor(steps)) * p_step;
+}
+
 // Godot's range hint, which wants two numbers and has no spelling for a bound that is not there.
 //
 // A type constrained on one side only -- `type{_X:int where 0 <= _X}` -- is therefore spelled with
@@ -525,8 +542,8 @@ static String range_hint_for(const Dictionary &p_entry, Variant::Type p_type) {
 	const bool has_min = p_entry["has_range_min"];
 	const bool has_max = p_entry["has_range_max"];
 	const double step = inspector_step_for(p_type);
-	const double min = (double)p_entry["range_min"] + ((bool)p_entry["range_min_exclusive"] ? step : 0.0);
-	const double max = (double)p_entry["range_max"] - ((bool)p_entry["range_max_exclusive"] ? step : 0.0);
+	const double min = rounded_inward(p_entry["range_min"], step, true);
+	const double max = rounded_inward(p_entry["range_max"], step, false);
 
 	// An integer bound is spelled as one: Godot reads the hint with to_float() either way, but the
 	// inspector shows the text, and "0,10" is what an author writing that type would have typed.

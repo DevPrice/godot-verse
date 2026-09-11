@@ -249,8 +249,6 @@ TypedArray<Dictionary> VerseRuntime::class_exports(const String &p_class_name, b
 		entry["range_max"] = descs[i].RangeMax;
 		entry["has_range_min"] = descs[i].HasRangeMin != 0;
 		entry["has_range_max"] = descs[i].HasRangeMax != 0;
-		entry["range_min_exclusive"] = descs[i].RangeMinExclusive != 0;
-		entry["range_max_exclusive"] = descs[i].RangeMaxExclusive != 0;
 		entry["group_kind"] = (int64_t)descs[i].GroupKind;
 		entry["group_name"] = String::utf8(descs[i].GroupNameUtf8, descs[i].GroupNameLen);
 		entry["line"] = (int64_t)descs[i].Line;

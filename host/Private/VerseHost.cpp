@@ -388,8 +388,6 @@ extern "C" int32_t vh_class_export_list(const char* ClassNameUtf8, const vh_expo
             Export.RangeMax,
             Export.bHasRangeMin ? 1 : 0,
             Export.bHasRangeMax ? 1 : 0,
-            Export.bRangeMinExclusive ? 1 : 0,
-            Export.bRangeMaxExclusive ? 1 : 0,
             Export.GroupKind,
             reinterpret_cast<const char*>(*Export.GroupName),
             Export.GroupName.Len(),

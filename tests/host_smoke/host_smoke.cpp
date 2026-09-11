@@ -1021,8 +1021,7 @@ int main(int argc, char** argv)
 	ExportsOk = Step("a bounded float carries its bounds",
 					RangedExport && RangedExport->Hint == VH_EXPORT_HINT_RANGE
 						&& RangedExport->HasRangeMin && RangedExport->HasRangeMax
-						&& RangedExport->RangeMin == 0.0 && RangedExport->RangeMax == 500.0
-						&& !RangedExport->RangeMinExclusive && !RangedExport->RangeMaxExclusive)
+						&& RangedExport->RangeMin == 0.0 && RangedExport->RangeMax == 500.0)
 			 && ExportsOk;
 	const vh_export_desc* StepsExport = FindExport("Steps");
 	ExportsOk = Step("and so does a bounded int",
@@ -1049,20 +1048,20 @@ int main(int argc, char** argv)
 						&& AtMostExport->RangeMax == 1.0)
 			 && ExportsOk;
 
-	// `<` rather than `<=`. The analyser stores the double below the bound, which is exactly the
-	// constraint and useless to an inspector: it prints as the bound and sits off the step grid.
-	// The consumer moves it in by a step, so what it needs to know is that it should.
+	// `<` rather than `<=`, which arrives already normalised: the largest double under 500, and
+	// so under 500 by less than any inspector could draw. Nothing here spells it as strict, and
+	// nothing needs to -- the consumer rounds every bound inward to its own step, which lands
+	// below 500 from this and on 500 from `<=`.
 	const vh_export_desc* ExclusiveExport = FindExport("Exclusive");
-	ExportsOk = Step("a strict float bound is reported as strict",
+	ExportsOk = Step("a strict float bound arrives just under the number written",
 					ExclusiveExport && ExclusiveExport->Hint == VH_EXPORT_HINT_RANGE
-						&& ExclusiveExport->HasRangeMax && ExclusiveExport->RangeMaxExclusive
-						&& ExclusiveExport->RangeMax < 500.0)
+						&& ExclusiveExport->HasRangeMax
+						&& ExclusiveExport->RangeMax < 500.0 && ExclusiveExport->RangeMax > 499.99)
 			 && ExportsOk;
-	// An integer needs no such guess: `0 < _X` is `1 <= _X`, and the compiler has already said so.
+	// An integer is normalised all the way: `0 < _X` is `1 <= _X`, exactly.
 	const vh_export_desc* ExclusiveIntExport = FindExport("ExclusiveInt");
 	ExportsOk = Step("a strict int bound is already the next integer",
-					ExclusiveIntExport && ExclusiveIntExport->RangeMin == 1.0
-						&& !ExclusiveIntExport->RangeMinExclusive)
+					ExclusiveIntExport && ExclusiveIntExport->RangeMin == 1.0)
 			 && ExportsOk;
 
 	// A section is opened by the member that names it, at one of Godot's three nesting depths.

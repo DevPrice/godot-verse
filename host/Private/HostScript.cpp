@@ -701,25 +701,6 @@ AUTORTFM_DISABLE FUtf8String EnumeratorList(const uLang::CEnumeration& Enumerati
     return List;
 }
 
-/// Whether a float bound is the analyser's normalisation of a strict inequality.
-///
-/// `_X < 500.0` is stored as the double immediately below 500.0, since that is the largest value
-/// the constraint admits. The normalisation is exact and the distinction is then gone: nothing in
-/// the type says the author wrote `<`, and no inspector could render the difference anyway. The
-/// one piece of evidence left is that the neighbour on the far side is a number a person would
-/// write and this one is not, which is what the round trip through a short decimal form asks.
-///
-/// A wrong answer costs one step of slider range at the end in question, in either direction.
-/// Integers need none of this: `0 < _X` normalises to `1 <= _X`, which is the same statement.
-AUTORTFM_DISABLE bool LooksLikeStrictBound(double Bound, double Neighbour)
-{
-    auto SurvivesShortForm = [](double Value)
-    {
-        return FCString::Atod(*FString::Printf(TEXT("%g"), Value)) == Value;
-    };
-    return FMath::IsFinite(Neighbour) && SurvivesShortForm(Neighbour) && !SurvivesShortForm(Bound);
-}
-
 /// What the inspector can make of a member's declared type: the value's shape on the wire, the
 /// Godot type to rebuild it as, the hint the declaration itself implies, and -- when the answer is
 /// that it cannot be exported at all -- why.
@@ -828,15 +809,14 @@ AUTORTFM_DISABLE void DescribeExportType(const uLang::CTypeBase* Type, const uLa
         OutDesc.Reject = VH_EXPORT_OK;
         // Plain `float` reports an infinite minimum and a NaN maximum. Neither is finite, which is
         // the whole test -- and the reason it is asked of each bound rather than of the type.
+        //
+        // A strict bound needs no special case: `_X < 500.0` is the double below 500.0, and the
+        // consumer rounds inward to its own step, which lands under 500 from either spelling.
         const CFloatType& FloatType = static_cast<const CFloatType&>(*Normal);
         OutDesc.bHasRangeMin = FMath::IsFinite(FloatType.GetMin());
         OutDesc.bHasRangeMax = FMath::IsFinite(FloatType.GetMax());
         OutDesc.RangeMin = OutDesc.bHasRangeMin ? FloatType.GetMin() : 0.0;
         OutDesc.RangeMax = OutDesc.bHasRangeMax ? FloatType.GetMax() : 0.0;
-        OutDesc.bRangeMinExclusive = OutDesc.bHasRangeMin
-            && LooksLikeStrictBound(FloatType.GetMin(), std::nextafter(FloatType.GetMin(), -std::numeric_limits<double>::infinity()));
-        OutDesc.bRangeMaxExclusive = OutDesc.bHasRangeMax
-            && LooksLikeStrictBound(FloatType.GetMax(), std::nextafter(FloatType.GetMax(), std::numeric_limits<double>::infinity()));
         if (OutDesc.bHasRangeMin || OutDesc.bHasRangeMax)
         {
             OutDesc.Hint = VH_EXPORT_HINT_RANGE;
