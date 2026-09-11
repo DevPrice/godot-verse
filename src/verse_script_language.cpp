@@ -70,6 +70,12 @@ String verse_doc_comment_above(const String &p_source, int64_t p_line) {
 	return String("\n").join(collected).strip_edges();
 }
 
+#ifdef TOOLS_ENABLED
+EditorInterface *verse_editor_interface() {
+	return Engine::get_singleton()->is_editor_hint() ? EditorInterface::get_singleton() : nullptr;
+}
+#endif
+
 const char *verse_godot_class_for(const String &p_verse_class) {
 	for (size_t i = 0; i < std::size(verse_api::classes); i++) {
 		if (p_verse_class == verse_api::classes[i].verse_name) {
@@ -238,7 +244,9 @@ PackedStringArray flattened_diagnostics(const Dictionary &p_errors_by_path) {
 // Only the visible editor is refreshed. Godot validates a script when its tab is opened and
 // republishes its documentation when it is saved, so the rest come back current on their own.
 void refresh_current_script_editor() {
-	EditorInterface *editor_interface = EditorInterface::get_singleton();
+	// Reached at game runtime as well: analysis runs there too, and a result landing sets the flag
+	// that asks for this. See verse_editor_interface.
+	EditorInterface *editor_interface = verse_editor_interface();
 	if (editor_interface == nullptr) {
 		return;
 	}

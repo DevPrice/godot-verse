@@ -17,6 +17,12 @@ struct VerseClassDecl;
 struct VerseScriptInstance;
 class VerseScript;
 
+#ifdef TOOLS_ENABLED
+namespace godot {
+class EditorInterface;
+}
+#endif
+
 // Line endings normalised away. A buffer arrives through TextEdit, which need not hand back the
 // endings the file was written with, and Verse analyses identically either way.
 godot::String verse_newline_normalized(const godot::String &p_source);
@@ -31,6 +37,19 @@ godot::String verse_doc_comment_above(const godot::String &p_source, int64_t p_l
 // verse_script.cpp turns an export's class hint into the name an inspector slot filters by, and
 // that has to be the same table the rest of the bridge resolves a Verse class name through.
 const char *verse_godot_class_for(const godot::String &p_verse_class);
+
+#ifdef TOOLS_ENABLED
+// The EditorInterface singleton, or nullptr when this process is not an editor.
+//
+// Not the same as EditorInterface::get_singleton(), which is two errors in the log before the null
+// comes back: Engine::get_singleton_object refuses an editor-only singleton unless is_editor_hint()
+// (engine: core/config/engine.cpp:347-351), and godot-cpp then reports the null it was handed. Null
+// checking the result is therefore too late -- the question has to be asked first.
+//
+// TOOLS_ENABLED does not answer it. A game launched from the editor loads this same editor build of
+// the library, with is_editor_hint() false, which is where the errors actually showed up.
+godot::EditorInterface *verse_editor_interface();
+#endif
 
 // The "Verse" ScriptLanguage. One instance, created and handed to
 // Engine::register_script_language by register_types.cpp, so singleton() is valid for the life

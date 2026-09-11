@@ -505,7 +505,9 @@ static double inspector_step_for(Variant::Type p_type) {
 		return 1.0;
 	}
 #ifdef TOOLS_ENABLED
-	EditorInterface *editor = EditorInterface::get_singleton();
+	// Reached at game runtime too -- a range hint is built wherever the property list is -- and there
+	// is no editor to ask then. See verse_editor_interface.
+	EditorInterface *editor = verse_editor_interface();
 	Ref<EditorSettings> settings = editor != nullptr ? editor->get_editor_settings() : Ref<EditorSettings>();
 	if (settings.is_valid()) {
 		const Variant step = settings->get_setting("interface/inspector/default_float_step");
