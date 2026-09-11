@@ -499,6 +499,16 @@ Ordered to front-load the cheap work. Bands, not estimates; item 4 is the one wi
 7. **`get_property_list_func` on the real script instance** still returns 0. Godot falls back to
    the script's list, which is why the inspector works anyway; a per-instance list is what would
    let one node expose members another does not.
+8. **A changed initializer does not change the default on screen until the editor restarts.** The
+   same one-generation-per-process rule, seen from the author's chair: `ReadClassDefaultField` builds
+   a transient instance of the *compiled* class to let the Verse constructor run, and that class is
+   whatever the session's single `vh_compile_project` produced. Editing `= array{60.0, 120.0}` moves
+   the semantic program, which is why the member's type, range and hint all refresh, and leaves the
+   generated constructor alone, which is why its value does not. The placeholder is not what holds
+   the stale number: `PlaceHolderScriptInstance::update` drops any stored value equal to the default
+   (`core/object/script_language.cpp:748-754`), so it would show a new one the moment the VM had one.
+   Nothing short of repeatable code generation fixes this, which is why it sits here rather than in
+   the list above.
 
 A rejection reaches the author as a warning rather than as silence. `refresh_export_warnings` in
 `src/verse_script_language.cpp` turns each refused member into a `_validate` warning on the line it

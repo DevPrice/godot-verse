@@ -225,6 +225,14 @@ reference cell, a `var` of a container type keeps a *mutable* container, and a w
 the slot rather than through it corrupts the member silently — the read agrees, and only the
 interpreter ever objects.
 
+That the defaults come from the VM has one consequence an author meets early: **editing an
+initializer does not change the default the inspector shows until the editor restarts.** Evaluating
+`= array{60.0, 120.0}` needs generated code, and code generation happens once per process, so every
+declared default on screen dates from the session's first build. The *shape* of the list does keep
+up — a new member, a changed type, a range, a hint all come from the analysis, which re-runs on every
+keystroke — which is what makes the two look like they should refresh together. A value an author has
+actually typed into the inspector is unaffected either way: it lives in the scene, not in the script.
+
 **A reference is two mechanisms, told apart by which package declares the class.** A member typed
 `?sprite2d` names one of the generated mirrors, and its value is a Verse wrapper the host builds
 around the handle Godot hands over — `NewObject` against the class's `UClass`, the same call that
