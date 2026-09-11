@@ -198,7 +198,7 @@ exports_probe := class(node2d):
     # Exercises the generated property accessors: reading a struct-typed one, writing it whole
     # (a field cannot be written on its own -- see emit_property), and the scalar shape.
     Probe<public>():void =
-        if (IsInstanceValid(Self)?):
+        if (IsInstanceValid[Self]):
             Shifted := Position.X + 1.0
             set Position = vector2{X := Shifted, Y := Position.Y}
             set Rotation = Rotation + 1.0

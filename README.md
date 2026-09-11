@@ -144,10 +144,14 @@ Failure was the wrong tool for it. `<decides>` is how Verse says *this value may
 absent*, and an `if` that swallows it reads as handling a known case; a use-after-free is neither
 legitimate nor absent, and silently skipping the branch every frame is how a dead reference stays
 invisible. What is genuinely absent — `GetParent()` at the scene root, a `FindChild` that misses —
-returns an object and still fails, which is the one thing `<decides>` is left doing.
+returns an object and still fails, which is what `<decides>` is left doing on the accessors.
 
-Test `IsInstanceValid(Node)` before reaching through a reference the scene may have dropped;
-`demo/scripts/lifetime.verse` holds a child, frees it, and keeps looking.
+Test `IsInstanceValid[Node]` before reaching through a reference the scene may have dropped;
+`demo/scripts/lifetime.verse` holds a child, frees it, and keeps looking. The guard itself is
+`<decides>`, which is not a contradiction: asking whether a reference is live is a question with a
+legitimate no, and it is the *answer* being swallowed that the paragraph above objects to. It also
+composes with what it guards — `if (IsInstanceValid[Node], Parent := Node.GetParent[])` is one
+condition, where a `logic` return was a `?` test wrapped around a second `if`.
 
 *Known limitation:* the host runs a single `verse::FContentScope` for the whole project, and a
 runtime error terminates the scope's task group — so one dead-object access kills every suspended

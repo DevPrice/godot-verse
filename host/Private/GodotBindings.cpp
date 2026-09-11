@@ -60,7 +60,7 @@ void RaiseCallStatus(int32 Status, int64 Handle, const verse::string& Member, co
         RAISE_VERSE_RUNTIME_ERROR_FORMAT(
             Verse::ERuntimeDiagnostic::ErrRuntime_NativeInternal,
             TEXT("%s `%hs` on Godot object %lld, which Godot has already freed. Test "
-                 "IsInstanceValid(...) before reaching through a reference the scene may have dropped."),
+                 "IsInstanceValid[...] before reaching through a reference the scene may have dropped."),
             Verb,
             reinterpret_cast<const char*>(*Name),
             Handle);

@@ -43,14 +43,18 @@ color<public> := struct:
 # --- Global functions --------------------------------------------------------
 
 # Godot's is_instance_valid, spelled the way @GlobalScope spells it rather than as a method on
-# the thing being tested, which is how GDScript reads it: `is_instance_valid(node)`. False once
+# the thing being tested, which is how GDScript reads it: `is_instance_valid(node)`. Fails once
 # Godot has freed the object; reaching through the handle after that is a runtime error, not a
 # failure, so this is the guard to test first when a reference has been stored across frames.
+#
+# `<decides>` rather than a `logic` return, so that the guard composes with what it guards:
+# `if (IsInstanceValid[Node], Parent := Node.GetParent[])` is one condition. A `logic` return
+# forced a `?` on every call and read as a value to inspect rather than a question to ask.
 #
 # Hand-written rather than generated with the rest of the API. Godot's own signature takes a
 # Variant, so a faithful mirror would read `IsInstanceValid(Value:variant)` and hand a script the
 # one type this package deliberately keeps to itself.
-IsInstanceValid<public>(Object:object)<transacts>:logic = VhIsValid(Object.Handle)
+IsInstanceValid<public>(Object:object)<decides><transacts>:void = VhIsValid(Object.Handle)?
 
 # --- variant packing -----------------------------------------------------
 
