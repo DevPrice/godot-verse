@@ -38,12 +38,6 @@ Run the smoke test (no Godot involved), then the demo:
     bin/host_smoke.exe <engine>/Engine/Binaries/Win64/verse_host.dll <engine>/Engine .
     godot --path demo
 
-The engine ships a hard SDK gate in `Engine/Config/Windows/Windows_SDK.json`: Windows SDK
-10.0.26100 and MSVC 14.44.35211. This machine has 10.0.22621 and 14.44.35207, so that file was
-edited locally to accept them (the original is beside it as `Windows_SDK.json.orig`). Installing
-the Windows 11 SDK 26100 component and updating VS 17.14 is the real fix; until then the gate is
-relaxed rather than satisfied.
-
 ## What works
 
 A `.verse` file is a Godot script. Attach one to a node the way you would a GDScript: it compiles
