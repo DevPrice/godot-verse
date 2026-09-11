@@ -3,6 +3,7 @@
 #include "verse_api_classes.h"
 #include "verse_class_decl.h"
 #include "verse_keywords.h"
+#include "verse_lexer.h"
 #include "verse_runtime.h"
 #include "verse_script.h"
 
@@ -856,6 +857,17 @@ static String member_declaration_class(const String &p_source, int64_t p_line, i
 	return String(decl.name.c_str());
 }
 
+// Whether the cursor -- the U+FFFF the editor splices in at p_marker -- stands inside a comment.
+// The marker is taken back out first: it is three bytes the lexer would count as code, sitting
+// exactly where the question is being asked about.
+static bool completing_in_comment(const String &p_code, int64_t p_marker) {
+	const String before = p_code.substr(0, p_marker);
+	const int64_t line_start = before.rfind("\n") + 1;
+	const String source = before + p_code.substr(p_marker + 1);
+	return verse_position_in_comment(source.utf8().get_data(),
+			(int)before.count("\n"), (int)before.substr(line_start).utf8().length());
+}
+
 // Completion, answered by the compiler wherever it can be.
 //
 // Godot marks the cursor by splicing U+FFFF into the buffer, and everything here is derived from
@@ -886,6 +898,13 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 
 	const int64_t marker = p_code.find(String::chr(0xFFFF));
 	if (marker < 0) {
+		return result;
+	}
+
+	// A comment is prose, and every set below is names. Godot raises the popup on its own as soon
+	// as one of them matches what is being typed, so answering here puts the Godot API over the
+	// middle of a sentence.
+	if (completing_in_comment(p_code, marker)) {
 		return result;
 	}
 

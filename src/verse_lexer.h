@@ -40,3 +40,11 @@ struct VerseLexState {
 // Lexes one line, appending tokens in strictly increasing column order, and advances p_state
 // to the state the next line starts in.
 void verse_lex_line(const std::string &p_line, VerseLexState &p_state, std::vector<VerseToken> &r_tokens);
+
+// Whether a cursor at p_line/p_column of p_source stands inside a comment. p_line is 0-based and
+// p_column a byte offset into it, counted the way the lexer counts columns.
+//
+// A cursor sits between two characters rather than on one, so what it is inside is decided by the
+// character behind it: `Print #` with the caret on the `#` is still in code. Lexing runs from the
+// start of the source, since a `<#` several lines above is what makes the line a comment at all.
+bool verse_position_in_comment(const std::string &p_source, int p_line, int p_column);

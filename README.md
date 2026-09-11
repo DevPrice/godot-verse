@@ -580,6 +580,14 @@ question and the whole of a completion context is one analysis. Substituting rat
 is deliberate: `set X = ` is a parse error that can take the enclosing function's AST down with
 it, while an identifier nothing defines costs one diagnostic nobody sees.
 
+Inside a comment nothing is completed at all. Godot raises the popup on its own the moment an
+option matches what is being typed, so a scope walk answered there puts the Godot API over the
+middle of a sentence — and the sets that need no compiler, the class names and the keywords, would
+do it even with the host unloaded. Whether the cursor is in one is a question for the lexer the
+highlighter already runs: a `<#` several lines above is what makes the line a comment at all, and
+the dedent that ends a `<#>` one is not a delimiter to search for. It is asked of the character
+*behind* the cursor, because a caret sitting on the `#` it just typed is still in code.
+
 **An `@` completes to attributes and nothing else.** The scope at that position is the same one a
 bare identifier completes against — three hundred names, of which four are legal after an `@` —
 so the mode exists to narrow it. What survives is two shapes: an attribute class, and the

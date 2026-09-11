@@ -216,6 +216,21 @@ VerseTokenKind classify_identifier(const std::string &p_line, int p_start, int p
 	return p_after_dot ? VerseTokenKind::Member : VerseTokenKind::Identifier;
 }
 
+// The kind covering byte p_column, or false when nothing does. Tokens run in increasing column
+// order and each one holds until the next starts, so the last that begins at or before the byte
+// is the one it belongs to.
+bool kind_at(const std::vector<VerseToken> &p_tokens, int p_column, VerseTokenKind &r_kind) {
+	bool found = false;
+	for (const VerseToken &token : p_tokens) {
+		if (token.column > p_column) {
+			break;
+		}
+		r_kind = token.kind;
+		found = true;
+	}
+	return found;
+}
+
 } // namespace
 
 bool VerseLexState::operator==(const VerseLexState &p_other) const {
@@ -409,4 +424,45 @@ void verse_lex_line(const std::string &p_line, VerseLexState &p_state, std::vect
 			p_state.interpolation_depth += 1;
 		}
 	}
+}
+
+bool verse_position_in_comment(const std::string &p_source, int p_line, int p_column) {
+	VerseLexState state;
+	std::vector<VerseToken> tokens;
+
+	size_t start = 0;
+	for (int row = 0; row <= p_line; row++) {
+		const size_t newline = p_source.find('\n', start);
+		const size_t end = newline == std::string::npos ? p_source.size() : newline;
+		std::string line = p_source.substr(start, end - start);
+		if (!line.empty() && line.back() == '\r') {
+			line.pop_back();
+		}
+
+		// A comment the line opened above it covers the line whole, column zero included -- where
+		// there is no character behind the cursor to classify, and where a blank line inside a
+		// block comment has no token at all.
+		const bool inherited = state.block_comment_depth > 0 || state.indent_comment_column >= 0;
+
+		tokens.clear();
+		verse_lex_line(line, state, tokens);
+
+		if (row < p_line) {
+			if (newline == std::string::npos) {
+				return false;
+			}
+			start = newline + 1;
+			continue;
+		}
+
+		if (tokens.empty()) {
+			return inherited;
+		}
+		VerseTokenKind kind = VerseTokenKind::Text;
+		if (p_column == 0) {
+			return inherited && kind_at(tokens, 0, kind) && kind == VerseTokenKind::Comment;
+		}
+		return kind_at(tokens, p_column - 1, kind) && kind == VerseTokenKind::Comment;
+	}
+	return false;
 }

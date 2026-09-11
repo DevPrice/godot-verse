@@ -295,6 +295,53 @@ bool TestIdentifierInsideCommentOrString()
 	return Step("identifier-shaped text inside a comment or string stays Comment/String", Ok);
 }
 
+bool TestPositionInComment()
+{
+	// Rows, in order: a trailing comment, an indented one, a string, a block comment over three
+	// lines, and an indented comment with a blank line in its body.
+	const std::string Source =
+			"Foo := 1 # trailing\n"
+			"\t# indented\n"
+			"Print(\"text\")\n"
+			"<# block\n"
+			"still inside\n"
+			"#> Bar\n"
+			"<#>\n"
+			"\tindented body\n"
+			"\n"
+			"Baz\n";
+
+	struct Case
+	{
+		const char* What;
+		int Row;
+		int Column;
+		bool Expect;
+	};
+	const Case Cases[] = {
+		{ "code ahead of a trailing comment is not in one", 0, 4, false },
+		{ "nor is the column its `#` sits at", 0, 9, false },
+		{ "one column further is", 0, 10, true },
+		{ "and so is the prose past it", 0, 11, true },
+		{ "an indented comment's own column is code", 1, 1, false },
+		{ "its body is not", 1, 5, true },
+		{ "a string literal is not a comment", 2, 8, false },
+		{ "the column a block comment opens at is code", 3, 0, false },
+		{ "a line inside one is comment from column zero", 4, 0, true },
+		{ "and past the `#>` that closed it is code again", 5, 4, false },
+		{ "the body of an indented comment is comment", 7, 6, true },
+		{ "a blank line inside one still is", 8, 0, true },
+		{ "and a dedent ends it", 9, 2, false },
+	};
+
+	bool Ok = true;
+	for (const Case& C : Cases)
+	{
+		Ok = Step(C.What, verse_position_in_comment(Source, C.Row, C.Column) == C.Expect) && Ok;
+	}
+	return Ok;
+}
+
 } // namespace
 
 int main()
@@ -316,6 +363,7 @@ int main()
 	Ok = TestBareIdentifier() && Ok;
 	Ok = TestIdentifierTokensDoNotMerge() && Ok;
 	Ok = TestIdentifierInsideCommentOrString() && Ok;
+	Ok = TestPositionInComment() && Ok;
 
 	printf("[verse_lexer_test] %s\n", Ok ? "ALL PASS" : "FAILURES");
 	return Ok ? 0 : 1;
