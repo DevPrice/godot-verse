@@ -57,16 +57,14 @@ valid script, and Godot reports it as one that failed to compile.
 
 ```verse
 using { /Godot.org/Godot }
-using { /Verse.org/Simulation }
 
 mover := class(node2d):
 
-    @editable
-    @clamp_min("0.0")
-    @clamp_max("500.0")
-    var Speed<public>:float = 60.0
+    @export
+    @export_group("Movement")
+    var Speed<public>:type{_X:float where 0.0 <= _X, _X <= 500.0} = 60.0
 
-    @editable
+    @export
     Greeting<public>:string = "Verse is running inside Godot, as a class."
 
     Ready<override>():void =
@@ -118,7 +116,7 @@ marshalling. Little would survive the trip anyway — the 78 math and 8 random n
 mirrored classes are emitted as `var Position<public>...:vector2`, and the `get_position` and
 `set_position` they were built from are gone — two spellings of one thing is worse than one.
 The mechanism is uLang's `<getter(...)>`/`<setter(...)>`, whose attribute classes are
-`epic_internal` and so reachable on the same footing as `@editable`: use, not authorship. The
+`epic_internal` and so reachable on the same footing as `<native>`: use, not authorship. The
 accessor functions themselves must be `epic_internal` too, since a definition may be no more
 accessible than the `accessor` type it takes.
 
@@ -159,30 +157,53 @@ runtime error terminates the scope's task group — so one dead-object access ki
 async task in every script, not just the offending one. Per-script scopes (or per-invocation, if
 Godot ever reaches Verse off the main thread) are the right shape and are not built yet.
 
-**`@editable` puts a data member in the inspector.** The property list Godot shows comes out of
-the *semantic program* the last analysis pass left behind, not out of the running bytecode —
+**`@export` puts a data member in the inspector.** The property list Godot shows comes out of the
+*semantic program* the last analysis pass left behind, not out of the running bytecode —
 `vh_class_export_list` walks `CClass::GetDefinitionsOfKind<CDataDefinition>()` and keeps the
-members whose `CDefinition::HasAttributeSubclass` matches `/Verse.org/Simulation/editable`. That
-choice is what makes the list refresh live: analysis re-runs on every keystroke, while code
-generation may happen once per process, so anything read from the VM would be frozen at startup.
-Subclasses count too, so `@editable_slider(float)` marks a member just as well as `@editable`.
+members whose `CDefinition::HasAttributeSubclass` matches `/Godot.org/Godot/export`. That choice is
+what makes the list refresh live: analysis re-runs on every keystroke, while code generation may
+happen once per process, so anything read from the VM would be frozen at startup.
 
-The attribute is Epic's rather than ours because uLang guards inheriting from *any* attribute type
-behind `CScope::IsAuthoredByEpic()` in `AddSuperType` — so neither a `godot_export` of our own nor
-a `class(editable)` alias compiles. The `InternalUser` scope this package builds under unlocks
-*access* to `epic_internal` definitions — which is what lets scripts say `<native>` — but not
-authorship. The host therefore links `VerseSimulationMetadata` (every module it depends on was
-already in the list) and scripts add `using { /Verse.org/Simulation }`. Authorship is only a
-prefix test against `/Verse.org/`, `/UnrealEngine.com/` and `/Fortnite.com/`, so a package named
-into one of those would pass the gate; `docs/property-export.md` records why that is not done.
+`export` is declared in the same runtime-compiled package `@global_class` is (below), under the
+same authorship grant, rather than borrowed from Epic's own vocabulary the way it once was. Epic's
+`editable` is `@customattribhandler`, so applying it calls a handler lookup and obliges the host to
+load `VerseSimulationMetadata` and submit every member to that handler's rules — rules written for
+a different inspector, which refuse what that inspector cannot draw. A `color` member is refused
+outright; Godot draws colours fine. An attribute with no handler is just a type applied to a
+definition, which is the whole of what exporting a member needs, so `export` carries no
+`@customattribhandler` at all.
 
-**Hints come from Epic's metadata attributes too.** `@clamp_min("0.0")` and `@clamp_max("500.0")`
-become a Godot range slider, `@category("Movement")` becomes an inspector group. They carry
-strings rather than numbers — a single string argument is the one attribute payload the compiler
-will hand back today — so godot-verse parses them, and a typo is a missing hint rather than a
-compile error. Properties reach the inspector in the order the class declares them, since Godot has
-no per-property group field: a `@category` claims every member listed after it until another
-`@category` (or none) takes over, the same positional rule GDScript's `@export_group` follows.
+**A hint comes off the member's declared type, not off a second attribute.** A bounded
+`type{_X:float where 0.0 <= _X, _X <= 500.0}` is already a range: the compiler enforces those exact
+bounds at every assignment, so a slider built from the same numbers cannot disagree with the
+language, the way a `@clamp_min` written beside a plain `float` could. An `enum` is already a list
+of choices and a mirrored class is already the node or resource a slot will accept, so both hints
+are read off the type the same way. A bound on one side only (`type{_X:int where 0 <= _X}`) becomes
+`or_greater`/`or_less` rather than a missing hint. A strict `<` needs no special case at all: the
+analyser normalises it to the adjacent double, and every bound is rounded inward onto the step the
+inspector moves on — so `_X < 500.0` shows 499.999 and `_X <= 500.0` shows 500, without anything
+having to remember which was written.
+
+**`@export_category`, `@export_group` and `@export_subgroup` reach Godot's three nesting depths.**
+Properties reach the inspector in the order the class declares them, since Godot has no
+per-property section field: a member opens the section it names and every member declared after it
+joins that section until another opens one, the same positional rule C#'s `[ExportGroup]` and
+GDScript's `@export_group` follow. Where a member names more than one, the outermost wins — a
+member cannot be the first of a group and the first of the category above it at once.
+
+**A member that cannot cross is harvested with a reason, not dropped.** `vh_class_export_list`
+lists every `@export` member whether or not it can reach the inspector, each with the line it was
+declared on: a Godot reference must be spelled `?node2d`, because nothing can force a value into an
+inspector slot and the declaration that compiles without the option, `node2d{}`, is a handle of 0 —
+dead from birth and indistinguishable from one freed later; an `option` around anything else is
+refused the other way, since the inspector has no empty slot for a number.
+
+Each refusal reaches the author as a warning on the line that declared it, the way the script
+editor marks a GDScript warning. Without one the member is simply absent: Godot draws the property
+list, and a member that never enters it leaves nothing behind to explain itself. The warnings are
+harvested when an analysis lands rather than when the editor validates, because reading the export
+list waits out any analysis in flight and `_validate` runs on the editor's thread while one usually
+is — asking there would hand back the stall the background check exists to remove.
 
 **Values cross both ways, through the VM's shape rather than the export list — a value exists
 nowhere but the VM.** `vh_instance_get_field` reads a member off a live instance,
@@ -208,7 +229,7 @@ Because the list comes from the analysis rather than the build, it also comes ba
 that *never succeeded* — the case a one-shot code generator would otherwise strand for the whole
 session. The script still cannot run until the editor restarts, so the failed build says so once.
 
-**A non-var is an initializer, not a constant.** Both kinds of `@editable` are editable in the
+**A non-var is an initializer, not a constant.** Both kinds of `@export` are editable in the
 inspector and stored in the `.tscn`. The difference is when the value may be applied: an instance
 is *unsealed* between instantiation and the first call into it, which is exactly the window Godot
 uses to push a scene's stored values, and while unsealed anything may be written. The first call —
@@ -362,7 +383,7 @@ simply what precedes a definition.
 
 That is read out of the source rather than asked of the compiler, which is not where you would
 expect to find it. The parser does keep comments, hanging each one off the node that begins the
-construct it precedes — but for a member sitting behind four lines of `@editable`, `@clamp_min`
+construct it precedes — but for a member sitting behind several lines of `@export`, `@export_group`
 and friends, the node that begins the construct is the attribute clause and not the member, and
 the comment is reachable from the definition only by guessing at the shape of the syntax tree
 around it. The definition's line is already known, the file's text is already to hand, and
@@ -463,7 +484,7 @@ together; there is no way to have one without the other.
 **A name from the mirrored API resolves to Godot's own documentation instead.** Ctrl+clicking
 `node2d`, `Position` or `GetChild` opens the class reference for `Node2D`, `Node2D.position` or
 `Node.get_child`, and hovering any of them shows the description Godot already ships. A mirrored
-property arrives as a `var` like any `@editable` member, so the routing keys off the *owner* —
+property arrives as a `var` like any `@export` member, so the routing keys off the *owner* —
 only a mirrored class appears in the table. `vector2`, `vector3` and `color` are in it too, and so
 are their fields: they are Godot builtins that happen to be hand-written in
 `GodotApi.native.verse` rather than generated, and without an entry the editor calls them local
@@ -509,7 +530,7 @@ dedent-terminated `<#>` comments and comments inside string interpolation all co
 none of which a delimiter matcher can express. On top of the comment/string/number/keyword
 classes it colours operators and punctuation, call positions (`Print(`, and the bracketed
 `GetChild[` of a `<decides>` call), `.member` accesses, and both attribute spellings — suffix
-`<public>` and prefix `@editable`.
+`<public>` and prefix `@export`.
 
 A definition's name colours apart from a call to it, the way GDScript separates `func foo` from
 `foo()`. Verse has no `func` keyword, so the discriminator is the `=` that follows the parameter
@@ -591,18 +612,18 @@ the dedent that ends a `<#>` one is not a delimiter to search for. It is asked o
 *behind* the cursor, because a caret sitting on the `#` it just typed is still in code.
 
 **An `@` completes to attributes and nothing else.** The scope at that position is the same one a
-bare identifier completes against — three hundred names, of which four are legal after an `@` —
+bare identifier completes against — three hundred names, of which five are legal after an `@` —
 so the mode exists to narrow it. What survives is two shapes: an attribute class, and the
-`<constructor>` function beside one that carries a payload. `@editable` names the class;
-`@clamp_min("0.0")` names the constructor, because Verse builds `clamp_min_attribute` out of its
-argument through a function of that name. The compiler-generated constructor every class has is
-dropped everywhere else for being unspellable, and this is the one place a constructor *is* what
-the author writes.
+`<constructor>` function beside one that carries a payload. `@export` and `@global_class` name
+their classes directly, since neither takes an argument; `@export_category("Movement")` names the
+constructor, because Verse builds `export_category_attribute` out of its argument through a
+function of that name. The compiler-generated constructor every class has is dropped everywhere
+else for being unspellable, and this is the one place a constructor *is* what the author writes.
 
 The names are offered without the `@`. CodeEdit walks back over identifier characters to find the
 text it is filtering on and stops at the symbol, so the `@` is neither matched against nor
 replaced on insert — GDScript strips it off its own annotations for the same reason. What is not
-narrowed is where an attribute may be applied: `editable` is `@attribscope_data` and is offered
+narrowed is where an attribute may be applied: `export` is `@attribscope_data` and is offered
 above a class declaration all the same, because at the moment the question is asked the thing it
 would attach to has not been written yet.
 
