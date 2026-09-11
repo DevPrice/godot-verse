@@ -102,6 +102,10 @@ private:
 	// is the same shape and for the same reason: see the note on placeholder_fallback_enabled.
 	void refresh_exports() const;
 
+	// The PROPERTY_USAGE_CATEGORY entry that heads the export list, naming the registered class
+	// where there is one and the file otherwise.
+	godot::Dictionary class_header() const;
+
 	// Re-reads validity and the export list out of whatever analysis the host has published.
 	void refresh_from_analysis();
 

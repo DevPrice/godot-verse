@@ -191,6 +191,14 @@ joins that section until another opens one, the same positional rule C#'s `[Expo
 GDScript's `@export_group` follow. Where a member names more than one, the outermost wins — a
 member cannot be the first of a group and the first of the category above it at once.
 
+Above all three sits the script's own heading, which the script pushes at the head of its property
+list the way `GDScript::_update_exports` does — there is no instance to ask for one, since a
+non-tool script gets a placeholder in the editor and a placeholder only replays the list it was
+handed. It names the registered class where the script has `@global_class` and the file otherwise,
+which is a deliberate step past GDScript: `Script::get_class_category` reads `Resource::get_name()`
+and so shows `player.gd` even for a `class_name Player`, where a heading that reads `Mover` is the
+name Godot uses for that script everywhere else.
+
 **A member that cannot cross is harvested with a reason, not dropped.** `vh_class_export_list`
 lists every `@export` member whether or not it can reach the inspector, each with the line it was
 declared on: a Godot reference must be spelled `?node2d`, because nothing can force a value into an

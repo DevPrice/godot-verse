@@ -436,8 +436,11 @@ void VerseScript::update_placeholders() {
 	Dictionary values;
 	for (int64_t i = 0; i < properties.size(); i++) {
 		const Dictionary property = properties[i];
-		// A group header is a layout marker, not a property, and has no value to report.
-		if (((int64_t)property["usage"] & PROPERTY_USAGE_GROUP) != 0) {
+		// A section header is a layout marker, not a property, and has no value to report. The
+		// three depths are three separate bits, so all three have to be tested: a category or a
+		// subgroup tested against PROPERTY_USAGE_GROUP alone reads as a property.
+		const int64_t header_usage = PROPERTY_USAGE_CATEGORY | PROPERTY_USAGE_GROUP | PROPERTY_USAGE_SUBGROUP;
+		if (((int64_t)property["usage"] & header_usage) != 0) {
 			continue;
 		}
 		const StringName name = property["name"];
@@ -613,6 +616,27 @@ TypedArray<Dictionary> VerseScript::_get_script_property_list() const {
 	return exports_cache;
 }
 
+// The heading the inspector shows above this script's own properties, built the way
+// Script::get_class_category() builds it: a nameless NIL entry whose hint_string is the script's
+// path, which is where the inspector goes for the icon and the class documentation.
+//
+// The name is the one place this diverges from GDScript. get_class_category() reads
+// Resource::get_name(), which no script loaded from a file ever has, so GDScript shows `player.gd`
+// even for a `class_name Player`. A registered class is the name Godot knows the script by
+// everywhere else -- the node creation dialog, a typed property's filter -- so it is the name shown
+// here, and only a script without @global_class falls back to its file.
+Dictionary VerseScript::class_header() const {
+	const StringName global_name = _get_global_name();
+
+	Dictionary header;
+	header["name"] = global_name == StringName() ? get_path().get_file() : String(global_name);
+	header["type"] = (int64_t)Variant::NIL;
+	header["hint"] = (int64_t)PROPERTY_HINT_NONE;
+	header["hint_string"] = get_path();
+	header["usage"] = (int64_t)PROPERTY_USAGE_CATEGORY;
+	return header;
+}
+
 // Deliberately not gated on valid(). The export list is read out of the semantic program the last
 // analysis left behind, and analysis re-runs on every edit, while code generation may only happen
 // once per process -- so a project whose *first* build failed can still describe its classes once
@@ -678,6 +702,10 @@ void VerseScript::refresh_exports() const {
 		}
 
 		properties.push_back(property_for(entry, type));
+	}
+
+	if (!properties.is_empty()) {
+		properties.insert(0, class_header());
 	}
 
 	exports_cache = properties;

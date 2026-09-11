@@ -176,6 +176,26 @@ function beside it (`export_category`): `GetAttributeTextValue` matches on the i
 **return type**. The outermost of the three that a member names wins, since a member cannot open a
 group and the category above it at the same position.
 
+**The heading above the whole list is not an attribute at all.** Every scripting language shows the
+script's own name above the properties it contributes, and that heading is a fourth
+`PROPERTY_USAGE_CATEGORY` entry — one the script pushes at the head of its property list rather than
+one a member asks for. `GDScript::_update_exports` does it with `get_class_category()`
+(`modules/gdscript/gdscript.cpp:556`) and `VerseScript::refresh_exports` does the same, only when
+the walk produced at least one property: a heading over nothing is noise. It cannot come from the
+script *instance* instead, because in the editor there is no instance — `_can_instantiate` is false
+for a non-tool script, so Godot builds a `PlaceHolderScriptInstance`, whose `get_property_list`
+replays the list it was handed (`core/object/script_language.cpp:648`) and adds nothing to it.
+
+The name on that heading is one deliberate divergence. `Script::get_class_category()`
+(`core/object/script_language.cpp:140`) reads `Resource::get_name()`, which is empty for any script
+loaded from a file, so GDScript falls through to the file name and shows `player.gd` even for a
+`class_name Player`. Here a script with `@global_class` shows the registered name — `Mover` — because
+that is the name Godot knows the script by everywhere else: the node creation dialog, a typed
+property's filter, the class documentation. The file name is the fallback, not the rule. The name
+comes from `VerseScript::_get_global_name`, which reads it out of the source text through
+`verse_scan_class_decl`, so the heading agrees with what was registered during the filesystem scan
+without asking the host.
+
 **Everything else comes off the declared type instead of a second attribute.** A range, an enum's
 choices and a mirrored class's name are all already spelled in the member's own type —
 `DescribeExportType` in `HostScript.cpp` reads a bounded `CIntType`/`CFloatType`'s min and max, a
