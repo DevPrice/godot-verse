@@ -9,6 +9,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 knowing" — read the relevant section before changing anything in that area. `docs/property-export.md`
 and `docs/editor-tooling.md` hold the full research and citations behind those sections.
 
+`docs/spec.md` is the requirements document — what the finished software must do, numbered so a
+commit can cite one. README describes today; the spec describes the target, and §14 holds the open
+questions that block the rest. Check a requirement's status there before assuming a gap is
+unexamined.
+
 This file is the map and the working rules; the reasoning lives there.
 
 ## Two binaries, one C header
