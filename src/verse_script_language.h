@@ -211,6 +211,12 @@ private:
 	// res:// path for each absolute path the host reports diagnostics against.
 	godot::Dictionary path_by_globalized;
 
+	// Warnings for the members a script asked to export and the host refused, keyed by res:// path
+	// and shaped the way _validate hands one over. Kept rather than asked for on demand: reading
+	// the export list waits out any analysis in flight, which is exactly what _validate must not
+	// do, so the list is harvested at the one moment the host is known to be idle.
+	mutable godot::Dictionary export_warnings_by_path;
+
 	// The buffer waiting for an analysis, and the one an analysis is running for. Only one runs
 	// at a time, and a newer buffer replaces a waiting one rather than queueing behind it.
 	mutable bool has_pending_check = false;
@@ -243,6 +249,10 @@ private:
 
 	// Reaps a finished analysis and starts whatever came in while it ran. Called once per frame.
 	void poll_check() const;
+
+	// Rebuilds export_warnings_by_path for one file, out of the export list the analysis just
+	// landed for.
+	void refresh_export_warnings(const godot::String &p_path) const;
 
 	std::vector<VerseScript *> live_scripts;
 

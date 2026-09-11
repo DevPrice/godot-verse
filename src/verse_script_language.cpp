@@ -448,6 +448,15 @@ Dictionary VerseScriptLanguage::_validate(const String &p_script, const String &
 	Dictionary result;
 	result["valid"] = errors.is_empty();
 	result["errors"] = errors;
+
+	// An export the host refused is not an error -- the script compiles and runs, it just has one
+	// fewer property than the author asked for -- and it would be invisible without this: Godot
+	// draws what the property list holds, and a member that never reaches it leaves nothing behind
+	// to explain its absence. The list is whatever the last analysis of this file left behind,
+	// which is the same staleness every diagnostic here has.
+	if (p_validate_warnings && export_warnings_by_path.has(p_path)) {
+		result["warnings"] = export_warnings_by_path[p_path];
+	}
 	return result;
 }
 
@@ -1782,6 +1791,7 @@ void VerseScriptLanguage::poll_check() const {
 		// validate is not guaranteed to follow, so the log is written from here.
 		const String globalized = ProjectSettings::get_singleton()->globalize_path(in_flight_path);
 		log_new_diagnostics(globalized, diagnostics_for(in_flight_path));
+		refresh_export_warnings(in_flight_path);
 
 		in_flight_path = String();
 		in_flight_source = String();
@@ -1795,6 +1805,77 @@ void VerseScriptLanguage::poll_check() const {
 			editor_refresh_pending = script->analysis_landed() || editor_refresh_pending;
 		}
 	}
+}
+
+// What a rejected export has to say for itself, at the line that declared it.
+//
+// The two rules read as instructions because they have a fix the author can apply. The third does
+// not: it is the bridge's own coverage, and saying so plainly is better than a suggestion that
+// would not work.
+static String export_rejection_message(const Dictionary &p_entry) {
+	const String name = p_entry["name"];
+	const String class_name = p_entry["hint_string"];
+	switch ((int64_t)p_entry["reject"]) {
+		case VH_EXPORT_OBJECT_NOT_OPTIONAL:
+			return name + String(" is a ") + class_name
+					+ String(", and the inspector may leave that slot empty. Declare it `?") + class_name
+					+ String("` so the member can hold the empty case.");
+		case VH_EXPORT_OPTION_NOT_OBJECT:
+			return name + String(" is an option around a value the inspector has no empty slot for. ")
+					+ String("Only a node or a resource can be left unassigned.");
+		default:
+			return name + String(" has a type godot-verse cannot carry to the inspector yet, so it is not exported.");
+	}
+}
+
+static String export_rejection_code(int64_t p_reject) {
+	switch (p_reject) {
+		case VH_EXPORT_OBJECT_NOT_OPTIONAL:
+			return String("OBJECT_EXPORT_NOT_OPTIONAL");
+		case VH_EXPORT_OPTION_NOT_OBJECT:
+			return String("OPTION_EXPORT_NOT_OBJECT");
+		default:
+			return String("EXPORT_TYPE_UNSUPPORTED");
+	}
+}
+
+void VerseScriptLanguage::refresh_export_warnings(const String &p_path) const {
+	VerseRuntime *runtime = get_runtime();
+	if (runtime == nullptr || !runtime->is_host_loaded()) {
+		return;
+	}
+
+	TypedArray<Dictionary> warnings;
+	bool found = false;
+	const TypedArray<Dictionary> exports = runtime->class_exports(p_path.get_file().get_basename(), &found);
+	for (int64_t i = 0; found && i < exports.size(); i++) {
+		const Dictionary entry = exports[i];
+		const int64_t reject = entry["reject"];
+		if (reject == VH_EXPORT_OK) {
+			continue;
+		}
+
+		// The host counts rows from zero and the editor from one. A member with no source location
+		// is not worth a warning nobody can find, so it is dropped rather than parked on line one.
+		const int64_t line = entry["line"];
+		if (line < 0) {
+			continue;
+		}
+
+		Dictionary warning;
+		warning["start_line"] = line + 1;
+		warning["end_line"] = line + 1;
+		warning["leftmost_column"] = (int64_t)entry["column"] + 1;
+		warning["rightmost_column"] = (int64_t)entry["column"] + 1;
+		warning["code"] = reject;
+		warning["string_code"] = export_rejection_code(reject);
+		warning["message"] = export_rejection_message(entry);
+		warnings.push_back(warning);
+	}
+
+	// Written even when empty: a member the author has just fixed has to lose its warning, and the
+	// analysis that proves it is this one.
+	export_warnings_by_path[p_path] = warnings;
 }
 
 bool VerseScriptLanguage::record_diagnostics(const Dictionary &p_errors_by_globalized) const {
