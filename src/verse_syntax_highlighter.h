@@ -48,6 +48,13 @@ private:
 	// author types, which is the one thing per-keystroke recolouring cannot tolerate.
 	std::unordered_set<std::string> type_names;
 
+	// Every field the currently open script declares directly in its class body -- one tab under
+	// the class header, the way `mover.verse` indents `Speed` and `Direction`. Verse code reaches
+	// its own members bare (no `self.`), so unlike a dotted access these need their name on record
+	// to colour, and unlike type_names they are rebuilt every _update_cache: a field is only a
+	// field in the file that declares it.
+	std::unordered_set<std::string> member_names;
+
 	godot::Color comment_color = godot::Color(0.4f, 0.6f, 0.4f);
 	godot::Color string_color = godot::Color(0.94f, 0.83f, 0.53f);
 	godot::Color keyword_color = godot::Color(1.0f, 0.44f, 0.52f);

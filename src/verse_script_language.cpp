@@ -1215,6 +1215,14 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 	const String found_owner = found["owner"];
 	const int64_t kind = found["kind"];
 
+	// GodotVerse::LookupSymbol only fills Type for a CDataDefinition or CFunction, so an enum's own
+	// name -- neither -- would otherwise tooltip with a blank type beside "Local Constant". Wrong
+	// label aside (Godot's lookup result has no "local type" of its own to ask for instead, and an
+	// enumerator genuinely is one), a blank type says nothing at all.
+	if (kind == VH_LOOKUP_ENUM && String(result["doc_type"]).is_empty()) {
+		result["doc_type"] = String("enum");
+	}
+
 	// An override means something the declaration itself does not say. Only at a declaration: a
 	// call site already resolves to the implementation that will run, and sending that to the
 	// parent would be wrong rather than merely unhelpful.
