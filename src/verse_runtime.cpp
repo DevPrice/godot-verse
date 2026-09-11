@@ -241,10 +241,14 @@ TypedArray<Dictionary> VerseRuntime::class_exports(const String &p_class_name, b
 		Dictionary entry;
 		entry["name"] = String::utf8(descs[i].NameUtf8, descs[i].NameLen);
 		entry["type"] = (int64_t)descs[i].Type;
+		entry["variant_tag"] = (int64_t)descs[i].VariantTag;
 		entry["is_var"] = descs[i].IsVar != 0;
-		entry["clamp_min"] = String::utf8(descs[i].ClampMinUtf8, descs[i].ClampMinLen);
-		entry["clamp_max"] = String::utf8(descs[i].ClampMaxUtf8, descs[i].ClampMaxLen);
+		entry["hint"] = (int64_t)descs[i].Hint;
+		entry["hint_string"] = String::utf8(descs[i].HintStringUtf8, descs[i].HintStringLen);
 		entry["category"] = String::utf8(descs[i].CategoryUtf8, descs[i].CategoryLen);
+		entry["line"] = (int64_t)descs[i].Line;
+		entry["column"] = (int64_t)descs[i].Column;
+		entry["reject"] = (int64_t)descs[i].Reject;
 		exports.push_back(entry);
 	}
 	return exports;

@@ -379,13 +379,16 @@ extern "C" int32_t vh_class_export_list(const char* ClassNameUtf8, const vh_expo
             reinterpret_cast<const char*>(*Export.Name),
             Export.Name.Len(),
             Export.Type,
+            Export.VariantTag,
             Export.bIsVar ? 1 : 0,
-            reinterpret_cast<const char*>(*Export.ClampMin),
-            Export.ClampMin.Len(),
-            reinterpret_cast<const char*>(*Export.ClampMax),
-            Export.ClampMax.Len(),
+            Export.Hint,
+            reinterpret_cast<const char*>(*Export.HintString),
+            Export.HintString.Len(),
             reinterpret_cast<const char*>(*Export.Category),
-            Export.Category.Len()});
+            Export.Category.Len(),
+            Export.Line,
+            Export.Column,
+            Export.Reject});
     }
 
     *OutExports = Descs.GetData();

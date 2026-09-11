@@ -21,6 +21,37 @@ exports := class(object):
     @editable
     var Label<public>:string = "hello"
 
+    # A range the compiler enforces rather than one the inspector merely draws: the bounds are on
+    # the type, so assigning 600.0 anywhere is an error rather than a value the slider happens not
+    # to offer. The hint comes from here, and no attribute says it twice.
+    @editable
+    var Ranged<public>:type{_X:float where 0.0 <= _X, _X <= 500.0} = 60.0
+
+    @editable
+    var Steps<public>:type{_X:int where 0 <= _X, _X <= 10} = 3
+
+    # Constrained on one side only, which Godot's range hint has no spelling for: it wants two
+    # numbers. Both directions, because the two are not the same code path.
+    @editable
+    var AtLeast<public>:type{_X:int where 0 <= _X} = 3
+
+    @editable
+    var AtMost<public>:type{_X:float where _X <= 1.0} = 0.5
+
+    # A Godot reference the scene may leave unassigned, which is every Godot reference: nothing can
+    # force a value into an inspector slot. The option is what lets the member hold that.
+    @editable
+    var Target<public>:?node2d = false
+
+    # The same reference without one. It compiles -- `node2d{}` is a handle of 0 -- which is
+    # exactly why it has to be refused rather than exported as a node that was never alive.
+    @editable
+    var Held<public>:node2d = node2d{}
+
+    # An option is the shape of an empty inspector slot, and a number has no empty slot.
+    @editable
+    var Maybe<public>:?float = false
+
     # No attribute, so it must not appear in the export list.
     Hidden<public>:int = 7
 

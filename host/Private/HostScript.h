@@ -71,15 +71,29 @@ AUTORTFM_DISABLE int32 InstanceCallVoidFloat(FInstance* Instance, FUtf8StringVie
 struct FExportDesc
 {
     FUtf8String Name;
-    vh_type Type;
-    bool bIsVar;
+    vh_type Type{VH_TYPE_VOID};
+    /// vh_variant_tag: which Godot type to rebuild the value as, where the layout alone cannot
+    /// say. VH_VARIANT_NIL leaves the consumer to infer it from Type.
+    int32 VariantTag{VH_VARIANT_NIL};
+    bool bIsVar{false};
 
-    /// Inspector hints, empty when the member carries no such attribute. Strings because that is
-    /// what the attributes hold: `@clamp_min("0.0")` takes a string, and SOL-972 means a string
-    /// argument is the only attribute payload that can be read back at all.
-    FUtf8String ClampMin;
-    FUtf8String ClampMax;
+    /// The inspector hint the *declaration* implies -- a range off a constrained int or float,
+    /// the enumerators of an enum, the class of a Godot reference. vh_export_hint, with the
+    /// string spelled the way Godot's hint wants it.
+    int32 Hint{VH_EXPORT_HINT_NONE};
+    FUtf8String HintString;
+
+    /// The inspector group this member opens, empty for one that opens none.
     FUtf8String Category;
+
+    /// Where the member is declared, for a consumer that wants to say something about it. Zero
+    /// based row, utf8 byte column, both -1 when the definition has no source location.
+    int32 Line{-1};
+    int32 Column{-1};
+
+    /// vh_export_reject. A member that cannot be exported is still harvested, so that whoever
+    /// asked can say why rather than leave the author staring at an inspector missing a property.
+    int32 Reject{VH_EXPORT_OK};
 };
 
 /// Fills OutExports with the `@godot_export` data members ClassName declares, reading the

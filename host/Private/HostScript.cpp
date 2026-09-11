@@ -626,46 +626,218 @@ AUTORTFM_DISABLE FUtf8String AttributeText(const uLang::CDataDefinition& Member,
     return Text.IsSet() ? FULangConversionUtils::ULangStrToFUtf8String(*Text) : FUtf8String();
 }
 
-/// The ABI tag for a member's declared type. Verse's `string` is `[]char`, so the array case has
-/// to ask about the element type before it can tell the two apart.
-AUTORTFM_DISABLE vh_type VhTypeForVerseType(const uLang::CTypeBase* Type)
+/// Where a definition was written, or nothing for one compiled from a package the project does
+/// not own -- the generated Godot API, Verse's own library. Those still describe fine.
+AUTORTFM_DISABLE void FillLocation(const uLang::CDefinition& Definition, FUtf8String& OutPath, int32& OutLine, int32& OutColumn)
 {
+    if (const uLang::CExpressionBase* DefinitionNode = Definition.GetAstNode())
+    {
+        if (const Verse::Vst::Node* Vst = DefinitionNode->GetMappedVstNode())
+        {
+            const Verse::SLocus& Whence = Vst->Whence();
+            OutPath = FULangConversionUtils::ULangStrToFUtf8String(Vst->GetSnippetPath());
+            OutLine = (int32)Whence.BeginRow();
+            OutColumn = (int32)Whence.BeginColumn();
+        }
+    }
+}
+
+/// The class every mirrored Godot class derives from. A member typed as one of its subclasses
+/// holds a *reference* the scene fills in, not a value the script owns, which is the whole of why
+/// such a member is treated differently from every other below.
+AUTORTFM_DISABLE const uLang::CClass* GodotObjectClass(const uLang::CSemanticProgram& Program)
+{
+    return Program.FindDefinitionByVersePath<uLang::CClass>("/Godot.org/Godot/object");
+}
+
+/// The enumerators of an enum, comma separated in declaration order, which is how Godot's enum
+/// hint spells the choices it offers.
+AUTORTFM_DISABLE FUtf8String EnumeratorList(const uLang::CEnumeration& Enumeration)
+{
+    FUtf8String List;
+    for (const uLang::TSRef<uLang::CEnumerator>& Enumerator : Enumeration.GetDefinitionsOfKind<uLang::CEnumerator>())
+    {
+        if (!List.IsEmpty())
+        {
+            List += UTF8TEXT(",");
+        }
+        List += FUtf8String(Enumerator->AsNameCString());
+    }
+    return List;
+}
+
+/// Godot's range hint, which has no spelling for a bound that is not there: it wants two numbers.
+///
+/// A type constrained on one side only -- `type{_X:int where 0 <= _X}` -- is therefore spelled
+/// with the bound it does have at both ends, plus `or_greater`/`or_less` to say which way it runs
+/// on. Godot clamps at the end that is real and lets the value past the other, which is exactly
+/// the constraint the compiler is enforcing. `hide_control` goes with it because a slider across a
+/// range of zero width says nothing; an older build spells that slice `hide_slider` and ignores
+/// this one, which costs a cosmetic slider and nothing else -- Range::get_as_ratio guards the
+/// division itself.
+AUTORTFM_DISABLE FUtf8String RangeHint(const FString& Min, const FString& Max)
+{
+    if (!Min.IsEmpty() && !Max.IsEmpty())
+    {
+        return FUtf8String(FString::Printf(TEXT("%s,%s"), *Min, *Max));
+    }
+    if (!Min.IsEmpty())
+    {
+        return FUtf8String(FString::Printf(TEXT("%s,%s,or_greater,hide_control"), *Min, *Min));
+    }
+    if (!Max.IsEmpty())
+    {
+        return FUtf8String(FString::Printf(TEXT("%s,%s,or_less,hide_control"), *Max, *Max));
+    }
+    return FUtf8String();
+}
+
+/// What the inspector can make of a member's declared type: the value's shape on the wire, the
+/// Godot type to rebuild it as, the hint the declaration itself implies, and -- when the answer is
+/// that it cannot be exported at all -- why.
+///
+/// The hint comes from the type wherever the type can carry it. A bounded Verse int or float is
+/// already a range: `type{_X:float where 0.0 <= _X, _X <= 500.0}` normalises to bounds on the type
+/// itself, and the compiler then enforces them at every assignment -- so an inspector slider built
+/// from those bounds and the language agree by construction, rather than because the author wrote
+/// the same two numbers twice. An enum is already a list of choices. A mirrored class is already
+/// the name of the node or resource the slot will accept.
+AUTORTFM_DISABLE void DescribeExportType(const uLang::CTypeBase* Type, const uLang::CSemanticProgram& Program, GodotVerse::FExportDesc& OutDesc)
+{
+    using namespace uLang;
+
+    OutDesc.Reject = VH_EXPORT_UNSUPPORTED_TYPE;
     if (!Type)
     {
-        return VH_TYPE_VOID;
+        return;
     }
 
     // A `var` member's declared type is a pointer around the value type. Unwrap that specifically
     // rather than through CNormalType::GetInnerType, which also unwraps an array -- and Verse's
     // `string` is `[]char`, so that route reports every string as a char.
-    const uLang::CNormalType* Unwrapped = &Type->GetNormalType();
-    while (Unwrapped->GetKind() == uLang::ETypeKind::Pointer || Unwrapped->GetKind() == uLang::ETypeKind::Reference)
+    const CNormalType* Normal = &Type->GetNormalType();
+    while (Normal->GetKind() == ETypeKind::Pointer || Normal->GetKind() == ETypeKind::Reference)
     {
-        Unwrapped = &static_cast<const uLang::CInvariantValueType*>(Unwrapped)->PositiveValueType()->GetNormalType();
+        Normal = &static_cast<const CInvariantValueType*>(Normal)->PositiveValueType()->GetNormalType();
     }
 
-    const uLang::CNormalType& Normal = *Unwrapped;
-    switch (Normal.GetKind())
+    const bool bIsOption = Normal->GetKind() == ETypeKind::Option;
+    if (bIsOption)
     {
-    case uLang::ETypeKind::Logic:
-        return VH_TYPE_LOGIC;
-    case uLang::ETypeKind::Int:
-        return VH_TYPE_INT;
-    case uLang::ETypeKind::Float:
-        return VH_TYPE_FLOAT;
-    case uLang::ETypeKind::Char8:
-    case uLang::ETypeKind::Char32:
-        return VH_TYPE_CHAR;
-    case uLang::ETypeKind::Array:
-        return static_cast<const uLang::CArrayType&>(Normal).IsStringType() ? VH_TYPE_STRING : VH_TYPE_ARRAY;
-    case uLang::ETypeKind::Map:
-        return VH_TYPE_MAP;
-    case uLang::ETypeKind::Tuple:
-        return VH_TYPE_TUPLE;
-    case uLang::ETypeKind::Option:
-        return VH_TYPE_OPTION;
+        Normal = &static_cast<const COptionType&>(*Normal).GetValueType()->GetNormalType();
+    }
+
+    if (const CClass* Class = Normal->AsNullable<CClass>())
+    {
+        const CClass* ObjectClass = GodotObjectClass(Program);
+        if (!ObjectClass || !Class->IsSubtypeOf(*ObjectClass))
+        {
+            // A struct -- vector2, color -- or a class the script wrote. Neither is a reference,
+            // so an option around one is asking for an empty slot Godot has no way to draw.
+            OutDesc.Reject = bIsOption ? VH_EXPORT_OPTION_NOT_OBJECT : VH_EXPORT_UNSUPPORTED_TYPE;
+            return;
+        }
+
+        // A reference crosses as the handle it is, which is an int the consumer rebuilds as an
+        // object; an optional one crosses as an option around that.
+        OutDesc.Type = bIsOption ? VH_TYPE_OPTION : VH_TYPE_INT;
+        OutDesc.VariantTag = VH_VARIANT_OBJECT;
+        OutDesc.Hint = VH_EXPORT_HINT_CLASS;
+        OutDesc.HintString = FUtf8String(Class->AsNameCString());
+
+        // Nothing can force a value into an inspector slot, so a member that cannot hold the empty
+        // case has a declared type the scene can always violate. The Verse spelling that compiles
+        // without an option, `node2d{}`, is a handle of 0: a reference dead from birth, and
+        // indistinguishable from one freed later.
+        OutDesc.Reject = bIsOption ? VH_EXPORT_UNSUPPORTED_TYPE : VH_EXPORT_OBJECT_NOT_OPTIONAL;
+        return;
+    }
+
+    if (bIsOption)
+    {
+        OutDesc.Reject = VH_EXPORT_OPTION_NOT_OBJECT;
+        return;
+    }
+
+    if (const CEnumeration* Enumeration = Normal->AsNullable<CEnumeration>())
+    {
+        OutDesc.Type = VH_TYPE_INT;
+        OutDesc.VariantTag = VH_VARIANT_INT;
+        OutDesc.Hint = VH_EXPORT_HINT_ENUM;
+        OutDesc.HintString = EnumeratorList(*Enumeration);
+        return;
+    }
+
+    switch (Normal->GetKind())
+    {
+    case ETypeKind::Logic:
+        OutDesc.Type = VH_TYPE_LOGIC;
+        OutDesc.VariantTag = VH_VARIANT_BOOL;
+        OutDesc.Reject = VH_EXPORT_OK;
+        break;
+
+    case ETypeKind::Int:
+    {
+        OutDesc.Type = VH_TYPE_INT;
+        OutDesc.VariantTag = VH_VARIANT_INT;
+        OutDesc.Reject = VH_EXPORT_OK;
+        const CIntType& IntType = static_cast<const CIntType&>(*Normal);
+        OutDesc.HintString = RangeHint(
+            IntType.GetMin().IsFinite() ? FString::Printf(TEXT("%lld"), IntType.GetMin().GetFiniteInt()) : FString(),
+            IntType.GetMax().IsFinite() ? FString::Printf(TEXT("%lld"), IntType.GetMax().GetFiniteInt()) : FString());
+        if (!OutDesc.HintString.IsEmpty())
+        {
+            OutDesc.Hint = VH_EXPORT_HINT_RANGE;
+        }
+        break;
+    }
+
+    case ETypeKind::Float:
+    {
+        OutDesc.Type = VH_TYPE_FLOAT;
+        OutDesc.VariantTag = VH_VARIANT_FLOAT;
+        OutDesc.Reject = VH_EXPORT_OK;
+        // Plain `float` reports an infinite minimum and a NaN maximum. Neither is finite, which is
+        // the whole test -- and the reason it is asked of each bound rather than of the type.
+        const CFloatType& FloatType = static_cast<const CFloatType&>(*Normal);
+        OutDesc.HintString = RangeHint(
+            FMath::IsFinite(FloatType.GetMin()) ? FString::Printf(TEXT("%g"), FloatType.GetMin()) : FString(),
+            FMath::IsFinite(FloatType.GetMax()) ? FString::Printf(TEXT("%g"), FloatType.GetMax()) : FString());
+        if (!OutDesc.HintString.IsEmpty())
+        {
+            OutDesc.Hint = VH_EXPORT_HINT_RANGE;
+        }
+        break;
+    }
+
+    case ETypeKind::Char8:
+    case ETypeKind::Char32:
+        OutDesc.Type = VH_TYPE_CHAR;
+        break;
+
+    case ETypeKind::Array:
+        if (static_cast<const CArrayType&>(*Normal).IsStringType())
+        {
+            OutDesc.Type = VH_TYPE_STRING;
+            OutDesc.VariantTag = VH_VARIANT_STRING;
+            OutDesc.Reject = VH_EXPORT_OK;
+        }
+        else
+        {
+            OutDesc.Type = VH_TYPE_ARRAY;
+        }
+        break;
+
+    case ETypeKind::Map:
+        OutDesc.Type = VH_TYPE_MAP;
+        break;
+
+    case ETypeKind::Tuple:
+        OutDesc.Type = VH_TYPE_TUPLE;
+        break;
+
     default:
-        return VH_TYPE_VOID;
+        break;
     }
 }
 } // namespace
@@ -998,13 +1170,30 @@ AUTORTFM_DISABLE bool GodotVerse::GetClassExports(FUtf8StringView ClassName, TAr
             continue;
         }
 
-        OutExports.Add(FExportDesc{
-            FUtf8String(Member->AsNameCString()),
-            VhTypeForVerseType(Member->GetType()),
-            Member->IsVar(),
-            AttributeText(*Member, ClampMinAttribute, *Program),
-            AttributeText(*Member, ClampMaxAttribute, *Program),
-            AttributeText(*Member, CategoryAttribute, *Program)});
+        FExportDesc Desc;
+        Desc.Name = FUtf8String(Member->AsNameCString());
+        Desc.bIsVar = Member->IsVar();
+        Desc.Category = AttributeText(*Member, CategoryAttribute, *Program);
+        DescribeExportType(Member->GetType(), *Program, Desc);
+
+        // A range the type did not carry, from the attributes that carried one before it could.
+        // Both ends or neither: Godot's range hint has no spelling for a half-open one, and a
+        // member with only a floor is better off with the plain field it already had.
+        if (Desc.Hint == VH_EXPORT_HINT_NONE)
+        {
+            const FUtf8String ClampMin = AttributeText(*Member, ClampMinAttribute, *Program);
+            const FUtf8String ClampMax = AttributeText(*Member, ClampMaxAttribute, *Program);
+            if (!ClampMin.IsEmpty() && !ClampMax.IsEmpty())
+            {
+                Desc.Hint = VH_EXPORT_HINT_RANGE;
+                Desc.HintString = ClampMin + UTF8TEXT(",") + ClampMax;
+            }
+        }
+
+        FUtf8String DeclaredIn;
+        FillLocation(*Member, DeclaredIn, Desc.Line, Desc.Column);
+
+        OutExports.Add(MoveTemp(Desc));
     }
     return true;
 }
@@ -1240,22 +1429,6 @@ AUTORTFM_DISABLE bool IsFunctionParameter(const uLang::CDefinition& Definition)
         }
     }
     return false;
-}
-
-/// Where a definition was written, or nothing for one compiled from a package the project does
-/// not own -- the generated Godot API, Verse's own library. Those still describe fine.
-AUTORTFM_DISABLE void FillLocation(const uLang::CDefinition& Definition, FUtf8String& OutPath, int32& OutLine, int32& OutColumn)
-{
-    if (const uLang::CExpressionBase* DefinitionNode = Definition.GetAstNode())
-    {
-        if (const Verse::Vst::Node* Vst = DefinitionNode->GetMappedVstNode())
-        {
-            const Verse::SLocus& Whence = Vst->Whence();
-            OutPath = FULangConversionUtils::ULangStrToFUtf8String(Vst->GetSnippetPath());
-            OutLine = (int32)Whence.BeginRow();
-            OutColumn = (int32)Whence.BeginColumn();
-        }
-    }
 }
 
 } // namespace

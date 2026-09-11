@@ -22,7 +22,7 @@
 extern "C" {
 #endif
 
-#define VH_ABI_VERSION 20
+#define VH_ABI_VERSION 21
 
 typedef int32_t vh_bool;
 
@@ -328,27 +328,83 @@ VH_ATTR VH_API int32_t vh_instance_call_void_float(vh_instance* Instance, const 
 
 /* ---------------------------------------------------------- class exports -- */
 
-/* One data member of a script's class carrying `@godot_export`. */
+/* The inspector hint a member's declaration implies. Spelled as what the host knows -- "this is a
+ * range" -- rather than as Godot's own PropertyHint numbering, which the host has no business
+ * carrying: it has no ClassDB to check the answer against. */
+typedef enum vh_export_hint
+{
+	VH_EXPORT_HINT_NONE = 0,
+	/* "Min,Max", from the bounds of a constrained int or float. */
+	VH_EXPORT_HINT_RANGE,
+	/* The enumerators of the declared enum, comma separated, in declaration order. */
+	VH_EXPORT_HINT_ENUM,
+	/* The Verse name of a mirrored class, which the consumer turns into Godot's own and sorts
+	 * into node or resource itself. */
+	VH_EXPORT_HINT_CLASS
+} vh_export_hint;
+
+/* Why a member the author asked to export cannot reach the inspector.
+ *
+ * A rejected member is still listed rather than dropped: the consumer needs somewhere to say why,
+ * and a member that silently vanishes from the inspector is the worst of the three outcomes --
+ * the author sees neither the property nor a reason. */
+typedef enum vh_export_reject
+{
+	VH_EXPORT_OK = 0,
+
+	/* No Godot type to rebuild the value as. A map, a tuple, a char -- and, until the bridge
+	 * learns to marshal them, everything but logic, int, float and string. */
+	VH_EXPORT_UNSUPPORTED_TYPE,
+
+	/* A Godot reference declared without an `option` around it. Nothing can force a value into an
+	 * inspector slot, so a member that cannot hold the empty case is one whose declared type the
+	 * scene can always violate -- and the Verse spelling that compiles, `node2d{}`, is a handle
+	 * of 0: a reference that is dead from birth and indistinguishable from one freed later. */
+	VH_EXPORT_OBJECT_NOT_OPTIONAL,
+
+	/* An `option` around something that is not a Godot reference. The inspector has no empty slot
+	 * for a number, so there is nothing for the option to mean. */
+	VH_EXPORT_OPTION_NOT_OBJECT
+} vh_export_reject;
+
+/* One data member of a script's class carrying the export attribute. */
 typedef struct vh_export_desc
 {
 	const char* NameUtf8; /* not null terminated */
 	int32_t NameLen;
 	vh_type Type;
+
+	/* Which Godot type to rebuild the value as, when vh_type alone cannot say -- an object rather
+	 * than the int its handle is. 0 (VH_VARIANT_NIL) means "infer from Type", as it does in
+	 * vh_value. */
+	int32_t VariantTag;
+
 	vh_bool IsVar; /* a `var` member; anything else can only be written before the instance seals */
 
-	/* Inspector hints, from the metadata attributes a member also carries. Each is empty when the
-	 * attribute is absent. These arrive as the strings Verse spelled them with -- `@clamp_min`
-	 * and friends take a string argument, not a number -- so the consumer parses them and a typo
-	 * is a bad hint rather than a compile error. */
-	const char* ClampMinUtf8;
-	int32_t ClampMinLen;
-	const char* ClampMaxUtf8;
-	int32_t ClampMaxLen;
+	int32_t Hint; /* vh_export_hint */
+	const char* HintStringUtf8;
+	int32_t HintStringLen;
+
+	/* The inspector group this member opens, which every member listed after it joins until one
+	 * opens another. Empty for a member that opens none -- including one that closes the group
+	 * above it, since the group in force is whatever the last member named. */
 	const char* CategoryUtf8;
 	int32_t CategoryLen;
+
+	/* Where the member is declared, for a consumer with something to say about it: zero-based row,
+	 * and a column counted in utf8 bytes the way the compiler counts. As everywhere else, this is
+	 * where the *definition* starts, which is its first attribute rather than its name. Both are
+	 * -1 when the definition has no source location. */
+	int32_t Line;
+	int32_t Column;
+
+	/* vh_export_reject. VH_EXPORT_OK is a promise as well as an answer: the consumer can build a
+	 * Godot value of Type/VariantTag for this member, so it is the whole of the filter -- nothing
+	 * downstream has to second-guess the type. */
+	int32_t Reject;
 } vh_export_desc;
 
-/* Lists the `@godot_export` data members of a top-level class.
+/* Lists the exported data members of a top-level class, in the order the class declares them.
  *
  * Read out of the semantic program the last analysis pass left behind, NOT out of the running
  * bytecode -- so this answers for the source as vh_check_project last saw it, and a member added

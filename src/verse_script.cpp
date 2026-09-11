@@ -465,7 +465,13 @@ TypedArray<Dictionary> VerseScript::_get_script_method_list() const {
 }
 
 namespace {
-Variant::Type variant_type_for(int64_t p_vh_type) {
+// VariantTag is Godot's own Variant::Type numbering (see the vh_variant_tag comment in the ABI
+// header), not another vh_type to translate -- so a non-zero tag is used as one directly and the
+// vh_type switch below only covers the pre-v3 callers that still leave it at 0.
+Variant::Type variant_type_for(int64_t p_vh_type, int64_t p_variant_tag) {
+	if (p_variant_tag != 0) {
+		return (Variant::Type)p_variant_tag;
+	}
 	switch ((vh_type)p_vh_type) {
 		case VH_TYPE_LOGIC:
 			return Variant::BOOL;
@@ -480,18 +486,27 @@ Variant::Type variant_type_for(int64_t p_vh_type) {
 	}
 }
 Dictionary property_for(const Dictionary &p_entry, Variant::Type p_type) {
-	const String clamp_min = p_entry["clamp_min"];
-	const String clamp_max = p_entry["clamp_max"];
-	// Godot's range hint needs both ends, and @clamp_min carries a string rather than a number,
-	// so a member is only ranged when both parse. Anything else falls back to a plain field.
-	const bool ranged = (p_type == Variant::FLOAT || p_type == Variant::INT) &&
-			clamp_min.is_valid_float() && clamp_max.is_valid_float();
-
 	Dictionary property;
 	property["name"] = p_entry["name"];
 	property["type"] = (int64_t)p_type;
-	property["hint"] = (int64_t)(ranged ? PROPERTY_HINT_RANGE : PROPERTY_HINT_NONE);
-	property["hint_string"] = ranged ? (clamp_min + String(",") + clamp_max) : String();
+
+	switch ((int64_t)p_entry["hint"]) {
+		case VH_EXPORT_HINT_RANGE:
+			property["hint"] = (int64_t)PROPERTY_HINT_RANGE;
+			property["hint_string"] = p_entry["hint_string"];
+			break;
+		case VH_EXPORT_HINT_ENUM:
+		case VH_EXPORT_HINT_CLASS:
+			// The host rejects a member carrying either hint until its *value*, not just its
+			// declared type, can cross the ABI -- an enum's ordinal, an object handle -- so no
+			// property is built from one yet. CLASS additionally needs the Verse-to-Godot class
+			// name mapping and the node-versus-resource split that belongs with that work.
+		case VH_EXPORT_HINT_NONE:
+		default:
+			property["hint"] = (int64_t)PROPERTY_HINT_NONE;
+			property["hint_string"] = String();
+			break;
+	}
 	// A non-var is editable here too, because the host applies a stored value while the instance
 	// is still unsealed -- before any Verse code has run. That is initialization, not mutation, so
 	// it keeps the author's `var`/non-var distinction rather than reaching around it. The
@@ -547,14 +562,14 @@ void VerseScript::refresh_exports() const {
 	String group = String();
 	for (int64_t i = 0; i < exports.size(); i++) {
 		const Dictionary entry = exports[i];
-		const Variant::Type type = variant_type_for(entry["type"]);
-		// A Verse type with no Variant counterpart -- char, a map, a tuple -- would reach the
-		// inspector as an untyped blank that silently swallows whatever is typed into it. Skipping
-		// it before the group comparison below means it can't leave a group header stranded above
-		// nothing.
-		if (type == Variant::NIL) {
+		// A rejected member is still listed -- deliberately, so a later commit can report *why*,
+		// at the line the host saw it declared on -- it is just not built into a property here.
+		// Skipping it before the group comparison below means it can't leave a group header
+		// stranded above nothing.
+		if ((int64_t)entry["reject"] != VH_EXPORT_OK) {
 			continue;
 		}
+		const Variant::Type type = variant_type_for(entry["type"], entry["variant_tag"]);
 
 		const String category = entry["category"];
 		if (category != group) {

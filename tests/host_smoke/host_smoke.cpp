@@ -1002,34 +1002,6 @@ int main(int argc, char** argv)
 		return nullptr;
 	};
 
-	// TEMP PROBE
-	{
-		for (int32_t Index = 0; Index < ExportCount; ++Index)
-		{
-			printf("[probe] export %d: %.*s type=%d\n", Index,
-				Exports[Index].NameLen, Exports[Index].NameUtf8, Exports[Index].Type);
-		}
-		const std::string Source = ReadFileUtf8(ExportsPath);
-		const char* Names[] = { "var Target", "var Art", "var Held" };
-		for (const char* Name : Names)
-		{
-			const size_t At = Source.find(Name);
-			if (At == std::string::npos)
-			{
-				printf("[probe] %s: not in fixture\n", Name);
-				continue;
-			}
-			int32_t Row = 0;
-			int32_t Column = 0;
-			RowColumnOf(Source, At + 5, Row, Column);
-			const vh_lookup_desc* Found = nullptr;
-			const int32_t Status = LookupSymbolFn(ExportsPathUtf8.c_str(), Row, Column, &Found);
-			printf("[probe] %s: status=%d type=%.*s\n", Name, Status,
-				Found ? Found->TypeLen : 0, Found ? Found->TypeUtf8 : "");
-		}
-	}
-
-	ExportsOk = Step("four members are exported", ExportCount == 4) && ExportsOk;
 	const vh_export_desc* SpeedExport = FindExport("Speed");
 	const vh_export_desc* ScaleExport = FindExport("Scale");
 	const vh_export_desc* EnabledExport = FindExport("Enabled");
@@ -1041,13 +1013,69 @@ int main(int argc, char** argv)
 	// The whole point of the attribute: an unmarked member stays out of the inspector.
 	Step("unmarked Hidden is not exported", FindExport("Hidden") == nullptr);
 
-	// Hint metadata. These attributes carry a single string, which is the only attribute payload
-	// SOL-972 leaves readable -- so "0.0" arrives as text and Godot parses it, not the compiler.
 	auto TextOf = [](const char* Utf8, int32_t Len) { return std::string(Utf8 ? Utf8 : "", Len); };
-	Step("Speed carries clamp_min", SpeedExport && TextOf(SpeedExport->ClampMinUtf8, SpeedExport->ClampMinLen) == "0.0");
-	Step("Speed carries clamp_max", SpeedExport && TextOf(SpeedExport->ClampMaxUtf8, SpeedExport->ClampMaxLen) == "500.0");
+
+	// A range off the declared type, which is the bounds the compiler is already enforcing at
+	// every assignment rather than a second opinion written beside them.
+	const vh_export_desc* RangedExport = FindExport("Ranged");
+	ExportsOk = Step("a bounded float carries a range hint",
+					RangedExport && RangedExport->Hint == VH_EXPORT_HINT_RANGE
+						&& TextOf(RangedExport->HintStringUtf8, RangedExport->HintStringLen) == "0,500")
+			 && ExportsOk;
+	const vh_export_desc* StepsExport = FindExport("Steps");
+	ExportsOk = Step("and so does a bounded int",
+					StepsExport && StepsExport->Hint == VH_EXPORT_HINT_RANGE
+						&& TextOf(StepsExport->HintStringUtf8, StepsExport->HintStringLen) == "0,10")
+			 && ExportsOk;
+	// Plain `float` reports its max as a NaN rather than an infinity, so an unbounded member is
+	// the case a bounds check has to get right to avoid hinting every float in the project.
+	ExportsOk = Step("an unbounded one carries none", ScaleExport && ScaleExport->Hint == VH_EXPORT_HINT_NONE) && ExportsOk;
+
+	// One-sided, which Godot's hint cannot spell: the bound it has stands at both ends, and the
+	// slice says which way the value is free to run. The control goes with it, since a slider
+	// across a range of zero width means nothing.
+	const vh_export_desc* AtLeastExport = FindExport("AtLeast");
+	ExportsOk = Step("a floor with no ceiling runs upwards",
+					AtLeastExport && AtLeastExport->Hint == VH_EXPORT_HINT_RANGE
+						&& TextOf(AtLeastExport->HintStringUtf8, AtLeastExport->HintStringLen) == "0,0,or_greater,hide_control")
+			 && ExportsOk;
+	const vh_export_desc* AtMostExport = FindExport("AtMost");
+	ExportsOk = Step("and a ceiling with no floor runs downwards",
+					AtMostExport && AtMostExport->Hint == VH_EXPORT_HINT_RANGE
+						&& TextOf(AtMostExport->HintStringUtf8, AtMostExport->HintStringLen) == "1,1,or_less,hide_control")
+			 && ExportsOk;
+
+	// Until `@export_range` exists, the attributes that carried a range before the type could.
+	ExportsOk = Step("clamp_min and clamp_max still make a range",
+					SpeedExport && SpeedExport->Hint == VH_EXPORT_HINT_RANGE
+						&& TextOf(SpeedExport->HintStringUtf8, SpeedExport->HintStringLen) == "0.0,500.0")
+			 && ExportsOk;
 	Step("Speed carries category", SpeedExport && TextOf(SpeedExport->CategoryUtf8, SpeedExport->CategoryLen) == "Movement");
-	Step("Label carries no hints", FindExport("Label") && FindExport("Label")->ClampMinLen == 0 && FindExport("Label")->CategoryLen == 0);
+	Step("Label carries no hint", FindExport("Label") && FindExport("Label")->Hint == VH_EXPORT_HINT_NONE);
+
+	// A Godot reference is a slot the scene may leave empty, so the member has to be able to hold
+	// that. Both spellings are harvested -- the point of reporting a rejection rather than
+	// dropping the member is that something can say why, at the line it was declared on.
+	const vh_export_desc* TargetExport = FindExport("Target");
+	ExportsOk = Step("an optional node names the class its slot accepts",
+					TargetExport && TargetExport->Hint == VH_EXPORT_HINT_CLASS
+						&& TextOf(TargetExport->HintStringUtf8, TargetExport->HintStringLen) == "node2d"
+						&& TargetExport->VariantTag == VH_VARIANT_OBJECT)
+			 && ExportsOk;
+	const vh_export_desc* HeldExport = FindExport("Held");
+	ExportsOk = Step("a node without an option around it is refused",
+					HeldExport && HeldExport->Reject == VH_EXPORT_OBJECT_NOT_OPTIONAL)
+			 && ExportsOk;
+	const vh_export_desc* MaybeExport = FindExport("Maybe");
+	ExportsOk = Step("and an option around a number is refused the other way",
+					MaybeExport && MaybeExport->Reject == VH_EXPORT_OPTION_NOT_OBJECT)
+			 && ExportsOk;
+	ExportsOk = Step("a member that exports says so", SpeedExport && SpeedExport->Reject == VH_EXPORT_OK) && ExportsOk;
+
+	// The location is what a consumer needs to put a rejection where the author can see it.
+	ExportsOk = Step("a harvested member carries where it was declared",
+					HeldExport && HeldExport->Line >= 0 && HeldExport->Column >= 0)
+			 && ExportsOk;
 
 	// Defaults come off the CDO, whose Verse constructor has already run -- the semantic program
 	// can only say that an initializer exists, not what it evaluates to.
