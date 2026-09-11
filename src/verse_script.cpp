@@ -8,6 +8,10 @@
 #include <gdextension_interface.h>
 
 #include <godot_cpp/classes/engine.hpp>
+#ifdef TOOLS_ENABLED
+#include <godot_cpp/classes/editor_interface.hpp>
+#include <godot_cpp/classes/editor_settings.hpp>
+#endif
 #include <godot_cpp/classes/object.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/godot.hpp>
@@ -485,6 +489,63 @@ Variant::Type variant_type_for(int64_t p_vh_type, int64_t p_variant_tag) {
 			return Variant::NIL;
 	}
 }
+// The smallest change the inspector will make to a value of this type, which is what an exclusive
+// bound has to be moved by: `_X < 500.0` admits every float below 500, and the largest one the
+// editor can actually produce is a step short of it.
+//
+// Godot's own default for a float field, so a bound moved by it lands where the spinbox was going
+// to land anyway. An integer field steps by one, and an integer bound is never exclusive in the
+// first place -- the compiler normalises `0 < _X` to `1 <= _X` exactly.
+static double inspector_step_for(Variant::Type p_type) {
+	if (p_type == Variant::INT) {
+		return 1.0;
+	}
+#ifdef TOOLS_ENABLED
+	EditorInterface *editor = EditorInterface::get_singleton();
+	Ref<EditorSettings> settings = editor != nullptr ? editor->get_editor_settings() : Ref<EditorSettings>();
+	if (settings.is_valid()) {
+		const Variant step = settings->get_setting("interface/inspector/default_float_step");
+		if (step.get_type() == Variant::FLOAT && (double)step > 0.0) {
+			return (double)step;
+		}
+	}
+#endif
+	return 0.001;
+}
+
+// Godot's range hint, which wants two numbers and has no spelling for a bound that is not there.
+//
+// A type constrained on one side only -- `type{_X:int where 0 <= _X}` -- is therefore spelled with
+// the bound it does have at both ends, plus `or_greater`/`or_less` to say which way it runs on:
+// Godot clamps at the end that is real and lets the value past the other, which is the constraint
+// the compiler is enforcing. `hide_control` goes with that because a slider across a range of zero
+// width says nothing. An older build spells that slice `hide_slider` and ignores this one, which
+// costs a cosmetic slider and nothing else -- Range::get_as_ratio guards the division itself.
+static String range_hint_for(const Dictionary &p_entry, Variant::Type p_type) {
+	const bool has_min = p_entry["has_range_min"];
+	const bool has_max = p_entry["has_range_max"];
+	const double step = inspector_step_for(p_type);
+	const double min = (double)p_entry["range_min"] + ((bool)p_entry["range_min_exclusive"] ? step : 0.0);
+	const double max = (double)p_entry["range_max"] - ((bool)p_entry["range_max_exclusive"] ? step : 0.0);
+
+	// An integer bound is spelled as one: Godot reads the hint with to_float() either way, but the
+	// inspector shows the text, and "0,10" is what an author writing that type would have typed.
+	auto spell = [p_type](double p_value) {
+		return p_type == Variant::INT ? String::num_int64((int64_t)p_value) : String::num(p_value);
+	};
+
+	if (has_min && has_max) {
+		return spell(min) + String(",") + spell(max);
+	}
+	if (has_min) {
+		return spell(min) + String(",") + spell(min) + String(",or_greater,hide_control");
+	}
+	if (has_max) {
+		return spell(max) + String(",") + spell(max) + String(",or_less,hide_control");
+	}
+	return String();
+}
+
 Dictionary property_for(const Dictionary &p_entry, Variant::Type p_type) {
 	Dictionary property;
 	property["name"] = p_entry["name"];
@@ -493,7 +554,7 @@ Dictionary property_for(const Dictionary &p_entry, Variant::Type p_type) {
 	switch ((int64_t)p_entry["hint"]) {
 		case VH_EXPORT_HINT_RANGE:
 			property["hint"] = (int64_t)PROPERTY_HINT_RANGE;
-			property["hint_string"] = p_entry["hint_string"];
+			property["hint_string"] = range_hint_for(p_entry, p_type);
 			break;
 		case VH_EXPORT_HINT_ENUM:
 		case VH_EXPORT_HINT_CLASS:

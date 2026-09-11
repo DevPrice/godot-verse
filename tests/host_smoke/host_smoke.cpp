@@ -1018,14 +1018,16 @@ int main(int argc, char** argv)
 	// A range off the declared type, which is the bounds the compiler is already enforcing at
 	// every assignment rather than a second opinion written beside them.
 	const vh_export_desc* RangedExport = FindExport("Ranged");
-	ExportsOk = Step("a bounded float carries a range hint",
+	ExportsOk = Step("a bounded float carries its bounds",
 					RangedExport && RangedExport->Hint == VH_EXPORT_HINT_RANGE
-						&& TextOf(RangedExport->HintStringUtf8, RangedExport->HintStringLen) == "0,500")
+						&& RangedExport->HasRangeMin && RangedExport->HasRangeMax
+						&& RangedExport->RangeMin == 0.0 && RangedExport->RangeMax == 500.0
+						&& !RangedExport->RangeMinExclusive && !RangedExport->RangeMaxExclusive)
 			 && ExportsOk;
 	const vh_export_desc* StepsExport = FindExport("Steps");
 	ExportsOk = Step("and so does a bounded int",
 					StepsExport && StepsExport->Hint == VH_EXPORT_HINT_RANGE
-						&& TextOf(StepsExport->HintStringUtf8, StepsExport->HintStringLen) == "0,10")
+						&& StepsExport->RangeMin == 0.0 && StepsExport->RangeMax == 10.0)
 			 && ExportsOk;
 	// Plain `float` reports its max as a NaN rather than an infinity, so an unbounded member is
 	// the case a bounds check has to get right to avoid hinting every float in the project.
@@ -1035,20 +1037,38 @@ int main(int argc, char** argv)
 	// slice says which way the value is free to run. The control goes with it, since a slider
 	// across a range of zero width means nothing.
 	const vh_export_desc* AtLeastExport = FindExport("AtLeast");
-	ExportsOk = Step("a floor with no ceiling runs upwards",
+	ExportsOk = Step("a floor with no ceiling reports only the floor",
 					AtLeastExport && AtLeastExport->Hint == VH_EXPORT_HINT_RANGE
-						&& TextOf(AtLeastExport->HintStringUtf8, AtLeastExport->HintStringLen) == "0,0,or_greater,hide_control")
+						&& AtLeastExport->HasRangeMin && !AtLeastExport->HasRangeMax
+						&& AtLeastExport->RangeMin == 0.0)
 			 && ExportsOk;
 	const vh_export_desc* AtMostExport = FindExport("AtMost");
-	ExportsOk = Step("and a ceiling with no floor runs downwards",
+	ExportsOk = Step("and a ceiling with no floor only the ceiling",
 					AtMostExport && AtMostExport->Hint == VH_EXPORT_HINT_RANGE
-						&& TextOf(AtMostExport->HintStringUtf8, AtMostExport->HintStringLen) == "1,1,or_less,hide_control")
+						&& !AtMostExport->HasRangeMin && AtMostExport->HasRangeMax
+						&& AtMostExport->RangeMax == 1.0)
+			 && ExportsOk;
+
+	// `<` rather than `<=`. The analyser stores the double below the bound, which is exactly the
+	// constraint and useless to an inspector: it prints as the bound and sits off the step grid.
+	// The consumer moves it in by a step, so what it needs to know is that it should.
+	const vh_export_desc* ExclusiveExport = FindExport("Exclusive");
+	ExportsOk = Step("a strict float bound is reported as strict",
+					ExclusiveExport && ExclusiveExport->Hint == VH_EXPORT_HINT_RANGE
+						&& ExclusiveExport->HasRangeMax && ExclusiveExport->RangeMaxExclusive
+						&& ExclusiveExport->RangeMax < 500.0)
+			 && ExportsOk;
+	// An integer needs no such guess: `0 < _X` is `1 <= _X`, and the compiler has already said so.
+	const vh_export_desc* ExclusiveIntExport = FindExport("ExclusiveInt");
+	ExportsOk = Step("a strict int bound is already the next integer",
+					ExclusiveIntExport && ExclusiveIntExport->RangeMin == 1.0
+						&& !ExclusiveIntExport->RangeMinExclusive)
 			 && ExportsOk;
 
 	// Until `@export_range` exists, the attributes that carried a range before the type could.
 	ExportsOk = Step("clamp_min and clamp_max still make a range",
 					SpeedExport && SpeedExport->Hint == VH_EXPORT_HINT_RANGE
-						&& TextOf(SpeedExport->HintStringUtf8, SpeedExport->HintStringLen) == "0.0,500.0")
+						&& SpeedExport->RangeMin == 0.0 && SpeedExport->RangeMax == 500.0)
 			 && ExportsOk;
 	Step("Speed carries category", SpeedExport && TextOf(SpeedExport->CategoryUtf8, SpeedExport->CategoryLen) == "Movement");
 	Step("Label carries no hint", FindExport("Label") && FindExport("Label")->Hint == VH_EXPORT_HINT_NONE);

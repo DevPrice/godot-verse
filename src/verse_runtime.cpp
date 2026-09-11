@@ -245,6 +245,12 @@ TypedArray<Dictionary> VerseRuntime::class_exports(const String &p_class_name, b
 		entry["is_var"] = descs[i].IsVar != 0;
 		entry["hint"] = (int64_t)descs[i].Hint;
 		entry["hint_string"] = String::utf8(descs[i].HintStringUtf8, descs[i].HintStringLen);
+		entry["range_min"] = descs[i].RangeMin;
+		entry["range_max"] = descs[i].RangeMax;
+		entry["has_range_min"] = descs[i].HasRangeMin != 0;
+		entry["has_range_max"] = descs[i].HasRangeMax != 0;
+		entry["range_min_exclusive"] = descs[i].RangeMinExclusive != 0;
+		entry["range_max_exclusive"] = descs[i].RangeMaxExclusive != 0;
 		entry["category"] = String::utf8(descs[i].CategoryUtf8, descs[i].CategoryLen);
 		entry["line"] = (int64_t)descs[i].Line;
 		entry["column"] = (int64_t)descs[i].Column;

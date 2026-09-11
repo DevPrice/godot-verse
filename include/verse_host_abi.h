@@ -22,7 +22,7 @@
 extern "C" {
 #endif
 
-#define VH_ABI_VERSION 21
+#define VH_ABI_VERSION 22
 
 typedef int32_t vh_bool;
 
@@ -334,7 +334,8 @@ VH_ATTR VH_API int32_t vh_instance_call_void_float(vh_instance* Instance, const 
 typedef enum vh_export_hint
 {
 	VH_EXPORT_HINT_NONE = 0,
-	/* "Min,Max", from the bounds of a constrained int or float. */
+	/* A constrained int or float: the bounds are in the Range fields rather than the hint string,
+	 * because turning them into a hint is Godot's business and needs Godot's editor settings. */
 	VH_EXPORT_HINT_RANGE,
 	/* The enumerators of the declared enum, comma separated, in declaration order. */
 	VH_EXPORT_HINT_ENUM,
@@ -382,8 +383,30 @@ typedef struct vh_export_desc
 	vh_bool IsVar; /* a `var` member; anything else can only be written before the instance seals */
 
 	int32_t Hint; /* vh_export_hint */
+
+	/* VH_EXPORT_HINT_ENUM and VH_EXPORT_HINT_CLASS only; a range speaks through the fields below. */
 	const char* HintStringUtf8;
 	int32_t HintStringLen;
+
+	/* VH_EXPORT_HINT_RANGE: the bounds the declared type carries. A bound the type does not
+	 * constrain is absent rather than infinite, which is not the same thing to an inspector -- one
+	 * end open is a spinbox that clamps on one side only.
+	 *
+	 * Exclusive says the author wrote `<` rather than `<=`. The distinction survives here only for
+	 * floats, and only as a guess: the analyser normalises a strict bound to the adjacent double,
+	 * which is exactly right and indistinguishable from the bound itself at any precision an
+	 * inspector would show. An int needs no guess -- `0 < _X` normalises to `1 <= _X`, exactly --
+	 * so RangeMinExclusive is never set for one.
+	 *
+	 * The consumer is expected to move an exclusive bound inward by whatever step its inspector
+	 * uses, which is the smallest offset that both keeps the constraint and lands on a value the
+	 * editor can actually produce. */
+	double RangeMin;
+	double RangeMax;
+	vh_bool HasRangeMin;
+	vh_bool HasRangeMax;
+	vh_bool RangeMinExclusive;
+	vh_bool RangeMaxExclusive;
 
 	/* The inspector group this member opens, which every member listed after it joins until one
 	 * opens another. Empty for a member that opens none -- including one that closes the group

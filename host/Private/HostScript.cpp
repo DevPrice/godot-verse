@@ -666,30 +666,23 @@ AUTORTFM_DISABLE FUtf8String EnumeratorList(const uLang::CEnumeration& Enumerati
     return List;
 }
 
-/// Godot's range hint, which has no spelling for a bound that is not there: it wants two numbers.
+/// Whether a float bound is the analyser's normalisation of a strict inequality.
 ///
-/// A type constrained on one side only -- `type{_X:int where 0 <= _X}` -- is therefore spelled
-/// with the bound it does have at both ends, plus `or_greater`/`or_less` to say which way it runs
-/// on. Godot clamps at the end that is real and lets the value past the other, which is exactly
-/// the constraint the compiler is enforcing. `hide_control` goes with it because a slider across a
-/// range of zero width says nothing; an older build spells that slice `hide_slider` and ignores
-/// this one, which costs a cosmetic slider and nothing else -- Range::get_as_ratio guards the
-/// division itself.
-AUTORTFM_DISABLE FUtf8String RangeHint(const FString& Min, const FString& Max)
+/// `_X < 500.0` is stored as the double immediately below 500.0, since that is the largest value
+/// the constraint admits. The normalisation is exact and the distinction is then gone: nothing in
+/// the type says the author wrote `<`, and no inspector could render the difference anyway. The
+/// one piece of evidence left is that the neighbour on the far side is a number a person would
+/// write and this one is not, which is what the round trip through a short decimal form asks.
+///
+/// A wrong answer costs one step of slider range at the end in question, in either direction.
+/// Integers need none of this: `0 < _X` normalises to `1 <= _X`, which is the same statement.
+AUTORTFM_DISABLE bool LooksLikeStrictBound(double Bound, double Neighbour)
 {
-    if (!Min.IsEmpty() && !Max.IsEmpty())
+    auto SurvivesShortForm = [](double Value)
     {
-        return FUtf8String(FString::Printf(TEXT("%s,%s"), *Min, *Max));
-    }
-    if (!Min.IsEmpty())
-    {
-        return FUtf8String(FString::Printf(TEXT("%s,%s,or_greater,hide_control"), *Min, *Min));
-    }
-    if (!Max.IsEmpty())
-    {
-        return FUtf8String(FString::Printf(TEXT("%s,%s,or_less,hide_control"), *Max, *Max));
-    }
-    return FUtf8String();
+        return FCString::Atod(*FString::Printf(TEXT("%g"), Value)) == Value;
+    };
+    return FMath::IsFinite(Neighbour) && SurvivesShortForm(Neighbour) && !SurvivesShortForm(Bound);
 }
 
 /// What the inspector can make of a member's declared type: the value's shape on the wire, the
@@ -782,10 +775,11 @@ AUTORTFM_DISABLE void DescribeExportType(const uLang::CTypeBase* Type, const uLa
         OutDesc.VariantTag = VH_VARIANT_INT;
         OutDesc.Reject = VH_EXPORT_OK;
         const CIntType& IntType = static_cast<const CIntType&>(*Normal);
-        OutDesc.HintString = RangeHint(
-            IntType.GetMin().IsFinite() ? FString::Printf(TEXT("%lld"), IntType.GetMin().GetFiniteInt()) : FString(),
-            IntType.GetMax().IsFinite() ? FString::Printf(TEXT("%lld"), IntType.GetMax().GetFiniteInt()) : FString());
-        if (!OutDesc.HintString.IsEmpty())
+        OutDesc.bHasRangeMin = IntType.GetMin().IsFinite();
+        OutDesc.bHasRangeMax = IntType.GetMax().IsFinite();
+        OutDesc.RangeMin = OutDesc.bHasRangeMin ? (double)IntType.GetMin().GetFiniteInt() : 0.0;
+        OutDesc.RangeMax = OutDesc.bHasRangeMax ? (double)IntType.GetMax().GetFiniteInt() : 0.0;
+        if (OutDesc.bHasRangeMin || OutDesc.bHasRangeMax)
         {
             OutDesc.Hint = VH_EXPORT_HINT_RANGE;
         }
@@ -800,10 +794,15 @@ AUTORTFM_DISABLE void DescribeExportType(const uLang::CTypeBase* Type, const uLa
         // Plain `float` reports an infinite minimum and a NaN maximum. Neither is finite, which is
         // the whole test -- and the reason it is asked of each bound rather than of the type.
         const CFloatType& FloatType = static_cast<const CFloatType&>(*Normal);
-        OutDesc.HintString = RangeHint(
-            FMath::IsFinite(FloatType.GetMin()) ? FString::Printf(TEXT("%g"), FloatType.GetMin()) : FString(),
-            FMath::IsFinite(FloatType.GetMax()) ? FString::Printf(TEXT("%g"), FloatType.GetMax()) : FString());
-        if (!OutDesc.HintString.IsEmpty())
+        OutDesc.bHasRangeMin = FMath::IsFinite(FloatType.GetMin());
+        OutDesc.bHasRangeMax = FMath::IsFinite(FloatType.GetMax());
+        OutDesc.RangeMin = OutDesc.bHasRangeMin ? FloatType.GetMin() : 0.0;
+        OutDesc.RangeMax = OutDesc.bHasRangeMax ? FloatType.GetMax() : 0.0;
+        OutDesc.bRangeMinExclusive = OutDesc.bHasRangeMin
+            && LooksLikeStrictBound(FloatType.GetMin(), std::nextafter(FloatType.GetMin(), -std::numeric_limits<double>::infinity()));
+        OutDesc.bRangeMaxExclusive = OutDesc.bHasRangeMax
+            && LooksLikeStrictBound(FloatType.GetMax(), std::nextafter(FloatType.GetMax(), std::numeric_limits<double>::infinity()));
+        if (OutDesc.bHasRangeMin || OutDesc.bHasRangeMax)
         {
             OutDesc.Hint = VH_EXPORT_HINT_RANGE;
         }
@@ -1177,16 +1176,19 @@ AUTORTFM_DISABLE bool GodotVerse::GetClassExports(FUtf8StringView ClassName, TAr
         DescribeExportType(Member->GetType(), *Program, Desc);
 
         // A range the type did not carry, from the attributes that carried one before it could.
-        // Both ends or neither: Godot's range hint has no spelling for a half-open one, and a
-        // member with only a floor is better off with the plain field it already had.
+        // They hold text rather than numbers -- a string argument is the one attribute payload
+        // SOL-972 leaves readable -- so a typo is a missing bound rather than a compile error.
         if (Desc.Hint == VH_EXPORT_HINT_NONE)
         {
             const FUtf8String ClampMin = AttributeText(*Member, ClampMinAttribute, *Program);
             const FUtf8String ClampMax = AttributeText(*Member, ClampMaxAttribute, *Program);
-            if (!ClampMin.IsEmpty() && !ClampMax.IsEmpty())
+            Desc.bHasRangeMin = !ClampMin.IsEmpty();
+            Desc.bHasRangeMax = !ClampMax.IsEmpty();
+            Desc.RangeMin = Desc.bHasRangeMin ? FCString::Atod(*FString(ClampMin)) : 0.0;
+            Desc.RangeMax = Desc.bHasRangeMax ? FCString::Atod(*FString(ClampMax)) : 0.0;
+            if (Desc.bHasRangeMin || Desc.bHasRangeMax)
             {
                 Desc.Hint = VH_EXPORT_HINT_RANGE;
-                Desc.HintString = ClampMin + UTF8TEXT(",") + ClampMax;
             }
         }
 

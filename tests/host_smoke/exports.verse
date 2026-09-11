@@ -38,6 +38,12 @@ exports := class(object):
     @editable
     var AtMost<public>:type{_X:float where _X <= 1.0} = 0.5
 
+    @editable
+    var Exclusive<public>:type{_X:float where _X < 500.0} = 1.0
+
+    @editable
+    var ExclusiveInt<public>:type{_X:int where 0 < _X} = 1
+
     # A Godot reference the scene may leave unassigned, which is every Godot reference: nothing can
     # force a value into an inspector slot. The option is what lets the member hold that.
     @editable

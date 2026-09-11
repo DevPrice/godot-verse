@@ -78,10 +78,19 @@ struct FExportDesc
     bool bIsVar{false};
 
     /// The inspector hint the *declaration* implies -- a range off a constrained int or float,
-    /// the enumerators of an enum, the class of a Godot reference. vh_export_hint, with the
-    /// string spelled the way Godot's hint wants it.
+    /// the enumerators of an enum, the class of a Godot reference. vh_export_hint.
     int32 Hint{VH_EXPORT_HINT_NONE};
+    /// The enumerators or the class name; a range speaks through the bounds below instead.
     FUtf8String HintString;
+
+    /// The bounds of a constrained number, absent rather than infinite at an end the type leaves
+    /// open. Exclusive is a guess and only ever a float's: see LooksLikeStrictBound.
+    double RangeMin{0.0};
+    double RangeMax{0.0};
+    bool bHasRangeMin{false};
+    bool bHasRangeMax{false};
+    bool bRangeMinExclusive{false};
+    bool bRangeMaxExclusive{false};
 
     /// The inspector group this member opens, empty for one that opens none.
     FUtf8String Category;
