@@ -33,6 +33,8 @@
 #include "VerseVM/VVMRestValue.h"
 #include "VerseVM/VVMClass.h"
 #include "VerseVM/VVMCoroutine.h"
+#include "VerseVM/Inline/VVMEnumerationInline.h"
+#include "VerseVM/VVMEnumerator.h"
 #include "VerseVM/VVMFalse.h"
 #include "VerseVM/VVMOption.h"
 #include "VerseVM/VVMInt.h"
@@ -996,10 +998,13 @@ AUTORTFM_DISABLE void DescribeExportType(const uLang::CTypeBase* Type, const uLa
 
     if (const CEnumeration* Enumeration = Normal->AsNullable<CEnumeration>())
     {
+        // The ordinal, which is what GDScript and C# store too -- including the trap that reordering
+        // the enumerators reinterprets every scene already saved.
         OutDesc.Type = VH_TYPE_INT;
         OutDesc.VariantTag = VH_VARIANT_INT;
         OutDesc.Hint = VH_EXPORT_HINT_ENUM;
         OutDesc.HintString = EnumeratorList(*Enumeration);
+        OutDesc.Reject = VH_EXPORT_OK;
         return;
     }
 
@@ -1102,6 +1107,10 @@ struct FMemberType
     /// The mirrored struct a member is declared as, which is where its field names come from --
     /// there is nothing in a value to read them off.
     const FStructLayout* Struct = nullptr;
+    /// How many enumerators the declared enum has, or 0 for a member that is not one. The ordinal
+    /// that crosses has to be checked against this, and the value in the slot cannot say: an enum
+    /// over a native UEnum property is stored as the number itself.
+    int32 EnumeratorCount = 0;
     /// What the export description makes of the same type. An array's element kind comes from here
     /// rather than from a classification of its own: the value cannot say -- an empty array has no
     /// element to look at, and the description is the answer the Godot side was already given.
@@ -1155,6 +1164,14 @@ AUTORTFM_DISABLE FMemberType DescribeMemberType(FUtf8StringView ClassName, FUtf8
             else if (ClassOriginOf(*Declared, *Program) == EClassOrigin::Mirrored)
             {
                 Result.Struct = FindStructLayout(FUtf8StringView(Declared->AsNameCString()));
+            }
+        }
+        else if (const uLang::CEnumeration* Enumeration = Normal ? Normal->AsNullable<uLang::CEnumeration>() : nullptr)
+        {
+            for (const uLang::TSRef<uLang::CEnumerator>& Enumerator : Enumeration->GetDefinitionsOfKind<uLang::CEnumerator>())
+            {
+                (void)Enumerator;
+                ++Result.EnumeratorCount;
             }
         }
         break;
@@ -1458,6 +1475,16 @@ AUTORTFM_DISABLE bool ReadFieldOf(UObject* Object, FUtf8StringView FieldName, vh
         {
             OutValue.Type = VH_TYPE_FLOAT;
             OutValue.Float = Value.AsFloat().AsDouble();
+        }
+        else if (const Verse::VEnumerator* Enumerator = Value.DynamicCast<Verse::VEnumerator>())
+        {
+            // An enum member holds an enumerator, which is a cell and not a number -- so this is the
+            // read, and `IsInt` above never sees one. The ordinal is what crosses, because that is
+            // what Godot stores; the names reach only the inspector's dropdown, which is also why
+            // reordering a Verse enum silently reinterprets every scene already saved.
+            OutValue.Type = VH_TYPE_INT;
+            OutValue.VariantTag = VH_VARIANT_INT;
+            OutValue.Int = Enumerator->GetIntValue();
         }
         else if (Verse::VValueObject* Struct = Value.DynamicCast<Verse::VValueObject>())
         {
@@ -1802,6 +1829,19 @@ AUTORTFM_DISABLE bool WriteFieldOf(UObject* Object, FUtf8StringView FieldName, c
         return WriteReferenceField(Object, FieldName, Mode, Referenced);
     }
 
+    // An enum arrives as its ordinal, which is indistinguishable from any other int. The bound is
+    // taken from the enum the author declared rather than from the VM's own enumerator count, which
+    // is not the same number. An ordinal outside it is refused rather than clamped: a scene saved
+    // against a longer version of the enum will carry one, and it has no enumerator to become.
+    if (Value.Type == VH_TYPE_INT)
+    {
+        const int32 EnumeratorCount = DescribeMemberType(FUtf8String(Object->GetClass()->GetName()), FieldName).EnumeratorCount;
+        if (EnumeratorCount > 0 && (Value.Int < 0 || Value.Int >= EnumeratorCount))
+        {
+            return false;
+        }
+    }
+
     // A struct and an array both arrive as a sequence of numbers that says nothing about what it is:
     // the field names of the one and the element type of the other are carried only by the declared
     // type, which is where DescribeExportType already worked them out for the export list.
@@ -1848,7 +1888,24 @@ AUTORTFM_DISABLE bool WriteFieldOf(UObject* Object, FUtf8StringView FieldName, c
         case VH_TYPE_LOGIC:
             return Verse::VValue::FromBool(Value.Logic != 0);
         case VH_TYPE_INT:
+        {
+            // An enum member holds an enumerator rather than a number, and the enumeration it belongs
+            // to is reachable only from the enumerator already in the slot -- the usual rule here,
+            // that the new value's kind comes from the one it replaces. WriteFieldOf has already
+            // bounded the ordinal against the enum the author declared.
+            Verse::VRef* const Box = Current.DynamicCast<Verse::VRef>();
+            const Verse::VValue Inner = Box ? Box->Get(Context) : Current;
+            if (Verse::VEnumerator* Enumerator = Inner.DynamicCast<Verse::VEnumerator>())
+            {
+                Verse::VEnumeration* const Enumeration = Enumerator->GetEnumeration();
+                if (!Enumeration || Value.Int < 0 || Value.Int >= Enumeration->NumEnumerators)
+                {
+                    return Verse::VValue();
+                }
+                return Verse::VValue(Enumeration->GetEnumeratorChecked((int32)Value.Int));
+            }
             return Verse::VValue(Verse::VInt(Context, Value.Int));
+        }
         case VH_TYPE_FLOAT:
             return Verse::VValue(Verse::VFloat(Value.Float));
         case VH_TYPE_STRING:

@@ -256,6 +256,13 @@ snapshot, made by freezing each element in turn, so an element has to be freezab
 not. Every `VArrayBase` constructor sets the deeply-mutable flag and nothing clears it, while `VArray`
 has no `FreezeImpl`, so the elements of a `var []string` have to be mutable arrays too.
 
+**An enum crosses as its ordinal**, which is what GDScript and C# store too, with the enumerators as
+the choices the inspector's dropdown offers — including the trap that reordering them reinterprets
+every scene already saved. The value in the slot is an enumerator rather than a number, so a write
+takes the enumeration from the one already there; the ordinal is bounded against the enum the author
+*declared* rather than against the VM's count, and one outside it is refused rather than clamped,
+because a scene saved against a longer version of the enum will carry one.
+
 Reading is uniform — the option is unwrapped and the handle reported — with one wrinkle that decides
 the shape of the whole read path. Verse spells an empty `option` and `logic` false with the same
 cell, so a member holding nothing cannot be told from a member holding false by looking at it. The

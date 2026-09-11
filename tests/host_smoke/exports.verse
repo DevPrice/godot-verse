@@ -1,5 +1,9 @@
 using { /Godot.org/Godot }
 
+# An enum, which the inspector draws as a dropdown. Declared outside the class because a member's
+# type has to exist before the member does, and the project shares one flat scope either way.
+exports_mode := enum{Idle, Walking, Running}
+
 # Fixture for the export-list checks. Named after the file, like any script: the host looks the
 # class up at /user@localhost/exports.
 exports := class(object):
@@ -91,6 +95,11 @@ exports := class(object):
     @export
     var Path<public>:[]vector2 = array{vector2{X := 1.0, Y := 2.0}}
 
+    # An enum, which crosses as the ordinal Godot stores and reports its enumerators as the choices
+    # the dropdown offers.
+    @export
+    var Mode<public>:exports_mode = exports_mode.Walking
+
     # What ReadTarget saw, so the ABI can read back the interpreter's own answer.
     @export
     var TargetSeen<public>:logic = false
@@ -171,6 +180,15 @@ exports := class(object):
         set ArraysSeen = -1.0
         if (P := Path[0]):
             set ArraysSeen = P.Y
+
+    # An enumerator is a value of its own, not a number, so comparing one is what says the write put
+    # the enumeration's own enumerator there rather than something shaped like an int.
+    ReadMode<public>():void =
+        set ArraysSeen = -1.0
+        if (Mode = exports_mode.Running):
+            set ArraysSeen = 2.0
+        else if (Mode = exports_mode.Idle):
+            set ArraysSeen = 0.0
 
 # Exists only to give the symbol lookup a Godot API method to resolve against. Analysis never
 # needs a real node behind it, and nothing instantiates this.

@@ -1138,6 +1138,16 @@ int main(int argc, char** argv)
 					FindExport("Speeds") && FindExport("Speeds")->ElementVariantTag == VH_VARIANT_NIL)
 			 && ExportsOk;
 
+	// An enum crosses as the ordinal Godot stores, with the enumerators as the choices its dropdown
+	// offers -- in declaration order, because the ordinal indexes into that order.
+	const vh_export_desc* ModeExport = FindExport("Mode");
+	ExportsOk = Step("an enum exports as an int and names its enumerators",
+					ModeExport && ModeExport->Reject == VH_EXPORT_OK
+						&& ModeExport->Type == VH_TYPE_INT && ModeExport->VariantTag == VH_VARIANT_INT
+						&& ModeExport->Hint == VH_EXPORT_HINT_ENUM
+						&& TextOf(ModeExport->HintStringUtf8, ModeExport->HintStringLen) == "Idle,Walking,Running")
+			 && ExportsOk;
+
 	const vh_export_desc* StrangerExport = FindExport("Stranger");
 	ExportsOk = Step("a reference to an unregistered one is refused, and says which it was",
 					StrangerExport && StrangerExport->Reject == VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL
@@ -1394,6 +1404,28 @@ int main(int argc, char** argv)
 					 && V.Seq.Items[0].Seq.Items[1].Float == 5.0;
 			 }));
 
+		// An enum reads as the ordinal of the enumerator it holds, and is written with one.
+		const vh_value* ModeValue = nullptr;
+		Step("an enum reads as its ordinal",
+			 GetFieldFn(Instance, "Mode", &ModeValue) == VH_OK && ModeValue != nullptr
+				 && ModeValue->Type == VH_TYPE_INT && ModeValue->Int == 1);
+
+		vh_value NewMode{};
+		NewMode.Type = VH_TYPE_INT;
+		NewMode.Int = 2;
+		Step("set/get an enum round-trips",
+			 RoundTrip("Mode", NewMode, [](const vh_value& V) { return V.Type == VH_TYPE_INT && V.Int == 2; }));
+
+		// A scene saved against a longer version of the enum carries an ordinal the enumeration no
+		// longer has, and GetEnumeratorChecked dies on one -- so it is refused here.
+		vh_value PastTheEnd{};
+		PastTheEnd.Type = VH_TYPE_INT;
+		PastTheEnd.Int = 3;
+		Step("an ordinal past the last enumerator is refused, not clamped",
+			 SetFieldFn(Instance, "Mode", &PastTheEnd) == VH_ERR_NOT_FOUND);
+		Step("and the refused write left the enumerator alone",
+			 GetFieldFn(Instance, "Mode", &ModeValue) == VH_OK && ModeValue != nullptr && ModeValue->Int == 2);
+
 		// A member typed as one of the project's own classes refuses a handle: the object it should
 		// hold already exists, and vh_instance_set_field_instance is how it is handed over.
 		Step("a script-class reference refuses a bare handle",
@@ -1497,6 +1529,11 @@ int main(int argc, char** argv)
 		Step("and a logic array", VerseReadsArray("(/user@localhost/exports:)ReadFlags") == 1000.0);
 		Step("and reads a field off an element of a struct array it was handed",
 			 VerseReadsArray("(/user@localhost/exports:)ReadPath") == 5.0);
+
+		// An enumerator is a value of its own rather than a number, so comparing one from Verse is
+		// what says the write put the enumeration's own enumerator in the slot.
+		Step("Verse compares the enumerator it was handed against its own",
+			 VerseReadsArray("(/user@localhost/exports:)ReadMode") == 2.0);
 
 		// Bump sealed the instance. From here Verse has observed the members, so the author's
 		// `var` is the whole of what may still change.

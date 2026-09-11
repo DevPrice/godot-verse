@@ -631,8 +631,12 @@ Dictionary property_for(const Dictionary &p_entry, Variant::Type p_type) {
 			break;
 		}
 		case VH_EXPORT_HINT_ENUM:
-			// The host rejects a member carrying this hint until its *value*, not just its declared
-			// type, can cross the ABI -- an enum's ordinal -- so no property is built from one yet.
+			// The enumerators, comma separated in declaration order, which is what Godot's enum hint
+			// wants and what the stored ordinal indexes into. Spelled as the author wrote them: the
+			// names are what the dropdown shows and nothing resolves them back.
+			property["hint"] = (int64_t)PROPERTY_HINT_ENUM;
+			property["hint_string"] = p_entry["hint_string"];
+			break;
 		case VH_EXPORT_HINT_NONE:
 		default:
 			// An untyped Array is the one property that needs a hint nothing asked for. Godot's

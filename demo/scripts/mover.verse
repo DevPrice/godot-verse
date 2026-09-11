@@ -1,5 +1,9 @@
 using { /Godot.org/Godot }
 
+# The one flat scope the whole project shares means this name is taken for every other file too, so
+# an enum meant for one script is named after it.
+mover_direction := enum{Right, Left}
+
 # Named after the file. A script that defines a class named after itself is attached to a node as
 # that class: the host instantiates it against the node and Ready/Process are its methods, not
 # free functions, so `Self` is the node and no GetNode lookup is needed.
@@ -27,6 +31,12 @@ mover := class(node2d):
 	@export
 	var Speeds<public>:[]float = array{60.0, 120.0}
 
+	# An enum, which the inspector draws as a dropdown of the enumerators. Godot stores the ordinal,
+	# as GDScript and C# do -- including the trap that reordering the enumerators reinterprets every
+	# scene already saved.
+	@export
+	var Direction<public>:mover_direction = mover_direction.Right
+
 	# A reference the scene fills in, which is why it is an option: nothing can force a value into
 	# an inspector slot, and `sprite2d{}` would be a handle of 0 -- dead before the scene loaded.
 	# The type is the whole of the hint, so the picker offers Sprite2D nodes and nothing else.
@@ -49,5 +59,8 @@ mover := class(node2d):
 			set Sprite.Modulate = Tint
 
 	Process<override>(Delta:float):void =
-		set Position = vector2{X := Position.X + Delta * Speed, Y := Position.Y}
+		var Step:float = Delta * Speed
+		if (Direction = mover_direction.Left):
+			set Step = -Step
+		set Position = vector2{X := Position.X + Step, Y := Position.Y}
 		Print("Mover x = {Position.X}")

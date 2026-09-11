@@ -429,6 +429,27 @@ elements were cells died — inside the interpreter, three assertions later. The
 container from Verse through a function of its own for exactly that reason. One oracle for all five
 said only that something was wrong.
 
+### Enums
+
+The ordinal, which is what GDScript and C# store, with `PROPERTY_HINT_ENUM` listing the enumerators in
+declaration order — so the stored number indexes into that order, and reordering a Verse enum silently
+reinterprets every scene already saved. That trap is inherited deliberately: the alternative is storing
+the name, which no other Godot language does and which would make a renamed enumerator the breaking
+change instead.
+
+The value in the slot is a `VEnumerator` cell, not a number. So the read answers before the `IsInt`
+test ever sees it, and the write takes the enumeration from the enumerator already there
+(`VEnumerator::GetEnumeration`) and asks it for the one at the ordinal. Both of those were worth
+*checking* rather than assuming: an earlier version wrote a plain `VInt`, and the ABI round-trip passed
+on it — the read agreed with the write, exactly as the string-representation bug did, and only
+comparing the member against `mode.Running` from Verse disagreed.
+
+The bound on the ordinal comes from the declared enum rather than from `VEnumeration::NumEnumerators`,
+which is not the same number — an ordinal past the author's last enumerator was accepted when the VM's
+count was the test. An out-of-range write is refused rather than clamped, because the case that
+produces one is a scene saved against a longer version of the enum, and silently moving that value to
+the nearest enumerator would be a wrong answer that looks like a right one.
+
 ## Roadmap
 
 Ordered to front-load the cheap work. Bands, not estimates; item 4 is the one with real unknowns.
@@ -447,14 +468,14 @@ Ordered to front-load the cheap work. Bands, not estimates; item 4 is the one wi
    `@export` member may be written — that is initialization, and it is how a non-var gets a
    value at all. Sealed, only a `var` may be. The rule needs no new ABI call and no cooperation
    from the GDExtension: `InstanceCallVoid` sets the flag, and `Ready` is a call.
-5. **Type coverage** — incremental. References, structs and arrays are done at ABI 26: an optional
-   reference to a mirrored class or to a registered script class carries its value both ways, filtered
-   in the inspector by node or resource type; `vector2`/`vector3`/`color` cross as tagged tuples; and
-   an array becomes the packed container Godot has for its element. An enum is still classified and
-   held at `VH_EXPORT_UNSUPPORTED_TYPE` until its ordinal can cross, and arrays *of references* are
-   refused for the reason a bare reference is. Maps remain awkward on principle, and `?float` stays
-   refused: Godot has no option type, so it would have to become either a nullable Variant or a
-   two-property pair.
+5. ~~**Type coverage**~~ — **done** for everything the plan set out, at ABI 26: an optional reference
+   to a mirrored class or to a registered script class, filtered in the inspector by node or resource
+   type; `vector2`/`vector3`/`color` as tagged tuples; an array as the packed container Godot has for
+   its element, or an `Array` naming what it holds; and an enum as its ordinal. What is left refused is
+   refused for a reason rather than for want of work: an array *of* references, because `[]node2d`
+   cannot hold the empty element an array editor starts a row as; a map, which Godot has no shape for;
+   and `?float`, because Godot has no option type, so it would have to become either a nullable Variant
+   or a two-property pair. Each of those reaches the author as a warning on the line that declared it.
 6. **Per-instance values in the editor.** A non-tool script gets a `PlaceHolderScriptInstance`,
    which holds Godot's own copy of the values and never reaches Verse. Declared defaults and
    stored overrides both display correctly through it, but an `@export` member whose value the
@@ -501,6 +522,10 @@ For structs and arrays: that each reports the Godot type to rebuild it as, that 
 its components and is refused when the wrong number of them arrives, that every array container
 round-trips including emptied and refilled, and that Verse indexes each one afterwards — through a
 function per container, so a failure says which.
+
+For enums: that one exports as an int naming its enumerators in order, that the ordinal round-trips,
+that an ordinal past the last enumerator is refused and leaves the member alone, and that Verse then
+compares the member against its own enumerator — the assertion a round-trip cannot make.
 
 Properties are published `PROPERTY_USAGE_DEFAULT | SCRIPT_VARIABLE`: exported and stored, var or
 not. Verified in a running Godot 4.7 as well as the harness — `demo/main.tscn` stores a `var
