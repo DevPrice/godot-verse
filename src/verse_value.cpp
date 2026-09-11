@@ -38,6 +38,20 @@
 
 using namespace godot;
 
+VerseArena::VerseArena() {
+	arena.Alloc = &VerseArena::alloc;
+}
+
+void *VerseArena::alloc(vh_arena *p_self, size_t p_size, size_t p_align) {
+	// new[] is aligned for any fundamental type, which covers every alignment a vh_value asks for.
+	if (p_size == 0 || p_align > alignof(std::max_align_t)) {
+		return nullptr;
+	}
+	VerseArena *self = reinterpret_cast<VerseArena *>(p_self);
+	self->blocks.push_back(std::make_unique<uint8_t[]>(p_size));
+	return self->blocks.back().get();
+}
+
 namespace {
 
 bool alloc_string(vh_arena *p_arena, const CharString &p_utf8, vh_value &r_out) {

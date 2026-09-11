@@ -66,9 +66,21 @@ exports := class(object):
     @export
     var Stranger<public>:?exports_unregistered = false
 
+    # A mirrored struct, which Epic's `editable` refused outright for not being concrete and which
+    # Godot draws with an editor of its own.
+    @export
+    var Offset<public>:vector2 = vector2{X := 1.0, Y := 2.0}
+
+    @export
+    var Tint<public>:color = color{R := 0.25, G := 0.5, B := 0.75, A := 1.0}
+
     # What ReadTarget saw, so the ABI can read back the interpreter's own answer.
     @export
     var TargetSeen<public>:logic = false
+
+    # The same, for a struct: the X the interpreter reads out of whatever was written.
+    @export
+    var OffsetSeen<public>:float = 0.0
 
     # No attribute, so it must not appear in the export list.
     Hidden<public>:int = 7
@@ -102,6 +114,12 @@ exports := class(object):
             set TargetSeen = true
         else:
             set TargetSeen = false
+
+    # The same oracle for a struct. Reading a field goes through the object's own shape, so a struct
+    # built with the wrong emergent type -- or with a field the shape does not carry -- fails here
+    # rather than reading back as the numbers that were put in.
+    ReadOffset<public>():void =
+        set OffsetSeen = Offset.X + Tint.B
 
 # Exists only to give the symbol lookup a Godot API method to resolve against. Analysis never
 # needs a real node behind it, and nothing instantiates this.

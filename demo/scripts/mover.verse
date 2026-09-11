@@ -28,10 +28,17 @@ mover := class(node2d):
 	@export_group("Sprite")
 	var Target<public>:?sprite2d = false
 
+	# A struct, which the inspector draws with an editor of its own -- a colour picker here, a pair
+	# of spinboxes for a vector2. Epic's `editable` refused these outright for not being concrete,
+	# which is the concrete reason this bridge declares its own attribute.
+	@export
+	var Tint<public>:color = color{R := 1.0, G := 1.0, B := 1.0, A := 1.0}
+
 	Ready<override>():void =
 		Print(Greeting)
 		if (Sprite := Target?):
 			set Sprite.FlipH = true
+			set Sprite.Modulate = Tint
 
 	Process<override>(Delta:float):void =
 		set Position = vector2{X := Position.X + Delta * Speed, Y := Position.Y}

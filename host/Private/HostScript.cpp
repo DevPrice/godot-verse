@@ -23,6 +23,7 @@
 #include "UObject/StrongObjectPtr.h"
 #include "VerseVM/Inline/VVMRefInline.h"
 #include "VerseVM/Inline/VVMValueInline.h"
+#include "VerseVM/Inline/VVMValueObjectInline.h"
 #include "VerseVM/Inline/VVMVerseClassInline.h"
 #include "VerseVM/VVMArray.h"
 #include "VerseVM/VVMMutableArray.h"
@@ -35,6 +36,8 @@
 #include "VerseVM/VVMFalse.h"
 #include "VerseVM/VVMOption.h"
 #include "VerseVM/VVMInt.h"
+#include "VerseVM/VVMFloat.h"
+#include "VerseVM/VVMValueObject.h"
 #include "VerseVM/VVMOpResult.h"
 #include "VerseVM/VVMVerseClass.h"
 #include "VerseVM/VVMGlobalProgram.h"
@@ -772,6 +775,55 @@ AUTORTFM_DISABLE EClassOrigin ClassOriginOf(const uLang::CClass& Class, const uL
     return EClassOrigin::Other;
 }
 
+/// A mirrored struct whose value can cross, and the fields the Godot type is built from.
+///
+/// Order is Godot's, not the declaration's: the wire carries a tuple of numbers and the consumer
+/// rebuilds a Vector2 or a Color by position, so these are the positions. Verse's own struct
+/// declarations in GodotApi.native.verse happen to agree, which is convenient and not the contract.
+struct FStructLayout
+{
+    const char* VerseName;
+    int32 VariantTag;
+    /// Null-terminated, so a two-field struct does not have to pretend to have four.
+    const char* Fields[5];
+};
+
+constexpr FStructLayout StructLayouts[] = {
+    {"vector2", VH_VARIANT_VECTOR2, {"X", "Y", nullptr}},
+    {"vector3", VH_VARIANT_VECTOR3, {"X", "Y", "Z", nullptr}},
+    {"color", VH_VARIANT_COLOR, {"R", "G", "B", "A", nullptr}},
+};
+
+AUTORTFM_DISABLE const FStructLayout* FindStructLayout(FUtf8StringView VerseName)
+{
+    for (const FStructLayout& Layout : StructLayouts)
+    {
+        if (VerseName.Equals(FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(Layout.VerseName))))
+        {
+            return &Layout;
+        }
+    }
+    return nullptr;
+}
+
+AUTORTFM_DISABLE int32 StructFieldCount(const FStructLayout& Layout)
+{
+    int32 Count = 0;
+    while (Layout.Fields[Count] != nullptr)
+    {
+        ++Count;
+    }
+    return Count;
+}
+
+/// The decorated shape key for a field of a mirrored struct. The same decoration ShapeKeyFor
+/// applies, qualified by the struct's own class rather than by a script's.
+AUTORTFM_DISABLE FUtf8String StructFieldKey(const FStructLayout& Layout, const char* Field)
+{
+    return FUtf8String(UTF8TEXT("(")) + GodotVersePath + UTF8TEXT("/") + Layout.VerseName
+        + UTF8TEXT(":)") + Field;
+}
+
 /// What the inspector can make of a member's declared type: the value's shape on the wire, the
 /// Godot type to rebuild it as, the hint the declaration itself implies, and -- when the answer is
 /// that it cannot be exported at all -- why.
@@ -800,9 +852,29 @@ AUTORTFM_DISABLE void DescribeExportType(const uLang::CTypeBase* Type, const uLa
         const CClass* ObjectClass = GodotObjectClass(Program);
         if (!ObjectClass || !Class->IsSubtypeOf(*ObjectClass))
         {
-            // A struct -- vector2, color -- or a class the script wrote. Neither is a reference,
-            // so an option around one is asking for an empty slot Godot has no way to draw.
-            OutDesc.Reject = bIsOption ? VH_EXPORT_OPTION_NOT_OBJECT : VH_EXPORT_UNSUPPORTED_TYPE;
+            // Not a reference, so an option around it is asking for an empty slot Godot has no way
+            // to draw -- that much is true of a struct and of a class the script wrote alike.
+            if (bIsOption)
+            {
+                OutDesc.Reject = VH_EXPORT_OPTION_NOT_OBJECT;
+                return;
+            }
+
+            // A mirrored struct is a value the inspector draws with an editor of its own: a colour
+            // picker, a pair of spinboxes. It crosses as the numbers it is made of, tagged with
+            // which Godot type to rebuild from them.
+            const FStructLayout* Layout = ClassOriginOf(*Class, Program) == EClassOrigin::Mirrored
+                ? FindStructLayout(FUtf8StringView(Class->AsNameCString()))
+                : nullptr;
+            if (Layout)
+            {
+                OutDesc.Type = VH_TYPE_TUPLE;
+                OutDesc.VariantTag = Layout->VariantTag;
+                OutDesc.Reject = VH_EXPORT_OK;
+                return;
+            }
+
+            OutDesc.Reject = VH_EXPORT_UNSUPPORTED_TYPE;
             return;
         }
 
@@ -948,6 +1020,9 @@ struct FMemberType
     /// for a member of any other type.
     const uLang::CClass* ReferenceClass = nullptr;
     EClassOrigin ReferenceOrigin = EClassOrigin::Other;
+    /// The mirrored struct a member is declared as, which is where its field names come from --
+    /// there is nothing in a value to read them off.
+    const FStructLayout* Struct = nullptr;
 };
 
 AUTORTFM_DISABLE FMemberType DescribeMemberType(FUtf8StringView ClassName, FUtf8StringView FieldName)
@@ -983,19 +1058,103 @@ AUTORTFM_DISABLE FMemberType DescribeMemberType(FUtf8StringView ClassName, FUtf8
         bool bIsOption = false;
         const uLang::CTypeBase* Type = Member->GetType();
         const uLang::CNormalType* Normal = Type ? &UnwrapDeclaredType(*Type, bIsOption) : nullptr;
-        // Only the optional form is a reference this can marshal, which is the same rule
-        // DescribeExportType refuses a bare one by.
-        if (bIsOption && Normal)
+        if (const uLang::CClass* Declared = Normal ? Normal->AsNullable<uLang::CClass>() : nullptr)
         {
-            if (const uLang::CClass* Referenced = Normal->AsNullable<uLang::CClass>())
+            // Only the optional form is a reference this can marshal, which is the same rule
+            // DescribeExportType refuses a bare one by; a struct is the other way round, since
+            // there is no empty struct for an option to hold.
+            if (bIsOption)
             {
-                Result.ReferenceClass = Referenced;
-                Result.ReferenceOrigin = ClassOriginOf(*Referenced, *Program);
+                Result.ReferenceClass = Declared;
+                Result.ReferenceOrigin = ClassOriginOf(*Declared, *Program);
+            }
+            else if (ClassOriginOf(*Declared, *Program) == EClassOrigin::Mirrored)
+            {
+                Result.Struct = FindStructLayout(FUtf8StringView(Declared->AsNameCString()));
             }
         }
         break;
     }
     return Result;
+}
+
+/// Reads Layout's fields off a struct value into OutItems, in Layout's order. False if any field is
+/// missing or is not a number, which would otherwise hand the consumer a tuple it cannot rebuild.
+AUTORTFM_DISABLE bool ReadStructFields(Verse::FRunningContext Context,
+                                      Verse::VValueObject& Struct,
+                                      const FStructLayout& Layout,
+                                      TArray<vh_value>& OutItems)
+{
+    const int32 Count = StructFieldCount(Layout);
+    // Reserved once, because OutItems is what Seq.Items will point into.
+    OutItems.Reserve(Count);
+    for (int32 Index = 0; Index < Count; ++Index)
+    {
+        Verse::VUniqueString& Key = Verse::VUniqueString::New(Context, FUtf8StringView(StructFieldKey(Layout, Layout.Fields[Index])));
+        const Verse::FOpResult Field = Struct.LoadField(Context, Key);
+        if (!Field.IsReturn() || !Field.Value.IsFloat())
+        {
+            return false;
+        }
+        vh_value Item{};
+        Item.Type = VH_TYPE_FLOAT;
+        Item.Float = Field.Value.AsFloat().AsDouble();
+        OutItems.Add(Item);
+    }
+    return true;
+}
+
+/// A fresh struct value of the same class as Current, with Layout's fields taken from Items.
+///
+/// The archetype is built from Layout's fields rather than taken from the class, and that is the
+/// whole of the difficulty here. A field the class declares with an initializer -- which every field
+/// of `vector2` has -- is *raised to the shape* as a `Constant`, shared by every instance, and a
+/// constant has no per-instance slot to write: `VObject::SetField` reaches `VERSE_UNREACHABLE` on one
+/// (`Inline/VVMObjectInline.h:73`). An archetype of `ObjectField` entries is what asks for the slots
+/// instead, and `CreateField` is what marks each as present before it is written. This is the same
+/// sequence `VNativeRef::FromNativeStruct` uses to hand a native struct to ordinary Verse code
+/// (`VVMNativeRef.cpp:492-513`).
+///
+/// `NewVObject` rather than a lower-level allocation because it is what marks a struct deeply mutable
+/// (`VVMClass.cpp:333-336`); an object built any other way does not compare or freeze like one.
+AUTORTFM_DISABLE Verse::VValue NewStructLike(Verse::FRunningContext Context,
+                                             Verse::VValueObject& Current,
+                                             const FStructLayout& Layout,
+                                             const vh_value* Items,
+                                             int32 ItemCount)
+{
+    const int32 Count = StructFieldCount(Layout);
+    if (ItemCount != Count)
+    {
+        return Verse::VValue();
+    }
+
+    TArray<Verse::VUniqueString*> Keys;
+    TArray<Verse::VArchetype::VEntry> Entries;
+    Keys.Reserve(Count);
+    Entries.Reserve(Count);
+    for (int32 Index = 0; Index < Count; ++Index)
+    {
+        Verse::VUniqueString& Key =
+            Verse::VUniqueString::New(Context, FUtf8StringView(StructFieldKey(Layout, Layout.Fields[Index])));
+        Keys.Add(&Key);
+        Entries.Add(Verse::VArchetype::VEntry::ObjectField(Context, Key));
+    }
+
+    Verse::VArchetype& Archetype = Verse::VArchetype::New(Context, Verse::VValue(), Entries);
+    Verse::VValueObject& Struct = Current.GetClass().NewVObject(Context, Archetype);
+    for (int32 Index = 0; Index < Count; ++Index)
+    {
+        const double Number = Items[Index].Type == VH_TYPE_FLOAT
+            ? Items[Index].Float
+            : (Items[Index].Type == VH_TYPE_INT ? (double)Items[Index].Int : 0.0);
+        if (!Struct.CreateField(Context, *Keys[Index])
+            || !Struct.SetField(Context, *Keys[Index], Verse::VValue(Verse::VFloat(Number))).IsReturn())
+        {
+            return Verse::VValue();
+        }
+    }
+    return Verse::VValue(Struct);
 }
 
 /// The Godot handle a Verse wrapper carries, or 0 for a value that is not one.
@@ -1016,7 +1175,7 @@ AUTORTFM_DISABLE FUtf8String ShapeKeyFor(UObject* Object, FUtf8StringView FieldN
 
 /// Reads FieldName off Object. Returns false for a field the shape does not carry, and for any
 /// Verse type with no vh_value counterpart.
-AUTORTFM_DISABLE bool ReadFieldOf(UObject* Object, FUtf8StringView FieldName, vh_value& OutValue, FUtf8String& OutStorage)
+AUTORTFM_DISABLE bool ReadFieldOf(UObject* Object, FUtf8StringView FieldName, vh_value& OutValue, GodotVerse::FFieldStorage& OutStorage)
 {
     if (!Object)
     {
@@ -1025,7 +1184,8 @@ AUTORTFM_DISABLE bool ReadFieldOf(UObject* Object, FUtf8StringView FieldName, vh
 
     OutValue = vh_value{};
     OutValue.VariantTag = VH_VARIANT_NIL;
-    OutStorage.Reset();
+    OutStorage.Text.Reset();
+    OutStorage.Items.Reset();
 
     bool bRead = false;
     Verse::FRunningContext Context = Verse::FRunningContextPromise{};
@@ -1116,15 +1276,35 @@ AUTORTFM_DISABLE bool ReadFieldOf(UObject* Object, FUtf8StringView FieldName, vh
             OutValue.Type = VH_TYPE_FLOAT;
             OutValue.Float = Value.AsFloat().AsDouble();
         }
+        else if (Verse::VValueObject* Struct = Value.DynamicCast<Verse::VValueObject>())
+        {
+            // A mirrored struct: vector2, color. The fields are read by name, and the names come
+            // from the declared type -- the value carries its field keys but not which order a
+            // Godot Vector2 wants them in, and positions are the whole of what crosses.
+            const FStructLayout* Layout =
+                DescribeMemberType(FUtf8String(Object->GetClass()->GetName()), FieldName).Struct;
+            if (!Layout)
+            {
+                return;
+            }
+            if (!ReadStructFields(Context, *Struct, *Layout, OutStorage.Items))
+            {
+                return;
+            }
+            OutValue.Type = VH_TYPE_TUPLE;
+            OutValue.VariantTag = Layout->VariantTag;
+            OutValue.Seq.Items = OutStorage.Items.GetData();
+            OutValue.Seq.Count = OutStorage.Items.Num();
+        }
         else if (const Verse::VArrayBase* Array = Value.DynamicCast<Verse::VArrayBase>())
         {
             // Verse `string` is `[]char`, so a string arrives as an array of char8. VArrayBase
             // rather than VArray because a `var` of a container type holds a VMutableArray -- the
             // mutability lives in the container itself, not in a reference around it.
-            OutStorage = FUtf8String(Array->AsStringView());
+            OutStorage.Text = FUtf8String(Array->AsStringView());
             OutValue.Type = VH_TYPE_STRING;
-            OutValue.String.Utf8 = reinterpret_cast<const char*>(*OutStorage);
-            OutValue.String.Len = OutStorage.Len();
+            OutValue.String.Utf8 = reinterpret_cast<const char*>(*OutStorage.Text);
+            OutValue.String.Len = OutStorage.Text.Len();
         }
         else
         {
@@ -1334,6 +1514,27 @@ AUTORTFM_DISABLE bool WriteFieldOf(UObject* Object, FUtf8StringView FieldName, c
         return WriteReferenceField(Object, FieldName, Mode, Referenced);
     }
 
+    // A mirrored struct, whose field names only the declared type carries -- the value arriving is a
+    // tuple of numbers and says nothing about what they are called.
+    if (Value.Type == VH_TYPE_TUPLE)
+    {
+        const FStructLayout* const Layout = DescribeMemberType(FUtf8String(Object->GetClass()->GetName()), FieldName).Struct;
+        if (!Layout)
+        {
+            return false;
+        }
+        return WriteFieldWith(Object, FieldName, Mode, [&Value, Layout](Verse::FRunningContext Context, Verse::VValue Current) {
+            // Cloned from the struct already in the slot, which is the same discipline every write
+            // here follows: the class comes from the value being replaced, so the new one cannot be
+            // of a class the compiled code was not expecting.
+            Verse::VRef* const Box = Current.DynamicCast<Verse::VRef>();
+            const Verse::VValue Inner = Box ? Box->Get(Context) : Current;
+            Verse::VValueObject* const Struct = Inner.DynamicCast<Verse::VValueObject>();
+            return Struct ? NewStructLike(Context, *Struct, *Layout, Value.Seq.Items, Value.Seq.Count)
+                          : Verse::VValue();
+        });
+    }
+
     return WriteFieldWith(Object, FieldName, Mode, [&Value](Verse::FRunningContext Context, Verse::VValue Current) {
         switch (Value.Type)
         {
@@ -1404,7 +1605,7 @@ AUTORTFM_DISABLE bool GodotVerse::WriteInstanceFieldInstance(FInstance* Instance
                                Instance->bSealed ? EFieldWrite::Assign : EFieldWrite::Initialize, Referenced);
 }
 
-AUTORTFM_DISABLE bool GodotVerse::ReadInstanceField(const FInstance* Instance, FUtf8StringView FieldName, vh_value& OutValue, FUtf8String& OutStorage)
+AUTORTFM_DISABLE bool GodotVerse::ReadInstanceField(const FInstance* Instance, FUtf8StringView FieldName, vh_value& OutValue, FFieldStorage& OutStorage)
 {
     if (!Instance || !Instance->Object.IsValid())
     {
@@ -1413,7 +1614,7 @@ AUTORTFM_DISABLE bool GodotVerse::ReadInstanceField(const FInstance* Instance, F
     return ReadFieldOf(Instance->Object.Get(), FieldName, OutValue, OutStorage);
 }
 
-AUTORTFM_DISABLE bool GodotVerse::ReadClassDefaultField(FUtf8StringView ClassName, FUtf8StringView FieldName, vh_value& OutValue, FUtf8String& OutStorage)
+AUTORTFM_DISABLE bool GodotVerse::ReadClassDefaultField(FUtf8StringView ClassName, FUtf8StringView FieldName, vh_value& OutValue, FFieldStorage& OutStorage)
 {
     UClass* NativeClass = FindGodotClass(ClassName);
     if (!NativeClass)

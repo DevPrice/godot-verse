@@ -224,16 +224,27 @@ AUTORTFM_DISABLE bool Complete(FUtf8StringView Path,
                                vh_complete_mode Mode,
                                TArray<FCompleteItem>& OutItems);
 
-/// Reads one data member off a live instance into the ABI's value shape.
+/// Backing store for the parts of a value a vh_value points at rather than holds: a string's bytes
+/// and a tuple's items.
 ///
-/// String bytes are copied into OutStorage rather than pointed at: VArray::AsStringView points
-/// into a GC-managed cell, and the vh_value outlives the VM scope it was read in.
-AUTORTFM_DISABLE bool ReadInstanceField(const FInstance* Instance, FUtf8StringView FieldName, vh_value& OutValue, FUtf8String& OutStorage);
+/// It has to outlive the VM scope the value was read in. VArray::AsStringView points into a
+/// GC-managed cell, and a struct's fields are read one at a time into storage of our own, so neither
+/// can be pointed at where it lies.
+struct FFieldStorage
+{
+    FUtf8String Text;
+    /// Reserved to its final size before anything is added: Seq.Items points into it, and a
+    /// reallocation part-way through would leave that pointing at freed memory.
+    TArray<vh_value> Items;
+};
+
+/// Reads one data member off a live instance into the ABI's value shape.
+AUTORTFM_DISABLE bool ReadInstanceField(const FInstance* Instance, FUtf8StringView FieldName, vh_value& OutValue, FFieldStorage& OutStorage);
 
 /// The same read against the class default object, whose Verse constructor has already run.
 /// That is where a member's declared default has to come from: the semantic program can say only
 /// that an initializer exists (CDataDefinition::HasInitializer), not what it evaluates to.
-AUTORTFM_DISABLE bool ReadClassDefaultField(FUtf8StringView ClassName, FUtf8StringView FieldName, vh_value& OutValue, FUtf8String& OutStorage);
+AUTORTFM_DISABLE bool ReadClassDefaultField(FUtf8StringView ClassName, FUtf8StringView FieldName, vh_value& OutValue, FFieldStorage& OutStorage);
 
 /// Writes one data member on a live instance. Covers the same four types the read path does.
 ///

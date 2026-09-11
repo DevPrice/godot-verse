@@ -1102,6 +1102,21 @@ int main(int argc, char** argv)
 						&& FriendExport->VariantTag == VH_VARIANT_OBJECT
 						&& FriendExport->Reject == VH_EXPORT_OK)
 			 && ExportsOk;
+	// A struct crosses as the numbers it is made of, tagged with which Godot type to rebuild from
+	// them -- the refusal Epic's `editable` gave these ("not concrete") is the reason the attribute
+	// had to be ours.
+	const vh_export_desc* OffsetExport = FindExport("Offset");
+	ExportsOk = Step("a vector2 exports as a Vector2",
+					OffsetExport && OffsetExport->Type == VH_TYPE_TUPLE
+						&& OffsetExport->VariantTag == VH_VARIANT_VECTOR2
+						&& OffsetExport->Reject == VH_EXPORT_OK)
+			 && ExportsOk;
+	const vh_export_desc* TintExport = FindExport("Tint");
+	ExportsOk = Step("and a color as a Color",
+					TintExport && TintExport->VariantTag == VH_VARIANT_COLOR
+						&& TintExport->Reject == VH_EXPORT_OK)
+			 && ExportsOk;
+
 	const vh_export_desc* StrangerExport = FindExport("Stranger");
 	ExportsOk = Step("a reference to an unregistered one is refused, and says which it was",
 					StrangerExport && StrangerExport->Reject == VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL
@@ -1217,6 +1232,42 @@ int main(int argc, char** argv)
 		Step("and a logic member holding false still reads as logic",
 			 RoundTrip("Enabled", FalseLogic, [](const vh_value& V) { return V.Type == VH_TYPE_LOGIC && V.Logic == 0; }));
 
+		// A struct reads and writes as a tuple of its components, in Godot's order.
+		const vh_value* OffsetValue = nullptr;
+		Step("a struct reads as its components",
+			 GetFieldFn(Instance, "Offset", &OffsetValue) == VH_OK && OffsetValue != nullptr
+				 && OffsetValue->Type == VH_TYPE_TUPLE && OffsetValue->VariantTag == VH_VARIANT_VECTOR2
+				 && OffsetValue->Seq.Count == 2 && OffsetValue->Seq.Items[0].Float == 1.0
+				 && OffsetValue->Seq.Items[1].Float == 2.0);
+
+		vh_value NewOffsetItems[2]{};
+		NewOffsetItems[0].Type = VH_TYPE_FLOAT;
+		NewOffsetItems[0].Float = 7.5;
+		NewOffsetItems[1].Type = VH_TYPE_FLOAT;
+		NewOffsetItems[1].Float = -3.0;
+		vh_value NewOffset{};
+		NewOffset.Type = VH_TYPE_TUPLE;
+		NewOffset.VariantTag = VH_VARIANT_VECTOR2;
+		NewOffset.Seq.Items = NewOffsetItems;
+		NewOffset.Seq.Count = 2;
+		Step("set/get a struct round-trips",
+			 RoundTrip("Offset", NewOffset, [](const vh_value& V) {
+				 return V.Type == VH_TYPE_TUPLE && V.Seq.Count == 2 && V.Seq.Items[0].Float == 7.5
+					 && V.Seq.Items[1].Float == -3.0;
+			 }));
+		Step("a struct written with the wrong number of components is refused",
+			 [&] {
+				 vh_value Short = NewOffset;
+				 Short.Seq.Count = 1;
+				 return SetFieldFn(Instance, "Offset", &Short) == VH_ERR_NOT_FOUND;
+			 }());
+
+		const vh_value* TintValue = nullptr;
+		Step("a four-component struct reads in Godot's order",
+			 GetFieldFn(Instance, "Tint", &TintValue) == VH_OK && TintValue != nullptr
+				 && TintValue->Seq.Count == 4 && TintValue->Seq.Items[0].Float == 0.25
+				 && TintValue->Seq.Items[2].Float == 0.75);
+
 		// A member typed as one of the project's own classes refuses a handle: the object it should
 		// hold already exists, and vh_instance_set_field_instance is how it is handed over.
 		Step("a script-class reference refuses a bare handle",
@@ -1289,6 +1340,14 @@ int main(int argc, char** argv)
 		};
 		Step("Verse unwraps a reference it was handed and dispatches on it", VerseSeesTarget(NewTarget) == 1);
 		Step("and sees the empty case as empty", VerseSeesTarget(NoTarget) == 0);
+
+		// And the same for a struct: reading a field goes through the object's own shape, so one
+		// built with the wrong emergent type fails here rather than reading back as what went in.
+		const bool ReadOffsetOk = CallInstanceVoidFn(Instance, "(/user@localhost/exports:)ReadOffset") == VH_OK;
+		const vh_value* OffsetSeen = Read("OffsetSeen");
+		Step("Verse reads a field off a struct it was handed",
+			 ReadOffsetOk && OffsetSeen && OffsetSeen->Type == VH_TYPE_FLOAT
+				 && OffsetSeen->Float == 7.5 + 0.75);
 
 		// Bump sealed the instance. From here Verse has observed the members, so the author's
 		// `var` is the whole of what may still change.

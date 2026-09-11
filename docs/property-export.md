@@ -365,6 +365,36 @@ source text because Godot asks during the filesystem scan, before a host exists.
 one decides whether the reference can be exported, the other decides whether the name it would be
 filtered by exists.
 
+### Structs
+
+`vector2`, `vector3` and `color` cross as a tuple of their components, tagged with the Godot type to
+rebuild from them. That encoding was already there: `src/verse_value.cpp` has converted those three
+Variant types in both directions since method calls needed them, so the wire needed nothing new and
+the Godot side needed nothing at all — `variant_type_for` reads the tag, and Godot draws a colour
+picker or a pair of spinboxes off the property type with no hint.
+
+**This is the one place the bridge really constructs a VM object, and the trap is shape constants.**
+A field the class declares with an initializer — which is every field of `vector2` — is raised to the
+*shape* as a `Constant`, shared by every instance, so it has no per-instance slot to write:
+`VObject::SetField` reaches `VERSE_UNREACHABLE` on one (`Inline/VVMObjectInline.h:73`), which is how
+the first attempt died. `VClass::GetArchetype()` is therefore the wrong archetype to build from. The
+right one is assembled by hand out of `VArchetype::VEntry::ObjectField` entries, one per field, which
+is what asks for the slots; `CreateField` then marks each present and `SetField` writes it. That is
+the sequence `VNativeRef::FromNativeStruct` uses (`VVMNativeRef.cpp:492-513`) to hand a native struct
+to ordinary Verse code, and it is the one to copy. `NewVObject` does the allocation rather than
+`VValueObject::NewUninitialized`, because it is also what calls `SetIsStruct` (`VVMClass.cpp:333-336`)
+— an object built without that does not compare or freeze as a struct.
+
+Nothing here needs the class looked up by name: the struct already in the slot supplies its own class,
+which is the same "match what is there" discipline the rest of the write path follows.
+
+**One Godot-side simplification came out of this.** `VerseRuntime::set_instance_field` had a switch
+of its own over the four Variant types it could pack. A struct would have made it five, and an array
+six, each needing somewhere for its items to live. It now packs with `variant_to_vh` — the same
+function a method argument goes through — over a `VerseArena` the GDExtension owns, since that is the
+one direction where the host does not supply the arena. Which types a member can *hold* is the host's
+answer anyway; a second, narrower list on this side could only disagree with it.
+
 ## Roadmap
 
 Ordered to front-load the cheap work. Bands, not estimates; item 4 is the one with real unknowns.
@@ -383,12 +413,12 @@ Ordered to front-load the cheap work. Bands, not estimates; item 4 is the one wi
    `@export` member may be written — that is initialization, and it is how a non-var gets a
    value at all. Sealed, only a `var` may be. The rule needs no new ABI call and no cooperation
    from the GDExtension: `InstanceCallVoid` sets the flag, and `Ready` is a call.
-5. **Type coverage** — incremental, and references are done: an optional reference to a mirrored
-   class or to a registered script class carries its value both ways at ABI 25, filtered in the
-   inspector by node or resource type. An enum is still classified and held at
-   `VH_EXPORT_UNSUPPORTED_TYPE` until its ordinal can cross; structs (`vector2`, `color`) and arrays
-   are the rest. Maps remain awkward on principle, and `?float` stays refused: Godot has no option
-   type, so it would have to become either a nullable Variant or a two-property pair.
+5. **Type coverage** — incremental. References and structs are done: an optional reference to a
+   mirrored class or to a registered script class carries its value both ways at ABI 25, filtered in
+   the inspector by node or resource type, and `vector2`/`vector3`/`color` cross as tagged tuples. An
+   enum is still classified and held at `VH_EXPORT_UNSUPPORTED_TYPE` until its ordinal can cross, and
+   arrays are the rest. Maps remain awkward on principle, and `?float` stays refused: Godot has no
+   option type, so it would have to become either a nullable Variant or a two-property pair.
 6. **Per-instance values in the editor.** A non-tool script gets a `PlaceHolderScriptInstance`,
    which holds Godot's own copy of the values and never reaches Verse. Declared defaults and
    stored overrides both display correctly through it, but an `@export` member whose value the

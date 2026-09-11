@@ -236,6 +236,14 @@ node two Verse objects, two sets of members, and no way for the author to tell w
 looking at. The rule then runs the other way too: a mirrored member assigned a node that *does* carry
 a Verse script holds that script's own object rather than a second wrapper around the same handle.
 
+**A struct crosses as the numbers it is made of.** `vector2`, `vector3` and `color` are hand-written
+Verse structs, and each is carried as a tuple tagged with the Godot type to rebuild from it — the same
+encoding a method argument already used. Building one needs the only piece of real VM object
+construction in the bridge, and one non-obvious thing about it: a field the class declares with an
+initializer is *raised to the shape* as a constant shared by every instance, so there is no
+per-instance slot to write. The archetype has to ask for object fields explicitly, which is what
+`VNativeRef::FromNativeStruct` does to hand a native struct to ordinary Verse code.
+
 Reading is uniform — the option is unwrapped and the handle reported — with one wrinkle that decides
 the shape of the whole read path. Verse spells an empty `option` and `logic` false with the same
 cell, so a member holding nothing cannot be told from a member holding false by looking at it. The

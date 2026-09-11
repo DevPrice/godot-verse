@@ -405,7 +405,7 @@ namespace {
 /// Backing store for both field readers. The ABI promises the value -- and any string it points
 /// at -- stays valid until the next read, so neither can live on the stack.
 vh_value GFieldValue{};
-FUtf8String GFieldStorage;
+GodotVerse::FFieldStorage GFieldStorage;
 } // namespace
 
 extern "C" int32_t vh_instance_get_field(vh_instance* Instance, const char* NameUtf8, const vh_value** OutValue)

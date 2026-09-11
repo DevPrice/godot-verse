@@ -388,43 +388,15 @@ bool VerseRuntime::set_instance_field(vh_instance *p_instance, const String &p_n
 		return false;
 	}
 
+	// The same packing a method argument gets, rather than a switch of its own. Which types a member
+	// can actually hold is the host's answer -- it knows the declared type and refuses the rest -- so
+	// a second, narrower list here would only disagree with it.
+	//
+	// The arena outlives the call and no longer: a vh_value borrows its strings and its items.
+	VerseArena arena;
 	vh_value value = {};
-	value.VariantTag = VH_VARIANT_NIL;
-
-	// Held until the call returns: vh_value borrows the bytes rather than owning them.
-	CharString text;
-
-	switch (p_value.get_type()) {
-		case Variant::BOOL:
-			value.Type = VH_TYPE_LOGIC;
-			value.Logic = ((bool)p_value) ? 1 : 0;
-			break;
-		case Variant::INT:
-			value.Type = VH_TYPE_INT;
-			value.Int = (int64_t)p_value;
-			break;
-		case Variant::FLOAT:
-			value.Type = VH_TYPE_FLOAT;
-			value.Float = (double)p_value;
-			break;
-		case Variant::STRING:
-			text = String(p_value).utf8();
-			value.Type = VH_TYPE_STRING;
-			value.String.Utf8 = text.get_data();
-			value.String.Len = text.length();
-			break;
-		case Variant::OBJECT: {
-			// The instance id, never a pointer -- the id is the only reference Verse can hold that
-			// stays checkable after Godot frees the object. The host builds the Verse wrapper for
-			// it; 0 is the null it turns into a reference holding nothing.
-			Object *object = p_value;
-			value.Type = VH_TYPE_INT;
-			value.VariantTag = VH_VARIANT_OBJECT;
-			value.Int = object != nullptr ? (int64_t)object->get_instance_id() : 0;
-			break;
-		}
-		default:
-			return false;
+	if (!variant_to_vh(p_value, arena.get(), value)) {
+		return false;
 	}
 
 	return host.InstanceSetField(p_instance, p_name.utf8().get_data(), &value) == VH_OK;
