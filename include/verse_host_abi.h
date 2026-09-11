@@ -22,7 +22,7 @@
 extern "C" {
 #endif
 
-#define VH_ABI_VERSION 25
+#define VH_ABI_VERSION 26
 
 typedef int32_t vh_bool;
 
@@ -401,6 +401,12 @@ typedef struct vh_export_desc
 	 * than the int its handle is. 0 (VH_VARIANT_NIL) means "infer from Type", as it does in
 	 * vh_value. */
 	int32_t VariantTag;
+
+	/* VH_TYPE_ARRAY only, and only where VariantTag is VH_VARIANT_ARRAY: the Godot type of an
+	 * element. Godot's packed arrays say what they hold in their own tag, but a plain Array does not
+	 * -- it needs the element type spelled out beside it or the inspector offers the author an
+	 * editor that can add anything. 0 where there is nothing to say. */
+	int32_t ElementVariantTag;
 
 	vh_bool IsVar; /* a `var` member; anything else can only be written before the instance seals */
 

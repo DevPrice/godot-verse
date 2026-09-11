@@ -1117,6 +1117,27 @@ int main(int argc, char** argv)
 						&& TintExport->Reject == VH_EXPORT_OK)
 			 && ExportsOk;
 
+	// An array becomes the packed container Godot has for its element, and a plain Array where it has
+	// none -- which among the elements that can cross is only `logic`, so that one alone has to say
+	// what it holds. An int goes to the 64-bit packed array: a Verse int is 64 bits wide.
+	const auto ArrayTag = [&](const char* Name) {
+		const vh_export_desc* Export = FindExport(Name);
+		return Export && Export->Reject == VH_EXPORT_OK && Export->Type == VH_TYPE_ARRAY ? Export->VariantTag : -1;
+	};
+	ExportsOk = Step("[]float exports as a PackedFloat64Array", ArrayTag("Speeds") == VH_VARIANT_PACKED_FLOAT64_ARRAY) && ExportsOk;
+	ExportsOk = Step("[]int as a PackedInt64Array, not the 32-bit one", ArrayTag("Counts") == VH_VARIANT_PACKED_INT64_ARRAY) && ExportsOk;
+	ExportsOk = Step("[]string as a PackedStringArray", ArrayTag("Names") == VH_VARIANT_PACKED_STRING_ARRAY) && ExportsOk;
+	ExportsOk = Step("[]vector2 as a PackedVector2Array", ArrayTag("Path") == VH_VARIANT_PACKED_VECTOR2_ARRAY) && ExportsOk;
+	const vh_export_desc* FlagsExport = FindExport("Flags");
+	ExportsOk = Step("[]logic as an Array that names its element type",
+					FlagsExport && FlagsExport->Reject == VH_EXPORT_OK
+						&& FlagsExport->VariantTag == VH_VARIANT_ARRAY
+						&& FlagsExport->ElementVariantTag == VH_VARIANT_BOOL)
+			 && ExportsOk;
+	ExportsOk = Step("a packed array says nothing about its element, having said it in its own tag",
+					FindExport("Speeds") && FindExport("Speeds")->ElementVariantTag == VH_VARIANT_NIL)
+			 && ExportsOk;
+
 	const vh_export_desc* StrangerExport = FindExport("Stranger");
 	ExportsOk = Step("a reference to an unregistered one is refused, and says which it was",
 					StrangerExport && StrangerExport->Reject == VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL
@@ -1268,6 +1289,111 @@ int main(int argc, char** argv)
 				 && TintValue->Seq.Count == 4 && TintValue->Seq.Items[0].Float == 0.25
 				 && TintValue->Seq.Items[2].Float == 0.75);
 
+		// Arrays, one per container. The values written are read back through the ABI here and read
+		// again from Verse further down, which is the half that can fail.
+		const vh_value* SpeedsValue = nullptr;
+		Step("an array reads as its elements",
+			 GetFieldFn(Instance, "Speeds", &SpeedsValue) == VH_OK && SpeedsValue != nullptr
+				 && SpeedsValue->Type == VH_TYPE_ARRAY
+				 && SpeedsValue->VariantTag == VH_VARIANT_PACKED_FLOAT64_ARRAY
+				 && SpeedsValue->Seq.Count == 2 && SpeedsValue->Seq.Items[1].Float == 2.0);
+
+		const vh_value* NamesValue = nullptr;
+		Step("a string array reads as strings",
+			 GetFieldFn(Instance, "Names", &NamesValue) == VH_OK && NamesValue != nullptr
+				 && NamesValue->Seq.Count == 2
+				 && std::string(NamesValue->Seq.Items[1].String.Utf8, NamesValue->Seq.Items[1].String.Len) == "bc");
+
+		const vh_value* PathValue = nullptr;
+		Step("an array of structs reads as a tuple per element",
+			 GetFieldFn(Instance, "Path", &PathValue) == VH_OK && PathValue != nullptr
+				 && PathValue->VariantTag == VH_VARIANT_PACKED_VECTOR2_ARRAY && PathValue->Seq.Count == 1
+				 && PathValue->Seq.Items[0].Type == VH_TYPE_TUPLE
+				 && PathValue->Seq.Items[0].Seq.Count == 2
+				 && PathValue->Seq.Items[0].Seq.Items[1].Float == 2.0);
+
+		vh_value FloatItems[3]{};
+		for (int32_t Index = 0; Index < 3; ++Index)
+		{
+			FloatItems[Index].Type = VH_TYPE_FLOAT;
+			FloatItems[Index].Float = 10.0 + Index;
+		}
+		vh_value NewSpeeds{};
+		NewSpeeds.Type = VH_TYPE_ARRAY;
+		NewSpeeds.VariantTag = VH_VARIANT_PACKED_FLOAT64_ARRAY;
+		NewSpeeds.Seq.Items = FloatItems;
+		NewSpeeds.Seq.Count = 3;
+		Step("set/get an array round-trips, length and all",
+			 RoundTrip("Speeds", NewSpeeds, [](const vh_value& V) {
+				 return V.Seq.Count == 3 && V.Seq.Items[0].Float == 10.0 && V.Seq.Items[2].Float == 12.0;
+			 }));
+
+		vh_value LogicItems[2]{};
+		LogicItems[0].Type = VH_TYPE_LOGIC;
+		LogicItems[0].Logic = 1;
+		LogicItems[1].Type = VH_TYPE_LOGIC;
+		LogicItems[1].Logic = 1;
+		vh_value NewFlags{};
+		NewFlags.Type = VH_TYPE_ARRAY;
+		NewFlags.VariantTag = VH_VARIANT_ARRAY;
+		NewFlags.Seq.Items = LogicItems;
+		NewFlags.Seq.Count = 2;
+		Step("a logic array round-trips as logic",
+			 RoundTrip("Flags", NewFlags, [](const vh_value& V) {
+				 return V.Seq.Count == 2 && V.Seq.Items[0].Type == VH_TYPE_LOGIC && V.Seq.Items[0].Logic != 0;
+			 }));
+
+		vh_value EmptyArray{};
+		EmptyArray.Type = VH_TYPE_ARRAY;
+		EmptyArray.VariantTag = VH_VARIANT_PACKED_STRING_ARRAY;
+		EmptyArray.Seq.Items = nullptr;
+		EmptyArray.Seq.Count = 0;
+		Step("an emptied array reads back empty rather than as a string",
+			 RoundTrip("Names", EmptyArray, [](const vh_value& V) {
+				 return V.Type == VH_TYPE_ARRAY && V.Seq.Count == 0;
+			 }));
+
+		// Written back to what it started as, because ReadArrays below reads these elements.
+		vh_value StringItems[2]{};
+		StringItems[0].Type = VH_TYPE_STRING;
+		StringItems[0].String.Utf8 = "a";
+		StringItems[0].String.Len = 1;
+		StringItems[1].Type = VH_TYPE_STRING;
+		StringItems[1].String.Utf8 = "bc";
+		StringItems[1].String.Len = 2;
+		vh_value NewNames{};
+		NewNames.Type = VH_TYPE_ARRAY;
+		NewNames.VariantTag = VH_VARIANT_PACKED_STRING_ARRAY;
+		NewNames.Seq.Items = StringItems;
+		NewNames.Seq.Count = 2;
+		Step("a string array round-trips",
+			 RoundTrip("Names", NewNames, [](const vh_value& V) {
+				 return V.Seq.Count == 2
+					 && std::string(V.Seq.Items[1].String.Utf8, V.Seq.Items[1].String.Len) == "bc";
+			 }));
+
+		vh_value PathFields[2]{};
+		PathFields[0].Type = VH_TYPE_FLOAT;
+		PathFields[0].Float = 4.0;
+		PathFields[1].Type = VH_TYPE_FLOAT;
+		PathFields[1].Float = 5.0;
+		vh_value PathItems[1]{};
+		PathItems[0].Type = VH_TYPE_TUPLE;
+		PathItems[0].VariantTag = VH_VARIANT_VECTOR2;
+		PathItems[0].Seq.Items = PathFields;
+		PathItems[0].Seq.Count = 2;
+		vh_value NewPath{};
+		NewPath.Type = VH_TYPE_ARRAY;
+		NewPath.VariantTag = VH_VARIANT_PACKED_VECTOR2_ARRAY;
+		NewPath.Seq.Items = PathItems;
+		NewPath.Seq.Count = 1;
+		Step("an array of structs round-trips",
+			 RoundTrip("Path", NewPath, [](const vh_value& V) {
+				 return V.Seq.Count == 1 && V.Seq.Items[0].Seq.Count == 2
+					 && V.Seq.Items[0].Seq.Items[0].Float == 4.0
+					 && V.Seq.Items[0].Seq.Items[1].Float == 5.0;
+			 }));
+
 		// A member typed as one of the project's own classes refuses a handle: the object it should
 		// hold already exists, and vh_instance_set_field_instance is how it is handed over.
 		Step("a script-class reference refuses a bare handle",
@@ -1348,6 +1474,29 @@ int main(int argc, char** argv)
 		Step("Verse reads a field off a struct it was handed",
 			 ReadOffsetOk && OffsetSeen && OffsetSeen->Type == VH_TYPE_FLOAT
 				 && OffsetSeen->Float == 7.5 + 0.75);
+
+		// And for every array. Indexing reads an element through the container's own storage kind, so
+		// an array built as the wrong kind fails here; the []vector2 goes on to read a field off an
+		// element, which checks two layers of construction at once.
+		//
+		// Speeds[1] = 11.0, Counts[0] = 7 (never written), Names[1] = "bc" scores 100, Flags[0] true
+		// scores 1000, Path[0].Y = 2.0.
+		auto VerseReadsArray = [&](const char* Function) {
+			if (CallInstanceVoidFn(Instance, Function) != VH_OK)
+			{
+				return -2.0;
+			}
+			const vh_value* Seen = Read("ArraysSeen");
+			return Seen && Seen->Type == VH_TYPE_FLOAT ? Seen->Float : -2.0;
+		};
+		Step("Verse indexes a float array it was handed",
+			 VerseReadsArray("(/user@localhost/exports:)ReadSpeeds") == 11.0);
+		Step("and one it was not, which must read as it always did",
+			 VerseReadsArray("(/user@localhost/exports:)ReadCounts") == 7.0);
+		Step("and a string array", VerseReadsArray("(/user@localhost/exports:)ReadNames") == 100.0);
+		Step("and a logic array", VerseReadsArray("(/user@localhost/exports:)ReadFlags") == 1000.0);
+		Step("and reads a field off an element of a struct array it was handed",
+			 VerseReadsArray("(/user@localhost/exports:)ReadPath") == 5.0);
 
 		// Bump sealed the instance. From here Verse has observed the members, so the author's
 		// `var` is the whole of what may still change.

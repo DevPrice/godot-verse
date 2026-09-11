@@ -242,6 +242,7 @@ TypedArray<Dictionary> VerseRuntime::class_exports(const String &p_class_name, b
 		entry["name"] = String::utf8(descs[i].NameUtf8, descs[i].NameLen);
 		entry["type"] = (int64_t)descs[i].Type;
 		entry["variant_tag"] = (int64_t)descs[i].VariantTag;
+		entry["element_variant_tag"] = (int64_t)descs[i].ElementVariantTag;
 		entry["is_var"] = descs[i].IsVar != 0;
 		entry["hint"] = (int64_t)descs[i].Hint;
 		entry["hint_string"] = String::utf8(descs[i].HintStringUtf8, descs[i].HintStringLen);

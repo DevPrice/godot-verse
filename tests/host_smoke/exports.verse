@@ -74,6 +74,23 @@ exports := class(object):
     @export
     var Tint<public>:color = color{R := 0.25, G := 0.5, B := 0.75, A := 1.0}
 
+    # Arrays, one per Godot container. A float, an int, a string and a vector2 each have a packed
+    # array; `logic` does not, so that one is a plain Array with its element type spelled beside it.
+    @export
+    var Speeds<public>:[]float = array{1.0, 2.0}
+
+    @export
+    var Counts<public>:[]int = array{7, 8, 9}
+
+    @export
+    var Names<public>:[]string = array{"a", "bc"}
+
+    @export
+    var Flags<public>:[]logic = array{true, false}
+
+    @export
+    var Path<public>:[]vector2 = array{vector2{X := 1.0, Y := 2.0}}
+
     # What ReadTarget saw, so the ABI can read back the interpreter's own answer.
     @export
     var TargetSeen<public>:logic = false
@@ -81,6 +98,10 @@ exports := class(object):
     # The same, for a struct: the X the interpreter reads out of whatever was written.
     @export
     var OffsetSeen<public>:float = 0.0
+
+    # And for the arrays: a number only a correctly built array can produce.
+    @export
+    var ArraysSeen<public>:float = 0.0
 
     # No attribute, so it must not appear in the export list.
     Hidden<public>:int = 7
@@ -120,6 +141,36 @@ exports := class(object):
     # rather than reading back as the numbers that were put in.
     ReadOffset<public>():void =
         set OffsetSeen = Offset.X + Tint.B
+
+    # And for arrays. Indexing is what reads an element through the container's own storage kind, so
+    # an array built as the wrong kind -- or holding a cell of the wrong type -- fails here; a `[]
+    # vector2` additionally goes on to read a field off an element, which is two layers of
+    # construction being checked at once.
+    # One per container rather than one for all of them, so a failure says which.
+    ReadSpeeds<public>():void =
+        set ArraysSeen = -1.0
+        if (F := Speeds[1]):
+            set ArraysSeen = F
+
+    ReadCounts<public>():void =
+        set ArraysSeen = -1.0
+        if (N := Counts[0]):
+            set ArraysSeen = N * 1.0
+
+    ReadNames<public>():void =
+        set ArraysSeen = -1.0
+        if (S := Names[1], S = "bc"):
+            set ArraysSeen = 100.0
+
+    ReadFlags<public>():void =
+        set ArraysSeen = -1.0
+        if (L := Flags[0], L?):
+            set ArraysSeen = 1000.0
+
+    ReadPath<public>():void =
+        set ArraysSeen = -1.0
+        if (P := Path[0]):
+            set ArraysSeen = P.Y
 
 # Exists only to give the symbol lookup a Godot API method to resolve against. Analysis never
 # needs a real node behind it, and nothing instantiates this.

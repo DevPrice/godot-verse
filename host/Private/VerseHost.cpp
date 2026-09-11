@@ -380,6 +380,7 @@ extern "C" int32_t vh_class_export_list(const char* ClassNameUtf8, const vh_expo
             Export.Name.Len(),
             Export.Type,
             Export.VariantTag,
+            Export.ElementVariantTag,
             Export.bIsVar ? 1 : 0,
             Export.Hint,
             reinterpret_cast<const char*>(*Export.HintString),

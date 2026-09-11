@@ -244,6 +244,18 @@ initializer is *raised to the shape* as a constant shared by every instance, so 
 per-instance slot to write. The archetype has to ask for object fields explicitly, which is what
 `VNativeRef::FromNativeStruct` does to hand a native struct to ordinary Verse code.
 
+**An array becomes the packed container Godot has for its element, and an `Array` where it has none.**
+`[]float` is a `PackedFloat64Array`, `[]int` a `PackedInt64Array` (a Verse int is 64 bits; narrowing
+it would discard half of a value the language allows), `[]string` a `PackedStringArray`, `[]vector2` a
+`PackedVector2Array`. `[]logic` has no packed form, so it becomes an `Array` carrying its element type
+beside it — an array editor that was not told what it holds offers the author a row of anything.
+
+One rule about building those is worth knowing, because getting it wrong is fatal rather than wrong:
+an element's mutability follows its container's. Reading a `var` container hands out an immutable
+snapshot, made by freezing each element in turn, so an element has to be freezable — and a `VArray` is
+not. Every `VArrayBase` constructor sets the deeply-mutable flag and nothing clears it, while `VArray`
+has no `FreezeImpl`, so the elements of a `var []string` have to be mutable arrays too.
+
 Reading is uniform — the option is unwrapped and the handle reported — with one wrinkle that decides
 the shape of the whole read path. Verse spells an empty `option` and `logic` false with the same
 cell, so a member holding nothing cannot be told from a member holding false by looking at it. The

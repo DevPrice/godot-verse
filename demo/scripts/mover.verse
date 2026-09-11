@@ -21,6 +21,12 @@ mover := class(node2d):
 	@export_group("Movement")
 	var Speed<public>:type{_X:float where 0.0 <= _X, _X <= 500.0} = 60.0
 
+	# An array, which Godot draws as a list the author adds rows to. `[]float` has a packed container
+	# of its own -- PackedFloat64Array -- as do `[]int`, `[]string` and `[]vector2`; `[]logic` does
+	# not, and becomes an Array that names what it holds.
+	@export
+	var Speeds<public>:[]float = array{60.0, 120.0}
+
 	# A reference the scene fills in, which is why it is an option: nothing can force a value into
 	# an inspector slot, and `sprite2d{}` would be a handle of 0 -- dead before the scene loaded.
 	# The type is the whole of the hint, so the picker offers Sprite2D nodes and nothing else.
@@ -36,6 +42,8 @@ mover := class(node2d):
 
 	Ready<override>():void =
 		Print(Greeting)
+		if (First := Speeds[0]):
+			Print("First speed is {First}")
 		if (Sprite := Target?):
 			set Sprite.FlipH = true
 			set Sprite.Modulate = Tint

@@ -395,6 +395,40 @@ function a method argument goes through — over a `VerseArena` the GDExtension 
 one direction where the host does not supply the arena. Which types a member can *hold* is the host's
 answer anyway; a second, narrower list on this side could only disagree with it.
 
+### Arrays
+
+An array becomes the packed container Godot has for its element, and a plain `Array` where it has
+none: `[]float` → `PackedFloat64Array`, `[]int` → `PackedInt64Array`, `[]string` →
+`PackedStringArray`, `[]vector2`/`[]vector3`/`[]color` → the matching packed array, `[]logic` →
+`Array`. The int case is deliberately the 64-bit one — a Verse int is 64 bits wide, and
+`PackedInt32Array` would silently discard the top half of a value the language accepts.
+
+Only `[]logic` needs anything said about its element, which is why `vh_export_desc` grew one field
+rather than a hint: a packed array's own tag says what it holds, and a plain `Array` told nothing
+gives the author an editor that adds rows of anything, which the host then refuses the whole member
+for. `PROPERTY_HINT_TYPE_STRING` with the element's Variant type is Godot's spelling for it.
+
+**Arrays of references are refused, and for the same reason a bare reference is.** `[]node2d` cannot
+hold the empty element an array editor starts a new row as, so the correct spelling would be
+`[]?node2d` — an array of options, which is another layer of marshalling and a different question
+about what an unfilled row means. Left refused, which is a supported state: the author gets a warning
+rather than a missing property.
+
+**An element's mutability follows its container's, and getting that wrong is fatal rather than
+merely wrong.** Reading a `var` container hands out an immutable snapshot, and
+`VMutableArray::FreezeImpl` builds one by freezing each element in turn — so every element has to be
+freezable. A `VArray` is not: every `VArrayBase` constructor calls `SetIsDeeplyMutable`
+(`VVMArrayBase.h:288-370`) and nothing ever clears it, while `VArray` has no `FreezeImpl` override. So
+freezing a `VArray` is not the no-op it reads as; it is `VCell subtype 'VArray' without FreezeImpl
+override called!` and the process is gone. The elements of a `var []string` are therefore
+`VMutableArray`s, and the elements of a plain `[]string` are `VArray`s.
+
+That cost a build cycle and was worth recording for the shape of the bug as much as the fix: the ABI
+round-trip passed, the Verse-side read of *another* array passed, and only the one array whose
+elements were cells died — inside the interpreter, three assertions later. The fixture reads each
+container from Verse through a function of its own for exactly that reason. One oracle for all five
+said only that something was wrong.
+
 ## Roadmap
 
 Ordered to front-load the cheap work. Bands, not estimates; item 4 is the one with real unknowns.
@@ -413,12 +447,14 @@ Ordered to front-load the cheap work. Bands, not estimates; item 4 is the one wi
    `@export` member may be written — that is initialization, and it is how a non-var gets a
    value at all. Sealed, only a `var` may be. The rule needs no new ABI call and no cooperation
    from the GDExtension: `InstanceCallVoid` sets the flag, and `Ready` is a call.
-5. **Type coverage** — incremental. References and structs are done: an optional reference to a
-   mirrored class or to a registered script class carries its value both ways at ABI 25, filtered in
-   the inspector by node or resource type, and `vector2`/`vector3`/`color` cross as tagged tuples. An
-   enum is still classified and held at `VH_EXPORT_UNSUPPORTED_TYPE` until its ordinal can cross, and
-   arrays are the rest. Maps remain awkward on principle, and `?float` stays refused: Godot has no
-   option type, so it would have to become either a nullable Variant or a two-property pair.
+5. **Type coverage** — incremental. References, structs and arrays are done at ABI 26: an optional
+   reference to a mirrored class or to a registered script class carries its value both ways, filtered
+   in the inspector by node or resource type; `vector2`/`vector3`/`color` cross as tagged tuples; and
+   an array becomes the packed container Godot has for its element. An enum is still classified and
+   held at `VH_EXPORT_UNSUPPORTED_TYPE` until its ordinal can cross, and arrays *of references* are
+   refused for the reason a bare reference is. Maps remain awkward on principle, and `?float` stays
+   refused: Godot has no option type, so it would have to become either a nullable Variant or a
+   two-property pair.
 6. **Per-instance values in the editor.** A non-tool script gets a `PlaceHolderScriptInstance`,
    which holds Godot's own copy of the values and never reaches Verse. Declared defaults and
    stored overrides both display correctly through it, but an `@export` member whose value the
@@ -440,7 +476,7 @@ than an admission.
 
 Implemented and covered by `tests/host_smoke` (`exports.verse` fixture): the harvest
 (`HostScript.cpp` `GetClassExports`), `vh_class_export_list`, `vh_instance_get_field`,
-`vh_class_default_field`, `vh_instance_set_field` and `vh_instance_set_field_instance` at ABI 25,
+`vh_class_default_field`, `vh_instance_set_field` and `vh_instance_set_field_instance` at ABI 26,
 `VerseScript::_get_script_property_list` with type-derived hints, a class header and group headers,
 `_get_property_default_value`, and the script instance's `get_func` and `set_func`.
 
@@ -460,6 +496,11 @@ while a `logic` false still reads as false, that a script-class member refuses a
 instance, that a mirrored one takes either, that a non-reference member refuses an instance, that an
 unregistered script class is rejected with its own reason — and, again the one that counts, that
 Verse unwraps the written option and dispatches a method on what comes out.
+
+For structs and arrays: that each reports the Godot type to rebuild it as, that a struct round-trips
+its components and is refused when the wrong number of them arrives, that every array container
+round-trips including emptied and refilled, and that Verse indexes each one afterwards — through a
+function per container, so a failure says which.
 
 Properties are published `PROPERTY_USAGE_DEFAULT | SCRIPT_VARIABLE`: exported and stored, var or
 not. Verified in a running Godot 4.7 as well as the harness — `demo/main.tscn` stores a `var

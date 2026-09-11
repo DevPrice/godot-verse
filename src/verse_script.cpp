@@ -635,8 +635,18 @@ Dictionary property_for(const Dictionary &p_entry, Variant::Type p_type) {
 			// type, can cross the ABI -- an enum's ordinal -- so no property is built from one yet.
 		case VH_EXPORT_HINT_NONE:
 		default:
-			property["hint"] = (int64_t)PROPERTY_HINT_NONE;
-			property["hint_string"] = String();
+			// An untyped Array is the one property that needs a hint nothing asked for. Godot's
+			// packed arrays say what they hold in their own type, but a plain Array does not, and an
+			// editor that was not told offers the author a row of whatever they like -- which the
+			// host then refuses the whole member for. The element type is spelled the way
+			// Variant::get_type_name's callers spell it: the element's Variant type, then a colon.
+			if ((int64_t)p_entry["element_variant_tag"] != VH_VARIANT_NIL) {
+				property["hint"] = (int64_t)PROPERTY_HINT_TYPE_STRING;
+				property["hint_string"] = String::num_int64((int64_t)p_entry["element_variant_tag"]) + String(":");
+			} else {
+				property["hint"] = (int64_t)PROPERTY_HINT_NONE;
+				property["hint_string"] = String();
+			}
 			break;
 	}
 	// A non-var is editable here too, because the host applies a stored value while the instance

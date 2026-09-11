@@ -784,14 +784,16 @@ struct FStructLayout
 {
     const char* VerseName;
     int32 VariantTag;
+    /// The packed array Godot has for this struct, which an array of them crosses as.
+    int32 PackedArrayTag;
     /// Null-terminated, so a two-field struct does not have to pretend to have four.
     const char* Fields[5];
 };
 
 constexpr FStructLayout StructLayouts[] = {
-    {"vector2", VH_VARIANT_VECTOR2, {"X", "Y", nullptr}},
-    {"vector3", VH_VARIANT_VECTOR3, {"X", "Y", "Z", nullptr}},
-    {"color", VH_VARIANT_COLOR, {"R", "G", "B", "A", nullptr}},
+    {"vector2", VH_VARIANT_VECTOR2, VH_VARIANT_PACKED_VECTOR2_ARRAY, {"X", "Y", nullptr}},
+    {"vector3", VH_VARIANT_VECTOR3, VH_VARIANT_PACKED_VECTOR3_ARRAY, {"X", "Y", "Z", nullptr}},
+    {"color", VH_VARIANT_COLOR, VH_VARIANT_PACKED_COLOR_ARRAY, {"R", "G", "B", "A", nullptr}},
 };
 
 AUTORTFM_DISABLE const FStructLayout* FindStructLayout(FUtf8StringView VerseName)
@@ -799,6 +801,20 @@ AUTORTFM_DISABLE const FStructLayout* FindStructLayout(FUtf8StringView VerseName
     for (const FStructLayout& Layout : StructLayouts)
     {
         if (VerseName.Equals(FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(Layout.VerseName))))
+        {
+            return &Layout;
+        }
+    }
+    return nullptr;
+}
+
+/// The struct an array carrying this Godot tag holds one of, or null for a tag that is not one of
+/// the packed struct arrays.
+AUTORTFM_DISABLE const FStructLayout* FindStructLayoutByPackedTag(int32 PackedArrayTag)
+{
+    for (const FStructLayout& Layout : StructLayouts)
+    {
+        if (Layout.PackedArrayTag == PackedArrayTag)
         {
             return &Layout;
         }
@@ -822,6 +838,67 @@ AUTORTFM_DISABLE FUtf8String StructFieldKey(const FStructLayout& Layout, const c
 {
     return FUtf8String(UTF8TEXT("(")) + GodotVersePath + UTF8TEXT("/") + Layout.VerseName
         + UTF8TEXT(":)") + Field;
+}
+
+/// Which Godot container an array of ElementType becomes, filled into OutDesc.
+///
+/// A packed array where Godot has one for the element, and a plain Array where it does not -- which
+/// among the element types that can cross is only `logic`, since Godot has no PackedBoolArray. The
+/// packed forms say what they hold in their own tag; the plain one does not, so its element type is
+/// reported beside it. An int goes to PackedInt64Array and not the 32-bit one: a Verse int is 64 bits
+/// wide, and narrowing it here would quietly discard the top half of a value the language allows.
+AUTORTFM_DISABLE void DescribeArrayElement(const uLang::CTypeBase* ElementType,
+                                           const uLang::CSemanticProgram& Program,
+                                           GodotVerse::FExportDesc& OutDesc)
+{
+    using namespace uLang;
+
+    if (!ElementType)
+    {
+        return;
+    }
+    const CNormalType& Element = ElementType->GetNormalType();
+
+    switch (Element.GetKind())
+    {
+    case ETypeKind::Logic:
+        OutDesc.VariantTag = VH_VARIANT_ARRAY;
+        OutDesc.ElementVariantTag = VH_VARIANT_BOOL;
+        OutDesc.Reject = VH_EXPORT_OK;
+        return;
+    case ETypeKind::Int:
+        OutDesc.VariantTag = VH_VARIANT_PACKED_INT64_ARRAY;
+        OutDesc.Reject = VH_EXPORT_OK;
+        return;
+    case ETypeKind::Float:
+        OutDesc.VariantTag = VH_VARIANT_PACKED_FLOAT64_ARRAY;
+        OutDesc.Reject = VH_EXPORT_OK;
+        return;
+    case ETypeKind::Array:
+        if (static_cast<const CArrayType&>(Element).IsStringType())
+        {
+            OutDesc.VariantTag = VH_VARIANT_PACKED_STRING_ARRAY;
+            OutDesc.Reject = VH_EXPORT_OK;
+        }
+        return;
+    default:
+        break;
+    }
+
+    // A mirrored struct, each of which Godot has a packed array for. A reference is deliberately not
+    // here: `[]node2d` cannot hold the empty element an array editor starts a new row as, which is
+    // the same objection VH_EXPORT_OBJECT_NOT_OPTIONAL makes about a bare reference.
+    if (const CClass* Class = Element.AsNullable<CClass>())
+    {
+        const FStructLayout* Layout = ClassOriginOf(*Class, Program) == EClassOrigin::Mirrored
+            ? FindStructLayout(FUtf8StringView(Class->AsNameCString()))
+            : nullptr;
+        if (Layout)
+        {
+            OutDesc.VariantTag = Layout->PackedArrayTag;
+            OutDesc.Reject = VH_EXPORT_OK;
+        }
+    }
 }
 
 /// What the inspector can make of a member's declared type: the value's shape on the wire, the
@@ -979,17 +1056,19 @@ AUTORTFM_DISABLE void DescribeExportType(const uLang::CTypeBase* Type, const uLa
         break;
 
     case ETypeKind::Array:
-        if (static_cast<const CArrayType&>(*Normal).IsStringType())
+    {
+        const CArrayType& ArrayType = static_cast<const CArrayType&>(*Normal);
+        if (ArrayType.IsStringType())
         {
             OutDesc.Type = VH_TYPE_STRING;
             OutDesc.VariantTag = VH_VARIANT_STRING;
             OutDesc.Reject = VH_EXPORT_OK;
+            break;
         }
-        else
-        {
-            OutDesc.Type = VH_TYPE_ARRAY;
-        }
+        OutDesc.Type = VH_TYPE_ARRAY;
+        DescribeArrayElement(ArrayType.GetElementType(), Program, OutDesc);
         break;
+    }
 
     case ETypeKind::Map:
         OutDesc.Type = VH_TYPE_MAP;
@@ -1023,6 +1102,10 @@ struct FMemberType
     /// The mirrored struct a member is declared as, which is where its field names come from --
     /// there is nothing in a value to read them off.
     const FStructLayout* Struct = nullptr;
+    /// What the export description makes of the same type. An array's element kind comes from here
+    /// rather than from a classification of its own: the value cannot say -- an empty array has no
+    /// element to look at, and the description is the answer the Godot side was already given.
+    GodotVerse::FExportDesc Described;
 };
 
 AUTORTFM_DISABLE FMemberType DescribeMemberType(FUtf8StringView ClassName, FUtf8StringView FieldName)
@@ -1058,6 +1141,7 @@ AUTORTFM_DISABLE FMemberType DescribeMemberType(FUtf8StringView ClassName, FUtf8
         bool bIsOption = false;
         const uLang::CTypeBase* Type = Member->GetType();
         const uLang::CNormalType* Normal = Type ? &UnwrapDeclaredType(*Type, bIsOption) : nullptr;
+        DescribeExportType(Type, *Program, Result.Described);
         if (const uLang::CClass* Declared = Normal ? Normal->AsNullable<uLang::CClass>() : nullptr)
         {
             // Only the optional form is a reference this can marshal, which is the same rule
@@ -1078,16 +1162,19 @@ AUTORTFM_DISABLE FMemberType DescribeMemberType(FUtf8StringView ClassName, FUtf8
     return Result;
 }
 
-/// Reads Layout's fields off a struct value into OutItems, in Layout's order. False if any field is
-/// missing or is not a number, which would otherwise hand the consumer a tuple it cannot rebuild.
-AUTORTFM_DISABLE bool ReadStructFields(Verse::FRunningContext Context,
+/// Reads Layout's fields off a struct value into a fresh block of OutStorage, in Layout's order, and
+/// points OutValue at it. False if any field is missing or is not a number, which would otherwise
+/// hand the consumer a tuple it cannot rebuild.
+AUTORTFM_DISABLE bool ReadStructValue(Verse::FRunningContext Context,
                                       Verse::VValueObject& Struct,
                                       const FStructLayout& Layout,
-                                      TArray<vh_value>& OutItems)
+                                      GodotVerse::FFieldStorage& OutStorage,
+                                      vh_value& OutValue)
 {
     const int32 Count = StructFieldCount(Layout);
-    // Reserved once, because OutItems is what Seq.Items will point into.
-    OutItems.Reserve(Count);
+    const int32 BlockIndex = OutStorage.Blocks.AddDefaulted();
+    OutStorage.Blocks[BlockIndex].Reserve(Count);
+
     for (int32 Index = 0; Index < Count; ++Index)
     {
         Verse::VUniqueString& Key = Verse::VUniqueString::New(Context, FUtf8StringView(StructFieldKey(Layout, Layout.Fields[Index])));
@@ -1099,12 +1186,107 @@ AUTORTFM_DISABLE bool ReadStructFields(Verse::FRunningContext Context,
         vh_value Item{};
         Item.Type = VH_TYPE_FLOAT;
         Item.Float = Field.Value.AsFloat().AsDouble();
-        OutItems.Add(Item);
+        OutStorage.Blocks[BlockIndex].Add(Item);
     }
+
+    OutValue.Type = VH_TYPE_TUPLE;
+    OutValue.VariantTag = Layout.VariantTag;
+    OutValue.Seq.Items = OutStorage.Blocks[BlockIndex].GetData();
+    OutValue.Seq.Count = Count;
     return true;
 }
 
-/// A fresh struct value of the same class as Current, with Layout's fields taken from Items.
+/// Reads an array into a fresh block of OutStorage, one element per the Godot container Tag names.
+///
+/// The element shape comes from Tag rather than from the elements: an empty array has none to look
+/// at, and a float and an int are different cells that a Godot PackedFloat64Array and
+/// PackedInt64Array would rebuild differently from the same bits.
+AUTORTFM_DISABLE bool ReadArrayValue(Verse::FRunningContext Context,
+                                     const Verse::VArrayBase& Array,
+                                     int32 Tag,
+                                     int32 ElementTag,
+                                     GodotVerse::FFieldStorage& OutStorage,
+                                     vh_value& OutValue)
+{
+    const int32 Count = (int32)Array.Num();
+    const FStructLayout* const Layout = FindStructLayoutByPackedTag(Tag);
+
+    // Reserved for the array's own block plus one per struct element, so that filling it never moves
+    // a block an element's vh_value already points into.
+    OutStorage.Blocks.Reserve(OutStorage.Blocks.Num() + 1 + (Layout ? Count : 0));
+    OutStorage.Strings.Reserve(Tag == VH_VARIANT_PACKED_STRING_ARRAY ? Count : 0);
+
+    const int32 BlockIndex = OutStorage.Blocks.AddDefaulted();
+    OutStorage.Blocks[BlockIndex].Reserve(Count);
+
+    for (int32 Index = 0; Index < Count; ++Index)
+    {
+        const Verse::VValue Element = Array.GetValue((uint32)Index);
+        vh_value Item{};
+
+        if (Layout)
+        {
+            Verse::VValueObject* const Struct = Element.DynamicCast<Verse::VValueObject>();
+            if (!Struct || !ReadStructValue(Context, *Struct, *Layout, OutStorage, Item))
+            {
+                return false;
+            }
+        }
+        else if (Tag == VH_VARIANT_PACKED_INT64_ARRAY)
+        {
+            if (!Element.IsInt())
+            {
+                return false;
+            }
+            Item.Type = VH_TYPE_INT;
+            Item.Int = Element.AsInt().AsInt64();
+        }
+        else if (Tag == VH_VARIANT_PACKED_FLOAT64_ARRAY)
+        {
+            if (!Element.IsFloat())
+            {
+                return false;
+            }
+            Item.Type = VH_TYPE_FLOAT;
+            Item.Float = Element.AsFloat().AsDouble();
+        }
+        else if (Tag == VH_VARIANT_PACKED_STRING_ARRAY)
+        {
+            const Verse::VArrayBase* const Text = Element.DynamicCast<Verse::VArrayBase>();
+            if (!Text)
+            {
+                return false;
+            }
+            const int32 StringIndex = OutStorage.Strings.Add(FUtf8String(Text->AsStringView()));
+            Item.Type = VH_TYPE_STRING;
+            Item.String.Utf8 = reinterpret_cast<const char*>(*OutStorage.Strings[StringIndex]);
+            Item.String.Len = OutStorage.Strings[StringIndex].Len();
+        }
+        else if (Tag == VH_VARIANT_ARRAY && ElementTag == VH_VARIANT_BOOL)
+        {
+            if (!Element.IsLogic())
+            {
+                return false;
+            }
+            Item.Type = VH_TYPE_LOGIC;
+            Item.Logic = Element.AsBool() ? 1 : 0;
+        }
+        else
+        {
+            return false;
+        }
+
+        OutStorage.Blocks[BlockIndex].Add(Item);
+    }
+
+    OutValue.Type = VH_TYPE_ARRAY;
+    OutValue.VariantTag = Tag;
+    OutValue.Seq.Items = OutStorage.Blocks[BlockIndex].GetData();
+    OutValue.Seq.Count = Count;
+    return true;
+}
+
+/// A fresh struct value of Class, with Layout's fields taken from Items.
 ///
 /// The archetype is built from Layout's fields rather than taken from the class, and that is the
 /// whole of the difficulty here. A field the class declares with an initializer -- which every field
@@ -1117,11 +1299,11 @@ AUTORTFM_DISABLE bool ReadStructFields(Verse::FRunningContext Context,
 ///
 /// `NewVObject` rather than a lower-level allocation because it is what marks a struct deeply mutable
 /// (`VVMClass.cpp:333-336`); an object built any other way does not compare or freeze like one.
-AUTORTFM_DISABLE Verse::VValue NewStructLike(Verse::FRunningContext Context,
-                                             Verse::VValueObject& Current,
-                                             const FStructLayout& Layout,
-                                             const vh_value* Items,
-                                             int32 ItemCount)
+AUTORTFM_DISABLE Verse::VValue NewStructValue(Verse::FRunningContext Context,
+                                              Verse::VClass& Class,
+                                              const FStructLayout& Layout,
+                                              const vh_value* Items,
+                                              int32 ItemCount)
 {
     const int32 Count = StructFieldCount(Layout);
     if (ItemCount != Count)
@@ -1142,7 +1324,7 @@ AUTORTFM_DISABLE Verse::VValue NewStructLike(Verse::FRunningContext Context,
     }
 
     Verse::VArchetype& Archetype = Verse::VArchetype::New(Context, Verse::VValue(), Entries);
-    Verse::VValueObject& Struct = Current.GetClass().NewVObject(Context, Archetype);
+    Verse::VValueObject& Struct = Class.NewVObject(Context, Archetype);
     for (int32 Index = 0; Index < Count; ++Index)
     {
         const double Number = Items[Index].Type == VH_TYPE_FLOAT
@@ -1185,7 +1367,8 @@ AUTORTFM_DISABLE bool ReadFieldOf(UObject* Object, FUtf8StringView FieldName, vh
     OutValue = vh_value{};
     OutValue.VariantTag = VH_VARIANT_NIL;
     OutStorage.Text.Reset();
-    OutStorage.Items.Reset();
+    OutStorage.Blocks.Reset();
+    OutStorage.Strings.Reset();
 
     bool bRead = false;
     Verse::FRunningContext Context = Verse::FRunningContextPromise{};
@@ -1283,28 +1466,41 @@ AUTORTFM_DISABLE bool ReadFieldOf(UObject* Object, FUtf8StringView FieldName, vh
             // Godot Vector2 wants them in, and positions are the whole of what crosses.
             const FStructLayout* Layout =
                 DescribeMemberType(FUtf8String(Object->GetClass()->GetName()), FieldName).Struct;
-            if (!Layout)
+            if (!Layout || !ReadStructValue(Context, *Struct, *Layout, OutStorage, OutValue))
             {
                 return;
             }
-            if (!ReadStructFields(Context, *Struct, *Layout, OutStorage.Items))
-            {
-                return;
-            }
-            OutValue.Type = VH_TYPE_TUPLE;
-            OutValue.VariantTag = Layout->VariantTag;
-            OutValue.Seq.Items = OutStorage.Items.GetData();
-            OutValue.Seq.Count = OutStorage.Items.Num();
         }
         else if (const Verse::VArrayBase* Array = Value.DynamicCast<Verse::VArrayBase>())
         {
-            // Verse `string` is `[]char`, so a string arrives as an array of char8. VArrayBase
-            // rather than VArray because a `var` of a container type holds a VMutableArray -- the
-            // mutability lives in the container itself, not in a reference around it.
-            OutStorage.Text = FUtf8String(Array->AsStringView());
-            OutValue.Type = VH_TYPE_STRING;
-            OutValue.String.Utf8 = reinterpret_cast<const char*>(*OutStorage.Text);
-            OutValue.String.Len = OutStorage.Text.Len();
+            // Verse `string` is `[]char`, so a string arrives as an array of char8 -- and so does
+            // every other array, which is why the char case is settled first. VArrayBase rather than
+            // VArray because a `var` of a container type holds a VMutableArray: the mutability lives
+            // in the container itself, not in a reference around it.
+            //
+            // An *empty* array cannot be told apart this way, since it carries no element type, so
+            // that one case goes back to what the author declared.
+            const Verse::EArrayType ArrayType = Array->GetArrayType();
+            bool bIsString = ArrayType == Verse::EArrayType::Char8 || ArrayType == Verse::EArrayType::Char32;
+            GodotVerse::FExportDesc Declared;
+            if (!bIsString)
+            {
+                Declared = DescribeMemberType(FUtf8String(Object->GetClass()->GetName()), FieldName).Described;
+                bIsString = Declared.Type == VH_TYPE_STRING;
+            }
+
+            if (bIsString)
+            {
+                OutStorage.Text = FUtf8String(Array->AsStringView());
+                OutValue.Type = VH_TYPE_STRING;
+                OutValue.String.Utf8 = reinterpret_cast<const char*>(*OutStorage.Text);
+                OutValue.String.Len = OutStorage.Text.Len();
+            }
+            else if (Declared.Type != VH_TYPE_ARRAY
+                     || !ReadArrayValue(Context, *Array, Declared.VariantTag, Declared.ElementVariantTag, OutStorage, OutValue))
+            {
+                return;
+            }
         }
         else
         {
@@ -1348,24 +1544,31 @@ enum class EFieldWrite : uint8
 /// comes from the package VNI built alongside the module, whose VM name is assembled out of the
 /// mount point and the C++ module name -- two things this file would be guessing at. The decorated
 /// name identifies the class on its own, so the package it is found in does not need predicting.
-AUTORTFM_DISABLE UClass* FindMirroredClass(FUtf8StringView ClassName)
+AUTORTFM_DISABLE Verse::VClass* FindMirroredVClass(Verse::FRunningContext Context, FUtf8StringView ClassName)
 {
     if (!Verse::GlobalProgram)
     {
         return nullptr;
     }
     const FUtf8String Decorated = FUtf8String(UTF8TEXT("(")) + GodotVersePath + UTF8TEXT(":)") + FUtf8String(ClassName);
+    for (uint32 Index = 0; Index < Verse::GlobalProgram->NumPackages(); ++Index)
+    {
+        if (Verse::VClass* Class = Verse::GlobalProgram->GetPackage(Index).LookupDefinition<Verse::VClass>(FUtf8StringView(Decorated)))
+        {
+            return Class;
+        }
+    }
+    return nullptr;
+}
 
+AUTORTFM_DISABLE UClass* FindMirroredClass(FUtf8StringView ClassName)
+{
     UClass* Found = nullptr;
     Verse::FRunningContext Context = Verse::FRunningContextPromise{};
     Context.EnterVM([&] {
-        for (uint32 Index = 0; Index < Verse::GlobalProgram->NumPackages() && Found == nullptr; ++Index)
+        if (Verse::VClass* Class = FindMirroredVClass(Context, ClassName))
         {
-            Verse::VPackage& Package = Verse::GlobalProgram->GetPackage(Index);
-            if (Verse::VClass* Class = Package.LookupDefinition<Verse::VClass>(FUtf8StringView(Decorated)))
-            {
-                Found = Cast<UClass>(Class->GetOrCreateNativeType(Context));
-            }
+            Found = Cast<UClass>(Class->GetOrCreateNativeType(Context));
         }
     });
     return Found;
@@ -1396,6 +1599,91 @@ AUTORTFM_DISABLE Verse::VValue ReferenceOption(Verse::FRunningContext Context, U
 {
     return Referenced ? Verse::VValue(Verse::VOption::New(Context, Verse::VValue(Referenced)))
                       : Verse::VValue(Verse::GlobalFalse());
+}
+
+/// A Verse array holding Items, built as the Godot container Tag names it.
+///
+/// Mutability is taken from the array already in the slot, for the same reason a string's is: Verse
+/// hangs it off the container, so a `var` holds a VMutableArray where a plain member holds a VArray,
+/// and writing the wrong one leaves storage the interpreter later dies on. The element storage kind
+/// is always VValue -- the narrower EArrayType cases are an optimisation the VM reads back through
+/// GetValue either way, and an empty array in the slot has no kind to copy.
+AUTORTFM_DISABLE Verse::VValue NewArrayValue(Verse::FRunningContext Context,
+                                            bool bMutable,
+                                            int32 Tag,
+                                            int32 ElementTag,
+                                            const vh_value* Items,
+                                            int32 ItemCount)
+{
+    const FStructLayout* const Layout = FindStructLayoutByPackedTag(Tag);
+    Verse::VClass* const StructClass =
+        Layout ? FindMirroredVClass(Context, FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(Layout->VerseName))) : nullptr;
+    if (Layout && !StructClass)
+    {
+        return Verse::VValue();
+    }
+
+    TArray<Verse::VValue> Elements;
+    Elements.Reserve(ItemCount);
+    for (int32 Index = 0; Index < ItemCount; ++Index)
+    {
+        const vh_value& Item = Items[Index];
+        if (Layout)
+        {
+            const Verse::VValue Element = NewStructValue(Context, *StructClass, *Layout, Item.Seq.Items, Item.Seq.Count);
+            if (Element.IsUninitialized())
+            {
+                return Verse::VValue();
+            }
+            Elements.Add(Element);
+        }
+        else if (Tag == VH_VARIANT_PACKED_INT64_ARRAY)
+        {
+            Elements.Add(Verse::VValue(Verse::VInt(Context, Item.Type == VH_TYPE_FLOAT ? (int64)Item.Float : Item.Int)));
+        }
+        else if (Tag == VH_VARIANT_PACKED_FLOAT64_ARRAY)
+        {
+            Elements.Add(Verse::VValue(Verse::VFloat(Item.Type == VH_TYPE_INT ? (double)Item.Int : Item.Float)));
+        }
+        else if (Tag == VH_VARIANT_PACKED_STRING_ARRAY)
+        {
+            if (Item.Type != VH_TYPE_STRING)
+            {
+                return Verse::VValue();
+            }
+            const FUtf8StringView Utf8(reinterpret_cast<const UTF8CHAR*>(Item.String.Utf8), Item.String.Len);
+            // An element's mutability follows its container's, which is not obvious and is load
+            // bearing. Reading a `var` container hands out an immutable snapshot, and
+            // VMutableArray::FreezeImpl makes one by freezing each element in turn -- so an element
+            // has to be freezable. A VArray is not: every VArrayBase constructor sets the
+            // deeply-mutable flag (VVMArrayBase.h:288-370) and nothing ever clears it, while VArray
+            // has no FreezeImpl, so freezing one is the fatal "VCell subtype 'VArray' without
+            // FreezeImpl override" rather than the no-op it looks like it should be.
+            Elements.Add(bMutable ? Verse::VValue(Verse::VMutableArray::New(Context, Utf8))
+                                  : Verse::VValue(Verse::VArray::New(Context, Utf8)));
+        }
+        else if (Tag == VH_VARIANT_ARRAY && ElementTag == VH_VARIANT_BOOL)
+        {
+            Elements.Add(Verse::VValue::FromBool(Item.Type == VH_TYPE_LOGIC ? Item.Logic != 0 : Item.Int != 0));
+        }
+        else
+        {
+            return Verse::VValue();
+        }
+    }
+
+    const auto Init = [&Elements](uint32 Index) { return Elements[(int32)Index]; };
+    if (bMutable)
+    {
+        Verse::VMutableArray& Array =
+            Verse::VMutableArray::New(Context, 0, (uint32)ItemCount, Verse::EArrayType::VValue);
+        for (const Verse::VValue& Element : Elements)
+        {
+            Array.AddValue(Context, Element);
+        }
+        return Verse::VValue(Array);
+    }
+    return Verse::VValue(Verse::VArray::New(Context, (uint32)ItemCount, Init));
 }
 
 /// Builds the value to write, given the one already in the slot. An uninitialized return means the
@@ -1514,24 +1802,43 @@ AUTORTFM_DISABLE bool WriteFieldOf(UObject* Object, FUtf8StringView FieldName, c
         return WriteReferenceField(Object, FieldName, Mode, Referenced);
     }
 
-    // A mirrored struct, whose field names only the declared type carries -- the value arriving is a
-    // tuple of numbers and says nothing about what they are called.
-    if (Value.Type == VH_TYPE_TUPLE)
+    // A struct and an array both arrive as a sequence of numbers that says nothing about what it is:
+    // the field names of the one and the element type of the other are carried only by the declared
+    // type, which is where DescribeExportType already worked them out for the export list.
+    if (Value.Type == VH_TYPE_TUPLE || Value.Type == VH_TYPE_ARRAY)
     {
-        const FStructLayout* const Layout = DescribeMemberType(FUtf8String(Object->GetClass()->GetName()), FieldName).Struct;
-        if (!Layout)
+        const FMemberType Declared = DescribeMemberType(FUtf8String(Object->GetClass()->GetName()), FieldName);
+        if (Declared.Described.Type != Value.Type)
         {
             return false;
         }
-        return WriteFieldWith(Object, FieldName, Mode, [&Value, Layout](Verse::FRunningContext Context, Verse::VValue Current) {
-            // Cloned from the struct already in the slot, which is the same discipline every write
-            // here follows: the class comes from the value being replaced, so the new one cannot be
-            // of a class the compiled code was not expecting.
+
+        if (Value.Type == VH_TYPE_TUPLE)
+        {
+            const FStructLayout* const Layout = Declared.Struct;
+            if (!Layout)
+            {
+                return false;
+            }
+            return WriteFieldWith(Object, FieldName, Mode, [&Value, Layout](Verse::FRunningContext Context, Verse::VValue Current) {
+                // The class is taken from the struct already in the slot, which is the discipline
+                // every write here follows: the new value cannot be of a class the compiled code was
+                // not already expecting.
+                Verse::VRef* const Box = Current.DynamicCast<Verse::VRef>();
+                const Verse::VValue Inner = Box ? Box->Get(Context) : Current;
+                Verse::VValueObject* const Struct = Inner.DynamicCast<Verse::VValueObject>();
+                return Struct ? NewStructValue(Context, Struct->GetClass(), *Layout, Value.Seq.Items, Value.Seq.Count)
+                              : Verse::VValue();
+            });
+        }
+
+        const int32 Tag = Declared.Described.VariantTag;
+        const int32 ElementTag = Declared.Described.ElementVariantTag;
+        return WriteFieldWith(Object, FieldName, Mode, [&Value, Tag, ElementTag](Verse::FRunningContext Context, Verse::VValue Current) {
             Verse::VRef* const Box = Current.DynamicCast<Verse::VRef>();
             const Verse::VValue Inner = Box ? Box->Get(Context) : Current;
-            Verse::VValueObject* const Struct = Inner.DynamicCast<Verse::VValueObject>();
-            return Struct ? NewStructLike(Context, *Struct, *Layout, Value.Seq.Items, Value.Seq.Count)
-                          : Verse::VValue();
+            return NewArrayValue(Context, Inner.IsCellOfType<Verse::VMutableArray>(), Tag, ElementTag,
+                                 Value.Seq.Items, Value.Seq.Count);
         });
     }
 

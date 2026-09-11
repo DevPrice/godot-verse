@@ -75,6 +75,10 @@ struct FExportDesc
     /// vh_variant_tag: which Godot type to rebuild the value as, where the layout alone cannot
     /// say. VH_VARIANT_NIL leaves the consumer to infer it from Type.
     int32 VariantTag{VH_VARIANT_NIL};
+    /// vh_variant_tag: what an element of a plain Array is. A packed array carries that in its own
+    /// tag; an Array does not, and an inspector told only "Array" offers an editor that can add
+    /// anything. VH_VARIANT_NIL where there is nothing to say.
+    int32 ElementVariantTag{VH_VARIANT_NIL};
     bool bIsVar{false};
 
     /// The inspector hint the *declaration* implies -- a range off a constrained int or float,
@@ -233,9 +237,15 @@ AUTORTFM_DISABLE bool Complete(FUtf8StringView Path,
 struct FFieldStorage
 {
     FUtf8String Text;
-    /// Reserved to its final size before anything is added: Seq.Items points into it, and a
-    /// reallocation part-way through would leave that pointing at freed memory.
-    TArray<vh_value> Items;
+    /// One block per vh_value Seq: an array's own items, and one more for each struct inside it.
+    /// Blocks is reserved to its final length before any block is filled and no block is resized
+    /// afterwards, because a vh_value holds a bare pointer into one -- growing either would leave
+    /// that pointing at freed memory. (Growing Blocks would move only the TArray headers, whose
+    /// allocations follow them, but an outstanding reference *into* Blocks would still dangle, so
+    /// blocks are addressed by index.)
+    TArray<TArray<vh_value>> Blocks;
+    /// The bytes of each string element, for the reason Text exists.
+    TArray<FUtf8String> Strings;
 };
 
 /// Reads one data member off a live instance into the ABI's value shape.
