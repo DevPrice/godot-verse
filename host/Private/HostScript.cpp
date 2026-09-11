@@ -1359,6 +1359,25 @@ struct AUTORTFM_DISABLE FCompletionVisitor : public uLang::SAstVisitor
     {
         using namespace uLang;
 
+        // The file's own scope, which is where a cursor inside no definition at all completes --
+        // an attribute written above a class, most of all. A `using` is added to whatever scope
+        // was open when it was analysed, and at the top of a file that is the snippet, so a
+        // position defaulted to the package's root module instead sees none of the Godot API:
+        // not `node2d`, not `Print`, and not the `global_class` the line is reaching for.
+        //
+        // Set before the narrowing below rather than beside it: a class or function containing
+        // the cursor still wins, because the walk reaches it after its enclosing snippet.
+        if (AstNode.GetNodeType() == EAstNodeType::Context_Snippet)
+        {
+            const CExprSnippet& Snippet = static_cast<const CExprSnippet&>(AstNode);
+            if (Snippet._SemanticSnippet
+                && FULangConversionUtils::ULangStrToFUtf8String(Snippet._Path).Equals(Path, ESearchCase::IgnoreCase))
+            {
+                bSawPath = true;
+                Scope = Snippet._SemanticSnippet;
+            }
+        }
+
         const Verse::Vst::Node* Vst = AstNode.GetMappedVstNode();
         if (Vst && FULangConversionUtils::ULangStrToFUtf8String(Vst->GetSnippetPath()).Equals(Path, ESearchCase::IgnoreCase))
         {

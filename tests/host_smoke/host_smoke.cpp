@@ -829,6 +829,49 @@ int main(int argc, char** argv)
 				}
 			}
 
+			// The same question at the top level of a file, where the cursor is inside no
+			// definition at all: an attribute above a class declaration, which is the one place
+			// `@global_class` is ever written. The scope there is the file's own -- the snippet --
+			// and it is the only scope that carries the file's `using`, so a position defaulted to
+			// the package's root module instead would answer with neither the attribute the line
+			// is reaching for nor anything else the Godot package brings into view.
+			const size_t GlobalClassUse = ExportsSource.find("@global_class");
+			CompleteOk = Step("located the fixture's class attribute", GlobalClassUse != std::string::npos) && CompleteOk;
+			if (GlobalClassUse != std::string::npos)
+			{
+				std::string TopLevelTyping = ExportsSource;
+				TopLevelTyping.replace(GlobalClassUse + 1, strlen("global_class"), "VhCompletionCursor");
+				int32_t TopRow = 0;
+				int32_t TopColumn = 0;
+				RowColumnOf(TopLevelTyping, GlobalClassUse + 1, TopRow, TopColumn);
+				if (Step("vh_complete_symbol at a top-level attribute",
+						CompleteSymbolFn(ExportsPathUtf8.c_str(), TopLevelTyping.c_str(), TopRow, TopColumn,
+										 VH_COMPLETE_ATTRIBUTES, &Items, &Count) == VH_OK))
+				{
+					CompleteOk = Step("it offers global_class above a class declaration",
+									 Offers(Items, Count, "global_class") != nullptr)
+							  && CompleteOk;
+				}
+				else
+				{
+					CompleteOk = false;
+				}
+
+				// And the scope mode at the same position, which is the other half of the same
+				// fault: the file's `using` is what puts the mirrored API in view anywhere.
+				if (Step("vh_complete_symbol in a top-level scope",
+						CompleteSymbolFn(ExportsPathUtf8.c_str(), TopLevelTyping.c_str(), TopRow, TopColumn,
+										 VH_COMPLETE_SCOPE, &Items, &Count) == VH_OK))
+				{
+					CompleteOk = Step("the Godot package is in view there", Offers(Items, Count, "Print") != nullptr) && CompleteOk;
+					CompleteOk = Step("and so are its classes", Offers(Items, Count, "node2d") != nullptr) && CompleteOk;
+				}
+				else
+				{
+					CompleteOk = false;
+				}
+			}
+
 			// Whitespace has no members, and answering anyway would put the enclosing scope behind
 			// a dot the author never typed.
 			const vh_complete_item* NoItems = nullptr;
@@ -958,6 +1001,33 @@ int main(int argc, char** argv)
 		}
 		return nullptr;
 	};
+
+	// TEMP PROBE
+	{
+		for (int32_t Index = 0; Index < ExportCount; ++Index)
+		{
+			printf("[probe] export %d: %.*s type=%d\n", Index,
+				Exports[Index].NameLen, Exports[Index].NameUtf8, Exports[Index].Type);
+		}
+		const std::string Source = ReadFileUtf8(ExportsPath);
+		const char* Names[] = { "var Target", "var Art", "var Held" };
+		for (const char* Name : Names)
+		{
+			const size_t At = Source.find(Name);
+			if (At == std::string::npos)
+			{
+				printf("[probe] %s: not in fixture\n", Name);
+				continue;
+			}
+			int32_t Row = 0;
+			int32_t Column = 0;
+			RowColumnOf(Source, At + 5, Row, Column);
+			const vh_lookup_desc* Found = nullptr;
+			const int32_t Status = LookupSymbolFn(ExportsPathUtf8.c_str(), Row, Column, &Found);
+			printf("[probe] %s: status=%d type=%.*s\n", Name, Status,
+				Found ? Found->TypeLen : 0, Found ? Found->TypeUtf8 : "");
+		}
+	}
 
 	ExportsOk = Step("four members are exported", ExportCount == 4) && ExportsOk;
 	const vh_export_desc* SpeedExport = FindExport("Speed");
