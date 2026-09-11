@@ -1,9 +1,8 @@
 # Exporting Verse properties to Godot's inspector
 
-Research notes and roadmap, done against the UE checkout at
-`C:/UnrealEngine` (read-only reference, not part of this repo). Every claim
-below is cited `path:line`; where the checkout does not answer the question, that is stated
-rather than guessed.
+Research notes and roadmap, done against a local UE source checkout on branch `ue6-main`
+(read-only reference, not part of this repo). Every claim below is cited `path:line`; where the
+checkout does not answer the question, that is stated rather than guessed.
 
 ## What an attribute is
 

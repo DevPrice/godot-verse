@@ -1,9 +1,9 @@
 # External editor tooling
 
-Research notes for pointing VS Code at Epic's Verse tooling, done against the UE checkout at
-`C:/UnrealEngine` (read-only reference, not part of this repo). Every claim
-below is cited `path:line`; where the checkout does not answer the question, that is stated
-rather than guessed.
+Research notes for pointing VS Code at Epic's Verse tooling, done against a local UE source
+checkout on branch `ue6-main` (read-only reference, not part of this repo). Every claim below
+is cited `path:line`; where the checkout does not answer the question, that is stated rather
+than guessed.
 
 ## uLangLSP
 

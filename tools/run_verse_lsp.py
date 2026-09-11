@@ -17,8 +17,6 @@ import os
 import sys
 from pathlib import Path
 
-DEFAULT_ENGINE = r"C:\UnrealEngine"
-
 # Names a build of uLangLSP might plausibly produce. None of these exist in the checkout this
 # script was written against -- see docs/editor-tooling.md -- but the check is cheap and this
 # list is the one place to update if that ever changes.
@@ -54,13 +52,18 @@ def verse_source_roots(repo: Path, project: Path) -> list[tuple[Path, str]]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--engine", default=os.environ.get("UE_ROOT", DEFAULT_ENGINE))
+    parser.add_argument("--engine", default=os.environ.get("UE_ROOT"),
+                        help="UE source checkout with the Verse toolchain; defaults to $UE_ROOT")
     parser.add_argument("--project", default=None, help="defaults to the repo's demo/ directory")
     parser.add_argument("--exe", default=None, help="path to a uLangLSP executable, bypassing the search in Engine/Binaries/Win64")
     args = parser.parse_args()
 
+    if not args.engine and not args.exe:
+        print("error: no engine root; pass --engine or set UE_ROOT (or point --exe at a server)", file=sys.stderr)
+        sys.exit(1)
+
     repo = repo_root()
-    engine = Path(args.engine).resolve()
+    engine = Path(args.engine).resolve() if args.engine else None
     project = Path(args.project).resolve() if args.project else repo / "demo"
 
     if not project.exists():
@@ -69,9 +72,12 @@ def main() -> None:
 
     lsp_exe = Path(args.exe).resolve() if args.exe else find_lsp_exe(engine)
     if lsp_exe is None or not lsp_exe.exists():
-        bin_dir = engine / "Engine" / "Binaries" / "Win64"
         print("error: no Verse language server executable found.", file=sys.stderr)
-        print(f"       looked for {', '.join(CANDIDATE_EXE_NAMES)} under {bin_dir}", file=sys.stderr)
+        if args.exe:
+            print(f"       {lsp_exe} does not exist", file=sys.stderr)
+        else:
+            bin_dir = engine / "Engine" / "Binaries" / "Win64"
+            print(f"       looked for {', '.join(CANDIDATE_EXE_NAMES)} under {bin_dir}", file=sys.stderr)
         print("", file=sys.stderr)
         print("       This is not a build-configuration problem: no UBT Program target in the", file=sys.stderr)
         print("       UnrealEngine checkout links uLangLSP into an executable. uLangLSP", file=sys.stderr)

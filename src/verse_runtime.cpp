@@ -42,7 +42,7 @@ Error VerseRuntime::load_host() {
 	// The host must be loaded from the engine's own Binaries/Win64: VNI records each Verse
 	// package's source directory relative to the loaded module, and the compiler reads those
 	// .verse files at runtime. A copy anywhere else compiles against an empty package set.
-	const String dll_default = "C:/UnrealEngine/Engine/Binaries/Win64/verse_host.dll";
+	const String dll_default = String();
 	if (!settings->has_setting(dll_setting_name)) {
 		settings->set_setting(dll_setting_name, dll_default);
 	}
@@ -55,7 +55,7 @@ Error VerseRuntime::load_host() {
 	settings->add_property_info(dll_property_info);
 
 	const String engine_setting_name = "verse/host/engine_dir";
-	const String engine_default = "C:/UnrealEngine/Engine";
+	const String engine_default = String();
 	if (!settings->has_setting(engine_setting_name)) {
 		settings->set_setting(engine_setting_name, engine_default);
 	}
@@ -80,7 +80,13 @@ Error VerseRuntime::load_host() {
 	debugger_property_info["hint_string"] = String();
 	settings->add_property_info(debugger_property_info);
 
-	const String dll_path = settings->globalize_path(settings->get_setting(dll_setting_name));
+	const String dll_setting = settings->get_setting(dll_setting_name);
+	if (dll_setting.is_empty()) {
+		UtilityFunctions::push_error("VerseRuntime: " + dll_setting_name + " is unset; point it at <engine>/Engine/Binaries/Win64/verse_host.dll");
+		return ERR_UNCONFIGURED;
+	}
+
+	const String dll_path = settings->globalize_path(dll_setting);
 	const String engine_dir = settings->globalize_path(settings->get_setting(engine_setting_name));
 	const bool enable_debugger = settings->get_setting(debugger_setting_name);
 

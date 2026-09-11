@@ -9,7 +9,6 @@ import sys
 import time
 from pathlib import Path
 
-DEFAULT_ENGINE = r"C:\UnrealEngine"
 SKIP_DIRS = {"Intermediate", "Binaries"}
 
 
@@ -121,11 +120,16 @@ def collect_outputs(engine: Path, repo: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--engine", default=os.environ.get("UE_ROOT", DEFAULT_ENGINE))
+    parser.add_argument("--engine", default=os.environ.get("UE_ROOT"),
+                        help="UE source checkout with the Verse toolchain; defaults to $UE_ROOT")
     parser.add_argument("--config", default="Development", choices=["Debug", "DebugGame", "Development", "Shipping"])
     parser.add_argument("--clean", action="store_true")
     parser.add_argument("--stage-only", action="store_true")
     args = parser.parse_args()
+
+    if not args.engine:
+        print("error: no engine root; pass --engine or set UE_ROOT", file=sys.stderr)
+        sys.exit(1)
 
     start = time.time()
 
