@@ -309,11 +309,13 @@ AUTORTFM_DISABLE bool EnsureIde()
         return true;
     }
 
-    // `editable` is declared @customattribhandler, so evaluating a module that applies it asks
-    // ICustomAttributeHandler::FindHandlerForAttribute for a handler and fails the whole build
-    // with "No custom handler for attribute: editable" when there is none. The handler is
-    // registered by FVerseSimulationMetadataModule::StartupModule, and in a monolithic program
-    // linking the module does not run that -- nothing loads it unless asked.
+    // Epic's metadata attributes are declared @customattribhandler, so evaluating a module that
+    // applies one asks ICustomAttributeHandler::FindHandlerForAttribute for a handler and fails
+    // the whole build with "No custom handler for attribute: editable" when there is none. The
+    // bridge's own attributes need no handler, but a script is free to import
+    // /Verse.org/Simulation and apply one of Epic's. The handler is registered by
+    // FVerseSimulationMetadataModule::StartupModule, and in a monolithic program linking the
+    // module does not run that -- nothing loads it unless asked.
     FModuleManager::Get().LoadModule(TEXT("VerseSimulationMetadata"));
 
     // Registered for the life of the process, which is the life of the host: the handle

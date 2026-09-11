@@ -35,11 +35,12 @@ public class VerseHost : ModuleRules
 			"Verse",
 			"VerseSpatialMath",
 
-			// For `@editable` (/Verse.org/Simulation). Defining our own attribute is not an
-			// option: AddSuperType guards inheriting from `attribute` behind
-			// CScope::IsAuthoredByEpic(), which the InternalUser scope above does not satisfy --
-			// that only unlocks *access* to epic_internal definitions, not authorship. Every
-			// module this plugin depends on is already listed here.
+			// Not for the inspector attributes -- those are godot-verse's own, declared at runtime
+			// in a package the authorship injection lets us author. This is for the scripts that
+			// import /Verse.org/Simulation anyway: its metadata attributes are
+			// `@customattribhandler`, and a build where one is applied with no handler registered
+			// fails outright rather than ignoring the attribute. Every module this plugin depends
+			// on is already listed here.
 			"VerseSimulationMetadata",
 		});
 	}
