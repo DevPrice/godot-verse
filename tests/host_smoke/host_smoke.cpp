@@ -221,10 +221,10 @@ int main(int argc, char** argv)
 		// `Speed<public>:float` member declared far above it in the same file.
 		//
 		// A definition's source range starts at the first attribute applied to it rather than
-		// at its name, so Speed's begins on its `@editable` -- four lines above the name. That
-		// is the first `@editable` in the fixture, and it is the row a jump should land on.
+		// at its name, so Speed's begins on its `@export` -- two lines above the name. That is
+		// the first `@export` in the fixture, and it is the row a jump should land on.
 		const size_t UseOffset = ExportsSource.find("+ Speed");
-		const size_t DeclOffset = ExportsSource.find("@editable");
+		const size_t DeclOffset = ExportsSource.find("@export");
 		LookupOk = Step("located the fixture's Speed use and declaration",
 					   UseOffset != std::string::npos && DeclOffset != std::string::npos)
 				&& LookupOk;
@@ -780,12 +780,12 @@ int main(int argc, char** argv)
 
 			// An `@`, which admits neither the scope nor the members of anything: the attributes
 			// alone, spelled without the `@` the editor has already got on screen.
-			const size_t AttributeUse = ExportsSource.find("    @editable");
+			const size_t AttributeUse = ExportsSource.find("    @export");
 			CompleteOk = Step("located the fixture's attribute", AttributeUse != std::string::npos) && CompleteOk;
 			if (AttributeUse != std::string::npos)
 			{
 				std::string AttributeTyping = ExportsSource;
-				AttributeTyping.replace(AttributeUse + strlen("    @"), strlen("editable"), "VhCompletionCursor");
+				AttributeTyping.replace(AttributeUse + strlen("    @"), strlen("export"), "VhCompletionCursor");
 				int32_t AttributeRow = 0;
 				int32_t AttributeColumn = 0;
 				RowColumnOf(AttributeTyping, AttributeUse + strlen("    @"), AttributeRow, AttributeColumn);
@@ -793,21 +793,21 @@ int main(int argc, char** argv)
 						CompleteSymbolFn(ExportsPathUtf8.c_str(), AttributeTyping.c_str(), AttributeRow, AttributeColumn,
 										 VH_COMPLETE_ATTRIBUTES, &Items, &Count) == VH_OK))
 				{
-					CompleteOk = Step("it offers editable", Offers(Items, Count, "editable") != nullptr) && CompleteOk;
+					CompleteOk = Step("it offers export", Offers(Items, Count, "export") != nullptr) && CompleteOk;
 					CompleteOk = Step("and the bridge's own global_class",
 									 Offers(Items, Count, "global_class") != nullptr)
 							  && CompleteOk;
-					if (const vh_complete_item* Editable = Offers(Items, Count, "editable"))
+					if (const vh_complete_item* Export = Offers(Items, Count, "export"))
 					{
-						CompleteOk = Step("an attribute is offered as the class it is", Editable->Kind == VH_LOOKUP_CLASS) && CompleteOk;
+						CompleteOk = Step("an attribute is offered as the class it is", Export->Kind == VH_LOOKUP_CLASS) && CompleteOk;
 					}
 					// The name an author writes for an attribute that carries a payload is the
-					// <constructor> beside the class, not the class -- `@clamp_min("0.0")`
-					// against clamp_min_attribute -- and it has to be offered as the call it is.
-					if (const vh_complete_item* ClampMin = Offers(Items, Count, "clamp_min"))
+					// <constructor> beside the class, not the class -- `@export_group("Movement")`
+					// against export_group_attribute -- and it has to be offered as the call it is.
+					if (const vh_complete_item* Group = Offers(Items, Count, "export_group"))
 					{
-						CompleteOk = Step("a payload attribute is offered as a function", ClampMin->Kind == VH_LOOKUP_FUNCTION) && CompleteOk;
-						CompleteOk = Step("taking the one argument it spells", ClampMin->ParamCount == 1) && CompleteOk;
+						CompleteOk = Step("a payload attribute is offered as a function", Group->Kind == VH_LOOKUP_FUNCTION) && CompleteOk;
+						CompleteOk = Step("taking the one argument it spells", Group->ParamCount == 1) && CompleteOk;
 					}
 					else
 					{
@@ -941,7 +941,7 @@ int main(int argc, char** argv)
 					}
 					return nullptr;
 				};
-				CompleteOk = Step("it lists an @editable member", Find(Members, MemberCount, "Speed") != nullptr) && CompleteOk;
+				CompleteOk = Step("it lists an @export member", Find(Members, MemberCount, "Speed") != nullptr) && CompleteOk;
 				CompleteOk = Step("and one carrying no attribute at all", Find(Members, MemberCount, "Hidden") != nullptr) && CompleteOk;
 				CompleteOk = Step("and its methods", Find(Members, MemberCount, "Bump") != nullptr) && CompleteOk;
 				CompleteOk = Step("but nothing it merely inherits", Find(Members, MemberCount, "Position") == nullptr) && CompleteOk;
@@ -1065,12 +1065,12 @@ int main(int argc, char** argv)
 						&& !ExclusiveIntExport->RangeMinExclusive)
 			 && ExportsOk;
 
-	// Until `@export_range` exists, the attributes that carried a range before the type could.
-	ExportsOk = Step("clamp_min and clamp_max still make a range",
-					SpeedExport && SpeedExport->Hint == VH_EXPORT_HINT_RANGE
-						&& SpeedExport->RangeMin == 0.0 && SpeedExport->RangeMax == 500.0)
+	// A section is opened by the member that names it, at one of Godot's three nesting depths.
+	ExportsOk = Step("Speed opens a group",
+					SpeedExport && SpeedExport->GroupKind == VH_EXPORT_GROUP_GROUP
+						&& TextOf(SpeedExport->GroupNameUtf8, SpeedExport->GroupNameLen) == "Movement")
 			 && ExportsOk;
-	Step("Speed carries category", SpeedExport && TextOf(SpeedExport->CategoryUtf8, SpeedExport->CategoryLen) == "Movement");
+	Step("a member that opens none says so", ScaleExport && ScaleExport->GroupKind == VH_EXPORT_GROUP_NONE);
 	Step("Label carries no hint", FindExport("Label") && FindExport("Label")->Hint == VH_EXPORT_HINT_NONE);
 
 	// A Godot reference is a slot the scene may leave empty, so the member has to be able to hold

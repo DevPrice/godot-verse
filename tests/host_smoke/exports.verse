@@ -1,61 +1,58 @@
 using { /Godot.org/Godot }
-using { /Verse.org/Simulation }
 
 # Fixture for the export-list checks. Named after the file, like any script: the host looks the
 # class up at /user@localhost/exports.
 exports := class(object):
 
     # Not a var, so it is exported read-only and writes to it must be refused.
-    @editable
-    @clamp_min("0.0")
-    @clamp_max("500.0")
-    @category("Movement")
+    @export
+    @export_group("Movement")
     Speed<public>:float = 60.0
 
-    @editable
+    @export
     var Scale<public>:float = 1.5
 
-    @editable
+    @export
     var Enabled<public>:logic = true
 
-    @editable
+    @export
     var Label<public>:string = "hello"
 
     # A range the compiler enforces rather than one the inspector merely draws: the bounds are on
     # the type, so assigning 600.0 anywhere is an error rather than a value the slider happens not
     # to offer. The hint comes from here, and no attribute says it twice.
-    @editable
+    @export
     var Ranged<public>:type{_X:float where 0.0 <= _X, _X <= 500.0} = 60.0
 
-    @editable
+    @export
     var Steps<public>:type{_X:int where 0 <= _X, _X <= 10} = 3
 
     # Constrained on one side only, which Godot's range hint has no spelling for: it wants two
     # numbers. Both directions, because the two are not the same code path.
-    @editable
+    @export
     var AtLeast<public>:type{_X:int where 0 <= _X} = 3
 
-    @editable
+    @export
     var AtMost<public>:type{_X:float where _X <= 1.0} = 0.5
 
-    @editable
+    @export
     var Exclusive<public>:type{_X:float where _X < 500.0} = 1.0
 
-    @editable
+    @export
     var ExclusiveInt<public>:type{_X:int where 0 < _X} = 1
 
     # A Godot reference the scene may leave unassigned, which is every Godot reference: nothing can
     # force a value into an inspector slot. The option is what lets the member hold that.
-    @editable
+    @export
     var Target<public>:?node2d = false
 
     # The same reference without one. It compiles -- `node2d{}` is a handle of 0 -- which is
     # exactly why it has to be refused rather than exported as a node that was never alive.
-    @editable
+    @export
     var Held<public>:node2d = node2d{}
 
     # An option is the shape of an empty inspector slot, and a number has no empty slot.
-    @editable
+    @export
     var Maybe<public>:?float = false
 
     # No attribute, so it must not appear in the export list.

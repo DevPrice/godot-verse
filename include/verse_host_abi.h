@@ -22,7 +22,7 @@
 extern "C" {
 #endif
 
-#define VH_ABI_VERSION 22
+#define VH_ABI_VERSION 23
 
 typedef int32_t vh_bool;
 
@@ -344,6 +344,16 @@ typedef enum vh_export_hint
 	VH_EXPORT_HINT_CLASS
 } vh_export_hint;
 
+/* The inspector section a member opens. Godot's three nesting depths, and Verse's three
+ * attributes for them: a category is a heading, a group folds under it, a subgroup under that. */
+typedef enum vh_export_group
+{
+	VH_EXPORT_GROUP_NONE = 0,
+	VH_EXPORT_GROUP_CATEGORY,
+	VH_EXPORT_GROUP_GROUP,
+	VH_EXPORT_GROUP_SUBGROUP
+} vh_export_group;
+
 /* Why a member the author asked to export cannot reach the inspector.
  *
  * A rejected member is still listed rather than dropped: the consumer needs somewhere to say why,
@@ -368,7 +378,7 @@ typedef enum vh_export_reject
 	VH_EXPORT_OPTION_NOT_OBJECT
 } vh_export_reject;
 
-/* One data member of a script's class carrying the export attribute. */
+/* One data member of a script's class carrying `@export`. */
 typedef struct vh_export_desc
 {
 	const char* NameUtf8; /* not null terminated */
@@ -408,11 +418,12 @@ typedef struct vh_export_desc
 	vh_bool RangeMinExclusive;
 	vh_bool RangeMaxExclusive;
 
-	/* The inspector group this member opens, which every member listed after it joins until one
-	 * opens another. Empty for a member that opens none -- including one that closes the group
-	 * above it, since the group in force is whatever the last member named. */
-	const char* CategoryUtf8;
-	int32_t CategoryLen;
+	/* The inspector section this member opens, which every member listed after it joins until one
+	 * opens another. VH_EXPORT_GROUP_NONE for a member that opens none; a section is closed by
+	 * opening an empty-named one, since what is in force is whatever the last member named. */
+	int32_t GroupKind; /* vh_export_group */
+	const char* GroupNameUtf8;
+	int32_t GroupNameLen;
 
 	/* Where the member is declared, for a consumer with something to say about it: zero-based row,
 	 * and a column counted in utf8 bytes the way the compiler counts. As everywhere else, this is

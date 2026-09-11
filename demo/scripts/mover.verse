@@ -1,5 +1,4 @@
 using { /Godot.org/Godot }
-using { /Verse.org/Simulation }
 
 # Named after the file. A script that defines a class named after itself is attached to a node as
 # that class: the host instantiates it against the node and Ready/Process are its methods, not
@@ -11,15 +10,15 @@ using { /Verse.org/Simulation }
 @global_class
 mover := class(node2d):
 
-	@editable
-	@clamp_min("0.0")
-	@clamp_max("500.0")
-	@category("Movement")
-	var Speed<public>:float = 60.0
+	# The range is on the type, so the compiler enforces it: 600.0 does not compile, here or
+	# anywhere else this member is assigned. The inspector's slider is built from the same bounds.
+	@export
+	@export_group("Movement")
+	var Speed<public>:type{_X:float where 0.0 <= _X, _X <= 500.0} = 60.0
 
 	# No `var`, so the inspector's value is an initializer: it is applied while the object is still
 	# being built, and by the time anything below can read it the value is fixed.
-	@editable
+	@export
 	Greeting<public>:string = "Verse is running inside Godot, as a class."
 
 	Ready<override>():void =

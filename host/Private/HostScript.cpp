@@ -81,12 +81,49 @@ constexpr const char* AttributeSnippetPath = "GodotAttributes.verse";
 /// unless CScope::IsAuthoredByEpic(), which only FGodotAuthorshipInjection below grants -- and
 /// that runs here, while host/Verse is compiled by VNI at UBT time, which nothing we build can
 /// reach. Hence a runtime-only package for the one thing VNI will not accept.
+///
+/// None of them carries `@customattribhandler`. Epic's `editable` does, which is why applying it
+/// obliges the host to load VerseSimulationMetadata and submit to that handler's rules -- the ones
+/// written for UEFN's inspector, which refuse a struct that is not concrete and so refuse `color`.
+/// An attribute with no handler is just a type applied to a definition, which is all this needs.
 constexpr const char* AttributePackageSource =
     "# Registers the class it is applied to as a Godot global class, the way C#'s [GlobalClass]\n"
     "# does. A marker with no argument: the name Godot registers is the class's own, which the\n"
     "# one-top-level-name-per-file rule already pins to the file stem.\n"
     "@attribscope_class\n"
-    "global_class<public> := class<computes>(attribute) {}\n";
+    "global_class<public> := class<computes>(attribute) {}\n"
+    "\n"
+    "# Sends the member to Godot's inspector, the way C#'s [Export] does. What kind of field it\n"
+    "# gets is read off the member's declared type rather than said again here: a bounded number\n"
+    "# is a range, an enum is a list of choices, a mirrored class is the node or resource a slot\n"
+    "# will accept.\n"
+    "@attribscope_data\n"
+    "export<public> := class<computes>(attribute) {}\n"
+    "\n"
+    "# The inspector section the member opens, which every member declared after it joins until\n"
+    "# one opens another -- Godot has no per-property section, so the section is a position in the\n"
+    "# list. [ExportCategory], [ExportGroup] and [ExportSubgroup] in C#, and the same three nested\n"
+    "# depths: a category is a heading, a group folds under it, a subgroup folds under that.\n"
+    "@attribscope_data\n"
+    "export_category_attribute<public> := class<computes>(attribute):\n"
+    "    Name<public>:string\n"
+    "\n"
+    "export_category<public><constructor>(Name:string)<computes> := export_category_attribute:\n"
+    "    Name := Name\n"
+    "\n"
+    "@attribscope_data\n"
+    "export_group_attribute<public> := class<computes>(attribute):\n"
+    "    Name<public>:string\n"
+    "\n"
+    "export_group<public><constructor>(Name:string)<computes> := export_group_attribute:\n"
+    "    Name := Name\n"
+    "\n"
+    "@attribscope_data\n"
+    "export_subgroup_attribute<public> := class<computes>(attribute):\n"
+    "    Name<public>:string\n"
+    "\n"
+    "export_subgroup<public><constructor>(Name:string)<computes> := export_subgroup_attribute:\n"
+    "    Name := Name\n";
 
 using FMainFunction = TVerseFunction<FVerseResult(
     TVerseCall<void>, const TArray<verse::string>&, const TMap<verse::string, verse::string>&)>;
@@ -601,18 +638,14 @@ AUTORTFM_DISABLE bool GodotVerse::HasClass(FUtf8StringView ClassName)
 }
 
 namespace {
-/// Epic's own inspector attribute, borrowed rather than reimplemented: uLang guards inheriting
-/// from `attribute` behind CScope::IsAuthoredByEpic(), so `/Godot.org/Godot` cannot declare one
-/// of its own however it is scoped. `editable` is <public> in a PublicAPI package and carries
-/// @attribscope_data, so applying it to a script's data member is legal from anywhere.
-constexpr const char* EditableAttributePath = "/Verse.org/Simulation/editable";
-
-// Metadata attributes that carry an inspector hint. Each takes a single string argument, which is
-// the one attribute payload SOL-972 leaves readable. These name the attribute *class*, not the
-// <constructor> function beside it: GetAttributeTextValue matches on the invocation's return type.
-constexpr const char* ClampMinAttributePath = "/Verse.org/Simulation/clamp_min_attribute";
-constexpr const char* ClampMaxAttributePath = "/Verse.org/Simulation/clamp_max_attribute";
-constexpr const char* CategoryAttributePath = "/Verse.org/Simulation/category_attribute";
+/// The bridge's own attributes, declared in AttributePackageSource above and so sharing the verse
+/// path a script already imports. The section ones name the attribute *class* rather than the
+/// `<constructor>` function beside it: GetAttributeTextValue matches on the invocation's return
+/// type, and a single string argument is the one attribute payload SOL-972 leaves readable.
+constexpr const char* ExportAttributePath = "/Godot.org/Godot/export";
+constexpr const char* ExportCategoryAttributePath = "/Godot.org/Godot/export_category_attribute";
+constexpr const char* ExportGroupAttributePath = "/Godot.org/Godot/export_group_attribute";
+constexpr const char* ExportSubgroupAttributePath = "/Godot.org/Godot/export_subgroup_attribute";
 
 /// The string a single-argument metadata attribute was spelled with, or empty when the member
 /// does not carry it.
@@ -1136,12 +1169,12 @@ AUTORTFM_DISABLE bool GodotVerse::GetClassExports(FUtf8StringView ClassName, TAr
     }
     const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
 
-    // Absent when VerseSimulationMetadata is not in the package set, which also means no script
-    // could have applied the attribute -- an empty list would claim the script exports nothing,
-    // so this reports "cannot answer" instead.
-    const uLang::CClass* EditableAttribute =
-        Program->FindDefinitionByVersePath<uLang::CClass>(EditableAttributePath);
-    if (!EditableAttribute)
+    // Absent when the attribute package did not make it into the program, which also means no
+    // script could have applied the attribute -- an empty list would claim the script exports
+    // nothing, so this reports "cannot answer" instead.
+    const uLang::CClass* ExportAttribute =
+        Program->FindDefinitionByVersePath<uLang::CClass>(ExportAttributePath);
+    if (!ExportAttribute)
     {
         return false;
     }
@@ -1154,17 +1187,15 @@ AUTORTFM_DISABLE bool GodotVerse::GetClassExports(FUtf8StringView ClassName, TAr
         return false;
     }
 
-    // Absent when VerseSimulationMetadata predates these attributes; a member simply gets no hint
-    // rather than the whole harvest failing, which is why these are not checked like the one above.
-    const uLang::CClass* ClampMinAttribute = Program->FindDefinitionByVersePath<uLang::CClass>(ClampMinAttributePath);
-    const uLang::CClass* ClampMaxAttribute = Program->FindDefinitionByVersePath<uLang::CClass>(ClampMaxAttributePath);
-    const uLang::CClass* CategoryAttribute = Program->FindDefinitionByVersePath<uLang::CClass>(CategoryAttributePath);
+    const uLang::CClass* CategoryAttribute = Program->FindDefinitionByVersePath<uLang::CClass>(ExportCategoryAttributePath);
+    const uLang::CClass* GroupAttribute = Program->FindDefinitionByVersePath<uLang::CClass>(ExportGroupAttributePath);
+    const uLang::CClass* SubgroupAttribute = Program->FindDefinitionByVersePath<uLang::CClass>(ExportSubgroupAttributePath);
 
     // Only the class's own members. An inherited export would have to be looked up through the
     // object hierarchy, and every one of those is generated API rather than script state.
     for (const uLang::TSRef<uLang::CDataDefinition>& Member : Class->GetDefinitionsOfKind<uLang::CDataDefinition>())
     {
-        if (!Member->HasAttributeSubclass(EditableAttribute, *Program))
+        if (!Member->HasAttributeSubclass(ExportAttribute, *Program))
         {
             continue;
         }
@@ -1172,24 +1203,28 @@ AUTORTFM_DISABLE bool GodotVerse::GetClassExports(FUtf8StringView ClassName, TAr
         FExportDesc Desc;
         Desc.Name = FUtf8String(Member->AsNameCString());
         Desc.bIsVar = Member->IsVar();
-        Desc.Category = AttributeText(*Member, CategoryAttribute, *Program);
         DescribeExportType(Member->GetType(), *Program, Desc);
 
-        // A range the type did not carry, from the attributes that carried one before it could.
-        // They hold text rather than numbers -- a string argument is the one attribute payload
-        // SOL-972 leaves readable -- so a typo is a missing bound rather than a compile error.
-        if (Desc.Hint == VH_EXPORT_HINT_NONE)
+        // The outermost section a member opens wins, since a member cannot be the first of a group
+        // and the first of the category above it at once -- and the deeper one would be drawn
+        // inside whatever came before, which is not what naming a category asks for.
+        const FUtf8String Category = AttributeText(*Member, CategoryAttribute, *Program);
+        const FUtf8String Group = AttributeText(*Member, GroupAttribute, *Program);
+        const FUtf8String Subgroup = AttributeText(*Member, SubgroupAttribute, *Program);
+        if (Member->HasAttributeSubclass(CategoryAttribute, *Program))
         {
-            const FUtf8String ClampMin = AttributeText(*Member, ClampMinAttribute, *Program);
-            const FUtf8String ClampMax = AttributeText(*Member, ClampMaxAttribute, *Program);
-            Desc.bHasRangeMin = !ClampMin.IsEmpty();
-            Desc.bHasRangeMax = !ClampMax.IsEmpty();
-            Desc.RangeMin = Desc.bHasRangeMin ? FCString::Atod(*FString(ClampMin)) : 0.0;
-            Desc.RangeMax = Desc.bHasRangeMax ? FCString::Atod(*FString(ClampMax)) : 0.0;
-            if (Desc.bHasRangeMin || Desc.bHasRangeMax)
-            {
-                Desc.Hint = VH_EXPORT_HINT_RANGE;
-            }
+            Desc.GroupKind = VH_EXPORT_GROUP_CATEGORY;
+            Desc.GroupName = Category;
+        }
+        else if (Member->HasAttributeSubclass(GroupAttribute, *Program))
+        {
+            Desc.GroupKind = VH_EXPORT_GROUP_GROUP;
+            Desc.GroupName = Group;
+        }
+        else if (Member->HasAttributeSubclass(SubgroupAttribute, *Program))
+        {
+            Desc.GroupKind = VH_EXPORT_GROUP_SUBGROUP;
+            Desc.GroupName = Subgroup;
         }
 
         FUtf8String DeclaredIn;

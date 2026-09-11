@@ -546,6 +546,18 @@ static String range_hint_for(const Dictionary &p_entry, Variant::Type p_type) {
 	return String();
 }
 
+// Godot's three nesting depths, which are three usage flags rather than a depth number.
+PropertyUsageFlags usage_for_group(int64_t p_kind) {
+	switch (p_kind) {
+		case VH_EXPORT_GROUP_CATEGORY:
+			return PROPERTY_USAGE_CATEGORY;
+		case VH_EXPORT_GROUP_SUBGROUP:
+			return PROPERTY_USAGE_SUBGROUP;
+		default:
+			return PROPERTY_USAGE_GROUP;
+	}
+}
+
 Dictionary property_for(const Dictionary &p_entry, Variant::Type p_type) {
 	Dictionary property;
 	property["name"] = p_entry["name"];
@@ -614,12 +626,14 @@ void VerseScript::refresh_exports() const {
 
 	TypedArray<Dictionary> properties;
 
-	// Godot has no per-property group field: a PROPERTY_USAGE_GROUP entry claims every property
-	// that follows it, up to the next group entry (or the end of the list) -- the same positional
-	// rule GDScript's @export_group and C#'s [ExportGroup] follow. So the export list is walked
-	// once, in the declaration order vh_class_export_list already returns, and a group header is
-	// inserted only when the category changes; that keeps the inspector, and the scene file Godot
-	// rewrites from it, in the order the author wrote the class rather than bucketed by category.
+	// Godot has no per-property section field: a PROPERTY_USAGE_CATEGORY, _GROUP or _SUBGROUP
+	// entry claims every property that follows it, up to the next entry of that kind (or the end
+	// of the list) -- the same positional rule `@export_group` follows in GDScript and
+	// [ExportGroup] in C#. So the export list is walked once, in the declaration order
+	// vh_class_export_list already returns, and a header is inserted only where a member opens a
+	// section; that keeps the inspector, and the scene file Godot rewrites from it, in the order
+	// the author wrote the class.
+	int64_t group_kind = VH_EXPORT_GROUP_NONE;
 	String group = String();
 	for (int64_t i = 0; i < exports.size(); i++) {
 		const Dictionary entry = exports[i];
@@ -632,16 +646,18 @@ void VerseScript::refresh_exports() const {
 		}
 		const Variant::Type type = variant_type_for(entry["type"], entry["variant_tag"]);
 
-		const String category = entry["category"];
-		if (category != group) {
+		const int64_t entry_kind = entry["group_kind"];
+		const String entry_group = entry["group_name"];
+		if (entry_kind != VH_EXPORT_GROUP_NONE && (entry_kind != group_kind || entry_group != group)) {
 			Dictionary group_entry;
-			group_entry["name"] = category;
+			group_entry["name"] = entry_group;
 			group_entry["type"] = (int64_t)Variant::NIL;
 			group_entry["hint"] = (int64_t)PROPERTY_HINT_NONE;
 			group_entry["hint_string"] = String();
-			group_entry["usage"] = (int64_t)PROPERTY_USAGE_GROUP;
+			group_entry["usage"] = (int64_t)usage_for_group(entry_kind);
 			properties.push_back(group_entry);
-			group = category;
+			group_kind = entry_kind;
+			group = entry_group;
 		}
 
 		properties.push_back(property_for(entry, type));

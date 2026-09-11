@@ -67,7 +67,7 @@ AUTORTFM_DISABLE bool InstanceHasFunction(const FInstance* Instance, FUtf8String
 AUTORTFM_DISABLE int32 InstanceCallVoid(FInstance* Instance, FUtf8StringView DecoratedName);
 AUTORTFM_DISABLE int32 InstanceCallVoidFloat(FInstance* Instance, FUtf8StringView DecoratedName, double Arg);
 
-/// One `@godot_export` data member, harvested from the semantic program rather than the VM.
+/// One `@export` data member, harvested from the semantic program rather than the VM.
 struct FExportDesc
 {
     FUtf8String Name;
@@ -92,8 +92,10 @@ struct FExportDesc
     bool bRangeMinExclusive{false};
     bool bRangeMaxExclusive{false};
 
-    /// The inspector group this member opens, empty for one that opens none.
-    FUtf8String Category;
+    /// The inspector section this member opens, and vh_export_group saying at which of Godot's
+    /// three nesting depths. Every member after it joins that section until one opens another.
+    int32 GroupKind{VH_EXPORT_GROUP_NONE};
+    FUtf8String GroupName;
 
     /// Where the member is declared, for a consumer that wants to say something about it. Zero
     /// based row, utf8 byte column, both -1 when the definition has no source location.
@@ -105,7 +107,7 @@ struct FExportDesc
     int32 Reject{VH_EXPORT_OK};
 };
 
-/// Fills OutExports with the `@godot_export` data members ClassName declares, reading the
+/// Fills OutExports with the `@export` data members ClassName declares, reading the
 /// semantic program the last analysis pass left behind.
 ///
 /// This is deliberately not routed through the VM. Analysis re-runs on every keystroke while
