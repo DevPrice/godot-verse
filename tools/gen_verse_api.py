@@ -41,6 +41,29 @@ BASE_MEMBER_NAMES = {"Handle", "Ready", "Process", "PhysicsProcess"}
 #
 # This package's own module-level names are in scope for the same reason and belong here too --
 # Print and IsInstanceValid, the two functions GodotApi.native.verse exports.
+# The names a *member* of a mirrored class may not take, because Verse's own definition of that name
+# is ambiguous with it. Confirmed by the compiler rather than guessed: generating the whole API with
+# no guard at all reports exactly these, and `Length`, `Reverse`, `Sign`, `Shuffle` and the rest of
+# the plausible list are not among them. To confirm a new one, drop the guard, generate, and read the
+# errors -- and add it here rather than widening the guess, because over-listing here costs a public
+# name where over-listing VERSE_STDLIB_NAMES below costs nothing.
+#
+# `Min` and `Max` are here as *data*: a `var` cannot overload, so a property of that name is
+# ambiguous with /Verse.org/Verse's function where a method would have been distinguished. No Godot
+# class has a *method* named either, and if one ever does, emit_class asserts rather than letting the
+# collision reach the compiler as an error hundreds of lines from its cause.
+VERSE_AMBIGUOUS_MEMBER_NAMES = {"Min", "Max", "ToString"}
+
+# Godot members that are reachable as a module-level function instead of as a method, because Verse
+# already gives the name a meaning worth keeping.
+#
+# `ToString` is the only one, and it is not a mere collision: Verse's string interpolation *desugars*
+# to it -- `"{X}"` becomes `ToString(X)` (Desugarer.cpp's DesugarInterpolatedString) -- so a
+# module-level `ToString(:object)` makes `"{MyNode}"` print what Godot's own to_string says. A method
+# named ToString could not have done that, and would have been ambiguous with the stdlib besides.
+# GodotApi.native.verse holds the function.
+FREE_FUNCTION_REPLACEMENTS = {("Object", "to_string"): "ToString(Value)"}
+
 VERSE_STDLIB_NAMES = {
     "Int", "Float", "Logic", "Char", "Rational",
     # Verse's bitwise intrinsics and its float constants, all of them $BuiltIn rather than a package
@@ -159,18 +182,7 @@ def pascal_member_name(godot_name: str) -> str:
 
 
 def verse_method_name(godot_name: str) -> str:
-    name = pascal_member_name(godot_name)
-    # A method whose name is one of Verse's own is ambiguous with it, and arity does not save it:
-    # `Object.to_string()` against `/Verse.org/Verse:ToString(:[]char)` is a compile error even
-    # though one takes nothing and the other takes a string. Skipping the method is not an option --
-    # R-SCN-2 permits only virtual, static and vararg -- so it takes Godot's name with `Godot` in
-    # front, which is what it is: Godot's own ToString rather than Verse's.
-    #
-    # Three methods across 1023 classes: Gradient.reverse, Crypto.sign and Object.to_string.
-    # VERSE_STDLIB_NAMES is a deliberately conservative guess at what `/Verse.org/Verse` exports --
-    # the standard library is compiler intrinsics rather than a .verse digest, so there is nothing to
-    # enumerate -- and over-listing here costs an odd-looking name where under-listing costs a build.
-    return f"Godot{name}" if name in VERSE_STDLIB_NAMES else name
+    return pascal_member_name(godot_name)
 
 
 def verse_param_name(godot_name: str, index: int, reserved_words: set, used: set, members: set) -> str:
@@ -1220,6 +1232,15 @@ def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members
     if m.get("is_vararg"):
         coverage.skip("vararg", record("vararg"))
         return None
+    if (godot_class, m["name"]) in FREE_FUNCTION_REPLACEMENTS:
+        coverage.skip("superseded_by_free_function", record(
+            "superseded_by_free_function", f"`{FREE_FUNCTION_REPLACEMENTS[(godot_class, m['name'])]}`"))
+        return None
+    if verse_method_name(m["name"]) in VERSE_AMBIGUOUS_MEMBER_NAMES:
+        raise ValueError(
+            f"{godot_class}.{m['name']} would be a method named "
+            f"{verse_method_name(m['name'])}, which Verse's own definition of that name is "
+            f"ambiguous with. Give it a FREE_FUNCTION_REPLACEMENTS entry.")
 
     unsupported_seen = []
 
@@ -1361,10 +1382,9 @@ def classify_property(p: dict, resolver: TypeResolver, coverage: Coverage, metho
     # of the same name would have been distinguished by its signature. So the property is dropped
     # and Godot's own getter and setter survive as methods -- GetMax() still reads it; what is lost
     # is only `set Node.Max = ...`.
-    # Checked before the Godot prefix verse_method_name would add: a property that cannot be a `var`
-    # is better dropped than renamed, because dropping it leaves Godot's own `GetMax()` and `SetMax()`
-    # standing and renaming it would put `GodotMax` in their place. Godot's vocabulary wins.
-    if pascal_member_name(p["name"]) in VERSE_STDLIB_NAMES:
+    # Dropped rather than renamed, because dropping it leaves Godot's own `GetMax()` and `SetMax()`
+    # standing where any rename would put an invented name in their place. Godot's vocabulary wins.
+    if pascal_member_name(p["name"]) in VERSE_AMBIGUOUS_MEMBER_NAMES:
         coverage.skip("property_ambiguous_name", record("property_ambiguous_name"))
         return None
     if info.verse_type in CONTAINER_PROPERTY_TYPES or info.verse_type.startswith("[]"):

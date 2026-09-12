@@ -65,6 +65,17 @@ TagPackedVector4Array:int = 38
 # one type this package deliberately keeps to itself.
 IsInstanceValid<public>(Object:object)<decides><transacts>:void = VhIsValid(Object.Handle)?
 
+# Godot's Object.to_string, as Verse's own ToString rather than as a method.
+#
+# Verse's string interpolation desugars to this name -- `"{X}"` becomes `ToString(X)` -- so declaring
+# it here is what makes `Print("hit {Body}")` print what Godot would print, rather than nothing or a
+# handle. A *method* could not have done that, and could not have existed anyway: `object.ToString()`
+# is ambiguous with /Verse.org/Verse's ToString even though one takes nothing and the other takes a
+# string, because arity does not separate a name from Verse's own.
+#
+# An overload of a stdlib name in this package, which is the same thing the enums' `ToInt` is.
+ToString<public>(Value:object)<transacts>:string = VhToString(VhCallValue(Value.Handle, "to_string", array{}))
+
 # --- variant packing ---------------------------------------------------------
 
 # Each of these names the lanes its tag reads and lets the struct default the rest, which is the

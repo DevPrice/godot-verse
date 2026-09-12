@@ -60,6 +60,14 @@ resolves conflicts:
   model* would mean the user's Godot knowledge stops transferring, and that knowledge is the only
   thing they brought. Status: **done** as a principle — the mirror already reads `node2d`,
   `Position`, `GetParent()`.
+
+  Godot's `Object.to_string` is the one place the principle had teeth. It cannot be a method named
+  `ToString`: Verse's own `ToString` is ambiguous with it whatever the arity. Renaming it would have
+  been the obvious escape and the wrong one — Verse's spelling wins, so it is reachable as
+  `ToString(Value)`, a module-level overload of Verse's own name. That buys more than it costs:
+  string interpolation *desugars* to `ToString`, so `"{MyNode}"` prints what Godot prints, with
+  nothing written to make it. Exactly four other members across 1023 classes are ambiguous with a
+  Verse name, all of them `Min` or `Max` as data, and each keeps Godot's own `GetMin()`/`SetMin()`.
 - **R-AUD-3 (SHOULD)** Verse's less familiar features — `<decides>`, structured concurrency,
   parametric types — are available but never on the critical path of a first script. A user must
   be able to write a working script knowing only "class, member, method, `set`".

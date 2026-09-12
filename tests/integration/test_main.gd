@@ -262,6 +262,12 @@ func _init() -> void:
 	_check("Object.has_method sees a GDScript method", node.call("CanCall", self, "_double"))
 	_check("and denies one nothing declares", not node.call("CanCall", self, "_no_such_method"))
 
+	# --- Object.to_string reached as Verse's own ToString -----------------------------------------
+	_check_eq("ToString on a Godot object answers what Godot's to_string does",
+			node.call("Described", kid), str(kid))
+	_check_eq("and string interpolation desugars to the same function",
+			node.call("Interpolated", kid), "<%s>" % str(kid))
+
 	# --- R-LANG-1/2/3: the Verse language itself -------------------------------------------------
 	#
 	# Script-to-script inheritance, interfaces, structs, enums and parametric types. Most of this was

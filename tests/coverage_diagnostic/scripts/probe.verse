@@ -12,6 +12,11 @@ probe := class(node2d):
     # virtual: Node._enter_tree is Godot's to call, and only three virtuals are carried (R-NODE-7).
     Virtual()<transacts>:void = EnterTree()
 
-    # property_ambiguous_name: Animation.length cannot be a `var` named Length -- Verse's own Length
-    # is in scope where it would be declared -- so Godot's own accessors carry it instead.
-    AmbiguousProperty(A:animation)<transacts>:float = A.Length
+    # property_ambiguous_name: VisualShaderNodeFloatParameter.max cannot be a `var` named Max --
+    # /Verse.org/Verse's Max is a function, and data cannot overload -- so Godot's own accessors
+    # carry it instead. Four properties across the whole API are in this position.
+    AmbiguousProperty(P:visual_shader_node_float_parameter)<transacts>:float = P.Max
+
+    # superseded_by_free_function: Object.to_string is Verse's own ToString, which is also what
+    # string interpolation desugars to.
+    FreeFunction(O:object)<transacts>:string = O.ToString()

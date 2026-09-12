@@ -265,6 +265,16 @@ marshal := class(node2d):
 
     CanCall<public>(Target:object, Method:string):logic = Target.HasMethod(Method)
 
+    # --- Godot's Object.to_string, as Verse's own ToString --------------------
+    #
+    # Not a method: `object.ToString()` is ambiguous with /Verse.org/Verse's ToString even though one
+    # takes nothing and the other takes a string. A module-level overload is better than a renamed
+    # method anyway, because Verse's string interpolation desugars to exactly this name -- so
+    # `"{Node}"` prints what Godot would print, with nothing written to make it.
+    Described<public>(Target:object):string = ToString(Target)
+
+    Interpolated<public>(Target:object):string = "<{Target}>"
+
     # --- R-LANG-6: a library file, resolved with no import -------------------
     #
     # HelperDouble and HelperAnswer live in helpers.verse, which declares no class and so cannot go

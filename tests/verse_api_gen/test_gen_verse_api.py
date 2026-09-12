@@ -823,6 +823,49 @@ def test_a_property_takes_its_enum_from_the_getter():
     )
 
 
+def test_a_member_ambiguous_with_a_verse_name():
+    # Confirmed by the compiler rather than guessed: generating the whole API with no guard reports
+    # exactly Min, Max and ToString. Length, Reverse, Sign and Shuffle are not among them, which an
+    # earlier conservative guess had assumed they were.
+    check("the confirmed set is small and closed",
+          sorted(g.VERSE_AMBIGUOUS_MEMBER_NAMES), ["Max", "Min", "ToString"])
+
+    resolver = g.TypeResolver({"Thing"}, {"Thing": None}, {"Thing"}, {})
+    coverage = g.Coverage()
+    check_true(
+        "a property named Max is dropped so Godot's accessors survive",
+        g.classify_property(
+            {"name": "max", "type": "float", "getter": "get_max", "setter": "set_max"},
+            resolver, coverage, {}, "Thing") is None,
+    )
+    check("and recorded as the ambiguity it is",
+          coverage.skip_reasons["property_ambiguous_name"], 1)
+    check_true("with Godot's own accessors named in the reason",
+               "`GetMax()`" in coverage.skipped_members[0].detail)
+
+    # A method in that position has no rename rule any more -- there is none left to need one -- so
+    # the generator refuses rather than letting the collision reach the compiler far from its cause.
+    raised = False
+    try:
+        g.classify_method(_method("max", "float"), resolver, g.Coverage(), set(), "Thing")
+    except ValueError:
+        raised = True
+    check_true("a *method* in that position fails generation instead", raised)
+
+
+def test_to_string_is_reachable_as_verses_own():
+    resolver = g.TypeResolver({"Object"}, {"Object": None}, {"Object"}, {})
+    coverage = g.Coverage()
+    check_true(
+        "Object.to_string is not emitted as a method",
+        g.classify_method(_method("to_string", "String"), resolver, coverage, set(), "Object") is None,
+    )
+    check("it is superseded by a free function",
+          coverage.skip_reasons["superseded_by_free_function"], 1)
+    check("and the reason names the spelling that replaced it",
+          coverage.skipped_members[0].detail, "`ToString(Value)`")
+
+
 def main():
     test_class_names()
     test_method_names()
@@ -838,6 +881,8 @@ def main():
     test_integer_vector_defaults_stay_integers()
     test_nested_math_structs_are_not_vars()
     test_ancestor_pull_in()
+    test_a_member_ambiguous_with_a_verse_name()
+    test_to_string_is_reachable_as_verses_own()
     test_enumerator_names_strip_their_shared_prefix()
     test_enums_drop_sentinels_and_aliases()
     test_a_property_takes_its_enum_from_the_getter()

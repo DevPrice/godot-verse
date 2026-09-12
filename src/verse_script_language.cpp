@@ -1942,6 +1942,9 @@ String skipped_member_explanation(const verse_api::skipped_member &p_entry) {
 	if (reason == "superseded_by_property") {
 		return String("it is reachable as the property ") + detail + ".";
 	}
+	if (reason == "superseded_by_free_function") {
+		return String("it is reachable as ") + detail + ", which is also what string interpolation uses.";
+	}
 	if (reason.begins_with("property_")) {
 		return String("it cannot be a property, so Godot's own ") + detail + " carry it instead.";
 	}
