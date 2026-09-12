@@ -342,7 +342,32 @@ private:
 	mutable std::map<std::string, std::string> module_by_script;
 	mutable bool module_map_built = false;
 
+	// The import _frame is about to write, as the res:// path of the file and the module path to
+	// import. One at a time: the next analysis reports whatever is still unresolved.
+	mutable godot::String pending_import_path;
+	mutable godot::String pending_import_module;
+	// Every (file, module) this session has already offered, so an import the author deletes is
+	// not put straight back and a stale diagnostic does not insert a second copy.
+	mutable std::unordered_map<std::string, bool> offered_imports;
+
 	void log_new_diagnostics(const godot::String &p_globalized_path, const godot::TypedArray<godot::Dictionary> &p_errors) const;
+
+	// R-TOOL-12. Looks through a file's fresh diagnostics for an unknown identifier that one of
+	// the project's modules declares, and queues the `using` that would fix it -- goimports'
+	// shape, reacting to the diagnostic rather than to the keystroke, because Godot's completion
+	// API carries no edit-on-accept hook to hang it on.
+	//
+	// Queued rather than written: this runs inside a validate, and writing into the buffer the
+	// editor is mid-validate on is not somewhere to do it. _frame performs the insertion.
+	//
+	// Only when exactly one module declares the name. Two modules declaring one name is legal --
+	// it is the point of modules -- and only the author knows which was meant.
+	void note_missing_imports(const godot::String &p_path, const godot::TypedArray<godot::Dictionary> &p_errors) const;
+
+	// Performs the queued insertion, if the script editor is still showing the file it is for.
+	// Insert only: nothing is ever removed, because removing a line the author may have written
+	// by hand is a different and worse promise.
+	void insert_pending_import() const;
 
 	static godot::PackedStringArray find_verse_sources(const godot::String &p_dir);
 	// Every file under p_dir whose extension is p_extension, lowercased. The `.verse` walk and the

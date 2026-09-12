@@ -263,6 +263,11 @@ COVERAGE_EXPLANATIONS = [
     "ClassDB is one flat namespace and a module is deliberately not part of it",
     "derives from `widget`, and more than one script answers to that name",
     "it offers Node as this script's base type",
+    # R-TOOL-12's sentence, in both shapes: the one module that would fix it, and the two that
+    # leave the choice to the author.
+    "It is declared in a module this file does not import; add "
+    "`using { /user@localhost/solo }` at the top of the file.",
+    "It is declared in more than one module, so which was meant is yours to say",
 ]
 
 

@@ -720,6 +720,78 @@ AUTORTFM_DISABLE bool GodotVerse::CheckProject(const FUtf8String& Path, const FU
     return RunCheck(Path, SourceText, [](const FSolDiagnostic& Diagnostic) { ForwardSolDiagnostic(Diagnostic); });
 }
 
+namespace {
+
+/// Records Module's path if it declares Name, then recurses. Path is relative to the package
+/// root, and an empty one is the root module itself -- which is skipped, because it is in scope
+/// from everywhere and so is never the answer to "what should I import".
+AUTORTFM_DISABLE void CollectModulesDeclaring(const uLang::CModule& Module,
+                                              const FUtf8String& Path,
+                                              FUtf8StringView Name,
+                                              TArray<FUtf8String>& Out)
+{
+    if (!Path.IsEmpty())
+    {
+        for (const uLang::TSRef<uLang::CDefinition>& Definition : Module.GetDefinitions())
+        {
+            if (FUtf8StringView(FUtf8String(Definition->AsNameCString())).Equals(Name))
+            {
+                Out.AddUnique(Path);
+                break;
+            }
+        }
+    }
+
+    for (const uLang::CModule* Submodule : Module.GetDefinitionsOfKind<uLang::CModule>())
+    {
+        const FUtf8String Name8 = FUtf8String(Submodule->AsNameCString());
+        CollectModulesDeclaring(*Submodule, Path.IsEmpty() ? Name8 : Path + UTF8TEXT("/") + Name8, Name, Out);
+    }
+}
+
+} // namespace
+
+AUTORTFM_DISABLE bool GodotVerse::ResolveUnknownName(FUtf8StringView Name, TArray<FUtf8String>& OutModules)
+{
+    OutModules.Empty();
+    if (!GIde.IsValid() || Name.IsEmpty())
+    {
+        return false;
+    }
+
+    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
+    if (!BuildManager.IsValid())
+    {
+        return false;
+    }
+    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
+    if (!Program->_AstProject)
+    {
+        return false;
+    }
+
+    for (const uLang::CAstCompilationUnit* CompilationUnit : Program->_AstProject->OrderedCompilationUnits())
+    {
+        for (const uLang::CAstPackage* Package : CompilationUnit->Packages())
+        {
+            // The project's own packages only. A name that needs an import from the Godot mirror
+            // is a different question, and the mirror is one module the whole project already
+            // imports.
+            const bool bIsUserPackage = Package->_VerseScope == uLang::EVerseScope::PublicUser
+                || Package->_VerseScope == uLang::EVerseScope::InternalUser;
+            if (!bIsUserPackage || !Package->_RootModule)
+            {
+                continue;
+            }
+            if (const uLang::CModule* Root = Package->_RootModule->GetModule())
+            {
+                CollectModulesDeclaring(*Root, FUtf8String(), Name, OutModules);
+            }
+        }
+    }
+    return true;
+}
+
 AUTORTFM_DISABLE bool GodotVerse::BeginBackgroundCheck(const FUtf8String& Path, const FUtf8String& SourceText)
 {
     if (GBackgroundCheck.Thread.joinable() || GBackgroundCheck.bRunning.load(std::memory_order_acquire)

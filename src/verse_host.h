@@ -33,6 +33,7 @@ public:
 	vh_shutdown_fn Shutdown = nullptr;
 	vh_tick_fn Tick = nullptr;
 	vh_compile_project_fn CompileProject = nullptr;
+	vh_resolve_unknown_name_fn ResolveUnknownName = nullptr;
 	vh_check_project_fn CheckProject = nullptr;
 	vh_check_project_begin_fn CheckProjectBegin = nullptr;
 	vh_check_project_poll_fn CheckProjectPoll = nullptr;

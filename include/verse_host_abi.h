@@ -997,6 +997,31 @@ VH_ATTR VH_API int32_t vh_complete_symbol(const char* PathUtf8,
 										  const vh_complete_item** OutItems,
 										  int32_t* OutCount);
 
+/* One module of the project, by the path a `using` would name it with. */
+typedef struct vh_module_ref
+{
+	/* '/'-separated and relative to the project's root module -- "gameplay", "gameplay/ai" -- so
+	 * the import the consumer writes is `using { /user@localhost/<this> }`. Never empty: the root
+	 * module is in scope everywhere and so is never an answer to this question. */
+	const char* PathUtf8;
+	int32_t PathLen;
+} vh_module_ref;
+
+/* Which of the project's modules declare a top-level NameUtf8.
+ *
+ * The question behind R-TOOL-12: analysis has just reported an unknown identifier, and this says
+ * whether an import would fix it and which one. Zero answers means the name is simply not in the
+ * project; more than one means the consumer must not guess, because two modules declaring one
+ * name is legal and only the author knows which was meant.
+ *
+ * Read out of the semantic program the last analysis left behind, so it answers for the editor's
+ * buffer rather than for the last build.
+ *
+ * OutModules points into storage owned by the host, valid until the next call to this function. */
+VH_ATTR VH_API int32_t vh_resolve_unknown_name(const char* NameUtf8,
+											   const vh_module_ref** OutModules,
+											   int32_t* OutCount);
+
 /* Every member ClassNameUtf8 declares itself -- not what it inherits, which each superclass
  * answers for on its own. Read out of the semantic program the last analysis left, exactly like
  * vh_class_export_list, and with the same consequence: it describes the source as last analysed
@@ -1050,6 +1075,7 @@ typedef int32_t (*vh_init_fn)(const vh_init_desc*);
 typedef void (*vh_shutdown_fn)(void);
 typedef void (*vh_tick_fn)(double);
 typedef int32_t (*vh_compile_project_fn)(const vh_source_file*, int32_t, int32_t*);
+typedef int32_t (*vh_resolve_unknown_name_fn)(const char*, const vh_module_ref**, int32_t*);
 typedef int32_t (*vh_check_project_fn)(const char*, const char*);
 typedef int32_t (*vh_check_project_begin_fn)(const char*, const char*);
 typedef int32_t (*vh_check_project_poll_fn)(vh_bool*);

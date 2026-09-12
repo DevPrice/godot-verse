@@ -21,6 +21,7 @@
 #include <godot_cpp/variant/utility_functions.hpp>
 
 #ifdef TOOLS_ENABLED
+#include <godot_cpp/classes/code_edit.hpp>
 #include <godot_cpp/classes/editor_interface.hpp>
 #include <godot_cpp/classes/script_editor.hpp>
 #include <godot_cpp/classes/script_editor_base.hpp>
@@ -1590,6 +1591,10 @@ void VerseScriptLanguage::_frame() {
 			editor_refresh_pending = false;
 			refresh_current_script_editor();
 		}
+
+		// After the refresh, so the validate the refresh asks for is about the text this is
+		// about to change rather than the text before it. R-TOOL-12.
+		insert_pending_import();
 #endif
 
 		runtime->tick(frame_budget_ms / 1000.0);
@@ -2249,6 +2254,131 @@ void VerseScriptLanguage::explain_skipped_members(const TypedArray<Dictionary> &
 	}
 }
 
+// The Verse compiler's code for "Unknown identifier %s." -- uLang's ErrSemantic_UnknownIdentifier,
+// from Glitch.h. Matched on the code rather than on the message, which is English and is not ours.
+static constexpr int64_t UNKNOWN_IDENTIFIER_CODE = 3506;
+
+// The name out of "Unknown identifier `foo`.", or empty. uLang quotes an identifier in backticks
+// everywhere it names one, and nothing else in that message is backticked.
+static String backtick_quoted_name(const String &p_message) {
+	const int64_t open = p_message.find("`");
+	if (open < 0) {
+		return String();
+	}
+	const int64_t close = p_message.find("`", open + 1);
+	if (close <= open + 1) {
+		return String();
+	}
+	return p_message.substr(open + 1, close - open - 1);
+}
+
+void VerseScriptLanguage::note_missing_imports(const String &p_path, const TypedArray<Dictionary> &p_errors) const {
+	VerseRuntime *runtime = get_runtime();
+	if (runtime == nullptr || !runtime->is_host_loaded()) {
+		return;
+	}
+
+	for (int64_t i = 0; i < p_errors.size(); i++) {
+		Dictionary error = p_errors[i];
+		if (!error.has("code") || (int64_t)error["code"] != UNKNOWN_IDENTIFIER_CODE) {
+			continue;
+		}
+		const String name = backtick_quoted_name(error["message"]);
+		if (name.is_empty()) {
+			continue;
+		}
+
+		const PackedStringArray modules = runtime->modules_declaring(name);
+		if (modules.is_empty()) {
+			continue;
+		}
+
+		// Said in the diagnostic whatever happens next, and said first. The insertion below only
+		// reaches a file the script editor happens to be showing; the sentence reaches the author
+		// wherever they are, and is the whole feature if the buffer turns out to be unreachable.
+		String listed;
+		for (int64_t m = 0; m < modules.size(); m++) {
+			listed += (m == 0 ? String() : String(" or ")) + String("`using { /user@localhost/") + modules[m] + String(" }`");
+		}
+		error["message"] = String(error["message"]) + String("\nIt is declared in ")
+				+ (modules.size() == 1 ? String("a module this file does not import; add ")
+									   : String("more than one module, so which was meant is yours to say; add "))
+				+ listed + String(" at the top of the file.");
+
+		// One insertion waits for _frame at a time; the next analysis reports whatever is left.
+		if (modules.size() != 1 || !pending_import_path.is_empty()) {
+			continue;
+		}
+
+		const std::string key = std::string(p_path.utf8().get_data()) + "|" + std::string(modules[0].utf8().get_data());
+		if (offered_imports.find(key) != offered_imports.end()) {
+			continue;
+		}
+		offered_imports[key] = true;
+		pending_import_path = p_path;
+		pending_import_module = modules[0];
+	}
+}
+
+void VerseScriptLanguage::insert_pending_import() const {
+	const String path = pending_import_path;
+	const String module = pending_import_module;
+	pending_import_path = String();
+	pending_import_module = String();
+	if (path.is_empty()) {
+		return;
+	}
+
+#ifdef TOOLS_ENABLED
+	EditorInterface *editor_interface = verse_editor_interface();
+	ScriptEditor *script_editor = editor_interface != nullptr ? editor_interface->get_script_editor() : nullptr;
+	if (script_editor == nullptr) {
+		return;
+	}
+	// Only the file on screen. The author moved on if it is not, and writing into a buffer nobody
+	// is looking at is how an edit surprises someone later.
+	const Ref<Script> current = script_editor->get_current_script();
+	if (current.is_null() || current->get_path() != path) {
+		return;
+	}
+	ScriptEditorBase *editor = script_editor->get_current_editor();
+	CodeEdit *code = editor != nullptr ? Object::cast_to<CodeEdit>(editor->get_base_editor()) : nullptr;
+	if (code == nullptr) {
+		return;
+	}
+
+	const String line = String("using { /user@localhost/") + module + String(" }");
+	if (code->get_text().contains(line)) {
+		return;
+	}
+
+	// After the last `using` at the top of the file, or at the very top when there is none. The
+	// scan stops at the first line that is neither an import, a comment nor blank, so a `using`
+	// written further down -- which Verse allows inside a scope -- is not what this appends to.
+	int64_t insert_at = 0;
+	for (int64_t i = 0; i < code->get_line_count(); i++) {
+		const String text = code->get_line(i).strip_edges();
+		if (text.begins_with("using")) {
+			insert_at = i + 1;
+			continue;
+		}
+		if (text.is_empty() || text.begins_with("#")) {
+			continue;
+		}
+		break;
+	}
+
+	// Godot restores the caret itself after a text edit, but not across an inserted line above it.
+	const int64_t caret_line = code->get_caret_line();
+	const int64_t caret_column = code->get_caret_column();
+	code->insert_line_at(insert_at, line);
+	if (caret_line >= insert_at) {
+		code->set_caret_line(caret_line + 1);
+		code->set_caret_column(caret_column);
+	}
+#endif
+}
+
 bool VerseScriptLanguage::record_diagnostics(const Dictionary &p_errors_by_globalized) const {
 	const PackedStringArray previous = flattened_diagnostics(diagnostics_by_path);
 
@@ -2269,6 +2399,7 @@ bool VerseScriptLanguage::record_diagnostics(const Dictionary &p_errors_by_globa
 			error["path"] = path;
 		}
 		explain_skipped_members(errors);
+		note_missing_imports(path, errors);
 		diagnostics_by_path[path] = errors;
 	}
 

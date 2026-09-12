@@ -39,6 +39,11 @@ AUTORTFM_DISABLE bool CompileProject(const TArray<FScriptSource>& Sources, int32
 /// expensive half and the half that publishes.
 AUTORTFM_DISABLE bool CheckProject(const FUtf8String& Path, const FUtf8String& SourceText);
 
+/// Which of the project's modules declare a top-level Name, by module path relative to the
+/// package root. The root module is never one of them: it is in scope everywhere, so a name it
+/// declares never needs an import. Answers out of the program the last analysis left behind.
+AUTORTFM_DISABLE bool ResolveUnknownName(FUtf8StringView Name, TArray<FUtf8String>& OutModules);
+
 /// Starts CheckProject on a thread we own. False when one is already in flight -- only one runs
 /// at a time, because they share the IDE and the semantic program it rebuilds.
 ///

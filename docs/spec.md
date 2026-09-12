@@ -707,16 +707,22 @@ external editor is secondary.
   binary. Writing our own server over `verse_host_abi.h` is the alternative. Related: **OQ-7**.
 - **R-TOOL-11 (MAY)** A formatter.
 - **R-TOOL-12 (MUST)** The editor maintains `using` statements; a user never types a module path.
-  Completion offers symbols from modules not yet in scope, and the import materialises when analysis
-  reports the unknown name — goimports-style, reacting to the *diagnostic* rather than to the
-  keystroke, because Godot's completion API carries no edit-on-accept hook to hang it on. Insert
-  only: nothing is ever removed, because removing a line the author may have written by hand is a
-  different and worse promise. Status: **none**; Phase 3, and the prerequisite for ever splitting the
-  Godot API itself into submodules. Two unknowns are named in
-  [`phase-3-design.md`](phase-3-design.md) §3 — whether a GDExtension can write into the active
-  script editor's buffer at all, and the fallback if it cannot, which is a diagnostic naming the
-  exact `using` line to paste. *Rewriting* imports when a file moves is explicitly **not** part of
-  this: a move is allowed to break its references and report them.
+  Status: **part**, and both halves of it work. The import materialises when analysis reports the
+  unknown name — goimports-style, reacting to the *diagnostic* rather than to the keystroke,
+  because Godot's completion API carries no edit-on-accept hook to hang it on. `vh_resolve_unknown_name`
+  answers which of the project's modules declare the name; one answer is inserted, more than one is
+  reported and left to the author, because two modules declaring one name is legal and only the
+  author knows which was meant. Insert only: nothing is ever removed, because removing a line the
+  author may have written by hand is a different and worse promise.
+  **The buffer unknown is closed**: `ScriptEditor::get_current_editor()->get_base_editor()` reaches
+  the active `CodeEdit` from a GDExtension, and the insertion happens from `_frame` rather than
+  from inside the validate that found the name. The **fallback ships as well as the mechanism**
+  rather than instead of it: the diagnostic always names the exact `using` line, which is what
+  reaches an author whose file is not the one on screen.
+  What is **missing** is the completion half — offering symbols from modules not yet in scope.
+  Typing a name you already know, from another file, is the flow this covers; discovering one you
+  do not is not. *Rewriting* imports when a file moves is explicitly **not** part of this either: a
+  move is allowed to break its references and report them.
 
 ---
 

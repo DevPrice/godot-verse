@@ -83,6 +83,10 @@ public:
 	// Build action do. Bound for GDScript, which is the only way anything outside the editor can
 	// make an edit live.
 	godot::Error build_project();
+
+	// Which of the project's modules declare a top-level p_name, by module path. Empty when the
+	// name is in the root module -- which needs no import -- or is not in the project at all.
+	godot::PackedStringArray modules_declaring(const godot::String &p_name) const;
 	// Re-runs semantic analysis with one file's text replaced, filing diagnostics the same way
 	// compile_project does. Generates nothing, so it is safe to call as often as the editor asks.
 	godot::Error check_project(const godot::String &p_globalized_path, const godot::String &p_source, godot::Dictionary *r_diagnostics_by_path);

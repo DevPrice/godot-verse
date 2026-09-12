@@ -281,6 +281,7 @@ int main(int argc, char** argv)
 	auto ClassMembersFn = Resolve<vh_class_members_fn>(Module, "vh_class_members", &ResolveOk);
 	auto SignatureAtFn = Resolve<vh_signature_at_fn>(Module, "vh_signature_at", &ResolveOk);
 	auto CheckProjectFn = Resolve<vh_check_project_fn>(Module, "vh_check_project", &ResolveOk);
+	auto ResolveUnknownNameFn = Resolve<vh_resolve_unknown_name_fn>(Module, "vh_resolve_unknown_name", &ResolveOk);
 	auto CheckBeginFn = Resolve<vh_check_project_begin_fn>(Module, "vh_check_project_begin", &ResolveOk);
 	auto CheckProjectPollFn = Resolve<vh_check_project_poll_fn>(Module, "vh_check_project_poll", &ResolveOk);
 	auto CheckBusyFn = Resolve<vh_check_project_busy_fn>(Module, "vh_check_project_busy", &ResolveOk);
@@ -1201,6 +1202,23 @@ int main(int argc, char** argv)
 		CallsOk = Step("a module's class has a method list of its own",
 					   ClassMethodListFn("gameplay/module_probe", &ModuleMethods, &ModuleMethodCount) == VH_OK
 						   && ModuleMethodCount > 0) && CallsOk;
+		// R-TOOL-12's half of the ABI: which module would an import have to name for this to
+		// resolve. module_probe is in `gameplay` and nothing else is in any module at all.
+		{
+			const vh_module_ref* Found = nullptr;
+			int32_t FoundCount = 0;
+			CallsOk = Step("vh_resolve_unknown_name finds the module declaring a name",
+						   ResolveUnknownNameFn("module_probe", &Found, &FoundCount) == VH_OK
+							   && FoundCount == 1
+							   && std::string(Found[0].PathUtf8, Found[0].PathLen) == "gameplay") && CallsOk;
+			CallsOk = Step("a name in the root module needs no import and so is no answer",
+						   ResolveUnknownNameFn("reload_probe", &Found, &FoundCount) == VH_OK
+							   && FoundCount == 0) && CallsOk;
+			CallsOk = Step("and a name the project does not declare has none either",
+						   ResolveUnknownNameFn("no_such_name_anywhere", &Found, &FoundCount) == VH_OK
+							   && FoundCount == 0) && CallsOk;
+		}
+
 		ReleaseInstanceFn(InModule);
 
 		vh_instance* Fresh = nullptr;

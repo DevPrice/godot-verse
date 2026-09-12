@@ -34,6 +34,24 @@ VerseRuntime::~VerseRuntime() {
 	unload_host();
 }
 
+PackedStringArray VerseRuntime::modules_declaring(const String &p_name) const {
+	PackedStringArray modules;
+	if (!host.is_loaded()) {
+		return modules;
+	}
+
+	const CharString name_utf8 = p_name.utf8();
+	const vh_module_ref *found = nullptr;
+	int32_t count = 0;
+	if (host.ResolveUnknownName(name_utf8.get_data(), &found, &count) != VH_OK) {
+		return modules;
+	}
+	for (int32_t i = 0; i < count; i++) {
+		modules.push_back(String::utf8(found[i].PathUtf8, found[i].PathLen));
+	}
+	return modules;
+}
+
 Error VerseRuntime::build_project() {
 	// Delegated rather than done here, because which files are in the project is a question about
 	// res:// and the language is what enumerates it. This is the same build the editor's Play
@@ -846,6 +864,10 @@ void VerseRuntime::on_diagnostic(void *p_ctx, const vh_diagnostic *p_diagnostic)
 		error["column"] = p_diagnostic->Column;
 		error["message"] = message;
 		error["path"] = file;
+		// The compiler's own code for the diagnostic, which is how a caller recognises one
+		// without matching on English. 3506 is ErrSemantic_UnknownIdentifier, and R-TOOL-12 is
+		// built on noticing it.
+		error["code"] = p_diagnostic->ReferenceCode;
 
 		Dictionary &sink = *runtime->diagnostic_sink;
 		TypedArray<Dictionary> for_file = sink.has(file) ? TypedArray<Dictionary>(sink[file]) : TypedArray<Dictionary>();

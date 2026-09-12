@@ -74,6 +74,7 @@ bool VerseHostLibrary::load(const String &p_dll_path, String &r_error) {
 	ok = ok && resolve(handle, "vh_shutdown", Shutdown, r_error);
 	ok = ok && resolve(handle, "vh_tick", Tick, r_error);
 	ok = ok && resolve(handle, "vh_compile_project", CompileProject, r_error);
+	ok = ok && resolve(handle, "vh_resolve_unknown_name", ResolveUnknownName, r_error);
 	ok = ok && resolve(handle, "vh_check_project", CheckProject, r_error);
 	ok = ok && resolve(handle, "vh_check_project_begin", CheckProjectBegin, r_error);
 	ok = ok && resolve(handle, "vh_check_project_poll", CheckProjectPoll, r_error);

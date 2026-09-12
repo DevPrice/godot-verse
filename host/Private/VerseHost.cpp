@@ -751,6 +751,39 @@ extern "C" int32_t vh_class_members(const char* ClassNameUtf8, const vh_complete
     return VH_OK;
 }
 
+extern "C" int32_t vh_resolve_unknown_name(const char* NameUtf8, const vh_module_ref** OutModules, int32_t* OutCount)
+{
+    if (!NameUtf8 || !OutModules || !OutCount)
+    {
+        return VH_ERR_ABI;
+    }
+    *OutModules = nullptr;
+    *OutCount = 0;
+
+    if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+
+    static TArray<FUtf8String> Modules;
+    static TArray<vh_module_ref> Refs;
+
+    if (!GodotVerse::ResolveUnknownName(Cstr(NameUtf8), Modules))
+    {
+        return VH_ERR_NOT_FOUND;
+    }
+
+    Refs.Reset(Modules.Num());
+    for (const FUtf8String& Module : Modules)
+    {
+        Refs.Add(vh_module_ref{reinterpret_cast<const char*>(*Module), Module.Len()});
+    }
+
+    *OutModules = Refs.GetData();
+    *OutCount = Refs.Num();
+    return VH_OK;
+}
+
 extern "C" int32_t vh_signature_at(const char* PathUtf8,
                                    const char* SourceUtf8,
                                    int32_t Line,
