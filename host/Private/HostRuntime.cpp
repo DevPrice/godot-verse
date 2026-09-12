@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "HostRuntime.h"
+#include "Containers/Utf8String.h"
 #include "HAL/UnrealMemory.h"
 #include "Math/UnrealMathUtility.h"
 
@@ -50,6 +51,84 @@ void ReportError(FUtf8StringView Message)
 void ReportInfo(FUtf8StringView Message)
 {
     ReportDiagnostic(VH_SEVERITY_INFO, Message, FUtf8StringView(), 0, 0, 0, 0, 0);
+}
+
+void ReportRuntimeError(FUtf8StringView Message, const FString& Callstack)
+{
+    FHostState& Host = GetHost();
+    if (!Host.OnRuntimeError)
+    {
+        // No runtime error callback: fold it into the ordinary diagnostics so the message is not
+        // simply lost, which is what v1 did for every runtime error.
+        ReportDiagnostic(VH_SEVERITY_ERROR, Message, FUtf8StringView(), 0, 0, 0, 0, 0);
+        return;
+    }
+
+    TArray<FString> Lines;
+    Callstack.ParseIntoArrayLines(Lines, /*bCullEmpty*/ true);
+
+    // The frames own their bytes, and the descriptors point into them, so both have to outlive the
+    // callback. Reserved to final size before any descriptor is built: growing Paths or Names
+    // afterwards would leave every pointer already written dangling.
+    TArray<FUtf8String> Paths;
+    TArray<FUtf8String> Names;
+    TArray<vh_stack_frame> Frames;
+    Paths.Reserve(Lines.Num());
+    Names.Reserve(Lines.Num());
+    Frames.Reserve(Lines.Num());
+
+    for (const FString& Raw : Lines)
+    {
+        FString Line = Raw;
+        Line.TrimStartAndEndInline();
+        if (Line.IsEmpty())
+        {
+            continue;
+        }
+
+        // `<path> <name>:<line>`, with the path and the line each optional. The line is taken from
+        // the last colon only when what follows it is entirely digits -- a Windows path carries a
+        // colon of its own in the drive letter.
+        int32 Line1 = 0;
+        int32 ColonIndex = INDEX_NONE;
+        if (Line.FindLastChar(TEXT(':'), ColonIndex))
+        {
+            const FString Suffix = Line.Mid(ColonIndex + 1);
+            if (!Suffix.IsEmpty() && Suffix.IsNumeric())
+            {
+                Line1 = FCString::Atoi(*Suffix);
+                Line = Line.Left(ColonIndex);
+            }
+        }
+
+        FString PathPart;
+        FString NamePart = Line;
+        int32 SpaceIndex = INDEX_NONE;
+        if (Line.FindLastChar(TEXT(' '), SpaceIndex))
+        {
+            PathPart = Line.Left(SpaceIndex);
+            NamePart = Line.Mid(SpaceIndex + 1);
+        }
+
+        Paths.Add(FUtf8String(PathPart));
+        Names.Add(FUtf8String(NamePart));
+
+        vh_stack_frame& Frame = Frames.AddDefaulted_GetRef();
+        Frame.PathUtf8 = reinterpret_cast<const char*>(*Paths.Last());
+        Frame.PathLen = Paths.Last().Len();
+        Frame.FunctionUtf8 = reinterpret_cast<const char*>(*Names.Last());
+        Frame.FunctionLen = Names.Last().Len();
+        Frame.Line = Line1;
+        Frame.Column = 0;
+    }
+
+    vh_runtime_error Error{};
+    Error.MessageUtf8 = reinterpret_cast<const char*>(Message.GetData());
+    Error.MessageLen = Message.Len();
+    Error.Frames = Frames.GetData();
+    Error.FrameCount = Frames.Num();
+
+    Host.OnRuntimeError(Host.RuntimeErrorCtx, &Error);
 }
 
 namespace {

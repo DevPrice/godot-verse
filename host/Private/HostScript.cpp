@@ -1138,11 +1138,57 @@ struct FMemberType
     /// that crosses has to be checked against this, and the value in the slot cannot say: an enum
     /// over a native UEnum property is stored as the number itself.
     int32 EnumeratorCount = 0;
+    /// The declared enum's decorated name -- `(/user@localhost:)exports_mode`. A member write finds
+    /// the enumeration through the enumerator already in the slot; a method argument has no slot,
+    /// so it has to be looked up, and this is what by.
+    FUtf8String EnumerationName;
     /// What the export description makes of the same type. An array's element kind comes from here
     /// rather than from a classification of its own: the value cannot say -- an empty array has no
     /// element to look at, and the description is the answer the Godot side was already given.
     GodotVerse::FExportDesc Described;
 };
+
+/// The same description, for a type with no member behind it: a method's parameter or its result.
+///
+/// Everything DescribeMemberType knows comes from the declared type rather than from the
+/// declaration, so a signature can be described exactly as a member is -- which is what lets one
+/// pair of converters serve both field access and dispatch.
+AUTORTFM_DISABLE FMemberType DescribeType(const uLang::CTypeBase* Type, const uLang::CSemanticProgram& Program)
+{
+    FMemberType Result;
+
+    bool bIsOption = false;
+    const uLang::CNormalType* Normal = Type ? &UnwrapDeclaredType(*Type, bIsOption) : nullptr;
+    DescribeExportType(Type, Program, Result.Described);
+    if (const uLang::CClass* Declared = Normal ? Normal->AsNullable<uLang::CClass>() : nullptr)
+    {
+        // Only the optional form is a reference this can marshal, which is the same rule
+        // DescribeExportType refuses a bare one by; a struct is the other way round, since
+        // there is no empty struct for an option to hold.
+        if (bIsOption)
+        {
+            Result.ReferenceClass = Declared;
+            Result.ReferenceOrigin = ClassOriginOf(*Declared, Program);
+        }
+        else if (ClassOriginOf(*Declared, Program) == EClassOrigin::Mirrored)
+        {
+            Result.Struct = FindStructLayout(FUtf8StringView(Declared->AsNameCString()));
+        }
+    }
+    else if (const uLang::CEnumeration* Enumeration = Normal ? Normal->AsNullable<uLang::CEnumeration>() : nullptr)
+    {
+        for (const uLang::TSRef<uLang::CEnumerator>& Enumerator : Enumeration->GetDefinitionsOfKind<uLang::CEnumerator>())
+        {
+            (void)Enumerator;
+            ++Result.EnumeratorCount;
+        }
+        Result.EnumerationName = FUtf8String(UTF8TEXT("("))
+            + FULangConversionUtils::ULangStrToFUtf8String(
+                  Enumeration->_EnclosingScope.GetScopePath('/', uLang::CScope::EPathMode::PrefixSeparator))
+            + UTF8TEXT(":)") + FUtf8String(Enumeration->AsNameCString());
+    }
+    return Result;
+}
 
 AUTORTFM_DISABLE FMemberType DescribeMemberType(FUtf8StringView ClassName, FUtf8StringView FieldName)
 {
@@ -1172,35 +1218,8 @@ AUTORTFM_DISABLE FMemberType DescribeMemberType(FUtf8StringView ClassName, FUtf8
         {
             continue;
         }
+        Result = DescribeType(Member->GetType(), *Program);
         Result.Member = &*Member;
-
-        bool bIsOption = false;
-        const uLang::CTypeBase* Type = Member->GetType();
-        const uLang::CNormalType* Normal = Type ? &UnwrapDeclaredType(*Type, bIsOption) : nullptr;
-        DescribeExportType(Type, *Program, Result.Described);
-        if (const uLang::CClass* Declared = Normal ? Normal->AsNullable<uLang::CClass>() : nullptr)
-        {
-            // Only the optional form is a reference this can marshal, which is the same rule
-            // DescribeExportType refuses a bare one by; a struct is the other way round, since
-            // there is no empty struct for an option to hold.
-            if (bIsOption)
-            {
-                Result.ReferenceClass = Declared;
-                Result.ReferenceOrigin = ClassOriginOf(*Declared, *Program);
-            }
-            else if (ClassOriginOf(*Declared, *Program) == EClassOrigin::Mirrored)
-            {
-                Result.Struct = FindStructLayout(FUtf8StringView(Declared->AsNameCString()));
-            }
-        }
-        else if (const uLang::CEnumeration* Enumeration = Normal ? Normal->AsNullable<uLang::CEnumeration>() : nullptr)
-        {
-            for (const uLang::TSRef<uLang::CEnumerator>& Enumerator : Enumeration->GetDefinitionsOfKind<uLang::CEnumerator>())
-            {
-                (void)Enumerator;
-                ++Result.EnumeratorCount;
-            }
-        }
         break;
     }
     return Result;
@@ -1399,6 +1418,123 @@ AUTORTFM_DISABLE FUtf8String ShapeKeyFor(UObject* Object, FUtf8StringView FieldN
         + FUtf8String(Object->GetClass()->GetName()) + UTF8TEXT(":)") + FUtf8String(FieldName);
 }
 
+/// Builds a vh_value from a Verse value, given what its declaration says it is.
+///
+/// The declaration is not optional context. A read cannot tell a `?node2d` holding nothing from a
+/// `logic` holding false, because Verse spells an empty option and false with the same cell; an
+/// empty array carries no element type; and a struct's field order is nowhere in the value. Taking
+/// the description rather than a member name is what lets a method's return value and a member
+/// read share one conversion.
+AUTORTFM_DISABLE bool ValueToWire(Verse::FRunningContext Context,
+                                  Verse::VValue Value,
+                                  const FMemberType& Declared,
+                                  GodotVerse::FFieldStorage& OutStorage,
+                                  vh_value& OutValue)
+{
+    // A reference, before the logic test rather than after it, because Verse's two spellings
+    // collide: `true` is an option around `false`, and an empty option *is* `false`. A set
+    // option wrapping a wrapper object is the one of the three the value alone identifies; an
+    // empty one has to be told what the author declared, and anything else falls through to
+    // the logic the cell equally well is.
+    int64 ReferenceHandle = 0;
+    bool bIsReference = false;
+    if (const Verse::VOption* Option = Value.DynamicCast<Verse::VOption>())
+    {
+        ReferenceHandle = HandleOf(Option->GetValue());
+        bIsReference = ReferenceHandle != 0;
+    }
+    else if (Value.IsFalse())
+    {
+        bIsReference = Declared.ReferenceClass != nullptr;
+    }
+
+    if (bIsReference)
+    {
+        // A handle the consumer rebuilds an object from, and for the empty case the empty
+        // option -- which is a reference holding nothing, not a member that failed to read.
+        OutValue.VariantTag = VH_VARIANT_OBJECT;
+        if (ReferenceHandle != 0)
+        {
+            OutValue.Type = VH_TYPE_INT;
+            OutValue.Int = ReferenceHandle;
+        }
+        else
+        {
+            OutValue.Type = VH_TYPE_OPTION;
+            OutValue.Option = nullptr;
+        }
+    }
+    else if (Value.IsLogic())
+    {
+        OutValue.Type = VH_TYPE_LOGIC;
+        OutValue.Logic = Value.AsBool() ? 1 : 0;
+    }
+    else if (Value.IsInt())
+    {
+        OutValue.Type = VH_TYPE_INT;
+        OutValue.Int = Value.AsInt().AsInt64();
+    }
+    else if (Value.IsFloat())
+    {
+        OutValue.Type = VH_TYPE_FLOAT;
+        OutValue.Float = Value.AsFloat().AsDouble();
+    }
+    else if (const Verse::VEnumerator* Enumerator = Value.DynamicCast<Verse::VEnumerator>())
+    {
+        // An enum member holds an enumerator, which is a cell and not a number -- so this is the
+        // read, and `IsInt` above never sees one. The ordinal is what crosses, because that is
+        // what Godot stores; the names reach only the inspector's dropdown, which is also why
+        // reordering a Verse enum silently reinterprets every scene already saved.
+        OutValue.Type = VH_TYPE_INT;
+        OutValue.VariantTag = VH_VARIANT_INT;
+        OutValue.Int = Enumerator->GetIntValue();
+    }
+    else if (Verse::VValueObject* Struct = Value.DynamicCast<Verse::VValueObject>())
+    {
+        // A mirrored struct: vector2, color. The fields are read by name, and the names come
+        // from the declared type -- the value carries its field keys but not which order a
+        // Godot Vector2 wants them in, and positions are the whole of what crosses.
+        if (!Declared.Struct || !ReadStructValue(Context, *Struct, *Declared.Struct, OutStorage, OutValue))
+        {
+            return false;
+        }
+    }
+    else if (const Verse::VArrayBase* Array = Value.DynamicCast<Verse::VArrayBase>())
+    {
+        // Verse `string` is `[]char`, so a string arrives as an array of char8 -- and so does
+        // every other array, which is why the char case is settled first. VArrayBase rather than
+        // VArray because a `var` of a container type holds a VMutableArray: the mutability lives
+        // in the container itself, not in a reference around it.
+        //
+        // An *empty* array cannot be told apart this way, since it carries no element type, so
+        // that one case goes back to what the author declared.
+        const Verse::EArrayType ArrayType = Array->GetArrayType();
+        const GodotVerse::FExportDesc& Desc = Declared.Described;
+        const bool bIsString = ArrayType == Verse::EArrayType::Char8
+            || ArrayType == Verse::EArrayType::Char32
+            || Desc.Type == VH_TYPE_STRING;
+
+        if (bIsString)
+        {
+            OutStorage.Text = FUtf8String(Array->AsStringView());
+            OutValue.Type = VH_TYPE_STRING;
+            OutValue.String.Utf8 = reinterpret_cast<const char*>(*OutStorage.Text);
+            OutValue.String.Len = OutStorage.Text.Len();
+        }
+        else if (Desc.Type != VH_TYPE_ARRAY
+                 || !ReadArrayValue(Context, *Array, Desc.VariantTag, Desc.ElementVariantTag, OutStorage, OutValue))
+        {
+            return false;
+        }
+    }
+    else
+    {
+        return false;
+    }
+
+    return true;
+}
+
 /// Reads FieldName off Object. Returns false for a field the shape does not carry, and for any
 /// Verse type with no vh_value counterpart.
 AUTORTFM_DISABLE bool ReadFieldOf(UObject* Object, FUtf8StringView FieldName, vh_value& OutValue, GodotVerse::FFieldStorage& OutStorage)
@@ -1455,116 +1591,13 @@ AUTORTFM_DISABLE bool ReadFieldOf(UObject* Object, FUtf8StringView FieldName, vh
             return;
         }
 
-        // A reference, before the logic test rather than after it, because Verse's two spellings
-        // collide: `true` is an option around `false`, and an empty option *is* `false`. A set
-        // option wrapping a wrapper object is the one of the three the value alone identifies; an
-        // empty one has to be told what the author declared, and anything else falls through to
-        // the logic the cell equally well is.
-        int64 ReferenceHandle = 0;
-        bool bIsReference = false;
-        if (const Verse::VOption* Option = Value.DynamicCast<Verse::VOption>())
-        {
-            ReferenceHandle = HandleOf(Option->GetValue());
-            bIsReference = ReferenceHandle != 0;
-        }
-        else if (Value.IsFalse())
-        {
-            bIsReference = DescribeMemberType(FUtf8String(Object->GetClass()->GetName()), FieldName).ReferenceClass != nullptr;
-        }
-
-        if (bIsReference)
-        {
-            // A handle the consumer rebuilds an object from, and for the empty case the empty
-            // option -- which is a reference holding nothing, not a member that failed to read.
-            OutValue.VariantTag = VH_VARIANT_OBJECT;
-            if (ReferenceHandle != 0)
-            {
-                OutValue.Type = VH_TYPE_INT;
-                OutValue.Int = ReferenceHandle;
-            }
-            else
-            {
-                OutValue.Type = VH_TYPE_OPTION;
-                OutValue.Option = nullptr;
-            }
-        }
-        else if (Value.IsLogic())
-        {
-            OutValue.Type = VH_TYPE_LOGIC;
-            OutValue.Logic = Value.AsBool() ? 1 : 0;
-        }
-        else if (Value.IsInt())
-        {
-            OutValue.Type = VH_TYPE_INT;
-            OutValue.Int = Value.AsInt().AsInt64();
-        }
-        else if (Value.IsFloat())
-        {
-            OutValue.Type = VH_TYPE_FLOAT;
-            OutValue.Float = Value.AsFloat().AsDouble();
-        }
-        else if (const Verse::VEnumerator* Enumerator = Value.DynamicCast<Verse::VEnumerator>())
-        {
-            // An enum member holds an enumerator, which is a cell and not a number -- so this is the
-            // read, and `IsInt` above never sees one. The ordinal is what crosses, because that is
-            // what Godot stores; the names reach only the inspector's dropdown, which is also why
-            // reordering a Verse enum silently reinterprets every scene already saved.
-            OutValue.Type = VH_TYPE_INT;
-            OutValue.VariantTag = VH_VARIANT_INT;
-            OutValue.Int = Enumerator->GetIntValue();
-        }
-        else if (Verse::VValueObject* Struct = Value.DynamicCast<Verse::VValueObject>())
-        {
-            // A mirrored struct: vector2, color. The fields are read by name, and the names come
-            // from the declared type -- the value carries its field keys but not which order a
-            // Godot Vector2 wants them in, and positions are the whole of what crosses.
-            const FStructLayout* Layout =
-                DescribeMemberType(FUtf8String(Object->GetClass()->GetName()), FieldName).Struct;
-            if (!Layout || !ReadStructValue(Context, *Struct, *Layout, OutStorage, OutValue))
-            {
-                return;
-            }
-        }
-        else if (const Verse::VArrayBase* Array = Value.DynamicCast<Verse::VArrayBase>())
-        {
-            // Verse `string` is `[]char`, so a string arrives as an array of char8 -- and so does
-            // every other array, which is why the char case is settled first. VArrayBase rather than
-            // VArray because a `var` of a container type holds a VMutableArray: the mutability lives
-            // in the container itself, not in a reference around it.
-            //
-            // An *empty* array cannot be told apart this way, since it carries no element type, so
-            // that one case goes back to what the author declared.
-            const Verse::EArrayType ArrayType = Array->GetArrayType();
-            bool bIsString = ArrayType == Verse::EArrayType::Char8 || ArrayType == Verse::EArrayType::Char32;
-            GodotVerse::FExportDesc Declared;
-            if (!bIsString)
-            {
-                Declared = DescribeMemberType(FUtf8String(Object->GetClass()->GetName()), FieldName).Described;
-                bIsString = Declared.Type == VH_TYPE_STRING;
-            }
-
-            if (bIsString)
-            {
-                OutStorage.Text = FUtf8String(Array->AsStringView());
-                OutValue.Type = VH_TYPE_STRING;
-                OutValue.String.Utf8 = reinterpret_cast<const char*>(*OutStorage.Text);
-                OutValue.String.Len = OutStorage.Text.Len();
-            }
-            else if (Declared.Type != VH_TYPE_ARRAY
-                     || !ReadArrayValue(Context, *Array, Declared.VariantTag, Declared.ElementVariantTag, OutStorage, OutValue))
-            {
-                return;
-            }
-        }
-        else
-        {
-            return;
-        }
-
-        bRead = true;
+        bRead = ValueToWire(Context, Value, DescribeMemberType(FUtf8String(Object->GetClass()->GetName()), FieldName),
+                            OutStorage, OutValue);
     });
     return bRead;
 }
+
+
 
 } // namespace
 
@@ -1610,6 +1643,25 @@ AUTORTFM_DISABLE Verse::VClass* FindMirroredVClass(Verse::FRunningContext Contex
         if (Verse::VClass* Class = Verse::GlobalProgram->GetPackage(Index).LookupDefinition<Verse::VClass>(FUtf8StringView(Decorated)))
         {
             return Class;
+        }
+    }
+    return nullptr;
+}
+
+/// The VM's enumeration of that decorated name, looked up the way FindMirroredVClass looks up a
+/// class: by walking the published packages, since nothing indexes them together.
+AUTORTFM_DISABLE Verse::VEnumeration* FindVEnumeration(FUtf8StringView DecoratedName)
+{
+    if (!Verse::GlobalProgram || DecoratedName.IsEmpty())
+    {
+        return nullptr;
+    }
+    for (uint32 Index = 0; Index < Verse::GlobalProgram->NumPackages(); ++Index)
+    {
+        if (Verse::VEnumeration* Enumeration =
+                Verse::GlobalProgram->GetPackage(Index).LookupDefinition<Verse::VEnumeration>(DecoratedName))
+        {
+            return Enumeration;
         }
     }
     return nullptr;
@@ -1742,6 +1794,132 @@ AUTORTFM_DISABLE Verse::VValue NewArrayValue(Verse::FRunningContext Context,
 
 /// Builds the value to write, given the one already in the slot. An uninitialized return means the
 /// value has no representation in this member and nothing is written.
+/// Builds a Verse value of the declared type from the wire.
+///
+/// The write path for *members* takes the class and the mutability off the value already in the
+/// slot, which is the safest source when there is one. A method argument has no slot: nothing has
+/// been assigned yet, so everything -- the struct's class, the array's element kind, the enum an
+/// ordinal belongs to -- has to come from the declaration. That is the whole difference between
+/// this and WriteFieldOf's builders, and it is why they are not one function.
+///
+/// Returns false for a wire value the declared type cannot accept, which is VH_ERR_ARGUMENT to the
+/// caller rather than a runtime error: the script is not at fault for how it was called.
+AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
+                                  const vh_value& Value,
+                                  const FMemberType& Declared,
+                                  Verse::VValue& OutValue)
+{
+    const GodotVerse::FExportDesc& Desc = Declared.Described;
+
+    // A reference arrives as a handle naming a Godot object, so the Verse wrapper has to be built
+    // here -- and only a mirrored class can be built from a handle alone. A parameter typed as one
+    // of the project's own classes has no spelling on this wire: the object it should receive
+    // already exists as some node's instance, and there is nothing in a handle to find it by.
+    if (Declared.ReferenceClass != nullptr)
+    {
+        if (Declared.ReferenceOrigin != EClassOrigin::Mirrored)
+        {
+            return false;
+        }
+        const int64 Handle = Value.Type == VH_TYPE_INT ? Value.Int : 0;
+        if (Handle == 0)
+        {
+            OutValue = ReferenceOption(Context, nullptr);
+            return true;
+        }
+        UObject* const Referenced =
+            NewMirroredWrapper(FindMirroredClass(FUtf8StringView(Declared.ReferenceClass->AsNameCString())), Handle);
+        if (!Referenced)
+        {
+            return false;
+        }
+        OutValue = ReferenceOption(Context, Referenced);
+        return true;
+    }
+
+    if (Declared.Struct != nullptr)
+    {
+        Verse::VClass* const StructClass =
+            FindMirroredVClass(Context, FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(Declared.Struct->VerseName)));
+        if (!StructClass || Value.Type != VH_TYPE_TUPLE)
+        {
+            return false;
+        }
+        const Verse::VValue Built = NewStructValue(Context, *StructClass, *Declared.Struct, Value.Seq.Items, Value.Seq.Count);
+        if (Built.IsUninitialized())
+        {
+            return false;
+        }
+        OutValue = Built;
+        return true;
+    }
+
+    if (Desc.Type == VH_TYPE_ARRAY)
+    {
+        if (Value.Type != VH_TYPE_ARRAY)
+        {
+            return false;
+        }
+        // Immutable: a parameter is a fresh binding the callee cannot assign through, so there is
+        // no `var` container to match the way a member write has to.
+        const Verse::VValue Built = NewArrayValue(Context, /*bMutable*/ false, Desc.VariantTag, Desc.ElementVariantTag,
+                                                  Value.Seq.Items, Value.Seq.Count);
+        if (Built.IsUninitialized())
+        {
+            return false;
+        }
+        OutValue = Built;
+        return true;
+    }
+
+    // An enum parameter takes its ordinal, bounded by the enum the author declared rather than
+    // clamped into it -- an ordinal with no enumerator is a caller that disagrees with the script
+    // about the enum, which is worth reporting rather than silently reinterpreting.
+    if (Declared.EnumeratorCount > 0)
+    {
+        if (Value.Type != VH_TYPE_INT || Value.Int < 0 || Value.Int >= Declared.EnumeratorCount)
+        {
+            return false;
+        }
+        Verse::VEnumeration* const Enumeration = FindVEnumeration(FUtf8StringView(Declared.EnumerationName));
+        if (!Enumeration || Value.Int >= Enumeration->NumEnumerators)
+        {
+            return false;
+        }
+        OutValue = Verse::VValue(Enumeration->GetEnumeratorChecked((int32)Value.Int));
+        return true;
+    }
+
+    switch (Value.Type)
+    {
+    case VH_TYPE_LOGIC:
+        OutValue = Verse::VValue::FromBool(Value.Logic != 0);
+        return true;
+    case VH_TYPE_INT:
+        // A float parameter handed an int is widened rather than refused: Godot spells 0 as an
+        // integer Variant whatever the receiving type, so refusing would make `Process(0)`
+        // unreachable from GDScript.
+        if (Desc.Type == VH_TYPE_FLOAT)
+        {
+            OutValue = Verse::VValue(Verse::VFloat((double)Value.Int));
+        }
+        else
+        {
+            OutValue = Verse::VValue(Verse::VInt(Context, Value.Int));
+        }
+        return true;
+    case VH_TYPE_FLOAT:
+        OutValue = Verse::VValue(Verse::VFloat(Value.Float));
+        return true;
+    case VH_TYPE_STRING:
+        OutValue = Verse::VValue(Verse::VArray::New(
+            Context, FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(Value.String.Utf8), Value.String.Len)));
+        return true;
+    default:
+        return false;
+    }
+}
+
 using FFieldValueBuilder = TFunctionRef<Verse::VValue(Verse::FRunningContext Context, Verse::VValue Current)>;
 
 AUTORTFM_DISABLE bool WriteFieldWith(UObject* Object, FUtf8StringView FieldName, EFieldWrite Mode, FFieldValueBuilder MakeValue)
@@ -2022,6 +2200,126 @@ AUTORTFM_DISABLE bool GodotVerse::ReadClassDefaultField(FUtf8StringView ClassNam
         return false;
     }
     return ReadFieldOf(Defaults.Get(), FieldName, OutValue, OutStorage);
+}
+
+namespace {
+
+/// Godot's name for the virtual a Verse method of this name overrides: `Ready` -> `_ready`,
+/// `PhysicsProcess` -> `_physics_process`.
+///
+/// The exact inverse of the rule gen_verse_api.py names a mirrored virtual by, which is what makes
+/// this a rule rather than a table: every virtual the generator emits round-trips through it, so a
+/// virtual added by a future Godot version needs no change here.
+AUTORTFM_DISABLE FUtf8String GodotVirtualNameOf(FUtf8StringView VerseName)
+{
+    FUtf8String Result;
+    for (int32 Index = 0; Index < VerseName.Len(); ++Index)
+    {
+        const UTF8CHAR Char = VerseName[Index];
+        if (Char >= UTF8CHAR('A') && Char <= UTF8CHAR('Z'))
+        {
+            Result.AppendChar(UTF8CHAR('_'));
+            Result.AppendChar(UTF8CHAR(Char - 'A' + 'a'));
+        }
+        else
+        {
+            Result.AppendChar(Char);
+        }
+    }
+    return Result;
+}
+
+/// Whether the definition this function ultimately overrides was declared in the generated Godot
+/// mirror, which is what makes it one of Godot's virtuals rather than the script's own method.
+AUTORTFM_DISABLE bool OverridesMirroredDefinition(const uLang::CFunction& Function)
+{
+    const uLang::CFunction* Base = Function.GetBaseOverriddenDefinition().GetPrototypeDefinition();
+    if (!Base || Base == &Function)
+    {
+        return false;
+    }
+    const FUtf8String ScopePath = FULangConversionUtils::ULangStrToFUtf8String(
+        Base->_EnclosingScope.GetScopePath('/', uLang::CScope::EPathMode::PrefixSeparator));
+    return FUtf8StringView(ScopePath).StartsWith(FUtf8StringView(GodotVersePath));
+}
+
+} // namespace
+
+AUTORTFM_DISABLE bool GodotVerse::GetClassMethods(FUtf8StringView ClassName, TArray<FMethodDesc>& OutMethods)
+{
+    OutMethods.Reset();
+
+    if (!GIde.IsValid())
+    {
+        return false;
+    }
+    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
+    if (!BuildManager.IsValid())
+    {
+        return false;
+    }
+    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
+
+    const FUtf8String ClassPath = FUtf8String(ScriptVersePath) + UTF8TEXT("/") + FUtf8String(ClassName);
+    const uLang::CClass* Class = Program->FindDefinitionByVersePath<uLang::CClass>(
+        FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath));
+    if (!Class)
+    {
+        return false;
+    }
+
+    // Only the class's own declarations. What it inherits from the mirrored API is Godot's to
+    // dispatch, not the script's -- and an override *is* a declaration, so a script's Ready is
+    // here while the empty one it overrides is not.
+    for (const uLang::TSRef<uLang::CFunction>& Function : Class->GetDefinitionsOfKind<uLang::CFunction>())
+    {
+        const uLang::CFunctionType* const Type = Function->_Signature.GetFunctionType();
+        if (!Type)
+        {
+            continue;
+        }
+
+        FMethodDesc Desc;
+        Desc.Name = FUtf8String(Function->AsNameCString());
+        Desc.DecoratedName = FULangConversionUtils::ULangStrToFUtf8String(Function->GetDecoratedName());
+
+        const uLang::SEffectSet Effects = Function->_Signature.GetEffects();
+        Desc.bCanFail = Effects[uLang::EEffect::decides];
+        Desc.bSuspends = Effects[uLang::EEffect::suspends];
+
+        for (const uLang::CDataDefinition* Param : Function->_Signature.GetParams())
+        {
+            if (!Param)
+            {
+                continue;
+            }
+            const FMemberType ParamType = DescribeType(Param->GetType(), *Program);
+            FParamDesc& Out = Desc.Params.AddDefaulted_GetRef();
+            Out.Name = FUtf8String(Param->AsNameCString());
+            Out.Type = ParamType.Described.Type;
+            Out.VariantTag = ParamType.Described.VariantTag;
+            Out.bHasDefault = Param->HasInitializer();
+            if (!Out.bHasDefault)
+            {
+                Desc.RequiredParamCount = Desc.Params.Num();
+            }
+        }
+
+        const FMemberType ResultType = DescribeType(&Type->GetReturnType(), *Program);
+        Desc.ResultType = ResultType.Described.Type;
+        Desc.ResultVariantTag = ResultType.Described.VariantTag;
+
+        if (OverridesMirroredDefinition(*Function))
+        {
+            Desc.GodotVirtual = GodotVirtualNameOf(FUtf8StringView(Desc.Name));
+        }
+
+        FUtf8String DeclaredIn;
+        FillLocation(*Function, DeclaredIn, Desc.Line, Desc.Column);
+
+        OutMethods.Add(MoveTemp(Desc));
+    }
+    return true;
 }
 
 AUTORTFM_DISABLE bool GodotVerse::GetClassExports(FUtf8StringView ClassName, TArray<FExportDesc>& OutExports)
@@ -3080,37 +3378,151 @@ AUTORTFM_DISABLE bool GodotVerse::InstanceHasFunction(const FInstance* Instance,
     return !Base.IsValid() || Base.Function.Get() != Resolved.Function.Get();
 }
 
-namespace {
-template <typename FunctionType, typename... ArgTypes>
-AUTORTFM_DISABLE int32 CallMethod(const GodotVerse::FInstance* Instance, FUtf8StringView DecoratedName, ArgTypes... Args)
+AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
+                                                FUtf8StringView DecoratedName,
+                                                const vh_value* Args,
+                                                int32 ArgCount,
+                                                vh_value& OutResult,
+                                                FFieldStorage& OutStorage)
 {
-    const verse::FExecutionContext Context = verse::FExecutionContext::GetActiveContext();
+    OutResult = vh_value{};
+    OutStorage.Text.Reset();
+    OutStorage.Blocks.Reset();
+    OutStorage.Strings.Reset();
 
-    FunctionType Function{LookupMethod(Instance, DecoratedName)};
-    if (!Function.IsValid())
+    if (!Instance || !Instance->Object.IsValid())
     {
-        GodotVerse::ReportError(FUtf8String(UTF8TEXT("Could not resolve ")) + FUtf8String(DecoratedName)
-                                + UTF8TEXT(" on the script instance."));
+        return VH_ERR_STATE;
+    }
+
+    // The signature, for the parameter and result types. Asked of the semantic program rather than
+    // of the VM because that is the only view that carries declared types -- the bytecode has
+    // erased them by the time a VValue exists.
+    const FUtf8String ClassName = FUtf8String(Instance->Object->GetClass()->GetName());
+    TArray<FMethodDesc> Methods;
+    if (!GetClassMethods(FUtf8StringView(ClassName), Methods))
+    {
+        return VH_ERR_NOT_FOUND;
+    }
+    const FMethodDesc* Method = Methods.FindByPredicate(
+        [DecoratedName](const FMethodDesc& Candidate) { return FUtf8StringView(Candidate.DecoratedName).Equals(DecoratedName); });
+    if (!Method)
+    {
         return VH_ERR_NOT_FOUND;
     }
 
-    const AutoRTFM::ETransactionResult TransactionResult =
-        AutoRTFM::Transact([&] { Function(Context, Args...); });
+    if (ArgCount < Method->RequiredParamCount || ArgCount > Method->Params.Num())
+    {
+        return VH_ERR_ARGUMENT;
+    }
 
-    return TransactionResult == AutoRTFM::ETransactionResult::Committed ? VH_OK : VH_ERR_RUNTIME;
-}
-}
+    FVerseFunction Resolved = LookupMethod(Instance, DecoratedName);
+    if (!Resolved.IsValid())
+    {
+        return VH_ERR_NOT_FOUND;
+    }
 
-AUTORTFM_DISABLE int32 GodotVerse::InstanceCallVoid(FInstance* Instance, FUtf8StringView DecoratedName)
-{
     Instance->bSealed = true;
-    return CallMethod<TVerseFunction<void()>>(Instance, DecoratedName);
-}
 
-AUTORTFM_DISABLE int32 GodotVerse::InstanceCallVoidFloat(FInstance* Instance, FUtf8StringView DecoratedName, double Arg)
-{
-    Instance->bSealed = true;
-    return CallMethod<TVerseFunction<void(double)>>(Instance, DecoratedName, Arg);
+    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
+    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
+    const uLang::CClass* const Class = Program->FindDefinitionByVersePath<uLang::CClass>(
+        FULangConversionUtils::FUtf8StringViewToULangStringView(FUtf8String(ScriptVersePath) + UTF8TEXT("/") + ClassName));
+
+    // Parameter descriptions are rebuilt here rather than carried on FMethodDesc, which holds only
+    // what crosses the ABI. A description carries uLang pointers, and those are owned by a semantic
+    // program the next analysis replaces.
+    TArray<FMemberType> ParamTypes;
+    FMemberType ResultTypeDesc;
+    if (Class)
+    {
+        for (const uLang::TSRef<uLang::CFunction>& Function : Class->GetDefinitionsOfKind<uLang::CFunction>())
+        {
+            if (!FULangConversionUtils::ULangStrToFUtf8String(Function->GetDecoratedName()).Equals(FUtf8String(DecoratedName)))
+            {
+                continue;
+            }
+            for (const uLang::CDataDefinition* Param : Function->_Signature.GetParams())
+            {
+                ParamTypes.Add(Param ? DescribeType(Param->GetType(), *Program) : FMemberType{});
+            }
+            if (const uLang::CFunctionType* const Type = Function->_Signature.GetFunctionType())
+            {
+                ResultTypeDesc = DescribeType(&Type->GetReturnType(), *Program);
+            }
+            break;
+        }
+    }
+    if (ParamTypes.Num() != Method->Params.Num())
+    {
+        return VH_ERR_NOT_FOUND;
+    }
+
+    int32 Status = VH_OK;
+    Verse::FRunningContext Context = Verse::FRunningContextPromise{};
+    const verse::FExecutionContext ExecContext = verse::FExecutionContext::GetActiveContext();
+
+    const AutoRTFM::ETransactionResult TransactionResult = AutoRTFM::Transact([&] {
+        // Open, inside the transaction. TVerseFunction's own operator() is AUTORTFM_OPEN and this
+        // is the same reason: raising a Verse runtime error from closed code trips
+        // AutoRTFM::UnreachableIfClosed in FContext::RaiseVerseRuntimeError and takes the process
+        // down, rather than unwinding the way a raise is supposed to.
+        AutoRTFM::Open([&] {
+        Context.EnterVM([&] {
+            Verse::VFunction::Args Converted;
+            Converted.Reserve(ArgCount);
+            for (int32 Index = 0; Index < ArgCount; ++Index)
+            {
+                Verse::VValue Value;
+                if (!WireToValue(Context, Args[Index], ParamTypes[Index], Value))
+                {
+                    Status = VH_ERR_ARGUMENT;
+                    return;
+                }
+                Converted.Add(Value);
+            }
+
+            const Verse::FOpResult OpResult = Resolved.Function->Invoke(Context, MoveTemp(Converted));
+            switch (OpResult.Kind)
+            {
+            case Verse::FOpResult::Return:
+                // A void method still returns -- of false, which is Verse's empty tuple -- so the
+                // declared result type is what decides whether there is a value to read, not the
+                // presence of one.
+                if (ResultTypeDesc.Described.Type != VH_TYPE_VOID
+                    && !ValueToWire(Context, OpResult.Value, ResultTypeDesc, OutStorage, OutResult))
+                {
+                    Status = VH_ERR_ARGUMENT;
+                }
+                break;
+
+            case Verse::FOpResult::Fail:
+                // A <decides> method that ran and declined. Distinct from VH_ERR_NOT_FOUND, which
+                // would say there had been nothing to call.
+                Status = VH_ERR_FAILED;
+                break;
+
+            case Verse::FOpResult::Yield:
+                // A <suspends> method started a task instead of completing. Nothing is wrong and
+                // there is no value; the task runs on under vh_tick.
+                break;
+
+            default:
+                Status = VH_ERR_RUNTIME;
+                break;
+            }
+        });
+        });
+    });
+
+    // A raise unwinds to the root failure context and aborts the transaction, which is what drops
+    // the Godot writes this call had deferred. The transaction result is the only place that is
+    // visible from here: the raise itself does not return through us.
+    if (TransactionResult != AutoRTFM::ETransactionResult::Committed)
+    {
+        return VH_ERR_RUNTIME;
+    }
+    return Status;
 }
 
 namespace {

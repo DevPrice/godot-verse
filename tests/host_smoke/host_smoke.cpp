@@ -52,6 +52,44 @@ static const char* SeverityName(int32_t Severity)
 }
 
 static int DiagnosticCount = 0;
+static int RuntimeErrorCount = 0;
+static std::string LastRuntimeErrorPath;
+static int LastRuntimeErrorLine = 0;
+static std::string LastRuntimeErrorFunction;
+static std::string LastRuntimeErrorStack;
+
+/* A no-argument call that wants no result, which is what every lifecycle method is. */
+static int32_t CallVoid(vh_instance_call_fn Call, vh_instance* Instance, const char* DecoratedName)
+{
+	return Call(Instance, DecoratedName, nullptr, 0, nullptr, nullptr);
+}
+
+static void SmokeOnRuntimeError(void*, const vh_runtime_error* Error)
+{
+	++RuntimeErrorCount;
+	LastRuntimeErrorPath.clear();
+	LastRuntimeErrorFunction.clear();
+	LastRuntimeErrorStack.clear();
+	LastRuntimeErrorLine = 0;
+	for (int32_t Index = 0; Index < Error->FrameCount; ++Index)
+	{
+		const vh_stack_frame& Frame = Error->Frames[Index];
+		LastRuntimeErrorStack.append(Frame.PathUtf8, static_cast<size_t>(Frame.PathLen));
+		LastRuntimeErrorStack.append(" ");
+		LastRuntimeErrorStack.append(Frame.FunctionUtf8, static_cast<size_t>(Frame.FunctionLen));
+		LastRuntimeErrorStack.append("\n");
+
+		/* The innermost frame carrying a location is where the error was raised, which for a call
+		 * into the Godot mirror is the mirror's own line rather than the script's. The script's is
+		 * further out, and the whole stack is what carries it. */
+		if (LastRuntimeErrorLine == 0 && Frame.PathLen > 0 && Frame.Line > 0)
+		{
+			LastRuntimeErrorPath.assign(Frame.PathUtf8, static_cast<size_t>(Frame.PathLen));
+			LastRuntimeErrorFunction.assign(Frame.FunctionUtf8, static_cast<size_t>(Frame.FunctionLen));
+			LastRuntimeErrorLine = Frame.Line;
+		}
+	}
+}
 
 /// The file's bytes, for handing a buffer to the check entry points the way an editor would.
 static std::string ReadFileUtf8(const fs::path& Path)
@@ -188,7 +226,8 @@ int main(int argc, char** argv)
 	auto ClassDefaultFieldFn = Resolve<vh_class_default_field_fn>(Module, "vh_class_default_field", &ResolveOk);
 	auto InstantiateFn = Resolve<vh_instantiate_fn>(Module, "vh_instantiate", &ResolveOk);
 	auto ReleaseInstanceFn = Resolve<vh_release_instance_fn>(Module, "vh_release_instance", &ResolveOk);
-	auto CallInstanceVoidFn = Resolve<vh_instance_call_void_fn>(Module, "vh_instance_call_void", &ResolveOk);
+	auto InstanceCallFn = Resolve<vh_instance_call_fn>(Module, "vh_instance_call", &ResolveOk);
+	auto ClassMethodListFn = Resolve<vh_class_method_list_fn>(Module, "vh_class_method_list", &ResolveOk);
 	auto GetFieldFn = Resolve<vh_instance_get_field_fn>(Module, "vh_instance_get_field", &ResolveOk);
 	auto SetFieldFn = Resolve<vh_instance_set_field_fn>(Module, "vh_instance_set_field", &ResolveOk);
 	auto SetFieldInstanceFn = Resolve<vh_instance_set_field_instance_fn>(Module, "vh_instance_set_field_instance", &ResolveOk);
@@ -225,6 +264,8 @@ int main(int argc, char** argv)
 	Desc.Godot.CallMethod = &SmokeCallMethod;
 	Desc.OnDiagnostic = &SmokeOnDiagnostic;
 	Desc.DiagnosticCtx = nullptr;
+	Desc.OnRuntimeError = &SmokeOnRuntimeError;
+	Desc.RuntimeErrorCtx = nullptr;
 	Desc.EnableDebugger = 0;
 
 	if (!Step("vh_init", InitFn(&Desc) == VH_OK))
@@ -1503,7 +1544,7 @@ int main(int argc, char** argv)
 			return GetFieldFn(Instance, Name, &Out) == VH_OK && Out != nullptr ? Out : nullptr;
 		};
 
-		const bool BumpOk = CallInstanceVoidFn(Instance, "(/user@localhost/exports:)Bump") == VH_OK;
+		const bool BumpOk = CallVoid(InstanceCallFn, Instance, "(/user@localhost/exports:)Bump") == VH_OK;
 		Step("Verse can read and assign the members it was handed", BumpOk);
 		const vh_value* ScaleAfterBump = Read("Scale");
 		Step("Verse read both a var and a non-var it was handed",
@@ -1514,7 +1555,7 @@ int main(int argc, char** argv)
 
 		// Separate from Bump because a string var is stored as a mutable container rather than as
 		// a box around an immutable one, so it is the case a scalar var cannot stand in for.
-		const bool BumpLabelOk = CallInstanceVoidFn(Instance, "(/user@localhost/exports:)BumpLabel") == VH_OK;
+		const bool BumpLabelOk = CallVoid(InstanceCallFn, Instance, "(/user@localhost/exports:)BumpLabel") == VH_OK;
 		Step("Verse can read and assign a string var", BumpLabelOk);
 		const vh_value* LabelAfterBump = Read("Label");
 		Step("a Verse assignment to a string var is visible across the ABI",
@@ -1526,7 +1567,7 @@ int main(int argc, char** argv)
 		// the ABI perfectly and dies inside the VM. Target is a var, so this still works sealed.
 		auto VerseSeesTarget = [&](const vh_value& Written) {
 			if (SetFieldFn(Instance, "Target", &Written) != VH_OK
-				|| CallInstanceVoidFn(Instance, "(/user@localhost/exports:)ReadTarget") != VH_OK)
+				|| CallVoid(InstanceCallFn, Instance, "(/user@localhost/exports:)ReadTarget") != VH_OK)
 			{
 				return -1;
 			}
@@ -1542,7 +1583,7 @@ int main(int argc, char** argv)
 
 		// And the same for a struct: reading a field goes through the object's own shape, so one
 		// built with the wrong emergent type fails here rather than reading back as what went in.
-		const bool ReadOffsetOk = CallInstanceVoidFn(Instance, "(/user@localhost/exports:)ReadOffset") == VH_OK;
+		const bool ReadOffsetOk = CallVoid(InstanceCallFn, Instance, "(/user@localhost/exports:)ReadOffset") == VH_OK;
 		const vh_value* OffsetSeen = Read("OffsetSeen");
 		Step("Verse reads a field off a struct it was handed",
 			 ReadOffsetOk && OffsetSeen && OffsetSeen->Type == VH_TYPE_FLOAT
@@ -1555,7 +1596,7 @@ int main(int argc, char** argv)
 		// Speeds[1] = 11.0, Counts[0] = 7 (never written), Names[1] = "bc" scores 100, Flags[0] true
 		// scores 1000, Path[0].Y = 2.0.
 		auto VerseReadsArray = [&](const char* Function) {
-			if (CallInstanceVoidFn(Instance, Function) != VH_OK)
+			if (CallVoid(InstanceCallFn, Instance, Function) != VH_OK)
 			{
 				return -2.0;
 			}
@@ -1586,7 +1627,179 @@ int main(int argc, char** argv)
 		Step("a var member is still writable once the instance is sealed",
 			 RoundTrip("Scale", NewFloat, [](const vh_value& V) { return V.Type == VH_TYPE_FLOAT && V.Float == 10.0; }));
 
+		// --- ABI v2: general dispatch (R-NODE-6) ---------------------------------------------
+		//
+		// v1 had two call shapes and a three-name array. Everything below goes through the one
+		// entry point, so a failure here is the dispatch core rather than a fixture.
+		{
+			auto Call = [&](const char* Decorated, const vh_value* Args, int32_t ArgCount, vh_value& Result) {
+				return InstanceCallFn(Instance, Decorated, Args, ArgCount, nullptr, &Result);
+			};
+
+			vh_value IntArgs[2] = {};
+			IntArgs[0].Type = VH_TYPE_INT;
+			IntArgs[0].Int = 17;
+			IntArgs[1].Type = VH_TYPE_INT;
+			IntArgs[1].Int = 25;
+			vh_value Result{};
+			Step("a method taking two ints and returning one is callable",
+				 Call("(/user@localhost/exports:)AddInts(:int,:int)", IntArgs, 2, Result) == VH_OK
+					 && Result.Type == VH_TYPE_INT && Result.Int == 42);
+
+			vh_value FloatArgs[2] = {};
+			FloatArgs[0].Type = VH_TYPE_FLOAT;
+			FloatArgs[0].Float = 1.5;
+			FloatArgs[1].Type = VH_TYPE_FLOAT;
+			FloatArgs[1].Float = 4.0;
+			Step("and floats",
+				 Call("(/user@localhost/exports:)ScaleFloat(:float,:float)", FloatArgs, 2, Result) == VH_OK
+					 && Result.Type == VH_TYPE_FLOAT && Result.Float == 6.0);
+
+			// An int where a float is declared. Godot spells 0 as an integer Variant whatever the
+			// receiving type, so refusing this would make half of GDScript's literals uncallable.
+			vh_value MixedArgs[2] = {};
+			MixedArgs[0].Type = VH_TYPE_INT;
+			MixedArgs[0].Int = 3;
+			MixedArgs[1].Type = VH_TYPE_FLOAT;
+			MixedArgs[1].Float = 2.0;
+			Step("an int argument widens into a float parameter",
+				 Call("(/user@localhost/exports:)ScaleFloat(:float,:float)", MixedArgs, 2, Result) == VH_OK
+					 && Result.Type == VH_TYPE_FLOAT && Result.Float == 6.0);
+
+			vh_value StringArgs[2] = {};
+			StringArgs[0].Type = VH_TYPE_STRING;
+			StringArgs[0].String.Utf8 = "<";
+			StringArgs[0].String.Len = 1;
+			StringArgs[1].Type = VH_TYPE_STRING;
+			StringArgs[1].String.Utf8 = ">";
+			StringArgs[1].String.Len = 1;
+			Step("and strings, in and out",
+				 Call("(/user@localhost/exports:)Decorate(:[]char,:[]char)", StringArgs, 2, Result) == VH_OK
+					 && Result.Type == VH_TYPE_STRING
+					 && std::string(Result.String.Utf8, Result.String.Len) == "<changed!>");
+
+			vh_value LogicArg{};
+			LogicArg.Type = VH_TYPE_LOGIC;
+			LogicArg.Logic = 1;
+			Step("and logic",
+				 Call("(/user@localhost/exports:)Negate(:logic)", &LogicArg, 1, Result) == VH_OK
+					 && Result.Type == VH_TYPE_LOGIC && Result.Logic == 0);
+
+			// No arguments but a result, which v1 had no shape for at all.
+			Step("a method with no arguments still returns its value",
+				 Call("(/user@localhost/exports:)CurrentScale", nullptr, 0, Result) == VH_OK
+					 && Result.Type == VH_TYPE_FLOAT && Result.Float == 10.0);
+
+			// A <decides> method, both ways. The distinction from VH_ERR_NOT_FOUND is the point:
+			// one ran and declined, the other was never there.
+			vh_value DecideArgs[2] = {};
+			DecideArgs[0].Type = VH_TYPE_INT;
+			DecideArgs[0].Int = 5;
+			DecideArgs[1].Type = VH_TYPE_INT;
+			DecideArgs[1].Int = 3;
+			Step("a <decides> method that succeeds returns its value",
+				 Call("(/user@localhost/exports:)NotBelow(:int,:int)", DecideArgs, 2, Result) == VH_OK
+					 && Result.Type == VH_TYPE_INT && Result.Int == 5);
+			DecideArgs[0].Int = 1;
+			Step("and one that declines answers VH_ERR_FAILED, not VH_ERR_NOT_FOUND",
+				 Call("(/user@localhost/exports:)NotBelow(:int,:int)", DecideArgs, 2, Result) == VH_ERR_FAILED);
+
+			Step("too few arguments is refused without running anything",
+				 Call("(/user@localhost/exports:)AddInts(:int,:int)", IntArgs, 1, Result) == VH_ERR_ARGUMENT);
+			Step("a method the class does not declare is VH_ERR_NOT_FOUND",
+				 Call("(/user@localhost/exports:)NoSuchMethod", nullptr, 0, Result) == VH_ERR_NOT_FOUND);
+		}
+
+		// --- R-DIAG-2: a runtime error names a file and a line -------------------------------
+		{
+			const int ErrorsBefore = RuntimeErrorCount;
+			// Target holds a handle the harness reports dead, so reaching through it raises.
+			SetFieldFn(Instance, "Target", &NewTarget);
+			const int32_t Status = CallVoid(InstanceCallFn, Instance, "(/user@localhost/exports:)TouchTarget");
+			Step("a method that raises answers VH_ERR_RUNTIME", Status == VH_ERR_RUNTIME);
+			Step("and the error reached the runtime error callback", RuntimeErrorCount > ErrorsBefore);
+			// The raise happens inside the mirrored QueueFree, so that is the innermost located
+			// frame -- which is correct, and is not where the author's mistake is.
+			Step("naming the .verse file it was raised in",
+				 LastRuntimeErrorPath.find(".verse") != std::string::npos);
+			Step("and a line inside it", LastRuntimeErrorLine > 0);
+			// The script's own frame is what the author needs, and it is further out. A stack that
+			// stopped at the raise site would point every dead-object error at the same mirror line.
+			Step("and a stack that reaches the script's own method",
+				 LastRuntimeErrorStack.find("TouchTarget") != std::string::npos);
+			Step("and the file that method is declared in",
+				 LastRuntimeErrorStack.find("exports.verse") != std::string::npos);
+		}
+
 		ReleaseInstanceFn(Instance);
+	}
+
+	// --- ABI v2: the method list (R-NODE-9) --------------------------------------------------
+	{
+		auto Text = [](const char* Utf8, int32_t Len) { return std::string(Utf8 ? Utf8 : "", Len); };
+
+		const vh_method_desc* Methods = nullptr;
+		int32_t MethodCount = 0;
+		const bool ListOk = ClassMethodListFn("exports", &Methods, &MethodCount) == VH_OK;
+		Step("vh_class_method_list", ListOk && MethodCount > 0);
+
+		auto Find = [&](const char* Name) -> const vh_method_desc* {
+			for (int32_t Index = 0; Index < MethodCount; ++Index)
+			{
+				if (Text(Methods[Index].NameUtf8, Methods[Index].NameLen) == Name)
+				{
+					return &Methods[Index];
+				}
+			}
+			return nullptr;
+		};
+
+		const vh_method_desc* AddInts = ListOk ? Find("AddInts") : nullptr;
+		Step("it reports a method the class declares", AddInts != nullptr);
+		Step("with its parameters, named and typed",
+			 AddInts && AddInts->ParamCount == 2 && AddInts->RequiredParamCount == 2
+				 && Text(AddInts->Params[0].NameUtf8, AddInts->Params[0].NameLen) == "A"
+				 && AddInts->Params[0].Type == VH_TYPE_INT
+				 && Text(AddInts->Params[1].NameUtf8, AddInts->Params[1].NameLen) == "B");
+		Step("and its result type", AddInts && AddInts->ResultType == VH_TYPE_INT);
+		Step("and the decorated name the call takes",
+			 AddInts
+				 && Text(AddInts->DecoratedUtf8, AddInts->DecoratedLen)
+						== "(/user@localhost/exports:)AddInts(:int,:int)");
+
+		const vh_method_desc* Bump = ListOk ? Find("Bump") : nullptr;
+		Step("a void method reports no result", Bump && Bump->ResultType == VH_TYPE_VOID);
+
+		const vh_method_desc* NotBelow = ListOk ? Find("NotBelow") : nullptr;
+		Step("a <decides> method says so", NotBelow && NotBelow->CanFail != 0);
+		Step("and one that cannot fail does not", AddInts && AddInts->CanFail == 0);
+
+		// Nothing in `exports` overrides a Godot virtual, so every method here is the script's own.
+		bool AnyVirtual = false;
+		for (int32_t Index = 0; ListOk && Index < MethodCount; ++Index)
+		{
+			AnyVirtual = AnyVirtual || Methods[Index].GodotVirtualLen > 0;
+		}
+		Step("a method that overrides nothing of Godot's carries no virtual name", ListOk && !AnyVirtual);
+
+		// exports_probe overrides PhysicsProcess, which is Godot's _physics_process. The mapping is
+		// derived rather than tabulated, so this is the check that the derivation is right.
+		const vh_method_desc* ProbeMethods = nullptr;
+		int32_t ProbeCount = 0;
+		const bool ProbeOk = ClassMethodListFn("exports_probe", &ProbeMethods, &ProbeCount) == VH_OK;
+		const vh_method_desc* Physics = nullptr;
+		for (int32_t Index = 0; ProbeOk && Index < ProbeCount; ++Index)
+		{
+			if (Text(ProbeMethods[Index].NameUtf8, ProbeMethods[Index].NameLen) == "PhysicsProcess")
+			{
+				Physics = &ProbeMethods[Index];
+			}
+		}
+		Step("an override of a Godot virtual reports Godot's own name for it",
+			 Physics && Text(Physics->GodotVirtualUtf8, Physics->GodotVirtualLen) == "_physics_process");
+
+		Step("a class the project does not declare has no method list",
+			 ClassMethodListFn("no_such_class", &Methods, &MethodCount) == VH_ERR_NOT_FOUND);
 	}
 
 	Step("vh_tick", true);

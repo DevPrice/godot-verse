@@ -8,7 +8,38 @@
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/packed_string_array.hpp>
+#include <godot_cpp/templates/vector.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
+
+// One method a Verse script declares, in Godot's vocabulary.
+//
+// A copy rather than a view: vh_class_method_list's descriptors live until the next call to it,
+// and a script's method table outlives many of those.
+struct VerseMethodInfo {
+	// The Verse name, which is the name Godot calls it by -- a script method is not transformed on
+	// its way out.
+	godot::StringName name;
+	// What call_instance takes. A CharString because the ABI wants utf8 bytes and a StringName
+	// would have to be converted at every call.
+	godot::CharString decorated;
+	// Godot's own name for the virtual this overrides -- `_ready` -- or empty for a plain method.
+	// A virtual answers to this name as well as to its Verse one, which is how Godot's own calls
+	// reach it.
+	godot::StringName godot_virtual;
+
+	struct Param {
+		godot::StringName name;
+		godot::Variant::Type type = godot::Variant::NIL;
+	};
+	godot::Vector<Param> params;
+	int32_t required_params = 0;
+
+	godot::Variant::Type return_type = godot::Variant::NIL;
+	bool returns_value = false;
+
+	bool can_fail = false;
+	bool suspends = false;
+};
 
 // The "VerseRuntime" engine singleton. Owns the verse_host.dll loader and the vh_init_desc handed
 // to it. Every method degrades to ERR_UNAVAILABLE plus a warning when no host is loaded; nothing
@@ -100,8 +131,21 @@ public:
 	vh_instance *instantiate(const godot::String &p_class_name, int64_t p_object_id);
 	void release_instance(vh_instance *p_instance);
 	bool instance_has_function(vh_instance *p_instance, const char *p_decorated_name) const;
-	godot::Error call_instance_void(vh_instance *p_instance, const char *p_decorated_name);
-	godot::Error call_instance_void_float(vh_instance *p_instance, const char *p_decorated_name, double p_arg);
+
+	// Calls any method the script declares. Answers a vh_status rather than a godot::Error because
+	// the caller has to tell the four outcomes apart: VH_ERR_NOT_FOUND is INVALID_METHOD to Godot,
+	// VH_ERR_ARGUMENT is an argument-count or type error, VH_ERR_FAILED is a <decides> method that
+	// declined -- which is a nil return, not an error -- and VH_ERR_RUNTIME has already been
+	// reported with its stack.
+	int32_t call_instance(vh_instance *p_instance,
+			const char *p_decorated_name,
+			const godot::Variant **p_args,
+			int32_t p_arg_count,
+			godot::Variant &r_result);
+
+	// Every method a script's class declares, copied out of the host's storage -- which the ABI
+	// only promises until the next call, so nothing here may hold a pointer into it.
+	godot::Vector<VerseMethodInfo> class_methods(const godot::String &p_class_name) const;
 
 	// One data member read off a live instance, and off the class default object respectively.
 	// Unlike class_exports these go through the VM, because a value exists nowhere else. A nil
@@ -130,6 +174,11 @@ private:
 	static int32_t api_set_property(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_value);
 	static int32_t api_call_method(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count, vh_arena *p_arena, vh_value *r_value);
 	static vh_handle api_get_singleton(void *p_ctx, const char *p_name_utf8, int32_t p_name_len);
+
+	// R-DIAG-2: a Verse runtime error, with the file, line and Verse call stack it was raised at.
+	// Separate from on_diagnostic because the two go to different places -- a compile error
+	// annotates the script editor's gutter, this goes to the output and errors panel.
+	static void on_runtime_error(void *p_ctx, const vh_runtime_error *p_error);
 
 	static void on_diagnostic(void *p_ctx, const vh_diagnostic *p_diagnostic);
 };

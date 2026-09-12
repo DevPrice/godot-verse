@@ -39,10 +39,13 @@ struct VerseScriptInstance {
 	// to nothing. Nodes need none of this -- the scene owns those.
 	godot::HashMap<godot::StringName, godot::Ref<godot::Resource>> held_resources;
 
-	// Resolved once at attach time rather than looked up per frame.
-	bool has_ready = false;
-	bool has_process = false;
-	bool has_physics_process = false;
+	// Which of the class's declared methods this instance actually implements, rather than
+	// inheriting as an empty body from the mirrored class it derives from.
+	//
+	// Resolved once at attach time: Godot asks has_method on paths that run per frame, and the
+	// answer for a Godot virtual is what decides whether the node joins the process list at all.
+	// Keyed by the Verse name, which is the identity every lookup narrows to first.
+	godot::HashMap<godot::StringName, bool> implemented;
 
 	// Returns nullptr when the script did not compile or its class could not be instantiated,
 	// which tells Godot to fall back to a placeholder instance.
@@ -51,8 +54,7 @@ struct VerseScriptInstance {
 	// Writes one member, routing an Object to whichever of the two writes can carry it.
 	bool set_field(const godot::StringName &p_name, const godot::Variant &p_value);
 
-	// Godot lifecycle name -> decorated Verse name, or nullptr for anything this phase does not
-	// dispatch. The decoration is the host's, not Godot's: a plain Process(Delta:float) is stored
-	// as Process(:float).
-	static const char *verse_name_for(const godot::StringName &p_method);
+	// The method Godot would call p_name, and whether this instance implements it. Null for a name
+	// the class declares nothing under, or one it declares but only inherits.
+	const VerseMethodInfo *resolve(const godot::StringName &p_name) const;
 };

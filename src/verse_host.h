@@ -41,8 +41,8 @@ public:
 	vh_instantiate_fn Instantiate = nullptr;
 	vh_release_instance_fn ReleaseInstance = nullptr;
 	vh_instance_has_function_fn InstanceHasFunction = nullptr;
-	vh_instance_call_void_fn InstanceCallVoid = nullptr;
-	vh_instance_call_void_float_fn InstanceCallVoidFloat = nullptr;
+	vh_instance_call_fn InstanceCall = nullptr;
+	vh_class_method_list_fn ClassMethodList = nullptr;
 	vh_class_export_list_fn ClassExportList = nullptr;
 	vh_instance_get_field_fn InstanceGetField = nullptr;
 	vh_class_default_field_fn ClassDefaultField = nullptr;

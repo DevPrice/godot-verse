@@ -124,6 +124,8 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 	init_desc.Godot = godot_api;
 	init_desc.OnDiagnostic = &VerseRuntime::on_diagnostic;
 	init_desc.DiagnosticCtx = this;
+	init_desc.OnRuntimeError = &VerseRuntime::on_runtime_error;
+	init_desc.RuntimeErrorCtx = this;
 	init_desc.EnableDebugger = p_enable_debugger ? 1 : 0;
 
 	const int32_t status = host.Init(&init_desc);
@@ -439,28 +441,72 @@ bool VerseRuntime::instance_has_function(vh_instance *p_instance, const char *p_
 	return host.InstanceHasFunction(p_instance, p_decorated_name) != 0;
 }
 
-Error VerseRuntime::call_instance_void(vh_instance *p_instance, const char *p_decorated_name) {
+int32_t VerseRuntime::call_instance(vh_instance *p_instance,
+		const char *p_decorated_name,
+		const Variant **p_args,
+		int32_t p_arg_count,
+		Variant &r_result) {
+	r_result = Variant();
 	if (!host.is_loaded() || p_instance == nullptr) {
-		return ERR_UNAVAILABLE;
+		return VH_ERR_STATE;
 	}
-	const int32_t status = host.InstanceCallVoid(p_instance, p_decorated_name);
-	if (status != VH_OK) {
-		UtilityFunctions::push_error(String("VerseRuntime: ") + String(p_decorated_name) + String(" failed with status ") + String::num_int64(status));
-		return FAILED;
+
+	// The arena outlives the call and nothing else: every string and container the arguments point
+	// at is allocated from it, and the host has copied whatever it needed by the time this returns.
+	VerseArena arena;
+	std::vector<vh_value> wire;
+	wire.resize((size_t)p_arg_count);
+	for (int32_t i = 0; i < p_arg_count; ++i) {
+		if (!variant_to_vh(*p_args[i], arena.get(), wire[(size_t)i])) {
+			return VH_ERR_ARGUMENT;
+		}
 	}
-	return OK;
+
+	vh_value result = {};
+	const int32_t status = host.InstanceCall(
+			p_instance, p_decorated_name, wire.empty() ? nullptr : wire.data(), p_arg_count, nullptr, &result);
+	if (status == VH_OK) {
+		r_result = vh_to_variant(result);
+	}
+	return status;
 }
 
-Error VerseRuntime::call_instance_void_float(vh_instance *p_instance, const char *p_decorated_name, double p_arg) {
-	if (!host.is_loaded() || p_instance == nullptr) {
-		return ERR_UNAVAILABLE;
+Vector<VerseMethodInfo> VerseRuntime::class_methods(const String &p_class_name) const {
+	Vector<VerseMethodInfo> methods;
+	if (!host.is_loaded()) {
+		return methods;
 	}
-	const int32_t status = host.InstanceCallVoidFloat(p_instance, p_decorated_name, p_arg);
-	if (status != VH_OK) {
-		UtilityFunctions::push_error(String("VerseRuntime: ") + String(p_decorated_name) + String(" failed with status ") + String::num_int64(status));
-		return FAILED;
+
+	const vh_method_desc *descs = nullptr;
+	int32_t count = 0;
+	if (host.ClassMethodList(p_class_name.utf8().get_data(), &descs, &count) != VH_OK) {
+		return methods;
 	}
-	return OK;
+
+	methods.resize(count);
+	for (int32_t i = 0; i < count; ++i) {
+		const vh_method_desc &desc = descs[i];
+		VerseMethodInfo &info = methods.write[i];
+		info.name = StringName(String::utf8(desc.NameUtf8, desc.NameLen));
+		info.decorated = String::utf8(desc.DecoratedUtf8, desc.DecoratedLen).utf8();
+		if (desc.GodotVirtualLen > 0) {
+			info.godot_virtual = StringName(String::utf8(desc.GodotVirtualUtf8, desc.GodotVirtualLen));
+		}
+		info.required_params = desc.RequiredParamCount;
+		info.can_fail = desc.CanFail != 0;
+		info.suspends = desc.Suspends != 0;
+		info.returns_value = desc.ResultType != VH_TYPE_VOID;
+		info.return_type = info.returns_value ? variant_type_for(desc.ResultType, desc.ResultVariantTag) : Variant::NIL;
+
+		info.params.resize(desc.ParamCount);
+		for (int32_t j = 0; j < desc.ParamCount; ++j) {
+			const vh_param_desc &param = desc.Params[j];
+			VerseMethodInfo::Param &out = info.params.write[j];
+			out.name = StringName(String::utf8(param.NameUtf8, param.NameLen));
+			out.type = variant_type_for(param.Type, param.VariantTag);
+		}
+	}
+	return methods;
 }
 
 void VerseRuntime::tick(double p_budget_seconds) {
@@ -536,6 +582,48 @@ int32_t VerseRuntime::api_call_method(void *p_ctx, vh_handle p_handle, const cha
 		return VH_CALL_OK;
 	}
 	return variant_to_vh(result, p_arena, *r_value) ? VH_CALL_OK : VH_CALL_BAD_VALUE;
+}
+
+void VerseRuntime::on_runtime_error(void *p_ctx, const vh_runtime_error *p_error) {
+	if (p_error == nullptr) {
+		return;
+	}
+
+	const String message = String::utf8(p_error->MessageUtf8, p_error->MessageLen);
+
+	// The innermost frame with a source location is what the error is *at*, so it is what
+	// push_error is told -- Godot makes the file and line it is given clickable, and the rest of
+	// the stack is only useful underneath it.
+	const vh_stack_frame *site = nullptr;
+	for (int32_t i = 0; i < p_error->FrameCount; i++) {
+		if (p_error->Frames[i].PathLen > 0 && p_error->Frames[i].Line > 0) {
+			site = &p_error->Frames[i];
+			break;
+		}
+	}
+
+	if (site != nullptr) {
+		const String path = String::utf8(site->PathUtf8, site->PathLen);
+		const String function = String::utf8(site->FunctionUtf8, site->FunctionLen);
+		UtilityFunctions::push_error(message, function, path, site->Line);
+	} else {
+		UtilityFunctions::push_error(message);
+	}
+
+	// The rest of the stack, innermost first, as its own lines. Printed rather than pushed so one
+	// error is one entry in the errors panel with its stack beneath it.
+	for (int32_t i = 0; i < p_error->FrameCount; i++) {
+		const vh_stack_frame &frame = p_error->Frames[i];
+		String line = String("    at ") + String::utf8(frame.FunctionUtf8, frame.FunctionLen);
+		if (frame.PathLen > 0) {
+			line += String(" (") + String::utf8(frame.PathUtf8, frame.PathLen);
+			if (frame.Line > 0) {
+				line += String(":") + String::num_int64(frame.Line);
+			}
+			line += String(")");
+		}
+		UtilityFunctions::print(line);
+	}
 }
 
 vh_handle VerseRuntime::api_get_singleton(void *p_ctx, const char *p_name_utf8, int32_t p_name_len) {

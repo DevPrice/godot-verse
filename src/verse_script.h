@@ -4,6 +4,8 @@
 // type to encode it; script_extension.hpp only forward-declares it.
 #include <godot_cpp/classes/script_extension.hpp>
 
+#include "verse_runtime.h"
+
 #include <vector>
 #include <godot_cpp/classes/script_language.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
@@ -86,8 +88,19 @@ public:
 	vh_instance *make_instance(int64_t p_object_id) const;
 	void free_instance(vh_instance *p_instance) const;
 	bool instance_has_function(vh_instance *p_instance, const char *p_decorated_name) const;
-	godot::Error call_instance_void(vh_instance *p_instance, const char *p_decorated_name) const;
-	godot::Error call_instance_void_float(vh_instance *p_instance, const char *p_decorated_name, double p_arg) const;
+	int32_t call_instance(vh_instance *p_instance,
+			const char *p_decorated_name,
+			const godot::Variant **p_args,
+			int32_t p_arg_count,
+			godot::Variant &r_result) const;
+
+	// Every method this script's class declares, from the last analysis.
+	const godot::Vector<VerseMethodInfo> &methods() const;
+
+	// The method Godot would call p_name: a script method answers to its Verse name verbatim, and
+	// one that overrides a Godot virtual answers to Godot's name for it as well. Null for a name
+	// this class declares nothing under.
+	const VerseMethodInfo *find_method(const godot::StringName &p_name) const;
 	godot::Variant instance_field(vh_instance *p_instance, const godot::StringName &p_name) const;
 	bool set_instance_field(vh_instance *p_instance, const godot::StringName &p_name, const godot::Variant &p_value) const;
 	bool set_instance_field_instance(vh_instance *p_instance, const godot::StringName &p_name, vh_instance *p_value) const;
@@ -130,6 +143,11 @@ private:
 	// handing it an empty list over a typo would clear the inspector *and* drop the values out
 	// of the scene on the next save.
 	mutable godot::TypedArray<godot::Dictionary> exports_cache;
+
+	// The method table from the same analysis as exports_cache, and refreshed with it. Cached
+	// rather than re-asked because Godot calls _has_method on paths that run per frame, and each
+	// ask walks the semantic program.
+	mutable godot::Vector<VerseMethodInfo> methods_cache;
 
 	// Set while exports_cache describes a program older than the file. Godot reads this through
 	// _is_placeholder_fallback_enabled and switches every placeholder to serving its own stored

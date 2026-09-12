@@ -8,21 +8,22 @@
 #include <godot_cpp/godot.hpp>
 #include <godot_cpp/variant/variant.hpp>
 
+#include <deque>
+#include <map>
+#include <vector>
+
 using namespace godot;
 
 namespace {
 
-// A script overrides methods declared on `object`, and the VM registers an override under the
-// *declaring* class's decorated name, not the overriding one. Looking up the undecorated name
-// instead does not fail politely — UVerseClass::PeekField asserts on a field the shape does not
-// have.
-//
-// The argument mangling is the host's, not Godot's: a plain Process(Delta:float) in Verse source
-// is stored as Process(:float), so these must match it exactly or resolution silently fails
-// instead of erroring.
-constexpr const char *kMethodReadyName = "(/Godot.org/Godot/object:)Ready";
-constexpr const char *kMethodProcessName = "(/Godot.org/Godot/object:)Process(:float)";
-constexpr const char *kMethodPhysicsProcessName = "(/Godot.org/Godot/object:)PhysicsProcess(:float)";
+struct MethodListStorage;
+
+// One entry per outstanding get_method_list_func answer. Godot hands the array back to
+// free_method_list_func and nothing else, so the array's own address is the only key available.
+std::map<const GDExtensionMethodInfo *, MethodListStorage *> &method_list_storage() {
+	static std::map<const GDExtensionMethodInfo *, MethodListStorage *> table;
+	return table;
+}
 
 GDExtensionBool set_func(GDExtensionScriptInstanceDataPtr p_instance, GDExtensionConstStringNamePtr p_name, GDExtensionConstVariantPtr p_value) {
 	VerseScriptInstance *self = static_cast<VerseScriptInstance *>(p_instance);
@@ -71,12 +72,97 @@ GDExtensionObjectPtr get_owner_func(GDExtensionScriptInstanceDataPtr p_instance)
 void get_property_state_func(GDExtensionScriptInstanceDataPtr p_instance, GDExtensionScriptInstancePropertyStateAdd p_add_func, void *p_userdata) {
 }
 
+// Everything one get_method_list_func answer points at, freed as a unit by its matching
+// free_method_list_func.
+//
+// GDExtensionMethodInfo holds bare pointers to a StringName per name and per argument, so the
+// names have to outlive the call that returned them and die exactly when Godot says so. Holding
+// them in one block keyed by the array Godot was handed is what makes that a single delete.
+struct MethodListStorage {
+	std::vector<GDExtensionMethodInfo> infos;
+	std::vector<GDExtensionPropertyInfo> arguments;
+	// Deques rather than vectors: a GDExtensionPropertyInfo points at one of these, and a vector
+	// that grew would move every name already pointed at.
+	std::deque<StringName> names;
+	std::deque<String> hint_strings;
+};
+
+GDExtensionPropertyInfo make_property(MethodListStorage &r_storage, const StringName &p_name, Variant::Type p_type) {
+	r_storage.names.push_back(p_name);
+	r_storage.names.push_back(StringName());
+	r_storage.hint_strings.push_back(String());
+
+	GDExtensionPropertyInfo info = {};
+	info.type = (GDExtensionVariantType)p_type;
+	info.name = (GDExtensionStringNamePtr)&r_storage.names[r_storage.names.size() - 2];
+	info.class_name = (GDExtensionStringNamePtr)&r_storage.names.back();
+	info.hint = PROPERTY_HINT_NONE;
+	info.hint_string = (GDExtensionStringPtr)&r_storage.hint_strings.back();
+	info.usage = p_type == Variant::NIL ? (PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_NIL_IS_VARIANT)
+									   : PROPERTY_USAGE_DEFAULT;
+	return info;
+}
+
 const GDExtensionMethodInfo *get_method_list_func(GDExtensionScriptInstanceDataPtr p_instance, uint32_t *r_count) {
 	*r_count = 0;
-	return nullptr;
+	VerseScriptInstance *self = static_cast<VerseScriptInstance *>(p_instance);
+	if (self->script.is_null()) {
+		return nullptr;
+	}
+
+	const Vector<VerseMethodInfo> &methods = self->script->methods();
+	if (methods.is_empty()) {
+		return nullptr;
+	}
+
+	MethodListStorage *storage = memnew(MethodListStorage);
+	storage->infos.reserve((size_t)methods.size());
+
+	// Filled to its final length before any GDExtensionPropertyInfo points into it, for the reason
+	// the deques exist: a reallocation here would move arguments Godot has already been given.
+	size_t total_arguments = 0;
+	for (int64_t i = 0; i < methods.size(); i++) {
+		total_arguments += (size_t)methods[i].params.size();
+	}
+	storage->arguments.reserve(total_arguments);
+
+	for (int64_t i = 0; i < methods.size(); i++) {
+		const VerseMethodInfo &method = methods[i];
+		const size_t first_argument = storage->arguments.size();
+		for (int64_t j = 0; j < method.params.size(); j++) {
+			storage->arguments.push_back(make_property(*storage, method.params[j].name, method.params[j].type));
+		}
+
+		// The name Godot calls it by: a script method keeps its Verse spelling, and one that
+		// overrides a Godot virtual is listed under Godot's name, because that is what the engine
+		// will look for.
+		storage->names.push_back(method.godot_virtual == StringName() ? method.name : method.godot_virtual);
+
+		GDExtensionMethodInfo info = {};
+		info.name = (GDExtensionStringNamePtr)&storage->names.back();
+		info.return_value = make_property(*storage, StringName(),
+				method.returns_value ? method.return_type : Variant::NIL);
+		info.flags = METHOD_FLAG_NORMAL;
+		info.id = 0;
+		info.argument_count = (uint32_t)method.params.size();
+		info.arguments = method.params.is_empty() ? nullptr : storage->arguments.data() + first_argument;
+		info.default_argument_count = 0;
+		info.default_arguments = nullptr;
+		storage->infos.push_back(info);
+	}
+
+	method_list_storage()[storage->infos.data()] = storage;
+	*r_count = (uint32_t)storage->infos.size();
+	return storage->infos.data();
 }
 
 void free_method_list_func(GDExtensionScriptInstanceDataPtr p_instance, const GDExtensionMethodInfo *p_list, uint32_t p_count) {
+	auto &table = method_list_storage();
+	const auto found = table.find(p_list);
+	if (found != table.end()) {
+		memdelete(found->second);
+		table.erase(found);
+	}
 }
 
 GDExtensionVariantType get_property_type_func(GDExtensionScriptInstanceDataPtr p_instance, GDExtensionConstStringNamePtr p_name, GDExtensionBool *r_is_valid) {
@@ -90,48 +176,80 @@ GDExtensionBool validate_property_func(GDExtensionScriptInstanceDataPtr p_instan
 
 GDExtensionBool has_method_func(GDExtensionScriptInstanceDataPtr p_instance, GDExtensionConstStringNamePtr p_name) {
 	VerseScriptInstance *self = static_cast<VerseScriptInstance *>(p_instance);
-	const char *method = VerseScriptInstance::verse_name_for(*reinterpret_cast<const StringName *>(p_name));
-	if (method == kMethodReadyName) {
-		return self->has_ready;
-	}
-	if (method == kMethodProcessName) {
-		return self->has_process;
-	}
-	if (method == kMethodPhysicsProcessName) {
-		return self->has_physics_process;
-	}
-	return false;
+	return self->resolve(*reinterpret_cast<const StringName *>(p_name)) != nullptr;
 }
 
 GDExtensionInt get_method_argument_count_func(GDExtensionScriptInstanceDataPtr p_instance, GDExtensionConstStringNamePtr p_name, GDExtensionBool *r_is_valid) {
-	*r_is_valid = false;
-	return 0;
+	VerseScriptInstance *self = static_cast<VerseScriptInstance *>(p_instance);
+	const VerseMethodInfo *method = self->resolve(*reinterpret_cast<const StringName *>(p_name));
+	*r_is_valid = method != nullptr;
+	return method != nullptr ? (GDExtensionInt)method->params.size() : 0;
 }
 
 void call_func(GDExtensionScriptInstanceDataPtr p_self, GDExtensionConstStringNamePtr p_method, const GDExtensionConstVariantPtr *p_args, GDExtensionInt p_argument_count, GDExtensionVariantPtr r_return, GDExtensionCallError *r_error) {
 	*reinterpret_cast<Variant *>(r_return) = Variant();
 
 	VerseScriptInstance *self = static_cast<VerseScriptInstance *>(p_self);
-	const char *method = VerseScriptInstance::verse_name_for(*reinterpret_cast<const StringName *>(p_method));
-	if (method == nullptr) {
+	const VerseMethodInfo *method = self->resolve(*reinterpret_cast<const StringName *>(p_method));
+	if (method == nullptr || self->verse_object == nullptr) {
 		r_error->error = GDEXTENSION_CALL_ERROR_INVALID_METHOD;
 		return;
 	}
 
-	if (method == kMethodReadyName) {
-		self->script->call_instance_void(self->verse_object, method);
-	} else {
-		if (p_argument_count < 1) {
-			r_error->error = GDEXTENSION_CALL_ERROR_TOO_FEW_ARGUMENTS;
-			r_error->argument = 0;
-			r_error->expected = 1;
-			return;
-		}
-		const double delta = *reinterpret_cast<const Variant *>(p_args[0]);
-		self->script->call_instance_void_float(self->verse_object, method, delta);
+	if (p_argument_count < method->required_params) {
+		r_error->error = GDEXTENSION_CALL_ERROR_TOO_FEW_ARGUMENTS;
+		r_error->argument = method->required_params;
+		r_error->expected = method->required_params;
+		return;
+	}
+	if (p_argument_count > method->params.size()) {
+		r_error->error = GDEXTENSION_CALL_ERROR_TOO_MANY_ARGUMENTS;
+		r_error->argument = (int32_t)method->params.size();
+		r_error->expected = (int32_t)method->params.size();
+		return;
 	}
 
-	r_error->error = GDEXTENSION_CALL_OK;
+	// GDExtensionConstVariantPtr is an opaque pointer per argument, not an array of Variants, so
+	// the pointers are re-pointed rather than cast through.
+	std::vector<const Variant *> args((size_t)p_argument_count);
+	for (int64_t i = 0; i < p_argument_count; i++) {
+		args[(size_t)i] = reinterpret_cast<const Variant *>(p_args[i]);
+	}
+
+	Variant result;
+	const int32_t status = self->script->call_instance(
+			self->verse_object, method->decorated.get_data(),
+			args.empty() ? nullptr : args.data(), (int32_t)p_argument_count, result);
+
+	switch (status) {
+		case VH_OK:
+			*reinterpret_cast<Variant *>(r_return) = result;
+			r_error->error = GDEXTENSION_CALL_OK;
+			return;
+
+		// A <decides> method that ran and declined. Nil is the Godot spelling of that, and it is
+		// not a call error: the script answered, and its answer was "no".
+		case VH_ERR_FAILED:
+			r_error->error = GDEXTENSION_CALL_OK;
+			return;
+
+		case VH_ERR_ARGUMENT:
+			r_error->error = GDEXTENSION_CALL_ERROR_INVALID_ARGUMENT;
+			r_error->argument = 0;
+			r_error->expected = (int32_t)(method->params.is_empty() ? Variant::NIL : method->params[0].type);
+			return;
+
+		case VH_ERR_NOT_FOUND:
+			r_error->error = GDEXTENSION_CALL_ERROR_INVALID_METHOD;
+			return;
+
+		// A raise. It has already been reported with its file, line and Verse stack through the
+		// runtime error callback, so saying anything more here would only duplicate it -- and the
+		// call did happen, so it is not a call error either.
+		default:
+			r_error->error = GDEXTENSION_CALL_OK;
+			return;
+	}
 }
 
 void notification_func(GDExtensionScriptInstanceDataPtr p_instance, int32_t p_what, GDExtensionBool p_reversed) {
@@ -206,17 +324,16 @@ const GDExtensionScriptInstanceInfo3 script_instance_info = {
 
 } // namespace
 
-const char *VerseScriptInstance::verse_name_for(const StringName &p_method) {
-	if (p_method == StringName("_ready")) {
-		return kMethodReadyName;
+const VerseMethodInfo *VerseScriptInstance::resolve(const StringName &p_name) const {
+	const VerseMethodInfo *method = script.is_valid() ? script->find_method(p_name) : nullptr;
+	if (method == nullptr) {
+		return nullptr;
 	}
-	if (p_method == StringName("_process")) {
-		return kMethodProcessName;
-	}
-	if (p_method == StringName("_physics_process")) {
-		return kMethodPhysicsProcessName;
-	}
-	return nullptr;
+	// A Godot virtual resolves on every instance, because the mirrored class it derives from gives
+	// it an empty body -- so "does the class declare it" is not the question Godot is asking.
+	// Whether *this* instance overrides it is, and that is what decides the process list.
+	const bool *found = implemented.getptr(method->name);
+	return found != nullptr && *found ? method : nullptr;
 }
 
 GDExtensionScriptInstancePtr VerseScriptInstance::create(VerseScript *p_script, Object *p_owner) {
@@ -239,9 +356,18 @@ GDExtensionScriptInstancePtr VerseScriptInstance::create(VerseScript *p_script, 
 		memdelete(instance);
 		return nullptr;
 	}
-	instance->has_ready = p_script->instance_has_function(instance->verse_object, kMethodReadyName);
-	instance->has_process = p_script->instance_has_function(instance->verse_object, kMethodProcessName);
-	instance->has_physics_process = p_script->instance_has_function(instance->verse_object, kMethodPhysicsProcessName);
+	// Asked once per method at attach time rather than per call. A method the class declares but
+	// only inherits is recorded as absent, which is what keeps a node that overrides none of the
+	// per-frame virtuals out of the process list.
+	const Vector<VerseMethodInfo> &methods = p_script->methods();
+	for (int64_t i = 0; i < methods.size(); i++) {
+		const VerseMethodInfo &method = methods[i];
+		// Only a virtual can be inherited-but-not-implemented; a method the script declares itself
+		// is implemented by definition, and asking the host would answer the same at more cost.
+		const bool implemented = method.godot_virtual == StringName()
+				|| p_script->instance_has_function(instance->verse_object, method.decorated.get_data());
+		instance->implemented.insert(method.name, implemented);
+	}
 
 	if (VerseScriptLanguage *language = VerseScriptLanguage::singleton()) {
 		language->register_instance(instance->owner_id, instance);

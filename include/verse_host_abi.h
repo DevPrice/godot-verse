@@ -10,7 +10,11 @@
  * in this header are still only ever invoked on the vh_init thread.
  *
  * Lifetimes: all pointers passed in are borrowed for the duration of the call. Values written
- * into a vh_arena are owned by the arena and valid until the call that supplied it returns.
+ * into a vh_arena are owned by the arena and valid until the call that supplied it returns. The
+ * one exception is a reference id (vh_value::Ref), which names an entry in a table the consumer
+ * owns and which outlives the call -- see "reference values" below.
+ *
+ * The design argument behind v2, and the spikes that settled it, are in docs/abi-v2-design.md.
  */
 #ifndef VERSE_HOST_ABI_H
 #define VERSE_HOST_ABI_H
@@ -22,7 +26,25 @@
 extern "C" {
 #endif
 
-#define VH_ABI_VERSION 27
+/* ---------------------------------------------------------------- version -- */
+
+/* Compatibility policy (R-QUAL-5).
+ *
+ * MAJOR changes when a struct's layout, a function's signature, or the meaning of an existing
+ * field changes. There is no compatibility window: both DLLs must be rebuilt, and vh_init refuses
+ * a descriptor whose major does not match exactly.
+ *
+ * MINOR changes when something is added that an older consumer can ignore -- a new enumerator, a
+ * new callback at the end of vh_godot_api, a new entry point. A host may run against a consumer
+ * with a lower minor: it must check StructSize before reading a field added after the version the
+ * consumer was built for, and fall back rather than fail.
+ *
+ * The mismatch surfaces at vh_init, not at compile time, because the two sides are compiled by
+ * different toolchains and nothing links them.
+ */
+#define VH_ABI_VERSION_MAJOR 2
+#define VH_ABI_VERSION_MINOR 0
+#define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
 typedef int32_t vh_bool;
 
@@ -34,7 +56,13 @@ typedef enum vh_status
 	VH_ERR_INIT,      /* engine boot failed */
 	VH_ERR_COMPILE,   /* Verse source did not compile; diagnostics were reported */
 	VH_ERR_NOT_FOUND, /* no such function / file */
-	VH_ERR_RUNTIME    /* Verse raised a runtime error */
+	VH_ERR_RUNTIME,   /* Verse raised a runtime error; it was reported through OnRuntimeError */
+	VH_ERR_ARGUMENT,  /* the call was shaped wrong: arity, or an argument with no Verse spelling */
+
+	/* A <decides> function failed. Distinct from VH_ERR_NOT_FOUND, which means there was no such
+	 * function to call: this one ran and declined, which is an ordinary outcome the caller is
+	 * expected to have a spelling for. */
+	VH_ERR_FAILED
 } vh_status;
 
 /* Outcome of a property read/write or a method call. The distinction is load bearing: the host
@@ -47,11 +75,14 @@ typedef enum vh_call_status
 	VH_CALL_OK = 0,
 	VH_CALL_DEAD_OBJECT,    /* the handle names a freed, or never valid, instance */
 	VH_CALL_NO_SUCH_MEMBER, /* the object is alive but has no such method or property */
-	VH_CALL_BAD_VALUE       /* an argument or the result has no representation on this wire */
+	VH_CALL_BAD_VALUE,      /* an argument or the result has no representation on this wire */
+	VH_CALL_BAD_ARITY       /* the member exists but was called with the wrong number of arguments */
 } vh_call_status;
 
 /* ---------------------------------------------------------------- values -- */
 
+/* How a vh_value's payload is laid out. Deliberately smaller than vh_variant_tag: this says how
+ * to *read* the value, that says what to rebuild it as. */
 typedef enum vh_type
 {
 	VH_TYPE_VOID = 0,
@@ -63,7 +94,10 @@ typedef enum vh_type
 	VH_TYPE_ARRAY,
 	VH_TYPE_MAP,
 	VH_TYPE_TUPLE,
-	VH_TYPE_OPTION /* Option == NULL is Verse's false */
+	VH_TYPE_OPTION, /* Option == NULL is Verse's false */
+
+	/* An id in the consumer's reference table rather than a value. See "reference values". */
+	VH_TYPE_REF
 } vh_type;
 
 typedef struct vh_value vh_value;
@@ -73,7 +107,7 @@ typedef struct vh_pair vh_pair;
  * this says which Godot type to rebuild from it, which vh_type alone cannot express -- a
  * two-float tuple is equally a Vector2, a Vector2i or a plain array.
  *
- * 0 (Godot's TYPE_NIL) means "infer from vh_type", which is what every pre-v3 caller wants.
+ * 0 (Godot's TYPE_NIL) means "infer from vh_type".
  * The values are Godot's own and must not be renumbered; extension_api.json is the source. */
 typedef enum vh_variant_tag
 {
@@ -115,9 +149,30 @@ typedef enum vh_variant_tag
 	VH_VARIANT_PACKED_VECTOR2_ARRAY = 35,
 	VH_VARIANT_PACKED_VECTOR3_ARRAY = 36,
 	VH_VARIANT_PACKED_COLOR_ARRAY = 37,
-	VH_VARIANT_PACKED_VECTOR4_ARRAY = 38
+	VH_VARIANT_PACKED_VECTOR4_ARRAY = 38,
+
+	VH_VARIANT_MAX = 39
 } vh_variant_tag;
 
+/* Reference values.
+ *
+ * godot-cpp splits Godot's type set in two and this ABI follows it: a value type is copied, and a
+ * reference type is an 8-byte opaque handle into engine-owned storage that every operation is
+ * asked of. `Array` and `Dictionary` have reference semantics an author can observe -- a
+ * Dictionary passed to a function and mutated is mutated for the caller -- and marshalling them
+ * by value would silently convert that to value semantics. `Callable` and `Signal` cannot be
+ * decomposed into scalars at all.
+ *
+ * So those cross as VH_TYPE_REF carrying an id minted by the *consumer* (the GDExtension), which
+ * owns a table from id to Variant. `Object` is the same idea with Godot supplying the id: an
+ * instance id is already a stable name for an object, so it needs no table.
+ *
+ * Ownership: an id handed to the host is retained by the table until the host calls ReleaseRef.
+ * The host does that when the Verse value wrapping it is collected -- a native Verse class'
+ * UObject shadow reaches BeginDestroy, which is measured in docs/abi-v2-design.md §1a. Release is
+ * therefore deferred by up to one collection cycle, and the table's own memory pressure is
+ * invisible to UE's garbage collector, so the host requests a cycle when the table grows rather
+ * than waiting to be asked. */
 struct vh_value
 {
 	int32_t Type;       /* vh_type */
@@ -128,6 +183,7 @@ struct vh_value
 		int64_t Int;
 		double Float;
 		uint32_t Char; /* unicode code point */
+		int64_t Ref;   /* VH_TYPE_REF: an id in the consumer's reference table */
 		struct
 		{
 			const char* Utf8;
@@ -165,6 +221,12 @@ struct vh_arena
 /* Object handles are Godot instance ids. 0 is never a valid handle. */
 typedef int64_t vh_handle;
 
+/* Every callback answering int32_t answers vh_call_status. A dead handle must be reported as
+ * VH_CALL_DEAD_OBJECT rather than folded into a missing member: the host raises on the former and
+ * fails on the latter.
+ *
+ * Grown only at the end, and guarded by StructSize, so a host built against a later minor can run
+ * against an older consumer by checking before it reads. */
 typedef struct vh_godot_api
 {
 	int32_t StructSize;
@@ -173,9 +235,6 @@ typedef struct vh_godot_api
 	void (*Print)(void* Ctx, const char* Utf8, int32_t Len);
 	vh_bool (*IsValid)(void* Ctx, vh_handle Handle);
 
-	/* All three answer vh_call_status. A dead handle must be reported as VH_CALL_DEAD_OBJECT
-	 * rather than folded into a missing member: the host raises on the former and fails on the
-	 * latter. */
 	int32_t (*GetProperty)(void* Ctx, vh_handle Handle, const char* NameUtf8, int32_t NameLen, vh_arena* Arena, vh_value* OutValue);
 	int32_t (*SetProperty)(void* Ctx, vh_handle Handle, const char* NameUtf8, int32_t NameLen, const vh_value* Value);
 	int32_t (*CallMethod)(void* Ctx, vh_handle Handle, const char* NameUtf8, int32_t NameLen, const vh_value* Args, int32_t ArgCount, vh_arena* Arena, vh_value* OutValue);
@@ -183,6 +242,49 @@ typedef struct vh_godot_api
 	/* Engine::get_singleton, for Input, Time, and the rest of Godot's global objects. 0 if
 	 * there is no such singleton. */
 	vh_handle (*GetSingleton)(void* Ctx, const char* NameUtf8, int32_t NameLen);
+
+	/* --- reference table: declared in v2.0, not yet supplied ---
+	 *
+	 * The design and the measurements behind it are in docs/abi-v2-design.md; what is missing is
+	 * the implementation on both sides, which is the rest of R-TYPE-1. Until then the consumer
+	 * leaves these null and the host never reaches a value that would need them -- no vh_value
+	 * carries VH_TYPE_REF yet. They are declared now because roadmap 1.1 asks the v2 header to
+	 * anticipate the whole spec: a reference type added later must not need a second calling
+	 * convention, and reserving the shape is what guarantees that.
+	 */
+
+	/* Drops the host's claim on a reference id. After this the id may be reused, so the host must
+	 * not name it again. Called when the Verse value wrapping it is collected. */
+	void (*ReleaseRef)(void* Ctx, int64_t Ref);
+
+	/* A second, independent claim on an id the host already holds -- for copying a Verse value
+	 * that wraps one. Answers the id back for convenience. */
+	int64_t (*RetainRef)(void* Ctx, int64_t Ref);
+
+	/* Mints an empty Array or Dictionary (or a packed array) and returns its id, already claimed
+	 * by the host. 0 if Tag is not a reference type. */
+	int64_t (*NewRef)(void* Ctx, int32_t VariantTag);
+
+	/* Element access on an Array, a Dictionary or a packed array. Key is an int index for the
+	 * sequence types and any value for a Dictionary. RefGet reports VH_CALL_NO_SUCH_MEMBER for a
+	 * key that is absent or an index out of range, which the host turns into an ordinary Verse
+	 * failure rather than a raise -- a missing key is not a bug. */
+	int32_t (*RefGet)(void* Ctx, int64_t Ref, const vh_value* Key, vh_arena* Arena, vh_value* OutValue);
+	int32_t (*RefSet)(void* Ctx, int64_t Ref, const vh_value* Key, const vh_value* Value);
+	int32_t (*RefSize)(void* Ctx, int64_t Ref, int64_t* OutSize);
+
+	/* The whole container at once, for the bulk converters that let a script reach Verse's own
+	 * map and array idioms. OutValue is a VH_TYPE_ARRAY of elements, or a VH_TYPE_MAP of pairs. */
+	int32_t (*RefContents)(void* Ctx, int64_t Ref, vh_arena* Arena, vh_value* OutValue);
+
+	/* Invokes a Callable. The one thing that makes a callback-taking engine API reachable. */
+	int32_t (*InvokeCallable)(void* Ctx, int64_t Ref, const vh_value* Args, int32_t ArgCount, vh_arena* Arena, vh_value* OutValue);
+
+	/* --- signals: declared in v2.0, implemented in roadmap Phase 4 (spec 5.3) --- */
+
+	int32_t (*EmitSignal)(void* Ctx, vh_handle Handle, const char* NameUtf8, int32_t NameLen, const vh_value* Args, int32_t ArgCount);
+	int32_t (*ConnectSignal)(void* Ctx, vh_handle Handle, const char* NameUtf8, int32_t NameLen, const vh_value* Target, int32_t Flags);
+	int32_t (*DisconnectSignal)(void* Ctx, vh_handle Handle, const char* NameUtf8, int32_t NameLen, const vh_value* Target);
 } vh_godot_api;
 
 /* ----------------------------------------------------------- diagnostics -- */
@@ -211,6 +313,41 @@ typedef struct vh_diagnostic
 
 typedef void (*vh_diagnostic_fn)(void* Ctx, const vh_diagnostic* Diagnostic);
 
+/* One Verse call frame, for R-DIAG-2. */
+typedef struct vh_stack_frame
+{
+	/* The function's Verse name, undecorated. Empty for a frame with no name to give. */
+	const char* FunctionUtf8;
+	int32_t FunctionLen;
+	/* The .verse file, as an absolute path the consumer can turn into a res:// path and make
+	 * clickable. Empty for a frame in a package the project has no source for -- the generated
+	 * Godot API, Verse's own library -- which can be shown but not jumped to. */
+	const char* PathUtf8;
+	int32_t PathLen;
+	/* 1-based, 0 when the frame carries no location. */
+	int32_t Line;
+	int32_t Column;
+} vh_stack_frame;
+
+/* A Verse runtime error: a failed unrecoverable expression, a stale object access, a division by
+ * zero. Distinct from vh_diagnostic, which describes source the compiler read; this describes code
+ * that ran.
+ *
+ * Reported through its own callback rather than as an error severity diagnostic because the
+ * consumer does different things with it -- a compile error annotates the script editor's gutter,
+ * a runtime error goes to the output and errors panel with a stack the user can click through. */
+typedef struct vh_runtime_error
+{
+	const char* MessageUtf8;
+	int32_t MessageLen;
+	/* Innermost frame first. Empty when the VM could not produce a stack, which is not an error:
+	 * the message still names what happened. */
+	const vh_stack_frame* Frames;
+	int32_t FrameCount;
+} vh_runtime_error;
+
+typedef void (*vh_runtime_error_fn)(void* Ctx, const vh_runtime_error* Error);
+
 /* ------------------------------------------------------------ entry points -- */
 
 typedef struct vh_init_desc
@@ -226,6 +363,11 @@ typedef struct vh_init_desc
 
 	vh_diagnostic_fn OnDiagnostic;
 	void* DiagnosticCtx;
+
+	/* R-DIAG-2. NULL folds runtime errors into OnDiagnostic as errors without a location, which
+	 * is what v1 did and is strictly worse. */
+	vh_runtime_error_fn OnRuntimeError;
+	void* RuntimeErrorCtx;
 
 	vh_bool EnableDebugger;
 } vh_init_desc;
@@ -253,7 +395,11 @@ VH_API int32_t vh_abi_version(void);
 VH_ATTR VH_API int32_t vh_init(const vh_init_desc* Desc);
 VH_ATTR VH_API void vh_shutdown(void);
 
-/* Runs queued Verse work for at most BudgetSeconds. Call once per frame. */
+/* Runs queued Verse work for at most BudgetSeconds. Call once per frame.
+ *
+ * Also where collection is driven: requesting a Verse collection cycle from inside running Verse
+ * code deadlocks the process (docs/abi-v2-design.md §1a), so the reference table's entries are
+ * only ever released from here. */
 VH_ATTR VH_API void vh_tick(double BudgetSeconds);
 
 /* Compiles every listed .verse file as ONE Verse program.
@@ -261,7 +407,7 @@ VH_ATTR VH_API void vh_tick(double BudgetSeconds);
  * Verse's compilation unit is the package, not the file, and this is not a preference: a second
  * build in the same process re-notifies already-loaded native Verse packages and aborts inside
  * the async loader. So this may be called once per process, and every script the host will ever
- * run has to be in the list.
+ * run has to be in the list. (Roadmap Phase 3 lifts this; spec §14.1 has the mechanism.)
  *
  * All the files share one flat scope, so each must name its class after its own file stem or its
  * definitions collide with every other script's. */
@@ -322,9 +468,114 @@ VH_ATTR VH_API vh_bool vh_has_class(const char* ClassNameUtf8);
 VH_ATTR VH_API int32_t vh_instantiate(const char* ClassNameUtf8, vh_handle Handle, vh_instance** OutInstance);
 VH_ATTR VH_API void vh_release_instance(vh_instance* Instance);
 
+/* ----------------------------------------------------------- dispatch (v2) -- */
+
+/* One parameter of a script method. */
+typedef struct vh_param_desc
+{
+	const char* NameUtf8; /* the parameter's own name, for an editor's argument hint */
+	int32_t NameLen;
+	int32_t Type;       /* vh_type -- how an argument of this parameter is laid out */
+	int32_t VariantTag; /* vh_variant_tag -- what Godot type the consumer should convert from */
+	vh_bool HasDefault; /* a `?Named:t = default` parameter, which the caller may omit */
+} vh_param_desc;
+
+/* One method a script's class defines, for R-NODE-9 and for binding Godot's virtuals.
+ *
+ * v1 reported the intersection of the script with a hardcoded three-name array, and dispatched
+ * over exactly two call shapes. This describes what the class actually declares. */
+typedef struct vh_method_desc
+{
+	/* The Verse name, undecorated -- `Fire`. This is the name Godot sees, verbatim: a script
+	 * method is not transformed on its way out, which is what makes `mover.Fire()` the spelling in
+	 * GDScript and matches how a property already reads there. */
+	const char* NameUtf8;
+	int32_t NameLen;
+
+	/* The decorated name vh_instance_call takes -- `(/user@localhost/mover:)Fire(:float)`. The
+	 * mangling is the VM's, and looking a method up by anything else does not fail politely:
+	 * UVerseClass::PeekField asserts on a field the shape does not have. */
+	const char* DecoratedUtf8;
+	int32_t DecoratedLen;
+
+	const vh_param_desc* Params;
+	int32_t ParamCount;
+	/* How many leading parameters have no default, and so must be supplied. */
+	int32_t RequiredParamCount;
+
+	int32_t ResultType;       /* vh_type; VH_TYPE_VOID for a method returning nothing */
+	int32_t ResultVariantTag; /* vh_variant_tag */
+
+	/* The method can fail -- declared <decides>. A failing call answers VH_CALL_NO_SUCH_MEMBER
+	 * rather than raising, and the consumer turns that into whatever its own language spells
+	 * absence as. */
+	vh_bool CanFail;
+	/* The method suspends -- declared <suspends>. Calling one starts a task rather than running
+	 * it to completion, so a consumer expecting a return value must not call it. */
+	vh_bool Suspends;
+
+	/* Godot's own name for the virtual this method overrides -- `_ready`, `_unhandled_input` --
+	 * or empty for a method that is not one. Filled from the mirrored class the script derives
+	 * from, which the generator built from extension_api.json's `is_virtual` methods; the script
+	 * declares it with <override> and Verse's own redeclaration rules supply the error when it
+	 * does not. That is the general mechanism R-NODE-7 asks for: a virtual added by a future Godot
+	 * version arrives by regenerating the mirror, with no code change here. */
+	const char* GodotVirtualUtf8;
+	int32_t GodotVirtualLen;
+
+	/* Where the method is declared: zero-based row, utf8 byte column, as everywhere else. Both
+	 * -1 when the definition has no source location. */
+	int32_t Line;
+	int32_t Column;
+} vh_method_desc;
+
+/* Every method ClassNameUtf8 declares, including the ones that override a Godot virtual.
+ *
+ * Read out of the semantic program the last analysis left behind, like vh_class_export_list and
+ * for the same reason: analysis re-runs as often as the editor types while code generation may
+ * run once per process, so this is the only method list that can refresh without a restart.
+ *
+ * OutMethods points into storage owned by the host, valid until the next call to this function.
+ * Returns VH_ERR_NOT_FOUND when the class does not exist in the analysed program. */
+VH_ATTR VH_API int32_t vh_class_method_list(const char* ClassNameUtf8, const vh_method_desc** OutMethods, int32_t* OutCount);
+
+/* Whether the instance implements this method itself, rather than inheriting an empty body from
+ * the mirrored class it derives from. DecoratedName is vh_method_desc::DecoratedUtf8.
+ *
+ * The distinction decides whether Godot puts the node in the per-frame process list at all: every
+ * mirrored virtual resolves on every instance, so a plain "does it resolve" test is true for
+ * everything. */
 VH_ATTR VH_API vh_bool vh_instance_has_function(vh_instance* Instance, const char* DecoratedName);
-VH_ATTR VH_API int32_t vh_instance_call_void(vh_instance* Instance, const char* DecoratedName);
-VH_ATTR VH_API int32_t vh_instance_call_void_float(vh_instance* Instance, const char* DecoratedName, double Arg);
+
+/* Calls any method the script defines, with any arguments, and answers its return value.
+ *
+ * This replaces v1's vh_instance_call_void and vh_instance_call_void_float, which is why v2 is a
+ * break rather than an addition: there is one calling convention and it is this one.
+ *
+ * Answers vh_status, not vh_call_status -- the two enums are numbered independently and mixing
+ * them is how a failed call reads as a successful one.
+ *
+ * Args are converted to the parameter types vh_class_method_list reported. Supplying the wrong
+ * number, or an argument with no Verse spelling, answers VH_ERR_ARGUMENT and runs nothing;
+ * neither is a runtime error, because neither is the script's fault. An unknown method is
+ * VH_ERR_NOT_FOUND, also having run nothing.
+ *
+ * A <decides> method that runs and declines answers VH_ERR_FAILED with no value written -- which
+ * is not the same as there being no such method. A method that raises answers VH_ERR_RUNTIME,
+ * having reported the error with its stack through OnRuntimeError; the enclosing transaction is
+ * rolled back, so queued Godot writes are discarded.
+ *
+ * OutResult is written into Arena and is valid until the caller releases it. Arena may be NULL
+ * for a method whose result the caller does not want, which is not the same as a void method --
+ * the call still runs.
+ *
+ * Calling into the instance seals it: see vh_instance_set_field. */
+VH_ATTR VH_API int32_t vh_instance_call(vh_instance* Instance,
+										const char* DecoratedName,
+										const vh_value* Args,
+										int32_t ArgCount,
+										vh_arena* Arena,
+										vh_value* OutResult);
 
 /* ---------------------------------------------------------- class exports -- */
 
@@ -368,8 +619,7 @@ typedef enum vh_export_reject
 {
 	VH_EXPORT_OK = 0,
 
-	/* No Godot type to rebuild the value as. A map, a tuple, a char -- and, until the bridge
-	 * learns to marshal them, everything but logic, int, float and string. */
+	/* No Godot type to rebuild the value as. */
 	VH_EXPORT_UNSUPPORTED_TYPE,
 
 	/* A Godot reference declared without an `option` around it. Nothing can force a value into an
@@ -473,14 +723,12 @@ VH_ATTR VH_API int32_t vh_class_export_list(const char* ClassNameUtf8, const vh_
 
 /* Reads one data member off a live instance.
  *
- * Unlike the export list this does go through the VM, because a value only exists there. Only
- * logic, int, float, string and an optional Godot reference come across; a member of any other
- * Verse type reports VH_ERR_NOT_FOUND rather than a half-converted value.
+ * Unlike the export list this does go through the VM, because a value only exists there.
  *
- * A reference reads as its handle -- VH_TYPE_INT tagged VH_VARIANT_OBJECT -- and a reference
- * holding nothing as the empty option, tagged the same way, which is the one read that has to be
- * told the declared type to answer: Verse spells an empty option and `logic` false with the same
- * cell, so the value alone cannot say which the author wrote.
+ * A reference reads as VH_TYPE_REF, and a reference holding nothing as the empty option tagged the
+ * same way -- which is the one read that has to be told the declared type to answer: Verse spells
+ * an empty option and `logic` false with the same cell, so the value alone cannot say which the
+ * author wrote.
  *
  * OutValue points into storage owned by the host, valid until the next call to either field
  * reader. Returns VH_ERR_NOT_FOUND for a field the instance's shape does not carry. */
@@ -490,7 +738,7 @@ VH_ATTR VH_API int32_t vh_instance_get_field(vh_instance* Instance, const char* 
  * which is the only place a member's declared default can be got. Same storage lifetime. */
 VH_ATTR VH_API int32_t vh_class_default_field(const char* ClassNameUtf8, const char* NameUtf8, const vh_value** OutValue);
 
-/* Writes one data member on a live instance. Same types the reader covers.
+/* Writes one data member on a live instance.
  *
  * A reference member is written with the handle of the object it should hold, tagged
  * VH_VARIANT_OBJECT; a handle of 0 clears it to the empty option. The host builds the Verse
@@ -498,7 +746,7 @@ VH_ATTR VH_API int32_t vh_class_default_field(const char* ClassNameUtf8, const c
  * one of the project's own classes is written through vh_instance_set_field_instance instead,
  * because the object it should hold already exists.
  *
- * An instance is *unsealed* from vh_instantiate until the first vh_instance_call_*, and sealing is
+ * An instance is *unsealed* from vh_instantiate until the first vh_instance_call, and sealing is
  * one-way. While unsealed, any exported member may be written: that is initialization, and it is
  * how a scene's stored values reach the object. Once sealed, only a `var` may be written -- a
  * non-var is immutable by the script author's own declaration, and no Verse code has yet run that
@@ -692,7 +940,8 @@ typedef struct vh_complete_item
 	 *
 	 * Says only that the compiler would take the declaration. Whether overriding it *does*
 	 * anything is the consumer's question: a Verse method the bridge generated to forward into
-	 * Godot answers here, and overriding one changes nothing about what Godot dispatches. */
+	 * Godot answers here, and overriding one changes nothing about what Godot dispatches --
+	 * which is why a script that does so is reported (docs/abi-v2-design.md §4, collision 3). */
 	vh_bool IsOverridable;
 } vh_complete_item;
 
@@ -786,9 +1035,9 @@ typedef int32_t (*vh_run_main_fn)(const char* const*, int32_t, int64_t*);
 typedef vh_bool (*vh_has_class_fn)(const char*);
 typedef int32_t (*vh_instantiate_fn)(const char*, vh_handle, vh_instance**);
 typedef void (*vh_release_instance_fn)(vh_instance*);
+typedef int32_t (*vh_class_method_list_fn)(const char*, const vh_method_desc**, int32_t*);
 typedef vh_bool (*vh_instance_has_function_fn)(vh_instance*, const char*);
-typedef int32_t (*vh_instance_call_void_fn)(vh_instance*, const char*);
-typedef int32_t (*vh_instance_call_void_float_fn)(vh_instance*, const char*, double);
+typedef int32_t (*vh_instance_call_fn)(vh_instance*, const char*, const vh_value*, int32_t, vh_arena*, vh_value*);
 typedef int32_t (*vh_class_export_list_fn)(const char*, const vh_export_desc**, int32_t*);
 typedef int32_t (*vh_instance_get_field_fn)(vh_instance*, const char*, const vh_value**);
 typedef int32_t (*vh_class_default_field_fn)(const char*, const char*, const vh_value**);

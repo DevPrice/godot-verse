@@ -16,6 +16,7 @@
 #include "Misc/CoreDelegates.h"
 #include "Modules/ModuleManager.h"
 #include "UObject/GCObject.h"
+#include "VerseVM/VVMRuntimeError.h"
 #include "RequiredProgramMainCPPInclude.h"
 #include "VerseString.h"
 #include "VerseVM/VVMSocketDebugger.h"
@@ -80,6 +81,42 @@ extern "C" int32_t vh_init(const vh_init_desc* Desc)
     Host.Godot = Desc->Godot;
     Host.OnDiagnostic = Desc->OnDiagnostic;
     Host.DiagnosticCtx = Desc->DiagnosticCtx;
+    Host.OnRuntimeError = Desc->OnRuntimeError;
+    Host.RuntimeErrorCtx = Desc->RuntimeErrorCtx;
+
+    // R-DIAG-2, in two halves, because no single hook carries both the stack and the report.
+    //
+    // RuntimeErrorTextProvider is a text *formatter*: FContext::RaiseVerseRuntimeError calls it
+    // while the Verse stack is still standing and hands it the rendered callstack, but returning
+    // from it is not the moment to report anything -- the cascading abort that follows has not run
+    // yet. OnVerseRuntimeError is broadcast after that abort, and carries only the string the
+    // provider returned.
+    //
+    // So the provider appends the callstack to the message in a shape the reporter can split back
+    // apart, and the reporter does the splitting. Carrying it in a variable between the two looked
+    // simpler and was not: the provider does not run for every raise the reporter sees, and a stale
+    // stack attached to the wrong error is worse than no stack at all.
+    FVerseRuntimeErrorDelegates::RuntimeErrorTextProvider.BindLambda(
+        [](const Verse::ERuntimeDiagnostic Diagnostic, const FText& MessageText, const FString& Callstack) {
+            const FString Formatted = Verse::AsFormattedString(Diagnostic, MessageText);
+            return Callstack.IsEmpty() ? Formatted : Formatted + TEXT("\n") + Callstack;
+        });
+
+    FVerseRuntimeErrorDelegates::OnVerseRuntimeError.AddLambda(
+        [](const Verse::ERuntimeDiagnostic Diagnostic, const FText& MessageText, const FString& RuntimeErrorText) {
+            const FUtf8String Message(Verse::AsFormattedString(Diagnostic, MessageText));
+
+            // Everything after the first line is the callstack the provider appended; a raise with
+            // no frames renders as the message alone and splits to nothing, which is the right
+            // answer rather than a missing one.
+            FString Callstack;
+            int32 FirstBreak = INDEX_NONE;
+            if (RuntimeErrorText.FindChar(TEXT('\n'), FirstBreak))
+            {
+                Callstack = RuntimeErrorText.Mid(FirstBreak + 1);
+            }
+            GodotVerse::ReportRuntimeError(FUtf8StringView(Message), Callstack);
+        });
 
     // We are loaded by godot.exe, so the engine directory cannot be derived from the running
     // process. GForeignEngineDir is the documented override for exactly this case.
@@ -120,6 +157,8 @@ extern "C" int32_t vh_init(const vh_init_desc* Desc)
 
 extern "C" void vh_shutdown(void)
 {
+    FVerseRuntimeErrorDelegates::RuntimeErrorTextProvider.Unbind();
+    FVerseRuntimeErrorDelegates::OnVerseRuntimeError.Clear();
     GodotVerse::WaitForBackgroundCheck();
     GodotVerse::FHostState& Host = GetHost();
     if (!Host.bInitialized)
@@ -318,10 +357,15 @@ extern "C" vh_bool vh_instance_has_function(vh_instance* Instance, const char* D
     return GodotVerse::InstanceHasFunction(reinterpret_cast<GodotVerse::FInstance*>(Instance), Cstr(DecoratedName)) ? 1 : 0;
 }
 
-extern "C" int32_t vh_instance_call_void(vh_instance* Instance, const char* DecoratedName)
+extern "C" int32_t vh_instance_call(vh_instance* Instance,
+                                   const char* DecoratedName,
+                                   const vh_value* Args,
+                                   int32_t ArgCount,
+                                   vh_arena* Arena,
+                                   vh_value* OutResult)
 {
     GodotVerse::WaitForBackgroundCheck();
-    if (!Instance || !DecoratedName)
+    if (!Instance || !DecoratedName || ArgCount < 0 || (ArgCount > 0 && !Args))
     {
         return VH_ERR_ABI;
     }
@@ -329,21 +373,97 @@ extern "C" int32_t vh_instance_call_void(vh_instance* Instance, const char* Deco
     {
         return VH_ERR_STATE;
     }
-    return GodotVerse::InstanceCallVoid(reinterpret_cast<GodotVerse::FInstance*>(Instance), Cstr(DecoratedName));
+
+    // The storage is static for the same reason every other descriptor here is: the value points at
+    // bytes the host owns, and the caller is told they live until the next call.
+    static vh_value Result;
+    static GodotVerse::FFieldStorage Storage;
+    const int32_t Status = GodotVerse::InstanceCall(
+        reinterpret_cast<GodotVerse::FInstance*>(Instance), Cstr(DecoratedName), Args, ArgCount, Result, Storage);
+
+    if (OutResult)
+    {
+        *OutResult = Status == VH_OK ? Result : vh_value{};
+    }
+    (void)Arena;
+    return Status;
 }
 
-extern "C" int32_t vh_instance_call_void_float(vh_instance* Instance, const char* DecoratedName, double Arg)
+extern "C" int32_t vh_class_method_list(const char* ClassNameUtf8, const vh_method_desc** OutMethods, int32_t* OutCount)
 {
     GodotVerse::WaitForBackgroundCheck();
-    if (!Instance || !DecoratedName)
+    if (!ClassNameUtf8 || !OutMethods || !OutCount)
     {
         return VH_ERR_ABI;
     }
+    *OutMethods = nullptr;
+    *OutCount = 0;
+
     if (!GetHost().bInitialized)
     {
         return VH_ERR_STATE;
     }
-    return GodotVerse::InstanceCallVoidFloat(reinterpret_cast<GodotVerse::FInstance*>(Instance), Cstr(DecoratedName), Arg);
+
+    // Both arrays are static and rebuilt per call: the descriptors point into the FMethodDesc
+    // strings, so the two have to live exactly as long as each other, and the header promises only
+    // until the next call.
+    static TArray<GodotVerse::FMethodDesc> Methods;
+    static TArray<vh_param_desc> Params;
+    static TArray<vh_method_desc> Descs;
+    if (!GodotVerse::GetClassMethods(Cstr(ClassNameUtf8), Methods))
+    {
+        return VH_ERR_NOT_FOUND;
+    }
+
+    // Filled before the descriptors, and reserved to its final size first, because a descriptor
+    // holds a bare pointer into it -- growing it afterwards would leave those dangling.
+    int32 TotalParams = 0;
+    for (const GodotVerse::FMethodDesc& Method : Methods)
+    {
+        TotalParams += Method.Params.Num();
+    }
+    Params.Reset();
+    Params.Reserve(TotalParams);
+    for (const GodotVerse::FMethodDesc& Method : Methods)
+    {
+        for (const GodotVerse::FParamDesc& Param : Method.Params)
+        {
+            vh_param_desc& Out = Params.AddDefaulted_GetRef();
+            Out.NameUtf8 = reinterpret_cast<const char*>(*Param.Name);
+            Out.NameLen = Param.Name.Len();
+            Out.Type = Param.Type;
+            Out.VariantTag = Param.VariantTag;
+            Out.HasDefault = Param.bHasDefault ? 1 : 0;
+        }
+    }
+
+    Descs.Reset();
+    Descs.Reserve(Methods.Num());
+    int32 ParamCursor = 0;
+    for (const GodotVerse::FMethodDesc& Method : Methods)
+    {
+        vh_method_desc& Out = Descs.AddDefaulted_GetRef();
+        Out.NameUtf8 = reinterpret_cast<const char*>(*Method.Name);
+        Out.NameLen = Method.Name.Len();
+        Out.DecoratedUtf8 = reinterpret_cast<const char*>(*Method.DecoratedName);
+        Out.DecoratedLen = Method.DecoratedName.Len();
+        Out.Params = Method.Params.Num() > 0 ? Params.GetData() + ParamCursor : nullptr;
+        Out.ParamCount = Method.Params.Num();
+        Out.RequiredParamCount = Method.RequiredParamCount;
+        Out.ResultType = Method.ResultType;
+        Out.ResultVariantTag = Method.ResultVariantTag;
+        Out.CanFail = Method.bCanFail ? 1 : 0;
+        Out.Suspends = Method.bSuspends ? 1 : 0;
+        Out.GodotVirtualUtf8 = reinterpret_cast<const char*>(*Method.GodotVirtual);
+        Out.GodotVirtualLen = Method.GodotVirtual.Len();
+        Out.Line = Method.Line;
+        Out.Column = Method.Column;
+        ParamCursor += Method.Params.Num();
+    }
+
+    *OutMethods = Descs.GetData();
+    *OutCount = Descs.Num();
+    return VH_OK;
 }
 
 extern "C" int32_t vh_class_export_list(const char* ClassNameUtf8, const vh_export_desc** OutExports, int32_t* OutCount)

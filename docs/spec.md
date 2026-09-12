@@ -253,10 +253,13 @@ This is the sharpest single gap in the current implementation and everything in 
 on closing it.
 
 - **R-NODE-6 (MUST)** Godot can call *any* method a Verse script defines, with any argument types
-  §6 covers, and receive the return value. Today `call_func` in `verse_script_instance.cpp`
-  dispatches three hardcoded names — `_ready`, `_process`, `_physics_process` — and the ABI
-  underneath offers exactly two shapes, `vh_instance_call_void` and
-  `vh_instance_call_void_float`. Everything else returns `INVALID_METHOD`. Status: **none**.
+  §6 covers, and receive the return value. Status: **done for the types §6 currently carries.**
+  `vh_instance_call` is one entry point over any signature; the three hardcoded names and the two
+  call shapes are gone. Arguments convert against the declared parameter types
+  `vh_class_method_list` reports, a `<decides>` method that declines is `VH_ERR_FAILED` rather than
+  a missing method, and wrong arity is refused without running anything. **What is left is §6, not
+  §5.2**: a method taking a `Dictionary` is uncallable because no `Dictionary` crosses, not because
+  dispatch cannot reach it.
 - **R-NODE-7 (MUST)** A Verse script overrides the full set of Godot virtuals its base class
   declares — `_enter_tree`, `_exit_tree`, `_input`, `_shortcut_input`, `_unhandled_input`,
   `_unhandled_key_input`, `_gui_input`, `_draw`, `_notification`, `_get_configuration_warnings`,
@@ -267,8 +270,11 @@ on closing it.
   `NOTIFICATION_WM_CLOSE_REQUEST` and friends are handleable. Status: **none**
   (`notification_func` is wired to the vtable but does not reach Verse).
 - **R-NODE-9 (MUST)** A script method list (`_get_script_method_list`, `_get_method_info`,
-  `_has_method`) reports what the script actually defines. Today it reports the intersection of
-  the script with a hardcoded three-name array. Status: **part**.
+  `_has_method`) reports what the script actually defines. Status: **done**. `vh_class_method_list`
+  reads the class's own declarations out of the semantic program — names, parameters with their own
+  names and types, result type, `<decides>`/`<suspends>`, and Godot's name for the virtual it
+  overrides — and the script instance answers `has_method`, `get_method_list` and
+  `get_method_argument_count` from it.
 
 ### 5.3 Signals
 
@@ -343,7 +349,13 @@ empty. Signals are how Godot programs are wired together, so this is parity-crit
   string types, all packed arrays, all math structs (`Vector2/2i/3/3i/4/4i`, `Rect2`, `Transform2D`,
   `Transform3D`, `Basis`, `Quaternion`, `AABB`, `Plane`, `Projection`, `Color`), `StringName`,
   `NodePath`, `RID`, `Callable`, `Signal`, `Dictionary`, `Array`, and `Object`.
-  Status: **part** — three value types plus objects.
+  Status: **part, and the remaining work is now designed rather than open.** `logic`, `int`,
+  `float`, `string`, `vector2`, `vector3`, `color`, arrays of those, and objects cross today. The
+  gap is on the **Verse side alone**: `src/verse_value.cpp` and the wire already carry the whole
+  set, and `docs/abi-v2-design.md` settles what replaces the flat `variant` tuple — a fixed-width
+  tuple of scalars, which measurements in §1a show marshals across VNI, is hashable (so
+  `[variant]variant` is a legal type), and allocates nothing. Reference types ride as an id.
+  Building it is the rest of Phase 1.
 - **R-TYPE-2 (MUST)** Typed arrays and typed dictionaries preserve their element type across the
   boundary, so a `TypedArray[Node2D]` is not flattened to an untyped array.
 - **R-TYPE-3 (MUST)** `Callable` is a Verse value a script can hold, invoke, and hand back to
@@ -497,8 +509,14 @@ engine change* lost because none is needed.
   compiler's message. Status: **done**.
 - **R-DIAG-2 (MUST)** A *runtime* error — a failed unrecoverable expression, a stale object access,
   a division by zero — reports the Verse file, line, and a Verse call stack into Godot's output and
-  errors panel, and is clickable to the source. Status: **none**; today the user gets a message
-  without a location.
+  errors panel, and is clickable to the source. Status: **done**. `vh_init` takes an
+  `OnRuntimeError` callback carrying the message and the frames; the host binds
+  `RuntimeErrorTextProvider` (which is handed the rendered callstack while the Verse stack is still
+  standing) and `OnVerseRuntimeError` (broadcast after the abort), because neither hook alone
+  carries both. The innermost located frame is what `push_error` is given, so Godot makes it
+  clickable, and the rest of the stack follows it. *Known shape:* a raise inside the generated
+  mirror reports the mirror's line as the site, with the script's own frame further out — which is
+  where it was raised, and the stack is what carries the author's line.
 - **R-DIAG-3 (MUST)** A script error never takes down the editor or the game process.
 - **R-DIAG-4 (MUST)** Godot's own debugger works on Verse: breakpoints in the script editor, step
   in/over/out, the call stack, local and member inspection, and expression evaluation at a
@@ -529,19 +547,26 @@ engine change* lost because none is needed.
   (the lexer and class-declaration scanner already have this shape), and **integration tests that
   drive a headless Godot with Verse scripts attached and assert on behaviour** — the layer that
   does not exist and where every parity requirement in §5 will actually be verified.
-  Status: **part** — four standalone binaries, no framework, no integration layer.
+  Status: **done in shape, growing in coverage** — the third layer exists:
+  `tests/integration/` is a Godot project driven headless by `tools/run_tests.py`, attaching a
+  `.verse` script to a node and asserting on what `node.call()` answers. What it covers is what §6
+  currently carries; the marshalling matrix grows with §6 rather than with this requirement.
 - **R-QUAL-2 (MUST)** Every requirement in this document that is marked done is covered by a test
   that would fail if it regressed.
 - **R-QUAL-3 (MUST)** One documented command runs everything a contributor can run locally, and
-  reports pass/fail without interpretation.
+  reports pass/fail without interpretation. Status: **done** — `python tools/run_tests.py`. A layer
+  whose prerequisites are absent is reported as **skipped**, never as a pass, so a contributor
+  without a UE checkout sees exactly which of the three layers ran.
 - **R-QUAL-4 (SHOULD, blocked)** CI runs builds and tests on every commit. Blocked on **OQ-1**:
   CI needs a UE source checkout with the Verse toolchain, which cannot be provisioned on a hosted
   runner under current licensing. Until then, R-QUAL-3 is the substitute and the gap is
   acknowledged rather than papered over.
 - **R-QUAL-5 (MUST)** `verse_host_abi.h` is semantically versioned with a written compatibility
   policy: what a bump means, what a mismatch does, and which side must be rebuilt.
-  Status: **part** — `VH_ABI_VERSION` is a monotonic integer at 27 with a rebuild-both rule but no
-  policy and no compatibility window.
+  Status: **part** — `VH_ABI_VERSION` is now `MAJOR * 1000 + MINOR` at 2.0 with the policy written
+  at the top of the header: a major changes layout or meaning and both sides must be rebuilt, a
+  minor adds what an older consumer can ignore behind a `StructSize` check. What is still missing is
+  the compatibility *window* — nothing yet tests a host against a consumer of a lower minor.
 - **R-QUAL-6 (MUST)** Releases are tagged, carry a changelog, and state the exact Godot and UE
   versions they were built and tested against.
 - **R-QUAL-7 (MUST)** The project tracks Godot `master` and UE `main`. Consequently: a version

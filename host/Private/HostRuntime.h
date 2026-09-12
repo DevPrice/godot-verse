@@ -15,6 +15,8 @@ struct FHostState
     vh_godot_api Godot{};
     vh_diagnostic_fn OnDiagnostic{nullptr};
     void* DiagnosticCtx{nullptr};
+    vh_runtime_error_fn OnRuntimeError{nullptr};
+    void* RuntimeErrorCtx{nullptr};
 };
 
 FHostState& GetHost();
@@ -30,6 +32,15 @@ void ReportDiagnostic(vh_severity Severity,
 
 void ReportError(FUtf8StringView Message);
 void ReportInfo(FUtf8StringView Message);
+
+/// Forwards a Verse runtime error with its call stack (R-DIAG-2).
+///
+/// Callstack is the VM's own rendering, one frame per line as `	<path> <name>:<line>`, which is
+/// parsed back into frames here. Parsing a rendered string is not the shape anyone would choose,
+/// but the VM offers no structured form: FVerseRuntimeErrorDelegates hands subscribers the text
+/// and nothing else, and the frames it was rendered from are gone by the time the delegate runs --
+/// RaiseVerseRuntimeError unwinds the stack immediately afterwards.
+void ReportRuntimeError(FUtf8StringView Message, const FString& Callstack);
 
 inline FUtf8StringView MakeView(const char* Utf8, int32 Len)
 {

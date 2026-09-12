@@ -40,8 +40,8 @@ void VerseHostLibrary::clear_function_pointers() {
 	Instantiate = nullptr;
 	ReleaseInstance = nullptr;
 	InstanceHasFunction = nullptr;
-	InstanceCallVoid = nullptr;
-	InstanceCallVoidFloat = nullptr;
+	InstanceCall = nullptr;
+	ClassMethodList = nullptr;
 	ClassExportList = nullptr;
 	InstanceGetField = nullptr;
 	ClassDefaultField = nullptr;
@@ -82,8 +82,8 @@ bool VerseHostLibrary::load(const String &p_dll_path, String &r_error) {
 	ok = ok && resolve(handle, "vh_instantiate", Instantiate, r_error);
 	ok = ok && resolve(handle, "vh_release_instance", ReleaseInstance, r_error);
 	ok = ok && resolve(handle, "vh_instance_has_function", InstanceHasFunction, r_error);
-	ok = ok && resolve(handle, "vh_instance_call_void", InstanceCallVoid, r_error);
-	ok = ok && resolve(handle, "vh_instance_call_void_float", InstanceCallVoidFloat, r_error);
+	ok = ok && resolve(handle, "vh_instance_call", InstanceCall, r_error);
+	ok = ok && resolve(handle, "vh_class_method_list", ClassMethodList, r_error);
 	ok = ok && resolve(handle, "vh_class_export_list", ClassExportList, r_error);
 	ok = ok && resolve(handle, "vh_instance_get_field", InstanceGetField, r_error);
 	ok = ok && resolve(handle, "vh_class_default_field", ClassDefaultField, r_error);

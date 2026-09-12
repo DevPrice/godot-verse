@@ -130,6 +130,27 @@ exports := class(object):
     BumpLabel<public>():void =
         set Label = Label + "!"
 
+    # --- ABI v2 dispatch fixtures (R-NODE-6) -------------------------------------
+    # One method per argument shape the wire carries, each returning something derived from what it
+    # was given, so a single call checks the round trip in both directions.
+    AddInts<public>(A:int, B:int):int = A + B
+    ScaleFloat<public>(V:float, By:float):float = V * By
+    Decorate<public>(Prefix:string, Suffix:string):string = "{Prefix}{Label}{Suffix}"
+    Negate<public>(Flag:logic):logic = if (Flag?) then false else true
+    CurrentScale<public>():float = Scale
+    # <decides>: it runs and declines rather than being absent, which the ABI reports as
+    # VH_ERR_FAILED and not VH_ERR_NOT_FOUND -- the two mean different things to a caller.
+    NotBelow<public>(N:int, Least:int)<decides>:int =
+        N >= Least
+        N
+
+    # R-DIAG-2: raises, so the error carries this file and this line. `Raise` itself cannot be the
+    # name -- it is already taken in this scope, and Verse reports the collision against whichever
+    # definition it analyses second rather than against the new one.
+    TouchTarget<public>():void =
+        if (Node := Target?):
+            Node.QueueFree()
+
     # The assertion a read/write round-trip cannot make. A reference written in the wrong
     # representation reads back as whatever was put there, so only the interpreter can tell a
     # correct write from a plausible one -- and an option is two shapes rather than one, so the set

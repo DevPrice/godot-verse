@@ -63,9 +63,74 @@ AUTORTFM_DISABLE void ReleaseInstance(FInstance* Instance);
 
 AUTORTFM_DISABLE bool InstanceHasFunction(const FInstance* Instance, FUtf8StringView DecoratedName);
 
+/// One parameter of a script method, described from its declared type.
+struct FParamDesc
+{
+    FUtf8String Name;
+    vh_type Type{VH_TYPE_VOID};
+    int32 VariantTag{VH_VARIANT_NIL};
+    /// A `?Named:t = default` parameter, which a caller may omit.
+    bool bHasDefault{false};
+};
+
+/// One method a script's class declares.
+struct FMethodDesc
+{
+    /// The Verse name, undecorated. This is the name Godot sees, verbatim.
+    FUtf8String Name;
+    /// What InstanceCall takes. The VM keys an override under the *declaring* class' decorated
+    /// name, which is what CFunction::GetDecoratedName produces and why it is asked rather than
+    /// assembled here.
+    FUtf8String DecoratedName;
+
+    TArray<FParamDesc> Params;
+    /// How many leading parameters have no default, and so must be supplied.
+    int32 RequiredParamCount{0};
+
+    vh_type ResultType{VH_TYPE_VOID};
+    int32 ResultVariantTag{VH_VARIANT_NIL};
+
+    /// Declared <decides>: the call may run and decline, which is not the same as being absent.
+    bool bCanFail{false};
+    /// Declared <suspends>: calling it starts a task rather than running it to completion.
+    bool bSuspends{false};
+
+    /// Godot's own name for the virtual this overrides -- `_ready` -- or empty when it overrides
+    /// nothing of Godot's. Derived rather than tabulated: a method whose base definition lives in
+    /// the mirrored package is a Godot virtual, and Godot's name for it is the snake_case of the
+    /// Verse one with a leading underscore, which is the exact inverse of the rule the generator
+    /// used to name it. So a virtual added by a future Godot version arrives by regenerating the
+    /// mirror, with no change here (R-NODE-7).
+    FUtf8String GodotVirtual;
+
+    int32 Line{-1};
+    int32 Column{-1};
+};
+
+/// Every method ClassName declares, read off the semantic program the last analysis left -- the
+/// same source, and for the same reason, as GetClassExports.
+///
+/// False means the class is not in the analysed program at all; a class with no methods of its own
+/// is true with an empty array.
+AUTORTFM_DISABLE bool GetClassMethods(FUtf8StringView ClassName, TArray<FMethodDesc>& OutMethods);
+
+/// Calls any method the script declares and answers its result.
+///
+/// Arguments are converted against the parameter types GetClassMethods reported, so this needs no
+/// per-shape entry point -- which is what replaced v1's two hardcoded call shapes.
+///
+/// Answers a vh_status: VH_OK with OutResult written, VH_ERR_NOT_FOUND for an unknown method,
+/// VH_ERR_ARGUMENT for the wrong arity or an argument the declared type cannot accept (neither
+/// having run anything), VH_ERR_FAILED for a <decides> method that ran and declined, and
+/// VH_ERR_RUNTIME for one that raised.
+///
 /// Calling into the instance seals it: see WriteInstanceField.
-AUTORTFM_DISABLE int32 InstanceCallVoid(FInstance* Instance, FUtf8StringView DecoratedName);
-AUTORTFM_DISABLE int32 InstanceCallVoidFloat(FInstance* Instance, FUtf8StringView DecoratedName, double Arg);
+AUTORTFM_DISABLE int32 InstanceCall(FInstance* Instance,
+                                    FUtf8StringView DecoratedName,
+                                    const vh_value* Args,
+                                    int32 ArgCount,
+                                    vh_value& OutResult,
+                                    struct FFieldStorage& OutStorage);
 
 /// One `@export` data member, harvested from the semantic program rather than the VM.
 struct FExportDesc

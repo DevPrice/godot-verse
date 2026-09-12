@@ -30,7 +30,10 @@ This file is the map and the working rules; the reasoning lives there.
 C++ ABI. It is staged into the host's `Public/` by `build_host.py`, so both compile the same file.
 
 A change to that header means bumping `VH_ABI_VERSION` and rebuilding **both** sides: the mismatch
-surfaces at `vh_init`, not at compile time.
+surfaces at `vh_init`, not at compile time. The version is now `MAJOR * 1000 + MINOR` with the
+policy written at the top of the header: a major bump is a layout or meaning change and both sides
+must be rebuilt; a minor bump adds something an older consumer can ignore behind a `StructSize`
+check. The design argument for v2, and the spikes that settled it, are in `docs/abi-v2-design.md`.
 
 ### `src/` — the GDExtension
 
@@ -70,13 +73,26 @@ and the `VerseSimulationMetadata` dependency each exist for a reason spelled out
 
 Run the tests:
 
+    python tools/run_tests.py                    # all three layers; the one command (R-QUAL-3)
+    python tools/run_tests.py --only units       # or one of units / abi / integration
+    python tools/run_tests.py --build            # rebuild the test binaries first
+
+It runs three layers and reports each: **units** (lexer, class-declaration scanner, generator —
+no Godot, no UE), **abi** (`host_smoke`, the whole C ABI with no Godot), and **integration** (a
+headless Godot with Verse scripts attached, asserting on behaviour). A layer whose prerequisites
+are absent is **skipped and said to be skipped**, never counted as a pass. `UE_ROOT` names the
+Unreal checkout and `GODOT` the Godot binary; both are guessed when unset.
+
+The binaries still run standalone, which is what to reach for when bisecting one failure:
+
     bin/host_smoke.exe <engine>/Engine/Binaries/Win64/verse_host.dll <engine>/Engine .
     bin/verse_lexer_test.exe
     bin/verse_class_decl_test.exe
     python tests/verse_api_gen/test_gen_verse_api.py
 
 No test framework anywhere. Each test is a `main` (or a plain script) that prints one line per case
-and exits non-zero on failure; keep new tests that shape.
+and exits non-zero on failure; keep new tests that shape. The integration layer is the same shape
+in GDScript — `tests/integration/test_main.gd`, one line per case, `quit(1)` on failure.
 
 `tools/build_host.py` needs a UE source checkout with the Verse toolchain — `--engine`, or `UE_ROOT`.
 Building the host and running the tests are fine to do unprompted. **Ask before launching Godot**

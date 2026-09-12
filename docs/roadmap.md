@@ -1,6 +1,6 @@
 # godot-verse — Roadmap
 
-**Status:** Draft 2 · 2026-09-11 · Phase 0 complete
+**Status:** Draft 2 · 2026-09-11 · Phase 0 complete, Phase 1 in progress
 **Companion to:** `docs/spec.md` (what must be true) and `README.md` (what is true now)
 
 ---
@@ -182,11 +182,24 @@ is simply that the host adds every snippet to the root module. The recipe is Epi
 
 ## Phase 1 — ABI v2: dispatch, marshalling, diagnostics, and the harness that proves them
 
+**In progress.** Design: [`abi-v2-design.md`](abi-v2-design.md). 1.1 and 1.3 are done and 1.2 is
+done except for the type set; what remains is listed under the exit criteria below.
+
 **Why now.** R-NODE-6 is the keystone: `call_func` dispatches three hardcoded names over an ABI
 offering two call shapes, and signals, the full virtual set, `@tool`, custom resources and
 two-way interop all queue behind it. Designed once, against the whole spec, informed by Phase 0.
 
-### 1.1 Design ABI v2
+### 1.1 Design ABI v2 ✅
+
+**Done.** `VH_ABI_VERSION` is `MAJOR * 1000 + MINOR` at 2.0, the header is rewritten rather than
+extended, and it carries a written compatibility policy (half of R-QUAL-5). Three spikes settled
+what the design rests on, and two of the three answers were not what the brief assumed:
+
+| | question | answer |
+| --- | --- | --- |
+| **wire shape** | what replaces the flat `variant` tuple, which cannot express a Dictionary, a nested Array, a `Callable` or a `Signal`? | **A fixed-width tuple of scalars.** godot-cpp reframes the question: it never marshals a reference type, so with `Array`/`Dictionary`/`Callable`/`Signal` as ids, *nothing on the wire ever nests*. Measured: it marshals across VNI, it is hashable (so `[variant]variant` is legal), and it allocates nothing. |
+| **lifetime** | can a reference id be released when Verse drops the value? | **Yes, through a native class' `BeginDestroy`.** Measured, after a first attempt said no for the wrong reason. `VWeakCellMap` turned out unnecessary. |
+| **names** | what does Godot call a Verse method? | Verbatim — `mover.Fire()` — with Godot's virtuals mapped from `extension_api.json`. |
 
 One break. `VH_ABI_VERSION` goes to a v2 numbering and the header is rewritten rather than
 extended. It must anticipate, whether or not it implements:
@@ -202,32 +215,46 @@ extended. It must anticipate, whether or not it implements:
 Anticipating is cheap now and expensive later; a shape that has to grow a second calling
 convention has failed.
 
-### 1.2 Build the dispatch core
+### 1.2 Build the dispatch core — *dispatch done, type set outstanding*
 
-- **R-NODE-6** — any method, any argument types, return values. The three-name array in
-  `verse_script_instance.cpp` goes away.
-- **R-NODE-9** — the method list reports what the script defines.
+- **R-NODE-6** ✅ — any method, any argument types, return values. The three-name array in
+  `verse_script_instance.cpp` is gone, and so are the two call shapes under it.
+- **R-NODE-9** ✅ — the method list reports what the script defines, read out of the semantic
+  program: parameters with their own names and types, result type, `<decides>`/`<suspends>`, and
+  Godot's name for the virtual a method overrides.
 - **R-TYPE-1 … R-TYPE-5** — `verse_value` grows from three types to the whole `Variant` set,
   with one documented spelling for absence (R-TYPE-4 today covers objects only).
 - **R-TYPE-6, R-TYPE-7** — no per-call allocation baked in; the plumbing stays hidden.
-- **R-DIAG-2** — runtime errors report file, line and a Verse stack. Landed here rather than in
+- **R-DIAG-2** ✅ — runtime errors report file, line and a Verse stack. Landed here rather than in
   Phase 6 because every phase after this one is easier to debug with it, and because it is an ABI
-  shape, not a feature.
+  shape, not a feature. It needed two engine hooks rather than one: the only callback handed the
+  rendered callstack runs *before* the cascading abort, and the only one that reports runs after.
 
-### 1.3 Build the integration harness
+### 1.3 Build the integration harness ✅
 
-- **R-QUAL-1** — the missing third layer: integration tests that drive a headless Godot with
-  Verse scripts attached and assert on behaviour. The marshalling matrix is exactly what needs it,
-  which is why it arrives with Phase 1 rather than as its own phase.
-- **R-QUAL-3** — one command runs everything.
-- Keep the existing shape: a `main` per test, one line per case, non-zero on failure.
+- **R-QUAL-1** ✅ — the missing third layer: `tests/integration/` is a Godot project driven
+  headless, attaching a `.verse` script to a node and asserting on what `node.call()` answers. Its
+  coverage grows with the type set rather than with this requirement.
+- **R-QUAL-3** ✅ — `python tools/run_tests.py` runs all three layers. A layer whose prerequisites
+  are missing is reported **skipped**, never as a pass.
+- Kept the existing shape: one line per case, non-zero on failure, no framework — in GDScript too.
 
 ### Phase 1 exit criteria
 
-- A Verse script method taking and returning every `Variant` type is callable from GDScript.
-- A runtime error names a file and a line.
-- The integration harness runs headless and covers the marshalling matrix.
-- `demo/` still runs.
+- ⚠️ A Verse script method taking and returning every `Variant` type is callable from GDScript.
+  **Dispatch is done and the type set is not.** Any method is callable with any *currently
+  marshalled* type — `logic`, `int`, `float`, `string`, `vector2`, `vector3`, `color`, arrays of
+  those, objects — proven from GDScript in the integration layer. The remaining types are R-TYPE-1,
+  and after the spikes they are a build rather than a design: the fixed-width `variant`, the
+  reference table the ABI already declares, and `gen_verse_api.py`'s type table.
+- ✅ A runtime error names a file and a line.
+- ✅ The integration harness runs headless. Its matrix covers what §6 carries today.
+- ⬜ `demo/` still runs — not yet re-checked against ABI v2.
+
+**What is left in this phase, in order:** the fixed-width `variant` and the Verse-side packers; the
+reference table (`ReleaseRef`, `NewRef`, `RefGet`/`RefSet`/`RefContents`, `InvokeCallable`) on both
+sides, which the header declares and neither side implements; `gen_verse_api.py`'s type table and
+the `<decides>`-per-nullable-return rule from R-TYPE-4; then `demo/`.
 
 ---
 

@@ -39,3 +39,10 @@ bool variant_to_vh(const godot::Variant &p_value, vh_arena *p_arena, vh_value &r
 // The inverse of variant_to_vh. A vh_value with no Variant representation converts to a nil
 // Variant.
 godot::Variant vh_to_variant(const vh_value &p_value);
+
+// The Godot type a value of this (vh_type, vh_variant_tag) pair rebuilds as, for the places that
+// have a declaration but no value: a method's parameter and return types.
+//
+// The tag wins where it says anything, because it is Godot's own Variant::Type and is numbered to
+// match; VH_VARIANT_NIL means it has nothing to say and the layout decides.
+godot::Variant::Type variant_type_for(int32_t p_type, int32_t p_variant_tag);

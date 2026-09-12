@@ -1,0 +1,18 @@
+; Engine configuration file.
+;
+; The integration test project (R-QUAL-1). Driven headless by tools/run_tests.py, which copies the
+; built GDExtension into addons/ and rewrites the two verse/host settings below from UE_ROOT before
+; each run -- they name a machine's own engine checkout and nothing portable can be committed here.
+
+config_version=5
+
+[application]
+
+config/name="godot-verse integration tests"
+run/main_scene=""
+config/features=PackedStringArray("4.5")
+
+[verse]
+
+host/dll_path="C:\\Users\\Devin\\projects\\UnrealEngine\\Engine\\Binaries\\Win64\\verse_host.dll"
+host/engine_dir="C:\\Users\\Devin\\projects\\UnrealEngine"

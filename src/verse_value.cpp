@@ -643,3 +643,29 @@ Variant vh_to_variant(const vh_value &p_value) {
 			return Variant();
 	}
 }
+
+Variant::Type variant_type_for(int32_t p_type, int32_t p_variant_tag) {
+	if (p_variant_tag > VH_VARIANT_NIL && p_variant_tag < VH_VARIANT_MAX) {
+		return (Variant::Type)p_variant_tag;
+	}
+	switch (p_type) {
+		case VH_TYPE_LOGIC:
+			return Variant::BOOL;
+		case VH_TYPE_INT:
+		case VH_TYPE_CHAR:
+			return Variant::INT;
+		case VH_TYPE_FLOAT:
+			return Variant::FLOAT;
+		case VH_TYPE_STRING:
+			return Variant::STRING;
+		case VH_TYPE_MAP:
+			return Variant::DICTIONARY;
+		// A tuple is an Array to Godot unless the tag named a math struct, which the tag test
+		// above has already answered for.
+		case VH_TYPE_ARRAY:
+		case VH_TYPE_TUPLE:
+			return Variant::ARRAY;
+		default:
+			return Variant::NIL;
+	}
+}
