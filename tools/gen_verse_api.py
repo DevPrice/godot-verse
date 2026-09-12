@@ -774,7 +774,8 @@ def emit_math_packed_converters() -> list:
 
 
 def emit_variant_readers(api: dict, enums: dict) -> list:
-    """variant_kind, VariantKind, one As<GodotType> per lane, and the VariantFrom family."""
+    """VariantKind over Godot's own variant_type, one As<GodotType> per lane, and the
+    VariantFrom<GodotType> family."""
     values = check_variant_lanes(api)
 
     blocks = []
@@ -1641,16 +1642,18 @@ VARIANT_TEMPLATE = """
 #
 # A Godot value whose type is not known until it arrives. The type is nameable so it can appear in a
 # signature; its lanes are not, so a script reads one through the failable `As<GodotType>` readers
-# below and builds one through `VariantFrom` (R-TYPE-7, amended in Phase 2).
+# below and builds one through the matching `VariantFrom<GodotType>` (R-TYPE-7, amended in Phase 2).
+# Neither family is overloaded -- the type is in the name, for the reason gen_verse_api.py records
+# where it emits them.
 #
 #     if (Health := AsInt[V]):
 #         Print("hp {{Health}}")
 #
 #     case (VariantKind(V)):          # when the type is not known at all
-#         variant_kind.Int => Print("an int")
+#         variant_type.TypeInt => Print("an int")
 #         _ => Print("something else")
 #
-#     Node.SetMeta("score", VariantFrom(42))
+#     Node.SetMeta("score", VariantFromInt(42))
 #
 # Reading is a <decides> free function rather than a cast, because Verse's own cast rejects a struct
 # on both sides -- see docs/phase-2-design.md 1 and 4.1. It reads the same at the call site and it

@@ -307,8 +307,10 @@ on closing it.
 
 ### 5.3 Signals
 
-Nothing exists today: `_has_script_signal` returns false and `_get_script_signal_list` returns
-empty. Signals are how Godot programs are wired together, so this is parity-critical.
+No script *declares* a signal today: `_has_script_signal` returns false and
+`_get_script_signal_list` returns empty. Signals are how Godot programs are wired together, so this
+is parity-critical. What already works is receiving one — a scene-file connection reaches a Verse
+method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port be wired at all.
 
 - **R-SIG-1 (MUST)** A Verse script declares signals with argument types, and they appear in the
   editor's Node panel where a designer connects them.
@@ -317,7 +319,13 @@ empty. Signals are how Godot programs are wired together, so this is parity-crit
   closure as the target, and disconnects.
 - **R-SIG-4 (MUST)** A connection made in the editor to a Verse script's method works — including
   the editor's "connect and create the function for me" flow, which is what `_make_function` is
-  for.
+  for. Status: **part**, and the part that works is the load-bearing one. The Dodge the Creeps port
+  is wired by ten connections in its scene files — five `Timer.timeout`s, `Button.pressed` and
+  `Area2D.body_entered` each to two different scripts, and `screen_exited` — and every one reaches
+  its Verse method, with the signal's arguments marshalled to the declared parameter types. It is
+  the reason the port survives having no signals of its own (`docs/dodge-the-creeps.md` wall 2).
+  What is untested is the editor-side flow: connecting through the Node panel, and `_make_function`
+  writing the handler.
 - **R-SIG-5 (MUST)** A script `await`s a signal from a concurrent context: the Verse spelling of
   GDScript's `await button.pressed`. Depends on §7.
 - **R-SIG-6 (MUST)** Signals declared in Verse are connectable and emittable from GDScript and C#
@@ -490,6 +498,12 @@ empty. Signals are how Godot programs are wired together, so this is parity-crit
   one exists, and a generated per-class function where the element is a class — because
   `VhFromObject` takes the base `object` and a Verse function type is not satisfied by one that
   merely accepts a supertype.
+
+  **One half is still missing, and the port found it:** a script can read and write the containers
+  Godot hands it and cannot **make** one. `godot_array{}` compiles and holds reference 0, which
+  crosses as `Nil`; `VhRefNew` is module-scoped and there is no public constructor. So a container
+  is something a script passes on rather than something it can originate, which is what stops
+  R-INT-2 short — see `docs/dodge-the-creeps.md` wall 7.
 - **R-TYPE-3 (MUST)** `Callable` is a Verse value a script can hold, invoke, and hand back to
   Godot — this is what makes R-SIG-3 and any callback-taking engine API work. Status: **done.** A `callable` is
   held, passed back, and invoked with arguments. The other direction — a Verse function *as* a
@@ -613,11 +627,21 @@ indistinguishable from a GDScript one.
   signals — with no Verse-specific API and no knowledge that Verse is involved. Depends on
   R-NODE-6 and §5.3.
 - **R-INT-2 (MUST)** A Verse script calls methods on, and reads properties of, an object whose
-  script is GDScript or C#, dynamically. Status: **done**, and as a side effect rather than as work
+  script is GDScript or C#, dynamically. Status: **part**, and as a side effect rather than as work
   of its own: `Object.callv(StringName, Array) -> Variant` is an ordinary concrete method, and Godot's
   `Object` became mirrorable the moment Variant and Array both crossed (Phase 2 §4.4). A script
   writes `AsInt[Target.Callv("_double", Args)]` and the GDScript method runs. `get`, `set`,
   `has_method` and `get_class` came with it.
+
+  **What is missing is the argument array**, which the Dodge the Creeps port found and
+  `docs/dodge-the-creeps.md` records as its wall 7: the `Args` in that test came from GDScript, and
+  a script cannot make a `godot_array` of its own. `godot_array{}` compiles — the wrappers are
+  public so they can be named in a signature — and holds reference 0, which crosses as `Nil`. So
+  dispatch by name works and *originating* such a call does not, `Object.add_user_signal` is
+  unusable, and every mirrored method taking an `Array` or a `Dictionary` can only be passed a
+  container Godot supplied. The fix is a public way to make an empty container and add to it:
+  `VhRefNew` is already the native function, and the generator already emits typed element
+  accessors. This is R-TYPE-2's remaining half and belongs with it.
 
   Proving it turned up a rule that had leaked out of the place it belonged: an object-typed
   *exported member* must be optional, because the inspector can leave a slot empty, and that rule was

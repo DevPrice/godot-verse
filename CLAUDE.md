@@ -9,11 +9,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 knowing" — read the relevant section before changing anything in that area. `docs/property-export.md`
 and `docs/editor-tooling.md` hold the full research and citations behind those sections.
 
-**Phase 2 is implemented except its Dodge the Creeps port.** `docs/phase-2-design.md` §11 says what
-it built and — more usefully — the four places the design in that same document turned out to be
-wrong. Read §11 before trusting §1 or §4 of it. The short version: Verse's overloading is far
-narrower than §1 claimed, Verse forbids non-public struct fields (so `variant`'s lanes are public,
-R-TYPE-7), Verse has no anonymous functions, and Godot's property metadata hides its own enums.
+**Phase 2 is complete.** `docs/phase-2-design.md` §11 says what it built and — more usefully — the
+places the design in that same document turned out to be wrong. Read §11 before trusting §1 or §4
+of it. The short version: Verse's overloading is far narrower than §1 claimed, Verse forbids
+non-public struct fields (so `variant`'s lanes are public, R-TYPE-7), Verse has no anonymous
+functions, and Godot's property metadata hides its own enums.
+
+**`docs/dodge-the-creeps.md` is the one to read before adding a Verse-facing feature.** The port
+closed Phase 2 and it plays, so the document is not a progress report — it is the eight things a
+Godot author writes without thinking that have no spelling yet, each with the requirement that will
+give it one, measured in a real game rather than estimated. It also corrects two statuses that were
+recorded as done: R-INT-2 (a script cannot make the `godot_array` `callv` needs) and the cost of
+R-SCN-6's absence.
 
 **README predates Phase 1 and is stale on marshalling.** It still describes three hand-written
 value types, a `variant` tuple, `object` as the only `<native>` class, and packed arrays crossing as
@@ -148,6 +155,13 @@ in GDScript — `tests/integration/test_main.gd`, one line per case, `quit(1)` o
 what normally writes it), and rewrites the two `verse/host/*` settings from `UE_ROOT` — those name
 one machine's engine checkout, so nothing portable can be committed. Adding a `.verse` fixture there
 means adding it under `scripts/`; the host compiles every `.verse` under `res://` together.
+
+`dodge-the-creeps/` is the third Godot project and the yardstick: the whole game in Verse, with no
+GDScript in it but `headless_check.gd`, which is how to see it work without a window —
+`godot --headless --fixed-fps 60 --path dodge-the-creeps -s res://headless_check.gd`, 29 checks, one
+line each. `--fixed-fps` is not optional; headless, a `Timer` counts real seconds while the loop
+runs flat out. It is deliberately **not** in `run_tests.py`: a yardstick that gates the build stops
+measuring. `scons` copies the addon into it the way it does for `demo/`.
 
 `tools/build_host.py` needs a UE source checkout with the Verse toolchain — `--engine`, or `UE_ROOT`.
 Building the host and running the tests are fine to do unprompted, and so is **headless** Godot —

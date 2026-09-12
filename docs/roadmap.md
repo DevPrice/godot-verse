@@ -1,8 +1,9 @@
 # godot-verse — Roadmap
 
-**Status:** Draft 4 · 2026-09-11 · Phases 0 and 1 complete; **Phase 2 implemented except its
-Dodge the Creeps port** (Stage 7). What Phase 2 built, and the four places the design was wrong,
-are in [`phase-2-design.md`](phase-2-design.md) §11.
+**Status:** Draft 5 · 2026-09-12 · **Phases 0, 1 and 2 complete.** What Phase 2 built, and the four
+places the design was wrong, are in [`phase-2-design.md`](phase-2-design.md) §11. The Dodge the
+Creeps port closed it and **plays** — the eight walls it hit, each mapped to a requirement, are
+[`dodge-the-creeps.md`](dodge-the-creeps.md), and that list is Phase 4's scope.
 **Companion to:** `docs/spec.md` (what must be true) and `README.md` (what is true now)
 
 ---
@@ -317,13 +318,22 @@ rewrites the source-set machinery they would be built on. **The phase touches no
 as a second project beside `demo/` so the next attempt starts where this one stopped. The walls are
 `docs/dodge-the-creeps.md`, and that list is Phase 4's scope.
 
-**Status: met, except the port.** All 1023 classes are mirrored, `unsupported_type` is zero, and a
-member the mirror does not carry is explained *in the editor* rather than in a report file. The
-phase also delivered R-INT-2 and part of R-SIG-3 as side effects of mirroring `Object`, closed
-R-TYPE-2 and R-LANG-6's third clause, and added R-SCN-5. Two things it did not do: the Dodge the
-Creeps port, and R-SCN-6 (`is`/`as`), which is specified and de-risked but not built — see
-`phase-2-design.md` §11. The cost is recorded rather than hidden: per-keystroke analysis went from
-158 ms to 1190 ms, which §3.2 named in advance as the first thing to revisit.
+**Status: met.** All 1023 classes are mirrored, `unsupported_type` is zero, and a member the mirror
+does not carry is explained *in the editor* rather than in a report file. The phase also delivered
+part of R-SIG-3 as a side effect of mirroring `Object`, closed R-TYPE-2 and R-LANG-6's third
+clause, and added R-SCN-5. The cost is recorded rather than hidden: per-keystroke analysis went
+from 158 ms to 1190 ms, which §3.2 named in advance as the first thing to revisit.
+
+**The port did more than it was asked to: it plays.** `dodge-the-creeps/` is the whole game in five
+`.verse` files with no GDScript in it, and a headless check that presses Start and asserts on 29
+things Godot sees. The expectation here was a half-broken attempt and a wall list, so the wall list
+is the part worth reading: eight things a GDScript author writes without thinking, each with the
+requirement that will give it a spelling. Six are Phase 4's — R-SCN-6, R-SIG-1/2/5 and R-SCN-3 via
+OQ-11 — one is a permitted vararg skip, and one is not a feature at all but a trap in Verse's
+effect defaults that a library file walks into. It also corrected two things this document and the
+spec had recorded as done: **R-INT-2** is `part`, because a script cannot make the argument array
+`callv` needs, and **R-SCN-6** was already known missing but is now measured — it is what seventeen
+`@export` slots and three `Object.Set` calls are standing in for.
 
 ---
 

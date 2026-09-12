@@ -1,6 +1,7 @@
 # Phase 2 — the whole engine API
 
-**Status:** Draft 5 · 2026-09-11 · **Stages 0-6 implemented**; Stage 7 (Dodge the Creeps) open.
+**Status:** Draft 6 · 2026-09-12 · **all seven stages implemented.** Stage 7, the Dodge the Creeps
+port, completed rather than stalling; its eight walls are [`dodge-the-creeps.md`](dodge-the-creeps.md).
 What each stage actually did, and where it moved the design, is in §11.
 **Companion to:** [`spec.md`](spec.md) (what must be true), [`roadmap.md`](roadmap.md) (why this phase is
 here), [`abi-v2-design.md`](abi-v2-design.md) (the wire this builds on)
@@ -22,7 +23,7 @@ are the ones to argue with first.
 | class set | **all 1022** — measured (3.1), chosen (3.2): the build cost is nothing and the 5.4x analysis cost is a lag, where a subset is a wall |
 | namespacing | flat. Submodules only once the editor writes `using` lines, which is Phase 3's |
 | `variant` | done, and it cost more than planned: Verse forbids non-public struct fields, so the *lanes* are public too (§11, R-TYPE-7) |
-| `Object` | done, and it took `unsupported_type` to zero. `callv` delivered R-INT-2 with it |
+| `Object` | done, and it took `unsupported_type` to zero. `callv` delivered *part* of R-INT-2: see §11 |
 | typed arrays | done. S-4 landed; `Unpack` had to be public, which is what forced `variant` public |
 | downcasting | spiked and **buildable**, not built: R-SCN-6 is specified and left to a later phase (§11) |
 | enums | done — 758 of them. The prefix comes off the *enumerators'* shared prefix, not the enum's name (§11) |
@@ -30,7 +31,7 @@ are the ones to argue with first.
 | library files | done |
 | coverage | done. The bar holds: `unsupported_type` is zero and every other skip is a named category |
 | language holes | one found and fixed: an `@export` on a base *script* class was invisible on the derived instance |
-| the yardstick | **outstanding** — Stage 7, handed off |
+| the yardstick | **done, and it plays** — `dodge-the-creeps/`, walls in [`dodge-the-creeps.md`](dodge-the-creeps.md) |
 | also in scope | analysis-latency measurement |
 
 ---
@@ -542,9 +543,11 @@ rather than assuming it.
 **Stage 6 — R-LANG-1/2/3. Done.** Script-to-script inheritance, interfaces, structs, enums and parametric
 types get tests. A hole that is an afternoon gets fixed; anything larger becomes a recorded wall.
 
-**Stage 7 — Dodge the Creeps. Outstanding**, and handed off. The port as a **second committed project** beside `demo/`, committed
-even while half-broken so progress across phases is a diff, and not a gate for `run_tests`.
-`docs/dodge-the-creeps.md` is the wall list, each wall mapped to a requirement.
+**Stage 7 — Dodge the Creeps. Done**, and it plays. The port is a **second committed project** beside
+`demo/`, not a gate for `run_tests`, with `headless_check.gd` for the runs a window cannot make.
+`docs/dodge-the-creeps.md` is the wall list, each wall mapped to a requirement. Committing it
+half-broken was the plan and turned out not to be necessary; what the plan got right is that the
+wall list is the output, not the game.
 
 ---
 
@@ -655,7 +658,31 @@ engineering, not risk: a native `VhAsObject` that asks Godot for the handle's cl
 existing `CallMethod` callback, a cast at every object return, and a handle→class cache so it is not
 a `get_class` round trip each time. No ABI change either way.
 
-**Stage 7 — Dodge the Creeps**, and with it `docs/dodge-the-creeps.md`.
+### What the port found, after this document was written
+
+Stage 7 ran last and moved two of the claims above. Both are in
+[`dodge-the-creeps.md`](dodge-the-creeps.md) with the evidence.
+
+**R-INT-2 is `part`, not `done`** — the correction §8 asked for by saying "verify rather than
+assume". `Object.callv` is on the type and the integration test does call a GDScript method through
+it, but the `Args` array in that test came *from* GDScript. A script cannot make a `godot_array`:
+`godot_array{}` compiles and holds reference 0, which crosses as `Nil`, and `VhRefNew` is
+module-scoped. So dispatch by name works and originating such a call does not — which also makes
+`add_user_signal` unusable and leaves every mirrored `Array`/`Dictionary` parameter fillable only
+with a container Godot supplied. It is R-TYPE-2's other half, and small: one public constructor plus
+the typed accessors the generator already emits.
+
+**R-SCN-6's absence is now measured rather than estimated.** In a game this size it costs
+seventeen `@export` slots standing in for seventeen node lookups, three `Object.Set` calls with
+string property names where the GDScript assigns three typed properties, and an `?option` unwrap
+around every one of those slots. Nothing about §11's plan for it changes; what changes is knowing it is the
+most expensive thing on the Phase 4 list.
+
+A third finding is not a requirement at all. A module-scope Verse function with no effect specifier
+is `no_rollback`, and a `no_rollback` function cannot be called from inside the transaction every
+Godot callback runs in — so a library file's helpers compile alone and fail at their first call
+site, in another file, naming an effect the author never wrote. The `.verse` template and the
+R-SCN-2 diagnostic machinery are both places that could say so at the declaration.
 
 ### The cost, measured
 

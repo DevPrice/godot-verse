@@ -104,6 +104,20 @@ void RaiseRefStatus(int32 Status, int64 Ref, const TCHAR* Verb)
     {
         return;
     }
+    // Reference 0 never named anything, so the released-handle story is the wrong one to tell: it
+    // is what `godot_array{}` holds, and a script can write that -- the container wrappers are
+    // public so they can be named in a signature, and their Ref is not. Blaming collection for it
+    // sends the author looking for a lifetime bug they do not have.
+    if (Ref == 0)
+    {
+        RAISE_VERSE_RUNTIME_ERROR_FORMAT(
+            Verse::ERuntimeDiagnostic::ErrRuntime_NativeInternal,
+            TEXT("%s a Godot container that names nothing. A container built in Verse -- "
+                 "`godot_array{}` and the like -- holds no Godot value; one has to come back from "
+                 "Godot."),
+            Verb);
+        return;
+    }
     RAISE_VERSE_RUNTIME_ERROR_FORMAT(
         Verse::ERuntimeDiagnostic::ErrRuntime_NativeInternal,
         TEXT("%s a Godot container the bridge no longer holds (reference %lld). A reference is "

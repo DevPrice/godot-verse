@@ -69,9 +69,16 @@ copy_output_action = env.Install(addondir, f"{projectdir}/{plugindir}")
 env.Depends(copy_output_action, build_plugin_action)
 env.Depends(copy_output_action, gdextension_action)
 
+# The port is the second committed project (docs/dodge-the-creeps.md), and a project cannot
+# reference an addon above its own res://, so it gets the same copy demo/ gets. tests/integration
+# is not here because tools/run_tests.py copies it in per run.
+port_output_action = env.Install(f"dodge-the-creeps/{addondir}", f"{projectdir}/{plugindir}")
+env.Depends(port_output_action, copy_output_action)
+
 actions = [
     build_plugin_action,
     gdextension_action,
     copy_output_action,
+    port_output_action,
 ]
 Default(*actions)
