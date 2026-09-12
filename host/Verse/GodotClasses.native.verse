@@ -50734,13 +50734,15 @@ visual_shader_node_float_parameter<public> := class(visual_shader_node_parameter
     var Hint<public><getter(HintGetter)><setter(HintSetter)>:visual_shader_node_float_parameter_hint = external {}
     HintGetter<epic_internal>(Accessor:accessor)<transacts>:visual_shader_node_float_parameter_hint = VhToVisualShaderNodeFloatParameterHint(VhCallValue(Handle, "get_hint", array{}))
     HintSetter<epic_internal>(Accessor:accessor, Value:visual_shader_node_float_parameter_hint)<transacts>:void = VhCallVoid(Handle, "set_hint", array{VhFromVisualShaderNodeFloatParameterHint(Value)})
+    var Maximum<public><getter(MaximumGetter)><setter(MaximumSetter)>:float = external {}
+    MaximumGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_max", array{}))
+    MaximumSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_max", array{VhFromFloat(Value)})
+    var Minimum<public><getter(MinimumGetter)><setter(MinimumSetter)>:float = external {}
+    MinimumGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_min", array{}))
+    MinimumSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_min", array{VhFromFloat(Value)})
     var Step<public><getter(StepGetter)><setter(StepSetter)>:float = external {}
     StepGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_step", array{}))
     StepSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_step", array{VhFromFloat(Value)})
-    GetMax<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_max", array{}))
-    GetMin<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_min", array{}))
-    SetMax<public>(Value:float)<transacts>:void = VhCallVoid(Handle, "set_max", array{VhFromFloat(Value)})
-    SetMin<public>(Value:float)<transacts>:void = VhCallVoid(Handle, "set_min", array{VhFromFloat(Value)})
 
 visual_shader_node_frame<public> := class(visual_shader_node_resizable_base):
 
@@ -50814,15 +50816,17 @@ visual_shader_node_int_parameter<public> := class(visual_shader_node_parameter):
     var Hint<public><getter(HintGetter)><setter(HintSetter)>:visual_shader_node_int_parameter_hint = external {}
     HintGetter<epic_internal>(Accessor:accessor)<transacts>:visual_shader_node_int_parameter_hint = VhToVisualShaderNodeIntParameterHint(VhCallValue(Handle, "get_hint", array{}))
     HintSetter<epic_internal>(Accessor:accessor, Value:visual_shader_node_int_parameter_hint)<transacts>:void = VhCallVoid(Handle, "set_hint", array{VhFromVisualShaderNodeIntParameterHint(Value)})
+    var Maximum<public><getter(MaximumGetter)><setter(MaximumSetter)>:int = external {}
+    MaximumGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_max", array{}))
+    MaximumSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_max", array{VhFromInt(Value)})
+    var Minimum<public><getter(MinimumGetter)><setter(MinimumSetter)>:int = external {}
+    MinimumGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_min", array{}))
+    MinimumSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_min", array{VhFromInt(Value)})
     var Step<public><getter(StepGetter)><setter(StepSetter)>:int = external {}
     StepGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_step", array{}))
     StepSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_step", array{VhFromInt(Value)})
     GetEnumNames<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_enum_names", array{}))
-    GetMax<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_max", array{}))
-    GetMin<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_min", array{}))
     SetEnumNames<public>(Names:[]string)<transacts>:void = VhCallVoid(Handle, "set_enum_names", array{VhFromStringArray(Names)})
-    SetMax<public>(Value:int)<transacts>:void = VhCallVoid(Handle, "set_max", array{VhFromInt(Value)})
-    SetMin<public>(Value:int)<transacts>:void = VhCallVoid(Handle, "set_min", array{VhFromInt(Value)})
 
 visual_shader_node_particle_box_emitter<public> := class(visual_shader_node_particle_emitter):
 

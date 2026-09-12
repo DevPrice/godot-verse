@@ -244,7 +244,9 @@ def run_integration(results: Results, engine: Path | None, godot: Path | None) -
 COVERAGE_EXPLANATIONS = [
     "Godot has get_position, but it is reachable as the property `Position`.",
     "Godot has _enter_tree, but it is a Godot virtual.",
-    "Godot has VisualShaderNodeFloatParameter.max, but it cannot be a property, so Godot's own",
+    "Godot has VisualShaderNodeFloatParameter.max, but a Verse function already answers to that "
+    "name, so it is the property `Maximum`.",
+    "Godot has VisualShaderNodeFloatParameter.get_max, but it is reachable as the property `Maximum`.",
     "Godot has Object.to_string, but it is reachable as `ToString(Value)`",
 ]
 

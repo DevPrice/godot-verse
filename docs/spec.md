@@ -66,8 +66,13 @@ resolves conflicts:
   been the obvious escape and the wrong one — Verse's spelling wins, so it is reachable as
   `ToString(Value)`, a module-level overload of Verse's own name. That buys more than it costs:
   string interpolation *desugars* to `ToString`, so `"{MyNode}"` prints what Godot prints, with
-  nothing written to make it. Exactly four other members across 1023 classes are ambiguous with a
-  Verse name, all of them `Min` or `Max` as data, and each keeps Godot's own `GetMin()`/`SetMin()`.
+  nothing written to make it.
+
+  Exactly four other members across 1023 classes are ambiguous with a Verse name, all of them `Min`
+  or `Max` as **data** — a `var` has no signature to be told apart by, where a *method* of the same
+  name is fine, which was confirmed both ways. Those four stay properties under one word of English:
+  `set X.Maximum = 1.0`. Both spellings an author might reach for are recorded as skipped and point
+  at it, so `X.Max` and `X.GetMax()` are each answered by the editor with the one that works.
 - **R-AUD-3 (SHOULD)** Verse's less familiar features — `<decides>`, structured concurrency,
   parametric types — are available but never on the critical path of a first script. A user must
   be able to write a working script knowing only "class, member, method, `set`".

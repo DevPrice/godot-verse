@@ -12,10 +12,14 @@ probe := class(node2d):
     # virtual: Node._enter_tree is Godot's to call, and only three virtuals are carried (R-NODE-7).
     Virtual()<transacts>:void = EnterTree()
 
-    # property_ambiguous_name: VisualShaderNodeFloatParameter.max cannot be a `var` named Max --
-    # /Verse.org/Verse's Max is a function, and data cannot overload -- so Godot's own accessors
-    # carry it instead. Four properties across the whole API are in this position.
-    AmbiguousProperty(P:visual_shader_node_float_parameter)<transacts>:float = P.Max
+    # property_renamed: VisualShaderNodeFloatParameter.max cannot be a `var` named Max --
+    # /Verse.org/Verse's Max is a function, and data has no signature to be told apart by -- so it is
+    # `Maximum`. Four properties across the whole API are in this position.
+    RenamedProperty(P:visual_shader_node_float_parameter)<transacts>:float = P.Max
+
+    # ...and the *other* spelling an author might try, which is Godot's own getter. It is superseded
+    # by the property, so it points at the same place.
+    RenamedPropertyGetter(P:visual_shader_node_float_parameter)<transacts>:float = P.GetMax()
 
     # superseded_by_free_function: Object.to_string is Verse's own ToString, which is also what
     # string interpolation desugars to.

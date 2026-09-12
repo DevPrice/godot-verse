@@ -48,11 +48,22 @@ BASE_MEMBER_NAMES = {"Handle", "Ready", "Process", "PhysicsProcess"}
 # errors -- and add it here rather than widening the guess, because over-listing here costs a public
 # name where over-listing VERSE_STDLIB_NAMES below costs nothing.
 #
-# `Min` and `Max` are here as *data*: a `var` cannot overload, so a property of that name is
-# ambiguous with /Verse.org/Verse's function where a method would have been distinguished. No Godot
-# class has a *method* named either, and if one ever does, emit_class asserts rather than letting the
-# collision reach the compiler as an error hundreds of lines from its cause.
+# `Min` and `Max` are here as *data*, and only as data: a `var` has no signature to be told apart
+# by, so a property of that name is ambiguous with /Verse.org/Verse's function where a *method* of
+# the same name is not. Confirmed both ways -- a class carrying `Max()` and `Min(:int)` compiles
+# clean. If a Godot class ever does declare a method named one of these, classify_method asserts
+# rather than letting the collision reach the compiler as an error hundreds of lines from its cause.
 VERSE_AMBIGUOUS_MEMBER_NAMES = {"Min", "Max", "ToString"}
+
+# What such a property is called instead. A property is worth keeping as a property -- `set X.Maximum
+# = 1.0` is the spelling the exercise is for -- and the alternative was dropping it so that Godot's
+# `GetMax()` and `SetMax()` carried the value, which is a worse deal for the six properties in this
+# position than one word of English is.
+#
+# The invented name is the only one in the mirror, and it is only reachable through it: `Max` and
+# `get_max` are both recorded as skipped and both point here, so either spelling an author tries is
+# answered by the editor with the one that works.
+PROPERTY_RENAMES = {"Min": "Minimum", "Max": "Maximum"}
 
 # Godot members that are reachable as a module-level function instead of as a method, because Verse
 # already gives the name a meaning worth keeping.
@@ -1382,11 +1393,7 @@ def classify_property(p: dict, resolver: TypeResolver, coverage: Coverage, metho
     # of the same name would have been distinguished by its signature. So the property is dropped
     # and Godot's own getter and setter survive as methods -- GetMax() still reads it; what is lost
     # is only `set Node.Max = ...`.
-    # Dropped rather than renamed, because dropping it leaves Godot's own `GetMax()` and `SetMax()`
-    # standing where any rename would put an invented name in their place. Godot's vocabulary wins.
-    if pascal_member_name(p["name"]) in VERSE_AMBIGUOUS_MEMBER_NAMES:
-        coverage.skip("property_ambiguous_name", record("property_ambiguous_name"))
-        return None
+
     if info.verse_type in CONTAINER_PROPERTY_TYPES or info.verse_type.startswith("[]"):
         coverage.skip("property_container_type", record("property_container_type"))
         return None
@@ -1408,9 +1415,18 @@ def classify_property(p: dict, resolver: TypeResolver, coverage: Coverage, metho
         coverage.skip("property_nested_struct", record("property_nested_struct"))
         return None
 
+    # A property whose own name is ambiguous with a Verse function takes the name beside it in
+    # PROPERTY_RENAMES, and the name it did not get is recorded so the editor can point at the one it
+    # did. `set X.Maximum = ...` rather than no property at all.
+    verse_name = pascal_member_name(p["name"])
+    if verse_name in PROPERTY_RENAMES:
+        coverage.skip("property_renamed", record("property_renamed")._replace(
+            detail=f"`{PROPERTY_RENAMES[verse_name]}`"))
+        verse_name = PROPERTY_RENAMES[verse_name]
+
     return ClassifiedProperty(
         godot_name=p["name"],
-        verse_name=verse_method_name(p["name"]),
+        verse_name=verse_name,
         type_info=info,
         getter=p["getter"],
         setter=p["setter"],

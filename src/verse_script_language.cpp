@@ -1942,6 +1942,10 @@ String skipped_member_explanation(const verse_api::skipped_member &p_entry) {
 	if (reason == "superseded_by_property") {
 		return String("it is reachable as the property ") + detail + ".";
 	}
+	if (reason == "property_renamed") {
+		return String("a Verse function already answers to that name, so it is the property ")
+				+ detail + ".";
+	}
 	if (reason == "superseded_by_free_function") {
 		return String("it is reachable as ") + detail + ", which is also what string interpolation uses.";
 	}

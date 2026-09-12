@@ -531,10 +531,10 @@ def test_property_skips_have_reasons():
         ) is None,
     )
     check_true(
-        "a property named after a Verse stdlib function is skipped",
+        "a property named after a Verse function keeps its value under another name",
         g.classify_property(
             {"name": "max", "type": "float", "getter": "get_max", "setter": "set_max"}, resolver, coverage, {}
-        ) is None,
+        ) is not None,
     )
     check_true(
         "a float property is not",
@@ -545,8 +545,8 @@ def test_property_skips_have_reasons():
     check(
         "each skip recorded its own reason",
         sorted(coverage.skip_reasons),
-        ["property_ambiguous_name", "property_container_type", "property_no_accessor_pair",
-         "property_object_type"],
+        ["property_container_type", "property_no_accessor_pair", "property_object_type",
+         "property_renamed"],
     )
 
 
@@ -832,16 +832,16 @@ def test_a_member_ambiguous_with_a_verse_name():
 
     resolver = g.TypeResolver({"Thing"}, {"Thing": None}, {"Thing"}, {})
     coverage = g.Coverage()
-    check_true(
-        "a property named Max is dropped so Godot's accessors survive",
-        g.classify_property(
-            {"name": "max", "type": "float", "getter": "get_max", "setter": "set_max"},
-            resolver, coverage, {}, "Thing") is None,
-    )
-    check("and recorded as the ambiguity it is",
-          coverage.skip_reasons["property_ambiguous_name"], 1)
-    check_true("with Godot's own accessors named in the reason",
-               "`GetMax()`" in coverage.skipped_members[0].detail)
+    renamed = g.classify_property(
+        {"name": "max", "type": "float", "getter": "get_max", "setter": "set_max"},
+        resolver, coverage, {}, "Thing")
+    check_true("a property named Max is still a property", renamed is not None)
+    check("under the name beside it in PROPERTY_RENAMES", renamed.verse_name, "Maximum")
+    check("and the name it did not get is recorded",
+          coverage.skip_reasons["property_renamed"], 1)
+    check("pointing at the one it did", coverage.skipped_members[0].detail, "`Maximum`")
+    check("keyed by the spelling an author would have tried",
+          coverage.skipped_members[0].verse_name, "Max")
 
     # A method in that position has no rename rule any more -- there is none left to need one -- so
     # the generator refuses rather than letting the collision reach the compiler far from its cause.
