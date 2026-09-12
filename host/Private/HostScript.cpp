@@ -73,7 +73,13 @@
 
 namespace {
 
-constexpr const char* ScriptPackageName = "SolIdeDataSources";
+/// The package the project's scripts are built into.
+///
+/// Not ISolIdeDataSource::DefaultDataSourceName, which is what ISolarisIde::AddDataSource would
+/// have picked: the name has to be the host's to choose, because publishing a package marks its
+/// exports LoaderImport and publishing that same package again asserts on the flag. A second
+/// generation therefore needs a name no publish has used, and a name the IDE owns cannot be one.
+constexpr const char* ScriptPackageName = "GodotScripts";
 constexpr const char* ScriptVersePath = "/user@localhost";
 constexpr const char* MainFunctionName = "Main(:[][]char,:[[]char][]char)";
 
@@ -137,6 +143,44 @@ constexpr const char* AttributePackageSource =
     "export_subgroup<public><constructor>(Name:string)<computes> := export_subgroup_attribute:\n"
     "    Name := Name\n";
 
+/// One .verse file, as the toolchain wants it: a path, its text, and somewhere to cache the
+/// parse.
+///
+/// The IDE's own ISolIdeDataSource is the thing this replaces, and the one capability it had
+/// that matters is the one kept here -- text that can be replaced in place, which is what an
+/// editor's unsaved buffer is. Everything else it carried (VPL widgets, disk round-trips,
+/// mutation broadcasts) has no caller on this side.
+class FHostSourceSnippet : public uLang::ISourceSnippet
+{
+public:
+    FHostSourceSnippet(uLang::CUTF8String&& InPath, uLang::CUTF8String&& InText)
+        : Path(uLang::Move(InPath))
+        , Text(uLang::Move(InText))
+    {
+    }
+
+    virtual uLang::CUTF8String GetPath() const override { return Path; }
+    virtual void SetPath(const uLang::CUTF8String& InPath) override { Path = InPath; }
+    virtual bool IsInMemoryOnly() const override { return true; }
+    virtual uLang::TOptional<uLang::CUTF8String> GetText() const override { return Text; }
+    virtual uLang::TOptional<Verse::Vst::TNodeRef<Verse::Vst::Snippet>> GetVst() const override { return Vst; }
+    virtual void SetVst(Verse::Vst::TNodeRef<Verse::Vst::Snippet> Snippet) override { Vst = Snippet; }
+
+    /// Replacing the text drops the cached parse with it. CToolchain::ProcessSnippet clones a
+    /// cached VST it considers valid instead of reparsing, so a VST kept across a text change
+    /// would have the build analyse the text that was just replaced.
+    void SetText(uLang::CUTF8String&& NewText)
+    {
+        Text = uLang::Move(NewText);
+        Vst.Reset();
+    }
+
+private:
+    uLang::CUTF8String Path;
+    uLang::CUTF8String Text;
+    uLang::TOptional<Verse::Vst::TNodeRef<Verse::Vst::Snippet>> Vst;
+};
+
 using FMainFunction = TVerseFunction<FVerseResult(
     TVerseCall<void>, const TArray<verse::string>&, const TMap<verse::string, verse::string>&)>;
 
@@ -197,6 +241,32 @@ AUTORTFM_DISABLE void AddAttributePackage(ISolarisIde& Ide)
         AttributePackageVersePath);
 }
 
+/// Creates the package this project's scripts are built into, and makes it depend on everything
+/// else the project holds.
+///
+/// The dependency list is the half of AddDataSource that is easy to miss: without it the native
+/// package's definitions do not resolve however a script spells the `using`. Taken fresh for the
+/// package named rather than once for the project, which is what lets a later generation depend
+/// on the same set without inheriting an earlier generation's entry.
+AUTORTFM_DISABLE void AddScriptPackage(uLang::CProgramBuildManager& BuildManager, const char* PackageName)
+{
+    const uLang::CSourceProject::SPackage& Package =
+        BuildManager.FindOrAddSourcePackage(PackageName, ScriptVersePath);
+    Package._Package->SetVerseScope(uLang::EVerseScope::InternalUser);
+    Package._Package->SetVerseVersion(Verse::Version::LatestUnstable);
+    Package._Package->SetAllowExperimental(true);
+
+    uLang::TArray<uLang::CUTF8String> Dependencies;
+    for (const uLang::CSourceProject::SPackage& Other : BuildManager.GetSourceProject()->_Packages)
+    {
+        if (&Other != &Package)
+        {
+            Dependencies.Add(Other._Package->GetName());
+        }
+    }
+    Package._Package->SetDependencyPackages(uLang::Move(Dependencies));
+}
+
 /// Whether the semantic program the IDE currently holds came from an analysis-only build.
 /// Code generation hangs an IR package off every module, and the AST accessors the symbol
 /// lookup walks assert rather than degrade when it finds one -- so the lookup has to be able
@@ -214,7 +284,9 @@ AUTORTFM_DISABLE bool RunCheck(const FUtf8String& Path, const FUtf8String& Sourc
 FUtf8String GAnalysedPath;
 FUtf8String GAnalysedSource;
 
-TArray<TSharedRef<ISolIdeDataSource>> GDataSources;
+/// The project's source files, in the order vh_compile_project listed them. Owned here rather
+/// than by the IDE because the package is: see ScriptPackageName.
+TArray<uLang::TSRef<FHostSourceSnippet>> GScriptSnippets;
 TSharedPtr<verse::FContentScope> GContentScope;
 TOptional<verse::FContentScopeGuard> GContentScopeGuard;
 
@@ -384,7 +456,7 @@ AUTORTFM_DISABLE void GodotVerse::LeaveContentScope()
 AUTORTFM_DISABLE void GodotVerse::ResetScriptState()
 {
     LeaveContentScope();
-    GDataSources.Empty();
+    GScriptSnippets.Empty();
     GIde.Reset();
     GProjectBuilt = false;
 }
@@ -405,6 +477,15 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FUtf8String>& Path
         return false;
     }
 
+    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
+    if (!BuildManager.IsValid())
+    {
+        ReportError(UTF8TEXT("No build manager; the project cannot be built."));
+        return false;
+    }
+
+    AddScriptPackage(*BuildManager, ScriptPackageName);
+
     for (const FUtf8String& Path : Paths)
     {
         FString SourceText;
@@ -413,7 +494,12 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FUtf8String>& Path
             ReportError(FUtf8String(TEXT("Failed to open Verse source file: ")) + Path);
             return false;
         }
-        GDataSources.Add(GIde->AddDataSource(FULangConversionUtils::FUtf8StringToULangStr(Path)));
+
+        uLang::TSRef<FHostSourceSnippet> Snippet = uLang::TSRef<FHostSourceSnippet>::New(
+            FULangConversionUtils::FUtf8StringToULangStr(Path),
+            FULangConversionUtils::FUtf8StringToULangStr(FUtf8String(SourceText)));
+        GScriptSnippets.Add(Snippet);
+        BuildManager->AddSourceSnippet(Snippet, ScriptPackageName, ScriptVersePath);
     }
 
     FSolIdeBuildSettings Settings{.LinkSettings = uLang::SBuildParams::ELinkParam::RequireComplete};
@@ -448,11 +534,11 @@ AUTORTFM_DISABLE bool RunCheck(const FUtf8String& Path, const FUtf8String& Sourc
         return false;
     }
 
-    for (const TSharedRef<ISolIdeDataSource>& DataSource : GDataSources)
+    for (const uLang::TSRef<FHostSourceSnippet>& Snippet : GScriptSnippets)
     {
-        if (FUtf8String(DataSource->GetPath().AsCString()) == Path)
+        if (FUtf8String(Snippet->GetPath().AsCString()) == Path)
         {
-            DataSource->ResetFromSourceTextNoBroadcasts(FULangConversionUtils::FUtf8StringToULangStr(SourceText));
+            Snippet->SetText(FULangConversionUtils::FUtf8StringToULangStr(SourceText));
             break;
         }
     }
