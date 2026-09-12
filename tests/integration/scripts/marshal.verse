@@ -179,6 +179,32 @@ marshal := class(node2d):
         Marshalls := GetMarshalls[]
         Marshalls.Base64ToRaw(Text)
 
+    # --- R-TYPE-2, R-SCN-1: objects in a container ---------------------------
+    #
+    # GetChildren() returns typedarray::Node, which the generator skipped entirely before this phase:
+    # a godot_array offers ten typed element accessors and not one of them is an object, so walking
+    # children -- which is what scene code is -- had no spelling. It is a typed_array(node) now, and
+    # what this proves is that its elements are real mirrored objects with methods, not handles.
+    ChildCount<public>():int = GetChildren().Length()
+
+    FirstChildName<public>()<decides>:string =
+        Children := GetChildren()
+        Child := Children.Get[0]
+        Child.GetName()
+
+    # The whole container as a Verse array, and a method called on each element.
+    ChildNames<public>():string =
+        var Joined:string = ""
+        for (Child : GetChildren().ToArray()):
+            set Joined = "{Joined}{Child.GetName()}/"
+        Joined
+
+    # Past the end is a miss rather than an error, the same answer an absent Dictionary key gives.
+    HasChildAt<public>(Index:int)<decides>:void =
+        Children := GetChildren()
+        Children.Get[Index]
+        false?
+
     # --- R-LANG-6: a library file, resolved with no import -------------------
     #
     # HelperDouble and HelperAnswer live in helpers.verse, which declares no class and so cannot go

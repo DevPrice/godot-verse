@@ -229,6 +229,7 @@ VhFromStringArray(Values:[]string)<transacts>:variant = VhFromStrings(TagPackedS
 # and get a container naming nothing.
 typed_array<public>(t:type) := class(godot_ref):
     Unpack<public>:type{_(:variant)<decides><transacts>:t}
+    Pack<public>:type{_(:t)<transacts>:variant}
 
     # How many elements it holds.
     Length<public>()<transacts>:int = VhRefSize(Ref)
@@ -241,3 +242,23 @@ typed_array<public>(t:type) := class(godot_ref):
     # The whole thing as a Verse array, which is a copy: elements that do not convert are dropped
     # rather than failing the call, the way `for` with a failable body already reads.
     ToArray<public>()<transacts>:[]t = for (V : VhRefValues(Ref), E := Unpack[V]) { E }
+
+    # Writes through to the container Godot owns, which every other holder sees. An index one past
+    # the end appends; further than that is the error GDScript makes it.
+    Set<public>(Index:int, Value:t)<transacts>:void = VhRefSet(Ref, VhFromInt(Index), Pack(Value))
+
+
+# Godot's Dictionary with a key and a value type -- `typeddictionary::int;String`. The same shape as
+# typed_array with one more converter, because a key has to be packed to be looked up.
+typed_dictionary<public>(k:type, v:type) := class(godot_ref):
+    PackKey<public>:type{_(:k)<transacts>:variant}
+    Unpack<public>:type{_(:variant)<decides><transacts>:v}
+    Pack<public>:type{_(:v)<transacts>:variant}
+
+    Length<public>()<transacts>:int = VhRefSize(Ref)
+
+    # Failable on both counts, and they read the same to the caller: no such key, or a value that is
+    # not a v after all.
+    Get<public>(Key:k)<decides><transacts>:v = Unpack[VhRefGet[Ref, PackKey(Key)]]
+
+    Set<public>(Key:k, Value:v)<transacts>:void = VhRefSet(Ref, PackKey(Key), Pack(Value))

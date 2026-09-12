@@ -207,6 +207,20 @@ func _init() -> void:
 	var raw: Variant = node.call("BytesOfBase64", "SGk=")
 	_check_eq("and comes back the same way", Array(raw), [72, 105])
 
+	# --- R-TYPE-2, R-SCN-1: objects in a container ----------------------------------------------
+	var kid := Node2D.new()
+	kid.name = "Kid"
+	node.add_child(kid)
+	var kid2 := Node2D.new()
+	kid2.name = "Sibling"
+	node.add_child(kid2)
+
+	_check_eq("GetChildren reports how many there are", node.call("ChildCount"), 2)
+	_check_eq("an element is an object a method can be called on",
+			node.call("FirstChildName"), "Kid")
+	_check_eq("and every element is", node.call("ChildNames"), "Kid/Sibling/")
+	_check_eq("an index past the end is a miss, not an error", node.call("HasChildAt", 99), null)
+
 	# --- R-LANG-6: library files ---------------------------------------------------------------
 	#
 	# helpers.verse declares no class. It is a Script and it compiles, its module-level functions

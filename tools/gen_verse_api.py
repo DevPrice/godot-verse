@@ -161,6 +161,11 @@ class TypeResolver:
         self.parent_map = parent_map
         self.class_names = class_names
         self._ancestor_cache = {}
+        # Element-type suffix -> the element's own TypeInfo, for every typed array the API asked
+        # about. Filled during generation and drained by emit_typed_array_converters.
+        self.typed_arrays = {}
+        # The same for typed dictionaries, keyed by the two halves' suffixes joined.
+        self.typed_dictionaries = {}
 
     def nearest_emitted_ancestor(self, godot_class: str):
         if godot_class in self._ancestor_cache:
@@ -181,11 +186,95 @@ class TypeResolver:
             return SCALAR_TYPES[godot_type]
         if godot_type.startswith("enum::") or godot_type.startswith("bitfield::"):
             return SCALAR_TYPES["int"]
+        if godot_type.startswith(TYPED_ARRAY_PREFIX):
+            return self.classify_typed_array(godot_type[len(TYPED_ARRAY_PREFIX):])
+        if godot_type.startswith(TYPED_DICT_PREFIX):
+            return self.classify_typed_dictionary(godot_type[len(TYPED_DICT_PREFIX):])
+        if "," in godot_type:
+            return self.classify_union(godot_type)
         if godot_type in self.class_names:
             target = godot_type if godot_type in self.emitted else self.nearest_emitted_ancestor(godot_type)
             if target is None:
                 return None
             return TypeInfo(verse_class_name(target), "VhFromObject", False, "VhToHandle", True)
+        return None
+
+    def classify_typed_array(self, element: str):
+        """`typedarray::Node`'s element half, as a typed_array(node) TypeInfo -- or None.
+
+        R-TYPE-2, and the gap that mattered most: a plain godot_array offers ten typed element
+        accessors and not one of them is an object, so `GetChildren()` returned a container whose
+        elements no script could read. Walking children is what scene code *is*.
+
+        Recording the element type rather than emitting here, because the converters are module-level
+        definitions and this is called from inside a class body. emit_typed_array_converters writes
+        the ones that were actually asked for.
+        """
+        godot_element = typed_array_element_type(element)
+        if godot_element is None:
+            return None
+        element_info = self.classify(godot_element)
+        if element_info is None:
+            return None
+        # No typed array of a typed array: Godot spells none, and nesting the parametric class would
+        # need a converter whose own type mentions t twice.
+        if element_info.verse_type.startswith("typed_array("):
+            return None
+        suffix = typed_array_suffix(godot_element, element_info)
+        self.typed_arrays[suffix] = element_info
+        return TypeInfo(f"typed_array({element_info.verse_type})",
+                        f"VhFrom{suffix}Array", False, f"VhTo{suffix}Array", False)
+
+    def classify_typed_dictionary(self, spelling: str):
+        """`typeddictionary::int;String`'s two halves, as a typed_dictionary(int, string)."""
+        key_spelling, _, value_spelling = spelling.partition(";")
+        key_godot = typed_array_element_type(key_spelling)
+        value_godot = typed_array_element_type(value_spelling)
+        if key_godot is None or value_godot is None:
+            return None
+        key_info = self.classify(key_godot)
+        value_info = self.classify(value_godot)
+        if key_info is None or value_info is None:
+            return None
+        if any(i.verse_type.startswith(("typed_array(", "typed_dictionary(")) for i in (key_info, value_info)):
+            return None
+        suffix = typed_array_suffix(key_godot, key_info) + typed_array_suffix(value_godot, value_info)
+        self.typed_dictionaries[suffix] = (key_info, value_info)
+        return TypeInfo(f"typed_dictionary({key_info.verse_type}, {value_info.verse_type})",
+                        f"VhFrom{suffix}Dict", False, f"VhTo{suffix}Dict", False)
+
+    def classify_union(self, godot_type: str):
+        """`BaseMaterial3D,ShaderMaterial` and its thirty siblings, as their nearest shared ancestor.
+
+        Godot spells a parameter that accepts several classes as a comma-separated list, sometimes
+        with `-Excluded` members -- `Texture2D,-AtlasTexture` is "a Texture2D but not an atlas". The
+        exclusions carry no information a static type can hold, so they are dropped and what is left
+        is widened to the one class every member derives from. That is exactly the type Godot itself
+        checks against at the call, so nothing is lost that the engine enforces.
+        """
+        members = [name for name in godot_type.split(",") if name and not name.startswith("-")]
+        if not members or any(name not in self.class_names for name in members):
+            return None
+        common = members[0]
+        for name in members[1:]:
+            common = self.common_ancestor(common, name)
+            if common is None:
+                return None
+        return self.classify(common)
+
+    def ancestry(self, godot_class: str) -> list:
+        chain = []
+        cur = godot_class
+        while cur is not None and cur != "Object":
+            chain.append(cur)
+            cur = self.parent_map.get(cur)
+        return chain
+
+    def common_ancestor(self, a: str, b: str):
+        b_chain = set(self.ancestry(b))
+        for name in self.ancestry(a):
+            if name in b_chain:
+                return name
         return None
 
 
@@ -376,6 +465,14 @@ MATH_PACKED_LANES = [lane for lane in VARIANT_LANES if lane.to_fn.startswith("Vh
 # Readers whose <decides>-ness comes from the conversion rather than from the tag check.
 VARIANT_DECIDES_CONVERTERS = {"VhToObject"}
 
+# The lane a converter belongs to, by its packer's name. Every VhFrom* in VARIANT_LANES is distinct,
+# which makes this the one reliable way from an element's TypeInfo back to its As/VariantFrom pair.
+LANE_BY_PACKER = {lane.from_fn: lane.reader for lane in VARIANT_LANES}
+
+# Variant::Type number (as a string, the way extension_api.json spells it inside a typedarray) ->
+# enumerator name. Filled by check_variant_lanes, which is the one place that reads the numbers.
+GODOT_VARIANT_TYPE_BY_TAG = {}
+
 for _packed in MATH_PACKED_LANES:
     SCALAR_TYPES[_packed.reader] = TypeInfo(
         _packed.verse_type, _packed.from_fn, False, _packed.to_fn, False)
@@ -406,6 +503,8 @@ def check_variant_lanes(api: dict) -> dict:
             f"VARIANT_LANES does not match Variant::Type: missing {sorted(missing)}, unknown {sorted(extra)}")
     if len(declared) != len(set(declared)):
         raise ValueError("VARIANT_LANES names a Variant::Type twice")
+    GODOT_VARIANT_TYPE_BY_TAG.clear()
+    GODOT_VARIANT_TYPE_BY_TAG.update({str(number): name for name, number in values.items()})
     return values
 
 
@@ -472,6 +571,118 @@ def emit_variant_readers(api: dict) -> list:
         blocks.append(
             f"VariantFrom{lane.reader}<public>(Value:{lane.verse_type})<transacts>:variant"
             f" = {lane.from_fn}(Value)")
+    return blocks
+
+
+TYPED_ARRAY_PREFIX = "typedarray::"
+TYPED_DICT_PREFIX = "typeddictionary::"
+
+# A raw C pointer -- `void*`, `const GDExtensionInitializationFunction*`. Three non-virtual
+# methods across the whole API take one, and GDScript cannot call them either: there is no
+# scripting spelling for an address. Its own permitted skip rather than an unsupported_type,
+# because unsupported_type is the bucket Phase 2 promised to empty.
+POINTER_TYPE_RE = re.compile(r"\*\s*$")
+
+
+def typed_array_element_type(element: str):
+    """The Godot type of a typed array's elements, from extension_api.json's spelling for one.
+
+    Usually just the type name -- `typedarray::Node`. An array of *objects* is spelled with the
+    property metadata Godot would have used in the inspector instead: `24/17:CompositorEffect` is
+    Variant::OBJECT (24) with PROPERTY_HINT_RESOURCE_TYPE (17) naming the class. `27/0:` is a
+    Dictionary with no hint and no name, so the variant type is all there is to go on.
+    """
+    if "/" not in element:
+        return element
+    tag, _, hinted = element.partition("/")
+    _, _, name = hinted.partition(":")
+    if name:
+        return name
+    lane = next((l for l in VARIANT_LANES if l.godot_type == GODOT_VARIANT_TYPE_BY_TAG.get(tag)), None)
+    return lane.reader if lane else None
+
+
+def typed_array_suffix(godot_element: str, element_info: TypeInfo) -> str:
+    """The identifier half of `VhToNodeArray`, unique per element type.
+
+    Godot's own type name rather than the Verse one, so the generated converter beside a mirrored
+    `GetChildren` reads as the Godot type it came from. `RID` lowers to `Rid` because the Verse and
+    C++ sides already spell it that way.
+    """
+    return "".join(part[0].upper() + part[1:] for part in split_pascal(godot_element))
+
+
+def element_converters(suffix: str, info: TypeInfo):
+    """The reader and writer a typed container's function-valued members are handed.
+
+    `Unpack` and `Pack` are function *values*, and Verse has no anonymous functions, so each has to
+    name something. Wherever the element type is one of Variant's own lanes, that is its
+    `As<GodotType>` reader and `VariantFrom<GodotType>` builder -- the reader checks the tag and is
+    already <decides>, which is the contract exactly. The lane is found by the element's packer rather
+    than by its Godot name, because those names do not always agree: RID's reader is `AsRid`.
+
+    A *class* element needs its own pair. Both halves have to name the class -- `VhFromObject` takes
+    the base `object` where the member's declared type says `node`, and a Verse function type is not
+    satisfied by one that merely accepts a supertype.
+    """
+    # An object element is checked first: VhFromObject *is* a lane's packer -- Variant's own Object
+    # lane -- and taking that branch would hand back the base `object` where the member's declared
+    # type says `node`.
+    lane = None if info.pack_fn == "VhFromObject" else LANE_BY_PACKER.get(info.pack_fn)
+    if lane is not None:
+        return f"As{lane}", f"VariantFrom{lane}", []
+    read = f"VhTo{suffix}Element"
+    write = f"VhFrom{suffix}Element"
+    return read, write, [
+        f"{read}(Value:variant)<decides><transacts>:{info.verse_type} ="
+        f" {info.verse_type}{{Handle := VhToHandle[Value]}}",
+        f"{write}(Value:{info.verse_type})<transacts>:variant = VhFromObject(Value)",
+    ]
+
+
+def emit_typed_array_converters(typed_arrays: dict, typed_dictionaries: dict) -> list:
+    """The module-scoped converters every typed container the API mentioned needs."""
+    blocks = []
+    emitted_elements = set()
+
+    def element_pair(suffix: str, info: TypeInfo):
+        """The reader and writer names, emitting their definitions the first time they are asked for.
+
+        A class that is both an array's element and a dictionary's value would otherwise have its
+        converter pair defined twice.
+        """
+        read, write, extra = element_converters(suffix, info)
+        if read not in emitted_elements:
+            emitted_elements.add(read)
+            blocks.extend(extra)
+        return read, write
+
+    for suffix in sorted(typed_arrays):
+        info = typed_arrays[suffix]
+        read, write = element_pair(suffix, info)
+        blocks.append(
+            f"VhTo{suffix}Array(Value:variant)<transacts>:typed_array({info.verse_type}) =\n"
+            f"    Made := typed_array({info.verse_type})"
+            f"{{Ref := Value.Ref, Unpack := {read}, Pack := {write}}}\n"
+            f"    VhAdopt(Made)\n"
+            f"    Made")
+        blocks.append(
+            f"VhFrom{suffix}Array(Value:typed_array({info.verse_type}))<transacts>:variant ="
+            f" variant{{Tag := TagArray, Ref := Value.Ref}}")
+
+    for suffix, (key_info, value_info) in sorted(typed_dictionaries.items()):
+        _key_read, key_write = element_pair(f"{suffix}Key", key_info)
+        value_read, value_write = element_pair(f"{suffix}Value", value_info)
+        spelling = f"typed_dictionary({key_info.verse_type}, {value_info.verse_type})"
+        blocks.append(
+            f"VhTo{suffix}Dict(Value:variant)<transacts>:{spelling} =\n"
+            f"    Made := {spelling}"
+            f"{{Ref := Value.Ref, PackKey := {key_write}, Unpack := {value_read}, Pack := {value_write}}}\n"
+            f"    VhAdopt(Made)\n"
+            f"    Made")
+        blocks.append(
+            f"VhFrom{suffix}Dict(Value:{spelling})<transacts>:variant ="
+            f" variant{{Tag := TagDictionary, Ref := Value.Ref}}")
     return blocks
 
 
@@ -787,7 +998,10 @@ def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members
         params.append(Param(pname, info, verse_default_literal(info.verse_type, default) if default else None))
 
     if unsupported_seen:
-        coverage.unsupported(unsupported_seen)
+        if all(POINTER_TYPE_RE.search(seen) for seen in unsupported_seen):
+            coverage.skip("unmarshallable_pointer")
+        else:
+            coverage.unsupported(unsupported_seen)
         return None
 
     # An optional parameter may not be followed by a required one, and a Godot default that had
@@ -1059,7 +1273,8 @@ def generate(api: dict, requested: list, coverage: Coverage):
         else:
             class_blocks.append(header)
 
-    return class_blocks, emit_order, method_map, all_member_names
+    return (class_blocks, emit_order, method_map, all_member_names, resolver.typed_arrays,
+            resolver.typed_dictionaries)
 
 
 HEADER_TEMPLATE = """using {{/Verse.org/Native}}
@@ -1135,6 +1350,21 @@ MATH_TEMPLATE = """
 """
 
 
+TYPED_ARRAYS_TEMPLATE = """
+# --- typed containers --------------------------------------------------------
+#
+# What `typedarray::Node` becomes: a typed_array(node) (see GodotApi.native.verse), built from the
+# same reference id a godot_array holds and carrying the element conversion as a function value.
+#
+# Module-scoped and Vh-prefixed, none of it in a script's completion. The element converter is the
+# `As<GodotType>` reader wherever one exists -- it already checks the tag and is already <decides>,
+# which is the contract -- and its own function only where the element is a *class*, because
+# building one has to name it.
+
+{converters}
+"""
+
+
 SINGLETONS_TEMPLATE = """
 # Godot hands a singleton out by name rather than through the scene, so a mirrored `input` or
 # `engine` would otherwise be a class no script can obtain an instance of. <decides> because
@@ -1169,7 +1399,8 @@ def emit_singleton_accessors(api: dict, emit_order: list, member_names: set) -> 
     ]
 
 
-def render(api: dict, class_blocks: list, singleton_accessors: list) -> str:
+def render(api: dict, class_blocks: list, singleton_accessors: list, typed_arrays: dict,
+           typed_dictionaries: dict) -> str:
     version = api["header"]["version_full_name"]
     text = HEADER_TEMPLATE.format(version=version)
     text += MATH_TEMPLATE.format(
@@ -1181,6 +1412,9 @@ def render(api: dict, class_blocks: list, singleton_accessors: list) -> str:
         packed="\n".join(emit_math_packed_converters()),
     )
     text += CONTAINERS_TEMPLATE.format(classes="\n\n".join(emit_container_classes()))
+    if typed_arrays or typed_dictionaries:
+        text += TYPED_ARRAYS_TEMPLATE.format(
+            converters="\n\n".join(emit_typed_array_converters(typed_arrays, typed_dictionaries)))
     text += "\n" + "\n\n".join(class_blocks) + "\n"
     if singleton_accessors:
         text += SINGLETONS_TEMPLATE.format(accessors="\n".join(singleton_accessors))
@@ -1423,6 +1657,10 @@ def main() -> int:
 
     api = load_api(api_path)
 
+    # Before generation rather than during rendering: a typed array of objects is spelled with a
+    # Variant::Type *number*, so resolving one needs the numbers, and TypeResolver runs first.
+    check_variant_lanes(api)
+
     if args.classes_file is None:
         requested = [c["name"] for c in api["classes"] if c["name"] != "Object"]
     else:
@@ -1430,8 +1668,10 @@ def main() -> int:
         requested = read_classes_file(classes_file)
 
     coverage = Coverage()
-    class_blocks, emit_order, method_map, member_names = generate(api, requested, coverage)
-    text = render(api, class_blocks, emit_singleton_accessors(api, emit_order, member_names))
+    (class_blocks, emit_order, method_map, member_names, typed_arrays,
+     typed_dictionaries) = generate(api, requested, coverage)
+    text = render(api, class_blocks, emit_singleton_accessors(api, emit_order, member_names),
+                  typed_arrays, typed_dictionaries)
     classes_header_text = render_classes_header(api, emit_order, method_map)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)

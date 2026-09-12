@@ -274,7 +274,7 @@ def test_shadow_suppression_across_inheritance():
         ]
     }
     coverage = g.Coverage()
-    blocks, _emit_order, _method_map, _nullary = g.generate(api, ["Derived"], coverage)
+    blocks, _emit_order, _method_map, _members, _arrays, _dicts = g.generate(api, ["Derived"], coverage)
     check("shadowed method skipped once", coverage.skip_reasons["shadow"], 1)
     check("only the non-colliding method emitted on Derived", coverage.methods_emitted, 2)
     derived_block = next(b for b in blocks if b.startswith("derived"))
@@ -313,7 +313,7 @@ def test_unsupported_type_skipping():
         ]
     }
     coverage = g.Coverage()
-    blocks, _emit_order, _method_map, _nullary = g.generate(api, ["Thing"], coverage)
+    blocks, _emit_order, _method_map, _members, _arrays, _dicts = g.generate(api, ["Thing"], coverage)
     check("unsupported return type skips its method", coverage.skip_reasons["unsupported_type"], 1)
     check("unsupported type recorded by name", coverage.unsupported_types["typedarray::Node2D"], 1)
     check("the supported sibling method still emits", coverage.methods_emitted, 1)
@@ -322,21 +322,94 @@ def test_unsupported_type_skipping():
     check_true("GetValue (int) present", "GetValue" in thing_block, thing_block)
 
 
-def test_packed_string_array_unsupported_as_parameter():
+def test_typed_array_parameter_takes_the_parametric_class():
     api = {
         "classes": [
             {"name": "Object", "inherits": None, "methods": []},
             {
                 "name": "Thing",
                 "inherits": "Object",
-                "methods": [_method("set_names", None, [{"name": "names", "type": "typedarray::StringName"}])],
+                "methods": [
+                    _method("set_names", None, [{"name": "names", "type": "typedarray::StringName"}]),
+                    _method("get_kids", "typedarray::Thing"),
+                ],
+            },
+        ]
+    }
+    coverage = g.Coverage()
+    blocks, _order, _map, _members, arrays, _dicts = g.generate(api, ["Thing"], coverage)
+    check("no typed array is unsupported any more", coverage.skip_reasons["unsupported_type"], 0)
+    check_true(
+        "a typed-array parameter takes the parametric class",
+        "SetNames<public>(Names:typed_array(string))" in blocks[0],
+    )
+    check_true(
+        "and a typed-array return hands one back",
+        "GetKids<public>()<transacts>:typed_array(thing)" in blocks[0],
+    )
+    check("both element types were recorded", sorted(arrays), ["StringName", "Thing"])
+
+    converters = "\n".join(g.emit_typed_array_converters(arrays, {}))
+    check_true(
+        "a lane element reuses its own reader rather than getting a new one",
+        "Unpack := AsStringName" in converters and "VhToStringNameElement" not in converters,
+    )
+    check_true(
+        "a class element gets one, because the converter has to name the class",
+        "VhToThingElement(Value:variant)<decides><transacts>:thing" in converters,
+    )
+
+
+def test_union_parameter_widens_to_the_common_ancestor():
+    api = {
+        "classes": [
+            {"name": "Object", "inherits": None, "methods": []},
+            {"name": "Material", "inherits": "Object", "methods": []},
+            {"name": "BaseMaterial3D", "inherits": "Material", "methods": []},
+            {"name": "ShaderMaterial", "inherits": "Material", "methods": []},
+            {
+                "name": "Thing",
+                "inherits": "Object",
+                "methods": [
+                    _method("set_material", None,
+                            [{"name": "material", "type": "BaseMaterial3D,ShaderMaterial"}]),
+                    # Godot's exclusion form: a Texture2D that is not one of these.
+                    _method("set_texture", None,
+                            [{"name": "texture", "type": "Material,-ShaderMaterial"}]),
+                ],
+            },
+        ]
+    }
+    coverage = g.Coverage()
+    blocks, order, _map, _members, _arrays, _dicts = g.generate(
+        api, ["Thing", "BaseMaterial3D", "ShaderMaterial"], coverage)
+    body = blocks[order.index("Thing")]
+    check_true(
+        "a union parameter widens to the class every member derives from",
+        "SetMaterial<public>(Material:material)" in body,
+    )
+    check_true(
+        "and an exclusion is dropped rather than narrowing anything",
+        "SetTexture<public>(Texture:material)" in body,
+    )
+    check("neither is recorded as unsupported", coverage.skip_reasons["unsupported_type"], 0)
+
+
+def test_a_raw_pointer_is_its_own_permitted_skip():
+    api = {
+        "classes": [
+            {"name": "Object", "inherits": None, "methods": []},
+            {
+                "name": "Thing",
+                "inherits": "Object",
+                "methods": [_method("poke", None, [{"name": "p", "type": "const void*"}])],
             },
         ]
     }
     coverage = g.Coverage()
     g.generate(api, ["Thing"], coverage)
-    check("a typed-array parameter is unsupported", coverage.skip_reasons["unsupported_type"], 1)
-    check("and is recorded as the offending type", coverage.unsupported_types["typedarray::StringName"], 1)
+    check("a pointer parameter is skipped as a pointer", coverage.skip_reasons["unmarshallable_pointer"], 1)
+    check("and not as an unsupported type", coverage.skip_reasons["unsupported_type"], 0)
 
 
 def test_class_type_falls_back_to_nearest_emitted_ancestor():
@@ -355,7 +428,7 @@ def test_class_type_falls_back_to_nearest_emitted_ancestor():
     }
     coverage = g.Coverage()
     # Base is emitted, but Mid/Leaf are not requested -- Other.GetLeaf must fall back to Base.
-    blocks, _emit_order, _method_map, _nullary = g.generate(api, ["Base", "Other"], coverage)
+    blocks, _emit_order, _method_map, _members, _arrays, _dicts = g.generate(api, ["Base", "Other"], coverage)
     other_block = next(b for b in blocks if b.startswith("other"))
     check_true(
         "unresolved class type falls back to nearest emitted ancestor (base)",
@@ -613,6 +686,9 @@ def test_generated_file_matches_hand_written_slice():
         if "VhSingleton[" not in line
         and not line.startswith("As")
         and not line.startswith("VhToObject(")
+        # A typed container's element converter, which fails on a null object like any other object
+        # read. Module-scoped and never in a script's completion.
+        and not (line.startswith("VhTo") and "Element(Value:variant)" in line)
     ]
     check("no failable free function fails for an unexplained reason", unexplained, [])
     check_true(
@@ -679,7 +755,9 @@ def main():
     test_shadow_suppression_across_inheritance()
     test_base_member_shadow()
     test_unsupported_type_skipping()
-    test_packed_string_array_unsupported_as_parameter()
+    test_typed_array_parameter_takes_the_parametric_class()
+    test_union_parameter_widens_to_the_common_ancestor()
+    test_a_raw_pointer_is_its_own_permitted_skip()
     test_class_type_falls_back_to_nearest_emitted_ancestor()
     test_render_classes_header()
     test_emit_scalar_property()

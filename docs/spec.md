@@ -377,11 +377,26 @@ empty. Signals are how Godot programs are wired together, so this is parity-crit
   shows through `Callable`; it is not a limitation of this bridge.) A mirrored Godot method is unaffected: the generator
   knows which packed type it wants and tags it.
 - **R-TYPE-2 (MUST)** Typed arrays and typed dictionaries preserve their element type across the
-  boundary, so a `TypedArray[Node2D]` is not flattened to an untyped array. Status: **part.** An
+  boundary, so a `TypedArray[Node2D]` is not flattened to an untyped array. Status: **done.** An
   `Array` and a `Dictionary` cross as references into the container Godot already owns, so nothing
-  is flattened and a typed one keeps whatever typing Godot gave it — a script reads and writes it
-  in place. What is missing is the Verse side of the *type*: a script writes `GetNode`, not
-  `GetNode[node2d]`, so `typedarray::Node2D` is still a type the generator skips.
+  is flattened and a typed one keeps whatever typing Godot gave it. Phase 2 added the Verse side of
+  the *type*: `typedarray::Node` is a `typed_array(node)` and `typeddictionary::int;String` a
+  `typed_dictionary(int, string)` — ordinary parametric Verse classes over the same reference id,
+  carrying their element conversion as a function value rather than needing a generated wrapper class
+  per element type. All 70 element types and both key/value pairs the API spells are covered.
+
+  What this unblocked is larger than the requirement. `GetChildren()` returned
+  `typedarray::Node` and was therefore skipped entirely, along with `GetNodesInGroup` and
+  `GetOverlappingBodies`: a `godot_array` offers ten typed element accessors and not one of them is an
+  object, so walking children — which is most of what scene code does — had no spelling at all.
+
+  Two Verse facts were found the hard way and are recorded because they shape the design. A required
+  data member may be **no less accessible than its class**, so the element converter had to be public,
+  which forced `variant` public with it (R-TYPE-7). And Verse has **no anonymous functions**, so the
+  converter cannot be an inline lambda: it names the element type's own `As<GodotType>` reader where
+  one exists, and a generated per-class function where the element is a class — because
+  `VhFromObject` takes the base `object` and a Verse function type is not satisfied by one that
+  merely accepts a supertype.
 - **R-TYPE-3 (MUST)** `Callable` is a Verse value a script can hold, invoke, and hand back to
   Godot — this is what makes R-SIG-3 and any callback-taking engine API work. Status: **done.** A `callable` is
   held, passed back, and invoked with arguments. The other direction — a Verse function *as* a
