@@ -9,13 +9,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 knowing" — read the relevant section before changing anything in that area. `docs/property-export.md`
 and `docs/editor-tooling.md` hold the full research and citations behind those sections.
 
+**README predates Phase 1 and is stale on marshalling.** It still describes three hand-written
+value types, a `variant` tuple, `object` as the only `<native>` class, and packed arrays crossing as
+copies — all four now wrong — and it says nothing about general dispatch, the method list, or
+runtime errors with stacks. It is awaiting a rewrite rather than a patch. Two things it says that
+*are* still true and read like they might not be: `Ready`, `Process` and `PhysicsProcess` remain the
+only Godot **virtuals** the bridge carries (the full set is R-NODE-7, Phase 4), and `@GlobalScope` is
+still out of reach (R-SCN-3, Phase 2). Its editor-tooling, export and constraints sections are
+unaffected. Where the two disagree, `docs/spec.md` and `docs/abi-v2-design.md` are the record.
+
 `docs/spec.md` is the requirements document — what the finished software must do, numbered so a
-commit can cite one. README describes today; the spec describes the target, and §14 holds the open
-questions that block the rest. Check a requirement's status there before assuming a gap is
+commit can cite one. README describes how the thing works; the spec describes what it must do, and
+carries the per-requirement status of what it *does* do today — which is where to look now that
+README has fallen behind. §14 holds the open questions that block the rest. Check a requirement's status there before assuming a gap is
 unexamined. `docs/roadmap.md` sequences those requirements into phases and says which phase the
 work in front of you belongs to. `docs/phase-0-spikes.md` is why three of those answers read
 the way they do — read it before re-deriving anything about hot reload, the export pipeline,
-or the flat scope.
+or the flat scope. `docs/abi-v2-design.md` is the same thing for the wire: what godot-cpp does and
+why the containers are references, plus the four spikes that settled the shape — the fixed-width
+`variant`, whether VNI marshals a native struct, whether a dropped Verse value releases anything,
+and how often a nullability rule would be wrong. Read it before changing `variant`'s lanes or
+proposing a different encoding.
 
 This file is the map and the working rules; the reasoning lives there.
 
@@ -43,6 +57,7 @@ check. The design argument for v2, and the spikes that settled it, are in `docs/
 | `verse_host.{h,cpp}` | `GetProcAddress` loader over the ABI; no Verse logic |
 | `verse_runtime.{h,cpp}` | the `VerseRuntime` singleton — `vh_init_desc`, the Godot callback table, `verse/host/*` project settings |
 | `verse_value.{h,cpp}` | `Variant` ⇄ `vh_value`, arena-allocated |
+| `verse_ref_table.{h,cpp}` | the id → `Variant` table the `Ref` lane names: Array, Dictionary, Callable, Signal and the packed arrays, which cross as references rather than copies |
 | `verse_script.{h,cpp}` | a `.verse` file as a Godot `Resource`; valid only if it defines its own class |
 | `verse_script_instance.{h,cpp}` | one script bound to one node; raw `GDExtensionScriptInstanceInfo3` vtable, not a `godot::Object` |
 | `verse_script_language.{h,cpp}` | the `ScriptLanguage`: `_validate`, the analysis cache, `_complete_code`/`_lookup_code`, `_frame` (which pumps `vh_tick` and reaps `vh_check_project_poll`) |
@@ -59,6 +74,12 @@ Adding an override you do not implement changes behaviour.
 
 `Private/` is the ABI implementation (`VerseHost.cpp`, `HostRuntime`, `HostScript`, `HostEventLoop`,
 `GodotBindings`, `GodotClasses`). `Verse/*.native.verse` is the `/Godot.org/Godot` package.
+
+`GodotClasses.h` holds every C++ shadow a `<native>` Verse declaration needs, and there are three:
+`object` (a UObject, so a script's class has one to be instantiated and called through), `variant`
+(a struct, the fixed-width lanes one Godot value crosses as) and `godot_ref` (a UObject whose
+`BeginDestroy` is what releases a reference id when Verse drops the value holding it). A native
+Verse type without its shadow is an "incomplete type" build failure naming the generated header.
 `VerseHost.Build.cs` and `.Target.cs` carry load-bearing comments — `SetupVerse(..., InternalUser)`
 and the `VerseSimulationMetadata` dependency each exist for a reason spelled out inline.
 
@@ -94,9 +115,17 @@ No test framework anywhere. Each test is a `main` (or a plain script) that print
 and exits non-zero on failure; keep new tests that shape. The integration layer is the same shape
 in GDScript — `tests/integration/test_main.gd`, one line per case, `quit(1)` on failure.
 
+`tests/integration` is a real Godot project, and two things in it are not committed but generated:
+`run_tests.py` copies the built GDExtension into its `addons/`, writes `.godot/extension_list.cfg`
+(outside the editor Godot loads extensions from that list rather than by scanning, and the editor is
+what normally writes it), and rewrites the two `verse/host/*` settings from `UE_ROOT` — those name
+one machine's engine checkout, so nothing portable can be committed. Adding a `.verse` fixture there
+means adding it under `scripts/`; the host compiles every `.verse` under `res://` together.
+
 `tools/build_host.py` needs a UE source checkout with the Verse toolchain — `--engine`, or `UE_ROOT`.
-Building the host and running the tests are fine to do unprompted. **Ask before launching Godot**
-(`godot --path demo`) — it opens a window on the user's machine.
+Building the host and running the tests are fine to do unprompted, and so is **headless** Godot —
+`tools/run_tests.py` drives one for the integration layer and it opens no window. **Ask before
+launching the editor** (`godot --path demo` with no `--headless`), which does.
 
 ## Generated files — never hand-edit
 
@@ -104,6 +133,7 @@ Building the host and running the tests are fine to do unprompted. **Ask before 
 | --- | --- | --- |
 | `host/Verse/GodotClasses.native.verse` | `tools/gen_verse_api.py` | `godot-cpp/gdextension/extension_api.json` |
 | `src/verse_api_classes.h` | `tools/gen_verse_api.py` | same |
+| `host/Private/GodotMathLayout.gen.h` | `tools/gen_verse_api.py` | same — the math types' field trees, so the host builds one the way the Verse struct declares it |
 | `src/verse_keywords.h` | `tools/gen_verse_keywords.py` | the UE compiler's `ReservedSymbols.inl` |
 
 `tools/verse_api_classes.txt` is the hand-maintained list of which Godot classes get mirrored;
@@ -112,7 +142,14 @@ a Godot type absent from it is a method the generator skips.
 
 `host/Verse/Godot.native.verse` and `GodotApi.native.verse` **are** hand-written: the first is the
 whole native primitive surface, the second the ordinary-Verse packing layer above it. Mirroring
-another Godot class should cost no C++ and no new native function.
+another Godot *class* still costs no C++ and no new native function — that rule held through ABI v2.
+What did cost native functions was the reference types: the primitive surface went from 8 to 22,
+because a container has to be asked for its elements rather than decomposed.
+
+The container wrappers (`godot_array`, `dictionary`) are **generated**, not hand-written, even
+though they are not mirrored Godot classes. A script cannot spell a `variant` — the packers are
+module-scoped by R-TYPE-7 — so every way into and out of a container has to be a typed accessor, and
+ten element types against four key types is not a list to maintain by hand.
 
 ## Constraints that break things silently
 
@@ -128,6 +165,19 @@ another Godot class should cost no C++ and no new native function.
 - **Every Godot callback goes through `AutoRTFM::Open`,** and writes defer to `AutoRTFM::OnCommit`.
   The GDExtension was never instrumented by the AutoRTFM compiler, so calling into it from closed
   Verse code is a fatal "could not find function" at runtime, not a link error.
+- **Calling *into* the VM must be open too.** `vh_instance_call` invokes through
+  `VFunction::Invoke` inside an `AutoRTFM::Open` nested in its transaction, which is what
+  `TVerseFunction::operator()` does for the same reason: a Verse runtime error raised from closed
+  code trips `AutoRTFM::UnreachableIfClosed` in `FContext::RaiseVerseRuntimeError` and takes the
+  process down instead of unwinding.
+- **`operator'()'` is a reserved intrinsic.** Verse rewrites `Data[Key]` on a non-function callee
+  into a call to it, but refuses to let anything *define* one — as a class member or as a free
+  function — so the bracket syntax cannot be given a meaning. Container lookup is
+  `Data.GetInt[Key]`.
+- **A `var` property cannot hold a nested struct or a container.** Verse asks a struct-typed `var`
+  for a field-named accessor overload per nesting level, and `transform3d`'s two members have
+  different types, so no one getter signature satisfies it. `gen_verse_api.py` leaves those as
+  ordinary getter and setter methods; only the flat math types keep `set Node.Position = ...`.
 - **One top-level name per file.** The whole project shares one flat `/user@localhost` scope and
   Verse forbids shadowing. A script's class is named after its own file for exactly this reason.
 - **The attribute package must be added before the first `AddDataSource`.** `@global_class` is
