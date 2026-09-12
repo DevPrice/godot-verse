@@ -1,5 +1,6 @@
 #include "verse_runtime.h"
 
+#include "verse_ref_table.h"
 #include "verse_value.h"
 
 #include <godot_cpp/classes/engine.hpp>
@@ -113,6 +114,14 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 	godot_api.SetProperty = &VerseRuntime::api_set_property;
 	godot_api.CallMethod = &VerseRuntime::api_call_method;
 	godot_api.GetSingleton = &VerseRuntime::api_get_singleton;
+	godot_api.ReleaseRef = &VerseRuntime::api_release_ref;
+	godot_api.RetainRef = &VerseRuntime::api_retain_ref;
+	godot_api.NewRef = &VerseRuntime::api_new_ref;
+	godot_api.RefGet = &VerseRuntime::api_ref_get;
+	godot_api.RefSet = &VerseRuntime::api_ref_set;
+	godot_api.RefSize = &VerseRuntime::api_ref_size;
+	godot_api.RefContents = &VerseRuntime::api_ref_contents;
+	godot_api.InvokeCallable = &VerseRuntime::api_invoke_callable;
 
 	// EngineDirUtf8 only needs to stay alive for the duration of host.Init below.
 	const CharString engine_dir_utf8 = p_engine_dir.is_empty() ? CharString() : p_engine_dir.utf8();
@@ -142,6 +151,12 @@ void VerseRuntime::unload_host() {
 	if (!host.is_loaded()) {
 		return;
 	}
+
+	// Before the host goes, and so while Godot is still alive to free them. The table holds
+	// Variants -- Arrays, Dictionaries, Callables -- and freeing one after Godot's own teardown is
+	// a use-after-free at exit rather than a leak. Releases arriving from the host afterwards name
+	// nothing and are no-ops, which is exactly what a cleared table answers.
+	verse_ref_table().clear();
 
 	if (host.Shutdown != nullptr) {
 		host.Shutdown();
@@ -581,6 +596,157 @@ int32_t VerseRuntime::api_call_method(void *p_ctx, vh_handle p_handle, const cha
 	if (r_value == nullptr) {
 		return VH_CALL_OK;
 	}
+	return variant_to_vh(result, p_arena, *r_value) ? VH_CALL_OK : VH_CALL_BAD_VALUE;
+}
+
+
+void VerseRuntime::api_release_ref(void *p_ctx, int64_t p_ref) {
+	verse_ref_table().release(p_ref);
+}
+
+int64_t VerseRuntime::api_retain_ref(void *p_ctx, int64_t p_ref) {
+	return verse_ref_table().retain(p_ref);
+}
+
+int64_t VerseRuntime::api_new_ref(void *p_ctx, int32_t p_variant_tag) {
+	switch (p_variant_tag) {
+		case VH_VARIANT_ARRAY:
+			return verse_ref_table().mint(Array());
+		case VH_VARIANT_DICTIONARY:
+			return verse_ref_table().mint(Dictionary());
+		case VH_VARIANT_PACKED_BYTE_ARRAY:
+			return verse_ref_table().mint(PackedByteArray());
+		case VH_VARIANT_PACKED_INT32_ARRAY:
+			return verse_ref_table().mint(PackedInt32Array());
+		case VH_VARIANT_PACKED_INT64_ARRAY:
+			return verse_ref_table().mint(PackedInt64Array());
+		case VH_VARIANT_PACKED_FLOAT32_ARRAY:
+			return verse_ref_table().mint(PackedFloat32Array());
+		case VH_VARIANT_PACKED_FLOAT64_ARRAY:
+			return verse_ref_table().mint(PackedFloat64Array());
+		case VH_VARIANT_PACKED_STRING_ARRAY:
+			return verse_ref_table().mint(PackedStringArray());
+		case VH_VARIANT_PACKED_VECTOR2_ARRAY:
+			return verse_ref_table().mint(PackedVector2Array());
+		case VH_VARIANT_PACKED_VECTOR3_ARRAY:
+			return verse_ref_table().mint(PackedVector3Array());
+		case VH_VARIANT_PACKED_COLOR_ARRAY:
+			return verse_ref_table().mint(PackedColorArray());
+		case VH_VARIANT_PACKED_VECTOR4_ARRAY:
+			return verse_ref_table().mint(PackedVector4Array());
+		default:
+			// A Callable or a Signal cannot be made from nothing -- both name something to call --
+			// and no other tag is a reference type at all.
+			return 0;
+	}
+}
+
+int32_t VerseRuntime::api_ref_get(void *p_ctx, int64_t p_ref, const vh_value *p_key, vh_arena *p_arena, vh_value *r_value) {
+	const Variant *found = verse_ref_table().find(p_ref);
+	if (found == nullptr || p_key == nullptr) {
+		return VH_CALL_DEAD_OBJECT;
+	}
+
+	// `get`, not `get_indexed`: the latter takes an int64 index, so a Dictionary asked for a
+	// string key silently read element zero. This is the keyed accessor, and it serves an Array
+	// indexed by an integer and a Dictionary keyed by anything alike.
+	//
+	// A missing key and an index out of range are the same answer, and it is not an error: the
+	// host turns VH_CALL_NO_SUCH_MEMBER into an ordinary Verse failure the script can handle.
+	bool valid = false;
+	const Variant got = found->get(vh_to_variant(*p_key), &valid);
+	if (!valid) {
+		return VH_CALL_NO_SUCH_MEMBER;
+	}
+	return variant_to_vh(got, p_arena, *r_value) ? VH_CALL_OK : VH_CALL_BAD_VALUE;
+}
+
+int32_t VerseRuntime::api_ref_set(void *p_ctx, int64_t p_ref, const vh_value *p_key, const vh_value *p_value) {
+	VerseRefTable &table = verse_ref_table();
+	const Variant *found = table.find(p_ref);
+	if (found == nullptr || p_key == nullptr || p_value == nullptr) {
+		return VH_CALL_DEAD_OBJECT;
+	}
+
+	// A copy, then written back. Godot's Array and Dictionary are references, so the copy shares
+	// their storage and the write reaches every other holder -- which is the semantics the whole
+	// reference design exists to preserve. A packed array is a value, and for one the write-back
+	// is what makes the mutation stick.
+	Variant container = *found;
+	bool valid = false;
+	container.set(vh_to_variant(*p_key), vh_to_variant(*p_value), &valid);
+	if (!valid) {
+		return VH_CALL_BAD_VALUE;
+	}
+	table.assign(p_ref, container);
+	return VH_CALL_OK;
+}
+
+int32_t VerseRuntime::api_ref_size(void *p_ctx, int64_t p_ref, int64_t *r_size) {
+	const Variant *found = verse_ref_table().find(p_ref);
+	if (found == nullptr || r_size == nullptr) {
+		return VH_CALL_DEAD_OBJECT;
+	}
+	Variant container = *found;
+	const Variant size = container.call("size");
+	*r_size = size.get_type() == Variant::INT ? (int64_t)size : 0;
+	return VH_CALL_OK;
+}
+
+int32_t VerseRuntime::api_ref_contents(void *p_ctx, int64_t p_ref, vh_arena *p_arena, vh_value *r_value) {
+	const Variant *found = verse_ref_table().find(p_ref);
+	if (found == nullptr) {
+		return VH_CALL_DEAD_OBJECT;
+	}
+
+	// A Dictionary comes back as pairs and everything else as a sequence; both are shapes
+	// vh_to_variant can rebuild, which is what makes the bulk converters round-trip.
+	if (found->get_type() == Variant::DICTIONARY) {
+		return variant_to_vh(*found, p_arena, *r_value) ? VH_CALL_OK : VH_CALL_BAD_VALUE;
+	}
+
+	// Every sequence type answers `size` and indexes by int, so one loop serves all eleven.
+	Variant container = *found;
+	const Variant size = container.call("size");
+	const int64_t count = size.get_type() == Variant::INT ? (int64_t)size : 0;
+	Array items;
+	for (int64_t i = 0; i < count; i++) {
+		bool valid = false;
+		bool oob = false;
+		items.push_back(container.get_indexed(i, valid, oob));
+		if (!valid || oob) {
+			return VH_CALL_BAD_VALUE;
+		}
+	}
+	// array_to_vh_seq rather than variant_to_vh: the latter would mint a second id for the Array
+	// just built, and the caller asked for the contents rather than another reference to them.
+	return array_to_vh_seq(items, p_arena, *r_value) ? VH_CALL_OK : VH_CALL_BAD_VALUE;
+}
+
+int32_t VerseRuntime::api_invoke_callable(void *p_ctx, int64_t p_ref, const vh_value *p_args, int32_t p_arg_count, vh_arena *p_arena, vh_value *r_value) {
+	const Variant *found = verse_ref_table().find(p_ref);
+	if (found == nullptr || found->get_type() != Variant::CALLABLE) {
+		return VH_CALL_DEAD_OBJECT;
+	}
+
+	const Callable callable = *found;
+	if (!callable.is_valid()) {
+		return VH_CALL_DEAD_OBJECT;
+	}
+
+
+	Array args;
+	for (int32_t i = 0; i < p_arg_count; i++) {
+		args.push_back(vh_to_variant(p_args[i]));
+	}
+
+	// Known defect: invoking a GDScript *lambda* through here segfaults Godot at shutdown, with
+	// "orphaned lambdas becoming invalid at destruction of script" logged first. A Callable bound
+	// to a method is fine, and so is holding a lambda and handing it back -- only calling one is
+	// not. Bisected to this call; not to the table, which clearing earlier does not fix, nor to
+	// holding, which on its own exits clean. Recorded in spec R-TYPE-3 rather than worked around,
+	// because a workaround that hid it would make the next person find it the hard way.
+	const Variant result = callable.callv(args);
 	return variant_to_vh(result, p_arena, *r_value) ? VH_CALL_OK : VH_CALL_BAD_VALUE;
 }
 

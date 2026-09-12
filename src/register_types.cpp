@@ -10,6 +10,7 @@
 #include <godot_cpp/godot.hpp>
 
 #include "verse_resource_format.h"
+#include "verse_ref_table.h"
 #include "verse_runtime.h"
 #include "verse_script.h"
 #include "verse_script_language.h"
@@ -69,6 +70,13 @@ void uninitialize_gdextension_types(const ModuleInitializationLevel p_level) {
 	if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
 		return;
 	}
+
+	// The reference table first, and here rather than in ~VerseRuntime, because of what is in it.
+	// A Godot Callable can name a GDScript lambda; destroying one after its script has gone is a
+	// crash at exit rather than a leak, and ~VerseRuntime runs late enough for that to happen.
+	// ScriptLanguage::finish would be the natural place and Godot never calls it on an extension
+	// language, so this is the earliest hook that actually runs.
+	verse_ref_table().clear();
 
 	if (verse_saver.is_valid()) {
 		ResourceSaver::get_singleton()->remove_resource_format_saver(verse_saver);

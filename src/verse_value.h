@@ -40,6 +40,12 @@ bool variant_to_vh(const godot::Variant &p_value, vh_arena *p_arena, vh_value &r
 // Variant.
 godot::Variant vh_to_variant(const vh_value &p_value);
 
+// Every element of p_values as a VH_TYPE_ARRAY, allocated out of p_arena.
+//
+// Distinct from variant_to_vh on an Array, which mints a reference id rather than copying: this is
+// what "give me the contents" means, and it is how the bulk converters read a container out.
+bool array_to_vh_seq(const godot::Array &p_values, vh_arena *p_arena, vh_value &r_out);
+
 // The Godot type a value of this (vh_type, vh_variant_tag) pair rebuilds as, for the places that
 // have a declaration but no value: a method's parameter and return types.
 //

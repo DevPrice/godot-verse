@@ -150,12 +150,35 @@ def test_emit_value_method_class_return():
     check("emit value method, class return stays failable (GetChild)", g.emit_method(cm), want)
 
 
-def test_packed_arrays_are_not_yet_marshalled():
-    """A packed array has no lanes in a fixed-width variant, so it is skipped until the reference
-    table lands (spec R-TYPE-1). Asserted rather than left implicit: a packed array silently
-    classifying as something else would emit a method that marshals the wrong thing."""
-    for name in ("PackedStringArray", "PackedInt32Array", "PackedVector2Array"):
-        check(f"{name} has no type-table entry yet", name in g.SCALAR_TYPES, False)
+def test_packed_arrays_marshal_as_verse_arrays():
+    """A packed array rides as a reference id, but the author sees a Verse array either way.
+
+    Two of Godot's packed types can share one Verse type -- PackedFloat32Array and
+    PackedFloat64Array are both `[]float` -- so what matters is that the *packer* differs, since
+    that is what carries the tag the Godot side rebuilds from.
+    """
+    check("PackedStringArray is []string", g.SCALAR_TYPES["PackedStringArray"].verse_type, "[]string")
+    check("PackedFloat32Array is []float", g.SCALAR_TYPES["PackedFloat32Array"].verse_type, "[]float")
+    check("and PackedFloat64Array too", g.SCALAR_TYPES["PackedFloat64Array"].verse_type, "[]float")
+    check("but they pack differently",
+          g.SCALAR_TYPES["PackedFloat32Array"].pack_fn != g.SCALAR_TYPES["PackedFloat64Array"].pack_fn, True)
+
+
+def test_reference_types_are_wrappers():
+    """Array, Dictionary, Callable and Signal cross as ids, so they map to wrapper classes rather
+    than to a Verse value type. `array` is a reserved word, hence `godot_array`."""
+    check("Array is godot_array", g.SCALAR_TYPES["Array"].verse_type, "godot_array")
+    check("Dictionary", g.SCALAR_TYPES["Dictionary"].verse_type, "dictionary")
+    check("Callable", g.SCALAR_TYPES["Callable"].verse_type, "callable")
+    names = {name for name, _ in g.REFERENCE_TYPES}
+    check("and each is in the host's reference table", names,
+          {"godot_array", "dictionary", "callable", "signal_ref"})
+
+
+def test_container_properties_stay_methods():
+    """A `var` whose type is a container cannot work -- Verse asks for accessor overloads no single
+    signature satisfies -- so Godot's getter and setter are emitted as ordinary methods."""
+    check("a container type is not a var", "godot_array" in g.CONTAINER_PROPERTY_TYPES, True)
 
 
 def test_math_layout_matches_the_wire():
@@ -266,7 +289,7 @@ def test_unsupported_type_skipping():
                 "name": "Thing",
                 "inherits": "Object",
                 "methods": [
-                    _method("get_data", "Dictionary"),
+                    _method("get_data", "typedarray::Node2D"),
                     _method("get_value", "int"),
                 ],
             },
@@ -275,10 +298,10 @@ def test_unsupported_type_skipping():
     coverage = g.Coverage()
     blocks, _emit_order, _method_map = g.generate(api, ["Thing"], coverage)
     check("unsupported return type skips its method", coverage.skip_reasons["unsupported_type"], 1)
-    check("unsupported type recorded by name", coverage.unsupported_types["Dictionary"], 1)
+    check("unsupported type recorded by name", coverage.unsupported_types["typedarray::Node2D"], 1)
     check("the supported sibling method still emits", coverage.methods_emitted, 1)
     thing_block = blocks[-1]
-    check_true("GetData (Dictionary) absent", "GetData" not in thing_block, thing_block)
+    check_true("GetData (typed array) absent", "GetData" not in thing_block, thing_block)
     check_true("GetValue (int) present", "GetValue" in thing_block, thing_block)
 
 
@@ -289,14 +312,14 @@ def test_packed_string_array_unsupported_as_parameter():
             {
                 "name": "Thing",
                 "inherits": "Object",
-                "methods": [_method("set_names", None, [{"name": "names", "type": "PackedStringArray"}])],
+                "methods": [_method("set_names", None, [{"name": "names", "type": "typedarray::StringName"}])],
             },
         ]
     }
     coverage = g.Coverage()
     g.generate(api, ["Thing"], coverage)
-    check("PackedStringArray parameter is unsupported", coverage.skip_reasons["unsupported_type"], 1)
-    check("PackedStringArray recorded as the offending type", coverage.unsupported_types["PackedStringArray"], 1)
+    check("a typed-array parameter is unsupported", coverage.skip_reasons["unsupported_type"], 1)
+    check("and is recorded as the offending type", coverage.unsupported_types["typedarray::StringName"], 1)
 
 
 def test_class_type_falls_back_to_nearest_emitted_ancestor():
@@ -480,6 +503,9 @@ def test_classes_header_file_matches_generated_verse_file():
         set(g.VALUE_TYPE_CLASSES.values()) <= header_classes,
     )
     header_classes -= set(g.VALUE_TYPE_CLASSES.values())
+    # The container wrappers are generated into the same file but are not mirrored Godot classes:
+    # nothing resolves a node's class to one, so they have no row in the header's table.
+    verse_classes -= {name for name, _ in g.REFERENCE_TYPES}
     check(
         "verse_api_classes.h lists exactly the classes GodotClasses.native.verse emits",
         header_classes,
@@ -523,20 +549,32 @@ def test_generated_file_matches_hand_written_slice():
         body = text[pos:end]
         blocks[name] = {"base": base, "names": method_re.findall(body)}
 
-    # A null Godot object is the only absence a mirrored method can report, so every remaining
-    # <decides> must be an object return. Anything else claiming failure is a method whose caller
-    # would have to write an `if` around a case that never arrives. The singleton accessors are
-    # the file's other failable definitions, and fail for the one other real reason: the name is
-    # not registered in this build. They are told apart by being at module scope.
+    # A null Godot object is the only absence a mirrored method on a *Godot class* can report, so
+    # every remaining <decides> there must be an object return. Anything else claiming failure is a
+    # method whose caller would have to write an `if` around a case that never arrives.
+    #
+    # Two kinds of definition fail for their own real reasons and are excluded: the singleton
+    # accessors, which fail when the name is not registered in this build and are told apart by
+    # being at module scope; and a container's element accessors, where an absent key, an index out
+    # of range and an element of another type are all genuine misses.
     failable = [
         line for line in text.splitlines()
-        if "<decides>" in line and not line.lstrip().startswith("#")
+        if "<decides>" in line and not line.lstrip().startswith("#") and "VhRefGet[" not in line
     ]
     check_true(
-        "every failable generated method returns an object",
+        "every failable method on a mirrored Godot class returns an object",
         any(line.startswith("    ") for line in failable)
         and all("VhToHandle[" in line for line in failable if line.startswith("    ")),
     )
+    container_reads = [
+        line for line in text.splitlines()
+        if "<decides>" in line and "VhRefGet[" in line
+    ]
+    check_true(
+        "a container's element accessors are the other failable methods",
+        container_reads and all(line.lstrip().startswith("Get") for line in container_reads),
+    )
+
     accessors = [line for line in failable if not line.startswith("    ")]
     check_true(
         "the only failable free functions are the singleton accessors",
@@ -552,7 +590,11 @@ def test_generated_file_matches_hand_written_slice():
     def inherited(name):
         if name == "object":
             return set(base_members)
-        info = blocks[name]
+        # A base this file does not declare is hand-written in Godot.native.verse -- `godot_ref`,
+        # which the container wrappers derive from. Its members are not the generator's to check.
+        info = blocks.get(name)
+        if info is None:
+            return set(base_members)
         return inherited(info["base"]) | set(info["names"])
 
     no_redeclare = True
@@ -572,7 +614,9 @@ def main():
     test_emit_void_method()
     test_emit_value_method_scalar()
     test_emit_value_method_class_return()
-    test_packed_arrays_are_not_yet_marshalled()
+    test_packed_arrays_marshal_as_verse_arrays()
+    test_reference_types_are_wrappers()
+    test_container_properties_stay_methods()
     test_math_layout_matches_the_wire()
     test_integer_vector_defaults_stay_integers()
     test_nested_math_structs_are_not_vars()

@@ -162,6 +162,116 @@ VhToColor(Value:variant)<transacts>:color =
     VhExpect(Value, TagColor, "color")
     color{R := Value.F0, G := Value.F1, B := Value.F2, A := Value.F3}
 
+# --- Godot's containers ------------------------------------------------------
+#
+# A typed accessor pair per element type, because a script cannot spell a `variant` -- the packers
+# are module-scoped so that a user cannot hold a raw reference that outlives what it names
+# (R-TYPE-7). Every read is failable: a key that is absent, an index out of range, and an element
+# of another type are all the same answer, and it is "no" rather than an error.
+
+godot_array<public> := class(godot_ref):
+
+    # How many elements it holds.
+    Length<public>()<transacts>:int = VhRefSize(Ref)
+
+    # The whole thing as a Verse array of its elements' own type, which is a copy:
+    # Verse's arrays are values, so mutating what this returns reaches nothing.
+    ToLogics<public>()<transacts>:[]logic = for (V : VhRefValues(Ref)) { VhToLogic(V) }
+    ToInts<public>()<transacts>:[]int = for (V : VhRefValues(Ref)) { VhToInt(V) }
+    ToFloats<public>()<transacts>:[]float = for (V : VhRefValues(Ref)) { VhToFloat(V) }
+    ToStrings<public>()<transacts>:[]string = for (V : VhRefValues(Ref)) { VhToString(V) }
+    ToVector2s<public>()<transacts>:[]vector2 = for (V : VhRefValues(Ref)) { VhToVector2(V) }
+    ToVector2is<public>()<transacts>:[]vector2i = for (V : VhRefValues(Ref)) { VhToVector2i(V) }
+    ToVector3s<public>()<transacts>:[]vector3 = for (V : VhRefValues(Ref)) { VhToVector3(V) }
+    ToColors<public>()<transacts>:[]color = for (V : VhRefValues(Ref)) { VhToColor(V) }
+
+    GetLogic<public>(Index:int)<decides><transacts>:logic = VhToLogic(VhRefGet[Ref, VhFromInt(Index)])
+    SetLogic<public>(Index:int, Value:logic)<transacts>:void = VhRefSet(Ref, VhFromInt(Index), VhFromLogic(Value))
+    GetInt<public>(Index:int)<decides><transacts>:int = VhToInt(VhRefGet[Ref, VhFromInt(Index)])
+    SetInt<public>(Index:int, Value:int)<transacts>:void = VhRefSet(Ref, VhFromInt(Index), VhFromInt(Value))
+    GetFloat<public>(Index:int)<decides><transacts>:float = VhToFloat(VhRefGet[Ref, VhFromInt(Index)])
+    SetFloat<public>(Index:int, Value:float)<transacts>:void = VhRefSet(Ref, VhFromInt(Index), VhFromFloat(Value))
+    GetString<public>(Index:int)<decides><transacts>:string = VhToString(VhRefGet[Ref, VhFromInt(Index)])
+    SetString<public>(Index:int, Value:string)<transacts>:void = VhRefSet(Ref, VhFromInt(Index), VhFromString(Value))
+    GetVector2<public>(Index:int)<decides><transacts>:vector2 = VhToVector2(VhRefGet[Ref, VhFromInt(Index)])
+    SetVector2<public>(Index:int, Value:vector2)<transacts>:void = VhRefSet(Ref, VhFromInt(Index), VhFromVector2(Value))
+    GetVector2i<public>(Index:int)<decides><transacts>:vector2i = VhToVector2i(VhRefGet[Ref, VhFromInt(Index)])
+    SetVector2i<public>(Index:int, Value:vector2i)<transacts>:void = VhRefSet(Ref, VhFromInt(Index), VhFromVector2i(Value))
+    GetVector3<public>(Index:int)<decides><transacts>:vector3 = VhToVector3(VhRefGet[Ref, VhFromInt(Index)])
+    SetVector3<public>(Index:int, Value:vector3)<transacts>:void = VhRefSet(Ref, VhFromInt(Index), VhFromVector3(Value))
+    GetColor<public>(Index:int)<decides><transacts>:color = VhToColor(VhRefGet[Ref, VhFromInt(Index)])
+    SetColor<public>(Index:int, Value:color)<transacts>:void = VhRefSet(Ref, VhFromInt(Index), VhFromColor(Value))
+    GetArray<public>(Index:int)<decides><transacts>:godot_array = VhToArray(VhRefGet[Ref, VhFromInt(Index)])
+    SetArray<public>(Index:int, Value:godot_array)<transacts>:void = VhRefSet(Ref, VhFromInt(Index), VhFromArray(Value))
+    GetDictionary<public>(Index:int)<decides><transacts>:dictionary = VhToDictionary(VhRefGet[Ref, VhFromInt(Index)])
+    SetDictionary<public>(Index:int, Value:dictionary)<transacts>:void = VhRefSet(Ref, VhFromInt(Index), VhFromDictionary(Value))
+
+dictionary<public> := class(godot_ref):
+
+    # How many elements it holds.
+    Length<public>()<transacts>:int = VhRefSize(Ref)
+
+    GetLogic<public>(Key:string)<decides><transacts>:logic = VhToLogic(VhRefGet[Ref, VhFromString(Key)])
+    GetLogic<public>(Key:int)<decides><transacts>:logic = VhToLogic(VhRefGet[Ref, VhFromInt(Key)])
+    GetLogic<public>(Key:vector2i)<decides><transacts>:logic = VhToLogic(VhRefGet[Ref, VhFromVector2i(Key)])
+    SetLogic<public>(Key:string, Value:logic)<transacts>:void = VhRefSet(Ref, VhFromString(Key), VhFromLogic(Value))
+    SetLogic<public>(Key:int, Value:logic)<transacts>:void = VhRefSet(Ref, VhFromInt(Key), VhFromLogic(Value))
+    SetLogic<public>(Key:vector2i, Value:logic)<transacts>:void = VhRefSet(Ref, VhFromVector2i(Key), VhFromLogic(Value))
+    GetInt<public>(Key:string)<decides><transacts>:int = VhToInt(VhRefGet[Ref, VhFromString(Key)])
+    GetInt<public>(Key:int)<decides><transacts>:int = VhToInt(VhRefGet[Ref, VhFromInt(Key)])
+    GetInt<public>(Key:vector2i)<decides><transacts>:int = VhToInt(VhRefGet[Ref, VhFromVector2i(Key)])
+    SetInt<public>(Key:string, Value:int)<transacts>:void = VhRefSet(Ref, VhFromString(Key), VhFromInt(Value))
+    SetInt<public>(Key:int, Value:int)<transacts>:void = VhRefSet(Ref, VhFromInt(Key), VhFromInt(Value))
+    SetInt<public>(Key:vector2i, Value:int)<transacts>:void = VhRefSet(Ref, VhFromVector2i(Key), VhFromInt(Value))
+    GetFloat<public>(Key:string)<decides><transacts>:float = VhToFloat(VhRefGet[Ref, VhFromString(Key)])
+    GetFloat<public>(Key:int)<decides><transacts>:float = VhToFloat(VhRefGet[Ref, VhFromInt(Key)])
+    GetFloat<public>(Key:vector2i)<decides><transacts>:float = VhToFloat(VhRefGet[Ref, VhFromVector2i(Key)])
+    SetFloat<public>(Key:string, Value:float)<transacts>:void = VhRefSet(Ref, VhFromString(Key), VhFromFloat(Value))
+    SetFloat<public>(Key:int, Value:float)<transacts>:void = VhRefSet(Ref, VhFromInt(Key), VhFromFloat(Value))
+    SetFloat<public>(Key:vector2i, Value:float)<transacts>:void = VhRefSet(Ref, VhFromVector2i(Key), VhFromFloat(Value))
+    GetString<public>(Key:string)<decides><transacts>:string = VhToString(VhRefGet[Ref, VhFromString(Key)])
+    GetString<public>(Key:int)<decides><transacts>:string = VhToString(VhRefGet[Ref, VhFromInt(Key)])
+    GetString<public>(Key:vector2i)<decides><transacts>:string = VhToString(VhRefGet[Ref, VhFromVector2i(Key)])
+    SetString<public>(Key:string, Value:string)<transacts>:void = VhRefSet(Ref, VhFromString(Key), VhFromString(Value))
+    SetString<public>(Key:int, Value:string)<transacts>:void = VhRefSet(Ref, VhFromInt(Key), VhFromString(Value))
+    SetString<public>(Key:vector2i, Value:string)<transacts>:void = VhRefSet(Ref, VhFromVector2i(Key), VhFromString(Value))
+    GetVector2<public>(Key:string)<decides><transacts>:vector2 = VhToVector2(VhRefGet[Ref, VhFromString(Key)])
+    GetVector2<public>(Key:int)<decides><transacts>:vector2 = VhToVector2(VhRefGet[Ref, VhFromInt(Key)])
+    GetVector2<public>(Key:vector2i)<decides><transacts>:vector2 = VhToVector2(VhRefGet[Ref, VhFromVector2i(Key)])
+    SetVector2<public>(Key:string, Value:vector2)<transacts>:void = VhRefSet(Ref, VhFromString(Key), VhFromVector2(Value))
+    SetVector2<public>(Key:int, Value:vector2)<transacts>:void = VhRefSet(Ref, VhFromInt(Key), VhFromVector2(Value))
+    SetVector2<public>(Key:vector2i, Value:vector2)<transacts>:void = VhRefSet(Ref, VhFromVector2i(Key), VhFromVector2(Value))
+    GetVector2i<public>(Key:string)<decides><transacts>:vector2i = VhToVector2i(VhRefGet[Ref, VhFromString(Key)])
+    GetVector2i<public>(Key:int)<decides><transacts>:vector2i = VhToVector2i(VhRefGet[Ref, VhFromInt(Key)])
+    GetVector2i<public>(Key:vector2i)<decides><transacts>:vector2i = VhToVector2i(VhRefGet[Ref, VhFromVector2i(Key)])
+    SetVector2i<public>(Key:string, Value:vector2i)<transacts>:void = VhRefSet(Ref, VhFromString(Key), VhFromVector2i(Value))
+    SetVector2i<public>(Key:int, Value:vector2i)<transacts>:void = VhRefSet(Ref, VhFromInt(Key), VhFromVector2i(Value))
+    SetVector2i<public>(Key:vector2i, Value:vector2i)<transacts>:void = VhRefSet(Ref, VhFromVector2i(Key), VhFromVector2i(Value))
+    GetVector3<public>(Key:string)<decides><transacts>:vector3 = VhToVector3(VhRefGet[Ref, VhFromString(Key)])
+    GetVector3<public>(Key:int)<decides><transacts>:vector3 = VhToVector3(VhRefGet[Ref, VhFromInt(Key)])
+    GetVector3<public>(Key:vector2i)<decides><transacts>:vector3 = VhToVector3(VhRefGet[Ref, VhFromVector2i(Key)])
+    SetVector3<public>(Key:string, Value:vector3)<transacts>:void = VhRefSet(Ref, VhFromString(Key), VhFromVector3(Value))
+    SetVector3<public>(Key:int, Value:vector3)<transacts>:void = VhRefSet(Ref, VhFromInt(Key), VhFromVector3(Value))
+    SetVector3<public>(Key:vector2i, Value:vector3)<transacts>:void = VhRefSet(Ref, VhFromVector2i(Key), VhFromVector3(Value))
+    GetColor<public>(Key:string)<decides><transacts>:color = VhToColor(VhRefGet[Ref, VhFromString(Key)])
+    GetColor<public>(Key:int)<decides><transacts>:color = VhToColor(VhRefGet[Ref, VhFromInt(Key)])
+    GetColor<public>(Key:vector2i)<decides><transacts>:color = VhToColor(VhRefGet[Ref, VhFromVector2i(Key)])
+    SetColor<public>(Key:string, Value:color)<transacts>:void = VhRefSet(Ref, VhFromString(Key), VhFromColor(Value))
+    SetColor<public>(Key:int, Value:color)<transacts>:void = VhRefSet(Ref, VhFromInt(Key), VhFromColor(Value))
+    SetColor<public>(Key:vector2i, Value:color)<transacts>:void = VhRefSet(Ref, VhFromVector2i(Key), VhFromColor(Value))
+    GetArray<public>(Key:string)<decides><transacts>:godot_array = VhToArray(VhRefGet[Ref, VhFromString(Key)])
+    GetArray<public>(Key:int)<decides><transacts>:godot_array = VhToArray(VhRefGet[Ref, VhFromInt(Key)])
+    GetArray<public>(Key:vector2i)<decides><transacts>:godot_array = VhToArray(VhRefGet[Ref, VhFromVector2i(Key)])
+    SetArray<public>(Key:string, Value:godot_array)<transacts>:void = VhRefSet(Ref, VhFromString(Key), VhFromArray(Value))
+    SetArray<public>(Key:int, Value:godot_array)<transacts>:void = VhRefSet(Ref, VhFromInt(Key), VhFromArray(Value))
+    SetArray<public>(Key:vector2i, Value:godot_array)<transacts>:void = VhRefSet(Ref, VhFromVector2i(Key), VhFromArray(Value))
+    GetDictionary<public>(Key:string)<decides><transacts>:dictionary = VhToDictionary(VhRefGet[Ref, VhFromString(Key)])
+    GetDictionary<public>(Key:int)<decides><transacts>:dictionary = VhToDictionary(VhRefGet[Ref, VhFromInt(Key)])
+    GetDictionary<public>(Key:vector2i)<decides><transacts>:dictionary = VhToDictionary(VhRefGet[Ref, VhFromVector2i(Key)])
+    SetDictionary<public>(Key:string, Value:dictionary)<transacts>:void = VhRefSet(Ref, VhFromString(Key), VhFromDictionary(Value))
+    SetDictionary<public>(Key:int, Value:dictionary)<transacts>:void = VhRefSet(Ref, VhFromInt(Key), VhFromDictionary(Value))
+    SetDictionary<public>(Key:vector2i, Value:dictionary)<transacts>:void = VhRefSet(Ref, VhFromVector2i(Key), VhFromDictionary(Value))
+
 engine<public> := class(object):
 
     var MaxFps<public><getter(MaxFpsGetter)><setter(MaxFpsSetter)>:int = external {}
@@ -186,14 +296,19 @@ engine<public> := class(object):
     TimeScaleGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_time_scale", array{}))
     TimeScaleSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_time_scale", array{VhFromFloat(Value)})
     GetArchitectureName<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_architecture_name", array{}))
+    GetAuthorInfo<public>()<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_author_info", array{}))
+    GetDonorInfo<public>()<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_donor_info", array{}))
     GetFramesDrawn<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_frames_drawn", array{}))
     GetFramesPerSecond<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_frames_per_second", array{}))
+    GetLicenseInfo<public>()<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_license_info", array{}))
     GetLicenseText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_license_text", array{}))
     GetMainLoop<public>()<decides><transacts>:main_loop = main_loop{Handle := VhToHandle[VhCallValue(Handle, "get_main_loop", array{})]}
     GetPhysicsFrames<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_physics_frames", array{}))
     GetPhysicsInterpolationFraction<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_physics_interpolation_fraction", array{}))
     GetProcessFrames<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_process_frames", array{}))
     GetScriptLanguageCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_script_language_count", array{}))
+    GetSingletonList<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_singleton_list", array{}))
+    GetVersionInfo<public>()<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_version_info", array{}))
     GetWriteMoviePath<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_write_movie_path", array{}))
     HasSingleton<public>(Name:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_singleton", array{VhFromStringName(Name)}))
     IsEditorHint<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_editor_hint", array{}))
@@ -228,6 +343,7 @@ input<public> := class(object):
     GetGyroscope<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_gyroscope", array{}))
     GetJoyAxis<public>(Device:int, Axis:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_joy_axis", array{VhFromInt(Device), VhFromInt(Axis)}))
     GetJoyGuid<public>(Device:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_joy_guid", array{VhFromInt(Device)}))
+    GetJoyInfo<public>(Device:int)<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_joy_info", array{VhFromInt(Device)}))
     GetJoyName<public>(Device:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_joy_name", array{VhFromInt(Device)}))
     GetJoyVibrationDuration<public>(Device:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_joy_vibration_duration", array{VhFromInt(Device)}))
     GetJoyVibrationStrength<public>(Device:int)<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_joy_vibration_strength", array{VhFromInt(Device)}))
@@ -316,6 +432,7 @@ node<public> := class(object):
     GetMultiplayerAuthority<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_multiplayer_authority", array{}))
     GetName<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_name", array{}))
     GetNode<public>(Path:string)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_node", array{VhFromNodePath(Path)})]}
+    GetNodeAndResource<public>(Path:string)<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_node_and_resource", array{VhFromNodePath(Path)}))
     GetNodeOrNull<public>(Path:string)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_node_or_null", array{VhFromNodePath(Path)})]}
     GetOwner<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_owner", array{})]}
     GetParent<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_parent", array{})]}
@@ -356,6 +473,7 @@ node<public> := class(object):
     NotifyThreadSafe<public>(What:int)<transacts>:void = VhCallVoid(Handle, "notify_thread_safe", array{VhFromInt(What)})
     PrintTree<public>()<transacts>:void = VhCallVoid(Handle, "print_tree", array{})
     PrintTreePretty<public>()<transacts>:void = VhCallVoid(Handle, "print_tree_pretty", array{})
+    PropagateCall<public>(Method:string, Args:godot_array, ?ParentFirst:logic = false)<transacts>:void = VhCallVoid(Handle, "propagate_call", array{VhFromStringName(Method), VhFromArray(Args), VhFromLogic(ParentFirst)})
     PropagateNotification<public>(What:int)<transacts>:void = VhCallVoid(Handle, "propagate_notification", array{VhFromInt(What)})
     QueueAccessibilityUpdate<public>()<transacts>:void = VhCallVoid(Handle, "queue_accessibility_update", array{})
     QueueFree<public>()<transacts>:void = VhCallVoid(Handle, "queue_free", array{})
@@ -393,15 +511,25 @@ ref_counted<public> := class(object):
 
 time<public> := class(object):
 
+    GetDateDictFromSystem<public>(?Utc:logic = false)<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_date_dict_from_system", array{VhFromLogic(Utc)}))
+    GetDateDictFromUnixTime<public>(UnixTimeVal:int)<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_date_dict_from_unix_time", array{VhFromInt(UnixTimeVal)}))
     GetDateStringFromSystem<public>(?Utc:logic = false)<transacts>:string = VhToString(VhCallValue(Handle, "get_date_string_from_system", array{VhFromLogic(Utc)}))
     GetDateStringFromUnixTime<public>(UnixTimeVal:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_date_string_from_unix_time", array{VhFromInt(UnixTimeVal)}))
+    GetDatetimeDictFromDatetimeString<public>(Datetime:string, Weekday:logic)<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_datetime_dict_from_datetime_string", array{VhFromString(Datetime), VhFromLogic(Weekday)}))
+    GetDatetimeDictFromSystem<public>(?Utc:logic = false)<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_datetime_dict_from_system", array{VhFromLogic(Utc)}))
+    GetDatetimeDictFromUnixTime<public>(UnixTimeVal:int)<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_datetime_dict_from_unix_time", array{VhFromInt(UnixTimeVal)}))
+    GetDatetimeStringFromDatetimeDict<public>(Datetime:dictionary, UseSpace:logic)<transacts>:string = VhToString(VhCallValue(Handle, "get_datetime_string_from_datetime_dict", array{VhFromDictionary(Datetime), VhFromLogic(UseSpace)}))
     GetDatetimeStringFromSystem<public>(?Utc:logic = false, ?UseSpace:logic = false)<transacts>:string = VhToString(VhCallValue(Handle, "get_datetime_string_from_system", array{VhFromLogic(Utc), VhFromLogic(UseSpace)}))
     GetDatetimeStringFromUnixTime<public>(UnixTimeVal:int, ?UseSpace:logic = false)<transacts>:string = VhToString(VhCallValue(Handle, "get_datetime_string_from_unix_time", array{VhFromInt(UnixTimeVal), VhFromLogic(UseSpace)}))
     GetOffsetStringFromOffsetMinutes<public>(OffsetMinutes:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_offset_string_from_offset_minutes", array{VhFromInt(OffsetMinutes)}))
     GetTicksMsec<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_ticks_msec", array{}))
     GetTicksUsec<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_ticks_usec", array{}))
+    GetTimeDictFromSystem<public>(?Utc:logic = false)<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_time_dict_from_system", array{VhFromLogic(Utc)}))
+    GetTimeDictFromUnixTime<public>(UnixTimeVal:int)<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_time_dict_from_unix_time", array{VhFromInt(UnixTimeVal)}))
     GetTimeStringFromSystem<public>(?Utc:logic = false)<transacts>:string = VhToString(VhCallValue(Handle, "get_time_string_from_system", array{VhFromLogic(Utc)}))
     GetTimeStringFromUnixTime<public>(UnixTimeVal:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_time_string_from_unix_time", array{VhFromInt(UnixTimeVal)}))
+    GetTimeZoneFromSystem<public>()<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_time_zone_from_system", array{}))
+    GetUnixTimeFromDatetimeDict<public>(Datetime:dictionary)<transacts>:int = VhToInt(VhCallValue(Handle, "get_unix_time_from_datetime_dict", array{VhFromDictionary(Datetime)}))
     GetUnixTimeFromDatetimeString<public>(Datetime:string)<transacts>:int = VhToInt(VhCallValue(Handle, "get_unix_time_from_datetime_string", array{VhFromString(Datetime)}))
     GetUnixTimeFromSystem<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_unix_time_from_system", array{}))
 
@@ -439,6 +567,7 @@ animation_mixer<public> := class(node):
     FindAnimationLibrary<public>(Animation:resource)<transacts>:string = VhToString(VhCallValue(Handle, "find_animation_library", array{VhFromObject(Animation)}))
     GetAnimation<public>(Name:string)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_animation", array{VhFromStringName(Name)})]}
     GetAnimationLibrary<public>(Name:string)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_animation_library", array{VhFromStringName(Name)})]}
+    GetAnimationList<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_animation_list", array{}))
     GetRootMotionPosition<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_root_motion_position", array{}))
     GetRootMotionPositionAccumulator<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_root_motion_position_accumulator", array{}))
     GetRootMotionRotation<public>()<transacts>:quaternion = VhToQuaternion(VhCallValue(Handle, "get_root_motion_rotation", array{}))
@@ -852,6 +981,7 @@ random_number_generator<public> := class(ref_counted):
     var State<public><getter(StateGetter)><setter(StateSetter)>:int = external {}
     StateGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_state", array{}))
     StateSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_state", array{VhFromInt(Value)})
+    RandWeighted<public>(Weights:[]float)<transacts>:int = VhToInt(VhCallValue(Handle, "rand_weighted", array{VhFromFloat32Array(Weights)}))
     Randf<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "randf", array{}))
     RandfRange<public>(From:float, To:float)<transacts>:float = VhToFloat(VhCallValue(Handle, "randf_range", array{VhFromFloat(From), VhFromFloat(To)}))
     Randfn<public>(?Mean:float = 0.0, ?Deviation:float = 1.0)<transacts>:float = VhToFloat(VhCallValue(Handle, "randfn", array{VhFromFloat(Mean), VhFromFloat(Deviation)}))
@@ -981,6 +1111,7 @@ tween<public> := class(ref_counted):
     SetSpeedScale<public>(Speed:float)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "set_speed_scale", array{VhFromFloat(Speed)})]}
     SetTrans<public>(Trans:int)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "set_trans", array{VhFromInt(Trans)})]}
     Stop<public>()<transacts>:void = VhCallVoid(Handle, "stop", array{})
+    TweenCallback<public>(Callback:callable)<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue(Handle, "tween_callback", array{VhFromCallable(Callback)})]}
     TweenInterval<public>(Time:float)<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue(Handle, "tween_interval", array{VhFromFloat(Time)})]}
     TweenSubtween<public>(Subtween:tween)<decides><transacts>:ref_counted = ref_counted{Handle := VhToHandle[VhCallValue(Handle, "tween_subtween", array{VhFromObject(Subtween)})]}
 
@@ -1397,6 +1528,7 @@ collision_object3d<public> := class(node3d):
     GetCollisionLayerValue<public>(LayerNumber:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_collision_layer_value", array{VhFromInt(LayerNumber)}))
     GetCollisionMaskValue<public>(LayerNumber:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_collision_mask_value", array{VhFromInt(LayerNumber)}))
     GetRid<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_rid", array{}))
+    GetShapeOwners<public>()<transacts>:[]int = VhToInts(VhCallValue(Handle, "get_shape_owners", array{}))
     IsShapeOwnerDisabled<public>(OwnerId:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_shape_owner_disabled", array{VhFromInt(OwnerId)}))
     RemoveShapeOwner<public>(OwnerId:int)<transacts>:void = VhCallVoid(Handle, "remove_shape_owner", array{VhFromInt(OwnerId)})
     SetCollisionLayerValue<public>(LayerNumber:int, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_collision_layer_value", array{VhFromInt(LayerNumber), VhFromLogic(Value)})
@@ -1692,6 +1824,7 @@ control<public> := class(canvas_item):
     SetAnchorsAndOffsetsPreset<public>(Preset:int, ?ResizeMode:int = 0, ?Margin:int = 0)<transacts>:void = VhCallVoid(Handle, "set_anchors_and_offsets_preset", array{VhFromInt(Preset), VhFromInt(ResizeMode), VhFromInt(Margin)})
     SetAnchorsPreset<public>(Preset:int, ?KeepOffsets:logic = false)<transacts>:void = VhCallVoid(Handle, "set_anchors_preset", array{VhFromInt(Preset), VhFromLogic(KeepOffsets)})
     SetBegin<public>(Arg0:vector2)<transacts>:void = VhCallVoid(Handle, "set_begin", array{VhFromVector2(Arg0)})
+    SetDragForwarding<public>(DragFunc:callable, CanDropFunc:callable, DropFunc:callable)<transacts>:void = VhCallVoid(Handle, "set_drag_forwarding", array{VhFromCallable(DragFunc), VhFromCallable(CanDropFunc), VhFromCallable(DropFunc)})
     SetDragPreview<public>(Control:control)<transacts>:void = VhCallVoid(Handle, "set_drag_preview", array{VhFromObject(Control)})
     SetEnd<public>(Arg0:vector2)<transacts>:void = VhCallVoid(Handle, "set_end", array{VhFromVector2(Arg0)})
     SetFocusNeighbor<public>(Side:int, Neighbor:string)<transacts>:void = VhCallVoid(Handle, "set_focus_neighbor", array{VhFromInt(Side), VhFromNodePath(Neighbor)})
@@ -2401,6 +2534,7 @@ collision_object2d<public> := class(node2d):
     GetCollisionMaskValue<public>(LayerNumber:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_collision_mask_value", array{VhFromInt(LayerNumber)}))
     GetRid<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_rid", array{}))
     GetShapeOwnerOneWayCollisionMargin<public>(OwnerId:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_shape_owner_one_way_collision_margin", array{VhFromInt(OwnerId)}))
+    GetShapeOwners<public>()<transacts>:[]int = VhToInts(VhCallValue(Handle, "get_shape_owners", array{}))
     IsShapeOwnerDisabled<public>(OwnerId:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_shape_owner_disabled", array{VhFromInt(OwnerId)}))
     IsShapeOwnerOneWayCollisionEnabled<public>(OwnerId:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_shape_owner_one_way_collision_enabled", array{VhFromInt(OwnerId)}))
     RemoveShapeOwner<public>(OwnerId:int)<transacts>:void = VhCallVoid(Handle, "remove_shape_owner", array{VhFromInt(OwnerId)})
@@ -2556,6 +2690,8 @@ label<public> := class(control):
     GetLineCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_line_count", array{}))
     GetLineHeight<public>(?Line:int = -1)<transacts>:int = VhToInt(VhCallValue(Handle, "get_line_height", array{VhFromInt(Line)}))
     GetParagraphSeparator<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_paragraph_separator", array{}))
+    GetStructuredTextBidiOverrideOptions<public>()<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_structured_text_bidi_override_options", array{}))
+    GetTabStops<public>()<transacts>:[]float = VhToFloats(VhCallValue(Handle, "get_tab_stops", array{}))
     GetText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_text", array{}))
     GetTotalCharacterCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_total_character_count", array{}))
     GetVisibleLineCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_visible_line_count", array{}))
@@ -2563,6 +2699,8 @@ label<public> := class(control):
     SetLabelSettings<public>(Settings:resource)<transacts>:void = VhCallVoid(Handle, "set_label_settings", array{VhFromObject(Settings)})
     SetLanguage<public>(Language:string)<transacts>:void = VhCallVoid(Handle, "set_language", array{VhFromString(Language)})
     SetParagraphSeparator<public>(ParagraphSeparator:string)<transacts>:void = VhCallVoid(Handle, "set_paragraph_separator", array{VhFromString(ParagraphSeparator)})
+    SetStructuredTextBidiOverrideOptions<public>(Args:godot_array)<transacts>:void = VhCallVoid(Handle, "set_structured_text_bidi_override_options", array{VhFromArray(Args)})
+    SetTabStops<public>(TabStops:[]float)<transacts>:void = VhCallVoid(Handle, "set_tab_stops", array{VhFromFloat32Array(TabStops)})
     SetText<public>(Text:string)<transacts>:void = VhCallVoid(Handle, "set_text", array{VhFromString(Text)})
 
 light2d<public> := class(node2d):
@@ -2848,6 +2986,7 @@ line_edit<public> := class(control):
     GetSelectedText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_selected_text", array{}))
     GetSelectionFromColumn<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_selection_from_column", array{}))
     GetSelectionToColumn<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_selection_to_column", array{}))
+    GetStructuredTextBidiOverrideOptions<public>()<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_structured_text_bidi_override_options", array{}))
     GetText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_text", array{}))
     HasImeText<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_ime_text", array{}))
     HasRedo<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_redo", array{}))
@@ -2863,6 +3002,7 @@ line_edit<public> := class(control):
     SetPlaceholder<public>(Text:string)<transacts>:void = VhCallVoid(Handle, "set_placeholder", array{VhFromString(Text)})
     SetRightIcon<public>(Icon:texture2d)<transacts>:void = VhCallVoid(Handle, "set_right_icon", array{VhFromObject(Icon)})
     SetSecretCharacter<public>(Character:string)<transacts>:void = VhCallVoid(Handle, "set_secret_character", array{VhFromString(Character)})
+    SetStructuredTextBidiOverrideOptions<public>(Args:godot_array)<transacts>:void = VhCallVoid(Handle, "set_structured_text_bidi_override_options", array{VhFromArray(Args)})
     SetText<public>(Text:string)<transacts>:void = VhCallVoid(Handle, "set_text", array{VhFromString(Text)})
     Unedit<public>()<transacts>:void = VhCallVoid(Handle, "unedit", array{})
 
@@ -3016,6 +3156,7 @@ rich_text_label<public> := class(control):
     GetCharacterParagraph<public>(Character:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_character_paragraph", array{VhFromInt(Character)}))
     GetContentHeight<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_content_height", array{}))
     GetContentWidth<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_content_width", array{}))
+    GetEffects<public>()<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_effects", array{}))
     GetLanguage<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_language", array{}))
     GetLineCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_line_count", array{}))
     GetLineHeight<public>(Line:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_line_height", array{VhFromInt(Line)}))
@@ -3030,6 +3171,8 @@ rich_text_label<public> := class(control):
     GetSelectionFrom<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_selection_from", array{}))
     GetSelectionLineOffset<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_selection_line_offset", array{}))
     GetSelectionTo<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_selection_to", array{}))
+    GetStructuredTextBidiOverrideOptions<public>()<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_structured_text_bidi_override_options", array{}))
+    GetTabStops<public>()<transacts>:[]float = VhToFloats(VhCallValue(Handle, "get_tab_stops", array{}))
     GetText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_text", array{}))
     GetTotalCharacterCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_total_character_count", array{}))
     GetVScrollBar<public>()<decides><transacts>:range = range{Handle := VhToHandle[VhCallValue(Handle, "get_v_scroll_bar", array{})]}
@@ -3043,6 +3186,7 @@ rich_text_label<public> := class(control):
     MenuOption<public>(Option:int)<transacts>:void = VhCallVoid(Handle, "menu_option", array{VhFromInt(Option)})
     Newline<public>()<transacts>:void = VhCallVoid(Handle, "newline", array{})
     ParseBbcode<public>(Bbcode:string)<transacts>:void = VhCallVoid(Handle, "parse_bbcode", array{VhFromString(Bbcode)})
+    ParseExpressionsForValues<public>(Expressions:[]string)<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "parse_expressions_for_values", array{VhFromStringArray(Expressions)}))
     Pop<public>()<transacts>:void = VhCallVoid(Handle, "pop", array{})
     PopAll<public>()<transacts>:void = VhCallVoid(Handle, "pop_all", array{})
     PopContext<public>()<transacts>:void = VhCallVoid(Handle, "pop_context", array{})
@@ -3052,6 +3196,7 @@ rich_text_label<public> := class(control):
     PushCell<public>()<transacts>:void = VhCallVoid(Handle, "push_cell", array{})
     PushColor<public>(Color:color)<transacts>:void = VhCallVoid(Handle, "push_color", array{VhFromColor(Color)})
     PushContext<public>()<transacts>:void = VhCallVoid(Handle, "push_context", array{})
+    PushCustomfx<public>(Effect:resource, Env:dictionary)<transacts>:void = VhCallVoid(Handle, "push_customfx", array{VhFromObject(Effect), VhFromDictionary(Env)})
     PushDropcap<public>(String:string, Font:resource, Arg2:int, DropcapMargins:rect2, ?Color:color = color{R := 1.0, G := 1.0, B := 1.0, A := 1.0}, ?OutlineSize:int = 0, ?OutlineColor:color = color{R := 0.0, G := 0.0, B := 0.0, A := 0.0})<transacts>:void = VhCallVoid(Handle, "push_dropcap", array{VhFromString(String), VhFromObject(Font), VhFromInt(Arg2), VhFromRect2(DropcapMargins), VhFromColor(Color), VhFromInt(OutlineSize), VhFromColor(OutlineColor)})
     PushFgcolor<public>(Fgcolor:color)<transacts>:void = VhCallVoid(Handle, "push_fgcolor", array{VhFromColor(Fgcolor)})
     PushFont<public>(Font:resource, ?FontSize:int = 0)<transacts>:void = VhCallVoid(Handle, "push_font", array{VhFromObject(Font), VhFromInt(FontSize)})
@@ -3065,6 +3210,7 @@ rich_text_label<public> := class(control):
     PushNormal<public>()<transacts>:void = VhCallVoid(Handle, "push_normal", array{})
     PushOutlineColor<public>(Color:color)<transacts>:void = VhCallVoid(Handle, "push_outline_color", array{VhFromColor(Color)})
     PushOutlineSize<public>(OutlineSize:int)<transacts>:void = VhCallVoid(Handle, "push_outline_size", array{VhFromInt(OutlineSize)})
+    PushParagraph<public>(Alignment:int, BaseDirection:int, Language:string, StParser:int, Arg4:int, TabStops:[]float)<transacts>:void = VhCallVoid(Handle, "push_paragraph", array{VhFromInt(Alignment), VhFromInt(BaseDirection), VhFromString(Language), VhFromInt(StParser), VhFromInt(Arg4), VhFromFloat32Array(TabStops)})
     PushStrikethrough<public>(?Color:color = color{R := 0.0, G := 0.0, B := 0.0, A := 0.0})<transacts>:void = VhCallVoid(Handle, "push_strikethrough", array{VhFromColor(Color)})
     PushTable<public>(Columns:int, ?InlineAlign:int = 0, ?AlignToRow:int = -1, ?Name:string = "")<transacts>:void = VhCallVoid(Handle, "push_table", array{VhFromInt(Columns), VhFromInt(InlineAlign), VhFromInt(AlignToRow), VhFromString(Name)})
     PushUnderline<public>(?Color:color = color{R := 0.0, G := 0.0, B := 0.0, A := 0.0})<transacts>:void = VhCallVoid(Handle, "push_underline", array{VhFromColor(Color)})
@@ -3078,7 +3224,10 @@ rich_text_label<public> := class(control):
     SetCellPadding<public>(Padding:rect2)<transacts>:void = VhCallVoid(Handle, "set_cell_padding", array{VhFromRect2(Padding)})
     SetCellRowBackgroundColor<public>(OddRowBg:color, EvenRowBg:color)<transacts>:void = VhCallVoid(Handle, "set_cell_row_background_color", array{VhFromColor(OddRowBg), VhFromColor(EvenRowBg)})
     SetCellSizeOverride<public>(MinSize:vector2, MaxSize:vector2)<transacts>:void = VhCallVoid(Handle, "set_cell_size_override", array{VhFromVector2(MinSize), VhFromVector2(MaxSize)})
+    SetEffects<public>(Effects:godot_array)<transacts>:void = VhCallVoid(Handle, "set_effects", array{VhFromArray(Effects)})
     SetLanguage<public>(Language:string)<transacts>:void = VhCallVoid(Handle, "set_language", array{VhFromString(Language)})
+    SetStructuredTextBidiOverrideOptions<public>(Args:godot_array)<transacts>:void = VhCallVoid(Handle, "set_structured_text_bidi_override_options", array{VhFromArray(Args)})
+    SetTabStops<public>(TabStops:[]float)<transacts>:void = VhCallVoid(Handle, "set_tab_stops", array{VhFromFloat32Array(TabStops)})
     SetTableColumnExpand<public>(Column:int, Expand:logic, ?Ratio:int = 1, ?Shrink:logic = true)<transacts>:void = VhCallVoid(Handle, "set_table_column_expand", array{VhFromInt(Column), VhFromLogic(Expand), VhFromInt(Ratio), VhFromLogic(Shrink)})
     SetTableColumnName<public>(Column:int, Name:string)<transacts>:void = VhCallVoid(Handle, "set_table_column_name", array{VhFromInt(Column), VhFromString(Name)})
     SetText<public>(Text:string)<transacts>:void = VhCallVoid(Handle, "set_text", array{VhFromString(Text)})
@@ -3290,6 +3439,7 @@ text_edit<public> := class(control):
     GetCaretColumn<public>(?CaretIndex:int = 0)<transacts>:int = VhToInt(VhCallValue(Handle, "get_caret_column", array{VhFromInt(CaretIndex)}))
     GetCaretCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_caret_count", array{}))
     GetCaretDrawPos<public>(?CaretIndex:int = 0)<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_caret_draw_pos", array{VhFromInt(CaretIndex)}))
+    GetCaretIndexEditOrder<public>()<transacts>:[]int = VhToInts(VhCallValue(Handle, "get_caret_index_edit_order", array{}))
     GetCaretLine<public>(?CaretIndex:int = 0)<transacts>:int = VhToInt(VhCallValue(Handle, "get_caret_line", array{VhFromInt(CaretIndex)}))
     GetCaretWrapIndex<public>(?CaretIndex:int = 0)<transacts>:int = VhToInt(VhCallValue(Handle, "get_caret_wrap_index", array{VhFromInt(CaretIndex)}))
     GetCustomWordSeparators<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_custom_word_separators", array{}))
@@ -3317,6 +3467,7 @@ text_edit<public> := class(control):
     GetLineWithIme<public>(Line:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_line_with_ime", array{VhFromInt(Line)}))
     GetLineWrapCount<public>(Line:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_line_wrap_count", array{VhFromInt(Line)}))
     GetLineWrapIndexAtColumn<public>(Line:int, Column:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_line_wrap_index_at_column", array{VhFromInt(Line), VhFromInt(Column)}))
+    GetLineWrappedText<public>(Line:int)<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_line_wrapped_text", array{VhFromInt(Line)}))
     GetLocalMousePos<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_local_mouse_pos", array{}))
     GetMenu<public>()<decides><transacts>:window = window{Handle := VhToHandle[VhCallValue(Handle, "get_menu", array{})]}
     GetMinimapLineAtPos<public>(Arg0:vector2i)<transacts>:int = VhToInt(VhCallValue(Handle, "get_minimap_line_at_pos", array{VhFromVector2i(Arg0)}))
@@ -3341,6 +3492,8 @@ text_edit<public> := class(control):
     GetSelectionOriginLine<public>(?CaretIndex:int = 0)<transacts>:int = VhToInt(VhCallValue(Handle, "get_selection_origin_line", array{VhFromInt(CaretIndex)}))
     GetSelectionToColumn<public>(?CaretIndex:int = 0)<transacts>:int = VhToInt(VhCallValue(Handle, "get_selection_to_column", array{VhFromInt(CaretIndex)}))
     GetSelectionToLine<public>(?CaretIndex:int = 0)<transacts>:int = VhToInt(VhCallValue(Handle, "get_selection_to_line", array{VhFromInt(CaretIndex)}))
+    GetSortedCarets<public>(?IncludeIgnoredCarets:logic = false)<transacts>:[]int = VhToInts(VhCallValue(Handle, "get_sorted_carets", array{VhFromLogic(IncludeIgnoredCarets)}))
+    GetStructuredTextBidiOverrideOptions<public>()<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_structured_text_bidi_override_options", array{}))
     GetSyntaxHighlighter<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_syntax_highlighter", array{})]}
     GetTabSize<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_tab_size", array{}))
     GetText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_text", array{}))
@@ -3391,6 +3544,7 @@ text_edit<public> := class(control):
     SetCaretLine<public>(Line:int, ?AdjustViewport:logic = true, ?CanBeHidden:logic = true, ?WrapIndex:int = 0, ?CaretIndex:int = 0)<transacts>:void = VhCallVoid(Handle, "set_caret_line", array{VhFromInt(Line), VhFromLogic(AdjustViewport), VhFromLogic(CanBeHidden), VhFromInt(WrapIndex), VhFromInt(CaretIndex)})
     SetCustomWordSeparators<public>(CustomWordSeparators:string)<transacts>:void = VhCallVoid(Handle, "set_custom_word_separators", array{VhFromString(CustomWordSeparators)})
     SetGutterClickable<public>(Gutter:int, Clickable:logic)<transacts>:void = VhCallVoid(Handle, "set_gutter_clickable", array{VhFromInt(Gutter), VhFromLogic(Clickable)})
+    SetGutterCustomDraw<public>(Column:int, DrawCallback:callable)<transacts>:void = VhCallVoid(Handle, "set_gutter_custom_draw", array{VhFromInt(Column), VhFromCallable(DrawCallback)})
     SetGutterDraw<public>(Gutter:int, Draw:logic)<transacts>:void = VhCallVoid(Handle, "set_gutter_draw", array{VhFromInt(Gutter), VhFromLogic(Draw)})
     SetGutterName<public>(Gutter:int, Name:string)<transacts>:void = VhCallVoid(Handle, "set_gutter_name", array{VhFromInt(Gutter), VhFromString(Name)})
     SetGutterOverwritable<public>(Gutter:int, Overwritable:logic)<transacts>:void = VhCallVoid(Handle, "set_gutter_overwritable", array{VhFromInt(Gutter), VhFromLogic(Overwritable)})
@@ -3413,9 +3567,11 @@ text_edit<public> := class(control):
     SetSelectionMode<public>(Mode:int)<transacts>:void = VhCallVoid(Handle, "set_selection_mode", array{VhFromInt(Mode)})
     SetSelectionOriginColumn<public>(Column:int, ?CaretIndex:int = 0)<transacts>:void = VhCallVoid(Handle, "set_selection_origin_column", array{VhFromInt(Column), VhFromInt(CaretIndex)})
     SetSelectionOriginLine<public>(Line:int, ?CanBeHidden:logic = true, ?WrapIndex:int = -1, ?CaretIndex:int = 0)<transacts>:void = VhCallVoid(Handle, "set_selection_origin_line", array{VhFromInt(Line), VhFromLogic(CanBeHidden), VhFromInt(WrapIndex), VhFromInt(CaretIndex)})
+    SetStructuredTextBidiOverrideOptions<public>(Args:godot_array)<transacts>:void = VhCallVoid(Handle, "set_structured_text_bidi_override_options", array{VhFromArray(Args)})
     SetSyntaxHighlighter<public>(SyntaxHighlighter:resource)<transacts>:void = VhCallVoid(Handle, "set_syntax_highlighter", array{VhFromObject(SyntaxHighlighter)})
     SetTabSize<public>(Arg0:int)<transacts>:void = VhCallVoid(Handle, "set_tab_size", array{VhFromInt(Arg0)})
     SetText<public>(Text:string)<transacts>:void = VhCallVoid(Handle, "set_text", array{VhFromString(Text)})
+    SetTooltipRequestFunc<public>(Callback:callable)<transacts>:void = VhCallVoid(Handle, "set_tooltip_request_func", array{VhFromCallable(Callback)})
     SkipSelectionForNextOccurrence<public>()<transacts>:void = VhCallVoid(Handle, "skip_selection_for_next_occurrence", array{})
     StartAction<public>(Action:int)<transacts>:void = VhCallVoid(Handle, "start_action", array{VhFromInt(Action)})
     SwapLines<public>(FromLine:int, ToLine:int)<transacts>:void = VhCallVoid(Handle, "swap_lines", array{VhFromInt(FromLine), VhFromInt(ToLine)})

@@ -6,6 +6,7 @@
 #include "VerseValue.h"
 
 #include "Godot.object.gen.h"
+#include "Godot.godot_ref.gen.h"
 #include "Godot.variant.gen.h"
 
 namespace verse {
@@ -56,6 +57,27 @@ class object : public UObject
 
 public:
 	TVal<int64> Handle;
+};
+
+/// The C++ shadow for Verse's `godot_ref`: an Array, a Dictionary, a Callable, a Signal or a
+/// packed array, held as an id in the GDExtension's table.
+///
+/// It exists to have a destructor. A Verse value has none, but a native class is a UObject, and a
+/// UObject is told when it is collected -- which is the only moment at which "Verse has dropped
+/// this" is knowable. Measured before it was relied on: docs/abi-v2-design.md 1a.
+class godot_ref : public UObject
+{
+	GODOT_REF_BODY();
+
+	// Verse API
+
+public:
+	TVal<int64> Ref;
+
+	/// Releases the table entry. Runs on the collection that finds this unreachable, so the entry
+	/// outlives the Verse value by up to one cycle -- which is why the host asks for a cycle when
+	/// the table grows rather than waiting to be asked.
+	void BeginDestroy() override;
 };
 
 } // namespace verse

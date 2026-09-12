@@ -97,6 +97,22 @@ void RaiseCallStatus(int32 Status, int64 Handle, const verse::string& Member, co
     }
 }
 
+/// The same as RaiseCallStatus, for a reference id rather than a named member of an object.
+void RaiseRefStatus(int32 Status, int64 Ref, const TCHAR* Verb)
+{
+    if (Status == VH_CALL_OK || Status == VH_CALL_NO_SUCH_MEMBER)
+    {
+        return;
+    }
+    RAISE_VERSE_RUNTIME_ERROR_FORMAT(
+        Verse::ERuntimeDiagnostic::ErrRuntime_NativeInternal,
+        TEXT("%s a Godot container the bridge no longer holds (reference %lld). A reference is "
+             "released when the Verse value holding it is collected, so this is a handle kept past "
+             "the object that owned it."),
+        Verb,
+        Ref);
+}
+
 /// A deferred write reports nothing useful: by the time OnCommit runs, the transaction a runtime
 /// error would have rolled back has already committed. Probing the receiver up front is what lets
 /// a write to a freed object fail at the point the script actually made it.
@@ -667,6 +683,319 @@ void VhSetValue(int64 Handle, verse::string const& Property, FGodotValue const& 
         const vh_value Wire = Store.Wire(Owned);
         Host.Godot.SetProperty(Host.Godot.Ctx, Handle, reinterpret_cast<const char*>(*Name), Name.Len(), &Wire);
     });
+}
+
+// --- reference values ---------------------------------------------------------------------
+
+void VhAdoptRef(TNonNullPtr<verse::godot_ref> Value)
+{
+    // Nothing to do but exist. Passing the object here is what materialises its UObject shadow,
+    // and the shadow is what will release the id -- a Verse value that never crossed to native has
+    // no UObject, so nothing would ever run for it.
+    (void)Value;
+}
+
+void VhRefGet(int64 Ref, FGodotValue const& Key, TOptional<FGodotValue>& OutValue)
+{
+    OutValue.Reset();
+    FHostState& Host = GetHost();
+    if (!Host.Godot.RefGet)
+    {
+        return;
+    }
+
+    FWireStore Store;
+    const vh_value WireKey = Store.Wire(Own(Key));
+    FCallArena Arena;
+    vh_value Result{};
+    const int32 Status = CallGodot([&] {
+        return Host.Godot.RefGet(Host.Godot.Ctx, Ref, &WireKey, &Arena, &Result);
+    });
+    if (Status == VH_CALL_NO_SUCH_MEMBER)
+    {
+        // An absent key or an index out of range: an ordinary Verse failure, not an error.
+        return;
+    }
+    if (Status != VH_CALL_OK)
+    {
+        RaiseRefStatus(Status, Ref, TEXT("Read"));
+        return;
+    }
+    OutValue = FromWire(Result);
+}
+
+void VhRefSet(int64 Ref, FGodotValue const& Key, FGodotValue const& Value)
+{
+    FOwnedValue OwnedKey = Own(Key);
+    FOwnedValue OwnedValue = Own(Value);
+    DeferToCommit([Ref, OwnedKey = MoveTemp(OwnedKey), OwnedValue = MoveTemp(OwnedValue)] {
+        FHostState& Host = GetHost();
+        if (!Host.Godot.RefSet)
+        {
+            return;
+        }
+        FWireStore Store;
+        const vh_value WireKey = Store.Wire(OwnedKey);
+        const vh_value WireValue = Store.Wire(OwnedValue);
+        Host.Godot.RefSet(Host.Godot.Ctx, Ref, &WireKey, &WireValue);
+    });
+}
+
+int64 VhRefSize(int64 Ref)
+{
+    FHostState& Host = GetHost();
+    if (!Host.Godot.RefSize)
+    {
+        return 0;
+    }
+    int64 Size = 0;
+    const int32 Status = CallGodot([&] { return Host.Godot.RefSize(Host.Godot.Ctx, Ref, &Size); });
+    if (Status != VH_CALL_OK)
+    {
+        RaiseRefStatus(Status, Ref, TEXT("Sized"));
+        return 0;
+    }
+    return Size;
+}
+
+int64 VhRefNew(int64 Tag)
+{
+    FHostState& Host = GetHost();
+    return Host.Godot.NewRef ? CallGodot([&] { return Host.Godot.NewRef(Host.Godot.Ctx, (int32)Tag); }) : 0;
+}
+
+void VhRefInvoke(int64 Ref, TArray<FGodotValue> const& Args, FGodotValue& OutValue)
+{
+    OutValue = FGodotValue{};
+    FHostState& Host = GetHost();
+    if (!Host.Godot.InvokeCallable)
+    {
+        return;
+    }
+
+    FWireStore Store;
+    TArray<vh_value> Wire;
+    Wire.Reserve(Args.Num());
+    for (const FGodotValue& Arg : Args)
+    {
+        Wire.Add(Store.Wire(Own(Arg)));
+    }
+
+    FCallArena Arena;
+    vh_value Result{};
+    const int32 Status = CallGodot([&] {
+        return Host.Godot.InvokeCallable(Host.Godot.Ctx, Ref, Wire.GetData(), Wire.Num(), &Arena, &Result);
+    });
+    if (Status != VH_CALL_OK)
+    {
+        RaiseRefStatus(Status, Ref, TEXT("Called"));
+        return;
+    }
+    OutValue = FromWire(Result);
+}
+
+void VhRefInvokeVoid(int64 Ref, TArray<FGodotValue> const& Args)
+{
+    FGodotValue Ignored;
+    VhRefInvoke(Ref, Args, Ignored);
+}
+
+/// The whole container, as the vh_value sequence the bulk converters read.
+///
+/// Returns false when the host is not wired up or the id names nothing; the converters above turn
+/// that into an empty array rather than a raise, because a container the script is iterating is
+/// not the place to discover the bridge is down.
+bool ReadRefContents(int64 Ref, GodotVerse::FCallArena& Arena, vh_value& OutValue)
+{
+    FHostState& Host = GetHost();
+    if (!Host.Godot.RefContents)
+    {
+        return false;
+    }
+    const int32 Status = CallGodot([&] {
+        return Host.Godot.RefContents(Host.Godot.Ctx, Ref, &Arena, &OutValue);
+    });
+    if (Status != VH_CALL_OK)
+    {
+        RaiseRefStatus(Status, Ref, TEXT("Read"));
+        return false;
+    }
+    return true;
+}
+
+TArray<int64> VhRefInts(int64 Ref)
+{
+    TArray<int64> Out;
+    FCallArena Arena;
+    vh_value Contents{};
+    if (!ReadRefContents(Ref, Arena, Contents))
+    {
+        return Out;
+    }
+    Out.Reserve(Contents.Seq.Count);
+    for (int32 Index = 0; Index < Contents.Seq.Count; ++Index)
+    {
+        Out.Add(AsInt(Contents.Seq.Items[Index]));
+    }
+    return Out;
+}
+
+TArray<double> VhRefFloats(int64 Ref)
+{
+    TArray<double> Out;
+    FCallArena Arena;
+    vh_value Contents{};
+    if (!ReadRefContents(Ref, Arena, Contents))
+    {
+        return Out;
+    }
+
+    // A packed array of vectors flattens: a PackedVector2Array of three is six floats, which is
+    // what the Verse side reads it as. Each element arrives as its own tuple, so the components
+    // are spliced rather than appended.
+    for (int32 Index = 0; Index < Contents.Seq.Count; ++Index)
+    {
+        const vh_value& Item = Contents.Seq.Items[Index];
+        if (Item.Type == VH_TYPE_TUPLE || Item.Type == VH_TYPE_ARRAY)
+        {
+            for (int32 Inner = 0; Inner < Item.Seq.Count; ++Inner)
+            {
+                Out.Add(AsDouble(Item.Seq.Items[Inner]));
+            }
+        }
+        else
+        {
+            Out.Add(AsDouble(Item));
+        }
+    }
+    return Out;
+}
+
+TArray<verse::string> VhRefStrings(int64 Ref)
+{
+    TArray<verse::string> Out;
+    FCallArena Arena;
+    vh_value Contents{};
+    if (!ReadRefContents(Ref, Arena, Contents))
+    {
+        return Out;
+    }
+    Out.Reserve(Contents.Seq.Count);
+    for (int32 Index = 0; Index < Contents.Seq.Count; ++Index)
+    {
+        const vh_value& Item = Contents.Seq.Items[Index];
+        Out.Add(Item.Type == VH_TYPE_STRING
+                    ? verse::string(GodotVerse::MakeView(Item.String.Utf8, Item.String.Len))
+                    : verse::string{});
+    }
+    return Out;
+}
+
+void VhRefValues(int64 Ref, TArray<FGodotValue>& Out)
+{
+    Out.Reset();
+    FCallArena Arena;
+    vh_value Contents{};
+    if (!ReadRefContents(Ref, Arena, Contents))
+    {
+        return;
+    }
+    Out.Reserve(Contents.Seq.Count);
+    for (int32 Index = 0; Index < Contents.Seq.Count; ++Index)
+    {
+        Out.Add(FromWire(Contents.Seq.Items[Index]));
+    }
+}
+
+/// Fills a fresh container of Tag with Items, and answers its id.
+int64 NewRefFrom(int64 Tag, const TArray<vh_value>& Items)
+{
+    FHostState& Host = GetHost();
+    if (!Host.Godot.NewRef || !Host.Godot.RefSet)
+    {
+        return 0;
+    }
+    const int64 Ref = CallGodot([&] { return Host.Godot.NewRef(Host.Godot.Ctx, (int32)Tag); });
+    if (Ref == 0)
+    {
+        return 0;
+    }
+
+    // A fresh packed array has no room in it, so each element is appended by setting the index one
+    // past the end -- which is what Godot's own resize-on-set does for these types.
+    for (int32 Index = 0; Index < Items.Num(); ++Index)
+    {
+        vh_value Key{};
+        Key.Type = VH_TYPE_INT;
+        Key.VariantTag = VH_VARIANT_INT;
+        Key.Int = Index;
+        CallGodot([&] { return Host.Godot.RefSet(Host.Godot.Ctx, Ref, &Key, &Items[Index]); });
+    }
+    return Ref;
+}
+
+int64 VhRefFromInts(int64 Tag, TArray<int64> const& Values)
+{
+    TArray<vh_value> Items;
+    Items.Reserve(Values.Num());
+    for (int64 Value : Values)
+    {
+        vh_value& Item = Items.AddDefaulted_GetRef();
+        Item.Type = VH_TYPE_INT;
+        Item.VariantTag = VH_VARIANT_INT;
+        Item.Int = Value;
+    }
+    return NewRefFrom(Tag, Items);
+}
+
+int64 VhRefFromFloats(int64 Tag, TArray<double> const& Values)
+{
+    TArray<vh_value> Items;
+    Items.Reserve(Values.Num());
+    for (double Value : Values)
+    {
+        vh_value& Item = Items.AddDefaulted_GetRef();
+        Item.Type = VH_TYPE_FLOAT;
+        Item.VariantTag = VH_VARIANT_FLOAT;
+        Item.Float = Value;
+    }
+    return NewRefFrom(Tag, Items);
+}
+
+int64 VhRefFromStrings(int64 Tag, TArray<verse::string> const& Values)
+{
+    // The bytes have to outlive the vh_values that point at them, and a verse::string is not ours
+    // to hold past this call.
+    TArray<FUtf8String> Owned;
+    Owned.Reserve(Values.Num());
+    for (const verse::string& Value : Values)
+    {
+        Owned.Add(FUtf8String(ToView(Value)));
+    }
+
+    TArray<vh_value> Items;
+    Items.Reserve(Owned.Num());
+    for (const FUtf8String& Text : Owned)
+    {
+        vh_value& Item = Items.AddDefaulted_GetRef();
+        Item.Type = VH_TYPE_STRING;
+        Item.VariantTag = VH_VARIANT_STRING;
+        Item.String.Utf8 = reinterpret_cast<const char*>(*Text);
+        Item.String.Len = Text.Len();
+    }
+    return NewRefFrom(Tag, Items);
+}
+
+int64 VhRefFromValues(int64 Tag, TArray<FGodotValue> const& Values)
+{
+    FWireStore Store;
+    TArray<vh_value> Items;
+    Items.Reserve(Values.Num());
+    for (const FGodotValue& Value : Values)
+    {
+        Items.Add(Store.Wire(Own(Value)));
+    }
+    return NewRefFrom(Tag, Items);
 }
 
 TOptional<int64> VhSingleton(verse::string const& Name)

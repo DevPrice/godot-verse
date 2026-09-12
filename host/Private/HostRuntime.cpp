@@ -43,6 +43,15 @@ void ReportDiagnostic(vh_severity Severity,
     Host.OnDiagnostic(Host.DiagnosticCtx, &Diagnostic);
 }
 
+void ReleaseGodotRef(int64 Ref)
+{
+    FHostState& Host = GetHost();
+    if (Ref != 0 && Host.Godot.ReleaseRef)
+    {
+        Host.Godot.ReleaseRef(Host.Godot.Ctx, Ref);
+    }
+}
+
 void ReportError(FUtf8StringView Message)
 {
     ReportDiagnostic(VH_SEVERITY_ERROR, Message, FUtf8StringView(), 0, 0, 0, 0, 0);

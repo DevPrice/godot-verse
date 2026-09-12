@@ -115,3 +115,93 @@ VhExpect(Value:variant, Tag:int, Expected:string)<transacts>:void =
 VhToHandle(Value:variant)<decides><transacts>:int =
     Value.Ref <> 0
     Value.Ref
+
+# --- reference types ---------------------------------------------------------
+
+# Godot's Array, Dictionary, Callable and Signal, as the references they are. Mutating one of these
+# is visible to every other holder, including GDScript -- which is what a Godot author expects and
+# what marshalling them by value would silently take away.
+
+# Godot's Array, Dictionary, Callable and Signal, as the references they are. Mutating one of
+# these is visible to every other holder, including GDScript -- which is what a Godot author
+# expects, and what marshalling them by value would silently take away.
+#
+# The typed element accessors are generated into GodotClasses.native.verse rather than written
+# here, because a script cannot unpack a `variant` itself: the packers are module-scoped so that a
+# user cannot hold a raw reference that outlives what it names (R-TYPE-7). So every way in and out
+# of a container has to be spelled with the element's own type, and there are too many of those
+# pairs to keep by hand.
+#
+# `array` is a reserved word in Verse, so Godot's Array is `godot_array` -- the one place a
+# mirrored name cannot be the Godot one lowered.
+#
+# callable and signal_ref stay here rather than being generated: they have no elements to index, so
+# there is nothing per-type to emit.
+
+callable<public> := class(godot_ref):
+    # R-TYPE-3. The arguments are a Verse array of whatever the callee takes, and the result comes
+    # back as one of the container element types the accessors above spell.
+    CallInt<public>(Args:[]int)<transacts>:int =
+        VhToInt(VhRefInvoke(Ref, for (A : Args) { VhFromInt(A) }))
+    CallFloat<public>(Args:[]float)<transacts>:float =
+        VhToFloat(VhRefInvoke(Ref, for (A : Args) { VhFromFloat(A) }))
+    CallString<public>(Args:[]string)<transacts>:string =
+        VhToString(VhRefInvoke(Ref, for (A : Args) { VhFromString(A) }))
+    CallVoid<public>(Args:[]int)<transacts>:void =
+        VhRefInvokeVoid(Ref, for (A : Args) { VhFromInt(A) })
+
+# Godot's Signal. Held and passed back; connecting and emitting are signals' own requirement
+# (spec 5.3) and arrive in Phase 4.
+signal_ref<public> := class(godot_ref) {}
+
+# --- reference packing -------------------------------------------------------
+
+# Every wrapper is adopted on the way in, which is what puts the UObject shadow behind it and so
+# what makes dropping it release the table entry.
+VhAdopt(Value:godot_ref)<transacts>:void = VhAdoptRef(Value)
+
+VhToArray(Value:variant)<transacts>:godot_array =
+    Made := godot_array{Ref := Value.Ref}
+    VhAdopt(Made)
+    Made
+
+VhToDictionary(Value:variant)<transacts>:dictionary =
+    Made := dictionary{Ref := Value.Ref}
+    VhAdopt(Made)
+    Made
+
+VhToCallable(Value:variant)<transacts>:callable =
+    Made := callable{Ref := Value.Ref}
+    VhAdopt(Made)
+    Made
+
+VhToSignal(Value:variant)<transacts>:signal_ref =
+    Made := signal_ref{Ref := Value.Ref}
+    VhAdopt(Made)
+    Made
+
+VhFromArray(Value:godot_array)<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+VhFromDictionary(Value:dictionary)<transacts>:variant = variant{Tag := TagDictionary, Ref := Value.Ref}
+VhFromCallable(Value:callable)<transacts>:variant = variant{Tag := TagCallable, Ref := Value.Ref}
+VhFromSignal(Value:signal_ref)<transacts>:variant = variant{Tag := TagSignal, Ref := Value.Ref}
+
+# --- packed arrays -----------------------------------------------------------
+
+# Godot's packed arrays are values, but variable-length ones, so they have no lanes in a
+# fixed-width variant and ride as a reference like the containers do. What the author sees is a
+# Verse array either way: these converters read the whole thing out, and build a fresh one going
+# back, so the generated signatures stay `[]float` rather than becoming a handle to unwrap.
+VhToInts(Value:variant)<transacts>:[]int = VhRefInts(Value.Ref)
+VhToFloats(Value:variant)<transacts>:[]float = VhRefFloats(Value.Ref)
+VhToStrings(Value:variant)<transacts>:[]string = VhRefStrings(Value.Ref)
+
+VhFromInts(Tag:int, Values:[]int)<transacts>:variant = variant{Tag := Tag, Ref := VhRefFromInts(Tag, Values)}
+VhFromFloats(Tag:int, Values:[]float)<transacts>:variant = variant{Tag := Tag, Ref := VhRefFromFloats(Tag, Values)}
+VhFromStrings(Tag:int, Values:[]string)<transacts>:variant = variant{Tag := Tag, Ref := VhRefFromStrings(Tag, Values)}
+
+VhFromByteArray(Values:[]int)<transacts>:variant = VhFromInts(TagPackedByteArray, Values)
+VhFromInt32Array(Values:[]int)<transacts>:variant = VhFromInts(TagPackedInt32Array, Values)
+VhFromInt64Array(Values:[]int)<transacts>:variant = VhFromInts(TagPackedInt64Array, Values)
+VhFromFloat32Array(Values:[]float)<transacts>:variant = VhFromFloats(TagPackedFloat32Array, Values)
+VhFromFloat64Array(Values:[]float)<transacts>:variant = VhFromFloats(TagPackedFloat64Array, Values)
+VhFromStringArray(Values:[]string)<transacts>:variant = VhFromStrings(TagPackedStringArray, Values)

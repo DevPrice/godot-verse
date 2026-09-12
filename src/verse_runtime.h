@@ -175,6 +175,17 @@ private:
 	static int32_t api_call_method(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count, vh_arena *p_arena, vh_value *r_value);
 	static vh_handle api_get_singleton(void *p_ctx, const char *p_name_utf8, int32_t p_name_len);
 
+	// The reference table (R-TYPE-1). See src/verse_ref_table.h for what is in it and why, and the
+	// ABI header's "reference values" for the ownership rule these implement.
+	static void api_release_ref(void *p_ctx, int64_t p_ref);
+	static int64_t api_retain_ref(void *p_ctx, int64_t p_ref);
+	static int64_t api_new_ref(void *p_ctx, int32_t p_variant_tag);
+	static int32_t api_ref_get(void *p_ctx, int64_t p_ref, const vh_value *p_key, vh_arena *p_arena, vh_value *r_value);
+	static int32_t api_ref_set(void *p_ctx, int64_t p_ref, const vh_value *p_key, const vh_value *p_value);
+	static int32_t api_ref_size(void *p_ctx, int64_t p_ref, int64_t *r_size);
+	static int32_t api_ref_contents(void *p_ctx, int64_t p_ref, vh_arena *p_arena, vh_value *r_value);
+	static int32_t api_invoke_callable(void *p_ctx, int64_t p_ref, const vh_value *p_args, int32_t p_arg_count, vh_arena *p_arena, vh_value *r_value);
+
 	// R-DIAG-2: a Verse runtime error, with the file, line and Verse call stack it was raised at.
 	// Separate from on_diagnostic because the two go to different places -- a compile error
 	// annotates the script editor's gutter, this goes to the output and errors panel.

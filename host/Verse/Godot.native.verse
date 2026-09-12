@@ -88,6 +88,53 @@ VhSetValue<native>(Handle:int, Property:string, Value:variant)<transacts>:void
 # accessors in GodotClasses.native.verse are `<decides>` for.
 VhSingleton<native>(Name:string)<decides><transacts>:int
 
+# --- reference values --------------------------------------------------------
+
+# A Godot value the wire cannot copy: an Array, a Dictionary, a Callable, a Signal, or one of the
+# ten packed arrays. It holds an id in a table the GDExtension owns, the way `object` holds a Godot
+# instance id -- which is godot-cpp's own split, where a value type is copied and a reference type
+# is a handle every operation is asked of.
+#
+# Native so that it has a UObject shadow, and so that dropping the last Verse reference to it
+# releases the table entry. That only works for an object that has crossed to native at least once,
+# which is why VhAdoptRef exists and why every wrapper is built through it.
+godot_ref<public><native> := class:
+    Ref<native>:int = 0
+
+# Forces the UObject shadow into existence and takes ownership of the id.
+#
+# A Verse object that never crosses to native is a VM cell with no UObject behind it, so nothing
+# would ever run to release what it holds. Passing it here is what materialises the shadow; the
+# release then happens on the collection that drops it.
+VhAdoptRef<native>(Value:godot_ref)<transacts>:void
+
+# Element access on an Array, a Dictionary or a packed array. `<decides>` because a key that is
+# absent and an index out of range are ordinary misses rather than errors -- which is the whole
+# reason a Dictionary read composes into a guard.
+VhRefGet<native>(Ref:int, Key:variant)<decides><transacts>:variant
+VhRefSet<native>(Ref:int, Key:variant, Value:variant)<transacts>:void
+VhRefSize<native>(Ref:int)<transacts>:int
+
+# A fresh empty container of the Godot type Tag names.
+VhRefNew<native>(Tag:int)<transacts>:int
+
+# Invokes a Callable. What makes a callback-taking engine API reachable (R-TYPE-3).
+VhRefInvoke<native>(Ref:int, Args:[]variant)<transacts>:variant
+VhRefInvokeVoid<native>(Ref:int, Args:[]variant)<transacts>:void
+
+# The whole container at once, for the bulk converters. One native function per element shape
+# rather than one per Godot type: eleven packed and unpacked types share four payloads.
+VhRefInts<native>(Ref:int)<transacts>:[]int
+VhRefFloats<native>(Ref:int)<transacts>:[]float
+VhRefStrings<native>(Ref:int)<transacts>:[]string
+VhRefValues<native>(Ref:int)<transacts>:[]variant
+
+# The reverse: a fresh container of Tag holding these.
+VhRefFromInts<native>(Tag:int, Values:[]int)<transacts>:int
+VhRefFromFloats<native>(Tag:int, Values:[]float)<transacts>:int
+VhRefFromStrings<native>(Tag:int, Values:[]string)<transacts>:int
+VhRefFromValues<native>(Tag:int, Values:[]variant)<transacts>:int
+
 # The one native class in the API. Everything in GodotApi.native.verse derives from it as
 # ordinary Verse, which is what keeps a thousand mirrored classes from needing a thousand C++
 # shadows: the VM dispatches through the object's own shape, not through anything native.

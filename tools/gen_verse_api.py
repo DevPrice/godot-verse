@@ -65,6 +65,24 @@ SCALAR_TYPES = {
     "StringName": TypeInfo("string", "VhFromStringName", False, "VhToString", False),
     "NodePath": TypeInfo("string", "VhFromNodePath", False, "VhToString", False),
     "RID": TypeInfo("int", "VhFromRid", False, "VhToInt", False),
+
+    # The reference types. They cross as an id in the GDExtension's table rather than as a copy,
+    # because Godot's Array and Dictionary have reference semantics an author can observe and a
+    # Callable cannot be decomposed at all -- see src/verse_ref_table.h.
+    "Array": TypeInfo("godot_array", "VhFromArray", False, "VhToArray", False),
+    "Dictionary": TypeInfo("dictionary", "VhFromDictionary", False, "VhToDictionary", False),
+    "Callable": TypeInfo("callable", "VhFromCallable", False, "VhToCallable", False),
+    "Signal": TypeInfo("signal_ref", "VhFromSignal", False, "VhToSignal", False),
+
+    # The packed arrays are references on the wire for the same reason -- variable length, and a
+    # fixed-width variant has no lanes for them -- but the author sees a Verse array either way:
+    # the converters read the whole container out and build a fresh one going back.
+    "PackedByteArray": TypeInfo("[]int", "VhFromByteArray", False, "VhToInts", False),
+    "PackedInt32Array": TypeInfo("[]int", "VhFromInt32Array", False, "VhToInts", False),
+    "PackedInt64Array": TypeInfo("[]int", "VhFromInt64Array", False, "VhToInts", False),
+    "PackedFloat32Array": TypeInfo("[]float", "VhFromFloat32Array", False, "VhToFloats", False),
+    "PackedFloat64Array": TypeInfo("[]float", "VhFromFloat64Array", False, "VhToFloats", False),
+    "PackedStringArray": TypeInfo("[]string", "VhFromStringArray", False, "VhToStrings", False),
 }
 
 # Godot's math types are added to this table at import time from MATH_LAYOUT below, so that one
@@ -239,6 +257,81 @@ MATH_TAGS = {name: "Tag" + ("Aabb" if name == "AABB" else name) for name in MATH
 for _godot_math in MATH_TYPES:
     SCALAR_TYPES[_godot_math] = TypeInfo(
         verse_class_name(_godot_math), f"VhFrom{_godot_math}", False, f"VhTo{_godot_math}", False)
+
+
+# What a script can read out of, or write into, a Godot container.
+#
+# One entry per element type, because a script cannot spell a `variant`: the packers are
+# module-scoped so that a user cannot hold a raw reference (R-TYPE-7), which means every way into
+# and out of a container has to be typed. Keyed by the suffix the accessor takes.
+CONTAINER_ELEMENTS = [
+    ("Logic", "logic", "VhFromLogic", "VhToLogic"),
+    ("Int", "int", "VhFromInt", "VhToInt"),
+    ("Float", "float", "VhFromFloat", "VhToFloat"),
+    ("String", "string", "VhFromString", "VhToString"),
+    ("Vector2", "vector2", "VhFromVector2", "VhToVector2"),
+    ("Vector2i", "vector2i", "VhFromVector2i", "VhToVector2i"),
+    ("Vector3", "vector3", "VhFromVector3", "VhToVector3"),
+    ("Color", "color", "VhFromColor", "VhToColor"),
+    ("Array", "godot_array", "VhFromArray", "VhToArray"),
+    ("Dictionary", "dictionary", "VhFromDictionary", "VhToDictionary"),
+]
+
+# The key types each container is indexed by. An Array takes an int; a Dictionary takes whatever
+# Godot lets it, of which these are the ones worth spelling -- a string key is the common case and
+# an integer or a Vector2i key is what a tilemap uses.
+# The reference wrappers, and the Godot type each stands for. Emitted into the host's layout header
+# so the host can type a parameter declared as one of them.
+REFERENCE_TYPES = [
+    ("godot_array", "VH_VARIANT_ARRAY"),
+    ("dictionary", "VH_VARIANT_DICTIONARY"),
+    ("callable", "VH_VARIANT_CALLABLE"),
+    ("signal_ref", "VH_VARIANT_SIGNAL"),
+]
+
+CONTAINER_KEYS = {
+    "godot_array": [("Index", "int", "VhFromInt")],
+    "dictionary": [
+        ("Key", "string", "VhFromString"),
+        ("Key", "int", "VhFromInt"),
+        ("Key", "vector2i", "VhFromVector2i"),
+    ],
+}
+
+
+def emit_container_classes() -> list:
+    """godot_array and dictionary, with a typed accessor pair per element type and key type."""
+    blocks = []
+    for verse_name, keys in CONTAINER_KEYS.items():
+        lines = [f"{verse_name}<public> := class(godot_ref):", ""]
+        lines.append("    # How many elements it holds.")
+        lines.append("    Length<public>()<transacts>:int = VhRefSize(Ref)")
+        lines.append("")
+        if verse_name == "godot_array":
+            lines.append("    # The whole thing as a Verse array of its elements' own type, which is a copy:")
+            lines.append("    # Verse's arrays are values, so mutating what this returns reaches nothing.")
+            for suffix, verse_type, _, unpack in CONTAINER_ELEMENTS:
+                if verse_type in ("godot_array", "dictionary"):
+                    continue
+                lines.append(
+                    f"    To{suffix}s<public>()<transacts>:[]{verse_type} ="
+                    f" for (V : VhRefValues(Ref)) {{ {unpack}(V) }}")
+            lines.append("")
+
+        for suffix, verse_type, pack, unpack in CONTAINER_ELEMENTS:
+            for key_name, key_type, key_pack in keys:
+                # Failable: an absent key and an index out of range are ordinary misses, and a
+                # value of another type is a miss too rather than a raise -- asking a container for
+                # an int and getting a string back is the caller's question answered "no".
+                lines.append(
+                    f"    Get{suffix}<public>({key_name}:{key_type})<decides><transacts>:{verse_type} ="
+                    f" {unpack}(VhRefGet[Ref, {key_pack}({key_name})])")
+            for key_name, key_type, key_pack in keys:
+                lines.append(
+                    f"    Set{suffix}<public>({key_name}:{key_type}, Value:{verse_type})<transacts>:void ="
+                    f" VhRefSet(Ref, {key_pack}({key_name}), {pack}(Value))")
+        blocks.append("\n".join(lines))
+    return blocks
 
 
 def math_struct_name(godot_name: str) -> str:
@@ -529,7 +622,12 @@ def emit_method(cm: ClassifiedMethod) -> str:
 # (:accessor, :int, :char):void as well -- element accessors, to make `Node.Text[3]` resolve. What
 # a write past the end of the string should do has no answer that is not invented, and an accessor
 # may not fail, so these keep their get/set methods instead.
-CONTAINER_PROPERTY_TYPES = {"string", "[]string"}
+# A `var` property whose type is a container cannot work: Verse asks a struct- or array-typed var
+# for field-named accessor overloads it cannot satisfy for these. Godot's own getter and setter are
+# emitted as ordinary methods instead, so the value is still reachable.
+#
+# `string` is here because Verse spells it `[]char`, so the compiler treats it as an array too.
+CONTAINER_PROPERTY_TYPES = {"string", "godot_array", "dictionary", "callable", "signal_ref"}
 
 # Names the generated accessor bodies bind. A Godot member that lands on one of these (Range.value
 # does) would be ambiguous rather than shadowed at the point the body mentions it.
@@ -546,7 +644,7 @@ def classify_property(p: dict, resolver: TypeResolver, coverage: Coverage):
     if info is None:
         coverage.unsupported([p["type"]])
         return None
-    if info.verse_type in CONTAINER_PROPERTY_TYPES:
+    if info.verse_type in CONTAINER_PROPERTY_TYPES or info.verse_type.startswith("[]"):
         coverage.skip("property_container_type")
         return None
     # An object-typed property would need a getter that cannot fail, and a null Godot object is
@@ -737,6 +835,18 @@ HEADER_TEMPLATE = """using {{/Verse.org/Native}}
 """
 
 
+CONTAINERS_TEMPLATE = """
+# --- Godot's containers ------------------------------------------------------
+#
+# A typed accessor pair per element type, because a script cannot spell a `variant` -- the packers
+# are module-scoped so that a user cannot hold a raw reference that outlives what it names
+# (R-TYPE-7). Every read is failable: a key that is absent, an index out of range, and an element
+# of another type are all the same answer, and it is "no" rather than an error.
+
+{classes}
+"""
+
+
 MATH_TEMPLATE = """
 # --- Godot's math types ------------------------------------------------------
 #
@@ -782,6 +892,7 @@ def render(api: dict, class_blocks: list, singleton_accessors: list) -> str:
         structs="\n\n".join(emit_math_structs()),
         packers="\n".join(emit_math_packers()),
     )
+    text += CONTAINERS_TEMPLATE.format(classes="\n\n".join(emit_container_classes()))
     text += "\n" + "\n\n".join(class_blocks) + "\n"
     if singleton_accessors:
         text += SINGLETONS_TEMPLATE.format(accessors="\n".join(singleton_accessors))
@@ -828,6 +939,19 @@ struct layout
 
 inline constexpr layout layouts[] = {{
 {entries}
+}};
+
+// The Verse classes that wrap a reference id rather than carrying a value, and the Godot type each
+// names. The host needs this to report a parameter's or a result's type across the ABI: without
+// it Godot is told the argument is Nil and refuses to pass one.
+struct reference_type
+{{
+	const char *verse_name;
+	int variant_tag;
+}};
+
+inline constexpr reference_type reference_types[] = {{
+{reference_entries}
 }};
 
 }} // namespace verse_math
@@ -930,10 +1054,13 @@ def render_math_layout_header(api: dict) -> str:
         entries.append(
             f'\t{{"{verse_name}", {math_variant_tag(godot_name)}, {packed}, '
             f"{ident}_fields, {len(MATH_LAYOUT[godot_name])}}},")
+    reference_entries = "\n".join(
+        f'\t{{"{verse_name}", {tag}}},' for verse_name, tag in REFERENCE_TYPES)
     return MATH_LAYOUT_HEADER_TEMPLATE.format(
         version=api["header"]["version_full_name"],
         field_arrays="\n\n".join(field_arrays),
         entries="\n".join(entries),
+        reference_entries=reference_entries,
     )
 
 

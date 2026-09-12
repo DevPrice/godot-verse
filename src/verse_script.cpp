@@ -35,9 +35,14 @@ Dictionary typed_argument(const String &p_name, Variant::Type p_type) {
 	Dictionary arg;
 	arg["name"] = p_name;
 	arg["type"] = (int64_t)p_type;
+	arg["class_name"] = StringName();
 	arg["hint"] = (int64_t)PROPERTY_HINT_NONE;
 	arg["hint_string"] = String();
-	arg["usage"] = (int64_t)PROPERTY_USAGE_DEFAULT;
+	// A NIL type here means "any", not "must be nil" -- which is what NIL_IS_VARIANT tells Godot,
+	// and what a Verse array parameter needs, since it accepts any of Godot's packed arrays.
+	arg["usage"] = (int64_t)(p_type == Variant::NIL
+					? (PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_NIL_IS_VARIANT)
+					: PROPERTY_USAGE_DEFAULT);
 	return arg;
 }
 
@@ -45,6 +50,7 @@ Dictionary untyped_argument(const String &p_name) {
 	Dictionary arg;
 	arg["name"] = p_name;
 	arg["type"] = (int64_t)Variant::NIL;
+	arg["class_name"] = StringName();
 	arg["hint"] = (int64_t)PROPERTY_HINT_NONE;
 	arg["hint_string"] = String();
 	arg["usage"] = (int64_t)(PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_NIL_IS_VARIANT);

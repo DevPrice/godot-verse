@@ -1,5 +1,7 @@
 #include "verse_value.h"
 
+#include "verse_ref_table.h"
+
 #include <godot_cpp/classes/object.hpp>
 #include <godot_cpp/variant/aabb.hpp>
 #include <godot_cpp/variant/array.hpp>
@@ -498,58 +500,36 @@ bool variant_to_vh(const Variant &p_value, vh_arena *p_arena, vh_value &r_out) {
 			return floats_to_tuple(p_arena, c, 16, VH_VARIANT_PROJECTION, r_out);
 		}
 
+		// The reference types. Copying an Array or a Dictionary across would turn Godot's
+		// reference semantics into value semantics without saying so, and a Callable cannot be
+		// decomposed at all; the packed arrays are values but have no fixed width. All of them
+		// cross as an id into the table, which the host releases when Verse drops the wrapper.
+		case Variant::ARRAY:
+		case Variant::DICTIONARY:
+		case Variant::CALLABLE:
+		case Variant::SIGNAL:
+			r_out.Type = VH_TYPE_REF;
+			r_out.VariantTag = (int32_t)p_value.get_type();
+			r_out.Ref = verse_ref_table().mint(p_value);
+			return true;
+
 		case Variant::PACKED_BYTE_ARRAY:
 		case Variant::PACKED_INT32_ARRAY:
 		case Variant::PACKED_INT64_ARRAY:
 		case Variant::PACKED_FLOAT32_ARRAY:
 		case Variant::PACKED_FLOAT64_ARRAY:
 		case Variant::PACKED_STRING_ARRAY:
-			return scalars_to_vh(p_arena, Array(p_value), (int32_t)p_value.get_type(), r_out);
-
 		case Variant::PACKED_VECTOR2_ARRAY:
-			return packed_vectors_to_vh(p_arena, PackedVector2Array(p_value), 2, VH_VARIANT_PACKED_VECTOR2_ARRAY, r_out);
 		case Variant::PACKED_VECTOR3_ARRAY:
-			return packed_vectors_to_vh(p_arena, PackedVector3Array(p_value), 3, VH_VARIANT_PACKED_VECTOR3_ARRAY, r_out);
-		case Variant::PACKED_COLOR_ARRAY: {
-			const PackedColorArray packed = p_value;
-			Array flat;
-			for (int64_t i = 0; i < packed.size(); i++) {
-				flat.push_back((double)packed[i].r);
-				flat.push_back((double)packed[i].g);
-				flat.push_back((double)packed[i].b);
-				flat.push_back((double)packed[i].a);
-			}
-			return scalars_to_vh(p_arena, flat, VH_VARIANT_PACKED_COLOR_ARRAY, r_out);
-		}
-
-		case Variant::ARRAY:
-			return scalars_to_vh(p_arena, Array(p_value), VH_VARIANT_ARRAY, r_out);
-
-		case Variant::DICTIONARY: {
-			const Dictionary dict = p_value;
-			const Array keys = dict.keys();
-			const int32_t count = (int32_t)keys.size();
-			vh_pair *pairs = nullptr;
-			if (count > 0) {
-				pairs = alloc_pairs(p_arena, count);
-				if (pairs == nullptr) {
-					return false;
-				}
-				for (int32_t i = 0; i < count; i++) {
-					const Variant key = keys[i];
-					if (!variant_to_vh(key, p_arena, pairs[i].Key)) {
-						return false;
-					}
-					if (!variant_to_vh(dict[key], p_arena, pairs[i].Value)) {
-						return false;
-					}
-				}
-			}
-			r_out.Type = VH_TYPE_MAP;
-			r_out.Map.Pairs = pairs;
-			r_out.Map.Count = count;
+		case Variant::PACKED_COLOR_ARRAY:
+		case Variant::PACKED_VECTOR4_ARRAY:
+			r_out.Type = VH_TYPE_REF;
+			r_out.VariantTag = (int32_t)p_value.get_type();
+			r_out.Ref = verse_ref_table().mint(p_value);
 			return true;
-		}
+
+		case Variant::VARIANT_MAX:
+			return false;
 
 		default:
 			return false;
@@ -606,6 +586,13 @@ Variant vh_to_variant(const vh_value &p_value) {
 	switch (p_value.Type) {
 		case VH_TYPE_VOID:
 			return Variant();
+
+		// The table owns the value; handing back a copy of the Variant is handing back the same
+		// Array or Dictionary, because those are references in Godot too.
+		case VH_TYPE_REF: {
+			const Variant *found = verse_ref_table().find(p_value.Ref);
+			return found != nullptr ? *found : Variant();
+		}
 
 		case VH_TYPE_LOGIC:
 			return Variant(p_value.Logic != 0);
@@ -666,12 +653,21 @@ Variant::Type variant_type_for(int32_t p_type, int32_t p_variant_tag) {
 			return Variant::STRING;
 		case VH_TYPE_MAP:
 			return Variant::DICTIONARY;
-		// A tuple is an Array to Godot unless the tag named a math struct, which the tag test
-		// above has already answered for.
-		case VH_TYPE_ARRAY:
+		// A tuple is an Array to Godot unless the tag named a math struct, which the tag test above
+		// has already answered for.
 		case VH_TYPE_TUPLE:
+			return Variant::ARRAY;
+		// An untagged array is an `Array` to Godot. A Verse `[]float` is equally a
+		// PackedFloat32Array and a PackedFloat64Array, and Godot converts between none of the
+		// three, so a script method taking one receives the general type -- which GDScript can
+		// build from any of them, where the reverse is not true.
+		case VH_TYPE_ARRAY:
 			return Variant::ARRAY;
 		default:
 			return Variant::NIL;
 	}
+}
+
+bool array_to_vh_seq(const Array &p_values, vh_arena *p_arena, vh_value &r_out) {
+	return scalars_to_vh(p_arena, p_values, VH_VARIANT_ARRAY, r_out);
 }

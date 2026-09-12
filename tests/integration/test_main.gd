@@ -11,6 +11,10 @@ var _passed := 0
 var _failed := 0
 
 
+func _double(n: int) -> int:
+	return n * 2
+
+
 func _check(name: String, ok: bool) -> void:
 	if ok:
 		_passed += 1
@@ -90,6 +94,48 @@ func _init() -> void:
 	# basis that crossed came back transposed; this is the assertion that says otherwise.
 	var basis := Basis(Vector3(1, 2, 3), Vector3(4, 5, 6), Vector3(7, 8, 9))
 	_check_eq("a Basis crosses untransposed", node.call("BasisColumnX", basis), basis.x)
+
+	# --- R-TYPE-1/2/3: the reference types ----------------------------------------------------
+	#
+	# The point of these is the last two: Godot's Array and Dictionary are references, and a Verse
+	# script mutating one has to be mutating the caller's. A copy would pass every other assertion
+	# here and fail those.
+	var items: Array = [10, 20, 30]
+	_check_eq("an Array's length crosses", node.call("ArrayLength", items), 3)
+	_check_eq("and its elements", node.call("ArrayFirstInt", items), 10)
+
+	node.call("ArrayAppendTo", items, 1, 99)
+	_check_eq("a write through an Array reaches the caller's", items[1], 99)
+
+	var data := {"hp": 7, "mp": 3}
+	_check_eq("a Dictionary lookup", node.call("DictLookup", data, "hp"), 7)
+	_check_eq("a missing key is nil, not an error", node.call("DictLookup", data, "nope"), null)
+	_check_eq("a Dictionary's size", node.call("DictLength", data), 2)
+
+	node.call("DictWrite", data, "hp", 42)
+	_check_eq("a write through a Dictionary reaches the caller's", data["hp"], 42)
+
+	# R-TYPE-3: a Callable held, invoked, and its result returned.
+	#
+	# A bound method, not a lambda. Invoking a GDScript *lambda* from Verse segfaults Godot during
+	# shutdown -- see spec R-TYPE-3 for what is known about it. Holding one and handing it back is
+	# fine; only calling one is not, so this covers the case `connect` and every callback-taking
+	# engine API actually use.
+	var doubler := Callable(self, "_double")
+	_check_eq("a Callable is invocable from Verse", node.call("CallIt", doubler, 21), 42)
+
+	# --- packed arrays ------------------------------------------------------------------------
+	#
+	# A Verse `[]float` is equally a PackedFloat32Array, a PackedFloat64Array and an Array, so a
+	# script method taking one declares the general type. Godot builds an Array from any packed
+	# array; it will not convert between them, which is why this is the direction that works.
+	_check_eq("a float array arrives as a Verse array",
+			node.call("SumFloats", [1.0, 2.0, 4.0]), 7.0)
+	_check_eq("and a string array",
+			node.call("JoinStrings", ["a", "b"]), "a/b/")
+	var made: Variant = node.call("MakeFloats", 3)
+	_check("a Verse array comes back as a sequence Godot can read", made != null and made.size() == 3)
+	_check_eq("with its values", float(made[2]), 2.0)
 
 	# --- the call reaches this instance, not the class default --------------------------------
 	_check_eq("a method's side effect is visible on the instance", node.call("Bump", 5), 5)

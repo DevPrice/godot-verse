@@ -349,27 +349,52 @@ empty. Signals are how Godot programs are wired together, so this is parity-crit
   string types, all packed arrays, all math structs (`Vector2/2i/3/3i/4/4i`, `Rect2`, `Transform2D`,
   `Transform3D`, `Basis`, `Quaternion`, `AABB`, `Plane`, `Projection`, `Color`), `StringName`,
   `NodePath`, `RID`, `Callable`, `Signal`, `Dictionary`, `Array`, and `Object`.
-  Status: **part, and the remaining work is now designed rather than open.** `logic`, `int`,
-  `float`, `string`, `vector2`, `vector3`, `color`, arrays of those, and objects cross today. The
-  gap is on the **Verse side alone**: `src/verse_value.cpp` and the wire already carry the whole
-  set, and `docs/abi-v2-design.md` settles what replaces the flat `variant` tuple — a fixed-width
-  tuple of scalars, which measurements in §1a show marshals across VNI, is hashable (so
-  `[variant]variant` is a legal type), and allocates nothing. Reference types ride as an id.
-  Building it is the rest of Phase 1.
+  Status: **done, with two edges.** `variant` is a fixed-width native struct of scalar lanes; all
+  sixteen math types cross as their components, generated from one layout that drives the Verse
+  struct, the packers and the host's marshalling alike; and the reference types — `Array`,
+  `Dictionary`, `Callable`, `Signal` and the ten packed arrays — cross as ids into a table the
+  GDExtension owns, released when the Verse value wrapping one is collected.
+
+  The two edges. `Callable` has the lambda defect under R-TYPE-3. And a Verse `[]float` names no
+  single Godot type — it is equally a `PackedFloat32Array`, a `PackedFloat64Array` and an `Array` —
+  so a *script-defined* method taking one declares `Array`, which Godot builds from any of them
+  where the reverse conversion does not exist. A mirrored Godot method is unaffected: the generator
+  knows which packed type it wants and tags it.
 - **R-TYPE-2 (MUST)** Typed arrays and typed dictionaries preserve their element type across the
-  boundary, so a `TypedArray[Node2D]` is not flattened to an untyped array.
+  boundary, so a `TypedArray[Node2D]` is not flattened to an untyped array. Status: **part.** An
+  `Array` and a `Dictionary` cross as references into the container Godot already owns, so nothing
+  is flattened and a typed one keeps whatever typing Godot gave it — a script reads and writes it
+  in place. What is missing is the Verse side of the *type*: a script writes `GetNode`, not
+  `GetNode[node2d]`, so `typedarray::Node2D` is still a type the generator skips.
 - **R-TYPE-3 (MUST)** `Callable` is a Verse value a script can hold, invoke, and hand back to
-  Godot — this is what makes R-SIG-3 and any callback-taking engine API work.
+  Godot — this is what makes R-SIG-3 and any callback-taking engine API work. Status: **done for a
+  bound Callable; a lambda has a known defect.** A `callable` is held, passed back, and invoked
+  with arguments. **Invoking a GDScript *lambda* from Verse segfaults Godot during shutdown**, with
+  "orphaned lambdas becoming invalid at destruction of script" logged first. A `Callable(object,
+  "method")` is unaffected, and so is holding a lambda and handing it back — only calling one is
+  not. Bisected to `Callable::callv` in `api_invoke_callable`: not the reference table, which
+  clearing earlier does not fix, and not the holding, which on its own exits clean. The other
+  direction — a Verse function *as* a Callable — is R-SIG-3's and arrives in Phase 4.
 - **R-TYPE-4 (MUST)** The absence of a value has exactly one spelling at the boundary, and it is
   documented. Verse has no null; the existing decision — a stale object handle is a runtime error,
   a legitimately-absent object is `<decides>` — is the rule, and it extends to every other type
-  a Godot API may return as `null`. Status: **part** (decided for objects only).
+  a Godot API may return as `null`. Status: **done, and the rule is that nullability is a property
+  of the *type*.** Only an `Object` return is `<decides>`; every other return is total, and a nil
+  arriving where a value was declared raises as a bridge bug rather than failing quietly. Measured
+  rather than assumed: across Godot's 5304 documented value-typed returns, five mention returning
+  null and four are false positives on inspection -- one names its *parameter*, one describes its
+  Array's *elements*, one returns an editor class the rule already covers, and one is a virtual the
+  generator skips. The single real exception, `EditorProperty.get_edited_property`, is editor-only.
+  A hand-maintained list would be 5303 entries of ceremony to catch it.
 - **R-TYPE-5 (MUST)** A type mismatch at the boundary is a compile error wherever the typed layer
   can see it, and a diagnosable runtime error with both type names where it cannot.
   Status: **part** (`VhTypeMismatch` exists).
 - **R-TYPE-6 (MUST)** Marshalling does not allocate per-call on the hot path in a way that makes
   per-frame script code unusable. No target number (§13), but the design must not make one
-  impossible to reach later.
+  impossible to reach later. Status: **improved on, not measured.** The encoding this replaced
+  built up to three Verse arrays to carry one number; a fixed-width struct builds none, so every
+  value type is allocation-free at the boundary now. A reference type costs a table entry, which is
+  the price of not copying a container. Still unmeasured — R-PERF-2 is what would say.
 - **R-TYPE-7 (MUST)** The plumbing stays hidden. The `Vh…` primitives, the `variant` tuple and
   `object`'s `Handle` carry no access specifier and stay out of completion lists; a user cannot
   accidentally hold a raw handle that outlives what it names. Status: **done**.

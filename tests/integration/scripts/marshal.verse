@@ -51,6 +51,48 @@ marshal := class(node2d):
     # A basis' X is Godot's own first *column*, which is what makes this the transpose check.
     BasisColumnX<public>(B:basis):vector3 = B.X
 
+    # --- reference types -----------------------------------------------------
+    # Array and Dictionary are references in Godot, so a mutation here has to be visible to the
+    # caller. That is the property the whole reference design exists to keep, and the only one a
+    # round trip cannot check -- a copy would round-trip perfectly and still be wrong.
+
+    ArrayLength<public>(Items:godot_array):int = Items.Length()
+
+    ArrayFirstInt<public>(Items:godot_array)<decides>:int = Items.GetInt[0]
+
+    # Writes through the reference. GDScript sees it.
+    ArrayAppendTo<public>(Items:godot_array, Index:int, Value:int):void =
+        Items.SetInt(Index, Value)
+
+    DictLookup<public>(Data:dictionary, Key:string)<decides>:int = Data.GetInt[Key]
+
+    DictWrite<public>(Data:dictionary, Key:string, Value:int):void =
+        Data.SetInt(Key, Value)
+
+    DictLength<public>(Data:dictionary):int = Data.Length()
+
+    # R-TYPE-3: a Callable the script was handed, invoked with arguments.
+    CallIt<public>(Fn:callable, Arg:int):int = Fn.CallInt(array{Arg})
+
+    # --- packed arrays -------------------------------------------------------
+    # Values on Godot's side and Verse arrays on this one, whatever the wire does between.
+
+    SumFloats<public>(Values:[]float):float =
+        var Total:float = 0.0
+        for (V : Values):
+            set Total = Total + V
+        Total
+
+    JoinStrings<public>(Values:[]string):string =
+        var Joined:string = ""
+        for (V : Values):
+            set Joined = "{Joined}{V}/"
+        Joined
+
+    MakeFloats<public>(Count:int):[]float =
+        for (I := 0..Count - 1):
+            1.0 * I
+
     # --- arity ---------------------------------------------------------------
 
     NoArgs<public>():int = 42

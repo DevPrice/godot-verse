@@ -157,6 +157,10 @@ extern "C" int32_t vh_init(const vh_init_desc* Desc)
 
 extern "C" void vh_shutdown(void)
 {
+    // The callbacks first: tearing the engine down collects, and a collected godot_ref would
+    // otherwise call back into a GDExtension that is already unloading.
+    GetHost().Godot = vh_godot_api{};
+
     FVerseRuntimeErrorDelegates::RuntimeErrorTextProvider.Unbind();
     FVerseRuntimeErrorDelegates::OnVerseRuntimeError.Clear();
     GodotVerse::WaitForBackgroundCheck();

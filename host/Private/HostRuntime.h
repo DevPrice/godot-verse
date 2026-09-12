@@ -30,6 +30,10 @@ void ReportDiagnostic(vh_severity Severity,
                       int32 EndColumn,
                       int32 ReferenceCode);
 
+/// Drops the host's claim on a GDExtension reference id. Called from godot_ref::BeginDestroy, so
+/// it runs on the collector's thread of control and must not touch the VM.
+void ReleaseGodotRef(int64 Ref);
+
 void ReportError(FUtf8StringView Message);
 void ReportInfo(FUtf8StringView Message);
 

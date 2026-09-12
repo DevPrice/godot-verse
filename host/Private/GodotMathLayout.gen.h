@@ -147,4 +147,20 @@ inline constexpr layout layouts[] = {
 	{"color", VH_VARIANT_COLOR, VH_VARIANT_PACKED_COLOR_ARRAY, color_fields, 4},
 };
 
+// The Verse classes that wrap a reference id rather than carrying a value, and the Godot type each
+// names. The host needs this to report a parameter's or a result's type across the ABI: without
+// it Godot is told the argument is Nil and refuses to pass one.
+struct reference_type
+{
+	const char *verse_name;
+	int variant_tag;
+};
+
+inline constexpr reference_type reference_types[] = {
+	{"godot_array", VH_VARIANT_ARRAY},
+	{"dictionary", VH_VARIANT_DICTIONARY},
+	{"callable", VH_VARIANT_CALLABLE},
+	{"signal_ref", VH_VARIANT_SIGNAL},
+};
+
 } // namespace verse_math

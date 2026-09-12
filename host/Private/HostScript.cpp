@@ -828,6 +828,19 @@ AUTORTFM_DISABLE const FStructLayout* FindStructLayout(FUtf8StringView VerseName
 }
 
 /// The layout of the struct a nested field holds.
+/// The Godot type a reference wrapper class names -- `godot_array` is an Array -- or 0.
+AUTORTFM_DISABLE int32 ReferenceVariantTag(FUtf8StringView VerseName)
+{
+    for (const verse_math::reference_type& Reference : verse_math::reference_types)
+    {
+        if (VerseName.Equals(FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(Reference.verse_name))))
+        {
+            return Reference.variant_tag;
+        }
+    }
+    return 0;
+}
+
 AUTORTFM_DISABLE const FStructLayout* FindStructLayoutByTag(int32 VariantTag)
 {
     for (const FStructLayout& Layout : verse_math::layouts)
@@ -968,6 +981,18 @@ AUTORTFM_DISABLE void DescribeExportType(const uLang::CTypeBase* Type, const uLa
             if (bIsOption)
             {
                 OutDesc.Reject = VH_EXPORT_OPTION_NOT_OBJECT;
+                return;
+            }
+
+            // A reference wrapper -- godot_array, dictionary, callable, signal_ref -- names a
+            // Godot type that crosses as an id rather than as a value. Typed here so a method
+            // taking one reports the right argument type to Godot; rejected for *export* in the
+            // same breath, because the inspector has no editor for an arbitrary Array.
+            if (const int32 ReferenceTag = ReferenceVariantTag(FUtf8StringView(Class->AsNameCString())))
+            {
+                OutDesc.Type = VH_TYPE_REF;
+                OutDesc.VariantTag = ReferenceTag;
+                OutDesc.Reject = VH_EXPORT_UNSUPPORTED_TYPE;
                 return;
             }
 
@@ -1584,6 +1609,19 @@ AUTORTFM_DISABLE bool ValueToWire(Verse::FRunningContext Context,
         OutValue.VariantTag = VH_VARIANT_INT;
         OutValue.Int = Enumerator->GetIntValue();
     }
+    else if (Declared.Described.Type == VH_TYPE_REF)
+    {
+        // A reference wrapper the script is handing back. Its id is what crosses; the table entry
+        // it names is still claimed by whatever Verse object holds it.
+        const verse::godot_ref* Wrapper = Cast<verse::godot_ref>(Value.ExtractUObject());
+        if (!Wrapper)
+        {
+            return false;
+        }
+        OutValue.Type = VH_TYPE_REF;
+        OutValue.VariantTag = Declared.Described.VariantTag;
+        OutValue.Ref = Wrapper->Ref.Get();
+    }
     else if (Verse::VValueObject* Struct = Value.DynamicCast<Verse::VValueObject>())
     {
         // A mirrored struct: vector2, color. The fields are read by name, and the names come
@@ -1796,6 +1834,35 @@ AUTORTFM_DISABLE UObject* NewMirroredWrapper(UClass* NativeClass, int64 Handle)
 
 /// What an optional reference member holds: an option around the object, or Verse's `false` for one
 /// holding nothing.
+/// The Verse class that wraps a reference of this Godot type.
+AUTORTFM_DISABLE UClass* FindReferenceClass(int32 VariantTag)
+{
+    for (const verse_math::reference_type& Reference : verse_math::reference_types)
+    {
+        if (Reference.variant_tag == VariantTag)
+        {
+            return FindMirroredClass(FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(Reference.verse_name)));
+        }
+    }
+    return nullptr;
+}
+
+/// One reference wrapper, holding the id and owning it from here on.
+///
+/// A UObject rather than a VM cell: the id has to be released when Verse drops the value, and only
+/// a UObject is told when that happens. godot_ref::BeginDestroy is the other half.
+AUTORTFM_DISABLE UObject* NewReferenceWrapper(UClass* NativeClass, int64 Id)
+{
+    UObject* Wrapper = NativeClass ? NewObject<UObject>(GetTransientPackage(), NativeClass) : nullptr;
+    verse::godot_ref* Shadow = Cast<verse::godot_ref>(Wrapper);
+    if (!Shadow)
+    {
+        return nullptr;
+    }
+    Shadow->Ref.Init(Id, Shadow);
+    return Wrapper;
+}
+
 AUTORTFM_DISABLE Verse::VValue ReferenceOption(Verse::FRunningContext Context, UObject* Referenced)
 {
     return Referenced ? Verse::VValue(Verse::VOption::New(Context, Verse::VValue(Referenced)))
@@ -1932,6 +1999,21 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
         return true;
     }
 
+    // A reference wrapper: the id is the whole of the value, and the Verse object exists to hold
+    // it and to release it when collected. Built through the UObject path rather than as a VM cell
+    // for exactly that reason -- a cell has no destructor, and an id nobody releases is a leak.
+    if (Desc.Type == VH_TYPE_REF)
+    {
+        const int64 Id = Value.Type == VH_TYPE_REF ? Value.Ref : (Value.Type == VH_TYPE_INT ? Value.Int : 0);
+        UObject* const Wrapper = NewReferenceWrapper(FindReferenceClass(Desc.VariantTag), Id);
+        if (!Wrapper)
+        {
+            return false;
+        }
+        OutValue = Verse::VValue(Wrapper);
+        return true;
+    }
+
     if (Declared.Struct != nullptr)
     {
         Verse::VClass* const StructClass =
@@ -1951,14 +2033,31 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
 
     if (Desc.Type == VH_TYPE_ARRAY)
     {
-        if (Value.Type != VH_TYPE_ARRAY)
+        // A Godot Array or packed array arrives as a reference id, because that is what every
+        // container is on this wire now. A Verse array is a value, so the contents have to be read
+        // out before one can be built -- which is the whole difference between the two, and the
+        // reason a script sees `[]float` where Godot has a PackedFloat32Array.
+        GodotVerse::FCallArena ContentsArena;
+        vh_value Contents{};
+        const vh_value* Source = &Value;
+        if (Value.Type == VH_TYPE_REF)
+        {
+            GodotVerse::FHostState& Host = GodotVerse::GetHost();
+            if (!Host.Godot.RefContents
+                || Host.Godot.RefContents(Host.Godot.Ctx, Value.Ref, &ContentsArena, &Contents) != VH_CALL_OK)
+            {
+                return false;
+            }
+            Source = &Contents;
+        }
+        if (Source->Type != VH_TYPE_ARRAY)
         {
             return false;
         }
         // Immutable: a parameter is a fresh binding the callee cannot assign through, so there is
         // no `var` container to match the way a member write has to.
         const Verse::VValue Built = NewArrayValue(Context, /*bMutable*/ false, Desc.VariantTag, Desc.ElementVariantTag,
-                                                  Value.Seq.Items, Value.Seq.Count);
+                                                  Source->Seq.Items, Source->Seq.Count);
         if (Built.IsUninitialized())
         {
             return false;
@@ -2392,7 +2491,13 @@ AUTORTFM_DISABLE bool GodotVerse::GetClassMethods(FUtf8StringView ClassName, TAr
             FParamDesc& Out = Desc.Params.AddDefaulted_GetRef();
             Out.Name = FUtf8String(Param->AsNameCString());
             Out.Type = ParamType.Described.Type;
-            Out.VariantTag = ParamType.Described.VariantTag;
+            // A Verse array names no single Godot type: `[]float` is a PackedFloat32Array, a
+            // PackedFloat64Array or a plain Array, and the converters take any of them. Reporting
+            // one would have Godot refuse the other two before the call was ever made, so the
+            // parameter is reported untyped and checked where it is converted instead.
+            Out.VariantTag = ParamType.Described.Type == VH_TYPE_ARRAY
+                ? VH_VARIANT_NIL
+                : ParamType.Described.VariantTag;
             Out.bHasDefault = Param->HasInitializer();
             if (!Out.bHasDefault)
             {
