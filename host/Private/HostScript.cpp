@@ -4250,12 +4250,17 @@ AUTORTFM_DISABLE void GodotVerse::TickScripts(double BudgetSeconds)
         // what makes that a rule an author can state.
         GHaltedUntilTick = false;
         ReviveContentScope();
-        ReportInfo(GTasksLostToError
-                       ? UTF8TEXT("Verse has resumed after the runtime error above. Suspended work "
-                                  "that was in flight anywhere in the project was cancelled with it "
-                                  "-- one scope serves every script today (R-ASYNC-4).")
-                       : UTF8TEXT("Verse has resumed after the runtime error above. Nothing was "
-                                  "suspended, so nothing else was lost."));
+
+        // Said only when it carries something the error did not. A script that raises every frame
+        // reports its error every frame -- which is what Godot does for GDScript too -- and a
+        // second line saying nothing was lost would double that for no information. When work
+        // *was* cancelled there is no other way to find out.
+        if (GTasksLostToError)
+        {
+            ReportInfo(UTF8TEXT("Verse has resumed. Suspended work that was in flight anywhere in "
+                                "the project was cancelled by the runtime error above -- one task "
+                                "scope serves every script today (R-ASYNC-4)."));
+        }
         GTasksLostToError = false;
     }
 

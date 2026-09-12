@@ -473,7 +473,11 @@ lifetime rules can be written down rather than discovered.
 
 - **R-ASYNC-4** — per-script-instance task scopes. Today one `verse::FContentScope` serves the
   whole project, so one dead-object access terminates every suspended task in every script. This
-  is first: it is a correctness bug, not a feature.
+  is first: it is a correctness bug, not a feature. Phase 3 made it *survivable* rather than
+  fatal — before R-DIAG-3's fix the same termination stopped Verse for the whole process, not
+  just its suspended work — but it did not narrow it. Two questions come here with it: where the
+  scope boundary goes, and whether a raise should still stop every script for the rest of the
+  frame once only one instance's tasks are at stake.
 - **R-ASYNC-1** — `spawn`, `race`, `sync`, `branch`, `rush`, `loop`, `<suspends>` verified in
   script code across frames.
 - **R-ASYNC-2, R-SIG-5** — await a Godot signal, a timer, a frame.
@@ -500,7 +504,11 @@ surface.
   told there are no stack frames. Implementing or removing them is part of this phase, and the
   same audit applies to every other declared virtual.
 - **R-DIAG-5** — the profiler, with the same declared-and-empty defect.
-- **R-DIAG-3** — a script error never takes down the editor or the game.
+- **R-DIAG-3** — a script error never takes down the editor or the game. **Part of this landed
+  with Phase 3**, because a raise turned out to stop every script in the process rather than
+  merely losing a return value; the spec has the three rules that replaced it. What is left here
+  is bounding a script that raises every frame (**OQ-13**), and keeping a `@tool` script's error
+  away from the scene the author is editing.
 - **R-DIAG-6** — the `SocketDebugger` DAP question (OQ-9), only if R-DIAG-4 turns out blocked.
 
 **Exit:** a breakpoint in Godot's script editor stops a Verse script and shows its locals.

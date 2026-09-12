@@ -11,14 +11,16 @@ language than GDScript and does not already know Verse.
 
 ## Status: experimental. Do not build a game on this.
 
-This is a research build, and it is early — Phase 1 of 8 on [the roadmap](docs/roadmap.md).
+This is a research build, and it is early — Phase 3 of 8 on [the roadmap](docs/roadmap.md).
 
 - **Windows only.** No macOS, no Linux, no export to anything.
 - **There is no addon to install.** Verse's compiler ships only inside Unreal, so building
   requires *your own Unreal Engine source checkout* plus Visual Studio, and the resulting host DLL
   cannot be redistributed. A download-and-unzip install waits on Epic licensing the toolchain
   separately.
-- **Scripts are picked up at editor start.** Adding a `.verse` file means restarting Godot.
+- **A build happens on Play, not on save.** Pressing Play compiles the whole project and runs
+  the edited code; saving refreshes diagnostics and completion but not what runs. There is a
+  `Project > Tools > Build Verse` for when there is no run to hang it on.
 
 What works today: a `.verse` file is a script you attach to a node; `Ready`, `Process` and
 `PhysicsProcess` run; properties export to the inspector; every Godot `Variant` type crosses in
@@ -26,9 +28,13 @@ both directions, containers by reference; GDScript can call any method a script 
 runtime error names a file, a line and a Verse call stack. The editor gets syntax highlighting,
 live diagnostics, completion and symbol lookup.
 
-Not yet: signals, the rest of Godot's virtuals, `@GlobalScope` utility functions, modules and
-subdirectories, hot reload, and all but a curated list of Godot's 1023 classes.
-[`docs/spec.md`](docs/spec.md) carries the per-requirement status.
+Since then: all 1023 Godot classes are mirrored with their enums (Phase 2), and a project is a
+real source set — hot reload on Play, modules marked with a `.vmodule` file, `@tool` scripts,
+and imports the editor writes for you (Phase 3).
+
+Not yet: signals, the rest of Godot's virtuals, `@GlobalScope` utility functions, concurrency,
+a debugger, and export to anything. [`docs/spec.md`](docs/spec.md) carries the per-requirement
+status, and the rest of this file predates most of it — where the two disagree, believe the spec.
 
 ## What a script looks like
 
@@ -64,8 +70,11 @@ PascalCase name with Godot, so `Mover` shows up in **Create New Node** and can b
 from GDScript. Godot's API is mirrored as a Verse class hierarchy under `/Godot.org/Godot`, with
 properties as writable members (`set Position = …`) rather than get/set pairs.
 
-The whole project shares one flat scope and Verse forbids shadowing, so every top-level name in
-every `.verse` file must be unique. Naming the class after the file is what keeps that true.
+A top-level name has to be unique within its module, and a directory becomes a module by
+carrying a `<name>.vmodule` file — marked rather than implied, because `res://` is an asset tree
+whose directory names were chosen for sprites. A project with no markers has every file in one
+root module, which is what a small project wants. Naming the class after the file is still what
+makes it attachable to a node.
 
 ## Building
 

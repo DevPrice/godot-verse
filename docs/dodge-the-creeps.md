@@ -297,8 +297,11 @@ and none of it needed a second attempt:
 - **`[]string` out of Godot**: `SpriteFrames.GetAnimationNames()` is a Verse array, indexable with
   Verse's own failable indexing.
 - **Library files** — `vectors.verse`, R-LANG-6's third clause.
-- **Four scripts in one flat scope** with no name collisions, which is the constraint Phase 3's
-  modules exist to remove and which did not bite at four files.
+- **Five scripts in a `gameplay` module** — `scripts/gameplay.vmodule` and nothing else. They
+  were in one flat scope when this was written, with no name collisions, which is the constraint
+  Phase 3's modules removed and which had not bitten at four files. Moving them is what found
+  the qualified-name bug in that phase: an `@export` slot typed as another script's class stopped
+  resolving, and no test in the repo could see it.
 
 ## What is not ported
 

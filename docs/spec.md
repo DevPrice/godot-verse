@@ -743,10 +743,15 @@ external editor is secondary.
 
 **Full hot reload is required.** Edit a script, and the new code runs — no editor restart, ever.
 
-This is the hardest requirement in the document and it is deliberate: the current behaviour is
-that any change to a script's *code* (as opposed to its shape, which analysis refreshes live)
-requires restarting the editor, and that a script added while the editor runs is not seen at all.
-An authoring loop with a restart in it is not a tool people use.
+This was the hardest requirement in the document and it is **met** as of Phase 3: R-ITER-1 through
+R-ITER-5 are done. It is left standing at full strength because the reason it was written has not
+changed — an authoring loop with a restart in it is not a tool people use — and because two of its
+neighbours are still open: a **running game** does not pick up an edit (R-ITER-7) and retained
+memory is unbounded across a session (R-ITER-6).
+
+What it replaced, for the record: any change to a script's *code* (as opposed to its shape, which
+analysis has refreshed live since Phase 1) used to require restarting the editor, and a script added
+while the editor ran was not seen at all.
 
 - **R-ITER-1 (MUST)** Editing a script and running the project executes the edited code, in the
   same editor session, indefinitely many times. Status: **done**. `VerseEditorPlugin::_build` runs
@@ -870,12 +875,17 @@ in §14.1 with what the run also confirmed about root being implicit from a subm
      `VH_ERR_HALTED` while halted, and `vh_instance_call` also checks, after the fact, that the VM
      actually ran the body — it was that confusion between "did not run" and "ran and found
      nothing" that kept this invisible for a phase.
-  3. **The author is told what it cost.** One line when execution resumes, saying whether suspended
-     work was cancelled with it. Whether it was is sampled in the runtime-error handler, the last
-     moment the task group can be asked.
+  3. **The author is told what it cost** — when there is something to tell. One line when execution
+     resumes, *only* if suspended work was cancelled with the error, because that is the part the
+     error message cannot carry. Whether any was is sampled in the runtime-error handler, which is
+     the last moment the task group can be asked. Deliberately silent otherwise: a script that
+     raises every frame already reports its error every frame, and a second line saying nothing was
+     lost would double that for no information.
   What is **missing**, and why this is *part* rather than done: the cancellation is still
-  project-wide (**R-ASYNC-4**), an error in a `@tool` script still runs against the scene the author
-  is editing, and nothing bounds a script that raises every frame. §14.1 has the measurement.
+  project-wide (**R-ASYNC-4**); an error in a `@tool` script runs against the scene the author is
+  editing; and nothing bounds a script that raises every frame (**OQ-13**), which this fix opened —
+  before it, the first raise silenced everything and the question could not arise. §14.1 has the
+  measurement.
 - **R-DIAG-4 (MUST)** Godot's own debugger works on Verse: breakpoints in the script editor, step
   in/over/out, the call stack, local and member inspection, and expression evaluation at a
   breakpoint.
@@ -987,6 +997,7 @@ A closed question keeps its row so that the reason it is closed is not lost.
 | **OQ-9** | Can any DAP client speak `Verse::SocketDebugger`'s framing? | R-DIAG-6 | Only worth answering if R-DIAG-4 (Godot's own debugger) turns out to be blocked. |
 | **OQ-10** | Can an editor-class UBT Program target be built — `bCompileAgainstEditor`, and therefore `bCompileAgainstEngine`? Cooking Verse needs `WITH_EDITOR=1` (§14.1), and nothing else this project builds does. | R-DIST-9, R-DIST-10, R-DIST-11 | Opened by the S-1 answer. Attempt it at the start of Phase 7. The one prior attempt failed on Engine module links, but it was made for a *lean* host, where the weight was the objection; a cooker that runs only at export has no such constraint. Fallback: cook through a real UE editor or commandlet process. |
 | **OQ-12** ✅ | Does a generation change the package *name* only, or the *verse path* too? S-2 varied the name; whether `/user@localhost` held across generations was not recorded. Module paths are user-visible text that R-TOOL-12 writes into the author's file, and `ScriptVersePath` is compiled into eight lookup sites in `HostScript.cpp`. | R-LANG-6, R-TOOL-12, and the shape of Phase 3 | **Closed: the name only.** The verse path is pinned at `/user@localhost` across generations and nothing in `HostScript.cpp` learns which generation it is asking about. See §14.1. |
+| **OQ-13** | What bounds a script that raises every frame? A raise now stops script code for the rest of the frame and the next tick resumes it, so a `Process` that raises raises again next frame, forever — the error is reported each time, which is what Godot does for GDScript, and no progress is ever made. Options: report it once and stop calling that method, disable the instance, disable the script, or leave it and rely on the author reading the log. | R-DIAG-3 | Phase 6, with the rest of R-DIAG-3. Opened by Phase 3's fix: before it, the first raise silenced everything and the question could not arise, which is not the same as it having an answer. Whatever is chosen has to be per instance rather than per process, so it wants R-ASYNC-4 first. |
 | **RISK-1** | UE's licensing applies to games shipped with the host, including royalties. This is a permanent property of the current distribution model and may deter adoption regardless of anything built here. | adoption | Disclose prominently (R-DIST-3). No mitigation available. |
 | **RISK-2** | Tracking Godot `master` and UE `main` simultaneously means two moving dependencies with no compatibility window. | R-QUAL-7 | Accepted deliberately while pre-1.0; revisit at the first release. |
 
@@ -1044,9 +1055,11 @@ is what kept this invisible. Eight checks in `host_smoke` pin it, including the 
 it was first written up: that a *void* method has its effect again, not merely that a value comes
 back.
 
-Two things this did not fix and one it exposed. The cancellation is still project-wide
-(**R-ASYNC-4**). Nothing bounds a script that raises every frame. And the first minor ABI bump found
-`vh_init` comparing the whole version where the header's own policy says majors must match and
+Two things this did not fix and two it exposed. The cancellation is still project-wide
+(**R-ASYNC-4**), and a `@tool` script's error still reaches the scene being edited. It opened
+**OQ-13** — a script that raises every frame now raises every frame forever, where before the first
+raise silenced everything, which looked like a bound and was a failure. And the first minor ABI bump
+found `vh_init` comparing the whole version where the header's own policy says majors must match and
 minors need not — corrected with it.
 
 **OQ-2 — an exported game ships precompiled Verse and a runtime-only host.**

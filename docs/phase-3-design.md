@@ -522,6 +522,11 @@ is `_complete_code` in `verse_script_language.cpp`.
 
 ## 9. Exit criteria
 
+**Where they stand.** Built and covered by `tools/run_tests.py` or the yardstick: the two-modules
+criterion, `dodge-the-creeps` headless, `demo/`, and the measured leak. Built but verifiable only by
+hand, and so still owed: everything that needs a running editor or a window — §11.1 is the checklist.
+Nothing is unbuilt.
+
 - **No workflow requires restarting the editor.** Concretely, all with one editor session open: add
   a `.verse` and attach it; rename it; delete it; change a method body and press Play to get the
   edited code; change an `@export` default and see the inspector update after a build; break the
@@ -567,7 +572,7 @@ path.
 | --- | --- |
 | a build is "~200 ms for a one-class project" | **1.27 s** for the five-file game, against a **3.1 s** first build. Later generations are cheaper because `IncrementalizeProjectSource` marks the native packages external and only the script package is rebuilt |
 | "~0.5 MB per generation" | **~1.3 MB**, median of ten generations of the same game |
-| `host_smoke` is "247/247" | 274 before this phase, 292 after |
+| `host_smoke` is "247/247" | 274 before this phase, 292 at the end of it, 300 once R-DIAG-3's eight landed |
 
 The build figure is the one worth sitting with. A second and a quarter is a real pause, and it is
 the whole argument for the trigger: on Play it is a pause nobody notices next to loading a scene,

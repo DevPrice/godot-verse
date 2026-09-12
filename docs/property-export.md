@@ -147,9 +147,15 @@ The list comes out of the **semantic program**, not the VM. The chain:
 
 **Why the semantic program and not the VM.** Analysis re-runs on every keystroke —
 `bSemanticAnalysisOnly` publishes nothing, which is what already gives the script editor live
-diagnostics — while code generation may happen once per process. Anything read from the VM would
-be frozen at startup, so the export list would not refresh until the editor restarted. This is
-the only view of a script's shape that can change while the editor is open.
+diagnostics — while code generation happens only when a generation is built. Anything read from the
+VM would therefore be a build behind the text, so the export list would not refresh until the next
+Play. This is the view of a script's shape that changes per keystroke.
+
+*(Written when code generation could happen only once per process, which made the argument
+starker: the VM's answer would have been frozen at startup for the life of the editor. Phase 3
+made builds repeatable — spec §10 — and the conclusion is unchanged, because "a build behind" is
+still wrong for a list the inspector redraws as the author types. It is also why R-ITER-3's two
+halves move at different speeds: a newly declared member appears on save, its default on build.)*
 
 The cost of that choice is that it describes *source*, not running state: it cannot give values.
 
