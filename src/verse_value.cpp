@@ -263,6 +263,30 @@ Variant math_variant(int32_t p_tag, const vh_value &p_value) {
 	}
 }
 
+// Every scalar under a sequence, one level of nesting deep.
+//
+// A Verse `[]vector2` reaches here as three tuples rather than as six floats: the host marshals each
+// element as the struct it is, and a struct is a tuple on the wire. The packed array of a math type
+// wants the components, so this is what flattens them -- the same rule the host applies in the other
+// direction (GodotBindings.cpp's VhRefFloats splices a tuple's components rather than appending it).
+// A sequence of plain scalars passes through untouched, which is what the six scalar packed arrays
+// send.
+static void flatten_components(const vh_value &p_value, Vector<const vh_value *> &r_out) {
+	if (p_value.Type != VH_TYPE_ARRAY && p_value.Type != VH_TYPE_TUPLE) {
+		return;
+	}
+	for (int32_t i = 0; i < p_value.Seq.Count; i++) {
+		const vh_value &item = p_value.Seq.Items[i];
+		if (item.Type == VH_TYPE_ARRAY || item.Type == VH_TYPE_TUPLE) {
+			for (int32_t inner = 0; inner < item.Seq.Count; inner++) {
+				r_out.push_back(&item.Seq.Items[inner]);
+			}
+		} else {
+			r_out.push_back(&item);
+		}
+	}
+}
+
 Variant packed_variant(int32_t p_tag, const vh_value &p_value) {
 	const int32_t count = (p_value.Type == VH_TYPE_ARRAY || p_value.Type == VH_TYPE_TUPLE) ? p_value.Seq.Count : 0;
 
@@ -316,32 +340,45 @@ Variant packed_variant(int32_t p_tag, const vh_value &p_value) {
 			return out;
 		}
 		case VH_VARIANT_PACKED_VECTOR2_ARRAY: {
+			Vector<const vh_value *> c;
+			flatten_components(p_value, c);
 			PackedVector2Array out;
-			out.resize(count / 2);
-			for (int32_t i = 0; i + 1 < count; i += 2) {
-				out[i / 2] = Vector2((real_t)double_of(p_value.Seq.Items[i]),
-						(real_t)double_of(p_value.Seq.Items[i + 1]));
+			out.resize(c.size() / 2);
+			for (int32_t i = 0; i + 1 < c.size(); i += 2) {
+				out[i / 2] = Vector2((real_t)double_of(*c[i]), (real_t)double_of(*c[i + 1]));
 			}
 			return out;
 		}
 		case VH_VARIANT_PACKED_VECTOR3_ARRAY: {
+			Vector<const vh_value *> c;
+			flatten_components(p_value, c);
 			PackedVector3Array out;
-			out.resize(count / 3);
-			for (int32_t i = 0; i + 2 < count; i += 3) {
-				out[i / 3] = Vector3((real_t)double_of(p_value.Seq.Items[i]),
-						(real_t)double_of(p_value.Seq.Items[i + 1]),
-						(real_t)double_of(p_value.Seq.Items[i + 2]));
+			out.resize(c.size() / 3);
+			for (int32_t i = 0; i + 2 < c.size(); i += 3) {
+				out[i / 3] = Vector3((real_t)double_of(*c[i]), (real_t)double_of(*c[i + 1]),
+						(real_t)double_of(*c[i + 2]));
+			}
+			return out;
+		}
+		case VH_VARIANT_PACKED_VECTOR4_ARRAY: {
+			Vector<const vh_value *> c;
+			flatten_components(p_value, c);
+			PackedVector4Array out;
+			out.resize(c.size() / 4);
+			for (int32_t i = 0; i + 3 < c.size(); i += 4) {
+				out[i / 4] = Vector4((real_t)double_of(*c[i]), (real_t)double_of(*c[i + 1]),
+						(real_t)double_of(*c[i + 2]), (real_t)double_of(*c[i + 3]));
 			}
 			return out;
 		}
 		case VH_VARIANT_PACKED_COLOR_ARRAY: {
+			Vector<const vh_value *> c;
+			flatten_components(p_value, c);
 			PackedColorArray out;
-			out.resize(count / 4);
-			for (int32_t i = 0; i + 3 < count; i += 4) {
-				out[i / 4] = Color((float)double_of(p_value.Seq.Items[i]),
-						(float)double_of(p_value.Seq.Items[i + 1]),
-						(float)double_of(p_value.Seq.Items[i + 2]),
-						(float)double_of(p_value.Seq.Items[i + 3]));
+			out.resize(c.size() / 4);
+			for (int32_t i = 0; i + 3 < c.size(); i += 4) {
+				out[i / 4] = Color((float)double_of(*c[i]), (float)double_of(*c[i + 1]),
+						(float)double_of(*c[i + 2]), (float)double_of(*c[i + 3]));
 			}
 			return out;
 		}
@@ -537,6 +574,15 @@ bool variant_to_vh(const Variant &p_value, vh_arena *p_arena, vh_value &r_out) {
 }
 
 Variant vh_to_variant(const vh_value &p_value) {
+	// How the value is carried decides before what Godot type it is. A reference id is the whole
+	// value, and the table already holds it as the right type -- where reading the tag first sent a
+	// REF-carried PackedByteArray into packed_variant, which found no sequence to read and answered
+	// with an empty one. Silently: the only symptom was a Godot method receiving nothing.
+	if (p_value.Type == VH_TYPE_REF) {
+		const Variant *found = verse_ref_table().find(p_value.Ref);
+		return found != nullptr ? *found : Variant();
+	}
+
 	switch (p_value.VariantTag) {
 		case VH_VARIANT_NIL:
 			break; // fall through to the vh_type-driven path below
@@ -577,6 +623,7 @@ Variant vh_to_variant(const vh_value &p_value) {
 		case VH_VARIANT_PACKED_VECTOR2_ARRAY:
 		case VH_VARIANT_PACKED_VECTOR3_ARRAY:
 		case VH_VARIANT_PACKED_COLOR_ARRAY:
+		case VH_VARIANT_PACKED_VECTOR4_ARRAY:
 			return packed_variant(p_value.VariantTag, p_value);
 
 		default:

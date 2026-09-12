@@ -360,6 +360,16 @@ empty. Signals are how Godot programs are wired together, so this is parity-crit
   `Dictionary`, `Callable`, `Signal` and the ten packed arrays — cross as ids into a table the
   GDExtension owns, released when the Verse value wrapping one is collected.
 
+  Phase 2 closed the last four: `PackedVector2Array`, `PackedVector3Array`, `PackedVector4Array` and
+  `PackedColorArray` now convert element by element rather than being skipped, and a Godot container
+  can finally carry a value whose type the script does not know — `godot_array.GetVariant` and
+  `dictionary.GetVariant`. Two things were quietly broken before anything tested them, and both were
+  the same mistake in opposite directions: a Verse `[]vector2` reached Godot as one tuple per
+  element while the GDExtension read it as a flat run of floats, so a three-element array arrived
+  with one element; and a packed array *carried as a reference* was decoded by its Variant tag
+  before its carrier was looked at, so `packed_variant` found no sequence and answered with an empty
+  container — which is every Verse array passed to a Godot method taking one. Both now have tests.
+
   The one edge worth naming here. A Verse `[]float` names no
   single Godot type — it is equally a `PackedFloat32Array`, a `PackedFloat64Array` and an `Array` —
   so a *script-defined* method taking one declares `Array`, which Godot builds from any of them
@@ -424,9 +434,17 @@ empty. Signals are how Godot programs are wired together, so this is parity-crit
   built up to three Verse arrays to carry one number; a fixed-width struct builds none, so every
   value type is allocation-free at the boundary now. A reference type costs a table entry, which is
   the price of not copying a container. Still unmeasured — R-PERF-2 is what would say.
-- **R-TYPE-7 (MUST)** The plumbing stays hidden. The `Vh…` primitives, the `variant` tuple and
+- **R-TYPE-7 (MUST)** The plumbing stays hidden. The `Vh…` primitives, `variant`'s *lanes* and
   `object`'s `Handle` carry no access specifier and stay out of completion lists; a user cannot
   accidentally hold a raw handle that outlives what it names. Status: **done**.
+
+  Amended in Phase 2: the `variant` **type** is public, because a script has to be able to name it in
+  a signature for Godot's 231 Variant-typed methods to be callable at all — and because
+  `typed_array(t)`'s element converter mentions it, and Verse refuses a required member less
+  accessible than its class. Nothing else moved. Every lane still carries no specifier, so
+  `V.I0` does not compile and neither does `variant{Tag := 2}`; what a script can do with one is ask
+  `As<GodotType>[V]`, branch on `VariantKind(V)`, and build one with `VariantFrom<GodotType>`. A
+  hand-made `variant` is all defaults, and a Tag of 0 is Nil, so the worst it can say is "nothing".
 
 ---
 

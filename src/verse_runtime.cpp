@@ -673,8 +673,25 @@ int32_t VerseRuntime::api_ref_set(void *p_ctx, int64_t p_ref, const vh_value *p_
 	// reference design exists to preserve. A packed array is a value, and for one the write-back
 	// is what makes the mutation stick.
 	Variant container = *found;
+	const Variant key = vh_to_variant(*p_key);
+
+	// Writing one past the end appends, which is the only way to fill a fresh container: Godot's
+	// indexed setter refuses an out-of-range index outright rather than growing, for a packed array
+	// as much as for an Array. Without this the host's NewRefFrom -- how every Verse array reaches a
+	// Godot method taking one -- left every container it built empty, and said nothing.
+	//
+	// Exactly one past the end, so a write at index 5 of a two-element array is still the error
+	// GDScript makes it. A Dictionary is untouched: any key is a legal key there, and `size` is not
+	// a position.
+	if (key.get_type() == Variant::INT && container.get_type() != Variant::DICTIONARY) {
+		const Variant size = container.call("size");
+		if (size.get_type() == Variant::INT && (int64_t)key == (int64_t)size) {
+			container.call("resize", (int64_t)size + 1);
+		}
+	}
+
 	bool valid = false;
-	container.set(vh_to_variant(*p_key), vh_to_variant(*p_value), &valid);
+	container.set(key, vh_to_variant(*p_value), &valid);
 	if (!valid) {
 		return VH_CALL_BAD_VALUE;
 	}

@@ -604,14 +604,38 @@ def test_generated_file_matches_hand_written_slice():
         container_reads and all(line.lstrip().startswith("Get") for line in container_reads),
     )
 
-    accessors = [line for line in failable if not line.startswith("    ")]
-    check_true(
-        "the only failable free functions are the singleton accessors",
-        accessors and all("VhSingleton[" in line for line in accessors),
-    )
+    # At module scope there are three kinds of failable definition, and each fails for a reason a
+    # caller has to handle: a singleton not registered in this build, a variant that is not the type
+    # being asked for, and a null object.
+    free = [line for line in failable if not line.startswith("    ")]
+    unexplained = [
+        line for line in free
+        if "VhSingleton[" not in line
+        and not line.startswith("As")
+        and not line.startswith("VhToObject(")
+    ]
+    check("no failable free function fails for an unexplained reason", unexplained, [])
     check_true(
         "a mirrored singleton gets an accessor",
-        'GetInput<public>()<decides><transacts>:input = input{Handle := VhSingleton["Input"]}' in text,
+        'GetInput' in text and 'VhSingleton["Input"]' in text,
+    )
+    check_true(
+        "an accessor a mirrored method already names is the one that moves",
+        'GetInputSingleton<public>()<decides><transacts>:input' in text
+        and "\nGetInput<public>()" not in text,
+    )
+
+    # Every Variant::Type the mirror can read has a reader and a builder, and they are named after
+    # Godot's own type rather than after the Verse one.
+    readers = [line.split("<")[0] for line in free if line.startswith("As")]
+    check_true("a reader per variant lane", len(readers) == len(g.VARIANT_LANES))
+    check_true(
+        "and a builder to match each",
+        all(f"VariantFrom{lane.reader}<public>(" in text for lane in g.VARIANT_LANES),
+    )
+    check_true(
+        "the kind enum keeps Godot's TYPE_ prefix, because Int and Float are taken",
+        "    TypeInt\n" in text and "    TypeFloat\n" in text and "    Int\n" not in text,
     )
 
     base_members = {"Handle", "Ready", "Process", "PhysicsProcess"}

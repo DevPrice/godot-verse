@@ -165,6 +165,48 @@ func _init() -> void:
 	_check("an overridden Godot virtual is listed under Godot's name", names.has("_ready"))
 	_check("and the engine can call it", node.has_method("_ready"))
 
+	# --- R-TYPE-7 amended: a script can name a Variant and read it -----------------------------
+	#
+	# The 231 Variant-typed methods of the mirror were the largest single bucket of unreachable API.
+	# What a script says about one is VariantKind to branch and As<GodotType> to ask.
+	var mixed: Array = [7, 1.5, "hi", Vector2(3.0, 4.0), null]
+	_check_eq("VariantKind reports an int element", node.call("KindAt", mixed, 0), "int")
+	_check_eq("a float element", node.call("KindAt", mixed, 1), "float")
+	_check_eq("a string element", node.call("KindAt", mixed, 2), "string")
+	_check_eq("a vector2 element", node.call("KindAt", mixed, 3), "vector2")
+	_check_eq("and a nil element", node.call("KindAt", mixed, 4), "nil")
+	_check_eq("an index past the end is a miss", node.call("KindAt", mixed, 99), "missing")
+
+	_check_eq("AsInt reads the int back", node.call("IntAt", mixed, 0), 7)
+	_check_eq("AsVector2 reads a component", node.call("Vector2XAt", mixed, 3), 3.0)
+	_check_eq("asking the wrong type declines rather than erroring",
+			node.call("StringAtFails", mixed, 0), null)
+	_check_eq("and the right one answers", node.call("StringAtFails", mixed, 2), "hi")
+
+	# The Array is a reference, so what Verse wrote is what GDScript sees.
+	node.call("PutInt", mixed, 0, 99)
+	_check_eq("VariantFromInt writes through the reference", mixed[0], 99)
+
+	# --- R-TYPE-1: PackedVector2Array ----------------------------------------------------------
+	var points := PackedVector2Array([Vector2(1.0, 0.0), Vector2(2.0, 0.0), Vector2(4.0, 0.0)])
+	_check_eq("a packed array of structs crosses element by element",
+			node.call("SumVector2Xs", points), 7.0)
+	var made_points: Variant = node.call("MakeVector2s", 3)
+	_check_eq("and comes back as one", typeof(made_points), TYPE_PACKED_VECTOR2_ARRAY)
+	if typeof(made_points) == TYPE_PACKED_VECTOR2_ARRAY:
+		_check_eq("with every element", made_points.size(), 3)
+		if made_points.size() == 3:
+			_check_eq("with its elements intact", made_points[2], Vector2(2.0, 4.0))
+
+	# --- the reference path for a packed array -------------------------------------------------
+	#
+	# A packed array crossing to a mirrored Godot method goes through the reference table, which the
+	# script-return tests above never touch. Marshalls round-trips bytes with no scene involved.
+	_check_eq("a Verse []int reaches a Godot PackedByteArray parameter",
+			node.call("Base64Of", [72, 105]), "SGk=")
+	var raw: Variant = node.call("BytesOfBase64", "SGk=")
+	_check_eq("and comes back the same way", Array(raw), [72, 105])
+
 	# --- R-LANG-6: library files ---------------------------------------------------------------
 	#
 	# helpers.verse declares no class. It is a Script and it compiles, its module-level functions

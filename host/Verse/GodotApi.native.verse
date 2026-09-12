@@ -199,6 +199,11 @@ VhFromInts(Tag:int, Values:[]int)<transacts>:variant = variant{Tag := Tag, Ref :
 VhFromFloats(Tag:int, Values:[]float)<transacts>:variant = variant{Tag := Tag, Ref := VhRefFromFloats(Tag, Values)}
 VhFromStrings(Tag:int, Values:[]string)<transacts>:variant = variant{Tag := Tag, Ref := VhRefFromStrings(Tag, Values)}
 
+# The packed arrays whose elements are math structs rather than scalars -- PackedVector2Array
+# and its three siblings. One variant per element, because a vector2 has no single lane to
+# flatten into the way an int does.
+VhFromValues(Tag:int, Values:[]variant)<transacts>:variant = variant{Tag := Tag, Ref := VhRefFromValues(Tag, Values)}
+
 VhFromByteArray(Values:[]int)<transacts>:variant = VhFromInts(TagPackedByteArray, Values)
 VhFromInt32Array(Values:[]int)<transacts>:variant = VhFromInts(TagPackedInt32Array, Values)
 VhFromInt64Array(Values:[]int)<transacts>:variant = VhFromInts(TagPackedInt64Array, Values)

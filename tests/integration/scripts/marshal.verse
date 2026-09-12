@@ -117,6 +117,68 @@ marshal := class(node2d):
     Ready<override>():void =
         Print("marshal ready")
 
+    # --- R-TYPE-7 amended: reading a Godot Variant ---------------------------
+    #
+    # A Godot Array is heterogeneous, and these are what a script can now say about one. VariantKind
+    # branches when the type is unknown; As<GodotType> asks when it is expected, and fails rather
+    # than raising when the answer is no. A script still cannot reach a lane: `V.I0` does not
+    # compile, and neither does `variant{Tag := 2}`.
+    KindAt<public>(A:godot_array, Index:int):string =
+        if (V := A.GetVariant[Index]):
+            case (VariantKind(V)):
+                variant_kind.TypeInt => "int"
+                variant_kind.TypeFloat => "float"
+                variant_kind.TypeString => "string"
+                variant_kind.TypeVector2 => "vector2"
+                variant_kind.TypeNil => "nil"
+                _ => "other"
+        else:
+            "missing"
+
+    IntAt<public>(A:godot_array, Index:int)<decides>:int =
+        V := A.GetVariant[Index]
+        AsInt[V]
+
+    Vector2XAt<public>(A:godot_array, Index:int)<decides>:float =
+        V := A.GetVariant[Index]
+        AsVector2[V].X
+
+    # Asking for the wrong type is a failure, not an error -- which is the whole reason the readers
+    # are <decides> rather than raising the way a mirrored getter does.
+    StringAtFails<public>(A:godot_array, Index:int)<decides>:string =
+        V := A.GetVariant[Index]
+        AsString[V]
+
+    # And building one, which is the other direction: VariantFromInt rather than an overload, for
+    # the reason in gen_verse_api.py's VARIANT_LANES comment.
+    PutInt<public>(A:godot_array, Index:int, Value:int):void =
+        A.SetVariant(Index, VariantFromInt(Value))
+
+    # --- R-TYPE-1: a packed array whose elements are structs -----------------
+    #
+    # PackedVector2Array crosses as a reference like every container, but each element is its own
+    # variant rather than a lane in a flat sequence.
+    SumVector2Xs<public>(Values:[]vector2):float =
+        var Total:float = 0.0
+        for (V : Values):
+            set Total = Total + V.X
+        Total
+
+    MakeVector2s<public>(Count:int):[]vector2 =
+        for (I := 0..Count - 1):
+            vector2{X := 1.0 * I, Y := 2.0 * I}
+
+    # The other direction, and the one nothing tested: a packed array handed to a *mirrored Godot*
+    # method rides through the reference table rather than being marshalled as a script return.
+    # Marshalls is a singleton and both of these are pure, so a headless Godot can answer.
+    Base64Of<public>(Bytes:[]int)<decides>:string =
+        Marshalls := GetMarshalls[]
+        Marshalls.RawToBase64(Bytes)
+
+    BytesOfBase64<public>(Text:string)<decides>:[]int =
+        Marshalls := GetMarshalls[]
+        Marshalls.Base64ToRaw(Text)
+
     # --- R-LANG-6: a library file, resolved with no import -------------------
     #
     # HelperDouble and HelperAnswer live in helpers.verse, which declares no class and so cannot go

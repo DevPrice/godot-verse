@@ -35,6 +35,7 @@ BASE_MEMBER_NAMES = {"Handle", "Ready", "Process", "PhysicsProcess"}
 # This package's own module-level names are in scope for the same reason and belong here too --
 # Print and IsInstanceValid, the two functions GodotApi.native.verse exports.
 VERSE_STDLIB_NAMES = {
+    "Int", "Float", "Logic", "Char", "Rational",
     "Abs", "Ceil", "Floor", "Round", "Sqrt", "Min", "Max", "Sign", "Clamp", "Lerp", "Mod",
     "Sin", "Cos", "Tan", "ArcSin", "ArcCos", "ArcTan", "Pow", "Exp", "Ln",
     "Print", "Err", "Sleep", "Length", "Slice", "Reverse", "Shuffle", "Concatenate", "Fits",
@@ -258,6 +259,221 @@ for _godot_math in MATH_TYPES:
     SCALAR_TYPES[_godot_math] = TypeInfo(
         verse_class_name(_godot_math), f"VhFrom{_godot_math}", False, f"VhTo{_godot_math}", False)
 
+# Godot's Variant itself, now that a script can name the type (R-TYPE-7, amended). The converters
+# are the identity: the wire carries exactly this, so nothing is packed or unpacked.
+SCALAR_TYPES["Variant"] = TypeInfo("variant", "VhFromVariant", False, "VhToVariant", False)
+
+# The packed arrays of a math struct, added from VARIANT_LANES below so that one table drives the
+# reader, the converter and the type table alike.
+
+
+# Every type a Godot Variant can carry, in Variant::Type order, and what the mirror reads it as.
+#
+# This is what makes a Variant-typed method usable -- 231 of them, the largest single bucket of the
+# coverage report's unsupported_type (docs/phase-2-design.md 2). A script names `variant` in the
+# signature and asks with `As<GodotType>[V]`, which is a <decides> free function invoked failably:
+# it reads as a cast without being one, which matters because Verse's real cast rejects a struct on
+# both sides (1). Nothing is boxed and nothing is unwrapped -- what an AsVector4 hands back is a
+# vector4, not a wrapper holding one.
+#
+# `godot_type` is the Variant::Type enumerator, and the generator resolves its number out of
+# extension_api.json and asserts every one is covered exactly once, so a Godot renumbering is a
+# generation failure rather than a value read off the wrong lane.
+#
+# There is no overloaded `VariantFrom`. 1 read Verse as overloading freely on parameter type, and it
+# does not -- the compiler rejected two arrangements in a row, each time refusing the *definitions*
+# rather than a call:
+#
+# - **two array-typed overloads are ambiguous whatever their element types**, because `array{}` is a
+#   call site that cannot resolve them: an empty array literal has no element type. `string` is
+#   `[]char`, so that is every packed array plus String at once;
+# - and `VariantFrom(:logic)` is ambiguous with `VariantFrom(:[]char)`, which no reading of
+#   "overloads on parameter type" predicts.
+#
+# So each lane gets its own `VariantFrom<GodotType>`, symmetric with its `As<GodotType>` reader. That
+# loses `VariantFrom(42)`, and buys a rule that is one sentence and cannot be undermined by whatever
+# Verse's real overload rule turns out to be. Where overloading *is* known to work is within one
+# class on distinct non-array types -- `dictionary.GetInt` takes a string, an int or a vector2i.
+#
+# `kind` is not carried: the variant_kind enumerator is derived from `godot_type` by
+# screaming_pascal_case, which keeps Godot's own TYPE_ prefix. Stripping it would give `Int` and
+# `Float`, and an enumerator of that name is ambiguous with /Verse.org/Verse's function of the same
+# name exactly as a data member would be. The rule is per *enum* rather than per enumerator so one
+# enum reads consistently -- a variant_kind holding Bool beside TypeInt would be worse than either.
+VariantLane = namedtuple(
+    "VariantLane", ["godot_type", "reader", "verse_type", "tag", "to_fn", "from_fn"]
+)
+
+
+def screaming_pascal_case(name: str) -> str:
+    """`TYPE_PACKED_VECTOR2_ARRAY` -> `TypePackedVector2Array`.
+
+    The one irregularity is Godot's dimensional suffix: a `d` closing a word with a digit before it
+    uppercases, so TRANSFORM2D is Transform2D the way Godot spells it. Same rule as
+    verse_pascal_case on the C++ side, for the same reason.
+    """
+    words = []
+    for word in name.split("_"):
+        if not word:
+            continue
+        cased = word[0].upper() + word[1:].lower()
+        if len(cased) > 1 and cased[-1] == "d" and cased[-2].isdigit():
+            cased = cased[:-1] + "D"
+        words.append(cased)
+    return "".join(words)
+
+
+def _math_lanes() -> list:
+    return [
+        VariantLane(
+            godot_type=f"TYPE_{'_'.join(t.upper() for t in split_pascal(name))}",
+            reader=name,
+            verse_type=verse_class_name(name),
+            tag=MATH_TAGS[name],
+            to_fn=f"VhTo{name}",
+            from_fn=f"VhFrom{name}",
+        )
+        for name in MATH_TYPES
+    ]
+
+
+VARIANT_LANES = [
+    VariantLane("TYPE_BOOL", "Bool", "logic", "TagBool", "VhToLogic", "VhFromLogic"),
+    VariantLane("TYPE_INT", "Int", "int", "TagInt", "VhToInt", "VhFromInt"),
+    VariantLane("TYPE_FLOAT", "Float", "float", "TagFloat", "VhToFloat", "VhFromFloat"),
+    VariantLane("TYPE_STRING", "String", "string", "TagString", "VhToString", "VhFromString"),
+] + _math_lanes() + [
+    VariantLane("TYPE_STRING_NAME", "StringName", "string", "TagStringName", "VhToString", "VhFromStringName"),
+    VariantLane("TYPE_NODE_PATH", "NodePath", "string", "TagNodePath", "VhToString", "VhFromNodePath"),
+    VariantLane("TYPE_RID", "Rid", "int", "TagRid", "VhToInt", "VhFromRid"),
+    VariantLane("TYPE_OBJECT", "Object", "object", "TagObject", "VhToObject", "VhFromObject"),
+    VariantLane("TYPE_CALLABLE", "Callable", "callable", "TagCallable", "VhToCallable", "VhFromCallable"),
+    VariantLane("TYPE_SIGNAL", "Signal", "signal_ref", "TagSignal", "VhToSignal", "VhFromSignal"),
+    VariantLane("TYPE_DICTIONARY", "Dictionary", "dictionary", "TagDictionary", "VhToDictionary", "VhFromDictionary"),
+    VariantLane("TYPE_ARRAY", "Array", "godot_array", "TagArray", "VhToArray", "VhFromArray"),
+    VariantLane("TYPE_PACKED_BYTE_ARRAY", "PackedByteArray", "[]int", "TagPackedByteArray", "VhToInts", "VhFromByteArray"),
+    VariantLane("TYPE_PACKED_INT32_ARRAY", "PackedInt32Array", "[]int", "TagPackedInt32Array", "VhToInts", "VhFromInt32Array"),
+    VariantLane("TYPE_PACKED_INT64_ARRAY", "PackedInt64Array", "[]int", "TagPackedInt64Array", "VhToInts", "VhFromInt64Array"),
+    VariantLane("TYPE_PACKED_FLOAT32_ARRAY", "PackedFloat32Array", "[]float", "TagPackedFloat32Array", "VhToFloats", "VhFromFloat32Array"),
+    VariantLane("TYPE_PACKED_FLOAT64_ARRAY", "PackedFloat64Array", "[]float", "TagPackedFloat64Array", "VhToFloats", "VhFromFloat64Array"),
+    VariantLane("TYPE_PACKED_STRING_ARRAY", "PackedStringArray", "[]string", "TagPackedStringArray", "VhToStrings", "VhFromStringArray"),
+    VariantLane("TYPE_PACKED_VECTOR2_ARRAY", "PackedVector2Array", "[]vector2", "TagPackedVector2Array", "VhToVector2s", "VhFromVector2s"),
+    VariantLane("TYPE_PACKED_VECTOR3_ARRAY", "PackedVector3Array", "[]vector3", "TagPackedVector3Array", "VhToVector3s", "VhFromVector3s"),
+    VariantLane("TYPE_PACKED_COLOR_ARRAY", "PackedColorArray", "[]color", "TagPackedColorArray", "VhToColors", "VhFromColors"),
+    VariantLane("TYPE_PACKED_VECTOR4_ARRAY", "PackedVector4Array", "[]vector4", "TagPackedVector4Array", "VhToVector4s", "VhFromVector4s"),
+]
+
+# The one lane with no reader: a Variant holding nothing is what VariantKind answers, not something
+# to convert. Present so the coverage assertion below sees every Variant::Type.
+VARIANT_NIL = "TYPE_NIL"
+
+# The packed arrays of a math struct, which ride as a reference and convert element by element --
+# there is no flat lane sequence to read them out of the way VhRefInts reads a PackedInt32Array.
+MATH_PACKED_LANES = [lane for lane in VARIANT_LANES if lane.to_fn.startswith("VhTo")
+                     and lane.verse_type.startswith("[]")
+                     and lane.verse_type[2:] in MATH_STRUCT_NAMES]
+
+# Readers whose <decides>-ness comes from the conversion rather than from the tag check.
+VARIANT_DECIDES_CONVERTERS = {"VhToObject"}
+
+for _packed in MATH_PACKED_LANES:
+    SCALAR_TYPES[_packed.reader] = TypeInfo(
+        _packed.verse_type, _packed.from_fn, False, _packed.to_fn, False)
+
+
+def variant_type_values(api: dict) -> dict:
+    """Variant::Type's enumerators and their numbers, from the API rather than from memory."""
+    for enum in api.get("global_enums", []):
+        if enum["name"] == "Variant.Type":
+            return {v["name"]: v["value"] for v in enum["values"]}
+    raise ValueError("Variant.Type is not in extension_api.json")
+
+
+def check_variant_lanes(api: dict) -> dict:
+    """Asserts VARIANT_LANES covers Variant::Type exactly, and answers each lane's number.
+
+    TYPE_MAX is excluded deliberately: it is a count rather than a value, and it is the one
+    enumerator Godot renumbers between releases -- 4.6 says 39 and 4.7 says 40 for twelve such
+    sentinels elsewhere in the API (docs/phase-2-design.md, Stage 0 results).
+    """
+    values = variant_type_values(api)
+    declared = [VARIANT_NIL] + [lane.godot_type for lane in VARIANT_LANES]
+    expected = {name for name in values if name != "TYPE_MAX"}
+    missing = expected - set(declared)
+    extra = set(declared) - expected
+    if missing or extra:
+        raise ValueError(
+            f"VARIANT_LANES does not match Variant::Type: missing {sorted(missing)}, unknown {sorted(extra)}")
+    if len(declared) != len(set(declared)):
+        raise ValueError("VARIANT_LANES names a Variant::Type twice")
+    return values
+
+
+def emit_math_packed_converters() -> list:
+    """Element-by-element converters for the packed arrays of a math struct.
+
+    PackedVector2Array and its three siblings are the last 207 methods of the unsupported_type
+    bucket. They cross as a reference id like every other container, but unlike PackedInt32Array
+    their elements are not scalars, so VhRefValues is what reads them -- one variant per element,
+    each carrying the struct's lanes.
+    """
+    lines = []
+    for lane in MATH_PACKED_LANES:
+        element = lane.verse_type[2:]
+        godot_element = next(n for n in MATH_TYPES if verse_class_name(n) == element)
+        lines.append(
+            f"{lane.to_fn}(Value:variant)<transacts>:{lane.verse_type} ="
+            f" for (V : VhRefValues(Value.Ref)) {{ VhTo{godot_element}(V) }}")
+        lines.append(
+            f"{lane.from_fn}(Values:{lane.verse_type})<transacts>:variant ="
+            f" VhFromValues({lane.tag}, for (V : Values) {{ VhFrom{godot_element}(V) }})")
+    return lines
+
+
+def emit_variant_readers(api: dict) -> list:
+    """variant_kind, VariantKind, one As<GodotType> per lane, and the VariantFrom family."""
+    values = check_variant_lanes(api)
+
+    kinds = [screaming_pascal_case(name)
+             for name in [VARIANT_NIL] + [lane.godot_type for lane in VARIANT_LANES]]
+    blocks = [
+        "variant_kind<public> := enum:\n" + "\n".join(f"    {kind}" for kind in kinds)
+    ]
+
+    # Integer literals rather than the Tag constants: `case` matches patterns, and a named constant
+    # is not one. The numbers come from extension_api.json, checked above.
+    case_arms = "\n".join(
+        f"        {values[lane.godot_type]} => variant_kind.{screaming_pascal_case(lane.godot_type)}"
+        for lane in VARIANT_LANES)
+    blocks.append(
+        "VariantKind<public>(Value:variant)<transacts>:variant_kind =\n"
+        "    case (Value.Tag):\n"
+        f"{case_arms}\n"
+        f"        _ => variant_kind.{screaming_pascal_case(VARIANT_NIL)}")
+
+    blocks.append("VhToObject(Value:variant)<decides><transacts>:object = object{Handle := VhToHandle[Value]}")
+
+    # Identity, so a `variant` parameter or return needs no special case in emit_method: the wire
+    # already carries exactly this.
+    blocks.append("VhToVariant(Value:variant)<transacts>:variant = Value")
+    blocks.append("VhFromVariant(Value:variant)<transacts>:variant = Value")
+
+    readers = []
+    for lane in VARIANT_LANES:
+        convert = (f"{lane.to_fn}[Value]" if lane.to_fn in VARIANT_DECIDES_CONVERTERS
+                   else f"{lane.to_fn}(Value)")
+        readers.append(
+            f"As{lane.reader}<public>(Value:variant)<decides><transacts>:{lane.verse_type} =\n"
+            f"    Value.Tag = {lane.tag}\n"
+            f"    {convert}")
+    blocks.extend(readers)
+
+    for lane in VARIANT_LANES:
+        blocks.append(
+            f"VariantFrom{lane.reader}<public>(Value:{lane.verse_type})<transacts>:variant"
+            f" = {lane.from_fn}(Value)")
+    return blocks
+
 
 # What a script can read out of, or write into, a Godot container.
 #
@@ -265,6 +481,10 @@ for _godot_math in MATH_TYPES:
 # module-scoped so that a user cannot hold a raw reference (R-TYPE-7), which means every way into
 # and out of a container has to be typed. Keyed by the suffix the accessor takes.
 CONTAINER_ELEMENTS = [
+    # First, and the one that makes the rest optional: a Godot Array is heterogeneous, and before
+    # `variant` was nameable there was no way to read an element whose type the script did not
+    # already know. The typed accessors below stay because knowing is the common case.
+    ("Variant", "variant", "VhFromVariant", "VhToVariant"),
     ("Logic", "logic", "VhFromLogic", "VhToLogic"),
     ("Int", "int", "VhFromInt", "VhToInt"),
     ("Float", "float", "VhFromFloat", "VhToFloat"),
@@ -655,6 +875,12 @@ def classify_property(p: dict, resolver: TypeResolver, coverage: Coverage):
     if info.verse_type in CONTAINER_PROPERTY_TYPES or info.verse_type.startswith("[]"):
         coverage.skip("property_container_type")
         return None
+    # A `variant` is a struct, so the compiler asks a var of that type for a field-named accessor
+    # overload per field -- and every one of variant's fields is module-scoped, so none of them can
+    # appear in a public signature. Godot's own getter and setter are emitted as methods instead.
+    if info.verse_type == "variant":
+        coverage.skip("property_variant_type")
+        return None
     # An object-typed property would need a getter that cannot fail, and a null Godot object is
     # exactly the absence VhToHandle reports as failure.
     if info.pack_fn == "VhFromObject":
@@ -760,9 +986,9 @@ def generate(api: dict, requested: list, coverage: Coverage):
     inherited_names = {}  # godot class name -> set of Verse names visible to its subclasses
     class_blocks = []
     method_map = []  # (godot class, verse class, godot method, verse method) per emitted method
-    # Every emitted method a module-level function could be ambiguous with: see
-    # singleton_accessor_name, where arity is the whole question.
-    nullary_methods = set()
+    # Every name any emitted class carries, across all of them. A module-level definition may not
+    # share one: see singleton_accessor_name. (member_names below is one class' own set.)
+    all_member_names = set()
 
     for name in emit_order:
         parent = parent_map[name]
@@ -809,6 +1035,7 @@ def generate(api: dict, requested: list, coverage: Coverage):
                 coverage.skip("shadow")
                 continue
             used |= names
+            all_member_names |= names
             emitted_lines.extend(emit_property(cp, locals_for_accessors))
             method_map.append((name, verse_class_name(name), cp.godot_name, cp.verse_name))
             coverage.properties_emitted += 1
@@ -818,8 +1045,7 @@ def generate(api: dict, requested: list, coverage: Coverage):
                 coverage.skip("shadow")
                 continue
             used.add(cm.verse_name)
-            if not cm.params:
-                nullary_methods.add(cm.verse_name)
+            all_member_names.add(cm.verse_name)
             emitted_lines.append(emit_method(cm))
             method_map.append((name, verse_class_name(name), cm.godot_name, cm.verse_name))
             coverage.methods_emitted += 1
@@ -833,7 +1059,7 @@ def generate(api: dict, requested: list, coverage: Coverage):
         else:
             class_blocks.append(header)
 
-    return class_blocks, emit_order, method_map, nullary_methods
+    return class_blocks, emit_order, method_map, all_member_names
 
 
 HEADER_TEMPLATE = """using {{/Verse.org/Native}}
@@ -845,6 +1071,37 @@ HEADER_TEMPLATE = """using {{/Verse.org/Native}}
 # Variant-typed reflection that this bridge cannot marshal (see the type table in
 # tools/gen_verse_api.py), so a class whose Godot parent is Object derives directly from
 # the hand-written native `object` (see Godot.native.verse) instead of a generated one.
+"""
+
+
+VARIANT_TEMPLATE = """
+# --- Godot's Variant ---------------------------------------------------------
+#
+# A Godot value whose type is not known until it arrives. The type is nameable so it can appear in a
+# signature; its lanes are not, so a script reads one through the failable `As<GodotType>` readers
+# below and builds one through `VariantFrom` (R-TYPE-7, amended in Phase 2).
+#
+#     if (Health := AsInt[V]):
+#         Print("hp {{Health}}")
+#
+#     case (VariantKind(V)):          # when the type is not known at all
+#         variant_kind.Int => Print("an int")
+#         _ => Print("something else")
+#
+#     Node.SetMeta("score", VariantFrom(42))
+#
+# Reading is a <decides> free function rather than a cast, because Verse's own cast rejects a struct
+# on both sides -- see docs/phase-2-design.md 1 and 4.1. It reads the same at the call site and it
+# boxes nothing.
+
+{readers}
+
+# --- the packed arrays of a math type ----------------------------------------
+#
+# These ride as a reference like every other container, but their elements are structs rather than
+# scalars, so each crosses as its own variant instead of flattening into a lane sequence.
+
+{packed}
 """
 
 
@@ -888,24 +1145,24 @@ SINGLETONS_TEMPLATE = """
 """
 
 
-def singleton_accessor_name(godot_name: str, nullary_methods: set) -> str:
-    """`GetInput`, unless a mirrored method already answers to that with no arguments.
+def singleton_accessor_name(godot_name: str, member_names: set) -> str:
+    """`GetInput`, unless a mirrored class already carries a member of that name.
 
-    A module-level function and a class method of the same name *and* signature are ambiguous
-    where the class' own body can see both -- EditorPlugin.get_editor_interface() against the
-    accessor for the EditorInterface singleton, which hand back the same object. The accessor is
-    this generator's invention and the method is Godot's, so the accessor is the one that moves.
-    Arity is what decides it: XRController3D.get_input(int) coexists with GetInput() untouched.
+    Within one package a module-level function and a class member of the same name are ambiguous
+    **whatever their signatures** -- `XRController3D.GetInput(:[]char)` against the accessor for the
+    Input singleton, which takes nothing. (Across packages a signature does disambiguate, which is
+    why `godot_array.Length()` coexists with /Verse.org/Verse's `Length`.) The accessor is this
+    generator's invention and the member is Godot's, so the accessor is the one that moves.
     """
     base = f"Get{godot_name}"
-    return f"{base}Singleton" if base in nullary_methods else base
+    return f"{base}Singleton" if base in member_names else base
 
 
-def emit_singleton_accessors(api: dict, emit_order: list, nullary_methods: set) -> list:
+def emit_singleton_accessors(api: dict, emit_order: list, member_names: set) -> list:
     """One module-level accessor per emitted class that Godot registers as a singleton."""
     singletons = {s["name"] for s in api.get("singletons", [])}
     return [
-        f'{singleton_accessor_name(name, nullary_methods)}<public>()<decides><transacts>'
+        f'{singleton_accessor_name(name, member_names)}<public>()<decides><transacts>'
         f':{verse_class_name(name)}'
         f' = {verse_class_name(name)}{{Handle := VhSingleton["{name}"]}}'
         for name in sorted(n for n in emit_order if n in singletons)
@@ -918,6 +1175,10 @@ def render(api: dict, class_blocks: list, singleton_accessors: list) -> str:
     text += MATH_TEMPLATE.format(
         structs="\n\n".join(emit_math_structs()),
         packers="\n".join(emit_math_packers()),
+    )
+    text += VARIANT_TEMPLATE.format(
+        readers="\n\n".join(emit_variant_readers(api)),
+        packed="\n".join(emit_math_packed_converters()),
     )
     text += CONTAINERS_TEMPLATE.format(classes="\n\n".join(emit_container_classes()))
     text += "\n" + "\n\n".join(class_blocks) + "\n"
@@ -1169,8 +1430,8 @@ def main() -> int:
         requested = read_classes_file(classes_file)
 
     coverage = Coverage()
-    class_blocks, emit_order, method_map, nullary_methods = generate(api, requested, coverage)
-    text = render(api, class_blocks, emit_singleton_accessors(api, emit_order, nullary_methods))
+    class_blocks, emit_order, method_map, member_names = generate(api, requested, coverage)
+    text = render(api, class_blocks, emit_singleton_accessors(api, emit_order, member_names))
     classes_header_text = render_classes_header(api, emit_order, method_map)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
