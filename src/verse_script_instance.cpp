@@ -6,6 +6,8 @@
 #include <godot_cpp/classes/object.hpp>
 #include <godot_cpp/core/memory.hpp>
 #include <godot_cpp/godot.hpp>
+#include <godot_cpp/variant/dictionary.hpp>
+#include <godot_cpp/variant/typed_array.hpp>
 #include <godot_cpp/variant/variant.hpp>
 
 #include <deque>
@@ -17,11 +19,17 @@ using namespace godot;
 namespace {
 
 struct MethodListStorage;
+struct PropertyListStorage;
 
 // One entry per outstanding get_method_list_func answer. Godot hands the array back to
 // free_method_list_func and nothing else, so the array's own address is the only key available.
 std::map<const GDExtensionMethodInfo *, MethodListStorage *> &method_list_storage() {
 	static std::map<const GDExtensionMethodInfo *, MethodListStorage *> table;
+	return table;
+}
+
+std::map<const GDExtensionPropertyInfo *, PropertyListStorage *> &property_list_storage() {
+	static std::map<const GDExtensionPropertyInfo *, PropertyListStorage *> table;
 	return table;
 }
 
@@ -48,12 +56,67 @@ GDExtensionBool get_func(GDExtensionScriptInstanceDataPtr p_instance, GDExtensio
 	return true;
 }
 
+// The strings one property list answer points at, for as long as Godot holds the array.
+struct PropertyListStorage {
+	std::vector<GDExtensionPropertyInfo> infos;
+	// Deques for the same reason MethodListStorage uses them: a GDExtensionPropertyInfo holds the
+	// address of one of these, and a vector that grew would move every string already handed over.
+	std::deque<StringName> names;
+	std::deque<String> hint_strings;
+};
+
+// A *live* instance's own properties, which is what the exported members are.
+//
+// Not the same path as the inspector's: a non-tool script gets a placeholder in the editor, and
+// update_placeholders pushes the same list there. This is the one a running game walks -- which is
+// what PackedScene::pack, Object::get_property_list and any reflective tool ask, so a stub here
+// meant an exported member was invisible to every one of them even though get and set worked.
 const GDExtensionPropertyInfo *get_property_list_func(GDExtensionScriptInstanceDataPtr p_instance, uint32_t *r_count) {
 	*r_count = 0;
-	return nullptr;
+	VerseScriptInstance *self = static_cast<VerseScriptInstance *>(p_instance);
+	if (self->script.is_null()) {
+		return nullptr;
+	}
+
+	// The same list the script hands the inspector, entry for entry: one description of a member,
+	// whichever kind of instance is asking.
+	const TypedArray<Dictionary> exports = self->script->_get_script_property_list();
+	if (exports.is_empty()) {
+		return nullptr;
+	}
+
+	PropertyListStorage *storage = memnew(PropertyListStorage);
+	storage->infos.reserve((size_t)exports.size());
+
+	for (int64_t i = 0; i < exports.size(); i++) {
+		const Dictionary entry = exports[i];
+		storage->names.push_back(StringName(entry.get("name", String())));
+		storage->names.push_back(StringName(entry.get("class_name", StringName())));
+		storage->hint_strings.push_back(String(entry.get("hint_string", String())));
+
+		GDExtensionPropertyInfo info = {};
+		info.type = (GDExtensionVariantType)(int64_t)entry.get("type", (int64_t)Variant::NIL);
+		info.name = (GDExtensionStringNamePtr)&storage->names[storage->names.size() - 2];
+		info.class_name = (GDExtensionStringNamePtr)&storage->names.back();
+		info.hint = (uint32_t)(int64_t)entry.get("hint", (int64_t)PROPERTY_HINT_NONE);
+		info.hint_string = (GDExtensionStringPtr)&storage->hint_strings.back();
+		info.usage = (uint32_t)(int64_t)entry.get("usage", (int64_t)PROPERTY_USAGE_DEFAULT);
+		storage->infos.push_back(info);
+	}
+
+	property_list_storage()[storage->infos.data()] = storage;
+	*r_count = (uint32_t)storage->infos.size();
+	return storage->infos.data();
 }
 
 void free_property_list_func(GDExtensionScriptInstanceDataPtr p_instance, const GDExtensionPropertyInfo *p_list, uint32_t p_count) {
+	auto &table = property_list_storage();
+	const auto found = table.find(p_list);
+	if (found == table.end()) {
+		return;
+	}
+	memdelete(found->second);
+	table.erase(found);
 }
 
 GDExtensionBool property_can_revert_func(GDExtensionScriptInstanceDataPtr p_instance, GDExtensionConstStringNamePtr p_name) {

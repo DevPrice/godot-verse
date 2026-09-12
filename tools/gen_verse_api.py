@@ -36,6 +36,10 @@ BASE_MEMBER_NAMES = {"Handle", "Ready", "Process", "PhysicsProcess"}
 # Print and IsInstanceValid, the two functions GodotApi.native.verse exports.
 VERSE_STDLIB_NAMES = {
     "Int", "Float", "Logic", "Char", "Rational",
+    # Verse's bitwise intrinsics and its float constants, all of them $BuiltIn rather than a package
+    # anything imports -- which is why they are not obvious and why the enum pass found them.
+    "BitAnd", "BitOr", "BitXor", "BitNot", "BitShift", "BitLshift", "BitRshift",
+    "Inf", "NaN", "Pi", "TwoPi", "E", "Epsilon",
     "Abs", "Ceil", "Floor", "Round", "Sqrt", "Min", "Max", "Sign", "Clamp", "Lerp", "Mod",
     "Sin", "Cos", "Tan", "ArcSin", "ArcCos", "ArcTan", "Pow", "Exp", "Ln",
     "Print", "Err", "Sleep", "Length", "Slice", "Reverse", "Shuffle", "Concatenate", "Fits",
@@ -156,10 +160,11 @@ def verse_param_name(godot_name: str, index: int, reserved_words: set, used: set
 
 
 class TypeResolver:
-    def __init__(self, emitted: set, parent_map: dict, class_names: set):
+    def __init__(self, emitted: set, parent_map: dict, class_names: set, enums: dict):
         self.emitted = emitted
         self.parent_map = parent_map
         self.class_names = class_names
+        self.enums = enums
         self._ancestor_cache = {}
         # Element-type suffix -> the element's own TypeInfo, for every typed array the API asked
         # about. Filled during generation and drained by emit_typed_array_converters.
@@ -184,7 +189,16 @@ class TypeResolver:
         """Returns a TypeInfo, or None if unsupported."""
         if godot_type in SCALAR_TYPES:
             return SCALAR_TYPES[godot_type]
-        if godot_type.startswith("enum::") or godot_type.startswith("bitfield::"):
+        if godot_type.startswith("enum::"):
+            info = self.enums.get(godot_type[len("enum::"):])
+            if info is None:
+                return SCALAR_TYPES["int"]
+            stem = enum_converter_stem(info.verse_name)
+            return TypeInfo(info.verse_name, f"VhFrom{stem}", False, f"VhTo{stem}", False)
+        if godot_type.startswith("bitfield::"):
+            # A bitfield *value* can be a combination, which no enum value can hold, so the parameter
+            # stays an int and flags are combined explicitly with Verse's own BitOr over ToInt. The
+            # enum is still declared, so the flags have names.
             return SCALAR_TYPES["int"]
         if godot_type.startswith(TYPED_ARRAY_PREFIX):
             return self.classify_typed_array(godot_type[len(TYPED_ARRAY_PREFIX):])
@@ -354,6 +368,188 @@ SCALAR_TYPES["Variant"] = TypeInfo("variant", "VhFromVariant", False, "VhToVaria
 
 # The packed arrays of a math struct, added from VARIANT_LANES below so that one table drives the
 # reader, the converter and the type table alike.
+
+
+# --- Godot's enums -----------------------------------------------------------
+#
+# R-SCN-5. Every one of Godot's 758 enums becomes a real Verse enum rather than a magic integer, so
+# `SetProcessMode(node_process_mode.Always)` compiles and `SetProcessMode(2)` stops compiling. That
+# is the phase's one deliberate break of existing scripts, and it is the R-AUD-1 win: a Godot
+# developer reads the enumerator, not the number.
+#
+# The wire is unchanged -- an enum still crosses as the int it is. What changes is the Verse
+# signature and a pair of generated converters per enum, in ordinary Verse over `case`, because a
+# `<native>` Verse enum needs a hand-written C++ shadow and 758 of those is not a thing to write.
+
+GodotEnum = namedtuple("GodotEnum", ["key", "verse_name", "is_bitfield", "values", "stripped"])
+
+
+def enum_verse_name(owner: str, godot_name: str) -> str:
+    """`Node.ProcessMode` -> `node_process_mode`; `Error` -> `error`.
+
+    Class-qualified because 96 bare enum names repeat across classes -- Mode, Operator, Param -- and
+    the whole project shares one flat scope. A global enum has no owner to qualify it with, which is
+    also true of it in Godot.
+    """
+    parts = ([verse_class_name(part) for part in owner.split(".")] if owner else []) + [
+        verse_class_name(part) for part in godot_name.split(".")
+    ]
+    return "_".join(parts)
+
+
+def enum_converter_stem(verse_name: str) -> str:
+    return "".join(part[0].upper() + part[1:] for part in verse_name.split("_"))
+
+
+def _common_prefix_words(names: list) -> list:
+    """The `_`-delimited words every one of these names starts with, never consuming the last word."""
+    if len(names) < 2:
+        return []
+    splits = [n.split("_") for n in names]
+    prefix = []
+    for i in range(min(len(s) for s in splits) - 1):
+        word = splits[0][i]
+        if not all(s[i] == word for s in splits):
+            break
+        prefix.append(word)
+    return prefix
+
+
+def _pascal_enumerator(name: str) -> str:
+    return "".join(w[0].upper() + w[1:].lower() for w in name.split("_") if w)
+
+
+def enumerator_names(godot_names: list) -> tuple:
+    """Verse names for one enum's enumerators, and whether the shared prefix was stripped.
+
+    The rule is the enumerators' own longest shared prefix rather than the enum's name, because
+    Godot's prefixing is only half consistent: deriving `PROCESS_MODE_` from `ProcessMode` works, and
+    the same derivation fails for 357 of 736 class enums. The enumerators always agree with each
+    other.
+
+    Stripping is **all or nothing per enum**, and it is abandoned when any stripped name would be an
+    illegal identifier (`SOURCE_2D_TEXTURE`), a duplicate of another in the same enum, a reserved
+    word, or ambiguous with a Verse stdlib name -- an enumerator is ambiguous with a function of the
+    same name exactly as a data member is, which is why Variant::Type keeps its `TYPE_` and reads
+    `variant_type.TypeInt`. Per enum rather than per enumerator so that one enum reads consistently:
+    a `Bool` beside a `TypeInt` would be worse than either.
+    """
+    prefix = _common_prefix_words(godot_names)
+    if prefix:
+        cut = len("_".join(prefix)) + 1
+        short = [_pascal_enumerator(name[cut:]) for name in godot_names]
+        legal = all(name and not name[0].isdigit() for name in short)
+        if (legal and len(set(short)) == len(short)
+                and not any(name in VERSE_STDLIB_NAMES or name in RESERVED_WORDS for name in short)):
+            return short, True
+    return [_pascal_enumerator(name) for name in godot_names], False
+
+
+def collect_enums(api: dict) -> dict:
+    """Every Godot enum, keyed by the way a signature spells it -- `Node.ProcessMode`, `Error`.
+
+    Two kinds of enumerator are dropped, and each would otherwise be a lie:
+
+    - a `_MAX` sentinel, which is a count rather than a value and the one thing Godot renumbers
+      between releases -- twelve of them moved between 4.6 and 4.7 (docs/phase-2-design.md, Stage 0);
+    - an alias, a second name for a value another enumerator already has. A Verse enum has one name
+      per value and the int -> enum conversion would have two `case` arms for one number.
+    """
+    sources = []
+    for godot_class in api["classes"]:
+        sources += [(godot_class["name"], e) for e in godot_class.get("enums", [])]
+    for builtin in api.get("builtin_classes", []):
+        sources += [(builtin["name"], e) for e in builtin.get("enums", [])]
+    sources += [(None, e) for e in api.get("global_enums", [])]
+
+    collected = {}
+    for owner, godot_enum in sources:
+        seen_values = set()
+        kept = []
+        for value in godot_enum["values"]:
+            if value["name"].endswith("_MAX") or value["value"] in seen_values:
+                continue
+            seen_values.add(value["value"])
+            kept.append(value)
+        if not kept:
+            continue
+
+        names, stripped = enumerator_names([value["name"] for value in kept])
+        key = f"{owner}.{godot_enum['name']}" if owner else godot_enum["name"]
+        verse_name = enum_verse_name(owner, godot_enum["name"])
+        if verse_name in collected:
+            raise ValueError(f"two Godot enums both spell themselves {verse_name}")
+        collected[key] = GodotEnum(
+            key=key,
+            verse_name=verse_name,
+            is_bitfield=bool(godot_enum.get("is_bitfield")),
+            values=list(zip(names, [value["value"] for value in kept])),
+            stripped=stripped,
+        )
+    return collected
+
+
+def check_enum_names(enums: dict, api: dict) -> None:
+    """Asserts no enum's name collides with a mirrored class', and that stripping stayed unique.
+
+    A generation failure rather than a silently shadowed name: Verse forbids shadowing outright, so a
+    collision here is a compile error hundreds of lines from its cause.
+    """
+    class_names = {verse_class_name(c["name"]) for c in api["classes"]}
+    for info in enums.values():
+        if info.verse_name in class_names:
+            raise ValueError(f"enum {info.key} spells itself {info.verse_name}, which is a mirrored class")
+        names = [name for name, _ in info.values]
+        if len(set(names)) != len(names):
+            raise ValueError(f"enum {info.key} has two enumerators named the same")
+
+
+def emit_enums(enums: dict) -> list:
+    """The enum declarations and the converters every generated body needs.
+
+    The converters are module-scoped, `Vh`-prefixed and invisible to a script: they exist because a
+    mirrored method's *body* has an int and its signature promises an enum. What a script gets is one
+    public name, `ToInt`, overloaded across every enum -- which is what makes a bitfield combination
+    spellable, since a combination is not an enumerator and a `bitfield::` parameter therefore stays
+    an int: `BitOr(ToInt(mouse_button_mask.Left), ToInt(mouse_button_mask.Right))`.
+    """
+    blocks = []
+    for key in sorted(enums, key=lambda k: enums[k].verse_name):
+        info = enums[key]
+        stem = enum_converter_stem(info.verse_name)
+        first = info.values[0][0]
+
+        blocks.append(
+            f"# Godot's {key}.\n"
+            f"{info.verse_name}<public> := enum:\n"
+            + "\n".join(f"    {name}" for name, _ in info.values))
+
+        # variant -> enum, because that is what a generated method body has: the same shape as every
+        # other unpacker in the table, so emit_method needs no case for enums. Total, because a
+        # mirrored method that returns a *value* must not claim it can fail -- a number no enumerator
+        # has is the kind of wrongness VhExpect reports for a mismatched variant, and it raises the
+        # same way. The trailing enumerator is unreachable and is there because a case arm has to
+        # produce one.
+        arms = "\n".join(f"        {number} => {info.verse_name}.{name}" for name, number in info.values)
+        blocks.append(
+            f"VhTo{stem}(Value:variant)<transacts>:{info.verse_name} =\n"
+            f"    case (VhToInt(Value)):\n"
+            f"{arms}\n"
+            f"        _ =>\n"
+            f'            VhTypeMismatch("{info.verse_name}", Value)\n'
+            f"            {info.verse_name}.{first}")
+
+        blocks.append(
+            f"VhFrom{stem}(Value:{info.verse_name})<transacts>:variant = VhFromInt(ToInt(Value))")
+
+        # The one public name, and the mapping lives here rather than in the packer so that a
+        # bitfield combination has a spelling: BitOr(ToInt(A), ToInt(B)).
+        back = "\n".join(f"        {info.verse_name}.{name} => {number}" for name, number in info.values)
+        blocks.append(
+            f"ToInt<public>(Value:{info.verse_name})<transacts>:int =\n"
+            f"    case (Value):\n"
+            f"{back}")
+    return blocks
 
 
 # Every type a Godot Variant can carry, in Variant::Type order, and what the mirror reads it as.
@@ -529,26 +725,26 @@ def emit_math_packed_converters() -> list:
     return lines
 
 
-def emit_variant_readers(api: dict) -> list:
+def emit_variant_readers(api: dict, enums: dict) -> list:
     """variant_kind, VariantKind, one As<GodotType> per lane, and the VariantFrom family."""
     values = check_variant_lanes(api)
 
-    kinds = [screaming_pascal_case(name)
-             for name in [VARIANT_NIL] + [lane.godot_type for lane in VARIANT_LANES]]
-    blocks = [
-        "variant_kind<public> := enum:\n" + "\n".join(f"    {kind}" for kind in kinds)
-    ]
+    blocks = []
 
-    # Integer literals rather than the Tag constants: `case` matches patterns, and a named constant
-    # is not one. The numbers come from extension_api.json, checked above.
+    # Godot's own Variant::Type enum, generated with the other 757 rather than declared again here:
+    # a second enum for one thing would be two names for one question. Its enumerators keep the
+    # TYPE_ prefix, because stripping it gives `Int` and `Float` and an enumerator is ambiguous with a
+    # stdlib function of that name.
+    kind_enum = enums["Variant.Type"]
+    by_number = {number: name for name, number in kind_enum.values}
     case_arms = "\n".join(
-        f"        {values[lane.godot_type]} => variant_kind.{screaming_pascal_case(lane.godot_type)}"
-        for lane in VARIANT_LANES)
+        f"        {values[lane.godot_type]} => {kind_enum.verse_name}.{by_number[values[lane.godot_type]]}"
+        for lane in VARIANT_LANES if values[lane.godot_type] in by_number)
     blocks.append(
-        "VariantKind<public>(Value:variant)<transacts>:variant_kind =\n"
+        f"VariantKind<public>(Value:variant)<transacts>:{kind_enum.verse_name} =\n"
         "    case (Value.Tag):\n"
         f"{case_arms}\n"
-        f"        _ => variant_kind.{screaming_pascal_case(VARIANT_NIL)}")
+        f"        _ => {kind_enum.verse_name}.{by_number[values[VARIANT_NIL]]}")
 
     blocks.append("VhToObject(Value:variant)<decides><transacts>:object = object{Handle := VhToHandle[Value]}")
 
@@ -1068,13 +1264,32 @@ CONTAINER_PROPERTY_TYPES = {"string", "godot_array", "dictionary", "callable", "
 ACCESSOR_LOCAL_NAMES = ("Accessor", "Field", "Value", "Current")
 
 
-def classify_property(p: dict, resolver: TypeResolver, coverage: Coverage):
+def property_godot_type(p: dict, methods_by_name: dict) -> str:
+    """A property's type, taking the getter's word for it over the property's own.
+
+    Godot's property metadata reports an enum-typed property as a plain `int` -- `Node.process_mode`
+    is `int` where `get_process_mode` returns `enum::Node.ProcessMode`. That is true of **515 of the
+    994** int properties, including the one R-SCN-5's exit criterion is written about, so without this
+    the enums land everywhere except where a script most often reaches for them.
+
+    Only `enum::` is taken this way. A bitfield stays an int on purpose: a combination of flags is not
+    an enumerator, so a `var` of the enum type could not hold what Godot puts in it.
+    """
+    declared = p["type"]
+    if declared != "int":
+        return declared
+    getter = methods_by_name.get(p.get("getter") or "")
+    from_getter = ((getter or {}).get("return_value") or {}).get("type", "")
+    return from_getter if from_getter.startswith("enum::") else declared
+
+
+def classify_property(p: dict, resolver: TypeResolver, coverage: Coverage, methods_by_name: dict):
     """Returns a ClassifiedProperty, or None (and records why) if the property is skipped."""
     if not p.get("getter") or not p.get("setter"):
         coverage.skip("property_no_accessor_pair")
         return None
 
-    info = resolver.classify(p["type"])
+    info = resolver.classify(property_godot_type(p, methods_by_name))
     if info is None:
         coverage.unsupported([p["type"]])
         return None
@@ -1184,7 +1399,7 @@ def emit_property(cp: ClassifiedProperty, names: dict) -> list:
     return lines
 
 
-def generate(api: dict, requested: list, coverage: Coverage):
+def generate(api: dict, requested: list, coverage: Coverage, enums: dict):
     classes = api["classes"]
     parent_map = build_parent_map(classes)
     class_names = set(parent_map.keys())
@@ -1195,7 +1410,7 @@ def generate(api: dict, requested: list, coverage: Coverage):
     emit_order.sort(key=lambda n: (class_depth(n, parent_map, depth_memo), verse_class_name(n)))
 
     emit_set = set(emit_order)
-    resolver = TypeResolver(emit_set, parent_map, class_names)
+    resolver = TypeResolver(emit_set, parent_map, class_names, enums)
 
     inherited_names = {}  # godot class name -> set of Verse names visible to its subclasses
     class_blocks = []
@@ -1211,9 +1426,11 @@ def generate(api: dict, requested: list, coverage: Coverage):
 
         methods = classes_by_name[name].get("methods", [])
 
+        methods_by_name = {m["name"]: m for m in methods}
+
         properties = []
         for p in classes_by_name[name].get("properties", []):
-            cp = classify_property(p, resolver, coverage)
+            cp = classify_property(p, resolver, coverage, methods_by_name)
             if cp is not None:
                 properties.append(cp)
         properties.sort(key=lambda cp: cp.verse_name)
@@ -1286,6 +1503,27 @@ HEADER_TEMPLATE = """using {{/Verse.org/Native}}
 # Variant-typed reflection that this bridge cannot marshal (see the type table in
 # tools/gen_verse_api.py), so a class whose Godot parent is Object derives directly from
 # the hand-written native `object` (see Godot.native.verse) instead of a generated one.
+"""
+
+
+ENUMS_TEMPLATE = """
+# --- Godot's enums -----------------------------------------------------------
+#
+# R-SCN-5: every Godot enum as a real Verse enum, so `SetProcessMode(node_process_mode.Always)`
+# compiles and `SetProcessMode(2)` does not. The type is class-qualified because 96 bare enum names
+# repeat across Godot's classes and the whole project shares one flat scope.
+#
+# Enumerators drop the prefix their own names share -- `PROCESS_MODE_ALWAYS` in Node.ProcessMode is
+# `node_process_mode.Always` -- all or nothing per enum, and not at all when a stripped name would be
+# illegal, duplicated, reserved, or ambiguous with a Verse stdlib function. `_MAX` sentinels and
+# duplicate-valued aliases are dropped: the first is a count rather than a value, and the second would
+# put two `case` arms on one number.
+#
+# A bitfield's parameters stay `int`, because a combination of flags is not an enumerator. Its enum is
+# declared anyway so the flags have names, and Verse's own bitwise intrinsics combine them:
+# `BitOr(ToInt(key_modifier_mask.Ctrl), ToInt(key_modifier_mask.Shift))`.
+
+{enums}
 """
 
 
@@ -1400,15 +1638,16 @@ def emit_singleton_accessors(api: dict, emit_order: list, member_names: set) -> 
 
 
 def render(api: dict, class_blocks: list, singleton_accessors: list, typed_arrays: dict,
-           typed_dictionaries: dict) -> str:
+           typed_dictionaries: dict, enums: dict) -> str:
     version = api["header"]["version_full_name"]
     text = HEADER_TEMPLATE.format(version=version)
     text += MATH_TEMPLATE.format(
         structs="\n\n".join(emit_math_structs()),
         packers="\n".join(emit_math_packers()),
     )
+    text += ENUMS_TEMPLATE.format(enums="\n\n".join(emit_enums(enums)))
     text += VARIANT_TEMPLATE.format(
-        readers="\n\n".join(emit_variant_readers(api)),
+        readers="\n\n".join(emit_variant_readers(api, enums)),
         packed="\n".join(emit_math_packed_converters()),
     )
     text += CONTAINERS_TEMPLATE.format(classes="\n\n".join(emit_container_classes()))
@@ -1660,6 +1899,8 @@ def main() -> int:
     # Before generation rather than during rendering: a typed array of objects is spelled with a
     # Variant::Type *number*, so resolving one needs the numbers, and TypeResolver runs first.
     check_variant_lanes(api)
+    enums = collect_enums(api)
+    check_enum_names(enums, api)
 
     if args.classes_file is None:
         requested = [c["name"] for c in api["classes"] if c["name"] != "Object"]
@@ -1669,9 +1910,9 @@ def main() -> int:
 
     coverage = Coverage()
     (class_blocks, emit_order, method_map, member_names, typed_arrays,
-     typed_dictionaries) = generate(api, requested, coverage)
+     typed_dictionaries) = generate(api, requested, coverage, enums)
     text = render(api, class_blocks, emit_singleton_accessors(api, emit_order, member_names),
-                  typed_arrays, typed_dictionaries)
+                  typed_arrays, typed_dictionaries, enums)
     classes_header_text = render_classes_header(api, emit_order, method_map)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)

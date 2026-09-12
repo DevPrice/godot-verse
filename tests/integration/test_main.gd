@@ -221,6 +221,33 @@ func _init() -> void:
 	_check_eq("and every element is", node.call("ChildNames"), "Kid/Sibling/")
 	_check_eq("an index past the end is a miss, not an error", node.call("HasChildAt", 99), null)
 
+	# --- R-SCN-5: Godot's enums ------------------------------------------------------------------
+	_check_eq("an enum-typed property reads as its enumerator", node.call("ProcessModeName"), "inherit")
+	node.call("SetAlways")
+	_check_eq("and writing one reaches Godot", node.process_mode, Node.PROCESS_MODE_ALWAYS)
+	_check_eq("it still reads back as the enumerator", node.call("ProcessModeName"), "always")
+	_check_eq("and its integer is reachable for a bitfield",
+			node.call("ProcessModeInt"), Node.PROCESS_MODE_ALWAYS)
+	# --- R-EXP-1: an exported Godot enum is a dropdown -------------------------------------------
+	var exported := {}
+	for entry in node.get_property_list():
+		exported[entry["name"]] = entry
+	if exported.has("Mode"):
+		var info: Dictionary = exported["Mode"]
+		_check_eq("an exported enum is an int to Godot", info["type"], TYPE_INT)
+		_check_eq("with the enum hint", info["hint"], PROPERTY_HINT_ENUM)
+		_check_eq("and every enumerator in the dropdown", info["hint_string"],
+				"Inherit,Pausable,WhenPaused,Always,Disabled")
+	else:
+		_check("an exported enum reaches the inspector", false)
+	_check_eq("its declared default is the ordinal of the enumerator", node.get("Mode"), 1)
+	_check_eq("and the script reads it back as that enumerator", node.call("ModeName"), "pausable")
+	node.set("Mode", 3)
+	_check_eq("picking another one reaches the script", node.call("ModeName"), "always")
+
+	_check_eq("flags combine with Verse's own BitOr",
+			node.call("CtrlAndShift"), KEY_MASK_CTRL | KEY_MASK_SHIFT)
+
 	# --- R-LANG-6: library files ---------------------------------------------------------------
 	#
 	# helpers.verse declares no class. It is a Script and it compiles, its module-level functions

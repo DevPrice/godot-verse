@@ -274,7 +274,7 @@ def test_shadow_suppression_across_inheritance():
         ]
     }
     coverage = g.Coverage()
-    blocks, _emit_order, _method_map, _members, _arrays, _dicts = g.generate(api, ["Derived"], coverage)
+    blocks, _emit_order, _method_map, _members, _arrays, _dicts = g.generate(api, ["Derived"], coverage, {})
     check("shadowed method skipped once", coverage.skip_reasons["shadow"], 1)
     check("only the non-colliding method emitted on Derived", coverage.methods_emitted, 2)
     derived_block = next(b for b in blocks if b.startswith("derived"))
@@ -290,7 +290,7 @@ def test_base_member_shadow():
         ]
     }
     coverage = g.Coverage()
-    g.generate(api, ["Thing"], coverage)
+    g.generate(api, ["Thing"], coverage, {})
     check(
         "method name colliding with `object`'s own Ready is shadowed",
         coverage.skip_reasons["shadow"],
@@ -313,7 +313,7 @@ def test_unsupported_type_skipping():
         ]
     }
     coverage = g.Coverage()
-    blocks, _emit_order, _method_map, _members, _arrays, _dicts = g.generate(api, ["Thing"], coverage)
+    blocks, _emit_order, _method_map, _members, _arrays, _dicts = g.generate(api, ["Thing"], coverage, {})
     check("unsupported return type skips its method", coverage.skip_reasons["unsupported_type"], 1)
     check("unsupported type recorded by name", coverage.unsupported_types["typedarray::Node2D"], 1)
     check("the supported sibling method still emits", coverage.methods_emitted, 1)
@@ -337,7 +337,7 @@ def test_typed_array_parameter_takes_the_parametric_class():
         ]
     }
     coverage = g.Coverage()
-    blocks, _order, _map, _members, arrays, _dicts = g.generate(api, ["Thing"], coverage)
+    blocks, _order, _map, _members, arrays, _dicts = g.generate(api, ["Thing"], coverage, {})
     check("no typed array is unsupported any more", coverage.skip_reasons["unsupported_type"], 0)
     check_true(
         "a typed-array parameter takes the parametric class",
@@ -382,7 +382,7 @@ def test_union_parameter_widens_to_the_common_ancestor():
     }
     coverage = g.Coverage()
     blocks, order, _map, _members, _arrays, _dicts = g.generate(
-        api, ["Thing", "BaseMaterial3D", "ShaderMaterial"], coverage)
+        api, ["Thing", "BaseMaterial3D", "ShaderMaterial"], coverage, {})
     body = blocks[order.index("Thing")]
     check_true(
         "a union parameter widens to the class every member derives from",
@@ -407,7 +407,7 @@ def test_a_raw_pointer_is_its_own_permitted_skip():
         ]
     }
     coverage = g.Coverage()
-    g.generate(api, ["Thing"], coverage)
+    g.generate(api, ["Thing"], coverage, {})
     check("a pointer parameter is skipped as a pointer", coverage.skip_reasons["unmarshallable_pointer"], 1)
     check("and not as an unsupported type", coverage.skip_reasons["unsupported_type"], 0)
 
@@ -428,7 +428,7 @@ def test_class_type_falls_back_to_nearest_emitted_ancestor():
     }
     coverage = g.Coverage()
     # Base is emitted, but Mid/Leaf are not requested -- Other.GetLeaf must fall back to Base.
-    blocks, _emit_order, _method_map, _members, _arrays, _dicts = g.generate(api, ["Base", "Other"], coverage)
+    blocks, _emit_order, _method_map, _members, _arrays, _dicts = g.generate(api, ["Base", "Other"], coverage, {})
     other_block = next(b for b in blocks if b.startswith("other"))
     check_true(
         "unresolved class type falls back to nearest emitted ancestor (base)",
@@ -511,34 +511,34 @@ def test_accessor_locals_dodge_a_colliding_member():
 
 
 def test_property_skips_have_reasons():
-    resolver = g.TypeResolver({"Node"}, {"Node": "Object"}, {"Node", "Texture2D"})
+    resolver = g.TypeResolver({"Node"}, {"Node": "Object"}, {"Node", "Texture2D"}, {})
     coverage = g.Coverage()
     check_true(
         "a read-only property is skipped",
-        g.classify_property({"name": "a", "type": "float", "getter": "get_a"}, resolver, coverage) is None,
+        g.classify_property({"name": "a", "type": "float", "getter": "get_a"}, resolver, coverage, {}) is None,
     )
     check_true(
         "a string property is skipped",
         g.classify_property(
-            {"name": "b", "type": "String", "getter": "get_b", "setter": "set_b"}, resolver, coverage
+            {"name": "b", "type": "String", "getter": "get_b", "setter": "set_b"}, resolver, coverage, {}
         ) is None,
     )
     check_true(
         "an object property is skipped",
         g.classify_property(
-            {"name": "c", "type": "Node", "getter": "get_c", "setter": "set_c"}, resolver, coverage
+            {"name": "c", "type": "Node", "getter": "get_c", "setter": "set_c"}, resolver, coverage, {}
         ) is None,
     )
     check_true(
         "a property named after a Verse stdlib function is skipped",
         g.classify_property(
-            {"name": "max", "type": "float", "getter": "get_max", "setter": "set_max"}, resolver, coverage
+            {"name": "max", "type": "float", "getter": "get_max", "setter": "set_max"}, resolver, coverage, {}
         ) is None,
     )
     check_true(
         "a float property is not",
         g.classify_property(
-            {"name": "d", "type": "float", "getter": "get_d", "setter": "set_d"}, resolver, coverage
+            {"name": "d", "type": "float", "getter": "get_d", "setter": "set_d"}, resolver, coverage, {}
         ) is not None,
     )
     check(
@@ -735,6 +735,93 @@ def test_generated_file_matches_hand_written_slice():
     check_true("no generated class redeclares an inherited method name", no_redeclare)
 
 
+def test_enumerator_names_strip_their_shared_prefix():
+    check(
+        "the enumerators' own shared prefix comes off",
+        g.enumerator_names(["PROCESS_MODE_INHERIT", "PROCESS_MODE_ALWAYS", "PROCESS_MODE_DISABLED"]),
+        (["Inherit", "Always", "Disabled"], True),
+    )
+    check(
+        "no shared prefix means no stripping",
+        g.enumerator_names(["OK", "FAILED", "ERR_UNAVAILABLE"]),
+        (["Ok", "Failed", "ErrUnavailable"], False),
+    )
+    check(
+        "a stripped name that is not an identifier abandons stripping for the whole enum",
+        g.enumerator_names(["SOURCE_TEXTURE", "SOURCE_2D_TEXTURE"]),
+        (["SourceTexture", "Source2dTexture"], False),
+    )
+    check(
+        "and so does one ambiguous with a Verse stdlib function",
+        g.enumerator_names(["TYPE_NIL", "TYPE_INT", "TYPE_FLOAT"]),
+        (["TypeNil", "TypeInt", "TypeFloat"], False),
+    )
+    check(
+        "the last word is never consumed, so a one-word remainder survives",
+        g.enumerator_names(["AXIS_X", "AXIS_Y", "AXIS_Z"]),
+        (["X", "Y", "Z"], True),
+    )
+
+
+def test_enums_drop_sentinels_and_aliases():
+    api = {
+        "classes": [],
+        "global_enums": [
+            {
+                "name": "Thing",
+                "values": [
+                    {"name": "THING_FIRST", "value": 0},
+                    {"name": "THING_SECOND", "value": 1},
+                    # An alias: a second name for a value another enumerator already has.
+                    {"name": "THING_ALSO_SECOND", "value": 1},
+                    # A sentinel, and the one thing Godot renumbers between releases.
+                    {"name": "THING_MAX", "value": 2},
+                ],
+            }
+        ],
+    }
+    enums = g.collect_enums(api)
+    info = enums["Thing"]
+    check("the sentinel and the alias are both gone", info.values, [("First", 0), ("Second", 1)])
+    check("and the type is named after the enum", info.verse_name, "thing")
+
+    emitted = "\n".join(g.emit_enums(enums))
+    check_true("the enum is declared public", "thing<public> := enum:" in emitted)
+    check_true("int -> enum reads the variant it was handed",
+               "VhToThing(Value:variant)<transacts>:thing" in emitted)
+    check_true("a number no enumerator has raises rather than guessing",
+               'VhTypeMismatch("thing", Value)' in emitted)
+    check_true("enum -> int is the one public name", "ToInt<public>(Value:thing)<transacts>:int" in emitted)
+    check_true("and the packer goes through it",
+               "VhFromThing(Value:thing)<transacts>:variant = VhFromInt(ToInt(Value))" in emitted)
+
+
+def test_a_property_takes_its_enum_from_the_getter():
+    # Godot reports process_mode as an int and only get_process_mode says which enum it is, which is
+    # true of 515 of its 994 int properties.
+    check(
+        "the getter's enum wins over the property's int",
+        g.property_godot_type(
+            {"name": "process_mode", "type": "int", "getter": "get_process_mode", "setter": "set_process_mode"},
+            {"get_process_mode": {"return_value": {"type": "enum::Node.ProcessMode"}}},
+        ),
+        "enum::Node.ProcessMode",
+    )
+    check(
+        "a bitfield does not, because a combination is not an enumerator",
+        g.property_godot_type(
+            {"name": "flags", "type": "int", "getter": "get_flags", "setter": "set_flags"},
+            {"get_flags": {"return_value": {"type": "bitfield::Node.Flags"}}},
+        ),
+        "int",
+    )
+    check(
+        "and a type the property states outright is left alone",
+        g.property_godot_type({"name": "x", "type": "float", "getter": "get_x", "setter": "set_x"}, {}),
+        "float",
+    )
+
+
 def main():
     test_class_names()
     test_method_names()
@@ -750,6 +837,9 @@ def main():
     test_integer_vector_defaults_stay_integers()
     test_nested_math_structs_are_not_vars()
     test_ancestor_pull_in()
+    test_enumerator_names_strip_their_shared_prefix()
+    test_enums_drop_sentinels_and_aliases()
+    test_a_property_takes_its_enum_from_the_getter()
     test_singleton_accessors_cover_only_emitted_classes()
     test_singleton_accessor_yields_to_a_method_of_the_same_name()
     test_shadow_suppression_across_inheritance()

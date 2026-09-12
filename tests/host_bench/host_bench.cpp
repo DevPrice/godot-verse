@@ -60,7 +60,13 @@ void BenchOnDiagnostic(void*, const vh_diagnostic* Diagnostic)
 	if (Diagnostic->Severity == VH_SEVERITY_ERROR)
 	{
 		++ErrorCount;
-		printf("[bench] error: %.*s\n", Diagnostic->MessageLen, Diagnostic->MessageUtf8);
+		printf("[bench] error: %.*s(%d,%d): %.*s\n",
+			   Diagnostic->FilePathLen,
+			   Diagnostic->FilePathUtf8,
+			   Diagnostic->Line,
+			   Diagnostic->Column,
+			   Diagnostic->MessageLen,
+			   Diagnostic->MessageUtf8);
 	}
 }
 

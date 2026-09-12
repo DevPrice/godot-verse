@@ -147,6 +147,18 @@ R-PERF-2 asks for a recorded number and a threshold would fail on a slower machi
 | `vh_compile_project` (the one generating build) | 421 ms | 2251 ms | 5.3× |
 | **M2** `vh_check_project`, per keystroke | 158 ms | 850 ms | 5.4× |
 
+And where the phase's own work took it, measured the same way as each stage landed:
+
+| mirror after | size | `vh_compile_project` | **M2** per keystroke |
+| --- | --- | --- | --- |
+| Stage 0 (the decision above) | 2825 KB | 2251 ms | 850 ms |
+| Stage 2 — `variant`, typed containers, unions | 2998 KB | 2412 ms | 905 ms |
+| Stage 3 — 758 enums | 4123 KB | 3044 ms | **1170 ms** |
+
+The enums are what cost: 758 types plus three converters each, and 5380 `case` arms twice over. It
+buys R-SCN-5 and R-AUD-1, and it is the single biggest thing to attack if the editor turns out to be
+unpleasant — §3.2 named that in advance, and this is the number to attack it against.
+
 **Where M1's time lands: nowhere.** The mirror is *ordinary* Verse — only the ~30 declarations in
 `Godot.native.verse` are `<native>` — so VNI generates no C++ for it and the 2.8 MB never reaches
 the C++ compiler. What grows is VNI's scan of the package, by 0.7 s, on a build that takes 14 s. The

@@ -306,6 +306,18 @@ empty. Signals are how Godot programs are wired together, so this is parity-crit
   groups, subgroups and categories. Status: **part** and well advanced — `@export_group`,
   refusal of types the inspector cannot draw, and range constraints derived from the Verse type's
   own `where` clause so the slider and the type cannot disagree (README).
+
+  **Enums** landed in Phase 2, pulled forward with R-SCN-5, and for Godot's own as much as for a
+  script's: an exported `node_process_mode` is a dropdown of the enumerators, and what is stored is
+  the ordinal — the same thing GDScript and C# store, carrying the same trap that reordering
+  enumerators reinterprets scenes already saved. Consistent because the enumerator is the identity on
+  the Verse side: whatever the ordinal names, `ToInt` of it is the number Godot receives.
+
+  Making that testable turned up a hole with nothing to do with enums: a *live* script instance's
+  `get_property_list` was a stub, so an exported member was invisible to `Object.get_property_list`,
+  to `PackedScene.pack` and to anything reflective, even though get and set worked. The inspector
+  never noticed because a non-tool script is drawn from a placeholder, which was told. It now answers
+  with the same list the placeholder gets.
 - **R-EXP-2 (MUST)** An exported value edited in the inspector persists into the scene and is
   present when the script runs. Status: **done**.
 - **R-EXP-3 (MUST)** A member that cannot be exported is reported with a reason, at the member,
@@ -350,6 +362,39 @@ empty. Signals are how Godot programs are wired together, so this is parity-crit
 
 ## 6. Types and marshalling
 
+- **R-SCN-5 (MUST)** Godot's per-class and global enums are reachable as named values rather than as
+  magic integers: `SetProcessMode(node_process_mode.Always)` compiles and `SetProcessMode(2)` does
+  not. Status: **done.** All 758 of them are real Verse enums, generated with a pair of converters
+  each in ordinary Verse over `case` — a `<native>` Verse enum would need a hand-written C++ shadow,
+  and 758 of those is not a thing anyone writes. The wire is unchanged: an enum still crosses as the
+  int it is.
+
+  The type is class-qualified (`node_process_mode`) because 96 bare enum names repeat across Godot's
+  classes and the project shares one flat scope. Enumerators drop the prefix their own names share,
+  all or nothing per enum, and not at all when a stripped name would be an illegal identifier, a
+  duplicate, a reserved word, or ambiguous with a Verse stdlib function — which is why Variant::Type
+  reads `variant_type.TypeInt`, `Int` being one of Verse's own. 680 of 765 strip; the 85 that do not
+  are almost all `VisualShaderNode*`. Deriving the prefix from the *enum's* name instead would have
+  failed for 357 of 736 class enums, because Godot's prefixing is only half consistent while the
+  enumerators always agree with each other.
+
+  Two kinds of enumerator are dropped, and each would otherwise be a lie: a `_MAX` sentinel, which is
+  a count rather than a value and the one thing Godot renumbers between releases (twelve moved between
+  4.6 and 4.7), and an alias, a second name for a value another enumerator already has.
+
+  A **bitfield**'s parameters stay `int`, because a combination of flags is not an enumerator and no
+  enum value could hold one. Its enum is still declared so the flags have names, and Verse's own
+  bitwise intrinsics combine them: `BitOr(ToInt(key_modifier_mask.MaskCtrl), ToInt(...))`. `ToInt` is
+  the one public name the enum machinery adds, overloaded across all 758.
+
+  The case that mattered most was nearly missed: Godot's property metadata reports an enum-typed
+  property as a plain `int`, and only the getter says which enum. That is true of **515 of its 994**
+  int properties, `Node.process_mode` among them — so the generator takes the accessor's word over the
+  property's, and `set Node.ProcessMode = node_process_mode.Always` is the spelling R-SCN-5 is
+  written about.
+
+  This is the phase's one deliberate break of existing scripts, and it is the R-AUD-1 win: the
+  reader sees the enumerator rather than the number.
 - **R-TYPE-1 (MUST)** Every Godot `Variant` type crosses in both directions: the numeric and
   string types, all packed arrays, all math structs (`Vector2/2i/3/3i/4/4i`, `Rect2`, `Transform2D`,
   `Transform3D`, `Basis`, `Quaternion`, `AABB`, `Plane`, `Projection`, `Color`), `StringName`,

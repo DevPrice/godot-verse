@@ -11,6 +11,14 @@ marshal := class(node2d):
     @export
     var Counter<public>:int = 0
 
+    # R-EXP-1 with a *Godot* enum, which is what 4.3 pulled forward from Phase 4: the inspector shows
+    # a dropdown of the enumerators and stores the one the author picked. The stored integer is the
+    # ordinal rather than Godot's own value for the enumerator -- which is what GDScript and C# store
+    # too, and is self-consistent because the enumerator is the identity on the Verse side: what
+    # reaches Godot is ToInt of whichever one the ordinal named.
+    @export
+    var Mode<public>:node_process_mode = node_process_mode.Pausable
+
     # --- scalars -------------------------------------------------------------
 
     EchoInt<public>(Value:int):int = Value
@@ -126,11 +134,11 @@ marshal := class(node2d):
     KindAt<public>(A:godot_array, Index:int):string =
         if (V := A.GetVariant[Index]):
             case (VariantKind(V)):
-                variant_kind.TypeInt => "int"
-                variant_kind.TypeFloat => "float"
-                variant_kind.TypeString => "string"
-                variant_kind.TypeVector2 => "vector2"
-                variant_kind.TypeNil => "nil"
+                variant_type.TypeInt => "int"
+                variant_type.TypeFloat => "float"
+                variant_type.TypeString => "string"
+                variant_type.TypeVector2 => "vector2"
+                variant_type.TypeNil => "nil"
                 _ => "other"
         else:
             "missing"
@@ -204,6 +212,40 @@ marshal := class(node2d):
         Children := GetChildren()
         Children.Get[Index]
         false?
+
+    # --- R-SCN-5: Godot's enums as Verse enums -------------------------------
+    #
+    # `SetProcessMode(2)` used to compile and say nothing about what 2 meant. Now the type is the
+    # documentation, and a wrong integer is a compile error rather than a subtly wrong scene.
+    #
+    # ProcessMode reaches Verse as a *property*, which is the case that matters most and the one
+    # Godot's own metadata hides: it reports process_mode as an int, and only get_process_mode says
+    # enum::Node.ProcessMode. 515 of Godot's 994 int properties are really enums.
+    SetAlways<public>():void = set ProcessMode = node_process_mode.Always
+
+    ProcessModeName<public>():string =
+        case (ProcessMode):
+            node_process_mode.Inherit => "inherit"
+            node_process_mode.Pausable => "pausable"
+            node_process_mode.WhenPaused => "when_paused"
+            node_process_mode.Always => "always"
+            node_process_mode.Disabled => "disabled"
+
+    ModeName<public>():string =
+        case (Mode):
+            node_process_mode.Inherit => "inherit"
+            node_process_mode.Pausable => "pausable"
+            node_process_mode.WhenPaused => "when_paused"
+            node_process_mode.Always => "always"
+            node_process_mode.Disabled => "disabled"
+
+    # The integer is still reachable, which is what makes a bitfield spellable: a combination of
+    # flags is not an enumerator, so a bitfield parameter stays an int and Verse's own BitOr does
+    # the work GDScript's `|` does.
+    ProcessModeInt<public>():int = ToInt(ProcessMode)
+
+    CtrlAndShift<public>():int =
+        BitOr(ToInt(key_modifier_mask.MaskCtrl), ToInt(key_modifier_mask.MaskShift))
 
     # --- R-LANG-6: a library file, resolved with no import -------------------
     #
