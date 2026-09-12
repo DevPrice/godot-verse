@@ -26,9 +26,16 @@ VhIsValid<native>(Handle:int)<transacts>:logic
 # The widest value type is Projection at sixteen floats; Vector4i and Rect2i want four ints, and
 # they are ints rather than floats because a double stops counting exactly above 2^53.
 #
-# Not <public>, like the rest of the plumbing: a script that can name a lane can build a variant
-# the host will misread (R-TYPE-7).
-variant<native> := struct:
+# <public>, but only the *type* is: every lane below leaves the specifier off, so a script can name
+# a variant in a signature and still cannot read a lane or build one the host would misread
+# (R-TYPE-7, amended in Phase 2). What makes the type public necessary rather than convenient is
+# typed_array: a required data member may be no less accessible than the constructor, so
+# `Unpack:type{_(:variant)...}` on a public class forces variant public too.
+#
+# Nothing follows from a script holding one. Every lane reads as its default -- a Tag of 0 is Nil --
+# so the worst a hand-built variant can say is "nothing", and the readers in GodotApi.native.verse
+# are what turn one into a value.
+variant<public><native> := struct:
 	# Godot's Variant::Type. Decides which of the lanes below carry the value.
 	Tag<native>:int = 0
 

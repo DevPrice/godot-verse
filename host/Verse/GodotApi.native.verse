@@ -205,3 +205,34 @@ VhFromInt64Array(Values:[]int)<transacts>:variant = VhFromInts(TagPackedInt64Arr
 VhFromFloat32Array(Values:[]float)<transacts>:variant = VhFromFloats(TagPackedFloat32Array, Values)
 VhFromFloat64Array(Values:[]float)<transacts>:variant = VhFromFloats(TagPackedFloat64Array, Values)
 VhFromStringArray(Values:[]string)<transacts>:variant = VhFromStrings(TagPackedStringArray, Values)
+
+# --- typed containers --------------------------------------------------------
+
+# Godot's Array with an element type, which is what `typedarray::Node` means and what
+# `GetChildren()` returns. R-TYPE-2, and the fix for the gap that mattered most: a plain
+# godot_array offers ten typed accessors and none of them is an object, so walking children --
+# which is what scene code is -- had no spelling at all.
+#
+# An ordinary parametric Verse class over the same reference id godot_array holds. The element
+# conversion is a function *value* rather than an overridden method, so one class covers every
+# element type instead of one generated wrapper class per type.
+#
+# `Unpack` is <public> because it has to be: a required data member may be no less accessible than
+# the constructor, and the class is public so a script can name `typed_array(node)` in a signature.
+# That costs nothing, because the gate on building one is `Ref` -- inherited from godot_ref, never
+# public, and worthless at its default of 0. A script can write `typed_array(node){Unpack := ...}`
+# and get a container naming nothing.
+typed_array<public>(t:type) := class(godot_ref):
+    Unpack<public>:type{_(:variant)<decides><transacts>:t}
+
+    # How many elements it holds.
+    Length<public>()<transacts>:int = VhRefSize(Ref)
+
+    # Element at Index. Failable for two reasons that read the same to the caller: the index is out
+    # of range, or the element is not a t after all -- Godot's typed arrays are checked on write,
+    # but a null object is still a miss.
+    Get<public>(Index:int)<decides><transacts>:t = Unpack[VhRefGet[Ref, VhFromInt(Index)]]
+
+    # The whole thing as a Verse array, which is a copy: elements that do not convert are dropped
+    # rather than failing the call, the way `for` with a failable body already reads.
+    ToArray<public>()<transacts>:[]t = for (V : VhRefValues(Ref), E := Unpack[V]) { E }

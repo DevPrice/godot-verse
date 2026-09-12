@@ -452,6 +452,58 @@ a pile of runtime "method not found", and R-QUAL-7's detect-and-report was decli
 **Gate:** §3 — both measurements written down, and the `--all`-or-curated choice recorded with its
 reason, before Stage 2.
 
+### Stage 0 results
+
+**The gate is met: §3.1 and §3.2.** All 1022 classes.
+
+**The version skew is benign, and it names one generator rule.** `godot-cpp` carries 4.6.stable;
+the integration layer and `demo/` run 4.7.stable. Diffed method for method: **4 methods and 1
+property** exist in 4.6 and not 4.7 (`AudioEffectSpectrumAnalyzer.{get,set}_tap_back_pos` and its
+property, `ImageTexture.get_format`, `PortableCompressedTexture2D.get_format`), **0 classes
+removed**, 13 added, and one enumerator dropped
+(`RichTextLabel.ImageUpdateMask.UPDATE_WIDTH_IN_PERCENT`). Twelve enumerators were renumbered and
+**every one of them is a `_MAX` sentinel** — which is the finding that matters, because §4.3 is
+about to turn 5380 enumerators into named Verse values: a `_MAX` is a count rather than a value, it
+is the one thing Godot renumbers between patch releases, and it must not be emitted. R-QUAL-7 stays
+declined for this phase on the strength of these numbers, not on hope.
+
+**S-4 lands, with three constraints the spike existed to find.** A parametric class deriving from
+the native `godot_ref`, carrying a function-typed data member, compiles through VNI *and* through
+the runtime compiler.
+
+- The spelling is `typed_array<public>(t:type)` — the attribute precedes the parameter list, and a
+  bare `(t)` is "V3540: Parameter is malformed".
+- **`Unpack` cannot be module-scoped**, which is what §4.2 wanted. "V3593: Data member 'Unpack' …
+  is less accessible than the constructor" — a required member may be no less accessible than the
+  class. It is `<public>`, and that gives nothing away: the gate on building a container is `Ref`,
+  inherited from `godot_ref`, never public and worthless at its default of 0.
+- Which in turn **forces `variant` public**, since `Unpack`'s type mentions it: "V3593: …
+  accessible universally, but depends on `variant`". So §4.1 is not merely first in the work order,
+  it is a prerequisite. §4.1's own open question is answered by the same build: a `<public>` struct
+  whose fields all leave the specifier off is accepted, and the fields stay module-scoped.
+- **Verse has no anonymous functions.** A function value comes from a named function, so the
+  converter cannot be the inline lambda §4.2 assumed. It is one module-scoped `Vh*` function per
+  element type — and there are **70 distinct typed-array element types across the whole API**, not
+  1022, because only the types Godot actually spells `typedarray::X` need one. Module-scoped and
+  `Vh`-prefixed, so none of it reaches a script's completion.
+
+What S-4 has not yet shown is that a *parametric* non-native subclass of a native class gets the
+UObject shadow `VhAdoptRef` needs. That is not a separable spike — it is the first integration test
+of §4.2 — and the fallback if it fails is the one §4.2 already names.
+
+**S-5's unknown was the wrong unknown, and the answer is better than expected.** §4.2 asked whether
+the host can instantiate a class from the native package, which has no C++ shadow. It already does:
+`FindMirroredClass` + `NewMirroredWrapper` build a mirrored class' instance from a handle today, on
+the path that hands a script method a node argument, and `VClass::GetOrCreateNativeType` is what
+makes the UClass. The language half also compiles: `node2d[Value]` with `Value:object` is accepted
+in this package. So **R-SCN-6 is buildable**, and what is left is engineering rather than risk:
+
+- a native `VhAsObject` that asks Godot for the handle's class through the existing `CallMethod`
+  callback, maps it to the mirrored Verse class, and instantiates *that*;
+- every object-returning generated method wrapping its result in a cast to its declared type, which
+  is failable and already is;
+- a handle → class cache, because otherwise every object return costs a `get_class` round trip.
+
 **Stage 1 — library files** (§5). The smallest piece, independent of everything else, and it makes
 one flat scope livable while modules wait.
 
