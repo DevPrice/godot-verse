@@ -165,5 +165,26 @@ func _init() -> void:
 	_check("an overridden Godot virtual is listed under Godot's name", names.has("_ready"))
 	_check("and the engine can call it", node.has_method("_ready"))
 
+	# --- R-LANG-6: library files ---------------------------------------------------------------
+	#
+	# helpers.verse declares no class. It is a Script and it compiles, its module-level functions
+	# are reachable from marshal.verse with nothing written to import them, and it cannot go on a
+	# node -- which Godot decides from the empty instance base type rather than from a broken
+	# script.
+	_check_eq("a library file's function is reachable from another file", node.call("CallHelper", 21), 42)
+	_check_eq("and its module-level constant", node.call("ReadHelperConstant"), 42)
+	_check_eq("and a string-returning one", node.call("CallHelperString", "verse"), "hello, verse")
+
+	var library: Script = load("res://scripts/helpers.verse")
+	_check("a .verse with no class of its own still loads as a Script", library != null)
+	if library != null:
+		# reload() answers with _is_valid()'s own verdict, which is the editor-facing half of this
+		# and is not itself bound for GDScript to ask: OK where a broken script gives
+		# ERR_COMPILATION_FAILED.
+		_check_eq("it is not reported broken", library.reload(), OK)
+		_check("but it cannot be instantiated", not library.can_instantiate())
+		_check_eq("and it offers no base type to attach to", library.get_instance_base_type(), &"")
+		_check_eq("and it registers no global class name", library.get_global_name(), &"")
+
 	print("[integration] %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)

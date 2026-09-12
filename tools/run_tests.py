@@ -78,11 +78,27 @@ def find_godot(explicit: str | None) -> Path | None:
     return None
 
 
-def run(name: str, argv: list[str], results: Results, cwd: Path | None = None) -> bool:
-    """Runs a test binary, echoing its own per-case lines. Exit code decides pass or fail."""
+def run(name: str, argv: list[str], results: Results, cwd: Path | None = None,
+        require_line: str | None = None) -> bool:
+    """Runs a test binary, echoing its own per-case lines. Exit code decides pass or fail.
+
+    `require_line` is for a runner that can exit 0 without having finished. Godot is one: an
+    unhandled GDScript error aborts _init, so `quit(1)` is never reached and the process leaves with
+    0 -- which reported a whole layer green while a third of its cases had not run. Requiring the
+    summary line the suite prints last is what makes "it stopped early" a failure.
+    """
     print(f"[run_tests] --- {name} ---")
-    completed = subprocess.run(argv, cwd=str(cwd or REPO))
-    ok = completed.returncode == 0
+    if require_line is None:
+        completed = subprocess.run(argv, cwd=str(cwd or REPO))
+        ok = completed.returncode == 0
+    else:
+        completed = subprocess.run(argv, cwd=str(cwd or REPO), capture_output=True, text=True,
+                                   errors="replace")
+        output = (completed.stdout or "") + (completed.stderr or "")
+        sys.stdout.write(output)
+        ok = completed.returncode == 0 and require_line in output
+        if completed.returncode == 0 and not ok:
+            print(f"[run_tests] {name}: exited 0 without printing {require_line!r} -- it stopped early")
     results.record(name, ok)
     return ok
 
@@ -208,6 +224,7 @@ def run_integration(results: Results, engine: Path | None, godot: Path | None) -
             "--quit-after", "600",
         ],
         results,
+        require_line="passed, ",
     )
 
 

@@ -133,6 +133,7 @@ Error VerseScript::compile() {
 	const String path = get_path();
 	if (path.is_empty()) {
 		valid = false;
+		has_own_class = false;
 		return ERR_UNCONFIGURED;
 	}
 
@@ -182,15 +183,17 @@ void VerseScript::refresh_from_analysis() {
 		return;
 	}
 
-	// A .verse file is only a script if the compiled project defines the class it is named after:
-	// there is no other shape a script can take, so a file without one cannot be attached.
+	// A file is valid when the project built and this file is not one of the reasons it might not
+	// have. Attachability is the separate question below: a `.verse` holding only module-level
+	// functions compiles, is usable from every other file in the one flat scope, and is not a
+	// mistake -- so reporting it broken was wrong, and this is R-LANG-6's third clause.
 	valid = language->ensure_project_built() == OK
-			&& language->diagnostics_for(get_path()).is_empty()
-			&& runtime->has_class(verse_class_name());
+			&& language->diagnostics_for(get_path()).is_empty();
+	has_own_class = valid && runtime->has_class(verse_class_name());
 
 	// The method table comes from the same analysis as the exports and is cached for the same
 	// reason: Godot asks _has_method on per-frame paths, and every ask walks the semantic program.
-	methods_cache = valid ? runtime->class_methods(verse_class_name()) : Vector<VerseMethodInfo>();
+	methods_cache = has_own_class ? runtime->class_methods(verse_class_name()) : Vector<VerseMethodInfo>();
 
 	// The export list only exists once the project has been analysed, and a placeholder created
 	// before that got an empty one.
@@ -261,7 +264,7 @@ const VerseMethodInfo *VerseScript::find_method(const StringName &p_name) const 
 }
 
 bool VerseScript::is_compiled() const {
-	return valid;
+	return has_own_class;
 }
 
 bool VerseScript::_editor_can_reload_from_file() {
@@ -387,7 +390,13 @@ StringName VerseScript::_get_instance_base_type() const {
 		return StringName("Node");
 	}
 	const VerseClassDecl decl = verse_scan_class_decl(source_code.utf8().get_data());
-	return language->base_types_for(decl).instance_base;
+
+	// A library file -- no top-level class of its own -- has nothing to attach to, and saying so is
+	// how Godot refuses and explains: the attach dialog and the drag-a-script-onto-a-node path both
+	// test the base type against the node's own class. Answering "Node" would let it be attached and
+	// then do nothing at all. Text rather than has_own_class because this is asked of files the
+	// editor has merely scanned.
+	return decl.name.empty() ? StringName() : language->base_types_for(decl).instance_base;
 }
 
 void *VerseScript::_instance_create(Object *p_for_object) const {
@@ -483,7 +492,7 @@ bool VerseScript::_has_property_default_value(const StringName &p_property) cons
 
 Variant VerseScript::_get_property_default_value(const StringName &p_property) const {
 	VerseRuntime *runtime = get_runtime();
-	if (!valid || runtime == nullptr) {
+	if (!has_own_class || runtime == nullptr) {
 		return Variant();
 	}
 	return runtime->class_default_field(verse_class_name(), String(p_property));

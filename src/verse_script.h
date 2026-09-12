@@ -134,8 +134,14 @@ private:
 	mutable std::vector<void *> placeholders;
 
 	godot::String source_code;
-	// The compiled project defines this file's class, so the file can be attached to a node.
+	// The project built and this file contributed no errors to it. True for a library file, which
+	// is valid Verse that simply has nothing to attach.
 	bool valid = false;
+
+	// The compiled project defines the class this file is named after, so the file can be attached
+	// to a node. False for a library file -- a `.verse` of module-level functions, which is most of
+	// what makes one flat scope livable while modules wait (R-LANG-6).
+	bool has_own_class = false;
 
 	// The property list the last believable analysis produced. Kept rather than recomputed on
 	// demand so that a file which currently does not analyse still has an export list to show:

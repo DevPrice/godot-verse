@@ -116,3 +116,11 @@ marshal := class(node2d):
 
     Ready<override>():void =
         Print("marshal ready")
+
+    # --- R-LANG-6: a library file, resolved with no import -------------------
+    #
+    # HelperDouble and HelperAnswer live in helpers.verse, which declares no class and so cannot go
+    # on a node. One flat scope is what makes them visible here with nothing written to import them.
+    CallHelper<public>(Value:int):int = HelperDouble(Value)
+    ReadHelperConstant<public>():int = HelperAnswer
+    CallHelperString<public>(Name:string):string = HelperGreeting(Name)

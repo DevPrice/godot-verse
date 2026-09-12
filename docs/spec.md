@@ -202,12 +202,17 @@ and packages, never syntax.
 - **R-LANG-6 (MUST)** A project is many files organised in directories, with real modules. A Verse
   file can import and use definitions from another file in the project; two files may define
   names that would collide at top level; shared library code lives outside any script.
-  *Current state:* **none**, and the current state is a hard rule in the opposite direction — the
-  whole project shares one flat `/user@localhost` scope and Verse forbids shadowing, so a script's
-  class is named after its file to keep collisions from happening (README, "Five constraints").
-  This is the single largest structural gap between the prototype and a language a project can be
-  written in. **OQ-5** is closed (§14.1): the escape is submodules built from the project's
-  directory tree, inside the one user package.
+  *Current state:* **part.** The third clause is **done**: a `.verse` with no class of its own is a
+  library file rather than a broken script — it compiles, every other file in the project resolves
+  its module-level definitions with nothing written to import them, and it reports no instance base
+  type, so Godot refuses to attach it and says why. That much needs no modules: in one flat scope
+  same-module files already see each other, and it is most of what makes that scope livable while
+  the rest waits. The first two clauses are **none**, and the current state is a hard rule in the
+  opposite direction — the whole project shares one flat `/user@localhost` scope and Verse forbids
+  shadowing, so a script's class is named after its file to keep collisions from happening (README,
+  "Five constraints"). That remains the single largest structural gap between the prototype and a
+  language a project can be written in. **OQ-5** is closed (§14.1): the escape is submodules built
+  from the project's directory tree, inside the one user package, and it is Phase 3's.
 - **R-LANG-7 (MUST)** Transactional semantics have a defined meaning at the Godot boundary, and
   it is documented as a language rule rather than as an implementation note. Today: every Godot
   callback is invoked through `AutoRTFM::Open` and writes defer to `AutoRTFM::OnCommit`, so a
