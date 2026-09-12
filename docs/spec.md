@@ -342,13 +342,29 @@ empty. Signals are how Godot programs are wired together, so this is parity-crit
 
 - **R-SCN-1 (MUST)** The full node API is reachable: `GetNode`, `FindChild`, groups, `AddChild`,
   `QueueFree`, signals, `SceneTree` access, `ChangeScene`, instantiating a `PackedScene`.
-  Status: **part** — 1023 Godot classes are mirrored but only the ~hundred in
-  `tools/verse_api_classes.txt` are emitted, and a method whose types are absent from
-  `gen_verse_api.py`'s type table is skipped.
+  Status: **done**, to the limit of what the phases below it allow. All **1023** classes are
+  emitted, Godot's own `Object` among them, and `gen_verse_api.py`'s type table no longer skips a
+  single method for a type it cannot carry — `unsupported_type` is **zero**. Of what remains
+  unreachable, every entry is one of the categories R-SCN-2 permits: `virtual` (1413, R-NODE-7,
+  Phase 4), `static` (114, R-NODE-4, Phase 4), `vararg` (15, no requirement), a raw C pointer (3,
+  which GDScript cannot call either), and the property skips, each of which leaves Godot's own
+  getter and setter standing.
+
+  A subset was chosen against, with the measurement behind it in `phase-2-design.md` §3: adding a
+  class to the mirror means rebuilding `verse_host.dll`, which means a UE source checkout, so a
+  curated list is a wall rather than a setting.
 - **R-SCN-2 (MUST)** Every Godot class and every method on it is reachable, or the reason it is
   not is recorded per-method and surfaced to the user rather than silently missing.
   *Rationale:* "the method I need isn't there and I can't tell why" is the failure mode that ends
-  adoption. Status: **none** — a skipped method simply is not emitted.
+  adoption. Status: **part.** The coverage side is done and has a bar: the permitted skip categories
+  are named exhaustively — `virtual`, `static`, `vararg`, `unmarshallable_pointer`, and the property
+  skips that leave Godot's own accessors standing — and any *other* skip is a defect. That makes the
+  requirement testable where "a reason is recorded" alone did not: 8984 recorded reasons would have
+  satisfied the old wording. `unsupported_type` is zero today, and a new one after a Godot version
+  bump is impossible to miss.
+
+  What is outstanding is the surfacing: the reason is in the generator's report, not yet in the
+  editor where the author meets the problem.
 - **R-SCN-3 (MUST)** Godot's `@GlobalScope` utility functions and constants are reachable under
   names that do not collide with `/Verse.org/Simulation`. Today none are: every mirrored call
   rides `VhCallValue(Handle, …)`, a free function has no handle, and 78 math plus 8 random names
@@ -547,8 +563,18 @@ indistinguishable from a GDScript one.
   signals — with no Verse-specific API and no knowledge that Verse is involved. Depends on
   R-NODE-6 and §5.3.
 - **R-INT-2 (MUST)** A Verse script calls methods on, and reads properties of, an object whose
-  script is GDScript or C#, dynamically. Status: **none** — every call goes through the *typed*
-  mirror of the engine API, which has no entry for a user-defined GDScript method.
+  script is GDScript or C#, dynamically. Status: **done**, and as a side effect rather than as work
+  of its own: `Object.callv(StringName, Array) -> Variant` is an ordinary concrete method, and Godot's
+  `Object` became mirrorable the moment Variant and Array both crossed (Phase 2 §4.4). A script
+  writes `AsInt[Target.Callv("_double", Args)]` and the GDScript method runs. `get`, `set`,
+  `has_method` and `get_class` came with it.
+
+  Proving it turned up a rule that had leaked out of the place it belonged: an object-typed
+  *exported member* must be optional, because the inspector can leave a slot empty, and that rule was
+  being applied to method *arguments* too — where it is not merely unnecessary but wrong. A parameter
+  declared `node2d` was handed a `?node2d`, so the first `.GetName()` on it died inside the
+  interpreter instead of failing to compile. A bare parameter now receives the object itself, and a
+  null handle for one is refused as a bad argument rather than becoming an empty option.
 - **R-INT-3 (MUST)** Signals cross in both directions (R-SIG-6).
 - **R-INT-4 (MUST)** A `Callable` produced by any language is invocable from any other, including
   a Verse function handed to a GDScript API (R-TYPE-3).

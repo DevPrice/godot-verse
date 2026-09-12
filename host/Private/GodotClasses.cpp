@@ -4,7 +4,7 @@
 
 #include "HostRuntime.h"
 
-#include "Godot.object.gen.ipp"
+#include "Godot.vh_object.gen.ipp"
 #include "Godot.godot_ref.gen.ipp"
 #include "Godot.variant.gen.ipp"
 

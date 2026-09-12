@@ -473,8 +473,11 @@ int main(int argc, char** argv)
 					&& ReadyLookup)
 				{
 					LookupOk = Step("it knows the cursor is on a definition", ReadyLookup->IsDefinition != 0) && LookupOk;
+					/* `vh_object` rather than `object` since Phase 2: Ready is declared on the
+					 * hand-written native root, and `object` is now the mirror of Godot's own Object
+					 * class, which sits between it and node2d. */
 					LookupOk = Step("it names the class the override came from",
-								   Text(ReadyLookup->OverriddenOwnerUtf8, ReadyLookup->OverriddenOwnerLen) == "object")
+								   Text(ReadyLookup->OverriddenOwnerUtf8, ReadyLookup->OverriddenOwnerLen) == "vh_object")
 							&& LookupOk;
 					LookupOk = Step("and where that parent was written",
 								   ReadyLookup->OverriddenLine >= 0 && ReadyLookup->OverriddenPathLen > 0)
@@ -799,7 +802,7 @@ int main(int argc, char** argv)
 					{
 						CompleteOk = Step("an inherited method is offered as overridable", Ready->IsOverridable != 0) && CompleteOk;
 						CompleteOk = Step("owned by the class that declares it",
-										 Text(Ready->OwnerUtf8, Ready->OwnerLen) == "object")
+										 Text(Ready->OwnerUtf8, Ready->OwnerLen) == "vh_object")
 								  && CompleteOk;
 						CompleteOk = Step("and spelled as a declaration",
 										 Text(Ready->SignatureUtf8, Ready->SignatureLen) == "():void")

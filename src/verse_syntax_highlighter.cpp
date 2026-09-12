@@ -36,6 +36,7 @@ Color read_color(const Ref<EditorSettings> &p_settings, const String &p_name, co
 // exported: a script cannot name it.
 constexpr const char *native_type_names[] = {
 	"object",
+	"vh_object",
 };
 
 std::string word_at(const CharString &p_utf8, int p_begin, int p_end) {

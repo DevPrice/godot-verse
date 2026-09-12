@@ -248,6 +248,20 @@ func _init() -> void:
 	_check_eq("flags combine with Verse's own BitOr",
 			node.call("CtrlAndShift"), KEY_MASK_CTRL | KEY_MASK_SHIFT)
 
+	# --- R-INT-2: Verse calls a GDScript method by name ------------------------------------------
+	#
+	# Object.callv is what delivers it, and Object is only mirrorable now that Variant and Array both
+	# cross. The receiver here is this SceneTree, whose _double is defined in GDScript above.
+	_check_eq("a method declared on the mirrored class it was passed as",
+			node.call("NodeNameOf", kid), "Kid")
+	_check_eq("a method inherited from Object", node.call("NodeClassOf", kid), "Node2D")
+	_check_eq("Object.get_class answers Godot's own class name",
+			node.call("ClassOf", kid), "Node2D")
+	_check_eq("a Verse script calls a GDScript method dynamically",
+			node.call("CallSibling", self, "_double", [21]), 42)
+	_check("Object.has_method sees a GDScript method", node.call("CanCall", self, "_double"))
+	_check("and denies one nothing declares", not node.call("CanCall", self, "_no_such_method"))
+
 	# --- R-LANG-6: library files ---------------------------------------------------------------
 	#
 	# helpers.verse declares no class. It is a Script and it compiles, its module-level functions

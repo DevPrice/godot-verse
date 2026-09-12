@@ -223,8 +223,9 @@ def test_ancestor_pull_in():
         "Sprite2D": "Node2D",
     }
     order = g.compute_emit_set(["Sprite2D"], parent_map)
-    check("ancestor pull-in order", order, ["Node", "CanvasItem", "Node2D", "Sprite2D"])
-    check_true("Object never pulled in", "Object" not in order)
+    # Object is mirrored like any other class since Phase 2, and comes first because it is the root.
+    # What it derives from is the hand-written native `vh_object`, which is not in the API at all.
+    check("ancestor pull-in order", order, ["Object", "Node", "CanvasItem", "Node2D", "Sprite2D"])
 
 
 def test_singleton_accessors_cover_only_emitted_classes():
@@ -341,11 +342,11 @@ def test_typed_array_parameter_takes_the_parametric_class():
     check("no typed array is unsupported any more", coverage.skip_reasons["unsupported_type"], 0)
     check_true(
         "a typed-array parameter takes the parametric class",
-        "SetNames<public>(Names:typed_array(string))" in blocks[0],
+        "SetNames<public>(Names:typed_array(string))" in blocks[-1],
     )
     check_true(
         "and a typed-array return hands one back",
-        "GetKids<public>()<transacts>:typed_array(thing)" in blocks[0],
+        "GetKids<public>()<transacts>:typed_array(thing)" in blocks[-1],
     )
     check("both element types were recorded", sorted(arrays), ["StringName", "Thing"])
 
@@ -578,11 +579,11 @@ def test_generated_method_map_covers_a_known_method():
         "the checked-in header still maps a surviving method",
         '{ "node", "GetChild", "Node", "get_child" },' in header,
     )
-    # object's lifecycle methods are hand-written rather than mirrored -- the generator skips
-    # virtuals -- but a script overriding one wants Godot's documentation for it.
+    # The native root's lifecycle methods are hand-written rather than mirrored -- the generator
+    # skips virtuals -- but a script overriding one wants Godot's documentation for it.
     check_true(
-        "the checked-in header maps object.Ready to Node._ready",
-        '{ "object", "Ready", "Node", "_ready" },' in header,
+        "the checked-in header maps vh_object.Ready to Node._ready",
+        '{ "vh_object", "Ready", "Node", "_ready" },' in header,
     )
 
 

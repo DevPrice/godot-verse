@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 #include "VerseValue.h"
 
-#include "Godot.object.gen.h"
+#include "Godot.vh_object.gen.h"
 #include "Godot.godot_ref.gen.h"
 #include "Godot.variant.gen.h"
 
@@ -46,12 +46,13 @@ public:
 	verse::string Text;
 };
 
-/// The C++ shadow for Verse's `object`. It exists so that a user's `class(node2d)`
-/// has a UObject representation the host can instantiate and call into; it carries no behaviour
-/// of its own, and every Godot class above it in the API is ordinary Verse.
-class object : public UObject
+/// The C++ shadow for Verse's `vh_object`, the root of the mirrored hierarchy. It exists so that a
+/// user's `class(node2d)` has a UObject representation the host can instantiate and call into; it
+/// carries no behaviour of its own, and every Godot class above it -- the mirror of Godot's own
+/// Object included -- is ordinary Verse.
+class vh_object : public UObject
 {
-	OBJECT_BODY();
+	VH_OBJECT_BODY();
 
 	// Verse API
 

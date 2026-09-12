@@ -24,6 +24,13 @@ DEFAULT_CLASSES_FILE = "tools/verse_api_classes.txt"
 KEYWORDS_HEADER = "src/verse_keywords.h"
 EXTENSION_API = "godot-cpp/gdextension/extension_api.json"
 
+# The hand-written native class every mirrored class descends from, in Godot.native.verse. Named
+# `vh_object` rather than `object` since Phase 2, because `object` is now the mirror of Godot's own
+# Object class: Verse cannot reopen a class, so Object's 46 methods could not be added to the
+# hand-written one, and a generated `godot_object` beside a native `object` would have put two base
+# names in completion where the one a user reaches for first is the empty one.
+NATIVE_ROOT = "vh_object"
+
 BASE_MEMBER_NAMES = {"Handle", "Ready", "Process", "PhysicsProcess"}
 
 # /Verse.org/Verse is in scope in every generated body, and Verse reports an ambiguity rather
@@ -143,9 +150,25 @@ def verse_class_name(godot_name: str) -> str:
     return "_".join(t.lower() for t in split_pascal(godot_name))
 
 
-def verse_method_name(godot_name: str) -> str:
+def pascal_member_name(godot_name: str) -> str:
+    """`set_v_size_flags` -> `SetVSizeFlags`, with nothing said about whether the name is usable."""
     parts = [p for p in godot_name.split("_") if p]
     return "".join(p[0].upper() + p[1:] for p in parts)
+
+
+def verse_method_name(godot_name: str) -> str:
+    name = pascal_member_name(godot_name)
+    # A method whose name is one of Verse's own is ambiguous with it, and arity does not save it:
+    # `Object.to_string()` against `/Verse.org/Verse:ToString(:[]char)` is a compile error even
+    # though one takes nothing and the other takes a string. Skipping the method is not an option --
+    # R-SCN-2 permits only virtual, static and vararg -- so it takes Godot's name with `Godot` in
+    # front, which is what it is: Godot's own ToString rather than Verse's.
+    #
+    # Three methods across 1023 classes: Gradient.reverse, Crypto.sign and Object.to_string.
+    # VERSE_STDLIB_NAMES is a deliberately conservative guess at what `/Verse.org/Verse` exports --
+    # the standard library is compiler intrinsics rather than a .verse digest, so there is nothing to
+    # enumerate -- and over-listing here costs an odd-looking name where under-listing costs a build.
+    return f"Godot{name}" if name in VERSE_STDLIB_NAMES else name
 
 
 def verse_param_name(godot_name: str, index: int, reserved_words: set, used: set, members: set) -> str:
@@ -177,7 +200,7 @@ class TypeResolver:
             return self._ancestor_cache[godot_class]
         cur = self.parent_map.get(godot_class)
         result = None
-        while cur and cur != "Object":
+        while cur:
             if cur in self.emitted:
                 result = cur
                 break
@@ -1048,15 +1071,20 @@ def build_parent_map(classes: list) -> dict:
 
 
 def compute_emit_set(requested: list, parent_map: dict) -> list:
-    """Requested classes plus all their ancestors (Object excluded), in first-seen order."""
+    """Requested classes plus all their ancestors, in first-seen order.
+
+    Object included, since Phase 2: it is an ordinary mirrored class whose base is the hand-written
+    native root, `vh_object`. Before that its API was almost all Variant- and Callable-typed and
+    there was nothing to emit.
+    """
     emit_order = []
     emit_set = set()
     for name in requested:
-        if name == "Object" or name not in parent_map:
+        if name not in parent_map:
             continue
         chain = []
         cur = name
-        while cur is not None and cur != "Object" and cur not in emit_set:
+        while cur is not None and cur not in emit_set:
             chain.append(cur)
             cur = parent_map.get(cur)
         for c in reversed(chain):
@@ -1070,7 +1098,7 @@ def class_depth(name: str, parent_map: dict, memo: dict) -> int:
     if name in memo:
         return memo[name]
     parent = parent_map.get(name)
-    depth = 0 if parent is None or parent == "Object" else 1 + class_depth(parent, parent_map, memo)
+    depth = 0 if parent is None else 1 + class_depth(parent, parent_map, memo)
     memo[name] = depth
     return depth
 
@@ -1298,7 +1326,10 @@ def classify_property(p: dict, resolver: TypeResolver, coverage: Coverage, metho
     # of the same name would have been distinguished by its signature. So the property is dropped
     # and Godot's own getter and setter survive as methods -- GetMax() still reads it; what is lost
     # is only `set Node.Max = ...`.
-    if verse_method_name(p["name"]) in VERSE_STDLIB_NAMES:
+    # Checked before the Godot prefix verse_method_name would add: a property that cannot be a `var`
+    # is better dropped than renamed, because dropping it leaves Godot's own `GetMax()` and `SetMax()`
+    # standing and renaming it would put `GodotMax` in their place. Godot's vocabulary wins.
+    if pascal_member_name(p["name"]) in VERSE_STDLIB_NAMES:
         coverage.skip("property_ambiguous_name")
         return None
     if info.verse_type in CONTAINER_PROPERTY_TYPES or info.verse_type.startswith("[]"):
@@ -1421,8 +1452,10 @@ def generate(api: dict, requested: list, coverage: Coverage, enums: dict):
 
     for name in emit_order:
         parent = parent_map[name]
-        base_names = set(BASE_MEMBER_NAMES) if parent == "Object" else set(inherited_names[parent])
-        base_verse = "object" if parent == "Object" else verse_class_name(parent)
+        # Godot's Object has no Godot parent; its base is the hand-written native root, whose four
+        # members every mirrored class inherits.
+        base_names = set(BASE_MEMBER_NAMES) if parent is None else set(inherited_names[parent])
+        base_verse = NATIVE_ROOT if parent is None else verse_class_name(parent)
 
         methods = classes_by_name[name].get("methods", [])
 
@@ -1499,10 +1532,10 @@ HEADER_TEMPLATE = """using {{/Verse.org/Native}}
 # Generated by tools/gen_verse_api.py from godot-cpp/gdextension/extension_api.json
 # ({version}). Do not edit by hand.
 #
-# Godot's Object class is skipped entirely: its own API is almost all Callable- and
-# Variant-typed reflection that this bridge cannot marshal (see the type table in
-# tools/gen_verse_api.py), so a class whose Godot parent is Object derives directly from
-# the hand-written native `object` (see Godot.native.verse) instead of a generated one.
+# Godot's Object is mirrored like every other class, and derives from the hand-written native
+# `vh_object` (see Godot.native.verse) -- which is what gives a script's class a UObject
+# representation the host can instantiate and call into. Nothing a script writes should name
+# `vh_object`; `object` is the base to derive from, and it carries Godot's own Object API.
 """
 
 
@@ -1773,9 +1806,9 @@ VALUE_TYPE_CLASSES = {"Vector2": "vector2", "Vector3": "vector3", "Color": "colo
 # overriding one wants Godot's documentation for it. Listed as (verse class, verse method, godot
 # class, godot method), the shape the method map already carries.
 LIFECYCLE_METHODS = [
-    ("object", "Ready", "Node", "_ready"),
-    ("object", "Process", "Node", "_process"),
-    ("object", "PhysicsProcess", "Node", "_physics_process"),
+    (NATIVE_ROOT, "Ready", "Node", "_ready"),
+    (NATIVE_ROOT, "Process", "Node", "_process"),
+    (NATIVE_ROOT, "PhysicsProcess", "Node", "_physics_process"),
 ]
 
 # The fields of those hand-written value types, in the same shape. Listed rather than read out of
@@ -1851,10 +1884,6 @@ def format_report(coverage: Coverage, class_count_requested: int) -> str:
     lines.append(f"Methods emitted: {coverage.methods_emitted}")
     lines.append(f"Properties emitted: {coverage.properties_emitted}")
     lines.append("")
-    lines.append("Note: Godot's Object class is always skipped -- its API is mostly")
-    lines.append("Callable/Variant-typed reflection this bridge cannot marshal. Any class")
-    lines.append("whose Godot parent is Object derives from the native `object` instead.")
-    lines.append("")
     lines.append("Methods skipped, by reason:")
     total_skipped = sum(coverage.skip_reasons.values())
     for reason, count in coverage.skip_reasons.most_common():
@@ -1903,7 +1932,7 @@ def main() -> int:
     check_enum_names(enums, api)
 
     if args.classes_file is None:
-        requested = [c["name"] for c in api["classes"] if c["name"] != "Object"]
+        requested = [c["name"] for c in api["classes"]]
     else:
         classes_file = resolve(root, args.classes_file)
         requested = read_classes_file(classes_file)

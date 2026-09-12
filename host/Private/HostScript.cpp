@@ -640,7 +640,7 @@ AUTORTFM_DISABLE UClass* FindGodotClass(FUtf8StringView ClassName)
             return;
         }
         UClass* NativeClass = Cast<UClass>(Class->GetOrCreateNativeType(Context));
-        if (NativeClass && NativeClass->IsChildOf(verse::object::StaticClass()))
+        if (NativeClass && NativeClass->IsChildOf(verse::vh_object::StaticClass()))
         {
             Found = NativeClass;
         }
@@ -1158,10 +1158,15 @@ namespace {
 struct FMemberType
 {
     const uLang::CDataDefinition* Member = nullptr;
-    /// The class an optional reference member holds, and which package declares it. Null and Other
-    /// for a member of any other type.
+    /// The class a reference member or parameter holds, and which package declares it. Null and
+    /// Other for one of any other type.
     const uLang::CClass* ReferenceClass = nullptr;
     EClassOrigin ReferenceOrigin = EClassOrigin::Other;
+    /// Whether it was declared `?node2d` rather than `node2d`. An *exported member* must be optional
+    /// -- the inspector can leave a slot empty, and VH_EXPORT_OBJECT_NOT_OPTIONAL says so -- but a
+    /// method argument always arrives with a value, so both spellings are legal there and the
+    /// difference is only whether the value handed over is wrapped.
+    bool bReferenceIsOption = false;
     /// The mirrored struct a member is declared as, which is where its field names come from --
     /// there is nothing in a value to read them off.
     const FStructLayout* Struct = nullptr;
@@ -1193,17 +1198,24 @@ AUTORTFM_DISABLE FMemberType DescribeType(const uLang::CTypeBase* Type, const uL
     DescribeExportType(Type, Program, Result.Described);
     if (const uLang::CClass* Declared = Normal ? Normal->AsNullable<uLang::CClass>() : nullptr)
     {
-        // Only the optional form is a reference this can marshal, which is the same rule
-        // DescribeExportType refuses a bare one by; a struct is the other way round, since
-        // there is no empty struct for an option to hold.
-        if (bIsOption)
+        // Three things in the mirror are spelled as a class and are not a Godot *object*: the
+        // sixteen math types, which are structs; the container wrappers, which carry a reference id;
+        // and the parametric typed containers over them. Only what is left is a handle to build a
+        // wrapper from, and only for it does the option/bare distinction below mean anything.
+        const FUtf8StringView Name = FUtf8StringView(Declared->AsNameCString());
+        const bool bIsContainer = ReferenceVariantTag(Name) != 0
+            || Name.StartsWith(UTF8TEXT("typed_array"))
+            || Name.StartsWith(UTF8TEXT("typed_dictionary"));
+        const FStructLayout* const Layout = bIsOption ? nullptr : FindStructLayout(Name);
+        if (Layout)
+        {
+            Result.Struct = Layout;
+        }
+        else if (bIsOption || !bIsContainer)
         {
             Result.ReferenceClass = Declared;
             Result.ReferenceOrigin = ClassOriginOf(*Declared, Program);
-        }
-        else if (ClassOriginOf(*Declared, Program) == EClassOrigin::Mirrored)
-        {
-            Result.Struct = FindStructLayout(FUtf8StringView(Declared->AsNameCString()));
+            Result.bReferenceIsOption = bIsOption;
         }
     }
     else if (const uLang::CEnumeration* Enumeration = Normal ? Normal->AsNullable<uLang::CEnumeration>() : nullptr)
@@ -1526,7 +1538,7 @@ AUTORTFM_DISABLE Verse::VValue NewStructValue(Verse::FRunningContext Context,
 AUTORTFM_DISABLE int64 HandleOf(Verse::VValue Value)
 {
     UObject* Wrapper = Value.ExtractUObject();
-    verse::object* Shadow = Wrapper ? Cast<verse::object>(Wrapper) : nullptr;
+    verse::vh_object* Shadow = Wrapper ? Cast<verse::vh_object>(Wrapper) : nullptr;
     return Shadow ? Shadow->Handle.Get() : 0;
 }
 
@@ -1823,7 +1835,7 @@ AUTORTFM_DISABLE UClass* FindMirroredClass(FUtf8StringView ClassName)
 AUTORTFM_DISABLE UObject* NewMirroredWrapper(UClass* NativeClass, int64 Handle)
 {
     UObject* Wrapper = NativeClass ? NewObject<UObject>(GetTransientPackage(), NativeClass) : nullptr;
-    verse::object* Shadow = Cast<verse::object>(Wrapper);
+    verse::vh_object* Shadow = Cast<verse::vh_object>(Wrapper);
     if (!Shadow)
     {
         return nullptr;
@@ -1986,6 +1998,13 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
         const int64 Handle = Value.Type == VH_TYPE_INT ? Value.Int : 0;
         if (Handle == 0)
         {
+            // Only an optional parameter has a value to stand for nothing. A bare `node2d` refuses,
+            // which reaches the caller as VH_ERR_ARGUMENT rather than as a runtime error: passing
+            // null where the signature does not allow it is the caller's mistake.
+            if (!Declared.bReferenceIsOption)
+            {
+                return false;
+            }
             OutValue = ReferenceOption(Context, nullptr);
             return true;
         }
@@ -1995,7 +2014,11 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
         {
             return false;
         }
-        OutValue = ReferenceOption(Context, Referenced);
+        // Wrapped only where the declaration asked for an option. Handing a `?node2d` to a parameter
+        // declared `node2d` is what made every method on it unreachable: the script had an option
+        // where it had written a node, and the first `.GetName()` died inside the interpreter rather
+        // than failing to compile.
+        OutValue = Declared.bReferenceIsOption ? ReferenceOption(Context, Referenced) : Verse::VValue(Referenced);
         return true;
     }
 
@@ -2211,7 +2234,7 @@ AUTORTFM_DISABLE bool WriteFieldOf(UObject* Object, FUtf8StringView FieldName, c
     if (Value.VariantTag == VH_VARIANT_OBJECT)
     {
         const FMemberType Declared = DescribeMemberType(FUtf8String(Object->GetClass()->GetName()), FieldName);
-        if (Declared.ReferenceOrigin != EClassOrigin::Mirrored)
+        if (Declared.ReferenceOrigin != EClassOrigin::Mirrored || !Declared.bReferenceIsOption)
         {
             return false;
         }
@@ -3535,7 +3558,7 @@ AUTORTFM_DISABLE GodotVerse::FInstance* GodotVerse::Instantiate(FUtf8StringView 
         return nullptr;
     }
 
-    verse::object* Shadow = CastChecked<verse::object>(Instance);
+    verse::vh_object* Shadow = CastChecked<verse::vh_object>(Instance);
     Shadow->Handle.Init(Handle, Shadow);
 
     return new FInstance{TStrongObjectPtr<UObject>(Instance)};
@@ -3574,7 +3597,7 @@ AUTORTFM_DISABLE bool GodotVerse::InstanceHasFunction(const FInstance* Instance,
     }
 
     const verse::FExecutionContext Context = verse::FExecutionContext::GetActiveContext();
-    FVerseFunction Base(Context, verse::object::StaticClass()->GetDefaultObject(), DecoratedName);
+    FVerseFunction Base(Context, verse::vh_object::StaticClass()->GetDefaultObject(), DecoratedName);
     return !Base.IsValid() || Base.Function.Get() != Resolved.Function.Get();
 }
 

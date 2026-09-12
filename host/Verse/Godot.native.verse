@@ -142,14 +142,20 @@ VhRefFromFloats<native>(Tag:int, Values:[]float)<transacts>:int
 VhRefFromStrings<native>(Tag:int, Values:[]string)<transacts>:int
 VhRefFromValues<native>(Tag:int, Values:[]variant)<transacts>:int
 
-# The one native class in the API. Everything in GodotApi.native.verse derives from it as
+# The one native class in the API, and the root of every mirrored one. Everything above it is
 # ordinary Verse, which is what keeps a thousand mirrored classes from needing a thousand C++
 # shadows: the VM dispatches through the object's own shape, not through anything native.
 #
 # It is native because a script's class has to reach C++ somehow -- the host instantiates a user
 # subclass and calls into it through a UObject, and only a native ancestor gives the instance a
 # UObject representation to be reached by.
-object<public><native> := class:
+#
+# `vh_object` rather than `object`, since Phase 2: `object` is now the *mirror* of Godot's own Object
+# class, with its 46 reachable methods, and it derives from this. Verse cannot reopen a class, so
+# those methods could not be added here; and a generated `godot_object` beside a native `object`
+# would have put two base names in completion where the one a user reaches for first is the empty
+# one. Nothing a script writes should name this type -- `object` is the base to derive from.
+vh_object<public><native> := class:
     # Godot instance id. The host writes it at construction; it never changes afterwards, and it
     # keeps its value after Godot frees the object -- which is what makes IsInstanceValid the only
     # way to tell a live reference from a stale one.

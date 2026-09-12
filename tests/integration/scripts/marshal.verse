@@ -247,6 +247,24 @@ marshal := class(node2d):
     CtrlAndShift<public>():int =
         BitOr(ToInt(key_modifier_mask.MaskCtrl), ToInt(key_modifier_mask.MaskShift))
 
+    # --- R-INT-2: calling a GDScript-defined method, by name -----------------
+    #
+    # `callv` is an ordinary method on Godot's Object, and Object is mirrored now that Variant and
+    # Array both cross -- so the requirement the spec calls "the one with no existing path" arrives
+    # as a side effect of 4.4 rather than as work of its own. The argument Array comes from the
+    # caller, since a script cannot mint a fresh Godot container.
+    CallSibling<public>(Target:object, Method:string, Args:godot_array)<decides>:int =
+        AsInt[Target.Callv(Method, Args)]
+
+    # Object's reflection, which is the rest of what mirroring it bought.
+    ClassOf<public>(Target:object):string = Target.GetClass()
+
+    NodeNameOf<public>(Target:node):string = Target.GetName()
+
+    NodeClassOf<public>(Target:node):string = Target.GetClass()
+
+    CanCall<public>(Target:object, Method:string):logic = Target.HasMethod(Method)
+
     # --- R-LANG-6: a library file, resolved with no import -------------------
     #
     # HelperDouble and HelperAnswer live in helpers.verse, which declares no class and so cannot go

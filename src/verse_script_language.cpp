@@ -92,16 +92,16 @@ VerseRuntime *get_runtime() {
 }
 
 // The Godot class whose documentation describes a Verse class. That is the mirrored table plus the
-// one name missing from it: `object`. Godot's Object is the single class gen_verse_api.py skips
-// outright -- tools/verse_api_classes.txt says why -- because Godot.native.verse's hand-written
-// `object` already stands where it stands, as the base every mirrored class without a mirrored
-// parent derives from. Absent from the table, it would otherwise be reported as a local constant,
-// with a tooltip that says nothing and nowhere for a click to go.
+// one name missing from it: `vh_object`. That is Godot.native.verse's hand-written native root, the
+// base Godot's own mirrored `object` derives from -- so it is not part of the generated API and not
+// in the table, and absent from it a hover on one of its three lifecycle methods would report a
+// local constant, with a tooltip that says nothing and nowhere for a click to go. Godot's Object is
+// what those methods belong to as far as the documentation is concerned.
 //
 // Deliberately not folded into verse_godot_class_for: that one answers "is this name part of the
-// generated API", which `object` is not, and the completion path relies on the distinction.
+// generated API", which `vh_object` is not, and the completion path relies on the distinction.
 const char *godot_doc_class_for(const String &p_verse_class) {
-	if (p_verse_class == String("object")) {
+	if (p_verse_class == String("vh_object")) {
 		return "Object";
 	}
 	return verse_godot_class_for(p_verse_class);
@@ -883,7 +883,7 @@ static bool completes_as_override(const Dictionary &p_item, const String &p_encl
 	if (verse_godot_class_for(owner) != nullptr) {
 		return false;
 	}
-	return owner != String("object") || godot_method_for(owner, p_item["name"]) != nullptr;
+	return owner != String("vh_object") || godot_method_for(owner, p_item["name"]) != nullptr;
 }
 
 // A line's indentation width, or -1 for one carrying no code -- blank, or a comment, which sits
