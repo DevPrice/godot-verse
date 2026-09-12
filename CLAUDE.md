@@ -9,14 +9,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 knowing" — read the relevant section before changing anything in that area. `docs/property-export.md`
 and `docs/editor-tooling.md` hold the full research and citations behind those sections.
 
+**Phase 2 is implemented except its Dodge the Creeps port.** `docs/phase-2-design.md` §11 says what
+it built and — more usefully — the four places the design in that same document turned out to be
+wrong. Read §11 before trusting §1 or §4 of it. The short version: Verse's overloading is far
+narrower than §1 claimed, Verse forbids non-public struct fields (so `variant`'s lanes are public,
+R-TYPE-7), Verse has no anonymous functions, and Godot's property metadata hides its own enums.
+
 **README predates Phase 1 and is stale on marshalling.** It still describes three hand-written
 value types, a `variant` tuple, `object` as the only `<native>` class, and packed arrays crossing as
 copies — all four now wrong — and it says nothing about general dispatch, the method list, or
 runtime errors with stacks. It is awaiting a rewrite rather than a patch. Two things it says that
 *are* still true and read like they might not be: `Ready`, `Process` and `PhysicsProcess` remain the
 only Godot **virtuals** the bridge carries (the full set is R-NODE-7, Phase 4), and `@GlobalScope` is
-still out of reach (R-SCN-3, Phase 2). Its editor-tooling, export and constraints sections are
+still out of reach (R-SCN-3, which Phase 2 moved to Phase 4 with OQ-11). Its editor-tooling, export and constraints sections are
 unaffected. Where the two disagree, `docs/spec.md` and `docs/abi-v2-design.md` are the record.
+
+Phase 2 makes it staler still, in ways worth knowing before reading it: every one of Godot's 1023
+classes is mirrored now rather than a curated ~60, Godot's `Object` among them; its 758 enums are
+real Verse enums; `typedarray::Node` is a `typed_array(node)` whose elements are objects a script
+calls methods on; and the hand-written native root is `vh_object`, because `object` is now the
+*mirror* of Godot's Object.
 
 `docs/spec.md` is the requirements document — what the finished software must do, numbered so a
 commit can cite one. README describes how the thing works; the spec describes what it must do, and
@@ -76,9 +88,13 @@ Adding an override you do not implement changes behaviour.
 `GodotBindings`, `GodotClasses`). `Verse/*.native.verse` is the `/Godot.org/Godot` package.
 
 `GodotClasses.h` holds every C++ shadow a `<native>` Verse declaration needs, and there are three:
-`object` (a UObject, so a script's class has one to be instantiated and called through), `variant`
+`vh_object` (a UObject, so a script's class has one to be instantiated and called through), `variant`
 (a struct, the fixed-width lanes one Godot value crosses as) and `godot_ref` (a UObject whose
-`BeginDestroy` is what releases a reference id when Verse drops the value holding it). A native
+`BeginDestroy` is what releases a reference id when Verse drops the value holding it).
+
+`vh_object`, not `object`: since Phase 2 `object` is the generated mirror of Godot's own `Object`
+class, and it derives from `vh_object`. Verse cannot reopen a class, so Object's methods could not be
+added to the hand-written root. Nothing a script writes should name `vh_object`. A native
 Verse type without its shadow is an "incomplete type" build failure naming the generated header.
 `VerseHost.Build.cs` and `.Target.cs` carry load-bearing comments — `SetupVerse(..., InternalUser)`
 and the `VerseSimulationMetadata` dependency each exist for a reason spelled out inline.
@@ -91,6 +107,7 @@ and the `VerseSimulationMetadata` dependency each exist for a reason spelled out
     python tools/build_smoke.py           # ABI test binary
     python tools/build_lexer_test.py      # lexer test binary
     python tools/build_class_decl_test.py # class-declaration scanner test binary
+    python tools/build_bench.py           # host benchmark (timings, not pass/fail)
 
 Run the tests:
 
@@ -99,8 +116,18 @@ Run the tests:
     python tools/run_tests.py --build            # rebuild the test binaries first
 
 It runs three layers and reports each: **units** (lexer, class-declaration scanner, generator —
-no Godot, no UE), **abi** (`host_smoke`, the whole C ABI with no Godot), and **integration** (a
-headless Godot with Verse scripts attached, asserting on behaviour). A layer whose prerequisites
+no Godot, no UE), **abi** (`host_smoke`, the whole C ABI with no Godot), and **integration** — which
+is two headless Godot projects, `tests/integration` for behaviour and `tests/coverage_diagnostic`
+for the R-SCN-2 diagnostics. The second is its own project because its one script deliberately does
+not compile, and one unresolvable name in the first would take every other case down with it. Its
+assertions live in `run_tests.py` rather than in the project, because `ScriptLanguage` exposes
+nothing a script can ask — so the only way to read what an author would see is to read what the
+editor prints.
+
+`tests/host_bench`, built by `tools/build_bench.py`, is not part of `run_tests.py`: it reports
+timings rather than pass/fail, because R-PERF-2 asks for a recorded number and a threshold would
+fail on a slower machine. It is what took the numbers in `phase-2-design.md` §3.1, and how to take
+them again. A layer whose prerequisites
 are absent is **skipped and said to be skipped**, never counted as a pass. `UE_ROOT` names the
 Unreal checkout and `GODOT` the Godot binary; both are guessed when unset.
 
@@ -134,11 +161,21 @@ launching the editor** (`godot --path demo` with no `--headless`), which does.
 | `host/Verse/GodotClasses.native.verse` | `tools/gen_verse_api.py` | `godot-cpp/gdextension/extension_api.json` |
 | `src/verse_api_classes.h` | `tools/gen_verse_api.py` | same |
 | `host/Private/GodotMathLayout.gen.h` | `tools/gen_verse_api.py` | same — the math types' field trees, so the host builds one the way the Verse struct declares it |
+| `src/verse_api_skipped.h` | `tools/gen_verse_api.py` | same — every Godot member the mirror does not carry under its own name, and why, which is what `_validate` turns into a sentence (R-SCN-2) |
 | `src/verse_keywords.h` | `tools/gen_verse_keywords.py` | the UE compiler's `ReservedSymbols.inl` |
 
-`tools/verse_api_classes.txt` is the hand-maintained list of which Godot classes get mirrored;
-edit that and regenerate, or pass `--all`. `gen_verse_api.py`'s type table is the other half —
-a Godot type absent from it is a method the generator skips.
+**Every Godot class is mirrored by default.** `tools/verse_api_classes.txt` is a smaller curated
+list kept for anyone who wants a smaller build, selected with `--classes-file`; there is no `--all`,
+because all *is* the default. The reasoning is `docs/phase-2-design.md` §3: adding a class means
+rebuilding `verse_host.dll`, which means a UE source checkout, so a subset is a wall rather than a
+setting. It costs per-keystroke analysis latency, which is measured and recorded there.
+
+`gen_verse_api.py`'s type table is the other half, and it no longer skips anything for a type it
+cannot carry — `unsupported_type` is zero. Three small tables decide the awkward names, and each
+says why in place: `VERSE_AMBIGUOUS_MEMBER_NAMES` (five names, compiler-confirmed, not guessed),
+`PROPERTY_RENAMES` (`Min`/`Max` → `Minimum`/`Maximum`, the only invented names in the mirror) and
+`FREE_FUNCTION_REPLACEMENTS` (`Object.to_string` is Verse's own `ToString`, which is also what
+string interpolation desugars to).
 
 `host/Verse/Godot.native.verse` and `GodotApi.native.verse` **are** hand-written: the first is the
 whole native primitive surface, the second the ordinary-Verse packing layer above it. Mirroring
@@ -178,8 +215,12 @@ ten element types against four key types is not a list to maintain by hand.
   for a field-named accessor overload per nesting level, and `transform3d`'s two members have
   different types, so no one getter signature satisfies it. `gen_verse_api.py` leaves those as
   ordinary getter and setter methods; only the flat math types keep `set Node.Position = ...`.
-- **One top-level name per file.** The whole project shares one flat `/user@localhost` scope and
-  Verse forbids shadowing. A script's class is named after its own file for exactly this reason.
+- **Every top-level name in the project must be unique.** The whole project shares one flat
+  `/user@localhost` scope and Verse forbids shadowing. A script's class is named after its own file
+  for exactly this reason. What a file may *also* declare beside that class is its own business —
+  Phase 2's `derived_entity.verse` carries an interface, two structs, an enum and a parametric class
+  alongside it — and a file with no class at all is a library file, usable from every sibling with
+  nothing written to import it (R-LANG-6).
 - **The attribute package must be added before the first `AddDataSource`.** `@global_class` is
   declared in a source package the host adds at runtime, not in `host/Verse` — VNI compiles that
   at build time and rejects `class(attribute)`. `FSolarisIde::EnsureDataSourcePackageExists`

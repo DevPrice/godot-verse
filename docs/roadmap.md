@@ -1,6 +1,8 @@
 # godot-verse — Roadmap
 
-**Status:** Draft 3 · 2026-09-11 · Phases 0 and 1 complete; Phase 2 designed
+**Status:** Draft 4 · 2026-09-11 · Phases 0 and 1 complete; **Phase 2 implemented except its
+Dodge the Creeps port** (Stage 7). What Phase 2 built, and the four places the design was wrong,
+are in [`phase-2-design.md`](phase-2-design.md) §11.
 **Companion to:** `docs/spec.md` (what must be true) and `README.md` (what is true now)
 
 ---
@@ -314,6 +316,14 @@ rewrites the source-set machinery they would be built on. **The phase touches no
 `demo/` still runs. **First Dodge the Creeps port attempt** — not expected to complete, and committed
 as a second project beside `demo/` so the next attempt starts where this one stopped. The walls are
 `docs/dodge-the-creeps.md`, and that list is Phase 4's scope.
+
+**Status: met, except the port.** All 1023 classes are mirrored, `unsupported_type` is zero, and a
+member the mirror does not carry is explained *in the editor* rather than in a report file. The
+phase also delivered R-INT-2 and part of R-SIG-3 as side effects of mirroring `Object`, closed
+R-TYPE-2 and R-LANG-6's third clause, and added R-SCN-5. Two things it did not do: the Dodge the
+Creeps port, and R-SCN-6 (`is`/`as`), which is specified and de-risked but not built — see
+`phase-2-design.md` §11. The cost is recorded rather than hidden: per-keystroke analysis went from
+158 ms to 1190 ms, which §3.2 named in advance as the first thing to revisit.
 
 ---
 

@@ -24,3 +24,6 @@ probe := class(node2d):
     # superseded_by_free_function: Object.to_string is Verse's own ToString, which is also what
     # string interpolation desugars to.
     FreeFunction(O:object)<transacts>:string = O.ToString()
+
+    # R-SCN-5's other half: the enum is the type now, so the integer that used to work does not.
+    ProcessModeFromInt()<transacts>:void = set ProcessMode = 2

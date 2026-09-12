@@ -248,6 +248,10 @@ COVERAGE_EXPLANATIONS = [
     "name, so it is the property `Maximum`.",
     "Godot has VisualShaderNodeFloatParameter.get_max, but it is reachable as the property `Maximum`.",
     "Godot has Object.to_string, but it is reachable as `ToString(Value)`",
+    # R-SCN-5's other half, and the phase's one deliberate break: the enum is the type, so the
+    # integer that used to compile does not.
+    "This assignment expects a value of type node_process_mode, but the assigned value is an "
+    "incompatible value of type type{2}.",
 ]
 
 

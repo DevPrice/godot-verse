@@ -542,17 +542,35 @@ empty. Signals are how Godot programs are wired together, so this is parity-crit
   built up to three Verse arrays to carry one number; a fixed-width struct builds none, so every
   value type is allocation-free at the boundary now. A reference type costs a table entry, which is
   the price of not copying a container. Still unmeasured — R-PERF-2 is what would say.
-- **R-TYPE-7 (MUST)** The plumbing stays hidden. The `Vh…` primitives, `variant`'s *lanes* and
-  `object`'s `Handle` carry no access specifier and stay out of completion lists; a user cannot
-  accidentally hold a raw handle that outlives what it names. Status: **done**.
+- **R-TYPE-7 (MUST)** The plumbing stays hidden. The `Vh…` primitives and `object`'s `Handle` carry
+  no access specifier and stay out of completion lists; a user cannot accidentally hold a raw handle
+  that outlives what it names.
 
-  Amended in Phase 2: the `variant` **type** is public, because a script has to be able to name it in
-  a signature for Godot's 231 Variant-typed methods to be callable at all — and because
-  `typed_array(t)`'s element converter mentions it, and Verse refuses a required member less
-  accessible than its class. Nothing else moved. Every lane still carries no specifier, so
-  `V.I0` does not compile and neither does `variant{Tag := 2}`; what a script can do with one is ask
-  `As<GodotType>[V]`, branch on `VariantKind(V)`, and build one with `VariantFrom<GodotType>`. A
-  hand-made `variant` is all defaults, and a Tag of 0 is Nil, so the worst it can say is "nothing".
+  Amended in Phase 2, and **weakened further than intended** — recorded here because the first
+  attempt at this paragraph claimed a guarantee the language does not allow.
+
+  The `variant` **type** had to become public: a script cannot call any of Godot's 231
+  Variant-typed methods without naming it in a signature. The intent was that the *lanes* stay
+  module-scoped. They cannot. Verse forbids a non-public field on a struct outright —
+  `Verse::Version::StructFieldsMustBePublic`, "Access level internal is not allowed in structs" — so
+  a public struct has public fields, and `V.I0` and `variant{Tag := 24, Ref := N}` both compile from
+  a script. Verified, not assumed: both were put in the coverage-diagnostic project expecting
+  errors, and neither produced one.
+
+  What that costs is bounded, and it is the one thing worth being precise about. A script can lift
+  the raw instance id out of an object-tagged variant and fabricate one back later. What it gets is
+  an `object` naming a possibly-dead Godot object — which is **exactly** what it already gets by
+  holding an `object` across a `queue_free`, and which is already a runtime error rather than memory
+  unsafety (README, and R-LANG-4's note that a freed object was deliberately made an error rather
+  than a failure). So the wording "a user cannot accidentally hold a raw handle that outlives what it
+  names" survives on *accidentally*; the deliberate route now exists and lands where the accidental
+  one already did.
+
+  Two things would restore it, neither of them Phase 2's: `variant` as a **class** rather than a
+  struct, which is an ABI change and would give up the fixed-width no-allocation property the whole
+  encoding was measured for (`abi-v2-design.md` §1a); or Verse growing non-public struct fields back.
+  The normal route is unaffected — `As<GodotType>[V]`, `VariantKind(V)`, `VariantFrom<GodotType>` —
+  and is what every generated body and every example uses. Status: **part.**
 
 ---
 

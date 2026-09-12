@@ -1,6 +1,7 @@
 # Phase 2 — the whole engine API
 
-**Status:** Draft 4 · 2026-09-11 · Stage 0 measured and decided (3.1, 3.2); stages 1-7 open
+**Status:** Draft 5 · 2026-09-11 · **Stages 0-6 implemented**; Stage 7 (Dodge the Creeps) open.
+What each stage actually did, and where it moved the design, is in §11.
 **Companion to:** [`spec.md`](spec.md) (what must be true), [`roadmap.md`](roadmap.md) (why this phase is
 here), [`abi-v2-design.md`](abi-v2-design.md) (the wire this builds on)
 
@@ -20,16 +21,16 @@ are the ones to argue with first.
 | scope | **modules and auto-import move to Phase 3**; `@GlobalScope` moves to Phase 4 with OQ-11 |
 | class set | **all 1022** — measured (3.1), chosen (3.2): the build cost is nothing and the 5.4x analysis cost is a lag, where a subset is a wall |
 | namespacing | flat. Submodules only once the editor writes `using` lines, which is Phase 3's |
-| `variant` | the existing native struct made **nameable**, read through cast-shaped `AsInt[V]` free functions |
-| `Object` | mirrored — all 46 concrete methods; the hand-written base is renamed `vh_object` |
-| typed arrays | a parametric `typed_array(t)`, kept even if the downcast spike lands |
-| downcasting | **spiked in Stage 0**: `is`/`as` parity via Verse's own failable cast |
-| enums | real Verse `enum` types, bitfields included, combined with Verse's `BitOr`; enumerators strip Godot's prefix |
-| enum `@export` | **pulled forward** from Phase 4 |
-| library files | a Script that reports itself non-instantiable, as GDScript does |
-| coverage | an editor diagnostic, no report file; plus a bar on what may be skipped (*bar: mine*) |
-| language holes | fix if small, else record as a wall |
-| the yardstick | Dodge the Creeps as a **second committed project**, beside `demo/` |
+| `variant` | done, and it cost more than planned: Verse forbids non-public struct fields, so the *lanes* are public too (§11, R-TYPE-7) |
+| `Object` | done, and it took `unsupported_type` to zero. `callv` delivered R-INT-2 with it |
+| typed arrays | done. S-4 landed; `Unpack` had to be public, which is what forced `variant` public |
+| downcasting | spiked and **buildable**, not built: R-SCN-6 is specified and left to a later phase (§11) |
+| enums | done — 758 of them. The prefix comes off the *enumerators'* shared prefix, not the enum's name (§11) |
+| enum `@export` | done, for Godot's enums and a script's own |
+| library files | done |
+| coverage | done. The bar holds: `unsupported_type` is zero and every other skip is a named category |
+| language holes | one found and fixed: an `@export` on a base *script* class was invisible on the derived instance |
+| the yardstick | **outstanding** — Stage 7, handed off |
 | also in scope | analysis-latency measurement |
 
 ---
@@ -59,9 +60,14 @@ GDScript's `is`/`as`. Its rules, from `SemanticAnalyzer.cpp:14522` (`AnalyzeInvo
 Seen in practice as `agent[Entity]`, `has_merge_rules[Component]` (interfaces cast too), and
 `test_player_primitive_data_payload[Context.UserData]`.
 
-**Verse overloads on parameter type.** The generated `dictionary` already carries
-`GetInt(Key:string)`, `GetInt(Key:int)` and `GetInt(Key:vector2i)` side by side. Constructors like
-`VariantFrom(42)` and `VariantFrom("hi")` are therefore one name, not two.
+**Verse overloads on parameter type — but far more narrowly than this said.** The generated
+`dictionary` does carry `GetInt(Key:string)`, `GetInt(Key:int)` and `GetInt(Key:vector2i)` side by
+side, and `ToInt` is overloaded across all 758 enums. What does *not* work, each refused as an
+ambiguous **definition** rather than at a call: two array-typed overloads, whatever their element
+types, because `array{}` is a call site that cannot resolve them; `(:logic)` against `(:[]char)`;
+and any member of a class against a `/Verse.org/Verse` name of the same spelling, whatever the
+arity — `Object.to_string()` against `ToString(:[]char)`. So `VariantFrom` is **not** one name: each
+Variant lane has its own, symmetric with its `As<GodotType>` reader (§11).
 
 **Verse has `case`,** so enum↔int conversion is generated Verse and needs no C++.
 
@@ -516,27 +522,27 @@ in this package. So **R-SCN-6 is buildable**, and what is left is engineering ra
   is failable and already is;
 - a handle → class cache, because otherwise every object return costs a `get_class` round trip.
 
-**Stage 1 — library files** (§5). The smallest piece, independent of everything else, and it makes
+**Stage 1 — library files** (§5). **Done.** The smallest piece, independent of everything else, and it makes
 one flat scope livable while modules wait.
 
-**Stage 2 — the type table.** `variant` first (§4.1), because typed arrays are built on it; then
+**Stage 2 — the type table. Done.** `variant` first (§4.1), because typed arrays are built on it; then
 typed arrays and objects in containers (§4.2); then bare `Object` returns, the packed vector and
 colour arrays, and union parameters (§4.5).
 
-**Stage 3 — enums** (§4.3), including `@export` and the bitfield treatment.
+**Stage 3 — enums** (§4.3), including `@export` and the bitfield treatment. **Done.**
 
-**Stage 4 — `Object`** (§4.4), including the `vh_object` rename. **After** Stages 2 and 3, not
+**Stage 4 — `Object`** (§4.4), including the `vh_object` rename. **Done**, and it took `unsupported_type` to zero. **After** Stages 2 and 3, not
 before: `connect` returns `enum::Error` and `get_signal_list` returns `typedarray::Dictionary`, so
 mirroring it early skips exactly the methods that made it worth mirroring. Verify R-INT-2 here
 rather than assuming it.
 
-**Stage 5 — the coverage diagnostic** (§4.6). Reason table into `src/`, `_validate` consults
+**Stage 5 — the coverage diagnostic** (§4.6). **Done.** Reason table into `src/`, `_validate` consults
 `ClassDB`.
 
-**Stage 6 — R-LANG-1/2/3.** Script-to-script inheritance, interfaces, structs, enums and parametric
+**Stage 6 — R-LANG-1/2/3. Done.** Script-to-script inheritance, interfaces, structs, enums and parametric
 types get tests. A hole that is an afternoon gets fixed; anything larger becomes a recorded wall.
 
-**Stage 7 — Dodge the Creeps.** The port as a **second committed project** beside `demo/`, committed
+**Stage 7 — Dodge the Creeps. Outstanding**, and handed off. The port as a **second committed project** beside `demo/`, committed
 even while half-broken so progress across phases is a diff, and not a gate for `run_tests`.
 `docs/dodge-the-creeps.md` is the wall list, each wall mapped to a requirement.
 
@@ -562,3 +568,99 @@ phase.
 - If S-5 landed: a `node` known to be a `sprite2d` casts, and one that is not fails rather than
   raises.
 - `demo/` runs. The Dodge the Creeps attempt is committed, and its walls are recorded one by one.
+
+---
+
+## 11. What was built, and where it moved the design
+
+Stages 0–6 are implemented and tested. Stage 7 is open. Each stage below names the thing the design
+got *wrong*, because those are the only parts of this document worth re-reading.
+
+### Where the design was wrong
+
+**Verse's overloading is much narrower than §1 read it.** Three refusals, each rejecting the
+*definitions* rather than a call: two array-typed overloads are ambiguous whatever their element
+types (`array{}` cannot resolve them); `(:logic)` is ambiguous with `(:[]char)`; and a class member is
+ambiguous with a `/Verse.org/Verse` name of the same spelling **whatever the arity**. So there is no
+overloaded `VariantFrom` — each lane has its own name, symmetric with its `As<GodotType>` reader.
+
+**A required data member may be no less accessible than its class.** `typed_array`'s `Unpack` had to
+be `<public>`, which forced `variant` public with it. §4.1 treated making `variant` nameable as a
+narrow amendment to R-TYPE-7; it is not, because **Verse forbids non-public struct fields outright**
+(`Verse::Version::StructFieldsMustBePublic`). A public struct has public lanes. Verified by putting
+`V.I0` and `variant{Tag := 24, Ref := N}` in the coverage-diagnostic project expecting errors and
+getting none. R-TYPE-7 carries the full accounting and the bound on what it costs; the short version
+is that a fabricated handle lands exactly where a stale `object` already landed, which is a runtime
+error rather than unsafety. §4.1's "verify at implementation time" note was right to be there and the
+answer was no.
+
+**Verse has no anonymous functions**, so §4.2's inline lambda cannot exist. The element converter
+names a function: the element's own `As<GodotType>` reader where it has one, and a generated
+per-class function where the element is a class, because `VhFromObject` takes the base `object` and a
+Verse function type is not satisfied by one that merely accepts a supertype.
+
+**Enumerator prefixes come off the enumerators, not the enum.** §4.3's rule — strip the enum's own
+name — fails for 357 of 736 class enums, because Godot's prefixing is only half consistent while the
+enumerators always agree with each other. Stripping their longest shared prefix works for 680 of 765.
+An *enumerator* is also ambiguous with a stdlib function exactly as a data member is, which is why
+`Variant::Type` keeps its `TYPE_` and reads `variant_type.TypeInt`.
+
+**Godot's property metadata hides its enums.** A property Godot reports as a plain `int` is an enum
+515 times out of 994, `Node.process_mode` among them — so the *getter* is the authority on a
+property's type, not the property. Without that, R-SCN-5's own exit criterion fails at the spelling it
+is written about.
+
+**`@export` of an enum was already implemented** for a script's own enums, so §4.3's "pulled forward
+from Phase 4" cost nothing. What it did cost was finding that a *live* instance's `get_property_list`
+was a stub — exports were invisible to `Object.get_property_list`, `PackedScene.pack` and anything
+reflective, while get and set worked, because the inspector is drawn from a placeholder that was told.
+
+### The two rules the phase added, and their whole extent
+
+Exactly **five** member names in 1023 classes are ambiguous with a Verse name, and the set is
+compiler-confirmed rather than guessed — generated with no guard at all, the compiler reports these
+and nothing else:
+
+- `Min` and `Max` as **data** on four properties. A `var` has no signature to be told apart by; a
+  *method* of the same name is fine, confirmed by compiling one. Those four are `Minimum` and
+  `Maximum`, the only invented names in the mirror, and both spellings an author might try (`Max`,
+  `GetMax`) are recorded as skipped and point at the one that works.
+- `Object.to_string`, which is Verse's own `ToString` — a module-level overload rather than a method,
+  because Verse's string interpolation *desugars* to that name, so `"{MyNode}"` prints what Godot
+  prints with nothing written to make it. R-AUD-2 decides it: Verse's spelling wins.
+
+A method that lands on one of the five now fails **generation** rather than the compile.
+
+### Bugs found by testing something for the first time
+
+Four, all pre-existing, none of them in the phase's own new code:
+
+- a Verse `[]vector2` reached Godot as one tuple per element while the GDExtension read it as a flat
+  run of floats, so a three-element array arrived with one;
+- a packed array carried as a *reference* was decoded by its Variant tag before anything looked at
+  its carrier, so every Verse array passed to a Godot method taking one arrived **empty**;
+- a live script instance's `get_property_list` was a stub;
+- an `@export` on a base *script* class was invisible on the derived instance, in two places that had
+  both been correct right up until a script could derive from another script.
+
+And one in the harness itself: an unhandled GDScript error aborts `_init`, so `quit(1)` never runs and
+Godot exits 0 — which had been reporting a third of the integration layer as green without running it.
+
+### What is specified and not built
+
+**R-SCN-6 — `is`/`as` parity.** S-5 asked the wrong question and the answer is better than expected:
+instantiating a mirrored class from the native package needs no new machinery (`FindMirroredClass` +
+`NewMirroredWrapper` do it today), and `node2d[Value]` with `Value:object` compiles. What is left is
+engineering, not risk: a native `VhAsObject` that asks Godot for the handle's class through the
+existing `CallMethod` callback, a cast at every object return, and a handle→class cache so it is not
+a `get_class` round trip each time. No ABI change either way.
+
+**Stage 7 — Dodge the Creeps**, and with it `docs/dodge-the-creeps.md`.
+
+### The cost, measured
+
+`tests/host_bench`, the same way §3.1 took it. The mirror is 4.1 MB and per-keystroke analysis is
+**1190 ms**, from 158 ms curated and 850 ms at the Stage 0 decision. The enums are most of the growth
+and R-SCN-5 is what they buy. §3.2 named this as the first thing to revisit if the editor turns out to
+be unpleasant to use, and it is still the honest answer: the number is recorded, `tools/build_bench.py`
+takes it again, and the real fix is the cooked-digest route that OQ-10 and Phase 7 already own.
