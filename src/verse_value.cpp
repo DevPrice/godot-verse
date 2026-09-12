@@ -467,16 +467,22 @@ bool variant_to_vh(const Variant &p_value, vh_arena *p_arena, vh_value &r_out) {
 		}
 		case Variant::BASIS: {
 			const Basis v = p_value;
-			const double c[9] = { (double)v.rows[0].x, (double)v.rows[0].y, (double)v.rows[0].z,
-				(double)v.rows[1].x, (double)v.rows[1].y, (double)v.rows[1].z,
-				(double)v.rows[2].x, (double)v.rows[2].y, (double)v.rows[2].z };
+			// Columns, not rows. Godot's Basis.x, .y and .z are columns 0, 1 and 2 (Basis.xml),
+			// and the read side builds through Basis(Vector3, Vector3, Vector3), which is
+			// set_columns. Emitting rows here transposed every basis that crossed.
+			const Vector3 cx = v.get_column(0), cy = v.get_column(1), cz = v.get_column(2);
+			const double c[9] = { (double)cx.x, (double)cx.y, (double)cx.z,
+				(double)cy.x, (double)cy.y, (double)cy.z,
+				(double)cz.x, (double)cz.y, (double)cz.z };
 			return floats_to_tuple(p_arena, c, 9, VH_VARIANT_BASIS, r_out);
 		}
 		case Variant::TRANSFORM3D: {
 			const Transform3D v = p_value;
-			const double c[12] = { (double)v.basis.rows[0].x, (double)v.basis.rows[0].y, (double)v.basis.rows[0].z,
-				(double)v.basis.rows[1].x, (double)v.basis.rows[1].y, (double)v.basis.rows[1].z,
-				(double)v.basis.rows[2].x, (double)v.basis.rows[2].y, (double)v.basis.rows[2].z,
+			// Columns, for the reason BASIS above gives.
+			const Vector3 cx = v.basis.get_column(0), cy = v.basis.get_column(1), cz = v.basis.get_column(2);
+			const double c[12] = { (double)cx.x, (double)cx.y, (double)cx.z,
+				(double)cy.x, (double)cy.y, (double)cy.z,
+				(double)cz.x, (double)cz.y, (double)cz.z,
 				(double)v.origin.x, (double)v.origin.y, (double)v.origin.z };
 			return floats_to_tuple(p_arena, c, 12, VH_VARIANT_TRANSFORM3D, r_out);
 		}

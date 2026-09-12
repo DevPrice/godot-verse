@@ -7,38 +7,47 @@ using {/Verse.org/Native}
 
 # --- Variant tags ------------------------------------------------------------
 
-# Godot's Variant::Type, spelled as constants rather than a Verse enum so that `variant` stays
-# a plain tuple VNI can marshal without a struct on the wire.
+# Godot's Variant::Type, spelled as constants rather than a Verse enum because the tag is a lane
+# of `variant` and a native struct's fields are the primitives VNI marshals.
 TagNil:int = 0
 TagBool:int = 1
 TagInt:int = 2
 TagFloat:int = 3
 TagString:int = 4
 TagVector2:int = 5
+TagVector2i:int = 6
+TagRect2:int = 7
+TagRect2i:int = 8
 TagVector3:int = 9
+TagVector3i:int = 10
+TagTransform2D:int = 11
+TagVector4:int = 12
+TagVector4i:int = 13
+TagPlane:int = 14
+TagQuaternion:int = 15
+TagAabb:int = 16
+TagBasis:int = 17
+TagTransform3D:int = 18
+TagProjection:int = 19
 TagColor:int = 20
 TagStringName:int = 21
 TagNodePath:int = 22
+TagRid:int = 23
 TagObject:int = 24
+TagCallable:int = 25
+TagSignal:int = 26
+TagDictionary:int = 27
 TagArray:int = 28
+TagPackedByteArray:int = 29
+TagPackedInt32Array:int = 30
+TagPackedInt64Array:int = 31
+TagPackedFloat32Array:int = 32
+TagPackedFloat64Array:int = 33
 TagPackedStringArray:int = 34
-
-# --- Builtin value types -----------------------------------------------------
-
-vector2<public> := struct:
-    X<public>:float = 0.0
-    Y<public>:float = 0.0
-
-vector3<public> := struct:
-    X<public>:float = 0.0
-    Y<public>:float = 0.0
-    Z<public>:float = 0.0
-
-color<public> := struct:
-    R<public>:float = 0.0
-    G<public>:float = 0.0
-    B<public>:float = 0.0
-    A<public>:float = 1.0
+TagPackedVector2Array:int = 35
+TagPackedVector3Array:int = 36
+TagPackedColorArray:int = 37
+TagPackedVector4Array:int = 38
 
 # --- Global functions --------------------------------------------------------
 
@@ -56,60 +65,53 @@ color<public> := struct:
 # one type this package deliberately keeps to itself.
 IsInstanceValid<public>(Object:object)<decides><transacts>:void = VhIsValid(Object.Handle)?
 
-# --- variant packing -----------------------------------------------------
+# --- variant packing ---------------------------------------------------------
 
-VhFromLogic(Value:logic)<transacts>:variant = (TagBool, array{if (Value?) then 1 else 0}, array{}, array{})
-VhFromInt(Value:int)<transacts>:variant = (TagInt, array{Value}, array{}, array{})
-VhFromFloat(Value:float)<transacts>:variant = (TagFloat, array{}, array{Value}, array{})
-VhFromString(Value:string)<transacts>:variant = (TagString, array{}, array{}, array{Value})
-VhFromStringName(Value:string)<transacts>:variant = (TagStringName, array{}, array{}, array{Value})
-VhFromNodePath(Value:string)<transacts>:variant = (TagNodePath, array{}, array{}, array{Value})
-VhFromVector2(Value:vector2)<transacts>:variant = (TagVector2, array{}, array{Value.X, Value.Y}, array{})
-VhFromVector3(Value:vector3)<transacts>:variant = (TagVector3, array{}, array{Value.X, Value.Y, Value.Z}, array{})
-VhFromColor(Value:color)<transacts>:variant = (TagColor, array{}, array{Value.R, Value.G, Value.B, Value.A}, array{})
-VhFromObject(Value:object)<transacts>:variant = (TagObject, array{Value.Handle}, array{}, array{})
+# Each of these names the lanes its tag reads and lets the struct default the rest, which is the
+# whole reason `variant` is a struct rather than the twenty-three element tuple it would otherwise
+# have to be: every packer would spell all twenty-three.
+#
+# The float lanes carry a math type's components in Godot's own order, and the integer lanes carry
+# the integer vectors -- a double stops counting exactly above 2^53, and Godot's are 32-bit values
+# that have to survive a round trip.
 
-# The payload slots, made total. A slot the tag promised but did not deliver means the host packed
-# something the caller was not generated for, which is a bug in the bridge rather than a value that
-# might legitimately be absent -- so it raises. VhTypeMismatch unwinds and never returns, which is
-# what makes the fallbacks below unreachable and these functions total.
-VhIntAt(Value:variant, Index:int, Expected:string)<transacts>:int =
-    if (N := Value(1)[Index]):
-        N
-    else:
+VhFromLogic(Value:logic)<transacts>:variant = variant{Tag := TagBool, I0 := if (Value?) then 1 else 0}
+VhFromInt(Value:int)<transacts>:variant = variant{Tag := TagInt, I0 := Value}
+VhFromFloat(Value:float)<transacts>:variant = variant{Tag := TagFloat, F0 := Value}
+VhFromString(Value:string)<transacts>:variant = variant{Tag := TagString, Text := Value}
+VhFromStringName(Value:string)<transacts>:variant = variant{Tag := TagStringName, Text := Value}
+VhFromNodePath(Value:string)<transacts>:variant = variant{Tag := TagNodePath, Text := Value}
+VhFromObject(Value:object)<transacts>:variant = variant{Tag := TagObject, Ref := Value.Handle}
+VhFromRid(Value:int)<transacts>:variant = variant{Tag := TagRid, Ref := Value}
+
+# --- variant unpacking -------------------------------------------------------
+
+# Plain lane reads. Nothing here is failable, because FromWire on the host side fills the lane the
+# tag names -- a number Godot spelled as an integer where the mirror declared a float has already
+# been widened by the time a variant exists.
+VhToLogic(Value:variant)<transacts>:logic = if (Value.I0 <> 0) then true else false
+VhToInt(Value:variant)<transacts>:int = Value.I0
+VhToFloat(Value:variant)<transacts>:float = Value.F0
+VhToString(Value:variant)<transacts>:string = Value.Text
+
+# Raises unless the value is what the caller was generated to read.
+#
+# With fixed lanes a mismatch no longer announces itself: reading a vector2 out of an int-tagged
+# variant gives (0.0, 0.0) rather than failing to find a slot, which is silently wrong where the
+# encoding this replaced was loudly wrong. So the check is explicit, and it is R-TYPE-5's runtime
+# half: the message names both the type expected and the tag that arrived.
+VhExpect(Value:variant, Tag:int, Expected:string)<transacts>:void =
+    if (Value.Tag <> Tag):
         VhTypeMismatch(Expected, Value)
-        0
-
-VhFloatAt(Value:variant, Index:int, Expected:string)<transacts>:float =
-    if (F := Value(2)[Index]):
-        F
-    else:
-        VhTypeMismatch(Expected, Value)
-        0.0
-
-VhTextAt(Value:variant, Index:int, Expected:string)<transacts>:string =
-    if (S := Value(3)[Index]):
-        S
-    else:
-        VhTypeMismatch(Expected, Value)
-        ""
-
-# Verse's <> is a failable comparison, not a boolean operator, so the logic has to be produced.
-VhToLogic(Value:variant)<transacts>:logic =
-    if (VhIntAt(Value, 0, "logic") <> 0) then true else false
-VhToInt(Value:variant)<transacts>:int = VhIntAt(Value, 0, "int")
-VhToFloat(Value:variant)<transacts>:float = VhFloatAt(Value, 0, "float")
-VhToString(Value:variant)<transacts>:string = VhTextAt(Value, 0, "string")
-VhToStrings(Value:variant)<transacts>:[]string = Value(3)
-VhToVector2(Value:variant)<transacts>:vector2 = vector2{X := VhFloatAt(Value, 0, "vector2"), Y := VhFloatAt(Value, 1, "vector2")}
-VhToVector3(Value:variant)<transacts>:vector3 = vector3{X := VhFloatAt(Value, 0, "vector3"), Y := VhFloatAt(Value, 1, "vector3"), Z := VhFloatAt(Value, 2, "vector3")}
-VhToColor(Value:variant)<transacts>:color = color{R := VhFloatAt(Value, 0, "color"), G := VhFloatAt(Value, 1, "color"), B := VhFloatAt(Value, 2, "color"), A := VhFloatAt(Value, 3, "color")}
 
 # The one place a Godot value is still allowed to be absent. A null object crosses as an
-# object-tagged zero rather than as a missing slot, so this is what makes GetParent() at the scene
+# object-tagged zero rather than as a missing value, so this is what makes GetParent() at the scene
 # root, or a FindChild that misses, an ordinary Verse failure -- and what stops a null from being
-# handed back as a live-looking reference with handle 0, which is what it used to do.
+# handed back as a live-looking reference with handle 0.
+#
+# Nullability is a property of the type rather than of the method (spec R-TYPE-4): across Godot's
+# 5304 documented value-typed returns exactly one is documented as nullable, and it is editor-only,
+# so an object return is the only thing that is `<decides>`.
 VhToHandle(Value:variant)<decides><transacts>:int =
-    H := VhIntAt(Value, 0, "object")
-    H <> 0
-    H
+    Value.Ref <> 0
+    Value.Ref

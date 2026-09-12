@@ -13,12 +13,58 @@ Print<public><native>(Message:string)<transacts>:void
 
 VhIsValid<native>(Handle:int)<transacts>:logic
 
-# One Godot Variant on the wire, as (Tag, Ints, Floats, Texts). Tag is Godot's own Variant::Type
-# and decides which payload slots are read: an int in Ints(0), a Vector2 as two Floats, an object
-# as its instance id in Ints(0), a PackedStringArray as the whole of Texts. Keeping the tag means
-# a two-float payload is a Vector2 rather than guessed at, which is what the untagged Phase 2
-# encoding could not express.
-variant := tuple(int, []int, []float, []string)
+# One Godot Variant on the wire: a fixed-width struct of scalars, with Tag saying which lanes to
+# read. Tag is Godot's own Variant::Type.
+#
+# Fixed width, and every lane a scalar, for three reasons that all follow from one measurement
+# (docs/abi-v2-design.md 1a). It is **hashable** -- a Verse array is Comparable and not Hashable, so
+# the array-carrying tuple this replaced could not be a map key and `[variant]variant` would not
+# compile. It **allocates nothing**: the old `VhFromFloat` built three arrays to carry one number.
+# And it needs no nesting, because Godot's only recursive types are its reference types, which ride
+# in `Ref` rather than inline -- which is what godot-cpp does and why it never marshals an Array.
+#
+# The widest value type is Projection at sixteen floats; Vector4i and Rect2i want four ints, and
+# they are ints rather than floats because a double stops counting exactly above 2^53.
+#
+# Not <public>, like the rest of the plumbing: a script that can name a lane can build a variant
+# the host will misread (R-TYPE-7).
+variant<native> := struct:
+	# Godot's Variant::Type. Decides which of the lanes below carry the value.
+	Tag<native>:int = 0
+
+	# A reference rather than a value: an object's Godot instance id, or an id in the
+	# GDExtension's reference table for an Array, a Dictionary, a Callable, a Signal or a packed
+	# array. Nothing here is ever reconstructed from lanes.
+	Ref<native>:int = 0
+
+	# Integer lanes: logic, int, Vector2i/3i/4i, Rect2i.
+	I0<native>:int = 0
+	I1<native>:int = 0
+	I2<native>:int = 0
+	I3<native>:int = 0
+
+	# Float lanes, in Godot's own component order: Vector2 is (F0, F1), Transform3D is its Basis'
+	# nine followed by its origin's three, Projection is four Vector4s.
+	F0<native>:float = 0.0
+	F1<native>:float = 0.0
+	F2<native>:float = 0.0
+	F3<native>:float = 0.0
+	F4<native>:float = 0.0
+	F5<native>:float = 0.0
+	F6<native>:float = 0.0
+	F7<native>:float = 0.0
+	F8<native>:float = 0.0
+	F9<native>:float = 0.0
+	F10<native>:float = 0.0
+	F11<native>:float = 0.0
+	F12<native>:float = 0.0
+	F13<native>:float = 0.0
+	F14<native>:float = 0.0
+	F15<native>:float = 0.0
+
+	# String, StringName and NodePath. They differ by Tag rather than by lane: Godot tells them
+	# apart and Verse spells all three `string`.
+	Text<native>:string = ""
 
 # Raises a Verse runtime error naming the type that was expected. It never returns: the raise
 # unwinds to the root failure context, which is what lets the unpackers in GodotApi.native.verse
@@ -63,3 +109,4 @@ object<public><native> := class:
     Ready<public>():void = {}
     Process<public>(Delta:float):void = {}
     PhysicsProcess<public>(Delta:float):void = {}
+

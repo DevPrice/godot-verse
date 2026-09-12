@@ -150,17 +150,45 @@ def test_emit_value_method_class_return():
     check("emit value method, class return stays failable (GetChild)", g.emit_method(cm), want)
 
 
-def test_emit_packed_string_array_return():
-    ti = g.SCALAR_TYPES["PackedStringArray"]
-    cm = g.ClassifiedMethod(
-        godot_name="get_meta_list",
-        verse_name="GetMetaList",
-        params=[],
-        return_type=ti,
-        is_void=False,
-    )
-    want = '    GetMetaList<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_meta_list", array{}))'
-    check("emit value method, PackedStringArray return uses non-decides unpacker", g.emit_method(cm), want)
+def test_packed_arrays_are_not_yet_marshalled():
+    """A packed array has no lanes in a fixed-width variant, so it is skipped until the reference
+    table lands (spec R-TYPE-1). Asserted rather than left implicit: a packed array silently
+    classifying as something else would emit a method that marshals the wrong thing."""
+    for name in ("PackedStringArray", "PackedInt32Array", "PackedVector2Array"):
+        check(f"{name} has no type-table entry yet", name in g.SCALAR_TYPES, False)
+
+
+def test_math_layout_matches_the_wire():
+    """Every math type's flattened leaves must be the lane count src/verse_value.cpp writes.
+
+    The two are separate pieces of code that have to agree component for component; a type written
+    with three components and read with two truncates silently, which no other test would catch.
+    """
+    for name in g.MATH_TYPES:
+        lanes = g.math_leaf_lanes(name)
+        got = (
+            sum(1 for _, kind in lanes if kind == "int"),
+            sum(1 for _, kind in lanes if kind == "float"),
+        )
+        check(f"{name} occupies the lanes the wire gives it", got, g.MATH_LANES[name])
+
+
+def test_integer_vector_defaults_stay_integers():
+    """Verse will not take 0.0 for an int, so Vector2i(0, 0) must not spell its components as
+    floats the way Vector2(0, 0) does."""
+    check("Vector2i default", g.verse_default_literal("vector2i", "Vector2i(0, 0)"),
+          "vector2i{X := 0, Y := 0}")
+    check("Vector2 default", g.verse_default_literal("vector2", "Vector2(0, 0)"),
+          "vector2{X := 0.0, Y := 0.0}")
+
+
+def test_nested_math_structs_are_not_vars():
+    """A struct whose members are structs cannot be a `var` property: Verse asks for a field-named
+    accessor per nesting level, and transform3d's two members have different types, so no single
+    getter signature satisfies it. Those stay ordinary methods."""
+    check("a flat struct can be a var", "vector3" in g.FLAT_MATH_STRUCTS, True)
+    check("a nested one cannot", "transform3d" in g.FLAT_MATH_STRUCTS, False)
+    check("nor can plane, whose Normal is a vector3", "plane" in g.FLAT_MATH_STRUCTS, False)
 
 
 def test_ancestor_pull_in():
@@ -544,7 +572,10 @@ def main():
     test_emit_void_method()
     test_emit_value_method_scalar()
     test_emit_value_method_class_return()
-    test_emit_packed_string_array_return()
+    test_packed_arrays_are_not_yet_marshalled()
+    test_math_layout_matches_the_wire()
+    test_integer_vector_defaults_stay_integers()
+    test_nested_math_structs_are_not_vars()
     test_ancestor_pull_in()
     test_singleton_accessors_cover_only_emitted_classes()
     test_shadow_suppression_across_inheritance()

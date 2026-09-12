@@ -5,6 +5,7 @@
 #include "Containers/Map.h"
 #include "Containers/UnrealString.h"
 #include "GodotClasses.h"
+#include "GodotMathLayout.gen.h"
 #include "HostEventLoop.h"
 #include "HostRuntime.h"
 #include "ISolarisIde.h"
@@ -808,27 +809,17 @@ AUTORTFM_DISABLE EClassOrigin ClassOriginOf(const uLang::CClass& Class, const uL
 /// Order is Godot's, not the declaration's: the wire carries a tuple of numbers and the consumer
 /// rebuilds a Vector2 or a Color by position, so these are the positions. Verse's own struct
 /// declarations in GodotApi.native.verse happen to agree, which is convenient and not the contract.
-struct FStructLayout
-{
-    const char* VerseName;
-    int32 VariantTag;
-    /// The packed array Godot has for this struct, which an array of them crosses as.
-    int32 PackedArrayTag;
-    /// Null-terminated, so a two-field struct does not have to pretend to have four.
-    const char* Fields[5];
-};
-
-constexpr FStructLayout StructLayouts[] = {
-    {"vector2", VH_VARIANT_VECTOR2, VH_VARIANT_PACKED_VECTOR2_ARRAY, {"X", "Y", nullptr}},
-    {"vector3", VH_VARIANT_VECTOR3, VH_VARIANT_PACKED_VECTOR3_ARRAY, {"X", "Y", "Z", nullptr}},
-    {"color", VH_VARIANT_COLOR, VH_VARIANT_PACKED_COLOR_ARRAY, {"R", "G", "B", "A", nullptr}},
-};
+// The math types' shapes come from the generator, which builds them from the same list that emits
+// the Verse structs and their packers -- see GodotMathLayout.gen.h. Aliased rather than renamed so
+// that the call sites below read as they did when there were three hand-written entries.
+using FStructLayout = verse_math::layout;
+using FStructField = verse_math::field;
 
 AUTORTFM_DISABLE const FStructLayout* FindStructLayout(FUtf8StringView VerseName)
 {
-    for (const FStructLayout& Layout : StructLayouts)
+    for (const FStructLayout& Layout : verse_math::layouts)
     {
-        if (VerseName.Equals(FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(Layout.VerseName))))
+        if (VerseName.Equals(FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(Layout.verse_name))))
         {
             return &Layout;
         }
@@ -836,13 +827,24 @@ AUTORTFM_DISABLE const FStructLayout* FindStructLayout(FUtf8StringView VerseName
     return nullptr;
 }
 
-/// The struct an array carrying this Godot tag holds one of, or null for a tag that is not one of
-/// the packed struct arrays.
+/// The layout of the struct a nested field holds.
+AUTORTFM_DISABLE const FStructLayout* FindStructLayoutByTag(int32 VariantTag)
+{
+    for (const FStructLayout& Layout : verse_math::layouts)
+    {
+        if (Layout.variant_tag == VariantTag)
+        {
+            return &Layout;
+        }
+    }
+    return nullptr;
+}
+
 AUTORTFM_DISABLE const FStructLayout* FindStructLayoutByPackedTag(int32 PackedArrayTag)
 {
-    for (const FStructLayout& Layout : StructLayouts)
+    for (const FStructLayout& Layout : verse_math::layouts)
     {
-        if (Layout.PackedArrayTag == PackedArrayTag)
+        if (Layout.packed_array_tag != 0 && Layout.packed_array_tag == PackedArrayTag)
         {
             return &Layout;
         }
@@ -850,31 +852,35 @@ AUTORTFM_DISABLE const FStructLayout* FindStructLayoutByPackedTag(int32 PackedAr
     return nullptr;
 }
 
+/// The decorated shape key of one of a mirrored struct's fields -- `(/Godot.org/Godot/vector2:)X`.
+AUTORTFM_DISABLE FUtf8String StructFieldKey(const FStructLayout& Layout, const char* Field)
+{
+    return FUtf8String(UTF8TEXT("(")) + GodotVersePath + UTF8TEXT("/") + Layout.verse_name
+        + UTF8TEXT(":)") + Field;
+}
+
+/// How many scalars a struct occupies on the wire, counting through its nested fields.
+///
+/// Not the field count: a transform3d has two fields and twelve components, and it is components
+/// that cross.
 AUTORTFM_DISABLE int32 StructFieldCount(const FStructLayout& Layout)
 {
     int32 Count = 0;
-    while (Layout.Fields[Count] != nullptr)
+    for (int32 Index = 0; Index < Layout.field_count; ++Index)
     {
-        ++Count;
+        const FStructField& Field = Layout.fields[Index];
+        if (Field.nested_tag == 0)
+        {
+            ++Count;
+        }
+        else if (const FStructLayout* Nested = FindStructLayoutByTag(Field.nested_tag))
+        {
+            Count += StructFieldCount(*Nested);
+        }
     }
     return Count;
 }
 
-/// The decorated shape key for a field of a mirrored struct. The same decoration ShapeKeyFor
-/// applies, qualified by the struct's own class rather than by a script's.
-AUTORTFM_DISABLE FUtf8String StructFieldKey(const FStructLayout& Layout, const char* Field)
-{
-    return FUtf8String(UTF8TEXT("(")) + GodotVersePath + UTF8TEXT("/") + Layout.VerseName
-        + UTF8TEXT(":)") + Field;
-}
-
-/// Which Godot container an array of ElementType becomes, filled into OutDesc.
-///
-/// A packed array where Godot has one for the element, and a plain Array where it does not -- which
-/// among the element types that can cross is only `logic`, since Godot has no PackedBoolArray. The
-/// packed forms say what they hold in their own tag; the plain one does not, so its element type is
-/// reported beside it. An int goes to PackedInt64Array and not the 32-bit one: a Verse int is 64 bits
-/// wide, and narrowing it here would quietly discard the top half of a value the language allows.
 AUTORTFM_DISABLE void DescribeArrayElement(const uLang::CTypeBase* ElementType,
                                            const uLang::CSemanticProgram& Program,
                                            GodotVerse::FExportDesc& OutDesc)
@@ -923,7 +929,7 @@ AUTORTFM_DISABLE void DescribeArrayElement(const uLang::CTypeBase* ElementType,
             : nullptr;
         if (Layout)
         {
-            OutDesc.VariantTag = Layout->PackedArrayTag;
+            OutDesc.VariantTag = Layout->packed_array_tag;
             OutDesc.Reject = VH_EXPORT_OK;
         }
     }
@@ -974,7 +980,7 @@ AUTORTFM_DISABLE void DescribeExportType(const uLang::CTypeBase* Type, const uLa
             if (Layout)
             {
                 OutDesc.Type = VH_TYPE_TUPLE;
-                OutDesc.VariantTag = Layout->VariantTag;
+                OutDesc.VariantTag = Layout->variant_tag;
                 OutDesc.Reject = VH_EXPORT_OK;
                 return;
             }
@@ -1228,42 +1234,81 @@ AUTORTFM_DISABLE FMemberType DescribeMemberType(FUtf8StringView ClassName, FUtf8
 /// Reads Layout's fields off a struct value into a fresh block of OutStorage, in Layout's order, and
 /// points OutValue at it. False if any field is missing or is not a number, which would otherwise
 /// hand the consumer a tuple it cannot rebuild.
+/// Appends a struct's scalar components to OutItems, walking into nested fields.
+///
+/// Recursive because Godot's math types are: a transform3d is a basis and a vector3, and the basis
+/// is three vector3s. The wire carries the leaves in this order and nothing else, so the walk here
+/// and the packer gen_verse_api.py emits have to agree -- which is why both come from one layout.
+AUTORTFM_DISABLE bool ReadStructComponents(Verse::FRunningContext Context,
+                                           Verse::VValueObject& Struct,
+                                           const FStructLayout& Layout,
+                                           TArray<vh_value>& OutItems)
+{
+    for (int32 Index = 0; Index < Layout.field_count; ++Index)
+    {
+        const FStructField& Field = Layout.fields[Index];
+        Verse::VUniqueString& Key = Verse::VUniqueString::New(Context, FUtf8StringView(StructFieldKey(Layout, Field.name)));
+        const Verse::FOpResult Read = Struct.LoadField(Context, Key);
+        if (!Read.IsReturn())
+        {
+            return false;
+        }
+
+        if (Field.nested_tag != 0)
+        {
+            const FStructLayout* const Nested = FindStructLayoutByTag(Field.nested_tag);
+            Verse::VValueObject* const Inner = Read.Value.DynamicCast<Verse::VValueObject>();
+            if (!Nested || !Inner || !ReadStructComponents(Context, *Inner, *Nested, OutItems))
+            {
+                return false;
+            }
+            continue;
+        }
+
+        vh_value Item{};
+        if (Field.is_int)
+        {
+            if (!Read.Value.IsInt())
+            {
+                return false;
+            }
+            Item.Type = VH_TYPE_INT;
+            Item.Int = Read.Value.AsInt().AsInt64();
+        }
+        else
+        {
+            if (!Read.Value.IsFloat())
+            {
+                return false;
+            }
+            Item.Type = VH_TYPE_FLOAT;
+            Item.Float = Read.Value.AsFloat().AsDouble();
+        }
+        OutItems.Add(Item);
+    }
+    return true;
+}
+
 AUTORTFM_DISABLE bool ReadStructValue(Verse::FRunningContext Context,
                                       Verse::VValueObject& Struct,
                                       const FStructLayout& Layout,
                                       GodotVerse::FFieldStorage& OutStorage,
                                       vh_value& OutValue)
 {
-    const int32 Count = StructFieldCount(Layout);
     const int32 BlockIndex = OutStorage.Blocks.AddDefaulted();
-    OutStorage.Blocks[BlockIndex].Reserve(Count);
-
-    for (int32 Index = 0; Index < Count; ++Index)
+    OutStorage.Blocks[BlockIndex].Reserve(StructFieldCount(Layout));
+    if (!ReadStructComponents(Context, Struct, Layout, OutStorage.Blocks[BlockIndex]))
     {
-        Verse::VUniqueString& Key = Verse::VUniqueString::New(Context, FUtf8StringView(StructFieldKey(Layout, Layout.Fields[Index])));
-        const Verse::FOpResult Field = Struct.LoadField(Context, Key);
-        if (!Field.IsReturn() || !Field.Value.IsFloat())
-        {
-            return false;
-        }
-        vh_value Item{};
-        Item.Type = VH_TYPE_FLOAT;
-        Item.Float = Field.Value.AsFloat().AsDouble();
-        OutStorage.Blocks[BlockIndex].Add(Item);
+        return false;
     }
 
     OutValue.Type = VH_TYPE_TUPLE;
-    OutValue.VariantTag = Layout.VariantTag;
+    OutValue.VariantTag = Layout.variant_tag;
     OutValue.Seq.Items = OutStorage.Blocks[BlockIndex].GetData();
-    OutValue.Seq.Count = Count;
+    OutValue.Seq.Count = OutStorage.Blocks[BlockIndex].Num();
     return true;
 }
 
-/// Reads an array into a fresh block of OutStorage, one element per the Godot container Tag names.
-///
-/// The element shape comes from Tag rather than from the elements: an empty array has none to look
-/// at, and a float and an int are different cells that a Godot PackedFloat64Array and
-/// PackedInt64Array would rebuild differently from the same bits.
 AUTORTFM_DISABLE bool ReadArrayValue(Verse::FRunningContext Context,
                                      const Verse::VArrayBase& Array,
                                      int32 Tag,
@@ -1362,39 +1407,76 @@ AUTORTFM_DISABLE bool ReadArrayValue(Verse::FRunningContext Context,
 ///
 /// `NewVObject` rather than a lower-level allocation because it is what marks a struct deeply mutable
 /// (`VVMClass.cpp:333-336`); an object built any other way does not compare or freeze like one.
-AUTORTFM_DISABLE Verse::VValue NewStructValue(Verse::FRunningContext Context,
-                                              Verse::VClass& Class,
-                                              const FStructLayout& Layout,
-                                              const vh_value* Items,
-                                              int32 ItemCount)
+AUTORTFM_DISABLE Verse::VClass* FindMirroredVClass(Verse::FRunningContext Context, FUtf8StringView ClassName);
+
+/// Builds one mirrored struct from Count of the components at Items, consuming them in order.
+///
+/// The cursor is threaded through rather than indexed from zero per field, because a nested field
+/// takes as many components as its own layout says -- a basis takes nine of a transform3d's twelve
+/// and the origin takes the rest.
+AUTORTFM_DISABLE Verse::VValue NewStructFrom(Verse::FRunningContext Context,
+                                             const FStructLayout& Layout,
+                                             const vh_value* Items,
+                                             int32 ItemCount,
+                                             int32& Cursor)
 {
-    const int32 Count = StructFieldCount(Layout);
-    if (ItemCount != Count)
+    Verse::VClass* const Class =
+        FindMirroredVClass(Context, FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(Layout.verse_name)));
+    if (!Class)
     {
         return Verse::VValue();
     }
 
     TArray<Verse::VUniqueString*> Keys;
     TArray<Verse::VArchetype::VEntry> Entries;
-    Keys.Reserve(Count);
-    Entries.Reserve(Count);
-    for (int32 Index = 0; Index < Count; ++Index)
+    Keys.Reserve(Layout.field_count);
+    Entries.Reserve(Layout.field_count);
+    for (int32 Index = 0; Index < Layout.field_count; ++Index)
     {
         Verse::VUniqueString& Key =
-            Verse::VUniqueString::New(Context, FUtf8StringView(StructFieldKey(Layout, Layout.Fields[Index])));
+            Verse::VUniqueString::New(Context, FUtf8StringView(StructFieldKey(Layout, Layout.fields[Index].name)));
         Keys.Add(&Key);
         Entries.Add(Verse::VArchetype::VEntry::ObjectField(Context, Key));
     }
 
     Verse::VArchetype& Archetype = Verse::VArchetype::New(Context, Verse::VValue(), Entries);
-    Verse::VValueObject& Struct = Class.NewVObject(Context, Archetype);
-    for (int32 Index = 0; Index < Count; ++Index)
+    Verse::VValueObject& Struct = Class->NewVObject(Context, Archetype);
+
+    for (int32 Index = 0; Index < Layout.field_count; ++Index)
     {
-        const double Number = Items[Index].Type == VH_TYPE_FLOAT
-            ? Items[Index].Float
-            : (Items[Index].Type == VH_TYPE_INT ? (double)Items[Index].Int : 0.0);
+        const FStructField& Field = Layout.fields[Index];
+        Verse::VValue FieldValue;
+
+        if (Field.nested_tag != 0)
+        {
+            const FStructLayout* const Nested = FindStructLayoutByTag(Field.nested_tag);
+            if (!Nested)
+            {
+                return Verse::VValue();
+            }
+            FieldValue = NewStructFrom(Context, *Nested, Items, ItemCount, Cursor);
+            if (FieldValue.IsUninitialized())
+            {
+                return Verse::VValue();
+            }
+        }
+        else
+        {
+            if (Cursor >= ItemCount)
+            {
+                return Verse::VValue();
+            }
+            const vh_value& Item = Items[Cursor++];
+            const double Number = Item.Type == VH_TYPE_FLOAT
+                ? Item.Float
+                : (Item.Type == VH_TYPE_INT ? (double)Item.Int : 0.0);
+            FieldValue = Field.is_int
+                ? Verse::VValue(Verse::VInt(Context, (int64)Number))
+                : Verse::VValue(Verse::VFloat(Number));
+        }
+
         if (!Struct.CreateField(Context, *Keys[Index])
-            || !Struct.SetField(Context, *Keys[Index], Verse::VValue(Verse::VFloat(Number))).IsReturn())
+            || !Struct.SetField(Context, *Keys[Index], FieldValue).IsReturn())
         {
             return Verse::VValue();
         }
@@ -1402,7 +1484,20 @@ AUTORTFM_DISABLE Verse::VValue NewStructValue(Verse::FRunningContext Context,
     return Verse::VValue(Struct);
 }
 
-/// The Godot handle a Verse wrapper carries, or 0 for a value that is not one.
+AUTORTFM_DISABLE Verse::VValue NewStructValue(Verse::FRunningContext Context,
+                                              Verse::VClass& Class,
+                                              const FStructLayout& Layout,
+                                              const vh_value* Items,
+                                              int32 ItemCount)
+{
+    if (ItemCount != StructFieldCount(Layout))
+    {
+        return Verse::VValue();
+    }
+    int32 Cursor = 0;
+    return NewStructFrom(Context, Layout, Items, ItemCount, Cursor);
+}
+
 AUTORTFM_DISABLE int64 HandleOf(Verse::VValue Value)
 {
     UObject* Wrapper = Value.ExtractUObject();
@@ -1723,7 +1818,7 @@ AUTORTFM_DISABLE Verse::VValue NewArrayValue(Verse::FRunningContext Context,
 {
     const FStructLayout* const Layout = FindStructLayoutByPackedTag(Tag);
     Verse::VClass* const StructClass =
-        Layout ? FindMirroredVClass(Context, FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(Layout->VerseName))) : nullptr;
+        Layout ? FindMirroredVClass(Context, FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(Layout->verse_name))) : nullptr;
     if (Layout && !StructClass)
     {
         return Verse::VValue();
@@ -1840,7 +1935,7 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
     if (Declared.Struct != nullptr)
     {
         Verse::VClass* const StructClass =
-            FindMirroredVClass(Context, FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(Declared.Struct->VerseName)));
+            FindMirroredVClass(Context, FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(Declared.Struct->verse_name)));
         if (!StructClass || Value.Type != VH_TYPE_TUPLE)
         {
             return false;

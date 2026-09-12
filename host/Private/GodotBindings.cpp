@@ -4,6 +4,7 @@
 #include "Containers/Array.h"
 #include "Containers/Map.h"
 #include "Containers/Utf8String.h"
+#include "GodotClasses.h"
 #include "HostRuntime.h"
 #include "Templates/UniquePtr.h"
 #include "VerseString.h"
@@ -149,252 +150,381 @@ void DeferToCommit(CallableType&& Callable)
     AutoRTFM::OnCommit(Forward<CallableType>(Callable));
 }
 
-/// The C++ spelling of Verse's `variant`: (Tag, Ints, Floats, Texts).
-using FGodotValue = verse::tuple<int64, TArray<int64>, TArray<double>, TArray<verse::string>>;
+/// The C++ spelling of Verse's `variant`, from GodotClasses.h. One Godot Variant as fixed-width
+/// lanes; Godot.native.verse carries the reasoning for the shape.
+using FGodotValue = verse::variant;
 
-/// A variant detached from the VM. Deferred writes run after the transaction that produced
-/// their arguments has committed, and a verse::string is not ours to hold across that boundary.
+/// How many float lanes a tag's value occupies, and how many int lanes.
+///
+/// One table rather than a switch in each direction, because the two directions have to agree
+/// exactly: a type written with three floats and read with two is a silent truncation, and the
+/// only way to be sure they match is for there to be one statement of it.
+struct FLaneCount
+{
+    int32 Ints = 0;
+    int32 Floats = 0;
+};
+
+FLaneCount LanesFor(int64 Tag)
+{
+    switch (Tag)
+    {
+    case VH_VARIANT_BOOL:
+    case VH_VARIANT_INT:
+        return {1, 0};
+    case VH_VARIANT_FLOAT:
+        return {0, 1};
+
+    case VH_VARIANT_VECTOR2:
+        return {0, 2};
+    case VH_VARIANT_VECTOR3:
+        return {0, 3};
+    case VH_VARIANT_VECTOR4:
+    case VH_VARIANT_RECT2:
+    case VH_VARIANT_PLANE:
+    case VH_VARIANT_QUATERNION:
+    case VH_VARIANT_COLOR:
+        return {0, 4};
+    case VH_VARIANT_TRANSFORM2D:
+    case VH_VARIANT_AABB:
+        return {0, 6};
+    case VH_VARIANT_BASIS:
+        return {0, 9};
+    case VH_VARIANT_TRANSFORM3D:
+        return {0, 12};
+    case VH_VARIANT_PROJECTION:
+        return {0, 16};
+
+    // The integer vectors take int lanes rather than float ones: a double stops counting exactly
+    // above 2^53, and Godot's are 32-bit signed values that must survive a round trip intact.
+    case VH_VARIANT_VECTOR2I:
+        return {2, 0};
+    case VH_VARIANT_VECTOR3I:
+        return {3, 0};
+    case VH_VARIANT_VECTOR4I:
+    case VH_VARIANT_RECT2I:
+        return {4, 0};
+
+    default:
+        // Strings ride in Text, references in Ref, and nil occupies nothing.
+        return {0, 0};
+    }
+}
+
+int64 IntLane(const FGodotValue& Value, int32 Index)
+{
+    switch (Index)
+    {
+    case 0: return Value.I0;
+    case 1: return Value.I1;
+    case 2: return Value.I2;
+    default: return Value.I3;
+    }
+}
+
+void SetIntLane(FGodotValue& Value, int32 Index, int64 Lane)
+{
+    switch (Index)
+    {
+    case 0: Value.I0 = Lane; break;
+    case 1: Value.I1 = Lane; break;
+    case 2: Value.I2 = Lane; break;
+    default: Value.I3 = Lane; break;
+    }
+}
+
+double FloatLane(const FGodotValue& Value, int32 Index)
+{
+    switch (Index)
+    {
+    case 0: return Value.F0;
+    case 1: return Value.F1;
+    case 2: return Value.F2;
+    case 3: return Value.F3;
+    case 4: return Value.F4;
+    case 5: return Value.F5;
+    case 6: return Value.F6;
+    case 7: return Value.F7;
+    case 8: return Value.F8;
+    case 9: return Value.F9;
+    case 10: return Value.F10;
+    case 11: return Value.F11;
+    case 12: return Value.F12;
+    case 13: return Value.F13;
+    case 14: return Value.F14;
+    default: return Value.F15;
+    }
+}
+
+void SetFloatLane(FGodotValue& Value, int32 Index, double Lane)
+{
+    switch (Index)
+    {
+    case 0: Value.F0 = Lane; break;
+    case 1: Value.F1 = Lane; break;
+    case 2: Value.F2 = Lane; break;
+    case 3: Value.F3 = Lane; break;
+    case 4: Value.F4 = Lane; break;
+    case 5: Value.F5 = Lane; break;
+    case 6: Value.F6 = Lane; break;
+    case 7: Value.F7 = Lane; break;
+    case 8: Value.F8 = Lane; break;
+    case 9: Value.F9 = Lane; break;
+    case 10: Value.F10 = Lane; break;
+    case 11: Value.F11 = Lane; break;
+    case 12: Value.F12 = Lane; break;
+    case 13: Value.F13 = Lane; break;
+    case 14: Value.F14 = Lane; break;
+    default: Value.F15 = Lane; break;
+    }
+}
+
+/// A variant detached from the VM. Deferred writes run after the transaction that produced their
+/// arguments has committed, and a verse::string is not ours to hold across that boundary.
 struct FOwnedValue
 {
-    int64 Tag = VH_VARIANT_NIL;
-    TArray<int64> Ints;
-    TArray<double> Floats;
-    TArray<FUtf8String> Texts;
+    FGodotValue Lanes;
+    FUtf8String Text;
 };
 
 FOwnedValue Own(const FGodotValue& Value)
 {
     FOwnedValue Owned;
-    Owned.Tag = Value.Get<0>();
-    Owned.Ints = Value.Get<1>();
-    Owned.Floats = Value.Get<2>();
-    for (const verse::string& Text : Value.Get<3>())
-    {
-        Owned.Texts.Add(FUtf8String(ToView(Text)));
-    }
+    Owned.Lanes = Value;
+    Owned.Text = FUtf8String(ToView(Value.Text));
+    // The verse::string is dropped: Text above is the copy that outlives the transaction, and a
+    // dangling one here would be indistinguishable from a live one at the point it is read.
+    Owned.Lanes.Text = verse::string{};
     return Owned;
 }
 
-/// Owns every buffer the vh_value trees it builds point at. Each block is allocated separately
-/// because growing one array of blocks would move payloads that an already-returned vh_value
-/// still points into.
-class FWireStore
+/// Builds the vh_value the C ABI carries from an owned variant.
+///
+/// Nothing here allocates: every value type is lanes, and every reference type is an id the
+/// consumer minted. That is the whole of what the fixed-width shape buys -- the encoding this
+/// replaced built up to four arrays to carry one number.
+vh_value WireOf(const FOwnedValue& Owned)
 {
-public:
-    vh_value Wire(const FOwnedValue& Value);
-
-private:
-    vh_value* Block(int32 Count)
-    {
-        TUniquePtr<TArray<vh_value>>& Slot = Blocks.Add_GetRef(MakeUnique<TArray<vh_value>>());
-        Slot->SetNumZeroed(Count);
-        return Slot->GetData();
-    }
-
-    TArray<TUniquePtr<TArray<vh_value>>> Blocks;
-};
-
-vh_value FWireStore::Wire(const FOwnedValue& Value)
-{
-    const TArray<int64>& Ints = Value.Ints;
-    const TArray<double>& Floats = Value.Floats;
-    const TArray<FUtf8String>& Texts = Value.Texts;
+    const FGodotValue& Lanes = Owned.Lanes;
 
     vh_value Out{};
-    Out.VariantTag = static_cast<int32>(Value.Tag);
+    Out.VariantTag = static_cast<int32>(Lanes.Tag);
 
-    const auto FloatSeq = [&](int32 Count) {
-        vh_value* Items = Block(Count);
-        for (int32 Index = 0; Index < Count; ++Index)
-        {
-            Items[Index].Type = VH_TYPE_FLOAT;
-            Items[Index].Float = Floats.IsValidIndex(Index) ? Floats[Index] : 0.0;
-        }
-        Out.Seq.Items = Items;
-        Out.Seq.Count = Count;
-    };
-
-    switch (Value.Tag)
+    switch (Lanes.Tag)
     {
     case VH_VARIANT_BOOL:
         Out.Type = VH_TYPE_LOGIC;
-        Out.Logic = (Ints.Num() > 0 && Ints[0] != 0) ? 1 : 0;
-        break;
+        Out.Logic = Lanes.I0 != 0 ? 1 : 0;
+        return Out;
 
     case VH_VARIANT_INT:
-    case VH_VARIANT_RID:
-    case VH_VARIANT_OBJECT:
         Out.Type = VH_TYPE_INT;
-        Out.Int = Ints.Num() > 0 ? Ints[0] : 0;
-        break;
+        Out.Int = Lanes.I0;
+        return Out;
 
     case VH_VARIANT_FLOAT:
         Out.Type = VH_TYPE_FLOAT;
-        Out.Float = Floats.Num() > 0 ? Floats[0] : 0.0;
-        break;
+        Out.Float = Lanes.F0;
+        return Out;
 
     case VH_VARIANT_STRING:
     case VH_VARIANT_STRING_NAME:
     case VH_VARIANT_NODE_PATH:
         Out.Type = VH_TYPE_STRING;
-        Out.String.Utf8 = Texts.Num() > 0 ? reinterpret_cast<const char*>(*Texts[0]) : "";
-        Out.String.Len = Texts.Num() > 0 ? Texts[0].Len() : 0;
-        break;
+        Out.String.Utf8 = reinterpret_cast<const char*>(*Owned.Text);
+        Out.String.Len = Owned.Text.Len();
+        return Out;
 
-    case VH_VARIANT_VECTOR2:
-    case VH_VARIANT_VECTOR2I:
-        Out.Type = VH_TYPE_TUPLE;
-        FloatSeq(2);
-        break;
+    // An object is named by Godot's own instance id, so it needs no table; everything else that
+    // carries a reference was given an id by the consumer.
+    case VH_VARIANT_OBJECT:
+    case VH_VARIANT_RID:
+        Out.Type = VH_TYPE_INT;
+        Out.Int = Lanes.Ref;
+        return Out;
 
-    case VH_VARIANT_VECTOR3:
-    case VH_VARIANT_VECTOR3I:
-        Out.Type = VH_TYPE_TUPLE;
-        FloatSeq(3);
-        break;
-
-    case VH_VARIANT_VECTOR4:
-    case VH_VARIANT_VECTOR4I:
-    case VH_VARIANT_RECT2:
-    case VH_VARIANT_RECT2I:
-    case VH_VARIANT_COLOR:
-    case VH_VARIANT_QUATERNION:
-    case VH_VARIANT_PLANE:
-        Out.Type = VH_TYPE_TUPLE;
-        FloatSeq(4);
-        break;
-
-    case VH_VARIANT_AABB:
-    case VH_VARIANT_TRANSFORM2D:
-        Out.Type = VH_TYPE_TUPLE;
-        FloatSeq(6);
-        break;
-
-    case VH_VARIANT_BASIS:
-        Out.Type = VH_TYPE_TUPLE;
-        FloatSeq(9);
-        break;
-
-    case VH_VARIANT_TRANSFORM3D:
-        Out.Type = VH_TYPE_TUPLE;
-        FloatSeq(12);
-        break;
-
-    case VH_VARIANT_PROJECTION:
-        Out.Type = VH_TYPE_TUPLE;
-        FloatSeq(16);
-        break;
-
-    case VH_VARIANT_PACKED_BYTE_ARRAY:
-    case VH_VARIANT_PACKED_INT32_ARRAY:
-    case VH_VARIANT_PACKED_INT64_ARRAY:
-    {
-        vh_value* Items = Block(Ints.Num());
-        for (int32 Index = 0; Index < Ints.Num(); ++Index)
-        {
-            Items[Index].Type = VH_TYPE_INT;
-            Items[Index].Int = Ints[Index];
-        }
-        Out.Type = VH_TYPE_ARRAY;
-        Out.Seq.Items = Items;
-        Out.Seq.Count = Ints.Num();
-        break;
-    }
-
-    case VH_VARIANT_PACKED_FLOAT32_ARRAY:
-    case VH_VARIANT_PACKED_FLOAT64_ARRAY:
-    case VH_VARIANT_PACKED_VECTOR2_ARRAY:
-    case VH_VARIANT_PACKED_VECTOR3_ARRAY:
-    case VH_VARIANT_PACKED_COLOR_ARRAY:
-        Out.Type = VH_TYPE_ARRAY;
-        FloatSeq(Floats.Num());
-        break;
-
-    case VH_VARIANT_PACKED_STRING_ARRAY:
-    {
-        vh_value* Items = Block(Texts.Num());
-        for (int32 Index = 0; Index < Texts.Num(); ++Index)
-        {
-            Items[Index].Type = VH_TYPE_STRING;
-            Items[Index].String.Utf8 = reinterpret_cast<const char*>(*Texts[Index]);
-            Items[Index].String.Len = Texts[Index].Len();
-        }
-        Out.Type = VH_TYPE_ARRAY;
-        Out.Seq.Items = Items;
-        Out.Seq.Count = Texts.Num();
-        break;
-    }
-
-    // An untyped Array has no tag to disambiguate it, so the first non-empty payload wins.
-    // Heterogeneous arrays have no variant spelling; see the digest.
-    case VH_VARIANT_ARRAY:
-        Out.Type = VH_TYPE_ARRAY;
-        if (Ints.Num() > 0)
-        {
-            vh_value* Items = Block(Ints.Num());
-            for (int32 Index = 0; Index < Ints.Num(); ++Index)
-            {
-                Items[Index].Type = VH_TYPE_INT;
-                Items[Index].Int = Ints[Index];
-            }
-            Out.Seq.Items = Items;
-            Out.Seq.Count = Ints.Num();
-        }
-        else
-        {
-            FloatSeq(Floats.Num());
-        }
-        break;
+    case VH_VARIANT_NIL:
+        Out.Type = VH_TYPE_VOID;
+        return Out;
 
     default:
-        Out.Type = VH_TYPE_VOID;
         break;
     }
 
+    const FLaneCount Lanes_ = LanesFor(Lanes.Tag);
+    if (Lanes_.Ints == 0 && Lanes_.Floats == 0)
+    {
+        // A reference type: Array, Dictionary, Callable, Signal, or a packed array.
+        Out.Type = VH_TYPE_REF;
+        Out.Ref = Lanes.Ref;
+        return Out;
+    }
+
+    // A math struct. It crosses as a tuple of its components in Godot's own order, which is what
+    // verse_value.cpp rebuilds the Godot type from.
+    Out.Type = VH_TYPE_TUPLE;
     return Out;
 }
 
-/// Sorts a vh_value's payload into variant's three typed slots. A map has no variant
-/// spelling and comes back as an empty value of its own tag.
+/// The components of a math struct, for the wire's tuple arm. Separate from Wire because the
+/// items have to live somewhere the caller owns for the length of the call.
+void WireComponents(const FGodotValue& Lanes, TArray<vh_value>& OutItems)
+{
+    const FLaneCount Count = LanesFor(Lanes.Tag);
+    OutItems.Reset();
+    OutItems.Reserve(Count.Ints + Count.Floats);
+    for (int32 Index = 0; Index < Count.Ints; ++Index)
+    {
+        vh_value& Item = OutItems.AddDefaulted_GetRef();
+        Item.Type = VH_TYPE_INT;
+        Item.Int = IntLane(Lanes, Index);
+    }
+    for (int32 Index = 0; Index < Count.Floats; ++Index)
+    {
+        vh_value& Item = OutItems.AddDefaulted_GetRef();
+        Item.Type = VH_TYPE_FLOAT;
+        Item.Float = FloatLane(Lanes, Index);
+    }
+}
+
+/// Owns the component arrays of however many variants one call carries.
+///
+/// Each block is its own allocation and none is ever moved: a vh_value holds a bare pointer into
+/// one, and growing a single array of blocks would leave an already-built value pointing at freed
+/// memory.
+class FWireStore
+{
+public:
+    vh_value Wire(const FOwnedValue& Owned)
+    {
+        vh_value Out = WireOf(Owned);
+        if (Out.Type != VH_TYPE_TUPLE)
+        {
+            return Out;
+        }
+        TUniquePtr<TArray<vh_value>>& Block = Blocks.Add_GetRef(MakeUnique<TArray<vh_value>>());
+        WireComponents(Owned.Lanes, *Block);
+        Out.Seq.Items = Block->GetData();
+        Out.Seq.Count = Block->Num();
+        return Out;
+    }
+
+private:
+    TArray<TUniquePtr<TArray<vh_value>>> Blocks;
+};
+
+/// The payload of a numeric vh_value, whichever of the three numeric shapes it arrived in.
+///
+/// Godot spells a number in whatever Variant its own API declared, and a method the mirror types
+/// as `float` can hand back an integer Variant -- `0` is the usual one. Coercing here rather than
+/// in the Verse unpackers is what lets those be plain lane reads: by the time a variant exists,
+/// the lane its tag names is filled.
+int64 AsInt(const vh_value& Value)
+{
+    switch (Value.Type)
+    {
+    case VH_TYPE_LOGIC: return Value.Logic != 0 ? 1 : 0;
+    case VH_TYPE_FLOAT: return (int64)Value.Float;
+    case VH_TYPE_REF: return Value.Ref;
+    default: return Value.Int;
+    }
+}
+
+double AsDouble(const vh_value& Value)
+{
+    switch (Value.Type)
+    {
+    case VH_TYPE_LOGIC: return Value.Logic != 0 ? 1.0 : 0.0;
+    case VH_TYPE_INT: return (double)Value.Int;
+    default: return Value.Float;
+    }
+}
+
+/// The tag a payload implies, for a consumer that did not name one. Only the unambiguous shapes
+/// are guessed: a tuple is equally a Vector2, a Vector2i or a Rect2, and guessing there would be
+/// the untagged encoding this design replaced.
+int64 InferTag(int32 Type)
+{
+    switch (Type)
+    {
+    case VH_TYPE_LOGIC: return VH_VARIANT_BOOL;
+    case VH_TYPE_INT: return VH_VARIANT_INT;
+    case VH_TYPE_FLOAT: return VH_VARIANT_FLOAT;
+    case VH_TYPE_STRING: return VH_VARIANT_STRING;
+    default: return VH_VARIANT_NIL;
+    }
+}
+
+/// Reads a vh_value back into the variant's lanes.
+///
+/// Driven by the tag rather than by the payload's shape, so that the lane a tag names is the lane
+/// that gets filled. The Verse unpackers rely on exactly that.
 FGodotValue FromWire(const vh_value& Value)
 {
-    TArray<int64> Ints;
-    TArray<double> Floats;
-    TArray<verse::string> Texts;
+    FGodotValue Out;
+    Out.Tag = Value.VariantTag != VH_VARIANT_NIL ? Value.VariantTag : InferTag(Value.Type);
 
-    const auto Scatter = [&](const vh_value& Item) {
-        switch (Item.Type)
+    switch (Out.Tag)
+    {
+    case VH_VARIANT_NIL:
+        return Out;
+
+    case VH_VARIANT_BOOL:
+        Out.I0 = AsInt(Value) != 0 ? 1 : 0;
+        return Out;
+
+    case VH_VARIANT_INT:
+        Out.I0 = AsInt(Value);
+        return Out;
+
+    case VH_VARIANT_FLOAT:
+        Out.F0 = AsDouble(Value);
+        return Out;
+
+    case VH_VARIANT_STRING:
+    case VH_VARIANT_STRING_NAME:
+    case VH_VARIANT_NODE_PATH:
+        if (Value.Type == VH_TYPE_STRING)
         {
-        case VH_TYPE_LOGIC:
-            Ints.Add(Item.Logic != 0 ? 1 : 0);
-            break;
-        case VH_TYPE_INT:
-            Ints.Add(Item.Int);
-            break;
-        case VH_TYPE_FLOAT:
-            Floats.Add(Item.Float);
-            break;
-        case VH_TYPE_STRING:
-            Texts.Add(verse::string(GodotVerse::MakeView(Item.String.Utf8, Item.String.Len)));
-            break;
-        default:
-            break;
+            Out.Text = verse::string(GodotVerse::MakeView(Value.String.Utf8, Value.String.Len));
         }
-    };
+        return Out;
 
+    // An object is named by Godot's own instance id and an RID by its own number; neither needs a
+    // table entry, so both land in Ref without one being minted.
+    case VH_VARIANT_OBJECT:
+    case VH_VARIANT_RID:
+        Out.Ref = AsInt(Value);
+        return Out;
+
+    default:
+        break;
+    }
+
+    const FLaneCount Count = LanesFor(Out.Tag);
+    if (Count.Ints == 0 && Count.Floats == 0)
+    {
+        // A reference type: Array, Dictionary, Callable, Signal, or a packed array. The id is the
+        // consumer's, and the host holds it until the Verse value wrapping it is collected.
+        Out.Ref = Value.Type == VH_TYPE_REF ? Value.Ref : AsInt(Value);
+        return Out;
+    }
+
+    // A math struct, as its components in Godot's own order. A payload shorter than the lanes its
+    // tag promised leaves the rest at zero rather than reading past what it was given.
     if (Value.Type == VH_TYPE_TUPLE || Value.Type == VH_TYPE_ARRAY)
     {
-        for (int32 Index = 0; Index < Value.Seq.Count; ++Index)
+        int32 Cursor = 0;
+        for (int32 Index = 0; Index < Count.Ints && Cursor < Value.Seq.Count; ++Index, ++Cursor)
         {
-            Scatter(Value.Seq.Items[Index]);
+            SetIntLane(Out, Index, AsInt(Value.Seq.Items[Cursor]));
+        }
+        for (int32 Index = 0; Index < Count.Floats && Cursor < Value.Seq.Count; ++Index, ++Cursor)
+        {
+            SetFloatLane(Out, Index, AsDouble(Value.Seq.Items[Cursor]));
         }
     }
-    else
-    {
-        Scatter(Value);
-    }
-
-    return {static_cast<int64>(Value.VariantTag), Ints, Floats, Texts};
+    return Out;
 }
 
 } // namespace
@@ -426,17 +556,18 @@ void VhTypeMismatch(verse::string const& Expected, FGodotValue const& Value)
         Verse::ERuntimeDiagnostic::ErrRuntime_NativeInternal,
         TEXT("Godot returned a value tagged %lld where the Verse bridge expected `%hs`. The type "
              "table in tools/gen_verse_api.py and this build of Godot disagree."),
-        Value.Get<0>(),
+        Value.Tag,
         reinterpret_cast<const char*>(*Name));
 }
 
-FGodotValue VhCallValue(int64 Handle, verse::string const& Method, TArray<FGodotValue> const& Args)
+void VhCallValue(int64 Handle, verse::string const& Method, TArray<FGodotValue> const& Args, FGodotValue& OutValue)
 {
+    OutValue = FGodotValue{};
     FHostState& Host = GetHost();
     if (!Host.Godot.CallMethod)
     {
         RAISE_VERSE_RUNTIME_ERROR_CODE(Verse::ERuntimeDiagnostic::ErrRuntime_NativeInternal);
-        return {};
+        return;
     }
 
     FWireStore Store;
@@ -457,9 +588,9 @@ FGodotValue VhCallValue(int64 Handle, verse::string const& Method, TArray<FGodot
     if (Status != VH_CALL_OK)
     {
         RaiseCallStatus(Status, Handle, Method, TEXT("Called"));
-        return {};
+        return;
     }
-    return FromWire(Result);
+    OutValue = FromWire(Result);
 }
 
 void VhCallVoid(int64 Handle, verse::string const& Method, TArray<FGodotValue> const& Args)
@@ -505,15 +636,16 @@ void VhCallVoid(int64 Handle, verse::string const& Method, TArray<FGodotValue> c
     });
 }
 
-TOptional<FGodotValue> VhGetValue(int64 Handle, verse::string const& Property)
+void VhGetValue(int64 Handle, verse::string const& Property, TOptional<FGodotValue>& OutValue)
 {
+    OutValue.Reset();
     FCallArena Arena;
     vh_value Value{};
     if (!ReadProperty(Handle, Property, Arena, Value))
     {
-        return {};
+        return;
     }
-    return FromWire(Value);
+    OutValue = FromWire(Value);
 }
 
 void VhSetValue(int64 Handle, verse::string const& Property, FGodotValue const& Value)

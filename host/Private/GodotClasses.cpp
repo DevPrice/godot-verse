@@ -3,3 +3,4 @@
 #include "GodotClasses.h"
 
 #include "Godot.object.gen.ipp"
+#include "Godot.variant.gen.ipp"

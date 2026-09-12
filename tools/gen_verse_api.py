@@ -19,6 +19,7 @@ from pathlib import Path
 
 GENERATED_PATH = "host/Verse/GodotClasses.native.verse"
 CLASSES_HEADER_PATH = "src/verse_api_classes.h"
+MATH_LAYOUT_HEADER_PATH = "host/Private/GodotMathLayout.gen.h"
 DEFAULT_CLASSES_FILE = "tools/verse_api_classes.txt"
 KEYWORDS_HEADER = "src/verse_keywords.h"
 EXTENSION_API = "godot-cpp/gdextension/extension_api.json"
@@ -63,11 +64,17 @@ SCALAR_TYPES = {
     "String": TypeInfo("string", "VhFromString", False, "VhToString", False),
     "StringName": TypeInfo("string", "VhFromStringName", False, "VhToString", False),
     "NodePath": TypeInfo("string", "VhFromNodePath", False, "VhToString", False),
-    "Vector2": TypeInfo("vector2", "VhFromVector2", False, "VhToVector2", False),
-    "Vector3": TypeInfo("vector3", "VhFromVector3", False, "VhToVector3", False),
-    "Color": TypeInfo("color", "VhFromColor", False, "VhToColor", False),
-    "PackedStringArray": TypeInfo("[]string", None, False, "VhToStrings", False),
+    "RID": TypeInfo("int", "VhFromRid", False, "VhToInt", False),
 }
+
+# Godot's math types are added to this table at import time from MATH_LAYOUT below, so that one
+# list drives the struct, the packers and the type table alike: a type present in one and missing
+# from another is the failure that arrangement exists to make impossible.
+#
+# Deliberately absent: the ten packed arrays. They are value types, but variable-length ones, and a
+# fixed-width variant has no lanes for them -- they ride as a reference id with bulk converters
+# (spec R-TYPE-1). Until that lands the generator skips the methods that use them, which is part of
+# the coverage report's "unsupported_type" count.
 
 
 def repo_root() -> Path:
@@ -163,6 +170,150 @@ class TypeResolver:
         return None
 
 
+# Godot's math types as Verse structs, each mirroring its own member tree so that
+# `Transform.Basis.X.X` reads the way `transform.basis.x.x` does in GDScript.
+#
+# Written out rather than read from extension_api.json's `members`, which lists *properties* and
+# so includes both the derived and the redundant: `Rect2.end` is `position + size`, and
+# `Plane.x/y/z` are the components of `Plane.normal` spelled again. Flattening those would put six
+# lanes where the wire carries four. What is here is the canonical decomposition, and it has to
+# agree component for component with src/verse_value.cpp -- MATH_LANES below is the check that it
+# does, and tests/verse_api_gen asserts it.
+#
+# Data only. The ~30 methods each of these carries in Godot (`Length`, `Normalized`, `Rotated`) are
+# R-SCN-3, which the roadmap puts in Phase 2 -- and generating them there for all sixteen beats
+# adopting Verse's own `vector2` here for two of them, since Verse's `vector3` is deprecated and
+# fourteen of the sixteen have no counterpart at all.
+#
+# Order is dependency order: a struct's members are declared before it.
+MATH_LAYOUT = {
+    "Vector2": [("x", "float"), ("y", "float")],
+    "Vector2i": [("x", "int"), ("y", "int")],
+    "Vector3": [("x", "float"), ("y", "float"), ("z", "float")],
+    "Vector3i": [("x", "int"), ("y", "int"), ("z", "int")],
+    "Vector4": [("x", "float"), ("y", "float"), ("z", "float"), ("w", "float")],
+    "Vector4i": [("x", "int"), ("y", "int"), ("z", "int"), ("w", "int")],
+    "Rect2": [("position", "Vector2"), ("size", "Vector2")],
+    "Rect2i": [("position", "Vector2i"), ("size", "Vector2i")],
+    "Plane": [("normal", "Vector3"), ("d", "float")],
+    "Quaternion": [("x", "float"), ("y", "float"), ("z", "float"), ("w", "float")],
+    "AABB": [("position", "Vector3"), ("size", "Vector3")],
+    # x, y and z are Godot's own names for the basis' three columns (Basis.xml), and columns are
+    # what crosses -- Basis(Vector3, Vector3, Vector3) is set_columns on the Godot side.
+    "Basis": [("x", "Vector3"), ("y", "Vector3"), ("z", "Vector3")],
+    "Transform2D": [("x", "Vector2"), ("y", "Vector2"), ("origin", "Vector2")],
+    "Transform3D": [("basis", "Basis"), ("origin", "Vector3")],
+    "Projection": [("x", "Vector4"), ("y", "Vector4"), ("z", "Vector4"), ("w", "Vector4")],
+    "Color": [("r", "float"), ("g", "float"), ("b", "float"), ("a", "float")],
+}
+
+MATH_TYPES = list(MATH_LAYOUT)
+MATH_STRUCT_NAMES = {verse_class_name(name) for name in MATH_LAYOUT}
+
+# Godot's packed array of a struct, where it has one. An array of these crosses as that packed
+# type rather than as a plain Array.
+MATH_PACKED_ARRAYS = {
+    "Vector2": "VH_VARIANT_PACKED_VECTOR2_ARRAY",
+    "Vector3": "VH_VARIANT_PACKED_VECTOR3_ARRAY",
+    "Vector4": "VH_VARIANT_PACKED_VECTOR4_ARRAY",
+    "Color": "VH_VARIANT_PACKED_COLOR_ARRAY",
+}
+
+# The vh_variant_tag enumerator for a Godot type, as the C header spells it.
+def math_variant_tag(godot_name: str) -> str:
+    return "VH_VARIANT_" + "_".join(t.upper() for t in split_pascal(godot_name))
+
+# How many lanes of each kind a type occupies, as src/verse_value.cpp writes it and as
+# GodotBindings.cpp's LanesFor reads it. Stated here so a layout edited on one side and not the
+# other fails a test rather than truncating a value at runtime.
+MATH_LANES = {
+    "Vector2": (0, 2), "Vector2i": (2, 0), "Vector3": (0, 3), "Vector3i": (3, 0),
+    "Vector4": (0, 4), "Vector4i": (4, 0), "Rect2": (0, 4), "Rect2i": (4, 0),
+    "Plane": (0, 4), "Quaternion": (0, 4), "AABB": (0, 6), "Basis": (0, 9),
+    "Transform2D": (0, 6), "Transform3D": (0, 12), "Projection": (0, 16), "Color": (0, 4),
+}
+
+# The Verse tag constant for a Godot type, as GodotApi.native.verse spells it.
+MATH_TAGS = {name: "Tag" + ("Aabb" if name == "AABB" else name) for name in MATH_LAYOUT}
+
+for _godot_math in MATH_TYPES:
+    SCALAR_TYPES[_godot_math] = TypeInfo(
+        verse_class_name(_godot_math), f"VhFrom{_godot_math}", False, f"VhTo{_godot_math}", False)
+
+
+def math_struct_name(godot_name: str) -> str:
+    return verse_class_name(godot_name)
+
+
+def math_leaf_lanes(godot_name: str, path: str = "") -> list:
+    """Every scalar leaf under a math type, as (access path, "int"|"float"), depth first."""
+    lanes = []
+    for member, member_type in MATH_LAYOUT[godot_name]:
+        here = f"{path}.{verse_method_name(member)}" if path else verse_method_name(member)
+        if member_type in ("float", "int"):
+            lanes.append((here, member_type))
+        else:
+            lanes.extend(math_leaf_lanes(member_type, here))
+    return lanes
+
+
+def emit_math_structs() -> list:
+    blocks = []
+    for godot_name in MATH_TYPES:
+        lines = [f"{math_struct_name(godot_name)}<public> := struct:"]
+        for member, member_type in MATH_LAYOUT[godot_name]:
+            field = verse_method_name(member)
+            if member_type == "float":
+                lines.append(f"    {field}<public>:float = 0.0")
+            elif member_type == "int":
+                lines.append(f"    {field}<public>:int = 0")
+            else:
+                inner = math_struct_name(member_type)
+                lines.append(f"    {field}<public>:{inner} = {inner}{{}}")
+        blocks.append("\n".join(lines))
+    return blocks
+
+
+def build_math_literal(godot_name: str, reads: dict, path: str) -> str:
+    """A struct literal for godot_name, reading each leaf out of `reads` by its access path."""
+    parts = []
+    for member, member_type in MATH_LAYOUT[godot_name]:
+        field = verse_method_name(member)
+        here = f"{path}.{field}" if path else field
+        if member_type in ("float", "int"):
+            parts.append(f"{field} := {reads[here]}")
+        else:
+            parts.append(f"{field} := {build_math_literal(member_type, reads, here)}")
+    return f"{math_struct_name(godot_name)}{{{', '.join(parts)}}}"
+
+
+def emit_math_packers() -> list:
+    blocks = []
+    for godot_name in MATH_TYPES:
+        name = math_struct_name(godot_name)
+        tag = MATH_TAGS[godot_name]
+        lanes = math_leaf_lanes(godot_name)
+        ints = [path for path, kind in lanes if kind == "int"]
+        floats = [path for path, kind in lanes if kind == "float"]
+
+        assigns = [f"Tag := {tag}"]
+        assigns += [f"I{i} := Value.{path}" for i, path in enumerate(ints)]
+        assigns += [f"F{i} := Value.{path}" for i, path in enumerate(floats)]
+        blocks.append(
+            f"VhFrom{godot_name}(Value:{name})<transacts>:variant = variant{{{', '.join(assigns)}}}")
+
+        reads = {}
+        for i, path in enumerate(ints):
+            reads[path] = f"Value.I{i}"
+        for i, path in enumerate(floats):
+            reads[path] = f"Value.F{i}"
+        blocks.append(
+            f"VhTo{godot_name}(Value:variant)<transacts>:{name} =\n"
+            f"    VhExpect(Value, {tag}, \"{name}\")\n"
+            f"    {build_math_literal(godot_name, reads, '')}")
+    return blocks
+
+
 ClassifiedMethod = namedtuple(
     "ClassifiedMethod", ["godot_name", "verse_name", "params", "return_type", "is_void"]
 )
@@ -230,7 +381,21 @@ class Coverage:
             self.unsupported_types[t] += 1
 
 
-VECTOR_FIELDS = {"vector2": "XY", "vector3": "XYZ", "color": "RGBA"}
+# The math structs whose members are all scalars, as (field names, scalar type). Only these can be
+# `var` properties: Verse asks a struct-typed var for a field-named accessor overload per nesting
+# level, and for a struct whose members are *themselves* structs there is no single signature that
+# satisfies it -- transform3d's two members are a `basis` and a `vector3`, and one getter cannot
+# return both. So a nested type stays a pair of ordinary methods; see classify_property.
+FLAT_MATH_STRUCTS = {
+    verse_class_name(name): (
+        [verse_method_name(member) for member, _ in layout],
+        layout[0][1],
+    )
+    for name, layout in MATH_LAYOUT.items()
+    if all(member_type in ("float", "int") for _, member_type in layout)
+}
+
+VECTOR_FIELDS = {name: fields for name, (fields, _) in FLAT_MATH_STRUCTS.items()}
 
 
 def verse_default_literal(verse_type: str, default: str):
@@ -254,15 +419,20 @@ def verse_default_literal(verse_type: str, default: str):
         m = re.fullmatch(r'NodePath\("([^"\\]*)"\)', default)
         return f'"{m.group(1)}"' if m else None
 
-    fields = VECTOR_FIELDS.get(verse_type)
-    if fields:
-        m = re.fullmatch(rf"{verse_type.capitalize()}\(([^)]*)\)", default)
+    flat = FLAT_MATH_STRUCTS.get(verse_type)
+    if flat:
+        fields, scalar = flat
+        # Godot spells the constructor with its own class name -- `Vector2i(0, 0)` -- which is the
+        # Verse name with the underscores taken out and each word capitalised again.
+        godot_name = "".join(part.capitalize() for part in verse_type.split("_"))
+        m = re.fullmatch(rf"{re.escape(godot_name)}\(([^)]*)\)", default, re.IGNORECASE)
         if not m:
             return None
         parts = [p.strip() for p in m.group(1).split(",")]
         if len(parts) != len(fields):
             return None
-        numbers = [verse_default_literal("float", p) for p in parts]
+        # An integer vector's components are ints, and Verse will not take 0.0 for one.
+        numbers = [verse_default_literal(scalar, p) for p in parts]
         if any(n is None for n in numbers):
             return None
         return verse_type + "{" + ", ".join(f"{f} := {n}" for f, n in zip(fields, numbers)) + "}"
@@ -384,6 +554,12 @@ def classify_property(p: dict, resolver: TypeResolver, coverage: Coverage):
     if info.pack_fn == "VhFromObject":
         coverage.skip("property_object_type")
         return None
+    # A nested math struct: see FLAT_MATH_STRUCTS. Skipping it here leaves Godot's own getter and
+    # setter to be emitted as ordinary methods, so `GetGlobalTransform()` still reaches it -- what
+    # is lost is only the `set Node.GlobalTransform = ...` spelling.
+    if info.verse_type in MATH_STRUCT_NAMES and info.verse_type not in FLAT_MATH_STRUCTS:
+        coverage.skip("property_nested_struct")
+        return None
 
     return ClassifiedProperty(
         godot_name=p["name"],
@@ -437,18 +613,19 @@ def emit_property(cp: ClassifiedProperty, names: dict) -> list:
     # Nothing can reach them: it walks a struct's fields without checking that any is assignable,
     # and a Verse struct may not contain a `var`, so the path it is asking about cannot be written.
     # They are emitted to satisfy the check and are dead.
-    fields = VECTOR_FIELDS.get(ti.verse_type)
-    if not fields:
+    flat = FLAT_MATH_STRUCTS.get(ti.verse_type)
+    if not flat:
         return lines
+    fields, scalar = flat
 
     selects = " else ".join(
         f'if ({field} = "{f}") then {current}.{f}' for f in fields[:-1]
     )
     lines += [
-        f"    {get_name}<epic_internal>({accessor}:accessor, {field}:string)<transacts>:float =",
+        f"    {get_name}<epic_internal>({accessor}:accessor, {field}:string)<transacts>:{scalar} =",
         f"        {current} := {read}",
         f"        {selects} else {current}.{fields[-1]}",
-        f"    {set_name}<epic_internal>({accessor}:accessor, {field}:string, {value}:float)<transacts>:void =",
+        f"    {set_name}<epic_internal>({accessor}:accessor, {field}:string, {value}:{scalar}) <transacts>:void =".replace(") <", ")<"),
         f"        {current} := {read}",
     ]
     for i, f in enumerate(fields):
@@ -560,6 +737,24 @@ HEADER_TEMPLATE = """using {{/Verse.org/Native}}
 """
 
 
+MATH_TEMPLATE = """
+# --- Godot's math types ------------------------------------------------------
+#
+# Each mirrors its own member tree, so `Transform.Basis.X.X` reads the way `transform.basis.x.x`
+# does in GDScript. Data only: the methods Godot gives these are R-SCN-3 and arrive in Phase 2.
+
+{structs}
+
+# --- and their packers -------------------------------------------------------
+#
+# The float lanes carry a type's components in Godot's own order, depth first over the member tree
+# above -- which is the order src/verse_value.cpp writes and reads them in. The two have to agree
+# component for component, so both are derived from the same tree rather than written twice.
+
+{packers}
+"""
+
+
 SINGLETONS_TEMPLATE = """
 # Godot hands a singleton out by name rather than through the scene, so a mirrored `input` or
 # `engine` would otherwise be a class no script can obtain an instance of. <decides> because
@@ -583,10 +778,60 @@ def emit_singleton_accessors(api: dict, emit_order: list) -> list:
 def render(api: dict, class_blocks: list, singleton_accessors: list) -> str:
     version = api["header"]["version_full_name"]
     text = HEADER_TEMPLATE.format(version=version)
+    text += MATH_TEMPLATE.format(
+        structs="\n\n".join(emit_math_structs()),
+        packers="\n".join(emit_math_packers()),
+    )
     text += "\n" + "\n\n".join(class_blocks) + "\n"
     if singleton_accessors:
         text += SINGLETONS_TEMPLATE.format(accessors="\n".join(singleton_accessors))
     return text
+
+
+MATH_LAYOUT_HEADER_TEMPLATE = """// Copyright Epic Games, Inc. All Rights Reserved.
+#pragma once
+
+// Generated by tools/gen_verse_api.py from godot-cpp/gdextension/extension_api.json
+// ({version}). Do not edit by hand.
+//
+// The shape of each Godot math type as Verse declares it, for the host's marshalling: which fields
+// a struct has, in order, and which of them are structs of their own. Generated from the same
+// MATH_LAYOUT that emits the Verse structs and their packers, so the two cannot drift -- a value
+// built here with the fields of a type it is not would be read back as plausible nonsense.
+//
+// Scalar fields carry NestedTag 0. A nested one carries the tag of the struct it holds, which is
+// its entry in MathLayouts below.
+
+namespace verse_math {{
+
+struct field
+{{
+	const char *name;
+	// 0 for a scalar; otherwise the vh_variant_tag of the struct this field holds.
+	int nested_tag;
+	// A scalar field holding an integer rather than a float -- the integer vectors, whose
+	// components stop being exact as doubles above 2^53.
+	bool is_int;
+}};
+
+struct layout
+{{
+	const char *verse_name;
+	int variant_tag;
+	// The packed array Godot has for this struct, which an array of them crosses as. 0 for none.
+	int packed_array_tag;
+	const field *fields;
+	int field_count;
+}};
+
+{field_arrays}
+
+inline constexpr layout layouts[] = {{
+{entries}
+}};
+
+}} // namespace verse_math
+"""
 
 
 CLASSES_HEADER_TEMPLATE = """#pragma once
@@ -666,6 +911,32 @@ VALUE_TYPE_MEMBERS = [
 ]
 
 
+def render_math_layout_header(api: dict) -> str:
+    field_arrays = []
+    entries = []
+    for godot_name in MATH_TYPES:
+        verse_name = verse_class_name(godot_name)
+        ident = verse_name.replace("_", "")
+        rows = []
+        for member, member_type in MATH_LAYOUT[godot_name]:
+            field = verse_method_name(member)
+            if member_type in ("float", "int"):
+                rows.append(f'\t{{"{field}", 0, {"true" if member_type == "int" else "false"}}},')
+            else:
+                rows.append(f'\t{{"{field}", {math_variant_tag(member_type)}, false}},')
+        field_arrays.append(
+            f"inline constexpr field {ident}_fields[] = {{\n" + "\n".join(rows) + "\n};")
+        packed = MATH_PACKED_ARRAYS.get(godot_name, "0")
+        entries.append(
+            f'\t{{"{verse_name}", {math_variant_tag(godot_name)}, {packed}, '
+            f"{ident}_fields, {len(MATH_LAYOUT[godot_name])}}},")
+    return MATH_LAYOUT_HEADER_TEMPLATE.format(
+        version=api["header"]["version_full_name"],
+        field_arrays="\n\n".join(field_arrays),
+        entries="\n".join(entries),
+    )
+
+
 def render_classes_header(api: dict, emit_order: list, method_map: list) -> str:
     version = api["header"]["version_full_name"]
     pairs = sorted(
@@ -717,6 +988,7 @@ def main() -> int:
     parser.add_argument("--classes-file", default=DEFAULT_CLASSES_FILE)
     parser.add_argument("--all", action="store_true", help="Emit every class in the API")
     parser.add_argument("--out", default=GENERATED_PATH)
+    parser.add_argument("--math-layout-header", default=MATH_LAYOUT_HEADER_PATH)
     parser.add_argument("--classes-header", default=CLASSES_HEADER_PATH)
     parser.add_argument("--report", default=None, help="Write the coverage report here instead of stdout")
     parser.add_argument("--keywords", default=KEYWORDS_HEADER)
@@ -749,6 +1021,10 @@ def main() -> int:
 
     classes_header_path.parent.mkdir(parents=True, exist_ok=True)
     classes_header_path.write_text(classes_header_text, encoding="utf-8", newline="\n")
+
+    math_layout_path = resolve(root, args.math_layout_header)
+    math_layout_path.parent.mkdir(parents=True, exist_ok=True)
+    math_layout_path.write_text(render_math_layout_header(api), encoding="utf-8", newline="\n")
 
     report = format_report(coverage, len(class_blocks))
     if args.report:
