@@ -1,6 +1,6 @@
 # Phase 2 — the whole engine API
 
-**Status:** Draft 3 · 2026-09-11 · design complete, nothing implemented
+**Status:** Draft 4 · 2026-09-11 · Stage 0 measured and decided (3.1, 3.2); stages 1-7 open
 **Companion to:** [`spec.md`](spec.md) (what must be true), [`roadmap.md`](roadmap.md) (why this phase is
 here), [`abi-v2-design.md`](abi-v2-design.md) (the wire this builds on)
 
@@ -18,7 +18,7 @@ are the ones to argue with first.
 | | decision |
 | --- | --- |
 | scope | **modules and auto-import move to Phase 3**; `@GlobalScope` moves to Phase 4 with OQ-11 |
-| class set | all 1022, **if** the measured build and analysis cost allows; measured first, chosen after, recorded before Stage 2 |
+| class set | **all 1022** — measured (3.1), chosen (3.2): the build cost is nothing and the 5.4x analysis cost is a lag, where a subset is a wall |
 | namespacing | flat. Submodules only once the editor writes `using` lines, which is Phase 3's |
 | `variant` | the existing native struct made **nameable**, read through cast-shaped `AsInt[V]` free functions |
 | `Object` | mirrored — all 46 concrete methods; the hand-written base is renamed `vh_object` |
@@ -131,6 +131,66 @@ slow keystroke is paid by every user on every character, and R-TOOL-2 promises "
 S-1 answer — cooked `.uasset` plus `WITH_VERSE_COMPILER=0` — and it needs the cooker, which is
 **OQ-10 and Phase 7**. Not available here. What *is* available is finding out whether the mirror
 package is already external per analysis, which is M1/M2's job and the cheap win if it is there.
+
+### 3.1 Measured
+
+`tests/host_bench`, built by `tools/build_bench.py`, on a 16-core Windows box against engine
+`203d76492e`. It loads the host with no Godot behind it and times the three operations whose cost is
+a function of the mirror's size. Not part of `run_tests.py`: it reports rather than asserts, because
+R-PERF-2 asks for a recorded number and a threshold would fail on a slower machine than this one.
+
+| | curated (538 KB, 60 classes) | `--all` (2825 KB, 1022 classes) | factor |
+| --- | --- | --- | --- |
+| **M1** VNI code generation, at UBT time | 0.25 s | 0.97 s | 3.9× |
+| **M1** incremental host build, whole target | 13.4 s | 14.3 s | 1.07× |
+| `vh_init` (engine boot, native packages) | 75 ms | 75 ms | 1.0× |
+| `vh_compile_project` (the one generating build) | 421 ms | 2251 ms | 5.3× |
+| **M2** `vh_check_project`, per keystroke | 158 ms | 850 ms | 5.4× |
+
+**Where M1's time lands: nowhere.** The mirror is *ordinary* Verse — only the ~30 declarations in
+`Godot.native.verse` are `<native>` — so VNI generates no C++ for it and the 2.8 MB never reaches
+the C++ compiler. What grows is VNI's scan of the package, by 0.7 s, on a build that takes 14 s. The
+question §3 asked ("UBT/VNI code generation, or the runtime compiler reading the package's sources")
+is answered: **the runtime compiler, entirely.** M1 is not a consideration.
+
+**So M2 is the whole decision, and it is 5.4× on the thing that matters.** Typing itself never
+blocks: `check_buffer` queues, `_frame` starts the analysis, newest-buffer-wins, and a validate
+answers from the previous result. What 850 ms buys is diagnostics roughly a second behind the caret —
+and a stall of up to that long on completion, hover and save, because every host entry point that
+reads the semantic program joins the in-flight analysis before it answers.
+
+**The cheap win is not there, and finding out cost the editor.** `IncrementalizeProjectSource` marks
+every package already compiled in this process `EPackageRole::External`, which is exactly what Phase
+0's S-2 found and what §3 hoped was already happening. Called before the analysis `BuildAll` it
+halves M2 — 850 → 485 ms full, 158 → 82 ms curated — and it breaks every editor feature that walks
+the mirror's AST: **104 of `host_smoke`'s cases fail against 0 at HEAD**, including goto-definition,
+completion and signature help, on the user's own script as well as the mirror. Externality is
+sticky, so scoping the call to edited buffers does not recover them. That is the answer to **OQ-8**
+for the analysis path: the mirror package is *not* already external, and making it external trades
+R-TOOL-1/2/3 for latency. The latency fix is the expensive one that was already scheduled — cooked
+digests, OQ-10 and Phase 7.
+
+**There is no principled middle.** Godot's own `api_type` split removes only 79 classes and 668
+methods — 8% — so "core only" is 790 ms rather than 158 ms. A hand-drawn middle is the curated list
+again, with its failure mode intact.
+
+### 3.2 Decided: the whole API, 1022 classes
+
+`gen_verse_api.py` emits every class by default; `--classes-file` is how a subset is asked for, and
+`tools/verse_api_classes.txt` stays in the repo as the documented one. The `--all` flag is gone —
+the default *is* all.
+
+The reason is that the two costs are not the same kind of cost. **A subset is not a setting, it is a
+wall**: adding a class to the mirror means rebuilding `verse_host.dll`, which means a UE *source*
+checkout and the Verse toolchain. For anyone but this host's own author that is not "one command",
+and 1.0's bar is a Godot developer who is not the author not hitting a wall — which is the wall.
+850 ms of diagnostic lag is a lag; "that class is not reachable from this build" is the end of the
+evaluation. §3's fallback — the curated default plus a documented regeneration, R-SCN-2 reworded to
+"obtainable without writing C++" — reads as a smaller concession than it is, because the C++ is not
+what stops anyone: the 200 GB checkout is.
+
+Recorded honestly: this is the first thing to revisit if the editor turns out to be unpleasant to
+use, the number to revisit it against is in §3.1, and `tools/build_bench.py` is how to take it again.
 
 ---
 

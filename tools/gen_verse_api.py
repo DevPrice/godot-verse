@@ -644,6 +644,14 @@ def classify_property(p: dict, resolver: TypeResolver, coverage: Coverage):
     if info is None:
         coverage.unsupported([p["type"]])
         return None
+    # A `var` is *data*, and data cannot overload: Verse rejects a member named Max outright
+    # because /Verse.org/Verse's Max is in scope at its declaration, where a zero-argument *method*
+    # of the same name would have been distinguished by its signature. So the property is dropped
+    # and Godot's own getter and setter survive as methods -- GetMax() still reads it; what is lost
+    # is only `set Node.Max = ...`.
+    if verse_method_name(p["name"]) in VERSE_STDLIB_NAMES:
+        coverage.skip("property_ambiguous_name")
+        return None
     if info.verse_type in CONTAINER_PROPERTY_TYPES or info.verse_type.startswith("[]"):
         coverage.skip("property_container_type")
         return None
@@ -752,6 +760,9 @@ def generate(api: dict, requested: list, coverage: Coverage):
     inherited_names = {}  # godot class name -> set of Verse names visible to its subclasses
     class_blocks = []
     method_map = []  # (godot class, verse class, godot method, verse method) per emitted method
+    # Every emitted method a module-level function could be ambiguous with: see
+    # singleton_accessor_name, where arity is the whole question.
+    nullary_methods = set()
 
     for name in emit_order:
         parent = parent_map[name]
@@ -807,6 +818,8 @@ def generate(api: dict, requested: list, coverage: Coverage):
                 coverage.skip("shadow")
                 continue
             used.add(cm.verse_name)
+            if not cm.params:
+                nullary_methods.add(cm.verse_name)
             emitted_lines.append(emit_method(cm))
             method_map.append((name, verse_class_name(name), cm.godot_name, cm.verse_name))
             coverage.methods_emitted += 1
@@ -820,7 +833,7 @@ def generate(api: dict, requested: list, coverage: Coverage):
         else:
             class_blocks.append(header)
 
-    return class_blocks, emit_order, method_map
+    return class_blocks, emit_order, method_map, nullary_methods
 
 
 HEADER_TEMPLATE = """using {{/Verse.org/Native}}
@@ -875,11 +888,25 @@ SINGLETONS_TEMPLATE = """
 """
 
 
-def emit_singleton_accessors(api: dict, emit_order: list) -> list:
+def singleton_accessor_name(godot_name: str, nullary_methods: set) -> str:
+    """`GetInput`, unless a mirrored method already answers to that with no arguments.
+
+    A module-level function and a class method of the same name *and* signature are ambiguous
+    where the class' own body can see both -- EditorPlugin.get_editor_interface() against the
+    accessor for the EditorInterface singleton, which hand back the same object. The accessor is
+    this generator's invention and the method is Godot's, so the accessor is the one that moves.
+    Arity is what decides it: XRController3D.get_input(int) coexists with GetInput() untouched.
+    """
+    base = f"Get{godot_name}"
+    return f"{base}Singleton" if base in nullary_methods else base
+
+
+def emit_singleton_accessors(api: dict, emit_order: list, nullary_methods: set) -> list:
     """One module-level accessor per emitted class that Godot registers as a singleton."""
     singletons = {s["name"] for s in api.get("singletons", [])}
     return [
-        f'Get{name}<public>()<decides><transacts>:{verse_class_name(name)}'
+        f'{singleton_accessor_name(name, nullary_methods)}<public>()<decides><transacts>'
+        f':{verse_class_name(name)}'
         f' = {verse_class_name(name)}{{Handle := VhSingleton["{name}"]}}'
         for name in sorted(n for n in emit_order if n in singletons)
     ]
@@ -1112,8 +1139,11 @@ RESERVED_WORDS = set()
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--api", default=EXTENSION_API, help="Path to extension_api.json")
-    parser.add_argument("--classes-file", default=DEFAULT_CLASSES_FILE)
-    parser.add_argument("--all", action="store_true", help="Emit every class in the API")
+    # The whole API by default: a class the mirror lacks can only be added by rebuilding
+    # verse_host.dll, which needs a UE source checkout, so a subset is a wall rather than a
+    # setting for anyone but the host's own author (docs/phase-2-design.md 3).
+    parser.add_argument("--classes-file", default=None,
+                        help=f"Emit only these classes and their ancestors, e.g. {DEFAULT_CLASSES_FILE}")
     parser.add_argument("--out", default=GENERATED_PATH)
     parser.add_argument("--math-layout-header", default=MATH_LAYOUT_HEADER_PATH)
     parser.add_argument("--classes-header", default=CLASSES_HEADER_PATH)
@@ -1132,15 +1162,15 @@ def main() -> int:
 
     api = load_api(api_path)
 
-    if args.all:
+    if args.classes_file is None:
         requested = [c["name"] for c in api["classes"] if c["name"] != "Object"]
     else:
         classes_file = resolve(root, args.classes_file)
         requested = read_classes_file(classes_file)
 
     coverage = Coverage()
-    class_blocks, emit_order, method_map = generate(api, requested, coverage)
-    text = render(api, class_blocks, emit_singleton_accessors(api, emit_order))
+    class_blocks, emit_order, method_map, nullary_methods = generate(api, requested, coverage)
+    text = render(api, class_blocks, emit_singleton_accessors(api, emit_order, nullary_methods))
     classes_header_text = render_classes_header(api, emit_order, method_map)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)

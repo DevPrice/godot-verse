@@ -229,11 +229,28 @@ def test_ancestor_pull_in():
 
 def test_singleton_accessors_cover_only_emitted_classes():
     api = {"singletons": [{"name": "Input"}, {"name": "RenderingServer"}]}
-    lines = g.emit_singleton_accessors(api, ["Node", "Input"])
+    lines = g.emit_singleton_accessors(api, ["Node", "Input"], set())
     check(
         "an accessor for the emitted singleton and nothing else",
         lines,
         ['GetInput<public>()<decides><transacts>:input = input{Handle := VhSingleton["Input"]}'],
+    )
+
+
+def test_singleton_accessor_yields_to_a_method_of_the_same_name():
+    api = {"singletons": [{"name": "EditorInterface"}, {"name": "Input"}]}
+    lines = g.emit_singleton_accessors(api, ["EditorInterface", "Input"], {"GetEditorInterface"})
+    check_true(
+        "the accessor a nullary method already claims is renamed",
+        any(line.startswith("GetEditorInterfaceSingleton<public>()") for line in lines),
+    )
+    check_true(
+        "and no accessor keeps the colliding name",
+        not any(line.startswith("GetEditorInterface<public>()") for line in lines),
+    )
+    check_true(
+        "an accessor nothing collides with is left alone",
+        any(line.startswith("GetInput<public>()") for line in lines),
     )
 
 
@@ -257,7 +274,7 @@ def test_shadow_suppression_across_inheritance():
         ]
     }
     coverage = g.Coverage()
-    blocks, _emit_order, _method_map = g.generate(api, ["Derived"], coverage)
+    blocks, _emit_order, _method_map, _nullary = g.generate(api, ["Derived"], coverage)
     check("shadowed method skipped once", coverage.skip_reasons["shadow"], 1)
     check("only the non-colliding method emitted on Derived", coverage.methods_emitted, 2)
     derived_block = next(b for b in blocks if b.startswith("derived"))
@@ -296,7 +313,7 @@ def test_unsupported_type_skipping():
         ]
     }
     coverage = g.Coverage()
-    blocks, _emit_order, _method_map = g.generate(api, ["Thing"], coverage)
+    blocks, _emit_order, _method_map, _nullary = g.generate(api, ["Thing"], coverage)
     check("unsupported return type skips its method", coverage.skip_reasons["unsupported_type"], 1)
     check("unsupported type recorded by name", coverage.unsupported_types["typedarray::Node2D"], 1)
     check("the supported sibling method still emits", coverage.methods_emitted, 1)
@@ -338,7 +355,7 @@ def test_class_type_falls_back_to_nearest_emitted_ancestor():
     }
     coverage = g.Coverage()
     # Base is emitted, but Mid/Leaf are not requested -- Other.GetLeaf must fall back to Base.
-    blocks, _emit_order, _method_map = g.generate(api, ["Base", "Other"], coverage)
+    blocks, _emit_order, _method_map, _nullary = g.generate(api, ["Base", "Other"], coverage)
     other_block = next(b for b in blocks if b.startswith("other"))
     check_true(
         "unresolved class type falls back to nearest emitted ancestor (base)",
@@ -440,10 +457,22 @@ def test_property_skips_have_reasons():
         ) is None,
     )
     check_true(
+        "a property named after a Verse stdlib function is skipped",
+        g.classify_property(
+            {"name": "max", "type": "float", "getter": "get_max", "setter": "set_max"}, resolver, coverage
+        ) is None,
+    )
+    check_true(
         "a float property is not",
         g.classify_property(
             {"name": "d", "type": "float", "getter": "get_d", "setter": "set_d"}, resolver, coverage
         ) is not None,
+    )
+    check(
+        "each skip recorded its own reason",
+        sorted(coverage.skip_reasons),
+        ["property_ambiguous_name", "property_container_type", "property_no_accessor_pair",
+         "property_object_type"],
     )
 
 
@@ -622,6 +651,7 @@ def main():
     test_nested_math_structs_are_not_vars()
     test_ancestor_pull_in()
     test_singleton_accessors_cover_only_emitted_classes()
+    test_singleton_accessor_yields_to_a_method_of_the_same_name()
     test_shadow_suppression_across_inheritance()
     test_base_member_shadow()
     test_unsupported_type_skipping()
