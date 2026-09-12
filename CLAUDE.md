@@ -15,13 +15,14 @@ of it. The short version: Verse's overloading is far narrower than §1 claimed, 
 non-public struct fields (so `variant`'s lanes are public, R-TYPE-7), Verse has no anonymous
 functions, and Godot's property metadata hides its own enums.
 
-**Phase 3 is designed and not started.** `docs/phase-3-design.md` is the whole of it: the decisions
-and where they came from, the work order with per-stage code anchors, and — read this part first —
-**§1, the spike that gates the phase.** Nothing in Phase 3 starts until OQ-12 is answered, because a
-negative answer redesigns the module half rather than adding to it. Two things the roadmap said
-about this phase are corrected there: modules are **not** one-per-subdirectory (a directory is a
-module only if it carries a `<name>.vmodule` marker), and the leak gets a measured number rather
-than a bound with a test.
+**Phase 3 is built.** `docs/phase-3-design.md` is the whole of it, and **§11 is the part to read**:
+written after the code, it is where the design turned out to be wrong. The three corrections that
+matter — a generation costs **1.27 s** and retains **~1.3 MB** against a real project rather than the
+200 ms and 0.5 MB the design assumed; a `UClass`'s qualified name comes back out of its *mangled*
+name because `PackageRelativeVersePath` is dead under VerseVM; and asking the *semantic* program for
+one must not use `EPathMode::PackageRelative`, which is fatal for a class with no package. §1.1 has
+OQ-12's answer (positive: the package name carries the generation, the verse path is pinned).
+Two by-hand checks are still owed — a windowed run of the yardstick, and an editor session.
 
 **`docs/dodge-the-creeps.md` is the one to read before adding a Verse-facing feature.** The port
 closed Phase 2 and it plays, so the document is not a progress report — it is the eight things a

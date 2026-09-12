@@ -1,6 +1,7 @@
 # godot-verse — Roadmap
 
-**Status:** Draft 6 · 2026-09-12 · **Phases 0, 1 and 2 complete; Phase 3 designed and not started.**
+**Status:** Draft 6 · 2026-09-12 · **Phases 0–3 complete**, bar the two by-hand checks Phase 3 is
+owed — a windowed run of the yardstick, and an editor session exercising Play, Build and `@tool`.
 Its design is [`phase-3-design.md`](phase-3-design.md), which supersedes four of the bullets below
 and gates the whole phase on a spike. What Phase 2 built, and the four
 places the design was wrong, are in [`phase-2-design.md`](phase-2-design.md) §11. The Dodge the
@@ -339,13 +340,19 @@ spec had recorded as done: **R-INT-2** is `part`, because a script cannot make t
 
 ---
 
-## Phase 3 — What a project is: the source set, live
+## Phase 3 — What a project is: the source set, live — **done**
 
 **Design:** [`phase-3-design.md`](phase-3-design.md) — the decisions, where they came from, the
-spike that gates the phase, and the work order with the code anchors for each stage. **Read it
-before starting anything here.** The bullets below are the brief the design was written against,
-corrected in place where the design contradicted them — four of them were wrong, and each says so
-rather than being quietly rewritten.
+spike that gated the phase and its answer, and the work order with the code anchors for each stage.
+**Read §1.1 and §10 of it before building on this.** The bullets below are the brief the design was
+written against, corrected in place where the design contradicted them — four of them were wrong,
+and each says so rather than being quietly rewritten.
+
+**What it cost, measured rather than estimated.** The "~200 ms per reload" below is what S-2 saw on
+a one-class prototype; against a real project it is **1.27 s per generation** and **~1.3 MB
+retained** (spec R-PERF-2 and R-ITER-6). The second figure is why the leak is tolerable and the
+first is why the trigger is Play. **OQ-12 came back positive** — the package name carries the
+generation and the verse path is pinned — so nothing in the design was redrawn.
 
 **Why now.** This phase and the next one swapped places, which is what Phase 0 was asked to decide.
 S-2 closed OQ-8 in favour of the fresh-package-name mechanism and measured it — ~200 ms per reload,

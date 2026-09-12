@@ -1,6 +1,7 @@
 # Phase 3 — what a project is: the source set, live
 
-**Status:** Draft 2 · 2026-09-12 · stages 0–2 done. Draft 2 moved the build trigger off save and
+**Status:** Draft 2 · 2026-09-12 · **built**, bar the two by-hand checks §9 asks for. §11 is the
+record of where this document turned out to be wrong — read it before trusting a number here. Draft 2 moved the build trigger off save and
 onto Play, and added §2.5 and §2.6. **§1's spike is answered — affirmatively — and nothing in this
 document is redesigned by it;** §1 records what the run found, and `spec.md` §14.1 is the record.
 **Companion to:** [`roadmap.md`](roadmap.md) §"Phase 3", [`spec.md`](spec.md) §10 and §14.1,
@@ -547,3 +548,57 @@ is `_complete_code` in `verse_script_language.cpp`.
 | the build blocks the main thread | accepted, because it now happens on Play and on an explicit action — where Godot already blocks for C#. Stage 2 measures the real number against a real project; if it is bad, off-thread building becomes a requirement rather than a guess |
 | a `@tool` script's error takes down the editor | stated, not mitigated; R-DIAG-3 is Phase 6 |
 | memory in a long session | accepted; R-ITER-6 tracks it |
+
+---
+
+## 11. What it built, and where the design was wrong
+
+Written after the code, like §11 of `phase-2-design.md` and for the same reason: the plan above is
+worth keeping, and so is the record of where following it taught something the plan did not know.
+
+**§1's spike came back positive and nothing was redesigned.** §1.1 has the answer. The one thing
+the question did not anticipate is that the retiring generation must leave the *source project*
+before the next build — `RemoveScriptPackage`, two lines — or every class is declared twice at one
+path.
+
+**Three numbers replaced three estimates.**
+
+| the design said | it is |
+| --- | --- |
+| a build is "~200 ms for a one-class project" | **1.27 s** for the five-file game, against a **3.1 s** first build. Later generations are cheaper because `IncrementalizeProjectSource` marks the native packages external and only the script package is rebuilt |
+| "~0.5 MB per generation" | **~1.3 MB**, median of ten generations of the same game |
+| `host_smoke` is "247/247" | 274 before this phase, 292 after |
+
+The build figure is the one worth sitting with. A second and a quarter is a real pause, and it is
+the whole argument for the trigger: on Play it is a pause nobody notices next to loading a scene,
+and on Ctrl+S it would have been unusable. If it has to come down, off-thread building is a
+requirement rather than a guess (spec R-PERF-2).
+
+**§3's riskiest unknown was not a risk.** A GDExtension *can* write into the active buffer:
+`ScriptEditor::get_current_editor()->get_base_editor()` is the `CodeEdit`. The fallback shipped
+anyway, because it is better than the mechanism in the case the mechanism cannot reach — a file the
+author is not looking at. What is **not** built is the completion half: symbols from modules not yet
+in scope are not offered. Typing a name you already know is covered; discovering one is not.
+
+**The qualified-name problem had two halves and only one was in the design.** §2.3 has the ABI half
+— split the name, build the path — and it was a few lines. The half nobody had thought about is the
+*reverse*: a `UObject` knows only its class's leaf name, and six lookups start from one. The answer
+is that a `UClass`'s own name is the module path mangled with `-` by `VNamedType::AppendMangledName`,
+so unmangling is a substitution. `UVerseClass::PackageRelativeVersePath` would have been the direct
+answer and is dead under VerseVM — the line that sets it is commented out in `VVMClass.cpp`.
+
+**And a third half, which only the yardstick found.** Asking the *semantic* program for a class's
+qualified name is a third thing again, and `EPathMode::PackageRelative` is a trap: for a class with
+no package — every intrinsic — it is a fatal error rather than an empty answer. Taking the whole
+verse path and removing the package prefix is the same answer and survives every class. The bug it
+caused was invisible to every test in the repo and immediate in `dodge-the-creeps`, because nothing
+in `tests/integration` exports a member typed as another script's class and `main.verse` does. That
+is the yardstick doing exactly what §8 said it was for.
+
+**One defect found and not fixed**, recorded against R-DIAG-3: after a Verse runtime error is
+raised, every later `vh_instance_call` returns `VH_OK` with no result value. It predates this phase
+and `@tool` makes it worse, because a tool script can now reach it without the game running.
+
+**What is owed.** Two by-hand checks in §9 that no headless run can make: the windowed run of the
+yardstick, and an editor session exercising Play, the Build action, `@tool` and the `using`
+insertion. Everything else in §9 is covered by `tools/run_tests.py` and the yardstick's 29 checks.
