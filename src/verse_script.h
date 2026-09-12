@@ -82,6 +82,12 @@ public:
 	// analysis covers the project.
 	bool analysis_landed();
 
+	// A new generation was published, so the classes, method tables and declared defaults this
+	// script reads are new ones. Re-reads them and tells the inspector, which is where a changed
+	// `@export` default becomes visible (R-ITER-3). Instances already running keep the class they
+	// were made with -- nothing here adopts anything.
+	void generation_published();
+
 	bool is_compiled() const;
 	godot::String verse_class_name() const;
 

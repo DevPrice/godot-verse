@@ -137,9 +137,11 @@ Error VerseScript::compile() {
 		return ERR_UNCONFIGURED;
 	}
 
-	// One file cannot be compiled on its own: the whole project is built together, and it is
-	// built once. This script is only usable if that build succeeded outright — the linker
-	// requires a complete program, so one bad file leaves nothing assembled.
+	// One file cannot be compiled on its own: the whole project is built together. Ensure rather
+	// than build, because this is reached on save and on reload, and neither publishes a
+	// generation -- Play does, and the Build action does. The script is only usable if a build
+	// succeeded outright: the linker requires a complete program, so one bad file leaves nothing
+	// assembled.
 	language->ensure_project_built();
 
 	// Reached on save and on reload, where the answer has to be about the text being saved. When
@@ -174,6 +176,16 @@ bool VerseScript::analysis_landed() {
 	awaited_source = String();
 	refresh_from_analysis();
 	return true;
+}
+
+void VerseScript::generation_published() {
+	refresh_from_analysis();
+
+	// The shape of the property list has come from analysis since Phase 1 and refreshes per
+	// keystroke; what only a build can produce is a *value*, because a declared default is
+	// evaluated by generated code. So this is where a changed default reaches the inspector, and
+	// it is why a new member appears long before its default does.
+	notify_property_list_changed();
 }
 
 void VerseScript::refresh_from_analysis() {
@@ -763,10 +775,11 @@ Dictionary VerseScript::class_header() const {
 }
 
 // Deliberately not gated on valid(). The export list is read out of the semantic program the last
-// analysis left behind, and analysis re-runs on every edit, while code generation may only happen
-// once per process -- so a project whose *first* build failed can still describe its classes once
-// the author fixes them. Tying the inspector to the build instead would leave the properties gone
-// for the rest of the session, with nothing the author could do about it but restart.
+// analysis left behind, and analysis re-runs on every edit, while code generation waits for a
+// build -- so a file the author is halfway through editing still describes its classes, and a
+// project whose last build failed still shows the shape of what it will be. Tying the inspector to
+// the build instead would empty the properties for as long as the file is broken, which is exactly
+// when the author wants to see them.
 void VerseScript::refresh_exports() const {
 	VerseRuntime *runtime = get_runtime();
 	VerseScriptLanguage *language = VerseScriptLanguage::singleton();

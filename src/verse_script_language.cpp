@@ -557,6 +557,14 @@ void VerseScriptLanguage::_thread_exit() {
 }
 
 void VerseScriptLanguage::_reload_all_scripts() {
+	// Refresh, not rebuild. Godot calls this when the filesystem moved under it, and what a script
+	// has to catch up with then is the analysis; publishing a generation is Play's job and the
+	// Build action's. Snapshotted because compile() can republish an export list, which Godot is
+	// free to drop a script in the middle of.
+	const std::vector<VerseScript *> scripts = live_scripts;
+	for (VerseScript *script : scripts) {
+		script->compile();
+	}
 }
 
 void VerseScriptLanguage::_reload_tool_script(const Ref<Script> &p_script, bool p_soft_reload) {
@@ -1452,9 +1460,9 @@ bool VerseScriptLanguage::_handles_global_class_type(const String &p_type) const
 //
 // EditorFileSystem asks this from its scan thread, for every .verse in the project, during the
 // startup scan -- and both halves of that are out of the ABI's reach. Every vh_ entry point has
-// to be called on the vh_init thread, and vh_compile_project may run only once per process, so a
-// filesystem scan is the last thing that should be able to trigger a build. GDScript answers the
-// same question from a tokenizer-only pass for the same reason.
+// to be called on the vh_init thread, and a build is the whole project at ~200ms, so a filesystem
+// scan is the last thing that should be able to trigger one. GDScript answers the same question
+// from a tokenizer-only pass for the same reason.
 Dictionary VerseScriptLanguage::_get_global_class_name(const String &p_path) const {
 	const String source = FileAccess::get_file_as_string(p_path);
 	if (FileAccess::get_open_error() != OK) {
@@ -1619,7 +1627,10 @@ Error VerseScriptLanguage::ensure_project_built() {
 	if (project_built) {
 		return project_build_status;
 	}
+	return build_project();
+}
 
+Error VerseScriptLanguage::build_project() {
 	VerseRuntime *runtime = get_runtime();
 	if (runtime == nullptr) {
 		return ERR_UNAVAILABLE;
@@ -1670,14 +1681,23 @@ Error VerseScriptLanguage::ensure_project_built() {
 	project_built = true;
 	project_build_status = status;
 
-	// Code generation gets one attempt per process and this was it, so no later edit can produce
-	// a runnable program -- however clean the file becomes, has_class keeps answering no. The
-	// diagnostics above say what is wrong; this says what fixing them will and will not buy.
 	if (status != OK) {
+		// Nothing was published, so whatever ran before this still runs (R-ITER-5). The
+		// diagnostics above say what is wrong; this says what that costs.
 		UtilityFunctions::push_warning(
-				"Verse: the project did not build. Fixing the errors restores the editor's analysis -- "
-				"exported properties, completion and lookup -- but a script cannot run until the editor "
-				"is restarted, because Verse generates code once per process.");
+				"Verse: the project did not build, so no new code was published. The editor's analysis -- "
+				"diagnostics, completion and the shape of the exported properties -- is live either way; "
+				"fix the errors and build again to replace what is running.");
+		return status;
+	}
+
+	// A new generation means new classes, new method tables and new declared defaults. Every
+	// script has to re-read them off the program that now exists, and the inspector has to be
+	// told, which is R-ITER-3. Snapshotted because refreshing a script republishes its export
+	// list, and Godot is free to drop a script while that runs.
+	const std::vector<VerseScript *> scripts = live_scripts;
+	for (VerseScript *script : scripts) {
+		script->generation_published();
 	}
 
 	return status;

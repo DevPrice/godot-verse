@@ -217,12 +217,16 @@ ten element types against four key types is not a list to maintain by hand.
   A copy elsewhere compiles against an empty package set and every identifier is unknown.
   `bin/verse_host.dll` exists for the smoke test only; Godot points at the engine tree through the
   `verse/host/dll_path` project setting.
-- **One code generation per process.** `vh_compile_project` publishes a package and may run once;
-  the first script that needs compiling builds every `.verse` under `res://`. Scripts added while
-  the editor runs are not picked up until restart. Analysis (`vh_check_project*`) has no such limit.
-  *Phase 3 removes this* — the mechanism is a fresh package name per generation with
-  `IncrementalizeProjectSource` before each build (spec §14.1), and the plan is
-  `docs/phase-3-design.md` §4. Still true today.
+- **A build is the whole project, and it happens on Play — not on save.** `vh_compile_project`
+  publishes a *generation*: a package name no publish has used, with the verse path pinned at
+  `/user@localhost` and the retiring generation removed from the source project first. Every build
+  re-enumerates `res://`, so a file added, renamed or deleted lands without a restart. What a save
+  does instead is refresh analysis, which keeps diagnostics, completion and the export *shape* live
+  per keystroke — but a changed `@export` **default** is generated code and waits for a build.
+  `VerseEditorPlugin::_build` is the trigger (`EditorNode::call_build()` before a run, the same
+  hook C# uses), plus a "Build Verse" item in Project > Tools. A failed build publishes nothing and
+  refuses the run, leaving the last good generation running. Instances adopt nothing: one made
+  against generation N keeps generation N's class for life.
 - **The host module never unloads.** `vh_shutdown` tears the engine down; the DLL stays resident.
 - **Every Godot callback goes through `AutoRTFM::Open`,** and writes defer to `AutoRTFM::OnCommit`.
   The GDExtension was never instrumented by the AutoRTFM compiler, so calling into it from closed

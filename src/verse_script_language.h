@@ -158,9 +158,21 @@ public:
 	// hanging the editor. Read from the verse/runtime/frame_budget_ms project setting at _init.
 	double get_frame_budget_ms() const;
 
-	// Compiles every .verse file under res:// as one Verse program, once. Verse's compilation
-	// unit is the package rather than the file, and a second build in the same process aborts
-	// the engine, so the first script that needs compiling pays for all of them.
+	// Builds every .verse file under res:// as one Verse program and publishes it as a new
+	// generation. Verse's compilation unit is the package rather than the file, so one script
+	// cannot be built alone and every build re-enumerates res:// -- which is what makes a file
+	// added, renamed or deleted since the last build land without a restart (R-ITER-2).
+	//
+	// Called on Play and from the Build action, not on save: the whole project is ~200ms, and
+	// GDScript only gets away with building on save because its unit is one file. What a save
+	// does instead is refresh analysis, which keeps diagnostics, completion and the export
+	// *shape* live per keystroke.
+	//
+	// A failed build publishes nothing, so the last generation that did keeps running (R-ITER-5).
+	godot::Error build_project();
+
+	// build_project the first time and the remembered result after, for the callers that need a
+	// program to exist but have no business deciding when a new one is published.
 	godot::Error ensure_project_built();
 
 	// Errors the project build reported against one script, in the shape _validate returns.
@@ -234,8 +246,8 @@ private:
 	static VerseScriptLanguage *singleton_instance;
 	double frame_budget_ms = 4.0;
 	bool project_built = false;
-	// What the one build this process gets came back with. Remembered because there is no second
-	// attempt to ask again: every later ensure_project_built answers from here.
+	// What the last build came back with, so ensure_project_built can answer without publishing
+	// a generation of its own.
 	godot::Error project_build_status = godot::OK;
 	mutable godot::Dictionary diagnostics_by_path;
 

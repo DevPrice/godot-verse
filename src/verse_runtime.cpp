@@ -1,6 +1,7 @@
 #include "verse_runtime.h"
 
 #include "verse_ref_table.h"
+#include "verse_script_language.h"
 #include "verse_value.h"
 
 #include <godot_cpp/classes/engine.hpp>
@@ -26,10 +27,20 @@ void VerseRuntime::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("unload_host"), &VerseRuntime::unload_host);
 	ClassDB::bind_method(D_METHOD("is_host_loaded"), &VerseRuntime::is_host_loaded);
 	ClassDB::bind_method(D_METHOD("tick", "budget_seconds"), &VerseRuntime::tick);
+	ClassDB::bind_method(D_METHOD("build_project"), &VerseRuntime::build_project);
 }
 
 VerseRuntime::~VerseRuntime() {
 	unload_host();
+}
+
+Error VerseRuntime::build_project() {
+	// Delegated rather than done here, because which files are in the project is a question about
+	// res:// and the language is what enumerates it. This is the same build the editor's Play
+	// button and Build action ask for, reachable from a script for the benefit of anything that
+	// has to make an edit live without an editor -- the headless integration suite included.
+	VerseScriptLanguage *language = VerseScriptLanguage::singleton();
+	return language != nullptr ? language->build_project() : ERR_UNAVAILABLE;
 }
 
 Error VerseRuntime::load_host(const String &p_dll_path) {

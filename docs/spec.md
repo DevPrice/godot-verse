@@ -732,19 +732,32 @@ requires restarting the editor, and that a script added while the editor runs is
 An authoring loop with a restart in it is not a tool people use.
 
 - **R-ITER-1 (MUST)** Editing a script and running the project executes the edited code, in the
-  same editor session, indefinitely many times.
+  same editor session, indefinitely many times. Status: **done**. `VerseEditorPlugin::_build` runs
+  before every Play and publishes a generation; `Project > Tools > Build Verse` does the same on
+  demand. Proven in `host_smoke` (a second generation runs the edited code, and the rest of that
+  suite then runs against it) and in the integration project (a node attached before a build goes
+  on answering after it).
 - **R-ITER-2 (MUST)** A `.verse` file added, renamed or deleted while the editor runs is picked up
-  without a restart.
+  without a restart. Status: **done**, and it needed no mechanism of its own: every build
+  re-enumerates `res://` rather than building a remembered list.
 - **R-ITER-3 (MUST)** A changed default value on an `@export` member refreshes in the inspector
-  (R-EXP-4). Today it cannot, because a declared default is evaluated by generated code — which is
-  also why, once Phase 3 lands, it refreshes on a **build** rather than on a save: a newly declared
-  member appears as soon as analysis sees it, while its default value is whatever the last build
-  generated. The two halves move at different speeds and that is the price of the trigger above.
+  (R-EXP-4). Status: **done**, on a **build** rather than on a save, because a declared default is
+  evaluated by generated code. `VerseScript::generation_published` re-reads the export list off the
+  new generation and calls `notify_property_list_changed`. The two halves of an export move at
+  different speeds and that is the price of the trigger: a newly declared member appears as soon as
+  analysis sees it, while its default value is whatever the last build generated.
 - **R-ITER-4 (SHOULD)** Reloading preserves the state of a running game where Godot's own
-  `reload(keep_state)` contract allows it.
+  `reload(keep_state)` contract allows it. Status: **done**, with its meaning stated rather than
+  assumed: **an instance keeps its own generation**. Nothing is invalidated under the engine and no
+  state is transferred, because an instance made against generation N goes on running generation
+  N's class for life. Adopting a new class is a deliberate act nobody has asked for, and it would
+  need a state-transfer path across the ABI that does not exist.
 - **R-ITER-5 (MUST)** A compile error during reload leaves the previously-working code running and
-  reports the error; it does not leave the project in a half-loaded state. Status: **part** — a
-  failed build reports once per session. One consequence decided with Phase 3's design: the
+  reports the error; it does not leave the project in a half-loaded state. Status: **done**. A
+  failed build publishes nothing, so the last generation that succeeded is still what runs, and
+  `_build` returning false makes Godot abandon the run rather than launch a game whose code the
+  author has already been told does not compile — the same thing C# does with the same hook. One
+  consequence decided with Phase 3's design: the
   inspector keeps showing the *analysed text's* shape rather than the last good generation's, so it
   can briefly show a property no running code has. Shape has come from analysis since Phase 1 and
   refreshes live; this is the lesser of the two surprises and the one that is already true today.

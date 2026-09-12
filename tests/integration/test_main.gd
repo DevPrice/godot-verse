@@ -341,5 +341,22 @@ func _init() -> void:
 		_check_eq("and it offers no base type to attach to", library.get_instance_base_type(), &"")
 		_check_eq("and it registers no global class name", library.get_global_name(), &"")
 
+	# --- R-ITER-1: a second generation, inside Godot -------------------------------------------
+	#
+	# host_smoke proves the host can publish generation N+1; what only this layer can see is
+	# whether Godot's own script instances survive it. The editor triggers this from Play and from
+	# the Build action; headless, VerseRuntime.build_project() is the same call.
+	#
+	# Nothing here edits a file: the point is not that the edit lands -- host_smoke has that -- but
+	# that a live node attached to a script goes on working across a build, which is the no-adoption
+	# rule seen from the engine's side.
+	_check_eq("a second build publishes a new generation", VerseRuntime.build_project(), OK)
+	_check_eq("a node attached before it still answers", node.call("EchoInt", 7), 7)
+	_check("and its script is still valid", script.can_instantiate())
+	var after_build := Node2D.new()
+	after_build.set_script(script)
+	root.add_child(after_build)
+	_check_eq("and a node attached after it answers too", after_build.call("EchoInt", 11), 11)
+
 	print("[integration] %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)

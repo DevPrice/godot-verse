@@ -78,6 +78,11 @@ public:
 	// Which generation the last successful compile_project published, counting from 1; 0 before
 	// the first. A failed build does not advance it.
 	int32_t script_generation() const { return generation; }
+
+	// Builds a new generation of every .verse under res://, the way the editor's Play button and
+	// Build action do. Bound for GDScript, which is the only way anything outside the editor can
+	// make an edit live.
+	godot::Error build_project();
 	// Re-runs semantic analysis with one file's text replaced, filing diagnostics the same way
 	// compile_project does. Generates nothing, so it is safe to call as often as the editor asks.
 	godot::Error check_project(const godot::String &p_globalized_path, const godot::String &p_source, godot::Dictionary *r_diagnostics_by_path);
