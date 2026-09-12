@@ -1,0 +1,23 @@
+; Engine configuration file.
+;
+; A second, deliberately *broken* Godot project (R-SCN-2). Its one script names three Godot members
+; the mirror does not carry, so the project cannot build -- which is the point: what is under test is
+; the explanation attached to each diagnostic, and a project that compiles has none to show.
+;
+; It has to be its own project because tests/integration's scripts are built together, and one
+; unresolvable name there would take every other case down with it. Driven by tools/run_tests.py,
+; which copies the built GDExtension into addons/ and rewrites the two verse/host settings below from
+; UE_ROOT before each run.
+
+config_version=5
+
+[application]
+
+config/name="godot-verse coverage diagnostic"
+run/main_scene=""
+config/features=PackedStringArray("4.5")
+
+[verse]
+
+host/dll_path="C:\\Users\\Devin\\projects\\UnrealEngine\\Engine\\Binaries\\Win64\\verse_host.dll"
+host/engine_dir="C:\\Users\\Devin\\projects\\UnrealEngine"

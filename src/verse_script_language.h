@@ -303,6 +303,10 @@ private:
 	// anything the editor draws actually moved.
 	bool record_diagnostics(const godot::Dictionary &p_errors_by_globalized) const;
 
+	// Adds "Godot has Node.foo, but ..." to any diagnostic that named a member the mirror
+	// deliberately does not carry. R-SCN-2: the reason has to reach the author, not a report file.
+	static void explain_skipped_members(const godot::TypedArray<godot::Dictionary> &p_errors);
+
 	// Set by an analysis that moved something the editor has already drawn -- diagnostics that
 	// differ from the last one's, or a script that settled its validity on this result -- and
 	// cleared by the _frame that asks the script editor to draw it again. Godot has no reason of

@@ -363,8 +363,16 @@ empty. Signals are how Godot programs are wired together, so this is parity-crit
   satisfied the old wording. `unsupported_type` is zero today, and a new one after a Godot version
   bump is impossible to miss.
 
-  What is outstanding is the surfacing: the reason is in the generator's report, not yet in the
-  editor where the author meets the problem.
+  The surfacing is done too, so the status is **done**. A script that names a member the mirror does
+  not carry gets the compiler's own diagnostic with a sentence appended: *"Godot has
+  Node2D.get_position, but it is reachable as the property `Position`."* Both of Verse's wordings are
+  answered — `Unknown member X in Y`, and `Unknown identifier X` for the unqualified call written
+  inside a class body, which is the spelling an author reaches for first. For the unqualified one the
+  class is not known, so the answer is given only when every class that skips that name skips it
+  alike; where they disagree it says nothing, because a confident wrong class is worse than silence.
+
+  In the editor rather than in a report file, because a report file in this repository is read by
+  whoever wrote the generator and by nobody else.
 - **R-SCN-3 (MUST)** Godot's `@GlobalScope` utility functions and constants are reachable under
   names that do not collide with `/Verse.org/Simulation`. Today none are: every mirrored call
   rides `VhCallValue(Handle, …)`, a free function has no handle, and 78 math plus 8 random names

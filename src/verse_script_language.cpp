@@ -1,6 +1,7 @@
 #include "verse_script_language.h"
 
 #include "verse_api_classes.h"
+#include "verse_api_skipped.h"
 #include "verse_class_decl.h"
 #include "verse_keywords.h"
 #include "verse_lexer.h"
@@ -1927,6 +1928,150 @@ void VerseScriptLanguage::refresh_export_warnings(const String &p_path) const {
 	export_warnings_by_path[p_path] = warnings;
 }
 
+namespace {
+
+// What a skipped member's reason means to the author who just wrote its name.
+//
+// R-SCN-2's whole point: a method that is not there for a good reason and a method that is not
+// there by accident look identical from the editor, and only one of them is worth working around.
+// The reason strings are gen_verse_api.py's own, so a new one shows up as an unexplained skip here
+// rather than being silently rendered as nothing.
+String skipped_member_explanation(const verse_api::skipped_member &p_entry) {
+	const String reason = String(p_entry.reason);
+	const String detail = String(p_entry.detail);
+	if (reason == "superseded_by_property") {
+		return String("it is reachable as the property ") + detail + ".";
+	}
+	if (reason.begins_with("property_")) {
+		return String("it cannot be a property, so Godot's own ") + detail + " carry it instead.";
+	}
+	if (reason == "virtual") {
+		return "it is a Godot virtual. Only Ready, Process and PhysicsProcess can be overridden today (R-NODE-7).";
+	}
+	if (reason == "static") {
+		return "it is static, and a static call has no Verse spelling yet (R-NODE-4).";
+	}
+	if (reason == "vararg") {
+		return "it takes a variable number of arguments, which the bridge cannot carry.";
+	}
+	if (reason == "unmarshallable_pointer") {
+		return "it takes a raw C pointer, which no scripting language can pass.";
+	}
+	if (reason == "unsupported_type") {
+		return String("nothing can carry its ") + detail + " across the boundary.";
+	}
+	if (reason == "shadow") {
+		return "a name it shares with an inherited member won.";
+	}
+	return String("it was skipped: ") + reason + ".";
+}
+
+// The Godot member a script named that the mirror does not carry, searched up the class chain.
+//
+// Up the chain because the compiler names the class the member was *looked for* on, which is the
+// most derived one -- `sprite2d` for a method Node declares. ClassDB is what knows the chain, and
+// the two name tables are what cross between its spelling and Verse's.
+const verse_api::skipped_member *skipped_member_for(const String &p_verse_class, const String &p_member) {
+	const char *godot_name = verse_godot_class_for(p_verse_class);
+	if (godot_name == nullptr) {
+		return nullptr;
+	}
+	for (String godot_class = String(godot_name); !godot_class.is_empty();
+			godot_class = ClassDB::get_parent_class(godot_class)) {
+		for (size_t i = 0; i < std::size(verse_api::skipped); i++) {
+			const verse_api::skipped_member &entry = verse_api::skipped[i];
+			if (p_member == entry.verse_name && godot_class == entry.godot_class) {
+				return &entry;
+			}
+		}
+	}
+	return nullptr;
+}
+
+// The same member, when the compiler could not say which class it belongs to.
+//
+// A call written inside the class body has no receiver -- `GetPosition()` rather than
+// `Node.GetPosition()` -- and Verse reports it as an unknown *identifier*, which names no class at
+// all. That is the common spelling and the one an author is most likely to reach for, so it cannot
+// be the one case that goes unexplained.
+//
+// Answered only when every class that skips a member of this name skips it for the same reason and
+// under the same Godot name. Where they disagree the honest answer is silence: the qualified form
+// still explains itself, and a confident wrong class is worse than no sentence.
+const verse_api::skipped_member *unambiguous_skipped_member(const String &p_member) {
+	const verse_api::skipped_member *found = nullptr;
+	for (size_t i = 0; i < std::size(verse_api::skipped); i++) {
+		const verse_api::skipped_member &entry = verse_api::skipped[i];
+		if (p_member != entry.verse_name) {
+			continue;
+		}
+		if (found == nullptr) {
+			found = &entry;
+			continue;
+		}
+		if (String(found->godot_name) != String(entry.godot_name)
+				|| String(found->reason) != String(entry.reason)
+				|| String(found->detail) != String(entry.detail)) {
+			return nullptr;
+		}
+	}
+	return found;
+}
+
+// `Unknown member \`GetPosition\` in \`node2d\`.` and `Unknown identifier \`GetPosition\`.` are the
+// compiler's two wordings, and the names in them are everything the lookup needs. Parsed rather than
+// asked for, because the diagnostic is the only place either name appears: the ABI carries a message,
+// a severity and a location. An empty class means the second form.
+bool parse_unknown_name(const String &p_message, String &r_member, String &r_class) {
+	const PackedStringArray parts = p_message.split("`");
+	if (p_message.begins_with("Unknown member `")) {
+		// "Unknown member ", member, " in ", class, "."
+		if (parts.size() < 4) {
+			return false;
+		}
+		r_member = parts[1];
+		r_class = parts[3];
+		return !r_member.is_empty() && !r_class.is_empty();
+	}
+	if (p_message.begins_with("Unknown identifier `")) {
+		if (parts.size() < 2) {
+			return false;
+		}
+		r_member = parts[1];
+		r_class = String();
+		return !r_member.is_empty();
+	}
+	return false;
+}
+
+} // namespace
+
+// Appends to any diagnostic that named a member the mirror deliberately does not carry (R-SCN-2).
+//
+// Where the author meets the problem, which is the only place it prevents the failure mode: a
+// coverage report in the repository is read by whoever wrote the generator and by nobody else.
+void VerseScriptLanguage::explain_skipped_members(const TypedArray<Dictionary> &p_errors) {
+	for (int64_t i = 0; i < p_errors.size(); i++) {
+		Dictionary error = p_errors[i];
+		String member;
+		String verse_class;
+		if (!parse_unknown_name(String(error["message"]), member, verse_class)) {
+			continue;
+		}
+		const verse_api::skipped_member *entry = verse_class.is_empty()
+				? unambiguous_skipped_member(member)
+				: skipped_member_for(verse_class, member);
+		if (entry == nullptr) {
+			continue;
+		}
+		// The class is named only where the diagnostic named one. For an unqualified call it is not
+		// known which class was meant, and every class that skips this name skips it alike.
+		const String owner = verse_class.is_empty() ? String() : String(entry->godot_class) + ".";
+		error["message"] = String(error["message"]) + " Godot has " + owner
+				+ String(entry->godot_name) + ", but " + skipped_member_explanation(*entry);
+	}
+}
+
 bool VerseScriptLanguage::record_diagnostics(const Dictionary &p_errors_by_globalized) const {
 	const PackedStringArray previous = flattened_diagnostics(diagnostics_by_path);
 
@@ -1946,6 +2091,7 @@ bool VerseScriptLanguage::record_diagnostics(const Dictionary &p_errors_by_globa
 			Dictionary error = errors[e];
 			error["path"] = path;
 		}
+		explain_skipped_members(errors);
 		diagnostics_by_path[path] = errors;
 	}
 

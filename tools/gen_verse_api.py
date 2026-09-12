@@ -130,6 +130,8 @@ def load_api(api_path: Path) -> dict:
 
 
 def split_pascal(name: str) -> list:
+    if not name:
+        return []
     tokens = []
     cur = name[0]
     for i in range(1, len(name)):
@@ -1112,6 +1114,13 @@ def read_classes_file(path: Path) -> list:
     return names
 
 
+# One skipped member, as the editor will need it: the name a script would have written, and why it
+# is not there. R-SCN-2's second half -- "the method I need isn't there and I can't tell why" is the
+# failure mode that ends adoption, and a report file nobody opens does not prevent it.
+SkippedMember = namedtuple(
+    "SkippedMember", ["verse_class", "verse_name", "godot_class", "godot_name", "reason", "detail"])
+
+
 class Coverage:
     def __init__(self):
         self.classes_emitted = 0
@@ -1119,12 +1128,20 @@ class Coverage:
         self.properties_emitted = 0
         self.skip_reasons = Counter()
         self.unsupported_types = Counter()
+        # Every skip that costs a *name*, for the editor diagnostic. A skip that costs nothing --
+        # a property whose accessors survive under their own names -- still goes in, because the
+        # author who wrote the property name needs telling where it went.
+        self.skipped_members = []
 
-    def skip(self, reason: str):
+    def skip(self, reason: str, member: "SkippedMember | None" = None):
         self.skip_reasons[reason] += 1
+        if member is not None:
+            self.skipped_members.append(member)
 
-    def unsupported(self, types_seen):
+    def unsupported(self, types_seen, member: "SkippedMember | None" = None):
         self.skip_reasons["unsupported_type"] += 1
+        if member is not None:
+            self.skipped_members.append(member._replace(detail=", ".join(sorted(set(types_seen)))))
         for t in set(types_seen):
             self.unsupported_types[t] += 1
 
@@ -1187,16 +1204,21 @@ def verse_default_literal(verse_type: str, default: str):
     return None
 
 
-def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members: set):
+def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members: set,
+                    godot_class: str = ""):
     """Returns a ClassifiedMethod, or None (and records why in coverage) if the method is skipped."""
+    def record(reason: str, detail: str = ""):
+        return SkippedMember(verse_class_name(godot_class), verse_method_name(m["name"]),
+                             godot_class, m["name"], reason, detail)
+
     if m.get("is_virtual"):
-        coverage.skip("virtual")
+        coverage.skip("virtual", record("virtual"))
         return None
     if m.get("is_static"):
-        coverage.skip("static")
+        coverage.skip("static", record("static"))
         return None
     if m.get("is_vararg"):
-        coverage.skip("vararg")
+        coverage.skip("vararg", record("vararg"))
         return None
 
     unsupported_seen = []
@@ -1223,9 +1245,9 @@ def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members
 
     if unsupported_seen:
         if all(POINTER_TYPE_RE.search(seen) for seen in unsupported_seen):
-            coverage.skip("unmarshallable_pointer")
+            coverage.skip("unmarshallable_pointer", record("unmarshallable_pointer"))
         else:
-            coverage.unsupported(unsupported_seen)
+            coverage.unsupported(unsupported_seen, record("unsupported_type"))
         return None
 
     # An optional parameter may not be followed by a required one, and a Godot default that had
@@ -1311,15 +1333,28 @@ def property_godot_type(p: dict, methods_by_name: dict) -> str:
     return from_getter if from_getter.startswith("enum::") else declared
 
 
-def classify_property(p: dict, resolver: TypeResolver, coverage: Coverage, methods_by_name: dict):
-    """Returns a ClassifiedProperty, or None (and records why) if the property is skipped."""
+def classify_property(p: dict, resolver: TypeResolver, coverage: Coverage, methods_by_name: dict,
+                      godot_class: str = ""):
+    """Returns a ClassifiedProperty, or None (and records why) if the property is skipped.
+
+    Every one of these leaves Godot's own getter and setter standing as ordinary methods, so what is
+    lost is the `set X.Y = ...` spelling rather than the value -- which is exactly what the recorded
+    skip goes on to tell an author who wrote the property name.
+    """
+    accessors = " and ".join(
+        f"`{verse_method_name(n)}()`" for n in (p.get("getter"), p.get("setter")) if n)
+
+    def record(reason: str):
+        return SkippedMember(verse_class_name(godot_class), pascal_member_name(p["name"]),
+                             godot_class, p["name"], reason, accessors)
+
     if not p.get("getter") or not p.get("setter"):
-        coverage.skip("property_no_accessor_pair")
+        coverage.skip("property_no_accessor_pair", record("property_no_accessor_pair"))
         return None
 
     info = resolver.classify(property_godot_type(p, methods_by_name))
     if info is None:
-        coverage.unsupported([p["type"]])
+        coverage.unsupported([p["type"]], record("unsupported_type"))
         return None
     # A `var` is *data*, and data cannot overload: Verse rejects a member named Max outright
     # because /Verse.org/Verse's Max is in scope at its declaration, where a zero-argument *method*
@@ -1330,27 +1365,27 @@ def classify_property(p: dict, resolver: TypeResolver, coverage: Coverage, metho
     # is better dropped than renamed, because dropping it leaves Godot's own `GetMax()` and `SetMax()`
     # standing and renaming it would put `GodotMax` in their place. Godot's vocabulary wins.
     if pascal_member_name(p["name"]) in VERSE_STDLIB_NAMES:
-        coverage.skip("property_ambiguous_name")
+        coverage.skip("property_ambiguous_name", record("property_ambiguous_name"))
         return None
     if info.verse_type in CONTAINER_PROPERTY_TYPES or info.verse_type.startswith("[]"):
-        coverage.skip("property_container_type")
+        coverage.skip("property_container_type", record("property_container_type"))
         return None
     # A `variant` is a struct, so the compiler asks a var of that type for a field-named accessor
     # overload per field -- and every one of variant's fields is module-scoped, so none of them can
     # appear in a public signature. Godot's own getter and setter are emitted as methods instead.
     if info.verse_type == "variant":
-        coverage.skip("property_variant_type")
+        coverage.skip("property_variant_type", record("property_variant_type"))
         return None
     # An object-typed property would need a getter that cannot fail, and a null Godot object is
     # exactly the absence VhToHandle reports as failure.
     if info.pack_fn == "VhFromObject":
-        coverage.skip("property_object_type")
+        coverage.skip("property_object_type", record("property_object_type"))
         return None
     # A nested math struct: see FLAT_MATH_STRUCTS. Skipping it here leaves Godot's own getter and
     # setter to be emitted as ordinary methods, so `GetGlobalTransform()` still reaches it -- what
     # is lost is only the `set Node.GlobalTransform = ...` spelling.
     if info.verse_type in MATH_STRUCT_NAMES and info.verse_type not in FLAT_MATH_STRUCTS:
-        coverage.skip("property_nested_struct")
+        coverage.skip("property_nested_struct", record("property_nested_struct"))
         return None
 
     return ClassifiedProperty(
@@ -1463,7 +1498,7 @@ def generate(api: dict, requested: list, coverage: Coverage, enums: dict):
 
         properties = []
         for p in classes_by_name[name].get("properties", []):
-            cp = classify_property(p, resolver, coverage, methods_by_name)
+            cp = classify_property(p, resolver, coverage, methods_by_name, name)
             if cp is not None:
                 properties.append(cp)
         properties.sort(key=lambda cp: cp.verse_name)
@@ -1484,9 +1519,13 @@ def generate(api: dict, requested: list, coverage: Coverage, enums: dict):
         candidates = []
         for m in methods:
             if m["name"] in superseded:
-                coverage.skip("superseded_by_property")
+                replacement = next(cp.verse_name for cp in properties
+                                   if m["name"] in (cp.getter, cp.setter))
+                coverage.skip("superseded_by_property", SkippedMember(
+                    verse_class_name(name), verse_method_name(m["name"]), name, m["name"],
+                    "superseded_by_property", f"`{replacement}`"))
                 continue
-            cm = classify_method(m, resolver, coverage, member_names)
+            cm = classify_method(m, resolver, coverage, member_names, name)
             if cm is not None:
                 candidates.append(cm)
         candidates.sort(key=lambda cm: (cm.verse_name, cm.godot_name))
@@ -1506,7 +1545,8 @@ def generate(api: dict, requested: list, coverage: Coverage, enums: dict):
 
         for cm in candidates:
             if cm.verse_name in used:
-                coverage.skip("shadow")
+                coverage.skip("shadow", SkippedMember(
+                    verse_class_name(name), cm.verse_name, name, cm.godot_name, "shadow", ""))
                 continue
             used.add(cm.verse_name)
             all_member_names.add(cm.verse_name)
@@ -1796,6 +1836,54 @@ inline constexpr method_mapping methods[] = {{
 """
 
 
+SKIPPED_HEADER_PATH = "src/verse_api_skipped.h"
+
+SKIPPED_HEADER_TEMPLATE = """#pragma once
+
+// Generated by tools/gen_verse_api.py from godot-cpp/gdextension/extension_api.json
+// ({version}). Do not edit by hand.
+//
+// Every Godot member the mirror does not carry under its own name, and why. R-SCN-2's second half:
+// "the method I need isn't there and I can't tell why" is the failure mode that ends adoption, and a
+// report file nobody opens does not prevent it. VerseScriptLanguage reads this when the compiler
+// says `Unknown member X in Y`, and answers with where the member went.
+//
+// Keyed by the Verse spellings, because those are what the diagnostic carries -- the Verse name
+// cannot be inverted on its own, since the transform to PascalCase drops the underscores that
+// separated the words.
+//
+// `detail` is the reason's own payload and reads differently per reason: the property that replaced
+// a getter, the accessors that survived a property, or the Godot types nothing could carry.
+
+namespace verse_api {{
+
+struct skipped_member {{
+\tconst char *verse_class;
+\tconst char *verse_name;
+\tconst char *godot_class;
+\tconst char *godot_name;
+\tconst char *reason;
+\tconst char *detail;
+}};
+
+inline constexpr skipped_member skipped[] = {{
+{entries}
+}};
+
+}} // namespace verse_api
+"""
+
+
+def render_skipped_header(api: dict, skipped: list) -> str:
+    """One row per skipped member, sorted so a diff of the header reads as a diff of the API."""
+    rows = sorted({(s.verse_class, s.verse_name, s.godot_class, s.godot_name, s.reason, s.detail)
+                   for s in skipped})
+    entries = "\n".join(
+        '\t{ "%s", "%s", "%s", "%s", "%s", "%s" },' % row for row in rows)
+    return SKIPPED_HEADER_TEMPLATE.format(
+        version=api["header"]["version_full_name"], entries=entries)
+
+
 # Godot builtins rather than mirrored classes, so they are hand-written in GodotApi.native.verse
 # and never reach emit_order -- but they are Godot types with Godot documentation, and without
 # them the editor calls `vector2` a local constant.
@@ -1910,6 +1998,7 @@ def main() -> int:
     parser.add_argument("--out", default=GENERATED_PATH)
     parser.add_argument("--math-layout-header", default=MATH_LAYOUT_HEADER_PATH)
     parser.add_argument("--classes-header", default=CLASSES_HEADER_PATH)
+    parser.add_argument("--skipped-header", default=SKIPPED_HEADER_PATH)
     parser.add_argument("--report", default=None, help="Write the coverage report here instead of stdout")
     parser.add_argument("--keywords", default=KEYWORDS_HEADER)
     args = parser.parse_args()
@@ -1953,6 +2042,11 @@ def main() -> int:
     math_layout_path = resolve(root, args.math_layout_header)
     math_layout_path.parent.mkdir(parents=True, exist_ok=True)
     math_layout_path.write_text(render_math_layout_header(api), encoding="utf-8", newline="\n")
+
+    skipped_path = resolve(root, args.skipped_header)
+    skipped_path.parent.mkdir(parents=True, exist_ok=True)
+    skipped_path.write_text(render_skipped_header(api, coverage.skipped_members),
+                            encoding="utf-8", newline="\n")
 
     report = format_report(coverage, len(class_blocks))
     if args.report:

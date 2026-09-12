@@ -79,7 +79,7 @@ def find_godot(explicit: str | None) -> Path | None:
 
 
 def run(name: str, argv: list[str], results: Results, cwd: Path | None = None,
-        require_line: str | None = None) -> bool:
+        require_line: str | None = None, require_all: list[str] | None = None) -> bool:
     """Runs a test binary, echoing its own per-case lines. Exit code decides pass or fail.
 
     `require_line` is for a runner that can exit 0 without having finished. Godot is one: an
@@ -88,7 +88,7 @@ def run(name: str, argv: list[str], results: Results, cwd: Path | None = None,
     summary line the suite prints last is what makes "it stopped early" a failure.
     """
     print(f"[run_tests] --- {name} ---")
-    if require_line is None:
+    if require_line is None and require_all is None:
         completed = subprocess.run(argv, cwd=str(cwd or REPO))
         ok = completed.returncode == 0
     else:
@@ -96,9 +96,16 @@ def run(name: str, argv: list[str], results: Results, cwd: Path | None = None,
                                    errors="replace")
         output = (completed.stdout or "") + (completed.stderr or "")
         sys.stdout.write(output)
-        ok = completed.returncode == 0 and require_line in output
-        if completed.returncode == 0 and not ok:
+        ok = completed.returncode == 0
+        if ok and require_line is not None and require_line not in output:
+            ok = False
             print(f"[run_tests] {name}: exited 0 without printing {require_line!r} -- it stopped early")
+        for expected in require_all or []:
+            if expected in output:
+                print(f"[run_tests] {name}: said {expected!r}")
+            else:
+                ok = False
+                print(f"[run_tests] {name}: never said {expected!r}")
     results.record(name, ok)
     return ok
 
@@ -228,6 +235,53 @@ def run_integration(results: Results, engine: Path | None, godot: Path | None) -
     )
 
 
+# What the editor must say when a script names a member the mirror deliberately does not carry.
+#
+# Asserted here rather than inside the project, because ScriptLanguage exposes nothing a script can
+# ask -- `_validate` is an extension virtual with no bound counterpart -- so the only way to read what
+# the author would see is to read what the editor prints. R-SCN-2: a reason recorded in a report file
+# in this repository is read by whoever wrote the generator and by nobody else.
+COVERAGE_EXPLANATIONS = [
+    "Godot has get_position, but it is reachable as the property `Position`.",
+    "Godot has _enter_tree, but it is a Godot virtual.",
+    "Godot has Animation.length, but it cannot be a property, so Godot's own",
+]
+
+
+def run_coverage_diagnostic(results: Results, engine: Path | None, godot: Path | None) -> None:
+    """The R-SCN-2 diagnostic, in its own project because its one script cannot compile."""
+    project = REPO / "tests" / "coverage_diagnostic"
+    if not (project / "project.godot").is_file():
+        results.skip("coverage_diagnostic", "tests/coverage_diagnostic is not a Godot project")
+        return
+    if godot is None:
+        results.skip("coverage_diagnostic", "no Godot binary -- set GODOT or pass --godot")
+        return
+    if engine is None:
+        results.skip("coverage_diagnostic", "no Unreal checkout -- set UE_ROOT or pass --engine")
+        return
+
+    why = stage_extension(project)
+    if why is not None:
+        results.skip("coverage_diagnostic", why)
+        return
+    point_at_engine(project, engine)
+
+    run(
+        "coverage_diagnostic",
+        [
+            str(godot),
+            "--headless",
+            "--path", str(project),
+            "--script", "res://probe_main.gd",
+            "--quit-after", "600",
+        ],
+        results,
+        require_line="[coverage] done",
+        require_all=COVERAGE_EXPLANATIONS,
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--only", choices=["units", "abi", "integration"], help="run one layer")
@@ -246,6 +300,7 @@ def main() -> None:
         run_abi(results, engine, args.build)
     if args.only in (None, "integration"):
         run_integration(results, engine, godot)
+        run_coverage_diagnostic(results, engine, godot)
 
     print()
     print(f"[run_tests] {results.passed} passed, {results.failed} failed, {len(results.skipped)} skipped")
