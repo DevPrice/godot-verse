@@ -355,10 +355,11 @@ empty. Signals are how Godot programs are wired together, so this is parity-crit
   `Dictionary`, `Callable`, `Signal` and the ten packed arrays — cross as ids into a table the
   GDExtension owns, released when the Verse value wrapping one is collected.
 
-  The two edges. `Callable` has the lambda defect under R-TYPE-3. And a Verse `[]float` names no
+  The one edge worth naming here. A Verse `[]float` names no
   single Godot type — it is equally a `PackedFloat32Array`, a `PackedFloat64Array` and an `Array` —
   so a *script-defined* method taking one declares `Array`, which Godot builds from any of them
-  where the reverse conversion does not exist. A mirrored Godot method is unaffected: the generator
+  where the reverse conversion does not exist. (R-TYPE-3 records an upstream Godot defect that
+  shows through `Callable`; it is not a limitation of this bridge.) A mirrored Godot method is unaffected: the generator
   knows which packed type it wants and tags it.
 - **R-TYPE-2 (MUST)** Typed arrays and typed dictionaries preserve their element type across the
   boundary, so a `TypedArray[Node2D]` is not flattened to an untyped array. Status: **part.** An
@@ -367,14 +368,37 @@ empty. Signals are how Godot programs are wired together, so this is parity-crit
   in place. What is missing is the Verse side of the *type*: a script writes `GetNode`, not
   `GetNode[node2d]`, so `typedarray::Node2D` is still a type the generator skips.
 - **R-TYPE-3 (MUST)** `Callable` is a Verse value a script can hold, invoke, and hand back to
-  Godot — this is what makes R-SIG-3 and any callback-taking engine API work. Status: **done for a
-  bound Callable; a lambda has a known defect.** A `callable` is held, passed back, and invoked
-  with arguments. **Invoking a GDScript *lambda* from Verse segfaults Godot during shutdown**, with
-  "orphaned lambdas becoming invalid at destruction of script" logged first. A `Callable(object,
-  "method")` is unaffected, and so is holding a lambda and handing it back — only calling one is
-  not. Bisected to `Callable::callv` in `api_invoke_callable`: not the reference table, which
-  clearing earlier does not fix, and not the holding, which on its own exits clean. The other
-  direction — a Verse function *as* a Callable — is R-SIG-3's and arrives in Phase 4.
+  Godot — this is what makes R-SIG-3 and any callback-taking engine API work. Status: **done.** A `callable` is
+  held, passed back, and invoked with arguments. The other direction — a Verse function *as* a
+  Callable — is R-SIG-3's and arrives in Phase 4.
+
+  **An upstream Godot defect shows through this, and is not ours.** A GDScript *lambda* that has
+  been called, and that is still referenced when `ScriptServer::finish_languages()` runs, segfaults
+  Godot at exit. Reduced to eight lines with no GDExtension loaded at all:
+
+  ```gdscript
+  # repro.gd, run as `godot --headless --path . --script res://repro.gd`. Godot 4.7.stable: exit 139.
+  extends SceneTree
+  func _init() -> void:
+      var maker = load("res://maker.gd").new()   # maker.gd: func make() -> Callable:
+      var fn: Callable = maker.make()            #               return func(n): return n * 2
+      Engine.set_meta("keep", fn)                # any engine component outliving the language
+      print(fn.call(21))                         # 42, then exit 139
+      quit(0)
+  ```
+
+  Godot's own `GDScriptLanguage::finish` names this case twice — "referenced from another engine
+  component, which shuts down later (e.g. an instance is stored in the metadata of `Engine`)", and
+  a TODO at its third pass: *"We might want to clean up `GDScriptLambdaCallables` at this point, to
+  prevent leaks from set & forget lambda setups. See GH-102327."*
+
+  The reference table is one such component, so a lambda a Verse script holds hits it. **Nothing in
+  a GDExtension can avoid it:** `Main::cleanup` runs `finish_languages()` 25 lines before
+  `deinitialize_extensions(SCENE)`, and `ScriptLanguage::finish` is never delivered to an extension
+  language, so there is no earlier hook — verified, not assumed. Releasing sooner does not help,
+  and neither does abandoning the entries instead of destroying them; both were tried.
+  `Callable(object, "method")` is unaffected, which is what `connect` and every callback-taking
+  engine API use, and what the integration suite covers.
 - **R-TYPE-4 (MUST)** The absence of a value has exactly one spelling at the boundary, and it is
   documented. Verse has no null; the existing decision — a stale object handle is a runtime error,
   a legitimately-absent object is `<decides>` — is the rule, and it extends to every other type

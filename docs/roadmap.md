@@ -252,12 +252,12 @@ convention has failed.
 ### Phase 1 exit criteria — met
 
 - ✅ A Verse script method taking and returning every `Variant` type is callable from GDScript,
-  proven from GDScript in the integration layer. **Two edges, both recorded in the spec rather than
-  papered over:** invoking a GDScript *lambda* through a `Callable` segfaults Godot at shutdown
-  (R-TYPE-3 — a bound Callable is fine, and holding a lambda is fine; only calling one is not), and
-  a Verse `[]float` names no single Godot type, so a script-defined method taking one declares
-  `Array` (R-TYPE-1). R-TYPE-2's *Verse spelling* of a typed array is also still absent, though
-  nothing is flattened: a typed container keeps Godot's own typing because it is never copied.
+  proven from GDScript in the integration layer. **One edge:** a Verse `[]float` names no single
+  Godot type, so a script-defined method taking one declares `Array` (R-TYPE-1). R-TYPE-2's *Verse
+  spelling* of a typed array is also still absent, though nothing is flattened: a typed container
+  keeps Godot's own typing because it is never copied. Separately, an **upstream Godot defect**
+  shows through `Callable` — a called GDScript lambda still referenced at `finish_languages()`
+  crashes the engine at exit, reproducible in eight lines with no extension loaded (R-TYPE-3).
 - ✅ A runtime error names a file and a line, and carries a Verse stack that reaches the script's
   own method.
 - ✅ The integration harness runs headless and covers the marshalling matrix — 51 cases driving a

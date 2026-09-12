@@ -740,12 +740,13 @@ int32_t VerseRuntime::api_invoke_callable(void *p_ctx, int64_t p_ref, const vh_v
 		args.push_back(vh_to_variant(p_args[i]));
 	}
 
-	// Known defect: invoking a GDScript *lambda* through here segfaults Godot at shutdown, with
-	// "orphaned lambdas becoming invalid at destruction of script" logged first. A Callable bound
-	// to a method is fine, and so is holding a lambda and handing it back -- only calling one is
-	// not. Bisected to this call; not to the table, which clearing earlier does not fix, nor to
-	// holding, which on its own exits clean. Recorded in spec R-TYPE-3 rather than worked around,
-	// because a workaround that hid it would make the next person find it the hard way.
+	// A GDScript lambda that has been called, and is still referenced when Godot runs
+	// ScriptServer::finish_languages(), segfaults the engine at exit. That is an upstream defect,
+	// not this call's: it reproduces in eight lines of GDScript with no GDExtension loaded, and
+	// GDScriptLanguage::finish names the case in its own comments (GH-102327). Spec R-TYPE-3 has
+	// the reduction. Nothing here can avoid it -- Main::cleanup finishes the languages before it
+	// deinitialises an extension, and ScriptLanguage::finish is never delivered to one -- so this
+	// is deliberately not worked around.
 	const Variant result = callable.callv(args);
 	return variant_to_vh(result, p_arena, *r_value) ? VH_CALL_OK : VH_CALL_BAD_VALUE;
 }
