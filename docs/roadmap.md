@@ -1,6 +1,6 @@
 # godot-verse — Roadmap
 
-**Status:** Draft 2 · 2026-09-11 · Phase 0 complete, Phase 1 in progress
+**Status:** Draft 2 · 2026-09-11 · Phases 0 and 1 complete
 **Companion to:** `docs/spec.md` (what must be true) and `README.md` (what is true now)
 
 ---
@@ -180,10 +180,11 @@ is simply that the host adds every snippet to the root module. The recipe is Epi
 
 ---
 
-## Phase 1 — ABI v2: dispatch, marshalling, diagnostics, and the harness that proves them
+## Phase 1 — ABI v2: dispatch, marshalling, diagnostics, and the harness that proves them ✅
 
-**In progress.** Design: [`abi-v2-design.md`](abi-v2-design.md). 1.1 and 1.3 are done and 1.2 is
-done except for the type set; what remains is listed under the exit criteria below.
+**Complete.** Design and the spikes behind it: [`abi-v2-design.md`](abi-v2-design.md). Two
+requirements landed with a documented edge rather than whole, and both are named under the exit
+criteria; nothing else is outstanding.
 
 **Why now.** R-NODE-6 is the keystone: `call_func` dispatches three hardcoded names over an ABI
 offering two call shapes, and signals, the full virtual set, `@tool`, custom resources and
@@ -215,16 +216,25 @@ extended. It must anticipate, whether or not it implements:
 Anticipating is cheap now and expensive later; a shape that has to grow a second calling
 convention has failed.
 
-### 1.2 Build the dispatch core — *dispatch done, type set outstanding*
+### 1.2 Build the dispatch core ✅
 
 - **R-NODE-6** ✅ — any method, any argument types, return values. The three-name array in
   `verse_script_instance.cpp` is gone, and so are the two call shapes under it.
 - **R-NODE-9** ✅ — the method list reports what the script defines, read out of the semantic
   program: parameters with their own names and types, result type, `<decides>`/`<suspends>`, and
   Godot's name for the virtual a method overrides.
-- **R-TYPE-1 … R-TYPE-5** — `verse_value` grows from three types to the whole `Variant` set,
-  with one documented spelling for absence (R-TYPE-4 today covers objects only).
-- **R-TYPE-6, R-TYPE-7** — no per-call allocation baked in; the plumbing stays hidden.
+- **R-TYPE-1 … R-TYPE-5** ✅ — the whole `Variant` set crosses. `variant` became a fixed-width
+  native struct of scalar lanes; the sixteen math types cross as their components, generated from
+  one layout that drives the Verse struct, the packers and the host's marshalling alike; and the
+  reference types — `Array`, `Dictionary`, `Callable`, `Signal`, the ten packed arrays — cross as
+  ids into a table the GDExtension owns, released when the Verse value wrapping one is collected.
+  R-TYPE-4's rule is that nullability is a property of the *type*, which a scan of Godot's 5304
+  documented value-typed returns settled: one real exception, editor-only.
+- **R-TYPE-6, R-TYPE-7** ✅ — the fixed-width struct *removed* the allocations the old encoding
+  made (three Verse arrays to carry one number); a reference costs a table entry, which is the
+  price of not copying a container. Unmeasured, which is R-PERF-2's job. The plumbing stayed
+  hidden, and that turned out to have teeth: because a script cannot spell a `variant`, every way
+  into and out of a container had to be a typed accessor, and those are generated.
 - **R-DIAG-2** ✅ — runtime errors report file, line and a Verse stack. Landed here rather than in
   Phase 6 because every phase after this one is easier to debug with it, and because it is an ABI
   shape, not a feature. It needed two engine hooks rather than one: the only callback handed the
@@ -239,22 +249,27 @@ convention has failed.
   are missing is reported **skipped**, never as a pass.
 - Kept the existing shape: one line per case, non-zero on failure, no framework — in GDScript too.
 
-### Phase 1 exit criteria
+### Phase 1 exit criteria — met
 
-- ⚠️ A Verse script method taking and returning every `Variant` type is callable from GDScript.
-  **Dispatch is done and the type set is not.** Any method is callable with any *currently
-  marshalled* type — `logic`, `int`, `float`, `string`, `vector2`, `vector3`, `color`, arrays of
-  those, objects — proven from GDScript in the integration layer. The remaining types are R-TYPE-1,
-  and after the spikes they are a build rather than a design: the fixed-width `variant`, the
-  reference table the ABI already declares, and `gen_verse_api.py`'s type table.
-- ✅ A runtime error names a file and a line.
-- ✅ The integration harness runs headless. Its matrix covers what §6 carries today.
-- ⬜ `demo/` still runs — not yet re-checked against ABI v2.
+- ✅ A Verse script method taking and returning every `Variant` type is callable from GDScript,
+  proven from GDScript in the integration layer. **Two edges, both recorded in the spec rather than
+  papered over:** invoking a GDScript *lambda* through a `Callable` segfaults Godot at shutdown
+  (R-TYPE-3 — a bound Callable is fine, and holding a lambda is fine; only calling one is not), and
+  a Verse `[]float` names no single Godot type, so a script-defined method taking one declares
+  `Array` (R-TYPE-1). R-TYPE-2's *Verse spelling* of a typed array is also still absent, though
+  nothing is flattened: a typed container keeps Godot's own typing because it is never copied.
+- ✅ A runtime error names a file and a line, and carries a Verse stack that reaches the script's
+  own method.
+- ✅ The integration harness runs headless and covers the marshalling matrix — 51 cases driving a
+  `.verse` script attached to a node, through `node.call()`.
+- ✅ `demo/` still runs.
 
-**What is left in this phase, in order:** the fixed-width `variant` and the Verse-side packers; the
-reference table (`ReleaseRef`, `NewRef`, `RefGet`/`RefSet`/`RefContents`, `InvokeCallable`) on both
-sides, which the header declares and neither side implements; `gen_verse_api.py`'s type table and
-the `<decides>`-per-nullable-return rule from R-TYPE-4; then `demo/`.
+**Found along the way, and worth not rediscovering:** every basis and transform3d that crossed used
+to come back transposed, because the Godot side emitted rows and rebuilt from columns;
+`operator'()'` is a reserved intrinsic, so `Data[Key]` cannot be given a meaning and container
+lookup is `Data.GetInt[Key]`; and a `var` property whose type is a nested struct or a container
+cannot exist, because Verse asks for a field-named accessor overload per nesting level that no
+single signature satisfies — those stay ordinary getter and setter methods.
 
 ---
 

@@ -1,11 +1,12 @@
 # ABI v2 — the design argument
 
-**Status:** Draft 1 · 2026-09-11 · decisions pending
+**Status:** Draft 2 · 2026-09-11 · decided and built
 **For:** roadmap Phase 1.1. **Requirements:** R-NODE-6, R-NODE-9, R-TYPE-1 … R-TYPE-7, R-DIAG-2.
 
 Roadmap §1.1 says the header is rewritten once, against the whole spec, and that "a shape that has
 to grow a second calling convention has failed." This document is the argument that precedes that
-rewrite. It records what was read, what it rules out, and what is left to decide.
+rewrite. It records what was read, what it ruled out, what the spikes measured, and what was
+decided. Phase 1 is built against it; §5 is the summary of what the header became.
 
 ---
 
@@ -382,22 +383,35 @@ exists rather than as a preference about casing.
 
 - **D-1 is settled by the spike**: reference types are handles, released through a native class'
   `BeginDestroy`. The mechanism is measured, not assumed, and it needs no `VWeakCellMap`.
+- **`variant` is a native struct, not a tuple.** Spiked after the wide-tuple measurement: a struct
+  used in a native function must itself be `<native>`, which costs a C++ shadow — the same pattern
+  `object` already uses — and buys named fields on both sides. A packer then names only the lane it
+  fills instead of spelling all twenty-three.
+- **The math types are ours, all sixteen, nested and data-only.** `/UnrealEngine.com/Temporary/
+  SpatialMath` is already a host dependency and supplies two of the sixteen with operators, but its
+  `vector3`, `transform` and `rotation` live in files named `_Deprecated`, and fourteen of the
+  sixteen have no counterpart at all. Two types with operators beside fourteen without is a worse
+  surface than sixteen consistent ones; the operators come in Phase 2 from Godot's own builtin
+  method data, for all of them.
+- **Nullability is a property of the type.** `extension_api.json` records no nullability at all —
+  8980 return values carry only `type` and `meta` — so the choice was a rule or a hand list. A scan
+  of Godot's doc XML found five value-typed returns documented as nullable out of 5304, four of
+  them false positives, and the one real case editor-only. The rule wins.
 
 So ABI v2 is:
 
 ```
-variant := tuple(
-    int,        # 0     Tag  -- Godot's Variant::Type
-    int,        # 1     Ref  -- object instance id, or an id in the GDExtension's reference table
-    int x4,     # 2-5   integer lanes: bool, int, Vector2i/3i/4i, Rect2i
-    float x16,  # 6-21  float lanes: every math struct up to Projection
-    string)     # 22    String, StringName, NodePath
+variant<native> := struct:        # a native struct: VNI marshals one given a C++ shadow
+    Tag:int                       # Godot's Variant::Type
+    Ref:int                       # instance id, or an id in the GDExtension's reference table
+    I0..I3:int                    # bool, int, Vector2i/3i/4i, Rect2i
+    F0..F15:float                 # every math struct up to Projection
+    Text:string                   # String, StringName, NodePath
 ```
 
 Hashable, so `[variant]variant` is a legal Verse type. Allocation-free for every value type.
-Reference types — `Object`, `Array`, `Dictionary`, `Callable`, `Signal`, and the packed arrays —
-ride in `Ref`, with mirrored Verse classes over them and bulk `ToMap[]`/`ToArray[]` converters so
-Verse's own idioms stay reachable. No nesting on the wire, ever.
+Reference types — `Object`, `Array`, `Dictionary`, `Callable`, `Signal`, and the ten packed arrays
+— ride in `Ref`, with mirrored Verse classes over them and generated typed accessors, because a
+script cannot spell a `variant` and so cannot unpack one itself. No nesting on the wire, ever.
 
-**Nothing is left blocking.** What remains is building it: §1.2's dispatch core, the type set,
-R-DIAG-2, and §1.3's harness.
+**Phase 1 is built.** What it cost, and what it turned up, is in the roadmap's exit criteria.
