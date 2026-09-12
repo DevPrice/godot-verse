@@ -206,10 +206,10 @@ extern "C" void vh_tick(double BudgetSeconds)
     GodotVerse::TickScripts(BudgetSeconds);
 }
 
-extern "C" int32_t vh_compile_project(const char* const* PathsUtf8, int32_t Count)
+extern "C" int32_t vh_compile_project(const vh_source_file* Files, int32_t Count, int32_t* OutGeneration)
 {
     GodotVerse::WaitForBackgroundCheck();
-    if (!PathsUtf8 || Count < 0)
+    if (!Files || Count < 0 || !OutGeneration)
     {
         return VH_ERR_ABI;
     }
@@ -219,18 +219,25 @@ extern "C" int32_t vh_compile_project(const char* const* PathsUtf8, int32_t Coun
         return VH_ERR_STATE;
     }
 
-    TArray<FUtf8String> Paths;
-    Paths.Reserve(Count);
+    TArray<GodotVerse::FScriptSource> Sources;
+    Sources.Reserve(Count);
     for (int32_t Index = 0; Index < Count; ++Index)
     {
-        if (!PathsUtf8[Index])
+        if (!Files[Index].PathUtf8)
         {
             return VH_ERR_ABI;
         }
-        Paths.Add(FUtf8String(Cstr(PathsUtf8[Index])));
+        Sources.Add({FUtf8String(Cstr(Files[Index].PathUtf8)),
+                     Files[Index].ModulePathUtf8 ? FUtf8String(Cstr(Files[Index].ModulePathUtf8)) : FUtf8String()});
     }
 
-    return GodotVerse::CompileProject(Paths) ? VH_OK : VH_ERR_COMPILE;
+    int32 Generation = 0;
+    const bool bBuilt = GodotVerse::CompileProject(Sources, Generation);
+    if (bBuilt)
+    {
+        *OutGeneration = Generation;
+    }
+    return bBuilt ? VH_OK : VH_ERR_COMPILE;
 }
 
 extern "C" int32_t vh_check_project(const char* PathUtf8, const char* SourceUtf8)

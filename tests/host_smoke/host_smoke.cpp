@@ -52,6 +52,7 @@ static const char* SeverityName(int32_t Severity)
 }
 
 static int DiagnosticCount = 0;
+static int DiagnosticErrorCount = 0;
 static int RuntimeErrorCount = 0;
 static std::string LastRuntimeErrorPath;
 static int LastRuntimeErrorLine = 0;
@@ -110,6 +111,46 @@ static std::string ReadFileUtf8(const fs::path& Path)
 	return Text;
 }
 
+/// Writes a .verse fixture the test generates rather than ships. Generations exist to pick up an
+/// edit, so a test of them has to be able to make one.
+static bool WriteFileUtf8(const fs::path& Path, const std::string& Text)
+{
+	FILE* File = nullptr;
+	if (fopen_s(&File, Path.string().c_str(), "wb") != 0 || !File)
+	{
+		return false;
+	}
+	const size_t Written = fwrite(Text.data(), 1, Text.size(), File);
+	fclose(File);
+	return Written == Text.size();
+}
+
+/// The generation fixture's text. Generation N reports N, so which generation an instance is
+/// running is a question the instance itself can answer.
+static std::string ReloadProbeSource(int Generation)
+{
+	return R"VERSE(using { /Godot.org/Godot }
+
+# Declared at the project root, and read from inside a module below, which is what says root is
+# implicit and needs no `using`.
+ReloadProbeShared<public>():int = 10
+
+reload_probe := class(object):
+    Generation<public>():int = )VERSE"
+		   + std::to_string(Generation) + "\n";
+}
+
+/// A second file, placed in a module rather than at the root. Its body names a root definition
+/// with nothing imported, which is the other half of what the OQ-12 run has to confirm.
+static std::string ModuleProbeSource()
+{
+	return R"VERSE(using { /Godot.org/Godot }
+
+module_probe := class(object):
+    Total<public>():int = ReloadProbeShared() + 5
+)VERSE";
+}
+
 /// Prints the provenance record build_host.py leaves beside the DLL, so a test log says which
 /// engine revision produced the host it just exercised. Absent when the DLL was copied by hand.
 static void ReportProvenance(const fs::path& DllPath)
@@ -146,6 +187,10 @@ static void ReportProvenance(const fs::path& DllPath)
 static void SmokeOnDiagnostic(void*, const vh_diagnostic* Diagnostic)
 {
 	++DiagnosticCount;
+	if (Diagnostic->Severity == VH_SEVERITY_ERROR)
+	{
+		++DiagnosticErrorCount;
+	}
 	fprintf(stderr, "%.*s:%d:%d: %s: %.*s\n",
 		Diagnostic->FilePathLen, Diagnostic->FilePathUtf8,
 		Diagnostic->Line, Diagnostic->Column,
@@ -273,16 +318,45 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
-	// One call for both fixtures: Verse builds a whole package at once, and the host may only
-	// generate once per process.
-	std::string VersePathUtf8 = VersePath.string();
-	std::string ExportsPathUtf8 = ExportsPath.string();
-	const char* ProjectPaths[2] = { VersePathUtf8.c_str(), ExportsPathUtf8.c_str() };
-	if (!Step("vh_compile_project", CompileProjectFn(ProjectPaths, 2) == VH_OK))
+	// One call for every fixture: Verse builds a whole package at once, so every script that will
+	// run has to be in the list.
+	//
+	// reload_probe is written rather than shipped, because the generation checks below need a file
+	// whose text changes between builds. It is in generation 1 so an instance of it can outlive
+	// generation 1.
+	const fs::path ScratchDir = fs::temp_directory_path() / "godot_verse_smoke";
+	std::error_code ScratchError;
+	fs::create_directories(ScratchDir, ScratchError);
+	const fs::path ReloadPath = ScratchDir / "reload_probe.verse";
+	const fs::path ModuleProbePath = ScratchDir / "module_probe.verse";
+	if (!Step("write the reload fixture", WriteFileUtf8(ReloadPath, ReloadProbeSource(1))))
 	{
 		ShutdownFn();
 		return 1;
 	}
+
+	std::string VersePathUtf8 = VersePath.string();
+	std::string ExportsPathUtf8 = ExportsPath.string();
+	std::string ReloadPathUtf8 = ReloadPath.string();
+	std::string ModuleProbePathUtf8 = ModuleProbePath.string();
+	vh_source_file ProjectFiles[3] = {
+		{ VersePathUtf8.c_str(), nullptr },
+		{ ExportsPathUtf8.c_str(), nullptr },
+		{ ReloadPathUtf8.c_str(), nullptr },
+	};
+	int32_t Generation = 0;
+	if (!Step("vh_compile_project", CompileProjectFn(ProjectFiles, 3, &Generation) == VH_OK))
+	{
+		ShutdownFn();
+		return 1;
+	}
+	Step("the first build is generation 1", Generation == 1);
+
+	// Instantiated here rather than beside the generation checks below, because the point of it is
+	// to be older than the second generation.
+	vh_instance* GenerationOne = nullptr;
+	Step("vh_instantiate against generation 1",
+		 InstantiateFn("reload_probe", 3, &GenerationOne) == VH_OK && GenerationOne != nullptr);
 
 	// Symbol lookup, asked before anything has edited a buffer. That is the state the editor is
 	// in at startup, and it is the interesting one: the build just done generated code, which
@@ -1056,6 +1130,66 @@ int main(int argc, char** argv)
 
 	bool CallsOk = true;
 	TickFn(0.0);
+
+	// --- Phase 3 / OQ-12: a second generation, at the same verse path -------------------------
+	//
+	// What this answers is whether a generation may change the package *name* while the verse path
+	// stays /user@localhost. It has to: a module path is user-visible text the editor writes into
+	// the author's own file (R-TOOL-12), and a path carrying a generation number would be
+	// invalidated by the author's next save.
+	//
+	// The second half of the same run is cheaper to ask here than anywhere else: module_probe sits
+	// in a `gameplay` module and its body names a definition declared at the root with no `using`
+	// written, so the build succeeding is what says root is implicit from inside a submodule.
+	//
+	// Deliberately before everything below rather than after it, so that every check in the rest
+	// of this file runs against the *second* generation. A generation that only half works would
+	// otherwise look fine here and fail in an editor.
+	{
+		auto ReadGeneration = [&](vh_instance* Instance) -> int64_t {
+			vh_value Result{};
+			if (!Instance
+				|| InstanceCallFn(Instance, "(/user@localhost/reload_probe:)Generation", nullptr, 0, nullptr, &Result) != VH_OK
+				|| Result.Type != VH_TYPE_INT)
+			{
+				return -1;
+			}
+			return Result.Int;
+		};
+
+		CallsOk = Step("generation 1's instance reports generation 1", ReadGeneration(GenerationOne) == 1) && CallsOk;
+		CallsOk = Step("write the edited fixture and a module beside it",
+					   WriteFileUtf8(ReloadPath, ReloadProbeSource(2))
+						   && WriteFileUtf8(ModuleProbePath, ModuleProbeSource())) && CallsOk;
+
+		vh_source_file SecondFiles[4] = {
+			{ VersePathUtf8.c_str(), nullptr },
+			{ ExportsPathUtf8.c_str(), nullptr },
+			{ ReloadPathUtf8.c_str(), nullptr },
+			{ ModuleProbePathUtf8.c_str(), "gameplay" },
+		};
+		int32_t SecondGeneration = 0;
+		DiagnosticErrorCount = 0;
+		const bool SecondBuilt = CompileProjectFn(SecondFiles, 4, &SecondGeneration) == VH_OK;
+		CallsOk = Step("a second vh_compile_project in the same process builds", SecondBuilt) && CallsOk;
+		CallsOk = Step("and reports generation 2", SecondGeneration == 2) && CallsOk;
+		CallsOk = Step("a file in a module reaches a root definition with nothing imported",
+					   SecondBuilt && DiagnosticErrorCount == 0) && CallsOk;
+
+		vh_instance* Fresh = nullptr;
+		CallsOk = Step("the new generation's class is what resolves now",
+					   InstantiateFn("reload_probe", 4, &Fresh) == VH_OK && Fresh != nullptr) && CallsOk;
+		CallsOk = Step("and a fresh instance runs the edited code", ReadGeneration(Fresh) == 2) && CallsOk;
+
+		// The whole no-adoption rule, in one line: nothing transferred state, so the instance made
+		// against generation 1 is still running generation 1's class.
+		CallsOk = Step("while the instance from generation 1 keeps its own class",
+					   ReadGeneration(GenerationOne) == 1) && CallsOk;
+
+		ReleaseInstanceFn(Fresh);
+		ReleaseInstanceFn(GenerationOne);
+	}
+
 	// The check that the verse path the host builds for a script's class --
 	// /user@localhost/<file stem> -- is the one the semantic program actually files it under;
 	// everything about exports depends on that string being right.

@@ -1633,9 +1633,12 @@ Error VerseScriptLanguage::ensure_project_built() {
 
 	const PackedStringArray sources = find_verse_sources("res://");
 	PackedStringArray globalized;
+	PackedStringArray modules;
 	ProjectSettings *settings = ProjectSettings::get_singleton();
 	for (int64_t i = 0; i < sources.size(); i++) {
 		globalized.push_back(settings->globalize_path(sources[i]));
+		// Every file is in the root module until Phase 3 stage 4 reads the .vmodule markers.
+		modules.push_back(String());
 	}
 
 	// The host reports against the absolute path it was handed; scripts are keyed by res:// path.
@@ -1645,7 +1648,7 @@ Error VerseScriptLanguage::ensure_project_built() {
 	}
 
 	Dictionary errors_by_globalized;
-	const Error status = runtime->compile_project(globalized, &errors_by_globalized);
+	const Error status = runtime->compile_project(globalized, modules, &errors_by_globalized);
 
 	record_diagnostics(errors_by_globalized);
 

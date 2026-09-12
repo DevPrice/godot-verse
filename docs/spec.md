@@ -796,11 +796,13 @@ the export *shape* stay live per keystroke; only generated code waits for a buil
 **Instances adopt nothing**: a live instance keeps its own generation's class, which is what
 R-ITER-4 asks for and costs no state-transfer path across the ABI.
 
-**One thing about the mechanism is still unknown, and it gates the phase.** S-2 gave each generation
-its own package *name*. Whether the *verse path* `/user@localhost` held across those generations is
-not recorded, and it decides whether a user-written module path — which R-TOOL-12 writes into the
-author's own file — survives the author's next save. It is **OQ-12**, and Phase 3's first stage is
-the spike that closes it.
+**The last unknown about the mechanism is now closed.** S-2 gave each generation its own package
+*name* but did not record whether the *verse path* `/user@localhost` held across those generations
+— which decides whether a user-written module path, the sort R-TOOL-12 writes into the author's own
+file, survives the author's next save. It does: **the name changes and the path is pinned**, and the
+one thing that has to happen besides is that the retiring generation's package leaves the *source
+project* before the next build, or every class in it is declared twice at one path. **OQ-12**, closed
+in §14.1 with what the run also confirmed about root being implicit from a submodule.
 
 ---
 
@@ -818,7 +820,12 @@ the spike that closes it.
   clickable, and the rest of the stack follows it. *Known shape:* a raise inside the generated
   mirror reports the mirror's line as the site, with the script's own frame further out — which is
   where it was raised, and the stack is what carries the author's line.
-- **R-DIAG-3 (MUST)** A script error never takes down the editor or the game process.
+- **R-DIAG-3 (MUST)** A script error never takes down the editor or the game process. Status:
+  **none**, and one half of it is worse than absent. A raised Verse runtime error does not crash the
+  process — but after one, every later `vh_instance_call` returns `VH_OK` with **no result value**,
+  so a method declared `:int` silently answers as if it were `:void` for the rest of the session.
+  Found while closing OQ-12 (§14.1 has the reproduction) and not caused by it. In an editor that
+  never restarts, one script's mistake quietly empties every later method result.
 - **R-DIAG-4 (MUST)** Godot's own debugger works on Verse: breakpoints in the script editor, step
   in/over/out, the call stack, local and member inspection, and expression evaluation at a
   breakpoint.
@@ -921,13 +928,49 @@ A closed question keeps its row so that the reason it is closed is not lost.
 | **OQ-8** ✅ | Which hot-reload mechanism: fresh package name per generation, out-of-process compilation, or an engine change? | all of §10, and R-EXP-5 | **Closed: fresh package name per generation**, with `IncrementalizeProjectSource` before each build. See §14.1. |
 | **OQ-9** | Can any DAP client speak `Verse::SocketDebugger`'s framing? | R-DIAG-6 | Only worth answering if R-DIAG-4 (Godot's own debugger) turns out to be blocked. |
 | **OQ-10** | Can an editor-class UBT Program target be built — `bCompileAgainstEditor`, and therefore `bCompileAgainstEngine`? Cooking Verse needs `WITH_EDITOR=1` (§14.1), and nothing else this project builds does. | R-DIST-9, R-DIST-10, R-DIST-11 | Opened by the S-1 answer. Attempt it at the start of Phase 7. The one prior attempt failed on Engine module links, but it was made for a *lean* host, where the weight was the objection; a cooker that runs only at export has no such constraint. Fallback: cook through a real UE editor or commandlet process. |
-| **OQ-12** | Does a generation change the package *name* only, or the *verse path* too? S-2 varied the name; whether `/user@localhost` held across generations is not recorded. Module paths are user-visible text that R-TOOL-12 writes into the author's file, and `ScriptVersePath` is compiled into eight lookup sites in `HostScript.cpp`. | R-LANG-6, R-TOOL-12, and the shape of Phase 3 | **Phase 3's first stage**, before anything else in it starts. Publish generation N as a fresh package name with the verse path pinned, and check that publishing does not assert, that the new generation resolves, and that an older instance still resolves against its own. Negative answer: a stable public path decoupled from the package name, or a per-generation alias module. |
+| **OQ-12** ✅ | Does a generation change the package *name* only, or the *verse path* too? S-2 varied the name; whether `/user@localhost` held across generations was not recorded. Module paths are user-visible text that R-TOOL-12 writes into the author's file, and `ScriptVersePath` is compiled into eight lookup sites in `HostScript.cpp`. | R-LANG-6, R-TOOL-12, and the shape of Phase 3 | **Closed: the name only.** The verse path is pinned at `/user@localhost` across generations and nothing in `HostScript.cpp` learns which generation it is asking about. See §14.1. |
 | **RISK-1** | UE's licensing applies to games shipped with the host, including royalties. This is a permanent property of the current distribution model and may deter adoption regardless of anything built here. | adoption | Disclose prominently (R-DIST-3). No mitigation available. |
 | **RISK-2** | Tracking Godot `master` and UE `main` simultaneously means two moving dependencies with no compatibility window. | R-QUAL-7 | Accepted deliberately while pre-1.0; revisit at the first release. |
 
 ### 14.1 Answers from the Phase 0 spikes
 
 Evidence, measurements and code citations: [`phase-0-spikes.md`](phase-0-spikes.md).
+
+**OQ-12 — a generation changes the package name only; the verse path is pinned.**
+
+Answered by the first stage of Phase 3 rather than by a Phase 0 spike, and it is the thing the rest
+of that phase rested on. `GodotScripts_N` publishes at `/user@localhost` for every N, and:
+
+- publishing generation N+1 over the same verse path does **not** assert on a duplicate definition,
+  provided generation N's package is removed from the *source project* first. It is only the source
+  that has to go; the published package stays live in the VM, which is what lets an old instance
+  keep running and is also the leak R-ITER-6 tracks;
+- `LookupDefinition` finds the new generation's class at the unchanged path, so `vh_has_class`,
+  `vh_instantiate` and the five other lookups that concatenate `ScriptVersePath` are untouched;
+- an instance made against generation N goes on answering with generation N's code after N+1 is
+  published — no adoption, which is R-ITER-4's meaning and costs no state-transfer path;
+- `FSolarisModule::IncrementalizeProjectSource` before each `BuildAll` is what keeps the build from
+  republishing the already-loaded native VNI packages, which is where S-2's first attempt died.
+
+Confirmed in the same run: a file in a submodule reaches a definition declared in the **root**
+module with no `using` written. Root is implicit by ordinary lexical scoping, so Phase 3 §3's
+"root is implicit" costs nothing to build.
+
+The negative branch — a stable public path decoupled from the package name, or a per-generation
+alias module — is not needed and was not built. `tests/host_smoke` carries the whole answer as
+running checks, with the rest of that suite deliberately running against the *second* generation so
+that a generation which only half works cannot pass.
+
+**One defect found while answering it, which is not Phase 3's and is recorded so it is not lost.**
+After a Verse runtime error is raised out of a script, every later `vh_instance_call` in the process
+returns `VH_OK` with **no result value** — a method declared `:int` answers as if it were `:void`.
+The call itself still runs; only the result is lost. Reproduced with `exports.TouchTarget` (which
+raises deliberately, for R-DIAG-2) followed by `exports.AddInts`, which returns nothing rather than
+42. It predates this work — nothing in the generations change touches the VM or the raise path —
+and was invisible until now because no test called a value-returning method after a raise. It
+belongs with **R-DIAG-3** (a script error must not take the editor down with it), and it is worse
+than it looks in an editor that never restarts: one script's mistake silently empties every later
+method result in the session.
 
 **OQ-2 — an exported game ships precompiled Verse and a runtime-only host.**
 

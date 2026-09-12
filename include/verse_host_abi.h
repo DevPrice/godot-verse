@@ -42,7 +42,7 @@ extern "C" {
  * The mismatch surfaces at vh_init, not at compile time, because the two sides are compiled by
  * different toolchains and nothing links them.
  */
-#define VH_ABI_VERSION_MAJOR 2
+#define VH_ABI_VERSION_MAJOR 3
 #define VH_ABI_VERSION_MINOR 0
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
@@ -402,21 +402,44 @@ VH_ATTR VH_API void vh_shutdown(void);
  * only ever released from here. */
 VH_ATTR VH_API void vh_tick(double BudgetSeconds);
 
-/* Compiles every listed .verse file as ONE Verse program.
+/* One .verse file, and where in the project's module tree it belongs. */
+typedef struct vh_source_file
+{
+	/* Absolute path to the file on disk. */
+	const char* PathUtf8;
+
+	/* The module the file's definitions go into: a '/'-separated path of Verse identifiers,
+	 * relative to the project's root module. NULL or "" puts the file in the root module, which
+	 * is where every file in a project with no modules lives.
+	 *
+	 * The consumer decides this, not the host -- which directories are modules is a question
+	 * about res://, and the host never learns what res:// means. */
+	const char* ModulePathUtf8;
+} vh_source_file;
+
+/* Compiles every listed .verse file as ONE Verse program, publishing a new generation of it.
  *
- * Verse's compilation unit is the package, not the file, and this is not a preference: a second
- * build in the same process re-notifies already-loaded native Verse packages and aborts inside
- * the async loader. So this may be called once per process, and every script the host will ever
- * run has to be in the list. (Roadmap Phase 3 lifts this; spec §14.1 has the mechanism.)
+ * Verse's compilation unit is the package, not the file, so every script the host will ever run
+ * has to be in the list: a build is always of the whole project.
  *
- * All the files share one flat scope, so each must name its class after its own file stem or its
- * definitions collide with every other script's. */
-VH_ATTR VH_API int32_t vh_compile_project(const char* const* PathsUtf8, int32_t Count);
+ * Callable as often as the consumer likes. Each call publishes a package this process has not
+ * published before -- publishing marks a package's exports LoaderImport and republishing that
+ * same package asserts on the flag -- and writes the new generation's number through
+ * OutGeneration, which counts from 1. Instances made against an earlier generation keep their
+ * own class and go on running; nothing adopts the new one. The previous generation's package is
+ * retained rather than reclaimed, which costs memory per generation (spec R-ITER-6).
+ *
+ * A failed build publishes nothing: the previous generation keeps running and OutGeneration is
+ * left alone. Diagnostics are reported through the init callback.
+ *
+ * Class names in this ABI are qualified by module from here on: `player` for a file in the root
+ * module, `gameplay/player` for one in the `gameplay` module. */
+VH_ATTR VH_API int32_t vh_compile_project(const vh_source_file* Files, int32_t Count, int32_t* OutGeneration);
 
 /* Re-runs semantic analysis over the already-compiled project with one file's text replaced,
  * reporting diagnostics through the init callback. Generates no code, so the running program is
- * unchanged and this is safe to call repeatedly -- unlike vh_compile_project, which may run once
- * per process. Returns VH_OK when the project still analyses clean.
+ * unchanged and this is safe to call repeatedly -- unlike vh_compile_project, which publishes a
+ * generation every time. Returns VH_OK when the project still analyses clean.
  *
  * Blocks for the length of a whole-project analysis (~100ms on a three-file project), which is a
  * visible stall if called from an editor's UI thread. Prefer the _begin/_poll pair below. */
@@ -532,8 +555,8 @@ typedef struct vh_method_desc
 /* Every method ClassNameUtf8 declares, including the ones that override a Godot virtual.
  *
  * Read out of the semantic program the last analysis left behind, like vh_class_export_list and
- * for the same reason: analysis re-runs as often as the editor types while code generation may
- * run once per process, so this is the only method list that can refresh without a restart.
+ * for the same reason: analysis re-runs as often as the editor types while code generation runs
+ * only when a generation is built, so this is the method list that refreshes per keystroke.
  *
  * OutMethods points into storage owned by the host, valid until the next call to this function.
  * Returns VH_ERR_NOT_FOUND when the class does not exist in the analysed program. */
@@ -714,8 +737,8 @@ typedef struct vh_export_desc
  * Read out of the semantic program the last analysis pass left behind, NOT out of the running
  * bytecode -- so this answers for the source as vh_check_project last saw it, and a member added
  * to a file since then shows up here while being absent from every live instance. That is the
- * point: analysis may re-run as often as the editor types, while vh_compile_project may not run
- * twice in a process, so this is the only export list that can refresh without a restart.
+ * point: analysis may re-run as often as the editor types, while vh_compile_project runs only
+ * when a generation is built, so this is the export list that refreshes per keystroke.
  *
  * OutExports points into storage owned by the host, valid until the next call to this function.
  * Returns VH_ERR_NOT_FOUND when the class does not exist in the analysed program. */
@@ -1026,7 +1049,7 @@ typedef int32_t (*vh_abi_version_fn)(void);
 typedef int32_t (*vh_init_fn)(const vh_init_desc*);
 typedef void (*vh_shutdown_fn)(void);
 typedef void (*vh_tick_fn)(double);
-typedef int32_t (*vh_compile_project_fn)(const char* const*, int32_t);
+typedef int32_t (*vh_compile_project_fn)(const vh_source_file*, int32_t, int32_t*);
 typedef int32_t (*vh_check_project_fn)(const char*, const char*);
 typedef int32_t (*vh_check_project_begin_fn)(const char*, const char*);
 typedef int32_t (*vh_check_project_poll_fn)(vh_bool*);

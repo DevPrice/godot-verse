@@ -1,7 +1,8 @@
 # Phase 3 — what a project is: the source set, live
 
-**Status:** Draft 2 · 2026-09-12 · nothing implemented. Draft 2 moved the build trigger off save and
-onto Play, and added §2.5 and §2.6.
+**Status:** Draft 2 · 2026-09-12 · stages 0–2 done. Draft 2 moved the build trigger off save and
+onto Play, and added §2.5 and §2.6. **§1's spike is answered — affirmatively — and nothing in this
+document is redesigned by it;** §1 records what the run found, and `spec.md` §14.1 is the record.
 **Companion to:** [`roadmap.md`](roadmap.md) §"Phase 3", [`spec.md`](spec.md) §10 and §14.1,
 [`phase-0-spikes.md`](phase-0-spikes.md) S-2 and S-3.
 
@@ -78,6 +79,34 @@ is the other one.
 **If the answer is negative**, the fallback is a stable *public* path decoupled from the package
 name, or a per-generation alias module. Either is a design change large enough that it must land
 before Stage 1, not after. **Nothing else in this phase starts until this is written down.**
+
+### 1.1 The answer: the name only
+
+**The verse path is pinned and the package name carries the generation.** Not one of the eight
+lookup sites in `HostScript.cpp` learns which generation it is asking about; `ScriptVersePath` is
+still a `constexpr`. What the run found, all of it now running as checks in `tests/host_smoke`:
+
+- publishing generation N+1 at the same verse path does not assert on a duplicate definition
+  **provided generation N's package leaves the *source project* first**. That is the one thing the
+  question did not anticipate and it is a two-line function (`RemoveScriptPackage`): only the
+  *source* goes, while the published package stays live in the VM, which is exactly what lets an old
+  instance keep running and is also R-ITER-6's leak;
+- `LookupDefinition` finds the new generation's class at the unchanged path;
+- an instance made against generation N keeps answering with generation N's code — R-ITER-4, free;
+- `IncrementalizeProjectSource` before each `BuildAll` is what stops the build republishing the
+  already-loaded native VNI packages, which is where S-2's first attempt died.
+
+Confirmed in the same run, as §1 asked: a file in a submodule reaches a definition in the **root**
+module with nothing imported. §3's "root is implicit" therefore costs nothing to build.
+
+The spike's checks are deliberately placed **before** the rest of `host_smoke` rather than after it,
+so every remaining check in that file runs against the *second* generation. A generation that only
+half worked would otherwise pass here and fail in an editor.
+
+**One defect found on the way, which is not this phase's.** After a Verse runtime error is raised,
+every later `vh_instance_call` returns `VH_OK` with no result value — a method declared `:int`
+answers as if it were `:void`. It predates this work and is recorded against **R-DIAG-3** in
+`spec.md`, with the reproduction in §14.1.
 
 ---
 

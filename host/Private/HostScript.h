@@ -14,15 +14,29 @@ namespace GodotVerse {
 AUTORTFM_DISABLE bool EnterContentScope();
 AUTORTFM_DISABLE void LeaveContentScope();
 
-/// Adds every path as a data source and builds them as one program. Callable once per process:
-/// a second BuildAll re-notifies already-loaded native Verse packages and aborts in the async
-/// loader, so a rebuild is refused with a diagnostic rather than attempted.
-AUTORTFM_DISABLE bool CompileProject(const TArray<FUtf8String>& Paths);
+/// One source file of the project, and the module its definitions go into.
+struct FScriptSource
+{
+    FUtf8String Path;
+    /// '/'-separated, relative to the package's root module. Empty is the root module itself.
+    FUtf8String ModulePath;
+};
+
+/// Builds every source as one program and publishes it as a new generation, writing that
+/// generation's number -- counting from 1 -- through OutGeneration.
+///
+/// Callable as often as the caller likes. Each generation gets a package name no publish has
+/// used, because publishing marks a package's exports LoaderImport and republishing the same
+/// package asserts on the flag; the previous generation's package is retired from the source
+/// project but stays live in the VM, so its instances go on running against it.
+///
+/// A failed build publishes nothing and leaves OutGeneration alone.
+AUTORTFM_DISABLE bool CompileProject(const TArray<FScriptSource>& Sources, int32& OutGeneration);
 /// Re-runs semantic analysis over the whole project with one file's text replaced by the
 /// editor's unsaved buffer, reporting fresh diagnostics through the init callback. Generates
 /// nothing, so the running program is untouched and this may be called as often as the editor
-/// asks -- it is the second BuildAll that CompileProject cannot do, minus the code generation
-/// that is what actually cannot happen twice.
+/// asks -- it is a CompileProject with the code generation taken out, which is both the
+/// expensive half and the half that publishes.
 AUTORTFM_DISABLE bool CheckProject(const FUtf8String& Path, const FUtf8String& SourceText);
 
 /// Starts CheckProject on a thread we own. False when one is already in flight -- only one runs

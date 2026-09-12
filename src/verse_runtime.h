@@ -63,12 +63,21 @@ public:
 
 	void tick(double p_budget_seconds);
 
-	// Verse's compilation unit is the package, not the file, and the host can only build once
-	// per process, so every .verse file in the project is compiled together.
+	// Verse's compilation unit is the package, not the file, so every .verse file in the project
+	// is built together -- a build is always of the whole project. Each successful call publishes
+	// a new generation; instances made against an earlier one keep running against it.
+	//
+	// p_module_paths runs parallel to p_globalized_paths and says which module each file's
+	// definitions go into, "" being the project's root module. Godot answers that question because
+	// it is a question about res://, which the host knows nothing about.
 	//
 	// While r_diagnostics_by_path is non-null every diagnostic the host reports is filed under
 	// its own source path as { line, column, message, path } instead of reaching the output log.
-	godot::Error compile_project(const godot::PackedStringArray &p_globalized_paths, godot::Dictionary *r_diagnostics_by_path);
+	godot::Error compile_project(const godot::PackedStringArray &p_globalized_paths, const godot::PackedStringArray &p_module_paths, godot::Dictionary *r_diagnostics_by_path);
+
+	// Which generation the last successful compile_project published, counting from 1; 0 before
+	// the first. A failed build does not advance it.
+	int32_t script_generation() const { return generation; }
 	// Re-runs semantic analysis with one file's text replaced, filing diagnostics the same way
 	// compile_project does. Generates nothing, so it is safe to call as often as the editor asks.
 	godot::Error check_project(const godot::String &p_globalized_path, const godot::String &p_source, godot::Dictionary *r_diagnostics_by_path);
@@ -165,6 +174,7 @@ private:
 	vh_init_desc init_desc = {};
 	vh_godot_api godot_api = {};
 	godot::Dictionary *diagnostic_sink = nullptr;
+	int32_t generation = 0;
 
 	godot::Error load_host_internal(const godot::String &p_dll_path, const godot::String &p_engine_dir, bool p_enable_debugger);
 

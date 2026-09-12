@@ -73,13 +73,13 @@
 
 namespace {
 
-/// The package the project's scripts are built into.
+/// What every generation's package name starts with; the generation number finishes it.
 ///
 /// Not ISolIdeDataSource::DefaultDataSourceName, which is what ISolarisIde::AddDataSource would
 /// have picked: the name has to be the host's to choose, because publishing a package marks its
-/// exports LoaderImport and publishing that same package again asserts on the flag. A second
-/// generation therefore needs a name no publish has used, and a name the IDE owns cannot be one.
-constexpr const char* ScriptPackageName = "GodotScripts";
+/// exports LoaderImport and publishing that same package again asserts on the flag. A generation
+/// is therefore a name no publish has used, and a name the IDE owns cannot be one.
+constexpr const char* ScriptPackageBaseName = "GodotScripts";
 constexpr const char* ScriptVersePath = "/user@localhost";
 constexpr const char* MainFunctionName = "Main(:[][]char,:[[]char][]char)";
 
@@ -185,6 +185,25 @@ using FMainFunction = TVerseFunction<FVerseResult(
     TVerseCall<void>, const TArray<verse::string>&, const TMap<verse::string, verse::string>&)>;
 
 TSharedPtr<ISolarisIde> GIde;
+
+/// The project source the IDE builds, kept because IncrementalizeProjectSource is asked for it
+/// by the caller rather than reachable from the IDE.
+TOptional<TSharedRef<ISolIdeSourceProject>> GSourceProject;
+
+/// How many generations have been published, and the name of the newest one's package. Zero and
+/// empty until the first build: every lookup that names the package answers nothing until then,
+/// which is the state the editor is in before its first Play.
+int32 GScriptGeneration = 0;
+FUtf8String GScriptPackageName;
+
+/// The package the *source project* currently holds, which is not the same thing: a build that
+/// failed published nothing but left its source behind for analysis to report against, so this
+/// is the name the next build has to retire while GScriptPackageName stays where it was.
+FUtf8String GScriptSourcePackageName;
+
+/// Whether a generation has ever been published. Not a latch against a second one -- that is the
+/// point of the phase -- but the guard on everything that reads a semantic program, which does
+/// not exist until the first build makes one.
 bool GProjectBuilt = false;
 
 /// Lets `/Godot.org/` declare attributes of its own.
@@ -248,10 +267,11 @@ AUTORTFM_DISABLE void AddAttributePackage(ISolarisIde& Ide)
 /// package's definitions do not resolve however a script spells the `using`. Taken fresh for the
 /// package named rather than once for the project, which is what lets a later generation depend
 /// on the same set without inheriting an earlier generation's entry.
-AUTORTFM_DISABLE void AddScriptPackage(uLang::CProgramBuildManager& BuildManager, const char* PackageName)
+AUTORTFM_DISABLE void AddScriptPackage(uLang::CProgramBuildManager& BuildManager, const FUtf8String& PackageName)
 {
     const uLang::CSourceProject::SPackage& Package =
-        BuildManager.FindOrAddSourcePackage(PackageName, ScriptVersePath);
+        BuildManager.FindOrAddSourcePackage(
+            FULangConversionUtils::FUtf8StringToULangStr(PackageName), ScriptVersePath);
     Package._Package->SetVerseScope(uLang::EVerseScope::InternalUser);
     Package._Package->SetVerseVersion(Verse::Version::LatestUnstable);
     Package._Package->SetAllowExperimental(true);
@@ -265,6 +285,71 @@ AUTORTFM_DISABLE void AddScriptPackage(uLang::CProgramBuildManager& BuildManager
         }
     }
     Package._Package->SetDependencyPackages(uLang::Move(Dependencies));
+}
+
+/// Drops a generation's package out of the source project.
+///
+/// The generation that published it is still live in the VM and its instances still run; what
+/// goes is only the *source* the next build compiles. Without this every class in the project
+/// would be declared twice at the same verse path -- the retired generation's snippets and the
+/// new one's -- and the build would report a redefinition for each.
+AUTORTFM_DISABLE void RemoveScriptPackage(uLang::CProgramBuildManager& BuildManager, const FUtf8String& PackageName)
+{
+    if (PackageName.IsEmpty())
+    {
+        return;
+    }
+
+    uLang::TArray<uLang::CSourceProject::SPackage>& Packages = BuildManager.GetSourceProject()->_Packages;
+    for (int32 Index = Packages.Num() - 1; Index >= 0; --Index)
+    {
+        if (FUtf8String(Packages[Index]._Package->GetName().AsCString()) == PackageName)
+        {
+            Packages.RemoveAt(Index);
+        }
+    }
+}
+
+/// The module a source file's definitions go into, creating it and every module on the way.
+///
+/// An empty path is the package's root module, which is where a project with no `.vmodule`
+/// markers puts every one of its files.
+AUTORTFM_DISABLE uLang::CSourceModule& FindOrAddModule(uLang::CSourceModule& Root, const FUtf8String& ModulePath)
+{
+    uLang::CSourceModule* Module = &Root;
+    FUtf8String Remaining = ModulePath;
+    while (!Remaining.IsEmpty())
+    {
+        FUtf8String Name;
+        int32 Slash = INDEX_NONE;
+        if (Remaining.FindChar(UTF8CHAR('/'), Slash))
+        {
+            Name = Remaining.Left(Slash);
+            Remaining.RightChopInline(Slash + 1);
+        }
+        else
+        {
+            Name = Remaining;
+            Remaining.Empty();
+        }
+
+        if (Name.IsEmpty())
+        {
+            continue;
+        }
+
+        const uLang::CUTF8String ULangName = FULangConversionUtils::FUtf8StringToULangStr(Name);
+        if (uLang::TOptional<uLang::TSRef<uLang::CSourceModule>> Existing = Module->FindSubmodule(ULangName))
+        {
+            Module = Existing.GetValue().Get();
+            continue;
+        }
+
+        uLang::TSRef<uLang::CSourceModule> Added = uLang::TSRef<uLang::CSourceModule>::New(ULangName);
+        Module->_Submodules.Add(Added);
+        Module = Added.Get();
+    }
+    return *Module;
 }
 
 /// Whether the semantic program the IDE currently holds came from an analysis-only build.
@@ -369,7 +454,7 @@ AUTORTFM_DISABLE void ForwardSolDiagnostic(const FSolDiagnostic& Diagnostic)
 /// name, and a name that is one character off just silently fails to resolve.
 AUTORTFM_DISABLE void ReportPackageDefinitions()
 {
-    Verse::VPackage* Package = Verse::GlobalProgram ? Verse::GlobalProgram->LookupPackage(ScriptPackageName) : nullptr;
+    Verse::VPackage* Package = Verse::GlobalProgram ? Verse::GlobalProgram->LookupPackage(GScriptPackageName) : nullptr;
     if (!Package)
     {
         GodotVerse::ReportInfo(UTF8TEXT("No script package is loaded."));
@@ -425,6 +510,7 @@ AUTORTFM_DISABLE bool EnsureIde()
     TSharedRef<ISolarisIde> Ide = SolarisModule.MakeDevEnvironment(IdeConfig);
     Ide->SetSourceProject(*MaybeSourceProject);
     AddAttributePackage(*Ide);
+    GSourceProject = MaybeSourceProject;
     GIde = Ide;
     return true;
 }
@@ -457,21 +543,16 @@ AUTORTFM_DISABLE void GodotVerse::ResetScriptState()
 {
     LeaveContentScope();
     GScriptSnippets.Empty();
+    GSourceProject.Reset();
     GIde.Reset();
+    GScriptGeneration = 0;
+    GScriptPackageName.Empty();
+    GScriptSourcePackageName.Empty();
     GProjectBuilt = false;
 }
 
-AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FUtf8String>& Paths)
+AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FScriptSource>& Sources, int32& OutGeneration)
 {
-    if (GProjectBuilt)
-    {
-        ReportError(UTF8TEXT("The Verse program has already been built in this process. A second "
-                             "generating build aborts the engine, so a script added after startup is "
-                             "not picked up, and neither is a declared default changed in code, "
-                             "until the process restarts."));
-        return false;
-    }
-
     if (!EnsureIde())
     {
         return false;
@@ -484,31 +565,65 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FUtf8String>& Path
         return false;
     }
 
-    AddScriptPackage(*BuildManager, ScriptPackageName);
-
-    for (const FUtf8String& Path : Paths)
+    // Read every file before touching the project, so a missing one leaves the previous
+    // generation's source exactly as it was rather than half replaced.
+    TArray<FUtf8String> Texts;
+    Texts.Reserve(Sources.Num());
+    for (const FScriptSource& Source : Sources)
     {
         FString SourceText;
-        if (!FFileHelper::LoadFileToString(SourceText, *FString(Path)))
+        if (!FFileHelper::LoadFileToString(SourceText, *FString(Source.Path)))
         {
-            ReportError(FUtf8String(TEXT("Failed to open Verse source file: ")) + Path);
+            ReportError(FUtf8String(TEXT("Failed to open Verse source file: ")) + Source.Path);
             return false;
         }
-
-        uLang::TSRef<FHostSourceSnippet> Snippet = uLang::TSRef<FHostSourceSnippet>::New(
-            FULangConversionUtils::FUtf8StringToULangStr(Path),
-            FULangConversionUtils::FUtf8StringToULangStr(FUtf8String(SourceText)));
-        GScriptSnippets.Add(Snippet);
-        BuildManager->AddSourceSnippet(Snippet, ScriptPackageName, ScriptVersePath);
+        Texts.Add(FUtf8String(SourceText));
     }
+
+    RemoveScriptPackage(*BuildManager, GScriptSourcePackageName);
+    GScriptSnippets.Empty(Sources.Num());
+
+    const int32 Generation = GScriptGeneration + 1;
+    const FUtf8String PackageName =
+        FUtf8String(FString::Printf(TEXT("%hs_%d"), ScriptPackageBaseName, Generation));
+
+    AddScriptPackage(*BuildManager, PackageName);
+    const uLang::CSourceProject::SPackage& Package =
+        BuildManager->FindOrAddSourcePackage(
+            FULangConversionUtils::FUtf8StringToULangStr(PackageName), ScriptVersePath);
+
+    for (int32 Index = 0; Index < Sources.Num(); ++Index)
+    {
+        uLang::TSRef<FHostSourceSnippet> Snippet = uLang::TSRef<FHostSourceSnippet>::New(
+            FULangConversionUtils::FUtf8StringToULangStr(Sources[Index].Path),
+            FULangConversionUtils::FUtf8StringToULangStr(Texts[Index]));
+        GScriptSnippets.Add(Snippet);
+        FindOrAddModule(*Package._Package->_RootModule, Sources[Index].ModulePath).AddSnippet(Snippet);
+    }
+
+    // Without this the build republishes the native VNI packages -- which are already loaded --
+    // and aborts inside the async loader. It marks everything already compiled External so that
+    // only the new generation's package is built.
+    ISolarisModule::Get().IncrementalizeProjectSource(
+        GSourceProject.GetValue(),
+        uLang::SBuildParams{._LinkType = uLang::SBuildParams::ELinkParam::RequireComplete});
 
     FSolIdeBuildSettings Settings{.LinkSettings = uLang::SBuildParams::ELinkParam::RequireComplete};
     const bool bBuilt = GIde->BuildAll(Settings, MakeIdeDiagnostics(ForwardSolDiagnostic));
+    GScriptSourcePackageName = PackageName;
     GProjectBuilt = true;
     if (!bBuilt)
     {
+        // Nothing was published, so GScriptPackageName still names the last generation that was:
+        // its classes keep resolving and its instances keep running, which is R-ITER-5. The
+        // failed generation's source stays in the project, because it is what the next analysis
+        // reports diagnostics against.
         return false;
     }
+
+    GScriptGeneration = Generation;
+    GScriptPackageName = PackageName;
+    OutGeneration = Generation;
 
     IVerseModule::Get(); // Runs VerseModule::StartupModule; VerseCmd does the same before calling in.
 
@@ -690,7 +805,7 @@ namespace {
 /// it, so asking for a function when the build failed crashes rather than returning invalid.
 AUTORTFM_DISABLE bool ScriptPackageLoaded()
 {
-    return Verse::GlobalProgram && Verse::GlobalProgram->LookupPackage(ScriptPackageName) != nullptr;
+    return Verse::GlobalProgram && Verse::GlobalProgram->LookupPackage(GScriptPackageName) != nullptr;
 }
 }
 
@@ -709,7 +824,7 @@ namespace {
 /// native representation at all, so `Cast<UClass>` is itself most of the check.
 AUTORTFM_DISABLE UClass* FindGodotClass(FUtf8StringView ClassName)
 {
-    Verse::VPackage* Package = Verse::GlobalProgram ? Verse::GlobalProgram->LookupPackage(ScriptPackageName) : nullptr;
+    Verse::VPackage* Package = Verse::GlobalProgram ? Verse::GlobalProgram->LookupPackage(GScriptPackageName) : nullptr;
     if (!Package)
     {
         return nullptr;
@@ -3905,7 +4020,7 @@ AUTORTFM_DISABLE int32 GodotVerse::RunMain(const TArray<verse::string>& Args, in
     const verse::FExecutionContext Context = verse::FExecutionContext::GetActiveContext();
 
     FMainFunction MainFunction{ScriptPackageLoaded()
-                                   ? FVerseFunction(Context, ScriptPackageName, ScriptVersePath, MainFunctionName)
+                                   ? FVerseFunction(Context, GScriptPackageName, ScriptVersePath, MainFunctionName)
                                    : FVerseFunction(EDefaultConstructVerseFunction::UnsafeDoNotUse)};
     if (!MainFunction.IsValid())
     {

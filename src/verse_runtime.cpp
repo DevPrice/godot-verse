@@ -168,27 +168,36 @@ bool VerseRuntime::is_host_loaded() const {
 	return host.is_loaded();
 }
 
-Error VerseRuntime::compile_project(const PackedStringArray &p_globalized_paths, Dictionary *r_diagnostics_by_path) {
+Error VerseRuntime::compile_project(const PackedStringArray &p_globalized_paths, const PackedStringArray &p_module_paths, Dictionary *r_diagnostics_by_path) {
 	if (!host.is_loaded()) {
 		return ERR_UNAVAILABLE;
 	}
+	ERR_FAIL_COND_V(p_module_paths.size() != p_globalized_paths.size(), ERR_INVALID_PARAMETER);
 
 	// The pointers handed to the host must outlive the call, so the CharStrings backing them
-	// have to stay alive alongside the pointer array.
+	// have to stay alive alongside the array of structs that points at them.
 	std::vector<CharString> utf8_paths;
-	std::vector<const char *> raw_paths;
+	std::vector<CharString> utf8_modules;
+	std::vector<vh_source_file> files;
 	utf8_paths.reserve(p_globalized_paths.size());
-	raw_paths.reserve(p_globalized_paths.size());
+	utf8_modules.reserve(p_globalized_paths.size());
+	files.reserve(p_globalized_paths.size());
 	for (int64_t i = 0; i < p_globalized_paths.size(); i++) {
 		utf8_paths.push_back(p_globalized_paths[i].utf8());
-		raw_paths.push_back(utf8_paths.back().get_data());
+		utf8_modules.push_back(p_module_paths[i].utf8());
+		files.push_back({ utf8_paths.back().get_data(), utf8_modules.back().get_data() });
 	}
 
 	diagnostic_sink = r_diagnostics_by_path;
-	const int32_t status = host.CompileProject(raw_paths.data(), (int32_t)raw_paths.size());
+	int32_t built_generation = 0;
+	const int32_t status = host.CompileProject(files.data(), (int32_t)files.size(), &built_generation);
 	diagnostic_sink = nullptr;
 
-	return status == VH_OK ? OK : ERR_COMPILATION_FAILED;
+	if (status != VH_OK) {
+		return ERR_COMPILATION_FAILED;
+	}
+	generation = built_generation;
+	return OK;
 }
 
 Error VerseRuntime::check_project(const String &p_globalized_path, const String &p_source, Dictionary *r_diagnostics_by_path) {
