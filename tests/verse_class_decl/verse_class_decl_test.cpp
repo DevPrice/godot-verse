@@ -232,6 +232,20 @@ bool TestAttributeOnTheNamedClassStillBinds()
 	return Step("and its own attribute still does", Decl.name == "player" && Decl.is_global);
 }
 
+bool TestToolAttribute()
+{
+	const VerseClassDecl Decl = verse_scan_class_decl("@tool\nmover := class(node2d):\n");
+	return Step("@tool marks the class a tool script", Decl.is_tool && Decl.name == "mover")
+		&& Step("and an unmarked class is not one",
+				!verse_scan_class_decl("mover := class(node2d):\n").is_tool);
+}
+
+bool TestToolAndGlobalTogether()
+{
+	const VerseClassDecl Decl = verse_scan_class_decl("@global_class\n@tool\nmover := class(node2d):\n");
+	return Step("both attributes bind to the same class", Decl.is_tool && Decl.is_global);
+}
+
 } // namespace
 
 int main()
@@ -264,6 +278,8 @@ int main()
 	Ok = TestFileStemWithNoMatch() && Ok;
 	Ok = TestAttributeBindsToTheNamedClass() && Ok;
 	Ok = TestAttributeOnTheNamedClassStillBinds() && Ok;
+	Ok = TestToolAttribute() && Ok;
+	Ok = TestToolAndGlobalTogether() && Ok;
 
 	printf("[verse_class_decl_test] %s\n", Ok ? "ALL PASS" : "FAILURES");
 	return Ok ? 0 : 1;

@@ -393,7 +393,13 @@ bool VerseScript::_is_valid() const {
 }
 
 bool VerseScript::_is_tool() const {
-	return false;
+	// From the text, not the host, and for the same reason _get_global_class_name is: Godot asks
+	// this of scripts it has merely scanned, long before anything is built. Nothing else is
+	// needed to make a tool script run -- _can_instantiate above already hands the editor a real
+	// instance when this is true and a placeholder when it is not.
+	return verse_scan_class_decl(source_code.utf8().get_data(),
+			get_path().get_file().get_basename().utf8().get_data())
+			.is_tool;
 }
 
 bool VerseScript::_is_abstract() const {

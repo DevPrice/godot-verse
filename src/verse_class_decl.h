@@ -15,6 +15,9 @@ struct VerseClassDecl {
 	std::string base;
 	bool is_global = false;
 	bool is_abstract = false;
+	// `@tool`: Ready and Process run in the editor too. C#'s [Tool], and Godot asks the same
+	// question of every language through Script::is_tool.
+	bool is_tool = false;
 	// Zero-based row the declaration is on, or -1 when there is none. The comment block above it
 	// is the class' documentation, and finding that block needs the row.
 	int line = -1;

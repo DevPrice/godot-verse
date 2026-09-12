@@ -370,16 +370,18 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   editor — including a changed *default value*, which today requires code generation and therefore
   a restart. Depends on §10.
 - **R-EXP-5 (MUST)** `@tool` scripts run in the editor: gizmo drawing, procedural generation,
-  scene validation, `_get_configuration_warnings`. Status: **none** (`_is_tool` returns false
-  unconditionally). *This interacts badly with the single-code-generation constraint* — a tool
-  script runs in the same process that must later run the edited version of itself — and is
-  therefore gated on §10. Phase 3 takes the first half: a `tool` attribute, `_is_tool()` answering
-  truthfully, and Ready and Process running in the editor — which is nearly all that is needed,
-  because `VerseScript::_can_instantiate` already routes a tool script to a real editor instance
-  and everything else to a placeholder. The editor-only virtuals in the sentence above wait for
-  R-NODE-7's general mechanism in Phase 4 rather than being built twice. A tool script runs the
-  **last built** generation, per §10's trigger — the same bargain a C# `[Tool]` script makes today,
-  and the workflow most likely to send an author looking for the Build action.
+  scene validation, `_get_configuration_warnings`. Status: **part**. `@tool` exists — a bridge
+  attribute beside `@global_class` and `@export`, read out of the text the same way because Godot
+  asks `is_tool` of scripts it has only scanned — and `VerseScript::_can_instantiate` already did
+  the rest, handing the editor a real instance for a tool script and a placeholder for everything
+  else. So Ready and Process run in the editor. What is **missing** is the editor-only virtual
+  surface: gizmos, scene validation, `_get_configuration_warnings`. Those wait for R-NODE-7's
+  general virtual mechanism in Phase 4 rather than being built twice for one attribute. A tool
+  script runs the **last built** generation, per §10's trigger — the same bargain a C# `[Tool]`
+  script makes today, and the workflow most likely to send an author looking for the Build action.
+  **Stated risk:** Verse now runs against the scene the author is editing, and R-DIAG-3 does not
+  land until Phase 6 — the defect recorded there, where a raised runtime error empties every later
+  method result, is one a tool script can now reach without running the game.
 - **R-EXP-6 (MUST)** A Verse class can be a custom `Resource`, saved to and loaded from `.tres`,
   with its exported properties serialised. Status: **none**.
 - **R-EXP-7 (MUST)** A Verse script can be registered as an autoload singleton. Status: **none**.

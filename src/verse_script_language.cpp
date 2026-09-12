@@ -1481,7 +1481,7 @@ Dictionary VerseScriptLanguage::_get_global_class_name(const String &p_path) con
 	Dictionary result;
 	result["base_type"] = base_types_for(decl).registry_base;
 	result["is_abstract"] = decl.is_abstract;
-	result["is_tool"] = false;
+	result["is_tool"] = decl.is_tool;
 	// Presence of "name" is what registers the class: ScriptLanguageExtension::get_global_class_name
 	// returns empty the moment the key is absent, so a script without the attribute must not set
 	// it. The other keys are filled either way, as C#'s ScriptManagerBridge does.

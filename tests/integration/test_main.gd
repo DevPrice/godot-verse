@@ -381,5 +381,18 @@ func _init() -> void:
 		_check_eq("a module reaches a root definition with nothing imported",
 				left_node.call("RootConstant"), 42)
 
+	# --- R-EXP-5: @tool ------------------------------------------------------------------------
+	#
+	# The attribute is the bridge's own, declared in the package the host adds at runtime, so
+	# tool_probe.verse compiling is what says it resolves. Whether Ready runs in the editor is not
+	# a question a headless run can ask -- there is no editor to be a hint of -- but the answer
+	# Godot acts on is is_tool(), and that is answered here.
+	var tool_script: Script = load("res://scripts/tool_probe.verse")
+	_check("a @tool script compiles", tool_script != null and tool_script.can_instantiate())
+	if tool_script != null:
+		_check("and reports itself a tool script", tool_script.is_tool())
+	var plain_script: Script = load("res://scripts/marshal.verse")
+	_check("while an unmarked one does not", plain_script != null and not plain_script.is_tool())
+
 	print("[integration] %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)

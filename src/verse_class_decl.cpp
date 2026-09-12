@@ -7,6 +7,7 @@
 namespace {
 
 constexpr const char *GlobalClassAttribute = "global_class";
+constexpr const char *ToolAttribute = "tool";
 constexpr const char *AbstractSpecifier = "abstract";
 
 bool is_ident_start(char p_c) {
@@ -174,6 +175,7 @@ std::string verse_snake_case(const std::string &p_verse_name) {
 VerseClassDecl verse_scan_class_decl(const std::string &p_source, const std::string &p_file_stem) {
 	VerseClassDecl decl;
 	bool pending_global = false;
+	bool pending_tool = false;
 
 	VerseLexState state;
 	std::vector<VerseToken> tokens;
@@ -196,8 +198,11 @@ VerseClassDecl verse_scan_class_decl(const std::string &p_source, const std::str
 
 		if (kind == VerseTokenKind::Attribute) {
 			size_t pos = 1; // Past the '@'.
-			if (take_identifier(line, pos) == GlobalClassAttribute) {
+			const std::string attribute = take_identifier(line, pos);
+			if (attribute == GlobalClassAttribute) {
 				pending_global = true;
+			} else if (attribute == ToolAttribute) {
+				pending_tool = true;
 			}
 			continue;
 		}
@@ -212,12 +217,14 @@ VerseClassDecl verse_scan_class_decl(const std::string &p_source, const std::str
 		// literal has to follow the `:=` for this to be a class definition at all.
 		if (!take_literal(line, pos, ":=")) {
 			pending_global = false;
+			pending_tool = false;
 			continue;
 		}
 		skip_spaces(line, pos);
 		size_t after_class = pos;
 		if (take_identifier(line, after_class) != "class") {
 			pending_global = false;
+			pending_tool = false;
 			continue;
 		}
 		pos = after_class;
@@ -227,6 +234,7 @@ VerseClassDecl verse_scan_class_decl(const std::string &p_source, const std::str
 		// attributes above *it* go with it, so pending_global clears with it too.
 		if (!p_file_stem.empty() && name != p_file_stem) {
 			pending_global = false;
+			pending_tool = false;
 			continue;
 		}
 
@@ -235,6 +243,7 @@ VerseClassDecl verse_scan_class_decl(const std::string &p_source, const std::str
 		decl.is_abstract = take_specifiers(line, pos);
 		decl.base = take_first_super(line, pos);
 		decl.is_global = pending_global;
+		decl.is_tool = pending_tool;
 		return decl;
 	}
 
