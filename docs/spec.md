@@ -842,11 +842,18 @@ in §14.1 with what the run also confirmed about root being implicit from a subm
   mirror reports the mirror's line as the site, with the script's own frame further out — which is
   where it was raised, and the stack is what carries the author's line.
 - **R-DIAG-3 (MUST)** A script error never takes down the editor or the game process. Status:
-  **none**, and one half of it is worse than absent. A raised Verse runtime error does not crash the
-  process — but after one, every later `vh_instance_call` returns `VH_OK` with **no result value**,
-  so a method declared `:int` silently answers as if it were `:void` for the rest of the session.
-  Found while closing OQ-12 (§14.1 has the reproduction) and not caused by it. In an editor that
-  never restarts, one script's mistake quietly empties every later method result.
+  **none**, and one half of it is worse than absent — materially worse than first recorded. A raised
+  Verse runtime error does not crash the process; it **stops Verse running in it at all**. Every
+  later `vh_instance_call` returns `VH_OK` and does nothing: a method declared `:int` answers as if
+  it were `:void`, *and* a method with side effects has none. The call does not fail — it is not
+  made.
+  **The cause is known and the fix is one call.** The raise terminates the host's `FContentScope`,
+  and `FRunningContext::EnterVM_Internal` returns without invoking its functor when the active scope
+  is terminated (`VVMEnterVMInline.h`), which is how the silence happens. `FContentScope` exposes
+  `ResetTerminationState()` for exactly this, and Epic's own `VerseNativeTests` raise an error and
+  then call it to make the scope usable again. Terminating on error is UEFN's policy — a misbehaving
+  creator's island stops — and it is not this bridge's: Godot's contract is that one script's
+  mistake does not take the others down with it. §14.1 has the measurement.
 - **R-DIAG-4 (MUST)** Godot's own debugger works on Verse: breakpoints in the script editor, step
   in/over/out, the call stack, local and member inspection, and expression evaluation at a
   breakpoint.
@@ -991,15 +998,29 @@ running checks, with the rest of that suite deliberately running against the *se
 that a generation which only half works cannot pass.
 
 **One defect found while answering it, which is not Phase 3's and is recorded so it is not lost.**
-After a Verse runtime error is raised out of a script, every later `vh_instance_call` in the process
-returns `VH_OK` with **no result value** — a method declared `:int` answers as if it were `:void`.
-The call itself still runs; only the result is lost. Reproduced with `exports.TouchTarget` (which
-raises deliberately, for R-DIAG-2) followed by `exports.AddInts`, which returns nothing rather than
-42. It predates this work — nothing in the generations change touches the VM or the raise path —
-and was invisible until now because no test called a value-returning method after a raise. It
-belongs with **R-DIAG-3** (a script error must not take the editor down with it), and it is worse
-than it looks in an editor that never restarts: one script's mistake silently empties every later
-method result in the session.
+After a Verse runtime error is raised out of a script, **no Verse code runs in the process again**.
+Every later `vh_instance_call` returns `VH_OK` having done nothing: a method declared `:int` answers
+as if it were `:void`, and a method with side effects has none.
+
+Reproduced with `exports.TouchTarget` (which raises deliberately, for R-DIAG-2) followed by
+`exports.AddInts` — which answers nothing rather than 42 — and by `exports.Bump`, whose `Scale`
+does not move. It predates this work, and was invisible because no test called anything after a
+raise.
+
+**Cause:** the raise terminates the host's one `FContentScope`, and
+`FRunningContext::EnterVM_Internal` returns *before invoking its functor* when the active scope is
+terminated (`VVMEnterVMInline.h`: "The active content scope was terminated."). Nothing downstream
+can tell that apart from a call that ran and returned nothing, which is why the host reports
+success. The scope is created once in `GodotVerse::EnterContentScope` and lives for the process, so
+once terminated it stays that way.
+
+**Fix, measured rather than proposed:** reviving the scope with
+`FContentScope::ResetTerminationState()` before entering the VM restores both — `AddInts` returns
+42 and `Bump` moves `Scale` again — with the whole suite and the yardstick still green. That is the
+API Epic's own `VerseNativeTests` use after deliberately raising. Terminating on error is UEFN's
+policy and not this bridge's, so the reset belongs at every entry point that runs Verse rather than
+only where it was noticed. Recorded against **R-DIAG-3**; not applied here, because it is Phase 6's
+requirement rather than this phase's.
 
 **OQ-2 — an exported game ships precompiled Verse and a runtime-only host.**
 
