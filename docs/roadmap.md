@@ -1,6 +1,6 @@
 # godot-verse — Roadmap
 
-**Status:** Draft 2 · 2026-09-11 · Phases 0 and 1 complete
+**Status:** Draft 3 · 2026-09-11 · Phases 0 and 1 complete; Phase 2 designed
 **Companion to:** `docs/spec.md` (what must be true) and `README.md` (what is true now)
 
 ---
@@ -273,35 +273,51 @@ single signature satisfies — those stay ordinary getter and setter methods.
 
 ---
 
-## Phase 2 — What a project is: modules, and the whole engine API
+## Phase 2 — The whole engine API
 
-**Why now.** Both items are about the surface a user writes against, and both are cheaper before
-parity features are built on top of them. The mirror in particular is blocked on Phase 1: reaching
-`@GlobalScope` needs the per-signature marshalling that Phase 1 builds.
+**Design:** [`phase-2-design.md`](phase-2-design.md) — the decisions, the measurement the class set
+is gated on, and the Verse language facts the shape rests on.
 
-- **R-LANG-6** — modules, subdirectories, shared library code, per the S-3 answer (spec §14.1):
-  each `res://` subdirectory becomes a `CSourceModule` under the package's root module, so
-  `res://gameplay/player.verse` is `/user@localhost/gameplay/player`. One top-level name per file
-  narrows from a project-wide rule to a per-directory one. Two things S-3 left as design rather
-  than unknown land here too: whether a cross-module `using` is the author's to write or generated,
-  and what moving a file between directories does to everything that referenced it.
-- **R-SCN-1, R-SCN-2** — the mirror covers all 1023 classes rather than the curated list in
-  `tools/verse_api_classes.txt`, the generator's type table is finished, and **a method the
-  generator skips is visible with its reason** instead of silently absent. The failure mode
-  R-SCN-2 exists to prevent — "the method I need isn't there and I can't tell why" — is the one
-  that ends adoption.
-- **R-SCN-3** — `@GlobalScope` utility functions, under names that do not collide with
-  `/Verse.org/Simulation`.
+**Why now.** The surface a user writes against is cheaper to finish before parity features are built
+on top of it, and it was blocked on Phase 1: reaching the whole type set needs the per-signature
+marshalling Phase 1 built. Modules were in this phase in Draft 2 and moved to Phase 3, which already
+rewrites the source-set machinery they would be built on. **The phase touches no ABI.**
+
+- **R-SCN-1, R-SCN-2** — the mirror covers all 1022 classes rather than the curated list in
+  `tools/verse_api_classes.txt`, **gated on a measurement**: full generation is 2.9 MB of Verse
+  through VNI on every host build, and possibly through analysis on every keystroke. The rule that
+  decides it is written down before the numbers arrive. The generator's type table is finished, and
+  a skipped method is **visible with its reason, as an editor diagnostic** — the failure mode
+  R-SCN-2 exists to prevent, "the method I need isn't there and I can't tell why", is the one that
+  ends adoption. R-SCN-2 also gains a bar it lacks: only `virtual`, `static` and `vararg` may be
+  skipped, and any other skip is a defect.
+- **The type table, which is where the reachability actually is.** Of 17 150 method entries, 2362
+  are unreachable by any spelling and 823 of those are this phase's, in four causes: a public
+  `variant` (231), typed arrays (~250), the packed vector and colour arrays (207), and bare
+  `Object` (60). Mirroring Godot's `Object` once those land drags **R-INT-2** and a piece of
+  **R-SIG-3** in early, because `callv` and `connect` are ordinary methods the moment `Variant`
+  crosses.
+- **Objects in containers.** `GetChildren()` returns a container whose elements no script can read —
+  unnamed in the spec, squarely inside R-SCN-1, and the most-hit gap in the mirror, because walking
+  children is what scene code is. Two mechanisms: `typed_array(t)`, and a spike on Verse's own
+  failable cast `type[Value]`, which would give `is`/`as` parity (**R-SCN-6**, new).
+- **R-SCN-5 (new)** — Godot's 758 enums become real Verse enums rather than magic integers, with
+  `@export` of one pulled forward out of Phase 4.
+- **R-LANG-6, third clause only** — library files: a `.verse` with no class of its own stops being a
+  broken script. It needs no modules, and it is most of what makes one flat scope livable while they
+  wait.
 - **R-LANG-1, R-LANG-2, R-LANG-3** — script-to-script inheritance, interfaces, structs, enums and
-  parametric types get tests. Most of this is expected to work already; none of it is verified.
+  parametric types get tests. Most of this is expected to work already; none of it is verified. A
+  hole that is an afternoon gets fixed; anything larger is recorded as a wall.
 
-**Exit:** a Verse script can reach any Godot class and any method on it, or find out why not; a
-project is more than one flat namespace; `demo/` still runs. **First Dodge the Creeps port
-attempt** — not expected to complete. Record the wall it hits; that list is Phase 4's scope.
+**Exit:** a Verse script can reach any Godot class and any method on it, or find out why not;
+`demo/` still runs. **First Dodge the Creeps port attempt** — not expected to complete, and committed
+as a second project beside `demo/` so the next attempt starts where this one stopped. The walls are
+`docs/dodge-the-creeps.md`, and that list is Phase 4's scope.
 
 ---
 
-## Phase 3 — The iteration loop
+## Phase 3 — What a project is: the source set, live
 
 **Why now.** This phase and the next one swapped places, which is what Phase 0 was asked to decide.
 S-2 closed OQ-8 in favour of the fresh-package-name mechanism and measured it — ~200 ms per reload,
@@ -310,6 +326,28 @@ working. At that price the optimistic placement the previous draft described is 
 reload comes before parity, because parity is the longest phase in this document and building it
 with a restart in the loop is the expensive choice.
 
+**Modules joined this phase in Draft 3.** They were Phase 2's, and moved because both are the same
+machinery: the host owning its script package rather than borrowing the IDE's, an `ISourceSnippet`
+whose text can change, and a source set whose files come and go. "A file moved to another directory"
+and "a file was renamed while the editor ran" are one problem, and building it against the borrowed
+package first would have meant solving it twice.
+
+- **R-LANG-6** — modules, subdirectories, shared library code, per the S-3 answer (spec §14.1):
+  each `res://` subdirectory becomes a `CSourceModule` under the package's root module, so
+  `res://gameplay/player.verse` is `/user@localhost/gameplay/player`. One top-level name per file
+  narrows from a project-wide rule to a per-directory one. Two things S-3 left as design land here
+  too: what moving a file between directories does to everything that referenced it, and the fact
+  that a Godot directory name — `res://2d/`, `res://my-stuff/` — is not necessarily a Verse
+  identifier.
+- **R-TOOL-12 (new)** — **the editor maintains `using` statements.** A user never types a module
+  path: completion offers symbols from modules not yet in scope, and the import materialises when
+  analysis reports the unknown name, goimports-style, because Godot's completion API carries no
+  edit-on-accept hook to hang it on. This is also what makes moving a file cheap enough to allow,
+  and it is the prerequisite for ever splitting the Godot API itself into submodules.
+- **A name the user has written must survive a reload.** The fresh-package-name mechanism changes
+  the package name every generation, and module paths are user-visible text. Nothing currently
+  forbids the one leaking into the other; this is the phase where both live, which is the other
+  reason modules belong here.
 - **R-ITER-1, R-ITER-2** — edit and run, indefinitely; files added, renamed and deleted live. The
   mechanism is settled (spec §14.1). What this phase builds is everything around it: the host
   owning its script package instead of borrowing the IDE's, an `ISourceSnippet` with settable text
@@ -344,8 +382,16 @@ is faster to build behind Phase 3's reload loop. This is the phase the yardstick
   abstract classes.
 - **R-EXP-6, R-EXP-7, R-EXP-8, R-EXP-9** — custom Resources, autoloads, icons, RPC config.
 - **R-EXP-1** — the remaining `@export` surface, including enums and structs from R-LANG-2.
+- **R-SCN-3 and OQ-11** — `@GlobalScope`'s utility functions, and the value-type methods and
+  operators the math types still lack. Both moved here from Phase 2 because they are one problem: a
+  free function has no handle to ride `VhCallValue` on, and neither does a `vector2`. One by-name
+  dispatch entry point answers both, and deciding them together costs one rather than two. The
+  naming is already decided — **Verse's own stdlib wins**, so of 114 utility functions only the ~28
+  with no `/Verse.org` counterpart are mirrored (R-AUD-2).
 - **§8 interop** — R-INT-1 … R-INT-4. R-INT-2 (calling a GDScript-defined method from Verse
-  dynamically) is the one with no existing path and should be scoped early in the phase.
+  dynamically) was the one with no existing path; Phase 2's `Object` mirror is expected to deliver
+  it through `callv`, so **verify it rather than scoping it**, and spend the time on R-INT-3 and
+  R-INT-4 instead.
 
 **Exit:** **Dodge the Creeps runs with no GDScript in it.** That is the phase gate, and it is
 binary.
