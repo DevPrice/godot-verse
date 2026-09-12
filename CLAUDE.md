@@ -242,6 +242,12 @@ ten element types against four key types is not a list to maintain by hand.
   `TVerseFunction::operator()` does for the same reason: a Verse runtime error raised from closed
   code trips `AutoRTFM::UnreachableIfClosed` in `FContext::RaiseVerseRuntimeError` and takes the
   process down instead of unwinding.
+- **A raise stops every script until the next `vh_tick`.** It terminates the host's one
+  `FContentScope`, and `EnterVM` then declines to run *anything* — silently, which is why this was
+  invisible for a phase. Every entry into the VM therefore goes through `EnterVerse`, which revives
+  the scope; `TickScripts` is the frame boundary that resumes execution and says what was cancelled;
+  and `VH_ERR_HALTED` is what an execution entry point answers in between. Never call
+  `Context.EnterVM` directly — use `EnterVerse`. The cancellation is still project-wide (R-ASYNC-4).
 - **`operator'()'` is a reserved intrinsic.** Verse rewrites `Data[Key]` on a non-function callee
   into a call to it, but refuses to let anything *define* one — as a class member or as a free
   function — so the bracket syntax cannot be given a meaning. Container lookup is

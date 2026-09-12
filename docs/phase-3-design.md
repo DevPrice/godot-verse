@@ -595,9 +595,17 @@ caused was invisible to every test in the repo and immediate in `dodge-the-creep
 in `tests/integration` exports a member typed as another script's class and `main.verse` does. That
 is the yardstick doing exactly what §8 said it was for.
 
-**One defect found and not fixed**, recorded against R-DIAG-3: after a Verse runtime error is
-raised, every later `vh_instance_call` returns `VH_OK` with no result value. It predates this phase
-and `@tool` makes it worse, because a tool script can now reach it without the game running.
+**One defect found, and fixed after the phase closed.** It predates this work and `@tool` made it
+reachable without the game running. The first write-up of it was wrong in the way that matters: it
+is not that a call loses its result, it is that **no Verse code runs in the process again** — a
+raise terminates the host's one content scope and `EnterVM` then silently declines every later
+entry, so a call reported success having not run and a read reported "no such member". The fix and
+the three rules it now follows are R-DIAG-3 in `spec.md`; what it could not narrow is R-ASYNC-4.
+
+The lesson worth keeping is about the *shape* of the bug rather than the bug: a layer that cannot
+distinguish "did not run" from "ran and found nothing" will report the first as the second, and no
+test catches it until something asks for a value. `vh_instance_call` now checks, after the fact,
+that the VM actually ran the body.
 
 ### 11.1 What is owed: two by-hand checks
 

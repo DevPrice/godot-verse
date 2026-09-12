@@ -622,8 +622,19 @@ event, and `vh_tick` pumped once per frame with a budget.
   relative to `_process` and `_physics_process`; the ordering is documented, not emergent.
   Status: **part** — `_frame` pumps `vh_tick` with a budget; the ordering guarantee is not stated.
 - **R-ASYNC-4 (MUST)** Task scopes are per-script-instance, not per-project. A runtime error in
-  one script's task must not terminate tasks belonging to another script. Today it does, and the
-  README names this as a known limitation. Status: **none**.
+  one script's task must not terminate tasks belonging to another script. Today it does. Status:
+  **none**, and now with the mechanism named rather than described: the host makes one
+  `verse::FContentScope` in `EnterContentScope` and it serves the whole project, so the `Terminate()`
+  a raise performs cancels every script's suspended work and `ResetTerminationState()` replaces the
+  task group wholesale. R-DIAG-3's fix makes that survivable — execution resumes at the next tick
+  instead of never — but it cannot narrow it: what was in flight is gone whoever owned it.
+  Two things to settle here rather than there. **Where the scope boundary goes** — per instance is
+  the obvious answer and costs scope lifetime following instance lifetime, GC referencing, and a
+  task group per node. And **when execution resumes**: R-DIAG-3 stops script code for the rest of
+  the frame on the grounds that the other nodes should not run against a half-rolled-back scene,
+  which is the conservative reading — a raise aborts only *its own* call's transaction, so a
+  sibling's writes were already committed. Once scopes are per instance the question is different
+  again, because only one node's code would have stopped.
 - **R-ASYNC-5 (MUST)** A node's tasks are cancelled when the node leaves the tree or is freed, and
   a scene change cancels the tasks of everything it unloads. Structured concurrency whose
   structure does not match the scene tree's lifetime is a leak with extra steps.
@@ -842,18 +853,29 @@ in §14.1 with what the run also confirmed about root being implicit from a subm
   mirror reports the mirror's line as the site, with the script's own frame further out — which is
   where it was raised, and the stack is what carries the author's line.
 - **R-DIAG-3 (MUST)** A script error never takes down the editor or the game process. Status:
-  **none**, and one half of it is worse than absent — materially worse than first recorded. A raised
-  Verse runtime error does not crash the process; it **stops Verse running in it at all**. Every
-  later `vh_instance_call` returns `VH_OK` and does nothing: a method declared `:int` answers as if
-  it were `:void`, *and* a method with side effects has none. The call does not fail — it is not
-  made.
-  **The cause is known and the fix is one call.** The raise terminates the host's `FContentScope`,
-  and `FRunningContext::EnterVM_Internal` returns without invoking its functor when the active scope
-  is terminated (`VVMEnterVMInline.h`), which is how the silence happens. `FContentScope` exposes
-  `ResetTerminationState()` for exactly this, and Epic's own `VerseNativeTests` raise an error and
-  then call it to make the scope usable again. Terminating on error is UEFN's policy — a misbehaving
-  creator's island stops — and it is not this bridge's: Godot's contract is that one script's
-  mistake does not take the others down with it. §14.1 has the measurement.
+  **part** — a raise no longer ends Verse for the process, which it used to.
+  A raised runtime error calls `Terminate()` on the active `FContentScope` (`VVMRuntimeError.cpp`),
+  and `FRunningContext::EnterVM_Internal` then returns *without invoking its functor* for every
+  later entry into the VM (`VVMEnterVMInline.h`). Since the host makes one scope that lives for the
+  process, the first raise anywhere stopped everything: a call reported `VH_OK` having not run, and
+  a read reported "no such member". **The fix is `ResetTerminationState()`**, which is the API
+  Epic's own `VerseNativeTests` use after deliberately raising — terminating on error is UEFN's
+  policy, where a misbehaving creator's island stops, and it is not this bridge's.
+  Three rules now hold, each pinned in `host_smoke`:
+  1. **A raise stops script code for the rest of the frame, and no longer.** `vh_tick` is the
+     boundary that resumes it, so a consumer that ticks recovers and one that never ticks does not.
+     A read still answers during that window, because a question about a member runs no script code
+     and an inspector must not be told the member is gone.
+  2. **Nothing pretends to have run.** Every entry point that would run script code answers
+     `VH_ERR_HALTED` while halted, and `vh_instance_call` also checks, after the fact, that the VM
+     actually ran the body — it was that confusion between "did not run" and "ran and found
+     nothing" that kept this invisible for a phase.
+  3. **The author is told what it cost.** One line when execution resumes, saying whether suspended
+     work was cancelled with it. Whether it was is sampled in the runtime-error handler, the last
+     moment the task group can be asked.
+  What is **missing**, and why this is *part* rather than done: the cancellation is still
+  project-wide (**R-ASYNC-4**), an error in a `@tool` script still runs against the scene the author
+  is editing, and nothing bounds a script that raises every frame. §14.1 has the measurement.
 - **R-DIAG-4 (MUST)** Godot's own debugger works on Verse: breakpoints in the script editor, step
   in/over/out, the call stack, local and member inspection, and expression evaluation at a
   breakpoint.
@@ -1014,13 +1036,18 @@ can tell that apart from a call that ran and returned nothing, which is why the 
 success. The scope is created once in `GodotVerse::EnterContentScope` and lives for the process, so
 once terminated it stays that way.
 
-**Fix, measured rather than proposed:** reviving the scope with
-`FContentScope::ResetTerminationState()` before entering the VM restores both — `AddInts` returns
-42 and `Bump` moves `Scale` again — with the whole suite and the yardstick still green. That is the
-API Epic's own `VerseNativeTests` use after deliberately raising. Terminating on error is UEFN's
-policy and not this bridge's, so the reset belongs at every entry point that runs Verse rather than
-only where it was noticed. Recorded against **R-DIAG-3**; not applied here, because it is Phase 6's
-requirement rather than this phase's.
+**Fixed**, against R-DIAG-3, which has the rules it now follows. Every entry into the VM goes
+through one wrapper that revives the scope, so a seventh entry point cannot be added that forgets;
+execution resumes at the next `vh_tick` rather than at the next call; and `VH_ERR_HALTED` (ABI 3.1)
+is what every other call gets in between, because "did not run" reading as "ran and found nothing"
+is what kept this invisible. Eight checks in `host_smoke` pin it, including the one nobody made when
+it was first written up: that a *void* method has its effect again, not merely that a value comes
+back.
+
+Two things this did not fix and one it exposed. The cancellation is still project-wide
+(**R-ASYNC-4**). Nothing bounds a script that raises every frame. And the first minor ABI bump found
+`vh_init` comparing the whole version where the header's own policy says majors must match and
+minors need not — corrected with it.
 
 **OQ-2 — an exported game ships precompiled Verse and a runtime-only host.**
 

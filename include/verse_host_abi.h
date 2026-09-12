@@ -43,7 +43,7 @@ extern "C" {
  * different toolchains and nothing links them.
  */
 #define VH_ABI_VERSION_MAJOR 3
-#define VH_ABI_VERSION_MINOR 0
+#define VH_ABI_VERSION_MINOR 1
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
 typedef int32_t vh_bool;
@@ -62,7 +62,15 @@ typedef enum vh_status
 	/* A <decides> function failed. Distinct from VH_ERR_NOT_FOUND, which means there was no such
 	 * function to call: this one ran and declined, which is an ordinary outcome the caller is
 	 * expected to have a spelling for. */
-	VH_ERR_FAILED
+	VH_ERR_FAILED,
+
+	/* A script raised a runtime error earlier this frame, so no Verse code runs until the next
+	 * vh_tick. Nothing was called and nothing was written; ask again next frame.
+	 *
+	 * The error itself was already reported through OnRuntimeError -- this is what every *other*
+	 * call gets for the rest of that frame, and it exists so that "did not run" cannot be
+	 * mistaken for "ran and found nothing", which is what it used to look like. */
+	VH_ERR_HALTED
 } vh_status;
 
 /* Outcome of a property read/write or a method call. The distinction is load bearing: the host
@@ -399,7 +407,11 @@ VH_ATTR VH_API void vh_shutdown(void);
  *
  * Also where collection is driven: requesting a Verse collection cycle from inside running Verse
  * code deadlocks the process (docs/abi-v2-design.md §1a), so the reference table's entries are
- * only ever released from here. */
+ * only ever released from here.
+ *
+ * And where Verse is restarted after a script raises. A runtime error stops every script in the
+ * process until the next tick, which is what VH_ERR_HALTED reports; this is the frame boundary
+ * that clears it. A consumer that never ticks never recovers. */
 VH_ATTR VH_API void vh_tick(double BudgetSeconds);
 
 /* One .verse file, and where in the project's module tree it belongs. */

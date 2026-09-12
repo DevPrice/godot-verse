@@ -67,7 +67,13 @@ extern "C" int32_t vh_abi_version(void)
 
 extern "C" int32_t vh_init(const vh_init_desc* Desc)
 {
-    if (!Desc || Desc->StructSize != static_cast<int32_t>(sizeof(vh_init_desc)) || Desc->AbiVersion != VH_ABI_VERSION)
+    // Majors must match exactly and minors need not, which is the policy written at the top of
+    // verse_host_abi.h -- until the first minor bump this compared the whole version and so refused
+    // a consumer the policy says to accept. A consumer built against a lower minor simply never
+    // asks about what was added; one built against a higher minor is refused here, because it would
+    // expect fields this host does not write.
+    if (!Desc || Desc->StructSize != static_cast<int32_t>(sizeof(vh_init_desc))
+        || Desc->AbiVersion / 1000 != VH_ABI_VERSION_MAJOR || Desc->AbiVersion > VH_ABI_VERSION)
     {
         return VH_ERR_ABI;
     }
@@ -104,6 +110,11 @@ extern "C" int32_t vh_init(const vh_init_desc* Desc)
 
     FVerseRuntimeErrorDelegates::OnVerseRuntimeError.AddLambda(
         [](const Verse::ERuntimeDiagnostic Diagnostic, const FText& MessageText, const FString& RuntimeErrorText) {
+            // UE terminates the active content scope immediately after this delegate returns, which
+            // stops every script in the process until the next tick. Noted here because this is the
+            // last moment the task group can be asked what is about to be cancelled.
+            GodotVerse::NoteRuntimeErrorRaised();
+
             const FUtf8String Message(Verse::AsFormattedString(Diagnostic, MessageText));
 
             // Everything after the first line is the callstack the provider appended; a raise with
@@ -342,6 +353,13 @@ extern "C" int32_t vh_instantiate(const char* ClassNameUtf8, vh_handle Handle, v
     {
         return VH_ERR_STATE;
     }
+    // A script raised earlier this frame, so nothing runs until the next tick. Said plainly
+    // rather than attempted, because a write that silently did not happen is indistinguishable
+    // from one that did.
+    if (GodotVerse::IsHaltedUntilTick())
+    {
+        return VH_ERR_HALTED;
+    }
 
     GodotVerse::FInstance* Instance = GodotVerse::Instantiate(Cstr(ClassNameUtf8), Handle);
     if (!Instance)
@@ -383,6 +401,13 @@ extern "C" int32_t vh_instance_call(vh_instance* Instance,
     if (!GetHost().bInitialized)
     {
         return VH_ERR_STATE;
+    }
+    // A script raised earlier this frame, so nothing runs until the next tick. Said plainly rather
+    // than attempted: InstanceCall would find the VM declining to run the body and report the same
+    // thing, and this saves the lookup.
+    if (GodotVerse::IsHaltedUntilTick())
+    {
+        return VH_ERR_HALTED;
     }
 
     // The storage is static for the same reason every other descriptor here is: the value points at
@@ -576,6 +601,13 @@ extern "C" int32_t vh_instance_set_field(vh_instance* Instance, const char* Name
     {
         return VH_ERR_STATE;
     }
+    // A script raised earlier this frame, so nothing runs until the next tick. Said plainly
+    // rather than attempted, because a write that silently did not happen is indistinguishable
+    // from one that did.
+    if (GodotVerse::IsHaltedUntilTick())
+    {
+        return VH_ERR_HALTED;
+    }
     return GodotVerse::WriteInstanceField(reinterpret_cast<GodotVerse::FInstance*>(Instance), Cstr(NameUtf8), *Value)
         ? VH_OK
         : VH_ERR_NOT_FOUND;
@@ -591,6 +623,13 @@ extern "C" int32_t vh_instance_set_field_instance(vh_instance* Instance, const c
     if (!GetHost().bInitialized)
     {
         return VH_ERR_STATE;
+    }
+    // A script raised earlier this frame, so nothing runs until the next tick. Said plainly
+    // rather than attempted, because a write that silently did not happen is indistinguishable
+    // from one that did.
+    if (GodotVerse::IsHaltedUntilTick())
+    {
+        return VH_ERR_HALTED;
     }
     // Value is allowed to be null: that is how a reference member is cleared.
     return GodotVerse::WriteInstanceFieldInstance(reinterpret_cast<GodotVerse::FInstance*>(Instance),

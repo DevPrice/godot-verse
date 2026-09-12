@@ -306,9 +306,18 @@ void call_func(GDExtensionScriptInstanceDataPtr p_self, GDExtensionConstStringNa
 			r_error->error = GDEXTENSION_CALL_ERROR_INVALID_METHOD;
 			return;
 
-		// A raise. It has already been reported with its file, line and Verse stack through the
-		// runtime error callback, so saying anything more here would only duplicate it -- and the
-		// call did happen, so it is not a call error either.
+		// Another script raised earlier this frame, so this call did not happen. Not a call error:
+		// the method exists and the arguments were fine, and nothing about this node is wrong.
+		// Deliberately silent -- the raise was reported once with its file, line and stack, and a
+		// line per skipped call would bury it under one entry for every node in the frame. The host
+		// says when everything resumes.
+		case VH_ERR_HALTED:
+			r_error->error = GDEXTENSION_CALL_OK;
+			return;
+
+		// A raise in this call. It has already been reported with its file, line and Verse stack
+		// through the runtime error callback, so saying anything more here would only duplicate it
+		// -- and the call did happen, so it is not a call error either.
 		default:
 			r_error->error = GDEXTENSION_CALL_OK;
 			return;

@@ -1911,6 +1911,61 @@ int main(int argc, char** argv)
 				 LastRuntimeErrorStack.find("TouchTarget") != std::string::npos);
 			Step("and the file that method is declared in",
 				 LastRuntimeErrorStack.find("exports.verse") != std::string::npos);
+
+			// --- R-DIAG-3: the raise stops this frame, and only this frame -------------------
+			//
+			// A raised runtime error terminates the content scope, and the VM then declines to run
+			// anything at all -- which used to be invisible, because a call reported success having
+			// not run and a read reported "no such member". Both halves are pinned here: what the
+			// halted frame says, and that the next tick puts it all back.
+			vh_value IntArgs[2] = {};
+			IntArgs[0].Type = VH_TYPE_INT;
+			IntArgs[0].Int = 17;
+			IntArgs[1].Type = VH_TYPE_INT;
+			IntArgs[1].Int = 25;
+			vh_value Result{};
+			Step("a call in the halted frame says so rather than reporting success",
+				 InstanceCallFn(Instance, "(/user@localhost/exports:)AddInts(:int,:int)", IntArgs, 2, nullptr, &Result)
+					 == VH_ERR_HALTED);
+
+			vh_value Ninety{};
+			Ninety.Type = VH_TYPE_FLOAT;
+			Ninety.Float = 90.0;
+			Step("and so does a write, rather than looking like a missing member",
+				 SetFieldFn(Instance, "Scale", &Ninety) == VH_ERR_HALTED);
+
+			vh_instance* DuringHalt = nullptr;
+			Step("and so does instantiating",
+				 InstantiateFn("exports_probe", 9, &DuringHalt) == VH_ERR_HALTED);
+
+			// A read is a question rather than script code, so it is answered rather than deferred:
+			// the inspector asking what a member holds must not be told the member is gone.
+			const vh_value* ScaleDuringHalt = Read("Scale");
+			Step("while a read still answers, because it runs no script code",
+				 ScaleDuringHalt != nullptr && ScaleDuringHalt->Type == VH_TYPE_FLOAT);
+
+			// The frame boundary. vh_tick is where a halted project resumes, so a consumer that
+			// ticks gets everything back and one that never ticks never does.
+			TickFn(0.004);
+
+			Step("after the next tick a call runs again and returns its value",
+				 InstanceCallFn(Instance, "(/user@localhost/exports:)AddInts(:int,:int)", IntArgs, 2, nullptr, &Result) == VH_OK
+					 && Result.Type == VH_TYPE_INT && Result.Int == 42);
+
+			// The half that matters most, and the half nobody checked when this was first written
+			// up: a void method's *effect*, not just its result.
+			const vh_value* BeforeBump = Read("Scale");
+			const double ScaleBeforeBump = BeforeBump ? BeforeBump->Float : -1.0;
+			Step("and a void method has its effect again",
+				 CallVoid(InstanceCallFn, Instance, "(/user@localhost/exports:)Bump") == VH_OK);
+			const vh_value* AfterBump = Read("Scale");
+			Step("which the member shows",
+				 AfterBump != nullptr && AfterBump->Float != ScaleBeforeBump);
+
+			vh_instance* AfterHalt = nullptr;
+			Step("and a class instantiates again",
+				 InstantiateFn("exports_probe", 10, &AfterHalt) == VH_OK && AfterHalt != nullptr);
+			ReleaseInstanceFn(AfterHalt);
 		}
 
 		ReleaseInstanceFn(Instance);

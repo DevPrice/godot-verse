@@ -381,6 +381,42 @@ TArray<uLang::TSRef<FHostSourceSnippet>> GScriptSnippets;
 TSharedPtr<verse::FContentScope> GContentScope;
 TOptional<verse::FContentScopeGuard> GContentScopeGuard;
 
+/// Whether a script raised this frame, which stops every script until the next tick.
+bool GHaltedUntilTick = false;
+
+/// Whether anything was suspended when it raised, so the report can say what was lost rather than
+/// guess. Sampled in NoteRuntimeErrorRaised, which is the last moment it can be asked.
+bool GTasksLostToError = false;
+
+/// Undoes the content scope's termination, which is UEFN's policy and not this bridge's.
+///
+/// A raised Verse runtime error calls Terminate() on the active content scope
+/// (VVMRuntimeError.cpp), and FRunningContext::EnterVM_Internal then returns *without running its
+/// functor* for every later entry into the VM. Nothing downstream can tell that apart from a call
+/// that ran and did nothing, so before this the whole bridge went quiet at the first raise: a
+/// method call reported success having not run, and a read reported "no such member". One script's
+/// first mistake ended Verse for the process, in an editor nobody restarts.
+///
+/// Resetting also builds a fresh task group, so whatever was suspended when the error hit is gone
+/// for good -- and that is *every* script's suspended work rather than the offending one's, because
+/// one scope serves the whole project. Narrowing that is R-ASYNC-4, in Phase 5.
+AUTORTFM_DISABLE void ReviveContentScope()
+{
+    if (GContentScope.IsValid() && GContentScope->WasTerminated())
+    {
+        GContentScope->ResetTerminationState();
+    }
+}
+
+/// Every entry into the VM goes through here rather than calling Context.EnterVM directly, so that
+/// a seventh entry point cannot be added that forgets the revive above.
+template <typename TBody>
+AUTORTFM_DISABLE void EnterVerse(Verse::FRunningContext& Context, TBody&& Body)
+{
+    ReviveContentScope();
+    Context.EnterVM(Forward<TBody>(Body));
+}
+
 /// A diagnostic captured on the worker, owning its strings so it outlives the analysis that
 /// produced it and can be replayed on the game thread.
 struct FCapturedDiagnostic
@@ -925,7 +961,7 @@ AUTORTFM_DISABLE UClass* FindGodotClass(FUtf8StringView ClassName)
 
     UClass* Found = nullptr;
     Verse::FRunningContext Context = Verse::FRunningContextPromise{};
-    Context.EnterVM([&] {
+    EnterVerse(Context, [&] {
         Verse::VClass* Class = Package->LookupDefinition<Verse::VClass>(FUtf8StringView(Decorated));
         if (!Class)
         {
@@ -2066,7 +2102,7 @@ AUTORTFM_DISABLE bool ReadFieldOf(UObject* Object, FUtf8StringView FieldName, vh
 
     bool bRead = false;
     Verse::FRunningContext Context = Verse::FRunningContextPromise{};
-    Context.EnterVM([&] {
+    EnterVerse(Context, [&] {
         // The shape lookup is done here rather than through LoadField's by-name overload, which
         // passes Shape.GetField straight into PeekField -- and PeekField asserts on the null that
         // a missing field returns. Asking the shape first is what makes "no such member" an
@@ -2184,7 +2220,7 @@ AUTORTFM_DISABLE UClass* FindMirroredClass(FUtf8StringView ClassName)
 {
     UClass* Found = nullptr;
     Verse::FRunningContext Context = Verse::FRunningContextPromise{};
-    Context.EnterVM([&] {
+    EnterVerse(Context, [&] {
         if (Verse::VClass* Class = FindMirroredVClass(Context, ClassName))
         {
             Found = Cast<UClass>(Class->GetOrCreateNativeType(Context));
@@ -2521,7 +2557,7 @@ AUTORTFM_DISABLE bool WriteFieldWith(UObject* Object, FUtf8StringView FieldName,
 
     bool bWrote = false;
     Verse::FRunningContext Context = Verse::FRunningContextPromise{};
-    Context.EnterVM([&] {
+    EnterVerse(Context, [&] {
         FUtf8String DeclaringClass;
         const Verse::VShape::VEntry* Field = FindShapeField(Context, Object, FieldName, DeclaringClass);
 
@@ -4071,6 +4107,11 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
     }
 
     int32 Status = VH_OK;
+    // Set inside the VM, read outside it. EnterVM is allowed to decline to run its functor --
+    // a terminated content scope is one reason and there may be others -- and a call that did
+    // not happen must never come back as one that did. That confusion is the whole reason this
+    // defect was silent for a phase.
+    bool bBodyRan = false;
     Verse::FRunningContext Context = Verse::FRunningContextPromise{};
     const verse::FExecutionContext ExecContext = verse::FExecutionContext::GetActiveContext();
 
@@ -4080,7 +4121,8 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
         // AutoRTFM::UnreachableIfClosed in FContext::RaiseVerseRuntimeError and takes the process
         // down, rather than unwinding the way a raise is supposed to.
         AutoRTFM::Open([&] {
-        Context.EnterVM([&] {
+        EnterVerse(Context, [&] {
+            bBodyRan = true;
             Verse::VFunction::Args Converted;
             Converted.Reserve(ArgCount);
             for (int32 Index = 0; Index < ArgCount; ++Index)
@@ -4134,7 +4176,7 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
     {
         return VH_ERR_RUNTIME;
     }
-    return Status;
+    return bBodyRan ? Status : VH_ERR_HALTED;
 }
 
 namespace {
@@ -4187,7 +4229,35 @@ AUTORTFM_DISABLE int32 GodotVerse::RunMain(const TArray<verse::string>& Args, in
     return Exit.Reason == FRunExit::EReason::Error ? VH_ERR_RUNTIME : VH_OK;
 }
 
+AUTORTFM_DISABLE void GodotVerse::NoteRuntimeErrorRaised()
+{
+    GTasksLostToError = GContentScope.IsValid() && GContentScope->HasActiveTasks();
+    GHaltedUntilTick = true;
+}
+
+AUTORTFM_DISABLE bool GodotVerse::IsHaltedUntilTick()
+{
+    return GHaltedUntilTick;
+}
+
 AUTORTFM_DISABLE void GodotVerse::TickScripts(double BudgetSeconds)
 {
+    if (GHaltedUntilTick)
+    {
+        // The frame boundary. A raise aborts its own call's transaction, and stopping the rest
+        // of the frame's script code keeps "one script raised" from meaning "the others each
+        // saw a different half of the scene". Resuming here rather than at the next call is
+        // what makes that a rule an author can state.
+        GHaltedUntilTick = false;
+        ReviveContentScope();
+        ReportInfo(GTasksLostToError
+                       ? UTF8TEXT("Verse has resumed after the runtime error above. Suspended work "
+                                  "that was in flight anywhere in the project was cancelled with it "
+                                  "-- one scope serves every script today (R-ASYNC-4).")
+                       : UTF8TEXT("Verse has resumed after the runtime error above. Nothing was "
+                                  "suspended, so nothing else was lost."));
+        GTasksLostToError = false;
+    }
+
     PumpEventLoop(verse::FExecutionContext::GetActiveContext(), BudgetSeconds);
 }

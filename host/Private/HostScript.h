@@ -367,7 +367,21 @@ AUTORTFM_DISABLE bool WriteInstanceFieldInstance(FInstance* Instance, FUtf8Strin
 
 AUTORTFM_DISABLE int32 RunMain(const TArray<verse::string>& Args, int64& OutExitCode);
 
+/// Runs queued Verse work, and is the frame boundary a halted project resumes at -- see
+/// IsHaltedUntilTick.
 AUTORTFM_DISABLE void TickScripts(double BudgetSeconds);
+
+/// Records that a script raised, which is the moment everything else stops running.
+///
+/// Called from the OnVerseRuntimeError delegate, which UE broadcasts immediately *before* it
+/// terminates the content scope -- the last moment the task group can be asked what is about to
+/// be thrown away.
+AUTORTFM_DISABLE void NoteRuntimeErrorRaised();
+
+/// Whether a raise has stopped Verse for the rest of this frame. Every entry point that would
+/// run script code answers VH_ERR_HALTED while this is true, rather than running nothing and
+/// reporting success.
+AUTORTFM_DISABLE bool IsHaltedUntilTick();
 
 /// Releases the IDE, its data sources and the content scope. Must run before the engine tears
 /// down: these objects free through GMalloc, which AppExit takes with it.
