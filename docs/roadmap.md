@@ -1,6 +1,8 @@
 # godot-verse — Roadmap
 
-**Status:** Draft 5 · 2026-09-12 · **Phases 0, 1 and 2 complete.** What Phase 2 built, and the four
+**Status:** Draft 6 · 2026-09-12 · **Phases 0, 1 and 2 complete; Phase 3 designed and not started.**
+Its design is [`phase-3-design.md`](phase-3-design.md), which supersedes four of the bullets below
+and gates the whole phase on a spike. What Phase 2 built, and the four
 places the design was wrong, are in [`phase-2-design.md`](phase-2-design.md) §11. The Dodge the
 Creeps port closed it and **plays** — the eight walls it hit, each mapped to a requirement, are
 [`dodge-the-creeps.md`](dodge-the-creeps.md), and that list is Phase 4's scope.
@@ -339,6 +341,12 @@ spec had recorded as done: **R-INT-2** is `part`, because a script cannot make t
 
 ## Phase 3 — What a project is: the source set, live
 
+**Design:** [`phase-3-design.md`](phase-3-design.md) — the decisions, where they came from, the
+spike that gates the phase, and the work order with the code anchors for each stage. **Read it
+before starting anything here.** The bullets below are the brief the design was written against,
+corrected in place where the design contradicted them — four of them were wrong, and each says so
+rather than being quietly rewritten.
+
 **Why now.** This phase and the next one swapped places, which is what Phase 0 was asked to decide.
 S-2 closed OQ-8 in favour of the fresh-package-name mechanism and measured it — ~200 ms per reload,
 about half a megabyte retained per generation, and instances from earlier generations still
@@ -352,38 +360,71 @@ whose text can change, and a source set whose files come and go. "A file moved t
 and "a file was renamed while the editor ran" are one problem, and building it against the borrowed
 package first would have meant solving it twice.
 
-- **R-LANG-6** — modules, subdirectories, shared library code, per the S-3 answer (spec §14.1):
-  each `res://` subdirectory becomes a `CSourceModule` under the package's root module, so
-  `res://gameplay/player.verse` is `/user@localhost/gameplay/player`. One top-level name per file
-  narrows from a project-wide rule to a per-directory one. Two things S-3 left as design land here
-  too: what moving a file between directories does to everything that referenced it, and the fact
-  that a Godot directory name — `res://2d/`, `res://my-stuff/` — is not necessarily a Verse
-  identifier.
+- **R-LANG-6** — modules, subdirectories, shared library code, per the S-3 answer (spec §14.1).
+  **Not** "each `res://` subdirectory becomes a module", which is what this bullet said before the
+  design and is Epic's *default* rather than Epic's only model: a directory is a module only if it
+  carries a `<name>.vmodule` marker, and unmarked directories are organisational — their files join
+  the nearest marked ancestor, defaulting to root. That is `TryRenameModule`'s behaviour in
+  `SourceFileProject.cpp`, and it is chosen because `res://` is an asset tree whose directory names
+  were picked for sprites rather than as Verse identifiers, and because it changes no existing
+  project's meaning. The two things S-3 left as design are settled in opposite directions: a Godot
+  directory name never has to be a Verse identifier (the marker file's stem names the module), and
+  **moving a file between directories is allowed to break its references** for now, with the fix
+  deferred. `phase-3-design.md` §2 has the reasoning and the four diagnostics that carry it.
+- **One top-level name per file retires entirely**, rather than narrowing to per-directory. A file
+  may declare any number; only the class named after the file can be attached to a node. Uniqueness
+  narrows from project-wide to per-module, and the collision diagnostic is what tells an author the
+  marker exists.
 - **R-TOOL-12 (new)** — **the editor maintains `using` statements.** A user never types a module
   path: completion offers symbols from modules not yet in scope, and the import materialises when
   analysis reports the unknown name, goimports-style, because Godot's completion API carries no
-  edit-on-accept hook to hang it on. This is also what makes moving a file cheap enough to allow,
-  and it is the prerequisite for ever splitting the Godot API itself into submodules.
-- **A name the user has written must survive a reload.** The fresh-package-name mechanism changes
-  the package name every generation, and module paths are user-visible text. Nothing currently
-  forbids the one leaking into the other; this is the phase where both live, which is the other
-  reason modules belong here.
+  edit-on-accept hook to hang it on. It is the prerequisite for ever splitting the Godot API itself
+  into submodules. This bullet also claimed it is what makes moving a file cheap; that half is
+  **deferred** — R-TOOL-12 inserts a missing `using`, and does not rewrite one when a file moves.
+- **A name the user has written must survive a reload — and this now gates the phase.** The
+  fresh-package-name mechanism changes the package name every generation, and module paths are
+  user-visible text that R-TOOL-12 writes into the author's own file. S-2 varied the package
+  *name*; whether `/user@localhost` held across those generations is not recorded, and
+  `ScriptVersePath` is compiled into eight lookup sites in `HostScript.cpp`. **Stage 0 of the phase
+  is a spike that answers it, and nothing else starts until it has** — a negative answer redesigns
+  the module half rather than adding to it. `phase-3-design.md` §1.
 - **R-ITER-1, R-ITER-2** — edit and run, indefinitely; files added, renamed and deleted live. The
   mechanism is settled (spec §14.1). What this phase builds is everything around it: the host
   owning its script package instead of borrowing the IDE's, an `ISourceSnippet` with settable text
   so analysis and completion survive the change, `IncrementalizeProjectSource` before each build,
-  and Godot's side deciding *when* a reload happens.
+  and Godot's side deciding *when* a reload happens. That last one is answered: **on Play, plus an
+  explicit Build action — not on save.** It is what Godot already does for the one language whose
+  compilation unit is the whole project like ours (C# builds from `EditorBuildCallback` on Play,
+  blocking), and the hook needs no new API: `EditorNode::call_build()` calls `build()` on every
+  editor plugin before a run and aborts the run if one returns false. Saving still refreshes
+  analysis per keystroke, so diagnostics, completion and export *shape* stay live.
 - **R-ITER-3 / R-EXP-4** — changed `@export` defaults refresh, which today requires generated code
   and therefore a restart.
 - **R-ITER-4, R-ITER-5** — state preservation where Godot's contract allows; a failed reload leaves
   the working code running. R-ITER-4 starts from a good default: an instance keeps its own
   generation's class until something deliberately moves it.
-- **R-EXP-5** — `@tool` scripts, unblocked by the above.
-- The leak gets a bound and a test rather than an anecdote: a reload loop asserting that retained
-  memory per generation stays under a stated figure.
+- **R-EXP-5** — `@tool` scripts, unblocked by the above, and cheaper than this bullet assumed:
+  `VerseScript::_can_instantiate` already routes a tool script to a real editor instance and
+  everything else to a placeholder, so the work is a `tool` attribute and making `_is_tool()`
+  truthful, not building an execution path. Ready and Process in the editor; **not** the
+  editor-only virtuals, which are Phase 4's general mechanism and would otherwise be built twice.
+- **The leak is measured and recorded, not fixed.** The earlier plan here — a bound with a test
+  asserting it — was dropped by decision: a reaping mechanism is not worth building while the
+  project is experimental, and the build-on-Play trigger above largely defuses it anyway, since a
+  session spends generations in the tens rather than the hundreds. It gets a number taken against a
+  real project and a new requirement (R-ITER-6) so the deferral is tracked rather than forgotten.
 
-**Exit:** no workflow requires restarting the editor. Dodge the Creeps port attempt — regression
-check, and the first one where the authoring experience is the thing being judged.
+**Two things this phase deliberately does not do**, both recorded as requirements so they are
+visible: a **running game** does not pick up an edit (R-ITER-7 — the game is a separate process with
+its own host, so it is a second delivery mechanism rather than an extension of this one), and
+**moving a file** does not rewrite the imports that referenced it.
+
+**Exit:** no workflow requires restarting the editor — add, rename, delete, edit a body and press
+Play to get the edited code, change an `@export` default, and break the build and have Play refuse
+to launch rather than run something stale, all in one editor session. Two same-named classes in two
+modules coexist and both attach. A `@tool` script runs in the editor. Dodge the Creeps is the
+regression check, with its five files moved into a `scripts` module, and it is owed the **one
+windowed run** Phase 2 never gave it. Full criteria: `phase-3-design.md` §9.
 
 ---
 

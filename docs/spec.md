@@ -236,7 +236,21 @@ and packages, never syntax.
   shadowing, so a script's class is named after its file to keep collisions from happening (README,
   "Five constraints"). That remains the single largest structural gap between the prototype and a
   language a project can be written in. **OQ-5** is closed (§14.1): the escape is submodules built
-  from the project's directory tree, inside the one user package, and it is Phase 3's.
+  from the project's directory tree, inside the one user package, and it is Phase 3's. Phase 3's
+  design ([`phase-3-design.md`](phase-3-design.md) §2) settles which directories become modules,
+  and it is **not** all of them: a directory is a module only if it carries a `<name>.vmodule`
+  marker, and unmarked directories are organisational — their files join the nearest marked
+  ancestor, defaulting to root. Epic's toolchain supports both models and this is the second of
+  them; it is chosen because `res://` is an asset tree whose directory names are not Verse
+  identifiers, and because it changes no existing project's meaning. Two rules follow: a file may
+  declare **any number** of top-level names, only the one named after the file being attachable to a
+  node; and uniqueness narrows from project-wide to **per-module**. One consequence is worth naming
+  because it is silent otherwise: Godot asks `_get_global_class_name` from `EditorFileSystem`'s scan
+  thread before anything is built, so a script's base class is resolved from *text* by matching the
+  file stem across `res://` — which modules make ambiguous. The decision is to report the ambiguity
+  and fall back to `Node`, then let the build supply the real base; the alternative, teaching the
+  text scan to follow `using`, would create a second resolution path guaranteed to disagree with the
+  compiler somewhere.
 - **R-LANG-7 (MUST)** Transactional semantics have a defined meaning at the Godot boundary, and
   it is documented as a language rule rather than as an implementation note. Today: every Godot
   callback is invoked through `AutoRTFM::Open` and writes defer to `AutoRTFM::OnCommit`, so a
@@ -361,7 +375,13 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   scene validation, `_get_configuration_warnings`. Status: **none** (`_is_tool` returns false
   unconditionally). *This interacts badly with the single-code-generation constraint* — a tool
   script runs in the same process that must later run the edited version of itself — and is
-  therefore gated on §10.
+  therefore gated on §10. Phase 3 takes the first half: a `tool` attribute, `_is_tool()` answering
+  truthfully, and Ready and Process running in the editor — which is nearly all that is needed,
+  because `VerseScript::_can_instantiate` already routes a tool script to a real editor instance
+  and everything else to a placeholder. The editor-only virtuals in the sentence above wait for
+  R-NODE-7's general mechanism in Phase 4 rather than being built twice. A tool script runs the
+  **last built** generation, per §10's trigger — the same bargain a C# `[Tool]` script makes today,
+  and the workflow most likely to send an author looking for the Build action.
 - **R-EXP-6 (MUST)** A Verse class can be a custom `Resource`, saved to and loaded from `.tres`,
   with its exported properties serialised. Status: **none**.
 - **R-EXP-7 (MUST)** A Verse script can be registered as an autoload singleton. Status: **none**.
@@ -688,6 +708,17 @@ external editor is secondary.
   in the UE checkout is a message-type library, not a Program target, and nothing links it into a
   binary. Writing our own server over `verse_host_abi.h` is the alternative. Related: **OQ-7**.
 - **R-TOOL-11 (MAY)** A formatter.
+- **R-TOOL-12 (MUST)** The editor maintains `using` statements; a user never types a module path.
+  Completion offers symbols from modules not yet in scope, and the import materialises when analysis
+  reports the unknown name — goimports-style, reacting to the *diagnostic* rather than to the
+  keystroke, because Godot's completion API carries no edit-on-accept hook to hang it on. Insert
+  only: nothing is ever removed, because removing a line the author may have written by hand is a
+  different and worse promise. Status: **none**; Phase 3, and the prerequisite for ever splitting the
+  Godot API itself into submodules. Two unknowns are named in
+  [`phase-3-design.md`](phase-3-design.md) §3 — whether a GDExtension can write into the active
+  script editor's buffer at all, and the fallback if it cannot, which is a diagnostic naming the
+  exact `using` line to paste. *Rewriting* imports when a file moves is explicitly **not** part of
+  this: a move is allowed to break its references and report them.
 
 ---
 
@@ -705,12 +736,31 @@ An authoring loop with a restart in it is not a tool people use.
 - **R-ITER-2 (MUST)** A `.verse` file added, renamed or deleted while the editor runs is picked up
   without a restart.
 - **R-ITER-3 (MUST)** A changed default value on an `@export` member refreshes in the inspector
-  (R-EXP-4). Today it cannot, because a declared default is evaluated by generated code.
+  (R-EXP-4). Today it cannot, because a declared default is evaluated by generated code — which is
+  also why, once Phase 3 lands, it refreshes on a **build** rather than on a save: a newly declared
+  member appears as soon as analysis sees it, while its default value is whatever the last build
+  generated. The two halves move at different speeds and that is the price of the trigger above.
 - **R-ITER-4 (SHOULD)** Reloading preserves the state of a running game where Godot's own
   `reload(keep_state)` contract allows it.
 - **R-ITER-5 (MUST)** A compile error during reload leaves the previously-working code running and
   reports the error; it does not leave the project in a half-loaded state. Status: **part** — a
-  failed build reports once per session.
+  failed build reports once per session. One consequence decided with Phase 3's design: the
+  inspector keeps showing the *analysed text's* shape rather than the last good generation's, so it
+  can briefly show a property no running code has. Shape has come from analysis since Phase 1 and
+  refreshes live; this is the lesser of the two surprises and the one that is already true today.
+- **R-ITER-6 (SHOULD)** Retained memory across a long editor session is bounded. Status: **none**,
+  deliberately. The fresh-package-name mechanism retains roughly **0.5 MB per generation** — the
+  previous generation's `VPackage`, its `UPackage` and their pinned exports — and nothing reclaims
+  it. The build-on-Play trigger keeps a session's generations in the tens rather than the hundreds,
+  which is most of why this is tolerable; had the trigger been per-save it would not be. Accepted
+  while the project is experimental: the figure is measured against a real project and recorded, and
+  no reaping mechanism is built. This requirement exists so the deferral is tracked rather than
+  rediscovered.
+- **R-ITER-7 (SHOULD)** A **running game** picks up an edit without being restarted. Status:
+  **none**, deferred out of Phase 3 by decision. R-ITER-1 is satisfied without it, because a run is
+  a fresh process that compiles the current source; a game already running has its own host in its
+  own process, so reaching it means a second delivery mechanism — Godot's remote-debugger channel —
+  rather than an extension of the editor's. Wanted eventually; not a gate on anything above.
 
 **The mechanism is settled (OQ-8): a fresh package name per generation**, with
 `FSolarisModule::IncrementalizeProjectSource` called before each build so that everything already
@@ -732,6 +782,25 @@ above:
 
 *Out-of-process compilation* lost here but is the shape of the export pipeline under OQ-2. *An
 engine change* lost because none is needed.
+
+**What Phase 3's design added on top of the settled mechanism** ([`phase-3-design.md`](phase-3-design.md)):
+a generation is built **on Play and on an explicit Build action, not on save** — the trigger is the
+one thing the mechanism does not imply, and this is what Godot already does for the one language
+whose compilation unit is the whole project like Verse's: C# is built by
+`BuildManager.EditorBuildCallback` → `BuildProjectBlocking`, invoked on Play. GDScript reloads
+synchronously on save and gets away with it only because its unit is one file at about a
+millisecond. The hook needs no new Godot API — `EditorNode::call_build()` calls `build()` on every
+editor plugin before a run and aborts the run if one returns false, which is R-ITER-5's reporting
+path as well as the trigger. Saving still refreshes analysis, so diagnostics, completion, lookup and
+the export *shape* stay live per keystroke; only generated code waits for a build.
+**Instances adopt nothing**: a live instance keeps its own generation's class, which is what
+R-ITER-4 asks for and costs no state-transfer path across the ABI.
+
+**One thing about the mechanism is still unknown, and it gates the phase.** S-2 gave each generation
+its own package *name*. Whether the *verse path* `/user@localhost` held across those generations is
+not recorded, and it decides whether a user-written module path — which R-TOOL-12 writes into the
+author's own file — survives the author's next save. It is **OQ-12**, and Phase 3's first stage is
+the spike that closes it.
 
 ---
 
@@ -852,6 +921,7 @@ A closed question keeps its row so that the reason it is closed is not lost.
 | **OQ-8** ✅ | Which hot-reload mechanism: fresh package name per generation, out-of-process compilation, or an engine change? | all of §10, and R-EXP-5 | **Closed: fresh package name per generation**, with `IncrementalizeProjectSource` before each build. See §14.1. |
 | **OQ-9** | Can any DAP client speak `Verse::SocketDebugger`'s framing? | R-DIAG-6 | Only worth answering if R-DIAG-4 (Godot's own debugger) turns out to be blocked. |
 | **OQ-10** | Can an editor-class UBT Program target be built — `bCompileAgainstEditor`, and therefore `bCompileAgainstEngine`? Cooking Verse needs `WITH_EDITOR=1` (§14.1), and nothing else this project builds does. | R-DIST-9, R-DIST-10, R-DIST-11 | Opened by the S-1 answer. Attempt it at the start of Phase 7. The one prior attempt failed on Engine module links, but it was made for a *lean* host, where the weight was the objection; a cooker that runs only at export has no such constraint. Fallback: cook through a real UE editor or commandlet process. |
+| **OQ-12** | Does a generation change the package *name* only, or the *verse path* too? S-2 varied the name; whether `/user@localhost` held across generations is not recorded. Module paths are user-visible text that R-TOOL-12 writes into the author's file, and `ScriptVersePath` is compiled into eight lookup sites in `HostScript.cpp`. | R-LANG-6, R-TOOL-12, and the shape of Phase 3 | **Phase 3's first stage**, before anything else in it starts. Publish generation N as a fresh package name with the verse path pinned, and check that publishing does not assert, that the new generation resolves, and that an older instance still resolves against its own. Negative answer: a stable public path decoupled from the package name, or a per-generation alias module. |
 | **RISK-1** | UE's licensing applies to games shipped with the host, including royalties. This is a permanent property of the current distribution model and may deter adoption regardless of anything built here. | adoption | Disclose prominently (R-DIST-3). No mitigation available. |
 | **RISK-2** | Tracking Godot `master` and UE `main` simultaneously means two moving dependencies with no compatibility window. | R-QUAL-7 | Accepted deliberately while pre-1.0; revisit at the first release. |
 

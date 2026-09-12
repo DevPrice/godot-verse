@@ -15,6 +15,14 @@ of it. The short version: Verse's overloading is far narrower than §1 claimed, 
 non-public struct fields (so `variant`'s lanes are public, R-TYPE-7), Verse has no anonymous
 functions, and Godot's property metadata hides its own enums.
 
+**Phase 3 is designed and not started.** `docs/phase-3-design.md` is the whole of it: the decisions
+and where they came from, the work order with per-stage code anchors, and — read this part first —
+**§1, the spike that gates the phase.** Nothing in Phase 3 starts until OQ-12 is answered, because a
+negative answer redesigns the module half rather than adding to it. Two things the roadmap said
+about this phase are corrected there: modules are **not** one-per-subdirectory (a directory is a
+module only if it carries a `<name>.vmodule` marker), and the leak gets a measured number rather
+than a bound with a test.
+
 **`docs/dodge-the-creeps.md` is the one to read before adding a Verse-facing feature.** The port
 closed Phase 2 and it plays, so the document is not a progress report — it is the eight things a
 Godot author writes without thinking that have no spelling yet, each with the requirement that will
@@ -212,6 +220,9 @@ ten element types against four key types is not a list to maintain by hand.
 - **One code generation per process.** `vh_compile_project` publishes a package and may run once;
   the first script that needs compiling builds every `.verse` under `res://`. Scripts added while
   the editor runs are not picked up until restart. Analysis (`vh_check_project*`) has no such limit.
+  *Phase 3 removes this* — the mechanism is a fresh package name per generation with
+  `IncrementalizeProjectSource` before each build (spec §14.1), and the plan is
+  `docs/phase-3-design.md` §4. Still true today.
 - **The host module never unloads.** `vh_shutdown` tears the engine down; the DLL stays resident.
 - **Every Godot callback goes through `AutoRTFM::Open`,** and writes defer to `AutoRTFM::OnCommit`.
   The GDExtension was never instrumented by the AutoRTFM compiler, so calling into it from closed
@@ -234,7 +245,10 @@ ten element types against four key types is not a list to maintain by hand.
   for exactly this reason. What a file may *also* declare beside that class is its own business —
   Phase 2's `derived_entity.verse` carries an interface, two structs, an enum and a parametric class
   alongside it — and a file with no class at all is a library file, usable from every sibling with
-  nothing written to import it (R-LANG-6).
+  nothing written to import it (R-LANG-6). *Phase 3 removes this too*: uniqueness narrows to
+  per-module, a file may declare any number of top-level names, and only the class named after the
+  file stays attachable to a node — which keeps `VerseScript::verse_class_name` reading the stem
+  even after Verse stops requiring it. `docs/phase-3-design.md` §2.4. Still true today.
 - **The attribute package must be added before the first `AddDataSource`.** `@global_class` is
   declared in a source package the host adds at runtime, not in `host/Verse` — VNI compiles that
   at build time and rejects `class(attribute)`. `FSolarisIde::EnsureDataSourcePackageExists`
