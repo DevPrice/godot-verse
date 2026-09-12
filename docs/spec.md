@@ -768,13 +768,15 @@ An authoring loop with a restart in it is not a tool people use.
   can briefly show a property no running code has. Shape has come from analysis since Phase 1 and
   refreshes live; this is the lesser of the two surprises and the one that is already true today.
 - **R-ITER-6 (SHOULD)** Retained memory across a long editor session is bounded. Status: **none**,
-  deliberately. The fresh-package-name mechanism retains roughly **0.5 MB per generation** — the
-  previous generation's `VPackage`, its `UPackage` and their pinned exports — and nothing reclaims
-  it. The build-on-Play trigger keeps a session's generations in the tens rather than the hundreds,
-  which is most of why this is tolerable; had the trigger been per-save it would not be. Accepted
-  while the project is experimental: the figure is measured against a real project and recorded, and
-  no reaping mechanism is built. This requirement exists so the deferral is tracked rather than
-  rediscovered.
+  deliberately, and now with a **measured figure** rather than an estimate. `tests/host_bench`
+  builds ten generations of `dodge-the-creeps` — five files, a class each, the whole 1023-class
+  mirror behind them — and reports **~1.3 MB retained per generation** (median of ten; the first is
+  larger). That is the previous generation's `VPackage`, its `UPackage` and their pinned exports,
+  and nothing reclaims it. The build-on-Play trigger keeps a session's generations in the tens
+  rather than the hundreds, which is most of why this is tolerable: tens of megabytes across a long
+  day, next to the ~110 MB the compiler and native packages cost once. Had the trigger been
+  per-save it would not be. Accepted while the project is experimental; no reaping mechanism is
+  built. This requirement exists so the deferral is tracked rather than rediscovered.
 - **R-ITER-7 (SHOULD)** A **running game** picks up an edit without being restarted. Status:
   **none**, deferred out of Phase 3 by decision. R-ITER-1 is satisfied without it, because a run is
   a fresh process that compiles the current source; a game already running has its own host in its
@@ -920,7 +922,15 @@ draft, and no design decision in §§4–12 may be justified by an unmeasured pe
   property read and write cost; a method call with marshalled arguments; project compile time at
   10, 100 and 1000 scripts; and editor analysis latency per keystroke.
 - **R-PERF-2 (MUST)** Benchmarks exist and run under R-QUAL-3 for visibility, before any target is
-  set. What gets measured early is what can be reasoned about later.
+  set. What gets measured early is what can be reasoned about later. `tests/host_bench` is where
+  they live — reported rather than asserted, because a threshold would fail on a slower machine.
+  The numbers on the machine Phase 3 was written on, against `dodge-the-creeps` and the full
+  1023-class mirror: `vh_init` **72 ms**; the **first** `vh_compile_project` **3.1 s**; a
+  **generation after it 1.27 s**, because `IncrementalizeProjectSource` marks the native packages
+  external and only the script package is rebuilt; `vh_check_project` **1.20 s**, which is Phase 2's
+  enum cost unchanged. The generation figure is the one the build-on-Play trigger rests on: it is a
+  second and a quarter an author pays on Play, and would have been a second and a quarter on every
+  Ctrl+S. If it has to come down, off-thread building becomes a requirement rather than a guess.
 - **R-PERF-3 (SHOULD)** Nothing in the design makes a future optimisation structurally impossible —
   specifically, marshalling and dispatch must not bake in per-call allocation (R-TYPE-6).
 

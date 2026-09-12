@@ -1075,9 +1075,26 @@ AUTORTFM_DISABLE FUtf8String NativeClassOf(const uLang::CClass& Class, const uLa
     return FUtf8String();
 }
 
+/// The qualified name of a class the semantic program holds: `player` at its package's root,
+/// `gameplay/player` inside a module. What every ClassNameUtf8 in the ABI carries, and the inverse
+/// of the split FindGodotClass does on one.
+///
+/// A class's own name stopped being enough to find it the moment two modules could each declare a
+/// `player`, and every path built by concatenating a name onto a package path needs this instead.
+AUTORTFM_DISABLE FUtf8String QualifiedNameOf(const uLang::CClass& Class)
+{
+    // The class's whole verse path, with the package's prefix taken off -- rather than
+    // EPathMode::PackageRelative, which reaches for the package's root module and is a fatal
+    // error rather than an empty answer for a class that has no package.
+    const FUtf8String Path = FULangConversionUtils::ULangStrToFUtf8String(
+        Class.GetScopePath(UTF8CHAR('/'), uLang::EPathMode::PrefixSeparator));
+    const FUtf8String Prefix = FUtf8String(ScriptVersePath) + UTF8TEXT("/");
+    return Path.StartsWith(Prefix) ? Path.RightChop(Prefix.Len()) : FUtf8String(Class.AsNameCString());
+}
+
 AUTORTFM_DISABLE EClassOrigin ClassOriginOf(const uLang::CClass& Class, const uLang::CSemanticProgram& Program)
 {
-    const FUtf8String Name = FUtf8String(Class.AsNameCString());
+    const FUtf8String Name = QualifiedNameOf(Class);
     const auto ResolvesAt = [&Class, &Program, &Name](const char* ScopePath) {
         const FUtf8String Path = FUtf8String(ScopePath) + UTF8TEXT("/") + Name;
         return Program.FindDefinitionByVersePath<uLang::CClass>(
@@ -1312,7 +1329,11 @@ AUTORTFM_DISABLE void DescribeExportType(const uLang::CTypeBase* Type, const uLa
         OutDesc.Type = bIsOption ? VH_TYPE_OPTION : VH_TYPE_INT;
         OutDesc.VariantTag = VH_VARIANT_OBJECT;
         OutDesc.Hint = Origin == EClassOrigin::Script ? VH_EXPORT_HINT_SCRIPT_CLASS : VH_EXPORT_HINT_CLASS;
-        OutDesc.HintString = FUtf8String(Class->AsNameCString());
+        // Qualified for a script class, so the consumer can find the class the hint names; a
+        // mirrored one is Godot's own and has no module to qualify with.
+        OutDesc.HintString = Origin == EClassOrigin::Script
+            ? QualifiedNameOf(*Class)
+            : FUtf8String(Class->AsNameCString());
         OutDesc.NativeClass = NativeClassOf(*Class, Program);
 
         // Nothing can force a value into an inspector slot, so a member that cannot hold the empty
@@ -2725,7 +2746,7 @@ AUTORTFM_DISABLE bool GodotVerse::WriteInstanceFieldInstance(FInstance* Instance
     if (Referenced)
     {
         UClass* MemberClass = Declared.ReferenceOrigin == EClassOrigin::Script
-            ? FindGodotClass(FUtf8StringView(Declared.ReferenceClass->AsNameCString()))
+            ? FindGodotClass(FUtf8StringView(QualifiedNameOf(*Declared.ReferenceClass)))
             : FindMirroredClass(FUtf8StringView(Declared.ReferenceClass->AsNameCString()));
         if (!MemberClass || !Referenced->GetClass()->IsChildOf(MemberClass))
         {

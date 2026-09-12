@@ -7,6 +7,8 @@
 // recorded number, not a threshold, because there is no baseline to set one against.
 #include <windows.h>
 
+#include <psapi.h>
+
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
@@ -109,10 +111,17 @@ Fn Resolve(HMODULE Module, const char* Name, bool* Ok)
 /// a function of. Reported so a log says which mirror it measured without being told.
 void ReportMirrorSize(const fs::path& EngineDir)
 {
-	const fs::path Mirror =
-		EngineDir / "Engine" / "Source" / "Programs" / "VerseHost" / "Verse" / "GodotClasses.native.verse";
+	// EngineDirUtf8 is what vh_init is given, which is the *Engine* directory rather than the
+	// checkout root -- but the smoke test and a hand-run can pass either, so both are tried.
+	const fs::path Relative = fs::path("Source") / "Programs" / "VerseHost" / "Verse" / "GodotClasses.native.verse";
+	fs::path Mirror = EngineDir / Relative;
 	std::error_code Error;
-	const auto Size = fs::file_size(Mirror, Error);
+	auto Size = fs::file_size(Mirror, Error);
+	if (Error)
+	{
+		Mirror = EngineDir / "Engine" / Relative;
+		Size = fs::file_size(Mirror, Error);
+	}
 	if (Error)
 	{
 		printf("[bench] mirror: %ls not found\n", Mirror.c_str());
@@ -208,10 +217,14 @@ int main(int argc, char** argv)
 
 	const std::string VersePathUtf8 = VersePath.string();
 	const std::string ExportsPathUtf8 = ExportsPath.string();
-	const char* ProjectPaths[2] = { VersePathUtf8.c_str(), ExportsPathUtf8.c_str() };
+	const vh_source_file ProjectFiles[2] = {
+		{ VersePathUtf8.c_str(), nullptr },
+		{ ExportsPathUtf8.c_str(), nullptr },
+	};
 
+	int32_t Generation = 0;
 	const Clock::time_point CompileStart = Clock::now();
-	const int32_t CompileResult = CompileProjectFn(ProjectPaths, 2);
+	const int32_t CompileResult = CompileProjectFn(ProjectFiles, 2, &Generation);
 	const double CompileMs = MillisSince(CompileStart);
 	if (CompileResult != VH_OK)
 	{
@@ -247,10 +260,89 @@ int main(int argc, char** argv)
 	}
 
 	printf("\n");
+	// Generations, against a real project rather than the two fixtures above: R-ITER-6 asks
+	// for a figure measured on something the size of a game, and dodge-the-creeps is the one
+	// this repo has -- five files, a class each, and the whole mirror behind them.
+	//
+	// Two numbers come out of it. What a build costs, which is what an author pays on every
+	// Play and the reason the trigger is Play rather than Ctrl+S; and what a generation
+	// retains, which is the previous one's VPackage, its UPackage and their pinned exports,
+	// none of which anything reclaims.
+	std::vector<double> GenerationSamples;
+	std::vector<double> RetainedKb;
+	{
+		const fs::path GameDir = VerseBase / "dodge-the-creeps" / "scripts";
+		std::vector<std::string> GamePaths;
+		std::error_code DirError;
+		for (const fs::directory_entry& Entry : fs::directory_iterator(GameDir, DirError))
+		{
+			if (Entry.path().extension() == ".verse")
+			{
+				GamePaths.push_back(Entry.path().string());
+			}
+		}
+
+		if (GamePaths.empty())
+		{
+			printf("[bench] generations: skipped -- no .verse under %ls\n", GameDir.c_str());
+		}
+		else
+		{
+			std::vector<vh_source_file> GameFiles;
+			for (const std::string& Path : GamePaths)
+			{
+				GameFiles.push_back(vh_source_file{ Path.c_str(), "gameplay" });
+			}
+
+			for (int Iteration = 0; Iteration < Iterations; ++Iteration)
+			{
+				PROCESS_MEMORY_COUNTERS_EX Before{};
+				Before.cb = sizeof(Before);
+				GetProcessMemoryInfo(GetCurrentProcess(), reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&Before), sizeof(Before));
+
+				int32_t Built = 0;
+				const Clock::time_point GenStart = Clock::now();
+				const int32_t GenResult =
+					CompileProjectFn(GameFiles.data(), static_cast<int32_t>(GameFiles.size()), &Built);
+				const double GenMs = MillisSince(GenStart);
+
+				PROCESS_MEMORY_COUNTERS_EX After{};
+				After.cb = sizeof(After);
+				GetProcessMemoryInfo(GetCurrentProcess(), reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&After), sizeof(After));
+
+				if (GenResult != VH_OK)
+				{
+					printf("[bench] generations: build %d failed (%d)\n", Iteration + 1, GenResult);
+					break;
+				}
+				GenerationSamples.push_back(GenMs);
+				RetainedKb.push_back(
+					(static_cast<double>(After.PrivateUsage) - static_cast<double>(Before.PrivateUsage)) / 1024.0);
+			}
+		}
+	}
+
 	printf("[bench] %-28s %8.1f ms\n", "LoadLibrary", LoadMs);
 	printf("[bench] %-28s %8.1f ms\n", "vh_init", InitMs);
 	printf("[bench] %-28s %8.1f ms\n", "vh_compile_project", CompileMs);
 	ReportSeries("vh_check_project", CheckSamples);
+	ReportSeries("generation (5-file game)", GenerationSamples);
+	if (!RetainedKb.empty())
+	{
+		std::vector<double> Sorted = RetainedKb;
+		std::sort(Sorted.begin(), Sorted.end());
+		double Total = 0.0;
+		for (double Sample : RetainedKb)
+		{
+			Total += Sample;
+		}
+		printf("[bench] %-28s n=%zu  median %8.0f KB  mean %8.0f KB  total %8.0f KB\n",
+			   "retained per generation",
+			   Sorted.size(),
+			   Sorted[Sorted.size() / 2],
+			   Total / static_cast<double>(Sorted.size()),
+			   Total);
+	}
 	printf("[bench] diagnostics reported as errors: %d\n", ErrorCount);
 
 	ShutdownFn();
