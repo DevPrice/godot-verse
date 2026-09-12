@@ -262,6 +262,58 @@ func _init() -> void:
 	_check("Object.has_method sees a GDScript method", node.call("CanCall", self, "_double"))
 	_check("and denies one nothing declares", not node.call("CanCall", self, "_no_such_method"))
 
+	# --- R-LANG-1/2/3: the Verse language itself -------------------------------------------------
+	#
+	# Script-to-script inheritance, interfaces, structs, enums and parametric types. Most of this was
+	# expected to work and none of it was verified, which is the whole reason for these cases.
+	var derived_script: Script = load("res://scripts/derived_entity.verse")
+	_check("a script that extends another script loads", derived_script != null)
+	if derived_script != null:
+		var entity := Node2D.new()
+		entity.set_script(derived_script)
+		root.add_child(entity)
+
+		# R-LANG-1: the derived class overrides a method its *base script* declared.
+		_check_eq("an override of another script's method wins", entity.call("Describe"), "derived")
+		# And the base's own code still runs, reading the base's own exported member.
+		_check_eq("the base class' method runs on the derived instance",
+				entity.call("BaseDoubled"), 200)
+		_check_eq("and an exported member declared by the base is reachable",
+				entity.get("Health"), 100)
+		entity.set("Health", 7)
+		_check_eq("writing it reaches the base's member", entity.call("BaseDoubled"), 14)
+
+		# R-LANG-1: an interface, implemented and dispatched through.
+		_check_eq("an interface method is implemented", entity.call("Name"), "derived_entity")
+		_check_eq("and dispatches when called through the interface type",
+				entity.call("NameThroughInterface"), "derived_entity")
+
+		# R-LANG-2: structs in user code, including a nested one.
+		_check_eq("a user struct nests and reads back", entity.call("TotalAttack", 3, 4), 7)
+
+		# R-LANG-2: an enum in user code, exported as a dropdown.
+		_check_eq("a user enum's declared default", entity.call("StanceName"), "neutral")
+		entity.set("Stance", 2)
+		_check_eq("and picking another value reaches the script", entity.call("StanceName"), "aggressive")
+		var entity_props := {}
+		for entry in entity.get_property_list():
+			entity_props[entry["name"]] = entry
+		if entity_props.has("Stance"):
+			_check_eq("a user enum exports as a dropdown too",
+					entity_props["Stance"]["hint"], PROPERTY_HINT_ENUM)
+			_check_eq("with its own enumerators",
+					entity_props["Stance"]["hint_string"], "Defensive,Neutral,Aggressive")
+		else:
+			_check("a user enum reaches the inspector", false)
+
+		# R-LANG-3: a parametric class instantiated at two types, read through a generic function.
+		_check_eq("a parametric class carries an int", entity.call("BoxedInt", 5), 5)
+		_check_eq("and a string, in the same script", entity.call("BoxedString", "hi"), "hi")
+
+		# The base is a script in its own right, not only something to derive from.
+		var base_script: Script = load("res://scripts/base_entity.verse")
+		_check("the base script is attachable on its own", base_script != null and base_script.can_instantiate())
+
 	# --- R-LANG-6: library files ---------------------------------------------------------------
 	#
 	# helpers.verse declares no class. It is a Script and it compiles, its module-level functions

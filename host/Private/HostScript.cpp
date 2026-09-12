@@ -1255,15 +1255,23 @@ AUTORTFM_DISABLE FMemberType DescribeMemberType(FUtf8StringView ClassName, FUtf8
         return Result;
     }
 
-    for (const uLang::TSRef<uLang::CDataDefinition>& Member : Class->GetDefinitionsOfKind<uLang::CDataDefinition>())
+    // Up the chain, because one script class may derive from another and the member may be the
+    // base's. The walk stops at the first class outside the script package: above that is generated
+    // API, whose members are Godot's own properties rather than script state.
+    for (const uLang::CClass* Cursor = Class;
+         Cursor != nullptr && ClassOriginOf(*Cursor, *Program) == EClassOrigin::Script;
+         Cursor = Cursor->GetSuperClass())
     {
-        if (!FUtf8StringView(Member->AsNameCString()).Equals(FieldName))
+        for (const uLang::TSRef<uLang::CDataDefinition>& Member : Cursor->GetDefinitionsOfKind<uLang::CDataDefinition>())
         {
-            continue;
+            if (!FUtf8StringView(Member->AsNameCString()).Equals(FieldName))
+            {
+                continue;
+            }
+            Result = DescribeType(Member->GetType(), *Program);
+            Result.Member = &*Member;
+            return Result;
         }
-        Result = DescribeType(Member->GetType(), *Program);
-        Result.Member = &*Member;
-        break;
     }
     return Result;
 }
@@ -1544,10 +1552,37 @@ AUTORTFM_DISABLE int64 HandleOf(Verse::VValue Value)
 
 /// The decorated shape key for a member of Object's own class. Factored out because the read and
 /// write paths must agree on it exactly.
-AUTORTFM_DISABLE FUtf8String ShapeKeyFor(UObject* Object, FUtf8StringView FieldName)
+AUTORTFM_DISABLE FUtf8String ShapeKeyFor(FUtf8StringView ClassName, FUtf8StringView FieldName)
 {
     return FUtf8String(UTF8TEXT("(")) + ScriptVersePath + UTF8TEXT("/")
-        + FUtf8String(Object->GetClass()->GetName()) + UTF8TEXT(":)") + FUtf8String(FieldName);
+        + FUtf8String(ClassName) + UTF8TEXT(":)") + FUtf8String(FieldName);
+}
+
+/// The shape entry for a member, and the class that declares it.
+///
+/// A shape keys a data member by its *declaring* class -- `(/user@localhost/base_entity:)Health`,
+/// never the class the object happens to be. One script class deriving from another is what makes
+/// those differ, and before that was tested the object's own name was always the right qualifier.
+/// The walk stops where the names stop resolving, which is the first class outside the script
+/// package: a mirrored class' members are Godot's own properties and are not in this shape at all.
+AUTORTFM_DISABLE const Verse::VShape::VEntry* FindShapeField(Verse::FRunningContext Context,
+                                                             UObject* Object,
+                                                             FUtf8StringView FieldName,
+                                                             FUtf8String& OutDeclaringClass)
+{
+    Verse::VShape& Shape = UVerseClass::GetShapeForLoadField(Context, Object->GetClass());
+    for (const UClass* Cursor = Object->GetClass(); Cursor != nullptr; Cursor = Cursor->GetSuperClass())
+    {
+        const FUtf8String ClassName = FUtf8String(Cursor->GetName());
+        Verse::VUniqueString& Name =
+            Verse::VUniqueString::New(Context, FUtf8StringView(ShapeKeyFor(ClassName, FieldName)));
+        if (const Verse::VShape::VEntry* Field = Shape.GetField(Name))
+        {
+            OutDeclaringClass = ClassName;
+            return Field;
+        }
+    }
+    return nullptr;
 }
 
 /// Builds a vh_value from a Verse value, given what its declaration says it is.
@@ -1708,9 +1743,8 @@ AUTORTFM_DISABLE bool ReadFieldOf(UObject* Object, FUtf8StringView FieldName, vh
         // FindGodotClass applies to class names and VerseScriptInstance applies to methods.
         // GetClassExports only ever harvests a class's own members, so the object's own class is
         // always the right qualifier.
-        Verse::VShape& Shape = UVerseClass::GetShapeForLoadField(Context, Object->GetClass());
-        Verse::VUniqueString& Name = Verse::VUniqueString::New(Context, FUtf8StringView(ShapeKeyFor(Object, FieldName)));
-        const Verse::VShape::VEntry* Field = Shape.GetField(Name);
+        FUtf8String DeclaringClass;
+        const Verse::VShape::VEntry* Field = FindShapeField(Context, Object, FieldName, DeclaringClass);
         if (Field == nullptr)
         {
             return;
@@ -1736,7 +1770,7 @@ AUTORTFM_DISABLE bool ReadFieldOf(UObject* Object, FUtf8StringView FieldName, vh
             return;
         }
 
-        bRead = ValueToWire(Context, Value, DescribeMemberType(FUtf8String(Object->GetClass()->GetName()), FieldName),
+        bRead = ValueToWire(Context, Value, DescribeMemberType(DeclaringClass, FieldName),
                             OutStorage, OutValue);
     });
     return bRead;
@@ -2154,9 +2188,8 @@ AUTORTFM_DISABLE bool WriteFieldWith(UObject* Object, FUtf8StringView FieldName,
     bool bWrote = false;
     Verse::FRunningContext Context = Verse::FRunningContextPromise{};
     Context.EnterVM([&] {
-        Verse::VShape& Shape = UVerseClass::GetShapeForLoadField(Context, Object->GetClass());
-        Verse::VUniqueString& Name = Verse::VUniqueString::New(Context, FUtf8StringView(ShapeKeyFor(Object, FieldName)));
-        const Verse::VShape::VEntry* Field = Shape.GetField(Name);
+        FUtf8String DeclaringClass;
+        const Verse::VShape::VEntry* Field = FindShapeField(Context, Object, FieldName, DeclaringClass);
 
         // A Constant entry lives in the shape itself rather than in the object, so it is shared by
         // every instance and cannot be assigned to.
@@ -2583,9 +2616,31 @@ AUTORTFM_DISABLE bool GodotVerse::GetClassExports(FUtf8StringView ClassName, TAr
     const uLang::CClass* GroupAttribute = Program->FindDefinitionByVersePath<uLang::CClass>(ExportGroupAttributePath);
     const uLang::CClass* SubgroupAttribute = Program->FindDefinitionByVersePath<uLang::CClass>(ExportSubgroupAttributePath);
 
-    // Only the class's own members. An inherited export would have to be looked up through the
-    // object hierarchy, and every one of those is generated API rather than script state.
-    for (const uLang::TSRef<uLang::CDataDefinition>& Member : Class->GetDefinitionsOfKind<uLang::CDataDefinition>())
+    // The class's own members *and* those of any script class it derives from, base first -- which
+    // is the order an inspector draws them in, and the order a reader expects.
+    //
+    // The walk stops at the first class outside the script package, because everything above that is
+    // generated API: a mirrored class' members are Godot's own properties, which Godot already draws
+    // and which carry no @export. Before script-to-script inheritance was tested there was no class
+    // between the two, and this loop read only the one class.
+    TArray<const uLang::CClass*> Chain;
+    for (const uLang::CClass* Cursor = Class;
+         Cursor != nullptr && ClassOriginOf(*Cursor, *Program) == EClassOrigin::Script;
+         Cursor = Cursor->GetSuperClass())
+    {
+        Chain.Insert(Cursor, 0);
+    }
+
+    TArray<const uLang::TSRef<uLang::CDataDefinition>> Members;
+    for (const uLang::CClass* Link : Chain)
+    {
+        for (const uLang::TSRef<uLang::CDataDefinition>& Member : Link->GetDefinitionsOfKind<uLang::CDataDefinition>())
+        {
+            Members.Add(Member);
+        }
+    }
+
+    for (const uLang::TSRef<uLang::CDataDefinition>& Member : Members)
     {
         if (!Member->HasAttributeSubclass(ExportAttribute, *Program))
         {

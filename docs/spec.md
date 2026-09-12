@@ -185,13 +185,24 @@ and packages, never syntax.
 
 - **R-LANG-1 (MUST)** Classes, inheritance, abstract classes, interfaces and interface
   implementation work in user code, including a Verse script class extending another Verse script
-  class. Status: **part** — a script extends a mirrored Godot class; script-to-script inheritance
-  is untested and `_inherits_script` exists.
+  class. Status: **done.** Tested in Phase 2, which is what it needed: script-to-script inheritance,
+  interfaces and interface dispatch all worked, and the testing found one hole on the *bridge* side
+  rather than in the language. An `@export` declared by a base script class was invisible on the
+  derived instance, in two places that made the same assumption — the export list harvested only a
+  class' own members, and a field read built the shape key from the object's class rather than the
+  class that *declares* the member. Both were true while the only thing above a script was generated
+  API. Both now walk the chain, stopping at the first class outside the script package.
 - **R-LANG-2 (MUST)** Structs and enums work in user code, and both are expressible at the Godot
   boundary where Godot has a counterpart: an enum member is `@export`-able as a Godot enum
-  property, a struct member as a Godot struct or dictionary. Status: **none** for the boundary.
+  property, a struct member as a Godot struct or dictionary. Status: **part.** Both work in user
+  code, nested structs included, and an enum member exports as a dropdown of its own enumerators
+  (R-EXP-1). A **struct** member at the boundary is still outstanding: the sixteen mirrored math
+  types cross, but a struct a project declares for itself has no Godot counterpart to become.
 - **R-LANG-3 (MUST)** Parametric types work — generic functions, generic classes, and the
-  parametric spellings in `/Verse.org/Simulation`. Status: unknown; nothing tests it.
+  parametric spellings in `/Verse.org/Simulation`. Status: **part.** A parametric class in user code
+  and a generic function over it both work, instantiated at two different types in one script, and
+  the bridge itself now rests on one: `typed_array(t)`. What is still untested is
+  `/Verse.org/Simulation`'s own parametric spellings, which nothing in the bridge reaches yet.
 - **R-LANG-4 (MUST)** Failure contexts are fully usable: `<decides>` functions, `if`/`for`
   conditions, `option`, `?` and `or`, and user-authored failable functions. Status: **part** —
   the mirror uses `<decides>` where absence is real (`GetParent()` at the root, a missing
