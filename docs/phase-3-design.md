@@ -599,6 +599,35 @@ is the yardstick doing exactly what §8 said it was for.
 raised, every later `vh_instance_call` returns `VH_OK` with no result value. It predates this phase
 and `@tool` makes it worse, because a tool script can now reach it without the game running.
 
-**What is owed.** Two by-hand checks in §9 that no headless run can make: the windowed run of the
-yardstick, and an editor session exercising Play, the Build action, `@tool` and the `using`
-insertion. Everything else in §9 is covered by `tools/run_tests.py` and the yardstick's 29 checks.
+### 11.1 What is owed: two by-hand checks
+
+Everything else in §9 is covered by `tools/run_tests.py` and the yardstick's 29 headless checks.
+These two are not, because nothing headless can make them — one needs a window and the other needs
+the editor, which has no scriptable Play button. Written out rather than summarised so that whoever
+does them is not re-deriving what to look at.
+
+**1. The windowed run of the yardstick.** Owed since Phase 2, which closed on 29 headless checks and
+never saw the game drawn.
+
+    godot --path dodge-the-creeps
+
+Watch for: the player moves and its animation flips with direction; mobs spawn along the path and
+leave the screen; touching one ends the round and the HUD says so; the Start button restarts it. All
+of that is asserted headless — what a window adds is whether it *looks* right, which is the part a
+Timer and an assertion cannot see.
+
+**2. An editor session.** `godot --path demo --editor`, or `dodge-the-creeps`, and in one session,
+without restarting:
+
+| do this | expect |
+| --- | --- |
+| press Play | the game runs the current source. `VerseEditorPlugin::_build` published a generation first |
+| edit a method body, save, press Play again | the **edited** code runs. A save alone does not build, so the running code between the save and the Play is the old one — that is the design, not a bug |
+| break a script, press Play | the run is **refused**, the compiler's diagnostics are in the log, and the previously-working code is still what a re-Play would run once the break is fixed |
+| add a `.verse` file, attach it to a node, press Play | it runs, with no restart (R-ITER-2) |
+| rename and delete a `.verse` while the editor is open | no restart needed either |
+| change an `@export` default, save | the inspector does **not** change. Then `Project > Tools > Build Verse` — it does (R-ITER-3). A *newly declared* member appears on save, its default on build |
+| right-click a directory in the FileSystem dock | "Make Verse Module" is in the menu, and writes `<dirname>.vmodule` |
+| put two files declaring one class in one module | the collision diagnostic names both files and names the menu action |
+| open a script and type a name that only another module declares | the diagnostic names the exact `using` line — and, while that file is the one on screen, the line appears at the top of the buffer by itself (R-TOOL-12) |
+| put `@tool` on a script with a `Process`, build, and watch the scene | it runs in the editor (R-EXP-5). This is also the one workflow where R-DIAG-3's recorded defect bites without the game running |
