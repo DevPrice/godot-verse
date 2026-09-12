@@ -54,6 +54,7 @@ void initialize_gdextension_types(const ModuleInitializationLevel p_level) {
 #ifdef TOOLS_ENABLED
 	if (p_level == MODULE_INITIALIZATION_LEVEL_EDITOR) {
 		GDREGISTER_CLASS(VerseSyntaxHighlighter);
+		GDREGISTER_CLASS(VerseModuleMenu);
 		GDREGISTER_CLASS(VerseEditorPlugin);
 		EditorPlugins::add_by_type<VerseEditorPlugin>();
 	}

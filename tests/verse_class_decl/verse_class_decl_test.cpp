@@ -181,6 +181,57 @@ bool TestDeclarationLine()
 		&& Step("a file with no class reports no row", verse_scan_class_decl("using { /Godot.org/Godot }\n").line == -1);
 }
 
+bool TestFileStemPicksTheClass()
+{
+	// Phase 2's derived_entity.verse already declared an interface, two structs, an enum and a
+	// parametric class beside its own, so the scanner was already being asked more than it
+	// promised. Modules make it matter: a file may declare any number of top-level names and only
+	// the one named after the file is the script.
+	const char* Source =
+		"using { /Godot.org/Godot }\n"
+		"\n"
+		"helper := class(object):\n"
+		"    X<public>:int = 1\n"
+		"\n"
+		"player := class(node2d):\n"
+		"    Speed<public>:float = 1.0\n";
+	const VerseClassDecl Decl = verse_scan_class_decl(Source, "player");
+	return Step("the class named after the file is the one reported",
+				Decl.name == "player" && Decl.base == "node2d")
+		&& Step("and the first one in the file is not, when it is not that one",
+				verse_scan_class_decl(Source).name == "helper");
+}
+
+bool TestFileStemWithNoMatch()
+{
+	const VerseClassDecl Decl = verse_scan_class_decl("helper := class(object):\n", "player");
+	return Step("a file declaring no class of its own name reports none", Decl.name.empty() && Decl.line == -1);
+}
+
+bool TestAttributeBindsToTheNamedClass()
+{
+	// The attribute above a class that is *not* the file's must not carry over to the one that is.
+	const char* Source =
+		"@global_class\n"
+		"helper := class(object):\n"
+		"\n"
+		"player := class(node2d):\n";
+	const VerseClassDecl Decl = verse_scan_class_decl(Source, "player");
+	return Step("an attribute above another class does not reach this one",
+				Decl.name == "player" && !Decl.is_global);
+}
+
+bool TestAttributeOnTheNamedClassStillBinds()
+{
+	const char* Source =
+		"helper := class(object):\n"
+		"\n"
+		"@global_class\n"
+		"player := class(node2d):\n";
+	const VerseClassDecl Decl = verse_scan_class_decl(Source, "player");
+	return Step("and its own attribute still does", Decl.name == "player" && Decl.is_global);
+}
+
 } // namespace
 
 int main()
@@ -209,6 +260,10 @@ int main()
 	Ok = TestEmptySource() && Ok;
 	Ok = TestPascalCase() && Ok;
 	Ok = TestSnakeCase() && Ok;
+	Ok = TestFileStemPicksTheClass() && Ok;
+	Ok = TestFileStemWithNoMatch() && Ok;
+	Ok = TestAttributeBindsToTheNamedClass() && Ok;
+	Ok = TestAttributeOnTheNamedClassStillBinds() && Ok;
 
 	printf("[verse_class_decl_test] %s\n", Ok ? "ALL PASS" : "FAILURES");
 	return Ok ? 0 : 1;

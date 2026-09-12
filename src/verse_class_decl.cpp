@@ -171,7 +171,7 @@ std::string verse_snake_case(const std::string &p_verse_name) {
 	return result;
 }
 
-VerseClassDecl verse_scan_class_decl(const std::string &p_source) {
+VerseClassDecl verse_scan_class_decl(const std::string &p_source, const std::string &p_file_stem) {
 	VerseClassDecl decl;
 	bool pending_global = false;
 
@@ -221,6 +221,14 @@ VerseClassDecl verse_scan_class_decl(const std::string &p_source) {
 			continue;
 		}
 		pos = after_class;
+
+		// Every other top-level class in the file is somebody else's -- a helper, a base, a
+		// parametric one -- and skipping it is the whole of what modules changed here. Note the
+		// attributes above *it* go with it, so pending_global clears with it too.
+		if (!p_file_stem.empty() && name != p_file_stem) {
+			pending_global = false;
+			continue;
+		}
 
 		decl.name = name;
 		decl.line = row;

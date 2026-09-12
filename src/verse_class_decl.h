@@ -20,10 +20,15 @@ struct VerseClassDecl {
 	int line = -1;
 };
 
-// Scans for the first top-level `name := class(base):` and the attributes directly above it.
-// Comments and string literals are skipped by the real lexer, so `@global_class` inside either
-// is not mistaken for the attribute.
-VerseClassDecl verse_scan_class_decl(const std::string &p_source);
+// Scans for a top-level `name := class(base):` and the attributes directly above it. Comments and
+// string literals are skipped by the real lexer, so `@global_class` inside either is not mistaken
+// for the attribute.
+//
+// p_file_stem is the file's own name without its extension, and it is what picks the class out: a
+// file may declare any number of top-level names and only the one named after the file is the
+// script. Pass it empty to take the first top-level class instead, which is what a caller with no
+// file in hand -- a test, a scratch buffer -- wants.
+VerseClassDecl verse_scan_class_decl(const std::string &p_source, const std::string &p_file_stem = std::string());
 
 // The Godot type name for a Verse class name: `player_controller` becomes `PlayerController`.
 //

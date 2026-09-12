@@ -830,7 +830,20 @@ AUTORTFM_DISABLE UClass* FindGodotClass(FUtf8StringView ClassName)
         return nullptr;
     }
 
-    const FUtf8String Decorated = FUtf8String(UTF8TEXT("(")) + ScriptVersePath + UTF8TEXT(":)") + FUtf8String(ClassName);
+    // A qualified name decorates as (scope:)leaf, and the module is part of the scope:
+    // `gameplay/player` is `(/user@localhost/gameplay:)player`. A root-module class has no module
+    // to add and decorates exactly as it did before modules existed.
+    FUtf8String Scope(ScriptVersePath);
+    FUtf8String Leaf(ClassName);
+    int32 LastSlash = INDEX_NONE;
+    if (Leaf.FindLastChar(UTF8CHAR('/'), LastSlash))
+    {
+        Scope += UTF8TEXT("/");
+        Scope += Leaf.Left(LastSlash);
+        Leaf.RightChopInline(LastSlash + 1);
+    }
+
+    const FUtf8String Decorated = FUtf8String(UTF8TEXT("(")) + Scope + UTF8TEXT(":)") + Leaf;
 
     UClass* Found = nullptr;
     Verse::FRunningContext Context = Verse::FRunningContextPromise{};
@@ -1751,6 +1764,27 @@ AUTORTFM_DISABLE int64 HandleOf(Verse::VValue Value)
     return Shadow ? Shadow->Handle.Get() : 0;
 }
 
+/// The module-qualified name of a script class: `player` at the package root, `gameplay/player`
+/// in a module. This is what every ClassNameUtf8 in the ABI carries.
+///
+/// Read back out of the UClass's own name, which is the Verse name mangled by
+/// VNamedType::AppendMangledName: the module path with each `/` replaced by a separator, then the
+/// class's own name. The separator is `-` for a Source package like this one (`_` is for VNI), and
+/// no Verse identifier can contain either one, so undoing it is a substitution rather than a parse.
+///
+/// UVerseClass::PackageRelativeVersePath would be the direct answer and is not usable: the line
+/// that sets it from the AST is commented out in VVMClass.cpp, so under VerseVM it is empty.
+AUTORTFM_DISABLE FUtf8String QualifiedClassName(const UClass* Class)
+{
+    if (!Class)
+    {
+        return FUtf8String();
+    }
+    FString Name = Class->GetName();
+    Name.ReplaceCharInline(TEXT('-'), TEXT('/'));
+    return FUtf8String(Name);
+}
+
 /// The decorated shape key for a member of Object's own class. Factored out because the read and
 /// write paths must agree on it exactly.
 AUTORTFM_DISABLE FUtf8String ShapeKeyFor(FUtf8StringView ClassName, FUtf8StringView FieldName)
@@ -1774,7 +1808,7 @@ AUTORTFM_DISABLE const Verse::VShape::VEntry* FindShapeField(Verse::FRunningCont
     Verse::VShape& Shape = UVerseClass::GetShapeForLoadField(Context, Object->GetClass());
     for (const UClass* Cursor = Object->GetClass(); Cursor != nullptr; Cursor = Cursor->GetSuperClass())
     {
-        const FUtf8String ClassName = FUtf8String(Cursor->GetName());
+        const FUtf8String ClassName = QualifiedClassName(Cursor);
         Verse::VUniqueString& Name =
             Verse::VUniqueString::New(Context, FUtf8StringView(ShapeKeyFor(ClassName, FieldName)));
         if (const Verse::VShape::VEntry* Field = Shape.GetField(Name))
@@ -2381,7 +2415,7 @@ AUTORTFM_DISABLE bool WriteFieldWith(UObject* Object, FUtf8StringView FieldName,
         return false;
     }
 
-    if (Mode == EFieldWrite::Assign && !IsVarMember(FUtf8String(Object->GetClass()->GetName()), FieldName))
+    if (Mode == EFieldWrite::Assign && !IsVarMember(QualifiedClassName(Object->GetClass()), FieldName))
     {
         return false;
     }
@@ -2467,7 +2501,7 @@ AUTORTFM_DISABLE bool WriteFieldOf(UObject* Object, FUtf8StringView FieldName, c
     // node's own instance already is, and WriteInstanceFieldInstance is the way to hand that over.
     if (Value.VariantTag == VH_VARIANT_OBJECT)
     {
-        const FMemberType Declared = DescribeMemberType(FUtf8String(Object->GetClass()->GetName()), FieldName);
+        const FMemberType Declared = DescribeMemberType(QualifiedClassName(Object->GetClass()), FieldName);
         if (Declared.ReferenceOrigin != EClassOrigin::Mirrored || !Declared.bReferenceIsOption)
         {
             return false;
@@ -2491,7 +2525,7 @@ AUTORTFM_DISABLE bool WriteFieldOf(UObject* Object, FUtf8StringView FieldName, c
     // against a longer version of the enum will carry one, and it has no enumerator to become.
     if (Value.Type == VH_TYPE_INT)
     {
-        const int32 EnumeratorCount = DescribeMemberType(FUtf8String(Object->GetClass()->GetName()), FieldName).EnumeratorCount;
+        const int32 EnumeratorCount = DescribeMemberType(QualifiedClassName(Object->GetClass()), FieldName).EnumeratorCount;
         if (EnumeratorCount > 0 && (Value.Int < 0 || Value.Int >= EnumeratorCount))
         {
             return false;
@@ -2503,7 +2537,7 @@ AUTORTFM_DISABLE bool WriteFieldOf(UObject* Object, FUtf8StringView FieldName, c
     // type, which is where DescribeExportType already worked them out for the export list.
     if (Value.Type == VH_TYPE_TUPLE || Value.Type == VH_TYPE_ARRAY)
     {
-        const FMemberType Declared = DescribeMemberType(FUtf8String(Object->GetClass()->GetName()), FieldName);
+        const FMemberType Declared = DescribeMemberType(QualifiedClassName(Object->GetClass()), FieldName);
         if (Declared.Described.Type != Value.Type)
         {
             return false;
@@ -2601,7 +2635,7 @@ AUTORTFM_DISABLE bool GodotVerse::WriteInstanceFieldInstance(FInstance* Instance
     }
 
     UObject* Referenced = Value && Value->Object.IsValid() ? Value->Object.Get() : nullptr;
-    const FMemberType Declared = DescribeMemberType(FUtf8String(Instance->Object->GetClass()->GetName()), FieldName);
+    const FMemberType Declared = DescribeMemberType(QualifiedClassName(Instance->Object->GetClass()), FieldName);
     if (!Declared.ReferenceClass)
     {
         return false;
@@ -3877,7 +3911,7 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
     // The signature, for the parameter and result types. Asked of the semantic program rather than
     // of the VM because that is the only view that carries declared types -- the bytecode has
     // erased them by the time a VValue exists.
-    const FUtf8String ClassName = FUtf8String(Instance->Object->GetClass()->GetName());
+    const FUtf8String ClassName = QualifiedClassName(Instance->Object->GetClass());
     TArray<FMethodDesc> Methods;
     if (!GetClassMethods(FUtf8StringView(ClassName), Methods))
     {

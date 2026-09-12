@@ -23,9 +23,16 @@ void VerseEditorPlugin::_enter_tree() {
 	// Play builds on its own; this is for everything else that wants the running code to catch up
 	// without a run -- a `@tool` script, or an `@export` default whose value only a build produces.
 	add_tool_menu_item(BUILD_MENU_ITEM, callable_mp(this, &VerseEditorPlugin::build_from_menu));
+
+	// Godot's FileSystem dock can create a script, a scene or a resource and nothing else, so
+	// without this a `.vmodule` marker could not be made from inside the editor at all.
+	module_menu.instantiate();
+	add_context_menu_plugin(EditorContextMenuPlugin::CONTEXT_SLOT_FILESYSTEM, module_menu);
 }
 
 void VerseEditorPlugin::_exit_tree() {
+	remove_context_menu_plugin(module_menu);
+	module_menu.unref();
 	remove_tool_menu_item(BUILD_MENU_ITEM);
 	EditorInterface::get_singleton()->get_script_editor()->unregister_syntax_highlighter(highlighter);
 	highlighter.unref();

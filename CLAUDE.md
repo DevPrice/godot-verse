@@ -90,7 +90,9 @@ check. The design argument for v2, and the spikes that settled it, are in `docs/
 | `verse_script_language.{h,cpp}` | the `ScriptLanguage`: `_validate`, the analysis cache, `_complete_code`/`_lookup_code`, `_frame` (which pumps `vh_tick` and reaps `vh_check_project_poll`) |
 | `verse_resource_format.{h,cpp}` | load/save, without which a `.verse` cannot be attached to a node |
 | `verse_lexer.{h,cpp}` | resumable per-line lexer; no godot-cpp dependency, so it is unit-testable standalone |
-| `verse_class_decl.{h,cpp}` | scans a `.verse` file's top-level class and its `@global_class` attribute out of the text; defers comments and strings to the lexer, and shares its lack of godot-cpp |
+| `verse_class_decl.{h,cpp}` | scans the top-level class **named after the file** and its `@global_class` attribute out of the text; defers comments and strings to the lexer, and shares its lack of godot-cpp |
+| `verse_module_map.{h,cpp}` | which module each `.verse` is in, from the `.vmodule` markers; pure, and the third godot-cpp-free unit |
+| `verse_module_menu.{h,cpp}` | editor-only: "Make Verse Module" in the FileSystem dock, because Godot's dock cannot create an empty file |
 | `verse_syntax_highlighter.*`, `verse_editor_plugin.*` | editor-only (`TOOLS_ENABLED`) |
 
 `VerseScriptLanguage` overrides only the virtuals it actually answers — godot-cpp binds a virtual
@@ -122,6 +124,7 @@ and the `VerseSimulationMetadata` dependency each exist for a reason spelled out
     python tools/build_smoke.py           # ABI test binary
     python tools/build_lexer_test.py      # lexer test binary
     python tools/build_class_decl_test.py # class-declaration scanner test binary
+    python tools/build_module_map_test.py # module-map test binary
     python tools/build_bench.py           # host benchmark (timings, not pass/fail)
 
 Run the tests:
@@ -130,8 +133,9 @@ Run the tests:
     python tools/run_tests.py --only units       # or one of units / abi / integration
     python tools/run_tests.py --build            # rebuild the test binaries first
 
-It runs three layers and reports each: **units** (lexer, class-declaration scanner, generator —
-no Godot, no UE), **abi** (`host_smoke`, the whole C ABI with no Godot), and **integration** — which
+It runs three layers and reports each: **units** (lexer, class-declaration scanner, module map,
+generator — no Godot, no UE), **abi** (`host_smoke`, the whole C ABI with no Godot), and
+**integration** — which
 is two headless Godot projects, `tests/integration` for behaviour and `tests/coverage_diagnostic`
 for the R-SCN-2 diagnostics. The second is its own project because its one script deliberately does
 not compile, and one unresolvable name in the first would take every other case down with it. Its
@@ -151,6 +155,7 @@ The binaries still run standalone, which is what to reach for when bisecting one
     bin/host_smoke.exe <engine>/Engine/Binaries/Win64/verse_host.dll <engine>/Engine .
     bin/verse_lexer_test.exe
     bin/verse_class_decl_test.exe
+    bin/verse_module_map_test.exe
     python tests/verse_api_gen/test_gen_verse_api.py
 
 No test framework anywhere. Each test is a `main` (or a plain script) that prints one line per case
@@ -244,15 +249,16 @@ ten element types against four key types is not a list to maintain by hand.
   for a field-named accessor overload per nesting level, and `transform3d`'s two members have
   different types, so no one getter signature satisfies it. `gen_verse_api.py` leaves those as
   ordinary getter and setter methods; only the flat math types keep `set Node.Position = ...`.
-- **Every top-level name in the project must be unique.** The whole project shares one flat
-  `/user@localhost` scope and Verse forbids shadowing. A script's class is named after its own file
-  for exactly this reason. What a file may *also* declare beside that class is its own business —
-  Phase 2's `derived_entity.verse` carries an interface, two structs, an enum and a parametric class
-  alongside it — and a file with no class at all is a library file, usable from every sibling with
-  nothing written to import it (R-LANG-6). *Phase 3 removes this too*: uniqueness narrows to
-  per-module, a file may declare any number of top-level names, and only the class named after the
-  file stays attachable to a node — which keeps `VerseScript::verse_class_name` reading the stem
-  even after Verse stops requiring it. `docs/phase-3-design.md` §2.4. Still true today.
+- **Every top-level name must be unique within its module.** A directory is a module only if it
+  carries a `<name>.vmodule` marker, and the **marker names the module**, not the directory —
+  `res://my-stuff/gameplay.vmodule` is module `gameplay`. Unmarked directories are organisational:
+  their files join the nearest marked ancestor, so a project with no markers has every file in the
+  root module and nothing on disk changes meaning. Root is implicit: a module reads the root
+  module's definitions with nothing written. A file may declare any number of top-level names, and
+  only the class **named after the file** can go on a node — which is a bridge rule now rather than
+  a Verse one. A file with no class at all is a library file (R-LANG-6). Every `ClassNameUtf8` in
+  the ABI is module-qualified: `player` at the root, `gameplay/player` in a module.
+  `src/verse_module_map.{h,cpp}` is the whole rule, and it is a unit test away from Godot.
 - **The attribute package must be added before the first `AddDataSource`.** `@global_class` is
   declared in a source package the host adds at runtime, not in `host/Verse` — VNI compiles that
   at build time and rejects `class(attribute)`. `FSolarisIde::EnsureDataSourcePackageExists`

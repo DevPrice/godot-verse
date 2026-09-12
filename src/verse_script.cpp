@@ -213,7 +213,13 @@ void VerseScript::refresh_from_analysis() {
 }
 
 String VerseScript::verse_class_name() const {
-	return get_path().get_file().get_basename();
+	// The module prefix is what the host ABI wants: `player` at the project root,
+	// `gameplay/player` for a file under a directory carrying a `.vmodule`. The *stem* is still
+	// what names the class, and still the only class in the file that can go on a node -- Verse
+	// stopped requiring that and the bridge did not.
+	VerseScriptLanguage *language = VerseScriptLanguage::singleton();
+	const String path = get_path();
+	return language != nullptr ? language->qualified_class_name(path) : path.get_file().get_basename();
 }
 
 vh_instance *VerseScript::make_instance(int64_t p_object_id) const {
@@ -321,7 +327,8 @@ TypedArray<Dictionary> VerseScript::_get_documentation() const {
 
 	const TypedArray<Dictionary> members = runtime->class_members(class_name);
 	const String source = verse_newline_normalized(source_code);
-	const VerseClassDecl decl = verse_scan_class_decl(source.utf8().get_data());
+	const VerseClassDecl decl =
+			verse_scan_class_decl(source.utf8().get_data(), get_path().get_file().get_basename().utf8().get_data());
 
 	Array properties;
 	Array methods;
@@ -401,7 +408,8 @@ StringName VerseScript::_get_instance_base_type() const {
 	if (language == nullptr) {
 		return StringName("Node");
 	}
-	const VerseClassDecl decl = verse_scan_class_decl(source_code.utf8().get_data());
+	const VerseClassDecl decl =
+			verse_scan_class_decl(source_code.utf8().get_data(), get_path().get_file().get_basename().utf8().get_data());
 
 	// A library file -- no top-level class of its own -- has nothing to attach to, and saying so is
 	// how Godot refuses and explains: the attach dialog and the drag-a-script-onto-a-node path both
@@ -482,7 +490,8 @@ StringName VerseScript::_get_global_name() const {
 	// Answered from the source text, like VerseScriptLanguage::_get_global_class_name and for the
 	// same reasons -- and it has to agree with it, because Godot compares the two when it decides
 	// whether the class cache is stale.
-	const VerseClassDecl decl = verse_scan_class_decl(source_code.utf8().get_data());
+	const VerseClassDecl decl =
+			verse_scan_class_decl(source_code.utf8().get_data(), get_path().get_file().get_basename().utf8().get_data());
 	return decl.is_global ? StringName(String(verse_pascal_case(decl.name).c_str())) : StringName();
 }
 

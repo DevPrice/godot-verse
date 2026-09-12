@@ -1,5 +1,6 @@
 #pragma once
 
+#include "verse_module_menu.h"
 #include "verse_syntax_highlighter.h"
 
 #include <godot_cpp/classes/editor_plugin.hpp>
@@ -30,4 +31,5 @@ private:
 	void build_from_menu();
 
 	godot::Ref<VerseSyntaxHighlighter> highlighter;
+	godot::Ref<VerseModuleMenu> module_menu;
 };

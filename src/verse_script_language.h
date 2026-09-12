@@ -10,6 +10,8 @@
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
 
+#include <map>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -222,6 +224,15 @@ public:
 	// the syntax highlighter has to colour a script that has never been built.
 	godot::PackedStringArray script_class_names() const;
 
+	// The module a script's definitions go into: "" for the root module, otherwise a
+	// '/'-separated path. A directory is a module only if it carries a `<name>.vmodule` marker,
+	// and the marker names the module -- see src/verse_module_map.h for the whole rule.
+	godot::String module_for_script(const godot::String &p_res_path) const;
+
+	// The module-qualified class name for a script: `player` at the root, `gameplay/player` in a
+	// module. This is what every ClassNameUtf8 in the host ABI carries.
+	godot::String qualified_class_name(const godot::String &p_res_path) const;
+
 	// The Godot class a script attaches at, and the base_type its global-class registration
 	// records. One walk up the Verse superclass chain answers both, which is why they come back
 	// together: they differ only in where they stop.
@@ -326,12 +337,34 @@ private:
 	// fix on screen and the documentation stays a save behind.
 	mutable bool editor_refresh_pending = false;
 
+	// Module path per res:// script path, and whether it has been derived at all this session.
+	// Mutable because verse_class_name() is const and every lookup goes through it.
+	mutable std::map<std::string, std::string> module_by_script;
+	mutable bool module_map_built = false;
+
 	void log_new_diagnostics(const godot::String &p_globalized_path, const godot::TypedArray<godot::Dictionary> &p_errors) const;
 
 	static godot::PackedStringArray find_verse_sources(const godot::String &p_dir);
+	// Every file under p_dir whose extension is p_extension, lowercased. The `.verse` walk and the
+	// `.vmodule` walk are the same walk with a different answer.
+	static godot::PackedStringArray find_project_files(const godot::String &p_dir, const godot::String &p_extension);
 
-	// The res:// path of the script defining p_class_name, or empty. A linear walk of the project
-	// rather than a cached map: it is only reached for a script whose superclass is another
-	// script, which the generated Godot API never is.
-	godot::String script_path_for_class(const godot::String &p_class_name) const;
+	// Every res:// path of a script whose *file stem* is p_class_name. More than one is possible
+	// once modules exist -- gameplay/player.verse and ui/player.verse both answer to `player` --
+	// and telling the callers apart is the caller's problem, because only one of them can do
+	// anything about it. A linear walk rather than a cached map: it is only reached for a script
+	// whose superclass is another script, which the generated Godot API never is.
+	godot::PackedStringArray script_paths_for_class(const godot::String &p_class_name) const;
+
+	// Re-reads the .vmodule markers and re-derives which module every script is in, reporting any
+	// marker whose stem is not a Verse identifier. Called by every build, and once more by a
+	// lookup for a path the map has never seen -- which is a script added since the last build.
+	void refresh_module_map() const;
+
+	// Complains about two files in one module claiming one class name, and about two
+	// @global_class classes claiming one Godot name. Both are project-wide questions that only a
+	// pass over every source can answer, so they ride along with the build, which reads them all
+	// anyway. p_sources and p_texts run parallel.
+	void report_name_collisions(const godot::PackedStringArray &p_sources,
+			const std::vector<std::string> &p_texts) const;
 };

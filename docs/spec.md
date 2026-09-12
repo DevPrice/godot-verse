@@ -226,17 +226,15 @@ and packages, never syntax.
 - **R-LANG-6 (MUST)** A project is many files organised in directories, with real modules. A Verse
   file can import and use definitions from another file in the project; two files may define
   names that would collide at top level; shared library code lives outside any script.
-  *Current state:* **part.** The third clause is **done**: a `.verse` with no class of its own is a
-  library file rather than a broken script — it compiles, every other file in the project resolves
-  its module-level definitions with nothing written to import them, and it reports no instance base
-  type, so Godot refuses to attach it and says why. That much needs no modules: in one flat scope
-  same-module files already see each other, and it is most of what makes that scope livable while
-  the rest waits. The first two clauses are **none**, and the current state is a hard rule in the
-  opposite direction — the whole project shares one flat `/user@localhost` scope and Verse forbids
-  shadowing, so a script's class is named after its file to keep collisions from happening (README,
-  "Five constraints"). That remains the single largest structural gap between the prototype and a
-  language a project can be written in. **OQ-5** is closed (§14.1): the escape is submodules built
-  from the project's directory tree, inside the one user package, and it is Phase 3's. Phase 3's
+  *Current state:* **done.** The third clause was done in Phase 2: a `.verse` with no class of its
+  own is a library file rather than a broken script — it compiles, every other file in the project
+  resolves its module-level definitions with nothing written to import them, and it reports no
+  instance base type, so Godot refuses to attach it and says why. The first two clauses are Phase
+  3's, and they are what modules bought: two files in different modules may declare the same name
+  and both go on a node, uniqueness narrows from project-wide to per-module, and a file may declare
+  any number of top-level names — only the one named after the file can be attached, which is a
+  bridge rule now rather than a Verse one. **OQ-5** is closed (§14.1): the escape is submodules
+  built from the project's directory tree, inside the one user package. Phase 3's
   design ([`phase-3-design.md`](phase-3-design.md) §2) settles which directories become modules,
   and it is **not** all of them: a directory is a module only if it carries a `<name>.vmodule`
   marker, and unmarked directories are organisational — their files join the nearest marked

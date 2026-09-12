@@ -1176,6 +1176,33 @@ int main(int argc, char** argv)
 		CallsOk = Step("a file in a module reaches a root definition with nothing imported",
 					   SecondBuilt && DiagnosticErrorCount == 0) && CallsOk;
 
+		// A class in a module is addressed by a qualified name, and everything the ABI does with a
+		// class name has to take one: the lookup, the method list and the per-call signature the
+		// result type comes from. Instantiating it and reading an int back exercises all three,
+		// because a result the host cannot type comes back as void.
+		vh_instance* InModule = nullptr;
+		CallsOk = Step("a class in a module instantiates under its qualified name",
+					   InstantiateFn("gameplay/module_probe", 5, &InModule) == VH_OK && InModule != nullptr)
+			   && CallsOk;
+		vh_instance* Unqualified = nullptr;
+		CallsOk = Step("and an unqualified name does not reach it",
+					   InstantiateFn("module_probe", 6, &Unqualified) != VH_OK) && CallsOk;
+		{
+			vh_value Total{};
+			CallsOk = Step("and its method returns a typed value",
+						   InModule != nullptr
+							   && InstanceCallFn(InModule, "(/user@localhost/gameplay/module_probe:)Total",
+												 nullptr, 0, nullptr, &Total) == VH_OK
+							   && Total.Type == VH_TYPE_INT && Total.Int == 15)
+				   && CallsOk;
+		}
+		const vh_method_desc* ModuleMethods = nullptr;
+		int32_t ModuleMethodCount = 0;
+		CallsOk = Step("a module's class has a method list of its own",
+					   ClassMethodListFn("gameplay/module_probe", &ModuleMethods, &ModuleMethodCount) == VH_OK
+						   && ModuleMethodCount > 0) && CallsOk;
+		ReleaseInstanceFn(InModule);
+
 		vh_instance* Fresh = nullptr;
 		CallsOk = Step("the new generation's class is what resolves now",
 					   InstantiateFn("reload_probe", 4, &Fresh) == VH_OK && Fresh != nullptr) && CallsOk;

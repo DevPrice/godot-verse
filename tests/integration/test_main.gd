@@ -358,5 +358,28 @@ func _init() -> void:
 	root.add_child(after_build)
 	_check_eq("and a node attached after it answers too", after_build.call("EchoInt", 11), 11)
 
+	# --- R-LANG-6: modules ---------------------------------------------------------------------
+	#
+	# widgets/left/ and widgets/right/ each carry a .vmodule and each declare a `widget`. Before
+	# modules that was unfixable: the project shared one flat scope, so two files could not both be
+	# called widget.verse however far apart they sat. Both attach, and each runs its own code.
+	var left: Script = load("res://widgets/left/widget.verse")
+	var right: Script = load("res://widgets/right/widget.verse")
+	_check("two same-named classes in two modules both load", left != null and right != null)
+	if left != null and right != null:
+		_check("and both are attachable", left.can_instantiate() and right.can_instantiate())
+		var left_node := Node2D.new()
+		left_node.set_script(left)
+		root.add_child(left_node)
+		var right_node := Node2D.new()
+		right_node.set_script(right)
+		root.add_child(right_node)
+		_check_eq("the left one runs its own code", left_node.call("Which"), "left")
+		_check_eq("and the right one runs its own", right_node.call("Which"), "right")
+		# helpers.verse is at the project root, and nothing in widget.verse imports it: a module
+		# reads the root module by ordinary lexical scoping.
+		_check_eq("a module reaches a root definition with nothing imported",
+				left_node.call("RootConstant"), 42)
+
 	print("[integration] %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)

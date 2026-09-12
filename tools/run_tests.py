@@ -119,6 +119,7 @@ def run_units(results: Results, do_build: bool) -> None:
     for binary, builder in (
         ("verse_lexer_test.exe", "build_lexer_test.py"),
         ("verse_class_decl_test.exe", "build_class_decl_test.py"),
+        ("verse_module_map_test.exe", "build_module_map_test.py"),
     ):
         if do_build and not build(builder):
             results.record(binary, False)
@@ -252,6 +253,16 @@ COVERAGE_EXPLANATIONS = [
     # integer that used to compile does not.
     "This assignment expects a value of type node_process_mode, but the assigned value is an "
     "incompatible value of type type{2}.",
+    # The four module diagnostics (phase-3-design.md section 2.4). Each is asserted on the part of
+    # the sentence that says *why*, not on the file names, whose order is the filesystem's.
+    '"my-stuff" is not a Verse module name',
+    'gameplay.vmodule, not my-stuff.vmodule',
+    "both declare `collide` in the root module",
+    'choose "Make Verse Module"',
+    "both register the Godot class name `Widget`",
+    "ClassDB is one flat namespace and a module is deliberately not part of it",
+    "derives from `widget`, and more than one script answers to that name",
+    "it offers Node as this script's base type",
 ]
 
 

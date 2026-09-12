@@ -5,6 +5,7 @@
 #include "verse_class_decl.h"
 #include "verse_keywords.h"
 #include "verse_lexer.h"
+#include "verse_module_map.h"
 #include "verse_runtime.h"
 #include "verse_script.h"
 
@@ -919,11 +920,11 @@ static int64_t code_line_indent(const String &p_line) {
 // indented at least as far as the cursor, since a line indented less would be the header of the
 // block the cursor is really inside.
 //
-// Only the file's top-level class is found, so a member of a nested one completes as an ordinary
-// name. That is the conservative direction, and one class per file is what the flat project scope
-// forces in the first place.
-static String member_declaration_class(const String &p_source, int64_t p_line, int64_t p_indent) {
-	const VerseClassDecl decl = verse_scan_class_decl(p_source.utf8().get_data());
+// Only the class named after the file is found, so a member being added to one of the file's
+// *other* top-level classes completes as an ordinary name. That is the conservative direction,
+// and the file's own class is the one a script is actually written in.
+static String member_declaration_class(const String &p_source, const String &p_file_stem, int64_t p_line, int64_t p_indent) {
+	const VerseClassDecl decl = verse_scan_class_decl(p_source.utf8().get_data(), p_file_stem.utf8().get_data());
 	if (decl.line < 0 || p_line <= decl.line) {
 		return String();
 	}
@@ -1027,7 +1028,8 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 	const int64_t line_start = before.rfind("\n") + 1;
 	const String ahead_of_prefix = before.substr(line_start, prefix_start - line_start);
 	const String declaring_in_class = !completing_members && !completing_attribute && !ahead_of_prefix.is_empty() && ahead_of_prefix.strip_edges().is_empty()
-			? member_declaration_class(verse_newline_normalized(p_code), before.count("\n"), ahead_of_prefix.length())
+			? member_declaration_class(verse_newline_normalized(p_code), p_path.get_file().get_basename(),
+					  before.count("\n"), ahead_of_prefix.length())
 			: String();
 
 	Array options;
@@ -1469,7 +1471,8 @@ Dictionary VerseScriptLanguage::_get_global_class_name(const String &p_path) con
 		return Dictionary();
 	}
 
-	const VerseClassDecl decl = verse_scan_class_decl(source.utf8().get_data());
+	const VerseClassDecl decl =
+			verse_scan_class_decl(source.utf8().get_data(), p_path.get_file().get_basename().utf8().get_data());
 	if (decl.name.empty()) {
 		return Dictionary();
 	}
@@ -1487,14 +1490,15 @@ Dictionary VerseScriptLanguage::_get_global_class_name(const String &p_path) con
 	return result;
 }
 
-String VerseScriptLanguage::script_path_for_class(const String &p_class_name) const {
+PackedStringArray VerseScriptLanguage::script_paths_for_class(const String &p_class_name) const {
+	PackedStringArray matches;
 	const PackedStringArray sources = find_verse_sources("res://");
 	for (int64_t i = 0; i < sources.size(); i++) {
 		if (sources[i].get_file().get_basename() == p_class_name) {
-			return sources[i];
+			matches.push_back(sources[i]);
 		}
 	}
-	return String();
+	return matches;
 }
 
 VerseScriptLanguage::BaseTypes VerseScriptLanguage::base_types_for(const VerseClassDecl &p_decl) const {
@@ -1518,15 +1522,29 @@ VerseScriptLanguage::BaseTypes VerseScriptLanguage::base_types_for(const VerseCl
 		}
 
 		const String base = String(decl.base.c_str());
-		const String base_path = script_path_for_class(base);
-		if (base_path.is_empty()) {
+		const PackedStringArray base_paths = script_paths_for_class(base);
+		if (base_paths.is_empty()) {
 			break;
 		}
+		// Modules make a file stem ambiguous -- gameplay/player.verse and ui/player.verse both
+		// answer to `player` -- and this scan is the one place that cannot resolve it. The
+		// compiler has no such problem: it resolves through modules and `using`, and it is not
+		// reachable from here (see _get_global_class_name). Reporting and falling back to Node is
+		// the honest answer; the alternative, teaching this scan to follow `using` lines, would be
+		// a second resolution path guaranteed to disagree with the compiler somewhere.
+		// Saying so is report_name_collisions' job, on the main thread at build time: this runs on
+		// EditorFileSystem's scan thread, where a warning would race the log and repeat once per
+		// script in the project.
+		if (base_paths.size() > 1) {
+			break;
+		}
+		const String base_path = base_paths[0];
 		const String base_source = FileAccess::get_file_as_string(base_path);
 		if (FileAccess::get_open_error() != OK) {
 			break;
 		}
-		const VerseClassDecl base_decl = verse_scan_class_decl(base_source.utf8().get_data());
+		const VerseClassDecl base_decl =
+				verse_scan_class_decl(base_source.utf8().get_data(), base.utf8().get_data());
 		if (base_decl.name.empty()) {
 			break;
 		}
@@ -1587,6 +1605,10 @@ double VerseScriptLanguage::get_frame_budget_ms() const {
 }
 
 PackedStringArray VerseScriptLanguage::find_verse_sources(const String &p_dir) {
+	return find_project_files(p_dir, "verse");
+}
+
+PackedStringArray VerseScriptLanguage::find_project_files(const String &p_dir, const String &p_extension) {
 	PackedStringArray found;
 
 	Ref<DirAccess> dir = DirAccess::open(p_dir);
@@ -1596,7 +1618,7 @@ PackedStringArray VerseScriptLanguage::find_verse_sources(const String &p_dir) {
 
 	const PackedStringArray files = dir->get_files();
 	for (int64_t i = 0; i < files.size(); i++) {
-		if (files[i].get_extension().to_lower() == "verse") {
+		if (files[i].get_extension().to_lower() == p_extension) {
 			found.push_back(p_dir.path_join(files[i]));
 		}
 	}
@@ -1608,10 +1630,124 @@ PackedStringArray VerseScriptLanguage::find_verse_sources(const String &p_dir) {
 		if (subdirs[i].begins_with(".") || (p_dir == "res://" && subdirs[i] == "addons")) {
 			continue;
 		}
-		found.append_array(find_verse_sources(p_dir.path_join(subdirs[i])));
+		found.append_array(find_project_files(p_dir.path_join(subdirs[i]), p_extension));
 	}
 
 	return found;
+}
+
+void VerseScriptLanguage::refresh_module_map() const {
+	const PackedStringArray sources = find_verse_sources("res://");
+	const PackedStringArray markers = find_project_files("res://", "vmodule");
+
+	std::vector<std::string> source_paths;
+	std::vector<std::string> marker_paths;
+	source_paths.reserve(sources.size());
+	marker_paths.reserve(markers.size());
+	for (int64_t i = 0; i < sources.size(); i++) {
+		source_paths.push_back(std::string(sources[i].utf8().get_data()));
+	}
+	for (int64_t i = 0; i < markers.size(); i++) {
+		marker_paths.push_back(std::string(markers[i].utf8().get_data()));
+	}
+
+	const VerseModuleMap map = verse_build_module_map(source_paths, marker_paths);
+	module_by_script = map.module_by_source;
+	module_map_built = true;
+
+	for (const VerseModuleDiagnostic &diagnostic : map.diagnostics) {
+		UtilityFunctions::push_error(String("res://") + String(diagnostic.marker_path.c_str())
+				+ String(": ") + String(diagnostic.message.c_str()));
+	}
+}
+
+String VerseScriptLanguage::module_for_script(const String &p_res_path) const {
+	if (!module_map_built) {
+		refresh_module_map();
+	}
+	const std::string key(p_res_path.utf8().get_data());
+	auto found = module_by_script.find(key);
+	if (found == module_by_script.end()) {
+		// A script added since the last build. One more walk of res:// answers for it and for
+		// every other new file at the same time.
+		refresh_module_map();
+		found = module_by_script.find(key);
+	}
+	return found == module_by_script.end() ? String() : String(found->second.c_str());
+}
+
+void VerseScriptLanguage::report_name_collisions(const PackedStringArray &p_sources,
+		const std::vector<std::string> &p_texts) const {
+	// res:// path of the file that claimed each (module, class) pair and each Godot global name.
+	std::map<std::string, String> owner_by_module_class;
+	std::map<std::string, String> owner_by_global_name;
+
+	for (int64_t i = 0; i < p_sources.size() && i < (int64_t)p_texts.size(); i++) {
+		const String path = p_sources[i];
+		const String stem = path.get_file().get_basename();
+		const VerseClassDecl decl = verse_scan_class_decl(p_texts[i], stem.utf8().get_data());
+		if (decl.name.empty()) {
+			continue;
+		}
+
+		const String module = module_for_script(path);
+		const std::string key = std::string(module.utf8().get_data()) + "/" + decl.name;
+		const auto claimed = owner_by_module_class.find(key);
+		if (claimed != owner_by_module_class.end()) {
+			// The one diagnostic that has to teach the feature: it is the only place an author
+			// finds out the marker exists, and its fix is the context-menu action.
+			UtilityFunctions::push_error(path + String(" and ") + claimed->second
+					+ String(" both declare `") + String(decl.name.c_str()) + String("` in ")
+					+ (module.is_empty() ? String("the root module")
+										 : String("module `") + module + String("`"))
+					+ String(". A name may only be declared once per module. Put one of them in a module of ")
+					+ String("its own -- right-click its directory in the FileSystem dock and choose ")
+					+ String("\"Make Verse Module\" -- or rename one of the files."));
+		} else {
+			owner_by_module_class[key] = path;
+		}
+
+		if (decl.is_global) {
+			const String godot_name = String(verse_pascal_case(decl.name).c_str());
+			const std::string global_key(godot_name.utf8().get_data());
+			const auto registered = owner_by_global_name.find(global_key);
+			if (registered != owner_by_global_name.end()) {
+				UtilityFunctions::push_error(path + String(" and ") + registered->second
+						+ String(" both register the Godot class name `") + godot_name
+						+ String("`. ClassDB is one flat namespace and a module is deliberately not part ")
+						+ String("of it, so two @global_class classes may not share a name however far apart ")
+						+ String("they are. Rename one of the files."));
+			} else {
+				owner_by_global_name[global_key] = path;
+			}
+		}
+
+		// The pre-build class picker resolves a script base by matching the file stem across
+		// res://, which modules can make ambiguous. It falls back to Node and says nothing, on a
+		// scan thread where it cannot say anything; here is where it can.
+		if (!decl.base.empty()) {
+			const String base = String(decl.base.c_str());
+			if (godot_class_for(decl.base).is_empty()) {
+				const PackedStringArray candidates = script_paths_for_class(base);
+				if (candidates.size() > 1) {
+					String listed;
+					for (int64_t c = 0; c < candidates.size(); c++) {
+						listed += (c == 0 ? String() : String(", ")) + candidates[c];
+					}
+					UtilityFunctions::push_warning(path + String(" derives from `") + base
+							+ String("`, and more than one script answers to that name (") + listed
+							+ String("). The build resolves it through modules; the class picker cannot, ")
+							+ String("so until this build finishes it offers Node as this script's base type."));
+				}
+			}
+		}
+	}
+}
+
+String VerseScriptLanguage::qualified_class_name(const String &p_res_path) const {
+	const String stem = p_res_path.get_file().get_basename();
+	const String module = module_for_script(p_res_path);
+	return module.is_empty() ? stem : module + String("/") + stem;
 }
 
 PackedStringArray VerseScriptLanguage::script_class_names() const {
@@ -1642,14 +1778,17 @@ Error VerseScriptLanguage::build_project() {
 		}
 	}
 
+	// Re-derived per build rather than trusted: a .vmodule added or removed since the last one
+	// moves files between modules, and a build is the moment that is allowed to take effect.
+	refresh_module_map();
+
 	const PackedStringArray sources = find_verse_sources("res://");
 	PackedStringArray globalized;
 	PackedStringArray modules;
 	ProjectSettings *settings = ProjectSettings::get_singleton();
 	for (int64_t i = 0; i < sources.size(); i++) {
 		globalized.push_back(settings->globalize_path(sources[i]));
-		// Every file is in the root module until Phase 3 stage 4 reads the .vmodule markers.
-		modules.push_back(String());
+		modules.push_back(module_for_script(sources[i]));
 	}
 
 	// The host reports against the absolute path it was handed; scripts are keyed by res:// path.
@@ -1666,12 +1805,20 @@ Error VerseScriptLanguage::build_project() {
 	// The host loaded each of these from disk just now, so this is the text it holds. Seeding it
 	// here is what makes the *first* validate of a file free rather than only the repeats.
 	analyzed_source_by_path.clear();
+	std::vector<std::string> texts;
+	texts.reserve(sources.size());
 	for (int64_t i = 0; i < sources.size(); i++) {
 		const String text = FileAccess::get_file_as_string(sources[i]);
-		if (FileAccess::get_open_error() == OK) {
+		const bool read = FileAccess::get_open_error() == OK;
+		if (read) {
 			analyzed_source_by_path[sources[i]] = verse_newline_normalized(text);
 		}
+		texts.push_back(read ? std::string(text.utf8().get_data()) : std::string());
 	}
+
+	// Every source is in hand exactly once per build, which is the only affordable moment to ask
+	// the three questions that are about the project rather than about a file.
+	report_name_collisions(sources, texts);
 
 	const Array reported = errors_by_globalized.keys();
 	for (int64_t i = 0; i < reported.size(); i++) {
