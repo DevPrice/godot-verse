@@ -11,12 +11,12 @@ lifetime := class(node2d):
 	# Verse object stays perfectly alive while the Godot object under it goes away.
 	var Held : ?node = false
 
-	Ready<override>():void =
+	_Ready<override>():void =
 		if (Victim := GetChild[0]):
 			set Held = option{Victim}
 			Print("lifetime: holding a child node")
 
-	Process<override>(Delta:float):void =
+	_Process<override>(Delta:float):void =
 		set Frames = Frames + 1
 
 		if (Victim := Held?):

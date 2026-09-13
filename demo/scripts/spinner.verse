@@ -4,10 +4,10 @@ using { /Godot.org/Godot }
 # rather than looking one up by scene path.
 spinner := class(sprite2d):
 
-	Ready<override>():void =
+	_Ready<override>():void =
 		Print("Spinner is ready.")
 
-	Process<override>(Delta:float):void =
+	_Process<override>(Delta:float):void =
 		set Rotation = Rotation + Delta
 	
-	PhysicsProcess<override>(Delta:float):void = {}
+	_PhysicsProcess<override>(Delta:float):void = {}

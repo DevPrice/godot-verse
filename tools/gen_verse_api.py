@@ -32,7 +32,10 @@ EXTENSION_API = "godot-cpp/gdextension/extension_api.json"
 # names in completion where the one a user reaches for first is the empty one.
 NATIVE_ROOT = "vh_object"
 
-BASE_MEMBER_NAMES = {"Handle", "Ready", "Process", "PhysicsProcess"}
+# What the hand-written native root carries, and so what no generated member may shadow. Since
+# Phase 4 that is two things: the handle, and the one script-level hook extension_api.json does not
+# describe. Godot's three lifecycle virtuals moved to `node`, where Godot declares them.
+BASE_MEMBER_NAMES = {"Handle", "_Notification"}
 
 # /Verse.org/Verse is in scope in every generated body, and Verse reports an ambiguity rather
 # than shadowing, so a parameter named Min breaks any method that mentions it. The standard
@@ -195,6 +198,59 @@ def pascal_member_name(godot_name: str) -> str:
 
 def verse_method_name(godot_name: str) -> str:
     return pascal_member_name(godot_name)
+
+
+def verse_virtual_name(godot_name: str) -> str:
+    """`_ready` -> `_Ready`. Godot's own leading underscore is kept, and it is load-bearing.
+
+    Counted before it was decided (docs/phase-4-design.md 7.1). A virtual against a *method* of the
+    same PascalCase name collides 834 times, almost entirely on server-extension classes nobody
+    derives from -- that alone would have been survivable. What decides it is the eight collisions
+    against a **signal**: `Node.ready` vs `_ready`, `CanvasItem.draw` vs `_draw`, `Control.gui_input`
+    vs `_gui_input`, `BaseButton.pressed` vs `_pressed`, and four more, all on the classes an
+    ordinary script derives from. Both are things a script touches.
+
+    So Godot's own disambiguation is kept rather than thrown away. It is also what a Godot developer
+    types in GDScript and what C# generates (`public override void _Ready()`), so R-AUD-1 is served
+    rather than strained.
+    """
+    return "_" + pascal_member_name(godot_name) if godot_name.startswith("_") else pascal_member_name(godot_name)
+
+
+# What an unoverridden virtual answers. A void one needs nothing; anything else needs a value, and
+# where Godot's own default is "not handled" this is what that must mean.
+#
+# A type with no entry here and no rule below is a *skip*, recorded with its reason rather than
+# quietly absent: an object return has no zero value a script could write, and a typed container
+# would have to mint a Godot Array on every call Godot makes to a virtual nobody overrode.
+VIRTUAL_SCALAR_DEFAULTS = {
+    "logic": "false",
+    "int": "0",
+    "float": "0.0",
+    "string": '""',
+    "variant": "variant{}",
+    "godot_array": "godot_array{}",
+    "dictionary": "dictionary{}",
+    "callable": "callable{}",
+    "signal_ref": "signal_ref{}",
+}
+
+
+def virtual_default(info, enums: dict):
+    """The default body for a virtual returning `info`, or None when there is nothing to write."""
+    if info is None:
+        return "{}"
+    verse_type = info.verse_type
+    if verse_type in VIRTUAL_SCALAR_DEFAULTS:
+        return VIRTUAL_SCALAR_DEFAULTS[verse_type]
+    if verse_type.startswith("[]"):
+        return "array{}"
+    if verse_type in MATH_STRUCT_NAMES:
+        return f"{verse_type}{{}}"
+    for enum in enums.values():
+        if enum.verse_name == verse_type and enum.values:
+            return f"{verse_type}.{enum.values[0][0]}"
+    return None
 
 
 def verse_param_name(godot_name: str, index: int, reserved_words: set, used: set, members: set) -> str:
@@ -1099,7 +1155,11 @@ def emit_math_packers() -> list:
 
 
 ClassifiedMethod = namedtuple(
-    "ClassifiedMethod", ["godot_name", "verse_name", "params", "return_type", "is_void"]
+    "ClassifiedMethod",
+    ["godot_name", "verse_name", "params", "return_type", "is_void", "default_body"],
+    # A virtual is the only method with one, and it is what makes the declaration a declaration
+    # rather than a call: everything else dispatches through the handle.
+    defaults=(None,),
 )
 ClassifiedProperty = namedtuple(
     "ClassifiedProperty", ["godot_name", "verse_name", "type_info", "getter", "setter", "index"]
@@ -1250,9 +1310,7 @@ def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members
         return SkippedMember(verse_class_name(godot_class), verse_method_name(m["name"]),
                              godot_class, m["name"], reason, detail)
 
-    if m.get("is_virtual"):
-        coverage.skip("virtual", record("virtual"))
-        return None
+    is_virtual = bool(m.get("is_virtual"))
     if m.get("is_static"):
         coverage.skip("static", record("static"))
         return None
@@ -1263,7 +1321,7 @@ def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members
         coverage.skip("superseded_by_free_function", record(
             "superseded_by_free_function", f"`{FREE_FUNCTION_REPLACEMENTS[(godot_class, m['name'])]}`"))
         return None
-    if verse_method_name(m["name"]) in VERSE_AMBIGUOUS_MEMBER_NAMES:
+    if not is_virtual and verse_method_name(m["name"]) in VERSE_AMBIGUOUS_MEMBER_NAMES:
         raise ValueError(
             f"{godot_class}.{m['name']} would be a method named "
             f"{verse_method_name(m['name'])}, which Verse's own definition of that name is "
@@ -1304,12 +1362,21 @@ def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members
         if params[i].default is not None and any(p.default is None for p in params[i + 1:]):
             params[i] = params[i]._replace(default=None)
 
+    default_body = None
+    if is_virtual:
+        default_body = virtual_default(return_info, resolver.enums)
+        if default_body is None:
+            coverage.skip("virtual_no_default", record(
+                "virtual_no_default", f"`{return_info.verse_type}`" if return_info else ""))
+            return None
+
     return ClassifiedMethod(
         godot_name=m["name"],
-        verse_name=verse_method_name(m["name"]),
+        verse_name=verse_virtual_name(m["name"]) if is_virtual else verse_method_name(m["name"]),
         params=params,
         return_type=return_info,
         is_void=is_void,
+        default_body=default_body,
     )
 
 
@@ -1327,6 +1394,16 @@ def emit_method(cm: ClassifiedMethod) -> str:
         else f"?{p.verse_name}:{p.type_info.verse_type} = {p.default}"
         for p in cm.params
     )
+
+    # A virtual is a declaration to override, not a call to make: the body is what Godot's own
+    # default means, and a script says `<override>` over it. **No effect specifier**, exactly as the
+    # three hand-written lifecycle methods carried none -- the default set is wider than
+    # `<transacts>`, so an overriding body may call whatever Godot it likes, where narrowing here
+    # would refuse a body that called a specifier-less helper.
+    if cm.default_body is not None:
+        result = "void" if cm.is_void else cm.return_type.verse_type
+        return f"    {cm.verse_name}<public>({param_decl}):{result} = {cm.default_body}"
+
     args = emit_call_args(cm.params)
     call = f'VhCallValue(Handle, "{cm.godot_name}", array{{{args}}})' if not cm.is_void else None
 
@@ -1950,10 +2027,11 @@ VALUE_TYPE_CLASSES = {"Vector2": "vector2", "Vector3": "vector3", "Color": "colo
 # the generator skips virtuals -- but they exist to be the Verse spelling of Godot's, and a script
 # overriding one wants Godot's documentation for it. Listed as (verse class, verse method, godot
 # class, godot method), the shape the method map already carries.
+# The one virtual that is hand-written rather than generated, so a hover on it still finds Godot's
+# documentation. Everything else Godot calls on a script is in extension_api.json and is generated
+# onto the class that declares it; `_notification` is in no part of it (docs/phase-4-design.md 7.3).
 LIFECYCLE_METHODS = [
-    (NATIVE_ROOT, "Ready", "Node", "_ready"),
-    (NATIVE_ROOT, "Process", "Node", "_process"),
-    (NATIVE_ROOT, "PhysicsProcess", "Node", "_physics_process"),
+    (NATIVE_ROOT, "_Notification", "Object", "_notification"),
 ]
 
 # The fields of those hand-written value types, in the same shape. Listed rather than read out of

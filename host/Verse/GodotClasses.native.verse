@@ -28111,6 +28111,23 @@ editor_vcs_interface<public> := class(object):
     CreateDiffLine<public>(NewLineNo:int, OldLineNo:int, Content:string, Status:string)<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "create_diff_line", array{VhFromInt(NewLineNo), VhFromInt(OldLineNo), VhFromString(Content), VhFromString(Status)}))
     CreateStatusFile<public>(FilePath:string, ChangeType:editor_vcs_interface_change_type, Area:editor_vcs_interface_tree_area)<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "create_status_file", array{VhFromString(FilePath), VhFromEditorVcsInterfaceChangeType(ChangeType), VhFromEditorVcsInterfaceTreeArea(Area)}))
     PopupError<public>(Msg:string)<transacts>:void = VhCallVoid(Handle, "popup_error", array{VhFromString(Msg)})
+    _CheckoutBranch<public>(BranchName:string):logic = false
+    _Commit<public>(Msg:string):void = {}
+    _CreateBranch<public>(BranchName:string):void = {}
+    _CreateRemote<public>(RemoteName:string, RemoteUrl:string):void = {}
+    _DiscardFile<public>(FilePath:string):void = {}
+    _Fetch<public>(Remote:string):void = {}
+    _GetCurrentBranchName<public>():string = ""
+    _GetVcsName<public>():string = ""
+    _Initialize<public>(ProjectPath:string):logic = false
+    _Pull<public>(Remote:string):void = {}
+    _Push<public>(Remote:string, Force:logic):void = {}
+    _RemoveBranch<public>(BranchName:string):void = {}
+    _RemoveRemote<public>(RemoteName:string):void = {}
+    _SetCredentials<public>(Username:string, Password:string, SshPublicKeyPath:string, SshPrivateKeyPath:string, SshPassphrase:string):void = {}
+    _ShutDown<public>():logic = false
+    _StageFile<public>(FilePath:string):void = {}
+    _UnstageFile<public>(FilePath:string):void = {}
 
 engine<public> := class(object):
 
@@ -28383,6 +28400,11 @@ jsonrpc<public> := class(object):
 
 main_loop<public> := class(object):
 
+    _Finalize<public>():void = {}
+    _Initialize<public>():void = {}
+    _PhysicsProcess<public>(Delta:float):logic = false
+    _Process<public>(Delta:float):logic = false
+
 marshalls<public> := class(object):
 
     Base64ToRaw<public>(Base64Str:string)<transacts>:[]int = VhToInts(VhCallValue(Handle, "base64_to_raw", array{VhFromString(Base64Str)}))
@@ -28393,6 +28415,12 @@ marshalls<public> := class(object):
     VariantToBase64<public>(Variant:variant, ?FullObjects:logic = false)<transacts>:string = VhToString(VhCallValue(Handle, "variant_to_base64", array{VhFromVariant(Variant), VhFromLogic(FullObjects)}))
 
 movie_writer<public> := class(object):
+
+    _GetAudioMixRate<public>():int = 0
+    _GetAudioSpeakerMode<public>():audio_server_speaker_mode = audio_server_speaker_mode.ModeStereo
+    _HandlesFile<public>(Path:string):logic = false
+    _WriteBegin<public>(MovieSize:vector2i, Fps:int, BasePath:string):error = error.Ok
+    _WriteEnd<public>():void = {}
 
 native_menu<public> := class(object):
 
@@ -28905,11 +28933,51 @@ node<public> := class(object):
     SetThreadSafe<public>(Property:string, Value:variant)<transacts>:void = VhCallVoid(Handle, "set_thread_safe", array{VhFromStringName(Property), VhFromVariant(Value)})
     SetTranslationDomainInherited<public>()<transacts>:void = VhCallVoid(Handle, "set_translation_domain_inherited", array{})
     UpdateConfigurationWarnings<public>()<transacts>:void = VhCallVoid(Handle, "update_configuration_warnings", array{})
+    _EnterTree<public>():void = {}
+    _ExitTree<public>():void = {}
+    _GetAccessibilityConfigurationWarnings<public>():[]string = array{}
+    _GetConfigurationWarnings<public>():[]string = array{}
+    _GetFocusedAccessibilityElement<public>():int = 0
+    _Input<public>(Event:input_event):void = {}
+    _PhysicsProcess<public>(Delta:float):void = {}
+    _Process<public>(Delta:float):void = {}
+    _Ready<public>():void = {}
+    _ShortcutInput<public>(Event:input_event):void = {}
+    _UnhandledInput<public>(Event:input_event):void = {}
+    _UnhandledKeyInput<public>(Event:input_event):void = {}
 
 open_xr_extension_wrapper<public> := class(object):
 
     GetOpenxrApi<public>()<decides><transacts>:open_xrapi_extension = open_xrapi_extension[VhObjectFrom[VhCallValue(Handle, "get_openxr_api", array{})]]
     RegisterExtensionWrapper<public>()<transacts>:void = VhCallVoid(Handle, "register_extension_wrapper", array{})
+    _GetCompositionLayer<public>(Index:int):int = 0
+    _GetCompositionLayerCount<public>():int = 0
+    _GetCompositionLayerOrder<public>(Index:int):int = 0
+    _GetRequestedExtensions<public>(XrVersion:int):dictionary = dictionary{}
+    _GetSuggestedTrackerNames<public>():[]string = array{}
+    _GetViewportCompositionLayerExtensionPropertyDefaults<public>():dictionary = dictionary{}
+    _OnBeforeInstanceCreated<public>():void = {}
+    _OnInstanceCreated<public>(Instance:int):void = {}
+    _OnInstanceDestroyed<public>():void = {}
+    _OnMainSwapchainsCreated<public>():void = {}
+    _OnPostDrawViewport<public>(Viewport:int):void = {}
+    _OnPreDrawViewport<public>(Viewport:int):void = {}
+    _OnPreRender<public>():void = {}
+    _OnProcess<public>():void = {}
+    _OnRegisterMetadata<public>():void = {}
+    _OnSessionCreated<public>(Session:int):void = {}
+    _OnSessionDestroyed<public>():void = {}
+    _OnStateExiting<public>():void = {}
+    _OnStateFocused<public>():void = {}
+    _OnStateIdle<public>():void = {}
+    _OnStateLossPending<public>():void = {}
+    _OnStateReady<public>():void = {}
+    _OnStateStopping<public>():void = {}
+    _OnStateSynchronized<public>():void = {}
+    _OnStateVisible<public>():void = {}
+    _OnSyncActions<public>():void = {}
+    _PrepareViewConfiguration<public>(ViewCount:int):void = {}
+    _PrintViewConfigurationInfo<public>(View:int):void = {}
 
 open_xr_interaction_profile_metadata<public> := class(object):
 
@@ -29497,6 +29565,9 @@ physics_server3d_rendering_server_handler<public> := class(object):
     SetAabb<public>(Aabb:aabb)<transacts>:void = VhCallVoid(Handle, "set_aabb", array{VhFromAABB(Aabb)})
     SetNormal<public>(VertexId:int, Normal:vector3)<transacts>:void = VhCallVoid(Handle, "set_normal", array{VhFromInt(VertexId), VhFromVector3(Normal)})
     SetVertex<public>(VertexId:int, Vertex:vector3)<transacts>:void = VhCallVoid(Handle, "set_vertex", array{VhFromInt(VertexId), VhFromVector3(Vertex)})
+    _SetAabb<public>(Aabb:aabb):void = {}
+    _SetNormal<public>(VertexId:int, Normal:vector3):void = {}
+    _SetVertex<public>(VertexId:int, Vertex:vector3):void = {}
 
 project_settings<public> := class(object):
 
@@ -30664,6 +30735,9 @@ a_star2d<public> := class(ref_counted):
     SetPointDisabled<public>(Id:int, ?Disabled:logic = true)<transacts>:void = VhCallVoid(Handle, "set_point_disabled", array{VhFromInt(Id), VhFromLogic(Disabled)})
     SetPointPosition<public>(Id:int, Position:vector2)<transacts>:void = VhCallVoid(Handle, "set_point_position", array{VhFromInt(Id), VhFromVector2(Position)})
     SetPointWeightScale<public>(Id:int, WeightScale:float)<transacts>:void = VhCallVoid(Handle, "set_point_weight_scale", array{VhFromInt(Id), VhFromFloat(WeightScale)})
+    _ComputeCost<public>(FromId:int, ToId:int):float = 0.0
+    _EstimateCost<public>(FromId:int, EndId:int):float = 0.0
+    _FilterNeighbor<public>(FromId:int, NeighborId:int):logic = false
 
 a_star3d<public> := class(ref_counted):
 
@@ -30693,6 +30767,9 @@ a_star3d<public> := class(ref_counted):
     SetPointDisabled<public>(Id:int, ?Disabled:logic = true)<transacts>:void = VhCallVoid(Handle, "set_point_disabled", array{VhFromInt(Id), VhFromLogic(Disabled)})
     SetPointPosition<public>(Id:int, Position:vector3)<transacts>:void = VhCallVoid(Handle, "set_point_position", array{VhFromInt(Id), VhFromVector3(Position)})
     SetPointWeightScale<public>(Id:int, WeightScale:float)<transacts>:void = VhCallVoid(Handle, "set_point_weight_scale", array{VhFromInt(Id), VhFromFloat(WeightScale)})
+    _ComputeCost<public>(FromId:int, ToId:int):float = 0.0
+    _EstimateCost<public>(FromId:int, EndId:int):float = 0.0
+    _FilterNeighbor<public>(FromId:int, NeighborId:int):logic = false
 
 a_star_grid2d<public> := class(ref_counted):
 
@@ -30764,6 +30841,8 @@ a_star_grid2d<public> := class(ref_counted):
     SetPointWeightScale<public>(Id:vector2i, WeightScale:float)<transacts>:void = VhCallVoid(Handle, "set_point_weight_scale", array{VhFromVector2i(Id), VhFromFloat(WeightScale)})
     SetRegion<public>(Region:rect2i)<transacts>:void = VhCallVoid(Handle, "set_region", array{VhFromRect2i(Region)})
     Update<public>()<transacts>:void = VhCallVoid(Handle, "update", array{})
+    _ComputeCost<public>(FromId:vector2i, ToId:vector2i):float = 0.0
+    _EstimateCost<public>(FromId:vector2i, EndId:vector2i):float = 0.0
 
 aes_context<public> := class(ref_counted):
 
@@ -30822,8 +30901,11 @@ animation_mixer<public> := class(node):
     RenameAnimationLibrary<public>(Name:string, Newname:string)<transacts>:void = VhCallVoid(Handle, "rename_animation_library", array{VhFromStringName(Name), VhFromStringName(Newname)})
     SetRootMotionTrack<public>(Path:string)<transacts>:void = VhCallVoid(Handle, "set_root_motion_track", array{VhFromNodePath(Path)})
     SetRootNode<public>(Path:string)<transacts>:void = VhCallVoid(Handle, "set_root_node", array{VhFromNodePath(Path)})
+    _PostProcessKeyValue<public>(Animation:animation, Track:int, Value:variant, ObjectId:int, ObjectSubIdx:int):variant = variant{}
 
 audio_effect_instance<public> := class(ref_counted):
+
+    _ProcessSilence<public>():logic = false
 
 audio_sample<public> := class(ref_counted):
 
@@ -30840,6 +30922,15 @@ audio_stream_playback<public> := class(ref_counted):
     SetSamplePlayback<public>(PlaybackSample:audio_sample_playback)<transacts>:void = VhCallVoid(Handle, "set_sample_playback", array{VhFromObject(PlaybackSample)})
     Start<public>(?FromPos:float = 0.0)<transacts>:void = VhCallVoid(Handle, "start", array{VhFromFloat(FromPos)})
     Stop<public>()<transacts>:void = VhCallVoid(Handle, "stop", array{})
+    _GetLoopCount<public>():int = 0
+    _GetParameter<public>(Name:string):variant = variant{}
+    _GetPlaybackPosition<public>():float = 0.0
+    _IsPlaying<public>():logic = false
+    _Seek<public>(Position:float):void = {}
+    _SetParameter<public>(Name:string, Value:variant):void = {}
+    _Start<public>(FromPos:float):void = {}
+    _Stop<public>():void = {}
+    _TagUsedStreams<public>():void = {}
 
 audio_stream_player<public> := class(node):
 
@@ -30901,6 +30992,8 @@ camera_feed<public> := class(ref_counted):
     SetTransform<public>(Transform:transform2d)<transacts>:void = VhCallVoid(Handle, "set_transform", array{VhFromTransform2D(Transform)})
     SetYcbcrImage<public>(YcbcrImage:image)<transacts>:void = VhCallVoid(Handle, "set_ycbcr_image", array{VhFromObject(YcbcrImage)})
     SetYcbcrImages<public>(YImage:image, CbcrImage:image)<transacts>:void = VhCallVoid(Handle, "set_ycbcr_images", array{VhFromObject(YImage), VhFromObject(CbcrImage)})
+    _ActivateFeed<public>():logic = false
+    _DeactivateFeed<public>():void = {}
 
 canvas_item<public> := class(node):
 
@@ -31035,6 +31128,7 @@ canvas_item<public> := class(node):
     SetNotifyTransform<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_notify_transform", array{VhFromLogic(Enable)})
     SetVisibilityLayerBit<public>(Layer:int, Enabled:logic)<transacts>:void = VhCallVoid(Handle, "set_visibility_layer_bit", array{VhFromInt(Layer), VhFromLogic(Enabled)})
     Show<public>()<transacts>:void = VhCallVoid(Handle, "show", array{})
+    _Draw<public>():void = {}
 
 canvas_layer<public> := class(node):
 
@@ -31254,11 +31348,18 @@ editor_context_menu_plugin<public> := class(ref_counted):
     AddContextMenuItemFromShortcut<public>(Name:string, Shortcut:shortcut, Icon:texture2d)<transacts>:void = VhCallVoid(Handle, "add_context_menu_item_from_shortcut", array{VhFromString(Name), VhFromObject(Shortcut), VhFromObject(Icon)})
     AddContextSubmenuItem<public>(Name:string, Menu:popup_menu, Icon:texture2d)<transacts>:void = VhCallVoid(Handle, "add_context_submenu_item", array{VhFromString(Name), VhFromObject(Menu), VhFromObject(Icon)})
     AddMenuShortcut<public>(Shortcut:shortcut, Callback:callable)<transacts>:void = VhCallVoid(Handle, "add_menu_shortcut", array{VhFromObject(Shortcut), VhFromCallable(Callback)})
+    _PopupMenu<public>(Paths:[]string):void = {}
 
 editor_debugger_plugin<public> := class(ref_counted):
 
     GetSession<public>(Id:int)<decides><transacts>:editor_debugger_session = editor_debugger_session[VhObjectFrom[VhCallValue(Handle, "get_session", array{VhFromInt(Id)})]]
     GetSessions<public>()<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_sessions", array{}))
+    _BreakpointSetInTree<public>(Script:script, Line:int, Enabled:logic):void = {}
+    _BreakpointsClearedInTree<public>():void = {}
+    _Capture<public>(Message:string, Data:godot_array, SessionId:int):logic = false
+    _GotoScriptLine<public>(Script:script, Line:int):void = {}
+    _HasCapture<public>(Arg0:string):logic = false
+    _SetupSession<public>(SessionId:int):void = {}
 
 editor_debugger_session<public> := class(ref_counted):
 
@@ -31323,6 +31424,28 @@ editor_export_plugin<public> := class(ref_counted):
     GetExportPreset<public>()<decides><transacts>:editor_export_preset = editor_export_preset[VhObjectFrom[VhCallValue(Handle, "get_export_preset", array{})]]
     GetOption<public>(Name:string)<transacts>:variant = VhToVariant(VhCallValue(Handle, "get_option", array{VhFromStringName(Name)}))
     Skip<public>()<transacts>:void = VhCallVoid(Handle, "skip", array{})
+    _BeginCustomizeResources<public>(Platform:editor_export_platform, Features:[]string):logic = false
+    _BeginCustomizeScenes<public>(Platform:editor_export_platform, Features:[]string):logic = false
+    _EndCustomizeResources<public>():void = {}
+    _EndCustomizeScenes<public>():void = {}
+    _ExportBegin<public>(Features:[]string, IsDebug:logic, Path:string, Flags:int):void = {}
+    _ExportEnd<public>():void = {}
+    _ExportFile<public>(Path:string, Type:string, Features:[]string):void = {}
+    _GetAndroidDependencies<public>(Platform:editor_export_platform, Debug:logic):[]string = array{}
+    _GetAndroidDependenciesMavenRepos<public>(Platform:editor_export_platform, Debug:logic):[]string = array{}
+    _GetAndroidLibraries<public>(Platform:editor_export_platform, Debug:logic):[]string = array{}
+    _GetAndroidManifestActivityElementContents<public>(Platform:editor_export_platform, Debug:logic):string = ""
+    _GetAndroidManifestApplicationElementContents<public>(Platform:editor_export_platform, Debug:logic):string = ""
+    _GetAndroidManifestElementContents<public>(Platform:editor_export_platform, Debug:logic):string = ""
+    _GetCustomizationConfigurationHash<public>():int = 0
+    _GetExportFeatures<public>(Platform:editor_export_platform, Debug:logic):[]string = array{}
+    _GetExportOptionVisibility<public>(Platform:editor_export_platform, Option:string):logic = false
+    _GetExportOptionWarning<public>(Platform:editor_export_platform, Option:string):string = ""
+    _GetExportOptionsOverrides<public>(Platform:editor_export_platform):dictionary = dictionary{}
+    _GetName<public>():string = ""
+    _ShouldUpdateExportOptions<public>(Platform:editor_export_platform):logic = false
+    _SupportsPlatform<public>(Platform:editor_export_platform):logic = false
+    _UpdateAndroidPrebuiltManifest<public>(Platform:editor_export_platform, ManifestData:[]int):[]int = array{}
 
 editor_export_preset<public> := class(ref_counted):
 
@@ -31380,11 +31503,21 @@ editor_file_system<public> := class(node):
 
 editor_file_system_import_format_support_query<public> := class(ref_counted):
 
+    _GetFileExtensions<public>():[]string = array{}
+    _IsActive<public>():logic = false
+    _Query<public>():logic = false
+
 editor_inspector_plugin<public> := class(ref_counted):
 
     AddCustomControl<public>(Control:control)<transacts>:void = VhCallVoid(Handle, "add_custom_control", array{VhFromObject(Control)})
     AddPropertyEditor<public>(Property:string, Editor:control, ?AddToEnd:logic = false, ?Label:string = "")<transacts>:void = VhCallVoid(Handle, "add_property_editor", array{VhFromString(Property), VhFromObject(Editor), VhFromLogic(AddToEnd), VhFromString(Label)})
     AddPropertyEditorForMultipleProperties<public>(Label:string, Properties:[]string, Editor:control)<transacts>:void = VhCallVoid(Handle, "add_property_editor_for_multiple_properties", array{VhFromString(Label), VhFromStringArray(Properties), VhFromObject(Editor)})
+    _CanHandle<public>(Object:object):logic = false
+    _ParseBegin<public>(Object:object):void = {}
+    _ParseCategory<public>(Object:object, Category:string):void = {}
+    _ParseEnd<public>(Object:object):void = {}
+    _ParseGroup<public>(Object:object, Group:string):void = {}
+    _ParseProperty<public>(Object:object, Type:variant_type, Name:string, HintType:property_hint, HintString:string, UsageFlags:int, Wide:logic):logic = false
 
 editor_plugin<public> := class(node):
 
@@ -31439,8 +31572,35 @@ editor_plugin<public> := class(node):
     SetForceDrawOverForwardingEnabled<public>()<transacts>:void = VhCallVoid(Handle, "set_force_draw_over_forwarding_enabled", array{})
     SetInputEventForwardingAlwaysEnabled<public>()<transacts>:void = VhCallVoid(Handle, "set_input_event_forwarding_always_enabled", array{})
     UpdateOverlays<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "update_overlays", array{}))
+    _ApplyChanges<public>():void = {}
+    _Build<public>():logic = false
+    _Clear<public>():void = {}
+    _DisablePlugin<public>():void = {}
+    _Edit<public>(Object:object):void = {}
+    _EnablePlugin<public>():void = {}
+    _Forward3dDrawOverViewport<public>(ViewportControl:control):void = {}
+    _Forward3dForceDrawOverViewport<public>(ViewportControl:control):void = {}
+    _Forward3dGuiInput<public>(ViewportCamera:camera3d, Event:input_event):int = 0
+    _ForwardCanvasDrawOverViewport<public>(ViewportControl:control):void = {}
+    _ForwardCanvasForceDrawOverViewport<public>(ViewportControl:control):void = {}
+    _ForwardCanvasGuiInput<public>(Event:input_event):logic = false
+    _GetBreakpoints<public>():[]string = array{}
+    _GetPluginName<public>():string = ""
+    _GetState<public>():dictionary = dictionary{}
+    _GetUnsavedStatus<public>(ForScene:string):string = ""
+    _GetWindowLayout<public>(Configuration:config_file):void = {}
+    _Handles<public>(Object:object):logic = false
+    _HasMainScreen<public>():logic = false
+    _MakeVisible<public>(Visible:logic):void = {}
+    _RunScene<public>(Scene:string, Args:[]string):[]string = array{}
+    _SaveExternalData<public>():void = {}
+    _SetState<public>(State:dictionary):void = {}
+    _SetWindowLayout<public>(Configuration:config_file):void = {}
 
 editor_resource_conversion_plugin<public> := class(ref_counted):
+
+    _ConvertsTo<public>():string = ""
+    _Handles<public>(Resource:resource):logic = false
 
 editor_resource_preview<public> := class(node):
 
@@ -31453,15 +31613,22 @@ editor_resource_preview<public> := class(node):
 editor_resource_preview_generator<public> := class(ref_counted):
 
     RequestDrawAndWait<public>(Viewport:int)<transacts>:void = VhCallVoid(Handle, "request_draw_and_wait", array{VhFromRid(Viewport)})
+    _CanGenerateSmallPreview<public>():logic = false
+    _GenerateSmallPreviewAutomatically<public>():logic = false
+    _Handles<public>(Type:string):logic = false
 
 editor_resource_tooltip_plugin<public> := class(ref_counted):
 
     RequestThumbnail<public>(Path:string, Control:texture_rect)<transacts>:void = VhCallVoid(Handle, "request_thumbnail", array{VhFromString(Path), VhFromObject(Control)})
+    _Handles<public>(Type:string):logic = false
 
 editor_scene_format_importer<public> := class(ref_counted):
 
     AddImportOption<public>(Name:string, Value:variant)<transacts>:void = VhCallVoid(Handle, "add_import_option", array{VhFromString(Name), VhFromVariant(Value)})
     AddImportOptionAdvanced<public>(Type:variant_type, Name:string, DefaultValue:variant, Hint:property_hint, ?HintString:string = "", ?UsageFlags:int = 6)<transacts>:void = VhCallVoid(Handle, "add_import_option_advanced", array{VhFromVariantType(Type), VhFromString(Name), VhFromVariant(DefaultValue), VhFromPropertyHint(Hint), VhFromString(HintString), VhFromInt(UsageFlags)})
+    _GetExtensions<public>():[]string = array{}
+    _GetImportOptions<public>(Path:string):void = {}
+    _GetOptionVisibility<public>(Path:string, ForAnimation:logic, Option:string):variant = variant{}
 
 editor_scene_post_import<public> := class(ref_counted):
 
@@ -31472,14 +31639,25 @@ editor_scene_post_import_plugin<public> := class(ref_counted):
     AddImportOption<public>(Name:string, Value:variant)<transacts>:void = VhCallVoid(Handle, "add_import_option", array{VhFromString(Name), VhFromVariant(Value)})
     AddImportOptionAdvanced<public>(Type:variant_type, Name:string, DefaultValue:variant, Hint:property_hint, ?HintString:string = "", ?UsageFlags:int = 6)<transacts>:void = VhCallVoid(Handle, "add_import_option_advanced", array{VhFromVariantType(Type), VhFromString(Name), VhFromVariant(DefaultValue), VhFromPropertyHint(Hint), VhFromString(HintString), VhFromInt(UsageFlags)})
     GetOptionValue<public>(Name:string)<transacts>:variant = VhToVariant(VhCallValue(Handle, "get_option_value", array{VhFromStringName(Name)}))
+    _GetImportOptions<public>(Path:string):void = {}
+    _GetInternalImportOptions<public>(Category:int):void = {}
+    _GetInternalOptionUpdateViewRequired<public>(Category:int, Option:string):variant = variant{}
+    _GetInternalOptionVisibility<public>(Category:int, ForAnimation:logic, Option:string):variant = variant{}
+    _GetOptionVisibility<public>(Path:string, ForAnimation:logic, Option:string):variant = variant{}
+    _InternalProcess<public>(Category:int, BaseNode:node, Node:node, Resource:resource):void = {}
+    _PostProcess<public>(Scene:node):void = {}
+    _PreProcess<public>(Scene:node):void = {}
 
 editor_script<public> := class(ref_counted):
 
     AddRootNode<public>(Node:node)<transacts>:void = VhCallVoid(Handle, "add_root_node", array{VhFromObject(Node)})
     GetEditorInterface<public>()<decides><transacts>:editor_interface = editor_interface[VhObjectFrom[VhCallValue(Handle, "get_editor_interface", array{})]]
     GetScene<public>()<decides><transacts>:node = node[VhObjectFrom[VhCallValue(Handle, "get_scene", array{})]]
+    _Run<public>():void = {}
 
 editor_translation_parser_plugin<public> := class(ref_counted):
+
+    _GetRecognizedExtensions<public>():[]string = array{}
 
 encoded_object_as_id<public> := class(ref_counted):
 
@@ -31488,6 +31666,10 @@ encoded_object_as_id<public> := class(ref_counted):
     ObjectIdSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_object_id", array{VhFromInt(Value)})
 
 engine_profiler<public> := class(ref_counted):
+
+    _AddFrame<public>(Data:godot_array):void = {}
+    _Tick<public>(FrameTime:float, ProcessTime:float, PhysicsTime:float, PhysicsFrameTime:float):void = {}
+    _Toggle<public>(Enable:logic, Options:godot_array):void = {}
 
 expression<public> := class(ref_counted):
 
@@ -31694,6 +31876,9 @@ kinematic_collision3d<public> := class(ref_counted):
 lightmapper<public> := class(ref_counted):
 
 logger<public> := class(ref_counted):
+
+    _LogError<public>(Function:string, File:string, Line:int, Code:string, Rationale:string, EditorNotify:logic, ErrorType:int, ScriptBacktraces:typed_array(script_backtrace)):void = {}
+    _LogMessage<public>(Message:string, Error:logic):void = {}
 
 mesh_convex_decomposition_settings<public> := class(ref_counted):
 
@@ -32562,10 +32747,15 @@ open_xr_spatial_anchor_capability<public> := class(open_xr_extension_wrapper):
 open_xr_spatial_capability_configuration_base_header<public> := class(ref_counted):
 
     HasValidConfiguration<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_valid_configuration", array{}))
+    _GetConfiguration<public>():int = 0
+    _HasValidConfiguration<public>():logic = false
 
 open_xr_spatial_component_data<public> := class(ref_counted):
 
     SetCapacity<public>(Capacity:int)<transacts>:void = VhCallVoid(Handle, "set_capacity", array{VhFromInt(Capacity)})
+    _GetComponentType<public>():int = 0
+    _GetStructureData<public>(Next:int):int = 0
+    _SetCapacity<public>(Capacity:int):void = {}
 
 open_xr_spatial_entity_extension<public> := class(open_xr_extension_wrapper):
 
@@ -32611,6 +32801,7 @@ open_xr_structure_base<public> := class(ref_counted):
     GetNext<public>()<decides><transacts>:open_xr_structure_base = open_xr_structure_base[VhObjectFrom[VhCallValue(Handle, "get_next", array{})]]
     GetStructureType<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_structure_type", array{}))
     SetNext<public>(Entity:open_xr_structure_base)<transacts>:void = VhCallVoid(Handle, "set_next", array{VhFromObject(Entity)})
+    _GetHeader<public>(Next:int):int = 0
 
 open_xrapi_extension<public> := class(ref_counted):
 
@@ -32684,7 +32875,103 @@ pck_packer<public> := class(ref_counted):
 
 physics_direct_body_state2d_extension<public> := class(physics_direct_body_state2d):
 
+    _AddConstantCentralForce<public>(Force:vector2):void = {}
+    _AddConstantForce<public>(Force:vector2, Position:vector2):void = {}
+    _AddConstantTorque<public>(Torque:float):void = {}
+    _ApplyCentralForce<public>(Force:vector2):void = {}
+    _ApplyCentralImpulse<public>(Impulse:vector2):void = {}
+    _ApplyForce<public>(Force:vector2, Position:vector2):void = {}
+    _ApplyImpulse<public>(Impulse:vector2, Position:vector2):void = {}
+    _ApplyTorque<public>(Torque:float):void = {}
+    _ApplyTorqueImpulse<public>(Impulse:float):void = {}
+    _GetAngularVelocity<public>():float = 0.0
+    _GetCenterOfMass<public>():vector2 = vector2{}
+    _GetCenterOfMassLocal<public>():vector2 = vector2{}
+    _GetCollisionLayer<public>():int = 0
+    _GetCollisionMask<public>():int = 0
+    _GetConstantForce<public>():vector2 = vector2{}
+    _GetConstantTorque<public>():float = 0.0
+    _GetContactCollider<public>(ContactIdx:int):int = 0
+    _GetContactColliderId<public>(ContactIdx:int):int = 0
+    _GetContactColliderPosition<public>(ContactIdx:int):vector2 = vector2{}
+    _GetContactColliderShape<public>(ContactIdx:int):int = 0
+    _GetContactColliderVelocityAtPosition<public>(ContactIdx:int):vector2 = vector2{}
+    _GetContactCount<public>():int = 0
+    _GetContactImpulse<public>(ContactIdx:int):vector2 = vector2{}
+    _GetContactLocalNormal<public>(ContactIdx:int):vector2 = vector2{}
+    _GetContactLocalPosition<public>(ContactIdx:int):vector2 = vector2{}
+    _GetContactLocalShape<public>(ContactIdx:int):int = 0
+    _GetContactLocalVelocityAtPosition<public>(ContactIdx:int):vector2 = vector2{}
+    _GetInverseInertia<public>():float = 0.0
+    _GetInverseMass<public>():float = 0.0
+    _GetLinearVelocity<public>():vector2 = vector2{}
+    _GetStep<public>():float = 0.0
+    _GetTotalAngularDamp<public>():float = 0.0
+    _GetTotalGravity<public>():vector2 = vector2{}
+    _GetTotalLinearDamp<public>():float = 0.0
+    _GetTransform<public>():transform2d = transform2d{}
+    _GetVelocityAtLocalPosition<public>(LocalPosition:vector2):vector2 = vector2{}
+    _IntegrateForces<public>():void = {}
+    _IsSleeping<public>():logic = false
+    _SetAngularVelocity<public>(Velocity:float):void = {}
+    _SetCollisionLayer<public>(Layer:int):void = {}
+    _SetCollisionMask<public>(Mask:int):void = {}
+    _SetConstantForce<public>(Force:vector2):void = {}
+    _SetConstantTorque<public>(Torque:float):void = {}
+    _SetLinearVelocity<public>(Velocity:vector2):void = {}
+    _SetSleepState<public>(Enabled:logic):void = {}
+    _SetTransform<public>(Transform:transform2d):void = {}
+
 physics_direct_body_state3d_extension<public> := class(physics_direct_body_state3d):
+
+    _AddConstantCentralForce<public>(Force:vector3):void = {}
+    _AddConstantForce<public>(Force:vector3, Position:vector3):void = {}
+    _AddConstantTorque<public>(Torque:vector3):void = {}
+    _ApplyCentralForce<public>(Force:vector3):void = {}
+    _ApplyCentralImpulse<public>(Impulse:vector3):void = {}
+    _ApplyForce<public>(Force:vector3, Position:vector3):void = {}
+    _ApplyImpulse<public>(Impulse:vector3, Position:vector3):void = {}
+    _ApplyTorque<public>(Torque:vector3):void = {}
+    _ApplyTorqueImpulse<public>(Impulse:vector3):void = {}
+    _GetAngularVelocity<public>():vector3 = vector3{}
+    _GetCenterOfMass<public>():vector3 = vector3{}
+    _GetCenterOfMassLocal<public>():vector3 = vector3{}
+    _GetCollisionLayer<public>():int = 0
+    _GetCollisionMask<public>():int = 0
+    _GetConstantForce<public>():vector3 = vector3{}
+    _GetConstantTorque<public>():vector3 = vector3{}
+    _GetContactCollider<public>(ContactIdx:int):int = 0
+    _GetContactColliderId<public>(ContactIdx:int):int = 0
+    _GetContactColliderPosition<public>(ContactIdx:int):vector3 = vector3{}
+    _GetContactColliderShape<public>(ContactIdx:int):int = 0
+    _GetContactColliderVelocityAtPosition<public>(ContactIdx:int):vector3 = vector3{}
+    _GetContactCount<public>():int = 0
+    _GetContactImpulse<public>(ContactIdx:int):vector3 = vector3{}
+    _GetContactLocalNormal<public>(ContactIdx:int):vector3 = vector3{}
+    _GetContactLocalPosition<public>(ContactIdx:int):vector3 = vector3{}
+    _GetContactLocalShape<public>(ContactIdx:int):int = 0
+    _GetContactLocalVelocityAtPosition<public>(ContactIdx:int):vector3 = vector3{}
+    _GetInverseInertia<public>():vector3 = vector3{}
+    _GetInverseInertiaTensor<public>():basis = basis{}
+    _GetInverseMass<public>():float = 0.0
+    _GetLinearVelocity<public>():vector3 = vector3{}
+    _GetPrincipalInertiaAxes<public>():basis = basis{}
+    _GetStep<public>():float = 0.0
+    _GetTotalAngularDamp<public>():float = 0.0
+    _GetTotalGravity<public>():vector3 = vector3{}
+    _GetTotalLinearDamp<public>():float = 0.0
+    _GetTransform<public>():transform3d = transform3d{}
+    _GetVelocityAtLocalPosition<public>(LocalPosition:vector3):vector3 = vector3{}
+    _IntegrateForces<public>():void = {}
+    _IsSleeping<public>():logic = false
+    _SetAngularVelocity<public>(Velocity:vector3):void = {}
+    _SetCollisionLayer<public>(Layer:int):void = {}
+    _SetCollisionMask<public>(Mask:int):void = {}
+    _SetConstantForce<public>(Force:vector3):void = {}
+    _SetConstantTorque<public>(Torque:vector3):void = {}
+    _SetLinearVelocity<public>(Velocity:vector3):void = {}
+    _SetSleepState<public>(Enabled:logic):void = {}
+    _SetTransform<public>(Transform:transform3d):void = {}
 
 physics_direct_space_state2d_extension<public> := class(physics_direct_space_state2d):
 
@@ -32693,6 +32980,7 @@ physics_direct_space_state2d_extension<public> := class(physics_direct_space_sta
 physics_direct_space_state3d_extension<public> := class(physics_direct_space_state3d):
 
     IsBodyExcludedFromQuery<public>(Body:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_body_excluded_from_query", array{VhFromRid(Body)}))
+    _GetClosestPointToObjectVolume<public>(Object:int, Point:vector3):vector3 = vector3{}
 
 physics_point_query_parameters2d<public> := class(ref_counted):
 
@@ -32848,11 +33136,332 @@ physics_server2d_extension<public> := class(physics_server2d):
 
     BodyTestMotionIsExcludingBody<public>(Body:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "body_test_motion_is_excluding_body", array{VhFromRid(Body)}))
     BodyTestMotionIsExcludingObject<public>(Object:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "body_test_motion_is_excluding_object", array{VhFromInt(Object)}))
+    _AreaAddShape<public>(Area:int, Shape:int, Transform:transform2d, Disabled:logic):void = {}
+    _AreaAttachCanvasInstanceId<public>(Area:int, Id:int):void = {}
+    _AreaAttachObjectInstanceId<public>(Area:int, Id:int):void = {}
+    _AreaClearShapes<public>(Area:int):void = {}
+    _AreaCreate<public>():int = 0
+    _AreaGetCanvasInstanceId<public>(Area:int):int = 0
+    _AreaGetCollisionLayer<public>(Area:int):int = 0
+    _AreaGetCollisionMask<public>(Area:int):int = 0
+    _AreaGetObjectInstanceId<public>(Area:int):int = 0
+    _AreaGetParam<public>(Area:int, Param:physics_server2d_area_parameter):variant = variant{}
+    _AreaGetShape<public>(Area:int, ShapeIdx:int):int = 0
+    _AreaGetShapeCount<public>(Area:int):int = 0
+    _AreaGetShapeTransform<public>(Area:int, ShapeIdx:int):transform2d = transform2d{}
+    _AreaGetSpace<public>(Area:int):int = 0
+    _AreaGetTransform<public>(Area:int):transform2d = transform2d{}
+    _AreaRemoveShape<public>(Area:int, ShapeIdx:int):void = {}
+    _AreaSetAreaMonitorCallback<public>(Area:int, Callback:callable):void = {}
+    _AreaSetCollisionLayer<public>(Area:int, Layer:int):void = {}
+    _AreaSetCollisionMask<public>(Area:int, Mask:int):void = {}
+    _AreaSetMonitorCallback<public>(Area:int, Callback:callable):void = {}
+    _AreaSetMonitorable<public>(Area:int, Monitorable:logic):void = {}
+    _AreaSetParam<public>(Area:int, Param:physics_server2d_area_parameter, Value:variant):void = {}
+    _AreaSetPickable<public>(Area:int, Pickable:logic):void = {}
+    _AreaSetShape<public>(Area:int, ShapeIdx:int, Shape:int):void = {}
+    _AreaSetShapeDisabled<public>(Area:int, ShapeIdx:int, Disabled:logic):void = {}
+    _AreaSetShapeTransform<public>(Area:int, ShapeIdx:int, Transform:transform2d):void = {}
+    _AreaSetSpace<public>(Area:int, Space:int):void = {}
+    _AreaSetTransform<public>(Area:int, Transform:transform2d):void = {}
+    _BodyAddCollisionException<public>(Body:int, ExceptedBody:int):void = {}
+    _BodyAddConstantCentralForce<public>(Body:int, Force:vector2):void = {}
+    _BodyAddConstantForce<public>(Body:int, Force:vector2, Position:vector2):void = {}
+    _BodyAddConstantTorque<public>(Body:int, Torque:float):void = {}
+    _BodyAddShape<public>(Body:int, Shape:int, Transform:transform2d, Disabled:logic):void = {}
+    _BodyApplyCentralForce<public>(Body:int, Force:vector2):void = {}
+    _BodyApplyCentralImpulse<public>(Body:int, Impulse:vector2):void = {}
+    _BodyApplyForce<public>(Body:int, Force:vector2, Position:vector2):void = {}
+    _BodyApplyImpulse<public>(Body:int, Impulse:vector2, Position:vector2):void = {}
+    _BodyApplyTorque<public>(Body:int, Torque:float):void = {}
+    _BodyApplyTorqueImpulse<public>(Body:int, Impulse:float):void = {}
+    _BodyAttachCanvasInstanceId<public>(Body:int, Id:int):void = {}
+    _BodyAttachObjectInstanceId<public>(Body:int, Id:int):void = {}
+    _BodyClearShapes<public>(Body:int):void = {}
+    _BodyCreate<public>():int = 0
+    _BodyGetCanvasInstanceId<public>(Body:int):int = 0
+    _BodyGetCollisionLayer<public>(Body:int):int = 0
+    _BodyGetCollisionMask<public>(Body:int):int = 0
+    _BodyGetCollisionPriority<public>(Body:int):float = 0.0
+    _BodyGetConstantForce<public>(Body:int):vector2 = vector2{}
+    _BodyGetConstantTorque<public>(Body:int):float = 0.0
+    _BodyGetContactsReportedDepthThreshold<public>(Body:int):float = 0.0
+    _BodyGetContinuousCollisionDetectionMode<public>(Body:int):physics_server2d_ccd_mode = physics_server2d_ccd_mode.Disabled
+    _BodyGetMaxContactsReported<public>(Body:int):int = 0
+    _BodyGetMode<public>(Body:int):physics_server2d_body_mode = physics_server2d_body_mode.Static
+    _BodyGetObjectInstanceId<public>(Body:int):int = 0
+    _BodyGetParam<public>(Body:int, Param:physics_server2d_body_parameter):variant = variant{}
+    _BodyGetShape<public>(Body:int, ShapeIdx:int):int = 0
+    _BodyGetShapeCount<public>(Body:int):int = 0
+    _BodyGetShapeTransform<public>(Body:int, ShapeIdx:int):transform2d = transform2d{}
+    _BodyGetSpace<public>(Body:int):int = 0
+    _BodyGetState<public>(Body:int, State:physics_server2d_body_state):variant = variant{}
+    _BodyIsOmittingForceIntegration<public>(Body:int):logic = false
+    _BodyRemoveCollisionException<public>(Body:int, ExceptedBody:int):void = {}
+    _BodyRemoveShape<public>(Body:int, ShapeIdx:int):void = {}
+    _BodyResetMassProperties<public>(Body:int):void = {}
+    _BodySetAxisVelocity<public>(Body:int, AxisVelocity:vector2):void = {}
+    _BodySetCollisionLayer<public>(Body:int, Layer:int):void = {}
+    _BodySetCollisionMask<public>(Body:int, Mask:int):void = {}
+    _BodySetCollisionPriority<public>(Body:int, Priority:float):void = {}
+    _BodySetConstantForce<public>(Body:int, Force:vector2):void = {}
+    _BodySetConstantTorque<public>(Body:int, Torque:float):void = {}
+    _BodySetContactsReportedDepthThreshold<public>(Body:int, Threshold:float):void = {}
+    _BodySetContinuousCollisionDetectionMode<public>(Body:int, Mode:physics_server2d_ccd_mode):void = {}
+    _BodySetForceIntegrationCallback<public>(Body:int, Callable:callable, Userdata:variant):void = {}
+    _BodySetMaxContactsReported<public>(Body:int, Amount:int):void = {}
+    _BodySetMode<public>(Body:int, Mode:physics_server2d_body_mode):void = {}
+    _BodySetOmitForceIntegration<public>(Body:int, Enable:logic):void = {}
+    _BodySetParam<public>(Body:int, Param:physics_server2d_body_parameter, Value:variant):void = {}
+    _BodySetPickable<public>(Body:int, Pickable:logic):void = {}
+    _BodySetShape<public>(Body:int, ShapeIdx:int, Shape:int):void = {}
+    _BodySetShapeAsOneWayCollision<public>(Body:int, ShapeIdx:int, Enable:logic, Margin:float):void = {}
+    _BodySetShapeDisabled<public>(Body:int, ShapeIdx:int, Disabled:logic):void = {}
+    _BodySetShapeTransform<public>(Body:int, ShapeIdx:int, Transform:transform2d):void = {}
+    _BodySetSpace<public>(Body:int, Space:int):void = {}
+    _BodySetState<public>(Body:int, State:physics_server2d_body_state, Value:variant):void = {}
+    _BodySetStateSyncCallback<public>(Body:int, Callable:callable):void = {}
+    _CapsuleShapeCreate<public>():int = 0
+    _CircleShapeCreate<public>():int = 0
+    _ConcavePolygonShapeCreate<public>():int = 0
+    _ConvexPolygonShapeCreate<public>():int = 0
+    _DampedSpringJointGetParam<public>(Joint:int, Param:physics_server2d_damped_spring_param):float = 0.0
+    _DampedSpringJointSetParam<public>(Joint:int, Param:physics_server2d_damped_spring_param, Value:float):void = {}
+    _EndSync<public>():void = {}
+    _Finish<public>():void = {}
+    _FlushQueries<public>():void = {}
+    _FreeRid<public>(Rid:int):void = {}
+    _GetProcessInfo<public>(ProcessInfo:physics_server2d_process_info):int = 0
+    _Init<public>():void = {}
+    _IsFlushingQueries<public>():logic = false
+    _JointClear<public>(Joint:int):void = {}
+    _JointCreate<public>():int = 0
+    _JointDisableCollisionsBetweenBodies<public>(Joint:int, Disable:logic):void = {}
+    _JointGetParam<public>(Joint:int, Param:physics_server2d_joint_param):float = 0.0
+    _JointGetType<public>(Joint:int):physics_server2d_joint_type = physics_server2d_joint_type.Pin
+    _JointIsDisabledCollisionsBetweenBodies<public>(Joint:int):logic = false
+    _JointMakeDampedSpring<public>(Joint:int, AnchorA:vector2, AnchorB:vector2, BodyA:int, BodyB:int):void = {}
+    _JointMakeGroove<public>(Joint:int, AGroove1:vector2, AGroove2:vector2, BAnchor:vector2, BodyA:int, BodyB:int):void = {}
+    _JointMakePin<public>(Joint:int, Anchor:vector2, BodyA:int, BodyB:int):void = {}
+    _JointSetParam<public>(Joint:int, Param:physics_server2d_joint_param, Value:float):void = {}
+    _PinJointGetFlag<public>(Joint:int, Flag:physics_server2d_pin_joint_flag):logic = false
+    _PinJointGetParam<public>(Joint:int, Param:physics_server2d_pin_joint_param):float = 0.0
+    _PinJointSetFlag<public>(Joint:int, Flag:physics_server2d_pin_joint_flag, Enabled:logic):void = {}
+    _PinJointSetParam<public>(Joint:int, Param:physics_server2d_pin_joint_param, Value:float):void = {}
+    _RectangleShapeCreate<public>():int = 0
+    _SegmentShapeCreate<public>():int = 0
+    _SeparationRayShapeCreate<public>():int = 0
+    _SetActive<public>(Active:logic):void = {}
+    _ShapeGetCustomSolverBias<public>(Shape:int):float = 0.0
+    _ShapeGetData<public>(Shape:int):variant = variant{}
+    _ShapeGetType<public>(Shape:int):physics_server2d_shape_type = physics_server2d_shape_type.WorldBoundary
+    _ShapeSetCustomSolverBias<public>(Shape:int, Bias:float):void = {}
+    _ShapeSetData<public>(Shape:int, Data:variant):void = {}
+    _SpaceCreate<public>():int = 0
+    _SpaceGetContactCount<public>(Space:int):int = 0
+    _SpaceGetContacts<public>(Space:int):[]vector2 = array{}
+    _SpaceGetParam<public>(Space:int, Param:physics_server2d_space_parameter):float = 0.0
+    _SpaceIsActive<public>(Space:int):logic = false
+    _SpaceSetActive<public>(Space:int, Active:logic):void = {}
+    _SpaceSetDebugContacts<public>(Space:int, MaxContacts:int):void = {}
+    _SpaceSetParam<public>(Space:int, Param:physics_server2d_space_parameter, Value:float):void = {}
+    _Step<public>(Arg0:float):void = {}
+    _Sync<public>():void = {}
+    _WorldBoundaryShapeCreate<public>():int = 0
 
 physics_server3d_extension<public> := class(physics_server3d):
 
     BodyTestMotionIsExcludingBody<public>(Body:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "body_test_motion_is_excluding_body", array{VhFromRid(Body)}))
     BodyTestMotionIsExcludingObject<public>(Object:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "body_test_motion_is_excluding_object", array{VhFromInt(Object)}))
+    _AreaAddShape<public>(Area:int, Shape:int, Transform:transform3d, Disabled:logic):void = {}
+    _AreaAttachObjectInstanceId<public>(Area:int, Id:int):void = {}
+    _AreaClearShapes<public>(Area:int):void = {}
+    _AreaCreate<public>():int = 0
+    _AreaGetCollisionLayer<public>(Area:int):int = 0
+    _AreaGetCollisionMask<public>(Area:int):int = 0
+    _AreaGetObjectInstanceId<public>(Area:int):int = 0
+    _AreaGetParam<public>(Area:int, Param:physics_server3d_area_parameter):variant = variant{}
+    _AreaGetShape<public>(Area:int, ShapeIdx:int):int = 0
+    _AreaGetShapeCount<public>(Area:int):int = 0
+    _AreaGetShapeTransform<public>(Area:int, ShapeIdx:int):transform3d = transform3d{}
+    _AreaGetSpace<public>(Area:int):int = 0
+    _AreaGetTransform<public>(Area:int):transform3d = transform3d{}
+    _AreaRemoveShape<public>(Area:int, ShapeIdx:int):void = {}
+    _AreaSetAreaMonitorCallback<public>(Area:int, Callback:callable):void = {}
+    _AreaSetCollisionLayer<public>(Area:int, Layer:int):void = {}
+    _AreaSetCollisionMask<public>(Area:int, Mask:int):void = {}
+    _AreaSetMonitorCallback<public>(Area:int, Callback:callable):void = {}
+    _AreaSetMonitorable<public>(Area:int, Monitorable:logic):void = {}
+    _AreaSetParam<public>(Area:int, Param:physics_server3d_area_parameter, Value:variant):void = {}
+    _AreaSetRayPickable<public>(Area:int, Enable:logic):void = {}
+    _AreaSetShape<public>(Area:int, ShapeIdx:int, Shape:int):void = {}
+    _AreaSetShapeDisabled<public>(Area:int, ShapeIdx:int, Disabled:logic):void = {}
+    _AreaSetShapeTransform<public>(Area:int, ShapeIdx:int, Transform:transform3d):void = {}
+    _AreaSetSpace<public>(Area:int, Space:int):void = {}
+    _AreaSetTransform<public>(Area:int, Transform:transform3d):void = {}
+    _BodyAddCollisionException<public>(Body:int, ExceptedBody:int):void = {}
+    _BodyAddConstantCentralForce<public>(Body:int, Force:vector3):void = {}
+    _BodyAddConstantForce<public>(Body:int, Force:vector3, Position:vector3):void = {}
+    _BodyAddConstantTorque<public>(Body:int, Torque:vector3):void = {}
+    _BodyAddShape<public>(Body:int, Shape:int, Transform:transform3d, Disabled:logic):void = {}
+    _BodyApplyCentralForce<public>(Body:int, Force:vector3):void = {}
+    _BodyApplyCentralImpulse<public>(Body:int, Impulse:vector3):void = {}
+    _BodyApplyForce<public>(Body:int, Force:vector3, Position:vector3):void = {}
+    _BodyApplyImpulse<public>(Body:int, Impulse:vector3, Position:vector3):void = {}
+    _BodyApplyTorque<public>(Body:int, Torque:vector3):void = {}
+    _BodyApplyTorqueImpulse<public>(Body:int, Impulse:vector3):void = {}
+    _BodyAttachObjectInstanceId<public>(Body:int, Id:int):void = {}
+    _BodyClearShapes<public>(Body:int):void = {}
+    _BodyCreate<public>():int = 0
+    _BodyGetCollisionLayer<public>(Body:int):int = 0
+    _BodyGetCollisionMask<public>(Body:int):int = 0
+    _BodyGetCollisionPriority<public>(Body:int):float = 0.0
+    _BodyGetConstantForce<public>(Body:int):vector3 = vector3{}
+    _BodyGetConstantTorque<public>(Body:int):vector3 = vector3{}
+    _BodyGetContactsReportedDepthThreshold<public>(Body:int):float = 0.0
+    _BodyGetMaxContactsReported<public>(Body:int):int = 0
+    _BodyGetMode<public>(Body:int):physics_server3d_body_mode = physics_server3d_body_mode.Static
+    _BodyGetObjectInstanceId<public>(Body:int):int = 0
+    _BodyGetParam<public>(Body:int, Param:physics_server3d_body_parameter):variant = variant{}
+    _BodyGetShape<public>(Body:int, ShapeIdx:int):int = 0
+    _BodyGetShapeCount<public>(Body:int):int = 0
+    _BodyGetShapeTransform<public>(Body:int, ShapeIdx:int):transform3d = transform3d{}
+    _BodyGetSpace<public>(Body:int):int = 0
+    _BodyGetState<public>(Body:int, State:physics_server3d_body_state):variant = variant{}
+    _BodyGetUserFlags<public>(Body:int):int = 0
+    _BodyIsAxisLocked<public>(Body:int, Axis:physics_server3d_body_axis):logic = false
+    _BodyIsContinuousCollisionDetectionEnabled<public>(Body:int):logic = false
+    _BodyIsOmittingForceIntegration<public>(Body:int):logic = false
+    _BodyRemoveCollisionException<public>(Body:int, ExceptedBody:int):void = {}
+    _BodyRemoveShape<public>(Body:int, ShapeIdx:int):void = {}
+    _BodyResetMassProperties<public>(Body:int):void = {}
+    _BodySetAxisLock<public>(Body:int, Axis:physics_server3d_body_axis, Lock:logic):void = {}
+    _BodySetAxisVelocity<public>(Body:int, AxisVelocity:vector3):void = {}
+    _BodySetCollisionLayer<public>(Body:int, Layer:int):void = {}
+    _BodySetCollisionMask<public>(Body:int, Mask:int):void = {}
+    _BodySetCollisionPriority<public>(Body:int, Priority:float):void = {}
+    _BodySetConstantForce<public>(Body:int, Force:vector3):void = {}
+    _BodySetConstantTorque<public>(Body:int, Torque:vector3):void = {}
+    _BodySetContactsReportedDepthThreshold<public>(Body:int, Threshold:float):void = {}
+    _BodySetEnableContinuousCollisionDetection<public>(Body:int, Enable:logic):void = {}
+    _BodySetForceIntegrationCallback<public>(Body:int, Callable:callable, Userdata:variant):void = {}
+    _BodySetMaxContactsReported<public>(Body:int, Amount:int):void = {}
+    _BodySetMode<public>(Body:int, Mode:physics_server3d_body_mode):void = {}
+    _BodySetOmitForceIntegration<public>(Body:int, Enable:logic):void = {}
+    _BodySetParam<public>(Body:int, Param:physics_server3d_body_parameter, Value:variant):void = {}
+    _BodySetRayPickable<public>(Body:int, Enable:logic):void = {}
+    _BodySetShape<public>(Body:int, ShapeIdx:int, Shape:int):void = {}
+    _BodySetShapeDisabled<public>(Body:int, ShapeIdx:int, Disabled:logic):void = {}
+    _BodySetShapeTransform<public>(Body:int, ShapeIdx:int, Transform:transform3d):void = {}
+    _BodySetSpace<public>(Body:int, Space:int):void = {}
+    _BodySetState<public>(Body:int, State:physics_server3d_body_state, Value:variant):void = {}
+    _BodySetStateSyncCallback<public>(Body:int, Callable:callable):void = {}
+    _BodySetUserFlags<public>(Body:int, Flags:int):void = {}
+    _BoxShapeCreate<public>():int = 0
+    _CapsuleShapeCreate<public>():int = 0
+    _ConcavePolygonShapeCreate<public>():int = 0
+    _ConeTwistJointGetParam<public>(Joint:int, Param:physics_server3d_cone_twist_joint_param):float = 0.0
+    _ConeTwistJointSetParam<public>(Joint:int, Param:physics_server3d_cone_twist_joint_param, Value:float):void = {}
+    _ConvexPolygonShapeCreate<public>():int = 0
+    _CustomShapeCreate<public>():int = 0
+    _CylinderShapeCreate<public>():int = 0
+    _EndSync<public>():void = {}
+    _Finish<public>():void = {}
+    _FlushQueries<public>():void = {}
+    _FreeRid<public>(Rid:int):void = {}
+    _Generic6dofJointGetFlag<public>(Joint:int, Axis:vector3_axis, Flag:physics_server3d_g6dof_joint_axis_flag):logic = false
+    _Generic6dofJointGetParam<public>(Joint:int, Axis:vector3_axis, Param:physics_server3d_g6dof_joint_axis_param):float = 0.0
+    _Generic6dofJointSetFlag<public>(Joint:int, Axis:vector3_axis, Flag:physics_server3d_g6dof_joint_axis_flag, Enable:logic):void = {}
+    _Generic6dofJointSetParam<public>(Joint:int, Axis:vector3_axis, Param:physics_server3d_g6dof_joint_axis_param, Value:float):void = {}
+    _GetProcessInfo<public>(ProcessInfo:physics_server3d_process_info):int = 0
+    _HeightmapShapeCreate<public>():int = 0
+    _HingeJointGetFlag<public>(Joint:int, Flag:physics_server3d_hinge_joint_flag):logic = false
+    _HingeJointGetParam<public>(Joint:int, Param:physics_server3d_hinge_joint_param):float = 0.0
+    _HingeJointSetFlag<public>(Joint:int, Flag:physics_server3d_hinge_joint_flag, Enabled:logic):void = {}
+    _HingeJointSetParam<public>(Joint:int, Param:physics_server3d_hinge_joint_param, Value:float):void = {}
+    _Init<public>():void = {}
+    _IsFlushingQueries<public>():logic = false
+    _JointClear<public>(Joint:int):void = {}
+    _JointCreate<public>():int = 0
+    _JointDisableCollisionsBetweenBodies<public>(Joint:int, Disable:logic):void = {}
+    _JointGetSolverPriority<public>(Joint:int):int = 0
+    _JointGetType<public>(Joint:int):physics_server3d_joint_type = physics_server3d_joint_type.JointTypePin
+    _JointIsDisabledCollisionsBetweenBodies<public>(Joint:int):logic = false
+    _JointMakeConeTwist<public>(Joint:int, BodyA:int, LocalRefA:transform3d, BodyB:int, LocalRefB:transform3d):void = {}
+    _JointMakeGeneric6dof<public>(Joint:int, BodyA:int, LocalRefA:transform3d, BodyB:int, LocalRefB:transform3d):void = {}
+    _JointMakeHinge<public>(Joint:int, BodyA:int, HingeA:transform3d, BodyB:int, HingeB:transform3d):void = {}
+    _JointMakeHingeSimple<public>(Joint:int, BodyA:int, PivotA:vector3, AxisA:vector3, BodyB:int, PivotB:vector3, AxisB:vector3):void = {}
+    _JointMakePin<public>(Joint:int, BodyA:int, LocalA:vector3, BodyB:int, LocalB:vector3):void = {}
+    _JointMakeSlider<public>(Joint:int, BodyA:int, LocalRefA:transform3d, BodyB:int, LocalRefB:transform3d):void = {}
+    _JointSetSolverPriority<public>(Joint:int, Priority:int):void = {}
+    _PinJointGetLocalA<public>(Joint:int):vector3 = vector3{}
+    _PinJointGetLocalB<public>(Joint:int):vector3 = vector3{}
+    _PinJointGetParam<public>(Joint:int, Param:physics_server3d_pin_joint_param):float = 0.0
+    _PinJointSetLocalA<public>(Joint:int, LocalA:vector3):void = {}
+    _PinJointSetLocalB<public>(Joint:int, LocalB:vector3):void = {}
+    _PinJointSetParam<public>(Joint:int, Param:physics_server3d_pin_joint_param, Value:float):void = {}
+    _SeparationRayShapeCreate<public>():int = 0
+    _SetActive<public>(Active:logic):void = {}
+    _ShapeGetCustomSolverBias<public>(Shape:int):float = 0.0
+    _ShapeGetData<public>(Shape:int):variant = variant{}
+    _ShapeGetMargin<public>(Shape:int):float = 0.0
+    _ShapeGetType<public>(Shape:int):physics_server3d_shape_type = physics_server3d_shape_type.WorldBoundary
+    _ShapeSetCustomSolverBias<public>(Shape:int, Bias:float):void = {}
+    _ShapeSetData<public>(Shape:int, Data:variant):void = {}
+    _ShapeSetMargin<public>(Shape:int, Margin:float):void = {}
+    _SliderJointGetParam<public>(Joint:int, Param:physics_server3d_slider_joint_param):float = 0.0
+    _SliderJointSetParam<public>(Joint:int, Param:physics_server3d_slider_joint_param, Value:float):void = {}
+    _SoftBodyAddCollisionException<public>(Body:int, BodyB:int):void = {}
+    _SoftBodyApplyCentralForce<public>(Body:int, Force:vector3):void = {}
+    _SoftBodyApplyCentralImpulse<public>(Body:int, Impulse:vector3):void = {}
+    _SoftBodyApplyPointForce<public>(Body:int, PointIndex:int, Force:vector3):void = {}
+    _SoftBodyApplyPointImpulse<public>(Body:int, PointIndex:int, Impulse:vector3):void = {}
+    _SoftBodyCreate<public>():int = 0
+    _SoftBodyGetBounds<public>(Body:int):aabb = aabb{}
+    _SoftBodyGetCollisionLayer<public>(Body:int):int = 0
+    _SoftBodyGetCollisionMask<public>(Body:int):int = 0
+    _SoftBodyGetDampingCoefficient<public>(Body:int):float = 0.0
+    _SoftBodyGetDragCoefficient<public>(Body:int):float = 0.0
+    _SoftBodyGetLinearStiffness<public>(Body:int):float = 0.0
+    _SoftBodyGetPointGlobalPosition<public>(Body:int, PointIndex:int):vector3 = vector3{}
+    _SoftBodyGetPressureCoefficient<public>(Body:int):float = 0.0
+    _SoftBodyGetShrinkingFactor<public>(Body:int):float = 0.0
+    _SoftBodyGetSimulationPrecision<public>(Body:int):int = 0
+    _SoftBodyGetSpace<public>(Body:int):int = 0
+    _SoftBodyGetState<public>(Body:int, State:physics_server3d_body_state):variant = variant{}
+    _SoftBodyGetTotalMass<public>(Body:int):float = 0.0
+    _SoftBodyIsPointPinned<public>(Body:int, PointIndex:int):logic = false
+    _SoftBodyMovePoint<public>(Body:int, PointIndex:int, GlobalPosition:vector3):void = {}
+    _SoftBodyPinPoint<public>(Body:int, PointIndex:int, Pin:logic):void = {}
+    _SoftBodyRemoveAllPinnedPoints<public>(Body:int):void = {}
+    _SoftBodyRemoveCollisionException<public>(Body:int, BodyB:int):void = {}
+    _SoftBodySetCollisionLayer<public>(Body:int, Layer:int):void = {}
+    _SoftBodySetCollisionMask<public>(Body:int, Mask:int):void = {}
+    _SoftBodySetDampingCoefficient<public>(Body:int, DampingCoefficient:float):void = {}
+    _SoftBodySetDragCoefficient<public>(Body:int, DragCoefficient:float):void = {}
+    _SoftBodySetLinearStiffness<public>(Body:int, LinearStiffness:float):void = {}
+    _SoftBodySetMesh<public>(Body:int, Mesh:int):void = {}
+    _SoftBodySetPressureCoefficient<public>(Body:int, PressureCoefficient:float):void = {}
+    _SoftBodySetRayPickable<public>(Body:int, Enable:logic):void = {}
+    _SoftBodySetShrinkingFactor<public>(Body:int, ShrinkingFactor:float):void = {}
+    _SoftBodySetSimulationPrecision<public>(Body:int, SimulationPrecision:int):void = {}
+    _SoftBodySetSpace<public>(Body:int, Space:int):void = {}
+    _SoftBodySetState<public>(Body:int, State:physics_server3d_body_state, Variant:variant):void = {}
+    _SoftBodySetTotalMass<public>(Body:int, TotalMass:float):void = {}
+    _SoftBodySetTransform<public>(Body:int, Transform:transform3d):void = {}
+    _SoftBodyUpdateRenderingServer<public>(Body:int, RenderingServerHandler:physics_server3d_rendering_server_handler):void = {}
+    _SpaceCreate<public>():int = 0
+    _SpaceGetContactCount<public>(Space:int):int = 0
+    _SpaceGetContacts<public>(Space:int):[]vector3 = array{}
+    _SpaceGetParam<public>(Space:int, Param:physics_server3d_space_parameter):float = 0.0
+    _SpaceIsActive<public>(Space:int):logic = false
+    _SpaceSetActive<public>(Space:int, Active:logic):void = {}
+    _SpaceSetDebugContacts<public>(Space:int, MaxContacts:int):void = {}
+    _SpaceSetParam<public>(Space:int, Param:physics_server3d_space_parameter, Value:float):void = {}
+    _SphereShapeCreate<public>():int = 0
+    _Step<public>(Arg0:float):void = {}
+    _Sync<public>():void = {}
+    _WorldBoundaryShapeCreate<public>():int = 0
 
 physics_shape_query_parameters2d<public> := class(ref_counted):
 
@@ -33437,6 +34046,9 @@ reg_ex_match<public> := class(ref_counted):
 
 render_data_extension<public> := class(render_data):
 
+    _GetCameraAttributes<public>():int = 0
+    _GetEnvironment<public>():int = 0
+
 render_data_rd<public> := class(render_data):
 
 render_scene_buffers<public> := class(ref_counted):
@@ -33496,6 +34108,13 @@ render_scene_buffers_configuration<public> := class(ref_counted):
 
 render_scene_data_extension<public> := class(render_scene_data):
 
+    _GetCamProjection<public>():projection = projection{}
+    _GetCamTransform<public>():transform3d = transform3d{}
+    _GetUniformBuffer<public>():int = 0
+    _GetViewCount<public>():int = 0
+    _GetViewEyeOffset<public>(View:int):vector3 = vector3{}
+    _GetViewProjection<public>(View:int):projection = projection{}
+
 render_scene_data_rd<public> := class(render_scene_data):
 
 resource<public> := class(ref_counted):
@@ -33521,12 +34140,36 @@ resource<public> := class(ref_counted):
     SetSceneUniqueId<public>(Id:string)<transacts>:void = VhCallVoid(Handle, "set_scene_unique_id", array{VhFromString(Id)})
     SetupLocalToScene<public>()<transacts>:void = VhCallVoid(Handle, "setup_local_to_scene", array{})
     TakeOverPath<public>(Path:string)<transacts>:void = VhCallVoid(Handle, "take_over_path", array{VhFromString(Path)})
+    _GetRid<public>():int = 0
+    _ResetState<public>():void = {}
+    _SetPathCache<public>(Path:string):void = {}
+    _SetupLocalToScene<public>():void = {}
 
 resource_format_loader<public> := class(ref_counted):
 
+    _Exists<public>(Path:string):logic = false
+    _GetClassesUsed<public>(Path:string):[]string = array{}
+    _GetDependencies<public>(Path:string, AddTypes:logic):[]string = array{}
+    _GetRecognizedExtensions<public>():[]string = array{}
+    _GetResourceScriptClass<public>(Path:string):string = ""
+    _GetResourceType<public>(Path:string):string = ""
+    _GetResourceUid<public>(Path:string):int = 0
+    _HandlesType<public>(Type:string):logic = false
+    _Load<public>(Path:string, OriginalPath:string, UseSubThreads:logic, CacheMode:int):variant = variant{}
+    _RecognizePath<public>(Path:string, Type:string):logic = false
+    _RenameDependencies<public>(Path:string, Renames:dictionary):error = error.Ok
+
 resource_format_saver<public> := class(ref_counted):
 
+    _GetRecognizedExtensions<public>(Resource:resource):[]string = array{}
+    _Recognize<public>(Resource:resource):logic = false
+    _RecognizePath<public>(Resource:resource, Path:string):logic = false
+    _Save<public>(Resource:resource, Path:string, Flags:int):error = error.Ok
+    _SetUid<public>(Path:string, Uid:int):error = error.Ok
+
 resource_importer<public> := class(ref_counted):
+
+    _GetBuildDependencies<public>(Path:string):[]string = array{}
 
 resource_preloader<public> := class(node):
 
@@ -33645,6 +34288,58 @@ script_backtrace<public> := class(ref_counted):
     IsEmpty<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_empty", array{}))
 
 script_language_extension<public> := class(script_language):
+
+    _AddGlobalConstant<public>(Name:string, Value:variant):void = {}
+    _AddNamedGlobalConstant<public>(Name:string, Value:variant):void = {}
+    _AutoIndentCode<public>(Code:string, FromLine:int, ToLine:int):string = ""
+    _CanInheritFromFile<public>():logic = false
+    _CanMakeFunction<public>():logic = false
+    _CompleteCode<public>(Code:string, Path:string, Owner:object):dictionary = dictionary{}
+    _DebugGetError<public>():string = ""
+    _DebugGetGlobals<public>(MaxSubitems:int, MaxDepth:int):dictionary = dictionary{}
+    _DebugGetStackLevelCount<public>():int = 0
+    _DebugGetStackLevelFunction<public>(Level:int):string = ""
+    _DebugGetStackLevelLine<public>(Level:int):int = 0
+    _DebugGetStackLevelLocals<public>(Level:int, MaxSubitems:int, MaxDepth:int):dictionary = dictionary{}
+    _DebugGetStackLevelMembers<public>(Level:int, MaxSubitems:int, MaxDepth:int):dictionary = dictionary{}
+    _DebugGetStackLevelSource<public>(Level:int):string = ""
+    _DebugParseStackLevelExpression<public>(Level:int, Expression:string, MaxSubitems:int, MaxDepth:int):string = ""
+    _FindFunction<public>(Function:string, Code:string):int = 0
+    _Finish<public>():void = {}
+    _Frame<public>():void = {}
+    _GetCommentDelimiters<public>():[]string = array{}
+    _GetDocCommentDelimiters<public>():[]string = array{}
+    _GetExtension<public>():string = ""
+    _GetGlobalClassName<public>(Path:string):dictionary = dictionary{}
+    _GetName<public>():string = ""
+    _GetPublicConstants<public>():dictionary = dictionary{}
+    _GetRecognizedExtensions<public>():[]string = array{}
+    _GetReservedWords<public>():[]string = array{}
+    _GetStringDelimiters<public>():[]string = array{}
+    _GetType<public>():string = ""
+    _HandlesGlobalClassType<public>(Type:string):logic = false
+    _HasNamedClasses<public>():logic = false
+    _Init<public>():void = {}
+    _IsControlFlowKeyword<public>(Keyword:string):logic = false
+    _IsUsingTemplates<public>():logic = false
+    _LookupCode<public>(Code:string, Symbol:string, Path:string, Owner:object):dictionary = dictionary{}
+    _MakeFunction<public>(ClassName:string, FunctionName:string, FunctionArgs:[]string):string = ""
+    _OpenInExternalEditor<public>(Script:script, Line:int, Column:int):error = error.Ok
+    _OverridesExternalEditor<public>():logic = false
+    _PreferredFileNameCasing<public>():script_language_script_name_casing = script_language_script_name_casing.Auto
+    _ProfilingSetSaveNativeCalls<public>(Enable:logic):void = {}
+    _ProfilingStart<public>():void = {}
+    _ProfilingStop<public>():void = {}
+    _ReloadAllScripts<public>():void = {}
+    _ReloadScripts<public>(Scripts:godot_array, SoftReload:logic):void = {}
+    _ReloadToolScript<public>(Script:script, SoftReload:logic):void = {}
+    _RemoveNamedGlobalConstant<public>(Name:string):void = {}
+    _SupportsBuiltinMode<public>():logic = false
+    _SupportsDocumentation<public>():logic = false
+    _ThreadEnter<public>():void = {}
+    _ThreadExit<public>():void = {}
+    _Validate<public>(Script:string, Path:string, ValidateFunctions:logic, ValidateErrors:logic, ValidateWarnings:logic, ValidateSafeLines:logic):dictionary = dictionary{}
+    _ValidatePath<public>(Path:string):string = ""
 
 semaphore<public> := class(ref_counted):
 
@@ -34732,6 +35427,13 @@ animation_node<public> := class(resource):
     SetFilterPath<public>(Path:string, Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_filter_path", array{VhFromNodePath(Path), VhFromLogic(Enable)})
     SetInputName<public>(Input:int, Name:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "set_input_name", array{VhFromInt(Input), VhFromString(Name)}))
     SetParameter<public>(Name:string, Value:variant)<transacts>:void = VhCallVoid(Handle, "set_parameter", array{VhFromStringName(Name), VhFromVariant(Value)})
+    _GetCaption<public>():string = ""
+    _GetChildNodes<public>():dictionary = dictionary{}
+    _GetParameterDefaultValue<public>(Parameter:string):variant = variant{}
+    _GetParameterList<public>():godot_array = godot_array{}
+    _HasFilter<public>():logic = false
+    _IsParameterReadOnly<public>(Parameter:string):logic = false
+    _Process<public>(Time:float, Seek:logic, IsExternalSeeking:logic, TestOnly:logic):float = 0.0
 
 animation_node_state_machine_playback<public> := class(resource):
 
@@ -34878,6 +35580,14 @@ audio_stream<public> := class(resource):
     InstantiatePlayback<public>()<decides><transacts>:audio_stream_playback = audio_stream_playback[VhObjectFrom[VhCallValue(Handle, "instantiate_playback", array{})]]
     IsMetaStream<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_meta_stream", array{}))
     IsMonophonic<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_monophonic", array{}))
+    _GetBarBeats<public>():int = 0
+    _GetBeatCount<public>():int = 0
+    _GetBpm<public>():float = 0.0
+    _GetLength<public>():float = 0.0
+    _GetStreamName<public>():string = ""
+    _GetTags<public>():dictionary = dictionary{}
+    _HasLoop<public>():logic = false
+    _IsMonophonic<public>():logic = false
 
 audio_stream_playback_interactive<public> := class(audio_stream_playback):
 
@@ -34898,6 +35608,7 @@ audio_stream_playback_polyphonic<public> := class(audio_stream_playback):
 audio_stream_playback_resampled<public> := class(audio_stream_playback):
 
     BeginResample<public>()<transacts>:void = VhCallVoid(Handle, "begin_resample", array{})
+    _GetStreamSamplingRate<public>():float = 0.0
 
 audio_stream_playback_synchronized<public> := class(audio_stream_playback):
 
@@ -35159,6 +35870,9 @@ collision_object3d<public> := class(node3d):
     ShapeOwnerRemoveShape<public>(OwnerId:int, ShapeId:int)<transacts>:void = VhCallVoid(Handle, "shape_owner_remove_shape", array{VhFromInt(OwnerId), VhFromInt(ShapeId)})
     ShapeOwnerSetDisabled<public>(OwnerId:int, Disabled:logic)<transacts>:void = VhCallVoid(Handle, "shape_owner_set_disabled", array{VhFromInt(OwnerId), VhFromLogic(Disabled)})
     ShapeOwnerSetTransform<public>(OwnerId:int, Transform:transform3d)<transacts>:void = VhCallVoid(Handle, "shape_owner_set_transform", array{VhFromInt(OwnerId), VhFromTransform3D(Transform)})
+    _InputEvent<public>(Camera:camera3d, Event:input_event, EventPosition:vector3, Normal:vector3, ShapeIdx:int):void = {}
+    _MouseEnter<public>():void = {}
+    _MouseExit<public>():void = {}
 
 collision_polygon3d<public> := class(node3d):
 
@@ -35256,6 +35970,7 @@ compositor_effect<public> := class(resource):
     var NeedsSeparateSpecular<public><getter(NeedsSeparateSpecularGetter)><setter(NeedsSeparateSpecularSetter)>:logic = external {}
     NeedsSeparateSpecularGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_needs_separate_specular", array{}))
     NeedsSeparateSpecularSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_needs_separate_specular", array{VhFromLogic(Value)})
+    _RenderCallback<public>(Arg0:int, RenderData:render_data):void = {}
 
 control<public> := class(canvas_item):
 
@@ -35537,6 +36252,15 @@ control<public> := class(canvas_item):
     SetTooltipText<public>(Hint:string)<transacts>:void = VhCallVoid(Handle, "set_tooltip_text", array{VhFromString(Hint)})
     UpdateMinimumSize<public>()<transacts>:void = VhCallVoid(Handle, "update_minimum_size", array{})
     WarpMouse<public>(Arg0:vector2)<transacts>:void = VhCallVoid(Handle, "warp_mouse", array{VhFromVector2(Arg0)})
+    _AccessibilityGetContextualInfo<public>():string = ""
+    _CanDropData<public>(AtPosition:vector2, Data:variant):logic = false
+    _DropData<public>(AtPosition:vector2, Data:variant):void = {}
+    _GetAccessibilityContainerName<public>(Node:node):string = ""
+    _GetDragData<public>(AtPosition:vector2):variant = variant{}
+    _GetMinimumSize<public>():vector2 = vector2{}
+    _GetTooltip<public>(AtPosition:vector2):string = ""
+    _GuiInput<public>(Event:input_event):void = {}
+    _HasPoint<public>(Point:vector2):logic = false
 
 crypto_key<public> := class(resource):
 
@@ -35683,6 +36407,33 @@ editor_export_platform_extension<public> := class(editor_export_platform):
     GetConfigMissingTemplates<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_config_missing_templates", array{}))
     SetConfigError<public>(ErrorText:string)<transacts>:void = VhCallVoid(Handle, "set_config_error", array{VhFromString(ErrorText)})
     SetConfigMissingTemplates<public>(MissingTemplates:logic)<transacts>:void = VhCallVoid(Handle, "set_config_missing_templates", array{VhFromLogic(MissingTemplates)})
+    _CanExport<public>(Preset:editor_export_preset, Debug:logic):logic = false
+    _Cleanup<public>():void = {}
+    _ExportPack<public>(Preset:editor_export_preset, Debug:logic, Path:string, Flags:int):error = error.Ok
+    _ExportPackPatch<public>(Preset:editor_export_preset, Debug:logic, Path:string, Patches:[]string, Flags:int):error = error.Ok
+    _ExportProject<public>(Preset:editor_export_preset, Debug:logic, Path:string, Flags:int):error = error.Ok
+    _ExportZip<public>(Preset:editor_export_preset, Debug:logic, Path:string, Flags:int):error = error.Ok
+    _ExportZipPatch<public>(Preset:editor_export_preset, Debug:logic, Path:string, Patches:[]string, Flags:int):error = error.Ok
+    _GetBinaryExtensions<public>(Preset:editor_export_preset):[]string = array{}
+    _GetDebugProtocol<public>():string = ""
+    _GetDeviceArchitecture<public>(Device:int):string = ""
+    _GetExportOptionVisibility<public>(Preset:editor_export_preset, Option:string):logic = false
+    _GetExportOptionWarning<public>(Preset:editor_export_preset, Option:string):string = ""
+    _GetName<public>():string = ""
+    _GetOptionLabel<public>(Device:int):string = ""
+    _GetOptionTooltip<public>(Device:int):string = ""
+    _GetOptionsCount<public>():int = 0
+    _GetOptionsTooltip<public>():string = ""
+    _GetOsName<public>():string = ""
+    _GetPlatformFeatures<public>():[]string = array{}
+    _GetPresetFeatures<public>(Preset:editor_export_preset):[]string = array{}
+    _HasValidExportConfiguration<public>(Preset:editor_export_preset, Debug:logic):logic = false
+    _HasValidProjectConfiguration<public>(Preset:editor_export_preset):logic = false
+    _Initialize<public>():void = {}
+    _IsExecutable<public>(Path:string):logic = false
+    _PollExport<public>():logic = false
+    _Run<public>(Preset:editor_export_preset, Device:int, DebugFlags:int):error = error.Ok
+    _ShouldUpdateExportOptions<public>():logic = false
 
 editor_export_platform_mac_os<public> := class(editor_export_platform):
 
@@ -35693,6 +36444,19 @@ editor_export_platform_web<public> := class(editor_export_platform):
 editor_import_plugin<public> := class(resource_importer):
 
     AppendImportExternalResource<public>(Path:string, CustomOptions:dictionary, CustomImporter:string, GeneratorParameters:variant)<transacts>:error = VhToError(VhCallValue(Handle, "append_import_external_resource", array{VhFromString(Path), VhFromDictionary(CustomOptions), VhFromString(CustomImporter), VhFromVariant(GeneratorParameters)}))
+    _CanImportThreaded<public>():logic = false
+    _GetFormatVersion<public>():int = 0
+    _GetImportOrder<public>():int = 0
+    _GetImporterName<public>():string = ""
+    _GetOptionVisibility<public>(Path:string, OptionName:string, Options:dictionary):logic = false
+    _GetPresetCount<public>():int = 0
+    _GetPresetName<public>(PresetIndex:int):string = ""
+    _GetPriority<public>():float = 0.0
+    _GetRecognizedExtensions<public>():[]string = array{}
+    _GetResourceType<public>():string = ""
+    _GetSaveExtension<public>():string = ""
+    _GetVisibleName<public>():string = ""
+    _Import<public>(SourceFile:string, SavePath:string, Options:dictionary, PlatformVariants:typed_array(string), GenFiles:typed_array(string)):error = error.Ok
 
 editor_node3d_gizmo<public> := class(node3d_gizmo):
 
@@ -35709,6 +36473,18 @@ editor_node3d_gizmo<public> := class(node3d_gizmo):
     IsSubgizmoSelected<public>(Id:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_subgizmo_selected", array{VhFromInt(Id)}))
     SetHidden<public>(Hidden:logic)<transacts>:void = VhCallVoid(Handle, "set_hidden", array{VhFromLogic(Hidden)})
     SetNode3d<public>(Node:node)<transacts>:void = VhCallVoid(Handle, "set_node_3d", array{VhFromObject(Node)})
+    _BeginHandleAction<public>(Id:int, Secondary:logic):void = {}
+    _CommitHandle<public>(Id:int, Secondary:logic, Restore:variant, Cancel:logic):void = {}
+    _CommitSubgizmos<public>(Ids:[]int, Restores:typed_array(transform3d), Cancel:logic):void = {}
+    _GetHandleName<public>(Id:int, Secondary:logic):string = ""
+    _GetHandleValue<public>(Id:int, Secondary:logic):variant = variant{}
+    _GetSubgizmoTransform<public>(Id:int):transform3d = transform3d{}
+    _IsHandleHighlighted<public>(Id:int, Secondary:logic):logic = false
+    _Redraw<public>():void = {}
+    _SetHandle<public>(Id:int, Secondary:logic, Camera:camera3d, Point:vector2):void = {}
+    _SetSubgizmoTransform<public>(Id:int, Transform:transform3d):void = {}
+    _SubgizmosIntersectFrustum<public>(Camera:camera3d, Frustum:typed_array(plane)):[]int = array{}
+    _SubgizmosIntersectRay<public>(Camera:camera3d, Point:vector2):int = 0
 
 editor_node3d_gizmo_plugin<public> := class(resource):
 
@@ -35717,6 +36493,23 @@ editor_node3d_gizmo_plugin<public> := class(resource):
     CreateIconMaterial<public>(Name:string, Texture:texture2d, ?OnTop:logic = false, ?Color:color = color{R := 1.0, G := 1.0, B := 1.0, A := 1.0})<transacts>:void = VhCallVoid(Handle, "create_icon_material", array{VhFromString(Name), VhFromObject(Texture), VhFromLogic(OnTop), VhFromColor(Color)})
     CreateMaterial<public>(Name:string, Color:color, ?Billboard:logic = false, ?OnTop:logic = false, ?UseVertexColor:logic = false)<transacts>:void = VhCallVoid(Handle, "create_material", array{VhFromString(Name), VhFromColor(Color), VhFromLogic(Billboard), VhFromLogic(OnTop), VhFromLogic(UseVertexColor)})
     GetMaterial<public>(Name:string, Gizmo:editor_node3d_gizmo)<decides><transacts>:standard_material3d = standard_material3d[VhObjectFrom[VhCallValue(Handle, "get_material", array{VhFromString(Name), VhFromObject(Gizmo)})]]
+    _BeginHandleAction<public>(Gizmo:editor_node3d_gizmo, HandleId:int, Secondary:logic):void = {}
+    _CanBeHidden<public>():logic = false
+    _CommitHandle<public>(Gizmo:editor_node3d_gizmo, HandleId:int, Secondary:logic, Restore:variant, Cancel:logic):void = {}
+    _CommitSubgizmos<public>(Gizmo:editor_node3d_gizmo, Ids:[]int, Restores:typed_array(transform3d), Cancel:logic):void = {}
+    _GetGizmoName<public>():string = ""
+    _GetHandleName<public>(Gizmo:editor_node3d_gizmo, HandleId:int, Secondary:logic):string = ""
+    _GetHandleValue<public>(Gizmo:editor_node3d_gizmo, HandleId:int, Secondary:logic):variant = variant{}
+    _GetPriority<public>():int = 0
+    _GetSubgizmoTransform<public>(Gizmo:editor_node3d_gizmo, SubgizmoId:int):transform3d = transform3d{}
+    _HasGizmo<public>(ForNode3d:node3d):logic = false
+    _IsHandleHighlighted<public>(Gizmo:editor_node3d_gizmo, HandleId:int, Secondary:logic):logic = false
+    _IsSelectableWhenHidden<public>():logic = false
+    _Redraw<public>(Gizmo:editor_node3d_gizmo):void = {}
+    _SetHandle<public>(Gizmo:editor_node3d_gizmo, HandleId:int, Secondary:logic, Camera:camera3d, ScreenPos:vector2):void = {}
+    _SetSubgizmoTransform<public>(Gizmo:editor_node3d_gizmo, SubgizmoId:int, Transform:transform3d):void = {}
+    _SubgizmosIntersectFrustum<public>(Gizmo:editor_node3d_gizmo, Camera:camera3d, FrustumPlanes:typed_array(plane)):[]int = array{}
+    _SubgizmosIntersectRay<public>(Gizmo:editor_node3d_gizmo, Camera:camera3d, ScreenPos:vector2):int = 0
 
 editor_scene_format_importer_blend<public> := class(editor_scene_format_importer):
 
@@ -36285,6 +37078,27 @@ gltf_document<public> := class(resource):
     WriteToFilesystem<public>(State:gltf_state, Path:string)<transacts>:error = VhToError(VhCallValue(Handle, "write_to_filesystem", array{VhFromObject(State), VhFromString(Path)}))
 
 gltf_document_extension<public> := class(resource):
+
+    _ConvertSceneNode<public>(State:gltf_state, GltfNode:gltf_node, SceneNode:node):void = {}
+    _ExportNode<public>(State:gltf_state, GltfNode:gltf_node, Json:dictionary, Node:node):error = error.Ok
+    _ExportPost<public>(State:gltf_state):error = error.Ok
+    _ExportPostConvert<public>(State:gltf_state, Root:node):error = error.Ok
+    _ExportPreflight<public>(State:gltf_state, Root:node):error = error.Ok
+    _ExportPreserialize<public>(State:gltf_state):error = error.Ok
+    _GetImageFileExtension<public>():string = ""
+    _GetSaveableImageFormats<public>():[]string = array{}
+    _GetSupportedExtensions<public>():[]string = array{}
+    _ImportNode<public>(State:gltf_state, GltfNode:gltf_node, Json:dictionary, Node:node):error = error.Ok
+    _ImportPost<public>(State:gltf_state, Root:node):error = error.Ok
+    _ImportPostParse<public>(State:gltf_state):error = error.Ok
+    _ImportPreGenerate<public>(State:gltf_state):error = error.Ok
+    _ImportPreflight<public>(State:gltf_state, Extensions:[]string):error = error.Ok
+    _ParseImageData<public>(State:gltf_state, ImageData:[]int, MimeType:string, RetImage:image):error = error.Ok
+    _ParseNodeExtensions<public>(State:gltf_state, GltfNode:gltf_node, Extensions:dictionary):error = error.Ok
+    _ParseTextureJson<public>(State:gltf_state, TextureJson:dictionary, RetGltfTexture:gltf_texture):error = error.Ok
+    _SaveImageAtPath<public>(State:gltf_state, Image:image, FilePath:string, ImageFormat:string, LossyQuality:float):error = error.Ok
+    _SerializeImageToBytes<public>(State:gltf_state, Image:image, ImageDict:dictionary, ImageFormat:string, LossyQuality:float):[]int = array{}
+    _SerializeTextureJson<public>(State:gltf_state, TextureJson:dictionary, GltfTexture:gltf_texture, ImageFormat:string):error = error.Ok
 
 gltf_light<public> := class(resource):
 
@@ -36907,6 +37721,8 @@ image_format_loader_extension<public> := class(image_format_loader):
 
     AddFormatLoader<public>()<transacts>:void = VhCallVoid(Handle, "add_format_loader", array{})
     RemoveFormatLoader<public>()<transacts>:void = VhCallVoid(Handle, "remove_format_loader", array{})
+    _GetRecognizedExtensions<public>():[]string = array{}
+    _LoadImage<public>(Image:image, Fileaccess:file_access, Flags:int, Scale:float):error = error.Ok
 
 importer_mesh<public> := class(resource):
 
@@ -37149,6 +37965,10 @@ material<public> := class(resource):
     GetNextPass<public>()<decides><transacts>:material = material[VhObjectFrom[VhCallValue(Handle, "get_next_pass", array{})]]
     InspectNativeShaderCode<public>()<transacts>:void = VhCallVoid(Handle, "inspect_native_shader_code", array{})
     SetNextPass<public>(NextPass:material)<transacts>:void = VhCallVoid(Handle, "set_next_pass", array{VhFromObject(NextPass)})
+    _CanDoNextPass<public>():logic = false
+    _CanUseRenderPriority<public>():logic = false
+    _GetShaderMode<public>():shader_mode = shader_mode.Spatial
+    _GetShaderRid<public>():int = 0
 
 mesh<public> := class(resource):
 
@@ -37176,6 +37996,18 @@ mesh<public> := class(resource):
     SurfaceGetBlendShapeArrays<public>(SurfIdx:int)<transacts>:typed_array(godot_array) = VhToArrayArray(VhCallValue(Handle, "surface_get_blend_shape_arrays", array{VhFromInt(SurfIdx)}))
     SurfaceGetMaterial<public>(SurfIdx:int)<decides><transacts>:material = material[VhObjectFrom[VhCallValue(Handle, "surface_get_material", array{VhFromInt(SurfIdx)})]]
     SurfaceSetMaterial<public>(SurfIdx:int, Material:material)<transacts>:void = VhCallVoid(Handle, "surface_set_material", array{VhFromInt(SurfIdx), VhFromObject(Material)})
+    _GetAabb<public>():aabb = aabb{}
+    _GetBlendShapeCount<public>():int = 0
+    _GetBlendShapeName<public>(Index:int):string = ""
+    _GetSurfaceCount<public>():int = 0
+    _SetBlendShapeName<public>(Index:int, Name:string):void = {}
+    _SurfaceGetArrayIndexLen<public>(Index:int):int = 0
+    _SurfaceGetArrayLen<public>(Index:int):int = 0
+    _SurfaceGetArrays<public>(Index:int):godot_array = godot_array{}
+    _SurfaceGetFormat<public>(Index:int):int = 0
+    _SurfaceGetLods<public>(Index:int):dictionary = dictionary{}
+    _SurfaceGetPrimitiveType<public>(Index:int):int = 0
+    _SurfaceSetMaterial<public>(Index:int, Material:material):void = {}
 
 mesh_library<public> := class(resource):
 
@@ -37290,6 +38122,15 @@ multi_mesh<public> := class(resource):
     SetMesh<public>(Mesh:mesh)<transacts>:void = VhCallVoid(Handle, "set_mesh", array{VhFromObject(Mesh)})
 
 multiplayer_api_extension<public> := class(multiplayer_api):
+
+    _GetPeerIds<public>():[]int = array{}
+    _GetRemoteSenderId<public>():int = 0
+    _GetUniqueId<public>():int = 0
+    _ObjectConfigurationAdd<public>(Object:object, Configuration:variant):error = error.Ok
+    _ObjectConfigurationRemove<public>(Object:object, Configuration:variant):error = error.Ok
+    _Poll<public>():error = error.Ok
+    _Rpc<public>(Peer:int, Object:object, Method:string, Args:godot_array):error = error.Ok
+    _SetMultiplayerPeer<public>(MultiplayerPeer:multiplayer_peer):void = {}
 
 multiplayer_peer<public> := class(packet_peer):
 
@@ -37798,6 +38639,9 @@ open_xr_action_set<public> := class(resource):
 
 open_xr_binding_modifier<public> := class(resource):
 
+    _GetDescription<public>():string = ""
+    _GetIpModification<public>():[]int = array{}
+
 open_xr_composition_layer<public> := class(node3d):
 
     var AlphaBlend<public><getter(AlphaBlendGetter)><setter(AlphaBlendSetter)>:logic = external {}
@@ -38102,6 +38946,9 @@ packet_peer_dtls<public> := class(packet_peer):
 
 packet_peer_extension<public> := class(packet_peer):
 
+    _GetAvailablePacketCount<public>():int = 0
+    _GetMaxPacketSize<public>():int = 0
+
 packet_peer_stream<public> := class(packet_peer):
 
     var InputBufferMaxSize<public><getter(InputBufferMaxSizeGetter)><setter(InputBufferMaxSizeSetter)>:int = external {}
@@ -38389,6 +39236,12 @@ remote_transform3d<public> := class(node3d):
 
 render_scene_buffers_extension<public> := class(render_scene_buffers):
 
+    _Configure<public>(Config:render_scene_buffers_configuration):void = {}
+    _SetAnisotropicFilteringLevel<public>(AnisotropicFilteringLevel:int):void = {}
+    _SetFsrSharpness<public>(FsrSharpness:float):void = {}
+    _SetTextureMipmapBias<public>(TextureMipmapBias:float):void = {}
+    _SetUseDebanding<public>(UseDebanding:logic):void = {}
+
 render_scene_buffers_rd<public> := class(render_scene_buffers):
 
     ClearContext<public>(Context:string)<transacts>:void = VhCallVoid(Handle, "clear_context", array{VhFromStringName(Context)})
@@ -38452,6 +39305,8 @@ resource_importer_texture_atlas<public> := class(resource_importer):
 resource_importer_wav<public> := class(resource_importer):
 
 rich_text_effect<public> := class(resource):
+
+    _ProcessCustomFx<public>(CharFx:char_fx_transform):logic = false
 
 scene_multiplayer<public> := class(multiplayer_api):
 
@@ -38719,6 +39574,9 @@ skeleton_modification2d<public> := class(resource):
     GetModificationStack<public>()<decides><transacts>:skeleton_modification_stack2d = skeleton_modification_stack2d[VhObjectFrom[VhCallValue(Handle, "get_modification_stack", array{})]]
     SetEditorDrawGizmo<public>(DrawGizmo:logic)<transacts>:void = VhCallVoid(Handle, "set_editor_draw_gizmo", array{VhFromLogic(DrawGizmo)})
     SetIsSetup<public>(IsSetup:logic)<transacts>:void = VhCallVoid(Handle, "set_is_setup", array{VhFromLogic(IsSetup)})
+    _DrawEditorGizmo<public>():void = {}
+    _Execute<public>(Delta:float):void = {}
+    _SetupModification<public>(ModificationStack:skeleton_modification_stack2d):void = {}
 
 skeleton_modification_stack2d<public> := class(resource):
 
@@ -38750,6 +39608,10 @@ skeleton_modifier3d<public> := class(node3d):
     InfluenceGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_influence", array{}))
     InfluenceSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_influence", array{VhFromFloat(Value)})
     GetSkeleton<public>()<decides><transacts>:skeleton3d = skeleton3d[VhObjectFrom[VhCallValue(Handle, "get_skeleton", array{})]]
+    _ProcessModification<public>():void = {}
+    _ProcessModificationWithDelta<public>(Delta:float):void = {}
+    _SkeletonChanged<public>(OldSkeleton:skeleton3d, NewSkeleton:skeleton3d):void = {}
+    _ValidateBoneNames<public>():void = {}
 
 skeleton_profile<public> := class(resource):
 
@@ -38901,6 +39763,8 @@ stream_peer_buffer<public> := class(stream_peer):
 
 stream_peer_extension<public> := class(stream_peer):
 
+    _GetAvailableBytes<public>():int = 0
+
 stream_peer_gzip<public> := class(stream_peer):
 
     Clear<public>()<transacts>:void = VhCallVoid(Handle, "clear", array{})
@@ -38944,6 +39808,10 @@ style_box<public> := class(resource):
     GetOffset<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_offset", array{}))
     SetContentMarginAll<public>(Offset:float)<transacts>:void = VhCallVoid(Handle, "set_content_margin_all", array{VhFromFloat(Offset)})
     TestMask<public>(Point:vector2, Rect:rect2)<transacts>:logic = VhToLogic(VhCallValue(Handle, "test_mask", array{VhFromVector2(Point), VhFromRect2(Rect)}))
+    _Draw<public>(ToCanvasItem:int, Rect:rect2):void = {}
+    _GetDrawRect<public>(Rect:rect2):rect2 = rect2{}
+    _GetMinimumSize<public>():vector2 = vector2{}
+    _TestMask<public>(Point:vector2, Rect:rect2):logic = false
 
 sub_viewport<public> := class(viewport):
 
@@ -38991,6 +39859,9 @@ syntax_highlighter<public> := class(resource):
     GetLineSyntaxHighlighting<public>(Line:int)<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_line_syntax_highlighting", array{VhFromInt(Line)}))
     GetTextEdit<public>()<decides><transacts>:text_edit = text_edit[VhObjectFrom[VhCallValue(Handle, "get_text_edit", array{})]]
     UpdateCache<public>()<transacts>:void = VhCallVoid(Handle, "update_cache", array{})
+    _ClearHighlightingCache<public>():void = {}
+    _GetLineSyntaxHighlighting<public>(Line:int):dictionary = dictionary{}
+    _UpdateCache<public>():void = {}
 
 tcp_server<public> := class(socket_server):
 
@@ -38999,6 +39870,238 @@ tcp_server<public> := class(socket_server):
     TakeConnection<public>()<decides><transacts>:stream_peer_tcp = stream_peer_tcp[VhObjectFrom[VhCallValue(Handle, "take_connection", array{})]]
 
 text_server_extension<public> := class(text_server):
+
+    _Cleanup<public>():void = {}
+    _CreateFont<public>():int = 0
+    _CreateFontLinkedVariation<public>(FontRid:int):int = 0
+    _CreateShapedText<public>(Direction:text_server_direction, Orientation:text_server_orientation):int = 0
+    _DrawHexCodeBox<public>(Canvas:int, Size:int, Pos:vector2, Index:int, Color:color):void = {}
+    _FontClearGlyphs<public>(FontRid:int, Size:vector2i):void = {}
+    _FontClearKerningMap<public>(FontRid:int, Size:int):void = {}
+    _FontClearSizeCache<public>(FontRid:int):void = {}
+    _FontClearSystemFallbackCache<public>():void = {}
+    _FontClearTextures<public>(FontRid:int, Size:vector2i):void = {}
+    _FontDrawGlyph<public>(FontRid:int, Canvas:int, Size:int, Pos:vector2, Index:int, Color:color, Oversampling:float):void = {}
+    _FontDrawGlyphOutline<public>(FontRid:int, Canvas:int, Size:int, OutlineSize:int, Pos:vector2, Index:int, Color:color, Oversampling:float):void = {}
+    _FontGetAntialiasing<public>(FontRid:int):text_server_font_antialiasing = text_server_font_antialiasing.None
+    _FontGetAscent<public>(FontRid:int, Size:int):float = 0.0
+    _FontGetBaselineOffset<public>(FontRid:int):float = 0.0
+    _FontGetCharFromGlyphIndex<public>(FontRid:int, Size:int, GlyphIndex:int):int = 0
+    _FontGetDescent<public>(FontRid:int, Size:int):float = 0.0
+    _FontGetDisableEmbeddedBitmaps<public>(FontRid:int):logic = false
+    _FontGetEmbolden<public>(FontRid:int):float = 0.0
+    _FontGetFaceCount<public>(FontRid:int):int = 0
+    _FontGetFaceIndex<public>(FontRid:int):int = 0
+    _FontGetFixedSize<public>(FontRid:int):int = 0
+    _FontGetFixedSizeScaleMode<public>(FontRid:int):text_server_fixed_size_scale_mode = text_server_fixed_size_scale_mode.Disable
+    _FontGetGenerateMipmaps<public>(FontRid:int):logic = false
+    _FontGetGlobalOversampling<public>():float = 0.0
+    _FontGetGlyphAdvance<public>(FontRid:int, Size:int, Glyph:int):vector2 = vector2{}
+    _FontGetGlyphContours<public>(FontRid:int, Size:int, Index:int):dictionary = dictionary{}
+    _FontGetGlyphIndex<public>(FontRid:int, Size:int, Arg2:int, VariationSelector:int):int = 0
+    _FontGetGlyphList<public>(FontRid:int, Size:vector2i):[]int = array{}
+    _FontGetGlyphOffset<public>(FontRid:int, Size:vector2i, Glyph:int):vector2 = vector2{}
+    _FontGetGlyphSize<public>(FontRid:int, Size:vector2i, Glyph:int):vector2 = vector2{}
+    _FontGetGlyphTextureIdx<public>(FontRid:int, Size:vector2i, Glyph:int):int = 0
+    _FontGetGlyphTextureRid<public>(FontRid:int, Size:vector2i, Glyph:int):int = 0
+    _FontGetGlyphTextureSize<public>(FontRid:int, Size:vector2i, Glyph:int):vector2 = vector2{}
+    _FontGetGlyphUvRect<public>(FontRid:int, Size:vector2i, Glyph:int):rect2 = rect2{}
+    _FontGetHinting<public>(FontRid:int):text_server_hinting = text_server_hinting.None
+    _FontGetKeepRoundingRemainders<public>(FontRid:int):logic = false
+    _FontGetKerning<public>(FontRid:int, Size:int, GlyphPair:vector2i):vector2 = vector2{}
+    _FontGetLanguageSupportOverride<public>(FontRid:int, Language:string):logic = false
+    _FontGetLanguageSupportOverrides<public>(FontRid:int):[]string = array{}
+    _FontGetMsdfPixelRange<public>(FontRid:int):int = 0
+    _FontGetMsdfSize<public>(FontRid:int):int = 0
+    _FontGetName<public>(FontRid:int):string = ""
+    _FontGetOpentypeFeatureOverrides<public>(FontRid:int):dictionary = dictionary{}
+    _FontGetOtNameStrings<public>(FontRid:int):dictionary = dictionary{}
+    _FontGetOversampling<public>(FontRid:int):float = 0.0
+    _FontGetScale<public>(FontRid:int, Size:int):float = 0.0
+    _FontGetScriptSupportOverride<public>(FontRid:int, Script:string):logic = false
+    _FontGetScriptSupportOverrides<public>(FontRid:int):[]string = array{}
+    _FontGetSpacing<public>(FontRid:int, Spacing:text_server_spacing_type):int = 0
+    _FontGetStretch<public>(FontRid:int):int = 0
+    _FontGetStyle<public>(FontRid:int):int = 0
+    _FontGetStyleName<public>(FontRid:int):string = ""
+    _FontGetSubpixelPositioning<public>(FontRid:int):text_server_subpixel_positioning = text_server_subpixel_positioning.Disabled
+    _FontGetSupportedChars<public>(FontRid:int):string = ""
+    _FontGetSupportedGlyphs<public>(FontRid:int):[]int = array{}
+    _FontGetTextureCount<public>(FontRid:int, Size:vector2i):int = 0
+    _FontGetTextureOffsets<public>(FontRid:int, Size:vector2i, TextureIndex:int):[]int = array{}
+    _FontGetTransform<public>(FontRid:int):transform2d = transform2d{}
+    _FontGetUnderlinePosition<public>(FontRid:int, Size:int):float = 0.0
+    _FontGetUnderlineThickness<public>(FontRid:int, Size:int):float = 0.0
+    _FontGetVariationCoordinates<public>(FontRid:int):dictionary = dictionary{}
+    _FontGetWeight<public>(FontRid:int):int = 0
+    _FontHasChar<public>(FontRid:int, Arg1:int):logic = false
+    _FontIsAllowSystemFallback<public>(FontRid:int):logic = false
+    _FontIsForceAutohinter<public>(FontRid:int):logic = false
+    _FontIsLanguageSupported<public>(FontRid:int, Language:string):logic = false
+    _FontIsModulateColorGlyphs<public>(FontRid:int):logic = false
+    _FontIsMultichannelSignedDistanceField<public>(FontRid:int):logic = false
+    _FontIsScriptSupported<public>(FontRid:int, Script:string):logic = false
+    _FontRemoveGlyph<public>(FontRid:int, Size:vector2i, Glyph:int):void = {}
+    _FontRemoveKerning<public>(FontRid:int, Size:int, GlyphPair:vector2i):void = {}
+    _FontRemoveLanguageSupportOverride<public>(FontRid:int, Language:string):void = {}
+    _FontRemoveScriptSupportOverride<public>(FontRid:int, Script:string):void = {}
+    _FontRemoveSizeCache<public>(FontRid:int, Size:vector2i):void = {}
+    _FontRemoveTexture<public>(FontRid:int, Size:vector2i, TextureIndex:int):void = {}
+    _FontRenderGlyph<public>(FontRid:int, Size:vector2i, Index:int):void = {}
+    _FontRenderRange<public>(FontRid:int, Size:vector2i, Start:int, End:int):void = {}
+    _FontSetAllowSystemFallback<public>(FontRid:int, AllowSystemFallback:logic):void = {}
+    _FontSetAntialiasing<public>(FontRid:int, Antialiasing:text_server_font_antialiasing):void = {}
+    _FontSetAscent<public>(FontRid:int, Size:int, Ascent:float):void = {}
+    _FontSetBaselineOffset<public>(FontRid:int, BaselineOffset:float):void = {}
+    _FontSetData<public>(FontRid:int, Data:[]int):void = {}
+    _FontSetDescent<public>(FontRid:int, Size:int, Descent:float):void = {}
+    _FontSetDisableEmbeddedBitmaps<public>(FontRid:int, DisableEmbeddedBitmaps:logic):void = {}
+    _FontSetEmbolden<public>(FontRid:int, Strength:float):void = {}
+    _FontSetFaceIndex<public>(FontRid:int, FaceIndex:int):void = {}
+    _FontSetFixedSize<public>(FontRid:int, FixedSize:int):void = {}
+    _FontSetFixedSizeScaleMode<public>(FontRid:int, FixedSizeScaleMode:text_server_fixed_size_scale_mode):void = {}
+    _FontSetForceAutohinter<public>(FontRid:int, ForceAutohinter:logic):void = {}
+    _FontSetGenerateMipmaps<public>(FontRid:int, GenerateMipmaps:logic):void = {}
+    _FontSetGlobalOversampling<public>(Oversampling:float):void = {}
+    _FontSetGlyphAdvance<public>(FontRid:int, Size:int, Glyph:int, Advance:vector2):void = {}
+    _FontSetGlyphOffset<public>(FontRid:int, Size:vector2i, Glyph:int, Offset:vector2):void = {}
+    _FontSetGlyphSize<public>(FontRid:int, Size:vector2i, Glyph:int, GlSize:vector2):void = {}
+    _FontSetGlyphTextureIdx<public>(FontRid:int, Size:vector2i, Glyph:int, TextureIdx:int):void = {}
+    _FontSetGlyphUvRect<public>(FontRid:int, Size:vector2i, Glyph:int, UvRect:rect2):void = {}
+    _FontSetHinting<public>(FontRid:int, Hinting:text_server_hinting):void = {}
+    _FontSetKeepRoundingRemainders<public>(FontRid:int, KeepRoundingRemainders:logic):void = {}
+    _FontSetKerning<public>(FontRid:int, Size:int, GlyphPair:vector2i, Kerning:vector2):void = {}
+    _FontSetLanguageSupportOverride<public>(FontRid:int, Language:string, Supported:logic):void = {}
+    _FontSetModulateColorGlyphs<public>(FontRid:int, Modulate:logic):void = {}
+    _FontSetMsdfPixelRange<public>(FontRid:int, MsdfPixelRange:int):void = {}
+    _FontSetMsdfSize<public>(FontRid:int, MsdfSize:int):void = {}
+    _FontSetMultichannelSignedDistanceField<public>(FontRid:int, Msdf:logic):void = {}
+    _FontSetName<public>(FontRid:int, Name:string):void = {}
+    _FontSetOpentypeFeatureOverrides<public>(FontRid:int, Overrides:dictionary):void = {}
+    _FontSetOversampling<public>(FontRid:int, Oversampling:float):void = {}
+    _FontSetScale<public>(FontRid:int, Size:int, Scale:float):void = {}
+    _FontSetScriptSupportOverride<public>(FontRid:int, Script:string, Supported:logic):void = {}
+    _FontSetSpacing<public>(FontRid:int, Spacing:text_server_spacing_type, Value:int):void = {}
+    _FontSetStretch<public>(FontRid:int, Stretch:int):void = {}
+    _FontSetStyle<public>(FontRid:int, Style:int):void = {}
+    _FontSetStyleName<public>(FontRid:int, NameStyle:string):void = {}
+    _FontSetSubpixelPositioning<public>(FontRid:int, SubpixelPositioning:text_server_subpixel_positioning):void = {}
+    _FontSetTextureImage<public>(FontRid:int, Size:vector2i, TextureIndex:int, Image:image):void = {}
+    _FontSetTextureOffsets<public>(FontRid:int, Size:vector2i, TextureIndex:int, Offset:[]int):void = {}
+    _FontSetTransform<public>(FontRid:int, Transform:transform2d):void = {}
+    _FontSetUnderlinePosition<public>(FontRid:int, Size:int, UnderlinePosition:float):void = {}
+    _FontSetUnderlineThickness<public>(FontRid:int, Size:int, UnderlineThickness:float):void = {}
+    _FontSetVariationCoordinates<public>(FontRid:int, VariationCoordinates:dictionary):void = {}
+    _FontSetWeight<public>(FontRid:int, Weight:int):void = {}
+    _FontSupportedFeatureList<public>(FontRid:int):dictionary = dictionary{}
+    _FontSupportedVariationList<public>(FontRid:int):dictionary = dictionary{}
+    _FormatNumber<public>(Number:string, Language:string):string = ""
+    _FreeRid<public>(Rid:int):void = {}
+    _GetFeatures<public>():int = 0
+    _GetHexCodeBoxSize<public>(Size:int, Index:int):vector2 = vector2{}
+    _GetName<public>():string = ""
+    _GetSupportData<public>():[]int = array{}
+    _GetSupportDataFilename<public>():string = ""
+    _GetSupportDataInfo<public>():string = ""
+    _Has<public>(Rid:int):logic = false
+    _HasFeature<public>(Feature:text_server_feature):logic = false
+    _IsConfusable<public>(String:string, Dict:[]string):int = 0
+    _IsLocaleRightToLeft<public>(Locale:string):logic = false
+    _IsLocaleUsingSupportData<public>(Locale:string):logic = false
+    _IsValidIdentifier<public>(String:string):logic = false
+    _IsValidLetter<public>(Unicode:int):logic = false
+    _LoadSupportData<public>(Filename:string):logic = false
+    _NameToTag<public>(Name:string):int = 0
+    _ParseNumber<public>(Number:string, Language:string):string = ""
+    _PercentSign<public>(Language:string):string = ""
+    _ReferenceOversamplingLevel<public>(Oversampling:float):void = {}
+    _SaveSupportData<public>(Filename:string):logic = false
+    _ShapedGetRunCount<public>(Shaped:int):int = 0
+    _ShapedGetRunDirection<public>(Shaped:int, Index:int):text_server_direction = text_server_direction.Auto
+    _ShapedGetRunFontRid<public>(Shaped:int, Index:int):int = 0
+    _ShapedGetRunFontSize<public>(Shaped:int, Index:int):int = 0
+    _ShapedGetRunLanguage<public>(Shaped:int, Index:int):string = ""
+    _ShapedGetRunObject<public>(Shaped:int, Index:int):variant = variant{}
+    _ShapedGetRunRange<public>(Shaped:int, Index:int):vector2i = vector2i{}
+    _ShapedGetRunText<public>(Shaped:int, Index:int):string = ""
+    _ShapedGetSpanCount<public>(Shaped:int):int = 0
+    _ShapedGetSpanEmbeddedObject<public>(Shaped:int, Index:int):variant = variant{}
+    _ShapedGetSpanMeta<public>(Shaped:int, Index:int):variant = variant{}
+    _ShapedGetSpanObject<public>(Shaped:int, Index:int):variant = variant{}
+    _ShapedGetSpanText<public>(Shaped:int, Index:int):string = ""
+    _ShapedGetText<public>(Shaped:int):string = ""
+    _ShapedSetSpanUpdateFont<public>(Shaped:int, Index:int, Fonts:typed_array(int), Size:int, OpentypeFeatures:dictionary):void = {}
+    _ShapedTextAddObject<public>(Shaped:int, Key:variant, Size:vector2, InlineAlign:inline_alignment, Arg4:int, Baseline:float):logic = false
+    _ShapedTextAddString<public>(Shaped:int, Text:string, Fonts:typed_array(int), Size:int, OpentypeFeatures:dictionary, Language:string, Meta:variant):logic = false
+    _ShapedTextClear<public>(Shaped:int):void = {}
+    _ShapedTextClosestCharacterPos<public>(Shaped:int, Pos:int):int = 0
+    _ShapedTextDraw<public>(Shaped:int, Canvas:int, Pos:vector2, ClipL:float, ClipR:float, Color:color, Oversampling:float):void = {}
+    _ShapedTextDrawOutline<public>(Shaped:int, Canvas:int, Pos:vector2, ClipL:float, ClipR:float, OutlineSize:int, Color:color, Oversampling:float):void = {}
+    _ShapedTextDuplicate<public>(Shaped:int):int = 0
+    _ShapedTextFitToWidth<public>(Shaped:int, Width:float, JustificationFlags:int):float = 0.0
+    _ShapedTextGetAscent<public>(Shaped:int):float = 0.0
+    _ShapedTextGetCharacterBreaks<public>(Shaped:int):[]int = array{}
+    _ShapedTextGetCustomEllipsis<public>(Shaped:int):int = 0
+    _ShapedTextGetCustomPunctuation<public>(Shaped:int):string = ""
+    _ShapedTextGetDescent<public>(Shaped:int):float = 0.0
+    _ShapedTextGetDirection<public>(Shaped:int):text_server_direction = text_server_direction.Auto
+    _ShapedTextGetDominantDirectionInRange<public>(Shaped:int, Start:int, End:int):int = 0
+    _ShapedTextGetEllipsisGlyphCount<public>(Shaped:int):int = 0
+    _ShapedTextGetEllipsisPos<public>(Shaped:int):int = 0
+    _ShapedTextGetGlyphCount<public>(Shaped:int):int = 0
+    _ShapedTextGetGraphemeBounds<public>(Shaped:int, Pos:int):vector2 = vector2{}
+    _ShapedTextGetInferredDirection<public>(Shaped:int):text_server_direction = text_server_direction.Auto
+    _ShapedTextGetLineBreaks<public>(Shaped:int, Width:float, Start:int, BreakFlags:int):[]int = array{}
+    _ShapedTextGetLineBreaksAdv<public>(Shaped:int, Width:[]float, Start:int, Once:logic, BreakFlags:int):[]int = array{}
+    _ShapedTextGetObjectGlyph<public>(Shaped:int, Key:variant):int = 0
+    _ShapedTextGetObjectRange<public>(Shaped:int, Key:variant):vector2i = vector2i{}
+    _ShapedTextGetObjectRect<public>(Shaped:int, Key:variant):rect2 = rect2{}
+    _ShapedTextGetObjects<public>(Shaped:int):godot_array = godot_array{}
+    _ShapedTextGetOrientation<public>(Shaped:int):text_server_orientation = text_server_orientation.Horizontal
+    _ShapedTextGetParent<public>(Shaped:int):int = 0
+    _ShapedTextGetPreserveControl<public>(Shaped:int):logic = false
+    _ShapedTextGetPreserveInvalid<public>(Shaped:int):logic = false
+    _ShapedTextGetRange<public>(Shaped:int):vector2i = vector2i{}
+    _ShapedTextGetSelection<public>(Shaped:int, Start:int, End:int):[]vector2 = array{}
+    _ShapedTextGetSize<public>(Shaped:int):vector2 = vector2{}
+    _ShapedTextGetSpacing<public>(Shaped:int, Spacing:text_server_spacing_type):int = 0
+    _ShapedTextGetTrimPos<public>(Shaped:int):int = 0
+    _ShapedTextGetUnderlinePosition<public>(Shaped:int):float = 0.0
+    _ShapedTextGetUnderlineThickness<public>(Shaped:int):float = 0.0
+    _ShapedTextGetWidth<public>(Shaped:int):float = 0.0
+    _ShapedTextGetWordBreaks<public>(Shaped:int, GraphemeFlags:int, SkipGraphemeFlags:int):[]int = array{}
+    _ShapedTextHasObject<public>(Shaped:int, Key:variant):logic = false
+    _ShapedTextHitTestGrapheme<public>(Shaped:int, Coord:float):int = 0
+    _ShapedTextHitTestPosition<public>(Shaped:int, Coord:float):int = 0
+    _ShapedTextIsReady<public>(Shaped:int):logic = false
+    _ShapedTextNextCharacterPos<public>(Shaped:int, Pos:int):int = 0
+    _ShapedTextNextGraphemePos<public>(Shaped:int, Pos:int):int = 0
+    _ShapedTextOverrunTrimToWidth<public>(Shaped:int, Width:float, TrimFlags:int):void = {}
+    _ShapedTextPrevCharacterPos<public>(Shaped:int, Pos:int):int = 0
+    _ShapedTextPrevGraphemePos<public>(Shaped:int, Pos:int):int = 0
+    _ShapedTextResizeObject<public>(Shaped:int, Key:variant, Size:vector2, InlineAlign:inline_alignment, Baseline:float):logic = false
+    _ShapedTextSetBidiOverride<public>(Shaped:int, Override:godot_array):void = {}
+    _ShapedTextSetCustomEllipsis<public>(Shaped:int, Arg1:int):void = {}
+    _ShapedTextSetCustomPunctuation<public>(Shaped:int, Punct:string):void = {}
+    _ShapedTextSetDirection<public>(Shaped:int, Direction:text_server_direction):void = {}
+    _ShapedTextSetOrientation<public>(Shaped:int, Orientation:text_server_orientation):void = {}
+    _ShapedTextSetPreserveControl<public>(Shaped:int, Enabled:logic):void = {}
+    _ShapedTextSetPreserveInvalid<public>(Shaped:int, Enabled:logic):void = {}
+    _ShapedTextSetSpacing<public>(Shaped:int, Spacing:text_server_spacing_type, Value:int):void = {}
+    _ShapedTextShape<public>(Shaped:int):logic = false
+    _ShapedTextSubstr<public>(Shaped:int, Start:int, Arg2:int):int = 0
+    _ShapedTextTabAlign<public>(Shaped:int, TabStops:[]float):float = 0.0
+    _ShapedTextUpdateBreaks<public>(Shaped:int):logic = false
+    _ShapedTextUpdateJustificationOps<public>(Shaped:int):logic = false
+    _SpoofCheck<public>(String:string):logic = false
+    _StringGetCharacterBreaks<public>(String:string, Language:string):[]int = array{}
+    _StringGetWordBreaks<public>(String:string, Language:string, CharsPerLine:int):[]int = array{}
+    _StringToLower<public>(String:string, Language:string):string = ""
+    _StringToTitle<public>(String:string, Language:string):string = ""
+    _StringToUpper<public>(String:string, Language:string):string = ""
+    _StripDiacritics<public>(String:string):string = ""
+    _TagToName<public>(Tag:int):string = ""
+    _UnreferenceOversamplingLevel<public>(Oversampling:float):void = {}
 
 texture<public> := class(resource):
 
@@ -39218,6 +40321,8 @@ translation<public> := class(resource):
     GetTranslatedMessageList<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_translated_message_list", array{}))
     SetLocale<public>(Locale:string)<transacts>:void = VhCallVoid(Handle, "set_locale", array{VhFromString(Locale)})
     SetPluralRulesOverride<public>(Rules:string)<transacts>:void = VhCallVoid(Handle, "set_plural_rules_override", array{VhFromString(Rules)})
+    _GetMessage<public>(SrcMessage:string, Context:string):string = ""
+    _GetPluralMessage<public>(SrcMessage:string, SrcPluralMessage:string, N:int, Context:string):string = ""
 
 uds_server<public> := class(socket_server):
 
@@ -39283,6 +40388,18 @@ video_stream<public> := class(resource):
 video_stream_playback<public> := class(resource):
 
     MixAudio<public>(NumFrames:int, Buffer:[]float, ?Offset:int = 0)<transacts>:int = VhToInt(VhCallValue(Handle, "mix_audio", array{VhFromInt(NumFrames), VhFromFloat32Array(Buffer), VhFromInt(Offset)}))
+    _GetChannels<public>():int = 0
+    _GetLength<public>():float = 0.0
+    _GetMixRate<public>():int = 0
+    _GetPlaybackPosition<public>():float = 0.0
+    _IsPaused<public>():logic = false
+    _IsPlaying<public>():logic = false
+    _Play<public>():void = {}
+    _Seek<public>(Time:float):void = {}
+    _SetAudioTrack<public>(Idx:int):void = {}
+    _SetPaused<public>(Paused:logic):void = {}
+    _Stop<public>():void = {}
+    _Update<public>(Delta:float):void = {}
 
 visual_instance3d<public> := class(node3d):
 
@@ -39301,6 +40418,7 @@ visual_instance3d<public> := class(node3d):
     GetLayerMaskValue<public>(LayerNumber:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_layer_mask_value", array{VhFromInt(LayerNumber)}))
     SetBase<public>(Base:int)<transacts>:void = VhCallVoid(Handle, "set_base", array{VhFromRid(Base)})
     SetLayerMaskValue<public>(LayerNumber:int, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_layer_mask_value", array{VhFromInt(LayerNumber), VhFromLogic(Value)})
+    _GetAabb<public>():aabb = aabb{}
 
 visual_shader_node<public> := class(resource):
 
@@ -39368,6 +40486,17 @@ web_rtc_data_channel<public> := class(packet_peer):
     WasStringPacket<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "was_string_packet", array{}))
 
 web_rtc_peer_connection_extension<public> := class(web_rtc_peer_connection):
+
+    _AddIceCandidate<public>(PSdpMidName:string, PSdpMlineIndex:int, PSdpName:string):error = error.Ok
+    _Close<public>():void = {}
+    _CreateOffer<public>():error = error.Ok
+    _GetConnectionState<public>():web_rtc_peer_connection_connection_state = web_rtc_peer_connection_connection_state.New
+    _GetGatheringState<public>():web_rtc_peer_connection_gathering_state = web_rtc_peer_connection_gathering_state.New
+    _GetSignalingState<public>():web_rtc_peer_connection_signaling_state = web_rtc_peer_connection_signaling_state.Stable
+    _Initialize<public>(PConfig:dictionary):error = error.Ok
+    _Poll<public>():error = error.Ok
+    _SetLocalDescription<public>(PType:string, PSdp:string):error = error.Ok
+    _SetRemoteDescription<public>(PType:string, PSdp:string):error = error.Ok
 
 web_socket_peer<public> := class(packet_peer):
 
@@ -39656,6 +40785,7 @@ window<public> := class(viewport):
     Show<public>()<transacts>:void = VhCallVoid(Handle, "show", array{})
     StartDrag<public>()<transacts>:void = VhCallVoid(Handle, "start_drag", array{})
     StartResize<public>(Edge:display_server_window_resize_edge)<transacts>:void = VhCallVoid(Handle, "start_resize", array{VhFromDisplayServerWindowResizeEdge(Edge)})
+    _GetContentsMinimumSize<public>():vector2 = vector2{}
 
 world2d<public> := class(resource):
 
@@ -39705,6 +40835,38 @@ xr_interface_extension<public> := class(xr_interface):
     GetDepthTexture<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_depth_texture", array{}))
     GetRenderTargetTexture<public>(RenderTarget:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_render_target_texture", array{VhFromRid(RenderTarget)}))
     GetVelocityTexture<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_velocity_texture", array{}))
+    _EndFrame<public>():void = {}
+    _GetAnchorDetectionIsEnabled<public>():logic = false
+    _GetCameraFeedId<public>():int = 0
+    _GetCameraTransform<public>():transform3d = transform3d{}
+    _GetCapabilities<public>():int = 0
+    _GetColorTexture<public>():int = 0
+    _GetDepthTexture<public>():int = 0
+    _GetName<public>():string = ""
+    _GetPlayArea<public>():[]vector3 = array{}
+    _GetPlayAreaMode<public>():xr_interface_play_area_mode = xr_interface_play_area_mode.XrPlayAreaUnknown
+    _GetProjectionForView<public>(View:int, Aspect:float, ZNear:float, ZFar:float):[]float = array{}
+    _GetRenderTargetSize<public>():vector2 = vector2{}
+    _GetSuggestedPoseNames<public>(TrackerName:string):[]string = array{}
+    _GetSuggestedTrackerNames<public>():[]string = array{}
+    _GetSystemInfo<public>():dictionary = dictionary{}
+    _GetTrackingStatus<public>():xr_interface_tracking_status = xr_interface_tracking_status.NormalTracking
+    _GetTransformForView<public>(View:int, CamTransform:transform3d):transform3d = transform3d{}
+    _GetVelocityTexture<public>():int = 0
+    _GetViewCount<public>():int = 0
+    _GetVrsTexture<public>():int = 0
+    _GetVrsTextureFormat<public>():xr_interface_vrs_texture_format = xr_interface_vrs_texture_format.Unified
+    _Initialize<public>():logic = false
+    _IsInitialized<public>():logic = false
+    _PostDrawViewport<public>(RenderTarget:int, ScreenRect:rect2):void = {}
+    _PreDrawViewport<public>(RenderTarget:int):logic = false
+    _PreRender<public>():void = {}
+    _Process<public>():void = {}
+    _SetAnchorDetectionIsEnabled<public>(Enabled:logic):void = {}
+    _SetPlayAreaMode<public>(Mode:xr_interface_play_area_mode):logic = false
+    _SupportsPlayAreaMode<public>(Mode:xr_interface_play_area_mode):logic = false
+    _TriggerHapticPulse<public>(ActionName:string, TrackerName:string, Frequency:float, Amplitude:float, DurationSec:float, DelaySec:float):void = {}
+    _Uninitialize<public>():void = {}
 
 xr_node3d<public> := class(node3d):
 
@@ -39812,6 +40974,8 @@ animated_sprite2d<public> := class(node2d):
     Stop<public>()<transacts>:void = VhCallVoid(Handle, "stop", array{})
 
 animation_node_extension<public> := class(animation_node):
+
+    _ProcessAnimationNode<public>(PlaybackInfo:[]float, TestOnly:logic):[]float = array{}
 
 animation_node_output<public> := class(animation_node):
 
@@ -40510,6 +41674,8 @@ base_button<public> := class(control):
     SetButtonGroup<public>(ButtonGroup:button_group)<transacts>:void = VhCallVoid(Handle, "set_button_group", array{VhFromObject(ButtonGroup)})
     SetPressedNoSignal<public>(Arg0:logic)<transacts>:void = VhCallVoid(Handle, "set_pressed_no_signal", array{VhFromLogic(Arg0)})
     SetShortcut<public>(Shortcut:shortcut)<transacts>:void = VhCallVoid(Handle, "set_shortcut", array{VhFromObject(Shortcut)})
+    _Pressed<public>():void = {}
+    _Toggled<public>(ToggledOn:logic):void = {}
 
 base_material3d<public> := class(material):
 
@@ -41448,6 +42614,11 @@ collision_object2d<public> := class(node2d):
     ShapeOwnerSetOneWayCollision<public>(OwnerId:int, Enable:logic)<transacts>:void = VhCallVoid(Handle, "shape_owner_set_one_way_collision", array{VhFromInt(OwnerId), VhFromLogic(Enable)})
     ShapeOwnerSetOneWayCollisionMargin<public>(OwnerId:int, Margin:float)<transacts>:void = VhCallVoid(Handle, "shape_owner_set_one_way_collision_margin", array{VhFromInt(OwnerId), VhFromFloat(Margin)})
     ShapeOwnerSetTransform<public>(OwnerId:int, Transform:transform2d)<transacts>:void = VhCallVoid(Handle, "shape_owner_set_transform", array{VhFromInt(OwnerId), VhFromTransform2D(Transform)})
+    _InputEvent<public>(Viewport:viewport, Event:input_event, ShapeIdx:int):void = {}
+    _MouseEnter<public>():void = {}
+    _MouseExit<public>():void = {}
+    _MouseShapeEnter<public>(ShapeIdx:int):void = {}
+    _MouseShapeExit<public>(ShapeIdx:int):void = {}
 
 collision_polygon2d<public> := class(node2d):
 
@@ -41550,6 +42721,8 @@ container<public> := class(control):
 
     FitChildInRect<public>(Child:control, Rect:rect2)<transacts>:void = VhCallVoid(Handle, "fit_child_in_rect", array{VhFromObject(Child), VhFromRect2(Rect)})
     QueueSort<public>()<transacts>:void = VhCallVoid(Handle, "queue_sort", array{})
+    _GetAllowedSizeFlagsHorizontal<public>():[]int = array{}
+    _GetAllowedSizeFlagsVertical<public>():[]int = array{}
 
 convex_polygon_shape2d<public> := class(shape2d):
 
@@ -41866,6 +43039,9 @@ editor_export_platform_vision_os<public> := class(editor_export_platform_apple_e
 editor_export_platform_windows<public> := class(editor_export_platform_pc):
 
 editor_syntax_highlighter<public> := class(syntax_highlighter):
+
+    _GetName<public>():string = ""
+    _GetSupportedLanguages<public>():[]string = array{}
 
 fast_noise_lite<public> := class(noise):
 
@@ -42473,6 +43649,10 @@ graph_edit<public> := class(control):
     RemoveValidRightDisconnectType<public>(Type:int)<transacts>:void = VhCallVoid(Handle, "remove_valid_right_disconnect_type", array{VhFromInt(Type)})
     SetConnectionActivity<public>(FromNode:string, FromPort:int, ToNode:string, ToPort:int, Amount:float)<transacts>:void = VhCallVoid(Handle, "set_connection_activity", array{VhFromStringName(FromNode), VhFromInt(FromPort), VhFromStringName(ToNode), VhFromInt(ToPort), VhFromFloat(Amount)})
     SetSelected<public>(Node:node)<transacts>:void = VhCallVoid(Handle, "set_selected", array{VhFromObject(Node)})
+    _GetConnectionLine<public>(FromPosition:vector2, ToPosition:vector2):[]vector2 = array{}
+    _IsInInputHotzone<public>(InNode:object, InPort:int, MousePosition:vector2):logic = false
+    _IsInOutputHotzone<public>(InNode:object, InPort:int, MousePosition:vector2):logic = false
+    _IsNodeHoverValid<public>(FromNode:string, FromPort:int, ToNode:string, ToPort:int):logic = false
 
 height_map_shape3d<public> := class(shape3d):
 
@@ -43431,6 +44611,28 @@ multi_mesh_instance2d<public> := class(node2d):
     SetTexture<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_texture", array{VhFromObject(Texture)})
 
 multiplayer_peer_extension<public> := class(multiplayer_peer):
+
+    _Close<public>():void = {}
+    _DisconnectPeer<public>(PPeer:int, PForce:logic):void = {}
+    _GetAvailablePacketCount<public>():int = 0
+    _GetConnectionStatus<public>():multiplayer_peer_connection_status = multiplayer_peer_connection_status.Disconnected
+    _GetMaxPacketSize<public>():int = 0
+    _GetPacketChannel<public>():int = 0
+    _GetPacketMode<public>():multiplayer_peer_transfer_mode = multiplayer_peer_transfer_mode.Unreliable
+    _GetPacketPeer<public>():int = 0
+    _GetPacketScript<public>():[]int = array{}
+    _GetTransferChannel<public>():int = 0
+    _GetTransferMode<public>():multiplayer_peer_transfer_mode = multiplayer_peer_transfer_mode.Unreliable
+    _GetUniqueId<public>():int = 0
+    _IsRefusingNewConnections<public>():logic = false
+    _IsServer<public>():logic = false
+    _IsServerRelaySupported<public>():logic = false
+    _Poll<public>():void = {}
+    _PutPacketScript<public>(PBuffer:[]int):error = error.Ok
+    _SetRefuseNewConnections<public>(PEnable:logic):void = {}
+    _SetTargetPeer<public>(PPeer:int):void = {}
+    _SetTransferChannel<public>(PChannel:int):void = {}
+    _SetTransferMode<public>(PMode:multiplayer_peer_transfer_mode):void = {}
 
 navigation_link2d<public> := class(node2d):
 
@@ -44627,6 +45829,7 @@ primitive_mesh<public> := class(mesh):
     RequestUpdate<public>()<transacts>:void = VhCallVoid(Handle, "request_update", array{})
     SetCustomAabb<public>(Aabb:aabb)<transacts>:void = VhCallVoid(Handle, "set_custom_aabb", array{VhFromAABB(Aabb)})
     SetMaterial<public>(Material:material)<transacts>:void = VhCallVoid(Handle, "set_material", array{VhFromObject(Material)})
+    _CreateMeshArray<public>():godot_array = godot_array{}
 
 procedural_sky_material<public> := class(material):
 
@@ -44787,6 +45990,7 @@ range<public> := class(control):
     SetValueNoSignal<public>(Arg0:float)<transacts>:void = VhCallVoid(Handle, "set_value_no_signal", array{VhFromFloat(Arg0)})
     Share<public>(With:node)<transacts>:void = VhCallVoid(Handle, "share", array{VhFromObject(With)})
     Unshare<public>()<transacts>:void = VhCallVoid(Handle, "unshare", array{})
+    _ValueChanged<public>(NewValue:float):void = {}
 
 ray_cast2d<public> := class(node2d):
 
@@ -45191,6 +46395,34 @@ root_motion_view<public> := class(visual_instance3d):
     SetAnimationPath<public>(Path:string)<transacts>:void = VhCallVoid(Handle, "set_animation_path", array{VhFromNodePath(Path)})
 
 script_extension<public> := class(script):
+
+    _CanInstantiate<public>():logic = false
+    _EditorCanReloadFromFile<public>():logic = false
+    _GetClassIconPath<public>():string = ""
+    _GetConstants<public>():dictionary = dictionary{}
+    _GetDocClassName<public>():string = ""
+    _GetGlobalName<public>():string = ""
+    _GetInstanceBaseType<public>():string = ""
+    _GetMemberLine<public>(Member:string):int = 0
+    _GetMethodInfo<public>(Method:string):dictionary = dictionary{}
+    _GetPropertyDefaultValue<public>(Property:string):variant = variant{}
+    _GetRpcConfig<public>():variant = variant{}
+    _GetScriptMethodArgumentCount<public>(Method:string):variant = variant{}
+    _GetSourceCode<public>():string = ""
+    _HasMethod<public>(Method:string):logic = false
+    _HasPropertyDefaultValue<public>(Property:string):logic = false
+    _HasScriptSignal<public>(Signal:string):logic = false
+    _HasSourceCode<public>():logic = false
+    _HasStaticMethod<public>(Method:string):logic = false
+    _InheritsScript<public>(Script:script):logic = false
+    _InstanceHas<public>(Object:object):logic = false
+    _IsAbstract<public>():logic = false
+    _IsPlaceholderFallbackEnabled<public>():logic = false
+    _IsTool<public>():logic = false
+    _IsValid<public>():logic = false
+    _Reload<public>(KeepState:logic):error = error.Ok
+    _SetSourceCode<public>(Code:string):void = {}
+    _UpdateExports<public>():void = {}
 
 segment_shape2d<public> := class(shape2d):
 
@@ -46369,6 +47601,12 @@ text_edit<public> := class(control):
     SwapLines<public>(FromLine:int, ToLine:int)<transacts>:void = VhCallVoid(Handle, "swap_lines", array{VhFromInt(FromLine), VhFromInt(ToLine)})
     TagSavedVersion<public>()<transacts>:void = VhCallVoid(Handle, "tag_saved_version", array{})
     Undo<public>()<transacts>:void = VhCallVoid(Handle, "undo", array{})
+    _Backspace<public>(CaretIndex:int):void = {}
+    _Copy<public>(CaretIndex:int):void = {}
+    _Cut<public>(CaretIndex:int):void = {}
+    _HandleUnicodeInput<public>(UnicodeChar:int, CaretIndex:int):void = {}
+    _Paste<public>(CaretIndex:int):void = {}
+    _PastePrimaryClipboard<public>(CaretIndex:int):void = {}
 
 text_server_advanced<public> := class(text_server_extension):
 
@@ -46385,6 +47623,13 @@ texture2d<public> := class(texture):
     GetSize<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_size", array{}))
     GetWidth<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_width", array{}))
     HasAlpha<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_alpha", array{}))
+    _Draw<public>(ToCanvasItem:int, Pos:vector2, Modulate:color, Transpose:logic):void = {}
+    _DrawRect<public>(ToCanvasItem:int, Rect:rect2, Tile:logic, Modulate:color, Transpose:logic):void = {}
+    _DrawRectRegion<public>(ToCanvasItem:int, Rect:rect2, SrcRect:rect2, Modulate:color, Transpose:logic, ClipUv:logic):void = {}
+    _GetHeight<public>():int = 0
+    _GetWidth<public>():int = 0
+    _HasAlpha<public>():logic = false
+    _IsPixelOpaque<public>(X:int, Y:int):logic = false
 
 texture3d<public> := class(texture):
 
@@ -46395,6 +47640,11 @@ texture3d<public> := class(texture):
     GetHeight<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_height", array{}))
     GetWidth<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_width", array{}))
     HasMipmaps<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_mipmaps", array{}))
+    _GetDepth<public>():int = 0
+    _GetFormat<public>():image_format = image_format.L8
+    _GetHeight<public>():int = 0
+    _GetWidth<public>():int = 0
+    _HasMipmaps<public>():logic = false
 
 texture_layered<public> := class(texture):
 
@@ -46405,6 +47655,12 @@ texture_layered<public> := class(texture):
     GetLayers<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_layers", array{}))
     GetWidth<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_width", array{}))
     HasMipmaps<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_mipmaps", array{}))
+    _GetFormat<public>():image_format = image_format.L8
+    _GetHeight<public>():int = 0
+    _GetLayeredType<public>():int = 0
+    _GetLayers<public>():int = 0
+    _GetWidth<public>():int = 0
+    _HasMipmaps<public>():logic = false
 
 texture_rect<public> := class(control):
 
@@ -46490,6 +47746,8 @@ tile_map<public> := class(node2d):
     SetPattern<public>(Layer:int, Arg1:vector2i, Pattern:tile_map_pattern)<transacts>:void = VhCallVoid(Handle, "set_pattern", array{VhFromInt(Layer), VhFromVector2i(Arg1), VhFromObject(Pattern)})
     SetTileset<public>(Tileset:tile_set)<transacts>:void = VhCallVoid(Handle, "set_tileset", array{VhFromObject(Tileset)})
     UpdateInternals<public>()<transacts>:void = VhCallVoid(Handle, "update_internals", array{})
+    _TileDataRuntimeUpdate<public>(Layer:int, Coords:vector2i, TileData:tile_data):void = {}
+    _UseTileDataRuntimeUpdate<public>(Layer:int, Coords:vector2i):logic = false
 
 tile_map_layer<public> := class(node2d):
 
@@ -46559,6 +47817,9 @@ tile_map_layer<public> := class(node2d):
     SetTileMapDataFromArray<public>(TileMapLayerData:[]int)<transacts>:void = VhCallVoid(Handle, "set_tile_map_data_from_array", array{VhFromByteArray(TileMapLayerData)})
     SetTileSet<public>(TileSet:tile_set)<transacts>:void = VhCallVoid(Handle, "set_tile_set", array{VhFromObject(TileSet)})
     UpdateInternals<public>()<transacts>:void = VhCallVoid(Handle, "update_internals", array{})
+    _TileDataRuntimeUpdate<public>(Coords:vector2i, TileData:tile_data):void = {}
+    _UpdateCells<public>(Coords:typed_array(vector2i), ForcedCleanup:logic):void = {}
+    _UseTileDataRuntimeUpdate<public>(Coords:vector2i):logic = false
 
 tile_set_atlas_source<public> := class(tile_set_source):
 
@@ -46917,6 +48178,27 @@ visual_shader_node_custom<public> := class(visual_shader_node):
     InitializedGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "_is_initialized", array{}))
     InitializedSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "_set_initialized", array{VhFromLogic(Value)})
     GetOptionIndex<public>(Option:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_option_index", array{VhFromInt(Option)}))
+    _GetCategory<public>():string = ""
+    _GetCode<public>(InputVars:typed_array(string), OutputVars:typed_array(string), Mode:shader_mode, Type:visual_shader_type):string = ""
+    _GetDefaultInputPort<public>(Type:visual_shader_node_port_type):int = 0
+    _GetDescription<public>():string = ""
+    _GetFuncCode<public>(Mode:shader_mode, Type:visual_shader_type):string = ""
+    _GetGlobalCode<public>(Mode:shader_mode):string = ""
+    _GetInputPortCount<public>():int = 0
+    _GetInputPortDefaultValue<public>(Port:int):variant = variant{}
+    _GetInputPortName<public>(Port:int):string = ""
+    _GetInputPortType<public>(Port:int):visual_shader_node_port_type = visual_shader_node_port_type.Scalar
+    _GetName<public>():string = ""
+    _GetOutputPortCount<public>():int = 0
+    _GetOutputPortName<public>(Port:int):string = ""
+    _GetOutputPortType<public>(Port:int):visual_shader_node_port_type = visual_shader_node_port_type.Scalar
+    _GetPropertyCount<public>():int = 0
+    _GetPropertyDefaultIndex<public>(Index:int):int = 0
+    _GetPropertyName<public>(Index:int):string = ""
+    _GetPropertyOptions<public>(Index:int):[]string = array{}
+    _GetReturnIconType<public>():visual_shader_node_port_type = visual_shader_node_port_type.Scalar
+    _IsAvailable<public>(Mode:shader_mode, Type:visual_shader_type):logic = false
+    _IsHighend<public>():logic = false
 
 visual_shader_node_derivative_func<public> := class(visual_shader_node):
 
@@ -47210,6 +48492,23 @@ voxel_gi<public> := class(visual_instance3d):
     SetProbeData<public>(Data:voxel_gi_data)<transacts>:void = VhCallVoid(Handle, "set_probe_data", array{VhFromObject(Data)})
 
 web_rtc_data_channel_extension<public> := class(web_rtc_data_channel):
+
+    _Close<public>():void = {}
+    _GetAvailablePacketCount<public>():int = 0
+    _GetBufferedAmount<public>():int = 0
+    _GetId<public>():int = 0
+    _GetLabel<public>():string = ""
+    _GetMaxPacketLifeTime<public>():int = 0
+    _GetMaxPacketSize<public>():int = 0
+    _GetMaxRetransmits<public>():int = 0
+    _GetProtocol<public>():string = ""
+    _GetReadyState<public>():web_rtc_data_channel_channel_state = web_rtc_data_channel_channel_state.Connecting
+    _GetWriteMode<public>():web_rtc_data_channel_write_mode = web_rtc_data_channel_write_mode.Text
+    _IsNegotiated<public>():logic = false
+    _IsOrdered<public>():logic = false
+    _Poll<public>():error = error.Ok
+    _SetWriteMode<public>(PWriteMode:web_rtc_data_channel_write_mode):void = {}
+    _WasStringPacket<public>():logic = false
 
 web_rtc_multiplayer_peer<public> := class(multiplayer_peer):
 
@@ -48109,6 +49408,8 @@ code_edit<public> := class(text_edit):
     UnfoldLine<public>(Line:int)<transacts>:void = VhCallVoid(Handle, "unfold_line", array{VhFromInt(Line)})
     UnindentLines<public>()<transacts>:void = VhCallVoid(Handle, "unindent_lines", array{})
     UpdateCodeCompletionOptions<public>(Force:logic)<transacts>:void = VhCallVoid(Handle, "update_code_completion_options", array{VhFromLogic(Force)})
+    _ConfirmCodeCompletion<public>(Replace:logic):void = {}
+    _RequestCodeCompletion<public>(Force:logic):void = {}
 
 compressed_texture2d<public> := class(texture2d):
 
@@ -48642,6 +49943,8 @@ editor_property<public> := class(container):
     SetLabelReference<public>(Control:control)<transacts>:void = VhCallVoid(Handle, "set_label_reference", array{VhFromObject(Control)})
     SetObjectAndProperty<public>(Object:object, Property:string)<transacts>:void = VhCallVoid(Handle, "set_object_and_property", array{VhFromObject(Object), VhFromStringName(Property)})
     UpdateProperty<public>()<transacts>:void = VhCallVoid(Handle, "update_property", array{})
+    _SetReadOnly<public>(Arg0:logic):void = {}
+    _UpdateProperty<public>():void = {}
 
 editor_spin_slider<public> := class(range):
 
@@ -49639,6 +50942,7 @@ physical_bone3d<public> := class(physics_body3d):
     IsSimulatingPhysics<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_simulating_physics", array{}))
     SetBodyOffset<public>(Offset:transform3d)<transacts>:void = VhCallVoid(Handle, "set_body_offset", array{VhFromTransform3D(Offset)})
     SetJointOffset<public>(Offset:transform3d)<transacts>:void = VhCallVoid(Handle, "set_joint_offset", array{VhFromTransform3D(Offset)})
+    _IntegrateForces<public>(State:physics_direct_body_state3d):void = {}
 
 physics_body2d<public> := class(collision_object2d):
 
@@ -50126,6 +51430,7 @@ rigid_body3d<public> := class(physics_body3d):
     GetPhysicsMaterialOverride<public>()<decides><transacts>:physics_material = physics_material[VhObjectFrom[VhCallValue(Handle, "get_physics_material_override", array{})]]
     SetAxisVelocity<public>(AxisVelocity:vector3)<transacts>:void = VhCallVoid(Handle, "set_axis_velocity", array{VhFromVector3(AxisVelocity)})
     SetPhysicsMaterialOverride<public>(PhysicsMaterialOverride:physics_material)<transacts>:void = VhCallVoid(Handle, "set_physics_material_override", array{VhFromObject(PhysicsMaterialOverride)})
+    _IntegrateForces<public>(State:physics_direct_body_state3d):void = {}
 
 scroll_bar<public> := class(range):
 
@@ -50421,6 +51726,7 @@ sub_viewport_container<public> := class(container):
     var StretchShrink<public><getter(StretchShrinkGetter)><setter(StretchShrinkSetter)>:int = external {}
     StretchShrinkGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_stretch_shrink", array{}))
     StretchShrinkSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_stretch_shrink", array{VhFromInt(Value)})
+    _PropagateInputEvent<public>(Event:input_event):logic = false
 
 tab_container<public> := class(container):
 
@@ -51427,6 +52733,9 @@ editor_dock<public> := class(margin_container):
     SetIconName<public>(IconName:string)<transacts>:void = VhCallVoid(Handle, "set_icon_name", array{VhFromStringName(IconName)})
     SetLayoutKey<public>(LayoutKey:string)<transacts>:void = VhCallVoid(Handle, "set_layout_key", array{VhFromString(LayoutKey)})
     SetTitle<public>(Title:string)<transacts>:void = VhCallVoid(Handle, "set_title", array{VhFromString(Title)})
+    _LoadLayoutFromConfig<public>(Config:config_file, Section:string):void = {}
+    _SaveLayoutToConfig<public>(Config:config_file, Section:string):void = {}
+    _UpdateLayout<public>(Layout:int):void = {}
 
 editor_inspector<public> := class(scroll_container):
 
@@ -51593,6 +52902,7 @@ graph_node<public> := class(graph_element):
     SetSlotTypeLeft<public>(SlotIndex:int, Type:int)<transacts>:void = VhCallVoid(Handle, "set_slot_type_left", array{VhFromInt(SlotIndex), VhFromInt(Type)})
     SetSlotTypeRight<public>(SlotIndex:int, Type:int)<transacts>:void = VhCallVoid(Handle, "set_slot_type_right", array{VhFromInt(SlotIndex), VhFromInt(Type)})
     SetTitle<public>(Title:string)<transacts>:void = VhCallVoid(Handle, "set_title", array{VhFromString(Title)})
+    _DrawPort<public>(SlotIndex:int, Arg1:vector2i, Left:logic, Color:color):void = {}
 
 h_box_container<public> := class(box_container):
 
@@ -51890,6 +53200,7 @@ rigid_body2d<public> := class(physics_body2d):
     GetPhysicsMaterialOverride<public>()<decides><transacts>:physics_material = physics_material[VhObjectFrom[VhCallValue(Handle, "get_physics_material_override", array{})]]
     SetAxisVelocity<public>(AxisVelocity:vector2)<transacts>:void = VhCallVoid(Handle, "set_axis_velocity", array{VhFromVector2(AxisVelocity)})
     SetPhysicsMaterialOverride<public>(PhysicsMaterialOverride:physics_material)<transacts>:void = VhCallVoid(Handle, "set_physics_material_override", array{VhFromObject(PhysicsMaterialOverride)})
+    _IntegrateForces<public>(State:physics_direct_body_state2d):void = {}
 
 script_create_dialog<public> := class(confirmation_dialog):
 
@@ -52301,6 +53612,8 @@ editor_resource_picker<public> := class(h_box_container):
     SetBaseType<public>(BaseType:string)<transacts>:void = VhCallVoid(Handle, "set_base_type", array{VhFromString(BaseType)})
     SetEditedResource<public>(Resource:resource)<transacts>:void = VhCallVoid(Handle, "set_edited_resource", array{VhFromObject(Resource)})
     SetTogglePressed<public>(Pressed:logic)<transacts>:void = VhCallVoid(Handle, "set_toggle_pressed", array{VhFromLogic(Pressed)})
+    _HandleMenuSelected<public>(Id:int):logic = false
+    _SetCreateOptions<public>(MenuNode:object):void = {}
 
 editor_toaster<public> := class(h_box_container):
 

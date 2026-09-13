@@ -32,11 +32,11 @@ player := class(area2d):
 	# Size of the game window.
 	var ScreenSize:vector2 = vector2{}
 
-	Ready<override>():void =
+	_Ready<override>():void =
 		set ScreenSize = GetViewportRect().Size
 		Hide()
 
-	Process<override>(Delta:float):void =
+	_Process<override>(Delta:float):void =
 		# The player's movement vector.
 		var Velocity:vector2 = vector2{}
 		if (Keys := GetInputSingleton[]):

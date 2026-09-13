@@ -70,8 +70,8 @@ def test_param_names():
         "Arg0",
     )
     check(
-        "param name colliding with an inherited lifecycle method",
-        g.verse_param_name("process", 1, reserved, set(), g.BASE_MEMBER_NAMES),
+        "param name colliding with an inherited member of the native root",
+        g.verse_param_name("handle", 1, reserved, set(), g.BASE_MEMBER_NAMES),
         "Arg1",
     )
 
@@ -287,16 +287,55 @@ def test_base_member_shadow():
     api = {
         "classes": [
             {"name": "Object", "inherits": None, "methods": []},
-            {"name": "Thing", "inherits": "Object", "methods": [_method("ready", "bool")]},
+            {"name": "Thing", "inherits": "Object",
+             "methods": [dict(_method("_notification", "bool"), is_virtual=True)]},
         ]
     }
     coverage = g.Coverage()
     g.generate(api, ["Thing"], coverage, {})
     check(
-        "method name colliding with `object`'s own Ready is shadowed",
+        "a method colliding with the native root's own _Notification is shadowed",
         coverage.skip_reasons["shadow"],
         1,
     )
+
+
+def test_virtual_names_keep_godots_underscore():
+    """A virtual is `_Ready`, not `Ready`, and it is measured rather than preferred.
+
+    Eight virtuals collide with a *signal* of the same PascalCase name on the classes an ordinary
+    script derives from -- Node.ready, CanvasItem.draw, Control.gui_input, BaseButton.pressed and
+    four more. The underscore Godot already uses is the disambiguation, and throwing it away is
+    what made those collide.
+    """
+    for godot_name, want in (("_ready", "_Ready"), ("_physics_process", "_PhysicsProcess"),
+                             ("_get_minimum_size", "_GetMinimumSize"), ("get_child", "GetChild")):
+        check(f"virtual name {godot_name}", g.verse_virtual_name(godot_name), want)
+
+
+def test_virtual_emits_a_default_body():
+    api = {
+        "classes": [
+            {"name": "Object", "inherits": None, "methods": []},
+            {"name": "Thing", "inherits": "Object", "methods": [
+                dict(_method("_ready", None), is_virtual=True),
+                dict(_method("_has_point", "bool"), is_virtual=True),
+                # No default can be written for an object return, so it is a recorded skip rather
+                # than a silent absence.
+                dict(_method("_get_owner", "Object"), is_virtual=True),
+            ]},
+        ]
+    }
+    coverage = g.Coverage()
+    blocks, _order, _map, _members, _arrays, _dicts = g.generate(api, ["Thing"], coverage, {})
+    block = next(b for b in blocks if b.startswith("thing"))
+    check_true("a void virtual is declared with an empty body",
+               "    _Ready<public>():void = {}" in block, block)
+    check_true("a value-returning one answers Godot's own default",
+               "    _HasPoint<public>():logic = false" in block, block)
+    check_true("a virtual with no writable default is skipped, not emitted",
+               "_GetOwner" not in block, block)
+    check("and the skip says why", coverage.skip_reasons.get("virtual_no_default"), 1)
 
 
 def test_unsupported_type_skipping():
@@ -579,11 +618,17 @@ def test_generated_method_map_covers_a_known_method():
         "the checked-in header still maps a surviving method",
         '{ "node", "GetChild", "Node", "get_child" },' in header,
     )
-    # The native root's lifecycle methods are hand-written rather than mirrored -- the generator
-    # skips virtuals -- but a script overriding one wants Godot's documentation for it.
+    # A virtual is generated onto the class Godot declares it on, so its documentation is found the
+    # same way every other member's is.
     check_true(
-        "the checked-in header maps vh_object.Ready to Node._ready",
-        '{ "vh_object", "Ready", "Node", "_ready" },' in header,
+        "the checked-in header maps node._Ready to Node._ready",
+        '{ "node", "_Ready", "Node", "_ready" },' in header,
+    )
+    # `_notification` is in no part of extension_api.json, so it is hand-written on the native root
+    # -- and a script overriding it still wants Godot's documentation for it.
+    check_true(
+        "and vh_object._Notification to Object._notification",
+        '{ "vh_object", "_Notification", "Object", "_notification" },' in header,
     )
 
 
@@ -715,7 +760,7 @@ def test_generated_file_matches_hand_written_slice():
         "    TypeInt\n" in text and "    TypeFloat\n" in text and "    Int\n" not in text,
     )
 
-    base_members = {"Handle", "Ready", "Process", "PhysicsProcess"}
+    base_members = {"Handle", "_Notification"}
 
     def inherited(name):
         if name == "object":

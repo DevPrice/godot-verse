@@ -50,7 +50,7 @@ mover := class(node2d):
 	@export
 	var Tint<public>:color = color{R := 1.0, G := 1.0, B := 1.0, A := 1.0}
 
-	Ready<override>():void =
+	_Ready<override>():void =
 		Print(Greeting)
 		if (First := Speeds[0]):
 			Print("First speed is {First}")
@@ -58,7 +58,7 @@ mover := class(node2d):
 			set Sprite.FlipH = true
 			set Sprite.Modulate = Tint
 
-	Process<override>(Delta:float):void =
+	_Process<override>(Delta:float):void =
 		var Step:float = Delta * Speed
 		if (Direction = mover_direction.Left):
 			set Step = -Step

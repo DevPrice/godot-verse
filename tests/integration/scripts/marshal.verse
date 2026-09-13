@@ -122,7 +122,7 @@ marshal := class(node2d):
 
     # --- virtuals ------------------------------------------------------------
 
-    Ready<override>():void =
+    _Ready<override>():void =
         Print("marshal ready")
 
     # --- R-TYPE-7 amended: reading a Godot Variant ---------------------------

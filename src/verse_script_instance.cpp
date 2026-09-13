@@ -332,7 +332,26 @@ void call_func(GDExtensionScriptInstanceDataPtr p_self, GDExtensionConstStringNa
 	}
 }
 
+// R-NODE-8. `_notification` is in no part of extension_api.json -- it is a hook Godot offers to
+// *scripts* rather than a method it registers in ClassDB -- so it is hand-declared on the native
+// root and reached through the call path every other method uses. No new ABI.
+//
+// p_reversed says Godot is walking the class chain the other way, which matters to a language whose
+// bases each have their own _notification. A Verse script's overrides resolve to one function, so
+// the pass that would run it twice is skipped rather than dispatched.
 void notification_func(GDExtensionScriptInstanceDataPtr p_instance, int32_t p_what, GDExtensionBool p_reversed) {
+	if (p_reversed) {
+		return;
+	}
+	VerseScriptInstance *self = static_cast<VerseScriptInstance *>(p_instance);
+	const VerseMethodInfo *method = self->resolve(StringName("_Notification"));
+	if (method == nullptr || self->verse_object == nullptr) {
+		return;
+	}
+	const Variant what = (int64_t)p_what;
+	const Variant *args[1] = { &what };
+	Variant result;
+	self->script->call_instance(self->verse_object, method->decorated.get_data(), args, 1, result);
 }
 
 void to_string_func(GDExtensionScriptInstanceDataPtr p_instance, GDExtensionBool *r_is_valid, GDExtensionStringPtr r_out) {

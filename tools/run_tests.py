@@ -244,7 +244,7 @@ def run_integration(results: Results, engine: Path | None, godot: Path | None) -
 # in this repository is read by whoever wrote the generator and by nobody else.
 COVERAGE_EXPLANATIONS = [
     "Godot has get_position, but it is reachable as the property `Position`.",
-    "Godot has _enter_tree, but it is a Godot virtual.",
+    "Godot has Control._make_custom_tooltip, but it is a Godot virtual returning `object`",
     "Godot has VisualShaderNodeFloatParameter.max, but a Verse function already answers to that "
     "name, so it is the property `Maximum`.",
     "Godot has VisualShaderNodeFloatParameter.get_max, but it is reachable as the property `Maximum`.",

@@ -218,9 +218,19 @@ vh_object<public><native> := class:
     # a script holding one instead of the object holds a number no guard can check.
     Handle<native>:int = 0
 
-    # Godot's _ready, _process and _physics_process. Defined here so a script overrides rather
-    # than declares them, and so a script that wants only one of the three still compiles.
-    Ready<public>():void = {}
-    Process<public>(Delta:float):void = {}
-    PhysicsProcess<public>(Delta:float):void = {}
+    # Godot's _notification, which is the one script-level hook the generator cannot reach:
+    # `_notification` is in no part of extension_api.json -- Object declares zero virtuals there,
+    # and neither _to_string, _get, _set nor _get_property_list appears anywhere in it. They are
+    # hooks Godot offers to *scripts* rather than methods it registers in ClassDB, so no amount of
+    # generator work produces them and R-NODE-8 does not ride R-NODE-7 after all.
+    #
+    # The rest of that set -- _ToString, _Get, _Set, _GetPropertyList, _ValidateProperty -- is
+    # R-NODE-10 and sits in 4b, where _Get and _Set can be designed beside the export machinery
+    # they overlap with.
+    #
+    # What is *not* here any more is Ready, Process and PhysicsProcess. Since Phase 4 every one of
+    # Godot's 1413 virtuals is generated onto the class that declares it, so `_Ready` is a member
+    # of `node` -- which is where Godot declares it, and which is what stops a Resource-derived
+    # script from having a `_Process` it could never receive.
+    _Notification<public>(What:int):void = {}
 

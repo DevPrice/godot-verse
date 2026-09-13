@@ -325,14 +325,49 @@ on closing it.
   `_unhandled_key_input`, `_gui_input`, `_draw`, `_notification`, `_get_configuration_warnings`,
   `_to_string`, and the rest — not a curated list of three. The mechanism must be general: a new
   Godot virtual in a future engine version must not require a code change here.
-  Status: **none** beyond the three.
+  Status: **done** (Phase 4 stage 5). All **1413** of `extension_api.json`'s virtuals are generated
+  onto the class that declares them — `_Input` and `_Ready` on `node`, `_Draw` on `canvas_item`,
+  `_GuiInput` on `control` — with a default body a script says `<override>` over, and Verse's own
+  redeclaration rules supply the error when a signature is wrong. The mechanism is general by
+  construction: a virtual a future Godot adds arrives by regenerating the mirror.
+
+  **The name keeps Godot's leading underscore: `_Ready`, not `Ready`.** That was counted rather than
+  preferred. A virtual collides with a *method or property* of the same PascalCase name 834 times,
+  almost entirely on server-extension classes nobody derives from — survivable on its own. What
+  decides it is the **eight** collisions with a **signal**: `Node.ready` vs `_ready`,
+  `CanvasItem.draw` vs `_draw`, `Control.gui_input` vs `_gui_input`, `BaseButton.pressed` vs
+  `_pressed`, `Range.value_changed`, `CollisionObject2D/3D.input_event`, `BaseButton.toggled` — on
+  the classes an ordinary script derives from, and both are things a script touches. Godot's names
+  are already disambiguated by the underscore; keeping it dissolves every collision of both kinds by
+  construction. It is also what a Godot developer types in GDScript and what C# generates
+  (`public override void _Ready()`), so R-AUD-1 is served rather than strained.
+
+  The rename landed all at once — `demo/`, `tests/`, `tests/host_smoke/` and the yardstick in one
+  commit, old names gone rather than deprecated. Pre-1.0, no compatibility obligation.
+
+  **74 virtuals are skipped, each with a recorded reason.** An unoverridden virtual has to answer
+  *something*, and there is no zero value to write for an object return or for a typed container
+  (which would mint a Godot Array on every call Godot makes to a virtual nobody overrode). That is
+  R-SCN-2's machinery, so the gap says so in the editor rather than being silently absent.
+
+  Two bugs were found on the way and are worth recording. `GodotVirtualNameOf` turned `_Ready` into
+  `__ready`, because it prepended a separator before every capital and Godot's name already starts
+  with one. And `InstanceHasFunction` — which decides whether Godot puts the node in the process
+  list at all — compared *function cells* to tell an override from an inherited body; a method is
+  stored once per shape and `Bind` makes a fresh cell on every field load, so every method looked
+  overridden. It compares **procedures** now, and walks the superclass chain rather than asking one
+  fixed root, because the declaring class is `node` or `control` rather than the native root.
 - **R-NODE-8 (MUST)** `_notification` reaches a script, with the notification constant, so
-  `NOTIFICATION_WM_CLOSE_REQUEST` and friends are handleable. Status: **none**
-  (`notification_func` is wired to the vtable but does not reach Verse). It does **not** ride
-  R-NODE-7's general mechanism, which was Phase 4's first assumption: `_notification` is absent from
+  `NOTIFICATION_WM_CLOSE_REQUEST` and friends are handleable. Status: **done** (Phase 4 stage 5),
+  through the `notification_func` the vtable already carried and with **no new ABI**. It does
+  **not** ride R-NODE-7's general mechanism, which was Phase 4's first assumption: `_notification` is absent from
   `extension_api.json` entirely — `Object` declares no virtuals there — so it is hand-declared on the
-  native root beside `_Ready`, and the constants it takes are R-SCN-3's
-  (`NodeStatics.NotificationReady`). See `docs/phase-4-design.md` §6.3.
+  native root, and the constants it takes are R-SCN-3's (`NodeStatics.NotificationReady`) until
+  Phase 4 stage 6 lands them. See `docs/phase-4-design.md` §7.3.
+
+  The rest of that set — `_ToString`, `_Get`, `_Set`, `_GetPropertyList`, `_ValidateProperty` — is
+  **R-NODE-10**, and sits in 4b where `_Get` and `_Set` can be designed beside the export machinery
+  they overlap with.
 - **R-NODE-9 (MUST)** A script method list (`_get_script_method_list`, `_get_method_info`,
   `_has_method`) reports what the script actually defines. Status: **done**. `vh_class_method_list`
   reads the class's own declarations out of the semantic program — names, parameters with their own
@@ -484,9 +519,9 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   attribute beside `@global_class` and `@export`, read out of the text the same way because Godot
   asks `is_tool` of scripts it has only scanned — and `VerseScript::_can_instantiate` already did
   the rest, handing the editor a real instance for a tool script and a placeholder for everything
-  else. So Ready and Process run in the editor. What is **missing** is the editor-only virtual
-  surface: gizmos, scene validation, `_get_configuration_warnings`. Those wait for R-NODE-7's
-  general virtual mechanism in Phase 4 rather than being built twice for one attribute. A tool
+  else. So `_Ready` and `_Process` run in the editor. The editor-only virtual surface came with
+  R-NODE-7 rather than being built twice for one attribute: `_GetConfigurationWarnings` and the
+  gizmo virtuals are among the 1413, so what was a feature is now a test. A tool
   script runs the **last built** generation, per §10's trigger — the same bargain a C# `[Tool]`
   script makes today, and the workflow most likely to send an author looking for the Build action.
   **Stated risk:** Verse now runs against the scene the author is editing, and R-DIAG-3 does not
@@ -1202,7 +1237,7 @@ A closed question keeps its row so that the reason it is closed is not lost.
 | **OQ-11** ✅ | How do free functions and value-type methods cross, given that every mirrored call rides `VhCallValue(Handle, …)` and neither a `@GlobalScope` function nor a `vector2` has a handle? Named by Phase 2 §8 and never recorded here until Phase 4's spikes answered it. | R-SCN-3, and the 16 math types' methods | **Closed: Verse can carry the value types itself.** Type-based extension methods (`(V:vector2).Length<public>()<computes>:float`) and definable operators (`operator'+'(:vector2, :vector2)`) both compile against the mirror's own structs, so the math is ordinary Verse with no handle and no ABI — which is also what Godot's C# does. What genuinely has no handle is Godot's 114 statics and the ~28 utility functions with no `/Verse.org` counterpart, and those get one by-name dispatch callback apiece. See `docs/phase-4-design.md` §1.3 and §7. |
 | **OQ-12** ✅ | Does a generation change the package *name* only, or the *verse path* too? S-2 varied the name; whether `/user@localhost` held across generations was not recorded. Module paths are user-visible text that R-TOOL-12 writes into the author's file, and `ScriptVersePath` is compiled into eight lookup sites in `HostScript.cpp`. | R-LANG-6, R-TOOL-12, and the shape of Phase 3 | **Closed: the name only.** The verse path is pinned at `/user@localhost` across generations and nothing in `HostScript.cpp` learns which generation it is asking about. See §14.1. |
 | **OQ-13** | What bounds a script that raises every frame? A raise now stops script code for the rest of the frame and the next tick resumes it, so a `Process` that raises raises again next frame, forever — the error is reported each time, which is what Godot does for GDScript, and no progress is ever made. Options: report it once and stop calling that method, disable the instance, disable the script, or leave it and rely on the author reading the log. | R-DIAG-3 | Phase 6, with the rest of R-DIAG-3. Opened by Phase 3's fix: before it, the first raise silenced everything and the question could not arise, which is not the same as it having an answer. Whatever is chosen has to be per instance rather than per process, so it wants R-ASYNC-4 first. |
-| **OQ-14** | Does per-keystroke analysis stay usable once the mirror carries the 1413 virtuals, the 489 signal accessors and the per-class constant modules Phase 4 adds? It is 1190 ms today, from 158 ms curated. | R-TOOL-2, and the urgency of Phase 7's cooked route | Record it at Phase 4 stage 5 with `tools/build_bench.py`, **with no threshold attached** — feature parity first, performance goals later, by decision. It changes no design: the decision to mirror everything is made (`phase-2-design.md` §3), and the fix if the number turns out to matter is the cooked digest OQ-10 already owns. |
+| **OQ-14** ✅ (measured, open) | Does per-keystroke analysis stay usable once the mirror carries the 1413 virtuals, the 489 signal accessors and the per-class constant modules Phase 4 adds? It was 1190 ms before, from 158 ms curated. **Measured at Phase 4 stage 5: 1235 ms median** (min 1223, max 1267, n=10) with 1283 virtuals emitted, a 4229 KB mirror and a 1350 ms generation. So the virtuals cost about **45 ms**, which is far less than the question feared; the signal accessors and the constant modules are still to come. | R-TOOL-2, and the urgency of Phase 7's cooked route | Record it at Phase 4 stage 5 with `tools/build_bench.py`, **with no threshold attached** — feature parity first, performance goals later, by decision. It changes no design: the decision to mirror everything is made (`phase-2-design.md` §3), and the fix if the number turns out to matter is the cooked digest OQ-10 already owns. |
 | **OQ-15** | What should the bridge say about Verse's effect semantics? A function with no effect specifier carries a default set wider than `<transacts>` — it includes `no_rollback` — so an explicit specifier *narrows*, and a **failure context** (an `if (X := F[])`, an option unwrap, a cast) refuses a `no_rollback` callee because failure has to unwind. One failable helper therefore pulls `<transacts>` onto everything it calls, which is what `dodge-the-creeps.md` wall 8 hit. (Wall 8 first recorded the cause as the host's AutoRTFM transaction; that was wrong, and Phase 4's probes corrected it.) | R-AUD-1, R-AUD-3, and the manual | **Phase 4.5**, its own phase between parity and concurrency, because nothing else in the roadmap owns it and folding it into a phase with other goals is how it gets skipped. Its subject matter: the **1354** methods that mutate Godot *and* return a value, so they can be neither deferred to commit nor compensated — plus signal emission, which Phase 4 makes immediate by decision; whether Godot's **6766** const methods should carry `<reads>` rather than `<transacts>`, which would make the method surface agree with the property surface (a property read is already `reads`) and shrink the audited set to exactly those 1354; what `no_rollback` costs a library author; and whether the `.verse` template and the R-SCN-2 diagnostic machinery should say something at the declaration. |
 | **OQ-16** | What anchors a Verse callback that is not a bound method? Godot answers this twice: a `self`-capturing lambda reports the captured object and dies with it, while a plain lambda is anchored to the script resource, overrides `is_valid` to ignore ObjectDB, and is Godot's own documented leak (the `GDScriptLambdaCallables` TODO, GH-102327). | R-SIG-3, R-INT-4, and library-level handlers | Phase 4a accepts only a bound method — the half of Godot's design that does not leak — and refuses an unbound function with a diagnostic. Answering means choosing an owner: a runtime-owned anchor with an explicit `Cancel`, or an explicit-owner spelling (`SubscribeAs(Owner, F)`) that keeps lifetime visible. Wanted by Phase 5, which will hand Godot more callbacks. |
 | **OQ-17** | Does any of the C# interop work? R-SIG-6, R-INT-1, R-INT-2 and R-INT-5 name C# as a MUST, and **no test in this repository has ever run C#** — every fixture is GDScript, and exercising C# needs a .NET Godot build that `tools/run_tests.py` does not have. | R-SIG-6, R-INT-1, R-INT-2, R-INT-5 | Get a .NET Godot into the harness and run the existing interop cases from C# before 1.0. Until then those four statuses describe GDScript only, and say so. Phase 4 enlarges the claim rather than testing it, which is why this is recorded now. |

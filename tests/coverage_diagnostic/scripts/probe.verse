@@ -9,8 +9,11 @@ probe := class(node2d):
     # superseded_by_property: Node2D.get_position is reachable as the property `Position`.
     Superseded()<transacts>:vector2 = GetPosition()
 
-    # virtual: Node._enter_tree is Godot's to call, and only three virtuals are carried (R-NODE-7).
-    Virtual()<transacts>:void = EnterTree()
+    # virtual_no_default: since Phase 4 every one of Godot's 1413 virtuals is generated, so
+    # `_EnterTree` is an ordinary member of `node` and only the ones whose return type has no
+    # writable default are skipped. An unoverridden virtual has to answer *something*, and there is
+    # no zero value for an object.
+    Virtual(C:control)<transacts>:void = C.MakeCustomTooltip("hi")
 
     # property_renamed: VisualShaderNodeFloatParameter.max cannot be a `var` named Max --
     # /Verse.org/Verse's Max is a function, and data has no signature to be told apart by -- so it is

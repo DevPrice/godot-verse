@@ -382,10 +382,10 @@ Ref<Script> VerseScriptLanguage::_make_template(const String &p_template, const 
 			"# The class is named after this file, which is how the node it is attached to finds it.\n"
 			"_CLASS_ := class(_BASE_):\n"
 			"\n"
-			"    Ready<override>():void =\n"
+			"    _Ready<override>():void =\n"
 			"        Print(\"_CLASS_ is ready\")\n"
 			"\n"
-			"    Process<override>(Delta:float):void =\n";
+			"    _Process<override>(Delta:float):void =\n";
 	source = source.replace("_CLASS_", class_name.to_snake_case());
 	source = source.replace("_BASE_", verse_base_class_for(p_base_class_name));
 
@@ -876,11 +876,11 @@ static Dictionary override_option_for(const Dictionary &p_item) {
 // compiles and changes nothing about what Godot calls. So the mirror is excluded wholesale, which
 // is what the class table already answers.
 //
-// That leaves the two sets that mean something. `object` is hand-written rather than generated and
-// so is not in the class table: its Ready/Process/PhysicsProcess are the only Godot virtuals the
-// bridge carries at all, and the method table names exactly those three as `object`'s -- which is
-// what the table lookup below is for, since anything else `object` ever grows would be a helper
-// nothing dispatches to. Anything else is a class the author wrote, and the mirror never contains
+// That leaves the two sets that mean something. Every one of Godot's virtuals is generated onto the
+// class that declares it, so `_Ready` is `node`'s and `_Draw` is `canvas_item`'s -- and the method
+// table names each one against its own class, which is what the table lookup below is for. The one
+// exception is `_Notification`, which is hand-written on the native root because it is in no part
+// of extension_api.json. Anything else is a class the author wrote, and the mirror never contains
 // one of those.
 //
 // A method the class already declares comes back owned by that class -- the host lets a subclass'
@@ -2127,8 +2127,13 @@ String skipped_member_explanation(const verse_api::skipped_member &p_entry) {
 	if (reason.begins_with("property_")) {
 		return String("it cannot be a property, so Godot's own ") + detail + " carry it instead.";
 	}
-	if (reason == "virtual") {
-		return "it is a Godot virtual. Only Ready, Process and PhysicsProcess can be overridden today (R-NODE-7).";
+	// Since Phase 4 a virtual is *emitted* rather than skipped, so this reason no longer appears
+	// for one Godot describes. What is still skipped is a virtual whose return type has no default
+	// a script could write -- an object, a typed container -- because an unoverridden one has to
+	// answer something and there is nothing to answer with.
+	if (reason == "virtual_no_default") {
+		return String("it is a Godot virtual returning ") + detail
+				+ ", and an unoverridden virtual has to answer a value there is no way to write (R-NODE-7).";
 	}
 	if (reason == "static") {
 		return "it is static, and a static call has no Verse spelling yet (R-NODE-4).";

@@ -11,7 +11,7 @@ using { /Godot.org/Godot }
 @tool
 tool_probe := class(node2d):
 
-    Ready<override>():void =
+    _Ready<override>():void =
         Print("tool_probe ready")
 
     Which<public>()<transacts>:string = "tool"

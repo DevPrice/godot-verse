@@ -197,8 +197,14 @@ func _init() -> void:
 	else:
 		_check("a method reports its arguments", false)
 
-	# A Godot virtual is listed under Godot's own name, which is how the engine finds it.
-	_check("an overridden Godot virtual is listed under Godot's name", names.has("_ready"))
+	# A Godot virtual is listed under Godot's own name, which is how the engine finds it. Asked of
+	# the *script's* list rather than the node's: a node's merges ClassDB's, where `_ready` is
+	# registered whatever the script says, so the node's list can never tell the two apart.
+	var script_methods := []
+	for method in (script as Script).get_script_method_list():
+		script_methods.append(String(method["name"]))
+	_check("an overridden Godot virtual is listed under Godot's own name",
+			script_methods.has("_ready"))
 	_check("and the engine can call it", node.has_method("_ready"))
 
 	# --- R-TYPE-7 amended: a script can name a Variant and read it -----------------------------
@@ -449,6 +455,70 @@ func _init() -> void:
 		_check("and reports itself a tool script", tool_script.is_tool())
 	var plain_script: Script = load("res://scripts/marshal.verse")
 	_check("while an unmarked one does not", plain_script != null and not plain_script.is_tool())
+
+	# --- R-NODE-7 / R-NODE-8: the full virtual set ----------------------------------------------
+	#
+	# Before Phase 4 exactly three of Godot's 1413 virtuals were carried, hand-written on the native
+	# root -- which also meant a Resource-derived script had a `_Process` it could never receive.
+	# Now each is generated onto the class that declares it, so a virtual a future Godot adds
+	# arrives by regenerating the mirror with no code change here.
+	var virt_script: Script = load("res://scripts/virtuals.verse")
+	_check("virtuals.verse compiles", virt_script != null and virt_script.can_instantiate())
+	if virt_script != null:
+		var virt := Node2D.new()
+		virt.set_script(virt_script)
+		root.add_child(virt)
+
+		# Dispatched by hand rather than by entering the tree: a SceneTree script's _init runs
+		# before the tree is standing, so a node added here is parented and never enters. What is
+		# under test is the mechanism -- that Godot's own name reaches the Verse method -- and
+		# `call` is the same path GDVIRTUAL_CALL(_enter_tree) takes out of Node::_propagate_enter_tree.
+		var virt_methods := []
+		for m in (virt_script as Script).get_script_method_list():
+			virt_methods.append(String(m["name"]))
+		_check("a virtual Godot declares is listed under Godot's own name",
+				virt_methods.has("_enter_tree") and virt_methods.has("_exit_tree"))
+		_check("and the leading underscore is not doubled on the way out",
+				not virt_methods.has("__enter_tree"))
+		_check("_notification is there too, hand-declared rather than generated",
+				virt_methods.has("_notification"))
+
+		virt.call("ClearTrail")
+		virt.call("_enter_tree")
+		_check_eq("_enter_tree reaches the script", virt.call("ReadTrail"), "enter;")
+		virt.call("ClearTrail")
+		virt.call("_ready")
+		_check_eq("and so does _ready", virt.call("ReadTrail"), "ready;")
+		virt.call("ClearTrail")
+		virt.call("_exit_tree")
+		_check_eq("and _exit_tree", virt.call("ReadTrail"), "exit;")
+
+		# R-NODE-8: `_notification` is in no part of extension_api.json, so it is hand-declared on
+		# the native root and reached through the script instance's own notification hook rather
+		# than through a generated declaration.
+		virt.call("ClearTrail")
+		virt.notification(Node.NOTIFICATION_PARENTED)
+		_check_eq("_Notification reaches the script with Godot's own constant",
+				virt.call("ReadTrail"), "n%d;" % Node.NOTIFICATION_PARENTED)
+
+		# A value-returning virtual, which is what makes the default body matter: Godot asks and
+		# acts on the answer, so an unoverridden one has to mean what Godot's own default means.
+		_check_eq("a value-returning virtual answers the script",
+				virt.call("_get_configuration_warnings"), PackedStringArray(["deliberate"]))
+
+		root.remove_child(virt)
+		virt.free()
+
+	# A script that overrides none of the per-frame virtuals must not claim to have them: that is
+	# what decides whether Godot puts the node in the process list at all.
+	var quiet := Node2D.new()
+	quiet.set_script(load("res://scripts/casting.verse"))
+	root.add_child(quiet)
+	var quiet_methods := []
+	for m in (quiet.get_script() as Script).get_script_method_list():
+		quiet_methods.append(String(m["name"]))
+	_check("a script that overrides no virtual does not claim one",
+			not quiet_methods.has("_process") and not quiet_methods.has("_ready"))
 
 	# --- R-SIG-1/2/3/4: signals a script declares -----------------------------------------------
 	#

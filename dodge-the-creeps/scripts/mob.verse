@@ -11,7 +11,7 @@ mob := class(rigid_body2d):
 	@export
 	var Sprite<public>:?animated_sprite2d = false
 
-	Ready<override>():void =
+	_Ready<override>():void =
 		if (Animation := Sprite?, Frames := Animation.GetSpriteFrames[]):
 			Names := Frames.GetAnimationNames()
 			if (Picked := Names[GetRandomInt(0, Names.Length - 1)]):

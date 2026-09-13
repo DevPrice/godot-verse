@@ -554,11 +554,11 @@ int main(int argc, char** argv)
 					&& ReadyLookup)
 				{
 					LookupOk = Step("it knows the cursor is on a definition", ReadyLookup->IsDefinition != 0) && LookupOk;
-					/* `vh_object` rather than `object` since Phase 2: Ready is declared on the
-					 * hand-written native root, and `object` is now the mirror of Godot's own Object
-					 * class, which sits between it and node2d. */
+					/* `node` since Phase 4: every one of Godot's virtuals is generated onto the
+					 * class that declares it, so _Ready belongs to node rather than to the
+					 * hand-written native root. */
 					LookupOk = Step("it names the class the override came from",
-								   Text(ReadyLookup->OverriddenOwnerUtf8, ReadyLookup->OverriddenOwnerLen) == "vh_object")
+								   Text(ReadyLookup->OverriddenOwnerUtf8, ReadyLookup->OverriddenOwnerLen) == "node")
 							&& LookupOk;
 					LookupOk = Step("and where that parent was written",
 								   ReadyLookup->OverriddenLine >= 0 && ReadyLookup->OverriddenPathLen > 0)
@@ -637,12 +637,12 @@ int main(int argc, char** argv)
 					{ "nor does the bracket opening one", "Speed<public>:float", strlen("Speed"), nullptr, nullptr },
 					{ "nor does an override specifier", "PhysicsProcess<override>(", strlen("PhysicsProcess<over"), nullptr, nullptr },
 					{ "the member's own name still does", "Speed<public>:float", 2, "Speed", "exports" },
-					{ "and so does the method's", "PhysicsProcess<override>(", 2, "PhysicsProcess", "exports_probe" },
+					{ "and so does the method's", "_PhysicsProcess<override>(", 2, "_PhysicsProcess", "exports_probe" },
 					// A parameter is described by itself rather than by the method it belongs to,
 					// which is what stops hovering an argument from documenting the whole call.
 					// The editor declines to show anything for one, but that is its policy: the
 					// host still has to resolve it, or the enclosing method would answer instead.
-					{ "a parameter resolves to the parameter", "PhysicsProcess<override>(Delta:float)", strlen("PhysicsProcess<override>(De"), "Delta", "PhysicsProcess" },
+					{ "a parameter resolves to the parameter", "_PhysicsProcess<override>(Delta:float)", strlen("_PhysicsProcess<override>(De"), "Delta", "_PhysicsProcess" },
 					{ "and its type still resolves to the type", "PhysicsProcess<override>(Delta:float)", strlen("PhysicsProcess<override>(Delta:fl"), "float", "Verse" },
 				};
 				for (const Spot& S : Spots)
@@ -809,7 +809,7 @@ int main(int argc, char** argv)
 					// between the brackets means the caret belongs past them.
 					CompleteOk = Step("and as one taking no arguments", Probe->ParamCount == 0) && CompleteOk;
 				}
-				if (const vh_complete_item* Process = Offers(Items, Count, "PhysicsProcess"))
+				if (const vh_complete_item* Process = Offers(Items, Count, "_PhysicsProcess"))
 				{
 					CompleteOk = Step("a method with an argument says so", Process->ParamCount == 1) && CompleteOk;
 				}
@@ -879,11 +879,11 @@ int main(int argc, char** argv)
 						CompleteSymbolFn(ExportsPathUtf8.c_str(), DeclTyping.c_str(), DeclRow, DeclColumn,
 										 VH_COMPLETE_SCOPE, &Items, &Count) == VH_OK))
 				{
-					if (const vh_complete_item* Ready = Offers(Items, Count, "Ready"))
+					if (const vh_complete_item* Ready = Offers(Items, Count, "_Ready"))
 					{
 						CompleteOk = Step("an inherited method is offered as overridable", Ready->IsOverridable != 0) && CompleteOk;
 						CompleteOk = Step("owned by the class that declares it",
-										 Text(Ready->OwnerUtf8, Ready->OwnerLen) == "vh_object")
+										 Text(Ready->OwnerUtf8, Ready->OwnerLen) == "node")
 								  && CompleteOk;
 						CompleteOk = Step("and spelled as a declaration",
 										 Text(Ready->SignatureUtf8, Ready->SignatureLen) == "():void")
@@ -893,7 +893,7 @@ int main(int argc, char** argv)
 					{
 						CompleteOk = Step("an inherited method is offered at all", false);
 					}
-					if (const vh_complete_item* Process = Offers(Items, Count, "Process"))
+					if (const vh_complete_item* Process = Offers(Items, Count, "_Process"))
 					{
 						// The parameter's own name, which is the whole reason the signature is not
 						// read off the function type: that spells this one "float->void".
@@ -903,7 +903,7 @@ int main(int argc, char** argv)
 					}
 					// Already overridden by the fixture, so it comes back owned by the fixture's
 					// own class -- which is how the editor knows not to offer it a second time.
-					if (const vh_complete_item* Physics = Offers(Items, Count, "PhysicsProcess"))
+					if (const vh_complete_item* Physics = Offers(Items, Count, "_PhysicsProcess"))
 					{
 						CompleteOk = Step("an override already written is owned by the class that wrote it",
 										 Text(Physics->OwnerUtf8, Physics->OwnerLen) == "exports_probe")
@@ -1055,7 +1055,7 @@ int main(int argc, char** argv)
 						SignatureAtFn(ExportsPathUtf8.c_str(), ExportsSource.c_str(), CalleeRow, CalleeColumn, &Signature) == VH_OK)
 					&& Signature)
 				{
-					CompleteOk = Step("it names the method", Text(Signature->NameUtf8, Signature->NameLen) == "PhysicsProcess") && CompleteOk;
+					CompleteOk = Step("it names the method", Text(Signature->NameUtf8, Signature->NameLen) == "_PhysicsProcess") && CompleteOk;
 					CompleteOk = Step("and its return type", Text(Signature->ResultUtf8, Signature->ResultLen) == "void") && CompleteOk;
 					CompleteOk = Step("and its one parameter", Signature->ParamCount == 1) && CompleteOk;
 					if (Signature->ParamCount == 1)
@@ -2033,7 +2033,7 @@ int main(int argc, char** argv)
 		const vh_method_desc* Physics = nullptr;
 		for (int32_t Index = 0; ProbeOk && Index < ProbeCount; ++Index)
 		{
-			if (Text(ProbeMethods[Index].NameUtf8, ProbeMethods[Index].NameLen) == "PhysicsProcess")
+			if (Text(ProbeMethods[Index].NameUtf8, ProbeMethods[Index].NameLen) == "_PhysicsProcess")
 			{
 				Physics = &ProbeMethods[Index];
 			}

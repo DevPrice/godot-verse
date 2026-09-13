@@ -3016,7 +3016,13 @@ AUTORTFM_DISABLE FUtf8String GodotVirtualNameOf(FUtf8StringView VerseName)
         const UTF8CHAR Char = VerseName[Index];
         if (Char >= UTF8CHAR('A') && Char <= UTF8CHAR('Z'))
         {
-            Result.AppendChar(UTF8CHAR('_'));
+            // One separator, never two: since Phase 4 a virtual is spelled `_Ready`, so the
+            // underscore Godot's own name starts with is already in hand and adding another would
+            // ask Godot about `__ready`.
+            if (Result.IsEmpty() || Result[Result.Len() - 1] != UTF8CHAR('_'))
+            {
+                Result.AppendChar(UTF8CHAR('_'));
+            }
             Result.AppendChar(UTF8CHAR(Char - 'A' + 'a'));
         }
         else
@@ -4586,24 +4592,45 @@ AUTORTFM_DISABLE FVerseFunction LookupMethod(const GodotVerse::FInstance* Instan
 }
 }
 
-/// Whether the script actually implements this lifecycle method.
+/// Whether the script actually implements this virtual, rather than inheriting the empty body the
+/// mirrored class gives it.
 ///
-/// `object` gives Ready, Process and PhysicsProcess empty bodies so a script can <override>
-/// them and so a script that wants only one of the three still compiles -- which means a plain
-/// "does it resolve" test is true for every instance. Comparing the resolved function against
-/// the one the base class resolves to is what distinguishes an override from the inherited
-/// no-op, and it decides whether Godot puts this node in the per-frame process list at all.
+/// Every one of Godot's virtuals is a member of the class that declares it, with a default body, so
+/// a plain "does it resolve" test is true for every instance. Comparing against what the *base*
+/// resolves to is what distinguishes an override from the inherited no-op, and it decides whether
+/// Godot puts this node in the per-frame process list at all.
+///
+/// Two things here are not obvious. The base is found by walking the superclass chain rather than
+/// asked of a fixed root, because since Phase 4 the declaring class is `node`, or `canvas_item`, or
+/// `control` -- wherever Godot declares the virtual -- rather than the one native root.
+///
+/// And the comparison is on the **procedure**, not the function cell: a method is stored once per
+/// shape and `Bind` makes a fresh VFunction around it every time a field is loaded, so two loads
+/// are two cells whatever they run. Comparing cells made every method look overridden.
 AUTORTFM_DISABLE bool GodotVerse::InstanceHasFunction(const FInstance* Instance, FUtf8StringView DecoratedName)
 {
     FVerseFunction Resolved = LookupMethod(Instance, DecoratedName);
-    if (!Resolved.IsValid())
+    if (!Resolved.IsValid() || !Instance->Object.IsValid())
     {
         return false;
     }
+    Verse::VCell* const Own = Resolved.Function->Procedure.Get().ExtractCell();
+    if (!Own)
+    {
+        return true;
+    }
 
     const verse::FExecutionContext Context = verse::FExecutionContext::GetActiveContext();
-    FVerseFunction Base(Context, verse::vh_object::StaticClass()->GetDefaultObject(), DecoratedName);
-    return !Base.IsValid() || Base.Function.Get() != Resolved.Function.Get();
+    for (UClass* Super = Instance->Object->GetClass()->GetSuperClass(); Super != nullptr;
+         Super = Super->GetSuperClass())
+    {
+        const FVerseFunction Base(Context, Super->GetDefaultObject(), DecoratedName);
+        if (Base.IsValid())
+        {
+            return Base.Function->Procedure.Get().ExtractCell() != Own;
+        }
+    }
+    return true;
 }
 
 AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
