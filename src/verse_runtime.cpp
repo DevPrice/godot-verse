@@ -10,6 +10,7 @@
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/classes/scene_tree.hpp>
 #include <godot_cpp/classes/window.hpp>
+#include <godot_cpp/classes/class_db_singleton.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/char_string.hpp>
@@ -146,6 +147,8 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 	godot_api.GetSingleton = &VerseRuntime::api_get_singleton;
 	godot_api.GetClassOf = &VerseRuntime::api_get_class_of;
 	godot_api.MakeCallable = &VerseRuntime::api_make_callable;
+	godot_api.CallStatic = &VerseRuntime::api_call_static;
+	godot_api.CallUtility = &VerseRuntime::api_call_utility;
 	godot_api.EmitSignal = &VerseRuntime::api_emit_signal;
 	godot_api.ConnectSignal = &VerseRuntime::api_connect_signal;
 	godot_api.DisconnectSignal = &VerseRuntime::api_disconnect_signal;
@@ -682,6 +685,85 @@ int32_t VerseRuntime::api_disconnect_signal(void *p_ctx, vh_handle p_handle, con
 		obj->disconnect(name, target);
 	}
 	return VH_CALL_OK;
+}
+
+// R-SCN-3's dispatch half: a call with no object. ClassDB::class_call_static is Godot's own way of
+// reaching a static without an instance, and it is what GDScript's `Tween.interpolate_value(...)`
+// resolves to.
+int32_t VerseRuntime::api_call_static(void *p_ctx, const char *p_class_utf8, int32_t p_class_len, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count, vh_arena *p_arena, vh_value *r_value) {
+	if (r_value == nullptr) {
+		return VH_CALL_BAD_VALUE;
+	}
+	ClassDBSingleton *db = ClassDBSingleton::get_singleton();
+	if (db == nullptr) {
+		return VH_CALL_NO_SUCH_MEMBER;
+	}
+	const StringName class_name(String::utf8(p_class_utf8, p_class_len));
+	const StringName method(String::utf8(p_name_utf8, p_name_len));
+	if (!db->class_has_method(class_name, method, false)) {
+		return VH_CALL_NO_SUCH_MEMBER;
+	}
+
+	// Through callv rather than through class_call_static, which godot-cpp binds as a variadic
+	// *template*: the arguments are only known at runtime here, and the internal overload that
+	// takes an array is private.
+	Array args;
+	args.push_back(Variant(class_name));
+	args.push_back(Variant(method));
+	for (int32_t i = 0; i < p_arg_count; ++i) {
+		args.push_back(vh_to_variant(p_args[i]));
+	}
+	const Variant result = db->callv("class_call_static", args);
+	return variant_to_vh(result, p_arena, *r_value) ? VH_CALL_OK : VH_CALL_BAD_VALUE;
+}
+
+// The @GlobalScope utilities. Reached through the Engine singleton's own `Callable` machinery
+// rather than through a binding, because godot-cpp exposes each one as a free function and the
+// bridge needs them by name.
+int32_t VerseRuntime::api_call_utility(void *p_ctx, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count, vh_arena *p_arena, vh_value *r_value) {
+	if (r_value == nullptr) {
+		return VH_CALL_BAD_VALUE;
+	}
+	const StringName name(String::utf8(p_name_utf8, p_name_len));
+
+	std::vector<Variant> values((size_t)p_arg_count);
+	std::vector<const Variant *> args((size_t)p_arg_count);
+	for (int32_t i = 0; i < p_arg_count; ++i) {
+		values[(size_t)i] = vh_to_variant(p_args[i]);
+		args[(size_t)i] = &values[(size_t)i];
+	}
+
+	// A fixed table rather than a generic dispatch, and the reason is the GDExtension interface:
+	// `variant_get_ptr_utility_function` hands back a *ptrcall*, which wants typed argument
+	// pointers and a signature hash, so there is no by-name call that takes Variants. godot-cpp
+	// binds each utility as an ordinary C++ function instead, which is what these reach.
+	//
+	// The **random family** is what has to be here, and it is the one exception to R-AUD-2: Verse
+	// has `GetRandomFloat`, but a Verse-side RNG would silently ignore `seed()` and `randomize()`,
+	// so these steer the engine's own stream. C# does the same thing for the same reason.
+	// Everything else Verse already spells keeps Verse's spelling, and the rest is recorded as a
+	// skip rather than being silently absent.
+	Variant result;
+	if (name == StringName("randf")) {
+		result = UtilityFunctions::randf();
+	} else if (name == StringName("randi")) {
+		result = UtilityFunctions::randi();
+	} else if (name == StringName("randf_range") && p_arg_count == 2) {
+		result = UtilityFunctions::randf_range((double)*args[0], (double)*args[1]);
+	} else if (name == StringName("randi_range") && p_arg_count == 2) {
+		result = UtilityFunctions::randi_range((int64_t)*args[0], (int64_t)*args[1]);
+	} else if (name == StringName("randfn") && p_arg_count == 2) {
+		result = UtilityFunctions::randfn((double)*args[0], (double)*args[1]);
+	} else if (name == StringName("randomize")) {
+		UtilityFunctions::randomize();
+	} else if (name == StringName("seed") && p_arg_count == 1) {
+		UtilityFunctions::seed((int64_t)*args[0]);
+	} else if (name == StringName("rand_from_seed") && p_arg_count == 1) {
+		result = UtilityFunctions::rand_from_seed((int64_t)*args[0]);
+	} else {
+		return VH_CALL_NO_SUCH_MEMBER;
+	}
+	return variant_to_vh(result, p_arena, *r_value) ? VH_CALL_OK : VH_CALL_BAD_VALUE;
 }
 
 void VerseRuntime::tick(double p_budget_seconds) {

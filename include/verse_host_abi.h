@@ -309,6 +309,15 @@ typedef struct vh_godot_api
 	/* Invokes a Callable. The one thing that makes a callback-taking engine API reachable. */
 	int32_t (*InvokeCallable)(void* Ctx, int64_t Ref, const vh_value* Args, int32_t ArgCount, vh_arena* Arena, vh_value* OutValue);
 
+	/* Godot's 114 static methods and its 114 `@GlobalScope` utility functions, which share one
+	 * problem: neither has an object to ride a call on. Two by-name calls that carry no handle
+	 * (R-SCN-3).
+	 *
+	 * Answers vh_call_status. VH_CALL_NO_SUCH_MEMBER for a name this build of Godot does not
+	 * have, which is the mirror and the engine having drifted apart. */
+	int32_t (*CallStatic)(void* Ctx, const char* ClassUtf8, int32_t ClassLen, const char* NameUtf8, int32_t NameLen, const vh_value* Args, int32_t ArgCount, vh_arena* Arena, vh_value* OutValue);
+	int32_t (*CallUtility)(void* Ctx, const char* NameUtf8, int32_t NameLen, const vh_value* Args, int32_t ArgCount, vh_arena* Arena, vh_value* OutValue);
+
 	/* A Godot Callable that calls back into the host, as a reference id in the same table an Array
 	 * or a Dictionary rides in. CallbackId is what vh_callback_invoke will be handed; OwnerHandle
 	 * is the Godot object the Verse function is bound to, which the Callable reports as its

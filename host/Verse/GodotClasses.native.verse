@@ -13,79 +13,79 @@ using {/Verse.org/Native}
 # Each mirrors its own member tree, so `Transform.Basis.X.X` reads the way `transform.basis.x.x`
 # does in GDScript. Data only: the methods Godot gives these are R-SCN-3 and arrive in Phase 2.
 
-vector2<public> := struct:
+vector2<public> := struct<concrete><computes>:
     X<public>:float = 0.0
     Y<public>:float = 0.0
 
-vector2i<public> := struct:
+vector2i<public> := struct<concrete><computes>:
     X<public>:int = 0
     Y<public>:int = 0
 
-vector3<public> := struct:
+vector3<public> := struct<concrete><computes>:
     X<public>:float = 0.0
     Y<public>:float = 0.0
     Z<public>:float = 0.0
 
-vector3i<public> := struct:
+vector3i<public> := struct<concrete><computes>:
     X<public>:int = 0
     Y<public>:int = 0
     Z<public>:int = 0
 
-vector4<public> := struct:
+vector4<public> := struct<concrete><computes>:
     X<public>:float = 0.0
     Y<public>:float = 0.0
     Z<public>:float = 0.0
     W<public>:float = 0.0
 
-vector4i<public> := struct:
+vector4i<public> := struct<concrete><computes>:
     X<public>:int = 0
     Y<public>:int = 0
     Z<public>:int = 0
     W<public>:int = 0
 
-rect2<public> := struct:
+rect2<public> := struct<concrete><computes>:
     Position<public>:vector2 = vector2{}
     Size<public>:vector2 = vector2{}
 
-rect2i<public> := struct:
+rect2i<public> := struct<concrete><computes>:
     Position<public>:vector2i = vector2i{}
     Size<public>:vector2i = vector2i{}
 
-plane<public> := struct:
+plane<public> := struct<concrete><computes>:
     Normal<public>:vector3 = vector3{}
     D<public>:float = 0.0
 
-quaternion<public> := struct:
+quaternion<public> := struct<concrete><computes>:
     X<public>:float = 0.0
     Y<public>:float = 0.0
     Z<public>:float = 0.0
     W<public>:float = 0.0
 
-aabb<public> := struct:
+aabb<public> := struct<concrete><computes>:
     Position<public>:vector3 = vector3{}
     Size<public>:vector3 = vector3{}
 
-basis<public> := struct:
+basis<public> := struct<concrete><computes>:
     X<public>:vector3 = vector3{}
     Y<public>:vector3 = vector3{}
     Z<public>:vector3 = vector3{}
 
-transform2d<public> := struct:
+transform2d<public> := struct<concrete><computes>:
     X<public>:vector2 = vector2{}
     Y<public>:vector2 = vector2{}
     Origin<public>:vector2 = vector2{}
 
-transform3d<public> := struct:
+transform3d<public> := struct<concrete><computes>:
     Basis<public>:basis = basis{}
     Origin<public>:vector3 = vector3{}
 
-projection<public> := struct:
+projection<public> := struct<concrete><computes>:
     X<public>:vector4 = vector4{}
     Y<public>:vector4 = vector4{}
     Z<public>:vector4 = vector4{}
     W<public>:vector4 = vector4{}
 
-color<public> := struct:
+color<public> := struct<concrete><computes>:
     R<public>:float = 0.0
     G<public>:float = 0.0
     B<public>:float = 0.0
@@ -1137,32 +1137,32 @@ ToInt<public>(Value:audio_stream_interactive_auto_advance_mode)<transacts>:int =
 
 # Godot's AudioStreamInteractive.FadeMode.
 audio_stream_interactive_fade_mode<public> := enum:
-    Disabled
-    In
-    Out
-    Cross
-    Automatic
+    FadeDisabled
+    FadeIn
+    FadeOut
+    FadeCross
+    FadeAutomatic
 
 VhToAudioStreamInteractiveFadeMode(Value:variant)<transacts>:audio_stream_interactive_fade_mode =
     case (VhToInt(Value)):
-        0 => audio_stream_interactive_fade_mode.Disabled
-        1 => audio_stream_interactive_fade_mode.In
-        2 => audio_stream_interactive_fade_mode.Out
-        3 => audio_stream_interactive_fade_mode.Cross
-        4 => audio_stream_interactive_fade_mode.Automatic
+        0 => audio_stream_interactive_fade_mode.FadeDisabled
+        1 => audio_stream_interactive_fade_mode.FadeIn
+        2 => audio_stream_interactive_fade_mode.FadeOut
+        3 => audio_stream_interactive_fade_mode.FadeCross
+        4 => audio_stream_interactive_fade_mode.FadeAutomatic
         _ =>
             VhTypeMismatch("audio_stream_interactive_fade_mode", Value)
-            audio_stream_interactive_fade_mode.Disabled
+            audio_stream_interactive_fade_mode.FadeDisabled
 
 VhFromAudioStreamInteractiveFadeMode(Value:audio_stream_interactive_fade_mode)<transacts>:variant = VhFromInt(ToInt(Value))
 
 ToInt<public>(Value:audio_stream_interactive_fade_mode)<transacts>:int =
     case (Value):
-        audio_stream_interactive_fade_mode.Disabled => 0
-        audio_stream_interactive_fade_mode.In => 1
-        audio_stream_interactive_fade_mode.Out => 2
-        audio_stream_interactive_fade_mode.Cross => 3
-        audio_stream_interactive_fade_mode.Automatic => 4
+        audio_stream_interactive_fade_mode.FadeDisabled => 0
+        audio_stream_interactive_fade_mode.FadeIn => 1
+        audio_stream_interactive_fade_mode.FadeOut => 2
+        audio_stream_interactive_fade_mode.FadeCross => 3
+        audio_stream_interactive_fade_mode.FadeAutomatic => 4
 
 # Godot's AudioStreamInteractive.TransitionFromTime.
 audio_stream_interactive_transition_from_time<public> := enum:
@@ -2890,68 +2890,68 @@ ToInt<public>(Value:control_anchor)<transacts>:int =
 
 # Godot's Control.CursorShape.
 control_cursor_shape<public> := enum:
-    Arrow
-    Ibeam
-    PointingHand
-    Cross
-    Wait
-    Busy
-    Drag
-    CanDrop
-    Forbidden
-    Vsize
-    Hsize
-    Bdiagsize
-    Fdiagsize
-    Move
-    Vsplit
-    Hsplit
-    Help
+    CursorArrow
+    CursorIbeam
+    CursorPointingHand
+    CursorCross
+    CursorWait
+    CursorBusy
+    CursorDrag
+    CursorCanDrop
+    CursorForbidden
+    CursorVsize
+    CursorHsize
+    CursorBdiagsize
+    CursorFdiagsize
+    CursorMove
+    CursorVsplit
+    CursorHsplit
+    CursorHelp
 
 VhToControlCursorShape(Value:variant)<transacts>:control_cursor_shape =
     case (VhToInt(Value)):
-        0 => control_cursor_shape.Arrow
-        1 => control_cursor_shape.Ibeam
-        2 => control_cursor_shape.PointingHand
-        3 => control_cursor_shape.Cross
-        4 => control_cursor_shape.Wait
-        5 => control_cursor_shape.Busy
-        6 => control_cursor_shape.Drag
-        7 => control_cursor_shape.CanDrop
-        8 => control_cursor_shape.Forbidden
-        9 => control_cursor_shape.Vsize
-        10 => control_cursor_shape.Hsize
-        11 => control_cursor_shape.Bdiagsize
-        12 => control_cursor_shape.Fdiagsize
-        13 => control_cursor_shape.Move
-        14 => control_cursor_shape.Vsplit
-        15 => control_cursor_shape.Hsplit
-        16 => control_cursor_shape.Help
+        0 => control_cursor_shape.CursorArrow
+        1 => control_cursor_shape.CursorIbeam
+        2 => control_cursor_shape.CursorPointingHand
+        3 => control_cursor_shape.CursorCross
+        4 => control_cursor_shape.CursorWait
+        5 => control_cursor_shape.CursorBusy
+        6 => control_cursor_shape.CursorDrag
+        7 => control_cursor_shape.CursorCanDrop
+        8 => control_cursor_shape.CursorForbidden
+        9 => control_cursor_shape.CursorVsize
+        10 => control_cursor_shape.CursorHsize
+        11 => control_cursor_shape.CursorBdiagsize
+        12 => control_cursor_shape.CursorFdiagsize
+        13 => control_cursor_shape.CursorMove
+        14 => control_cursor_shape.CursorVsplit
+        15 => control_cursor_shape.CursorHsplit
+        16 => control_cursor_shape.CursorHelp
         _ =>
             VhTypeMismatch("control_cursor_shape", Value)
-            control_cursor_shape.Arrow
+            control_cursor_shape.CursorArrow
 
 VhFromControlCursorShape(Value:control_cursor_shape)<transacts>:variant = VhFromInt(ToInt(Value))
 
 ToInt<public>(Value:control_cursor_shape)<transacts>:int =
     case (Value):
-        control_cursor_shape.Arrow => 0
-        control_cursor_shape.Ibeam => 1
-        control_cursor_shape.PointingHand => 2
-        control_cursor_shape.Cross => 3
-        control_cursor_shape.Wait => 4
-        control_cursor_shape.Busy => 5
-        control_cursor_shape.Drag => 6
-        control_cursor_shape.CanDrop => 7
-        control_cursor_shape.Forbidden => 8
-        control_cursor_shape.Vsize => 9
-        control_cursor_shape.Hsize => 10
-        control_cursor_shape.Bdiagsize => 11
-        control_cursor_shape.Fdiagsize => 12
-        control_cursor_shape.Move => 13
-        control_cursor_shape.Vsplit => 14
-        control_cursor_shape.Hsplit => 15
-        control_cursor_shape.Help => 16
+        control_cursor_shape.CursorArrow => 0
+        control_cursor_shape.CursorIbeam => 1
+        control_cursor_shape.CursorPointingHand => 2
+        control_cursor_shape.CursorCross => 3
+        control_cursor_shape.CursorWait => 4
+        control_cursor_shape.CursorBusy => 5
+        control_cursor_shape.CursorDrag => 6
+        control_cursor_shape.CursorCanDrop => 7
+        control_cursor_shape.CursorForbidden => 8
+        control_cursor_shape.CursorVsize => 9
+        control_cursor_shape.CursorHsize => 10
+        control_cursor_shape.CursorBdiagsize => 11
+        control_cursor_shape.CursorFdiagsize => 12
+        control_cursor_shape.CursorMove => 13
+        control_cursor_shape.CursorVsplit => 14
+        control_cursor_shape.CursorHsplit => 15
+        control_cursor_shape.CursorHelp => 16
 
 # Godot's Control.FocusBehaviorRecursive.
 control_focus_behavior_recursive<public> := enum:
@@ -3404,53 +3404,53 @@ ToInt<public>(Value:cpu_particles2d_emission_shape)<transacts>:int =
 
 # Godot's CPUParticles2D.Parameter.
 cpu_particles2d_parameter<public> := enum:
-    InitialLinearVelocity
-    AngularVelocity
-    OrbitVelocity
-    LinearAccel
-    RadialAccel
-    TangentialAccel
-    Damping
-    Angle
-    Scale
-    HueVariation
-    AnimSpeed
-    AnimOffset
+    ParamInitialLinearVelocity
+    ParamAngularVelocity
+    ParamOrbitVelocity
+    ParamLinearAccel
+    ParamRadialAccel
+    ParamTangentialAccel
+    ParamDamping
+    ParamAngle
+    ParamScale
+    ParamHueVariation
+    ParamAnimSpeed
+    ParamAnimOffset
 
 VhToCpuParticles2dParameter(Value:variant)<transacts>:cpu_particles2d_parameter =
     case (VhToInt(Value)):
-        0 => cpu_particles2d_parameter.InitialLinearVelocity
-        1 => cpu_particles2d_parameter.AngularVelocity
-        2 => cpu_particles2d_parameter.OrbitVelocity
-        3 => cpu_particles2d_parameter.LinearAccel
-        4 => cpu_particles2d_parameter.RadialAccel
-        5 => cpu_particles2d_parameter.TangentialAccel
-        6 => cpu_particles2d_parameter.Damping
-        7 => cpu_particles2d_parameter.Angle
-        8 => cpu_particles2d_parameter.Scale
-        9 => cpu_particles2d_parameter.HueVariation
-        10 => cpu_particles2d_parameter.AnimSpeed
-        11 => cpu_particles2d_parameter.AnimOffset
+        0 => cpu_particles2d_parameter.ParamInitialLinearVelocity
+        1 => cpu_particles2d_parameter.ParamAngularVelocity
+        2 => cpu_particles2d_parameter.ParamOrbitVelocity
+        3 => cpu_particles2d_parameter.ParamLinearAccel
+        4 => cpu_particles2d_parameter.ParamRadialAccel
+        5 => cpu_particles2d_parameter.ParamTangentialAccel
+        6 => cpu_particles2d_parameter.ParamDamping
+        7 => cpu_particles2d_parameter.ParamAngle
+        8 => cpu_particles2d_parameter.ParamScale
+        9 => cpu_particles2d_parameter.ParamHueVariation
+        10 => cpu_particles2d_parameter.ParamAnimSpeed
+        11 => cpu_particles2d_parameter.ParamAnimOffset
         _ =>
             VhTypeMismatch("cpu_particles2d_parameter", Value)
-            cpu_particles2d_parameter.InitialLinearVelocity
+            cpu_particles2d_parameter.ParamInitialLinearVelocity
 
 VhFromCpuParticles2dParameter(Value:cpu_particles2d_parameter)<transacts>:variant = VhFromInt(ToInt(Value))
 
 ToInt<public>(Value:cpu_particles2d_parameter)<transacts>:int =
     case (Value):
-        cpu_particles2d_parameter.InitialLinearVelocity => 0
-        cpu_particles2d_parameter.AngularVelocity => 1
-        cpu_particles2d_parameter.OrbitVelocity => 2
-        cpu_particles2d_parameter.LinearAccel => 3
-        cpu_particles2d_parameter.RadialAccel => 4
-        cpu_particles2d_parameter.TangentialAccel => 5
-        cpu_particles2d_parameter.Damping => 6
-        cpu_particles2d_parameter.Angle => 7
-        cpu_particles2d_parameter.Scale => 8
-        cpu_particles2d_parameter.HueVariation => 9
-        cpu_particles2d_parameter.AnimSpeed => 10
-        cpu_particles2d_parameter.AnimOffset => 11
+        cpu_particles2d_parameter.ParamInitialLinearVelocity => 0
+        cpu_particles2d_parameter.ParamAngularVelocity => 1
+        cpu_particles2d_parameter.ParamOrbitVelocity => 2
+        cpu_particles2d_parameter.ParamLinearAccel => 3
+        cpu_particles2d_parameter.ParamRadialAccel => 4
+        cpu_particles2d_parameter.ParamTangentialAccel => 5
+        cpu_particles2d_parameter.ParamDamping => 6
+        cpu_particles2d_parameter.ParamAngle => 7
+        cpu_particles2d_parameter.ParamScale => 8
+        cpu_particles2d_parameter.ParamHueVariation => 9
+        cpu_particles2d_parameter.ParamAnimSpeed => 10
+        cpu_particles2d_parameter.ParamAnimOffset => 11
 
 # Godot's CPUParticles2D.ParticleFlags.
 cpu_particles2d_particle_flags<public> := enum:
@@ -3535,53 +3535,53 @@ ToInt<public>(Value:cpu_particles3d_emission_shape)<transacts>:int =
 
 # Godot's CPUParticles3D.Parameter.
 cpu_particles3d_parameter<public> := enum:
-    InitialLinearVelocity
-    AngularVelocity
-    OrbitVelocity
-    LinearAccel
-    RadialAccel
-    TangentialAccel
-    Damping
-    Angle
-    Scale
-    HueVariation
-    AnimSpeed
-    AnimOffset
+    ParamInitialLinearVelocity
+    ParamAngularVelocity
+    ParamOrbitVelocity
+    ParamLinearAccel
+    ParamRadialAccel
+    ParamTangentialAccel
+    ParamDamping
+    ParamAngle
+    ParamScale
+    ParamHueVariation
+    ParamAnimSpeed
+    ParamAnimOffset
 
 VhToCpuParticles3dParameter(Value:variant)<transacts>:cpu_particles3d_parameter =
     case (VhToInt(Value)):
-        0 => cpu_particles3d_parameter.InitialLinearVelocity
-        1 => cpu_particles3d_parameter.AngularVelocity
-        2 => cpu_particles3d_parameter.OrbitVelocity
-        3 => cpu_particles3d_parameter.LinearAccel
-        4 => cpu_particles3d_parameter.RadialAccel
-        5 => cpu_particles3d_parameter.TangentialAccel
-        6 => cpu_particles3d_parameter.Damping
-        7 => cpu_particles3d_parameter.Angle
-        8 => cpu_particles3d_parameter.Scale
-        9 => cpu_particles3d_parameter.HueVariation
-        10 => cpu_particles3d_parameter.AnimSpeed
-        11 => cpu_particles3d_parameter.AnimOffset
+        0 => cpu_particles3d_parameter.ParamInitialLinearVelocity
+        1 => cpu_particles3d_parameter.ParamAngularVelocity
+        2 => cpu_particles3d_parameter.ParamOrbitVelocity
+        3 => cpu_particles3d_parameter.ParamLinearAccel
+        4 => cpu_particles3d_parameter.ParamRadialAccel
+        5 => cpu_particles3d_parameter.ParamTangentialAccel
+        6 => cpu_particles3d_parameter.ParamDamping
+        7 => cpu_particles3d_parameter.ParamAngle
+        8 => cpu_particles3d_parameter.ParamScale
+        9 => cpu_particles3d_parameter.ParamHueVariation
+        10 => cpu_particles3d_parameter.ParamAnimSpeed
+        11 => cpu_particles3d_parameter.ParamAnimOffset
         _ =>
             VhTypeMismatch("cpu_particles3d_parameter", Value)
-            cpu_particles3d_parameter.InitialLinearVelocity
+            cpu_particles3d_parameter.ParamInitialLinearVelocity
 
 VhFromCpuParticles3dParameter(Value:cpu_particles3d_parameter)<transacts>:variant = VhFromInt(ToInt(Value))
 
 ToInt<public>(Value:cpu_particles3d_parameter)<transacts>:int =
     case (Value):
-        cpu_particles3d_parameter.InitialLinearVelocity => 0
-        cpu_particles3d_parameter.AngularVelocity => 1
-        cpu_particles3d_parameter.OrbitVelocity => 2
-        cpu_particles3d_parameter.LinearAccel => 3
-        cpu_particles3d_parameter.RadialAccel => 4
-        cpu_particles3d_parameter.TangentialAccel => 5
-        cpu_particles3d_parameter.Damping => 6
-        cpu_particles3d_parameter.Angle => 7
-        cpu_particles3d_parameter.Scale => 8
-        cpu_particles3d_parameter.HueVariation => 9
-        cpu_particles3d_parameter.AnimSpeed => 10
-        cpu_particles3d_parameter.AnimOffset => 11
+        cpu_particles3d_parameter.ParamInitialLinearVelocity => 0
+        cpu_particles3d_parameter.ParamAngularVelocity => 1
+        cpu_particles3d_parameter.ParamOrbitVelocity => 2
+        cpu_particles3d_parameter.ParamLinearAccel => 3
+        cpu_particles3d_parameter.ParamRadialAccel => 4
+        cpu_particles3d_parameter.ParamTangentialAccel => 5
+        cpu_particles3d_parameter.ParamDamping => 6
+        cpu_particles3d_parameter.ParamAngle => 7
+        cpu_particles3d_parameter.ParamScale => 8
+        cpu_particles3d_parameter.ParamHueVariation => 9
+        cpu_particles3d_parameter.ParamAnimSpeed => 10
+        cpu_particles3d_parameter.ParamAnimOffset => 11
 
 # Godot's CPUParticles3D.ParticleFlags.
 cpu_particles3d_particle_flags<public> := enum:
@@ -4192,68 +4192,68 @@ ToInt<public>(Value:display_server_accessibility_scroll_unit)<transacts>:int =
 
 # Godot's DisplayServer.CursorShape.
 display_server_cursor_shape<public> := enum:
-    Arrow
-    Ibeam
-    PointingHand
-    Cross
-    Wait
-    Busy
-    Drag
-    CanDrop
-    Forbidden
-    Vsize
-    Hsize
-    Bdiagsize
-    Fdiagsize
-    Move
-    Vsplit
-    Hsplit
-    Help
+    CursorArrow
+    CursorIbeam
+    CursorPointingHand
+    CursorCross
+    CursorWait
+    CursorBusy
+    CursorDrag
+    CursorCanDrop
+    CursorForbidden
+    CursorVsize
+    CursorHsize
+    CursorBdiagsize
+    CursorFdiagsize
+    CursorMove
+    CursorVsplit
+    CursorHsplit
+    CursorHelp
 
 VhToDisplayServerCursorShape(Value:variant)<transacts>:display_server_cursor_shape =
     case (VhToInt(Value)):
-        0 => display_server_cursor_shape.Arrow
-        1 => display_server_cursor_shape.Ibeam
-        2 => display_server_cursor_shape.PointingHand
-        3 => display_server_cursor_shape.Cross
-        4 => display_server_cursor_shape.Wait
-        5 => display_server_cursor_shape.Busy
-        6 => display_server_cursor_shape.Drag
-        7 => display_server_cursor_shape.CanDrop
-        8 => display_server_cursor_shape.Forbidden
-        9 => display_server_cursor_shape.Vsize
-        10 => display_server_cursor_shape.Hsize
-        11 => display_server_cursor_shape.Bdiagsize
-        12 => display_server_cursor_shape.Fdiagsize
-        13 => display_server_cursor_shape.Move
-        14 => display_server_cursor_shape.Vsplit
-        15 => display_server_cursor_shape.Hsplit
-        16 => display_server_cursor_shape.Help
+        0 => display_server_cursor_shape.CursorArrow
+        1 => display_server_cursor_shape.CursorIbeam
+        2 => display_server_cursor_shape.CursorPointingHand
+        3 => display_server_cursor_shape.CursorCross
+        4 => display_server_cursor_shape.CursorWait
+        5 => display_server_cursor_shape.CursorBusy
+        6 => display_server_cursor_shape.CursorDrag
+        7 => display_server_cursor_shape.CursorCanDrop
+        8 => display_server_cursor_shape.CursorForbidden
+        9 => display_server_cursor_shape.CursorVsize
+        10 => display_server_cursor_shape.CursorHsize
+        11 => display_server_cursor_shape.CursorBdiagsize
+        12 => display_server_cursor_shape.CursorFdiagsize
+        13 => display_server_cursor_shape.CursorMove
+        14 => display_server_cursor_shape.CursorVsplit
+        15 => display_server_cursor_shape.CursorHsplit
+        16 => display_server_cursor_shape.CursorHelp
         _ =>
             VhTypeMismatch("display_server_cursor_shape", Value)
-            display_server_cursor_shape.Arrow
+            display_server_cursor_shape.CursorArrow
 
 VhFromDisplayServerCursorShape(Value:display_server_cursor_shape)<transacts>:variant = VhFromInt(ToInt(Value))
 
 ToInt<public>(Value:display_server_cursor_shape)<transacts>:int =
     case (Value):
-        display_server_cursor_shape.Arrow => 0
-        display_server_cursor_shape.Ibeam => 1
-        display_server_cursor_shape.PointingHand => 2
-        display_server_cursor_shape.Cross => 3
-        display_server_cursor_shape.Wait => 4
-        display_server_cursor_shape.Busy => 5
-        display_server_cursor_shape.Drag => 6
-        display_server_cursor_shape.CanDrop => 7
-        display_server_cursor_shape.Forbidden => 8
-        display_server_cursor_shape.Vsize => 9
-        display_server_cursor_shape.Hsize => 10
-        display_server_cursor_shape.Bdiagsize => 11
-        display_server_cursor_shape.Fdiagsize => 12
-        display_server_cursor_shape.Move => 13
-        display_server_cursor_shape.Vsplit => 14
-        display_server_cursor_shape.Hsplit => 15
-        display_server_cursor_shape.Help => 16
+        display_server_cursor_shape.CursorArrow => 0
+        display_server_cursor_shape.CursorIbeam => 1
+        display_server_cursor_shape.CursorPointingHand => 2
+        display_server_cursor_shape.CursorCross => 3
+        display_server_cursor_shape.CursorWait => 4
+        display_server_cursor_shape.CursorBusy => 5
+        display_server_cursor_shape.CursorDrag => 6
+        display_server_cursor_shape.CursorCanDrop => 7
+        display_server_cursor_shape.CursorForbidden => 8
+        display_server_cursor_shape.CursorVsize => 9
+        display_server_cursor_shape.CursorHsize => 10
+        display_server_cursor_shape.CursorBdiagsize => 11
+        display_server_cursor_shape.CursorFdiagsize => 12
+        display_server_cursor_shape.CursorMove => 13
+        display_server_cursor_shape.CursorVsplit => 14
+        display_server_cursor_shape.CursorHsplit => 15
+        display_server_cursor_shape.CursorHelp => 16
 
 # Godot's DisplayServer.Feature.
 display_server_feature<public> := enum:
@@ -8037,68 +8037,68 @@ ToInt<public>(Value:inline_alignment)<transacts>:int =
 
 # Godot's Input.CursorShape.
 input_cursor_shape<public> := enum:
-    Arrow
-    Ibeam
-    PointingHand
-    Cross
-    Wait
-    Busy
-    Drag
-    CanDrop
-    Forbidden
-    Vsize
-    Hsize
-    Bdiagsize
-    Fdiagsize
-    Move
-    Vsplit
-    Hsplit
-    Help
+    CursorArrow
+    CursorIbeam
+    CursorPointingHand
+    CursorCross
+    CursorWait
+    CursorBusy
+    CursorDrag
+    CursorCanDrop
+    CursorForbidden
+    CursorVsize
+    CursorHsize
+    CursorBdiagsize
+    CursorFdiagsize
+    CursorMove
+    CursorVsplit
+    CursorHsplit
+    CursorHelp
 
 VhToInputCursorShape(Value:variant)<transacts>:input_cursor_shape =
     case (VhToInt(Value)):
-        0 => input_cursor_shape.Arrow
-        1 => input_cursor_shape.Ibeam
-        2 => input_cursor_shape.PointingHand
-        3 => input_cursor_shape.Cross
-        4 => input_cursor_shape.Wait
-        5 => input_cursor_shape.Busy
-        6 => input_cursor_shape.Drag
-        7 => input_cursor_shape.CanDrop
-        8 => input_cursor_shape.Forbidden
-        9 => input_cursor_shape.Vsize
-        10 => input_cursor_shape.Hsize
-        11 => input_cursor_shape.Bdiagsize
-        12 => input_cursor_shape.Fdiagsize
-        13 => input_cursor_shape.Move
-        14 => input_cursor_shape.Vsplit
-        15 => input_cursor_shape.Hsplit
-        16 => input_cursor_shape.Help
+        0 => input_cursor_shape.CursorArrow
+        1 => input_cursor_shape.CursorIbeam
+        2 => input_cursor_shape.CursorPointingHand
+        3 => input_cursor_shape.CursorCross
+        4 => input_cursor_shape.CursorWait
+        5 => input_cursor_shape.CursorBusy
+        6 => input_cursor_shape.CursorDrag
+        7 => input_cursor_shape.CursorCanDrop
+        8 => input_cursor_shape.CursorForbidden
+        9 => input_cursor_shape.CursorVsize
+        10 => input_cursor_shape.CursorHsize
+        11 => input_cursor_shape.CursorBdiagsize
+        12 => input_cursor_shape.CursorFdiagsize
+        13 => input_cursor_shape.CursorMove
+        14 => input_cursor_shape.CursorVsplit
+        15 => input_cursor_shape.CursorHsplit
+        16 => input_cursor_shape.CursorHelp
         _ =>
             VhTypeMismatch("input_cursor_shape", Value)
-            input_cursor_shape.Arrow
+            input_cursor_shape.CursorArrow
 
 VhFromInputCursorShape(Value:input_cursor_shape)<transacts>:variant = VhFromInt(ToInt(Value))
 
 ToInt<public>(Value:input_cursor_shape)<transacts>:int =
     case (Value):
-        input_cursor_shape.Arrow => 0
-        input_cursor_shape.Ibeam => 1
-        input_cursor_shape.PointingHand => 2
-        input_cursor_shape.Cross => 3
-        input_cursor_shape.Wait => 4
-        input_cursor_shape.Busy => 5
-        input_cursor_shape.Drag => 6
-        input_cursor_shape.CanDrop => 7
-        input_cursor_shape.Forbidden => 8
-        input_cursor_shape.Vsize => 9
-        input_cursor_shape.Hsize => 10
-        input_cursor_shape.Bdiagsize => 11
-        input_cursor_shape.Fdiagsize => 12
-        input_cursor_shape.Move => 13
-        input_cursor_shape.Vsplit => 14
-        input_cursor_shape.Hsplit => 15
-        input_cursor_shape.Help => 16
+        input_cursor_shape.CursorArrow => 0
+        input_cursor_shape.CursorIbeam => 1
+        input_cursor_shape.CursorPointingHand => 2
+        input_cursor_shape.CursorCross => 3
+        input_cursor_shape.CursorWait => 4
+        input_cursor_shape.CursorBusy => 5
+        input_cursor_shape.CursorDrag => 6
+        input_cursor_shape.CursorCanDrop => 7
+        input_cursor_shape.CursorForbidden => 8
+        input_cursor_shape.CursorVsize => 9
+        input_cursor_shape.CursorHsize => 10
+        input_cursor_shape.CursorBdiagsize => 11
+        input_cursor_shape.CursorFdiagsize => 12
+        input_cursor_shape.CursorMove => 13
+        input_cursor_shape.CursorVsplit => 14
+        input_cursor_shape.CursorHsplit => 15
+        input_cursor_shape.CursorHelp => 16
 
 # Godot's Input.MouseMode.
 input_mouse_mode<public> := enum:
@@ -9891,23 +9891,23 @@ ToInt<public>(Value:mesh_array_type)<transacts>:int =
 
 # Godot's Mesh.BlendShapeMode.
 mesh_blend_shape_mode<public> := enum:
-    Normalized
-    Relative
+    BlendShapeModeNormalized
+    BlendShapeModeRelative
 
 VhToMeshBlendShapeMode(Value:variant)<transacts>:mesh_blend_shape_mode =
     case (VhToInt(Value)):
-        0 => mesh_blend_shape_mode.Normalized
-        1 => mesh_blend_shape_mode.Relative
+        0 => mesh_blend_shape_mode.BlendShapeModeNormalized
+        1 => mesh_blend_shape_mode.BlendShapeModeRelative
         _ =>
             VhTypeMismatch("mesh_blend_shape_mode", Value)
-            mesh_blend_shape_mode.Normalized
+            mesh_blend_shape_mode.BlendShapeModeNormalized
 
 VhFromMeshBlendShapeMode(Value:mesh_blend_shape_mode)<transacts>:variant = VhFromInt(ToInt(Value))
 
 ToInt<public>(Value:mesh_blend_shape_mode)<transacts>:int =
     case (Value):
-        mesh_blend_shape_mode.Normalized => 0
-        mesh_blend_shape_mode.Relative => 1
+        mesh_blend_shape_mode.BlendShapeModeNormalized => 0
+        mesh_blend_shape_mode.BlendShapeModeRelative => 1
 
 # Godot's MeshConvexDecompositionSettings.Mode.
 mesh_convex_decomposition_settings_mode<public> := enum:
@@ -12164,71 +12164,71 @@ ToInt<public>(Value:particle_process_material_emission_shape)<transacts>:int =
 
 # Godot's ParticleProcessMaterial.Parameter.
 particle_process_material_parameter<public> := enum:
-    InitialLinearVelocity
-    AngularVelocity
-    OrbitVelocity
-    LinearAccel
-    RadialAccel
-    TangentialAccel
-    Damping
-    Angle
-    Scale
-    HueVariation
-    AnimSpeed
-    AnimOffset
-    RadialVelocity
-    DirectionalVelocity
-    ScaleOverVelocity
-    TurbVelInfluence
-    TurbInitDisplacement
-    TurbInfluenceOverLife
+    ParamInitialLinearVelocity
+    ParamAngularVelocity
+    ParamOrbitVelocity
+    ParamLinearAccel
+    ParamRadialAccel
+    ParamTangentialAccel
+    ParamDamping
+    ParamAngle
+    ParamScale
+    ParamHueVariation
+    ParamAnimSpeed
+    ParamAnimOffset
+    ParamRadialVelocity
+    ParamDirectionalVelocity
+    ParamScaleOverVelocity
+    ParamTurbVelInfluence
+    ParamTurbInitDisplacement
+    ParamTurbInfluenceOverLife
 
 VhToParticleProcessMaterialParameter(Value:variant)<transacts>:particle_process_material_parameter =
     case (VhToInt(Value)):
-        0 => particle_process_material_parameter.InitialLinearVelocity
-        1 => particle_process_material_parameter.AngularVelocity
-        2 => particle_process_material_parameter.OrbitVelocity
-        3 => particle_process_material_parameter.LinearAccel
-        4 => particle_process_material_parameter.RadialAccel
-        5 => particle_process_material_parameter.TangentialAccel
-        6 => particle_process_material_parameter.Damping
-        7 => particle_process_material_parameter.Angle
-        8 => particle_process_material_parameter.Scale
-        9 => particle_process_material_parameter.HueVariation
-        10 => particle_process_material_parameter.AnimSpeed
-        11 => particle_process_material_parameter.AnimOffset
-        15 => particle_process_material_parameter.RadialVelocity
-        16 => particle_process_material_parameter.DirectionalVelocity
-        17 => particle_process_material_parameter.ScaleOverVelocity
-        13 => particle_process_material_parameter.TurbVelInfluence
-        14 => particle_process_material_parameter.TurbInitDisplacement
-        12 => particle_process_material_parameter.TurbInfluenceOverLife
+        0 => particle_process_material_parameter.ParamInitialLinearVelocity
+        1 => particle_process_material_parameter.ParamAngularVelocity
+        2 => particle_process_material_parameter.ParamOrbitVelocity
+        3 => particle_process_material_parameter.ParamLinearAccel
+        4 => particle_process_material_parameter.ParamRadialAccel
+        5 => particle_process_material_parameter.ParamTangentialAccel
+        6 => particle_process_material_parameter.ParamDamping
+        7 => particle_process_material_parameter.ParamAngle
+        8 => particle_process_material_parameter.ParamScale
+        9 => particle_process_material_parameter.ParamHueVariation
+        10 => particle_process_material_parameter.ParamAnimSpeed
+        11 => particle_process_material_parameter.ParamAnimOffset
+        15 => particle_process_material_parameter.ParamRadialVelocity
+        16 => particle_process_material_parameter.ParamDirectionalVelocity
+        17 => particle_process_material_parameter.ParamScaleOverVelocity
+        13 => particle_process_material_parameter.ParamTurbVelInfluence
+        14 => particle_process_material_parameter.ParamTurbInitDisplacement
+        12 => particle_process_material_parameter.ParamTurbInfluenceOverLife
         _ =>
             VhTypeMismatch("particle_process_material_parameter", Value)
-            particle_process_material_parameter.InitialLinearVelocity
+            particle_process_material_parameter.ParamInitialLinearVelocity
 
 VhFromParticleProcessMaterialParameter(Value:particle_process_material_parameter)<transacts>:variant = VhFromInt(ToInt(Value))
 
 ToInt<public>(Value:particle_process_material_parameter)<transacts>:int =
     case (Value):
-        particle_process_material_parameter.InitialLinearVelocity => 0
-        particle_process_material_parameter.AngularVelocity => 1
-        particle_process_material_parameter.OrbitVelocity => 2
-        particle_process_material_parameter.LinearAccel => 3
-        particle_process_material_parameter.RadialAccel => 4
-        particle_process_material_parameter.TangentialAccel => 5
-        particle_process_material_parameter.Damping => 6
-        particle_process_material_parameter.Angle => 7
-        particle_process_material_parameter.Scale => 8
-        particle_process_material_parameter.HueVariation => 9
-        particle_process_material_parameter.AnimSpeed => 10
-        particle_process_material_parameter.AnimOffset => 11
-        particle_process_material_parameter.RadialVelocity => 15
-        particle_process_material_parameter.DirectionalVelocity => 16
-        particle_process_material_parameter.ScaleOverVelocity => 17
-        particle_process_material_parameter.TurbVelInfluence => 13
-        particle_process_material_parameter.TurbInitDisplacement => 14
-        particle_process_material_parameter.TurbInfluenceOverLife => 12
+        particle_process_material_parameter.ParamInitialLinearVelocity => 0
+        particle_process_material_parameter.ParamAngularVelocity => 1
+        particle_process_material_parameter.ParamOrbitVelocity => 2
+        particle_process_material_parameter.ParamLinearAccel => 3
+        particle_process_material_parameter.ParamRadialAccel => 4
+        particle_process_material_parameter.ParamTangentialAccel => 5
+        particle_process_material_parameter.ParamDamping => 6
+        particle_process_material_parameter.ParamAngle => 7
+        particle_process_material_parameter.ParamScale => 8
+        particle_process_material_parameter.ParamHueVariation => 9
+        particle_process_material_parameter.ParamAnimSpeed => 10
+        particle_process_material_parameter.ParamAnimOffset => 11
+        particle_process_material_parameter.ParamRadialVelocity => 15
+        particle_process_material_parameter.ParamDirectionalVelocity => 16
+        particle_process_material_parameter.ParamScaleOverVelocity => 17
+        particle_process_material_parameter.ParamTurbVelInfluence => 13
+        particle_process_material_parameter.ParamTurbInitDisplacement => 14
+        particle_process_material_parameter.ParamTurbInfluenceOverLife => 12
 
 # Godot's ParticleProcessMaterial.ParticleFlags.
 particle_process_material_particle_flags<public> := enum:
@@ -16395,23 +16395,23 @@ ToInt<public>(Value:rendering_server_bake_channels)<transacts>:int =
 
 # Godot's RenderingServer.BlendShapeMode.
 rendering_server_blend_shape_mode<public> := enum:
-    Normalized
-    Relative
+    BlendShapeModeNormalized
+    BlendShapeModeRelative
 
 VhToRenderingServerBlendShapeMode(Value:variant)<transacts>:rendering_server_blend_shape_mode =
     case (VhToInt(Value)):
-        0 => rendering_server_blend_shape_mode.Normalized
-        1 => rendering_server_blend_shape_mode.Relative
+        0 => rendering_server_blend_shape_mode.BlendShapeModeNormalized
+        1 => rendering_server_blend_shape_mode.BlendShapeModeRelative
         _ =>
             VhTypeMismatch("rendering_server_blend_shape_mode", Value)
-            rendering_server_blend_shape_mode.Normalized
+            rendering_server_blend_shape_mode.BlendShapeModeNormalized
 
 VhFromRenderingServerBlendShapeMode(Value:rendering_server_blend_shape_mode)<transacts>:variant = VhFromInt(ToInt(Value))
 
 ToInt<public>(Value:rendering_server_blend_shape_mode)<transacts>:int =
     case (Value):
-        rendering_server_blend_shape_mode.Normalized => 0
-        rendering_server_blend_shape_mode.Relative => 1
+        rendering_server_blend_shape_mode.BlendShapeModeNormalized => 0
+        rendering_server_blend_shape_mode.BlendShapeModeRelative => 1
 
 # Godot's RenderingServer.CanvasGroupMode.
 rendering_server_canvas_group_mode<public> := enum:
@@ -18871,23 +18871,23 @@ ToInt<public>(Value:retarget_modifier3d_transform_flag)<transacts>:int =
 
 # Godot's RibbonTrailMesh.Shape.
 ribbon_trail_mesh_shape<public> := enum:
-    Flat
-    Cross
+    ShapeFlat
+    ShapeCross
 
 VhToRibbonTrailMeshShape(Value:variant)<transacts>:ribbon_trail_mesh_shape =
     case (VhToInt(Value)):
-        0 => ribbon_trail_mesh_shape.Flat
-        1 => ribbon_trail_mesh_shape.Cross
+        0 => ribbon_trail_mesh_shape.ShapeFlat
+        1 => ribbon_trail_mesh_shape.ShapeCross
         _ =>
             VhTypeMismatch("ribbon_trail_mesh_shape", Value)
-            ribbon_trail_mesh_shape.Flat
+            ribbon_trail_mesh_shape.ShapeFlat
 
 VhFromRibbonTrailMeshShape(Value:ribbon_trail_mesh_shape)<transacts>:variant = VhFromInt(ToInt(Value))
 
 ToInt<public>(Value:ribbon_trail_mesh_shape)<transacts>:int =
     case (Value):
-        ribbon_trail_mesh_shape.Flat => 0
-        ribbon_trail_mesh_shape.Cross => 1
+        ribbon_trail_mesh_shape.ShapeFlat => 0
+        ribbon_trail_mesh_shape.ShapeCross => 1
 
 # Godot's RichTextLabel.ImageUpdateMask.
 rich_text_label_image_update_mask<public> := enum:
@@ -32747,7 +32747,7 @@ node3d<public> := class(node):
     GetTransform<public>()<transacts>:transform3d = VhToTransform3D(VhCallValue(Handle, "get_transform", array{}))
     GetVisibilityParent<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_visibility_parent", array{}))
     GetWorld3d<public>()<decides><transacts>:world3d = world3d[VhObjectFrom[VhCallValue(Handle, "get_world_3d", array{})]]
-    GlobalRotate<public>(Axis:vector3, Angle:float)<transacts>:void = VhCallVoid(Handle, "global_rotate", array{VhFromVector3(Axis), VhFromFloat(Angle)})
+    GlobalRotate<public>(Axis:vector3, Arg1:float)<transacts>:void = VhCallVoid(Handle, "global_rotate", array{VhFromVector3(Axis), VhFromFloat(Arg1)})
     GlobalScale<public>(Arg0:vector3)<transacts>:void = VhCallVoid(Handle, "global_scale", array{VhFromVector3(Arg0)})
     GlobalTranslate<public>(Offset:vector3)<transacts>:void = VhCallVoid(Handle, "global_translate", array{VhFromVector3(Offset)})
     Hide<public>()<transacts>:void = VhCallVoid(Handle, "hide", array{})
@@ -32758,11 +32758,11 @@ node3d<public> := class(node):
     LookAt<public>(Target:vector3, ?Up:vector3 = vector3{X := 0.0, Y := 1.0, Z := 0.0}, ?UseModelFront:logic = false)<transacts>:void = VhCallVoid(Handle, "look_at", array{VhFromVector3(Target), VhFromVector3(Up), VhFromLogic(UseModelFront)})
     LookAtFromPosition<public>(Arg0:vector3, Target:vector3, ?Up:vector3 = vector3{X := 0.0, Y := 1.0, Z := 0.0}, ?UseModelFront:logic = false)<transacts>:void = VhCallVoid(Handle, "look_at_from_position", array{VhFromVector3(Arg0), VhFromVector3(Target), VhFromVector3(Up), VhFromLogic(UseModelFront)})
     Orthonormalize<public>()<transacts>:void = VhCallVoid(Handle, "orthonormalize", array{})
-    Rotate<public>(Axis:vector3, Angle:float)<transacts>:void = VhCallVoid(Handle, "rotate", array{VhFromVector3(Axis), VhFromFloat(Angle)})
-    RotateObjectLocal<public>(Axis:vector3, Angle:float)<transacts>:void = VhCallVoid(Handle, "rotate_object_local", array{VhFromVector3(Axis), VhFromFloat(Angle)})
-    RotateX<public>(Angle:float)<transacts>:void = VhCallVoid(Handle, "rotate_x", array{VhFromFloat(Angle)})
-    RotateY<public>(Angle:float)<transacts>:void = VhCallVoid(Handle, "rotate_y", array{VhFromFloat(Angle)})
-    RotateZ<public>(Angle:float)<transacts>:void = VhCallVoid(Handle, "rotate_z", array{VhFromFloat(Angle)})
+    Rotate<public>(Axis:vector3, Arg1:float)<transacts>:void = VhCallVoid(Handle, "rotate", array{VhFromVector3(Axis), VhFromFloat(Arg1)})
+    RotateObjectLocal<public>(Axis:vector3, Arg1:float)<transacts>:void = VhCallVoid(Handle, "rotate_object_local", array{VhFromVector3(Axis), VhFromFloat(Arg1)})
+    RotateX<public>(Arg0:float)<transacts>:void = VhCallVoid(Handle, "rotate_x", array{VhFromFloat(Arg0)})
+    RotateY<public>(Arg0:float)<transacts>:void = VhCallVoid(Handle, "rotate_y", array{VhFromFloat(Arg0)})
+    RotateZ<public>(Arg0:float)<transacts>:void = VhCallVoid(Handle, "rotate_z", array{VhFromFloat(Arg0)})
     ScaleObjectLocal<public>(Arg0:vector3)<transacts>:void = VhCallVoid(Handle, "scale_object_local", array{VhFromVector3(Arg0)})
     SetBasis<public>(Basis:basis)<transacts>:void = VhCallVoid(Handle, "set_basis", array{VhFromBasis(Basis)})
     SetDisableScale<public>(Disable:logic)<transacts>:void = VhCallVoid(Handle, "set_disable_scale", array{VhFromLogic(Disable)})
@@ -39766,7 +39766,7 @@ skeleton_modification2d<public> := class(resource):
     var ExecutionMode<public><getter(ExecutionModeGetter)><setter(ExecutionModeSetter)>:int = external {}
     ExecutionModeGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_execution_mode", array{}))
     ExecutionModeSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_execution_mode", array{VhFromInt(Value)})
-    ClampAngle<public>(Angle:float, Arg1:float, Arg2:float, Invert:logic)<transacts>:float = VhToFloat(VhCallValue(Handle, "clamp_angle", array{VhFromFloat(Angle), VhFromFloat(Arg1), VhFromFloat(Arg2), VhFromLogic(Invert)}))
+    ClampAngle<public>(Arg0:float, Arg1:float, Arg2:float, Invert:logic)<transacts>:float = VhToFloat(VhCallValue(Handle, "clamp_angle", array{VhFromFloat(Arg0), VhFromFloat(Arg1), VhFromFloat(Arg2), VhFromLogic(Invert)}))
     GetEditorDrawGizmo<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_editor_draw_gizmo", array{}))
     GetIsSetup<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_is_setup", array{}))
     GetModificationStack<public>()<decides><transacts>:skeleton_modification_stack2d = skeleton_modification_stack2d[VhObjectFrom[VhCallValue(Handle, "get_modification_stack", array{})]]
@@ -42394,7 +42394,7 @@ bone2d<public> := class(node2d):
     GetRest<public>()<transacts>:transform2d = VhToTransform2D(VhCallValue(Handle, "get_rest", array{}))
     GetSkeletonRest<public>()<transacts>:transform2d = VhToTransform2D(VhCallValue(Handle, "get_skeleton_rest", array{}))
     SetAutocalculateLengthAndAngle<public>(AutoCalculate:logic)<transacts>:void = VhCallVoid(Handle, "set_autocalculate_length_and_angle", array{VhFromLogic(AutoCalculate)})
-    SetBoneAngle<public>(Angle:float)<transacts>:void = VhCallVoid(Handle, "set_bone_angle", array{VhFromFloat(Angle)})
+    SetBoneAngle<public>(Arg0:float)<transacts>:void = VhCallVoid(Handle, "set_bone_angle", array{VhFromFloat(Arg0)})
     SetLength<public>(Arg0:float)<transacts>:void = VhCallVoid(Handle, "set_length", array{VhFromFloat(Arg0)})
     SetRest<public>(Rest:transform2d)<transacts>:void = VhCallVoid(Handle, "set_rest", array{VhFromTransform2D(Rest)})
 
@@ -54264,6 +54264,662 @@ editor_script_picker<public> := class(editor_resource_picker):
     SetScriptOwner<public>(OwnerNode:node)<transacts>:void = VhCallVoid(Handle, "set_script_owner", array{VhFromObject(OwnerNode)})
 
 open_xr_interaction_profile_editor<public> := class(open_xr_interaction_profile_editor_base):
+
+# --- @GlobalScope utilities --------------------------------------------------
+#
+# In a module rather than at module scope, and not for tidiness: a module-level `Randf` is ambiguous
+# with `random_number_generator.Randf`, because Verse refuses a definition that resolves
+# ambiguously against anything visible. `GodotStatics.Randf()` reaches one and
+# `MyRng.Randf()` still reaches the other.
+#
+# The one exception to R-AUD-2, and only this family: Verse has `GetRandomFloat`, but a Verse-side
+# RNG would silently ignore `Seed()` and `Randomize()`, so a project that seeds for a replay would
+# get a different game. These steer Godot's own stream. C# makes the same exception for the same
+# reason.
+
+GodotStatics<public> := module:
+    Randomize<public>()<transacts>:void = { VhCallUtility("randomize", array{}) }
+    Randi<public>()<transacts>:int = VhToInt(VhCallUtility("randi", array{}))
+    Randf<public>()<transacts>:float = VhToFloat(VhCallUtility("randf", array{}))
+    RandiRange<public>(From:int, To:int)<transacts>:int = VhToInt(VhCallUtility("randi_range", array{VhFromInt(From), VhFromInt(To)}))
+    RandfRange<public>(From:float, To:float)<transacts>:float = VhToFloat(VhCallUtility("randf_range", array{VhFromFloat(From), VhFromFloat(To)}))
+    Randfn<public>(Mean:float, Deviation:float)<transacts>:float = VhToFloat(VhCallUtility("randfn", array{VhFromFloat(Mean), VhFromFloat(Deviation)}))
+    SeedRandom<public>(Base:int)<transacts>:void = { VhCallUtility("seed", array{VhFromInt(Base)}) }
+    RandFromSeed<public>(Seed:int)<transacts>:[]int = VhToInts(VhCallUtility("rand_from_seed", array{VhFromInt(Seed)}))
+
+# --- constants ---------------------------------------------------------------
+#
+# Godot's class constants and its math types', as one inline module per owner: `NodeStatics`,
+# `Vector2Statics`. Verse has no constant *on* a type -- Epic hit the same wall and wrote `Zero2()`
+# with a TODO wishing for `vector2.Zero` -- and an inline module needs no `using`, so
+# `NodeStatics.NotificationReady` reaches one from any script that imports this package.
+#
+# The `...Statics` suffix is load-bearing rather than decoration. Verse refuses a *local* that
+# resolves ambiguously against a visible definition, so a module named `Tree` would break
+# `if (Tree := GetTree[])` -- which the yardstick writes today -- and one named `Node` would break
+# any local of that name.
+
+ObjectStatics<public> := module:
+    NotificationPostinitialize<public>:int = 0
+    NotificationPredelete<public>:int = 1
+    NotificationExtensionReloaded<public>:int = 2
+
+DisplayServerStatics<public> := module:
+    InvalidScreen<public>:int = -1
+    ScreenWithMouseFocus<public>:int = -4
+    ScreenWithKeyboardFocus<public>:int = -3
+    ScreenPrimary<public>:int = -2
+    ScreenOfMainWindow<public>:int = -1
+    MainWindowId<public>:int = 0
+    InvalidWindowId<public>:int = -1
+    InvalidIndicatorId<public>:int = -1
+
+FramebufferCacheRDStatics<public> := module:
+    GetCacheMultipass<public>(Textures:typed_array(int), Passes:typed_array(rd_framebuffer_pass), Views:int)<transacts>:int = VhToInt(VhCallStatic("FramebufferCacheRD", "get_cache_multipass", array{VhFromRIDArray(Textures), VhFromRDFramebufferPassArray(Passes), VhFromInt(Views)}))
+
+IPStatics<public> := module:
+    ResolverMaxQueries<public>:int = 256
+    ResolverInvalidId<public>:int = -1
+
+MainLoopStatics<public> := module:
+    NotificationOsMemoryWarning<public>:int = 2009
+    NotificationTranslationChanged<public>:int = 2010
+    NotificationWmAbout<public>:int = 2011
+    NotificationCrash<public>:int = 2012
+    NotificationOsImeUpdate<public>:int = 2013
+    NotificationApplicationResumed<public>:int = 2014
+    NotificationApplicationPaused<public>:int = 2015
+    NotificationApplicationFocusIn<public>:int = 2016
+    NotificationApplicationFocusOut<public>:int = 2017
+    NotificationTextServerChanged<public>:int = 2018
+
+MovieWriterStatics<public> := module:
+    AddWriter<public>(Writer:movie_writer)<transacts>:void = { VhCallStatic("MovieWriter", "add_writer", array{VhFromObject(Writer)}) }
+
+NodeStatics<public> := module:
+    NotificationEnterTree<public>:int = 10
+    NotificationExitTree<public>:int = 11
+    NotificationMovedInParent<public>:int = 12
+    NotificationReady<public>:int = 13
+    NotificationPaused<public>:int = 14
+    NotificationUnpaused<public>:int = 15
+    NotificationPhysicsProcess<public>:int = 16
+    NotificationProcess<public>:int = 17
+    NotificationParented<public>:int = 18
+    NotificationUnparented<public>:int = 19
+    NotificationSceneInstantiated<public>:int = 20
+    NotificationDragBegin<public>:int = 21
+    NotificationDragEnd<public>:int = 22
+    NotificationPathRenamed<public>:int = 23
+    NotificationChildOrderChanged<public>:int = 24
+    NotificationInternalProcess<public>:int = 25
+    NotificationInternalPhysicsProcess<public>:int = 26
+    NotificationPostEnterTree<public>:int = 27
+    NotificationDisabled<public>:int = 28
+    NotificationEnabled<public>:int = 29
+    NotificationResetPhysicsInterpolation<public>:int = 2001
+    NotificationEditorPreSave<public>:int = 9001
+    NotificationEditorPostSave<public>:int = 9002
+    NotificationWmMouseEnter<public>:int = 1002
+    NotificationWmMouseExit<public>:int = 1003
+    NotificationWmWindowFocusIn<public>:int = 1004
+    NotificationWmWindowFocusOut<public>:int = 1005
+    NotificationWmCloseRequest<public>:int = 1006
+    NotificationWmGoBackRequest<public>:int = 1007
+    NotificationWmSizeChanged<public>:int = 1008
+    NotificationWmDpiChange<public>:int = 1009
+    NotificationVpMouseEnter<public>:int = 1010
+    NotificationVpMouseExit<public>:int = 1011
+    NotificationWmPositionChanged<public>:int = 1012
+    NotificationOsMemoryWarning<public>:int = 2009
+    NotificationTranslationChanged<public>:int = 2010
+    NotificationWmAbout<public>:int = 2011
+    NotificationCrash<public>:int = 2012
+    NotificationOsImeUpdate<public>:int = 2013
+    NotificationApplicationResumed<public>:int = 2014
+    NotificationApplicationPaused<public>:int = 2015
+    NotificationApplicationFocusIn<public>:int = 2016
+    NotificationApplicationFocusOut<public>:int = 2017
+    NotificationTextServerChanged<public>:int = 2018
+    NotificationAccessibilityUpdate<public>:int = 3000
+    NotificationAccessibilityInvalidate<public>:int = 3001
+    PrintOrphanNodes<public>()<transacts>:void = { VhCallStatic("Node", "print_orphan_nodes", array{}) }
+    GetOrphanNodeIds<public>()<transacts>:typed_array(int) = VhToIntArray(VhCallStatic("Node", "get_orphan_node_ids", array{}))
+
+RenderingDeviceStatics<public> := module:
+    InvalidId<public>:int = -1
+    InvalidFormatId<public>:int = -1
+
+RenderingServerStatics<public> := module:
+    NoIndexArray<public>:int = -1
+    ArrayWeightsSize<public>:int = 4
+    CanvasItemZMin<public>:int = -4096
+    CanvasItemZMax<public>:int = 4096
+    CanvasLayerMin<public>:int = -2147483648
+    CanvasLayerMax<public>:int = 2147483647
+    MaxGlowLevels<public>:int = 7
+    MaxCursors<public>:int = 8
+    Max2dDirectionalLights<public>:int = 8
+    MaxMeshSurfaces<public>:int = 256
+    MaterialRenderPriorityMin<public>:int = -128
+    MaterialRenderPriorityMax<public>:int = 127
+    ArrayCustomCount<public>:int = 4
+    ParticlesEmitFlagPosition<public>:int = 1
+    ParticlesEmitFlagRotationScale<public>:int = 2
+    ParticlesEmitFlagVelocity<public>:int = 4
+    ParticlesEmitFlagColor<public>:int = 8
+    ParticlesEmitFlagCustom<public>:int = 16
+
+ResourceUIDStatics<public> := module:
+    InvalidId<public>:int = -1
+    UidToPath<public>(Uid:string)<transacts>:string = VhToString(VhCallStatic("ResourceUID", "uid_to_path", array{VhFromString(Uid)}))
+    PathToUid<public>(Path:string)<transacts>:string = VhToString(VhCallStatic("ResourceUID", "path_to_uid", array{VhFromString(Path)}))
+    EnsurePath<public>(PathOrUid:string)<transacts>:string = VhToString(VhCallStatic("ResourceUID", "ensure_path", array{VhFromString(PathOrUid)}))
+
+ShaderIncludeDBStatics<public> := module:
+    ListBuiltInIncludeFiles<public>()<transacts>:[]string = VhToStrings(VhCallStatic("ShaderIncludeDB", "list_built_in_include_files", array{}))
+    HasBuiltInIncludeFile<public>(Filename:string)<transacts>:logic = VhToLogic(VhCallStatic("ShaderIncludeDB", "has_built_in_include_file", array{VhFromString(Filename)}))
+    GetBuiltInIncludeFile<public>(Filename:string)<transacts>:string = VhToString(VhCallStatic("ShaderIncludeDB", "get_built_in_include_file", array{VhFromString(Filename)}))
+
+UniformSetCacheRDStatics<public> := module:
+    GetCache<public>(Shader:int, Set:int, Uniforms:typed_array(rd_uniform))<transacts>:int = VhToInt(VhCallStatic("UniformSetCacheRD", "get_cache", array{VhFromRid(Shader), VhFromInt(Set), VhFromRDUniformArray(Uniforms)}))
+
+CanvasItemStatics<public> := module:
+    NotificationTransformChanged<public>:int = 2000
+    NotificationLocalTransformChanged<public>:int = 35
+    NotificationDraw<public>:int = 30
+    NotificationVisibilityChanged<public>:int = 31
+    NotificationEnterCanvas<public>:int = 32
+    NotificationExitCanvas<public>:int = 33
+    NotificationWorld2dChanged<public>:int = 36
+
+DirAccessStatics<public> := module:
+    Open<public>(Path:string)<decides><transacts>:dir_access = dir_access[VhObjectFrom[VhCallStatic("DirAccess", "open", array{VhFromString(Path)})]]
+    GetOpenError<public>()<transacts>:error = VhToError(VhCallStatic("DirAccess", "get_open_error", array{}))
+    CreateTemp<public>(Prefix:string, Keep:logic)<decides><transacts>:dir_access = dir_access[VhObjectFrom[VhCallStatic("DirAccess", "create_temp", array{VhFromString(Prefix), VhFromLogic(Keep)})]]
+    GetFilesAt<public>(Path:string)<transacts>:[]string = VhToStrings(VhCallStatic("DirAccess", "get_files_at", array{VhFromString(Path)}))
+    GetDirectoriesAt<public>(Path:string)<transacts>:[]string = VhToStrings(VhCallStatic("DirAccess", "get_directories_at", array{VhFromString(Path)}))
+    GetDriveCount<public>()<transacts>:int = VhToInt(VhCallStatic("DirAccess", "get_drive_count", array{}))
+    GetDriveName<public>(Idx:int)<transacts>:string = VhToString(VhCallStatic("DirAccess", "get_drive_name", array{VhFromInt(Idx)}))
+    MakeDirAbsolute<public>(Path:string)<transacts>:error = VhToError(VhCallStatic("DirAccess", "make_dir_absolute", array{VhFromString(Path)}))
+    MakeDirRecursiveAbsolute<public>(Path:string)<transacts>:error = VhToError(VhCallStatic("DirAccess", "make_dir_recursive_absolute", array{VhFromString(Path)}))
+    DirExistsAbsolute<public>(Path:string)<transacts>:logic = VhToLogic(VhCallStatic("DirAccess", "dir_exists_absolute", array{VhFromString(Path)}))
+    CopyAbsolute<public>(From:string, To:string, ChmodFlags:int)<transacts>:error = VhToError(VhCallStatic("DirAccess", "copy_absolute", array{VhFromString(From), VhFromString(To), VhFromInt(ChmodFlags)}))
+    RenameAbsolute<public>(From:string, To:string)<transacts>:error = VhToError(VhCallStatic("DirAccess", "rename_absolute", array{VhFromString(From), VhFromString(To)}))
+    RemoveAbsolute<public>(Path:string)<transacts>:error = VhToError(VhCallStatic("DirAccess", "remove_absolute", array{VhFromString(Path)}))
+
+EditorExportPlatformStatics<public> := module:
+    GetForcedExportFiles<public>(Preset:editor_export_preset)<transacts>:[]string = VhToStrings(VhCallStatic("EditorExportPlatform", "get_forced_export_files", array{VhFromObject(Preset)}))
+
+EditorSceneFormatImporterStatics<public> := module:
+    ImportScene<public>:int = 1
+    ImportAnimation<public>:int = 2
+    ImportFailOnMissingDependencies<public>:int = 4
+    ImportGenerateTangentArrays<public>:int = 8
+    ImportUseNamedSkinBinds<public>:int = 16
+    ImportDiscardMeshesAndMaterials<public>:int = 32
+    ImportForceDisableMeshCompression<public>:int = 64
+
+FileAccessStatics<public> := module:
+    Open<public>(Path:string, Flags:file_access_mode_flags)<decides><transacts>:file_access = file_access[VhObjectFrom[VhCallStatic("FileAccess", "open", array{VhFromString(Path), VhFromFileAccessModeFlags(Flags)})]]
+    OpenEncrypted<public>(Path:string, ModeFlags:file_access_mode_flags, Key:[]int, Iv:[]int)<decides><transacts>:file_access = file_access[VhObjectFrom[VhCallStatic("FileAccess", "open_encrypted", array{VhFromString(Path), VhFromFileAccessModeFlags(ModeFlags), VhFromByteArray(Key), VhFromByteArray(Iv)})]]
+    OpenEncryptedWithPass<public>(Path:string, ModeFlags:file_access_mode_flags, Pass:string)<decides><transacts>:file_access = file_access[VhObjectFrom[VhCallStatic("FileAccess", "open_encrypted_with_pass", array{VhFromString(Path), VhFromFileAccessModeFlags(ModeFlags), VhFromString(Pass)})]]
+    OpenCompressed<public>(Path:string, ModeFlags:file_access_mode_flags, CompressionMode:file_access_compression_mode)<decides><transacts>:file_access = file_access[VhObjectFrom[VhCallStatic("FileAccess", "open_compressed", array{VhFromString(Path), VhFromFileAccessModeFlags(ModeFlags), VhFromFileAccessCompressionMode(CompressionMode)})]]
+    GetOpenError<public>()<transacts>:error = VhToError(VhCallStatic("FileAccess", "get_open_error", array{}))
+    CreateTemp<public>(ModeFlags:file_access_mode_flags, Prefix:string, Extension:string, Keep:logic)<decides><transacts>:file_access = file_access[VhObjectFrom[VhCallStatic("FileAccess", "create_temp", array{VhFromFileAccessModeFlags(ModeFlags), VhFromString(Prefix), VhFromString(Extension), VhFromLogic(Keep)})]]
+    GetFileAsBytes<public>(Path:string)<transacts>:[]int = VhToInts(VhCallStatic("FileAccess", "get_file_as_bytes", array{VhFromString(Path)}))
+    GetFileAsString<public>(Path:string)<transacts>:string = VhToString(VhCallStatic("FileAccess", "get_file_as_string", array{VhFromString(Path)}))
+    GetMd5<public>(Path:string)<transacts>:string = VhToString(VhCallStatic("FileAccess", "get_md5", array{VhFromString(Path)}))
+    GetSha256<public>(Path:string)<transacts>:string = VhToString(VhCallStatic("FileAccess", "get_sha256", array{VhFromString(Path)}))
+    FileExists<public>(Path:string)<transacts>:logic = VhToLogic(VhCallStatic("FileAccess", "file_exists", array{VhFromString(Path)}))
+    GetModifiedTime<public>(File:string)<transacts>:int = VhToInt(VhCallStatic("FileAccess", "get_modified_time", array{VhFromString(File)}))
+    GetAccessTime<public>(File:string)<transacts>:int = VhToInt(VhCallStatic("FileAccess", "get_access_time", array{VhFromString(File)}))
+    GetSize<public>(File:string)<transacts>:int = VhToInt(VhCallStatic("FileAccess", "get_size", array{VhFromString(File)}))
+    GetUnixPermissions<public>(File:string)<transacts>:int = VhToInt(VhCallStatic("FileAccess", "get_unix_permissions", array{VhFromString(File)}))
+    SetUnixPermissions<public>(File:string, Permissions:int)<transacts>:error = VhToError(VhCallStatic("FileAccess", "set_unix_permissions", array{VhFromString(File), VhFromInt(Permissions)}))
+    GetHiddenAttribute<public>(File:string)<transacts>:logic = VhToLogic(VhCallStatic("FileAccess", "get_hidden_attribute", array{VhFromString(File)}))
+    SetHiddenAttribute<public>(File:string, Hidden:logic)<transacts>:error = VhToError(VhCallStatic("FileAccess", "set_hidden_attribute", array{VhFromString(File), VhFromLogic(Hidden)}))
+    SetReadOnlyAttribute<public>(File:string, Ro:logic)<transacts>:error = VhToError(VhCallStatic("FileAccess", "set_read_only_attribute", array{VhFromString(File), VhFromLogic(Ro)}))
+    GetReadOnlyAttribute<public>(File:string)<transacts>:logic = VhToLogic(VhCallStatic("FileAccess", "get_read_only_attribute", array{VhFromString(File)}))
+    GetExtendedAttribute<public>(File:string, AttributeName:string)<transacts>:[]int = VhToInts(VhCallStatic("FileAccess", "get_extended_attribute", array{VhFromString(File), VhFromString(AttributeName)}))
+    GetExtendedAttributeString<public>(File:string, AttributeName:string)<transacts>:string = VhToString(VhCallStatic("FileAccess", "get_extended_attribute_string", array{VhFromString(File), VhFromString(AttributeName)}))
+    SetExtendedAttribute<public>(File:string, AttributeName:string, Data:[]int)<transacts>:error = VhToError(VhCallStatic("FileAccess", "set_extended_attribute", array{VhFromString(File), VhFromString(AttributeName), VhFromByteArray(Data)}))
+    SetExtendedAttributeString<public>(File:string, AttributeName:string, Data:string)<transacts>:error = VhToError(VhCallStatic("FileAccess", "set_extended_attribute_string", array{VhFromString(File), VhFromString(AttributeName), VhFromString(Data)}))
+    RemoveExtendedAttribute<public>(File:string, AttributeName:string)<transacts>:error = VhToError(VhCallStatic("FileAccess", "remove_extended_attribute", array{VhFromString(File), VhFromString(AttributeName)}))
+    GetExtendedAttributesList<public>(File:string)<transacts>:[]string = VhToStrings(VhCallStatic("FileAccess", "get_extended_attributes_list", array{VhFromString(File)}))
+
+MultiplayerAPIStatics<public> := module:
+    SetDefaultInterface<public>(InterfaceName:string)<transacts>:void = { VhCallStatic("MultiplayerAPI", "set_default_interface", array{VhFromStringName(InterfaceName)}) }
+    GetDefaultInterface<public>()<transacts>:string = VhToString(VhCallStatic("MultiplayerAPI", "get_default_interface", array{}))
+    CreateDefaultInterface<public>()<decides><transacts>:multiplayer_api = multiplayer_api[VhObjectFrom[VhCallStatic("MultiplayerAPI", "create_default_interface", array{})]]
+
+Node3DStatics<public> := module:
+    NotificationTransformChanged<public>:int = 2000
+    NotificationEnterWorld<public>:int = 41
+    NotificationExitWorld<public>:int = 42
+    NotificationVisibilityChanged<public>:int = 43
+    NotificationLocalTransformChanged<public>:int = 44
+
+OpenXRAPIExtensionStatics<public> := module:
+    OpenxrIsEnabled<public>(CheckRunInEditor:logic)<transacts>:logic = VhToLogic(VhCallStatic("OpenXRAPIExtension", "openxr_is_enabled", array{VhFromLogic(CheckRunInEditor)}))
+
+PhysicsRayQueryParameters2DStatics<public> := module:
+    Create<public>(From:vector2, To:vector2, CollisionMask:int, Exclude:typed_array(int))<decides><transacts>:physics_ray_query_parameters2d = physics_ray_query_parameters2d[VhObjectFrom[VhCallStatic("PhysicsRayQueryParameters2D", "create", array{VhFromVector2(From), VhFromVector2(To), VhFromInt(CollisionMask), VhFromRIDArray(Exclude)})]]
+
+PhysicsRayQueryParameters3DStatics<public> := module:
+    Create<public>(From:vector3, To:vector3, CollisionMask:int, Exclude:typed_array(int))<decides><transacts>:physics_ray_query_parameters3d = physics_ray_query_parameters3d[VhObjectFrom[VhCallStatic("PhysicsRayQueryParameters3D", "create", array{VhFromVector3(From), VhFromVector3(To), VhFromInt(CollisionMask), VhFromRIDArray(Exclude)})]]
+
+RDFramebufferPassStatics<public> := module:
+    AttachmentUnused<public>:int = -1
+
+RegExStatics<public> := module:
+    CreateFromString<public>(Pattern:string, ShowError:logic)<decides><transacts>:reg_ex = reg_ex[VhObjectFrom[VhCallStatic("RegEx", "create_from_string", array{VhFromString(Pattern), VhFromLogic(ShowError)})]]
+
+ResourceStatics<public> := module:
+    GenerateSceneUniqueId<public>()<transacts>:string = VhToString(VhCallStatic("Resource", "generate_scene_unique_id", array{}))
+
+ThreadStatics<public> := module:
+    SetThreadSafetyChecksEnabled<public>(Enabled:logic)<transacts>:void = { VhCallStatic("Thread", "set_thread_safety_checks_enabled", array{VhFromLogic(Enabled)}) }
+    IsMainThread<public>()<transacts>:logic = VhToLogic(VhCallStatic("Thread", "is_main_thread", array{}))
+
+TLSOptionsStatics<public> := module:
+    Client<public>(TrustedChain:x509certificate, CommonNameOverride:string)<decides><transacts>:tls_options = tls_options[VhObjectFrom[VhCallStatic("TLSOptions", "client", array{VhFromObject(TrustedChain), VhFromString(CommonNameOverride)})]]
+    ClientUnsafe<public>(TrustedChain:x509certificate)<decides><transacts>:tls_options = tls_options[VhObjectFrom[VhCallStatic("TLSOptions", "client_unsafe", array{VhFromObject(TrustedChain)})]]
+    Server<public>(Key:crypto_key, Certificate:x509certificate)<decides><transacts>:tls_options = tls_options[VhObjectFrom[VhCallStatic("TLSOptions", "server", array{VhFromObject(Key), VhFromObject(Certificate)})]]
+
+TweenStatics<public> := module:
+    InterpolateValue<public>(InitialValue:variant, DeltaValue:variant, ElapsedTime:float, Duration:float, TransType:tween_transition_type, EaseType:tween_ease_type)<transacts>:variant = VhToVariant(VhCallStatic("Tween", "interpolate_value", array{VhFromVariant(InitialValue), VhFromVariant(DeltaValue), VhFromFloat(ElapsedTime), VhFromFloat(Duration), VhFromTweenTransitionType(TransType), VhFromTweenEaseType(EaseType)}))
+
+WebRTCPeerConnectionStatics<public> := module:
+    SetDefaultExtension<public>(ExtensionClass:string)<transacts>:void = { VhCallStatic("WebRTCPeerConnection", "set_default_extension", array{VhFromStringName(ExtensionClass)}) }
+
+AudioStreamPlaybackPolyphonicStatics<public> := module:
+    InvalidId<public>:int = -1
+
+ControlStatics<public> := module:
+    NotificationResized<public>:int = 40
+    NotificationMouseEnter<public>:int = 41
+    NotificationMouseExit<public>:int = 42
+    NotificationMouseEnterSelf<public>:int = 60
+    NotificationMouseExitSelf<public>:int = 61
+    NotificationFocusEnter<public>:int = 43
+    NotificationFocusExit<public>:int = 44
+    NotificationThemeChanged<public>:int = 45
+    NotificationScrollBegin<public>:int = 47
+    NotificationScrollEnd<public>:int = 48
+    NotificationLayoutDirectionChanged<public>:int = 49
+
+ENetPacketPeerStatics<public> := module:
+    PacketLossScale<public>:int = 65536
+    PacketThrottleScale<public>:int = 32
+    FlagReliable<public>:int = 1
+    FlagUnsequenced<public>:int = 2
+    FlagUnreliableFragment<public>:int = 8
+
+EditorSettingsStatics<public> := module:
+    NotificationEditorSettingsChanged<public>:int = 10000
+
+GLTFAccessorStatics<public> := module:
+    FromDictionary<public>(Dictionary:dictionary)<decides><transacts>:gltf_accessor = gltf_accessor[VhObjectFrom[VhCallStatic("GLTFAccessor", "from_dictionary", array{VhFromDictionary(Dictionary)})]]
+
+GLTFBufferViewStatics<public> := module:
+    FromDictionary<public>(Dictionary:dictionary)<decides><transacts>:gltf_buffer_view = gltf_buffer_view[VhObjectFrom[VhCallStatic("GLTFBufferView", "from_dictionary", array{VhFromDictionary(Dictionary)})]]
+
+GLTFCameraStatics<public> := module:
+    FromNode<public>(CameraNode:camera3d)<decides><transacts>:gltf_camera = gltf_camera[VhObjectFrom[VhCallStatic("GLTFCamera", "from_node", array{VhFromObject(CameraNode)})]]
+    FromDictionary<public>(Dictionary:dictionary)<decides><transacts>:gltf_camera = gltf_camera[VhObjectFrom[VhCallStatic("GLTFCamera", "from_dictionary", array{VhFromDictionary(Dictionary)})]]
+
+GLTFDocumentStatics<public> := module:
+    ImportObjectModelProperty<public>(State:gltf_state, JsonPointer:string)<decides><transacts>:gltf_object_model_property = gltf_object_model_property[VhObjectFrom[VhCallStatic("GLTFDocument", "import_object_model_property", array{VhFromObject(State), VhFromString(JsonPointer)})]]
+    ExportObjectModelProperty<public>(State:gltf_state, NodePath:string, GodotNode:node, GltfNodeIndex:int)<decides><transacts>:gltf_object_model_property = gltf_object_model_property[VhObjectFrom[VhCallStatic("GLTFDocument", "export_object_model_property", array{VhFromObject(State), VhFromNodePath(NodePath), VhFromObject(GodotNode), VhFromInt(GltfNodeIndex)})]]
+    RegisterGltfDocumentExtension<public>(Extension:gltf_document_extension, FirstPriority:logic)<transacts>:void = { VhCallStatic("GLTFDocument", "register_gltf_document_extension", array{VhFromObject(Extension), VhFromLogic(FirstPriority)}) }
+    UnregisterGltfDocumentExtension<public>(Extension:gltf_document_extension)<transacts>:void = { VhCallStatic("GLTFDocument", "unregister_gltf_document_extension", array{VhFromObject(Extension)}) }
+    GetSupportedGltfExtensions<public>()<transacts>:[]string = VhToStrings(VhCallStatic("GLTFDocument", "get_supported_gltf_extensions", array{}))
+
+GLTFLightStatics<public> := module:
+    FromNode<public>(LightNode:light3d)<decides><transacts>:gltf_light = gltf_light[VhObjectFrom[VhCallStatic("GLTFLight", "from_node", array{VhFromObject(LightNode)})]]
+    FromDictionary<public>(Dictionary:dictionary)<decides><transacts>:gltf_light = gltf_light[VhObjectFrom[VhCallStatic("GLTFLight", "from_dictionary", array{VhFromDictionary(Dictionary)})]]
+
+GLTFPhysicsBodyStatics<public> := module:
+    FromNode<public>(BodyNode:collision_object3d)<decides><transacts>:gltf_physics_body = gltf_physics_body[VhObjectFrom[VhCallStatic("GLTFPhysicsBody", "from_node", array{VhFromObject(BodyNode)})]]
+    FromDictionary<public>(Dictionary:dictionary)<decides><transacts>:gltf_physics_body = gltf_physics_body[VhObjectFrom[VhCallStatic("GLTFPhysicsBody", "from_dictionary", array{VhFromDictionary(Dictionary)})]]
+
+GLTFPhysicsShapeStatics<public> := module:
+    FromNode<public>(ShapeNode:collision_shape3d)<decides><transacts>:gltf_physics_shape = gltf_physics_shape[VhObjectFrom[VhCallStatic("GLTFPhysicsShape", "from_node", array{VhFromObject(ShapeNode)})]]
+    FromResource<public>(ShapeResource:shape3d)<decides><transacts>:gltf_physics_shape = gltf_physics_shape[VhObjectFrom[VhCallStatic("GLTFPhysicsShape", "from_resource", array{VhFromObject(ShapeResource)})]]
+    FromDictionary<public>(Dictionary:dictionary)<decides><transacts>:gltf_physics_shape = gltf_physics_shape[VhObjectFrom[VhCallStatic("GLTFPhysicsShape", "from_dictionary", array{VhFromDictionary(Dictionary)})]]
+
+GLTFStateStatics<public> := module:
+    HandleBinaryDiscardTextures<public>:int = 0
+    HandleBinaryExtractTextures<public>:int = 1
+    HandleBinaryEmbedAsBasisu<public>:int = 2
+    HandleBinaryEmbedAsUncompressed<public>:int = 3
+
+GridMapStatics<public> := module:
+    InvalidCellItem<public>:int = -1
+
+ImageStatics<public> := module:
+    MaxWidth<public>:int = 16777216
+    MaxHeight<public>:int = 16777216
+    Create<public>(Width:int, Height:int, UseMipmaps:logic, Format:image_format)<decides><transacts>:image = image[VhObjectFrom[VhCallStatic("Image", "create", array{VhFromInt(Width), VhFromInt(Height), VhFromLogic(UseMipmaps), VhFromImageFormat(Format)})]]
+    CreateEmpty<public>(Width:int, Height:int, UseMipmaps:logic, Format:image_format)<decides><transacts>:image = image[VhObjectFrom[VhCallStatic("Image", "create_empty", array{VhFromInt(Width), VhFromInt(Height), VhFromLogic(UseMipmaps), VhFromImageFormat(Format)})]]
+    CreateFromData<public>(Width:int, Height:int, UseMipmaps:logic, Format:image_format, Data:[]int)<decides><transacts>:image = image[VhObjectFrom[VhCallStatic("Image", "create_from_data", array{VhFromInt(Width), VhFromInt(Height), VhFromLogic(UseMipmaps), VhFromImageFormat(Format), VhFromByteArray(Data)})]]
+    LoadFromFile<public>(Path:string)<decides><transacts>:image = image[VhObjectFrom[VhCallStatic("Image", "load_from_file", array{VhFromString(Path)})]]
+
+ImporterMeshStatics<public> := module:
+    FromMesh<public>(Mesh:mesh)<decides><transacts>:importer_mesh = importer_mesh[VhObjectFrom[VhCallStatic("ImporterMesh", "from_mesh", array{VhFromObject(Mesh)})]]
+
+InputEventStatics<public> := module:
+    DeviceIdEmulation<public>:int = -1
+
+JSONStatics<public> := module:
+    Stringify<public>(Data:variant, Indent:string, SortKeys:logic, FullPrecision:logic)<transacts>:string = VhToString(VhCallStatic("JSON", "stringify", array{VhFromVariant(Data), VhFromString(Indent), VhFromLogic(SortKeys), VhFromLogic(FullPrecision)}))
+    ParseString<public>(JsonString:string)<transacts>:variant = VhToVariant(VhCallStatic("JSON", "parse_string", array{VhFromString(JsonString)}))
+    FromNative<public>(Variant:variant, FullObjects:logic)<transacts>:variant = VhToVariant(VhCallStatic("JSON", "from_native", array{VhFromVariant(Variant), VhFromLogic(FullObjects)}))
+    ToNative<public>(Json:variant, AllowObjects:logic)<transacts>:variant = VhToVariant(VhCallStatic("JSON", "to_native", array{VhFromVariant(Json), VhFromLogic(AllowObjects)}))
+
+MaterialStatics<public> := module:
+    RenderPriorityMax<public>:int = 127
+    RenderPriorityMin<public>:int = -128
+
+MultiplayerPeerStatics<public> := module:
+    TargetPeerBroadcast<public>:int = 0
+    TargetPeerServer<public>:int = 1
+
+PathFollow3DStatics<public> := module:
+    CorrectPosture<public>(Transform:transform3d, RotationMode:path_follow3d_rotation_mode)<transacts>:transform3d = VhToTransform3D(VhCallStatic("PathFollow3D", "correct_posture", array{VhFromTransform3D(Transform), VhFromPathFollow3dRotationMode(RotationMode)}))
+
+ResourceImporterOggVorbisStatics<public> := module:
+    LoadFromBuffer<public>(StreamData:[]int)<decides><transacts>:audio_stream_ogg_vorbis = audio_stream_ogg_vorbis[VhObjectFrom[VhCallStatic("ResourceImporterOggVorbis", "load_from_buffer", array{VhFromByteArray(StreamData)})]]
+    LoadFromFile<public>(Path:string)<decides><transacts>:audio_stream_ogg_vorbis = audio_stream_ogg_vorbis[VhObjectFrom[VhCallStatic("ResourceImporterOggVorbis", "load_from_file", array{VhFromString(Path)})]]
+
+Skeleton3DStatics<public> := module:
+    NotificationUpdateSkeleton<public>:int = 50
+
+WindowStatics<public> := module:
+    NotificationVisibilityChanged<public>:int = 30
+    NotificationThemeChanged<public>:int = 32
+    GetFocusedWindow<public>()<decides><transacts>:window = window[VhObjectFrom[VhCallStatic("Window", "get_focused_window", array{})]]
+
+AnimationNodeExtensionStatics<public> := module:
+    IsLooping<public>(NodeInfo:[]float)<transacts>:logic = VhToLogic(VhCallStatic("AnimationNodeExtension", "is_looping", array{VhFromFloat32Array(NodeInfo)}))
+    GetRemainingTime<public>(NodeInfo:[]float, BreakLoop:logic)<transacts>:float = VhToFloat(VhCallStatic("AnimationNodeExtension", "get_remaining_time", array{VhFromFloat32Array(NodeInfo), VhFromLogic(BreakLoop)}))
+
+AudioStreamInteractiveStatics<public> := module:
+    ClipAny<public>:int = -1
+
+AudioStreamMP3Statics<public> := module:
+    LoadFromBuffer<public>(StreamData:[]int)<decides><transacts>:audio_stream_mp3 = audio_stream_mp3[VhObjectFrom[VhCallStatic("AudioStreamMP3", "load_from_buffer", array{VhFromByteArray(StreamData)})]]
+    LoadFromFile<public>(Path:string)<decides><transacts>:audio_stream_mp3 = audio_stream_mp3[VhObjectFrom[VhCallStatic("AudioStreamMP3", "load_from_file", array{VhFromString(Path)})]]
+
+AudioStreamOggVorbisStatics<public> := module:
+    LoadFromBuffer<public>(StreamData:[]int)<decides><transacts>:audio_stream_ogg_vorbis = audio_stream_ogg_vorbis[VhObjectFrom[VhCallStatic("AudioStreamOggVorbis", "load_from_buffer", array{VhFromByteArray(StreamData)})]]
+    LoadFromFile<public>(Path:string)<decides><transacts>:audio_stream_ogg_vorbis = audio_stream_ogg_vorbis[VhObjectFrom[VhCallStatic("AudioStreamOggVorbis", "load_from_file", array{VhFromString(Path)})]]
+
+AudioStreamPlaylistStatics<public> := module:
+    MaxStreams<public>:int = 64
+
+AudioStreamSynchronizedStatics<public> := module:
+    MaxStreams<public>:int = 32
+
+AudioStreamWAVStatics<public> := module:
+    LoadFromBuffer<public>(StreamData:[]int, Options:dictionary)<decides><transacts>:audio_stream_wav = audio_stream_wav[VhObjectFrom[VhCallStatic("AudioStreamWAV", "load_from_buffer", array{VhFromByteArray(StreamData), VhFromDictionary(Options)})]]
+    LoadFromFile<public>(Path:string, Options:dictionary)<decides><transacts>:audio_stream_wav = audio_stream_wav[VhObjectFrom[VhCallStatic("AudioStreamWAV", "load_from_file", array{VhFromString(Path), VhFromDictionary(Options)})]]
+
+ContainerStatics<public> := module:
+    NotificationPreSortChildren<public>:int = 50
+    NotificationSortChildren<public>:int = 51
+
+TileSetAtlasSourceStatics<public> := module:
+    TransformFlipH<public>:int = 4096
+    TransformFlipV<public>:int = 8192
+    TransformTranspose<public>:int = 16384
+
+VisualShaderStatics<public> := module:
+    NodeIdInvalid<public>:int = -1
+    NodeIdOutput<public>:int = 0
+
+AnimatedTextureStatics<public> := module:
+    MaxFrames<public>:int = 256
+
+AnimationNodeBlendTreeStatics<public> := module:
+    ConnectionOk<public>:int = 0
+    ConnectionErrorNoInput<public>:int = 1
+    ConnectionErrorNoInputIndex<public>:int = 2
+    ConnectionErrorNoOutput<public>:int = 3
+    ConnectionErrorSameNode<public>:int = 4
+    ConnectionErrorConnectionExists<public>:int = 5
+
+DPITextureStatics<public> := module:
+    CreateFromString<public>(Source:string, Scale:float, Saturation:float, ColorMap:dictionary)<decides><transacts>:dpi_texture = dpi_texture[VhObjectFrom[VhCallStatic("DPITexture", "create_from_string", array{VhFromString(Source), VhFromFloat(Scale), VhFromFloat(Saturation), VhFromDictionary(ColorMap)})]]
+
+GPUParticles3DStatics<public> := module:
+    MaxDrawPasses<public>:int = 4
+
+ImageTextureStatics<public> := module:
+    CreateFromImage<public>(Image:image)<decides><transacts>:image_texture = image_texture[VhObjectFrom[VhCallStatic("ImageTexture", "create_from_image", array{VhFromObject(Image)})]]
+
+PortableCompressedTexture2DStatics<public> := module:
+    SetKeepAllCompressedBuffers<public>(Keep:logic)<transacts>:void = { VhCallStatic("PortableCompressedTexture2D", "set_keep_all_compressed_buffers", array{VhFromLogic(Keep)}) }
+    IsKeepingAllCompressedBuffers<public>()<transacts>:logic = VhToLogic(VhCallStatic("PortableCompressedTexture2D", "is_keeping_all_compressed_buffers", array{}))
+
+EditorInspectorStatics<public> := module:
+    InstantiatePropertyEditor<public>(Object:object, Type:variant_type, Path:string, Hint:property_hint, HintText:string, Usage:int, Wide:logic)<decides><transacts>:editor_property = editor_property[VhObjectFrom[VhCallStatic("EditorInspector", "instantiate_property_editor", array{VhFromObject(Object), VhFromVariantType(Type), VhFromString(Path), VhFromPropertyHint(Hint), VhFromString(HintText), VhFromInt(Usage), VhFromLogic(Wide)})]]
+
+FileDialogStatics<public> := module:
+    SetFavoriteList<public>(Favorites:[]string)<transacts>:void = { VhCallStatic("FileDialog", "set_favorite_list", array{VhFromStringArray(Favorites)}) }
+    GetFavoriteList<public>()<transacts>:[]string = VhToStrings(VhCallStatic("FileDialog", "get_favorite_list", array{}))
+    SetRecentList<public>(Recents:[]string)<transacts>:void = { VhCallStatic("FileDialog", "set_recent_list", array{VhFromStringArray(Recents)}) }
+    GetRecentList<public>()<transacts>:[]string = VhToStrings(VhCallStatic("FileDialog", "get_recent_list", array{}))
+    SetGetIconCallback<public>(Callback:callable)<transacts>:void = { VhCallStatic("FileDialog", "set_get_icon_callback", array{VhFromCallable(Callback)}) }
+    SetGetThumbnailCallback<public>(Callback:callable)<transacts>:void = { VhCallStatic("FileDialog", "set_get_thumbnail_callback", array{VhFromCallable(Callback)}) }
+
+Vector2Statics<public> := module:
+    Zero<public>:vector2 = vector2{X := 0.0, Y := 0.0}
+    One<public>:vector2 = vector2{X := 1.0, Y := 1.0}
+    Left<public>:vector2 = vector2{X := -1.0, Y := 0.0}
+    Right<public>:vector2 = vector2{X := 1.0, Y := 0.0}
+    Up<public>:vector2 = vector2{X := 0.0, Y := -1.0}
+    Down<public>:vector2 = vector2{X := 0.0, Y := 1.0}
+
+Vector2iStatics<public> := module:
+    Zero<public>:vector2i = vector2i{X := 0, Y := 0}
+    One<public>:vector2i = vector2i{X := 1, Y := 1}
+    Minimum<public>:vector2i = vector2i{X := -2147483648, Y := -2147483648}
+    Maximum<public>:vector2i = vector2i{X := 2147483647, Y := 2147483647}
+    Left<public>:vector2i = vector2i{X := -1, Y := 0}
+    Right<public>:vector2i = vector2i{X := 1, Y := 0}
+    Up<public>:vector2i = vector2i{X := 0, Y := -1}
+    Down<public>:vector2i = vector2i{X := 0, Y := 1}
+
+Vector3Statics<public> := module:
+    Zero<public>:vector3 = vector3{X := 0.0, Y := 0.0, Z := 0.0}
+    One<public>:vector3 = vector3{X := 1.0, Y := 1.0, Z := 1.0}
+    Left<public>:vector3 = vector3{X := -1.0, Y := 0.0, Z := 0.0}
+    Right<public>:vector3 = vector3{X := 1.0, Y := 0.0, Z := 0.0}
+    Up<public>:vector3 = vector3{X := 0.0, Y := 1.0, Z := 0.0}
+    Down<public>:vector3 = vector3{X := 0.0, Y := -1.0, Z := 0.0}
+    Forward<public>:vector3 = vector3{X := 0.0, Y := 0.0, Z := -1.0}
+    Back<public>:vector3 = vector3{X := 0.0, Y := 0.0, Z := 1.0}
+    ModelLeft<public>:vector3 = vector3{X := 1.0, Y := 0.0, Z := 0.0}
+    ModelRight<public>:vector3 = vector3{X := -1.0, Y := 0.0, Z := 0.0}
+    ModelTop<public>:vector3 = vector3{X := 0.0, Y := 1.0, Z := 0.0}
+    ModelBottom<public>:vector3 = vector3{X := 0.0, Y := -1.0, Z := 0.0}
+    ModelFront<public>:vector3 = vector3{X := 0.0, Y := 0.0, Z := 1.0}
+    ModelRear<public>:vector3 = vector3{X := 0.0, Y := 0.0, Z := -1.0}
+
+Vector3iStatics<public> := module:
+    Zero<public>:vector3i = vector3i{X := 0, Y := 0, Z := 0}
+    One<public>:vector3i = vector3i{X := 1, Y := 1, Z := 1}
+    Minimum<public>:vector3i = vector3i{X := -2147483648, Y := -2147483648, Z := -2147483648}
+    Maximum<public>:vector3i = vector3i{X := 2147483647, Y := 2147483647, Z := 2147483647}
+    Left<public>:vector3i = vector3i{X := -1, Y := 0, Z := 0}
+    Right<public>:vector3i = vector3i{X := 1, Y := 0, Z := 0}
+    Up<public>:vector3i = vector3i{X := 0, Y := 1, Z := 0}
+    Down<public>:vector3i = vector3i{X := 0, Y := -1, Z := 0}
+    Forward<public>:vector3i = vector3i{X := 0, Y := 0, Z := -1}
+    Back<public>:vector3i = vector3i{X := 0, Y := 0, Z := 1}
+
+Vector4Statics<public> := module:
+    Zero<public>:vector4 = vector4{X := 0.0, Y := 0.0, Z := 0.0, W := 0.0}
+    One<public>:vector4 = vector4{X := 1.0, Y := 1.0, Z := 1.0, W := 1.0}
+
+Vector4iStatics<public> := module:
+    Zero<public>:vector4i = vector4i{X := 0, Y := 0, Z := 0, W := 0}
+    One<public>:vector4i = vector4i{X := 1, Y := 1, Z := 1, W := 1}
+    Minimum<public>:vector4i = vector4i{X := -2147483648, Y := -2147483648, Z := -2147483648, W := -2147483648}
+    Maximum<public>:vector4i = vector4i{X := 2147483647, Y := 2147483647, Z := 2147483647, W := 2147483647}
+
+QuaternionStatics<public> := module:
+    Identity<public>:quaternion = quaternion{X := 0.0, Y := 0.0, Z := 0.0, W := 1.0}
+
+ColorStatics<public> := module:
+    AliceBlue<public>:color = color{R := 0.9411765, G := 0.972549, B := 1.0, A := 1.0}
+    AntiqueWhite<public>:color = color{R := 0.98039216, G := 0.92156863, B := 0.84313726, A := 1.0}
+    Aqua<public>:color = color{R := 0.0, G := 1.0, B := 1.0, A := 1.0}
+    Aquamarine<public>:color = color{R := 0.49803922, G := 1.0, B := 0.83137256, A := 1.0}
+    Azure<public>:color = color{R := 0.9411765, G := 1.0, B := 1.0, A := 1.0}
+    Beige<public>:color = color{R := 0.9607843, G := 0.9607843, B := 0.8627451, A := 1.0}
+    Bisque<public>:color = color{R := 1.0, G := 0.89411765, B := 0.76862746, A := 1.0}
+    Black<public>:color = color{R := 0.0, G := 0.0, B := 0.0, A := 1.0}
+    BlanchedAlmond<public>:color = color{R := 1.0, G := 0.92156863, B := 0.8039216, A := 1.0}
+    Blue<public>:color = color{R := 0.0, G := 0.0, B := 1.0, A := 1.0}
+    BlueViolet<public>:color = color{R := 0.5411765, G := 0.16862746, B := 0.8862745, A := 1.0}
+    Brown<public>:color = color{R := 0.64705884, G := 0.16470589, B := 0.16470589, A := 1.0}
+    Burlywood<public>:color = color{R := 0.87058824, G := 0.72156864, B := 0.5294118, A := 1.0}
+    CadetBlue<public>:color = color{R := 0.37254903, G := 0.61960787, B := 0.627451, A := 1.0}
+    Chartreuse<public>:color = color{R := 0.49803922, G := 1.0, B := 0.0, A := 1.0}
+    Chocolate<public>:color = color{R := 0.8235294, G := 0.4117647, B := 0.11764706, A := 1.0}
+    Coral<public>:color = color{R := 1.0, G := 0.49803922, B := 0.3137255, A := 1.0}
+    CornflowerBlue<public>:color = color{R := 0.39215687, G := 0.58431375, B := 0.92941177, A := 1.0}
+    Cornsilk<public>:color = color{R := 1.0, G := 0.972549, B := 0.8627451, A := 1.0}
+    Crimson<public>:color = color{R := 0.8627451, G := 0.078431375, B := 0.23529412, A := 1.0}
+    Cyan<public>:color = color{R := 0.0, G := 1.0, B := 1.0, A := 1.0}
+    DarkBlue<public>:color = color{R := 0.0, G := 0.0, B := 0.54509807, A := 1.0}
+    DarkCyan<public>:color = color{R := 0.0, G := 0.54509807, B := 0.54509807, A := 1.0}
+    DarkGoldenrod<public>:color = color{R := 0.72156864, G := 0.5254902, B := 0.043137256, A := 1.0}
+    DarkGray<public>:color = color{R := 0.6627451, G := 0.6627451, B := 0.6627451, A := 1.0}
+    DarkGreen<public>:color = color{R := 0.0, G := 0.39215687, B := 0.0, A := 1.0}
+    DarkKhaki<public>:color = color{R := 0.7411765, G := 0.7176471, B := 0.41960785, A := 1.0}
+    DarkMagenta<public>:color = color{R := 0.54509807, G := 0.0, B := 0.54509807, A := 1.0}
+    DarkOliveGreen<public>:color = color{R := 0.33333334, G := 0.41960785, B := 0.18431373, A := 1.0}
+    DarkOrange<public>:color = color{R := 1.0, G := 0.54901963, B := 0.0, A := 1.0}
+    DarkOrchid<public>:color = color{R := 0.6, G := 0.19607843, B := 0.8, A := 1.0}
+    DarkRed<public>:color = color{R := 0.54509807, G := 0.0, B := 0.0, A := 1.0}
+    DarkSalmon<public>:color = color{R := 0.9137255, G := 0.5882353, B := 0.47843137, A := 1.0}
+    DarkSeaGreen<public>:color = color{R := 0.56078434, G := 0.7372549, B := 0.56078434, A := 1.0}
+    DarkSlateBlue<public>:color = color{R := 0.28235295, G := 0.23921569, B := 0.54509807, A := 1.0}
+    DarkSlateGray<public>:color = color{R := 0.18431373, G := 0.30980393, B := 0.30980393, A := 1.0}
+    DarkTurquoise<public>:color = color{R := 0.0, G := 0.80784315, B := 0.81960785, A := 1.0}
+    DarkViolet<public>:color = color{R := 0.5803922, G := 0.0, B := 0.827451, A := 1.0}
+    DeepPink<public>:color = color{R := 1.0, G := 0.078431375, B := 0.5764706, A := 1.0}
+    DeepSkyBlue<public>:color = color{R := 0.0, G := 0.7490196, B := 1.0, A := 1.0}
+    DimGray<public>:color = color{R := 0.4117647, G := 0.4117647, B := 0.4117647, A := 1.0}
+    DodgerBlue<public>:color = color{R := 0.11764706, G := 0.5647059, B := 1.0, A := 1.0}
+    Firebrick<public>:color = color{R := 0.69803923, G := 0.13333334, B := 0.13333334, A := 1.0}
+    FloralWhite<public>:color = color{R := 1.0, G := 0.98039216, B := 0.9411765, A := 1.0}
+    ForestGreen<public>:color = color{R := 0.13333334, G := 0.54509807, B := 0.13333334, A := 1.0}
+    Fuchsia<public>:color = color{R := 1.0, G := 0.0, B := 1.0, A := 1.0}
+    Gainsboro<public>:color = color{R := 0.8627451, G := 0.8627451, B := 0.8627451, A := 1.0}
+    GhostWhite<public>:color = color{R := 0.972549, G := 0.972549, B := 1.0, A := 1.0}
+    Gold<public>:color = color{R := 1.0, G := 0.84313726, B := 0.0, A := 1.0}
+    Goldenrod<public>:color = color{R := 0.85490197, G := 0.64705884, B := 0.1254902, A := 1.0}
+    Gray<public>:color = color{R := 0.74509805, G := 0.74509805, B := 0.74509805, A := 1.0}
+    Green<public>:color = color{R := 0.0, G := 1.0, B := 0.0, A := 1.0}
+    GreenYellow<public>:color = color{R := 0.6784314, G := 1.0, B := 0.18431373, A := 1.0}
+    Honeydew<public>:color = color{R := 0.9411765, G := 1.0, B := 0.9411765, A := 1.0}
+    HotPink<public>:color = color{R := 1.0, G := 0.4117647, B := 0.7058824, A := 1.0}
+    IndianRed<public>:color = color{R := 0.8039216, G := 0.36078432, B := 0.36078432, A := 1.0}
+    Indigo<public>:color = color{R := 0.29411766, G := 0.0, B := 0.50980395, A := 1.0}
+    Ivory<public>:color = color{R := 1.0, G := 1.0, B := 0.9411765, A := 1.0}
+    Khaki<public>:color = color{R := 0.9411765, G := 0.9019608, B := 0.54901963, A := 1.0}
+    Lavender<public>:color = color{R := 0.9019608, G := 0.9019608, B := 0.98039216, A := 1.0}
+    LavenderBlush<public>:color = color{R := 1.0, G := 0.9411765, B := 0.9607843, A := 1.0}
+    LawnGreen<public>:color = color{R := 0.4862745, G := 0.9882353, B := 0.0, A := 1.0}
+    LemonChiffon<public>:color = color{R := 1.0, G := 0.98039216, B := 0.8039216, A := 1.0}
+    LightBlue<public>:color = color{R := 0.6784314, G := 0.84705883, B := 0.9019608, A := 1.0}
+    LightCoral<public>:color = color{R := 0.9411765, G := 0.5019608, B := 0.5019608, A := 1.0}
+    LightCyan<public>:color = color{R := 0.8784314, G := 1.0, B := 1.0, A := 1.0}
+    LightGoldenrod<public>:color = color{R := 0.98039216, G := 0.98039216, B := 0.8235294, A := 1.0}
+    LightGray<public>:color = color{R := 0.827451, G := 0.827451, B := 0.827451, A := 1.0}
+    LightGreen<public>:color = color{R := 0.5647059, G := 0.93333334, B := 0.5647059, A := 1.0}
+    LightPink<public>:color = color{R := 1.0, G := 0.7137255, B := 0.75686276, A := 1.0}
+    LightSalmon<public>:color = color{R := 1.0, G := 0.627451, B := 0.47843137, A := 1.0}
+    LightSeaGreen<public>:color = color{R := 0.1254902, G := 0.69803923, B := 0.6666667, A := 1.0}
+    LightSkyBlue<public>:color = color{R := 0.5294118, G := 0.80784315, B := 0.98039216, A := 1.0}
+    LightSlateGray<public>:color = color{R := 0.46666667, G := 0.53333336, B := 0.6, A := 1.0}
+    LightSteelBlue<public>:color = color{R := 0.6901961, G := 0.76862746, B := 0.87058824, A := 1.0}
+    LightYellow<public>:color = color{R := 1.0, G := 1.0, B := 0.8784314, A := 1.0}
+    Lime<public>:color = color{R := 0.0, G := 1.0, B := 0.0, A := 1.0}
+    LimeGreen<public>:color = color{R := 0.19607843, G := 0.8039216, B := 0.19607843, A := 1.0}
+    Linen<public>:color = color{R := 0.98039216, G := 0.9411765, B := 0.9019608, A := 1.0}
+    Magenta<public>:color = color{R := 1.0, G := 0.0, B := 1.0, A := 1.0}
+    Maroon<public>:color = color{R := 0.6901961, G := 0.1882353, B := 0.3764706, A := 1.0}
+    MediumAquamarine<public>:color = color{R := 0.4, G := 0.8039216, B := 0.6666667, A := 1.0}
+    MediumBlue<public>:color = color{R := 0.0, G := 0.0, B := 0.8039216, A := 1.0}
+    MediumOrchid<public>:color = color{R := 0.7294118, G := 0.33333334, B := 0.827451, A := 1.0}
+    MediumPurple<public>:color = color{R := 0.5764706, G := 0.4392157, B := 0.85882354, A := 1.0}
+    MediumSeaGreen<public>:color = color{R := 0.23529412, G := 0.7019608, B := 0.44313726, A := 1.0}
+    MediumSlateBlue<public>:color = color{R := 0.48235294, G := 0.40784314, B := 0.93333334, A := 1.0}
+    MediumSpringGreen<public>:color = color{R := 0.0, G := 0.98039216, B := 0.6039216, A := 1.0}
+    MediumTurquoise<public>:color = color{R := 0.28235295, G := 0.81960785, B := 0.8, A := 1.0}
+    MediumVioletRed<public>:color = color{R := 0.78039217, G := 0.08235294, B := 0.52156866, A := 1.0}
+    MidnightBlue<public>:color = color{R := 0.09803922, G := 0.09803922, B := 0.4392157, A := 1.0}
+    MintCream<public>:color = color{R := 0.9607843, G := 1.0, B := 0.98039216, A := 1.0}
+    MistyRose<public>:color = color{R := 1.0, G := 0.89411765, B := 0.88235295, A := 1.0}
+    Moccasin<public>:color = color{R := 1.0, G := 0.89411765, B := 0.70980394, A := 1.0}
+    NavajoWhite<public>:color = color{R := 1.0, G := 0.87058824, B := 0.6784314, A := 1.0}
+    NavyBlue<public>:color = color{R := 0.0, G := 0.0, B := 0.5019608, A := 1.0}
+    OldLace<public>:color = color{R := 0.99215686, G := 0.9607843, B := 0.9019608, A := 1.0}
+    Olive<public>:color = color{R := 0.5019608, G := 0.5019608, B := 0.0, A := 1.0}
+    OliveDrab<public>:color = color{R := 0.41960785, G := 0.5568628, B := 0.13725491, A := 1.0}
+    Orange<public>:color = color{R := 1.0, G := 0.64705884, B := 0.0, A := 1.0}
+    OrangeRed<public>:color = color{R := 1.0, G := 0.27058825, B := 0.0, A := 1.0}
+    Orchid<public>:color = color{R := 0.85490197, G := 0.4392157, B := 0.8392157, A := 1.0}
+    PaleGoldenrod<public>:color = color{R := 0.93333334, G := 0.9098039, B := 0.6666667, A := 1.0}
+    PaleGreen<public>:color = color{R := 0.59607846, G := 0.9843137, B := 0.59607846, A := 1.0}
+    PaleTurquoise<public>:color = color{R := 0.6862745, G := 0.93333334, B := 0.93333334, A := 1.0}
+    PaleVioletRed<public>:color = color{R := 0.85882354, G := 0.4392157, B := 0.5764706, A := 1.0}
+    PapayaWhip<public>:color = color{R := 1.0, G := 0.9372549, B := 0.8352941, A := 1.0}
+    PeachPuff<public>:color = color{R := 1.0, G := 0.85490197, B := 0.7254902, A := 1.0}
+    Peru<public>:color = color{R := 0.8039216, G := 0.52156866, B := 0.24705882, A := 1.0}
+    Pink<public>:color = color{R := 1.0, G := 0.7529412, B := 0.79607844, A := 1.0}
+    Plum<public>:color = color{R := 0.8666667, G := 0.627451, B := 0.8666667, A := 1.0}
+    PowderBlue<public>:color = color{R := 0.6901961, G := 0.8784314, B := 0.9019608, A := 1.0}
+    Purple<public>:color = color{R := 0.627451, G := 0.1254902, B := 0.9411765, A := 1.0}
+    RebeccaPurple<public>:color = color{R := 0.4, G := 0.2, B := 0.6, A := 1.0}
+    Red<public>:color = color{R := 1.0, G := 0.0, B := 0.0, A := 1.0}
+    RosyBrown<public>:color = color{R := 0.7372549, G := 0.56078434, B := 0.56078434, A := 1.0}
+    RoyalBlue<public>:color = color{R := 0.25490198, G := 0.4117647, B := 0.88235295, A := 1.0}
+    SaddleBrown<public>:color = color{R := 0.54509807, G := 0.27058825, B := 0.07450981, A := 1.0}
+    Salmon<public>:color = color{R := 0.98039216, G := 0.5019608, B := 0.44705883, A := 1.0}
+    SandyBrown<public>:color = color{R := 0.95686275, G := 0.6431373, B := 0.3764706, A := 1.0}
+    SeaGreen<public>:color = color{R := 0.18039216, G := 0.54509807, B := 0.34117648, A := 1.0}
+    Seashell<public>:color = color{R := 1.0, G := 0.9607843, B := 0.93333334, A := 1.0}
+    Sienna<public>:color = color{R := 0.627451, G := 0.32156864, B := 0.1764706, A := 1.0}
+    Silver<public>:color = color{R := 0.7529412, G := 0.7529412, B := 0.7529412, A := 1.0}
+    SkyBlue<public>:color = color{R := 0.5294118, G := 0.80784315, B := 0.92156863, A := 1.0}
+    SlateBlue<public>:color = color{R := 0.41568628, G := 0.3529412, B := 0.8039216, A := 1.0}
+    SlateGray<public>:color = color{R := 0.4392157, G := 0.5019608, B := 0.5647059, A := 1.0}
+    Snow<public>:color = color{R := 1.0, G := 0.98039216, B := 0.98039216, A := 1.0}
+    SpringGreen<public>:color = color{R := 0.0, G := 1.0, B := 0.49803922, A := 1.0}
+    SteelBlue<public>:color = color{R := 0.27450982, G := 0.50980395, B := 0.7058824, A := 1.0}
+    TanColor<public>:color = color{R := 0.8235294, G := 0.7058824, B := 0.54901963, A := 1.0}
+    Teal<public>:color = color{R := 0.0, G := 0.5019608, B := 0.5019608, A := 1.0}
+    Thistle<public>:color = color{R := 0.84705883, G := 0.7490196, B := 0.84705883, A := 1.0}
+    Tomato<public>:color = color{R := 1.0, G := 0.3882353, B := 0.2784314, A := 1.0}
+    Transparent<public>:color = color{R := 1.0, G := 1.0, B := 1.0, A := 0.0}
+    Turquoise<public>:color = color{R := 0.2509804, G := 0.8784314, B := 0.8156863, A := 1.0}
+    Violet<public>:color = color{R := 0.93333334, G := 0.50980395, B := 0.93333334, A := 1.0}
+    WebGray<public>:color = color{R := 0.5019608, G := 0.5019608, B := 0.5019608, A := 1.0}
+    WebGreen<public>:color = color{R := 0.0, G := 0.5019608, B := 0.0, A := 1.0}
+    WebMaroon<public>:color = color{R := 0.5019608, G := 0.0, B := 0.0, A := 1.0}
+    WebPurple<public>:color = color{R := 0.5019608, G := 0.0, B := 0.5019608, A := 1.0}
+    Wheat<public>:color = color{R := 0.9607843, G := 0.87058824, B := 0.7019608, A := 1.0}
+    White<public>:color = color{R := 1.0, G := 1.0, B := 1.0, A := 1.0}
+    WhiteSmoke<public>:color = color{R := 0.9607843, G := 0.9607843, B := 0.9607843, A := 1.0}
+    Yellow<public>:color = color{R := 1.0, G := 1.0, B := 0.0, A := 1.0}
+    YellowGreen<public>:color = color{R := 0.6039216, G := 0.8039216, B := 0.19607843, A := 1.0}
 
 # Godot hands a singleton out by name rather than through the scene, so a mirrored `input` or
 # `engine` would otherwise be a class no script can obtain an instance of. <decides> because

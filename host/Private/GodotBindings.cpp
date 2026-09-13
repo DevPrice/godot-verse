@@ -676,6 +676,76 @@ void VhCallValue(int64 Handle, verse::string const& Method, TArray<FGodotValue> 
     OutValue = FromWire(Result);
 }
 
+void VhCallStatic(verse::string const& Class,
+                  verse::string const& Method,
+                  TArray<FGodotValue> const& Args,
+                  FGodotValue& OutValue)
+{
+    OutValue = FGodotValue{};
+    FHostState& Host = GetHost();
+    if (!Host.Godot.CallStatic)
+    {
+        return;
+    }
+
+    FWireStore Store;
+    TArray<vh_value> Wire;
+    Wire.Reserve(Args.Num());
+    for (const FGodotValue& Arg : Args)
+    {
+        Wire.Add(Store.Wire(Own(Arg)));
+    }
+
+    const FUtf8StringView ClassName = ToView(Class);
+    const FUtf8StringView Name = ToView(Method);
+    FCallArena Arena;
+    vh_value Result{};
+    const int32 Status = CallGodot([&] {
+        return Host.Godot.CallStatic(Host.Godot.Ctx,
+                                     Bytes(ClassName), ClassName.Len(),
+                                     Bytes(Name), Name.Len(),
+                                     Wire.GetData(), Wire.Num(), &Arena, &Result);
+    });
+    if (Status != VH_CALL_OK)
+    {
+        RaiseCallStatus(Status, 0, Method, TEXT("Called static"));
+        return;
+    }
+    OutValue = FromWire(Result);
+}
+
+void VhCallUtility(verse::string const& Name, TArray<FGodotValue> const& Args, FGodotValue& OutValue)
+{
+    OutValue = FGodotValue{};
+    FHostState& Host = GetHost();
+    if (!Host.Godot.CallUtility)
+    {
+        return;
+    }
+
+    FWireStore Store;
+    TArray<vh_value> Wire;
+    Wire.Reserve(Args.Num());
+    for (const FGodotValue& Arg : Args)
+    {
+        Wire.Add(Store.Wire(Own(Arg)));
+    }
+
+    const FUtf8StringView Which = ToView(Name);
+    FCallArena Arena;
+    vh_value Result{};
+    const int32 Status = CallGodot([&] {
+        return Host.Godot.CallUtility(Host.Godot.Ctx, Bytes(Which), Which.Len(),
+                                      Wire.GetData(), Wire.Num(), &Arena, &Result);
+    });
+    if (Status != VH_CALL_OK)
+    {
+        RaiseCallStatus(Status, 0, Name, TEXT("Called"));
+        return;
+    }
+    OutValue = FromWire(Result);
+}
+
 void VhCallVoid(int64 Handle, verse::string const& Method, TArray<FGodotValue> const& Args)
 {
     if (RaiseIfDead(Handle, Method, TEXT("Called")))

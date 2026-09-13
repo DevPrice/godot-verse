@@ -90,6 +90,14 @@ VERSE_STDLIB_NAMES = {
     "Print", "Err", "Sleep", "Length", "Slice", "Reverse", "Shuffle", "Concatenate", "Fits",
     "ToString", "ToDiagnostic", "ToInt", "ToFloat", "ToChar", "ToRational",
     "IsInstanceValid",
+    # The math extension methods in GodotMath.native.verse. An extension method is a *module-level*
+    # definition -- `(V:vector2).Angle()` declares `operator'.Angle'` beside everything else -- and
+    # Verse resolves a bare `Angle` against it, so a parameter of that name is ambiguous rather than
+    # shadowing. Eight methods on Node3D and two others reported exactly this the first time the
+    # math landed. The same constraint reaches a script's locals, which is the price of the idiom
+    # and is Epic's own: SpatialMath declares `(V:vector2).Length` too.
+    "Angle", "AngleTo", "AngleToPoint", "Cross", "Dot", "DistanceTo", "DistanceSquaredTo",
+    "LengthSquared", "Normalized", "Rotated", "Vector2FromAngle",
 }
 
 TypeInfo = namedtuple("TypeInfo", ["verse_type", "pack_fn", "pack_decides", "unpack_fn", "unpack_decides"])
@@ -1100,7 +1108,11 @@ def math_leaf_lanes(godot_name: str, path: str = "") -> list:
 def emit_math_structs() -> list:
     blocks = []
     for godot_name in MATH_TYPES:
-        lines = [f"{math_struct_name(godot_name)}<public> := struct:"]
+        # `<concrete><computes>`, which Epic's own vector2 also carries: without it a struct
+        # literal inside a `<computes>` function is refused -- "this archetype instantiation
+        # constructs a class that has the 'transacts' effect" -- and none of the math in
+        # GodotMath.verse could construct its own result.
+        lines = [f"{math_struct_name(godot_name)}<public> := struct<concrete><computes>:"]
         for member, member_type in MATH_LAYOUT[godot_name]:
             field = verse_method_name(member)
             if member_type == "float":
@@ -1226,6 +1238,9 @@ class Coverage:
         self.methods_emitted = 0
         self.properties_emitted = 0
         self.signals_emitted = 0
+        self.constants_emitted = 0
+        self.statics_emitted = 0
+        self.utilities_emitted = 0
         self.skip_reasons = Counter()
         self.unsupported_types = Counter()
         # Every skip that costs a *name*, for the editor diagnostic. A skip that costs nothing --
@@ -1379,6 +1394,238 @@ def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members
         is_void=is_void,
         default_body=default_body,
     )
+
+
+# Godot's `@GlobalScope` utilities that are *dispatched* rather than answered by Verse's own
+# stdlib, and the only ones: the random family. R-AUD-2 says Verse's spelling wins where Verse has
+# a counterpart, and `GetRandomFloat` is a counterpart -- but a Verse-side RNG would silently ignore
+# `seed()` and `randomize()`, so a project that seeds for a replay would get a different game.
+# Godot's C# makes the same exception for the same reason.
+#
+# The other 106 utilities are recorded as skips: most are Verse's own under Verse's name (Abs, Sqrt,
+# Clamp, Lerp, ...), and the rest have no dispatch yet because the GDExtension interface offers no
+# by-name utility call that takes Variants -- only a ptrcall wanting a signature hash.
+# A utility whose Verse name would be ambiguous with something already visible, and what it is
+# called instead. `seed` collides with the `Seed` *property* on six classes -- a `var` has no
+# signature to be told apart by -- so the free function takes the longer name and the property keeps
+# Godot's. Recorded as a skip too, so the editor answers either spelling.
+UTILITY_RENAMES = {"seed": "SeedRandom"}
+
+# The same thing for a *constant*, and there is one: Godot's `Color.TAN` is the colour, and Verse's
+# `Tan` is the trigonometric function. Data has no signature to be told apart by, and Verse refuses
+# an ambiguous definition even inside a module, so the constant takes the longer name. The other
+# nine collisions across the whole API are `MIN`/`MAX` (which PROPERTY_RENAMES already answers) and
+# `INF` (which has no Verse float literal and is skipped for that).
+CONSTANT_RENAMES = {"Tan": "TanColor"}
+
+DISPATCHED_UTILITIES = {
+    "randf", "randi", "randf_range", "randi_range", "randfn", "randomize", "seed", "rand_from_seed",
+}
+
+
+def emit_utility_functions(api: dict, resolver: TypeResolver, coverage: Coverage) -> list:
+    """The `@GlobalScope` utilities the bridge dispatches, as module-level Verse functions."""
+    blocks = []
+    for utility in api.get("utility_functions", []):
+        name = utility["name"]
+        verse_name = UTILITY_RENAMES.get(name, verse_method_name(name))
+        if name not in DISPATCHED_UTILITIES:
+            coverage.skip("utility_not_dispatched", SkippedMember(
+                "", verse_name, "@GlobalScope", name, "utility_not_dispatched",
+                "Verse's own" if utility.get("category") == "math" else ""))
+            continue
+
+        params = []
+        used = set()
+        unsupported = False
+        for index, arg in enumerate(utility.get("arguments") or []):
+            info = resolver.classify(arg["type"])
+            if info is None or info.pack_fn is None:
+                unsupported = True
+                break
+            pname = verse_param_name(arg["name"], index, RESERVED_WORDS, used, set())
+            used.add(pname)
+            params.append(Param(pname, info, None))
+        if unsupported:
+            coverage.skip("utility_not_dispatched", SkippedMember(
+                "", verse_name, "@GlobalScope", name, "utility_not_dispatched", ""))
+            continue
+
+        return_type = utility.get("return_type")
+        info = resolver.classify(return_type) if return_type else None
+        decl = ", ".join(f"{q.verse_name}:{q.type_info.verse_type}" for q in params)
+        args = emit_call_args(params)
+        call = f'VhCallUtility("{name}", array{{{args}}})'
+        if info is None:
+            blocks.append(f"    {verse_name}<public>({decl})<transacts>:void = {{ {call} }}")
+        elif info.unpack_decides:
+            blocks.append(f"    {verse_name}<public>({decl})<decides><transacts>:{info.verse_type}"
+                          f" = {info.unpack_fn}[{call}]")
+        else:
+            blocks.append(f"    {verse_name}<public>({decl})<transacts>:{info.verse_type}"
+                          f" = {info.unpack_fn}({call})")
+        if name in UTILITY_RENAMES:
+            coverage.skip("utility_renamed", SkippedMember(
+                "", verse_method_name(name), "@GlobalScope", name, "utility_renamed",
+                f"`{UTILITY_RENAMES[name]}`"))
+        coverage.utilities_emitted += 1
+    return blocks
+
+
+def emit_static_methods(api: dict, emit_order: list, resolver: TypeResolver,
+                        coverage: Coverage) -> list:
+    """Godot's 114 statics, as members of each class's `...Statics` module.
+
+    A static is not a member of the mirrored class: Verse has no `static` keyword, so it goes where
+    the class's constants go and is reached the same way -- `TweenStatics.InterpolateValue(...)`.
+    """
+    by_class = {}
+    emitted = set(emit_order)
+    for godot_class in api["classes"]:
+        if godot_class["name"] not in emitted:
+            continue
+        for method in godot_class.get("methods", []) or []:
+            if not method.get("is_static"):
+                continue
+            by_class.setdefault(godot_class["name"], []).append(method)
+
+    blocks = []
+    for godot_class, methods in sorted(by_class.items()):
+        lines = []
+        for method in methods:
+            verse_name = verse_method_name(method["name"])
+            params = []
+            used = set()
+            unsupported = False
+            for index, arg in enumerate(method.get("arguments") or []):
+                info = resolver.classify(arg["type"])
+                if info is None or info.pack_fn is None:
+                    unsupported = True
+                    break
+                pname = verse_param_name(arg["name"], index, RESERVED_WORDS, used, set())
+                used.add(pname)
+                params.append(Param(pname, info, None))
+            return_value = method.get("return_value")
+            info = resolver.classify(return_value["type"]) if return_value else None
+            if unsupported or (return_value and info is None) or method.get("is_vararg"):
+                coverage.skip("static_unsupported", SkippedMember(
+                    verse_class_name(godot_class), verse_name, godot_class, method["name"],
+                    "static_unsupported", ""))
+                continue
+
+            decl = ", ".join(f"{q.verse_name}:{q.type_info.verse_type}" for q in params)
+            args = emit_call_args(params)
+            call = f'VhCallStatic("{godot_class}", "{method["name"]}", array{{{args}}})'
+            if info is None:
+                lines.append(f"    {verse_name}<public>({decl})<transacts>:void = {{ {call} }}")
+            elif info.pack_fn == "VhFromObject":
+                lines.append(f"    {verse_name}<public>({decl})<decides><transacts>:{info.verse_type}"
+                             f" = {info.verse_type}[VhObjectFrom[{call}]]")
+            elif info.unpack_decides:
+                lines.append(f"    {verse_name}<public>({decl})<decides><transacts>:{info.verse_type}"
+                             f" = {info.unpack_fn}[{call}]")
+            else:
+                lines.append(f"    {verse_name}<public>({decl})<transacts>:{info.verse_type}"
+                             f" = {info.unpack_fn}({call})")
+            coverage.statics_emitted += 1
+        if lines:
+            blocks.append((godot_class, lines))
+    return blocks
+
+
+def statics_module_name(godot_class: str) -> str:
+    """`Node` -> `NodeStatics`. The suffix is not decoration.
+
+    Verse has no constant on a type, and Epic hit the same wall -- `SpatialMath` writes `Zero2()`
+    with a TODO wishing for `vector2.Zero`. What Verse does have is inline modules with qualified
+    access, so the constants go in one.
+
+    The suffix is what keeps the module from being a top-level name an author reaches for. Verse
+    refuses a *local* that resolves ambiguously against a visible definition, so a module named
+    `Tree` would break `if (Tree := GetTree[])`, which the yardstick writes today, and one named
+    `Node` would break any local of that name. `...Statics` is a name nobody reaches for.
+    """
+    # Godot's own spelling of the class, verbatim: `NodeStatics`, `Vector2iStatics`, `AABBStatics`.
+    # It is what an author looks for, and a mirrored class name is lowercase, so the two cannot meet.
+    return godot_class + "Statics"
+
+
+def emit_statics_module(godot_class: str, constants: list, resolver: TypeResolver,
+                        coverage: Coverage, enums: dict) -> str:
+    """One inline module of Godot's constants for a class, or "" when none of them can be written.
+
+    An inline module needs no `using`: `NodeStatics.NotificationReady` reaches it from any script
+    that imports the package, which is every script.
+    """
+    lines = []
+    for constant in constants:
+        # SCREAMING_SNAKE to PascalCase: `NOTIFICATION_ENTER_TREE` is `NotificationEnterTree`, `UP`
+        # is `Up`. verse_method_name keeps the tail of each part as it found it, which is right for
+        # `get_max` and wrong for a constant, where the whole name is shouting.
+        name = "".join(part.capitalize() for part in constant["name"].split("_") if part)
+        # `Vector2i.MIN` would be data named `Min`, which is ambiguous with /Verse.org/Verse's
+        # function of that name -- data has no signature to be told apart by. The same rename a
+        # property in that position gets, and recorded the same way so either spelling is answered.
+        renamed = PROPERTY_RENAMES.get(name) or CONSTANT_RENAMES.get(name)
+        if renamed:
+            coverage.skip("constant_renamed", SkippedMember(
+                verse_class_name(godot_class), name, godot_class, constant["name"],
+                "constant_renamed", f"`{renamed}`"))
+            name = renamed
+        godot_type = constant.get("type")
+        if godot_type is None:
+            # A class constant, which is always an int -- extension_api.json gives these a value
+            # and no type at all.
+            lines.append(f"    {name}<public>:int = {constant['value']}")
+            continue
+        info = resolver.classify(godot_type)
+        literal = verse_default_literal(info.verse_type, constant.get("value")) if info else None
+        if literal is None:
+            # `Vector2.INF` is `Vector2(inf, inf)`, and an infinity has no Verse float literal.
+            # Recorded rather than dropped, so the editor can say where it went.
+            coverage.skip("constant_no_literal", SkippedMember(
+                verse_class_name(godot_class), name, godot_class, constant["name"],
+                "constant_no_literal", f"`{constant.get('value')}`"))
+            continue
+        lines.append(f"    {name}<public>:{info.verse_type} = {literal}")
+
+    if not lines:
+        return ""
+    return f"{statics_module_name(godot_class)}<public> := module:\n" + "\n".join(lines)
+
+
+def emit_statics_modules(api: dict, emit_order: list, resolver: TypeResolver,
+                         coverage: Coverage, enums: dict) -> list:
+    """One module per owner, carrying its constants and its static methods.
+
+    Both for the same reason: Verse has no constant and no static *on* a type, and an inline module
+    with qualified access is what it has instead.
+    """
+    blocks = []
+    by_name = {c["name"]: c for c in api["classes"]}
+    static_lines = dict(emit_static_methods(api, emit_order, resolver, coverage))
+    for name in emit_order:
+        constants = by_name[name].get("constants") or []
+        block = emit_statics_module(name, constants, resolver, coverage, enums) if constants else ""
+        statics = static_lines.get(name)
+        if statics:
+            if block:
+                block += "\n" + "\n".join(statics)
+            else:
+                block = f"{statics_module_name(name)}<public> := module:\n" + "\n".join(statics)
+        if block:
+            blocks.append(block)
+            coverage.constants_emitted += len(constants)
+    for builtin in api.get("builtin_classes", []):
+        if builtin["name"] not in MATH_TYPES:
+            continue
+        constants = builtin.get("constants") or []
+        if constants:
+            block = emit_statics_module(builtin["name"], constants, resolver, coverage, enums)
+            if block:
+                blocks.append(block)
+                coverage.constants_emitted += block.count("<public>:")
+    return blocks
 
 
 def emit_signal_accessor(godot_class: str, sig: dict, resolver: TypeResolver, coverage: Coverage):
@@ -1866,6 +2113,41 @@ TYPED_ARRAYS_TEMPLATE = """
 """
 
 
+UTILITIES_TEMPLATE = """
+# --- @GlobalScope utilities --------------------------------------------------
+#
+# In a module rather than at module scope, and not for tidiness: a module-level `Randf` is ambiguous
+# with `random_number_generator.Randf`, because Verse refuses a definition that resolves
+# ambiguously against anything visible. `GodotStatics.Randf()` reaches one and
+# `MyRng.Randf()` still reaches the other.
+#
+# The one exception to R-AUD-2, and only this family: Verse has `GetRandomFloat`, but a Verse-side
+# RNG would silently ignore `Seed()` and `Randomize()`, so a project that seeds for a replay would
+# get a different game. These steer Godot's own stream. C# makes the same exception for the same
+# reason.
+
+GodotStatics<public> := module:
+{functions}
+"""
+
+
+STATICS_TEMPLATE = """
+# --- constants ---------------------------------------------------------------
+#
+# Godot's class constants and its math types', as one inline module per owner: `NodeStatics`,
+# `Vector2Statics`. Verse has no constant *on* a type -- Epic hit the same wall and wrote `Zero2()`
+# with a TODO wishing for `vector2.Zero` -- and an inline module needs no `using`, so
+# `NodeStatics.NotificationReady` reaches one from any script that imports this package.
+#
+# The `...Statics` suffix is load-bearing rather than decoration. Verse refuses a *local* that
+# resolves ambiguously against a visible definition, so a module named `Tree` would break
+# `if (Tree := GetTree[])` -- which the yardstick writes today -- and one named `Node` would break
+# any local of that name.
+
+{modules}
+"""
+
+
 SINGLETONS_TEMPLATE = """
 # Godot hands a singleton out by name rather than through the scene, so a mirrored `input` or
 # `engine` would otherwise be a class no script can obtain an instance of. <decides> because
@@ -1901,7 +2183,7 @@ def emit_singleton_accessors(api: dict, emit_order: list, member_names: set) -> 
 
 
 def render(api: dict, class_blocks: list, singleton_accessors: list, typed_arrays: dict,
-           typed_dictionaries: dict, enums: dict) -> str:
+           typed_dictionaries: dict, enums: dict, statics_modules: list, utilities: list) -> str:
     version = api["header"]["version_full_name"]
     text = HEADER_TEMPLATE.format(version=version)
     text += MATH_TEMPLATE.format(
@@ -1918,6 +2200,10 @@ def render(api: dict, class_blocks: list, singleton_accessors: list, typed_array
         text += TYPED_ARRAYS_TEMPLATE.format(
             converters="\n\n".join(emit_typed_array_converters(typed_arrays, typed_dictionaries)))
     text += "\n" + "\n\n".join(class_blocks) + "\n"
+    if utilities:
+        text += UTILITIES_TEMPLATE.format(functions="\n".join(utilities))
+    if statics_modules:
+        text += STATICS_TEMPLATE.format(modules="\n\n".join(statics_modules))
     if singleton_accessors:
         text += SINGLETONS_TEMPLATE.format(accessors="\n".join(singleton_accessors))
     return text
@@ -2211,6 +2497,9 @@ def format_report(coverage: Coverage, class_count_requested: int) -> str:
     lines.append(f"Methods emitted: {coverage.methods_emitted}")
     lines.append(f"Properties emitted: {coverage.properties_emitted}")
     lines.append(f"Signal accessors emitted: {coverage.signals_emitted}")
+    lines.append(f"Constants emitted: {coverage.constants_emitted}")
+    lines.append(f"Static methods emitted: {coverage.statics_emitted}")
+    lines.append(f"Utility functions dispatched: {coverage.utilities_emitted}")
     lines.append("")
     lines.append("Methods skipped, by reason:")
     total_skipped = sum(coverage.skip_reasons.values())
@@ -2270,8 +2559,12 @@ def main() -> int:
     coverage = Coverage()
     (class_blocks, emit_order, method_map, member_names, typed_arrays,
      typed_dictionaries) = generate(api, requested, coverage, enums)
+    resolver_for_statics = TypeResolver(set(emit_order), build_parent_map(api["classes"]),
+                                       {c["name"] for c in api["classes"]}, enums)
+    statics_modules = emit_statics_modules(api, emit_order, resolver_for_statics, coverage, enums)
     text = render(api, class_blocks, emit_singleton_accessors(api, emit_order, member_names),
-                  typed_arrays, typed_dictionaries, enums)
+                  typed_arrays, typed_dictionaries, enums, statics_modules,
+                  emit_utility_functions(api, resolver_for_statics, coverage))
     classes_header_text = render_classes_header(api, emit_order, method_map)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)

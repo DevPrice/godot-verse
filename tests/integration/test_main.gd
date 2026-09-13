@@ -456,6 +456,35 @@ func _init() -> void:
 	var plain_script: Script = load("res://scripts/marshal.verse")
 	_check("while an unmarked one does not", plain_script != null and not plain_script.is_tool())
 
+	# --- OQ-11 / R-SCN-3: the math types, as ordinary Verse -------------------------------------
+	_check_eq("vector addition is an operator", node.call("VecAdd", Vector2(1, 2), Vector2(3, 4)),
+			Vector2(4, 6))
+	_check_eq("and scaling", node.call("VecScale", Vector2(3, 4), 2.0), Vector2(6, 8))
+	_check_eq("length", node.call("VecLength", Vector2(3, 4)), 5.0)
+	_check_eq("dot", node.call("VecDot", Vector2(1, 2), Vector2(3, 4)), 11.0)
+	_check_eq("normalizing a zero vector answers zero, as Godot's own does",
+			node.call("VecNormalized", Vector2(0, 0)), Vector2(0, 0))
+	_check_eq("and a real one answers a unit vector",
+			node.call("VecNormalized", Vector2(0, 5)), Vector2(0, 1))
+	var rotated: Vector2 = node.call("VecRotated", Vector2(1, 0), PI / 2.0)
+	_check("rotating by a quarter turn matches Godot's own",
+			rotated.distance_to(Vector2(1, 0).rotated(PI / 2.0)) < 0.0001)
+
+	# --- R-SCN-3: constants and statics ---------------------------------------------------------
+	_check_eq("a class constant is reachable through its statics module",
+			node.call("ReadyNotification"), Node.NOTIFICATION_READY)
+	_check_eq("and a math type's", node.call("UpVector"), Vector2.UP)
+	_check_eq("including the zero one", node.call("ZeroVector"), Vector2.ZERO)
+
+	# Godot's own RNG, not a Verse-side one: seeding and asking again has to repeat.
+	var first: int = node.call("SeededRandom", 12345)
+	var again: int = node.call("SeededRandom", 12345)
+	_check_eq("a seeded random repeats, so it is Godot's stream and not a second one",
+			first, again)
+	seed(12345)
+	_check_eq("and GDScript seeding the same stream sees the same number",
+			randi_range(0, 1000000), first)
+
 	# --- R-NODE-7 / R-NODE-8: the full virtual set ----------------------------------------------
 	#
 	# Before Phase 4 exactly three of Godot's 1413 virtuals were carried, hand-written on the native

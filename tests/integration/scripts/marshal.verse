@@ -317,6 +317,41 @@ marshal := class(node2d):
 
     ReadCallbackSeen<public>()<transacts>:int = CallbackSeen
 
+    # --- OQ-11 / R-SCN-3: the math types, as ordinary Verse ------------------
+    #
+    # No handle and no ABI: Verse has type-based extension methods and definable operators, so
+    # `Position + Velocity * Delta` is Verse code over Verse data. Godot's own C# does the same.
+    VecAdd<public>(A:vector2, B:vector2)<transacts>:vector2 = A + B
+    VecScale<public>(A:vector2, S:float)<transacts>:vector2 = A * S
+    VecLength<public>(A:vector2)<transacts>:float = A.Length()
+    VecDot<public>(A:vector2, B:vector2)<transacts>:float = A.Dot(B)
+
+    # Godot's own edge case, not merely its formula: normalizing a zero vector answers zero rather
+    # than NaN, which is what core/math/vector2.cpp does.
+    VecNormalized<public>(A:vector2)<transacts>:vector2 = A.Normalized()
+
+    # `Radians` rather than `Angle`: an extension method is a module-level definition, so
+    # `(V:vector2).Angle()` declares `operator'.Angle'` and a local named `Angle` is ambiguous with
+    # it. That is the same rule Verse's own `Abs`, `Clamp` and `Length` already impose.
+    VecRotated<public>(A:vector2, Radians:float)<transacts>:vector2 = A.Rotated(Radians)
+
+    # --- R-SCN-3: constants, statics, and the one dispatched utility family --
+    #
+    # Verse has no constant and no static *on* a type, so each class's go into an inline module of
+    # its own: `NodeStatics.NotificationReady`, `Vector2Statics.Up`. The `...Statics` suffix is
+    # load-bearing -- a module named `Node` or `Tree` would be a top-level name an author reaches
+    # for, and Verse refuses a local that resolves ambiguously against one.
+    ReadyNotification<public>()<transacts>:int = NodeStatics.NotificationReady
+    UpVector<public>()<transacts>:vector2 = Vector2Statics.Up
+    ZeroVector<public>()<transacts>:vector2 = Vector2Statics.Zero
+
+    # The random family is the one exception to R-AUD-2: Verse has `GetRandomFloat`, but a
+    # Verse-side RNG would silently ignore Seed, so these steer Godot's own stream. Seeding and
+    # asking twice is what proves it is Godot's.
+    SeededRandom<public>(Base:int)<transacts>:int =
+        GodotStatics.SeedRandom(Base)
+        GodotStatics.RandiRange(0, 1000000)
+
     # Object's reflection, which is the rest of what mirroring it bought.
     ClassOf<public>(Target:object):string = Target.GetClass()
 

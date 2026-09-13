@@ -220,6 +220,8 @@ private:
 	static vh_handle api_get_singleton(void *p_ctx, const char *p_name_utf8, int32_t p_name_len);
 	static int32_t api_get_class_of(void *p_ctx, vh_handle p_handle, vh_arena *p_arena, vh_value *r_class_name);
 	static int64_t api_make_callable(void *p_ctx, int64_t p_callback_id, vh_handle p_owner_handle);
+	static int32_t api_call_static(void *p_ctx, const char *p_class_utf8, int32_t p_class_len, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count, vh_arena *p_arena, vh_value *r_value);
+	static int32_t api_call_utility(void *p_ctx, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count, vh_arena *p_arena, vh_value *r_value);
 
 	// Signals (R-SIG-1..4). Declared in the v2 header and left unsupplied until now.
 	static int32_t api_emit_signal(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count);

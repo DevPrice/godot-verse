@@ -162,6 +162,12 @@ VhSignalCancel<native>(Subscription:int)<transacts>:void
 # grow the table.
 VhSignalBind<native>(Handle:int, Class:string, Accessor:string, Name:string)<transacts>:int
 
+# A call with no object, for Godot's 114 statics and its `@GlobalScope` utilities: neither has a
+# handle to ride VhCallValue on, which is the whole of what OQ-11 asked about the *free function*
+# half. (The value-type half turned out to need no ABI at all -- see GodotMath.native.verse.)
+VhCallStatic<native>(Class:string, Method:string, Args:[]variant)<transacts>:variant
+VhCallUtility<native>(Name:string, Args:[]variant)<transacts>:variant
+
 # --- reference values --------------------------------------------------------
 
 # A Godot value the wire cannot copy: an Array, a Dictionary, a Callable, a Signal, or one of the
