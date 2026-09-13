@@ -26627,6 +26627,7 @@ godot_array<public> := class(godot_ref):
     ToVector2is<public>()<transacts>:[]vector2i = for (V : VhRefValues(Ref)) { VhToVector2i(V) }
     ToVector3s<public>()<transacts>:[]vector3 = for (V : VhRefValues(Ref)) { VhToVector3(V) }
     ToColors<public>()<transacts>:[]color = for (V : VhRefValues(Ref)) { VhToColor(V) }
+    ToObjects<public>()<transacts>:[]object = for (V : VhRefValues(Ref), E := VhToObject[V]) { E }
 
     GetVariant<public>(Index:int)<decides><transacts>:variant = VhToVariant(VhRefGet[Ref, VhFromInt(Index)])
     SetVariant<public>(Index:int, Value:variant)<transacts>:void = VhRefSet(Ref, VhFromInt(Index), VhFromVariant(Value))
@@ -26661,6 +26662,9 @@ godot_array<public> := class(godot_ref):
     GetDictionary<public>(Index:int)<decides><transacts>:dictionary = VhToDictionary(VhRefGet[Ref, VhFromInt(Index)])
     SetDictionary<public>(Index:int, Value:dictionary)<transacts>:void = VhRefSet(Ref, VhFromInt(Index), VhFromDictionary(Value))
     AddDictionary<public>(Value:dictionary)<transacts>:void = VhRefSet(Ref, VhFromInt(VhRefSize(Ref)), VhFromDictionary(Value))
+    GetObject<public>(Index:int)<decides><transacts>:object = VhToObject[VhRefGet[Ref, VhFromInt(Index)]]
+    SetObject<public>(Index:int, Value:object)<transacts>:void = VhRefSet(Ref, VhFromInt(Index), VhFromObject(Value))
+    AddObject<public>(Value:object)<transacts>:void = VhRefSet(Ref, VhFromInt(VhRefSize(Ref)), VhFromObject(Value))
 
 dictionary<public> := class(godot_ref):
 
@@ -26733,6 +26737,12 @@ dictionary<public> := class(godot_ref):
     SetDictionary<public>(Key:string, Value:dictionary)<transacts>:void = VhRefSet(Ref, VhFromString(Key), VhFromDictionary(Value))
     SetDictionary<public>(Key:int, Value:dictionary)<transacts>:void = VhRefSet(Ref, VhFromInt(Key), VhFromDictionary(Value))
     SetDictionary<public>(Key:vector2i, Value:dictionary)<transacts>:void = VhRefSet(Ref, VhFromVector2i(Key), VhFromDictionary(Value))
+    GetObject<public>(Key:string)<decides><transacts>:object = VhToObject[VhRefGet[Ref, VhFromString(Key)]]
+    GetObject<public>(Key:int)<decides><transacts>:object = VhToObject[VhRefGet[Ref, VhFromInt(Key)]]
+    GetObject<public>(Key:vector2i)<decides><transacts>:object = VhToObject[VhRefGet[Ref, VhFromVector2i(Key)]]
+    SetObject<public>(Key:string, Value:object)<transacts>:void = VhRefSet(Ref, VhFromString(Key), VhFromObject(Value))
+    SetObject<public>(Key:int, Value:object)<transacts>:void = VhRefSet(Ref, VhFromInt(Key), VhFromObject(Value))
+    SetObject<public>(Key:vector2i, Value:object)<transacts>:void = VhRefSet(Ref, VhFromVector2i(Key), VhFromObject(Value))
 
 # --- typed containers --------------------------------------------------------
 #

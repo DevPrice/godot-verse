@@ -30,18 +30,28 @@ part to read before trusting it**: twenty-one numbered entries saying where the 
 the design disagree, what is unbuilt, and what would close each. §13 of the design summarises the
 phase and carries its measurements.
 
-**Seven of those entries are now closed and one is answered**, which took the ABI to **v5** — a layout
-change, so both DLLs must be rebuilt and `run_tests.py --build` is how the test binaries follow. The
-four ways a signal declaration could compile and not work (G1–G4) are one validation pass in
+**Twelve of those entries are now closed, one more is built, and one is answered** — what is left is
+**G13** (math bodies for twelve of the sixteen types), **G11** (utility dispatch) and the by-hand
+checklist. Closing them took the ABI to **v5** — a layout change, so both DLLs must be rebuilt and
+`run_tests.py --build` is how the test binaries follow.
+
+The four ways a signal declaration could compile and not work (G1–G4) are one validation pass in
 `GetClassSignals` now: `vh_signal_desc` carries a `Reject` the way `vh_export_desc` does, Godot is
 never told about a signal nothing can emit, and `_validate` says why at the member's line. A struct
 payload works in **both** directions — out as one Godot argument per field, named by the field, which
 is what gives the connect dialog real names; back in through `InstanceCall`'s rule that N arguments
 satisfy one struct parameter with N fields (**G21**). That path needs no Godot counterpart for a
 struct, because a signal delivers the fields separately; a struct as a *method parameter* still has
-none, and that half is R-LANG-2's, which the spec answers with a Dictionary. The thread guard covers
-every entry point (G6), and the math tail is recorded rather than silent (G12). Still open and worth
-knowing: `_make_function` is a stub (G5), and `@statics` emits no diagnostics (G10).
+none, and that half is R-LANG-2's, which the spec answers with a Dictionary. `godot_signal()` is an
+alias for `godot_signal(tuple())` (G7), spelled the way `/Verse.org/Concurrency` spells
+`listenable()`. The thread guard covers every entry point (G6), and the math tail is recorded rather
+than silent (G12).
+
+**`_make_function` is built and cannot be tested from here** (G5): it is a `ScriptLanguageExtension`
+virtual with no ClassDB entry, and `Script.get_language()` is not in the public API, so GDScript can
+reach neither — the editor's own C++ is its only caller. The same is true of `_HasPoint` and
+`_CanDropData`, which Godot reaches only from pointer-input paths (G19). All three are on the by-hand
+checklist, which is the real thing Phase 4 still owes.
 
 Four things it settled are load-bearing everywhere else. A virtual is spelled the way Godot spells
 it — **`_Ready`, not `Ready`**, and §7.1 counts the eight *signal* collisions that decided it.

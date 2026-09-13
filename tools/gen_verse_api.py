@@ -1025,6 +1025,12 @@ CONTAINER_ELEMENTS = [
     ("Color", "color", "VhFromColor", "VhToColor"),
     ("Array", "godot_array", "VhFromArray", "VhToArray"),
     ("Dictionary", "dictionary", "VhFromDictionary", "VhToDictionary"),
+    # Last, and the only one whose reader can fail for a reason that is not the tag: a null object
+    # crosses as an object-tagged zero, so VhToObject is <decides> and every use of it below takes
+    # the bracket form. `typed_array(t)` covers the case where the element type is known; this is
+    # for the plain heterogeneous Array, where before it there was no way to read an object element
+    # at all without a `variant` a script cannot spell (R-TYPE-7).
+    ("Object", "object", "VhFromObject", "VhToObject"),
 ]
 
 # The key types each container is indexed by. An Array takes an int; a Dictionary takes whatever
@@ -1063,19 +1069,24 @@ def emit_container_classes() -> list:
             for suffix, verse_type, _, unpack in CONTAINER_ELEMENTS:
                 if verse_type in ("godot_array", "dictionary"):
                     continue
-                lines.append(
-                    f"    To{suffix}s<public>()<transacts>:[]{verse_type} ="
-                    f" for (V : VhRefValues(Ref)) {{ {unpack}(V) }}")
+                # A reader that can fail filters instead of converting: an element that is not a t
+                # is dropped rather than failing the whole call, which is what `for` with a failable
+                # binding already reads as and what typed_array(t).ToArray does.
+                body = (f"for (V : VhRefValues(Ref), E := {unpack}[V]) {{ E }}"
+                        if unpack in VARIANT_DECIDES_CONVERTERS
+                        else f"for (V : VhRefValues(Ref)) {{ {unpack}(V) }}")
+                lines.append(f"    To{suffix}s<public>()<transacts>:[]{verse_type} = {body}")
             lines.append("")
 
         for suffix, verse_type, pack, unpack in CONTAINER_ELEMENTS:
+            read = "{0}[{1}]" if unpack in VARIANT_DECIDES_CONVERTERS else "{0}({1})"
             for key_name, key_type, key_pack in keys:
                 # Failable: an absent key and an index out of range are ordinary misses, and a
                 # value of another type is a miss too rather than a raise -- asking a container for
                 # an int and getting a string back is the caller's question answered "no".
                 lines.append(
                     f"    Get{suffix}<public>({key_name}:{key_type})<decides><transacts>:{verse_type} ="
-                    f" {unpack}(VhRefGet[Ref, {key_pack}({key_name})])")
+                    f" {read.format(unpack, f'VhRefGet[Ref, {key_pack}({key_name})]')}")
             for key_name, key_type, key_pack in keys:
                 lines.append(
                     f"    Set{suffix}<public>({key_name}:{key_type}, Value:{verse_type})<transacts>:void ="

@@ -891,6 +891,10 @@ AUTORTFM_DISABLE void JoinBackgroundCheck()
     }
 }
 
+/// The two things `@statics` was chosen over a naming convention to make checkable (R-NODE-4).
+/// Defined further down, beside GetClassStatics, whose walk and helpers it shares.
+AUTORTFM_DISABLE void ReportStaticsDiagnostics();
+
 } // namespace
 
 AUTORTFM_DISABLE bool GodotVerse::PollBackgroundCheck(bool& OutFinished)
@@ -919,6 +923,10 @@ AUTORTFM_DISABLE bool GodotVerse::PollBackgroundCheck(bool& OutFinished)
     }
     GBackgroundCheck.Diagnostics.Empty();
     GBackgroundCheck.bResultPending = false;
+
+    // After the compiler's own, and through the same channel: these are read off the semantic
+    // program the analysis just left behind, so this is the first moment they can be asked.
+    ReportStaticsDiagnostics();
 
     OutFinished = true;
     return GBackgroundCheck.bResult;
@@ -3753,6 +3761,84 @@ AUTORTFM_DISABLE bool GodotVerse::IsClassAbstract(FUtf8StringView ClassName)
     const uLang::CClass* const Class = Program->FindDefinitionByVersePath<uLang::CClass>(
         FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath));
     return Class != nullptr && Class->IsAbstract();
+}
+
+namespace {
+/// The two things `@statics` was chosen over a naming convention to make checkable (R-NODE-4).
+///
+/// A convention produces a silently empty statics module when it is mistyped, and that was the whole
+/// argument for a declared association -- so an association naming a class that does not exist, and
+/// two modules claiming one class, have to actually say so or the attribute bought nothing.
+///
+/// Run once per analysis rather than from GetClassStatics, which is asked about one class at a time
+/// and so can never see a module naming a class that is not there.
+AUTORTFM_DISABLE void ReportStaticsDiagnostics()
+{
+    if (!GIde.IsValid())
+    {
+        return;
+    }
+    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
+    if (!BuildManager.IsValid())
+    {
+        return;
+    }
+    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
+
+    const uLang::CClass* const StaticsAttribute =
+        Program->FindDefinitionByVersePath<uLang::CClass>(StaticsAttributePath);
+    const uLang::CModule* const Root = Program->FindDefinitionByVersePath<uLang::CModule>(ScriptVersePath);
+    if (!StaticsAttribute || !Root)
+    {
+        return;
+    }
+
+    // Claimed class name -> the module that claimed it first, so the second one has something to
+    // name. Modules are walked in declaration order, so "first" is stable across analyses.
+    TMap<FUtf8String, FUtf8String> ClaimedBy;
+
+    for (const uLang::TSRef<uLang::CModule>& Module : Root->GetDefinitionsOfKind<uLang::CModule>())
+    {
+        const uLang::TOptional<uLang::CUTF8String> Text =
+            Module->GetAttributes().GetAttributeTextValue(StaticsAttribute, *Program);
+        if (!Text.IsSet())
+        {
+            continue;
+        }
+        const FUtf8String ClassName = FULangConversionUtils::ULangStrToFUtf8String(*Text);
+        const FUtf8String ModuleName = FUtf8String(Module->AsNameCString());
+
+        FUtf8String Path;
+        int32 Line = -1;
+        int32 Column = -1;
+        FillLocation(*Module, Path, Line, Column);
+
+        const FUtf8String ClassPath = FUtf8String(ScriptVersePath) + UTF8TEXT("/") + ClassName;
+        if (!Program->FindDefinitionByVersePath<uLang::CClass>(
+                FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath)))
+        {
+            GodotVerse::ReportDiagnostic(VH_SEVERITY_ERROR,
+                FUtf8StringView(FUtf8String(UTF8TEXT("`@statics(\"")) + ClassName + UTF8TEXT("\")` on module `")
+                    + ModuleName + UTF8TEXT("` names a class no script declares, so nothing will ever read these ")
+                    + UTF8TEXT("constants. The name is the class's Verse name, module-qualified the way every ")
+                    + UTF8TEXT("other one is -- `gameplay/player` for a class in a module.")),
+                FUtf8StringView(Path), Line, Column, Line, Column, 0);
+            continue;
+        }
+
+        if (const FUtf8String* const First = ClaimedBy.Find(ClassName))
+        {
+            GodotVerse::ReportDiagnostic(VH_SEVERITY_ERROR,
+                FUtf8StringView(FUtf8String(UTF8TEXT("Modules `")) + *First + UTF8TEXT("` and `") + ModuleName
+                    + UTF8TEXT("` both declare themselves the statics of `") + ClassName
+                    + UTF8TEXT("`. A class has one statics module: Godot asks it for a single constant map, so ")
+                    + UTF8TEXT("which of the two answers is not a question the bridge can decide. Merge them.")),
+                FUtf8StringView(Path), Line, Column, Line, Column, 0);
+            continue;
+        }
+        ClaimedBy.Add(ClassName, ModuleName);
+    }
+}
 }
 
 AUTORTFM_DISABLE bool GodotVerse::GetClassStatics(FUtf8StringView ClassName,

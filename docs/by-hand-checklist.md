@@ -35,6 +35,26 @@ Each line is one thing to do and one thing to see. Tick nothing you have not wat
 - [ ] **Let `_make_function` write the handler.** Connect `Hit` to another node and leave "Make
       Function" checked. The editor must write a handler into that node's `.verse` with the right
       name and no parameters, and the file must still compile.
+
+      **This is the only way to check it at all**, which is why it is worth doing carefully:
+      `_make_function` is a `ScriptLanguageExtension` virtual with no ClassDB entry, and
+      `Script.get_language()` is not in the public API, so GDScript can reach neither. The editor's
+      own C++ is its only caller — a headless test answers *"Nonexistent function"*, measured.
+
+      Exactly what to expect, tabs included, since Verse rejects mixed tabs and spaces and Godot's
+      editor writes tabs:
+
+      ```
+      	OnHit<public>()<transacts>:void =
+      		# TODO
+      ```
+
+      The `<transacts>` is load-bearing, not decoration: `Subscribe` fixes its callback at that
+      effect, and a specifier-less function carries the wider default set that a `<transacts>`
+      context may not call. A stub without it is `dodge-the-creeps.md` wall 8 on the author's first
+      generated line. For a signal with arguments, each parameter takes the Verse spelling of its
+      type — `Damage:int`, `By:string`, `Body:node2d` — and a struct payload gives them the field's
+      own names rather than `Arg0`.
 - [ ] **A signal with arguments names them.** Do the same for the HUD's `StartGame`, and for a
       signal declared `godot_signal(tuple(int, string))` — the connect dialog must show two
       arguments, `Arg0` and `Arg1`, and the generated stub must take two parameters. (Verse tuples
@@ -58,6 +78,14 @@ Each line is one thing to do and one thing to see. Tick nothing you have not wat
 - [ ] **An `_Input` handler receives a key.** Override `_Input<override>(Event:input_event):void` on
       a node in `demo`, print the event, and press a key with the game window focused. Nothing
       headless can press a key.
+- [ ] **`_HasPoint` and `_CanDropData` gate what the engine does.** Both are `Control` virtuals Godot
+      reaches only from pointer-input and drag paths — neither has a public caller, so no headless
+      run can make the engine ask (`phase-4-gaps.md` G19, where `_GetMinimumSize` covers the shared
+      mechanism instead). Give a Control a `_HasPoint<override>` returning `false` over its whole
+      rect and confirm clicks fall through to what is behind it; give another a
+      `_CanDropData<override>` returning `true` and confirm the drag cursor accepts a drop. A wrong
+      default in either is a script that works and an engine that behaves differently, with nothing
+      printed.
 - [ ] **The inspector no longer shows the yardstick's node slots.** Open `dodge-the-creeps/main.tscn`
       and select Main: the only exported property must be `MobScene`. The nine that were there
       before Phase 4 are lookups in `_Ready` now, and a stale `node_paths` entry left in a `.tscn`

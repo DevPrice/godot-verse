@@ -511,7 +511,7 @@ bool VerseScriptLanguage::_can_inherit_from_file() const {
 }
 
 bool VerseScriptLanguage::_can_make_function() const {
-	return false;
+	return true;
 }
 
 int32_t VerseScriptLanguage::_find_function(const String &p_function, const String &p_code) const {
@@ -593,8 +593,72 @@ TypedArray<Dictionary> VerseScriptLanguage::_get_built_in_templates(const String
 	return TypedArray<Dictionary>();
 }
 
-String VerseScriptLanguage::_make_function(const String &p_class_name, const String &p_function_name, const PackedStringArray &p_function_args) const {
+// The Verse spelling of a Godot type as the connect dialog names it (R-SIG-4).
+//
+// Godot hands make_function its arguments as "name:Type" pairs built from the signal's MethodInfo,
+// so the type is a Godot *name* -- `int`, `String`, `Vector2`, `Node2D` -- and never a Verse one.
+// A class goes through the generated table, which is the same inversion _make_template does.
+//
+// An unrecognised type answers empty rather than guessing, and the caller drops the parameter's
+// annotation instead. A wrong type in a generated stub is worse than a missing one: the author sees
+// a compile error on a line they did not write.
+static String verse_type_for_godot_type(const String &p_godot_type) {
+	if (p_godot_type.is_empty() || p_godot_type == "Variant") {
+		return String();
+	}
+	if (p_godot_type == "bool") {
+		return String("logic");
+	}
+	if (p_godot_type == "int" || p_godot_type == "float") {
+		return p_godot_type;
+	}
+	if (p_godot_type == "String" || p_godot_type == "StringName" || p_godot_type == "NodePath") {
+		return String("string");
+	}
+	if (p_godot_type == "Array") {
+		return String("godot_array");
+	}
+	if (p_godot_type == "Dictionary") {
+		return String("dictionary");
+	}
+	if (p_godot_type == "Callable") {
+		return String("callable");
+	}
+	for (size_t i = 0; i < std::size(verse_api::classes); i++) {
+		if (p_godot_type == verse_api::classes[i].godot_name) {
+			return String(verse_api::classes[i].verse_name);
+		}
+	}
 	return String();
+}
+
+// R-SIG-4's editor half: the handler the Node dock writes when "Make Function" is checked.
+//
+// Godot does the inserting -- ScriptTextEditor::add_callback finds the end of the file and writes
+// what this returns -- so the whole job is the text, and the two things that make it Verse rather
+// than GDScript are `<public>` and tabs. **Tabs are not a preference**: Godot's script editor writes
+// tabs, and Verse rejects a file that mixes them with spaces, so a space-indented body would produce
+// a stub that does not compile the moment the author types a second line.
+//
+// `<transacts>` because a signal handler is one: `Subscribe` fixes its callback at that effect, and
+// a specifier-less function carries the wider default set, which a <transacts> context may not call.
+// Writing it here is the difference between a stub that compiles and the wall this repository has
+// tripped over most (`dodge-the-creeps.md` wall 8).
+String VerseScriptLanguage::_make_function(const String &p_class_name, const String &p_function_name, const PackedStringArray &p_function_args) const {
+	String out = String("\t") + p_function_name + String("<public>(");
+	for (int64_t i = 0; i < p_function_args.size(); i++) {
+		const String arg = p_function_args[i];
+		const String name = arg.get_slice(":", 0);
+		const String verse_type = verse_type_for_godot_type(arg.get_slice(":", 1));
+		if (i > 0) {
+			out += String(", ");
+		}
+		// A parameter Godot named but whose type has no Verse spelling still gets its name, so the
+		// author has something to edit rather than a stub they have to re-derive from the dialog.
+		out += name + (verse_type.is_empty() ? String(":?") : String(":") + verse_type);
+	}
+	out += String(")<transacts>:void =\n\t\t# TODO\n");
+	return out;
 }
 
 Error VerseScriptLanguage::_open_in_external_editor(const Ref<Script> &p_script, int32_t p_line, int32_t p_column) {

@@ -575,6 +575,32 @@ func _init() -> void:
 		root.remove_child(virt)
 		virt.free()
 
+	# The same claim, but made by *Godot* rather than by a direct call: the engine asks a virtual a
+	# question and acts on the answer. `_get_configuration_warnings` above is called here by hand,
+	# which proves the method resolves and not that anything consults it.
+	#
+	# `Control.get_minimum_size()` is the one of that family a headless run can reach -- it is the
+	# only one with a public caller. `_HasPoint` and `_CanDropData` are reached from pointer-input
+	# and drag paths that need a window and a mouse, so they are on the by-hand checklist. A wrong
+	# default in any of the three is a working script with wrong engine behaviour and nothing said.
+	var ctrl_script: Script = load("res://scripts/control_virtuals.verse")
+	_check("control_virtuals.verse compiles", ctrl_script != null and ctrl_script.can_instantiate())
+	if ctrl_script != null:
+		var ctrl := Control.new()
+		ctrl.set_script(ctrl_script)
+		root.add_child(ctrl)
+		_check_eq("Godot asks a value-returning virtual and acts on the answer",
+				ctrl.get_minimum_size(), Vector2(73, 31))
+		root.remove_child(ctrl)
+		ctrl.free()
+
+	# R-SIG-4's generated handler is NOT tested here, and the reason is worth writing down:
+	# `_make_function` is a ScriptLanguageExtension virtual with no ClassDB entry, so GDScript
+	# can reach neither it nor the language object usefully -- `Script.get_language()` is not in
+	# the public API either, and calling the virtual by name answers "Nonexistent function". The
+	# editor's C++ is its only caller, so by-hand-checklist.md carries the check, with the exact
+	# text it should produce.
+
 	# A script that overrides none of the per-frame virtuals must not claim to have them: that is
 	# what decides whether Godot puts the node in the process list at all.
 	var quiet := Node2D.new()

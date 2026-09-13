@@ -17,7 +17,7 @@ hud := class(canvas_layer):
 	# `signal start_game` in the GDScript. main subscribes to it, where the port used to have
 	# main.tscn connect StartButton.pressed to main's own NewGame -- one engine signal wired to two
 	# scripts, because this one had nothing to emit.
-	StartGame<public>:godot_signal(tuple()) = godot_signal(tuple()){}
+	StartGame<public>:godot_signal() = godot_signal(){}
 
 	# The three methods main calls carry `<transacts>` and that is wall 8, not decoration: a
 	# `Subscribe` handler must be `<transacts>`, an explicit specifier *replaces* the default set

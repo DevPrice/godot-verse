@@ -18,7 +18,7 @@ strike_report := struct:
 signals := class(node2d):
 
     # No payload. `tuple()` is the empty tuple, and Godot sees a signal with no arguments.
-    Hit<public>:godot_signal(tuple()) = godot_signal(tuple()){}
+    Hit<public>:godot_signal() = godot_signal(){}
 
     # One argument, named for its type because Verse tuples cannot name their elements.
     Scored<public>:godot_signal(int) = godot_signal(int){}

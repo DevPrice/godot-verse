@@ -277,7 +277,7 @@ VhFromStringArray(Values:[]string)<transacts>:variant = VhFromStrings(TagPackedS
 # drift:
 #
 #     player := class(area2d):
-#         Hit<public>:godot_signal(tuple()) = godot_signal(tuple()){}
+#         Hit<public>:godot_signal() = godot_signal(){}
 #         Struck<public>:godot_signal(tuple(int, string)) = godot_signal(tuple(int, string)){}
 #
 # Shaped like Verse's own `listenable` rather than implementing it, and the difference is not a
@@ -300,6 +300,15 @@ godot_signal<public>(t:type) := class(vh_signal):
     # Godot's own lambda callables do and what UEFN's event does.
     Subscribe<public>(Callback(:t)<transacts>:void)<transacts>:cancelable =
         godot_subscription{Subscription := VhSignalSubscribe(Id, Callback)}
+
+# `godot_signal()` for `godot_signal(tuple())`, which is the payload most declarations have and
+# which was otherwise spelled twice on every line of them:
+#
+#     Hit<public>:godot_signal() = godot_signal(){}
+#
+# Exactly how `/Verse.org/Concurrency` spells its own -- `listenable<public>() := listenable(tuple())`
+# in Listenable.native.verse -- rather than an invention.
+godot_signal<public>() := godot_signal(tuple())
 
 # What Subscribe answers. Verse's own `cancelable` is implementable -- its `Cancel` is
 # `<transacts>` rather than `no_rollback` -- so this is Verse's vocabulary rather than an invention.

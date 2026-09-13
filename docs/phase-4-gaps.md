@@ -5,11 +5,13 @@
 code or measured by running it; none is recalled. Where a previous document said something that
 turned out to be false, that is noted and the document has been corrected.
 
-**Seven entries have since been closed** — G1, G2, G3, G4, G6, G12 and G21 — and G9 was answered
-with a "do not build this". Closing them took the ABI to **v5**. G21 was raised *and* half closed in
-the same pass: G1 exposed it, and the half it was actually about turned out to need no ABI change at
-all. What is left of it is R-LANG-2, a MUST that has been at `part` since Phase 2. Each closed entry keeps its original diagnosis below its **Built** note, because the
-diagnosis is the part worth re-reading: §0 is why.
+**Twelve entries are now closed** — G1, G2, G3, G4, G6, G7, G8, G10, G12, G19, G20 and G21 — G5 is
+built (and provably unverifiable without a window), and G9 was answered with a "do not build this".
+Closing them took the ABI to **v5**. **G13 and G11 are what is left**, plus the by-hand checklist,
+which nothing here can substitute for. G21 was raised *and* half closed in the same pass: G1 exposed
+it, and the half it was actually about turned out to need no ABI change at all. What is left of it is
+R-LANG-2, a MUST that has been at `part` since Phase 2. Each closed entry keeps its original
+diagnosis below its **Built** note, because the diagnosis is the part worth re-reading: §0 is why.
 
 **Companion to:** [`phase-4-design.md`](phase-4-design.md) (the design, and §13's short note pointing
 here), [`spec.md`](spec.md) (per-requirement status), [`by-hand-checklist.md`](by-hand-checklist.md)
@@ -61,12 +63,12 @@ Sized as **S** (an afternoon), **M** (a day), **L** (more, or needs a decision f
 | **G2** | a `var` or non-`public` `godot_signal` member is silently absent from the signal list | accepted-but-broken | S | **closed** |
 | **G3** | a `godot_signal` on a class never bound to a handle is only reported at emission | accepted-but-broken | S | **closed** |
 | **G4** | a payload the wire cannot carry is refused at *emission*, not at the member | accepted-but-broken | S | **closed** |
-| **G5** | `_make_function` and `_can_make_function` are stubs — R-SIG-4's editor half | unbuilt | M | open |
+| **G5** | `_make_function` and `_can_make_function` are stubs — R-SIG-4's editor half | unbuilt | M | **built**; verifiable only by hand |
 | **G6** | the thread guard covers 2 of 31 entry points | unbuilt | S | **closed** |
-| **G7** | `godot_signal()` has no zero-argument alias | unbuilt | S | open |
-| **G8** | `godot_array` has no `AddObject` | unbuilt | S | open |
+| **G7** | `godot_signal()` has no zero-argument alias | unbuilt | S | **closed** |
+| **G8** | `godot_array` has no `AddObject` | unbuilt | S | **closed** |
 | **G9** | a callback does not remember its `FContentScope` | unbuilt | M | open |
-| **G10** | `@statics` emits neither of the two diagnostics the design promised | unbuilt | S | open |
+| **G10** | `@statics` emits neither of the two diagnostics the design promised | unbuilt | S | **closed** |
 | **G11** | 106 of 114 `@GlobalScope` utilities are undispatched | unbuilt | L | open |
 | **G12** | 367 math methods and 261 operators are absent with nothing recorded | unbuilt | M | **closed** |
 | **G13** | math exists for 4 of 16 types; `snapped`, `min`/`max`, `floor`/`ceil`/`round` unwritten | narrower | M | open |
@@ -75,8 +77,8 @@ Sized as **S** (an afternoon), **M** (a day), **L** (more, or needs a decision f
 | **G16** | `vh_signal` is non-parametric; the payload lives in a host-side table | structural | — | as built |
 | **G17** | the callback native takes `any`, not a typed function parameter | structural | — | as built |
 | **G18** | `@statics` names its class as a string, not an identifier | structural | S | as built |
-| **G19** | no behavioural test for `_CanDropData` / `_HasPoint` | test gap | S | open |
-| **G20** | R-EXP-5's body overstates; R-AUD-2 never edited | doc | S | open |
+| **G19** | no behavioural test for `_CanDropData` / `_HasPoint` | test gap | S | **closed**, via the one of that family a headless run can reach |
+| **G20** | R-EXP-5's body overstates; R-AUD-2 never edited | doc | S | **closed** |
 | **G21** | a user struct cannot cross the wire *inbound*, so a Verse handler cannot take one | found closing G1 | M | **closed for signals**; the rest is R-LANG-2 |
 
 **G14–G18 are working as built and are not bugs.** They are here so a fresh reader does not
@@ -238,7 +240,31 @@ and costs one pass.
 
 ## 3. Unbuilt
 
-### G5 — `_make_function` is a stub (R-SIG-4's editor half)
+### G5 — `_make_function` is a stub (R-SIG-4's editor half) · **built, and only checkable by hand**
+
+**Built.** `_can_make_function` answers true and `_make_function` writes the handler. Godot does the
+inserting — `ScriptTextEditor::add_callback` finds the end of the file and writes what the language
+returns — so the whole job is the text, and three things in it are load-bearing:
+
+- **Tabs.** Godot's script editor writes tabs and Verse rejects a file that mixes them with spaces,
+  so a space-indented stub stops compiling the moment the author types a second line.
+- **`<transacts>`.** `Subscribe` fixes its callback at that effect, and a specifier-less function
+  carries the wider default set a `<transacts>` context may not call. Without it the generated line
+  is `dodge-the-creeps.md` wall 8, delivered to the author by the editor.
+- **The Verse spelling of each parameter's type.** Godot hands the arguments over as `name:Type`
+  with Godot's own type names, so `String` becomes `string` and `Node2D` becomes `node2d` through the
+  generated class table — the same inversion `_make_template` does. A type with no Verse spelling
+  gives the parameter its name and no annotation rather than a guess: a wrong type in a stub is a
+  compile error on a line the author did not write.
+
+**And it cannot be tested here, which was worth finding out rather than assuming.**
+`_make_function` is a `ScriptLanguageExtension` virtual with no ClassDB entry, and
+`Script.get_language()` is not in the public API either, so GDScript can reach neither the language
+nor the method — calling it by name answers *"Nonexistent function '_make_function (via call)'"*,
+measured. The editor's own C++ is its only caller. `by-hand-checklist.md` carries the check with the
+exact text to expect.
+
+**Original entry:**
 
 **Design:** §6.8. Connecting through the Node panel with "Make Function" checked should write a
 handler into the script with parameters spelled from the same descriptors `vh_class_signal_list`
@@ -300,7 +326,16 @@ the guard is incomplete on its own terms.
 `vh_callback_release` stays unguarded — it is deliberately unguarded today, because a `Callable` can
 be destroyed on whatever thread dropped the last reference and releasing only touches a map.
 
-### G7 — `godot_signal()` has no alias
+### G7 — `godot_signal()` has no alias · **closed**
+
+**Built:** `godot_signal<public>() := godot_signal(tuple())`, which is exactly how
+`/Verse.org/Concurrency` spells its own — `listenable<public>() := listenable(tuple())` in
+`Listenable.native.verse` — rather than an invention. It works as a type *and* as a constructor, so
+`Hit<public>:godot_signal() = godot_signal(){}` compiles; that was the part worth checking rather
+than assuming, since `listenable` is an interface and this is a class. The yardstick's two
+declarations and the integration fixture's use it now.
+
+**Original entry:**
 
 **Design:** §6.1. *"`godot_signal()` is the alias for `godot_signal(tuple())`, the way `listenable()`
 is for `listenable(tuple())`."*
@@ -316,7 +351,19 @@ is for `listenable(tuple())`."*
 `Engine/Plugins/Verse/Verse/Source/Verse/Verse/Verse/Listenable.native.verse` — and copy it. It is
 cosmetic but it is on the line every author writes.
 
-### G8 — no `AddObject` on `godot_array`
+### G8 — no `AddObject` on `godot_array` · **closed**
+
+**Built:** an `Object` row in `CONTAINER_ELEMENTS`, which generates `AddObject`, `GetObject`,
+`SetObject` and `ToObjects` on `godot_array` and the `GetObject`/`SetObject` triple on `dictionary`.
+
+The "check why it is absent before adding it" warning was right to be there, and the answer is that
+its reader is the only one that can fail for a reason other than the tag: a null object crosses as an
+object-tagged zero, so `VhToObject` is `<decides>`. The generator already had
+`VARIANT_DECIDES_CONVERTERS` for exactly that, and the emitter now takes the bracket form from it —
+`VhToObject[VhRefGet[...]]` — with `ToObjects` filtering rather than converting, the way
+`typed_array(t).ToArray` already does.
+
+**Original entry:**
 
 **Design:** §4. *"`AddInt`, `AddFloat`, `AddString`, `AddObject`, … symmetric with the existing
 `GetInt`/`GetFloat` readers."*
@@ -377,7 +424,22 @@ pointer.
 Nothing to build here. **What to do in Phase 5:** implement R-ASYNC-4 first; the callback→scope link
 is a consequence of it, not a precursor.
 
-### G10 — `@statics` has no diagnostics
+### G10 — `@statics` has no diagnostics · **closed**
+
+**Built:** `ReportStaticsDiagnostics`, run once per analysis from `PollBackgroundCheck` — right after
+the compiler's own diagnostics are replayed, through the same channel, because that is the first
+moment the semantic program it reads is the current one.
+
+It is **not** in `GetClassStatics`, where this document suggested putting it, and the reason is
+worth keeping: that function is asked about one class at a time, so it can never see a module naming
+a class that is not there, which is the whole first diagnostic. Both now report — an association
+naming a class no script declares, and two modules claiming one class — at the module's own line.
+
+That restores the property the attribute was chosen *for*. §8.4 argued for a declared association
+over a naming convention precisely because a mistyped convention is silently empty; without these
+two checks the attribute bought nothing over the convention it replaced.
+
+**Original entry:**
 
 **Design:** §8.4. *"With the attribute, a module naming a class that does not exist — or two modules
 naming one class — is a diagnostic."* That was the argument *for* the attribute over a naming
@@ -618,22 +680,36 @@ empty. Except that the check is not implemented — see **G10**.
 
 ## 6. Test and documentation gaps
 
-### G19 — no behavioural test for the virtuals that gate engine behaviour
+### G19 — no behavioural test for the virtuals that gate engine behaviour · **closed, differently**
 
 **Design:** §7.2 — *"the ones that gate engine behaviour (`_CanDropData`, `_HasPoint`) get a test
 each."*
 
-**What is there.** `tests/verse_api_gen/test_gen_verse_api.py` asserts that `_HasPoint` is *emitted*
-with a `false` default body. There is no test that Godot acts on the answer — which is what the
-design meant, because a wrong default here changes engine behaviour silently.
+**Built, but not for those two, and the substitution is the finding.** Neither `_has_point` nor
+`_can_drop_data` has a public caller: Godot reaches them only from pointer-input and drag paths, so
+a headless run with no window and no mouse cannot make the engine ask. Writing a test that *calls*
+them directly would have asserted the thing that was already covered — that the method resolves —
+and none of what the design meant.
 
-### G20 — two spec entries that overstate or were not edited
+`_GetMinimumSize` is the one of that family a headless run can reach, because `Control.get_minimum_size()`
+is public and calls the virtual. `tests/integration/scripts/control_virtuals.verse` overrides it with
+`vector2{X := 73.0, Y := 31.0}` — deliberately not the generated `vector2{}` default, so a virtual
+that never ran cannot pass — and the suite asserts Godot answers that through its own API. That
+covers the mechanism all three share: the engine asks a script a question and acts on the answer, so
+a virtual silently keeping its default is a working script with wrong engine behaviour.
 
-- **R-EXP-5** is `part`, correctly, but its body now says the editor-only virtual surface "came with
-  R-NODE-7 … so what was a feature is now a test". No such test was written; `_GetConfigurationWarnings`
-  is exercised on a *non-tool* script by direct call. The by-hand checklist carries the real check.
-- **R-AUD-2** was never edited to carry the random-family exception, which §11.2 asked for. The
-  exception is recorded under R-SCN-3 instead.
+`_HasPoint` and `_CanDropData` move to `by-hand-checklist.md`, where what cannot be automated goes.
+
+### G20 — two spec entries that overstate or were not edited · **closed**
+
+Both edited. R-EXP-5 now says the editor-only virtual surface is a *declaration* that needs no code
+of its own and is **not** yet a test — `_GetConfigurationWarnings` is exercised by direct call on a
+non-tool script, which proves the method resolves and nothing about the editor consulting it — and
+points at the by-hand checklist for the real one. R-AUD-2 carries the random-family exception in its
+own body now, with the argument that makes it an exception rather than an inconsistency: `seed()` and
+`randomize()` name a *stream*, so a Verse-side RNG would silently ignore both and a project that
+seeds for a replay would get a different game. That is a model difference wearing a spelling's
+clothes, and R-AUD-2's own rule is that Godot's model wins.
 
 ---
 
@@ -664,12 +740,14 @@ Items 1–4 are **done**, struck through, and their entries above say what shipp
 2. ~~**G12** — record the math skips.~~ Done.
 3. ~~**G6** — finish the thread guard.~~ Done, and it found a `GCallbacks` race on the way.
 4. ~~**G9** — decide before Phase 5.~~ Decided: **do not build it**, R-ASYNC-4 first. See the entry.
-5. **G5** — `_make_function`. Needs the by-hand checklist to verify, so it pairs with running that,
-   and it is now worth more than it was: a struct payload gives it real parameter names to write.
-6. **G13** — the math bodies. Every one written deletes its own skip row, which is a rare shape for
-   this kind of work: the measure of progress is generated rather than claimed.
-7. **G11**, **G7**, **G8**, **G10**, **G19**, **G20** — ordinary work, in whatever order the next
-   phase makes convenient.
+5. ~~**G5** — `_make_function`.~~ Built. Still needs the by-hand checklist to *verify*, and now
+   provably so: it is unreachable from GDScript, so there is no automated check to write.
+6. ~~**G7**, **G8**, **G10**, **G19**, **G20**~~ — done.
+7. **G13** — the math bodies, and **G11** — the utilities. The two that are left, and both are
+   bounded rather than open: G13's progress is *generated* (every body written deletes its own skip
+   row), and G11 should start by checking which of the 106 actually need dispatching, since most are
+   correctly skipped under R-AUD-2 and only the `@GlobalScope` names with no Verse counterpart --
+   `print_rich`, `var_to_bytes`, `hash`, `type_string`, `instance_from_id` -- are really missing.
 8. ~~**G21** — needs an ABI decision before it is ordinary work.~~ The signal half needed no such
    decision and is done. What is left is **R-LANG-2**'s general case — a struct as a method
    parameter, a return value, an `@export` — and the spec has already chosen the Dictionary; it wants

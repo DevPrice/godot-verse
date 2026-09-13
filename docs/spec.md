@@ -92,6 +92,15 @@ resolves conflicts:
   name is fine, which was confirmed both ways. Those four stay properties under one word of English:
   `set X.Maximum = 1.0`. Both spellings an author might reach for are recorded as skipped and point
   at it, so `X.Max` and `X.GetMax()` are each answered by the editor with the one that works.
+
+  **The random family is the one exception to the principle, and it is a deliberate one.** `Randf`,
+  `RandiRange`, `SeedRandom` and their five siblings are dispatched to *Godot's* implementation
+  rather than answered by Verse's own, which R-AUD-2 would otherwise decide the other way. The
+  reason is that they are not really a spelling difference: `seed()` and `randomize()` name a stream,
+  and a Verse-side RNG would ignore both, so a project that seeds for a replay would get a different
+  game and nothing would say why. That is a *model* difference wearing a spelling's clothes, and
+  Godot's model wins. C# makes the same exception for the same reason. The integration suite proves
+  it is one stream: GDScript seeding and Verse asking see the same number. See R-SCN-3.
 - **R-AUD-3 (SHOULD)** Verse's less familiar features — `<decides>`, structured concurrency,
   parametric types — are available but never on the critical path of a first script. A user must
   be able to write a working script knowing only "class, member, method, `set`".
@@ -336,6 +345,13 @@ thinking about it.
   argument, so `@statics(player)` would have meant walking the attribute's own AST. The string is
   checked rather than trusted, so the failure mode the design was avoiding is avoided either way.
 
+  **Both checks the attribute was chosen for now report**, at the module's own line: an association
+  naming a class no script declares, and two modules claiming one class. They run once per analysis
+  rather than from `GetClassStatics`, which is asked about one class at a time and so could never
+  have seen the first of them. Without them the attribute bought nothing over the convention it
+  replaced, which is worth saying plainly — the argument for it was entirely that a mistyped
+  association is *checkable*.
+
   A constant's *value* is read out of the published package by its decorated path, the way an
   enum's name is built — so a class that has never been built reports its statics by name with no
   value, which is the same bargain an `@export` default already makes.
@@ -564,9 +580,16 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   The rest stayed deliberately: connecting a node's own signal through the Node panel is what a
   Godot author does, and it keeps this path covered.
 
-  What is still untested is the **editor-side flow**: connecting through the Node panel, and
-  `_make_function` writing the handler. Both need a windowed editor session, which is on the phase's
-  by-hand checklist and is owed.
+  `_make_function` is **built**: "Make Function" writes a tab-indented `<public>` handler whose
+  parameters carry the Verse spelling of each argument's type, and `<transacts>` on the signature,
+  which is load-bearing rather than decoration — `Subscribe` fixes its callback at that effect, so a
+  specifier-less stub would hand the author wall 8 on their first generated line.
+
+  What is still untested is the **editor-side flow**, and it is untestable here rather than merely
+  untested: `_make_function` is a `ScriptLanguageExtension` virtual with no ClassDB entry and
+  `Script.get_language()` is not in the public API, so GDScript can reach neither — calling it by
+  name answers "Nonexistent function", measured. The editor's own C++ is its only caller. That check
+  and the Node panel connection are on the by-hand checklist, with the exact text to expect.
 - **R-SIG-5 (MUST)** A script `await`s a signal from a concurrent context: the Verse spelling of
   GDScript's `await button.pressed`. Depends on §7.
 - **R-SIG-6 (MUST)** Signals declared in Verse are connectable and emittable from GDScript and C#
@@ -611,8 +634,11 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   the rest, handing the editor a real instance for a tool script and a placeholder for everything
   else. So `_Ready` and `_Process` run in the editor. The editor-only virtual surface came with
   R-NODE-7 rather than being built twice for one attribute: `_GetConfigurationWarnings` and the
-  gizmo virtuals are among the 1413, so what was a feature is now a test. A tool
-  script runs the **last built** generation, per §10's trigger — the same bargain a C# `[Tool]`
+  gizmo virtuals are among the 1413, so what would have been a feature is a *declaration* that
+  needs no code of its own. What it is **not** yet is a test. `_GetConfigurationWarnings` is
+  exercised only by direct call on a non-tool script, which proves the method resolves and says
+  nothing about the editor acting on it — that check needs a window and is on the by-hand checklist.
+  A tool script runs the **last built** generation, per §10's trigger — the same bargain a C# `[Tool]`
   script makes today, and the workflow most likely to send an author looking for the Build action.
   **Stated risk:** Verse now runs against the scene the author is editing, and R-DIAG-3 does not
   land until Phase 6 — the defect recorded there, where a raised runtime error empties every later
