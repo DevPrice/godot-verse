@@ -22,18 +22,21 @@ using { /Verse.org/Native }
 # Both are narrower than `<transacts>`, so either is callable from a Godot callback and from inside
 # a failure context.
 #
-# **Not everything is here, and the gap is not yet on the record.** Godot has 367 methods and 261
+# **Not everything is here, and what is missing is on the record.** Godot has 367 methods and 261
 # operators across its 16 math types, and C# solved that by writing them all. This writes what the
 # yardstick and ordinary scene code reach, and only for `vector2`, `vector2i`, `vector3` and
 # `color`: the other twelve types have no operators at all, and the long tail --
 # `bezier_interpolate`, `cubic_interpolate`, `orthonormalized`, `slerp`, `snapped`, the
 # Basis/Quaternion conversions -- is absent everywhere.
 #
-# `docs/phase-4-design.md` 8.3 asked for each of those to be **recorded as a skip with a reason**,
-# so the gap says so in the editor rather than being a name that is simply not there (R-SCN-2).
-# That is not built: `tools/gen_verse_api.py` never enumerates `builtin_classes[*].methods`, so
-# only these types' *constants* appear in `src/verse_api_skipped.h`. It is the largest hole left in
-# R-SCN-2's promise and it is tracked as G12 in docs/phase-4-gaps.md.
+# `tools/gen_verse_api.py` reads *this file* to find out what is written and records everything else
+# as a `math_not_written` skip, which is what makes the absence say so in the editor instead of
+# being a name that is simply not there (R-SCN-2, docs/phase-4-design.md 8.3). Reading the file
+# rather than maintaining a list is the point: **add a method below and its skip disappears on the
+# next generation**, with nothing else to update. 585 of the 628 are skips today.
+#
+# The parsing is line-based, so a definition has to start at column zero to be seen -- which every
+# one below does, because a Verse module-level definition has nowhere else to start.
 
 # --- vector2 -----------------------------------------------------------------
 

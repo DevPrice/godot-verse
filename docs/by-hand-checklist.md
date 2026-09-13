@@ -38,8 +38,19 @@ Each line is one thing to do and one thing to see. Tick nothing you have not wat
 - [ ] **A signal with arguments names them.** Do the same for the HUD's `StartGame`, and for a
       signal declared `godot_signal(tuple(int, string))` — the connect dialog must show two
       arguments, `Arg0` and `Arg1`, and the generated stub must take two parameters. (Verse tuples
-      cannot name their elements; a *struct* payload would give real names and does not merely lack
-      them — it registers a bogus signal and emits nothing. `phase-4-gaps.md` G1.)
+      cannot name their elements. A *struct* payload does give real names — see the next line.)
+- [ ] **A struct payload names its arguments in the connect dialog.** `signals.verse` declares
+      `Reported:godot_signal(strike_report)` over a three-field struct. The dialog must show
+      **`Damage`, `By`, `Point`** — the fields' own names, not `Arg0`/`Arg1`/`Arg2` — and typed
+      `int`, `String`, `Vector2`. This is the whole reason the struct row exists, and it is the one
+      half of it a headless run cannot check: the integration suite proves the *arguments* arrive,
+      not that a designer sees the names.
+- [ ] **A refused signal says why, at its own line.** Open `tests/integration/scripts/signal_rejects.verse`
+      in the script editor. Four members must each carry a warning on their own line — `Reassignable`
+      (a `var`), `Unseen` (not `<public>`), `Nested` (a struct field that is itself a struct) and
+      `Maybe` (a payload with no Godot type) — and `Fine` must carry none. Attach the script to a
+      node and confirm the Node dock's Signals list shows **only `Fine`**. Then fix one (drop the
+      `var`) and watch its warning clear on the next keystroke, without a build.
 - [ ] **A `@tool` script's configuration warning shows on the node.** Give a `@tool` script a
       `_GetConfigurationWarnings<override>():[]string` that returns one string. The node must show
       the warning triangle in the Scene dock with that text in its tooltip, and it must clear when
@@ -55,6 +66,12 @@ Each line is one thing to do and one thing to see. Tick nothing you have not wat
       constants must appear where Godot shows a script's constant map. A module naming a class
       that does not exist **will not** say so — that diagnostic is unbuilt, `phase-4-gaps.md` G10 —
       so this checks the constants only.
+- [ ] **A missing math method explains itself.** Write `Position.Snapped(vector2{X := 8.0, Y := 8.0})`
+      in a `.verse`. The diagnostic must not stop at "Unknown member `Snapped` in `vector2`": it must
+      append that the math types are ordinary Verse, this one has not been written yet, and
+      `host/Verse/GodotMath.native.verse` is where it goes. 585 members answer this way now
+      (`phase-4-gaps.md` G12); before, every one of them was silence. Try an operator too —
+      `SomeVector / OtherVector` — which takes the other of the two sentences.
 
 ## What a failure here means
 

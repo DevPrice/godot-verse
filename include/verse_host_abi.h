@@ -42,7 +42,7 @@ extern "C" {
  * The mismatch surfaces at vh_init, not at compile time, because the two sides are compiled by
  * different toolchains and nothing links them.
  */
-#define VH_ABI_VERSION_MAJOR 4
+#define VH_ABI_VERSION_MAJOR 5
 #define VH_ABI_VERSION_MINOR 0
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
@@ -604,6 +604,44 @@ typedef struct vh_method_desc
 	int32_t Column;
 } vh_method_desc;
 
+/* Why a signal a script declared cannot reach Godot.
+ *
+ * The same bargain vh_export_reject makes, for the same reason: a rejected signal is still listed,
+ * because the consumer needs somewhere to say why. A signal that silently does not exist is the
+ * worst outcome -- the author sees neither the connection nor a reason, and finds out at the first
+ * emission, at runtime, if at all.
+ *
+ * All five are decidable from the declaration alone, which is the point: each was a runtime
+ * surprise before it was a reject code. */
+typedef enum vh_signal_reject
+{
+	VH_SIGNAL_OK = 0,
+
+	/* Declared `var`. A signal is an identity, not a value to reassign: the binding is minted once
+	 * against the object the member was constructed on, so a later write leaves the name pointing
+	 * at a row nothing emits through. */
+	VH_SIGNAL_IS_VAR,
+
+	/* Not `<public>`. Godot registers signals per script class and connects by name from outside
+	 * the class entirely, so a member the rest of the program cannot see has no one to connect it. */
+	VH_SIGNAL_NOT_PUBLIC,
+
+	/* The declaring class has no Godot object to register on -- it does not derive from `object`,
+	 * so nothing ever hands it a handle. Unlike GDScript, where every class extends Object and so
+	 * every instance carries a signal table of its own, a plain Verse class is a VM object with no
+	 * Godot counterpart: there is nothing to emit on and nothing to connect to. */
+	VH_SIGNAL_NO_GODOT_OWNER,
+
+	/* A payload argument with no Godot wire lane. RejectDetail names the argument. */
+	VH_SIGNAL_PAYLOAD_UNSUPPORTED,
+
+	/* A struct payload with a field that is itself a struct the bridge does not mirror. A struct
+	 * payload decomposes one level, into one Godot argument per top-level field -- which is what
+	 * buys the connect dialog real names -- and there is no second level to decompose into:
+	 * Godot has no argument shape for "a struct". RejectDetail names the field. */
+	VH_SIGNAL_PAYLOAD_NESTED_STRUCT
+} vh_signal_reject;
+
 /* One signal a script's class declares (R-SIG-1).
  *
  * There is no `@signal` attribute: the member's *type* is the declaration -- `Hit:godot_signal(t)`
@@ -620,15 +658,29 @@ typedef struct vh_signal_desc
 	int32_t NameLen;
 
 	/* One per Godot argument. A `tuple()` payload has none; `tuple(int, string)` has two, named
-	 * `Arg0` and `Arg1` because Verse tuples cannot name their elements; anything else has one,
-	 * named for its type. Mapping is top level only -- a `vector2` payload is one Vector2
-	 * argument, not two floats. */
+	 * `Arg0` and `Arg1` because Verse tuples cannot name their elements; a *struct* payload has one
+	 * per top-level field, each named by the field, which is what buys the connect dialog and
+	 * _make_function real names; anything else has one, named for its type.
+	 *
+	 * Mapping is one level only -- a `vector2` payload is one Vector2 argument, not two floats, and
+	 * a struct field that is itself a struct is VH_SIGNAL_PAYLOAD_NESTED_STRUCT rather than a
+	 * second round of flattening. */
 	const vh_param_desc* Args;
 	int32_t ArgCount;
 
 	/* Where the member is declared: zero-based row, utf8 byte column. */
 	int32_t Line;
 	int32_t Column;
+
+	/* vh_signal_reject. Anything but VH_SIGNAL_OK means the signal is listed so it can be
+	 * explained and must not be registered with Godot: the consumer drops it from the script's
+	 * signal list and reports RejectDetail at Line/Column. */
+	int32_t Reject;
+
+	/* The argument or field the rejection is about, for the two payload rejections; empty for the
+	 * three that are about the member itself. Not null terminated. */
+	const char* RejectDetailUtf8;
+	int32_t RejectDetailLen;
 } vh_signal_desc;
 
 /* One member of a class's statics module (R-NODE-4).
@@ -675,6 +727,9 @@ VH_ATTR VH_API vh_bool vh_class_is_abstract(const char* ClassNameUtf8);
  * vh_class_export_list, so it refreshes per keystroke rather than per build. A signal declared in
  * a script that has never been built appears after the next Build, which is the same bargain an
  * `@export` *default* already makes.
+ *
+ * A signal the bridge cannot carry is listed with a Reject rather than dropped -- see
+ * vh_signal_reject for why -- so a consumer registering signals with Godot must filter on Reject.
  *
  * The descriptors are the host's and live until the next call to this function.
  * Returns VH_ERR_NOT_FOUND when the class does not exist in the analysed program. */

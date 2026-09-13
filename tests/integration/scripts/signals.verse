@@ -7,6 +7,13 @@ using { /Godot.org/Godot }
 # attribute exists where the text is the only source -- `@global_class` survives without
 # compilation because Godot asks about files it has only scanned -- and a signal list is not one of
 # those cases: the host reads declared types out of the semantic program already.
+# A struct payload's fields, which is the one spelling that carries *names* to Godot. R-TYPE-7:
+# Verse forbids a non-public struct field, so every one of these is `<public>` because it must be.
+strike_report := struct:
+    Damage<public>:int = 0
+    By<public>:string = ""
+    Point<public>:vector2 = vector2{}
+
 @global_class
 signals := class(node2d):
 
@@ -23,6 +30,39 @@ signals := class(node2d):
 
     # An object payload, which is what `body_entered` shaped signals carry.
     Touched<public>:godot_signal(node2d) = godot_signal(node2d){}
+
+    # A struct payload: one Godot argument per top-level field, *named by the field*. This is the
+    # spelling that gives the connect dialog and "Make Function" real names instead of `Arg0`, and
+    # it is why the mapping is not simply "one payload, one argument".
+    #
+    # It crosses in both directions, and the two are not symmetric. Outbound the struct is taken
+    # apart into three Godot arguments; inbound Godot calls the handler with those three and the
+    # host builds the struct back, because `Subscribe` is `Callback(:t)` and the handler declares
+    # one value. Verse already reads a multi-parameter function as satisfying a one-tuple-parameter
+    # callback for the same reason -- a function's parameter *is* its tuple -- so this is that rule
+    # reaching the one spelling that carries names.
+    Reported<public>:godot_signal(strike_report) = godot_signal(strike_report){}
+
+    EmitReported<public>(Amount:int, Source:string)<transacts>:void =
+        Reported.Signal(strike_report{Damage := Amount, By := Source, Point := vector2{X := 3.0, Y := 4.0}})
+
+    var ReportedDamage<public>:int = 0
+    var ReportedBy<public>:string = ""
+    var ReportedX<public>:float = 0.0
+
+    # One parameter against three Godot arguments. Every field is read, so a field written into the
+    # wrong slot is a wrong value rather than something that round-tripped unexamined.
+    OnReported<public>(Report:strike_report)<transacts>:void =
+        set ReportedDamage = Report.Damage
+        set ReportedBy = Report.By
+        set ReportedX = Report.Point.X
+
+    SubscribeToReported<public>()<transacts>:void =
+        Reported.Subscribe(OnReported)
+
+    ReadReportedDamage<public>()<transacts>:int = ReportedDamage
+    ReadReportedBy<public>()<transacts>:string = ReportedBy
+    ReadReportedX<public>()<transacts>:float = ReportedX
 
     EmitTouched<public>(Body:node2d)<transacts>:void = Touched.Signal(Body)
 

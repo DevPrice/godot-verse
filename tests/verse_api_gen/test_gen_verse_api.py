@@ -4,6 +4,8 @@ case and exits non-zero if any case fails.
 """
 
 import sys
+import tempfile
+import textwrap
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -550,6 +552,61 @@ def test_accessor_locals_dodge_a_colliding_member():
     check("an uncontested one is not", names["Accessor"], "Accessor")
 
 
+def test_math_written_is_read_from_the_source(tmp_source=None):
+    """G12: the record of what is missing is computed from GodotMath, not maintained beside it.
+
+    The property that matters is the *negative* one -- a method that is written must not be recorded
+    as absent -- because that is the one that rots. A list maintained by hand goes stale silently the
+    first time someone adds a body.
+    """
+    source = textwrap.dedent("""\
+        using { /Verse.org/Native }
+
+        operator'+'<public>(L:vector2, R:vector2)<computes>:vector2 = vector2{}
+        operator'*'<public>(S:float, R:vector2)<computes>:vector2 = vector2{}
+        prefix'-'<public>(V:vector2)<computes>:vector2 = vector2{}
+        (V:vector2).Length<public>()<reads>:float = 0.0
+        """)
+    with tempfile.TemporaryDirectory() as folder:
+        path = Path(folder) / "GodotMath.native.verse"
+        path.write_text(source, encoding="utf-8")
+        methods, operators = g.read_math_written(path)
+
+    check("the extension method is seen", sorted(methods["vector2"]), ["Length"])
+    check_true("a binary operator is keyed on both operands", ("+", "vector2", "vector2") in operators)
+    check_true("a prefix operator is keyed as unary", ("-", "vector2", None) in operators)
+    # Godot files `float * Vector2` under Vector2, and the Verse overload that serves it is written
+    # with the float on the left -- so it has to be found under either side or it reads as missing.
+    check_true("a reversed-operand overload counts for the math type",
+               ("*", "vector2", "float") in operators)
+
+    api = {"builtin_classes": [{
+        "name": "Vector2",
+        "methods": [{"name": "length"}, {"name": "snapped"}],
+        "operators": [
+            {"name": "+", "right_type": "Vector2"},
+            {"name": "unary-"},
+            {"name": "/", "right_type": "float"},
+        ],
+    }]}
+    coverage = g.Coverage()
+    with tempfile.TemporaryDirectory() as folder:
+        path = Path(folder) / "GodotMath.native.verse"
+        path.write_text(source, encoding="utf-8")
+        g.record_math_skips(api, coverage, path)
+
+    skipped = {(s.verse_name, s.reason) for s in coverage.skipped_members}
+    check_true("a method with no body is recorded", ("Snapped", "math_not_written") in skipped)
+    check_true("a method that is written is not",
+               not any(s.verse_name == "Length" for s in coverage.skipped_members))
+    check_true("an operator with no overload is recorded",
+               ("operator'/'", "math_operator_not_written") in skipped)
+    check_true("an operator that is written is not",
+               not any(s.verse_name == "operator'+'" for s in coverage.skipped_members))
+    check_true("nor a unary one that is written",
+               not any(s.godot_name == "unary-" for s in coverage.skipped_members))
+
+
 def test_property_skips_have_reasons():
     resolver = g.TypeResolver({"Node"}, {"Node": "Object"}, {"Node", "Texture2D"}, {})
     coverage = g.Coverage()
@@ -945,6 +1002,7 @@ def main():
     test_emit_indexed_property_passes_its_index()
     test_struct_property_gets_the_field_overloads()
     test_accessor_locals_dodge_a_colliding_member()
+    test_math_written_is_read_from_the_source()
     test_property_skips_have_reasons()
     test_method_map_names_the_godot_original()
     test_generated_method_map_covers_a_known_method()

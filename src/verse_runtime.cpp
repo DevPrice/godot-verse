@@ -665,6 +665,10 @@ Vector<VerseSignalInfo> VerseRuntime::class_signals(const String &p_class_name) 
 		const vh_signal_desc &desc = descs[i];
 		VerseSignalInfo &info = signals.write[i];
 		info.name = StringName(String::utf8(desc.NameUtf8, desc.NameLen));
+		info.reject = desc.Reject;
+		info.reject_detail = String::utf8(desc.RejectDetailUtf8, desc.RejectDetailLen);
+		info.line = desc.Line;
+		info.column = desc.Column;
 		info.args.resize(desc.ArgCount);
 		for (int32_t j = 0; j < desc.ArgCount; ++j) {
 			const vh_param_desc &arg = desc.Args[j];

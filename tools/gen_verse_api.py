@@ -14,7 +14,7 @@ Epic's own libraries disambiguate their two `vector3` types.
 import argparse
 import json
 import re
-from collections import Counter, namedtuple
+from collections import Counter, defaultdict, namedtuple
 from pathlib import Path
 
 GENERATED_PATH = "host/Verse/GodotClasses.native.verse"
@@ -2394,6 +2394,108 @@ VALUE_TYPE_MEMBERS = [
 ]
 
 
+# Where the math types' methods and operators actually live. Hand-written Verse, not generated --
+# OQ-11's answer is that a vector2 has no handle and needs no ABI -- which is exactly why the
+# *gap* has to be computed rather than maintained: a list of "what is missing" written by hand goes
+# stale the moment someone adds a method, and silently.
+MATH_SOURCE_PATH = "host/Verse/GodotMath.native.verse"
+
+# `(V:vector2).LengthSquared<public>(` -- an extension method, which is a module-level definition of
+# `operator'.LengthSquared'` and is why these names are unusable as parameter names anywhere.
+MATH_METHOD_RE = re.compile(r"^\(\s*\w+\s*:\s*(\w+)\s*\)\.(\w+)")
+
+# `operator'*'<public>(L:vector2, S:float)` and `prefix'-'<public>(V:vector2)`. The left operand's
+# type is what files the definition under a math type; the right operand's is what tells two
+# overloads of one symbol apart.
+MATH_OPERATOR_RE = re.compile(
+    r"^(operator|prefix)'([^']+)'\s*(?:<[^>]*>\s*)*\(\s*\w+\s*:\s*(\w+)\s*(?:,\s*\w+\s*:\s*(\w+)\s*)?\)")
+
+
+def read_math_written(path: Path) -> tuple[dict, set]:
+    """What GodotMath.native.verse defines, as (methods by verse type, operator keys).
+
+    Read out of the file rather than listed here on purpose (G12): adding a method to GodotMath has
+    to make its skip disappear on the next generation, or the record drifts from the code and the
+    editor starts explaining the absence of something that is present.
+
+    Operator keys are `(symbol, left verse type, right verse type or None)`, because Godot lists one
+    operator entry per right-hand type and Verse spells each as its own overload.
+    """
+    methods = defaultdict(set)
+    operators = set()
+    if not path.exists():
+        return methods, operators
+    for line in path.read_text(encoding="utf-8").splitlines():
+        method = MATH_METHOD_RE.match(line)
+        if method:
+            methods[method.group(1)].add(method.group(2))
+            continue
+        operator = MATH_OPERATOR_RE.match(line)
+        if operator:
+            kind, symbol, left, right = operator.groups()
+            # `prefix'-'(V:vector2)` is Godot's `unary-`; a binary operator keys on both sides.
+            operators.add((symbol, left, None) if kind == "prefix" else (symbol, left, right))
+            # Godot files `float * Vector2` under Vector2 as well, and Verse needs the mirrored
+            # overload to be written for it to be reachable -- so record it under whichever side is
+            # a math type.
+            if kind == "operator" and right is not None:
+                operators.add((symbol, right, left))
+    return methods, operators
+
+
+# Godot's spelling of a unary operator, against Verse's `prefix'-'`.
+GODOT_UNARY_PREFIX = "unary"
+
+
+def record_math_skips(api: dict, coverage: Coverage, math_source: Path):
+    """Records every builtin method and operator GodotMath does not define, as `math_not_written`.
+
+    R-SCN-2 promises that every Godot member is reachable *or the reason it is not is reported*, and
+    this is the largest surface where the second half was missing: 367 methods and 261 operators
+    across sixteen types, absent with nothing said. The skip is what turns "that name does not
+    exist" into a sentence in the editor.
+    """
+    written_methods, written_operators = read_math_written(math_source)
+
+    for builtin in api.get("builtin_classes", []):
+        godot_class = builtin["name"]
+        if godot_class not in MATH_TYPES:
+            continue
+        verse_class = verse_class_name(godot_class)
+
+        for method in builtin.get("methods") or []:
+            verse_name = verse_method_name(method["name"])
+            if verse_name in written_methods.get(verse_class, ()):
+                continue
+            coverage.skip("math_not_written", SkippedMember(
+                verse_class, verse_name, godot_class, method["name"], "math_not_written", ""))
+
+        for operator in builtin.get("operators") or []:
+            symbol = operator["name"]
+            right = operator.get("right_type")
+            if symbol.startswith(GODOT_UNARY_PREFIX):
+                key = (symbol[len(GODOT_UNARY_PREFIX):], verse_class, None)
+            else:
+                key = (symbol, verse_class, verse_builtin_type_name(right))
+            if key in written_operators:
+                continue
+            # The name an author would have written is the operator itself; there is no member name
+            # to look up, so the detail carries the operand that identifies which overload.
+            detail = "" if right is None else right
+            coverage.skip("math_not_written", SkippedMember(
+                verse_class, f"operator'{symbol}'", godot_class, symbol, "math_operator_not_written",
+                detail))
+
+
+def verse_builtin_type_name(godot_type: str | None) -> str | None:
+    """`Vector2` -> `vector2`, `float` -> `float`. None stays None, for a unary operator."""
+    if godot_type is None:
+        return None
+    if godot_type in ("int", "float", "bool", "String", "Variant"):
+        return {"bool": "logic", "String": "string", "Variant": "variant"}.get(godot_type, godot_type)
+    return verse_class_name(godot_type)
+
+
 def render_math_layout_header(api: dict) -> str:
     field_arrays = []
     entries = []
@@ -2529,6 +2631,8 @@ def main() -> int:
     parser.add_argument("--class-names-header", default=CLASS_NAMES_HEADER_PATH)
     parser.add_argument("--classes-header", default=CLASSES_HEADER_PATH)
     parser.add_argument("--skipped-header", default=SKIPPED_HEADER_PATH)
+    parser.add_argument("--math-source", default=MATH_SOURCE_PATH,
+                        help="The hand-written math file whose definitions decide what is *not* skipped")
     parser.add_argument("--report", default=None, help="Write the coverage report here instead of stdout")
     parser.add_argument("--keywords", default=KEYWORDS_HEADER)
     args = parser.parse_args()
@@ -2562,6 +2666,7 @@ def main() -> int:
     resolver_for_statics = TypeResolver(set(emit_order), build_parent_map(api["classes"]),
                                        {c["name"] for c in api["classes"]}, enums)
     statics_modules = emit_statics_modules(api, emit_order, resolver_for_statics, coverage, enums)
+    record_math_skips(api, coverage, resolve(root, args.math_source))
     text = render(api, class_blocks, emit_singleton_accessors(api, emit_order, member_names),
                   typed_arrays, typed_dictionaries, enums, statics_modules,
                   emit_utility_functions(api, resolver_for_statics, coverage))

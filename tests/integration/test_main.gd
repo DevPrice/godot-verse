@@ -14,10 +14,17 @@ var _signal_hits := 0
 var _signal_points := 0
 var _signal_by := ""
 var _signal_object: Object = null
+var _signal_report: Array = []
 
 
 func _on_verse_touched(body: Node2D) -> void:
 	_signal_object = body
+
+
+# Three parameters against a one-struct payload: the struct decomposed on the way out, which is
+# what puts `damage`/`by`/`point` in the connect dialog instead of a single unnamed value.
+func _on_verse_reported(damage: int, by: String, point: Vector2) -> void:
+	_signal_report = [damage, by, point]
 
 
 func _on_verse_hit() -> void:
@@ -637,6 +644,50 @@ func _init() -> void:
 		emitter_node.call("EmitTouched", emitter_node)
 		_check("an object payload crosses as the node it names", _signal_object == emitter_node)
 
+		# A struct payload: one argument per top-level field, named by the field. The whole reason
+		# the mapping is not "one payload, one argument" -- these are the names the connect dialog
+		# shows and the names Make Function writes, where a tuple payload can only offer Arg0.
+		if by_name.has("Reported"):
+			var reported_args: Array = by_name["Reported"]["args"]
+			_check_eq("a struct payload is one argument per top-level field", reported_args.size(), 3)
+			if reported_args.size() == 3:
+				_check_eq("named by the field, which is what a tuple payload cannot do",
+						[String(reported_args[0]["name"]), String(reported_args[1]["name"]),
+								String(reported_args[2]["name"])],
+						["Damage", "By", "Point"])
+				_check_eq("and typed field by field",
+						[int(reported_args[0]["type"]), int(reported_args[1]["type"]),
+								int(reported_args[2]["type"])],
+						[TYPE_INT, TYPE_STRING, TYPE_VECTOR2])
+		else:
+			_check("a struct payload appears in get_signal_list", false)
+
+		_signal_report.clear()
+		emitter_node.connect("Reported", _on_verse_reported)
+		emitter_node.call("EmitReported", 12, "axe")
+		_check_eq("a struct payload arrives as its fields, in declaration order",
+				_signal_report, [12, "axe", Vector2(3, 4)])
+
+		# And back the other way: Godot invokes with three arguments, the host builds the struct,
+		# and the Verse handler reads it as one value. The inbound half is not the outbound half
+		# run backwards -- nothing else on this wire can construct a struct a project declared.
+		emitter_node.call("SubscribeToReported")
+		emitter_node.call("EmitReported", 31, "pike")
+		_check_eq("a Verse handler receives a struct payload as one value",
+				[emitter_node.call("ReadReportedDamage"), emitter_node.call("ReadReportedBy"),
+						emitter_node.call("ReadReportedX")],
+				[31, "pike", 3.0])
+
+		# A *direct* call cannot do the same, and the refusal is Godot's rather than the bridge's:
+		# `Object::call` checks arity against the script's own method list -- which says one
+		# parameter -- and answers "Expected 1 argument(s)" without entering the host at all. So the
+		# packing rule reaches a signal handler and not a direct caller. A Callable invocation is
+		# the difference: it arrives through vh_callback_invoke, which Godot does not arity-check.
+		_check_eq("a struct-taking method still reports one parameter to Godot",
+				(emitter_node.get_method_list().filter(
+						func(m): return String(m["name"]) == "OnReported")[0]["args"] as Array).size(),
+				1)
+
 		# Godot's own signals, through the accessor the generator emits per signal per class. The
 		# engine emits `renamed` itself, so nothing here emits it: setting the name is the event.
 		# Emitted by hand rather than by setting the name: Node::set_name only emits `renamed` for a
@@ -678,6 +729,57 @@ func _init() -> void:
 		subscriber.free()
 		emitter_node.call("EmitScored", 1)
 		_check("emitting after the subscriber was freed is not an error", true)
+
+	# --- R-SIG-1: the declarations that compile and cannot work ---------------------------------
+	#
+	# Four members the compiler accepts and the bridge refuses, each decidable from the declaration.
+	# What is asserted here is the *drop*: Godot must not be told about a signal nothing can emit,
+	# so the script's signal list carries neither the name nor a row. The sentence an author reads
+	# needs the editor, and `by-hand-checklist.md` owns that half -- a headless run has no
+	# _validate to ask.
+	var reject_script: Script = load("res://scripts/signal_rejects.verse")
+	_check("signal_rejects.verse compiles -- none of the four is a compile error", reject_script != null)
+	if reject_script != null:
+		var reject_names := {}
+		for entry in reject_script.get_script_signal_list():
+			reject_names[String(entry["name"])] = entry
+		_check("a signal with nothing wrong with it is still registered", reject_names.has("Fine"))
+		_check_eq("a `var` signal is not", reject_names.has("Reassignable"), false)
+		_check_eq("nor a non-public one", reject_names.has("Unseen"), false)
+		_check_eq("nor one whose struct payload nests a struct", reject_names.has("Nested"), false)
+		_check_eq("nor one whose payload has no Godot type", reject_names.has("Maybe"), false)
+
+		var reject_node := Node2D.new()
+		reject_node.set_script(reject_script)
+		root.add_child(reject_node)
+		_check("has_signal agrees with the list", reject_node.has_signal("Fine"))
+		_check_eq("and refuses the rejected one", reject_node.has_signal("Unseen"), false)
+		_signal_points = 0
+		reject_node.connect("Fine", _on_verse_scored)
+		reject_node.call("EmitFine", 6)
+		_check_eq("the good signal on that class still emits", _signal_points, 6)
+		# Emitting a refused signal reports its own reason rather than the generic "names nothing".
+		# The *text* is what matters and GDScript cannot read push_error output, so what is asserted
+		# here is that none of the four is fatal; the four sentences are eyeballed in the run log and
+		# recorded in phase-4-gaps.md §2.
+		reject_node.call("EmitUnseen", 1)
+		reject_node.call("EmitReassignable", 1)
+		reject_node.call("EmitNested")
+		reject_node.call("EmitMaybe")
+		_check("emitting a refused signal is reported, not fatal", true)
+		reject_node.call("EmitFine", 8)
+		_check_eq("and the good signal on that class still works afterwards", _signal_points, 8)
+
+	# A class with no Godot object at all: nothing ever hands it a handle, so the signal on it can
+	# never be registered, connected or emitted.
+	var orphan_script: Script = load("res://scripts/signal_no_owner.verse")
+	_check("signal_no_owner.verse compiles", orphan_script != null)
+	if orphan_script != null:
+		var orphan_names := {}
+		for entry in orphan_script.get_script_signal_list():
+			orphan_names[String(entry["name"])] = entry
+		_check_eq("a signal on a class that does not derive from `object` is not registered",
+				orphan_names.has("Orphan"), false)
 
 	# --- R-ASYNC-8: a call from another thread is refused rather than served --------------------
 	#

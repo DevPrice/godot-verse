@@ -228,8 +228,19 @@ and packages, never syntax.
   boundary where Godot has a counterpart: an enum member is `@export`-able as a Godot enum
   property, a struct member as a Godot struct or dictionary. Status: **part.** Both work in user
   code, nested structs included, and an enum member exports as a dropdown of its own enumerators
-  (R-EXP-1). A **struct** member at the boundary is still outstanding: the sixteen mirrored math
-  types cross, but a struct a project declares for itself has no Godot counterpart to become.
+  (R-EXP-1). A **struct** member at the boundary is **part**: a project's own struct now crosses as a
+  `godot_signal` payload in both directions — out as one Godot argument per field, named by the
+  field, and back in through `InstanceCall`'s packing rule and `WireToValue`'s user-struct branch
+  (R-SIG-1). That path needs no Godot counterpart at all, because a signal delivers the fields as
+  separate arguments and the host reassembles them.
+
+  What is left is the general case: a struct as a method parameter or return value, and as an
+  `@export`. Those need a Variant to *be*, and this requirement already names it — **a dictionary**,
+  keyed by field name, which is GDScript's own idiom for a record and is order-independent where a
+  positional encoding would misread every saved scene after a field was reordered, exactly as
+  reordering a Verse enum does. Keep it separate from the signal path when it lands: a Dictionary is
+  a reference on this wire since ABI v2 and costs a ref-table entry per crossing, which a signal
+  emitted every frame should not pay. Tracked as `phase-4-gaps.md` G21.
 - **R-LANG-3 (MUST)** Parametric types work — generic functions, generic classes, and the
   parametric spellings in `/Verse.org/Simulation`. Status: **part.** A parametric class in user code
   and a generic function over it both work, instantiated at two different types in one script, and
@@ -449,22 +460,50 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   | `tuple()` | none |
   | a bare type | one, named for the type — `Int`, `Float`, `Text` |
   | `tuple(a, b)` | two, `Arg0` and `Arg1` |
+  | a struct | one per top-level field, **named by the field** |
 
   Verse tuples cannot name their elements (`tuple(Damage:int, ...)` is "Expected a type, got data
-  definition instead"), which is why the names are positional. The design's fourth row — a **struct**
-  payload mapping to one named argument per top-level field — is **not implemented**, and the
-  fallback is worse than the design's framing suggests. A `godot_signal(my_struct)` registers a
-  signal with one argument named `Value` of type NIL, and **emits nothing**: the payload's shape is
-  read through `FMemberType::Struct`, which is filled from the generated table of Godot's 16 math
-  structs, so a *user* struct leaves it null and `ValueToWire` refuses the value at the first
-  emission.
+  definition instead"), which is why the tuple names are positional — and why the struct row exists
+  at all: it is the one spelling that carries names to the connect dialog and to what
+  `_make_function` writes.
 
-  That is not a missing nicety, it is a member that compiles and does not work. §6.2's own answer
-  for a payload the wire cannot carry — **refuse it at the member**, reusing R-EXP-3's machinery
-  — is not implemented either, so the failure lands at runtime rather than in the editor. Either
-  fix closes it; describing the struct's fields is the one that keeps the feature, and the
-  machinery is there (`GetClassExports` already walks a class's data members, and `ReadStructValue`
-  already reads one back by field).
+  **The struct row decomposes one level**, and a field that is itself a user struct is refused at the
+  member (below), because Godot has no argument shape for a struct and there is nothing for a second
+  level to flatten into. A field of one of the mirrored *math* types is fine — a `vector2` is one
+  Vector2 argument.
+
+  **It crosses both ways, and the two directions are not each other reversed.** Outbound the struct
+  is taken apart into N arguments. Inbound Godot invokes the handler with those N while
+  `Subscribe(Callback(:t))` declares one value, so the host builds the struct back: `InstanceCall`
+  packs N arguments into one tuple when the single declared parameter is a user struct with N fields,
+  and `WireToValue` constructs it from the semantic field list. Verse already reads a
+  multi-parameter function as satisfying a one-tuple-parameter callback for the same reason — a
+  function's parameter *is* its tuple — so this is that rule reaching the one spelling that carries
+  names. A *direct* `Object::call` cannot do the same: Godot checks arity against the script's method
+  list, which reports the one declared parameter, before the host sees the call at all.
+
+  **A signal the bridge cannot carry is refused at the member**, reusing R-EXP-3's shape rather than
+  failing at the emission — `vh_signal_desc` carries a `Reject` the way `vh_export_desc` does,
+  `_get_script_signal_list` drops a rejected signal so Godot is never told about one nothing can
+  emit, and `_validate` turns the reason into a warning at the member's own line. The five reasons,
+  all decidable from the declaration:
+
+  | `vh_signal_reject` | the declaration |
+  | --- | --- |
+  | `IS_VAR` | a `var` member — a signal is an identity, and the binding is minted once |
+  | `NOT_PUBLIC` | not `<public>`, so nothing outside the class can connect to it |
+  | `NO_GODOT_OWNER` | a class that does not derive from `object`, so nothing ever hands it a handle |
+  | `PAYLOAD_UNSUPPORTED` | an argument with no Godot type |
+  | `PAYLOAD_NESTED_STRUCT` | a struct payload whose field is itself a struct |
+
+  `NO_GODOT_OWNER` is the one with no GDScript counterpart, and the asymmetry is worth stating: every
+  GDScript class extends Object, so every instance carries a signal table of its own and a
+  `RefCounted` subclass can declare signals freely. A plain Verse class is a VM object with no Godot
+  counterpart at all — there is no table to register on and no object to connect to.
+
+  Emitting or subscribing to a refused signal reports its own reason rather than the generic "names
+  nothing", because the editor warning is the only report a *tools* build makes and a game running
+  outside one would otherwise get nothing useful.
 
   Signals **inherit**: a script class deriving from another has that class's signals, and both the
   list and the construction-time binding walk the whole chain. Phase 2 shipped exactly this bug once
@@ -621,6 +660,20 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
 
   In the editor rather than in a report file, because a report file in this repository is read by
   whoever wrote the generator and by nobody else.
+
+  **The math types were the largest hole in that promise and are now inside it.** They are ordinary
+  Verse rather than a mirror over an ABI (OQ-11), so `tools/gen_verse_api.py` never enumerated
+  `builtin_classes[*].methods` and 367 methods and 261 operators across the sixteen types were absent
+  with nothing recorded. The generator now **reads `host/Verse/GodotMath.native.verse`** to find out
+  what is written and records everything else as `math_not_written` / `math_operator_not_written` —
+  585 rows today, against 43 written. Reading the file rather than maintaining a list is the whole
+  point: adding a method makes its skip disappear on the next generation, so the record cannot drift
+  from the code. The sentence says the truth about these, which is different from every other skip:
+  not "the bridge cannot carry this" but "nobody has written it yet, and here is the file it goes in".
+
+  Resolving one needed a second path in the editor: `ClassDB` has never heard of `Vector2` — it is a
+  Variant type, not a class — so the chain walk that answers for `node2d` answers nothing for
+  `vector2`, and the lookup matches on the Verse name the skip row carries instead.
 - **R-SCN-3 (MUST)** Godot's `@GlobalScope` utility functions and constants are reachable under
   names that do not collide with `/Verse.org/Simulation`. Status: **done** (Phase 4 stage 6), and
   in three pieces because the question turned out to be three questions.
@@ -907,6 +960,16 @@ event, and `vh_tick` pumped once per frame with a budget.
   which is the conservative reading — a raise aborts only *its own* call's transaction, so a
   sibling's writes were already committed. Once scopes are per instance the question is different
   again, because only one node's code would have stopped.
+
+  **This requirement is also the one blocking `phase-4-gaps.md` G9**, and reading Epic's answer is
+  what established that. `FVerseEventCallbackList` drops a callback when its scope **terminates**
+  (`VerseEvent.cpp:169-188`), never consults `ResetTerminationState()`, and UEFN never revives a
+  terminated scope at all — `ContentScopeRepository` hands out a *fresh* one
+  (`VerseEngine/.../ContentScopeRepository.h:80-92`). That rule is only coherent because their scopes
+  are per entity, per world, per evaluation. Attaching it to one revived process-wide scope would
+  drop every subscription in the project on any raise, which is worse than what this requirement
+  already describes. So the callback→scope link is a *consequence* of R-ASYNC-4 rather than a step
+  toward it, and there is nothing useful to build before the boundary moves.
 - **R-ASYNC-5 (MUST)** A node's tasks are cancelled when the node leaves the tree or is freed, and
   a scene change cancels the tasks of everything it unloads. Structured concurrency whose
   structure does not match the scene tree's lifetime is a leak with extra steps.
@@ -920,12 +983,26 @@ event, and `vh_tick` pumped once per frame with a budget.
 
 - **R-ASYNC-8 (MUST)** A call that enters the host from any thread other than the one that called
   `vh_init` is **refused with a diagnosable error, and nothing runs**. Status: **done** (Phase 4
-  stage 3). `vh_init` records its thread; every execution entry point compares against it and
+  stage 3). `vh_init` records its thread; **every** entry point compares against it and
   answers `VH_ERR_THREAD` having run nothing, reporting through the diagnostic callback with the
   entry point named and what to do instead. The GDExtension turns that into an invalid call, so
   GDScript sees it where it made the mistake. It landed with the Callable because that is the stage
   that enlarges the exposure: a Callable is a value, and an author may hand one to a
   `WorkerThreadPool` task.
+
+  Phase 4a guarded only the two entry points that *execute* Verse; the guard now covers all of them.
+  The read-only ones were never harmless — they read a semantic program the analysis thread
+  replaces. Three are deliberately unguarded, each argued in place: `vh_abi_version` (answered
+  before `vh_init`, so there is no thread to compare against), `vh_init` itself, and
+  **`vh_callback_release`** — a Godot `Callable` is destroyed on whatever thread dropped its last
+  reference, and refusing that would leak the row rather than protect anything. Releasing never
+  enters the VM, so allowing it is safe; the `TMap` it mutates is what needed protecting, and it is
+  now under a lock, with `vh_callback_invoke` copying its target out before running anything rather
+  than holding a pointer across a call that runs Verse.
+
+  Four entry points return `vh_bool` and have no error value, so a refused call answers `0` — which
+  reads as "no such class" rather than "refused". The diagnostic carries the difference; widening
+  those four is a major ABI change nobody has needed.
 
   *Rationale, and why a lock is not the answer.* VerseVM does not merely prefer the game thread, it
   asserts it: `VVMEnterVMInline.h` opens the top-level VM entry with

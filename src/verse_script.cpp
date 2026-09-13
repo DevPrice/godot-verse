@@ -535,7 +535,7 @@ bool VerseScript::_inherits_script(const Ref<Script> &p_script) const {
 // neither ClassDB nor the script knows.
 bool VerseScript::_has_script_signal(const StringName &p_signal) const {
 	for (int64_t i = 0; i < signals_cache.size(); i++) {
-		if (signals_cache[i].name == p_signal) {
+		if (signals_cache[i].name == p_signal && signals_cache[i].reject == VH_SIGNAL_OK) {
 			return true;
 		}
 	}
@@ -546,6 +546,12 @@ TypedArray<Dictionary> VerseScript::_get_script_signal_list() const {
 	TypedArray<Dictionary> out;
 	for (int64_t i = 0; i < signals_cache.size(); i++) {
 		const VerseSignalInfo &signal = signals_cache[i];
+		// A rejected signal is listed by the host and dropped here -- the same bargain the export
+		// list makes a few hundred lines down, for the same reason: the editor needs the row so it
+		// can say why, and Godot must not be told about a signal nothing can emit.
+		if (signal.reject != VH_SIGNAL_OK) {
+			continue;
+		}
 		Array args;
 		for (int64_t j = 0; j < signal.args.size(); j++) {
 			args.push_back(typed_argument(String(signal.args[j].name), signal.args[j].type));

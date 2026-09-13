@@ -459,8 +459,8 @@ Dictionary VerseScriptLanguage::_validate(const String &p_script, const String &
 	// draws what the property list holds, and a member that never reaches it leaves nothing behind
 	// to explain its absence. The list is whatever the last analysis of this file left behind,
 	// which is the same staleness every diagnostic here has.
-	if (p_validate_warnings && export_warnings_by_path.has(p_path)) {
-		result["warnings"] = export_warnings_by_path[p_path];
+	if (p_validate_warnings && script_warnings_by_path.has(p_path)) {
+		result["warnings"] = script_warnings_by_path[p_path];
 	}
 
 	// ScriptTextEditor::get_functions() reads this key alone to build the script editor's method
@@ -2010,7 +2010,7 @@ void VerseScriptLanguage::poll_check() const {
 		// validate is not guaranteed to follow, so the log is written from here.
 		const String globalized = ProjectSettings::get_singleton()->globalize_path(in_flight_path);
 		log_new_diagnostics(globalized, diagnostics_for(in_flight_path));
-		refresh_export_warnings(in_flight_path);
+		refresh_script_warnings(in_flight_path);
 
 		in_flight_path = String();
 		in_flight_source = String();
@@ -2064,7 +2064,57 @@ static String export_rejection_code(int64_t p_reject) {
 	}
 }
 
-void VerseScriptLanguage::refresh_export_warnings(const String &p_path) const {
+// What a refused signal has to say for itself, at the line that declared it.
+//
+// Every one of these was a runtime surprise before it was a warning, and three of them were silent:
+// the member compiled, the signal was absent from Godot, and the author found out at the first
+// emission or never. So each sentence names the rule and the edit that satisfies it.
+static String signal_rejection_message(const VerseSignalInfo &p_signal) {
+	const String name = String(p_signal.name);
+	switch (p_signal.reject) {
+		case VH_SIGNAL_IS_VAR:
+			return name + String(" is a `var`, and a signal is an identity rather than a value. Its ")
+					+ String("binding is made once against the object the member was built on, so ")
+					+ String("reassigning it leaves the name pointing at nothing. Drop the `var`.");
+		case VH_SIGNAL_NOT_PUBLIC:
+			return name + String(" is not `<public>`, so nothing outside the class can connect to it ")
+					+ String("-- which is the only thing connecting ever is. Declare it `")
+					+ name + String("<public>`.");
+		case VH_SIGNAL_NO_GODOT_OWNER:
+			return name + String(" is on a class that does not derive from `object`, so Godot never ")
+					+ String("gives it an object to register the signal on. Unlike GDScript, where ")
+					+ String("every class is an Object with a signal table of its own, a plain Verse ")
+					+ String("class has no Godot counterpart at all.");
+		case VH_SIGNAL_PAYLOAD_NESTED_STRUCT:
+			return name + String(" has a payload whose field `") + p_signal.reject_detail
+					+ String("` is itself a struct. A struct payload becomes one Godot argument per ")
+					+ String("top-level field, and Godot has no argument shape for a struct, so there ")
+					+ String("is no second level to flatten into. Flatten the field, or carry it as ")
+					+ String("one of the mirrored math types.");
+		case VH_SIGNAL_PAYLOAD_UNSUPPORTED:
+			return name + String(" has a payload argument `") + p_signal.reject_detail
+					+ String("` with no Godot type, so an emission would have nothing to carry it in.");
+		default:
+			return name + String(" cannot be registered with Godot, so nothing can connect to it.");
+	}
+}
+
+static String signal_rejection_code(int32_t p_reject) {
+	switch (p_reject) {
+		case VH_SIGNAL_IS_VAR:
+			return String("SIGNAL_IS_VAR");
+		case VH_SIGNAL_NOT_PUBLIC:
+			return String("SIGNAL_NOT_PUBLIC");
+		case VH_SIGNAL_NO_GODOT_OWNER:
+			return String("SIGNAL_NO_GODOT_OWNER");
+		case VH_SIGNAL_PAYLOAD_NESTED_STRUCT:
+			return String("SIGNAL_PAYLOAD_NESTED_STRUCT");
+		default:
+			return String("SIGNAL_PAYLOAD_UNSUPPORTED");
+	}
+}
+
+void VerseScriptLanguage::refresh_script_warnings(const String &p_path) const {
 	VerseRuntime *runtime = get_runtime();
 	if (runtime == nullptr || !runtime->is_host_loaded()) {
 		return;
@@ -2098,9 +2148,30 @@ void VerseScriptLanguage::refresh_export_warnings(const String &p_path) const {
 		warnings.push_back(warning);
 	}
 
+	// The same pass over the signal list, which the host rejects for its own five reasons. Reported
+	// here rather than at the emission that used to discover them, which is R-SIG-1's half of
+	// "refused at the member" and the reason vh_signal_desc carries a Reject at all.
+	const Vector<VerseSignalInfo> signals = runtime->class_signals(p_path.get_file().get_basename());
+	for (int64_t i = 0; i < signals.size(); i++) {
+		const VerseSignalInfo &signal = signals[i];
+		if (signal.reject == VH_SIGNAL_OK || signal.line < 0) {
+			continue;
+		}
+
+		Dictionary warning;
+		warning["start_line"] = (int64_t)signal.line + 1;
+		warning["end_line"] = (int64_t)signal.line + 1;
+		warning["leftmost_column"] = (int64_t)signal.column + 1;
+		warning["rightmost_column"] = (int64_t)signal.column + 1;
+		warning["code"] = (int64_t)signal.reject;
+		warning["string_code"] = signal_rejection_code(signal.reject);
+		warning["message"] = signal_rejection_message(signal);
+		warnings.push_back(warning);
+	}
+
 	// Written even when empty: a member the author has just fixed has to lose its warning, and the
 	// analysis that proves it is this one.
-	export_warnings_by_path[p_path] = warnings;
+	script_warnings_by_path[p_path] = warnings;
 }
 
 namespace {
@@ -2150,6 +2221,18 @@ String skipped_member_explanation(const verse_api::skipped_member &p_entry) {
 	if (reason == "shadow") {
 		return "a name it shares with an inherited member won.";
 	}
+	// The math types are ordinary Verse rather than a mirror over an ABI (OQ-11), so a missing
+	// method is not a bridge limitation -- it is a body nobody has written yet, and the fix is to
+	// write it. Said plainly, because "unsupported" would be false and would stop someone who could
+	// have added it in ten minutes.
+	if (reason == "math_not_written") {
+		return String("the math types are ordinary Verse rather than calls into Godot, and this one ")
+				+ String("has not been written yet -- host/Verse/GodotMath.native.verse is where it goes.");
+	}
+	if (reason == "math_operator_not_written") {
+		return String("this operator has not been written for those operands yet -- the math types are ")
+				+ String("ordinary Verse, and host/Verse/GodotMath.native.verse is where it goes.");
+	}
 	return String("it was skipped: ") + reason + ".";
 }
 
@@ -2161,6 +2244,15 @@ String skipped_member_explanation(const verse_api::skipped_member &p_entry) {
 const verse_api::skipped_member *skipped_member_for(const String &p_verse_class, const String &p_member) {
 	const char *godot_name = verse_godot_class_for(p_verse_class);
 	if (godot_name == nullptr) {
+		// A math type. ClassDB has never heard of Vector2 -- it is a Variant type, not a class --
+		// so there is no chain to walk and no parent to inherit from: a vector2's members are all
+		// its own. Matched on the Verse name the skip row already carries.
+		for (size_t i = 0; i < std::size(verse_api::skipped); i++) {
+			const verse_api::skipped_member &entry = verse_api::skipped[i];
+			if (p_member == entry.verse_name && p_verse_class == entry.verse_class) {
+				return &entry;
+			}
+		}
 		return nullptr;
 	}
 	for (String godot_class = String(godot_name); !godot_class.is_empty();

@@ -5,6 +5,12 @@
 code or measured by running it; none is recalled. Where a previous document said something that
 turned out to be false, that is noted and the document has been corrected.
 
+**Seven entries have since been closed** — G1, G2, G3, G4, G6, G12 and G21 — and G9 was answered
+with a "do not build this". Closing them took the ABI to **v5**. G21 was raised *and* half closed in
+the same pass: G1 exposed it, and the half it was actually about turned out to need no ABI change at
+all. What is left of it is R-LANG-2, a MUST that has been at `part` since Phase 2. Each closed entry keeps its original diagnosis below its **Built** note, because the
+diagnosis is the part worth re-reading: §0 is why.
+
 **Companion to:** [`phase-4-design.md`](phase-4-design.md) (the design, and §13's short note pointing
 here), [`spec.md`](spec.md) (per-requirement status), [`by-hand-checklist.md`](by-hand-checklist.md)
 (what no headless run can see).
@@ -32,48 +38,121 @@ plausible and false.
 `tests/integration` and reading what Godot prints costs one test run. **Before you write down what
 something does, make it do it.**
 
+Applied before the fact rather than after it, twice, while closing the entries above — and both
+times the reading changed the plan:
+
+- **G1** looked finished once a struct payload reached GDScript as named arguments. Reading
+  `InstanceCall`'s arity check instead of assuming the inbound path was symmetric found **G21**: N
+  Godot arguments against a one-parameter Verse handler is `VH_ERR_ARGUMENT`, from a call the author
+  never wrote. Half a feature, shipped, would have been a *new* accepted-but-broken entry.
+- **G9** said to copy Epic's `FVerseEventCallbackList`. Reading it found that the rule drops
+  callbacks on *termination* and that UEFN never revives a terminated scope — so copying it into a
+  host with one revived process-wide scope would have regressed the very bug the revive fixed.
+
 ---
 
 ## 1. The gaps, at a glance
 
 Sized as **S** (an afternoon), **M** (a day), **L** (more, or needs a decision first).
 
-| id | gap | kind | size |
-| --- | --- | --- | --- |
-| **G1** | a struct signal payload compiles, registers a bogus signal, and emits nothing | accepted-but-broken | M |
-| **G2** | a `var` or non-`public` `godot_signal` member is silently absent from the signal list | accepted-but-broken | S |
-| **G3** | a `godot_signal` on a class never bound to a handle is only reported at emission | accepted-but-broken | S |
-| **G4** | a payload the wire cannot carry is refused at *emission*, not at the member | accepted-but-broken | S |
-| **G5** | `_make_function` and `_can_make_function` are stubs — R-SIG-4's editor half | unbuilt | M |
-| **G6** | the thread guard covers 2 of 31 entry points | unbuilt | S |
-| **G7** | `godot_signal()` has no zero-argument alias | unbuilt | S |
-| **G8** | `godot_array` has no `AddObject` | unbuilt | S |
-| **G9** | a callback does not remember its `FContentScope` | unbuilt | M |
-| **G10** | `@statics` emits neither of the two diagnostics the design promised | unbuilt | S |
-| **G11** | 106 of 114 `@GlobalScope` utilities are undispatched | unbuilt | L |
-| **G12** | 367 math methods and 261 operators are absent with nothing recorded | unbuilt | M |
-| **G13** | math exists for 4 of 16 types; `snapped`, `min`/`max`, `floor`/`ceil`/`round` unwritten | narrower | M |
-| **G14** | `GetClassOf` answers only the Godot class | structural | — |
-| **G15** | there is no `godot_callback` native class; a callback is `(handle, decorated name)` | structural | — |
-| **G16** | `vh_signal` is non-parametric; the payload lives in a host-side table | structural | — |
-| **G17** | the callback native takes `any`, not a typed function parameter | structural | — |
-| **G18** | `@statics` names its class as a string, not an identifier | structural | S |
-| **G19** | no behavioural test for `_CanDropData` / `_HasPoint` | test gap | S |
-| **G20** | R-EXP-5's body overstates; R-AUD-2 never edited | doc | S |
+| id | gap | kind | size | state |
+| --- | --- | --- | --- | --- |
+| **G1** | a struct signal payload compiles, registers a bogus signal, and emits nothing | accepted-but-broken | M | **closed** |
+| **G2** | a `var` or non-`public` `godot_signal` member is silently absent from the signal list | accepted-but-broken | S | **closed** |
+| **G3** | a `godot_signal` on a class never bound to a handle is only reported at emission | accepted-but-broken | S | **closed** |
+| **G4** | a payload the wire cannot carry is refused at *emission*, not at the member | accepted-but-broken | S | **closed** |
+| **G5** | `_make_function` and `_can_make_function` are stubs — R-SIG-4's editor half | unbuilt | M | open |
+| **G6** | the thread guard covers 2 of 31 entry points | unbuilt | S | **closed** |
+| **G7** | `godot_signal()` has no zero-argument alias | unbuilt | S | open |
+| **G8** | `godot_array` has no `AddObject` | unbuilt | S | open |
+| **G9** | a callback does not remember its `FContentScope` | unbuilt | M | open |
+| **G10** | `@statics` emits neither of the two diagnostics the design promised | unbuilt | S | open |
+| **G11** | 106 of 114 `@GlobalScope` utilities are undispatched | unbuilt | L | open |
+| **G12** | 367 math methods and 261 operators are absent with nothing recorded | unbuilt | M | **closed** |
+| **G13** | math exists for 4 of 16 types; `snapped`, `min`/`max`, `floor`/`ceil`/`round` unwritten | narrower | M | open |
+| **G14** | `GetClassOf` answers only the Godot class | structural | — | as built |
+| **G15** | there is no `godot_callback` native class; a callback is `(handle, decorated name)` | structural | — | as built |
+| **G16** | `vh_signal` is non-parametric; the payload lives in a host-side table | structural | — | as built |
+| **G17** | the callback native takes `any`, not a typed function parameter | structural | — | as built |
+| **G18** | `@statics` names its class as a string, not an identifier | structural | S | as built |
+| **G19** | no behavioural test for `_CanDropData` / `_HasPoint` | test gap | S | open |
+| **G20** | R-EXP-5's body overstates; R-AUD-2 never edited | doc | S | open |
+| **G21** | a user struct cannot cross the wire *inbound*, so a Verse handler cannot take one | found closing G1 | M | **closed for signals**; the rest is R-LANG-2 |
 
-**G14–G17 are working as built and are not bugs.** They are here so a fresh reader does not
+**G14–G18 are working as built and are not bugs.** They are here so a fresh reader does not
 "restore" them to the design's shape without knowing why they differ.
+
+**The closed entries shipped together** and the ABI went to **v5** with them — `vh_signal_desc`
+grew three fields, which is a layout change, so both sides must be rebuilt (`tools/run_tests.py
+--build`, or `host_smoke` refuses at `vh_init` with no useful sign of why). `tools/run_tests.py` is
+7/7 and the yardstick's 30 headless checks pass. What each one actually built is under its own entry.
 
 ---
 
-## 2. Accepted-but-broken
+## 2. Accepted-but-broken — **all four closed**
 
 The worst category: a script writes something the compiler accepts, and it does not work. All four
-are signals, all four have the same fix shape, and the design already specified it — §6.2's *"a
+are signals, all four had the same fix shape, and the design already specified it — §6.2's *"a
 payload the wire cannot carry is refused **at the member**, reusing R-EXP-3's machinery rather than
-failing at the emission."* That sentence answers G1, G3 and G4 together, and G2 belongs with them.
+failing at the emission."* That sentence answered G1, G3 and G4 together, and G2 belonged with them.
 
-### G1 — a struct signal payload does not work
+**What shipped, once, for all four.** `vh_signal_desc` carries a `Reject` and a `RejectDetail` the
+way `vh_export_desc` carries its own (ABI v5), filled by one validation pass in `GetClassSignals`.
+`VerseScript::_get_script_signal_list` and `_has_script_signal` drop a rejected signal, so Godot is
+never told about one nothing can emit; `refresh_script_warnings` — renamed from
+`refresh_export_warnings`, since it now covers both — turns the reason into a warning at the
+member's own line. The binding keeps its reject too, so emitting or subscribing to a refused signal
+reports *its* reason rather than the generic "names nothing", which is the only report a build
+running outside the editor gets.
+
+The five reasons, all decidable from the declaration:
+
+| `vh_signal_reject` | the declaration | was |
+| --- | --- | --- |
+| `IS_VAR` | a `var` member | G2 |
+| `NOT_PUBLIC` | not `<public>` | G2 |
+| `NO_GODOT_OWNER` | a class that does not derive from `object` | G3 |
+| `PAYLOAD_UNSUPPORTED` | an argument with no Godot type | G4 |
+| `PAYLOAD_NESTED_STRUCT` | a struct payload whose field is itself a struct | G1 |
+
+Tests: `tests/integration/scripts/signal_rejects.verse` (the four member-level refusals, plus one
+good signal on the same class so the pass is shown to reject individually rather than wholesale) and
+`signal_no_owner.verse` (the class with no base, which needs a file of its own because the thing
+being tested *is* the base). The *editor* sentences need a window and are on
+[`by-hand-checklist.md`](by-hand-checklist.md); the runtime ones each have an emitter, because "it
+was rejected" and "it was rejected for the right reason" are different claims and only the second
+helps an author. As of this pass they read:
+
+```
+The signal `Unseen` was never registered with Godot: a `godot_signal` member must be
+  `<public>` for anything outside the class to connect to it. Nothing was emitted.
+The signal `Reassignable` ...: a `godot_signal` member must not be `var`.
+The signal `Nested` ...: its payload field `Inner` is itself a struct, and a payload
+  decomposes one level only.
+The signal `Maybe` ...: its payload argument `Value` has no Godot type.
+```
+
+### G1 — a struct signal payload does not work · **closed, and it found G21**
+
+**Built:** `DescribePayload` has a struct branch. A `CClass` whose `IsStruct()` is true and which has
+no generated `FStructLayout` — that second test is what keeps the sixteen math types *out*, since a
+`vector2` payload is one Vector2 argument and not two floats — decomposes into one argument per
+top-level field, named by the field, walking the struct's own inheritance chain base-first. Each
+field's decorated key (`(/user@localhost/strike_report:)Damage`) is computed once at description
+time and stored on the binding, so the emission reads fields by name rather than reconstructing
+paths. `EmitSignal` grew a `Struct` arm beside its tuple and bare ones.
+
+One level only, which is what "decompose flat only" was chosen to mean: a field that is itself a
+user struct is `PAYLOAD_NESTED_STRUCT` at the member, because Godot has no argument shape for a
+struct and silently dropping the field would be the same accepted-but-broken failure in a new place.
+
+**What this exposed — G21, since closed.** Shipping the outbound half alone would have left the
+inbound one broken: Godot invokes a handler with N arguments, a Verse `Subscribe(Callback(:t))` takes
+the payload as one value, and `InstanceCall`'s arity check answers `VH_ERR_ARGUMENT` from a call the
+author never wrote. It was refused explicitly for one commit and then built; **G21** has the
+mechanism. A Verse handler takes the struct as one value now, so both halves of §6.2's row are real.
+
+**Original diagnosis, kept because the method is the point:**
 
 **Design:** §6.2's fourth row. A `godot_signal(my_struct)` should report **one Godot argument per
 top-level field**, named by the field, so the connect dialog and `_make_function` get real names;
@@ -180,7 +259,29 @@ returns `String()` (`src/verse_script_language.cpp`). Untouched by the phase.
 line that way. The argument names come from `class_signals()`, which `VerseScript` already caches.
 The indentation must be tabs (Godot's editor writes tabs, and Verse rejects mixed tabs and spaces).
 
-### G6 — the thread guard covers 2 of 31 entry points
+### G6 — the thread guard covers 2 of 31 entry points · **closed**
+
+**Built:** 26 more entry points carry the two-line prologue; three do not, and each says why where it
+is defined — `vh_abi_version` (a consumer calls it *before* `vh_init`, so there is no recorded thread
+to compare against, and it reads a compile-time constant), `vh_init` itself, and
+`vh_callback_release`.
+
+**`vh_callback_release` was the one that needed deciding, and deciding it found a real race.** It
+stays unguarded, because a Godot `Callable` is destroyed on whatever thread dropped its last
+reference and refusing that would leak the row rather than protect anything. But "releasing only
+touches a map" was never a reason it was *safe*: `TMap::Remove` from an arbitrary thread against
+`Find` and `Add` on the game thread can rehash and free under the reader. `GCallbacks` is under an
+`FCriticalSection` now, and `InvokeCallback` copies its `FCallbackTarget` out under the lock instead
+of holding a pointer into the map across a call that runs Verse.
+
+Four entry points return `vh_bool` and have no error value, so a refused call answers `0` — which
+reads as "no such class" rather than "refused". The diagnostic carries the difference. Recorded
+rather than fixed: widening them is a major ABI change and nothing has needed it.
+
+The GDExtension-side check the design also asked for ("so the message can say which node it came
+from") is still absent.
+
+**Original entry:**
 
 **Design:** §5.1. *"Record the `vh_init` thread at init, compare at **every entry point**, answer
 `VH_ERR_THREAD` having run nothing."* Also: *"The GDExtension can check on its own side too, so the
@@ -230,7 +331,7 @@ before adding it: the reader half (`GetObject`) would have to answer `object`, a
 `element_converters` special-cases `VhFromObject` already (see the comment there about taking the
 lane packer's branch and handing back the base `object`).
 
-### G9 — a callback does not remember its content scope
+### G9 — a callback does not remember its content scope · **answered: do not copy it, and here is why**
 
 **Design:** §5. *"Epic's `FVerseEventCallbackList` carries the other half of the discipline and is
 worth copying: each callback remembers the `FContentScope` it was subscribed in, and a terminated
@@ -239,10 +340,42 @@ again."*
 
 **What is there.** Nothing. `FCallbackTarget` is `{OwnerHandle, DecoratedName}` and the host has one
 process-wide `GContentScope`. After a raise terminates the scope, `EnterVerse` revives it at the next
-`vh_tick` — so in practice the callbacks *do* run again, which is why nothing failed. Whether that is
-correct or merely benign is not established.
+`vh_tick` — so in practice the callbacks *do* run again, which is why nothing failed.
 
-**Worth deciding before Phase 5**, which adds `Await` and more callbacks with longer lives.
+**What Epic actually does**, read rather than recalled:
+
+- The list is literally a sparse array of `TTuple<TWeakPtr<FContentScope>, TVerseFunction<...>>`
+  (`Engine/Plugins/Verse/Verse/Source/Verse/Public/VerseEvent.h:21`), the scope taken from
+  `FContentScopeGuard::GetActiveScope()` at subscribe time (`VerseEvent.cpp:50`).
+- The trigger is **termination, not destruction**. `FContentScopeImpl::Terminate()` broadcasts
+  `OnContentScopeCleanup` and then `Clear()`s it (`VerseContentScope.cpp:128-137`); each
+  subscription's cleanup lambda does `SubscribedCallbacks.RemoveAt(CallbackID)`
+  (`VerseEvent.cpp:169-188`). `Signal` re-checks `ShouldExecuteCodeWithThisScope()`, which is
+  `!WasTerminated()`, as a second line (`VerseEvent.cpp:83-87`).
+- **`ResetTerminationState()` is never consulted by that path.** Its only implementation clears the
+  flag and rebuilds the task group; it restores no cleanup delegates and no callbacks
+  (`VerseContentScope.cpp:139-146`). Subscription loss is permanent for that scope.
+- **UEFN never revives a terminated scope for new work.** `ContentScopeRepository` hands back the
+  cached scope only while `ShouldExecuteCodeWithThisScope()`, and otherwise **makes a new one**
+  (`VerseEngine/.../ContentScopeRepository.h:80-92`). Scopes are per owner UObject, per entity, per
+  world, per Sequencer evaluation — never one per process, except in the standalone host programs,
+  of which this bridge is one.
+
+**So the discipline is not separable from the granularity, and copying it here would be a
+regression.** Epic can drop every callback in a scope on termination because a scope is one entity or
+one world, and because the next subscription gets a *fresh* scope. This host has one scope for the
+whole project and deliberately *revives* it — `ReviveContentScope` exists because without it one
+script's first raise ended Verse for the process, silently, for a phase. Attaching Epic's rule to
+this architecture would mean: any script raises, and every subscription in the project dies for good.
+That is strictly worse than today, and it is worse in exactly the way the revive was written to fix.
+
+**The real content of G9 is R-ASYNC-4** — narrowing the blast radius from the project to something
+smaller. Get scopes per owner first, and Epic's rule becomes correct *and* free. Until then the
+recording would be dead weight: one scope, so every callback would record the same always-live
+pointer.
+
+Nothing to build here. **What to do in Phase 5:** implement R-ASYNC-4 first; the callback→scope link
+is a consequence of it, not a precursor.
 
 ### G10 — `@statics` has no diagnostics
 
@@ -280,7 +413,33 @@ the right answer under R-AUD-2 and the skip is correct rather than a gap. The on
 are the `@GlobalScope` names with no Verse counterpart — `print_rich`, `var_to_bytes`, `hash`,
 `type_string`, `instance_from_id` and the like.
 
-### G12 — the math tail is absent *and* unrecorded
+### G12 — the math tail is absent *and* unrecorded · **closed (the recording half)**
+
+**Built:** `gen_verse_api.py` reads `host/Verse/GodotMath.native.verse`, extracts what it defines —
+extension methods from `^\(X:type\).Name`, operators from `^operator'sym'(A:type, B:type)` and
+`^prefix'sym'(V:type)` — and records every `builtin_classes` method and operator for a `MATH_TYPES`
+entry that is not among them. **585 rows**, 342 methods and 243 operators, against 43 written.
+
+Reading the file rather than maintaining a list is the whole requirement: add a method to `GodotMath`
+and its skip disappears on the next generation. The generator test asserts the *negative* property —
+a method that is written must not be recorded as absent — because that is the one that rots.
+
+Two details worth keeping:
+
+- Godot files `float * Vector2` under `Vector2`, and the Verse overload serving it is written with
+  the float on the left. An operator is therefore recorded under *whichever* side is a math type, or
+  every reversed-operand overload would read as missing while being present.
+- Resolving one in the editor needed a second path. `ClassDB` has never heard of `Vector2` — it is a
+  Variant type, not a class — so `skipped_member_for`'s chain walk answers nothing for `vector2`, and
+  it now matches on the Verse class name the skip row already carries.
+
+The sentence is deliberately unlike every other skip's: not "the bridge cannot carry this" but "the
+math types are ordinary Verse, this one has not been written yet, and here is the file it goes in".
+Anything else would stop someone who could have added it in ten minutes.
+
+**The writing half is still G13.** This closed R-SCN-2's promise over the surface, not the gap.
+
+**Original entry:**
 
 **Design:** §8.3 item 2. *"The long tail … is **recorded as a skip with a reason**, which is
 machinery R-SCN-2 already has and which makes the gap say so in the editor rather than being
@@ -302,6 +461,62 @@ reachable, or the reason it is not is reported".
 method and operator for a `MATH_TYPES` entry that is not among them, as `math_not_written`. Reading
 the file rather than hand-maintaining a list keeps it honest: add a method to `GodotMath` and its
 skip disappears on the next generation.
+
+---
+
+### G21 — a user struct crosses outbound only · **half closed: signals both ways, the rest is R-LANG-2**
+
+**Found closing G1**, by reading `InstanceCall` rather than assuming — §0's lesson applied before the
+fact instead of after it.
+
+**It is not an orphan.** It is the unbuilt half of **R-LANG-2**, a MUST at `part` since Phase 2,
+whose own text already names the answer: *"a struct member as a Godot struct **or dictionary**"*.
+Phase 2 recorded it as a wall; this is that wall found from the other side.
+
+**What was wrong with this entry's first draft.** It listed "decide what a struct looks like on the
+wire" as the blocker for all of it. That is the blocker for *half*, and the half it does not block is
+the half G21 was about — because Godot delivers a struct payload as **N separate arguments**, so the
+signal case needs no Godot representation at all. `Seq.Items` is `const vh_value*` already, so the
+tuple lane was never scalar-only either; only the *math* path is, because math structs are.
+
+**Built — no ABI change, no new Godot representation.**
+
+- `FMemberType::UserStruct` holds an `FUserStructLayout`: the struct's decorated name and its fields'
+  keys, names and declared types. Set by `DescribeType` where `ReferenceClass` used to be — calling a
+  struct a reference is what sent it down the handle path to be refused there.
+- One walk fills it, `CollectStructFields`, and `DescribePayload` uses the *same* one. Two walks
+  would be two chances to disagree about field order, and a disagreement there is a silent
+  mis-assignment rather than an error.
+- `WireToValue` grows a user-struct arm beside the mirrored-math one: `FindVClassByDecoratedName`
+  (`FindMirroredVClass` without the assumption that the name is Godot's), an archetype of field keys,
+  `NewVObject`, then **this same function** per field — so a field can be anything a field can be,
+  where a math struct's can only be a scalar.
+- `InstanceCall` packs N arguments into one tuple when the method's single parameter is a user struct
+  with N fields. Verse already reads a multi-parameter function as satisfying a one-tuple-parameter
+  callback for the same reason — a function's parameter *is* its tuple.
+- The `SubscribeSignal` refusal is gone. The design's §6.2 sentence — *"the Verse subscriber receives
+  one value and reads `P.Damage`"* — is true for the first time.
+
+**The spike that had to come first** was whether a script-package struct's `VClass` is findable by
+decorated name the way a mirrored one is. It is: `(/user@localhost:)strike_report` resolves. The
+verse path rather than the package name is what decorates it, which is OQ-12's answer doing work
+again — a generation's package is renamed on every publish while its verse path stays pinned.
+
+**One claim this pass made and the test refuted.** Packing in `InstanceCall` was supposed to also let
+a GDScript caller reach a struct-taking method positionally. It does not: `Object::call` checks arity
+against the script's method list, which reports the one declared parameter, and answers *"Expected 1
+argument(s)"* without entering the host at all. A Callable invocation is the difference — it arrives
+through `vh_callback_invoke`, which Godot does not arity-check. The comment and the test say so now.
+
+**What is left, and it is R-LANG-2's:** a user struct as a method parameter or return value in the
+general case, and as an `@export`. That needs the representation decision this entry originally led
+with, and the spec has already chosen: **a Dictionary keyed by field name**. It is GDScript's own
+idiom for a record, self-describing, and order-independent — where positional would fail exactly the
+way reordering a Verse enum silently reinterprets every saved scene.
+
+Keep the two mechanisms separate when that lands. A Dictionary is a *reference* on this wire since
+ABI v2, so it costs a ref-table entry per crossing; a signal emitted every frame should keep the
+tuple path, which allocates nothing outside the arena.
 
 ---
 
@@ -443,16 +658,22 @@ Found during the review that produced this document, and fixed:
 
 ## 9. A suggested order
 
-1. **G2 + G3 + G4** — one validation pass in `GetClassSignals`, three silent failures become editor
-   diagnostics. Highest value per hour in the list, and the design already specifies it.
-2. **G1** — the struct payload, which the same pass can either implement or refuse cleanly.
-3. **G12** — record the math skips. Restores R-SCN-2's promise over the largest surface still missing
-   from it, and tells the *next* person what is absent without them having to read a Verse file.
-4. **G6** — finish the thread guard. Small, and it is a correctness claim the spec already makes.
-5. **G5** — `_make_function`. Needs the by-hand checklist to verify, so it pairs with running that.
-6. **G13**, **G11**, **G7**, **G8**, **G10**, **G19**, **G20** — ordinary work, in whatever order the
-   next phase makes convenient.
-7. **G9** — decide before Phase 5 rather than after.
+Items 1–4 are **done**, struck through, and their entries above say what shipped. What is left:
+
+1. ~~**G2 + G3 + G4** — one validation pass in `GetClassSignals`.~~ Done, with **G1** folded in.
+2. ~~**G12** — record the math skips.~~ Done.
+3. ~~**G6** — finish the thread guard.~~ Done, and it found a `GCallbacks` race on the way.
+4. ~~**G9** — decide before Phase 5.~~ Decided: **do not build it**, R-ASYNC-4 first. See the entry.
+5. **G5** — `_make_function`. Needs the by-hand checklist to verify, so it pairs with running that,
+   and it is now worth more than it was: a struct payload gives it real parameter names to write.
+6. **G13** — the math bodies. Every one written deletes its own skip row, which is a rare shape for
+   this kind of work: the measure of progress is generated rather than claimed.
+7. **G11**, **G7**, **G8**, **G10**, **G19**, **G20** — ordinary work, in whatever order the next
+   phase makes convenient.
+8. ~~**G21** — needs an ABI decision before it is ordinary work.~~ The signal half needed no such
+   decision and is done. What is left is **R-LANG-2**'s general case — a struct as a method
+   parameter, a return value, an `@export` — and the spec has already chosen the Dictionary; it wants
+   a phase, not a slot in this list.
 
 `G14`–`G18` need no action unless a requirement changes; read them before touching the code they
 describe.

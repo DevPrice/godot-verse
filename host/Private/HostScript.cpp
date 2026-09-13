@@ -1551,7 +1551,90 @@ struct FMemberType
     /// rather than from a classification of its own: the value cannot say -- an empty array has no
     /// element to look at, and the description is the answer the Godot side was already given.
     GodotVerse::FExportDesc Described;
+
+    /// For a struct the *project* declares -- never one of Godot's sixteen, which have `Struct`
+    /// above and a generated layout behind it. Held behind a pointer because the layout holds
+    /// FMemberTypes of its own, which a struct with a struct field makes recursive.
+    TSharedPtr<struct FUserStructLayout> UserStruct;
 };
+
+/// A project's own struct, as much of it as building one back from the wire needs.
+///
+/// The mirrored math types have `FStructLayout`, generated from extension_api.json and flat arrays
+/// of scalars. Nothing generates anything for a struct a project declares, so this is read off the
+/// semantic program instead -- and unlike the generated one it can carry any field type, because a
+/// user struct can hold a string or an object where a vector2 cannot.
+struct FUserStructLayout
+{
+    /// Decorated: `(/user@localhost:)strike_report`. What the VM knows it as.
+    FUtf8String DecoratedName;
+    /// Field keys and their declared types, in declaration order, base class first. The order is
+    /// load-bearing twice over: it is the order Godot is told the arguments come in, and the order
+    /// an inbound tuple is read back in. One walk fills both, which is why CollectStructFields
+    /// exists rather than each side doing it.
+    TArray<FUtf8String> FieldKeys;
+    /// The field's own name, which is what Godot is told the argument is called.
+    TArray<FUtf8String> FieldNames;
+    TArray<FMemberType> FieldTypes;
+};
+
+/// How a `godot_signal(t)`'s payload maps onto Godot's argument list.
+///
+/// Three shapes, because Verse has three answers to "what is one value carrying several things":
+/// a tuple, which cannot name its elements; a struct, which can; and everything else, which is one
+/// thing. The *emission* has to take the value apart the same way the descriptor put it together,
+/// so one shape serves both rather than each deciding for itself.
+enum class EPayloadShape : uint8
+{
+    /// One argument, the payload itself. `godot_signal(int)`, `godot_signal(node2d)`.
+    Bare,
+    /// One argument per element, positionally named. `tuple()` is this with no arguments.
+    Tuple,
+    /// One argument per top-level field, named by the field.
+    Struct,
+};
+
+/// One Godot argument a payload decomposes into.
+struct FPayloadArg
+{
+    /// What Godot is told the argument is called, and so what the connect dialog shows and what
+    /// _make_function writes: `Arg0` for a tuple element, the field's own name for a struct.
+    FUtf8String Name;
+    /// The decorated key this field is stored under, for LoadField at emission. Empty unless the
+    /// payload is a struct -- a tuple is an array and is read by index.
+    FUtf8String FieldKey;
+    FMemberType Type;
+};
+
+/// A payload's whole story: what it decomposes into, and -- when it decomposes into nothing usable
+/// -- which argument spoiled it and why (vh_signal_reject).
+struct FPayloadShape
+{
+    EPayloadShape Kind = EPayloadShape::Bare;
+    TArray<FPayloadArg> Args;
+    int32 Reject = VH_SIGNAL_OK;
+    FUtf8String RejectDetail;
+    /// The struct the payload decomposes, for Kind == Struct and null otherwise. Kept because the
+    /// *inbound* direction has to build one back, and the semantic class is what names it.
+    const uLang::CClass* StructClass = nullptr;
+};
+
+/// `(<enclosing scope path>:)<name>` -- what the VM knows a definition as. Defined below, beside the
+/// lookup that consumes it.
+AUTORTFM_DISABLE FUtf8String DecoratedNameOf(const uLang::CDefinition& Definition);
+
+/// A struct the project declares, or null for anything else -- a class, an interface, or one of
+/// Godot's sixteen math structs, which have a generated layout and are not this.
+AUTORTFM_DISABLE const uLang::CClass* UserStructClass(const uLang::CNormalType& Normal);
+
+/// Fills OutLayout from Struct's own fields, base class first.
+///
+/// One walk, used by both directions: `DescribePayload` names Godot's arguments from it and
+/// `WireToValue` reads an inbound tuple back with it. Two walks would be two chances to disagree
+/// about order, and a disagreement there is a silent mis-assignment rather than an error.
+AUTORTFM_DISABLE void CollectStructFields(const uLang::CClass& Struct,
+                                          const uLang::CSemanticProgram& Program,
+                                          FUserStructLayout& OutLayout);
 
 /// The same description, for a type with no member behind it: a method's parameter or its result.
 ///
@@ -1576,9 +1659,18 @@ AUTORTFM_DISABLE FMemberType DescribeType(const uLang::CTypeBase* Type, const uL
             || Name.StartsWith(UTF8TEXT("typed_array"))
             || Name.StartsWith(UTF8TEXT("typed_dictionary"));
         const FStructLayout* const Layout = bIsOption ? nullptr : FindStructLayout(Name);
+        const uLang::CClass* const UserStruct = bIsOption ? nullptr : UserStructClass(*Normal);
         if (Layout)
         {
             Result.Struct = Layout;
+        }
+        else if (UserStruct)
+        {
+            // A struct the project declared. Not a reference -- it is a value, and calling it one
+            // was what sent a struct-typed parameter down the handle path to be refused there.
+            Result.UserStruct = MakeShared<FUserStructLayout>();
+            Result.UserStruct->DecoratedName = DecoratedNameOf(*UserStruct);
+            CollectStructFields(*UserStruct, Program, *Result.UserStruct);
         }
         else if (bIsOption || !bIsContainer)
         {
@@ -1600,6 +1692,43 @@ AUTORTFM_DISABLE FMemberType DescribeType(const uLang::CTypeBase* Type, const uL
             + UTF8TEXT(":)") + FUtf8String(Enumeration->AsNameCString());
     }
     return Result;
+}
+
+AUTORTFM_DISABLE const uLang::CClass* UserStructClass(const uLang::CNormalType& Normal)
+{
+    const uLang::CClass* const Class = Normal.AsNullable<uLang::CClass>();
+    if (!Class || !Class->IsStruct())
+    {
+        return nullptr;
+    }
+    // FindStructLayout is what tells Godot's sixteen apart from a project's own: they are structs
+    // too, and they cross as the packed components a Vector2 is made of rather than field by field.
+    return FindStructLayout(FUtf8StringView(Class->AsNameCString())) ? nullptr : Class;
+}
+
+AUTORTFM_DISABLE void CollectStructFields(const uLang::CClass& Struct,
+                                          const uLang::CSemanticProgram& Program,
+                                          FUserStructLayout& OutLayout)
+{
+    // Base first and the whole chain, the way GetClassSignals walks a script class: a struct that
+    // extends another carries the base's fields, and those are fields the *value* has, so leaving
+    // them out would mis-align every field after them.
+    TArray<const uLang::CClass*> Chain;
+    for (const uLang::CClass* Cursor = &Struct; Cursor != nullptr && Cursor->IsStruct();
+         Cursor = Cursor->GetSuperClass())
+    {
+        Chain.Insert(Cursor, 0);
+    }
+
+    for (const uLang::CClass* Link : Chain)
+    {
+        for (const uLang::TSRef<uLang::CDataDefinition>& Field : Link->GetDefinitionsOfKind<uLang::CDataDefinition>())
+        {
+            OutLayout.FieldNames.Add(FUtf8String(Field->AsNameCString()));
+            OutLayout.FieldKeys.Add(DecoratedNameOf(*Field));
+            OutLayout.FieldTypes.Add(DescribeType(Field->GetType(), Program));
+        }
+    }
 }
 
 AUTORTFM_DISABLE FMemberType DescribeMemberType(FUtf8StringView ClassName, FUtf8StringView FieldName)
@@ -2226,6 +2355,42 @@ AUTORTFM_DISABLE Verse::VClass* FindMirroredVClass(Verse::FRunningContext Contex
     return nullptr;
 }
 
+/// The VM's class for an already-decorated name, which is FindMirroredVClass without the assumption
+/// that the name is Godot's.
+///
+/// A struct a *project* declares lives at its own verse path -- `(/user@localhost:)strike_report`,
+/// or `(/user@localhost/gameplay:)strike_report` inside a module -- so the mirrored spelling cannot
+/// reach it. The verse path rather than the package name is what goes in the decoration: a
+/// generation's package is named afresh on every publish while its verse path stays pinned, which is
+/// OQ-12's answer and the reason the statics reader looks definitions up this way too.
+AUTORTFM_DISABLE Verse::VClass* FindVClassByDecoratedName(FUtf8StringView DecoratedName)
+{
+    if (!Verse::GlobalProgram || DecoratedName.IsEmpty())
+    {
+        return nullptr;
+    }
+    for (uint32 Index = 0; Index < Verse::GlobalProgram->NumPackages(); ++Index)
+    {
+        if (Verse::VClass* Class = Verse::GlobalProgram->GetPackage(Index).LookupDefinition<Verse::VClass>(DecoratedName))
+        {
+            return Class;
+        }
+    }
+    return nullptr;
+}
+
+/// The decorated name of a semantic definition: `(<enclosing scope path>:)<name>`.
+///
+/// The one spelling three readers had each built inline -- the enum reader, the statics reader and
+/// the struct-payload field keys -- and now the class lookup needs it too.
+AUTORTFM_DISABLE FUtf8String DecoratedNameOf(const uLang::CDefinition& Definition)
+{
+    return FUtf8String(UTF8TEXT("("))
+        + FULangConversionUtils::ULangStrToFUtf8String(
+              Definition._EnclosingScope.GetScopePath('/', uLang::CScope::EPathMode::PrefixSeparator))
+        + UTF8TEXT(":)") + FUtf8String(Definition.AsNameCString());
+}
+
 /// The VM's enumeration of that decorated name, looked up the way FindMirroredVClass looks up a
 /// class: by walking the published packages, since nothing indexes them together.
 AUTORTFM_DISABLE Verse::VEnumeration* FindVEnumeration(FUtf8StringView DecoratedName)
@@ -2306,17 +2471,31 @@ struct FCallbackTarget
 TMap<int64, FCallbackTarget> GCallbacks;
 int64 GNextCallbackId = 1;
 
+/// The one table in this file that is touched off the game thread, and so the one that needs a lock.
+///
+/// vh_callback_release is deliberately unguarded (R-ASYNC-8's exception, argued at its definition):
+/// a Godot Callable is destroyed on whatever thread dropped its last reference, and refusing that
+/// would leak the row instead. Releasing never enters the VM, so allowing it is safe -- but a
+/// TMap::Remove racing a Find on the game thread is not, and that is what this closes.
+///
+/// The id counter needs no lock: only the game thread mints one.
+FCriticalSection GCallbacksLock;
+
 /// One `godot_signal` member of one live instance: everything the member's *type* and *name* said,
 /// resolved once at construction so neither has to be spelled again.
 struct FSignalBinding
 {
     int64 OwnerHandle = 0;
     FUtf8String Name;
-    /// What the payload decomposes into. Empty for a `tuple()` payload; one entry for a bare type;
-    /// N for `tuple(a, b, ...)`. The same list the signal descriptor reports to Godot, so the
-    /// arguments a handler is generated for and the arguments an emission carries cannot disagree.
-    TArray<FMemberType> ArgTypes;
-    bool bPayloadIsTuple = false;
+    /// What the payload decomposes into -- the same shape the signal descriptor reported to Godot,
+    /// so the arguments a handler was generated for and the arguments an emission carries cannot
+    /// disagree.
+    FPayloadShape Payload;
+    /// vh_signal_reject, copied off the descriptor. A rejected signal is still bound, so that
+    /// emitting it can say the reason the editor said rather than the generic "names nothing" --
+    /// which is what a script running outside the editor gets, and it was the whole complaint.
+    int32 Reject = VH_SIGNAL_OK;
+    FUtf8String RejectDetail;
 };
 
 TMap<int64, FSignalBinding> GSignalBindings;
@@ -2640,6 +2819,57 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
             return false;
         }
         OutValue = Verse::VValue(Wrapper);
+        return true;
+    }
+
+    // A struct the project declares, arriving as one argument per field. The mirrored math types
+    // below take the same tuple lane and a different builder: theirs is a flat run of scalars laid
+    // out by a generated table, and this one is a field list read off the semantic program, so its
+    // fields go through this very function and can be anything a field can be.
+    if (Declared.UserStruct.IsValid())
+    {
+        const FUserStructLayout& Layout = *Declared.UserStruct;
+        if (Value.Type != VH_TYPE_TUPLE || Value.Seq.Count != Layout.FieldKeys.Num())
+        {
+            return false;
+        }
+        Verse::VClass* const StructClass = FindVClassByDecoratedName(FUtf8StringView(Layout.DecoratedName));
+        if (!StructClass)
+        {
+            return false;
+        }
+
+        TArray<Verse::VUniqueString*> Keys;
+        TArray<Verse::VArchetype::VEntry> Entries;
+        Keys.Reserve(Layout.FieldKeys.Num());
+        Entries.Reserve(Layout.FieldKeys.Num());
+        for (const FUtf8String& Key : Layout.FieldKeys)
+        {
+            Verse::VUniqueString& Unique = Verse::VUniqueString::New(Context, FUtf8StringView(Key));
+            Keys.Add(&Unique);
+            Entries.Add(Verse::VArchetype::VEntry::ObjectField(Context, Unique));
+        }
+
+        // NewVObject rather than a lower-level allocation, for the reason NewStructFrom gives: it is
+        // what marks a struct deeply mutable, and one built any other way does not compare or freeze
+        // like a struct.
+        Verse::VArchetype& Archetype = Verse::VArchetype::New(Context, Verse::VValue(), Entries);
+        Verse::VValueObject& Struct = StructClass->NewVObject(Context, Archetype);
+
+        for (int32 Index = 0; Index < Layout.FieldKeys.Num(); ++Index)
+        {
+            Verse::VValue FieldValue;
+            if (!WireToValue(Context, Value.Seq.Items[Index], Layout.FieldTypes[Index], FieldValue))
+            {
+                return false;
+            }
+            if (!Struct.CreateField(Context, *Keys[Index])
+                || !Struct.SetField(Context, *Keys[Index], FieldValue).IsReturn())
+            {
+                return false;
+            }
+        }
+        OutValue = Verse::VValue(Struct);
         return true;
     }
 
@@ -3295,42 +3525,12 @@ AUTORTFM_DISABLE const uLang::CTypeBase* SignalPayloadType(const uLang::CClass& 
     return nullptr;
 }
 
-/// What a payload becomes on Godot's side (phase-4-design 6.2).
-///
-/// A `tuple()` is no arguments; a tuple of N is N; anything else is one. The mapping is top level
-/// only -- a `vector2` payload is one Vector2 argument, not two floats -- and it is the same list
-/// the signal descriptor reports and an emission fills, so the arguments a generated handler is
-/// written for and the arguments that arrive cannot disagree.
-AUTORTFM_DISABLE void DescribePayload(const uLang::CTypeBase* Payload,
-                                      const uLang::CSemanticProgram& Program,
-                                      TArray<FMemberType>& OutArgs,
-                                      bool& bOutIsTuple)
-{
-    OutArgs.Reset();
-    bOutIsTuple = false;
-    if (!Payload)
-    {
-        return;
-    }
-    bool bIsOption = false;
-    const uLang::CNormalType& Normal = UnwrapDeclaredType(*Payload, bIsOption);
-    if (const uLang::CTupleType* Tuple = Normal.AsNullable<uLang::CTupleType>())
-    {
-        bOutIsTuple = true;
-        for (const uLang::CTypeBase* Element : Tuple->GetElements())
-        {
-            OutArgs.Add(DescribeType(Element, Program));
-        }
-        return;
-    }
-    OutArgs.Add(DescribeType(Payload, Program));
-}
-
 /// The argument name Godot is told, for a payload that carries no names of its own.
 ///
 /// Verse tuples cannot name their elements -- `tuple(Damage:int, ...)` is "Expected a type, got
 /// data definition instead" -- so a tuple payload gets positional names and a bare one is named
-/// for its type, which is what the connect dialog and `_make_function` then write.
+/// for its type, which is what the connect dialog and `_make_function` then write. A struct payload
+/// is the spelling that *does* carry names, and never reaches here.
 AUTORTFM_DISABLE FUtf8String SignalArgName(const FMemberType& Arg, int32 Index, bool bIsTuple)
 {
     if (bIsTuple)
@@ -3346,6 +3546,161 @@ AUTORTFM_DISABLE FUtf8String SignalArgName(const FMemberType& Arg, int32 Index, 
     case VH_TYPE_ARRAY:  return FUtf8String(UTF8TEXT("Items"));
     case VH_TYPE_REF:    return FUtf8String(UTF8TEXT("Ref"));
     default:             return FUtf8String(UTF8TEXT("Value"));
+    }
+}
+
+/// Whether the wire can carry one payload argument of this declared type, and it is deliberately
+/// *not* `Described.Reject == VH_EXPORT_OK`.
+///
+/// Three of the export rejections are rules about the inspector rather than about the wire, and a
+/// signal argument is subject to none of them:
+///
+///   - VH_EXPORT_OBJECT_NOT_OPTIONAL is "the inspector can leave a slot empty". Nothing leaves a
+///     signal argument empty -- the emitter supplies it -- and ValueToWire has the bare-object
+///     branch for exactly this case, added when `godot_signal(node2d)` emitted nothing.
+///   - VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL is "ClassDB cannot filter a picker by this name". An
+///     emission carries a handle; nobody filters anything.
+///   - VH_EXPORT_UNSUPPORTED_TYPE over a *reference* wrapper is "the inspector has no editor for
+///     an arbitrary Array". The id crosses perfectly well, which is why DescribeExportType types
+///     it before rejecting it.
+///
+/// What is left really is unrepresentable: an option around a non-object (ValueToWire reads a
+/// cleared option as a null reference, so `?int` would arrive as nothing), and a type with no lane.
+AUTORTFM_DISABLE bool PayloadArgCrosses(const FMemberType& Arg)
+{
+    switch (Arg.Described.Reject)
+    {
+    case VH_EXPORT_OK:
+    case VH_EXPORT_OBJECT_NOT_OPTIONAL:
+    case VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL:
+        return true;
+    case VH_EXPORT_UNSUPPORTED_TYPE:
+        return Arg.Described.Type == VH_TYPE_REF;
+    default:
+        return false;
+    }
+}
+
+/// A user struct a payload decomposes into arguments, or null for anything else.
+///
+/// "User" because the sixteen mirrored math types are structs too and are *not* decomposed: a
+/// vector2 payload is one Vector2 argument, which is the whole of what Godot wants, and
+/// FindStructLayout is what tells the two apart.
+AUTORTFM_DISABLE const uLang::CClass* PayloadStructClass(const uLang::CNormalType& Normal)
+{
+    const uLang::CClass* const Class = Normal.AsNullable<uLang::CClass>();
+    if (!Class || !Class->IsStruct())
+    {
+        return nullptr;
+    }
+    return FindStructLayout(FUtf8StringView(Class->AsNameCString())) ? nullptr : Class;
+}
+
+/// What a payload becomes on Godot's side (phase-4-design 6.2), and why it cannot become anything.
+///
+/// A `tuple()` is no arguments; a tuple of N is N; a struct is one per top-level field, named by
+/// the field; anything else is one. The mapping is one level only -- a `vector2` payload is one
+/// Vector2 argument, not two floats -- and it is the same list the signal descriptor reports and an
+/// emission fills, so the arguments a generated handler is written for and the arguments that
+/// arrive cannot disagree.
+///
+/// This is the one place that decides, so G1-G4's rejections are decidable from the declaration:
+/// the editor reports them at the member and no emission has to discover them at runtime.
+AUTORTFM_DISABLE void DescribePayload(const uLang::CTypeBase* Payload,
+                                      const uLang::CSemanticProgram& Program,
+                                      FPayloadShape& OutShape)
+{
+    OutShape = FPayloadShape{};
+    if (!Payload)
+    {
+        return;
+    }
+
+    const auto AddArg = [&OutShape](FUtf8String Name, FUtf8String FieldKey, FMemberType Type) {
+        FPayloadArg& Arg = OutShape.Args.AddDefaulted_GetRef();
+        Arg.Name = MoveTemp(Name);
+        Arg.FieldKey = MoveTemp(FieldKey);
+        Arg.Type = MoveTemp(Type);
+    };
+
+    bool bIsOption = false;
+    const uLang::CNormalType& Normal = UnwrapDeclaredType(*Payload, bIsOption);
+
+    if (const uLang::CTupleType* Tuple = Normal.AsNullable<uLang::CTupleType>())
+    {
+        OutShape.Kind = EPayloadShape::Tuple;
+        for (const uLang::CTypeBase* Element : Tuple->GetElements())
+        {
+            FMemberType Described = DescribeType(Element, Program);
+            AddArg(SignalArgName(Described, OutShape.Args.Num(), true), FUtf8String(), MoveTemp(Described));
+        }
+    }
+    else if (const uLang::CClass* const Struct = bIsOption ? nullptr : PayloadStructClass(Normal))
+    {
+        OutShape.Kind = EPayloadShape::Struct;
+        OutShape.StructClass = Struct;
+
+        // The same walk the inbound direction uses, so the order Godot is told the arguments come
+        // in and the order they are read back cannot disagree.
+        FUserStructLayout Layout;
+        Layout.DecoratedName = DecoratedNameOf(*Struct);
+        CollectStructFields(*Struct, Program, Layout);
+
+        for (int32 Index = 0; Index < Layout.FieldNames.Num(); ++Index)
+        {
+            if (Layout.FieldTypes[Index].UserStruct.IsValid())
+            {
+                // One level, and no more. Godot has no argument shape for "a struct", so the second
+                // level has nothing to decompose into and silently dropping it would be the
+                // accepted-but-broken failure this whole pass exists to remove.
+                OutShape.Reject = VH_SIGNAL_PAYLOAD_NESTED_STRUCT;
+                OutShape.RejectDetail = Layout.FieldNames[Index];
+                return;
+            }
+            AddArg(Layout.FieldNames[Index], Layout.FieldKeys[Index], Layout.FieldTypes[Index]);
+        }
+    }
+    else
+    {
+        OutShape.Kind = EPayloadShape::Bare;
+        FMemberType Described = DescribeType(Payload, Program);
+        AddArg(SignalArgName(Described, 0, false), FUtf8String(), MoveTemp(Described));
+    }
+
+    for (const FPayloadArg& Arg : OutShape.Args)
+    {
+        if (!PayloadArgCrosses(Arg.Type))
+        {
+            OutShape.Reject = VH_SIGNAL_PAYLOAD_UNSUPPORTED;
+            OutShape.RejectDetail = Arg.Name;
+            return;
+        }
+    }
+}
+
+/// Why a signal was refused, as a clause that follows "was never registered with Godot: ".
+///
+/// The editor says this better -- src/verse_script_language.cpp turns the same code into a sentence
+/// with a fix in it, at the member's own line, which is where an author wants it. This is the
+/// version a game running outside the editor gets, and it exists because the alternative was the
+/// generic "names nothing", which described the symptom and not one cause.
+AUTORTFM_DISABLE FUtf8String SignalRejectReason(int32 Reject, const FUtf8String& Detail)
+{
+    switch (Reject)
+    {
+    case VH_SIGNAL_IS_VAR:
+        return UTF8TEXT("a `godot_signal` member must not be `var`.");
+    case VH_SIGNAL_NOT_PUBLIC:
+        return UTF8TEXT("a `godot_signal` member must be `<public>` for anything outside the class to connect to it.");
+    case VH_SIGNAL_NO_GODOT_OWNER:
+        return UTF8TEXT("its class does not derive from `object`, so Godot never gives it an object to register on.");
+    case VH_SIGNAL_PAYLOAD_UNSUPPORTED:
+        return FUtf8String(UTF8TEXT("its payload argument `")) + Detail + UTF8TEXT("` has no Godot type.");
+    case VH_SIGNAL_PAYLOAD_NESTED_STRUCT:
+        return FUtf8String(UTF8TEXT("its payload field `")) + Detail
+            + UTF8TEXT("` is itself a struct, and a payload decomposes one level only.");
+    default:
+        return UTF8TEXT("the declaration was refused.");
     }
 }
 
@@ -3530,6 +3885,14 @@ AUTORTFM_DISABLE bool GodotVerse::GetClassSignals(FUtf8StringView ClassName, TAr
         return false;
     }
 
+    // Whether anything ever hands this class a handle. A handle arrives exactly one way -- Godot
+    // attaching the script to an object it made -- and Instantiate refuses a class that does not
+    // derive from `object`, so a signal on one is a member that can never be registered, connected
+    // or emitted. GDScript has no equivalent of this because every GDScript class extends Object
+    // and so carries a signal table of its own; a plain Verse class is a VM object with no Godot
+    // counterpart at all. Asked of the leaf, which is the class Godot instantiates.
+    const bool bHasGodotOwner = !NativeClassOf(*Class, *Program).IsEmpty();
+
     // Base first, and the whole chain: **signals inherit**. Phase 2 shipped exactly this bug once
     // already, for @export on a base script class, in two places that had been correct right up
     // until a script could derive from a script.
@@ -3557,16 +3920,37 @@ AUTORTFM_DISABLE bool GodotVerse::GetClassSignals(FUtf8StringView ClassName, TAr
             FSignalDesc Desc;
             Desc.Name = FUtf8String(Member->AsNameCString());
 
-            TArray<FMemberType> ArgTypes;
-            bool bIsTuple = false;
-            DescribePayload(SignalPayloadType(*Declared), *Program, ArgTypes, bIsTuple);
-            for (int32 Index = 0; Index < ArgTypes.Num(); ++Index)
+            FPayloadShape Shape;
+            DescribePayload(SignalPayloadType(*Declared), *Program, Shape);
+            for (const FPayloadArg& Arg : Shape.Args)
             {
-                FParamDesc Arg;
-                Arg.Name = SignalArgName(ArgTypes[Index], Index, bIsTuple);
-                Arg.Type = ArgTypes[Index].Described.Type;
-                Arg.VariantTag = ArgTypes[Index].Described.VariantTag;
-                Desc.Args.Add(MoveTemp(Arg));
+                FParamDesc Param;
+                Param.Name = Arg.Name;
+                Param.Type = Arg.Type.Described.Type;
+                Param.VariantTag = Arg.Type.Described.VariantTag;
+                Desc.Args.Add(MoveTemp(Param));
+            }
+
+            // Member first, payload second: "this cannot be a signal at all" is a better sentence
+            // than "its third argument has no Godot type", and the author fixes the member either
+            // way. Order within the three is declaration order -- `var` is the one an author is
+            // most likely to have written on purpose and to need talking out of.
+            if (!bHasGodotOwner)
+            {
+                Desc.Reject = VH_SIGNAL_NO_GODOT_OWNER;
+            }
+            else if (Member->IsVar())
+            {
+                Desc.Reject = VH_SIGNAL_IS_VAR;
+            }
+            else if (Member->DerivedAccessLevel()._Kind != uLang::SAccessLevel::EKind::Public)
+            {
+                Desc.Reject = VH_SIGNAL_NOT_PUBLIC;
+            }
+            else
+            {
+                Desc.Reject = Shape.Reject;
+                Desc.RejectDetail = Shape.RejectDetail;
             }
 
             FUtf8String DeclaredIn;
@@ -3618,10 +4002,11 @@ AUTORTFM_DISABLE void BindSignals(UObject* Instance, FUtf8StringView ClassName, 
         FSignalBinding Binding;
         Binding.OwnerHandle = Handle;
         Binding.Name = Signal.Name;
+        Binding.Reject = Signal.Reject;
+        Binding.RejectDetail = Signal.RejectDetail;
         if (Declared.ReferenceClass)
         {
-            DescribePayload(SignalPayloadType(*Declared.ReferenceClass), *Program,
-                            Binding.ArgTypes, Binding.bPayloadIsTuple);
+            DescribePayload(SignalPayloadType(*Declared.ReferenceClass), *Program, Binding.Payload);
         }
 
         const int64 Id = GNextSignalId++;
@@ -3654,8 +4039,7 @@ AUTORTFM_DISABLE int64 GodotVerse::BindEngineSignal(int64 Handle,
     const FUtf8String Shape = FUtf8String(ClassName) + UTF8TEXT(".") + FUtf8String(AccessorName);
     if (const FSignalBinding* Cached = GEngineSignalShapes.Find(Shape))
     {
-        Binding.ArgTypes = Cached->ArgTypes;
-        Binding.bPayloadIsTuple = Cached->bPayloadIsTuple;
+        Binding.Payload = Cached->Payload;
     }
     else if (GIde.IsValid())
     {
@@ -3678,8 +4062,7 @@ AUTORTFM_DISABLE int64 GodotVerse::BindEngineSignal(int64 Handle,
                         Type ? &UnwrapDeclaredType(Type->GetReturnType(), bIsOption) : nullptr;
                     if (const uLang::CClass* const Signal = Returned ? Returned->AsNullable<uLang::CClass>() : nullptr)
                     {
-                        DescribePayload(SignalPayloadType(*Signal), *Program,
-                                        Binding.ArgTypes, Binding.bPayloadIsTuple);
+                        DescribePayload(SignalPayloadType(*Signal), *Program, Binding.Payload);
                     }
                     break;
                 }
@@ -3705,6 +4088,16 @@ AUTORTFM_DISABLE void GodotVerse::EmitSignal(int64 SignalId, const FVerseValue& 
         return;
     }
 
+    // A signal the editor already refused. Saying so again here is not redundant: the editor
+    // warning is the only report a *tools* build makes, and a game running outside it would
+    // otherwise get the generic "names nothing" for a member that was declared perfectly visibly.
+    if (Binding->Reject != VH_SIGNAL_OK)
+    {
+        ReportError(FUtf8String(UTF8TEXT("The signal `")) + Binding->Name + UTF8TEXT("` was never registered with Godot: ")
+            + SignalRejectReason(Binding->Reject, Binding->RejectDetail) + UTF8TEXT(" Nothing was emitted."));
+        return;
+    }
+
     FHostState& Host = GetHost();
     if (!Host.Godot.EmitSignal)
     {
@@ -3713,7 +4106,8 @@ AUTORTFM_DISABLE void GodotVerse::EmitSignal(int64 SignalId, const FVerseValue& 
 
     // One storage per argument: FFieldStorage carries a single Text, so two string arguments
     // sharing one would clobber each other.
-    const int32 Count = Binding->ArgTypes.Num();
+    const FPayloadShape& Shape = Binding->Payload;
+    const int32 Count = Shape.Args.Num();
     TArray<FFieldStorage> Storages;
     Storages.SetNum(Count);
     TArray<vh_value> Args;
@@ -3723,16 +4117,48 @@ AUTORTFM_DISABLE void GodotVerse::EmitSignal(int64 SignalId, const FVerseValue& 
     Verse::FRunningContext Context = Verse::FRunningContextPromise{};
     EnterVerse(Context, [&] {
         const Verse::VValue Value = Payload.GetValue();
-        const Verse::VArrayBase* const Tuple = Binding->bPayloadIsTuple
+        const Verse::VArrayBase* const Tuple = Shape.Kind == EPayloadShape::Tuple
             ? Value.DynamicCast<Verse::VArrayBase>()
+            : nullptr;
+        Verse::VValueObject* const Struct = Shape.Kind == EPayloadShape::Struct
+            ? Value.DynamicCast<Verse::VValueObject>()
             : nullptr;
         for (int32 Index = 0; Index < Count; ++Index)
         {
-            // A Verse tuple is an array at runtime, and its elements are the arguments Godot sees.
-            const Verse::VValue Element = Binding->bPayloadIsTuple
-                ? (Tuple && Index < (int32)Tuple->Num() ? Tuple->GetValue((uint32)Index) : Verse::VValue())
-                : Value;
-            if (!ValueToWire(Context, Element, Binding->ArgTypes[Index], Storages[Index], Args[Index]))
+            const FPayloadArg& Arg = Shape.Args[Index];
+            Verse::VValue Element;
+            switch (Shape.Kind)
+            {
+            case EPayloadShape::Tuple:
+                // A Verse tuple is an array at runtime, and its elements are the arguments Godot sees.
+                Element = Tuple && Index < (int32)Tuple->Num() ? Tuple->GetValue((uint32)Index) : Verse::VValue();
+                break;
+            case EPayloadShape::Struct:
+            {
+                // By name rather than by position, the way ReadStructComponents reads a mirrored
+                // math type: a struct value carries its fields under decorated keys and nothing in
+                // it says what order the declaration wrote them in.
+                if (!Struct)
+                {
+                    bConverted = false;
+                    return;
+                }
+                Verse::VUniqueString& Key = Verse::VUniqueString::New(Context, FUtf8StringView(Arg.FieldKey));
+                const Verse::FOpResult Read = Struct->LoadField(Context, Key);
+                if (!Read.IsReturn())
+                {
+                    bConverted = false;
+                    return;
+                }
+                Element = Read.Value;
+                break;
+            }
+            case EPayloadShape::Bare:
+                Element = Value;
+                break;
+            }
+
+            if (!ValueToWire(Context, Element, Arg.Type, Storages[Index], Args[Index]))
             {
                 bConverted = false;
                 return;
@@ -3761,6 +4187,15 @@ AUTORTFM_DISABLE int64 GodotVerse::SubscribeSignal(int64 SignalId, const FVerseV
     if (!Binding)
     {
         ReportError(UTF8TEXT("Subscribe was called on an unbound `godot_signal`, which names nothing."));
+        return 0;
+    }
+
+    // Same reason as the emission half: Godot was never told this signal exists, so `connect` would
+    // refuse the name, and "connect failed" is a worse sentence than the one that says why.
+    if (Binding->Reject != VH_SIGNAL_OK)
+    {
+        ReportError(FUtf8String(UTF8TEXT("Cannot subscribe to `")) + Binding->Name + UTF8TEXT("`: ")
+            + SignalRejectReason(Binding->Reject, Binding->RejectDetail));
         return 0;
     }
 
@@ -4876,7 +5311,11 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
         return VH_ERR_NOT_FOUND;
     }
 
-    if (ArgCount < Method->RequiredParamCount || ArgCount > Method->Params.Num())
+    // One shape cannot be settled yet: a single *struct* parameter is satisfied by one Godot
+    // argument per field, and which parameters are structs is not known until the declared types
+    // are read below. Everything else is decided here, as it always was.
+    const bool bArityMayBeStructPack = Method->Params.Num() == 1 && ArgCount != 1;
+    if (!bArityMayBeStructPack && (ArgCount < Method->RequiredParamCount || ArgCount > Method->Params.Num()))
     {
         return VH_ERR_ARGUMENT;
     }
@@ -4886,8 +5325,6 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
     {
         return VH_ERR_NOT_FOUND;
     }
-
-    Instance->bSealed = true;
 
     const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
     const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
@@ -4922,6 +5359,45 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
     {
         return VH_ERR_NOT_FOUND;
     }
+
+    // **N Godot arguments satisfy one struct parameter, one per field.**
+    //
+    // This is the inbound half of a struct signal payload. The payload decomposes into one argument
+    // per field on the way out, which is what gives the connect dialog real names (R-SIG-1), so
+    // Godot invokes the handler with that many while the handler declares the struct. Verse already
+    // reads a multi-parameter function as satisfying a one-tuple-parameter callback for the same
+    // reason -- a function's parameter *is* its tuple -- so this is that rule extended to the one
+    // Verse spelling that carries names.
+    //
+    // In InstanceCall rather than in the callback path so there is one rule rather than one per
+    // caller -- but note what that does *not* buy. A direct `node.call("OnReported", 1, 2, 3)` never
+    // reaches here: Object::call checks arity against the script's method list first, which reports
+    // the one declared parameter, and answers "Expected 1 argument(s)" on Godot's side. A Callable
+    // invocation is the difference, arriving through vh_callback_invoke, which is not arity-checked.
+    // Measured, after the opposite was asserted and the test said otherwise.
+    vh_value PackedStructArg{};
+    if (ParamTypes.Num() == 1 && ParamTypes[0].UserStruct.IsValid()
+        && ParamTypes[0].UserStruct->FieldKeys.Num() == ArgCount)
+    {
+        PackedStructArg.Type = VH_TYPE_TUPLE;
+        // Borrowed for the duration of the call, like every other pointer on this wire, and the
+        // tuple lane is already `const vh_value*` -- so a field can be anything a field can be,
+        // rather than the scalars a mirrored math struct is limited to.
+        PackedStructArg.Seq.Items = Args;
+        PackedStructArg.Seq.Count = ArgCount;
+        Args = &PackedStructArg;
+        ArgCount = 1;
+    }
+    else if (ArgCount < Method->RequiredParamCount || ArgCount > Method->Params.Num())
+    {
+        // The deferred half of the check above. Reached only for a one-parameter method that turned
+        // out not to be a struct taking this many fields.
+        return VH_ERR_ARGUMENT;
+    }
+
+    // After the arity is settled, so a call that was never going to run does not seal the instance
+    // against the construction-time writes it still permits.
+    Instance->bSealed = true;
 
     int32 Status = VH_OK;
     // Set inside the VM, read outside it. EnterVM is allowed to decline to run its functor --
@@ -5068,10 +5544,14 @@ AUTORTFM_DISABLE int64 GodotVerse::MakeCallableFor(const FVerseValue& Callback)
     }
 
     const int64 Id = GNextCallbackId++;
-    GCallbacks.Add(Id, FCallbackTarget{OwnerHandle, Decorated});
+    {
+        FScopeLock Lock(&GCallbacksLock);
+        GCallbacks.Add(Id, FCallbackTarget{OwnerHandle, Decorated});
+    }
     const int64 Ref = Host.Godot.MakeCallable(Host.Godot.Ctx, Id, OwnerHandle);
     if (Ref == 0)
     {
+        FScopeLock Lock(&GCallbacksLock);
         GCallbacks.Remove(Id);
     }
     return Ref;
@@ -5079,6 +5559,7 @@ AUTORTFM_DISABLE int64 GodotVerse::MakeCallableFor(const FVerseValue& Callback)
 
 AUTORTFM_DISABLE void GodotVerse::ReleaseCallback(int64 CallbackId)
 {
+    FScopeLock Lock(&GCallbacksLock);
     GCallbacks.Remove(CallbackId);
 }
 
@@ -5088,19 +5569,26 @@ AUTORTFM_DISABLE int32 GodotVerse::InvokeCallback(int64 CallbackId,
                                                   vh_value& OutResult,
                                                   FFieldStorage& OutStorage)
 {
-    const FCallbackTarget* const Target = GCallbacks.Find(CallbackId);
-    if (!Target)
+    // Copied out under the lock rather than held as a pointer: the call below runs Verse, and a
+    // Callable released on another thread mid-call would take the row -- and the pointer -- with it.
+    FCallbackTarget Target;
     {
-        return VH_ERR_NOT_FOUND;
+        FScopeLock Lock(&GCallbacksLock);
+        const FCallbackTarget* const Found = GCallbacks.Find(CallbackId);
+        if (!Found)
+        {
+            return VH_ERR_NOT_FOUND;
+        }
+        Target = *Found;
     }
-    FInstance** const Bound = GInstancesByHandle.Find(Target->OwnerHandle);
+    FInstance** const Bound = GInstancesByHandle.Find(Target.OwnerHandle);
     if (!Bound || !*Bound)
     {
         // The node was freed. Godot's own is_valid() should have caught this first; answering
         // rather than raising is what keeps a late emission from taking the frame down.
         return VH_ERR_NOT_FOUND;
     }
-    return InstanceCall(*Bound, FUtf8StringView(Target->DecoratedName), Args, ArgCount, OutResult, OutStorage);
+    return InstanceCall(*Bound, FUtf8StringView(Target.DecoratedName), Args, ArgCount, OutResult, OutStorage);
 }
 
 namespace {

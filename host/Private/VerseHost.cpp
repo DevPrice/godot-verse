@@ -60,6 +60,9 @@ vh_complete_item ToCompleteItem(const GodotVerse::FCompleteItem& Item)
 
 } // namespace
 
+/// Unguarded, and it is the one entry point that must be: a consumer calls this *before* vh_init to
+/// decide whether to load the host at all, so there is no recorded thread to compare against and
+/// nothing here that could be harmed by the answer. It reads a compile-time constant.
 extern "C" int32_t vh_abi_version(void)
 {
     return VH_ABI_VERSION;
@@ -84,6 +87,16 @@ uint32 GVerseThreadId = 0;
 
 /// Reports the refusal through the diagnostic callback, which is the only channel a call from the
 /// wrong thread has -- it cannot raise, because raising is itself entering the VM.
+///
+/// Every entry point below carries this prologue, with three deliberate exceptions, each commented
+/// at its own definition: vh_abi_version (answered before there is a thread to compare against),
+/// vh_init (which records the thread) and vh_callback_release (which a Callable's last reference may
+/// legitimately drop on any thread).
+///
+/// The guard answers VH_ERR_THREAD where it can. Four entry points return vh_bool and have no error
+/// value, so they answer 0 -- which reads as "no such class" rather than "refused", and is the one
+/// place this mechanism cannot say what happened. The diagnostic is what carries the difference, and
+/// widening those four to int32_t is a major ABI change nobody has needed yet.
 bool WrongThread(const char* What)
 {
     if (GVerseThreadId == 0 || FPlatformTLS::GetCurrentThreadId() == GVerseThreadId)
@@ -207,6 +220,10 @@ extern "C" int32_t vh_init(const vh_init_desc* Desc)
 
 extern "C" void vh_shutdown(void)
 {
+    if (WrongThread("vh_shutdown"))
+    {
+        return;
+    }
     // The callbacks first: tearing the engine down collects, and a collected godot_ref would
     // otherwise call back into a GDExtension that is already unloading.
     GetHost().Godot = vh_godot_api{};
@@ -240,6 +257,10 @@ extern "C" void vh_shutdown(void)
 
 extern "C" void vh_tick(double BudgetSeconds)
 {
+    if (WrongThread("vh_tick"))
+    {
+        return;
+    }
     if (!GetHost().bInitialized)
     {
         return;
@@ -258,6 +279,10 @@ extern "C" void vh_tick(double BudgetSeconds)
 
 extern "C" int32_t vh_compile_project(const vh_source_file* Files, int32_t Count, int32_t* OutGeneration)
 {
+    if (WrongThread("vh_compile_project"))
+    {
+        return VH_ERR_THREAD;
+    }
     GodotVerse::WaitForBackgroundCheck();
     if (!Files || Count < 0 || !OutGeneration)
     {
@@ -292,6 +317,10 @@ extern "C" int32_t vh_compile_project(const vh_source_file* Files, int32_t Count
 
 extern "C" int32_t vh_check_project(const char* PathUtf8, const char* SourceUtf8)
 {
+    if (WrongThread("vh_check_project"))
+    {
+        return VH_ERR_THREAD;
+    }
     if (!PathUtf8 || !SourceUtf8)
     {
         return VH_ERR_ABI;
@@ -305,6 +334,10 @@ extern "C" int32_t vh_check_project(const char* PathUtf8, const char* SourceUtf8
 
 extern "C" int32_t vh_check_project_begin(const char* PathUtf8, const char* SourceUtf8)
 {
+    if (WrongThread("vh_check_project_begin"))
+    {
+        return VH_ERR_THREAD;
+    }
     if (!PathUtf8 || !SourceUtf8)
     {
         return VH_ERR_ABI;
@@ -320,6 +353,10 @@ extern "C" int32_t vh_check_project_begin(const char* PathUtf8, const char* Sour
 
 extern "C" int32_t vh_check_project_poll(vh_bool* OutFinished)
 {
+    if (WrongThread("vh_check_project_poll"))
+    {
+        return VH_ERR_THREAD;
+    }
     if (!OutFinished)
     {
         return VH_ERR_ABI;
@@ -338,11 +375,19 @@ extern "C" int32_t vh_check_project_poll(vh_bool* OutFinished)
 
 extern "C" vh_bool vh_check_project_busy(void)
 {
+    if (WrongThread("vh_check_project_busy"))
+    {
+        return 0;
+    }
     return GetHost().bInitialized && GodotVerse::IsBackgroundCheckRunning() ? 1 : 0;
 }
 
 extern "C" int32_t vh_run_main(const char* const* Args, int32_t ArgCount, int64_t* OutExitCode)
 {
+    if (WrongThread("vh_run_main"))
+    {
+        return VH_ERR_THREAD;
+    }
     GodotVerse::WaitForBackgroundCheck();
     if (!Args && ArgCount > 0)
     {
@@ -371,6 +416,10 @@ extern "C" int32_t vh_run_main(const char* const* Args, int32_t ArgCount, int64_
 
 extern "C" vh_bool vh_has_class(const char* ClassNameUtf8)
 {
+    if (WrongThread("vh_has_class"))
+    {
+        return 0;
+    }
     GodotVerse::WaitForBackgroundCheck();
     if (!ClassNameUtf8 || !GetHost().bInitialized)
     {
@@ -381,6 +430,10 @@ extern "C" vh_bool vh_has_class(const char* ClassNameUtf8)
 
 extern "C" int32_t vh_instantiate(const char* ClassNameUtf8, vh_handle Handle, vh_instance** OutInstance)
 {
+    if (WrongThread("vh_instantiate"))
+    {
+        return VH_ERR_THREAD;
+    }
     GodotVerse::WaitForBackgroundCheck();
     if (!ClassNameUtf8 || !OutInstance)
     {
@@ -411,12 +464,20 @@ extern "C" int32_t vh_instantiate(const char* ClassNameUtf8, vh_handle Handle, v
 
 extern "C" void vh_release_instance(vh_instance* Instance)
 {
+    if (WrongThread("vh_release_instance"))
+    {
+        return;
+    }
     GodotVerse::WaitForBackgroundCheck();
     GodotVerse::ReleaseInstance(reinterpret_cast<GodotVerse::FInstance*>(Instance));
 }
 
 extern "C" vh_bool vh_instance_has_function(vh_instance* Instance, const char* DecoratedName)
 {
+    if (WrongThread("vh_instance_has_function"))
+    {
+        return 0;
+    }
     GodotVerse::WaitForBackgroundCheck();
     if (!Instance || !DecoratedName || !GetHost().bInitialized)
     {
@@ -516,6 +577,10 @@ extern "C" void vh_callback_release(int64_t CallbackId)
 
 extern "C" int32_t vh_class_method_list(const char* ClassNameUtf8, const vh_method_desc** OutMethods, int32_t* OutCount)
 {
+    if (WrongThread("vh_class_method_list"))
+    {
+        return VH_ERR_THREAD;
+    }
     GodotVerse::WaitForBackgroundCheck();
     if (!ClassNameUtf8 || !OutMethods || !OutCount)
     {
@@ -593,6 +658,10 @@ extern "C" int32_t vh_class_method_list(const char* ClassNameUtf8, const vh_meth
 
 extern "C" int32_t vh_class_signal_list(const char* ClassNameUtf8, const vh_signal_desc** OutSignals, int32_t* OutCount)
 {
+    if (WrongThread("vh_class_signal_list"))
+    {
+        return VH_ERR_THREAD;
+    }
     GodotVerse::WaitForBackgroundCheck();
     if (!ClassNameUtf8 || !OutSignals || !OutCount)
     {
@@ -650,6 +719,9 @@ extern "C" int32_t vh_class_signal_list(const char* ClassNameUtf8, const vh_sign
         Out.ArgCount = Signal.Args.Num();
         Out.Line = Signal.Line;
         Out.Column = Signal.Column;
+        Out.Reject = Signal.Reject;
+        Out.RejectDetailUtf8 = reinterpret_cast<const char*>(*Signal.RejectDetail);
+        Out.RejectDetailLen = Signal.RejectDetail.Len();
         ArgCursor += Signal.Args.Num();
     }
 
@@ -660,6 +732,10 @@ extern "C" int32_t vh_class_signal_list(const char* ClassNameUtf8, const vh_sign
 
 extern "C" int32_t vh_class_static_list(const char* ClassNameUtf8, const vh_static_desc** OutStatics, int32_t* OutCount)
 {
+    if (WrongThread("vh_class_static_list"))
+    {
+        return VH_ERR_THREAD;
+    }
     GodotVerse::WaitForBackgroundCheck();
     if (!ClassNameUtf8 || !OutStatics || !OutCount)
     {
@@ -702,6 +778,10 @@ extern "C" int32_t vh_class_static_list(const char* ClassNameUtf8, const vh_stat
 
 extern "C" vh_bool vh_class_is_abstract(const char* ClassNameUtf8)
 {
+    if (WrongThread("vh_class_is_abstract"))
+    {
+        return 0;
+    }
     GodotVerse::WaitForBackgroundCheck();
     if (!ClassNameUtf8 || !GetHost().bInitialized)
     {
@@ -712,6 +792,10 @@ extern "C" vh_bool vh_class_is_abstract(const char* ClassNameUtf8)
 
 extern "C" int32_t vh_class_export_list(const char* ClassNameUtf8, const vh_export_desc** OutExports, int32_t* OutCount)
 {
+    if (WrongThread("vh_class_export_list"))
+    {
+        return VH_ERR_THREAD;
+    }
     GodotVerse::WaitForBackgroundCheck();
     if (!ClassNameUtf8 || !OutExports || !OutCount)
     {
@@ -777,6 +861,10 @@ GodotVerse::FFieldStorage GFieldStorage;
 
 extern "C" int32_t vh_instance_get_field(vh_instance* Instance, const char* NameUtf8, const vh_value** OutValue)
 {
+    if (WrongThread("vh_instance_get_field"))
+    {
+        return VH_ERR_THREAD;
+    }
     GodotVerse::WaitForBackgroundCheck();
     if (!Instance || !NameUtf8 || !OutValue)
     {
@@ -800,6 +888,10 @@ extern "C" int32_t vh_instance_get_field(vh_instance* Instance, const char* Name
 
 extern "C" int32_t vh_instance_set_field(vh_instance* Instance, const char* NameUtf8, const vh_value* Value)
 {
+    if (WrongThread("vh_instance_set_field"))
+    {
+        return VH_ERR_THREAD;
+    }
     GodotVerse::WaitForBackgroundCheck();
     if (!Instance || !NameUtf8 || !Value)
     {
@@ -823,6 +915,10 @@ extern "C" int32_t vh_instance_set_field(vh_instance* Instance, const char* Name
 
 extern "C" int32_t vh_instance_set_field_instance(vh_instance* Instance, const char* NameUtf8, vh_instance* Value)
 {
+    if (WrongThread("vh_instance_set_field_instance"))
+    {
+        return VH_ERR_THREAD;
+    }
     GodotVerse::WaitForBackgroundCheck();
     if (!Instance || !NameUtf8)
     {
@@ -849,6 +945,10 @@ extern "C" int32_t vh_instance_set_field_instance(vh_instance* Instance, const c
 
 extern "C" int32_t vh_class_default_field(const char* ClassNameUtf8, const char* NameUtf8, const vh_value** OutValue)
 {
+    if (WrongThread("vh_class_default_field"))
+    {
+        return VH_ERR_THREAD;
+    }
     GodotVerse::WaitForBackgroundCheck();
     if (!ClassNameUtf8 || !NameUtf8 || !OutValue)
     {
@@ -872,6 +972,10 @@ extern "C" int32_t vh_class_default_field(const char* ClassNameUtf8, const char*
 
 extern "C" int32_t vh_lookup_symbol(const char* PathUtf8, int32_t Line, int32_t Column, const vh_lookup_desc** OutResult)
 {
+    if (WrongThread("vh_lookup_symbol"))
+    {
+        return VH_ERR_THREAD;
+    }
     GodotVerse::WaitForBackgroundCheck();
     if (!PathUtf8 || !OutResult)
     {
@@ -928,6 +1032,10 @@ extern "C" int32_t vh_complete_symbol(const char* PathUtf8,
                                       const vh_complete_item** OutItems,
                                       int32_t* OutCount)
 {
+    if (WrongThread("vh_complete_symbol"))
+    {
+        return VH_ERR_THREAD;
+    }
     if (!PathUtf8 || !SourceUtf8 || !OutItems || !OutCount)
     {
         return VH_ERR_ABI;
@@ -967,6 +1075,10 @@ extern "C" int32_t vh_complete_symbol(const char* PathUtf8,
 
 extern "C" int32_t vh_class_members(const char* ClassNameUtf8, const vh_complete_item** OutItems, int32_t* OutCount)
 {
+    if (WrongThread("vh_class_members"))
+    {
+        return VH_ERR_THREAD;
+    }
     if (!ClassNameUtf8 || !OutItems || !OutCount)
     {
         return VH_ERR_ABI;
@@ -1000,6 +1112,10 @@ extern "C" int32_t vh_class_members(const char* ClassNameUtf8, const vh_complete
 
 extern "C" int32_t vh_resolve_unknown_name(const char* NameUtf8, const vh_module_ref** OutModules, int32_t* OutCount)
 {
+    if (WrongThread("vh_resolve_unknown_name"))
+    {
+        return VH_ERR_THREAD;
+    }
     if (!NameUtf8 || !OutModules || !OutCount)
     {
         return VH_ERR_ABI;
@@ -1037,6 +1153,10 @@ extern "C" int32_t vh_signature_at(const char* PathUtf8,
                                    int32_t Column,
                                    const vh_signature_desc** OutResult)
 {
+    if (WrongThread("vh_signature_at"))
+    {
+        return VH_ERR_THREAD;
+    }
     if (!PathUtf8 || !SourceUtf8 || !OutResult)
     {
         return VH_ERR_ABI;

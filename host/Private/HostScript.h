@@ -127,11 +127,16 @@ struct FSignalDesc
     /// (which registers `Hit`, not `hit`) and what a Verse method already does in every scene
     /// connection.
     FUtf8String Name;
-    /// One per Godot argument. A `tuple()` payload has none; a tuple of N has N; anything else has
-    /// one.
+    /// One per Godot argument. A `tuple()` payload has none; a tuple of N has N; a struct has one
+    /// per top-level field; anything else has one.
     TArray<FParamDesc> Args;
     int32 Line{0};
     int32 Column{0};
+    /// vh_signal_reject. Anything but VH_SIGNAL_OK means this signal must not be registered with
+    /// Godot -- it is reported so the editor can say why, at Line/Column.
+    int32 Reject{0};
+    /// The argument or field a payload rejection is about; empty for a rejection about the member.
+    FUtf8String RejectDetail;
 };
 
 /// The signals ClassName declares, its base script classes' included (R-SIG-6.6: signals inherit,

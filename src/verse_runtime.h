@@ -53,6 +53,15 @@ struct VerseSignalInfo {
 		godot::Variant::Type type = godot::Variant::NIL;
 	};
 	godot::Vector<Arg> args;
+
+	// vh_signal_reject. Anything but VH_SIGNAL_OK and the signal is not registered with Godot at
+	// all -- it is carried this far only so `_validate` can say why, at the line below.
+	int32_t reject = 0;
+	// The argument or field a payload rejection is about; empty for the rest.
+	godot::String reject_detail;
+	// Zero-based, as the host counts; -1 when the definition has no source location.
+	int32_t line = -1;
+	int32_t column = -1;
 };
 
 // The "VerseRuntime" engine singleton. Owns the verse_host.dll loader and the vh_init_desc handed

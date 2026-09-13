@@ -26,11 +26,22 @@ Two by-hand checks are still owed — a windowed run of the yardstick, and an ed
 
 **Phase 4a is built; 4b is not.** `docs/phase-4-design.md` is the design, and unusually for this repo
 its spikes ran *before* it was written — **§2 is where they are**. **`docs/phase-4-gaps.md` is the
-part to read before trusting it**: twenty numbered entries saying where the implementation and the
-design disagree, what is unbuilt, and what would close each. Several things the design describes
-read as delivered and are not — including four ways a signal declaration can compile and
-not work (G1–G4), and `_make_function`, which is still a stub (G5). §13 of the design summarises it and
-carries the phase's measurements.
+part to read before trusting it**: twenty-one numbered entries saying where the implementation and
+the design disagree, what is unbuilt, and what would close each. §13 of the design summarises the
+phase and carries its measurements.
+
+**Seven of those entries are now closed and one is answered**, which took the ABI to **v5** — a layout
+change, so both DLLs must be rebuilt and `run_tests.py --build` is how the test binaries follow. The
+four ways a signal declaration could compile and not work (G1–G4) are one validation pass in
+`GetClassSignals` now: `vh_signal_desc` carries a `Reject` the way `vh_export_desc` does, Godot is
+never told about a signal nothing can emit, and `_validate` says why at the member's line. A struct
+payload works in **both** directions — out as one Godot argument per field, named by the field, which
+is what gives the connect dialog real names; back in through `InstanceCall`'s rule that N arguments
+satisfy one struct parameter with N fields (**G21**). That path needs no Godot counterpart for a
+struct, because a signal delivers the fields separately; a struct as a *method parameter* still has
+none, and that half is R-LANG-2's, which the spec answers with a Dictionary. The thread guard covers
+every entry point (G6), and the math tail is recorded rather than silent (G12). Still open and worth
+knowing: `_make_function` is a stub (G5), and `@statics` emits no diagnostics (G10).
 
 Four things it settled are load-bearing everywhere else. A virtual is spelled the way Godot spells
 it — **`_Ready`, not `Ready`**, and §7.1 counts the eight *signal* collisions that decided it.
@@ -241,6 +252,12 @@ because all *is* the default. The reasoning is `docs/phase-2-design.md` §3: add
 rebuilding `verse_host.dll`, which means a UE source checkout, so a subset is a wall rather than a
 setting. It costs per-keystroke analysis latency, which is measured and recorded there.
 
+`src/verse_api_skipped.h` also carries what the **math** file does not define, and that row source is
+unusual: `gen_verse_api.py` *reads* `host/Verse/GodotMath.native.verse` to find out what is written
+and records every other `builtin_classes` method and operator as a skip. So adding a method there
+deletes its own skip row on the next generation, and the record cannot drift from the code. 585 rows
+today.
+
 `gen_verse_api.py`'s type table is the other half, and it no longer skips anything for a type it
 cannot carry — `unsupported_type` is zero. Three small tables decide the awkward names, and each
 says why in place: `VERSE_AMBIGUOUS_MEMBER_NAMES` (five names, compiler-confirmed, not guessed),
@@ -326,6 +343,12 @@ ten element types against four key types is not a list to maintain by hand.
   forces `<transacts>` on a method (a `Subscribe` handler; a failure context) forces it on
   everything that method calls, a file at a time. The compiler reports it at the **call** site, not
   at the declaration that needs changing. This is `dodge-the-creeps.md` wall 8 and Phase 4.5 owns it.
+- **A class member may not shadow an inherited mirrored one, and Godot's signals are members too.**
+  `Hidden:godot_signal(int)` on a `node2d` is *"Instance data member `Hidden` is already defined in
+  `canvas_item`, did you mean to add the `<override>` specifier?"* — because `canvas_item` mirrors
+  Godot's `hidden` signal as a `Hidden` accessor. Every one of the 489 signal accessors and 3232
+  properties is a name a script cannot reuse, and the compiler reports it at the *declaration* with
+  no hint that the collision is with generated code. Rename the member; there is nothing to override.
 - **A module-level name and a local of that name are ambiguous, not shadowing** — and an *extension
   method* is a module-level name. `(V:vector2).Length()` makes `Length` unusable as a parameter name
   in any file that imports the Godot package, which is every script. See the Phase 4 note above for
