@@ -149,7 +149,20 @@ constexpr const char* AttributePackageSource =
     "    Name<public>:string\n"
     "\n"
     "export_subgroup<public><constructor>(Name:string)<computes> := export_subgroup_attribute:\n"
-    "    Name := Name\n";
+    "    Name := Name\n"
+    "\n"
+    "# Says which class a module of constants and static functions belongs to, so Godot can be told\n"
+    "# about them: `@statics(player)` over `player_statics`. Verse has no `static` keyword, and a\n"
+    "# module is what it has instead -- a script can already write `PlayerStatics.MaxSpeed` with no\n"
+    "# bridge in it at all. What the attribute buys is the *link*, which the editor needs and a\n"
+    "# naming convention could not give: a typo in a convention produces a silently empty statics\n"
+    "# module, where a module naming a class that does not exist is a diagnostic.\n"
+    "@attribscope_module\n"
+    "statics_attribute<public> := class<computes>(attribute):\n"
+    "    ClassName<public>:string\n"
+    "\n"
+    "statics<public><constructor>(ClassName:string)<computes> := statics_attribute:\n"
+    "    ClassName := ClassName\n";
 
 /// One .verse file, as the toolchain wants it: a path, its text, and somewhere to cache the
 /// parse.
@@ -994,6 +1007,7 @@ namespace {
 /// `<constructor>` function beside it: GetAttributeTextValue matches on the invocation's return
 /// type, and a single string argument is the one attribute payload SOL-972 leaves readable.
 constexpr const char* ExportAttributePath = "/Godot.org/Godot/export";
+constexpr const char* StaticsAttributePath = "/Godot.org/Godot/statics_attribute";
 constexpr const char* ExportCategoryAttributePath = "/Godot.org/Godot/export_category_attribute";
 constexpr const char* ExportGroupAttributePath = "/Godot.org/Godot/export_group_attribute";
 constexpr const char* ExportSubgroupAttributePath = "/Godot.org/Godot/export_subgroup_attribute";
@@ -3367,6 +3381,131 @@ AUTORTFM_DISABLE UObject* PeekFieldObject(UObject* Object, FUtf8StringView Field
 }
 
 } // namespace
+
+AUTORTFM_DISABLE bool GodotVerse::IsClassAbstract(FUtf8StringView ClassName)
+{
+    if (!GIde.IsValid())
+    {
+        return false;
+    }
+    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
+    if (!BuildManager.IsValid())
+    {
+        return false;
+    }
+    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
+    const FUtf8String ClassPath = FUtf8String(ScriptVersePath) + UTF8TEXT("/") + FUtf8String(ClassName);
+    const uLang::CClass* const Class = Program->FindDefinitionByVersePath<uLang::CClass>(
+        FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath));
+    return Class != nullptr && Class->IsAbstract();
+}
+
+AUTORTFM_DISABLE bool GodotVerse::GetClassStatics(FUtf8StringView ClassName,
+                                                  TArray<FStaticDesc>& OutStatics,
+                                                  TArray<vh_value>& OutValues,
+                                                  TArray<FFieldStorage>& OutStorage)
+{
+    OutStatics.Reset();
+    OutValues.Reset();
+    OutStorage.Reset();
+
+    if (!GIde.IsValid())
+    {
+        return false;
+    }
+    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
+    if (!BuildManager.IsValid())
+    {
+        return false;
+    }
+    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
+
+    const FUtf8String ClassPath = FUtf8String(ScriptVersePath) + UTF8TEXT("/") + FUtf8String(ClassName);
+    if (!Program->FindDefinitionByVersePath<uLang::CClass>(
+            FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath)))
+    {
+        return false;
+    }
+
+    const uLang::CClass* const StaticsAttribute =
+        Program->FindDefinitionByVersePath<uLang::CClass>(StaticsAttributePath);
+    const uLang::CModule* const Root = Program->FindDefinitionByVersePath<uLang::CModule>(ScriptVersePath);
+    if (!StaticsAttribute || !Root)
+    {
+        // No attribute package means no script could have applied the attribute, so "no statics"
+        // is the truthful answer rather than a refusal.
+        return true;
+    }
+
+    // The undecorated class name, because that is what `@statics("player")` carries: the module
+    // path is the script's own, and a module in a Verse module says `gameplay/player` the way every
+    // other ClassNameUtf8 in the ABI does.
+    for (const uLang::TSRef<uLang::CModule>& Module : Root->GetDefinitionsOfKind<uLang::CModule>())
+    {
+        const uLang::TOptional<uLang::CUTF8String> Text =
+            Module->GetAttributes().GetAttributeTextValue(StaticsAttribute, *Program);
+        if (!Text.IsSet())
+        {
+            continue;
+        }
+        if (!FUtf8StringView(FULangConversionUtils::ULangStrToFUtf8String(*Text)).Equals(ClassName))
+        {
+            continue;
+        }
+
+        for (const uLang::TSRef<uLang::CFunction>& Function : Module->GetDefinitionsOfKind<uLang::CFunction>())
+        {
+            FStaticDesc Desc;
+            Desc.Name = FUtf8String(Function->AsNameCString());
+            Desc.bIsFunction = true;
+            FUtf8String DeclaredIn;
+            FillLocation(*Function, DeclaredIn, Desc.Line, Desc.Column);
+            OutStatics.Add(MoveTemp(Desc));
+            OutValues.AddDefaulted();
+            OutStorage.AddDefaulted();
+        }
+
+        for (const uLang::TSRef<uLang::CDataDefinition>& Member : Module->GetDefinitionsOfKind<uLang::CDataDefinition>())
+        {
+            FStaticDesc Desc;
+            Desc.Name = FUtf8String(Member->AsNameCString());
+            Desc.bIsFunction = false;
+            FUtf8String DeclaredIn;
+            FillLocation(*Member, DeclaredIn, Desc.Line, Desc.Column);
+
+            const int32 Slot = OutStatics.Add(MoveTemp(Desc));
+            OutValues.AddDefaulted();
+            OutStorage.AddDefaulted();
+
+            // The value, read out of the published package rather than evaluated: a module's
+            // constants are definitions of that package, looked up by the same decorated path the
+            // enum reader builds. A build that has not happened yet has no package, and the name
+            // is still reported -- which is the same bargain an `@export` default makes.
+            const FUtf8String Decorated = FUtf8String(UTF8TEXT("("))
+                + FULangConversionUtils::ULangStrToFUtf8String(
+                      Member->_EnclosingScope.GetScopePath('/', uLang::CScope::EPathMode::PrefixSeparator))
+                + UTF8TEXT(":)") + FUtf8String(Member->AsNameCString());
+
+            const FMemberType Declared = DescribeType(Member->GetType(), *Program);
+            Verse::FRunningContext Context = Verse::FRunningContextPromise{};
+            EnterVerse(Context, [&] {
+                Verse::VPackage* const Package =
+                    Verse::GlobalProgram ? Verse::GlobalProgram->LookupPackage(GScriptPackageName) : nullptr;
+                if (!Package)
+                {
+                    return;
+                }
+                const Verse::VValue Value = Package->LookupDefinition(FUtf8StringView(Decorated));
+                if (Value.IsUninitialized())
+                {
+                    return;
+                }
+                ValueToWire(Context, Value, Declared, OutStorage[Slot], OutValues[Slot]);
+            });
+        }
+    }
+    return true;
+}
 
 AUTORTFM_DISABLE bool GodotVerse::GetClassSignals(FUtf8StringView ClassName, TArray<FSignalDesc>& OutSignals)
 {

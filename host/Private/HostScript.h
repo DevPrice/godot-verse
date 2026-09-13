@@ -139,6 +139,28 @@ struct FSignalDesc
 /// refreshes per keystroke the way the method and export lists do.
 AUTORTFM_DISABLE bool GetClassSignals(FUtf8StringView ClassName, TArray<FSignalDesc>& OutSignals);
 
+/// One member of a class's `@statics` module (R-NODE-4).
+struct FStaticDesc
+{
+    FUtf8String Name;
+    bool bIsFunction{false};
+    int32 Line{0};
+    int32 Column{0};
+};
+
+/// The members of the module that declares itself ClassName's statics. False when there is no such
+/// class; an empty list when there is no such module, which is the ordinary case.
+///
+/// OutValues runs parallel to OutStatics and holds a wire value per *constant* -- a function's slot
+/// is left empty. The storage is the caller's because a vh_value points into it.
+AUTORTFM_DISABLE bool GetClassStatics(FUtf8StringView ClassName,
+                                      TArray<FStaticDesc>& OutStatics,
+                                      TArray<vh_value>& OutValues,
+                                      TArray<FFieldStorage>& OutStorage);
+
+/// Whether the class is `class<abstract>` (R-NODE-5).
+AUTORTFM_DISABLE bool IsClassAbstract(FUtf8StringView ClassName);
+
 /// Emits the signal a binding id names, now. See the Verse declaration for why "now".
 AUTORTFM_DISABLE void EmitSignal(int64 SignalId, const FVerseValue& Payload);
 

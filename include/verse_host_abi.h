@@ -631,6 +631,44 @@ typedef struct vh_signal_desc
 	int32_t Column;
 } vh_signal_desc;
 
+/* One member of a class's statics module (R-NODE-4).
+ *
+ * Verse has no `static` keyword, and an inline module is what it has instead -- a script can
+ * already write `PlayerStatics.MaxSpeed` with nothing from the bridge. What crosses here is the
+ * *link*, so Godot can be told: `_get_constants` and `_has_static_method` are the two questions it
+ * asks a script class about, and neither has an instance to ask through. */
+typedef struct vh_static_desc
+{
+	const char* NameUtf8;
+	int32_t NameLen;
+
+	/* A function rather than a constant. A constant carries Value; a function does not, and is
+	 * reported so that _has_static_method can answer. */
+	vh_bool IsFunction;
+
+	/* The constant's value, for a member that is not a function. Points at host storage that lives
+	 * until the next call to vh_class_static_list. */
+	vh_value Value;
+
+	int32_t Line;
+	int32_t Column;
+} vh_static_desc;
+
+/* The members of the module that declares itself this class's statics -- `@statics("player")` over
+ * `player_statics`.
+ *
+ * The association is *declared* rather than inferred from a name, and that was the point: a naming
+ * convention produces a silently empty statics module when it is mistyped, where a module naming a
+ * class that does not exist can be a diagnostic. A class with no statics module answers VH_OK with
+ * a count of 0; VH_ERR_NOT_FOUND means there is no such class.
+ *
+ * The descriptors are the host's and live until the next call. */
+VH_ATTR VH_API int32_t vh_class_static_list(const char* ClassNameUtf8, const vh_static_desc** OutStatics, int32_t* OutCount);
+
+/* Whether the class is declared `class<abstract>` (R-NODE-5), so Godot stops offering to
+ * instantiate a base script that was never meant to be attached. */
+VH_ATTR VH_API vh_bool vh_class_is_abstract(const char* ClassNameUtf8);
+
 /* Every signal ClassNameUtf8 declares, its base script classes' included -- signals inherit.
  *
  * Read out of the semantic program the last analysis left behind, like vh_class_method_list and
@@ -1195,6 +1233,8 @@ typedef int32_t (*vh_instantiate_fn)(const char*, vh_handle, vh_instance**);
 typedef void (*vh_release_instance_fn)(vh_instance*);
 typedef int32_t (*vh_class_method_list_fn)(const char*, const vh_method_desc**, int32_t*);
 typedef int32_t (*vh_class_signal_list_fn)(const char*, const vh_signal_desc**, int32_t*);
+typedef int32_t (*vh_class_static_list_fn)(const char*, const vh_static_desc**, int32_t*);
+typedef vh_bool (*vh_class_is_abstract_fn)(const char*);
 typedef vh_bool (*vh_instance_has_function_fn)(vh_instance*, const char*);
 typedef int32_t (*vh_instance_call_fn)(vh_instance*, const char*, const vh_value*, int32_t, vh_arena*, vh_value*);
 typedef int32_t (*vh_callback_invoke_fn)(int64_t, const vh_value*, int32_t, vh_arena*, vh_value*);

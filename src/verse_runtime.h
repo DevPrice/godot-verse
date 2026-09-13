@@ -185,6 +185,16 @@ public:
 	// only promises until the next call, so nothing here may hold a pointer into it.
 	godot::Vector<VerseMethodInfo> class_methods(const godot::String &p_class_name) const;
 
+	// A class's `@statics` module, as { name -> value } for its constants and a list of names for
+	// its functions. R-NODE-4: Verse has no `static` keyword, and an inline module is what it has
+	// instead -- what crosses is the *link*, which is the only part Godot needs telling about.
+	godot::Dictionary class_static_constants(const godot::String &p_class_name) const;
+	godot::PackedStringArray class_static_methods(const godot::String &p_class_name) const;
+
+	// R-NODE-5: whether the class is `class<abstract>`, so Godot stops offering to instantiate a
+	// base script that was never meant to be attached.
+	bool class_is_abstract(const godot::String &p_class_name) const;
+
 	// The signals a class declares, its base script classes' included. Read out of the last
 	// analysis rather than the running program, so a signal added in the editor shows up without
 	// a build -- the same bargain the export list makes.

@@ -485,6 +485,36 @@ func _init() -> void:
 	_check_eq("and GDScript seeding the same stream sees the same number",
 			randi_range(0, 1000000), first)
 
+	# --- R-NODE-4 / R-NODE-5: a script's own statics, and an abstract base ----------------------
+	var statics_script: Script = load("res://scripts/statics_probe.verse")
+	_check("statics_probe.verse compiles", statics_script != null and statics_script.can_instantiate())
+	if statics_script != null:
+		var probe := Node2D.new()
+		probe.set_script(statics_script)
+		root.add_child(probe)
+		# The half that needed no bridge: a module inside a script file is ordinary Verse.
+		_check_eq("a script reads its own statics with nothing from the bridge",
+				probe.call("ReadMaxSpeed"), 400.0)
+		_check_eq("including a static function", probe.call("ReadDescription"), "the probe")
+
+		# The half Godot has to be told about, which is what @statics buys.
+		var constants: Dictionary = (statics_script as Script).get_script_constant_map()
+		_check("Godot sees the statics module's constants", constants.has("MaxSpeed"))
+		if constants.has("MaxSpeed"):
+			_check_eq("with their values", constants["MaxSpeed"], 400.0)
+			_check_eq("of every type the module declares",
+					[constants.get("Label"), constants.get("Lives")], ["probe", 3])
+		# `_has_static_method` is a ScriptExtension virtual Godot calls internally and does not bind
+		# for GDScript, so what can be asserted from here is that a *function* stays out of the
+		# constant map -- the same split, from the side that is reachable.
+		_check("while a static function is not a constant", not constants.has("Describe"))
+
+	var abstract_script: Script = load("res://scripts/abstract_base.verse")
+	_check("abstract_base.verse compiles", abstract_script != null)
+	if abstract_script != null:
+		_check("a class<abstract> reports itself abstract", (abstract_script as Script).is_abstract())
+		_check("while an ordinary one does not", not (statics_script as Script).is_abstract())
+
 	# --- R-NODE-7 / R-NODE-8: the full virtual set ----------------------------------------------
 	#
 	# Before Phase 4 exactly three of Godot's 1413 virtuals were carried, hand-written on the native

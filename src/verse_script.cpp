@@ -407,8 +407,12 @@ bool VerseScript::_is_tool() const {
 			.is_tool;
 }
 
+// R-NODE-5. Verse has `class<abstract>`, so this is the semantic program's answer rather than an
+// unconditional no -- which is what had Godot offering to instantiate a base script that was never
+// meant to be attached.
 bool VerseScript::_is_abstract() const {
-	return false;
+	VerseRuntime *runtime = get_runtime();
+	return is_compiled() && runtime != nullptr && runtime->class_is_abstract(verse_class_name());
 }
 
 StringName VerseScript::_get_instance_base_type() const {
@@ -477,7 +481,23 @@ bool VerseScript::_has_method(const StringName &p_method) const {
 	return is_compiled() && find_method(p_method) != nullptr;
 }
 
+// R-NODE-4, the half Godot has to be told about: a Verse script's statics are ordinary members of
+// an inline module -- `PlayerStatics.MaxSpeed` needs nothing from the bridge -- and what the
+// `@statics("player")` attribute buys is the link, so these two questions have an answer.
 bool VerseScript::_has_static_method(const StringName &p_method) const {
+	if (!is_compiled()) {
+		return false;
+	}
+	VerseRuntime *runtime = get_runtime();
+	if (runtime == nullptr) {
+		return false;
+	}
+	const PackedStringArray names = runtime->class_static_methods(verse_class_name());
+	for (int64_t i = 0; i < names.size(); i++) {
+		if (StringName(names[i]) == p_method) {
+			return true;
+		}
+	}
 	return false;
 }
 
@@ -896,7 +916,10 @@ int32_t VerseScript::_get_member_line(const StringName &p_member) const {
 }
 
 Dictionary VerseScript::_get_constants() const {
-	return Dictionary();
+	VerseRuntime *runtime = get_runtime();
+	return is_compiled() && runtime != nullptr
+			? runtime->class_static_constants(verse_class_name())
+			: Dictionary();
 }
 
 TypedArray<StringName> VerseScript::_get_members() const {

@@ -303,9 +303,34 @@ thinking about it.
   object a script creates, holds, and passes around, including one that extends
   `RefCounted`/`Object` rather than `Node`. Status: **none**.
 - **R-NODE-4 (MUST)** A script's own static functions and constants are callable and readable.
-  Status: **none** (`_has_static_method` exists; `_get_constants` returns nothing).
+  Status: **done** (Phase 4 stage 6).
+
+  Verse has no `static` keyword. What it has is a **module**, and a module inside a script file is
+  ordinary Verse: `PlayerStatics.MaxSpeed` and `PlayerStatics.Describe()` work with nothing from
+  the bridge at all. So what was actually missing was the *link* Godot needs to answer
+  `get_script_constant_map()` and `has_static_method()`, and `@statics` is it:
+
+  ```
+  @statics("player")
+  PlayerStatics<public> := module:
+      MaxSpeed<public>:float = 400.0
+      Describe<public>()<transacts>:string = "the player"
+  ```
+
+  A **declared** association rather than a naming convention, and the interview's reason still
+  holds: a typo in a convention produces a silently empty statics module where a module naming a
+  class that does not exist can be told about. The one deviation from
+  `docs/phase-4-design.md` §8.4 is that the class is named as a **string**: uLang hands back an
+  attribute's *text* value (`GetAttributeTextValue`), and there is no equivalent for a `type`
+  argument, so `@statics(player)` would have meant walking the attribute's own AST. The string is
+  checked rather than trusted, so the failure mode the design was avoiding is avoided either way.
+
+  A constant's *value* is read out of the published package by its decorated path, the way an
+  enum's name is built — so a class that has never been built reports its statics by name with no
+  value, which is the same bargain an `@export` default already makes.
 - **R-NODE-5 (SHOULD)** Abstract Verse classes report as abstract so Godot refuses to instantiate
-  them. Status: **none** (`_is_abstract` returns false unconditionally).
+  them. Status: **done** (Phase 4 stage 6). Verse has `class<abstract>`, so `_is_abstract` answers
+  from the semantic program instead of returning false unconditionally.
 
 ### 5.2 Calling into a script
 

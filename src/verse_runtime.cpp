@@ -607,6 +607,47 @@ Vector<VerseMethodInfo> VerseRuntime::class_methods(const String &p_class_name) 
 	return methods;
 }
 
+Dictionary VerseRuntime::class_static_constants(const String &p_class_name) const {
+	Dictionary out;
+	if (!host.is_loaded() || host.ClassStaticList == nullptr) {
+		return out;
+	}
+	const vh_static_desc *descs = nullptr;
+	int32_t count = 0;
+	if (host.ClassStaticList(p_class_name.utf8().get_data(), &descs, &count) != VH_OK) {
+		return out;
+	}
+	for (int32_t i = 0; i < count; ++i) {
+		if (descs[i].IsFunction == 0) {
+			out[String::utf8(descs[i].NameUtf8, descs[i].NameLen)] = vh_to_variant(descs[i].Value);
+		}
+	}
+	return out;
+}
+
+PackedStringArray VerseRuntime::class_static_methods(const String &p_class_name) const {
+	PackedStringArray out;
+	if (!host.is_loaded() || host.ClassStaticList == nullptr) {
+		return out;
+	}
+	const vh_static_desc *descs = nullptr;
+	int32_t count = 0;
+	if (host.ClassStaticList(p_class_name.utf8().get_data(), &descs, &count) != VH_OK) {
+		return out;
+	}
+	for (int32_t i = 0; i < count; ++i) {
+		if (descs[i].IsFunction != 0) {
+			out.push_back(String::utf8(descs[i].NameUtf8, descs[i].NameLen));
+		}
+	}
+	return out;
+}
+
+bool VerseRuntime::class_is_abstract(const String &p_class_name) const {
+	return host.is_loaded() && host.ClassIsAbstract != nullptr
+			&& host.ClassIsAbstract(p_class_name.utf8().get_data()) != 0;
+}
+
 Vector<VerseSignalInfo> VerseRuntime::class_signals(const String &p_class_name) const {
 	Vector<VerseSignalInfo> signals;
 	if (!host.is_loaded() || host.ClassSignalList == nullptr) {

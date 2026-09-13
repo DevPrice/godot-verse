@@ -658,6 +658,58 @@ extern "C" int32_t vh_class_signal_list(const char* ClassNameUtf8, const vh_sign
     return VH_OK;
 }
 
+extern "C" int32_t vh_class_static_list(const char* ClassNameUtf8, const vh_static_desc** OutStatics, int32_t* OutCount)
+{
+    GodotVerse::WaitForBackgroundCheck();
+    if (!ClassNameUtf8 || !OutStatics || !OutCount)
+    {
+        return VH_ERR_ABI;
+    }
+    *OutStatics = nullptr;
+    *OutCount = 0;
+
+    if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+
+    static TArray<GodotVerse::FStaticDesc> Statics;
+    static TArray<vh_value> Values;
+    static TArray<GodotVerse::FFieldStorage> Storage;
+    static TArray<vh_static_desc> Descs;
+    if (!GodotVerse::GetClassStatics(Cstr(ClassNameUtf8), Statics, Values, Storage))
+    {
+        return VH_ERR_NOT_FOUND;
+    }
+
+    Descs.Reset();
+    Descs.Reserve(Statics.Num());
+    for (int32 Index = 0; Index < Statics.Num(); ++Index)
+    {
+        vh_static_desc& Out = Descs.AddDefaulted_GetRef();
+        Out.NameUtf8 = reinterpret_cast<const char*>(*Statics[Index].Name);
+        Out.NameLen = Statics[Index].Name.Len();
+        Out.IsFunction = Statics[Index].bIsFunction ? 1 : 0;
+        Out.Value = Values[Index];
+        Out.Line = Statics[Index].Line;
+        Out.Column = Statics[Index].Column;
+    }
+
+    *OutStatics = Descs.GetData();
+    *OutCount = Descs.Num();
+    return VH_OK;
+}
+
+extern "C" vh_bool vh_class_is_abstract(const char* ClassNameUtf8)
+{
+    GodotVerse::WaitForBackgroundCheck();
+    if (!ClassNameUtf8 || !GetHost().bInitialized)
+    {
+        return 0;
+    }
+    return GodotVerse::IsClassAbstract(Cstr(ClassNameUtf8)) ? 1 : 0;
+}
+
 extern "C" int32_t vh_class_export_list(const char* ClassNameUtf8, const vh_export_desc** OutExports, int32_t* OutCount)
 {
     GodotVerse::WaitForBackgroundCheck();

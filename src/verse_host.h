@@ -47,6 +47,8 @@ public:
 	vh_callback_release_fn CallbackRelease = nullptr;
 	vh_class_method_list_fn ClassMethodList = nullptr;
 	vh_class_signal_list_fn ClassSignalList = nullptr;
+	vh_class_static_list_fn ClassStaticList = nullptr;
+	vh_class_is_abstract_fn ClassIsAbstract = nullptr;
 	vh_class_export_list_fn ClassExportList = nullptr;
 	vh_instance_get_field_fn InstanceGetField = nullptr;
 	vh_class_default_field_fn ClassDefaultField = nullptr;
