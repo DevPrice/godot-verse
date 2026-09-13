@@ -40,6 +40,11 @@ static int32_t SmokeCallMethod(void*, vh_handle, const char*, int32_t, const vh_
 	return VH_CALL_DEAD_OBJECT;
 }
 
+static int32_t SmokeGetClassOf(void*, vh_handle, vh_arena*, vh_value*)
+{
+	return VH_CALL_DEAD_OBJECT;
+}
+
 static const char* SeverityName(int32_t Severity)
 {
 	switch (Severity)
@@ -308,6 +313,7 @@ int main(int argc, char** argv)
 	Desc.Godot.GetProperty = &SmokeGetProperty;
 	Desc.Godot.SetProperty = &SmokeSetProperty;
 	Desc.Godot.CallMethod = &SmokeCallMethod;
+	Desc.Godot.GetClassOf = &SmokeGetClassOf;
 	Desc.OnDiagnostic = &SmokeOnDiagnostic;
 	Desc.DiagnosticCtx = nullptr;
 	Desc.OnRuntimeError = &SmokeOnRuntimeError;

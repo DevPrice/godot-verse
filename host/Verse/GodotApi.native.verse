@@ -127,6 +127,12 @@ VhToHandle(Value:variant)<decides><transacts>:int =
     Value.Ref <> 0
     Value.Ref
 
+# An object-tagged variant as the Verse object it names, at the class it actually is. Every
+# generated object return goes through this and then casts, which is where R-SCN-6 lives: the cast
+# is what turns `node` into `animated_sprite2d`, and it can only succeed because the host built the
+# object rather than the signature did.
+VhObjectFrom(Value:variant)<decides><transacts>:vh_object = VhObjectOf(VhToHandle[Value])
+
 # --- reference types ---------------------------------------------------------
 
 # Godot's Array, Dictionary, Callable and Signal, as the references they are. Mutating one of these

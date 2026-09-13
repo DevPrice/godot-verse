@@ -143,6 +143,7 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 	godot_api.SetProperty = &VerseRuntime::api_set_property;
 	godot_api.CallMethod = &VerseRuntime::api_call_method;
 	godot_api.GetSingleton = &VerseRuntime::api_get_singleton;
+	godot_api.GetClassOf = &VerseRuntime::api_get_class_of;
 	godot_api.ReleaseRef = &VerseRuntime::api_release_ref;
 	godot_api.RetainRef = &VerseRuntime::api_retain_ref;
 	godot_api.NewRef = &VerseRuntime::api_new_ref;
@@ -851,6 +852,19 @@ void VerseRuntime::on_runtime_error(void *p_ctx, const vh_runtime_error *p_error
 vh_handle VerseRuntime::api_get_singleton(void *p_ctx, const char *p_name_utf8, int32_t p_name_len) {
 	Object *singleton = Engine::get_singleton()->get_singleton(StringName(String::utf8(p_name_utf8, p_name_len)));
 	return singleton != nullptr ? singleton->get_instance_id() : 0;
+}
+
+// The engine class, never the script's: a node carrying a Verse script is still an Area2D to
+// Godot, and the host is the side that knows which of its instances that handle belongs to.
+int32_t VerseRuntime::api_get_class_of(void *p_ctx, vh_handle p_handle, vh_arena *p_arena, vh_value *r_class_name) {
+	if (r_class_name == nullptr) {
+		return VH_CALL_BAD_VALUE;
+	}
+	Object *obj = UtilityFunctions::instance_from_id(p_handle);
+	if (obj == nullptr) {
+		return VH_CALL_DEAD_OBJECT;
+	}
+	return variant_to_vh(Variant(obj->get_class()), p_arena, *r_class_name) ? VH_CALL_OK : VH_CALL_BAD_VALUE;
 }
 
 void VerseRuntime::on_diagnostic(void *p_ctx, const vh_diagnostic *p_diagnostic) {

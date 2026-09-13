@@ -42,8 +42,8 @@ extern "C" {
  * The mismatch surfaces at vh_init, not at compile time, because the two sides are compiled by
  * different toolchains and nothing links them.
  */
-#define VH_ABI_VERSION_MAJOR 3
-#define VH_ABI_VERSION_MINOR 1
+#define VH_ABI_VERSION_MAJOR 4
+#define VH_ABI_VERSION_MINOR 0
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
 typedef int32_t vh_bool;
@@ -250,6 +250,17 @@ typedef struct vh_godot_api
 	/* Engine::get_singleton, for Input, Time, and the rest of Godot's global objects. 0 if
 	 * there is no such singleton. */
 	vh_handle (*GetSingleton)(void* Ctx, const char* NameUtf8, int32_t NameLen);
+
+	/* The Godot class a handle names -- `Node2D`, `Timer` -- written into OutClassName as a
+	 * VH_TYPE_STRING allocated from Arena.
+	 *
+	 * What R-SCN-6 is built on: a handle crossing into Verse has to become an object of the most
+	 * derived mirrored class it actually is, or a downcast can never succeed. The host caches the
+	 * answer per handle, so this is asked once per Godot object rather than once per crossing.
+	 * Instance ids are not reused within a run, which is what makes that cache safe.
+	 *
+	 * VH_CALL_DEAD_OBJECT for a handle Godot has already freed. */
+	int32_t (*GetClassOf)(void* Ctx, vh_handle Handle, vh_arena* Arena, vh_value* OutClassName);
 
 	/* --- reference table: declared in v2.0, not yet supplied ---
 	 *

@@ -145,7 +145,7 @@ def test_emit_value_method_class_return():
     )
     want = (
         '    GetChild<public>(Index:int)<decides><transacts>:node = '
-        'node{Handle := VhToHandle[VhCallValue(Handle, "get_child", array{VhFromInt(Index)})]}'
+        'node[VhObjectFrom[VhCallValue(Handle, "get_child", array{VhFromInt(Index)})]]'
     )
     check("emit value method, class return stays failable (GetChild)", g.emit_method(cm), want)
 
@@ -433,7 +433,7 @@ def test_class_type_falls_back_to_nearest_emitted_ancestor():
     other_block = next(b for b in blocks if b.startswith("other"))
     check_true(
         "unresolved class type falls back to nearest emitted ancestor (base)",
-        "base{Handle := VhToHandle[" in other_block,
+        "base[VhObjectFrom[" in other_block,
         other_block,
     )
 
@@ -667,7 +667,7 @@ def test_generated_file_matches_hand_written_slice():
     check_true(
         "every failable method on a mirrored Godot class returns an object",
         any(line.startswith("    ") for line in failable)
-        and all("VhToHandle[" in line for line in failable if line.startswith("    ")),
+        and all("VhObjectFrom[" in line for line in failable if line.startswith("    ")),
     )
     container_reads = [
         line for line in text.splitlines()

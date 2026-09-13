@@ -15,6 +15,12 @@ func _double(n: int) -> int:
 	return n * 2
 
 
+# Sprite2D is a Node2D, but `call` needs the argument typed as what the Verse parameter declares;
+# this is only here to say that plainly at the call site.
+func sprite2d_as_node2d(s: Sprite2D) -> Node2D:
+	return s
+
+
 func _check(name: String, ok: bool) -> void:
 	if ok:
 		_passed += 1
@@ -393,6 +399,38 @@ func _init() -> void:
 		_check("and reports itself a tool script", tool_script.is_tool())
 	var plain_script: Script = load("res://scripts/marshal.verse")
 	_check("while an unmarked one does not", plain_script != null and not plain_script.is_tool())
+
+	# --- R-SCN-6: the cast, and object identity ------------------------------------------------
+	#
+	# The two halves are separate claims. A node with no script must cross as the mirror of the
+	# Godot class it actually is, or every cast fails; a node carrying a Verse script must cross as
+	# *that script's own object*, or a cast to the script's class fails while the mirror one works.
+	# Both are asked here, along with the case that must decline rather than error.
+	var cast_script: Script = load("res://scripts/casting.verse")
+	_check("casting.verse compiles", cast_script != null and cast_script.can_instantiate())
+	if cast_script != null:
+		var caster := Node2D.new()
+		caster.set_script(cast_script)
+		root.add_child(caster)
+
+		var sprite := Sprite2D.new()
+		sprite.name = "Pic"
+		caster.add_child(sprite)
+		_check_eq("a node Godot handed back casts to its own Godot class",
+				caster.call("SpriteName", "Pic"), "Pic")
+		_check_eq("and a cast to a class it is not declines rather than erroring",
+				caster.call("TimerName", "Pic"), "no")
+
+		var scripted := Node2D.new()
+		scripted.name = "Scripted"
+		scripted.set_script(load("res://scripts/derived_entity.verse"))
+		caster.add_child(scripted)
+		_check_eq("a node carrying another Verse script casts to that script's class, and runs its code",
+				caster.call("Describe", "Scripted"), "derived")
+		_check_eq("the same node handed over as an argument casts the same way",
+				caster.call("DescribeGiven", scripted), "derived")
+		_check_eq("while a node with no script declines that cast",
+				caster.call("DescribeGiven", sprite2d_as_node2d(sprite)), "no")
 
 	print("[integration] %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)

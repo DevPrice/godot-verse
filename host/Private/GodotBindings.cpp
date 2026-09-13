@@ -6,6 +6,7 @@
 #include "Containers/Utf8String.h"
 #include "GodotClasses.h"
 #include "HostRuntime.h"
+#include "HostScript.h"
 #include "Templates/UniquePtr.h"
 #include "VerseString.h"
 #include "VerseValue.h"
@@ -577,6 +578,19 @@ bool VhIsValid(int64 Handle)
 {
     FHostState& Host = GetHost();
     return Host.Godot.IsValid && CallGodot([&] { return Host.Godot.IsValid(Host.Godot.Ctx, Handle) != 0; });
+}
+
+TNonNullPtr<verse::vh_object> VhObjectOf(int64 Handle)
+{
+    // Open, and for the usual two reasons at once: the class lookup calls a Godot callback in a
+    // DLL the AutoRTFM compiler never saw, and NewObject is not instrumented either.
+    //
+    // AutoRTFM::Open rather than CallGodot, because only Open's own parameter carries
+    // AUTORTFM_IMPLICIT_DISABLE -- the wrapper's does not, so a lambda built for it stays closed
+    // and naming an AUTORTFM_DISABLE function inside one is a compile error.
+    return AutoRTFM::Open([&] {
+        return TNonNullPtr<verse::vh_object>(CastChecked<verse::vh_object>(GodotVerse::ObjectForHandle(Handle)));
+    });
 }
 
 void VhTypeMismatch(verse::string const& Expected, FGodotValue const& Value)

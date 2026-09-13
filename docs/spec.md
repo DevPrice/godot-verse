@@ -462,6 +462,30 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   corrupt the scene. Status: **done** — it raises a Verse runtime error, unwinds to the root
   failure context, and discards queued writes. *But* see R-ASYNC-4: today it also kills every
   suspended task in the project.
+- **R-SCN-6 (MUST)** A Godot object a script is handed can be narrowed to what it actually is, as a
+  failable cast: `if (Sprite := animated_sprite2d[GetNode("Pic")])`. A cast that does not hold
+  **fails** rather than raising, so it composes into a guard the way every other question does.
+  Status: **done** (Phase 4 stage 1).
+
+  Identity is part of the requirement rather than an optimisation of it. Every mirrored method
+  declares the class Godot's own API declares -- `GetNode` returns `node` -- so a Verse object built
+  from the *signature* is a `node` whatever the handle names, and no downcast could ever succeed.
+  The host therefore builds the object at the class the handle **is**: the Godot class name comes
+  back through `vh_godot_api::GetClassOf` and is matched against a generated table of every Godot
+  class (`host/Private/GodotClassNames.gen.h`), which also names the nearest mirrored ancestor for a
+  class a `--classes-file` build left out.
+
+  And a node carrying a Verse script crosses as **that script's own object**, out of a
+  handle-to-instance registry the host keeps from `vh_instantiate` to `vh_release_instance`.
+  Without it `player[GetNode("Player")]` fails on exactly the case the cast exists for. Two
+  crossings of a handle with no script are two mirror wrappers: equality is by handle, and caching
+  them would need a rule for what happens across a hot-reload generation that nothing yet needs.
+  The class lookup itself *is* cached per handle -- Godot does not reuse an instance id within a
+  run, which is what makes that safe.
+
+  A handle Godot has already freed, or one of a class outside the mirror, crosses as a bare
+  `vh_object`, and every cast then declines. That is the shape the caller asked for: they wrote a
+  failable cast, so a failure is an answer.
 
 ---
 

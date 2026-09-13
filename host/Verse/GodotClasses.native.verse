@@ -26356,7 +26356,7 @@ VariantKind<public>(Value:variant)<transacts>:variant_type =
         38 => variant_type.TypePackedVector4Array
         _ => variant_type.TypeNil
 
-VhToObject(Value:variant)<decides><transacts>:object = object{Handle := VhToHandle[Value]}
+VhToObject(Value:variant)<decides><transacts>:object = object[VhObjectFrom[Value]]
 
 VhToVariant(Value:variant)<transacts>:variant = Value
 
@@ -26733,7 +26733,7 @@ dictionary<public> := class(godot_ref):
 # which is the contract -- and its own function only where the element is a *class*, because
 # building one has to name it.
 
-VhToArea2DElement(Value:variant)<decides><transacts>:area2d = area2d{Handle := VhToHandle[Value]}
+VhToArea2DElement(Value:variant)<decides><transacts>:area2d = area2d[VhObjectFrom[Value]]
 
 VhFromArea2DElement(Value:area2d)<transacts>:variant = VhFromObject(Value)
 
@@ -26744,7 +26744,7 @@ VhToArea2DArray(Value:variant)<transacts>:typed_array(area2d) =
 
 VhFromArea2DArray(Value:typed_array(area2d))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToArea3DElement(Value:variant)<decides><transacts>:area3d = area3d{Handle := VhToHandle[Value]}
+VhToArea3DElement(Value:variant)<decides><transacts>:area3d = area3d[VhObjectFrom[Value]]
 
 VhFromArea3DElement(Value:area3d)<transacts>:variant = VhFromObject(Value)
 
@@ -26762,7 +26762,7 @@ VhToArrayArray(Value:variant)<transacts>:typed_array(godot_array) =
 
 VhFromArrayArray(Value:typed_array(godot_array))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToBaseButtonElement(Value:variant)<decides><transacts>:base_button = base_button{Handle := VhToHandle[Value]}
+VhToBaseButtonElement(Value:variant)<decides><transacts>:base_button = base_button[VhObjectFrom[Value]]
 
 VhFromBaseButtonElement(Value:base_button)<transacts>:variant = VhFromObject(Value)
 
@@ -26773,7 +26773,7 @@ VhToBaseButtonArray(Value:variant)<transacts>:typed_array(base_button) =
 
 VhFromBaseButtonArray(Value:typed_array(base_button))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToCameraFeedElement(Value:variant)<decides><transacts>:camera_feed = camera_feed{Handle := VhToHandle[Value]}
+VhToCameraFeedElement(Value:variant)<decides><transacts>:camera_feed = camera_feed[VhObjectFrom[Value]]
 
 VhFromCameraFeedElement(Value:camera_feed)<transacts>:variant = VhFromObject(Value)
 
@@ -26784,7 +26784,7 @@ VhToCameraFeedArray(Value:variant)<transacts>:typed_array(camera_feed) =
 
 VhFromCameraFeedArray(Value:typed_array(camera_feed))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToCompositorEffectElement(Value:variant)<decides><transacts>:compositor_effect = compositor_effect{Handle := VhToHandle[Value]}
+VhToCompositorEffectElement(Value:variant)<decides><transacts>:compositor_effect = compositor_effect[VhObjectFrom[Value]]
 
 VhFromCompositorEffectElement(Value:compositor_effect)<transacts>:variant = VhFromObject(Value)
 
@@ -26795,7 +26795,7 @@ VhToCompositorEffectArray(Value:variant)<transacts>:typed_array(compositor_effec
 
 VhFromCompositorEffectArray(Value:typed_array(compositor_effect))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToControlElement(Value:variant)<decides><transacts>:control = control{Handle := VhToHandle[Value]}
+VhToControlElement(Value:variant)<decides><transacts>:control = control[VhObjectFrom[Value]]
 
 VhFromControlElement(Value:control)<transacts>:variant = VhFromObject(Value)
 
@@ -26813,7 +26813,7 @@ VhToDictionaryArray(Value:variant)<transacts>:typed_array(dictionary) =
 
 VhFromDictionaryArray(Value:typed_array(dictionary))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToENetPacketPeerElement(Value:variant)<decides><transacts>:e_net_packet_peer = e_net_packet_peer{Handle := VhToHandle[Value]}
+VhToENetPacketPeerElement(Value:variant)<decides><transacts>:e_net_packet_peer = e_net_packet_peer[VhObjectFrom[Value]]
 
 VhFromENetPacketPeerElement(Value:e_net_packet_peer)<transacts>:variant = VhFromObject(Value)
 
@@ -26824,7 +26824,7 @@ VhToENetPacketPeerArray(Value:variant)<transacts>:typed_array(e_net_packet_peer)
 
 VhFromENetPacketPeerArray(Value:typed_array(e_net_packet_peer))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToFoldableContainerElement(Value:variant)<decides><transacts>:foldable_container = foldable_container{Handle := VhToHandle[Value]}
+VhToFoldableContainerElement(Value:variant)<decides><transacts>:foldable_container = foldable_container[VhObjectFrom[Value]]
 
 VhFromFoldableContainerElement(Value:foldable_container)<transacts>:variant = VhFromObject(Value)
 
@@ -26835,7 +26835,7 @@ VhToFoldableContainerArray(Value:variant)<transacts>:typed_array(foldable_contai
 
 VhFromFoldableContainerArray(Value:typed_array(foldable_container))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToFontElement(Value:variant)<decides><transacts>:font = font{Handle := VhToHandle[Value]}
+VhToFontElement(Value:variant)<decides><transacts>:font = font[VhObjectFrom[Value]]
 
 VhFromFontElement(Value:font)<transacts>:variant = VhFromObject(Value)
 
@@ -26846,7 +26846,7 @@ VhToFontArray(Value:variant)<transacts>:typed_array(font) =
 
 VhFromFontArray(Value:typed_array(font))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToGLTFAccessorElement(Value:variant)<decides><transacts>:gltf_accessor = gltf_accessor{Handle := VhToHandle[Value]}
+VhToGLTFAccessorElement(Value:variant)<decides><transacts>:gltf_accessor = gltf_accessor[VhObjectFrom[Value]]
 
 VhFromGLTFAccessorElement(Value:gltf_accessor)<transacts>:variant = VhFromObject(Value)
 
@@ -26857,7 +26857,7 @@ VhToGLTFAccessorArray(Value:variant)<transacts>:typed_array(gltf_accessor) =
 
 VhFromGLTFAccessorArray(Value:typed_array(gltf_accessor))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToGLTFAnimationElement(Value:variant)<decides><transacts>:gltf_animation = gltf_animation{Handle := VhToHandle[Value]}
+VhToGLTFAnimationElement(Value:variant)<decides><transacts>:gltf_animation = gltf_animation[VhObjectFrom[Value]]
 
 VhFromGLTFAnimationElement(Value:gltf_animation)<transacts>:variant = VhFromObject(Value)
 
@@ -26868,7 +26868,7 @@ VhToGLTFAnimationArray(Value:variant)<transacts>:typed_array(gltf_animation) =
 
 VhFromGLTFAnimationArray(Value:typed_array(gltf_animation))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToGLTFBufferViewElement(Value:variant)<decides><transacts>:gltf_buffer_view = gltf_buffer_view{Handle := VhToHandle[Value]}
+VhToGLTFBufferViewElement(Value:variant)<decides><transacts>:gltf_buffer_view = gltf_buffer_view[VhObjectFrom[Value]]
 
 VhFromGLTFBufferViewElement(Value:gltf_buffer_view)<transacts>:variant = VhFromObject(Value)
 
@@ -26879,7 +26879,7 @@ VhToGLTFBufferViewArray(Value:variant)<transacts>:typed_array(gltf_buffer_view) 
 
 VhFromGLTFBufferViewArray(Value:typed_array(gltf_buffer_view))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToGLTFCameraElement(Value:variant)<decides><transacts>:gltf_camera = gltf_camera{Handle := VhToHandle[Value]}
+VhToGLTFCameraElement(Value:variant)<decides><transacts>:gltf_camera = gltf_camera[VhObjectFrom[Value]]
 
 VhFromGLTFCameraElement(Value:gltf_camera)<transacts>:variant = VhFromObject(Value)
 
@@ -26890,7 +26890,7 @@ VhToGLTFCameraArray(Value:variant)<transacts>:typed_array(gltf_camera) =
 
 VhFromGLTFCameraArray(Value:typed_array(gltf_camera))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToGLTFLightElement(Value:variant)<decides><transacts>:gltf_light = gltf_light{Handle := VhToHandle[Value]}
+VhToGLTFLightElement(Value:variant)<decides><transacts>:gltf_light = gltf_light[VhObjectFrom[Value]]
 
 VhFromGLTFLightElement(Value:gltf_light)<transacts>:variant = VhFromObject(Value)
 
@@ -26901,7 +26901,7 @@ VhToGLTFLightArray(Value:variant)<transacts>:typed_array(gltf_light) =
 
 VhFromGLTFLightArray(Value:typed_array(gltf_light))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToGLTFMeshElement(Value:variant)<decides><transacts>:gltf_mesh = gltf_mesh{Handle := VhToHandle[Value]}
+VhToGLTFMeshElement(Value:variant)<decides><transacts>:gltf_mesh = gltf_mesh[VhObjectFrom[Value]]
 
 VhFromGLTFMeshElement(Value:gltf_mesh)<transacts>:variant = VhFromObject(Value)
 
@@ -26912,7 +26912,7 @@ VhToGLTFMeshArray(Value:variant)<transacts>:typed_array(gltf_mesh) =
 
 VhFromGLTFMeshArray(Value:typed_array(gltf_mesh))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToGLTFNodeElement(Value:variant)<decides><transacts>:gltf_node = gltf_node{Handle := VhToHandle[Value]}
+VhToGLTFNodeElement(Value:variant)<decides><transacts>:gltf_node = gltf_node[VhObjectFrom[Value]]
 
 VhFromGLTFNodeElement(Value:gltf_node)<transacts>:variant = VhFromObject(Value)
 
@@ -26923,7 +26923,7 @@ VhToGLTFNodeArray(Value:variant)<transacts>:typed_array(gltf_node) =
 
 VhFromGLTFNodeArray(Value:typed_array(gltf_node))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToGLTFSkeletonElement(Value:variant)<decides><transacts>:gltf_skeleton = gltf_skeleton{Handle := VhToHandle[Value]}
+VhToGLTFSkeletonElement(Value:variant)<decides><transacts>:gltf_skeleton = gltf_skeleton[VhObjectFrom[Value]]
 
 VhFromGLTFSkeletonElement(Value:gltf_skeleton)<transacts>:variant = VhFromObject(Value)
 
@@ -26934,7 +26934,7 @@ VhToGLTFSkeletonArray(Value:variant)<transacts>:typed_array(gltf_skeleton) =
 
 VhFromGLTFSkeletonArray(Value:typed_array(gltf_skeleton))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToGLTFSkinElement(Value:variant)<decides><transacts>:gltf_skin = gltf_skin{Handle := VhToHandle[Value]}
+VhToGLTFSkinElement(Value:variant)<decides><transacts>:gltf_skin = gltf_skin[VhObjectFrom[Value]]
 
 VhFromGLTFSkinElement(Value:gltf_skin)<transacts>:variant = VhFromObject(Value)
 
@@ -26945,7 +26945,7 @@ VhToGLTFSkinArray(Value:variant)<transacts>:typed_array(gltf_skin) =
 
 VhFromGLTFSkinArray(Value:typed_array(gltf_skin))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToGLTFTextureElement(Value:variant)<decides><transacts>:gltf_texture = gltf_texture{Handle := VhToHandle[Value]}
+VhToGLTFTextureElement(Value:variant)<decides><transacts>:gltf_texture = gltf_texture[VhObjectFrom[Value]]
 
 VhFromGLTFTextureElement(Value:gltf_texture)<transacts>:variant = VhFromObject(Value)
 
@@ -26956,7 +26956,7 @@ VhToGLTFTextureArray(Value:variant)<transacts>:typed_array(gltf_texture) =
 
 VhFromGLTFTextureArray(Value:typed_array(gltf_texture))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToGLTFTextureSamplerElement(Value:variant)<decides><transacts>:gltf_texture_sampler = gltf_texture_sampler{Handle := VhToHandle[Value]}
+VhToGLTFTextureSamplerElement(Value:variant)<decides><transacts>:gltf_texture_sampler = gltf_texture_sampler[VhObjectFrom[Value]]
 
 VhFromGLTFTextureSamplerElement(Value:gltf_texture_sampler)<transacts>:variant = VhFromObject(Value)
 
@@ -26967,7 +26967,7 @@ VhToGLTFTextureSamplerArray(Value:variant)<transacts>:typed_array(gltf_texture_s
 
 VhFromGLTFTextureSamplerArray(Value:typed_array(gltf_texture_sampler))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToImageElement(Value:variant)<decides><transacts>:image = image{Handle := VhToHandle[Value]}
+VhToImageElement(Value:variant)<decides><transacts>:image = image[VhObjectFrom[Value]]
 
 VhFromImageElement(Value:image)<transacts>:variant = VhFromObject(Value)
 
@@ -26978,7 +26978,7 @@ VhToImageArray(Value:variant)<transacts>:typed_array(image) =
 
 VhFromImageArray(Value:typed_array(image))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToInputEventElement(Value:variant)<decides><transacts>:input_event = input_event{Handle := VhToHandle[Value]}
+VhToInputEventElement(Value:variant)<decides><transacts>:input_event = input_event[VhObjectFrom[Value]]
 
 VhFromInputEventElement(Value:input_event)<transacts>:variant = VhFromObject(Value)
 
@@ -26996,7 +26996,7 @@ VhToIntArray(Value:variant)<transacts>:typed_array(int) =
 
 VhFromIntArray(Value:typed_array(int))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToMaterialElement(Value:variant)<decides><transacts>:material = material{Handle := VhToHandle[Value]}
+VhToMaterialElement(Value:variant)<decides><transacts>:material = material[VhObjectFrom[Value]]
 
 VhFromMaterialElement(Value:material)<transacts>:variant = VhFromObject(Value)
 
@@ -27007,7 +27007,7 @@ VhToMaterialArray(Value:variant)<transacts>:typed_array(material) =
 
 VhFromMaterialArray(Value:typed_array(material))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToMeshElement(Value:variant)<decides><transacts>:mesh = mesh{Handle := VhToHandle[Value]}
+VhToMeshElement(Value:variant)<decides><transacts>:mesh = mesh[VhObjectFrom[Value]]
 
 VhFromMeshElement(Value:mesh)<transacts>:variant = VhFromObject(Value)
 
@@ -27018,7 +27018,7 @@ VhToMeshArray(Value:variant)<transacts>:typed_array(mesh) =
 
 VhFromMeshArray(Value:typed_array(mesh))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToNodeElement(Value:variant)<decides><transacts>:node = node{Handle := VhToHandle[Value]}
+VhToNodeElement(Value:variant)<decides><transacts>:node = node[VhObjectFrom[Value]]
 
 VhFromNodeElement(Value:node)<transacts>:variant = VhFromObject(Value)
 
@@ -27029,7 +27029,7 @@ VhToNodeArray(Value:variant)<transacts>:typed_array(node) =
 
 VhFromNodeArray(Value:typed_array(node))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToNode2DElement(Value:variant)<decides><transacts>:node2d = node2d{Handle := VhToHandle[Value]}
+VhToNode2DElement(Value:variant)<decides><transacts>:node2d = node2d[VhObjectFrom[Value]]
 
 VhFromNode2DElement(Value:node2d)<transacts>:variant = VhFromObject(Value)
 
@@ -27040,7 +27040,7 @@ VhToNode2DArray(Value:variant)<transacts>:typed_array(node2d) =
 
 VhFromNode2DArray(Value:typed_array(node2d))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToNode3DElement(Value:variant)<decides><transacts>:node3d = node3d{Handle := VhToHandle[Value]}
+VhToNode3DElement(Value:variant)<decides><transacts>:node3d = node3d[VhObjectFrom[Value]]
 
 VhFromNode3DElement(Value:node3d)<transacts>:variant = VhFromObject(Value)
 
@@ -27051,7 +27051,7 @@ VhToNode3DArray(Value:variant)<transacts>:typed_array(node3d) =
 
 VhFromNode3DArray(Value:typed_array(node3d))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToNode3DGizmoElement(Value:variant)<decides><transacts>:node3d_gizmo = node3d_gizmo{Handle := VhToHandle[Value]}
+VhToNode3DGizmoElement(Value:variant)<decides><transacts>:node3d_gizmo = node3d_gizmo[VhObjectFrom[Value]]
 
 VhFromNode3DGizmoElement(Value:node3d_gizmo)<transacts>:variant = VhFromObject(Value)
 
@@ -27069,7 +27069,7 @@ VhToNodePathArray(Value:variant)<transacts>:typed_array(string) =
 
 VhFromNodePathArray(Value:typed_array(string))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToOpenXRSpatialCapabilityConfigurationBaseHeaderElement(Value:variant)<decides><transacts>:open_xr_spatial_capability_configuration_base_header = open_xr_spatial_capability_configuration_base_header{Handle := VhToHandle[Value]}
+VhToOpenXRSpatialCapabilityConfigurationBaseHeaderElement(Value:variant)<decides><transacts>:open_xr_spatial_capability_configuration_base_header = open_xr_spatial_capability_configuration_base_header[VhObjectFrom[Value]]
 
 VhFromOpenXRSpatialCapabilityConfigurationBaseHeaderElement(Value:open_xr_spatial_capability_configuration_base_header)<transacts>:variant = VhFromObject(Value)
 
@@ -27080,7 +27080,7 @@ VhToOpenXRSpatialCapabilityConfigurationBaseHeaderArray(Value:variant)<transacts
 
 VhFromOpenXRSpatialCapabilityConfigurationBaseHeaderArray(Value:typed_array(open_xr_spatial_capability_configuration_base_header))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToOpenXRSpatialComponentDataElement(Value:variant)<decides><transacts>:open_xr_spatial_component_data = open_xr_spatial_component_data{Handle := VhToHandle[Value]}
+VhToOpenXRSpatialComponentDataElement(Value:variant)<decides><transacts>:open_xr_spatial_component_data = open_xr_spatial_component_data[VhObjectFrom[Value]]
 
 VhFromOpenXRSpatialComponentDataElement(Value:open_xr_spatial_component_data)<transacts>:variant = VhFromObject(Value)
 
@@ -27112,7 +27112,7 @@ VhToPackedVector2ArrayArray(Value:variant)<transacts>:typed_array([]vector2) =
 
 VhFromPackedVector2ArrayArray(Value:typed_array([]vector2))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToPhysicsBody2DElement(Value:variant)<decides><transacts>:physics_body2d = physics_body2d{Handle := VhToHandle[Value]}
+VhToPhysicsBody2DElement(Value:variant)<decides><transacts>:physics_body2d = physics_body2d[VhObjectFrom[Value]]
 
 VhFromPhysicsBody2DElement(Value:physics_body2d)<transacts>:variant = VhFromObject(Value)
 
@@ -27123,7 +27123,7 @@ VhToPhysicsBody2DArray(Value:variant)<transacts>:typed_array(physics_body2d) =
 
 VhFromPhysicsBody2DArray(Value:typed_array(physics_body2d))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToPhysicsBody3DElement(Value:variant)<decides><transacts>:physics_body3d = physics_body3d{Handle := VhToHandle[Value]}
+VhToPhysicsBody3DElement(Value:variant)<decides><transacts>:physics_body3d = physics_body3d[VhObjectFrom[Value]]
 
 VhFromPhysicsBody3DElement(Value:physics_body3d)<transacts>:variant = VhFromObject(Value)
 
@@ -27141,7 +27141,7 @@ VhToPlaneArray(Value:variant)<transacts>:typed_array(plane) =
 
 VhFromPlaneArray(Value:typed_array(plane))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToRDAttachmentFormatElement(Value:variant)<decides><transacts>:rd_attachment_format = rd_attachment_format{Handle := VhToHandle[Value]}
+VhToRDAttachmentFormatElement(Value:variant)<decides><transacts>:rd_attachment_format = rd_attachment_format[VhObjectFrom[Value]]
 
 VhFromRDAttachmentFormatElement(Value:rd_attachment_format)<transacts>:variant = VhFromObject(Value)
 
@@ -27152,7 +27152,7 @@ VhToRDAttachmentFormatArray(Value:variant)<transacts>:typed_array(rd_attachment_
 
 VhFromRDAttachmentFormatArray(Value:typed_array(rd_attachment_format))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToRDFramebufferPassElement(Value:variant)<decides><transacts>:rd_framebuffer_pass = rd_framebuffer_pass{Handle := VhToHandle[Value]}
+VhToRDFramebufferPassElement(Value:variant)<decides><transacts>:rd_framebuffer_pass = rd_framebuffer_pass[VhObjectFrom[Value]]
 
 VhFromRDFramebufferPassElement(Value:rd_framebuffer_pass)<transacts>:variant = VhFromObject(Value)
 
@@ -27163,7 +27163,7 @@ VhToRDFramebufferPassArray(Value:variant)<transacts>:typed_array(rd_framebuffer_
 
 VhFromRDFramebufferPassArray(Value:typed_array(rd_framebuffer_pass))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToRDPipelineColorBlendStateAttachmentElement(Value:variant)<decides><transacts>:rd_pipeline_color_blend_state_attachment = rd_pipeline_color_blend_state_attachment{Handle := VhToHandle[Value]}
+VhToRDPipelineColorBlendStateAttachmentElement(Value:variant)<decides><transacts>:rd_pipeline_color_blend_state_attachment = rd_pipeline_color_blend_state_attachment[VhObjectFrom[Value]]
 
 VhFromRDPipelineColorBlendStateAttachmentElement(Value:rd_pipeline_color_blend_state_attachment)<transacts>:variant = VhFromObject(Value)
 
@@ -27174,7 +27174,7 @@ VhToRDPipelineColorBlendStateAttachmentArray(Value:variant)<transacts>:typed_arr
 
 VhFromRDPipelineColorBlendStateAttachmentArray(Value:typed_array(rd_pipeline_color_blend_state_attachment))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToRDPipelineSpecializationConstantElement(Value:variant)<decides><transacts>:rd_pipeline_specialization_constant = rd_pipeline_specialization_constant{Handle := VhToHandle[Value]}
+VhToRDPipelineSpecializationConstantElement(Value:variant)<decides><transacts>:rd_pipeline_specialization_constant = rd_pipeline_specialization_constant[VhObjectFrom[Value]]
 
 VhFromRDPipelineSpecializationConstantElement(Value:rd_pipeline_specialization_constant)<transacts>:variant = VhFromObject(Value)
 
@@ -27185,7 +27185,7 @@ VhToRDPipelineSpecializationConstantArray(Value:variant)<transacts>:typed_array(
 
 VhFromRDPipelineSpecializationConstantArray(Value:typed_array(rd_pipeline_specialization_constant))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToRDUniformElement(Value:variant)<decides><transacts>:rd_uniform = rd_uniform{Handle := VhToHandle[Value]}
+VhToRDUniformElement(Value:variant)<decides><transacts>:rd_uniform = rd_uniform[VhObjectFrom[Value]]
 
 VhFromRDUniformElement(Value:rd_uniform)<transacts>:variant = VhFromObject(Value)
 
@@ -27196,7 +27196,7 @@ VhToRDUniformArray(Value:variant)<transacts>:typed_array(rd_uniform) =
 
 VhFromRDUniformArray(Value:typed_array(rd_uniform))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToRDVertexAttributeElement(Value:variant)<decides><transacts>:rd_vertex_attribute = rd_vertex_attribute{Handle := VhToHandle[Value]}
+VhToRDVertexAttributeElement(Value:variant)<decides><transacts>:rd_vertex_attribute = rd_vertex_attribute[VhObjectFrom[Value]]
 
 VhFromRDVertexAttributeElement(Value:rd_vertex_attribute)<transacts>:variant = VhFromObject(Value)
 
@@ -27221,7 +27221,7 @@ VhToRect2Array(Value:variant)<transacts>:typed_array(rect2) =
 
 VhFromRect2Array(Value:typed_array(rect2))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToRegExMatchElement(Value:variant)<decides><transacts>:reg_ex_match = reg_ex_match{Handle := VhToHandle[Value]}
+VhToRegExMatchElement(Value:variant)<decides><transacts>:reg_ex_match = reg_ex_match[VhObjectFrom[Value]]
 
 VhFromRegExMatchElement(Value:reg_ex_match)<transacts>:variant = VhFromObject(Value)
 
@@ -27232,7 +27232,7 @@ VhToRegExMatchArray(Value:variant)<transacts>:typed_array(reg_ex_match) =
 
 VhFromRegExMatchArray(Value:typed_array(reg_ex_match))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToRichTextEffectElement(Value:variant)<decides><transacts>:rich_text_effect = rich_text_effect{Handle := VhToHandle[Value]}
+VhToRichTextEffectElement(Value:variant)<decides><transacts>:rich_text_effect = rich_text_effect[VhObjectFrom[Value]]
 
 VhFromRichTextEffectElement(Value:rich_text_effect)<transacts>:variant = VhFromObject(Value)
 
@@ -27243,7 +27243,7 @@ VhToRichTextEffectArray(Value:variant)<transacts>:typed_array(rich_text_effect) 
 
 VhFromRichTextEffectArray(Value:typed_array(rich_text_effect))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToScriptElement(Value:variant)<decides><transacts>:script = script{Handle := VhToHandle[Value]}
+VhToScriptElement(Value:variant)<decides><transacts>:script = script[VhObjectFrom[Value]]
 
 VhFromScriptElement(Value:script)<transacts>:variant = VhFromObject(Value)
 
@@ -27254,7 +27254,7 @@ VhToScriptArray(Value:variant)<transacts>:typed_array(script) =
 
 VhFromScriptArray(Value:typed_array(script))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToScriptBacktraceElement(Value:variant)<decides><transacts>:script_backtrace = script_backtrace{Handle := VhToHandle[Value]}
+VhToScriptBacktraceElement(Value:variant)<decides><transacts>:script_backtrace = script_backtrace[VhObjectFrom[Value]]
 
 VhFromScriptBacktraceElement(Value:script_backtrace)<transacts>:variant = VhFromObject(Value)
 
@@ -27265,7 +27265,7 @@ VhToScriptBacktraceArray(Value:variant)<transacts>:typed_array(script_backtrace)
 
 VhFromScriptBacktraceArray(Value:typed_array(script_backtrace))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToScriptEditorBaseElement(Value:variant)<decides><transacts>:script_editor_base = script_editor_base{Handle := VhToHandle[Value]}
+VhToScriptEditorBaseElement(Value:variant)<decides><transacts>:script_editor_base = script_editor_base[VhObjectFrom[Value]]
 
 VhFromScriptEditorBaseElement(Value:script_editor_base)<transacts>:variant = VhFromObject(Value)
 
@@ -27290,7 +27290,7 @@ VhToStringNameArray(Value:variant)<transacts>:typed_array(string) =
 
 VhFromStringNameArray(Value:typed_array(string))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToTexture2DElement(Value:variant)<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[Value]}
+VhToTexture2DElement(Value:variant)<decides><transacts>:texture2d = texture2d[VhObjectFrom[Value]]
 
 VhFromTexture2DElement(Value:texture2d)<transacts>:variant = VhFromObject(Value)
 
@@ -27301,7 +27301,7 @@ VhToTexture2DArray(Value:variant)<transacts>:typed_array(texture2d) =
 
 VhFromTexture2DArray(Value:typed_array(texture2d))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToTextureLayeredElement(Value:variant)<decides><transacts>:texture_layered = texture_layered{Handle := VhToHandle[Value]}
+VhToTextureLayeredElement(Value:variant)<decides><transacts>:texture_layered = texture_layered[VhObjectFrom[Value]]
 
 VhFromTextureLayeredElement(Value:texture_layered)<transacts>:variant = VhFromObject(Value)
 
@@ -27319,7 +27319,7 @@ VhToTransform3DArray(Value:variant)<transacts>:typed_array(transform3d) =
 
 VhFromTransform3DArray(Value:typed_array(transform3d))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToTranslationElement(Value:variant)<decides><transacts>:translation = translation{Handle := VhToHandle[Value]}
+VhToTranslationElement(Value:variant)<decides><transacts>:translation = translation[VhObjectFrom[Value]]
 
 VhFromTranslationElement(Value:translation)<transacts>:variant = VhFromObject(Value)
 
@@ -27330,7 +27330,7 @@ VhToTranslationArray(Value:variant)<transacts>:typed_array(translation) =
 
 VhFromTranslationArray(Value:typed_array(translation))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToTreeItemElement(Value:variant)<decides><transacts>:tree_item = tree_item{Handle := VhToHandle[Value]}
+VhToTreeItemElement(Value:variant)<decides><transacts>:tree_item = tree_item[VhObjectFrom[Value]]
 
 VhFromTreeItemElement(Value:tree_item)<transacts>:variant = VhFromObject(Value)
 
@@ -27341,7 +27341,7 @@ VhToTreeItemArray(Value:variant)<transacts>:typed_array(tree_item) =
 
 VhFromTreeItemArray(Value:typed_array(tree_item))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToTweenElement(Value:variant)<decides><transacts>:tween = tween{Handle := VhToHandle[Value]}
+VhToTweenElement(Value:variant)<decides><transacts>:tween = tween[VhObjectFrom[Value]]
 
 VhFromTweenElement(Value:tween)<transacts>:variant = VhFromObject(Value)
 
@@ -27380,7 +27380,7 @@ VhToVector3iArray(Value:variant)<transacts>:typed_array(vector3i) =
 
 VhFromVector3iArray(Value:typed_array(vector3i))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-VhToWindowElement(Value:variant)<decides><transacts>:window = window{Handle := VhToHandle[Value]}
+VhToWindowElement(Value:variant)<decides><transacts>:window = window[VhObjectFrom[Value]]
 
 VhFromWindowElement(Value:window)<transacts>:variant = VhFromObject(Value)
 
@@ -27463,11 +27463,11 @@ audio_server<public> := class(object):
     PlaybackSpeedScaleSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_playback_speed_scale", array{VhFromFloat(Value)})
     AddBus<public>(?AtPosition:int = -1)<transacts>:void = VhCallVoid(Handle, "add_bus", array{VhFromInt(AtPosition)})
     AddBusEffect<public>(BusIdx:int, Effect:audio_effect, ?AtPosition:int = -1)<transacts>:void = VhCallVoid(Handle, "add_bus_effect", array{VhFromInt(BusIdx), VhFromObject(Effect), VhFromInt(AtPosition)})
-    GenerateBusLayout<public>()<decides><transacts>:audio_bus_layout = audio_bus_layout{Handle := VhToHandle[VhCallValue(Handle, "generate_bus_layout", array{})]}
+    GenerateBusLayout<public>()<decides><transacts>:audio_bus_layout = audio_bus_layout[VhObjectFrom[VhCallValue(Handle, "generate_bus_layout", array{})]]
     GetBusChannels<public>(BusIdx:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_bus_channels", array{VhFromInt(BusIdx)}))
-    GetBusEffect<public>(BusIdx:int, EffectIdx:int)<decides><transacts>:audio_effect = audio_effect{Handle := VhToHandle[VhCallValue(Handle, "get_bus_effect", array{VhFromInt(BusIdx), VhFromInt(EffectIdx)})]}
+    GetBusEffect<public>(BusIdx:int, EffectIdx:int)<decides><transacts>:audio_effect = audio_effect[VhObjectFrom[VhCallValue(Handle, "get_bus_effect", array{VhFromInt(BusIdx), VhFromInt(EffectIdx)})]]
     GetBusEffectCount<public>(BusIdx:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_bus_effect_count", array{VhFromInt(BusIdx)}))
-    GetBusEffectInstance<public>(BusIdx:int, EffectIdx:int, ?Channel:int = 0)<decides><transacts>:audio_effect_instance = audio_effect_instance{Handle := VhToHandle[VhCallValue(Handle, "get_bus_effect_instance", array{VhFromInt(BusIdx), VhFromInt(EffectIdx), VhFromInt(Channel)})]}
+    GetBusEffectInstance<public>(BusIdx:int, EffectIdx:int, ?Channel:int = 0)<decides><transacts>:audio_effect_instance = audio_effect_instance[VhObjectFrom[VhCallValue(Handle, "get_bus_effect_instance", array{VhFromInt(BusIdx), VhFromInt(EffectIdx), VhFromInt(Channel)})]]
     GetBusIndex<public>(BusName:string)<transacts>:int = VhToInt(VhCallValue(Handle, "get_bus_index", array{VhFromStringName(BusName)}))
     GetBusName<public>(BusIdx:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_bus_name", array{VhFromInt(BusIdx)}))
     GetBusPeakVolumeLeftDb<public>(BusIdx:int, Channel:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_bus_peak_volume_left_db", array{VhFromInt(BusIdx), VhFromInt(Channel)}))
@@ -27522,7 +27522,7 @@ camera_server<public> := class(object):
     MonitoringFeedsSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_monitoring_feeds", array{VhFromLogic(Value)})
     AddFeed<public>(Feed:camera_feed)<transacts>:void = VhCallVoid(Handle, "add_feed", array{VhFromObject(Feed)})
     Feeds<public>()<transacts>:typed_array(camera_feed) = VhToCameraFeedArray(VhCallValue(Handle, "feeds", array{}))
-    GetFeed<public>(Index:int)<decides><transacts>:camera_feed = camera_feed{Handle := VhToHandle[VhCallValue(Handle, "get_feed", array{VhFromInt(Index)})]}
+    GetFeed<public>(Index:int)<decides><transacts>:camera_feed = camera_feed[VhObjectFrom[VhCallValue(Handle, "get_feed", array{VhFromInt(Index)})]]
     GetFeedCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_feed_count", array{}))
     RemoveFeed<public>(Feed:camera_feed)<transacts>:void = VhCallVoid(Handle, "remove_feed", array{VhFromObject(Feed)})
 
@@ -27638,7 +27638,7 @@ display_server<public> := class(object):
     AccessibilityUpdateSetValue<public>(Id:int, Value:string)<transacts>:void = VhCallVoid(Handle, "accessibility_update_set_value", array{VhFromRid(Id), VhFromString(Value)})
     Beep<public>()<transacts>:void = VhCallVoid(Handle, "beep", array{})
     ClipboardGet<public>()<transacts>:string = VhToString(VhCallValue(Handle, "clipboard_get", array{}))
-    ClipboardGetImage<public>()<decides><transacts>:image = image{Handle := VhToHandle[VhCallValue(Handle, "clipboard_get_image", array{})]}
+    ClipboardGetImage<public>()<decides><transacts>:image = image[VhObjectFrom[VhCallValue(Handle, "clipboard_get_image", array{})]]
     ClipboardGetPrimary<public>()<transacts>:string = VhToString(VhCallValue(Handle, "clipboard_get_primary", array{}))
     ClipboardHas<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "clipboard_has", array{}))
     ClipboardHasImage<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "clipboard_has_image", array{}))
@@ -27681,7 +27681,7 @@ display_server<public> := class(object):
     GlobalMenuGetItemAccelerator<public>(MenuRoot:string, Idx:int)<transacts>:key = VhToKey(VhCallValue(Handle, "global_menu_get_item_accelerator", array{VhFromString(MenuRoot), VhFromInt(Idx)}))
     GlobalMenuGetItemCallback<public>(MenuRoot:string, Idx:int)<transacts>:callable = VhToCallable(VhCallValue(Handle, "global_menu_get_item_callback", array{VhFromString(MenuRoot), VhFromInt(Idx)}))
     GlobalMenuGetItemCount<public>(MenuRoot:string)<transacts>:int = VhToInt(VhCallValue(Handle, "global_menu_get_item_count", array{VhFromString(MenuRoot)}))
-    GlobalMenuGetItemIcon<public>(MenuRoot:string, Idx:int)<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "global_menu_get_item_icon", array{VhFromString(MenuRoot), VhFromInt(Idx)})]}
+    GlobalMenuGetItemIcon<public>(MenuRoot:string, Idx:int)<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "global_menu_get_item_icon", array{VhFromString(MenuRoot), VhFromInt(Idx)})]]
     GlobalMenuGetItemIndentationLevel<public>(MenuRoot:string, Idx:int)<transacts>:int = VhToInt(VhCallValue(Handle, "global_menu_get_item_indentation_level", array{VhFromString(MenuRoot), VhFromInt(Idx)}))
     GlobalMenuGetItemIndexFromTag<public>(MenuRoot:string, Tag:variant)<transacts>:int = VhToInt(VhCallValue(Handle, "global_menu_get_item_index_from_tag", array{VhFromString(MenuRoot), VhFromVariant(Tag)}))
     GlobalMenuGetItemIndexFromText<public>(MenuRoot:string, Text:string)<transacts>:int = VhToInt(VhCallValue(Handle, "global_menu_get_item_index_from_text", array{VhFromString(MenuRoot), VhFromString(Text)}))
@@ -27741,8 +27741,8 @@ display_server<public> := class(object):
     ProcessEvents<public>()<transacts>:void = VhCallVoid(Handle, "process_events", array{})
     RegisterAdditionalOutput<public>(Object:object)<transacts>:void = VhCallVoid(Handle, "register_additional_output", array{VhFromObject(Object)})
     ScreenGetDpi<public>(?Screen:int = -1)<transacts>:int = VhToInt(VhCallValue(Handle, "screen_get_dpi", array{VhFromInt(Screen)}))
-    ScreenGetImage<public>(?Screen:int = -1)<decides><transacts>:image = image{Handle := VhToHandle[VhCallValue(Handle, "screen_get_image", array{VhFromInt(Screen)})]}
-    ScreenGetImageRect<public>(Rect:rect2i)<decides><transacts>:image = image{Handle := VhToHandle[VhCallValue(Handle, "screen_get_image_rect", array{VhFromRect2i(Rect)})]}
+    ScreenGetImage<public>(?Screen:int = -1)<decides><transacts>:image = image[VhObjectFrom[VhCallValue(Handle, "screen_get_image", array{VhFromInt(Screen)})]]
+    ScreenGetImageRect<public>(Rect:rect2i)<decides><transacts>:image = image[VhObjectFrom[VhCallValue(Handle, "screen_get_image_rect", array{VhFromRect2i(Rect)})]]
     ScreenGetMaxScale<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "screen_get_max_scale", array{}))
     ScreenGetOrientation<public>(?Screen:int = -1)<transacts>:display_server_screen_orientation = VhToDisplayServerScreenOrientation(VhCallValue(Handle, "screen_get_orientation", array{VhFromInt(Screen)}))
     ScreenGetPixel<public>(Position:vector2i)<transacts>:color = VhToColor(VhCallValue(Handle, "screen_get_pixel", array{VhFromVector2i(Position)}))
@@ -27842,9 +27842,9 @@ editor_file_system_directory<public> := class(object):
     GetFileScriptClassName<public>(Idx:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_file_script_class_name", array{VhFromInt(Idx)}))
     GetFileType<public>(Idx:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_file_type", array{VhFromInt(Idx)}))
     GetName<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_name", array{}))
-    GetParent<public>()<decides><transacts>:editor_file_system_directory = editor_file_system_directory{Handle := VhToHandle[VhCallValue(Handle, "get_parent", array{})]}
+    GetParent<public>()<decides><transacts>:editor_file_system_directory = editor_file_system_directory[VhObjectFrom[VhCallValue(Handle, "get_parent", array{})]]
     GetPath<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_path", array{}))
-    GetSubdir<public>(Idx:int)<decides><transacts>:editor_file_system_directory = editor_file_system_directory{Handle := VhToHandle[VhCallValue(Handle, "get_subdir", array{VhFromInt(Idx)})]}
+    GetSubdir<public>(Idx:int)<decides><transacts>:editor_file_system_directory = editor_file_system_directory[VhObjectFrom[VhCallValue(Handle, "get_subdir", array{VhFromInt(Idx)})]]
     GetSubdirCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_subdir_count", array{}))
 
 editor_interface<public> := class(object):
@@ -27860,35 +27860,35 @@ editor_interface<public> := class(object):
     EditNode<public>(Node:node)<transacts>:void = VhCallVoid(Handle, "edit_node", array{VhFromObject(Node)})
     EditResource<public>(Resource:resource)<transacts>:void = VhCallVoid(Handle, "edit_resource", array{VhFromObject(Resource)})
     EditScript<public>(Script:script, ?Line:int = -1, ?Column:int = 0, ?GrabFocus:logic = true)<transacts>:void = VhCallVoid(Handle, "edit_script", array{VhFromObject(Script), VhFromInt(Line), VhFromInt(Column), VhFromLogic(GrabFocus)})
-    GetBaseControl<public>()<decides><transacts>:control = control{Handle := VhToHandle[VhCallValue(Handle, "get_base_control", array{})]}
-    GetCommandPalette<public>()<decides><transacts>:editor_command_palette = editor_command_palette{Handle := VhToHandle[VhCallValue(Handle, "get_command_palette", array{})]}
+    GetBaseControl<public>()<decides><transacts>:control = control[VhObjectFrom[VhCallValue(Handle, "get_base_control", array{})]]
+    GetCommandPalette<public>()<decides><transacts>:editor_command_palette = editor_command_palette[VhObjectFrom[VhCallValue(Handle, "get_command_palette", array{})]]
     GetCurrentDirectory<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_current_directory", array{}))
     GetCurrentFeatureProfile<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_current_feature_profile", array{}))
     GetCurrentPath<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_current_path", array{}))
-    GetEditedSceneRoot<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_edited_scene_root", array{})]}
+    GetEditedSceneRoot<public>()<decides><transacts>:node = node[VhObjectFrom[VhCallValue(Handle, "get_edited_scene_root", array{})]]
     GetEditorLanguage<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_editor_language", array{}))
-    GetEditorMainScreen<public>()<decides><transacts>:v_box_container = v_box_container{Handle := VhToHandle[VhCallValue(Handle, "get_editor_main_screen", array{})]}
-    GetEditorPaths<public>()<decides><transacts>:editor_paths = editor_paths{Handle := VhToHandle[VhCallValue(Handle, "get_editor_paths", array{})]}
+    GetEditorMainScreen<public>()<decides><transacts>:v_box_container = v_box_container[VhObjectFrom[VhCallValue(Handle, "get_editor_main_screen", array{})]]
+    GetEditorPaths<public>()<decides><transacts>:editor_paths = editor_paths[VhObjectFrom[VhCallValue(Handle, "get_editor_paths", array{})]]
     GetEditorScale<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_editor_scale", array{}))
-    GetEditorSettings<public>()<decides><transacts>:editor_settings = editor_settings{Handle := VhToHandle[VhCallValue(Handle, "get_editor_settings", array{})]}
-    GetEditorTheme<public>()<decides><transacts>:theme = theme{Handle := VhToHandle[VhCallValue(Handle, "get_editor_theme", array{})]}
-    GetEditorToaster<public>()<decides><transacts>:editor_toaster = editor_toaster{Handle := VhToHandle[VhCallValue(Handle, "get_editor_toaster", array{})]}
-    GetEditorUndoRedo<public>()<decides><transacts>:editor_undo_redo_manager = editor_undo_redo_manager{Handle := VhToHandle[VhCallValue(Handle, "get_editor_undo_redo", array{})]}
-    GetEditorViewport2d<public>()<decides><transacts>:sub_viewport = sub_viewport{Handle := VhToHandle[VhCallValue(Handle, "get_editor_viewport_2d", array{})]}
-    GetEditorViewport3d<public>(?Idx:int = 0)<decides><transacts>:sub_viewport = sub_viewport{Handle := VhToHandle[VhCallValue(Handle, "get_editor_viewport_3d", array{VhFromInt(Idx)})]}
-    GetFileSystemDock<public>()<decides><transacts>:file_system_dock = file_system_dock{Handle := VhToHandle[VhCallValue(Handle, "get_file_system_dock", array{})]}
-    GetInspector<public>()<decides><transacts>:editor_inspector = editor_inspector{Handle := VhToHandle[VhCallValue(Handle, "get_inspector", array{})]}
+    GetEditorSettings<public>()<decides><transacts>:editor_settings = editor_settings[VhObjectFrom[VhCallValue(Handle, "get_editor_settings", array{})]]
+    GetEditorTheme<public>()<decides><transacts>:theme = theme[VhObjectFrom[VhCallValue(Handle, "get_editor_theme", array{})]]
+    GetEditorToaster<public>()<decides><transacts>:editor_toaster = editor_toaster[VhObjectFrom[VhCallValue(Handle, "get_editor_toaster", array{})]]
+    GetEditorUndoRedo<public>()<decides><transacts>:editor_undo_redo_manager = editor_undo_redo_manager[VhObjectFrom[VhCallValue(Handle, "get_editor_undo_redo", array{})]]
+    GetEditorViewport2d<public>()<decides><transacts>:sub_viewport = sub_viewport[VhObjectFrom[VhCallValue(Handle, "get_editor_viewport_2d", array{})]]
+    GetEditorViewport3d<public>(?Idx:int = 0)<decides><transacts>:sub_viewport = sub_viewport[VhObjectFrom[VhCallValue(Handle, "get_editor_viewport_3d", array{VhFromInt(Idx)})]]
+    GetFileSystemDock<public>()<decides><transacts>:file_system_dock = file_system_dock[VhObjectFrom[VhCallValue(Handle, "get_file_system_dock", array{})]]
+    GetInspector<public>()<decides><transacts>:editor_inspector = editor_inspector[VhObjectFrom[VhCallValue(Handle, "get_inspector", array{})]]
     GetNode3dRotateSnap<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_node_3d_rotate_snap", array{}))
     GetNode3dScaleSnap<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_node_3d_scale_snap", array{}))
     GetNode3dTranslateSnap<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_node_3d_translate_snap", array{}))
     GetOpenSceneRoots<public>()<transacts>:typed_array(node) = VhToNodeArray(VhCallValue(Handle, "get_open_scene_roots", array{}))
     GetOpenScenes<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_open_scenes", array{}))
     GetPlayingScene<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_playing_scene", array{}))
-    GetResourceFilesystem<public>()<decides><transacts>:editor_file_system = editor_file_system{Handle := VhToHandle[VhCallValue(Handle, "get_resource_filesystem", array{})]}
-    GetResourcePreviewer<public>()<decides><transacts>:editor_resource_preview = editor_resource_preview{Handle := VhToHandle[VhCallValue(Handle, "get_resource_previewer", array{})]}
-    GetScriptEditor<public>()<decides><transacts>:script_editor = script_editor{Handle := VhToHandle[VhCallValue(Handle, "get_script_editor", array{})]}
+    GetResourceFilesystem<public>()<decides><transacts>:editor_file_system = editor_file_system[VhObjectFrom[VhCallValue(Handle, "get_resource_filesystem", array{})]]
+    GetResourcePreviewer<public>()<decides><transacts>:editor_resource_preview = editor_resource_preview[VhObjectFrom[VhCallValue(Handle, "get_resource_previewer", array{})]]
+    GetScriptEditor<public>()<decides><transacts>:script_editor = script_editor[VhObjectFrom[VhCallValue(Handle, "get_script_editor", array{})]]
     GetSelectedPaths<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_selected_paths", array{}))
-    GetSelection<public>()<decides><transacts>:editor_selection = editor_selection{Handle := VhToHandle[VhCallValue(Handle, "get_selection", array{})]}
+    GetSelection<public>()<decides><transacts>:editor_selection = editor_selection[VhObjectFrom[VhCallValue(Handle, "get_selection", array{})]]
     InspectObject<public>(Object:object, ?ForProperty:string = "", ?InspectorOnly:logic = false)<transacts>:void = VhCallVoid(Handle, "inspect_object", array{VhFromObject(Object), VhFromString(ForProperty), VhFromLogic(InspectorOnly)})
     IsMultiWindowEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_multi_window_enabled", array{}))
     IsNode3dSnapEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_node_3d_snap_enabled", array{}))
@@ -27950,7 +27950,7 @@ editor_undo_redo_manager<public> := class(object):
     CommitAction<public>(?Execute:logic = true)<transacts>:void = VhCallVoid(Handle, "commit_action", array{VhFromLogic(Execute)})
     CreateAction<public>(Name:string, MergeMode:undo_redo_merge_mode, CustomContext:object, ?BackwardUndoOps:logic = false, ?MarkUnsaved:logic = true)<transacts>:void = VhCallVoid(Handle, "create_action", array{VhFromString(Name), VhFromUndoRedoMergeMode(MergeMode), VhFromObject(CustomContext), VhFromLogic(BackwardUndoOps), VhFromLogic(MarkUnsaved)})
     ForceFixedHistory<public>()<transacts>:void = VhCallVoid(Handle, "force_fixed_history", array{})
-    GetHistoryUndoRedo<public>(Id:int)<decides><transacts>:undo_redo = undo_redo{Handle := VhToHandle[VhCallValue(Handle, "get_history_undo_redo", array{VhFromInt(Id)})]}
+    GetHistoryUndoRedo<public>(Id:int)<decides><transacts>:undo_redo = undo_redo[VhObjectFrom[VhCallValue(Handle, "get_history_undo_redo", array{VhFromInt(Id)})]]
     GetObjectHistoryId<public>(Object:object)<transacts>:int = VhToInt(VhCallValue(Handle, "get_object_history_id", array{VhFromObject(Object)}))
     IsCommittingAction<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_committing_action", array{}))
 
@@ -27997,13 +27997,13 @@ engine<public> := class(object):
     GetFramesPerSecond<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_frames_per_second", array{}))
     GetLicenseInfo<public>()<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_license_info", array{}))
     GetLicenseText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_license_text", array{}))
-    GetMainLoop<public>()<decides><transacts>:main_loop = main_loop{Handle := VhToHandle[VhCallValue(Handle, "get_main_loop", array{})]}
+    GetMainLoop<public>()<decides><transacts>:main_loop = main_loop[VhObjectFrom[VhCallValue(Handle, "get_main_loop", array{})]]
     GetPhysicsFrames<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_physics_frames", array{}))
     GetPhysicsInterpolationFraction<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_physics_interpolation_fraction", array{}))
     GetProcessFrames<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_process_frames", array{}))
-    GetScriptLanguage<public>(Index:int)<decides><transacts>:script_language = script_language{Handle := VhToHandle[VhCallValue(Handle, "get_script_language", array{VhFromInt(Index)})]}
+    GetScriptLanguage<public>(Index:int)<decides><transacts>:script_language = script_language[VhObjectFrom[VhCallValue(Handle, "get_script_language", array{VhFromInt(Index)})]]
     GetScriptLanguageCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_script_language_count", array{}))
-    GetSingleton<public>(Name:string)<decides><transacts>:object = object{Handle := VhToHandle[VhCallValue(Handle, "get_singleton", array{VhFromStringName(Name)})]}
+    GetSingleton<public>(Name:string)<decides><transacts>:object = object[VhObjectFrom[VhCallValue(Handle, "get_singleton", array{VhFromStringName(Name)})]]
     GetSingletonList<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_singleton_list", array{}))
     GetVersionInfo<public>()<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_version_info", array{}))
     GetWriteMoviePath<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_write_movie_path", array{}))
@@ -28046,7 +28046,7 @@ framebuffer_cache_rd<public> := class(object):
 
 gd_extension_manager<public> := class(object):
 
-    GetExtension<public>(Path:string)<decides><transacts>:gd_extension = gd_extension{Handle := VhToHandle[VhCallValue(Handle, "get_extension", array{VhFromString(Path)})]}
+    GetExtension<public>(Path:string)<decides><transacts>:gd_extension = gd_extension[VhObjectFrom[VhCallValue(Handle, "get_extension", array{VhFromString(Path)})]]
     GetLoadedExtensions<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_loaded_extensions", array{}))
     IsExtensionLoaded<public>(Path:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_extension_loaded", array{VhFromString(Path)}))
     LoadExtension<public>(Path:string)<transacts>:gd_extension_manager_load_status = VhToGdExtensionManagerLoadStatus(VhCallValue(Handle, "load_extension", array{VhFromString(Path)}))
@@ -28205,16 +28205,16 @@ ip<public> := class(object):
 
 java_class_wrapper<public> := class(object):
 
-    GetException<public>()<decides><transacts>:java_object = java_object{Handle := VhToHandle[VhCallValue(Handle, "get_exception", array{})]}
-    Wrap<public>(Name:string)<decides><transacts>:java_class = java_class{Handle := VhToHandle[VhCallValue(Handle, "wrap", array{VhFromString(Name)})]}
+    GetException<public>()<decides><transacts>:java_object = java_object[VhObjectFrom[VhCallValue(Handle, "get_exception", array{})]]
+    Wrap<public>(Name:string)<decides><transacts>:java_class = java_class[VhObjectFrom[VhCallValue(Handle, "wrap", array{VhFromString(Name)})]]
 
 java_script_bridge<public> := class(object):
 
-    CreateCallback<public>(Callable:callable)<decides><transacts>:java_script_object = java_script_object{Handle := VhToHandle[VhCallValue(Handle, "create_callback", array{VhFromCallable(Callable)})]}
+    CreateCallback<public>(Callable:callable)<decides><transacts>:java_script_object = java_script_object[VhObjectFrom[VhCallValue(Handle, "create_callback", array{VhFromCallable(Callable)})]]
     DownloadBuffer<public>(Buffer:[]int, Name:string, ?Mime:string = "application/octet-stream")<transacts>:void = VhCallVoid(Handle, "download_buffer", array{VhFromByteArray(Buffer), VhFromString(Name), VhFromString(Mime)})
     Eval<public>(Code:string, ?UseGlobalExecutionContext:logic = false)<transacts>:variant = VhToVariant(VhCallValue(Handle, "eval", array{VhFromString(Code), VhFromLogic(UseGlobalExecutionContext)}))
     ForceFsSync<public>()<transacts>:void = VhCallVoid(Handle, "force_fs_sync", array{})
-    GetInterface<public>(Interface:string)<decides><transacts>:java_script_object = java_script_object{Handle := VhToHandle[VhCallValue(Handle, "get_interface", array{VhFromString(Interface)})]}
+    GetInterface<public>(Interface:string)<decides><transacts>:java_script_object = java_script_object[VhObjectFrom[VhCallValue(Handle, "get_interface", array{VhFromString(Interface)})]]
     IsJsBuffer<public>(JavascriptObject:java_script_object)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_js_buffer", array{VhFromObject(JavascriptObject)}))
     JsBufferToPackedByteArray<public>(JavascriptBuffer:java_script_object)<transacts>:[]int = VhToInts(VhCallValue(Handle, "js_buffer_to_packed_byte_array", array{VhFromObject(JavascriptBuffer)}))
     PwaNeedsUpdate<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "pwa_needs_update", array{}))
@@ -28267,7 +28267,7 @@ native_menu<public> := class(object):
     GetItemAccelerator<public>(Rid:int, Idx:int)<transacts>:key = VhToKey(VhCallValue(Handle, "get_item_accelerator", array{VhFromRid(Rid), VhFromInt(Idx)}))
     GetItemCallback<public>(Rid:int, Idx:int)<transacts>:callable = VhToCallable(VhCallValue(Handle, "get_item_callback", array{VhFromRid(Rid), VhFromInt(Idx)}))
     GetItemCount<public>(Rid:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_item_count", array{VhFromRid(Rid)}))
-    GetItemIcon<public>(Rid:int, Idx:int)<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_item_icon", array{VhFromRid(Rid), VhFromInt(Idx)})]}
+    GetItemIcon<public>(Rid:int, Idx:int)<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_item_icon", array{VhFromRid(Rid), VhFromInt(Idx)})]]
     GetItemIndentationLevel<public>(Rid:int, Idx:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_item_indentation_level", array{VhFromRid(Rid), VhFromInt(Idx)}))
     GetItemKeyCallback<public>(Rid:int, Idx:int)<transacts>:callable = VhToCallable(VhCallValue(Handle, "get_item_key_callback", array{VhFromRid(Rid), VhFromInt(Idx)}))
     GetItemMaxStates<public>(Rid:int, Idx:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_item_max_states", array{VhFromRid(Rid), VhFromInt(Idx)}))
@@ -28668,39 +28668,39 @@ node<public> := class(object):
     AtrN<public>(Message:string, PluralMessage:string, N:int, ?Context:string = "")<transacts>:string = VhToString(VhCallValue(Handle, "atr_n", array{VhFromString(Message), VhFromStringName(PluralMessage), VhFromInt(N), VhFromStringName(Context)}))
     CanAutoTranslate<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "can_auto_translate", array{}))
     CanProcess<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "can_process", array{}))
-    CreateTween<public>()<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "create_tween", array{})]}
-    Duplicate<public>(?Flags:int = 15)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "duplicate", array{VhFromInt(Flags)})]}
-    FindChild<public>(Pattern:string, ?Recursive:logic = true, ?Owned:logic = true)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "find_child", array{VhFromString(Pattern), VhFromLogic(Recursive), VhFromLogic(Owned)})]}
+    CreateTween<public>()<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "create_tween", array{})]]
+    Duplicate<public>(?Flags:int = 15)<decides><transacts>:node = node[VhObjectFrom[VhCallValue(Handle, "duplicate", array{VhFromInt(Flags)})]]
+    FindChild<public>(Pattern:string, ?Recursive:logic = true, ?Owned:logic = true)<decides><transacts>:node = node[VhObjectFrom[VhCallValue(Handle, "find_child", array{VhFromString(Pattern), VhFromLogic(Recursive), VhFromLogic(Owned)})]]
     FindChildren<public>(Pattern:string, ?Type:string = "", ?Recursive:logic = true, ?Owned:logic = true)<transacts>:typed_array(node) = VhToNodeArray(VhCallValue(Handle, "find_children", array{VhFromString(Pattern), VhFromString(Type), VhFromLogic(Recursive), VhFromLogic(Owned)}))
-    FindParent<public>(Pattern:string)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "find_parent", array{VhFromString(Pattern)})]}
+    FindParent<public>(Pattern:string)<decides><transacts>:node = node[VhObjectFrom[VhCallValue(Handle, "find_parent", array{VhFromString(Pattern)})]]
     GetAccessibilityElement<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_accessibility_element", array{}))
-    GetChild<public>(Idx:int, ?IncludeInternal:logic = false)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_child", array{VhFromInt(Idx), VhFromLogic(IncludeInternal)})]}
+    GetChild<public>(Idx:int, ?IncludeInternal:logic = false)<decides><transacts>:node = node[VhObjectFrom[VhCallValue(Handle, "get_child", array{VhFromInt(Idx), VhFromLogic(IncludeInternal)})]]
     GetChildCount<public>(?IncludeInternal:logic = false)<transacts>:int = VhToInt(VhCallValue(Handle, "get_child_count", array{VhFromLogic(IncludeInternal)}))
     GetChildren<public>(?IncludeInternal:logic = false)<transacts>:typed_array(node) = VhToNodeArray(VhCallValue(Handle, "get_children", array{VhFromLogic(IncludeInternal)}))
     GetEditorDescription<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_editor_description", array{}))
     GetGroups<public>()<transacts>:typed_array(string) = VhToStringNameArray(VhCallValue(Handle, "get_groups", array{}))
     GetIndex<public>(?IncludeInternal:logic = false)<transacts>:int = VhToInt(VhCallValue(Handle, "get_index", array{VhFromLogic(IncludeInternal)}))
-    GetLastExclusiveWindow<public>()<decides><transacts>:window = window{Handle := VhToHandle[VhCallValue(Handle, "get_last_exclusive_window", array{})]}
-    GetMultiplayer<public>()<decides><transacts>:multiplayer_api = multiplayer_api{Handle := VhToHandle[VhCallValue(Handle, "get_multiplayer", array{})]}
+    GetLastExclusiveWindow<public>()<decides><transacts>:window = window[VhObjectFrom[VhCallValue(Handle, "get_last_exclusive_window", array{})]]
+    GetMultiplayer<public>()<decides><transacts>:multiplayer_api = multiplayer_api[VhObjectFrom[VhCallValue(Handle, "get_multiplayer", array{})]]
     GetMultiplayerAuthority<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_multiplayer_authority", array{}))
     GetName<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_name", array{}))
-    GetNode<public>(Path:string)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_node", array{VhFromNodePath(Path)})]}
+    GetNode<public>(Path:string)<decides><transacts>:node = node[VhObjectFrom[VhCallValue(Handle, "get_node", array{VhFromNodePath(Path)})]]
     GetNodeAndResource<public>(Path:string)<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_node_and_resource", array{VhFromNodePath(Path)}))
-    GetNodeOrNull<public>(Path:string)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_node_or_null", array{VhFromNodePath(Path)})]}
+    GetNodeOrNull<public>(Path:string)<decides><transacts>:node = node[VhObjectFrom[VhCallValue(Handle, "get_node_or_null", array{VhFromNodePath(Path)})]]
     GetNodeRpcConfig<public>()<transacts>:variant = VhToVariant(VhCallValue(Handle, "get_node_rpc_config", array{}))
-    GetOwner<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_owner", array{})]}
-    GetParent<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_parent", array{})]}
+    GetOwner<public>()<decides><transacts>:node = node[VhObjectFrom[VhCallValue(Handle, "get_owner", array{})]]
+    GetParent<public>()<decides><transacts>:node = node[VhObjectFrom[VhCallValue(Handle, "get_parent", array{})]]
     GetPath<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_path", array{}))
     GetPathTo<public>(Node:node, ?UseUniquePath:logic = false)<transacts>:string = VhToString(VhCallValue(Handle, "get_path_to", array{VhFromObject(Node), VhFromLogic(UseUniquePath)}))
     GetPhysicsProcessDeltaTime<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_physics_process_delta_time", array{}))
     GetProcessDeltaTime<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_process_delta_time", array{}))
     GetSceneFilePath<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_scene_file_path", array{}))
     GetSceneInstanceLoadPlaceholder<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_scene_instance_load_placeholder", array{}))
-    GetTree<public>()<decides><transacts>:scene_tree = scene_tree{Handle := VhToHandle[VhCallValue(Handle, "get_tree", array{})]}
+    GetTree<public>()<decides><transacts>:scene_tree = scene_tree[VhObjectFrom[VhCallValue(Handle, "get_tree", array{})]]
     GetTreeString<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_tree_string", array{}))
     GetTreeStringPretty<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_tree_string_pretty", array{}))
-    GetViewport<public>()<decides><transacts>:viewport = viewport{Handle := VhToHandle[VhCallValue(Handle, "get_viewport", array{})]}
-    GetWindow<public>()<decides><transacts>:window = window{Handle := VhToHandle[VhCallValue(Handle, "get_window", array{})]}
+    GetViewport<public>()<decides><transacts>:viewport = viewport[VhObjectFrom[VhCallValue(Handle, "get_viewport", array{})]]
+    GetWindow<public>()<decides><transacts>:window = window[VhObjectFrom[VhCallValue(Handle, "get_window", array{})]]
     HasNode<public>(Path:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_node", array{VhFromNodePath(Path)}))
     HasNodeAndResource<public>(Path:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_node_and_resource", array{VhFromNodePath(Path)}))
     IsAncestorOf<public>(Node:node)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_ancestor_of", array{VhFromObject(Node)}))
@@ -28761,7 +28761,7 @@ node<public> := class(object):
 
 open_xr_extension_wrapper<public> := class(object):
 
-    GetOpenxrApi<public>()<decides><transacts>:open_xrapi_extension = open_xrapi_extension{Handle := VhToHandle[VhCallValue(Handle, "get_openxr_api", array{})]}
+    GetOpenxrApi<public>()<decides><transacts>:open_xrapi_extension = open_xrapi_extension[VhObjectFrom[VhCallValue(Handle, "get_openxr_api", array{})]]
     RegisterExtensionWrapper<public>()<transacts>:void = VhCallVoid(Handle, "register_extension_wrapper", array{})
 
 open_xr_interaction_profile_metadata<public> := class(object):
@@ -28913,7 +28913,7 @@ physics_direct_body_state2d<public> := class(object):
     GetConstantTorque<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_constant_torque", array{}))
     GetContactCollider<public>(ContactIdx:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_contact_collider", array{VhFromInt(ContactIdx)}))
     GetContactColliderId<public>(ContactIdx:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_contact_collider_id", array{VhFromInt(ContactIdx)}))
-    GetContactColliderObject<public>(ContactIdx:int)<decides><transacts>:object = object{Handle := VhToHandle[VhCallValue(Handle, "get_contact_collider_object", array{VhFromInt(ContactIdx)})]}
+    GetContactColliderObject<public>(ContactIdx:int)<decides><transacts>:object = object[VhObjectFrom[VhCallValue(Handle, "get_contact_collider_object", array{VhFromInt(ContactIdx)})]]
     GetContactColliderPosition<public>(ContactIdx:int)<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_contact_collider_position", array{VhFromInt(ContactIdx)}))
     GetContactColliderShape<public>(ContactIdx:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_contact_collider_shape", array{VhFromInt(ContactIdx)}))
     GetContactColliderVelocityAtPosition<public>(ContactIdx:int)<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_contact_collider_velocity_at_position", array{VhFromInt(ContactIdx)}))
@@ -28925,7 +28925,7 @@ physics_direct_body_state2d<public> := class(object):
     GetContactLocalVelocityAtPosition<public>(ContactIdx:int)<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_contact_local_velocity_at_position", array{VhFromInt(ContactIdx)}))
     GetInverseInertia<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_inverse_inertia", array{}))
     GetInverseMass<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_inverse_mass", array{}))
-    GetSpaceState<public>()<decides><transacts>:physics_direct_space_state2d = physics_direct_space_state2d{Handle := VhToHandle[VhCallValue(Handle, "get_space_state", array{})]}
+    GetSpaceState<public>()<decides><transacts>:physics_direct_space_state2d = physics_direct_space_state2d[VhObjectFrom[VhCallValue(Handle, "get_space_state", array{})]]
     GetStep<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_step", array{}))
     GetTotalAngularDamp<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_total_angular_damp", array{}))
     GetTotalGravity<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_total_gravity", array{}))
@@ -28991,7 +28991,7 @@ physics_direct_body_state3d<public> := class(object):
     GetConstantTorque<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_constant_torque", array{}))
     GetContactCollider<public>(ContactIdx:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_contact_collider", array{VhFromInt(ContactIdx)}))
     GetContactColliderId<public>(ContactIdx:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_contact_collider_id", array{VhFromInt(ContactIdx)}))
-    GetContactColliderObject<public>(ContactIdx:int)<decides><transacts>:object = object{Handle := VhToHandle[VhCallValue(Handle, "get_contact_collider_object", array{VhFromInt(ContactIdx)})]}
+    GetContactColliderObject<public>(ContactIdx:int)<decides><transacts>:object = object[VhObjectFrom[VhCallValue(Handle, "get_contact_collider_object", array{VhFromInt(ContactIdx)})]]
     GetContactColliderPosition<public>(ContactIdx:int)<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_contact_collider_position", array{VhFromInt(ContactIdx)}))
     GetContactColliderShape<public>(ContactIdx:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_contact_collider_shape", array{VhFromInt(ContactIdx)}))
     GetContactColliderVelocityAtPosition<public>(ContactIdx:int)<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_contact_collider_velocity_at_position", array{VhFromInt(ContactIdx)}))
@@ -29005,7 +29005,7 @@ physics_direct_body_state3d<public> := class(object):
     GetInverseInertiaTensor<public>()<transacts>:basis = VhToBasis(VhCallValue(Handle, "get_inverse_inertia_tensor", array{}))
     GetInverseMass<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_inverse_mass", array{}))
     GetPrincipalInertiaAxes<public>()<transacts>:basis = VhToBasis(VhCallValue(Handle, "get_principal_inertia_axes", array{}))
-    GetSpaceState<public>()<decides><transacts>:physics_direct_space_state3d = physics_direct_space_state3d{Handle := VhToHandle[VhCallValue(Handle, "get_space_state", array{})]}
+    GetSpaceState<public>()<decides><transacts>:physics_direct_space_state3d = physics_direct_space_state3d[VhObjectFrom[VhCallValue(Handle, "get_space_state", array{})]]
     GetStep<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_step", array{}))
     GetTotalAngularDamp<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_total_angular_damp", array{}))
     GetTotalGravity<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_total_gravity", array{}))
@@ -29086,7 +29086,7 @@ physics_server2d<public> := class(object):
     BodyGetConstantForce<public>(Body:int)<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "body_get_constant_force", array{VhFromRid(Body)}))
     BodyGetConstantTorque<public>(Body:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "body_get_constant_torque", array{VhFromRid(Body)}))
     BodyGetContinuousCollisionDetectionMode<public>(Body:int)<transacts>:physics_server2d_ccd_mode = VhToPhysicsServer2dCcdMode(VhCallValue(Handle, "body_get_continuous_collision_detection_mode", array{VhFromRid(Body)}))
-    BodyGetDirectState<public>(Body:int)<decides><transacts>:physics_direct_body_state2d = physics_direct_body_state2d{Handle := VhToHandle[VhCallValue(Handle, "body_get_direct_state", array{VhFromRid(Body)})]}
+    BodyGetDirectState<public>(Body:int)<decides><transacts>:physics_direct_body_state2d = physics_direct_body_state2d[VhObjectFrom[VhCallValue(Handle, "body_get_direct_state", array{VhFromRid(Body)})]]
     BodyGetMaxContactsReported<public>(Body:int)<transacts>:int = VhToInt(VhCallValue(Handle, "body_get_max_contacts_reported", array{VhFromRid(Body)}))
     BodyGetMode<public>(Body:int)<transacts>:physics_server2d_body_mode = VhToPhysicsServer2dBodyMode(VhCallValue(Handle, "body_get_mode", array{VhFromRid(Body)}))
     BodyGetObjectInstanceId<public>(Body:int)<transacts>:int = VhToInt(VhCallValue(Handle, "body_get_object_instance_id", array{VhFromRid(Body)}))
@@ -29150,7 +29150,7 @@ physics_server2d<public> := class(object):
     ShapeGetType<public>(Shape:int)<transacts>:physics_server2d_shape_type = VhToPhysicsServer2dShapeType(VhCallValue(Handle, "shape_get_type", array{VhFromRid(Shape)}))
     ShapeSetData<public>(Shape:int, Data:variant)<transacts>:void = VhCallVoid(Handle, "shape_set_data", array{VhFromRid(Shape), VhFromVariant(Data)})
     SpaceCreate<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "space_create", array{}))
-    SpaceGetDirectState<public>(Space:int)<decides><transacts>:physics_direct_space_state2d = physics_direct_space_state2d{Handle := VhToHandle[VhCallValue(Handle, "space_get_direct_state", array{VhFromRid(Space)})]}
+    SpaceGetDirectState<public>(Space:int)<decides><transacts>:physics_direct_space_state2d = physics_direct_space_state2d[VhObjectFrom[VhCallValue(Handle, "space_get_direct_state", array{VhFromRid(Space)})]]
     SpaceGetParam<public>(Space:int, Param:physics_server2d_space_parameter)<transacts>:float = VhToFloat(VhCallValue(Handle, "space_get_param", array{VhFromRid(Space), VhFromPhysicsServer2dSpaceParameter(Param)}))
     SpaceIsActive<public>(Space:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "space_is_active", array{VhFromRid(Space)}))
     SpaceSetActive<public>(Space:int, Active:logic)<transacts>:void = VhCallVoid(Handle, "space_set_active", array{VhFromRid(Space), VhFromLogic(Active)})
@@ -29209,7 +29209,7 @@ physics_server3d<public> := class(object):
     BodyGetCollisionPriority<public>(Body:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "body_get_collision_priority", array{VhFromRid(Body)}))
     BodyGetConstantForce<public>(Body:int)<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "body_get_constant_force", array{VhFromRid(Body)}))
     BodyGetConstantTorque<public>(Body:int)<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "body_get_constant_torque", array{VhFromRid(Body)}))
-    BodyGetDirectState<public>(Body:int)<decides><transacts>:physics_direct_body_state3d = physics_direct_body_state3d{Handle := VhToHandle[VhCallValue(Handle, "body_get_direct_state", array{VhFromRid(Body)})]}
+    BodyGetDirectState<public>(Body:int)<decides><transacts>:physics_direct_body_state3d = physics_direct_body_state3d[VhObjectFrom[VhCallValue(Handle, "body_get_direct_state", array{VhFromRid(Body)})]]
     BodyGetMaxContactsReported<public>(Body:int)<transacts>:int = VhToInt(VhCallValue(Handle, "body_get_max_contacts_reported", array{VhFromRid(Body)}))
     BodyGetMode<public>(Body:int)<transacts>:physics_server3d_body_mode = VhToPhysicsServer3dBodyMode(VhCallValue(Handle, "body_get_mode", array{VhFromRid(Body)}))
     BodyGetObjectInstanceId<public>(Body:int)<transacts>:int = VhToInt(VhCallValue(Handle, "body_get_object_instance_id", array{VhFromRid(Body)}))
@@ -29332,7 +29332,7 @@ physics_server3d<public> := class(object):
     SoftBodySetTransform<public>(Body:int, Transform:transform3d)<transacts>:void = VhCallVoid(Handle, "soft_body_set_transform", array{VhFromRid(Body), VhFromTransform3D(Transform)})
     SoftBodyUpdateRenderingServer<public>(Body:int, RenderingServerHandler:physics_server3d_rendering_server_handler)<transacts>:void = VhCallVoid(Handle, "soft_body_update_rendering_server", array{VhFromRid(Body), VhFromObject(RenderingServerHandler)})
     SpaceCreate<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "space_create", array{}))
-    SpaceGetDirectState<public>(Space:int)<decides><transacts>:physics_direct_space_state3d = physics_direct_space_state3d{Handle := VhToHandle[VhCallValue(Handle, "space_get_direct_state", array{VhFromRid(Space)})]}
+    SpaceGetDirectState<public>(Space:int)<decides><transacts>:physics_direct_space_state3d = physics_direct_space_state3d[VhObjectFrom[VhCallValue(Handle, "space_get_direct_state", array{VhFromRid(Space)})]]
     SpaceGetParam<public>(Space:int, Param:physics_server3d_space_parameter)<transacts>:float = VhToFloat(VhCallValue(Handle, "space_get_param", array{VhFromRid(Space), VhFromPhysicsServer3dSpaceParameter(Param)}))
     SpaceIsActive<public>(Space:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "space_is_active", array{VhFromRid(Space)}))
     SpaceSetActive<public>(Space:int, Active:logic)<transacts>:void = VhCallVoid(Handle, "space_set_active", array{VhFromRid(Space), VhFromLogic(Active)})
@@ -29386,8 +29386,8 @@ render_data<public> := class(object):
 
     GetCameraAttributes<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_camera_attributes", array{}))
     GetEnvironment<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_environment", array{}))
-    GetRenderSceneBuffers<public>()<decides><transacts>:render_scene_buffers = render_scene_buffers{Handle := VhToHandle[VhCallValue(Handle, "get_render_scene_buffers", array{})]}
-    GetRenderSceneData<public>()<decides><transacts>:render_scene_data = render_scene_data{Handle := VhToHandle[VhCallValue(Handle, "get_render_scene_data", array{})]}
+    GetRenderSceneBuffers<public>()<decides><transacts>:render_scene_buffers = render_scene_buffers[VhObjectFrom[VhCallValue(Handle, "get_render_scene_buffers", array{})]]
+    GetRenderSceneData<public>()<decides><transacts>:render_scene_data = render_scene_data[VhObjectFrom[VhCallValue(Handle, "get_render_scene_data", array{})]]
 
 render_scene_data<public> := class(object):
 
@@ -29418,7 +29418,7 @@ rendering_device<public> := class(object):
     ComputeListSetPushConstant<public>(ComputeList:int, Buffer:[]int, SizeBytes:int)<transacts>:void = VhCallVoid(Handle, "compute_list_set_push_constant", array{VhFromInt(ComputeList), VhFromByteArray(Buffer), VhFromInt(SizeBytes)})
     ComputePipelineCreate<public>(Shader:int, SpecializationConstants:typed_array(rd_pipeline_specialization_constant))<transacts>:int = VhToInt(VhCallValue(Handle, "compute_pipeline_create", array{VhFromRid(Shader), VhFromRDPipelineSpecializationConstantArray(SpecializationConstants)}))
     ComputePipelineIsValid<public>(ComputePipeline:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "compute_pipeline_is_valid", array{VhFromRid(ComputePipeline)}))
-    CreateLocalDevice<public>()<decides><transacts>:rendering_device = rendering_device{Handle := VhToHandle[VhCallValue(Handle, "create_local_device", array{})]}
+    CreateLocalDevice<public>()<decides><transacts>:rendering_device = rendering_device[VhObjectFrom[VhCallValue(Handle, "create_local_device", array{})]]
     DrawCommandBeginLabel<public>(Name:string, Color:color)<transacts>:void = VhCallVoid(Handle, "draw_command_begin_label", array{VhFromString(Name), VhFromColor(Color)})
     DrawCommandEndLabel<public>()<transacts>:void = VhCallVoid(Handle, "draw_command_end_label", array{})
     DrawCommandInsertLabel<public>(Name:string, Color:color)<transacts>:void = VhCallVoid(Handle, "draw_command_insert_label", array{VhFromString(Name), VhFromColor(Color)})
@@ -29486,7 +29486,7 @@ rendering_device<public> := class(object):
     ScreenGetWidth<public>(?Screen:int = 0)<transacts>:int = VhToInt(VhCallValue(Handle, "screen_get_width", array{VhFromInt(Screen)}))
     SetResourceName<public>(Id:int, Name:string)<transacts>:void = VhCallVoid(Handle, "set_resource_name", array{VhFromRid(Id), VhFromString(Name)})
     ShaderCompileBinaryFromSpirv<public>(SpirvData:rd_shader_spirv, ?Name:string = "")<transacts>:[]int = VhToInts(VhCallValue(Handle, "shader_compile_binary_from_spirv", array{VhFromObject(SpirvData), VhFromString(Name)}))
-    ShaderCompileSpirvFromSource<public>(ShaderSource:rd_shader_source, ?AllowCache:logic = true)<decides><transacts>:rd_shader_spirv = rd_shader_spirv{Handle := VhToHandle[VhCallValue(Handle, "shader_compile_spirv_from_source", array{VhFromObject(ShaderSource), VhFromLogic(AllowCache)})]}
+    ShaderCompileSpirvFromSource<public>(ShaderSource:rd_shader_source, ?AllowCache:logic = true)<decides><transacts>:rd_shader_spirv = rd_shader_spirv[VhObjectFrom[VhCallValue(Handle, "shader_compile_spirv_from_source", array{VhFromObject(ShaderSource), VhFromLogic(AllowCache)})]]
     ShaderCreateFromBytecode<public>(BinaryData:[]int, PlaceholderRid:int)<transacts>:int = VhToInt(VhCallValue(Handle, "shader_create_from_bytecode", array{VhFromByteArray(BinaryData), VhFromRid(PlaceholderRid)}))
     ShaderCreateFromSpirv<public>(SpirvData:rd_shader_spirv, ?Name:string = "")<transacts>:int = VhToInt(VhCallValue(Handle, "shader_create_from_spirv", array{VhFromObject(SpirvData), VhFromString(Name)}))
     ShaderCreatePlaceholder<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "shader_create_placeholder", array{}))
@@ -29503,7 +29503,7 @@ rendering_device<public> := class(object):
     TextureCreateSharedFromSlice<public>(View:rd_texture_view, WithTexture:int, Layer:int, Mipmap:int, Mipmaps:int, SliceType:rendering_device_texture_slice_type)<transacts>:int = VhToInt(VhCallValue(Handle, "texture_create_shared_from_slice", array{VhFromObject(View), VhFromRid(WithTexture), VhFromInt(Layer), VhFromInt(Mipmap), VhFromInt(Mipmaps), VhFromRenderingDeviceTextureSliceType(SliceType)}))
     TextureGetData<public>(Texture:int, Layer:int)<transacts>:[]int = VhToInts(VhCallValue(Handle, "texture_get_data", array{VhFromRid(Texture), VhFromInt(Layer)}))
     TextureGetDataAsync<public>(Texture:int, Layer:int, Callback:callable)<transacts>:error = VhToError(VhCallValue(Handle, "texture_get_data_async", array{VhFromRid(Texture), VhFromInt(Layer), VhFromCallable(Callback)}))
-    TextureGetFormat<public>(Texture:int)<decides><transacts>:rd_texture_format = rd_texture_format{Handle := VhToHandle[VhCallValue(Handle, "texture_get_format", array{VhFromRid(Texture)})]}
+    TextureGetFormat<public>(Texture:int)<decides><transacts>:rd_texture_format = rd_texture_format[VhObjectFrom[VhCallValue(Handle, "texture_get_format", array{VhFromRid(Texture)})]]
     TextureGetNativeHandle<public>(Texture:int)<transacts>:int = VhToInt(VhCallValue(Handle, "texture_get_native_handle", array{VhFromRid(Texture)}))
     TextureIsDiscardable<public>(Texture:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "texture_is_discardable", array{VhFromRid(Texture)}))
     TextureIsFormatSupportedForUsage<public>(Format:rendering_device_data_format, UsageFlags:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "texture_is_format_supported_for_usage", array{VhFromRenderingDeviceDataFormat(Format), VhFromInt(UsageFlags)}))
@@ -29647,7 +29647,7 @@ rendering_server<public> := class(object):
     CompositorEffectSetEnabled<public>(Effect:int, Enabled:logic)<transacts>:void = VhCallVoid(Handle, "compositor_effect_set_enabled", array{VhFromRid(Effect), VhFromLogic(Enabled)})
     CompositorEffectSetFlag<public>(Effect:int, Flag:rendering_server_compositor_effect_flags, Arg2:logic)<transacts>:void = VhCallVoid(Handle, "compositor_effect_set_flag", array{VhFromRid(Effect), VhFromRenderingServerCompositorEffectFlags(Flag), VhFromLogic(Arg2)})
     CompositorSetCompositorEffects<public>(Compositor:int, Effects:typed_array(int))<transacts>:void = VhCallVoid(Handle, "compositor_set_compositor_effects", array{VhFromRid(Compositor), VhFromRIDArray(Effects)})
-    CreateLocalRenderingDevice<public>()<decides><transacts>:rendering_device = rendering_device{Handle := VhToHandle[VhCallValue(Handle, "create_local_rendering_device", array{})]}
+    CreateLocalRenderingDevice<public>()<decides><transacts>:rendering_device = rendering_device[VhObjectFrom[VhCallValue(Handle, "create_local_rendering_device", array{})]]
     DebugCanvasItemGetRect<public>(Item:int)<transacts>:rect2 = VhToRect2(VhCallValue(Handle, "debug_canvas_item_get_rect", array{VhFromRid(Item)}))
     DecalCreate<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "decal_create", array{}))
     DecalSetAlbedoMix<public>(Decal:int, AlbedoMix:float)<transacts>:void = VhCallVoid(Handle, "decal_set_albedo_mix", array{VhFromRid(Decal), VhFromFloat(AlbedoMix)})
@@ -29663,7 +29663,7 @@ rendering_server<public> := class(object):
     DirectionalLightCreate<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "directional_light_create", array{}))
     DirectionalShadowAtlasSetSize<public>(Size:int, Is16bits:logic)<transacts>:void = VhCallVoid(Handle, "directional_shadow_atlas_set_size", array{VhFromInt(Size), VhFromLogic(Is16bits)})
     DirectionalSoftShadowFilterSetQuality<public>(Quality:rendering_server_shadow_quality)<transacts>:void = VhCallVoid(Handle, "directional_soft_shadow_filter_set_quality", array{VhFromRenderingServerShadowQuality(Quality)})
-    EnvironmentBakePanorama<public>(Environment:int, BakeIrradiance:logic, Size:vector2i)<decides><transacts>:image = image{Handle := VhToHandle[VhCallValue(Handle, "environment_bake_panorama", array{VhFromRid(Environment), VhFromLogic(BakeIrradiance), VhFromVector2i(Size)})]}
+    EnvironmentBakePanorama<public>(Environment:int, BakeIrradiance:logic, Size:vector2i)<decides><transacts>:image = image[VhObjectFrom[VhCallValue(Handle, "environment_bake_panorama", array{VhFromRid(Environment), VhFromLogic(BakeIrradiance), VhFromVector2i(Size)})]]
     EnvironmentCreate<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "environment_create", array{}))
     EnvironmentGlowSetUseBicubicUpscale<public>(Enable:logic)<transacts>:void = VhCallVoid(Handle, "environment_glow_set_use_bicubic_upscale", array{VhFromLogic(Enable)})
     EnvironmentSetAdjustment<public>(Env:int, Enable:logic, Brightness:float, Contrast:float, Saturation:float, Use1dColorCorrection:logic, ColorCorrection:int)<transacts>:void = VhCallVoid(Handle, "environment_set_adjustment", array{VhFromRid(Env), VhFromLogic(Enable), VhFromFloat(Brightness), VhFromFloat(Contrast), VhFromFloat(Saturation), VhFromLogic(Use1dColorCorrection), VhFromRid(ColorCorrection)})
@@ -29705,7 +29705,7 @@ rendering_server<public> := class(object):
     GetCurrentRenderingMethod<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_current_rendering_method", array{}))
     GetDefaultClearColor<public>()<transacts>:color = VhToColor(VhCallValue(Handle, "get_default_clear_color", array{}))
     GetFrameSetupTimeCpu<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_frame_setup_time_cpu", array{}))
-    GetRenderingDevice<public>()<decides><transacts>:rendering_device = rendering_device{Handle := VhToHandle[VhCallValue(Handle, "get_rendering_device", array{})]}
+    GetRenderingDevice<public>()<decides><transacts>:rendering_device = rendering_device[VhObjectFrom[VhCallValue(Handle, "get_rendering_device", array{})]]
     GetRenderingInfo<public>(Info:rendering_server_rendering_info)<transacts>:int = VhToInt(VhCallValue(Handle, "get_rendering_info", array{VhFromRenderingServerRenderingInfo(Info)}))
     GetShaderParameterList<public>(Shader:int)<transacts>:typed_array(dictionary) = VhToDictionaryArray(VhCallValue(Handle, "get_shader_parameter_list", array{VhFromRid(Shader)}))
     GetTestCube<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_test_cube", array{}))
@@ -29944,7 +29944,7 @@ rendering_server<public> := class(object):
     SkeletonCreate<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "skeleton_create", array{}))
     SkeletonGetBoneCount<public>(Skeleton:int)<transacts>:int = VhToInt(VhCallValue(Handle, "skeleton_get_bone_count", array{VhFromRid(Skeleton)}))
     SkeletonSetBaseTransform2d<public>(Skeleton:int, BaseTransform:transform2d)<transacts>:void = VhCallVoid(Handle, "skeleton_set_base_transform_2d", array{VhFromRid(Skeleton), VhFromTransform2D(BaseTransform)})
-    SkyBakePanorama<public>(Sky:int, Energy:float, BakeIrradiance:logic, Size:vector2i)<decides><transacts>:image = image{Handle := VhToHandle[VhCallValue(Handle, "sky_bake_panorama", array{VhFromRid(Sky), VhFromFloat(Energy), VhFromLogic(BakeIrradiance), VhFromVector2i(Size)})]}
+    SkyBakePanorama<public>(Sky:int, Energy:float, BakeIrradiance:logic, Size:vector2i)<decides><transacts>:image = image[VhObjectFrom[VhCallValue(Handle, "sky_bake_panorama", array{VhFromRid(Sky), VhFromFloat(Energy), VhFromLogic(BakeIrradiance), VhFromVector2i(Size)})]]
     SkyCreate<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "sky_create", array{}))
     SkySetMaterial<public>(Sky:int, Material:int)<transacts>:void = VhCallVoid(Handle, "sky_set_material", array{VhFromRid(Sky), VhFromRid(Material)})
     SkySetMode<public>(Sky:int, Mode:rendering_server_sky_mode)<transacts>:void = VhCallVoid(Handle, "sky_set_mode", array{VhFromRid(Sky), VhFromRenderingServerSkyMode(Mode)})
@@ -29953,8 +29953,8 @@ rendering_server<public> := class(object):
     SubSurfaceScatteringSetQuality<public>(Quality:rendering_server_sub_surface_scattering_quality)<transacts>:void = VhCallVoid(Handle, "sub_surface_scattering_set_quality", array{VhFromRenderingServerSubSurfaceScatteringQuality(Quality)})
     SubSurfaceScatteringSetScale<public>(Scale:float, DepthScale:float)<transacts>:void = VhCallVoid(Handle, "sub_surface_scattering_set_scale", array{VhFromFloat(Scale), VhFromFloat(DepthScale)})
     Texture2dCreate<public>(Image:image)<transacts>:int = VhToInt(VhCallValue(Handle, "texture_2d_create", array{VhFromObject(Image)}))
-    Texture2dGet<public>(Texture:int)<decides><transacts>:image = image{Handle := VhToHandle[VhCallValue(Handle, "texture_2d_get", array{VhFromRid(Texture)})]}
-    Texture2dLayerGet<public>(Texture:int, Layer:int)<decides><transacts>:image = image{Handle := VhToHandle[VhCallValue(Handle, "texture_2d_layer_get", array{VhFromRid(Texture), VhFromInt(Layer)})]}
+    Texture2dGet<public>(Texture:int)<decides><transacts>:image = image[VhObjectFrom[VhCallValue(Handle, "texture_2d_get", array{VhFromRid(Texture)})]]
+    Texture2dLayerGet<public>(Texture:int, Layer:int)<decides><transacts>:image = image[VhObjectFrom[VhCallValue(Handle, "texture_2d_layer_get", array{VhFromRid(Texture), VhFromInt(Layer)})]]
     Texture2dLayeredCreate<public>(Layers:typed_array(image), LayeredType:rendering_server_texture_layered_type)<transacts>:int = VhToInt(VhCallValue(Handle, "texture_2d_layered_create", array{VhFromImageArray(Layers), VhFromRenderingServerTextureLayeredType(LayeredType)}))
     Texture2dLayeredPlaceholderCreate<public>(LayeredType:rendering_server_texture_layered_type)<transacts>:int = VhToInt(VhCallValue(Handle, "texture_2d_layered_placeholder_create", array{VhFromRenderingServerTextureLayeredType(LayeredType)}))
     Texture2dPlaceholderCreate<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "texture_2d_placeholder_create", array{}))
@@ -30053,14 +30053,14 @@ resource_loader<public> := class(object):
 
     AddResourceFormatLoader<public>(FormatLoader:resource_format_loader, ?AtFront:logic = false)<transacts>:void = VhCallVoid(Handle, "add_resource_format_loader", array{VhFromObject(FormatLoader), VhFromLogic(AtFront)})
     Exists<public>(Path:string, ?TypeHint:string = "")<transacts>:logic = VhToLogic(VhCallValue(Handle, "exists", array{VhFromString(Path), VhFromString(TypeHint)}))
-    GetCachedRef<public>(Path:string)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_cached_ref", array{VhFromString(Path)})]}
+    GetCachedRef<public>(Path:string)<decides><transacts>:resource = resource[VhObjectFrom[VhCallValue(Handle, "get_cached_ref", array{VhFromString(Path)})]]
     GetDependencies<public>(Path:string)<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_dependencies", array{VhFromString(Path)}))
     GetRecognizedExtensionsForType<public>(Type:string)<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_recognized_extensions_for_type", array{VhFromString(Type)}))
     GetResourceUid<public>(Path:string)<transacts>:int = VhToInt(VhCallValue(Handle, "get_resource_uid", array{VhFromString(Path)}))
     HasCached<public>(Path:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_cached", array{VhFromString(Path)}))
     ListDirectory<public>(DirectoryPath:string)<transacts>:[]string = VhToStrings(VhCallValue(Handle, "list_directory", array{VhFromString(DirectoryPath)}))
-    Load<public>(Path:string, TypeHint:string, CacheMode:resource_loader_cache_mode)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "load", array{VhFromString(Path), VhFromString(TypeHint), VhFromResourceLoaderCacheMode(CacheMode)})]}
-    LoadThreadedGet<public>(Path:string)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "load_threaded_get", array{VhFromString(Path)})]}
+    Load<public>(Path:string, TypeHint:string, CacheMode:resource_loader_cache_mode)<decides><transacts>:resource = resource[VhObjectFrom[VhCallValue(Handle, "load", array{VhFromString(Path), VhFromString(TypeHint), VhFromResourceLoaderCacheMode(CacheMode)})]]
+    LoadThreadedGet<public>(Path:string)<decides><transacts>:resource = resource[VhObjectFrom[VhCallValue(Handle, "load_threaded_get", array{VhFromString(Path)})]]
     LoadThreadedGetStatus<public>(Path:string, Progress:godot_array)<transacts>:resource_loader_thread_load_status = VhToResourceLoaderThreadLoadStatus(VhCallValue(Handle, "load_threaded_get_status", array{VhFromString(Path), VhFromArray(Progress)}))
     LoadThreadedRequest<public>(Path:string, TypeHint:string, UseSubThreads:logic, CacheMode:resource_loader_cache_mode)<transacts>:error = VhToError(VhCallValue(Handle, "load_threaded_request", array{VhFromString(Path), VhFromString(TypeHint), VhFromLogic(UseSubThreads), VhFromResourceLoaderCacheMode(CacheMode)}))
     RemoveResourceFormatLoader<public>(FormatLoader:resource_format_loader)<transacts>:void = VhCallVoid(Handle, "remove_resource_format_loader", array{VhFromObject(FormatLoader)})
@@ -30094,11 +30094,11 @@ shader_include_db<public> := class(object):
 text_server_manager<public> := class(object):
 
     AddInterface<public>(Interface:text_server)<transacts>:void = VhCallVoid(Handle, "add_interface", array{VhFromObject(Interface)})
-    FindInterface<public>(Name:string)<decides><transacts>:text_server = text_server{Handle := VhToHandle[VhCallValue(Handle, "find_interface", array{VhFromString(Name)})]}
-    GetInterface<public>(Idx:int)<decides><transacts>:text_server = text_server{Handle := VhToHandle[VhCallValue(Handle, "get_interface", array{VhFromInt(Idx)})]}
+    FindInterface<public>(Name:string)<decides><transacts>:text_server = text_server[VhObjectFrom[VhCallValue(Handle, "find_interface", array{VhFromString(Name)})]]
+    GetInterface<public>(Idx:int)<decides><transacts>:text_server = text_server[VhObjectFrom[VhCallValue(Handle, "get_interface", array{VhFromInt(Idx)})]]
     GetInterfaceCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_interface_count", array{}))
     GetInterfaces<public>()<transacts>:typed_array(dictionary) = VhToDictionaryArray(VhCallValue(Handle, "get_interfaces", array{}))
-    GetPrimaryInterface<public>()<decides><transacts>:text_server = text_server{Handle := VhToHandle[VhCallValue(Handle, "get_primary_interface", array{})]}
+    GetPrimaryInterface<public>()<decides><transacts>:text_server = text_server[VhObjectFrom[VhCallValue(Handle, "get_primary_interface", array{})]]
     RemoveInterface<public>(Interface:text_server)<transacts>:void = VhCallVoid(Handle, "remove_interface", array{VhFromObject(Interface)})
     SetPrimaryInterface<public>(Index:text_server)<transacts>:void = VhCallVoid(Handle, "set_primary_interface", array{VhFromObject(Index)})
 
@@ -30110,11 +30110,11 @@ theme_db<public> := class(object):
     var FallbackFontSize<public><getter(FallbackFontSizeGetter)><setter(FallbackFontSizeSetter)>:int = external {}
     FallbackFontSizeGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_fallback_font_size", array{}))
     FallbackFontSizeSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_fallback_font_size", array{VhFromInt(Value)})
-    GetDefaultTheme<public>()<decides><transacts>:theme = theme{Handle := VhToHandle[VhCallValue(Handle, "get_default_theme", array{})]}
-    GetFallbackFont<public>()<decides><transacts>:font = font{Handle := VhToHandle[VhCallValue(Handle, "get_fallback_font", array{})]}
-    GetFallbackIcon<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_fallback_icon", array{})]}
-    GetFallbackStylebox<public>()<decides><transacts>:style_box = style_box{Handle := VhToHandle[VhCallValue(Handle, "get_fallback_stylebox", array{})]}
-    GetProjectTheme<public>()<decides><transacts>:theme = theme{Handle := VhToHandle[VhCallValue(Handle, "get_project_theme", array{})]}
+    GetDefaultTheme<public>()<decides><transacts>:theme = theme[VhObjectFrom[VhCallValue(Handle, "get_default_theme", array{})]]
+    GetFallbackFont<public>()<decides><transacts>:font = font[VhObjectFrom[VhCallValue(Handle, "get_fallback_font", array{})]]
+    GetFallbackIcon<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_fallback_icon", array{})]]
+    GetFallbackStylebox<public>()<decides><transacts>:style_box = style_box[VhObjectFrom[VhCallValue(Handle, "get_fallback_stylebox", array{})]]
+    GetProjectTheme<public>()<decides><transacts>:theme = theme[VhObjectFrom[VhCallValue(Handle, "get_project_theme", array{})]]
     SetFallbackFont<public>(Font:font)<transacts>:void = VhCallVoid(Handle, "set_fallback_font", array{VhFromObject(Font)})
     SetFallbackIcon<public>(Icon:texture2d)<transacts>:void = VhCallVoid(Handle, "set_fallback_icon", array{VhFromObject(Icon)})
     SetFallbackStylebox<public>(Stylebox:style_box)<transacts>:void = VhCallVoid(Handle, "set_fallback_stylebox", array{VhFromObject(Stylebox)})
@@ -30182,10 +30182,10 @@ tile_data<public> := class(object):
     GetConstantLinearVelocity<public>(LayerId:int)<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_constant_linear_velocity", array{VhFromInt(LayerId)}))
     GetCustomData<public>(LayerName:string)<transacts>:variant = VhToVariant(VhCallValue(Handle, "get_custom_data", array{VhFromString(LayerName)}))
     GetCustomDataByLayerId<public>(LayerId:int)<transacts>:variant = VhToVariant(VhCallValue(Handle, "get_custom_data_by_layer_id", array{VhFromInt(LayerId)}))
-    GetMaterial<public>()<decides><transacts>:material = material{Handle := VhToHandle[VhCallValue(Handle, "get_material", array{})]}
-    GetNavigationPolygon<public>(LayerId:int, ?Arg1:logic = false, ?Arg2:logic = false, ?Arg3:logic = false)<decides><transacts>:navigation_polygon = navigation_polygon{Handle := VhToHandle[VhCallValue(Handle, "get_navigation_polygon", array{VhFromInt(LayerId), VhFromLogic(Arg1), VhFromLogic(Arg2), VhFromLogic(Arg3)})]}
-    GetOccluder<public>(LayerId:int, ?Arg1:logic = false, ?Arg2:logic = false, ?Arg3:logic = false)<decides><transacts>:occluder_polygon2d = occluder_polygon2d{Handle := VhToHandle[VhCallValue(Handle, "get_occluder", array{VhFromInt(LayerId), VhFromLogic(Arg1), VhFromLogic(Arg2), VhFromLogic(Arg3)})]}
-    GetOccluderPolygon<public>(LayerId:int, PolygonIndex:int, ?Arg2:logic = false, ?Arg3:logic = false, ?Arg4:logic = false)<decides><transacts>:occluder_polygon2d = occluder_polygon2d{Handle := VhToHandle[VhCallValue(Handle, "get_occluder_polygon", array{VhFromInt(LayerId), VhFromInt(PolygonIndex), VhFromLogic(Arg2), VhFromLogic(Arg3), VhFromLogic(Arg4)})]}
+    GetMaterial<public>()<decides><transacts>:material = material[VhObjectFrom[VhCallValue(Handle, "get_material", array{})]]
+    GetNavigationPolygon<public>(LayerId:int, ?Arg1:logic = false, ?Arg2:logic = false, ?Arg3:logic = false)<decides><transacts>:navigation_polygon = navigation_polygon[VhObjectFrom[VhCallValue(Handle, "get_navigation_polygon", array{VhFromInt(LayerId), VhFromLogic(Arg1), VhFromLogic(Arg2), VhFromLogic(Arg3)})]]
+    GetOccluder<public>(LayerId:int, ?Arg1:logic = false, ?Arg2:logic = false, ?Arg3:logic = false)<decides><transacts>:occluder_polygon2d = occluder_polygon2d[VhObjectFrom[VhCallValue(Handle, "get_occluder", array{VhFromInt(LayerId), VhFromLogic(Arg1), VhFromLogic(Arg2), VhFromLogic(Arg3)})]]
+    GetOccluderPolygon<public>(LayerId:int, PolygonIndex:int, ?Arg2:logic = false, ?Arg3:logic = false, ?Arg4:logic = false)<decides><transacts>:occluder_polygon2d = occluder_polygon2d[VhObjectFrom[VhCallValue(Handle, "get_occluder_polygon", array{VhFromInt(LayerId), VhFromInt(PolygonIndex), VhFromLogic(Arg2), VhFromLogic(Arg3), VhFromLogic(Arg4)})]]
     GetOccluderPolygonsCount<public>(LayerId:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_occluder_polygons_count", array{VhFromInt(LayerId)}))
     GetTerrainPeeringBit<public>(PeeringBit:tile_set_cell_neighbor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_terrain_peering_bit", array{VhFromTileSetCellNeighbor(PeeringBit)}))
     HasCustomData<public>(LayerName:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_custom_data", array{VhFromString(LayerName)}))
@@ -30250,12 +30250,12 @@ translation_server<public> := class(object):
     GetLoadedLocales<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_loaded_locales", array{}))
     GetLocale<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_locale", array{}))
     GetLocaleName<public>(Locale:string)<transacts>:string = VhToString(VhCallValue(Handle, "get_locale_name", array{VhFromString(Locale)}))
-    GetOrAddDomain<public>(Domain:string)<decides><transacts>:translation_domain = translation_domain{Handle := VhToHandle[VhCallValue(Handle, "get_or_add_domain", array{VhFromStringName(Domain)})]}
+    GetOrAddDomain<public>(Domain:string)<decides><transacts>:translation_domain = translation_domain[VhObjectFrom[VhCallValue(Handle, "get_or_add_domain", array{VhFromStringName(Domain)})]]
     GetPercentSign<public>(Locale:string)<transacts>:string = VhToString(VhCallValue(Handle, "get_percent_sign", array{VhFromString(Locale)}))
     GetPluralRules<public>(Locale:string)<transacts>:string = VhToString(VhCallValue(Handle, "get_plural_rules", array{VhFromString(Locale)}))
     GetScriptName<public>(Script:string)<transacts>:string = VhToString(VhCallValue(Handle, "get_script_name", array{VhFromString(Script)}))
     GetToolLocale<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_tool_locale", array{}))
-    GetTranslationObject<public>(Locale:string)<decides><transacts>:translation = translation{Handle := VhToHandle[VhCallValue(Handle, "get_translation_object", array{VhFromString(Locale)})]}
+    GetTranslationObject<public>(Locale:string)<decides><transacts>:translation = translation[VhObjectFrom[VhCallValue(Handle, "get_translation_object", array{VhFromString(Locale)})]]
     GetTranslations<public>()<transacts>:typed_array(translation) = VhToTranslationArray(VhCallValue(Handle, "get_translations", array{}))
     HasDomain<public>(Domain:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_domain", array{VhFromStringName(Domain)}))
     HasTranslation<public>(Translation:translation)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_translation", array{VhFromObject(Translation)}))
@@ -30289,45 +30289,45 @@ tree_item<public> := class(object):
     ClearButtons<public>()<transacts>:void = VhCallVoid(Handle, "clear_buttons", array{})
     ClearCustomBgColor<public>(Column:int)<transacts>:void = VhCallVoid(Handle, "clear_custom_bg_color", array{VhFromInt(Column)})
     ClearCustomColor<public>(Column:int)<transacts>:void = VhCallVoid(Handle, "clear_custom_color", array{VhFromInt(Column)})
-    CreateChild<public>(?Index:int = -1)<decides><transacts>:tree_item = tree_item{Handle := VhToHandle[VhCallValue(Handle, "create_child", array{VhFromInt(Index)})]}
+    CreateChild<public>(?Index:int = -1)<decides><transacts>:tree_item = tree_item[VhObjectFrom[VhCallValue(Handle, "create_child", array{VhFromInt(Index)})]]
     Deselect<public>(Column:int)<transacts>:void = VhCallVoid(Handle, "deselect", array{VhFromInt(Column)})
     EraseButton<public>(Column:int, ButtonIndex:int)<transacts>:void = VhCallVoid(Handle, "erase_button", array{VhFromInt(Column), VhFromInt(ButtonIndex)})
     GetAutoTranslateMode<public>(Column:int)<transacts>:node_auto_translate_mode = VhToNodeAutoTranslateMode(VhCallValue(Handle, "get_auto_translate_mode", array{VhFromInt(Column)}))
     GetAutowrapMode<public>(Column:int)<transacts>:text_server_autowrap_mode = VhToTextServerAutowrapMode(VhCallValue(Handle, "get_autowrap_mode", array{VhFromInt(Column)}))
-    GetButton<public>(Column:int, ButtonIndex:int)<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_button", array{VhFromInt(Column), VhFromInt(ButtonIndex)})]}
+    GetButton<public>(Column:int, ButtonIndex:int)<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_button", array{VhFromInt(Column), VhFromInt(ButtonIndex)})]]
     GetButtonById<public>(Column:int, Id:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_button_by_id", array{VhFromInt(Column), VhFromInt(Id)}))
     GetButtonColor<public>(Column:int, Id:int)<transacts>:color = VhToColor(VhCallValue(Handle, "get_button_color", array{VhFromInt(Column), VhFromInt(Id)}))
     GetButtonCount<public>(Column:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_button_count", array{VhFromInt(Column)}))
     GetButtonId<public>(Column:int, ButtonIndex:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_button_id", array{VhFromInt(Column), VhFromInt(ButtonIndex)}))
     GetButtonTooltipText<public>(Column:int, ButtonIndex:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_button_tooltip_text", array{VhFromInt(Column), VhFromInt(ButtonIndex)}))
     GetCellMode<public>(Column:int)<transacts>:tree_item_tree_cell_mode = VhToTreeItemTreeCellMode(VhCallValue(Handle, "get_cell_mode", array{VhFromInt(Column)}))
-    GetChild<public>(Index:int)<decides><transacts>:tree_item = tree_item{Handle := VhToHandle[VhCallValue(Handle, "get_child", array{VhFromInt(Index)})]}
+    GetChild<public>(Index:int)<decides><transacts>:tree_item = tree_item[VhObjectFrom[VhCallValue(Handle, "get_child", array{VhFromInt(Index)})]]
     GetChildCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_child_count", array{}))
     GetChildren<public>()<transacts>:typed_array(tree_item) = VhToTreeItemArray(VhCallValue(Handle, "get_children", array{}))
     GetCustomBgColor<public>(Column:int)<transacts>:color = VhToColor(VhCallValue(Handle, "get_custom_bg_color", array{VhFromInt(Column)}))
     GetCustomColor<public>(Column:int)<transacts>:color = VhToColor(VhCallValue(Handle, "get_custom_color", array{VhFromInt(Column)}))
     GetCustomDrawCallback<public>(Column:int)<transacts>:callable = VhToCallable(VhCallValue(Handle, "get_custom_draw_callback", array{VhFromInt(Column)}))
-    GetCustomFont<public>(Column:int)<decides><transacts>:font = font{Handle := VhToHandle[VhCallValue(Handle, "get_custom_font", array{VhFromInt(Column)})]}
+    GetCustomFont<public>(Column:int)<decides><transacts>:font = font[VhObjectFrom[VhCallValue(Handle, "get_custom_font", array{VhFromInt(Column)})]]
     GetCustomFontSize<public>(Column:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_custom_font_size", array{VhFromInt(Column)}))
-    GetCustomStylebox<public>(Column:int)<decides><transacts>:style_box = style_box{Handle := VhToHandle[VhCallValue(Handle, "get_custom_stylebox", array{VhFromInt(Column)})]}
+    GetCustomStylebox<public>(Column:int)<decides><transacts>:style_box = style_box[VhObjectFrom[VhCallValue(Handle, "get_custom_stylebox", array{VhFromInt(Column)})]]
     GetDescription<public>(Column:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_description", array{VhFromInt(Column)}))
     GetExpandRight<public>(Column:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_expand_right", array{VhFromInt(Column)}))
-    GetFirstChild<public>()<decides><transacts>:tree_item = tree_item{Handle := VhToHandle[VhCallValue(Handle, "get_first_child", array{})]}
-    GetIcon<public>(Column:int)<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_icon", array{VhFromInt(Column)})]}
+    GetFirstChild<public>()<decides><transacts>:tree_item = tree_item[VhObjectFrom[VhCallValue(Handle, "get_first_child", array{})]]
+    GetIcon<public>(Column:int)<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_icon", array{VhFromInt(Column)})]]
     GetIconMaxWidth<public>(Column:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_icon_max_width", array{VhFromInt(Column)}))
     GetIconModulate<public>(Column:int)<transacts>:color = VhToColor(VhCallValue(Handle, "get_icon_modulate", array{VhFromInt(Column)}))
-    GetIconOverlay<public>(Column:int)<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_icon_overlay", array{VhFromInt(Column)})]}
+    GetIconOverlay<public>(Column:int)<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_icon_overlay", array{VhFromInt(Column)})]]
     GetIconRegion<public>(Column:int)<transacts>:rect2 = VhToRect2(VhCallValue(Handle, "get_icon_region", array{VhFromInt(Column)}))
     GetIndex<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_index", array{}))
     GetLanguage<public>(Column:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_language", array{VhFromInt(Column)}))
     GetMetadata<public>(Column:int)<transacts>:variant = VhToVariant(VhCallValue(Handle, "get_metadata", array{VhFromInt(Column)}))
-    GetNext<public>()<decides><transacts>:tree_item = tree_item{Handle := VhToHandle[VhCallValue(Handle, "get_next", array{})]}
-    GetNextInTree<public>(?Wrap:logic = false)<decides><transacts>:tree_item = tree_item{Handle := VhToHandle[VhCallValue(Handle, "get_next_in_tree", array{VhFromLogic(Wrap)})]}
-    GetNextVisible<public>(?Wrap:logic = false)<decides><transacts>:tree_item = tree_item{Handle := VhToHandle[VhCallValue(Handle, "get_next_visible", array{VhFromLogic(Wrap)})]}
-    GetParent<public>()<decides><transacts>:tree_item = tree_item{Handle := VhToHandle[VhCallValue(Handle, "get_parent", array{})]}
-    GetPrev<public>()<decides><transacts>:tree_item = tree_item{Handle := VhToHandle[VhCallValue(Handle, "get_prev", array{})]}
-    GetPrevInTree<public>(?Wrap:logic = false)<decides><transacts>:tree_item = tree_item{Handle := VhToHandle[VhCallValue(Handle, "get_prev_in_tree", array{VhFromLogic(Wrap)})]}
-    GetPrevVisible<public>(?Wrap:logic = false)<decides><transacts>:tree_item = tree_item{Handle := VhToHandle[VhCallValue(Handle, "get_prev_visible", array{VhFromLogic(Wrap)})]}
+    GetNext<public>()<decides><transacts>:tree_item = tree_item[VhObjectFrom[VhCallValue(Handle, "get_next", array{})]]
+    GetNextInTree<public>(?Wrap:logic = false)<decides><transacts>:tree_item = tree_item[VhObjectFrom[VhCallValue(Handle, "get_next_in_tree", array{VhFromLogic(Wrap)})]]
+    GetNextVisible<public>(?Wrap:logic = false)<decides><transacts>:tree_item = tree_item[VhObjectFrom[VhCallValue(Handle, "get_next_visible", array{VhFromLogic(Wrap)})]]
+    GetParent<public>()<decides><transacts>:tree_item = tree_item[VhObjectFrom[VhCallValue(Handle, "get_parent", array{})]]
+    GetPrev<public>()<decides><transacts>:tree_item = tree_item[VhObjectFrom[VhCallValue(Handle, "get_prev", array{})]]
+    GetPrevInTree<public>(?Wrap:logic = false)<decides><transacts>:tree_item = tree_item[VhObjectFrom[VhCallValue(Handle, "get_prev_in_tree", array{VhFromLogic(Wrap)})]]
+    GetPrevVisible<public>(?Wrap:logic = false)<decides><transacts>:tree_item = tree_item[VhObjectFrom[VhCallValue(Handle, "get_prev_visible", array{VhFromLogic(Wrap)})]]
     GetRange<public>(Column:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_range", array{VhFromInt(Column)}))
     GetRangeConfig<public>(Column:int)<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_range_config", array{VhFromInt(Column)}))
     GetStructuredTextBidiOverride<public>(Column:int)<transacts>:text_server_structured_text_parser = VhToTextServerStructuredTextParser(VhCallValue(Handle, "get_structured_text_bidi_override", array{VhFromInt(Column)}))
@@ -30338,7 +30338,7 @@ tree_item<public> := class(object):
     GetTextDirection<public>(Column:int)<transacts>:control_text_direction = VhToControlTextDirection(VhCallValue(Handle, "get_text_direction", array{VhFromInt(Column)}))
     GetTextOverrunBehavior<public>(Column:int)<transacts>:text_server_overrun_behavior = VhToTextServerOverrunBehavior(VhCallValue(Handle, "get_text_overrun_behavior", array{VhFromInt(Column)}))
     GetTooltipText<public>(Column:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_tooltip_text", array{VhFromInt(Column)}))
-    GetTree<public>()<decides><transacts>:tree = tree{Handle := VhToHandle[VhCallValue(Handle, "get_tree", array{})]}
+    GetTree<public>()<decides><transacts>:tree = tree[VhObjectFrom[VhCallValue(Handle, "get_tree", array{})]]
     IsAnyCollapsed<public>(?OnlyVisible:logic = false)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_any_collapsed", array{VhFromLogic(OnlyVisible)}))
     IsButtonDisabled<public>(Column:int, ButtonIndex:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_button_disabled", array{VhFromInt(Column), VhFromInt(ButtonIndex)}))
     IsChecked<public>(Column:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_checked", array{VhFromInt(Column)}))
@@ -30464,14 +30464,14 @@ xr_server<public> := class(object):
     AddTracker<public>(Tracker:xr_tracker)<transacts>:void = VhCallVoid(Handle, "add_tracker", array{VhFromObject(Tracker)})
     CenterOnHmd<public>(RotationMode:xr_server_rotation_mode, KeepHeight:logic)<transacts>:void = VhCallVoid(Handle, "center_on_hmd", array{VhFromXrServerRotationMode(RotationMode), VhFromLogic(KeepHeight)})
     ClearReferenceFrame<public>()<transacts>:void = VhCallVoid(Handle, "clear_reference_frame", array{})
-    FindInterface<public>(Name:string)<decides><transacts>:xr_interface = xr_interface{Handle := VhToHandle[VhCallValue(Handle, "find_interface", array{VhFromString(Name)})]}
+    FindInterface<public>(Name:string)<decides><transacts>:xr_interface = xr_interface[VhObjectFrom[VhCallValue(Handle, "find_interface", array{VhFromString(Name)})]]
     GetHmdTransform<public>()<transacts>:transform3d = VhToTransform3D(VhCallValue(Handle, "get_hmd_transform", array{}))
-    GetInterface<public>(Idx:int)<decides><transacts>:xr_interface = xr_interface{Handle := VhToHandle[VhCallValue(Handle, "get_interface", array{VhFromInt(Idx)})]}
+    GetInterface<public>(Idx:int)<decides><transacts>:xr_interface = xr_interface[VhObjectFrom[VhCallValue(Handle, "get_interface", array{VhFromInt(Idx)})]]
     GetInterfaceCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_interface_count", array{}))
     GetInterfaces<public>()<transacts>:typed_array(dictionary) = VhToDictionaryArray(VhCallValue(Handle, "get_interfaces", array{}))
-    GetPrimaryInterface<public>()<decides><transacts>:xr_interface = xr_interface{Handle := VhToHandle[VhCallValue(Handle, "get_primary_interface", array{})]}
+    GetPrimaryInterface<public>()<decides><transacts>:xr_interface = xr_interface[VhObjectFrom[VhCallValue(Handle, "get_primary_interface", array{})]]
     GetReferenceFrame<public>()<transacts>:transform3d = VhToTransform3D(VhCallValue(Handle, "get_reference_frame", array{}))
-    GetTracker<public>(TrackerName:string)<decides><transacts>:xr_tracker = xr_tracker{Handle := VhToHandle[VhCallValue(Handle, "get_tracker", array{VhFromStringName(TrackerName)})]}
+    GetTracker<public>(TrackerName:string)<decides><transacts>:xr_tracker = xr_tracker[VhObjectFrom[VhCallValue(Handle, "get_tracker", array{VhFromStringName(TrackerName)})]]
     GetTrackers<public>(TrackerTypes:int)<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_trackers", array{VhFromInt(TrackerTypes)}))
     RemoveInterface<public>(Interface:xr_interface)<transacts>:void = VhCallVoid(Handle, "remove_interface", array{VhFromObject(Interface)})
     RemoveTracker<public>(Tracker:xr_tracker)<transacts>:void = VhCallVoid(Handle, "remove_tracker", array{VhFromObject(Tracker)})
@@ -30657,8 +30657,8 @@ animation_mixer<public> := class(node):
     ClearCaches<public>()<transacts>:void = VhCallVoid(Handle, "clear_caches", array{})
     FindAnimation<public>(Animation:animation)<transacts>:string = VhToString(VhCallValue(Handle, "find_animation", array{VhFromObject(Animation)}))
     FindAnimationLibrary<public>(Animation:animation)<transacts>:string = VhToString(VhCallValue(Handle, "find_animation_library", array{VhFromObject(Animation)}))
-    GetAnimation<public>(Name:string)<decides><transacts>:animation = animation{Handle := VhToHandle[VhCallValue(Handle, "get_animation", array{VhFromStringName(Name)})]}
-    GetAnimationLibrary<public>(Name:string)<decides><transacts>:animation_library = animation_library{Handle := VhToHandle[VhCallValue(Handle, "get_animation_library", array{VhFromStringName(Name)})]}
+    GetAnimation<public>(Name:string)<decides><transacts>:animation = animation[VhObjectFrom[VhCallValue(Handle, "get_animation", array{VhFromStringName(Name)})]]
+    GetAnimationLibrary<public>(Name:string)<decides><transacts>:animation_library = animation_library[VhObjectFrom[VhCallValue(Handle, "get_animation_library", array{VhFromStringName(Name)})]]
     GetAnimationLibraryList<public>()<transacts>:typed_array(string) = VhToStringNameArray(VhCallValue(Handle, "get_animation_library_list", array{}))
     GetAnimationList<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_animation_list", array{}))
     GetRootMotionPosition<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_root_motion_position", array{}))
@@ -30686,7 +30686,7 @@ audio_stream_playback<public> := class(ref_counted):
 
     GetLoopCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_loop_count", array{}))
     GetPlaybackPosition<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_playback_position", array{}))
-    GetSamplePlayback<public>()<decides><transacts>:audio_sample_playback = audio_sample_playback{Handle := VhToHandle[VhCallValue(Handle, "get_sample_playback", array{})]}
+    GetSamplePlayback<public>()<decides><transacts>:audio_sample_playback = audio_sample_playback[VhObjectFrom[VhCallValue(Handle, "get_sample_playback", array{})]]
     IsPlaying<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_playing", array{}))
     MixAudio<public>(RateScale:float, Frames:int)<transacts>:[]vector2 = VhToVector2s(VhCallValue(Handle, "mix_audio", array{VhFromFloat(RateScale), VhFromInt(Frames)}))
     Seek<public>(?Time:float = 0.0)<transacts>:void = VhCallVoid(Handle, "seek", array{VhFromFloat(Time)})
@@ -30725,8 +30725,8 @@ audio_stream_player<public> := class(node):
     VolumeLinearSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_volume_linear", array{VhFromFloat(Value)})
     GetBus<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_bus", array{}))
     GetPlaybackPosition<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_playback_position", array{}))
-    GetStream<public>()<decides><transacts>:audio_stream = audio_stream{Handle := VhToHandle[VhCallValue(Handle, "get_stream", array{})]}
-    GetStreamPlayback<public>()<decides><transacts>:audio_stream_playback = audio_stream_playback{Handle := VhToHandle[VhCallValue(Handle, "get_stream_playback", array{})]}
+    GetStream<public>()<decides><transacts>:audio_stream = audio_stream[VhObjectFrom[VhCallValue(Handle, "get_stream", array{})]]
+    GetStreamPlayback<public>()<decides><transacts>:audio_stream_playback = audio_stream_playback[VhObjectFrom[VhCallValue(Handle, "get_stream_playback", array{})]]
     HasStreamPlayback<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_stream_playback", array{}))
     Play<public>(?FromPosition:float = 0.0)<transacts>:void = VhCallVoid(Handle, "play", array{VhFromFloat(FromPosition)})
     Seek<public>(ToPosition:float)<transacts>:void = VhCallVoid(Handle, "seek", array{VhFromFloat(ToPosition)})
@@ -30860,26 +30860,26 @@ canvas_item<public> := class(node):
     ForceUpdateTransform<public>()<transacts>:void = VhCallVoid(Handle, "force_update_transform", array{})
     GetCanvas<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_canvas", array{}))
     GetCanvasItem<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_canvas_item", array{}))
-    GetCanvasLayerNode<public>()<decides><transacts>:canvas_layer = canvas_layer{Handle := VhToHandle[VhCallValue(Handle, "get_canvas_layer_node", array{})]}
+    GetCanvasLayerNode<public>()<decides><transacts>:canvas_layer = canvas_layer[VhObjectFrom[VhCallValue(Handle, "get_canvas_layer_node", array{})]]
     GetCanvasTransform<public>()<transacts>:transform2d = VhToTransform2D(VhCallValue(Handle, "get_canvas_transform", array{}))
     GetGlobalMousePosition<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_global_mouse_position", array{}))
     GetGlobalTransform<public>()<transacts>:transform2d = VhToTransform2D(VhCallValue(Handle, "get_global_transform", array{}))
     GetGlobalTransformWithCanvas<public>()<transacts>:transform2d = VhToTransform2D(VhCallValue(Handle, "get_global_transform_with_canvas", array{}))
     GetInstanceShaderParameter<public>(Name:string)<transacts>:variant = VhToVariant(VhCallValue(Handle, "get_instance_shader_parameter", array{VhFromStringName(Name)}))
     GetLocalMousePosition<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_local_mouse_position", array{}))
-    GetMaterial<public>()<decides><transacts>:material = material{Handle := VhToHandle[VhCallValue(Handle, "get_material", array{})]}
+    GetMaterial<public>()<decides><transacts>:material = material[VhObjectFrom[VhCallValue(Handle, "get_material", array{})]]
     GetScreenTransform<public>()<transacts>:transform2d = VhToTransform2D(VhCallValue(Handle, "get_screen_transform", array{}))
     GetTransform<public>()<transacts>:transform2d = VhToTransform2D(VhCallValue(Handle, "get_transform", array{}))
     GetViewportRect<public>()<transacts>:rect2 = VhToRect2(VhCallValue(Handle, "get_viewport_rect", array{}))
     GetViewportTransform<public>()<transacts>:transform2d = VhToTransform2D(VhCallValue(Handle, "get_viewport_transform", array{}))
     GetVisibilityLayerBit<public>(Layer:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_visibility_layer_bit", array{VhFromInt(Layer)}))
-    GetWorld2d<public>()<decides><transacts>:world2d = world2d{Handle := VhToHandle[VhCallValue(Handle, "get_world_2d", array{})]}
+    GetWorld2d<public>()<decides><transacts>:world2d = world2d[VhObjectFrom[VhCallValue(Handle, "get_world_2d", array{})]]
     Hide<public>()<transacts>:void = VhCallVoid(Handle, "hide", array{})
     IsLocalTransformNotificationEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_local_transform_notification_enabled", array{}))
     IsTransformNotificationEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_transform_notification_enabled", array{}))
     IsVisibleInTree<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_visible_in_tree", array{}))
     MakeCanvasPositionLocal<public>(ViewportPoint:vector2)<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "make_canvas_position_local", array{VhFromVector2(ViewportPoint)}))
-    MakeInputLocal<public>(Event:input_event)<decides><transacts>:input_event = input_event{Handle := VhToHandle[VhCallValue(Handle, "make_input_local", array{VhFromObject(Event)})]}
+    MakeInputLocal<public>(Event:input_event)<decides><transacts>:input_event = input_event[VhObjectFrom[VhCallValue(Handle, "make_input_local", array{VhFromObject(Event)})]]
     MoveToFront<public>()<transacts>:void = VhCallVoid(Handle, "move_to_front", array{})
     QueueRedraw<public>()<transacts>:void = VhCallVoid(Handle, "queue_redraw", array{})
     SetInstanceShaderParameter<public>(Name:string, Value:variant)<transacts>:void = VhCallVoid(Handle, "set_instance_shader_parameter", array{VhFromStringName(Name), VhFromVariant(Value)})
@@ -30931,7 +30931,7 @@ canvas_layer<public> := class(node):
     VisibleGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_visible", array{}))
     VisibleSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_visible", array{VhFromLogic(Value)})
     GetCanvas<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_canvas", array{}))
-    GetCustomViewport<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_custom_viewport", array{})]}
+    GetCustomViewport<public>()<decides><transacts>:node = node[VhObjectFrom[VhCallValue(Handle, "get_custom_viewport", array{})]]
     GetFinalTransform<public>()<transacts>:transform2d = VhToTransform2D(VhCallValue(Handle, "get_final_transform", array{}))
     GetTransform<public>()<transacts>:transform2d = VhToTransform2D(VhCallValue(Handle, "get_transform", array{}))
     Hide<public>()<transacts>:void = VhCallVoid(Handle, "hide", array{})
@@ -31036,8 +31036,8 @@ crypto<public> := class(ref_counted):
     Decrypt<public>(Key:crypto_key, Ciphertext:[]int)<transacts>:[]int = VhToInts(VhCallValue(Handle, "decrypt", array{VhFromObject(Key), VhFromByteArray(Ciphertext)}))
     Encrypt<public>(Key:crypto_key, Plaintext:[]int)<transacts>:[]int = VhToInts(VhCallValue(Handle, "encrypt", array{VhFromObject(Key), VhFromByteArray(Plaintext)}))
     GenerateRandomBytes<public>(Size:int)<transacts>:[]int = VhToInts(VhCallValue(Handle, "generate_random_bytes", array{VhFromInt(Size)}))
-    GenerateRsa<public>(Size:int)<decides><transacts>:crypto_key = crypto_key{Handle := VhToHandle[VhCallValue(Handle, "generate_rsa", array{VhFromInt(Size)})]}
-    GenerateSelfSignedCertificate<public>(Key:crypto_key, ?IssuerName:string = "CN=myserver,O=myorganisation,C=IT", ?NotBefore:string = "20140101000000", ?NotAfter:string = "20340101000000")<decides><transacts>:x509certificate = x509certificate{Handle := VhToHandle[VhCallValue(Handle, "generate_self_signed_certificate", array{VhFromObject(Key), VhFromString(IssuerName), VhFromString(NotBefore), VhFromString(NotAfter)})]}
+    GenerateRsa<public>(Size:int)<decides><transacts>:crypto_key = crypto_key[VhObjectFrom[VhCallValue(Handle, "generate_rsa", array{VhFromInt(Size)})]]
+    GenerateSelfSignedCertificate<public>(Key:crypto_key, ?IssuerName:string = "CN=myserver,O=myorganisation,C=IT", ?NotBefore:string = "20140101000000", ?NotAfter:string = "20340101000000")<decides><transacts>:x509certificate = x509certificate[VhObjectFrom[VhCallValue(Handle, "generate_self_signed_certificate", array{VhFromObject(Key), VhFromString(IssuerName), VhFromString(NotBefore), VhFromString(NotAfter)})]]
     HmacDigest<public>(HashType:hashing_context_hash_type, Key:[]int, Msg:[]int)<transacts>:[]int = VhToInts(VhCallValue(Handle, "hmac_digest", array{VhFromHashingContextHashType(HashType), VhFromByteArray(Key), VhFromByteArray(Msg)}))
     Sign<public>(HashType:hashing_context_hash_type, Hash:[]int, Key:crypto_key)<transacts>:[]int = VhToInts(VhCallValue(Handle, "sign", array{VhFromHashingContextHashType(HashType), VhFromByteArray(Hash), VhFromObject(Key)}))
     Verify<public>(HashType:hashing_context_hash_type, Hash:[]int, Signature:[]int, Key:crypto_key)<transacts>:logic = VhToLogic(VhCallValue(Handle, "verify", array{VhFromHashingContextHashType(HashType), VhFromByteArray(Hash), VhFromByteArray(Signature), VhFromObject(Key)}))
@@ -31078,7 +31078,7 @@ dir_access<public> := class(ref_counted):
 dtls_server<public> := class(ref_counted):
 
     Setup<public>(ServerOptions:tls_options)<transacts>:error = VhToError(VhCallValue(Handle, "setup", array{VhFromObject(ServerOptions)}))
-    TakeConnection<public>(UdpPeer:packet_peer_udp)<decides><transacts>:packet_peer_dtls = packet_peer_dtls{Handle := VhToHandle[VhCallValue(Handle, "take_connection", array{VhFromObject(UdpPeer)})]}
+    TakeConnection<public>(UdpPeer:packet_peer_udp)<decides><transacts>:packet_peer_dtls = packet_peer_dtls[VhObjectFrom[VhCallValue(Handle, "take_connection", array{VhFromObject(UdpPeer)})]]
 
 e_net_connection<public> := class(ref_counted):
 
@@ -31086,7 +31086,7 @@ e_net_connection<public> := class(ref_counted):
     Broadcast<public>(Channel:int, Packet:[]int, Flags:int)<transacts>:void = VhCallVoid(Handle, "broadcast", array{VhFromInt(Channel), VhFromByteArray(Packet), VhFromInt(Flags)})
     ChannelLimit<public>(Limit:int)<transacts>:void = VhCallVoid(Handle, "channel_limit", array{VhFromInt(Limit)})
     Compress<public>(Mode:e_net_connection_compression_mode)<transacts>:void = VhCallVoid(Handle, "compress", array{VhFromENetConnectionCompressionMode(Mode)})
-    ConnectToHost<public>(Address:string, Port:int, ?Channels:int = 0, ?Data:int = 0)<decides><transacts>:e_net_packet_peer = e_net_packet_peer{Handle := VhToHandle[VhCallValue(Handle, "connect_to_host", array{VhFromString(Address), VhFromInt(Port), VhFromInt(Channels), VhFromInt(Data)})]}
+    ConnectToHost<public>(Address:string, Port:int, ?Channels:int = 0, ?Data:int = 0)<decides><transacts>:e_net_packet_peer = e_net_packet_peer[VhObjectFrom[VhCallValue(Handle, "connect_to_host", array{VhFromString(Address), VhFromInt(Port), VhFromInt(Channels), VhFromInt(Data)})]]
     CreateHost<public>(?MaxPeers:int = 32, ?MaxChannels:int = 0, ?InBandwidth:int = 0, ?OutBandwidth:int = 0)<transacts>:error = VhToError(VhCallValue(Handle, "create_host", array{VhFromInt(MaxPeers), VhFromInt(MaxChannels), VhFromInt(InBandwidth), VhFromInt(OutBandwidth)}))
     CreateHostBound<public>(BindAddress:string, BindPort:int, ?MaxPeers:int = 32, ?MaxChannels:int = 0, ?InBandwidth:int = 0, ?OutBandwidth:int = 0)<transacts>:error = VhToError(VhCallValue(Handle, "create_host_bound", array{VhFromString(BindAddress), VhFromInt(BindPort), VhFromInt(MaxPeers), VhFromInt(MaxChannels), VhFromInt(InBandwidth), VhFromInt(OutBandwidth)}))
     Destroy<public>()<transacts>:void = VhCallVoid(Handle, "destroy", array{})
@@ -31110,7 +31110,7 @@ editor_context_menu_plugin<public> := class(ref_counted):
 
 editor_debugger_plugin<public> := class(ref_counted):
 
-    GetSession<public>(Id:int)<decides><transacts>:editor_debugger_session = editor_debugger_session{Handle := VhToHandle[VhCallValue(Handle, "get_session", array{VhFromInt(Id)})]}
+    GetSession<public>(Id:int)<decides><transacts>:editor_debugger_session = editor_debugger_session[VhObjectFrom[VhCallValue(Handle, "get_session", array{VhFromInt(Id)})]]
     GetSessions<public>()<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_sessions", array{}))
 
 editor_debugger_session<public> := class(ref_counted):
@@ -31128,7 +31128,7 @@ editor_export_platform<public> := class(ref_counted):
 
     AddMessage<public>(Type:editor_export_platform_export_message_type, Category:string, Message:string)<transacts>:void = VhCallVoid(Handle, "add_message", array{VhFromEditorExportPlatformExportMessageType(Type), VhFromString(Category), VhFromString(Message)})
     ClearMessages<public>()<transacts>:void = VhCallVoid(Handle, "clear_messages", array{})
-    CreatePreset<public>()<decides><transacts>:editor_export_preset = editor_export_preset{Handle := VhToHandle[VhCallValue(Handle, "create_preset", array{})]}
+    CreatePreset<public>()<decides><transacts>:editor_export_preset = editor_export_preset[VhObjectFrom[VhCallValue(Handle, "create_preset", array{})]]
     ExportPack<public>(Preset:editor_export_preset, Debug:logic, Path:string, ?Flags:int = 0)<transacts>:error = VhToError(VhCallValue(Handle, "export_pack", array{VhFromObject(Preset), VhFromLogic(Debug), VhFromString(Path), VhFromInt(Flags)}))
     ExportPackPatch<public>(Preset:editor_export_preset, Debug:logic, Path:string, Patches:[]string, ?Flags:int = 0)<transacts>:error = VhToError(VhCallValue(Handle, "export_pack_patch", array{VhFromObject(Preset), VhFromLogic(Debug), VhFromString(Path), VhFromStringArray(Patches), VhFromInt(Flags)}))
     ExportProject<public>(Preset:editor_export_preset, Debug:logic, Path:string, ?Flags:int = 0)<transacts>:error = VhToError(VhCallValue(Handle, "export_project", array{VhFromObject(Preset), VhFromLogic(Debug), VhFromString(Path), VhFromInt(Flags)}))
@@ -31172,8 +31172,8 @@ editor_export_plugin<public> := class(ref_counted):
     AddIosProjectStaticLib<public>(Path:string)<transacts>:void = VhCallVoid(Handle, "add_ios_project_static_lib", array{VhFromString(Path)})
     AddMacosPluginFile<public>(Path:string)<transacts>:void = VhCallVoid(Handle, "add_macos_plugin_file", array{VhFromString(Path)})
     AddSharedObject<public>(Path:string, Tags:[]string, Target:string)<transacts>:void = VhCallVoid(Handle, "add_shared_object", array{VhFromString(Path), VhFromStringArray(Tags), VhFromString(Target)})
-    GetExportPlatform<public>()<decides><transacts>:editor_export_platform = editor_export_platform{Handle := VhToHandle[VhCallValue(Handle, "get_export_platform", array{})]}
-    GetExportPreset<public>()<decides><transacts>:editor_export_preset = editor_export_preset{Handle := VhToHandle[VhCallValue(Handle, "get_export_preset", array{})]}
+    GetExportPlatform<public>()<decides><transacts>:editor_export_platform = editor_export_platform[VhObjectFrom[VhCallValue(Handle, "get_export_platform", array{})]]
+    GetExportPreset<public>()<decides><transacts>:editor_export_preset = editor_export_preset[VhObjectFrom[VhCallValue(Handle, "get_export_preset", array{})]]
     GetOption<public>(Name:string)<transacts>:variant = VhToVariant(VhCallValue(Handle, "get_option", array{VhFromStringName(Name)}))
     Skip<public>()<transacts>:void = VhCallVoid(Handle, "skip", array{})
 
@@ -31222,8 +31222,8 @@ editor_feature_profile<public> := class(ref_counted):
 editor_file_system<public> := class(node):
 
     GetFileType<public>(Path:string)<transacts>:string = VhToString(VhCallValue(Handle, "get_file_type", array{VhFromString(Path)}))
-    GetFilesystem<public>()<decides><transacts>:editor_file_system_directory = editor_file_system_directory{Handle := VhToHandle[VhCallValue(Handle, "get_filesystem", array{})]}
-    GetFilesystemPath<public>(Path:string)<decides><transacts>:editor_file_system_directory = editor_file_system_directory{Handle := VhToHandle[VhCallValue(Handle, "get_filesystem_path", array{VhFromString(Path)})]}
+    GetFilesystem<public>()<decides><transacts>:editor_file_system_directory = editor_file_system_directory[VhObjectFrom[VhCallValue(Handle, "get_filesystem", array{})]]
+    GetFilesystemPath<public>(Path:string)<decides><transacts>:editor_file_system_directory = editor_file_system_directory[VhObjectFrom[VhCallValue(Handle, "get_filesystem_path", array{VhFromString(Path)})]]
     GetScanningProgress<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_scanning_progress", array{}))
     IsScanning<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_scanning", array{}))
     ReimportFiles<public>(Files:[]string)<transacts>:void = VhCallVoid(Handle, "reimport_files", array{VhFromStringArray(Files)})
@@ -31243,7 +31243,7 @@ editor_plugin<public> := class(node):
 
     AddAutoloadSingleton<public>(Name:string, Path:string)<transacts>:void = VhCallVoid(Handle, "add_autoload_singleton", array{VhFromString(Name), VhFromString(Path)})
     AddContextMenuPlugin<public>(Slot:editor_context_menu_plugin_context_menu_slot, Plugin:editor_context_menu_plugin)<transacts>:void = VhCallVoid(Handle, "add_context_menu_plugin", array{VhFromEditorContextMenuPluginContextMenuSlot(Slot), VhFromObject(Plugin)})
-    AddControlToBottomPanel<public>(Control:control, Title:string, Shortcut:shortcut)<decides><transacts>:button = button{Handle := VhToHandle[VhCallValue(Handle, "add_control_to_bottom_panel", array{VhFromObject(Control), VhFromString(Title), VhFromObject(Shortcut)})]}
+    AddControlToBottomPanel<public>(Control:control, Title:string, Shortcut:shortcut)<decides><transacts>:button = button[VhObjectFrom[VhCallValue(Handle, "add_control_to_bottom_panel", array{VhFromObject(Control), VhFromString(Title), VhFromObject(Shortcut)})]]
     AddControlToContainer<public>(Container:editor_plugin_custom_control_container, Control:control)<transacts>:void = VhCallVoid(Handle, "add_control_to_container", array{VhFromEditorPluginCustomControlContainer(Container), VhFromObject(Control)})
     AddControlToDock<public>(Slot:editor_plugin_dock_slot, Control:control, Shortcut:shortcut)<transacts>:void = VhCallVoid(Handle, "add_control_to_dock", array{VhFromEditorPluginDockSlot(Slot), VhFromObject(Control), VhFromObject(Shortcut)})
     AddCustomType<public>(Type:string, Base:string, Script:script, Icon:texture2d)<transacts>:void = VhCallVoid(Handle, "add_custom_type", array{VhFromString(Type), VhFromString(Base), VhFromObject(Script), VhFromObject(Icon)})
@@ -31261,11 +31261,11 @@ editor_plugin<public> := class(node):
     AddToolSubmenuItem<public>(Name:string, Submenu:popup_menu)<transacts>:void = VhCallVoid(Handle, "add_tool_submenu_item", array{VhFromString(Name), VhFromObject(Submenu)})
     AddTranslationParserPlugin<public>(Parser:editor_translation_parser_plugin)<transacts>:void = VhCallVoid(Handle, "add_translation_parser_plugin", array{VhFromObject(Parser)})
     AddUndoRedoInspectorHookCallback<public>(Callable:callable)<transacts>:void = VhCallVoid(Handle, "add_undo_redo_inspector_hook_callback", array{VhFromCallable(Callable)})
-    GetEditorInterface<public>()<decides><transacts>:editor_interface = editor_interface{Handle := VhToHandle[VhCallValue(Handle, "get_editor_interface", array{})]}
-    GetExportAsMenu<public>()<decides><transacts>:popup_menu = popup_menu{Handle := VhToHandle[VhCallValue(Handle, "get_export_as_menu", array{})]}
+    GetEditorInterface<public>()<decides><transacts>:editor_interface = editor_interface[VhObjectFrom[VhCallValue(Handle, "get_editor_interface", array{})]]
+    GetExportAsMenu<public>()<decides><transacts>:popup_menu = popup_menu[VhObjectFrom[VhCallValue(Handle, "get_export_as_menu", array{})]]
     GetPluginVersion<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_plugin_version", array{}))
-    GetScriptCreateDialog<public>()<decides><transacts>:script_create_dialog = script_create_dialog{Handle := VhToHandle[VhCallValue(Handle, "get_script_create_dialog", array{})]}
-    GetUndoRedo<public>()<decides><transacts>:editor_undo_redo_manager = editor_undo_redo_manager{Handle := VhToHandle[VhCallValue(Handle, "get_undo_redo", array{})]}
+    GetScriptCreateDialog<public>()<decides><transacts>:script_create_dialog = script_create_dialog[VhObjectFrom[VhCallValue(Handle, "get_script_create_dialog", array{})]]
+    GetUndoRedo<public>()<decides><transacts>:editor_undo_redo_manager = editor_undo_redo_manager[VhObjectFrom[VhCallValue(Handle, "get_undo_redo", array{})]]
     HideBottomPanel<public>()<transacts>:void = VhCallVoid(Handle, "hide_bottom_panel", array{})
     MakeBottomPanelItemVisible<public>(Item:control)<transacts>:void = VhCallVoid(Handle, "make_bottom_panel_item_visible", array{VhFromObject(Item)})
     QueueSaveLayout<public>()<transacts>:void = VhCallVoid(Handle, "queue_save_layout", array{})
@@ -31329,8 +31329,8 @@ editor_scene_post_import_plugin<public> := class(ref_counted):
 editor_script<public> := class(ref_counted):
 
     AddRootNode<public>(Node:node)<transacts>:void = VhCallVoid(Handle, "add_root_node", array{VhFromObject(Node)})
-    GetEditorInterface<public>()<decides><transacts>:editor_interface = editor_interface{Handle := VhToHandle[VhCallValue(Handle, "get_editor_interface", array{})]}
-    GetScene<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_scene", array{})]}
+    GetEditorInterface<public>()<decides><transacts>:editor_interface = editor_interface[VhObjectFrom[VhCallValue(Handle, "get_editor_interface", array{})]]
+    GetScene<public>()<decides><transacts>:node = node[VhObjectFrom[VhCallValue(Handle, "get_scene", array{})]]
 
 editor_translation_parser_plugin<public> := class(ref_counted):
 
@@ -31406,8 +31406,8 @@ gltf_object_model_property<public> := class(ref_counted):
     AppendNodePath<public>(NodePath:string)<transacts>:void = VhCallVoid(Handle, "append_node_path", array{VhFromNodePath(NodePath)})
     AppendPathToProperty<public>(NodePath:string, PropName:string)<transacts>:void = VhCallVoid(Handle, "append_path_to_property", array{VhFromNodePath(NodePath), VhFromStringName(PropName)})
     GetAccessorType<public>()<transacts>:gltf_accessor_gltf_accessor_type = VhToGltfAccessorGltfAccessorType(VhCallValue(Handle, "get_accessor_type", array{}))
-    GetGltfToGodotExpression<public>()<decides><transacts>:expression = expression{Handle := VhToHandle[VhCallValue(Handle, "get_gltf_to_godot_expression", array{})]}
-    GetGodotToGltfExpression<public>()<decides><transacts>:expression = expression{Handle := VhToHandle[VhCallValue(Handle, "get_godot_to_gltf_expression", array{})]}
+    GetGltfToGodotExpression<public>()<decides><transacts>:expression = expression[VhObjectFrom[VhCallValue(Handle, "get_gltf_to_godot_expression", array{})]]
+    GetGodotToGltfExpression<public>()<decides><transacts>:expression = expression[VhObjectFrom[VhCallValue(Handle, "get_godot_to_gltf_expression", array{})]]
     GetJsonPointers<public>()<transacts>:typed_array([]string) = VhToPackedStringArrayArray(VhCallValue(Handle, "get_json_pointers", array{}))
     GetNodePaths<public>()<transacts>:typed_array(string) = VhToNodePathArray(VhCallValue(Handle, "get_node_paths", array{}))
     HasJsonPointers<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_json_pointers", array{}))
@@ -31440,7 +31440,7 @@ http_client<public> := class(ref_counted):
     ReadChunkSizeSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_read_chunk_size", array{VhFromInt(Value)})
     Close<public>()<transacts>:void = VhCallVoid(Handle, "close", array{})
     ConnectToHost<public>(Host:string, Port:int, TlsOptions:tls_options)<transacts>:error = VhToError(VhCallValue(Handle, "connect_to_host", array{VhFromString(Host), VhFromInt(Port), VhFromObject(TlsOptions)}))
-    GetConnection<public>()<decides><transacts>:stream_peer = stream_peer{Handle := VhToHandle[VhCallValue(Handle, "get_connection", array{})]}
+    GetConnection<public>()<decides><transacts>:stream_peer = stream_peer[VhObjectFrom[VhCallValue(Handle, "get_connection", array{})]]
     GetResponseBodyLength<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_response_body_length", array{}))
     GetResponseCode<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_response_code", array{}))
     GetResponseHeaders<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_response_headers", array{}))
@@ -31493,7 +31493,7 @@ image_format_loader<public> := class(ref_counted):
 
 instance_placeholder<public> := class(node):
 
-    CreateInstance<public>(Replace:logic, CustomScene:packed_scene)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "create_instance", array{VhFromLogic(Replace), VhFromObject(CustomScene)})]}
+    CreateInstance<public>(Replace:logic, CustomScene:packed_scene)<decides><transacts>:node = node[VhObjectFrom[VhCallValue(Handle, "create_instance", array{VhFromLogic(Replace), VhFromObject(CustomScene)})]]
     GetInstancePath<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_instance_path", array{}))
     GetStoredValues<public>(?WithOrder:logic = false)<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_stored_values", array{VhFromLogic(WithOrder)}))
 
@@ -31501,12 +31501,12 @@ java_class<public> := class(ref_counted):
 
     GetJavaClassName<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_java_class_name", array{}))
     GetJavaMethodList<public>()<transacts>:typed_array(dictionary) = VhToDictionaryArray(VhCallValue(Handle, "get_java_method_list", array{}))
-    GetJavaParentClass<public>()<decides><transacts>:java_class = java_class{Handle := VhToHandle[VhCallValue(Handle, "get_java_parent_class", array{})]}
+    GetJavaParentClass<public>()<decides><transacts>:java_class = java_class[VhObjectFrom[VhCallValue(Handle, "get_java_parent_class", array{})]]
     HasJavaMethod<public>(Method:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_java_method", array{VhFromStringName(Method)}))
 
 java_object<public> := class(ref_counted):
 
-    GetJavaClass<public>()<decides><transacts>:java_class = java_class{Handle := VhToHandle[VhCallValue(Handle, "get_java_class", array{})]}
+    GetJavaClass<public>()<decides><transacts>:java_class = java_class[VhObjectFrom[VhCallValue(Handle, "get_java_class", array{})]]
     HasJavaMethod<public>(Method:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_java_method", array{VhFromStringName(Method)}))
 
 java_script_object<public> := class(ref_counted):
@@ -31514,14 +31514,14 @@ java_script_object<public> := class(ref_counted):
 kinematic_collision2d<public> := class(ref_counted):
 
     GetAngle<public>(?UpDirection:vector2 = vector2{X := 0.0, Y := -1.0})<transacts>:float = VhToFloat(VhCallValue(Handle, "get_angle", array{VhFromVector2(UpDirection)}))
-    GetCollider<public>()<decides><transacts>:object = object{Handle := VhToHandle[VhCallValue(Handle, "get_collider", array{})]}
+    GetCollider<public>()<decides><transacts>:object = object[VhObjectFrom[VhCallValue(Handle, "get_collider", array{})]]
     GetColliderId<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_collider_id", array{}))
     GetColliderRid<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_collider_rid", array{}))
-    GetColliderShape<public>()<decides><transacts>:object = object{Handle := VhToHandle[VhCallValue(Handle, "get_collider_shape", array{})]}
+    GetColliderShape<public>()<decides><transacts>:object = object[VhObjectFrom[VhCallValue(Handle, "get_collider_shape", array{})]]
     GetColliderShapeIndex<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_collider_shape_index", array{}))
     GetColliderVelocity<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_collider_velocity", array{}))
     GetDepth<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_depth", array{}))
-    GetLocalShape<public>()<decides><transacts>:object = object{Handle := VhToHandle[VhCallValue(Handle, "get_local_shape", array{})]}
+    GetLocalShape<public>()<decides><transacts>:object = object[VhObjectFrom[VhCallValue(Handle, "get_local_shape", array{})]]
     GetNormal<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_normal", array{}))
     GetPosition<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_position", array{}))
     GetRemainder<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_remainder", array{}))
@@ -31530,15 +31530,15 @@ kinematic_collision2d<public> := class(ref_counted):
 kinematic_collision3d<public> := class(ref_counted):
 
     GetAngle<public>(?CollisionIndex:int = 0, ?UpDirection:vector3 = vector3{X := 0.0, Y := 1.0, Z := 0.0})<transacts>:float = VhToFloat(VhCallValue(Handle, "get_angle", array{VhFromInt(CollisionIndex), VhFromVector3(UpDirection)}))
-    GetCollider<public>(?CollisionIndex:int = 0)<decides><transacts>:object = object{Handle := VhToHandle[VhCallValue(Handle, "get_collider", array{VhFromInt(CollisionIndex)})]}
+    GetCollider<public>(?CollisionIndex:int = 0)<decides><transacts>:object = object[VhObjectFrom[VhCallValue(Handle, "get_collider", array{VhFromInt(CollisionIndex)})]]
     GetColliderId<public>(?CollisionIndex:int = 0)<transacts>:int = VhToInt(VhCallValue(Handle, "get_collider_id", array{VhFromInt(CollisionIndex)}))
     GetColliderRid<public>(?CollisionIndex:int = 0)<transacts>:int = VhToInt(VhCallValue(Handle, "get_collider_rid", array{VhFromInt(CollisionIndex)}))
-    GetColliderShape<public>(?CollisionIndex:int = 0)<decides><transacts>:object = object{Handle := VhToHandle[VhCallValue(Handle, "get_collider_shape", array{VhFromInt(CollisionIndex)})]}
+    GetColliderShape<public>(?CollisionIndex:int = 0)<decides><transacts>:object = object[VhObjectFrom[VhCallValue(Handle, "get_collider_shape", array{VhFromInt(CollisionIndex)})]]
     GetColliderShapeIndex<public>(?CollisionIndex:int = 0)<transacts>:int = VhToInt(VhCallValue(Handle, "get_collider_shape_index", array{VhFromInt(CollisionIndex)}))
     GetColliderVelocity<public>(?CollisionIndex:int = 0)<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_collider_velocity", array{VhFromInt(CollisionIndex)}))
     GetCollisionCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_collision_count", array{}))
     GetDepth<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_depth", array{}))
-    GetLocalShape<public>(?CollisionIndex:int = 0)<decides><transacts>:object = object{Handle := VhToHandle[VhCallValue(Handle, "get_local_shape", array{VhFromInt(CollisionIndex)})]}
+    GetLocalShape<public>(?CollisionIndex:int = 0)<decides><transacts>:object = object[VhObjectFrom[VhCallValue(Handle, "get_local_shape", array{VhFromInt(CollisionIndex)})]]
     GetNormal<public>(?CollisionIndex:int = 0)<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_normal", array{VhFromInt(CollisionIndex)}))
     GetPosition<public>(?CollisionIndex:int = 0)<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_position", array{VhFromInt(CollisionIndex)}))
     GetRemainder<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_remainder", array{}))
@@ -31605,7 +31605,7 @@ mesh_data_tool<public> := class(ref_counted):
     GetFaceNormal<public>(Idx:int)<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_face_normal", array{VhFromInt(Idx)}))
     GetFaceVertex<public>(Idx:int, Vertex:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_face_vertex", array{VhFromInt(Idx), VhFromInt(Vertex)}))
     GetFormat<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_format", array{}))
-    GetMaterial<public>()<decides><transacts>:material = material{Handle := VhToHandle[VhCallValue(Handle, "get_material", array{})]}
+    GetMaterial<public>()<decides><transacts>:material = material[VhObjectFrom[VhCallValue(Handle, "get_material", array{})]]
     GetVertex<public>(Idx:int)<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_vertex", array{VhFromInt(Idx)}))
     GetVertexBones<public>(Idx:int)<transacts>:[]int = VhToInts(VhCallValue(Handle, "get_vertex_bones", array{VhFromInt(Idx)}))
     GetVertexColor<public>(Idx:int)<transacts>:color = VhToColor(VhCallValue(Handle, "get_vertex_color", array{VhFromInt(Idx)}))
@@ -31646,7 +31646,7 @@ missing_node<public> := class(node):
 
 multiplayer_api<public> := class(ref_counted):
 
-    GetMultiplayerPeer<public>()<decides><transacts>:multiplayer_peer = multiplayer_peer{Handle := VhToHandle[VhCallValue(Handle, "get_multiplayer_peer", array{})]}
+    GetMultiplayerPeer<public>()<decides><transacts>:multiplayer_peer = multiplayer_peer[VhObjectFrom[VhCallValue(Handle, "get_multiplayer_peer", array{})]]
     GetPeers<public>()<transacts>:[]int = VhToInts(VhCallValue(Handle, "get_peers", array{}))
     GetRemoteSenderId<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_remote_sender_id", array{}))
     GetUniqueId<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_unique_id", array{}))
@@ -31671,7 +31671,7 @@ multiplayer_spawner<public> := class(node):
     GetSpawnableSceneCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_spawnable_scene_count", array{}))
     SetSpawnFunction<public>(SpawnFunction:callable)<transacts>:void = VhCallVoid(Handle, "set_spawn_function", array{VhFromCallable(SpawnFunction)})
     SetSpawnPath<public>(Path:string)<transacts>:void = VhCallVoid(Handle, "set_spawn_path", array{VhFromNodePath(Path)})
-    Spawn<public>(Data:variant)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "spawn", array{VhFromVariant(Data)})]}
+    Spawn<public>(Data:variant)<decides><transacts>:node = node[VhObjectFrom[VhCallValue(Handle, "spawn", array{VhFromVariant(Data)})]]
 
 multiplayer_synchronizer<public> := class(node):
 
@@ -31688,7 +31688,7 @@ multiplayer_synchronizer<public> := class(node):
     VisibilityUpdateModeGetter<epic_internal>(Accessor:accessor)<transacts>:multiplayer_synchronizer_visibility_update_mode = VhToMultiplayerSynchronizerVisibilityUpdateMode(VhCallValue(Handle, "get_visibility_update_mode", array{}))
     VisibilityUpdateModeSetter<epic_internal>(Accessor:accessor, Value:multiplayer_synchronizer_visibility_update_mode)<transacts>:void = VhCallVoid(Handle, "set_visibility_update_mode", array{VhFromMultiplayerSynchronizerVisibilityUpdateMode(Value)})
     AddVisibilityFilter<public>(Filter:callable)<transacts>:void = VhCallVoid(Handle, "add_visibility_filter", array{VhFromCallable(Filter)})
-    GetReplicationConfig<public>()<decides><transacts>:scene_replication_config = scene_replication_config{Handle := VhToHandle[VhCallValue(Handle, "get_replication_config", array{})]}
+    GetReplicationConfig<public>()<decides><transacts>:scene_replication_config = scene_replication_config[VhObjectFrom[VhCallValue(Handle, "get_replication_config", array{})]]
     GetRootPath<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_root_path", array{}))
     GetVisibilityFor<public>(Peer:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_visibility_for", array{VhFromInt(Peer)}))
     RemoveVisibilityFilter<public>(Filter:callable)<transacts>:void = VhCallVoid(Handle, "remove_visibility_filter", array{VhFromCallable(Filter)})
@@ -31831,7 +31831,7 @@ navigation_agent2d<public> := class(node):
     GetAvoidanceMaskValue<public>(MaskNumber:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_avoidance_mask_value", array{VhFromInt(MaskNumber)}))
     GetCurrentNavigationPath<public>()<transacts>:[]vector2 = VhToVector2s(VhCallValue(Handle, "get_current_navigation_path", array{}))
     GetCurrentNavigationPathIndex<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_current_navigation_path_index", array{}))
-    GetCurrentNavigationResult<public>()<decides><transacts>:navigation_path_query_result2d = navigation_path_query_result2d{Handle := VhToHandle[VhCallValue(Handle, "get_current_navigation_result", array{})]}
+    GetCurrentNavigationResult<public>()<decides><transacts>:navigation_path_query_result2d = navigation_path_query_result2d[VhObjectFrom[VhCallValue(Handle, "get_current_navigation_result", array{})]]
     GetFinalPosition<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_final_position", array{}))
     GetNavigationLayerValue<public>(LayerNumber:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_navigation_layer_value", array{VhFromInt(LayerNumber)}))
     GetNavigationMap<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_navigation_map", array{}))
@@ -31988,7 +31988,7 @@ navigation_agent3d<public> := class(node):
     GetAvoidanceMaskValue<public>(MaskNumber:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_avoidance_mask_value", array{VhFromInt(MaskNumber)}))
     GetCurrentNavigationPath<public>()<transacts>:[]vector3 = VhToVector3s(VhCallValue(Handle, "get_current_navigation_path", array{}))
     GetCurrentNavigationPathIndex<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_current_navigation_path_index", array{}))
-    GetCurrentNavigationResult<public>()<decides><transacts>:navigation_path_query_result3d = navigation_path_query_result3d{Handle := VhToHandle[VhCallValue(Handle, "get_current_navigation_result", array{})]}
+    GetCurrentNavigationResult<public>()<decides><transacts>:navigation_path_query_result3d = navigation_path_query_result3d[VhObjectFrom[VhCallValue(Handle, "get_current_navigation_result", array{})]]
     GetFinalPosition<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_final_position", array{}))
     GetNavigationLayerValue<public>(LayerNumber:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_navigation_layer_value", array{VhFromInt(LayerNumber)}))
     GetNavigationMap<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_navigation_map", array{}))
@@ -32309,10 +32309,10 @@ node3d<public> := class(node):
     GetGlobalBasis<public>()<transacts>:basis = VhToBasis(VhCallValue(Handle, "get_global_basis", array{}))
     GetGlobalTransform<public>()<transacts>:transform3d = VhToTransform3D(VhCallValue(Handle, "get_global_transform", array{}))
     GetGlobalTransformInterpolated<public>()<transacts>:transform3d = VhToTransform3D(VhCallValue(Handle, "get_global_transform_interpolated", array{}))
-    GetParentNode3d<public>()<decides><transacts>:node3d = node3d{Handle := VhToHandle[VhCallValue(Handle, "get_parent_node_3d", array{})]}
+    GetParentNode3d<public>()<decides><transacts>:node3d = node3d[VhObjectFrom[VhCallValue(Handle, "get_parent_node_3d", array{})]]
     GetTransform<public>()<transacts>:transform3d = VhToTransform3D(VhCallValue(Handle, "get_transform", array{}))
     GetVisibilityParent<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_visibility_parent", array{}))
-    GetWorld3d<public>()<decides><transacts>:world3d = world3d{Handle := VhToHandle[VhCallValue(Handle, "get_world_3d", array{})]}
+    GetWorld3d<public>()<decides><transacts>:world3d = world3d[VhObjectFrom[VhCallValue(Handle, "get_world_3d", array{})]]
     GlobalRotate<public>(Axis:vector3, Angle:float)<transacts>:void = VhCallVoid(Handle, "global_rotate", array{VhFromVector3(Axis), VhFromFloat(Angle)})
     GlobalScale<public>(Arg0:vector3)<transacts>:void = VhCallVoid(Handle, "global_scale", array{VhFromVector3(Arg0)})
     GlobalTranslate<public>(Offset:vector3)<transacts>:void = VhCallVoid(Handle, "global_translate", array{VhFromVector3(Offset)})
@@ -32373,7 +32373,7 @@ open_xr_future_extension<public> := class(open_xr_extension_wrapper):
 
     CancelFuture<public>(Future:int)<transacts>:void = VhCallVoid(Handle, "cancel_future", array{VhFromInt(Future)})
     IsActive<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_active", array{}))
-    RegisterFuture<public>(Future:int, OnSuccess:callable)<decides><transacts>:open_xr_future_result = open_xr_future_result{Handle := VhToHandle[VhCallValue(Handle, "register_future", array{VhFromInt(Future), VhFromCallable(OnSuccess)})]}
+    RegisterFuture<public>(Future:int, OnSuccess:callable)<decides><transacts>:open_xr_future_result = open_xr_future_result[VhObjectFrom[VhCallValue(Handle, "register_future", array{VhFromInt(Future), VhFromCallable(OnSuccess)})]]
 
 open_xr_future_result<public> := class(ref_counted):
 
@@ -32397,20 +32397,20 @@ open_xr_render_model_extension<public> := class(open_xr_extension_wrapper):
     RenderModelGetSubactionPaths<public>(RenderModel:int)<transacts>:[]string = VhToStrings(VhCallValue(Handle, "render_model_get_subaction_paths", array{VhFromRid(RenderModel)}))
     RenderModelGetTopLevelPath<public>(RenderModel:int)<transacts>:string = VhToString(VhCallValue(Handle, "render_model_get_top_level_path", array{VhFromRid(RenderModel)}))
     RenderModelIsAnimatableNodeVisible<public>(RenderModel:int, Index:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "render_model_is_animatable_node_visible", array{VhFromRid(RenderModel), VhFromInt(Index)}))
-    RenderModelNewSceneInstance<public>(RenderModel:int)<decides><transacts>:node3d = node3d{Handle := VhToHandle[VhCallValue(Handle, "render_model_new_scene_instance", array{VhFromRid(RenderModel)})]}
+    RenderModelNewSceneInstance<public>(RenderModel:int)<decides><transacts>:node3d = node3d[VhObjectFrom[VhCallValue(Handle, "render_model_new_scene_instance", array{VhFromRid(RenderModel)})]]
 
 open_xr_spatial_anchor_capability<public> := class(open_xr_extension_wrapper):
 
-    CreateNewAnchor<public>(Transform:transform3d, SpatialContext:int)<decides><transacts>:open_xr_anchor_tracker = open_xr_anchor_tracker{Handle := VhToHandle[VhCallValue(Handle, "create_new_anchor", array{VhFromTransform3D(Transform), VhFromRid(SpatialContext)})]}
-    CreatePersistenceContext<public>(Scope:open_xr_spatial_anchor_capability_persistence_scope, UserCallback:callable)<decides><transacts>:open_xr_future_result = open_xr_future_result{Handle := VhToHandle[VhCallValue(Handle, "create_persistence_context", array{VhFromOpenXrSpatialAnchorCapabilityPersistenceScope(Scope), VhFromCallable(UserCallback)})]}
+    CreateNewAnchor<public>(Transform:transform3d, SpatialContext:int)<decides><transacts>:open_xr_anchor_tracker = open_xr_anchor_tracker[VhObjectFrom[VhCallValue(Handle, "create_new_anchor", array{VhFromTransform3D(Transform), VhFromRid(SpatialContext)})]]
+    CreatePersistenceContext<public>(Scope:open_xr_spatial_anchor_capability_persistence_scope, UserCallback:callable)<decides><transacts>:open_xr_future_result = open_xr_future_result[VhObjectFrom[VhCallValue(Handle, "create_persistence_context", array{VhFromOpenXrSpatialAnchorCapabilityPersistenceScope(Scope), VhFromCallable(UserCallback)})]]
     FreePersistenceContext<public>(PersistenceContext:int)<transacts>:void = VhCallVoid(Handle, "free_persistence_context", array{VhFromRid(PersistenceContext)})
     GetPersistenceContextHandle<public>(PersistenceContext:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_persistence_context_handle", array{VhFromRid(PersistenceContext)}))
     IsPersistenceScopeSupported<public>(Scope:open_xr_spatial_anchor_capability_persistence_scope)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_persistence_scope_supported", array{VhFromOpenXrSpatialAnchorCapabilityPersistenceScope(Scope)}))
     IsSpatialAnchorSupported<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_spatial_anchor_supported", array{}))
     IsSpatialPersistenceSupported<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_spatial_persistence_supported", array{}))
-    PersistAnchor<public>(AnchorTracker:open_xr_anchor_tracker, PersistenceContext:int, UserCallback:callable)<decides><transacts>:open_xr_future_result = open_xr_future_result{Handle := VhToHandle[VhCallValue(Handle, "persist_anchor", array{VhFromObject(AnchorTracker), VhFromRid(PersistenceContext), VhFromCallable(UserCallback)})]}
+    PersistAnchor<public>(AnchorTracker:open_xr_anchor_tracker, PersistenceContext:int, UserCallback:callable)<decides><transacts>:open_xr_future_result = open_xr_future_result[VhObjectFrom[VhCallValue(Handle, "persist_anchor", array{VhFromObject(AnchorTracker), VhFromRid(PersistenceContext), VhFromCallable(UserCallback)})]]
     RemoveAnchor<public>(AnchorTracker:open_xr_anchor_tracker)<transacts>:void = VhCallVoid(Handle, "remove_anchor", array{VhFromObject(AnchorTracker)})
-    UnpersistAnchor<public>(AnchorTracker:open_xr_anchor_tracker, PersistenceContext:int, UserCallback:callable)<decides><transacts>:open_xr_future_result = open_xr_future_result{Handle := VhToHandle[VhCallValue(Handle, "unpersist_anchor", array{VhFromObject(AnchorTracker), VhFromRid(PersistenceContext), VhFromCallable(UserCallback)})]}
+    UnpersistAnchor<public>(AnchorTracker:open_xr_anchor_tracker, PersistenceContext:int, UserCallback:callable)<decides><transacts>:open_xr_future_result = open_xr_future_result[VhObjectFrom[VhCallValue(Handle, "unpersist_anchor", array{VhFromObject(AnchorTracker), VhFromRid(PersistenceContext), VhFromCallable(UserCallback)})]]
 
 open_xr_spatial_capability_configuration_base_header<public> := class(ref_counted):
 
@@ -32423,8 +32423,8 @@ open_xr_spatial_component_data<public> := class(ref_counted):
 open_xr_spatial_entity_extension<public> := class(open_xr_extension_wrapper):
 
     AddSpatialEntity<public>(SpatialContext:int, EntityId:int, Entity:int)<transacts>:int = VhToInt(VhCallValue(Handle, "add_spatial_entity", array{VhFromRid(SpatialContext), VhFromInt(EntityId), VhFromInt(Entity)}))
-    CreateSpatialContext<public>(CapabilityConfigurations:typed_array(open_xr_spatial_capability_configuration_base_header), Next:open_xr_structure_base, UserCallback:callable)<decides><transacts>:open_xr_future_result = open_xr_future_result{Handle := VhToHandle[VhCallValue(Handle, "create_spatial_context", array{VhFromOpenXRSpatialCapabilityConfigurationBaseHeaderArray(CapabilityConfigurations), VhFromObject(Next), VhFromCallable(UserCallback)})]}
-    DiscoverSpatialEntities<public>(SpatialContext:int, ComponentTypes:[]int, Next:open_xr_structure_base, UserCallback:callable)<decides><transacts>:open_xr_future_result = open_xr_future_result{Handle := VhToHandle[VhCallValue(Handle, "discover_spatial_entities", array{VhFromRid(SpatialContext), VhFromInt64Array(ComponentTypes), VhFromObject(Next), VhFromCallable(UserCallback)})]}
+    CreateSpatialContext<public>(CapabilityConfigurations:typed_array(open_xr_spatial_capability_configuration_base_header), Next:open_xr_structure_base, UserCallback:callable)<decides><transacts>:open_xr_future_result = open_xr_future_result[VhObjectFrom[VhCallValue(Handle, "create_spatial_context", array{VhFromOpenXRSpatialCapabilityConfigurationBaseHeaderArray(CapabilityConfigurations), VhFromObject(Next), VhFromCallable(UserCallback)})]]
+    DiscoverSpatialEntities<public>(SpatialContext:int, ComponentTypes:[]int, Next:open_xr_structure_base, UserCallback:callable)<decides><transacts>:open_xr_future_result = open_xr_future_result[VhObjectFrom[VhCallValue(Handle, "discover_spatial_entities", array{VhFromRid(SpatialContext), VhFromInt64Array(ComponentTypes), VhFromObject(Next), VhFromCallable(UserCallback)})]]
     FindSpatialEntity<public>(EntityId:int)<transacts>:int = VhToInt(VhCallValue(Handle, "find_spatial_entity", array{VhFromInt(EntityId)}))
     FreeSpatialContext<public>(SpatialContext:int)<transacts>:void = VhCallVoid(Handle, "free_spatial_context", array{VhFromRid(SpatialContext)})
     FreeSpatialEntity<public>(Entity:int)<transacts>:void = VhCallVoid(Handle, "free_spatial_entity", array{VhFromRid(Entity)})
@@ -32461,7 +32461,7 @@ open_xr_spatial_plane_tracking_capability<public> := class(open_xr_extension_wra
 
 open_xr_structure_base<public> := class(ref_counted):
 
-    GetNext<public>()<decides><transacts>:open_xr_structure_base = open_xr_structure_base{Handle := VhToHandle[VhCallValue(Handle, "get_next", array{})]}
+    GetNext<public>()<decides><transacts>:open_xr_structure_base = open_xr_structure_base[VhObjectFrom[VhCallValue(Handle, "get_next", array{})]]
     GetStructureType<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_structure_type", array{}))
     SetNext<public>(Entity:open_xr_structure_base)<transacts>:void = VhCallVoid(Handle, "set_next", array{VhFromObject(Entity)})
 
@@ -32739,7 +32739,7 @@ physics_shape_query_parameters2d<public> := class(ref_counted):
     var ShapeRid<public><getter(ShapeRidGetter)><setter(ShapeRidSetter)>:int = external {}
     ShapeRidGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_shape_rid", array{}))
     ShapeRidSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_shape_rid", array{VhFromRid(Value)})
-    GetShape<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_shape", array{})]}
+    GetShape<public>()<decides><transacts>:resource = resource[VhObjectFrom[VhCallValue(Handle, "get_shape", array{})]]
     GetTransform<public>()<transacts>:transform2d = VhToTransform2D(VhCallValue(Handle, "get_transform", array{}))
     SetShape<public>(Shape:resource)<transacts>:void = VhCallVoid(Handle, "set_shape", array{VhFromObject(Shape)})
     SetTransform<public>(Transform:transform2d)<transacts>:void = VhCallVoid(Handle, "set_transform", array{VhFromTransform2D(Transform)})
@@ -32778,7 +32778,7 @@ physics_shape_query_parameters3d<public> := class(ref_counted):
     var ShapeRid<public><getter(ShapeRidGetter)><setter(ShapeRidSetter)>:int = external {}
     ShapeRidGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_shape_rid", array{}))
     ShapeRidSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_shape_rid", array{VhFromRid(Value)})
-    GetShape<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_shape", array{})]}
+    GetShape<public>()<decides><transacts>:resource = resource[VhObjectFrom[VhCallValue(Handle, "get_shape", array{})]]
     GetTransform<public>()<transacts>:transform3d = VhToTransform3D(VhCallValue(Handle, "get_transform", array{}))
     SetShape<public>(Shape:resource)<transacts>:void = VhCallVoid(Handle, "set_shape", array{VhFromObject(Shape)})
     SetTransform<public>(Transform:transform3d)<transacts>:void = VhCallVoid(Handle, "set_transform", array{VhFromTransform3D(Transform)})
@@ -32852,7 +32852,7 @@ physics_test_motion_parameters3d<public> := class(ref_counted):
 
 physics_test_motion_result2d<public> := class(ref_counted):
 
-    GetCollider<public>()<decides><transacts>:object = object{Handle := VhToHandle[VhCallValue(Handle, "get_collider", array{})]}
+    GetCollider<public>()<decides><transacts>:object = object[VhObjectFrom[VhCallValue(Handle, "get_collider", array{})]]
     GetColliderId<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_collider_id", array{}))
     GetColliderRid<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_collider_rid", array{}))
     GetColliderShape<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_collider_shape", array{}))
@@ -32868,7 +32868,7 @@ physics_test_motion_result2d<public> := class(ref_counted):
 
 physics_test_motion_result3d<public> := class(ref_counted):
 
-    GetCollider<public>(?CollisionIndex:int = 0)<decides><transacts>:object = object{Handle := VhToHandle[VhCallValue(Handle, "get_collider", array{VhFromInt(CollisionIndex)})]}
+    GetCollider<public>(?CollisionIndex:int = 0)<decides><transacts>:object = object[VhObjectFrom[VhCallValue(Handle, "get_collider", array{VhFromInt(CollisionIndex)})]]
     GetColliderId<public>(?CollisionIndex:int = 0)<transacts>:int = VhToInt(VhCallValue(Handle, "get_collider_id", array{VhFromInt(CollisionIndex)}))
     GetColliderRid<public>(?CollisionIndex:int = 0)<transacts>:int = VhToInt(VhCallValue(Handle, "get_collider_rid", array{VhFromInt(CollisionIndex)}))
     GetColliderShape<public>(?CollisionIndex:int = 0)<transacts>:int = VhToInt(VhCallValue(Handle, "get_collider_shape", array{VhFromInt(CollisionIndex)}))
@@ -33274,7 +33274,7 @@ reg_ex<public> := class(ref_counted):
     GetNames<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_names", array{}))
     GetPattern<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_pattern", array{}))
     IsValid<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_valid", array{}))
-    Search<public>(Subject:string, ?Offset:int = 0, ?End:int = -1)<decides><transacts>:reg_ex_match = reg_ex_match{Handle := VhToHandle[VhCallValue(Handle, "search", array{VhFromString(Subject), VhFromInt(Offset), VhFromInt(End)})]}
+    Search<public>(Subject:string, ?Offset:int = 0, ?End:int = -1)<decides><transacts>:reg_ex_match = reg_ex_match[VhObjectFrom[VhCallValue(Handle, "search", array{VhFromString(Subject), VhFromInt(Offset), VhFromInt(End)})]]
     SearchAll<public>(Subject:string, ?Offset:int = 0, ?End:int = -1)<transacts>:typed_array(reg_ex_match) = VhToRegExMatchArray(VhCallValue(Handle, "search_all", array{VhFromString(Subject), VhFromInt(Offset), VhFromInt(End)}))
     Sub<public>(Subject:string, Replacement:string, ?All:logic = false, ?Offset:int = 0, ?End:int = -1)<transacts>:string = VhToString(VhCallValue(Handle, "sub", array{VhFromString(Subject), VhFromString(Replacement), VhFromLogic(All), VhFromInt(Offset), VhFromInt(End)}))
 
@@ -33356,11 +33356,11 @@ resource<public> := class(ref_counted):
     var ResourceLocalToScene<public><getter(ResourceLocalToSceneGetter)><setter(ResourceLocalToSceneSetter)>:logic = external {}
     ResourceLocalToSceneGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_local_to_scene", array{}))
     ResourceLocalToSceneSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_local_to_scene", array{VhFromLogic(Value)})
-    Duplicate<public>(?Deep:logic = false)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "duplicate", array{VhFromLogic(Deep)})]}
-    DuplicateDeep<public>(DeepSubresourcesMode:resource_deep_duplicate_mode)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "duplicate_deep", array{VhFromResourceDeepDuplicateMode(DeepSubresourcesMode)})]}
+    Duplicate<public>(?Deep:logic = false)<decides><transacts>:resource = resource[VhObjectFrom[VhCallValue(Handle, "duplicate", array{VhFromLogic(Deep)})]]
+    DuplicateDeep<public>(DeepSubresourcesMode:resource_deep_duplicate_mode)<decides><transacts>:resource = resource[VhObjectFrom[VhCallValue(Handle, "duplicate_deep", array{VhFromResourceDeepDuplicateMode(DeepSubresourcesMode)})]]
     EmitChanged<public>()<transacts>:void = VhCallVoid(Handle, "emit_changed", array{})
     GetIdForPath<public>(Path:string)<transacts>:string = VhToString(VhCallValue(Handle, "get_id_for_path", array{VhFromString(Path)}))
-    GetLocalScene<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_local_scene", array{})]}
+    GetLocalScene<public>()<decides><transacts>:node = node[VhObjectFrom[VhCallValue(Handle, "get_local_scene", array{})]]
     GetName<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_name", array{}))
     GetPath<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_path", array{}))
     GetRid<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_rid", array{}))
@@ -33384,7 +33384,7 @@ resource_importer<public> := class(ref_counted):
 resource_preloader<public> := class(node):
 
     AddResource<public>(Name:string, Resource:resource)<transacts>:void = VhCallVoid(Handle, "add_resource", array{VhFromStringName(Name), VhFromObject(Resource)})
-    GetResource<public>(Name:string)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_resource", array{VhFromStringName(Name)})]}
+    GetResource<public>(Name:string)<decides><transacts>:resource = resource[VhObjectFrom[VhCallValue(Handle, "get_resource", array{VhFromStringName(Name)})]]
     GetResourceList<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_resource_list", array{}))
     HasResource<public>(Name:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_resource", array{VhFromStringName(Name)}))
     RemoveResource<public>(Name:string)<transacts>:void = VhCallVoid(Handle, "remove_resource", array{VhFromStringName(Name)})
@@ -33392,7 +33392,7 @@ resource_preloader<public> := class(node):
 
 scene_state<public> := class(ref_counted):
 
-    GetBaseSceneState<public>()<decides><transacts>:scene_state = scene_state{Handle := VhToHandle[VhCallValue(Handle, "get_base_scene_state", array{})]}
+    GetBaseSceneState<public>()<decides><transacts>:scene_state = scene_state[VhObjectFrom[VhCallValue(Handle, "get_base_scene_state", array{})]]
     GetConnectionBinds<public>(Idx:int)<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_connection_binds", array{VhFromInt(Idx)}))
     GetConnectionCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_connection_count", array{}))
     GetConnectionFlags<public>(Idx:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_connection_flags", array{VhFromInt(Idx)}))
@@ -33404,7 +33404,7 @@ scene_state<public> := class(ref_counted):
     GetNodeCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_node_count", array{}))
     GetNodeGroups<public>(Idx:int)<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_node_groups", array{VhFromInt(Idx)}))
     GetNodeIndex<public>(Idx:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_node_index", array{VhFromInt(Idx)}))
-    GetNodeInstance<public>(Idx:int)<decides><transacts>:packed_scene = packed_scene{Handle := VhToHandle[VhCallValue(Handle, "get_node_instance", array{VhFromInt(Idx)})]}
+    GetNodeInstance<public>(Idx:int)<decides><transacts>:packed_scene = packed_scene[VhObjectFrom[VhCallValue(Handle, "get_node_instance", array{VhFromInt(Idx)})]]
     GetNodeInstancePlaceholder<public>(Idx:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_node_instance_placeholder", array{VhFromInt(Idx)}))
     GetNodeName<public>(Idx:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_node_name", array{VhFromInt(Idx)}))
     GetNodeOwnerPath<public>(Idx:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_node_owner_path", array{VhFromInt(Idx)}))
@@ -33445,18 +33445,18 @@ scene_tree<public> := class(main_loop):
     ChangeSceneToFile<public>(Path:string)<transacts>:error = VhToError(VhCallValue(Handle, "change_scene_to_file", array{VhFromString(Path)}))
     ChangeSceneToNode<public>(Node:node)<transacts>:error = VhToError(VhCallValue(Handle, "change_scene_to_node", array{VhFromObject(Node)}))
     ChangeSceneToPacked<public>(PackedScene:packed_scene)<transacts>:error = VhToError(VhCallValue(Handle, "change_scene_to_packed", array{VhFromObject(PackedScene)}))
-    CreateTimer<public>(TimeSec:float, ?ProcessAlways:logic = true, ?ProcessInPhysics:logic = false, ?IgnoreTimeScale:logic = false)<decides><transacts>:scene_tree_timer = scene_tree_timer{Handle := VhToHandle[VhCallValue(Handle, "create_timer", array{VhFromFloat(TimeSec), VhFromLogic(ProcessAlways), VhFromLogic(ProcessInPhysics), VhFromLogic(IgnoreTimeScale)})]}
-    CreateTween<public>()<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "create_tween", array{})]}
-    GetCurrentScene<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_current_scene", array{})]}
-    GetEditedSceneRoot<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_edited_scene_root", array{})]}
-    GetFirstNodeInGroup<public>(Group:string)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_first_node_in_group", array{VhFromStringName(Group)})]}
+    CreateTimer<public>(TimeSec:float, ?ProcessAlways:logic = true, ?ProcessInPhysics:logic = false, ?IgnoreTimeScale:logic = false)<decides><transacts>:scene_tree_timer = scene_tree_timer[VhObjectFrom[VhCallValue(Handle, "create_timer", array{VhFromFloat(TimeSec), VhFromLogic(ProcessAlways), VhFromLogic(ProcessInPhysics), VhFromLogic(IgnoreTimeScale)})]]
+    CreateTween<public>()<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "create_tween", array{})]]
+    GetCurrentScene<public>()<decides><transacts>:node = node[VhObjectFrom[VhCallValue(Handle, "get_current_scene", array{})]]
+    GetEditedSceneRoot<public>()<decides><transacts>:node = node[VhObjectFrom[VhCallValue(Handle, "get_edited_scene_root", array{})]]
+    GetFirstNodeInGroup<public>(Group:string)<decides><transacts>:node = node[VhObjectFrom[VhCallValue(Handle, "get_first_node_in_group", array{VhFromStringName(Group)})]]
     GetFrame<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_frame", array{}))
-    GetMultiplayer<public>(?ForPath:string = "")<decides><transacts>:multiplayer_api = multiplayer_api{Handle := VhToHandle[VhCallValue(Handle, "get_multiplayer", array{VhFromNodePath(ForPath)})]}
+    GetMultiplayer<public>(?ForPath:string = "")<decides><transacts>:multiplayer_api = multiplayer_api[VhObjectFrom[VhCallValue(Handle, "get_multiplayer", array{VhFromNodePath(ForPath)})]]
     GetNodeCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_node_count", array{}))
     GetNodeCountInGroup<public>(Group:string)<transacts>:int = VhToInt(VhCallValue(Handle, "get_node_count_in_group", array{VhFromStringName(Group)}))
     GetNodesInGroup<public>(Group:string)<transacts>:typed_array(node) = VhToNodeArray(VhCallValue(Handle, "get_nodes_in_group", array{VhFromStringName(Group)}))
     GetProcessedTweens<public>()<transacts>:typed_array(tween) = VhToTweenArray(VhCallValue(Handle, "get_processed_tweens", array{}))
-    GetRoot<public>()<decides><transacts>:window = window{Handle := VhToHandle[VhCallValue(Handle, "get_root", array{})]}
+    GetRoot<public>()<decides><transacts>:window = window[VhObjectFrom[VhCallValue(Handle, "get_root", array{})]]
     HasGroup<public>(Name:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_group", array{VhFromStringName(Name)}))
     IsAccessibilityEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_accessibility_enabled", array{}))
     IsAccessibilitySupported<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_accessibility_supported", array{}))
@@ -33510,21 +33510,21 @@ shader_globals_override<public> := class(node):
 skin_reference<public> := class(ref_counted):
 
     GetSkeleton<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_skeleton", array{}))
-    GetSkin<public>()<decides><transacts>:skin = skin{Handle := VhToHandle[VhCallValue(Handle, "get_skin", array{})]}
+    GetSkin<public>()<decides><transacts>:skin = skin[VhObjectFrom[VhCallValue(Handle, "get_skin", array{})]]
 
 socket_server<public> := class(ref_counted):
 
     IsConnectionAvailable<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_connection_available", array{}))
     IsListening<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_listening", array{}))
     Stop<public>()<transacts>:void = VhCallVoid(Handle, "stop", array{})
-    TakeSocketConnection<public>()<decides><transacts>:stream_peer_socket = stream_peer_socket{Handle := VhToHandle[VhCallValue(Handle, "take_socket_connection", array{})]}
+    TakeSocketConnection<public>()<decides><transacts>:stream_peer_socket = stream_peer_socket[VhObjectFrom[VhCallValue(Handle, "take_socket_connection", array{})]]
 
 status_indicator<public> := class(node):
 
     var Visible<public><getter(VisibleGetter)><setter(VisibleSetter)>:logic = external {}
     VisibleGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_visible", array{}))
     VisibleSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_visible", array{VhFromLogic(Value)})
-    GetIcon<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_icon", array{})]}
+    GetIcon<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_icon", array{})]]
     GetMenu<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_menu", array{}))
     GetRect<public>()<transacts>:rect2 = VhToRect2(VhCallValue(Handle, "get_rect", array{}))
     GetTooltip<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_tooltip", array{}))
@@ -33579,7 +33579,7 @@ surface_tool<public> := class(ref_counted):
     AppendFrom<public>(Existing:mesh, Surface:int, Transform:transform3d)<transacts>:void = VhCallVoid(Handle, "append_from", array{VhFromObject(Existing), VhFromInt(Surface), VhFromTransform3D(Transform)})
     Begin<public>(Primitive:mesh_primitive_type)<transacts>:void = VhCallVoid(Handle, "begin", array{VhFromMeshPrimitiveType(Primitive)})
     Clear<public>()<transacts>:void = VhCallVoid(Handle, "clear", array{})
-    Commit<public>(Existing:array_mesh, ?Flags:int = 0)<decides><transacts>:array_mesh = array_mesh{Handle := VhToHandle[VhCallValue(Handle, "commit", array{VhFromObject(Existing), VhFromInt(Flags)})]}
+    Commit<public>(Existing:array_mesh, ?Flags:int = 0)<decides><transacts>:array_mesh = array_mesh[VhObjectFrom[VhCallValue(Handle, "commit", array{VhFromObject(Existing), VhFromInt(Flags)})]]
     CommitToArrays<public>()<transacts>:godot_array = VhToArray(VhCallValue(Handle, "commit_to_arrays", array{}))
     CreateFrom<public>(Existing:mesh, Surface:int)<transacts>:void = VhCallVoid(Handle, "create_from", array{VhFromObject(Existing), VhFromInt(Surface)})
     CreateFromArrays<public>(Arrays:godot_array, PrimitiveType:mesh_primitive_type)<transacts>:void = VhCallVoid(Handle, "create_from_arrays", array{VhFromArray(Arrays), VhFromMeshPrimitiveType(PrimitiveType)})
@@ -33638,7 +33638,7 @@ text_line<public> := class(ref_counted):
     Clear<public>()<transacts>:void = VhCallVoid(Handle, "clear", array{})
     Draw<public>(Canvas:int, Pos:vector2, ?Color:color = color{R := 1.0, G := 1.0, B := 1.0, A := 1.0}, ?Oversampling:float = 0.0)<transacts>:void = VhCallVoid(Handle, "draw", array{VhFromRid(Canvas), VhFromVector2(Pos), VhFromColor(Color), VhFromFloat(Oversampling)})
     DrawOutline<public>(Canvas:int, Pos:vector2, ?OutlineSize:int = 1, ?Color:color = color{R := 1.0, G := 1.0, B := 1.0, A := 1.0}, ?Oversampling:float = 0.0)<transacts>:void = VhCallVoid(Handle, "draw_outline", array{VhFromRid(Canvas), VhFromVector2(Pos), VhFromInt(OutlineSize), VhFromColor(Color), VhFromFloat(Oversampling)})
-    Duplicate<public>()<decides><transacts>:text_line = text_line{Handle := VhToHandle[VhCallValue(Handle, "duplicate", array{})]}
+    Duplicate<public>()<decides><transacts>:text_line = text_line[VhObjectFrom[VhCallValue(Handle, "duplicate", array{})]]
     GetEllipsisChar<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_ellipsis_char", array{}))
     GetInferredDirection<public>()<transacts>:text_server_direction = VhToTextServerDirection(VhCallValue(Handle, "get_inferred_direction", array{}))
     GetLineAscent<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_line_ascent", array{}))
@@ -33702,7 +33702,7 @@ text_paragraph<public> := class(ref_counted):
     DrawLine<public>(Canvas:int, Pos:vector2, Line:int, ?Color:color = color{R := 1.0, G := 1.0, B := 1.0, A := 1.0}, ?Oversampling:float = 0.0)<transacts>:void = VhCallVoid(Handle, "draw_line", array{VhFromRid(Canvas), VhFromVector2(Pos), VhFromInt(Line), VhFromColor(Color), VhFromFloat(Oversampling)})
     DrawLineOutline<public>(Canvas:int, Pos:vector2, Line:int, ?OutlineSize:int = 1, ?Color:color = color{R := 1.0, G := 1.0, B := 1.0, A := 1.0}, ?Oversampling:float = 0.0)<transacts>:void = VhCallVoid(Handle, "draw_line_outline", array{VhFromRid(Canvas), VhFromVector2(Pos), VhFromInt(Line), VhFromInt(OutlineSize), VhFromColor(Color), VhFromFloat(Oversampling)})
     DrawOutline<public>(Canvas:int, Pos:vector2, ?OutlineSize:int = 1, ?Color:color = color{R := 1.0, G := 1.0, B := 1.0, A := 1.0}, ?DcColor:color = color{R := 1.0, G := 1.0, B := 1.0, A := 1.0}, ?Oversampling:float = 0.0)<transacts>:void = VhCallVoid(Handle, "draw_outline", array{VhFromRid(Canvas), VhFromVector2(Pos), VhFromInt(OutlineSize), VhFromColor(Color), VhFromColor(DcColor), VhFromFloat(Oversampling)})
-    Duplicate<public>()<decides><transacts>:text_paragraph = text_paragraph{Handle := VhToHandle[VhCallValue(Handle, "duplicate", array{})]}
+    Duplicate<public>()<decides><transacts>:text_paragraph = text_paragraph[VhObjectFrom[VhCallValue(Handle, "duplicate", array{})]]
     GetCustomPunctuation<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_custom_punctuation", array{}))
     GetDropcapLines<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_dropcap_lines", array{}))
     GetDropcapRid<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_dropcap_rid", array{}))
@@ -33794,7 +33794,7 @@ text_server<public> := class(ref_counted):
     FontGetSupportedChars<public>(FontRid:int)<transacts>:string = VhToString(VhCallValue(Handle, "font_get_supported_chars", array{VhFromRid(FontRid)}))
     FontGetSupportedGlyphs<public>(FontRid:int)<transacts>:[]int = VhToInts(VhCallValue(Handle, "font_get_supported_glyphs", array{VhFromRid(FontRid)}))
     FontGetTextureCount<public>(FontRid:int, Size:vector2i)<transacts>:int = VhToInt(VhCallValue(Handle, "font_get_texture_count", array{VhFromRid(FontRid), VhFromVector2i(Size)}))
-    FontGetTextureImage<public>(FontRid:int, Size:vector2i, TextureIndex:int)<decides><transacts>:image = image{Handle := VhToHandle[VhCallValue(Handle, "font_get_texture_image", array{VhFromRid(FontRid), VhFromVector2i(Size), VhFromInt(TextureIndex)})]}
+    FontGetTextureImage<public>(FontRid:int, Size:vector2i, TextureIndex:int)<decides><transacts>:image = image[VhObjectFrom[VhCallValue(Handle, "font_get_texture_image", array{VhFromRid(FontRid), VhFromVector2i(Size), VhFromInt(TextureIndex)})]]
     FontGetTextureOffsets<public>(FontRid:int, Size:vector2i, TextureIndex:int)<transacts>:[]int = VhToInts(VhCallValue(Handle, "font_get_texture_offsets", array{VhFromRid(FontRid), VhFromVector2i(Size), VhFromInt(TextureIndex)}))
     FontGetTransform<public>(FontRid:int)<transacts>:transform2d = VhToTransform2D(VhCallValue(Handle, "font_get_transform", array{VhFromRid(FontRid)}))
     FontGetUnderlinePosition<public>(FontRid:int, Size:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "font_get_underline_position", array{VhFromRid(FontRid), VhFromInt(Size)}))
@@ -34008,9 +34008,9 @@ timer<public> := class(node):
 tls_options<public> := class(ref_counted):
 
     GetCommonNameOverride<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_common_name_override", array{}))
-    GetOwnCertificate<public>()<decides><transacts>:x509certificate = x509certificate{Handle := VhToHandle[VhCallValue(Handle, "get_own_certificate", array{})]}
-    GetPrivateKey<public>()<decides><transacts>:crypto_key = crypto_key{Handle := VhToHandle[VhCallValue(Handle, "get_private_key", array{})]}
-    GetTrustedCaChain<public>()<decides><transacts>:x509certificate = x509certificate{Handle := VhToHandle[VhCallValue(Handle, "get_trusted_ca_chain", array{})]}
+    GetOwnCertificate<public>()<decides><transacts>:x509certificate = x509certificate[VhObjectFrom[VhCallValue(Handle, "get_own_certificate", array{})]]
+    GetPrivateKey<public>()<decides><transacts>:crypto_key = crypto_key[VhObjectFrom[VhCallValue(Handle, "get_private_key", array{})]]
+    GetTrustedCaChain<public>()<decides><transacts>:x509certificate = x509certificate[VhObjectFrom[VhCallValue(Handle, "get_trusted_ca_chain", array{})]]
     IsServer<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_server", array{}))
     IsUnsafeClient<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_unsafe_client", array{}))
 
@@ -34046,7 +34046,7 @@ translation_domain<public> := class(ref_counted):
     GetLocaleOverride<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_locale_override", array{}))
     GetPseudolocalizationPrefix<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_pseudolocalization_prefix", array{}))
     GetPseudolocalizationSuffix<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_pseudolocalization_suffix", array{}))
-    GetTranslationObject<public>(Locale:string)<decides><transacts>:translation = translation{Handle := VhToHandle[VhCallValue(Handle, "get_translation_object", array{VhFromString(Locale)})]}
+    GetTranslationObject<public>(Locale:string)<decides><transacts>:translation = translation[VhObjectFrom[VhCallValue(Handle, "get_translation_object", array{VhFromString(Locale)})]]
     GetTranslations<public>()<transacts>:typed_array(translation) = VhToTranslationArray(VhCallValue(Handle, "get_translations", array{}))
     HasTranslation<public>(Translation:translation)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_translation", array{VhFromObject(Translation)}))
     HasTranslationForLocale<public>(Locale:string, Exact:logic)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_translation_for_locale", array{VhFromString(Locale), VhFromLogic(Exact)}))
@@ -34067,31 +34067,31 @@ triangle_mesh<public> := class(ref_counted):
 
 tween<public> := class(ref_counted):
 
-    BindNode<public>(Node:node)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "bind_node", array{VhFromObject(Node)})]}
-    Chain<public>()<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "chain", array{})]}
+    BindNode<public>(Node:node)<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "bind_node", array{VhFromObject(Node)})]]
+    Chain<public>()<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "chain", array{})]]
     CustomStep<public>(Delta:float)<transacts>:logic = VhToLogic(VhCallValue(Handle, "custom_step", array{VhFromFloat(Delta)}))
     GetLoopsLeft<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_loops_left", array{}))
     GetTotalElapsedTime<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_total_elapsed_time", array{}))
     IsRunning<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_running", array{}))
     IsValid<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_valid", array{}))
     Kill<public>()<transacts>:void = VhCallVoid(Handle, "kill", array{})
-    Parallel<public>()<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "parallel", array{})]}
+    Parallel<public>()<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "parallel", array{})]]
     Pause<public>()<transacts>:void = VhCallVoid(Handle, "pause", array{})
     Play<public>()<transacts>:void = VhCallVoid(Handle, "play", array{})
-    SetEase<public>(Ease:tween_ease_type)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "set_ease", array{VhFromTweenEaseType(Ease)})]}
-    SetIgnoreTimeScale<public>(?Ignore:logic = true)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "set_ignore_time_scale", array{VhFromLogic(Ignore)})]}
-    SetLoops<public>(?Loops:int = 0)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "set_loops", array{VhFromInt(Loops)})]}
-    SetParallel<public>(?Arg0:logic = true)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "set_parallel", array{VhFromLogic(Arg0)})]}
-    SetPauseMode<public>(Mode:tween_tween_pause_mode)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "set_pause_mode", array{VhFromTweenTweenPauseMode(Mode)})]}
-    SetProcessMode<public>(Mode:tween_tween_process_mode)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "set_process_mode", array{VhFromTweenTweenProcessMode(Mode)})]}
-    SetSpeedScale<public>(Speed:float)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "set_speed_scale", array{VhFromFloat(Speed)})]}
-    SetTrans<public>(Trans:tween_transition_type)<decides><transacts>:tween = tween{Handle := VhToHandle[VhCallValue(Handle, "set_trans", array{VhFromTweenTransitionType(Trans)})]}
+    SetEase<public>(Ease:tween_ease_type)<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "set_ease", array{VhFromTweenEaseType(Ease)})]]
+    SetIgnoreTimeScale<public>(?Ignore:logic = true)<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "set_ignore_time_scale", array{VhFromLogic(Ignore)})]]
+    SetLoops<public>(?Loops:int = 0)<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "set_loops", array{VhFromInt(Loops)})]]
+    SetParallel<public>(?Arg0:logic = true)<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "set_parallel", array{VhFromLogic(Arg0)})]]
+    SetPauseMode<public>(Mode:tween_tween_pause_mode)<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "set_pause_mode", array{VhFromTweenTweenPauseMode(Mode)})]]
+    SetProcessMode<public>(Mode:tween_tween_process_mode)<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "set_process_mode", array{VhFromTweenTweenProcessMode(Mode)})]]
+    SetSpeedScale<public>(Speed:float)<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "set_speed_scale", array{VhFromFloat(Speed)})]]
+    SetTrans<public>(Trans:tween_transition_type)<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "set_trans", array{VhFromTweenTransitionType(Trans)})]]
     Stop<public>()<transacts>:void = VhCallVoid(Handle, "stop", array{})
-    TweenCallback<public>(Callback:callable)<decides><transacts>:callback_tweener = callback_tweener{Handle := VhToHandle[VhCallValue(Handle, "tween_callback", array{VhFromCallable(Callback)})]}
-    TweenInterval<public>(Time:float)<decides><transacts>:interval_tweener = interval_tweener{Handle := VhToHandle[VhCallValue(Handle, "tween_interval", array{VhFromFloat(Time)})]}
-    TweenMethod<public>(Method:callable, From:variant, To:variant, Duration:float)<decides><transacts>:method_tweener = method_tweener{Handle := VhToHandle[VhCallValue(Handle, "tween_method", array{VhFromCallable(Method), VhFromVariant(From), VhFromVariant(To), VhFromFloat(Duration)})]}
-    TweenProperty<public>(Object:object, Property:string, FinalVal:variant, Duration:float)<decides><transacts>:property_tweener = property_tweener{Handle := VhToHandle[VhCallValue(Handle, "tween_property", array{VhFromObject(Object), VhFromNodePath(Property), VhFromVariant(FinalVal), VhFromFloat(Duration)})]}
-    TweenSubtween<public>(Subtween:tween)<decides><transacts>:subtween_tweener = subtween_tweener{Handle := VhToHandle[VhCallValue(Handle, "tween_subtween", array{VhFromObject(Subtween)})]}
+    TweenCallback<public>(Callback:callable)<decides><transacts>:callback_tweener = callback_tweener[VhObjectFrom[VhCallValue(Handle, "tween_callback", array{VhFromCallable(Callback)})]]
+    TweenInterval<public>(Time:float)<decides><transacts>:interval_tweener = interval_tweener[VhObjectFrom[VhCallValue(Handle, "tween_interval", array{VhFromFloat(Time)})]]
+    TweenMethod<public>(Method:callable, From:variant, To:variant, Duration:float)<decides><transacts>:method_tweener = method_tweener[VhObjectFrom[VhCallValue(Handle, "tween_method", array{VhFromCallable(Method), VhFromVariant(From), VhFromVariant(To), VhFromFloat(Duration)})]]
+    TweenProperty<public>(Object:object, Property:string, FinalVal:variant, Duration:float)<decides><transacts>:property_tweener = property_tweener[VhObjectFrom[VhCallValue(Handle, "tween_property", array{VhFromObject(Object), VhFromNodePath(Property), VhFromVariant(FinalVal), VhFromFloat(Duration)})]]
+    TweenSubtween<public>(Subtween:tween)<decides><transacts>:subtween_tweener = subtween_tweener[VhObjectFrom[VhCallValue(Handle, "tween_subtween", array{VhFromObject(Subtween)})]]
 
 tweener<public> := class(ref_counted):
 
@@ -34106,7 +34106,7 @@ udp_server<public> := class(ref_counted):
     Listen<public>(Port:int, ?BindAddress:string = "*")<transacts>:error = VhToError(VhCallValue(Handle, "listen", array{VhFromInt(Port), VhFromString(BindAddress)}))
     Poll<public>()<transacts>:error = VhToError(VhCallValue(Handle, "poll", array{}))
     Stop<public>()<transacts>:void = VhCallVoid(Handle, "stop", array{})
-    TakeConnection<public>()<decides><transacts>:packet_peer_udp = packet_peer_udp{Handle := VhToHandle[VhCallValue(Handle, "take_connection", array{})]}
+    TakeConnection<public>()<decides><transacts>:packet_peer_udp = packet_peer_udp[VhObjectFrom[VhCallValue(Handle, "take_connection", array{})]]
 
 upnp<public> := class(ref_counted):
 
@@ -34121,10 +34121,10 @@ upnp<public> := class(ref_counted):
     ClearDevices<public>()<transacts>:void = VhCallVoid(Handle, "clear_devices", array{})
     DeletePortMapping<public>(Port:int, ?Proto:string = "UDP")<transacts>:int = VhToInt(VhCallValue(Handle, "delete_port_mapping", array{VhFromInt(Port), VhFromString(Proto)}))
     Discover<public>(?Timeout:int = 2000, ?Ttl:int = 2, ?DeviceFilter:string = "InternetGatewayDevice")<transacts>:int = VhToInt(VhCallValue(Handle, "discover", array{VhFromInt(Timeout), VhFromInt(Ttl), VhFromString(DeviceFilter)}))
-    GetDevice<public>(Index:int)<decides><transacts>:upnp_device = upnp_device{Handle := VhToHandle[VhCallValue(Handle, "get_device", array{VhFromInt(Index)})]}
+    GetDevice<public>(Index:int)<decides><transacts>:upnp_device = upnp_device[VhObjectFrom[VhCallValue(Handle, "get_device", array{VhFromInt(Index)})]]
     GetDeviceCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_device_count", array{}))
     GetDiscoverMulticastIf<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_discover_multicast_if", array{}))
-    GetGateway<public>()<decides><transacts>:upnp_device = upnp_device{Handle := VhToHandle[VhCallValue(Handle, "get_gateway", array{})]}
+    GetGateway<public>()<decides><transacts>:upnp_device = upnp_device[VhObjectFrom[VhCallValue(Handle, "get_gateway", array{})]]
     QueryExternalAddress<public>()<transacts>:string = VhToString(VhCallValue(Handle, "query_external_address", array{}))
     RemoveDevice<public>(Index:int)<transacts>:void = VhCallVoid(Handle, "remove_device", array{VhFromInt(Index)})
     SetDevice<public>(Index:int, Device:upnp_device)<transacts>:void = VhCallVoid(Handle, "set_device", array{VhFromInt(Index), VhFromObject(Device)})
@@ -34287,12 +34287,12 @@ viewport<public> := class(node):
     var VrsUpdateMode<public><getter(VrsUpdateModeGetter)><setter(VrsUpdateModeSetter)>:viewport_vrs_update_mode = external {}
     VrsUpdateModeGetter<epic_internal>(Accessor:accessor)<transacts>:viewport_vrs_update_mode = VhToViewportVrsUpdateMode(VhCallValue(Handle, "get_vrs_update_mode", array{}))
     VrsUpdateModeSetter<epic_internal>(Accessor:accessor, Value:viewport_vrs_update_mode)<transacts>:void = VhCallVoid(Handle, "set_vrs_update_mode", array{VhFromViewportVrsUpdateMode(Value)})
-    FindWorld2d<public>()<decides><transacts>:world2d = world2d{Handle := VhToHandle[VhCallValue(Handle, "find_world_2d", array{})]}
-    FindWorld3d<public>()<decides><transacts>:world3d = world3d{Handle := VhToHandle[VhCallValue(Handle, "find_world_3d", array{})]}
-    GetAudioListener2d<public>()<decides><transacts>:audio_listener2d = audio_listener2d{Handle := VhToHandle[VhCallValue(Handle, "get_audio_listener_2d", array{})]}
-    GetAudioListener3d<public>()<decides><transacts>:audio_listener3d = audio_listener3d{Handle := VhToHandle[VhCallValue(Handle, "get_audio_listener_3d", array{})]}
-    GetCamera2d<public>()<decides><transacts>:camera2d = camera2d{Handle := VhToHandle[VhCallValue(Handle, "get_camera_2d", array{})]}
-    GetCamera3d<public>()<decides><transacts>:camera3d = camera3d{Handle := VhToHandle[VhCallValue(Handle, "get_camera_3d", array{})]}
+    FindWorld2d<public>()<decides><transacts>:world2d = world2d[VhObjectFrom[VhCallValue(Handle, "find_world_2d", array{})]]
+    FindWorld3d<public>()<decides><transacts>:world3d = world3d[VhObjectFrom[VhCallValue(Handle, "find_world_3d", array{})]]
+    GetAudioListener2d<public>()<decides><transacts>:audio_listener2d = audio_listener2d[VhObjectFrom[VhCallValue(Handle, "get_audio_listener_2d", array{})]]
+    GetAudioListener3d<public>()<decides><transacts>:audio_listener3d = audio_listener3d[VhObjectFrom[VhCallValue(Handle, "get_audio_listener_3d", array{})]]
+    GetCamera2d<public>()<decides><transacts>:camera2d = camera2d[VhObjectFrom[VhCallValue(Handle, "get_camera_2d", array{})]]
+    GetCamera3d<public>()<decides><transacts>:camera3d = camera3d[VhObjectFrom[VhCallValue(Handle, "get_camera_3d", array{})]]
     GetCanvasCullMaskBit<public>(Layer:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_canvas_cull_mask_bit", array{VhFromInt(Layer)}))
     GetCanvasTransform<public>()<transacts>:transform2d = VhToTransform2D(VhCallValue(Handle, "get_canvas_transform", array{}))
     GetEmbeddedSubwindows<public>()<transacts>:typed_array(window) = VhToWindowArray(VhCallValue(Handle, "get_embedded_subwindows", array{}))
@@ -34303,17 +34303,17 @@ viewport<public> := class(node):
     GetRenderInfo<public>(Type:viewport_render_info_type, Info:viewport_render_info)<transacts>:int = VhToInt(VhCallValue(Handle, "get_render_info", array{VhFromViewportRenderInfoType(Type), VhFromViewportRenderInfo(Info)}))
     GetScreenTransform<public>()<transacts>:transform2d = VhToTransform2D(VhCallValue(Handle, "get_screen_transform", array{}))
     GetStretchTransform<public>()<transacts>:transform2d = VhToTransform2D(VhCallValue(Handle, "get_stretch_transform", array{}))
-    GetTexture<public>()<decides><transacts>:viewport_texture = viewport_texture{Handle := VhToHandle[VhCallValue(Handle, "get_texture", array{})]}
+    GetTexture<public>()<decides><transacts>:viewport_texture = viewport_texture[VhObjectFrom[VhCallValue(Handle, "get_texture", array{})]]
     GetViewportRid<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_viewport_rid", array{}))
     GetVisibleRect<public>()<transacts>:rect2 = VhToRect2(VhCallValue(Handle, "get_visible_rect", array{}))
-    GetVrsTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_vrs_texture", array{})]}
-    GetWorld2d<public>()<decides><transacts>:world2d = world2d{Handle := VhToHandle[VhCallValue(Handle, "get_world_2d", array{})]}
-    GetWorld3d<public>()<decides><transacts>:world3d = world3d{Handle := VhToHandle[VhCallValue(Handle, "get_world_3d", array{})]}
+    GetVrsTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_vrs_texture", array{})]]
+    GetWorld2d<public>()<decides><transacts>:world2d = world2d[VhObjectFrom[VhCallValue(Handle, "get_world_2d", array{})]]
+    GetWorld3d<public>()<decides><transacts>:world3d = world3d[VhObjectFrom[VhCallValue(Handle, "get_world_3d", array{})]]
     GuiCancelDrag<public>()<transacts>:void = VhCallVoid(Handle, "gui_cancel_drag", array{})
     GuiGetDragData<public>()<transacts>:variant = VhToVariant(VhCallValue(Handle, "gui_get_drag_data", array{}))
     GuiGetDragDescription<public>()<transacts>:string = VhToString(VhCallValue(Handle, "gui_get_drag_description", array{}))
-    GuiGetFocusOwner<public>()<decides><transacts>:control = control{Handle := VhToHandle[VhCallValue(Handle, "gui_get_focus_owner", array{})]}
-    GuiGetHoveredControl<public>()<decides><transacts>:control = control{Handle := VhToHandle[VhCallValue(Handle, "gui_get_hovered_control", array{})]}
+    GuiGetFocusOwner<public>()<decides><transacts>:control = control[VhObjectFrom[VhCallValue(Handle, "gui_get_focus_owner", array{})]]
+    GuiGetHoveredControl<public>()<decides><transacts>:control = control[VhObjectFrom[VhCallValue(Handle, "gui_get_hovered_control", array{})]]
     GuiIsDragSuccessful<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "gui_is_drag_successful", array{}))
     GuiIsDragging<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "gui_is_dragging", array{}))
     GuiReleaseFocus<public>()<transacts>:void = VhCallVoid(Handle, "gui_release_focus", array{})
@@ -34342,7 +34342,7 @@ web_rtc_peer_connection<public> := class(ref_counted):
 
     AddIceCandidate<public>(Media:string, Index:int, Name:string)<transacts>:error = VhToError(VhCallValue(Handle, "add_ice_candidate", array{VhFromString(Media), VhFromInt(Index), VhFromString(Name)}))
     Close<public>()<transacts>:void = VhCallVoid(Handle, "close", array{})
-    CreateDataChannel<public>(Label:string, Options:dictionary)<decides><transacts>:web_rtc_data_channel = web_rtc_data_channel{Handle := VhToHandle[VhCallValue(Handle, "create_data_channel", array{VhFromString(Label), VhFromDictionary(Options)})]}
+    CreateDataChannel<public>(Label:string, Options:dictionary)<decides><transacts>:web_rtc_data_channel = web_rtc_data_channel[VhObjectFrom[VhCallValue(Handle, "create_data_channel", array{VhFromString(Label), VhFromDictionary(Options)})]]
     CreateOffer<public>()<transacts>:error = VhToError(VhCallValue(Handle, "create_offer", array{}))
     GetConnectionState<public>()<transacts>:web_rtc_peer_connection_connection_state = VhToWebRtcPeerConnectionConnectionState(VhCallValue(Handle, "get_connection_state", array{}))
     GetGatheringState<public>()<transacts>:web_rtc_peer_connection_gathering_state = VhToWebRtcPeerConnectionGatheringState(VhCallValue(Handle, "get_gathering_state", array{}))
@@ -34354,9 +34354,9 @@ web_rtc_peer_connection<public> := class(ref_counted):
 
 world_environment<public> := class(node):
 
-    GetCameraAttributes<public>()<decides><transacts>:camera_attributes = camera_attributes{Handle := VhToHandle[VhCallValue(Handle, "get_camera_attributes", array{})]}
-    GetCompositor<public>()<decides><transacts>:compositor = compositor{Handle := VhToHandle[VhCallValue(Handle, "get_compositor", array{})]}
-    GetEnvironment<public>()<decides><transacts>:environment = environment{Handle := VhToHandle[VhCallValue(Handle, "get_environment", array{})]}
+    GetCameraAttributes<public>()<decides><transacts>:camera_attributes = camera_attributes[VhObjectFrom[VhCallValue(Handle, "get_camera_attributes", array{})]]
+    GetCompositor<public>()<decides><transacts>:compositor = compositor[VhObjectFrom[VhCallValue(Handle, "get_compositor", array{})]]
+    GetEnvironment<public>()<decides><transacts>:environment = environment[VhObjectFrom[VhCallValue(Handle, "get_environment", array{})]]
     SetCameraAttributes<public>(CameraAttributes:camera_attributes)<transacts>:void = VhCallVoid(Handle, "set_camera_attributes", array{VhFromObject(CameraAttributes)})
     SetCompositor<public>(Compositor:compositor)<transacts>:void = VhCallVoid(Handle, "set_compositor", array{VhFromObject(Compositor)})
     SetEnvironment<public>(Env:environment)<transacts>:void = VhCallVoid(Handle, "set_environment", array{VhFromObject(Env)})
@@ -34482,7 +34482,7 @@ animation<public> := class(resource):
     AnimationTrackSetKeyAnimation<public>(TrackIdx:int, KeyIdx:int, Animation:string)<transacts>:void = VhCallVoid(Handle, "animation_track_set_key_animation", array{VhFromInt(TrackIdx), VhFromInt(KeyIdx), VhFromStringName(Animation)})
     AudioTrackGetKeyEndOffset<public>(TrackIdx:int, KeyIdx:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "audio_track_get_key_end_offset", array{VhFromInt(TrackIdx), VhFromInt(KeyIdx)}))
     AudioTrackGetKeyStartOffset<public>(TrackIdx:int, KeyIdx:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "audio_track_get_key_start_offset", array{VhFromInt(TrackIdx), VhFromInt(KeyIdx)}))
-    AudioTrackGetKeyStream<public>(TrackIdx:int, KeyIdx:int)<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "audio_track_get_key_stream", array{VhFromInt(TrackIdx), VhFromInt(KeyIdx)})]}
+    AudioTrackGetKeyStream<public>(TrackIdx:int, KeyIdx:int)<decides><transacts>:resource = resource[VhObjectFrom[VhCallValue(Handle, "audio_track_get_key_stream", array{VhFromInt(TrackIdx), VhFromInt(KeyIdx)})]]
     AudioTrackInsertKey<public>(TrackIdx:int, Time:float, Stream:resource, ?StartOffset:float = 0.0, ?EndOffset:float = 0.0)<transacts>:int = VhToInt(VhCallValue(Handle, "audio_track_insert_key", array{VhFromInt(TrackIdx), VhFromFloat(Time), VhFromObject(Stream), VhFromFloat(StartOffset), VhFromFloat(EndOffset)}))
     AudioTrackIsUseBlend<public>(TrackIdx:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "audio_track_is_use_blend", array{VhFromInt(TrackIdx)}))
     AudioTrackSetKeyEndOffset<public>(TrackIdx:int, KeyIdx:int, Offset:float)<transacts>:void = VhCallVoid(Handle, "audio_track_set_key_end_offset", array{VhFromInt(TrackIdx), VhFromInt(KeyIdx), VhFromFloat(Offset)})
@@ -34558,7 +34558,7 @@ animation<public> := class(resource):
 animation_library<public> := class(resource):
 
     AddAnimation<public>(Name:string, Animation:animation)<transacts>:error = VhToError(VhCallValue(Handle, "add_animation", array{VhFromStringName(Name), VhFromObject(Animation)}))
-    GetAnimation<public>(Name:string)<decides><transacts>:animation = animation{Handle := VhToHandle[VhCallValue(Handle, "get_animation", array{VhFromStringName(Name)})]}
+    GetAnimation<public>(Name:string)<decides><transacts>:animation = animation[VhObjectFrom[VhCallValue(Handle, "get_animation", array{VhFromStringName(Name)})]]
     GetAnimationList<public>()<transacts>:typed_array(string) = VhToStringNameArray(VhCallValue(Handle, "get_animation_list", array{}))
     GetAnimationListSize<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_animation_list_size", array{}))
     HasAnimation<public>(Name:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_animation", array{VhFromStringName(Name)}))
@@ -34625,7 +34625,7 @@ animation_node_state_machine_transition<public> := class(resource):
     XfadeTimeSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_xfade_time", array{VhFromFloat(Value)})
     GetAdvanceCondition<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_advance_condition", array{}))
     GetAdvanceExpression<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_advance_expression", array{}))
-    GetXfadeCurve<public>()<decides><transacts>:curve = curve{Handle := VhToHandle[VhCallValue(Handle, "get_xfade_curve", array{})]}
+    GetXfadeCurve<public>()<decides><transacts>:curve = curve[VhObjectFrom[VhCallValue(Handle, "get_xfade_curve", array{})]]
     SetAdvanceCondition<public>(Name:string)<transacts>:void = VhCallVoid(Handle, "set_advance_condition", array{VhFromStringName(Name)})
     SetAdvanceExpression<public>(Text:string)<transacts>:void = VhCallVoid(Handle, "set_advance_expression", array{VhFromString(Text)})
     SetXfadeCurve<public>(Curve:curve)<transacts>:void = VhCallVoid(Handle, "set_xfade_curve", array{VhFromObject(Curve)})
@@ -34699,7 +34699,7 @@ animation_tree<public> := class(animation_mixer):
     GetAdvanceExpressionBaseNode<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_advance_expression_base_node", array{}))
     GetAnimationPlayer<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_animation_player", array{}))
     GetProcessCallback<public>()<transacts>:animation_tree_animation_process_callback = VhToAnimationTreeAnimationProcessCallback(VhCallValue(Handle, "get_process_callback", array{}))
-    GetTreeRoot<public>()<decides><transacts>:animation_root_node = animation_root_node{Handle := VhToHandle[VhCallValue(Handle, "get_tree_root", array{})]}
+    GetTreeRoot<public>()<decides><transacts>:animation_root_node = animation_root_node[VhObjectFrom[VhCallValue(Handle, "get_tree_root", array{})]]
     SetAdvanceExpressionBaseNode<public>(Path:string)<transacts>:void = VhCallVoid(Handle, "set_advance_expression_base_node", array{VhFromNodePath(Path)})
     SetAnimationPlayer<public>(Path:string)<transacts>:void = VhCallVoid(Handle, "set_animation_player", array{VhFromNodePath(Path)})
     SetProcessCallback<public>(Mode:animation_tree_animation_process_callback)<transacts>:void = VhCallVoid(Handle, "set_process_callback", array{VhFromAnimationTreeAnimationProcessCallback(Mode)})
@@ -34726,9 +34726,9 @@ audio_listener3d<public> := class(node3d):
 audio_stream<public> := class(resource):
 
     CanBeSampled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "can_be_sampled", array{}))
-    GenerateSample<public>()<decides><transacts>:audio_sample = audio_sample{Handle := VhToHandle[VhCallValue(Handle, "generate_sample", array{})]}
+    GenerateSample<public>()<decides><transacts>:audio_sample = audio_sample[VhObjectFrom[VhCallValue(Handle, "generate_sample", array{})]]
     GetLength<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_length", array{}))
-    InstantiatePlayback<public>()<decides><transacts>:audio_stream_playback = audio_stream_playback{Handle := VhToHandle[VhCallValue(Handle, "instantiate_playback", array{})]}
+    InstantiatePlayback<public>()<decides><transacts>:audio_stream_playback = audio_stream_playback[VhObjectFrom[VhCallValue(Handle, "instantiate_playback", array{})]]
     IsMetaStream<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_meta_stream", array{}))
     IsMonophonic<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_monophonic", array{}))
 
@@ -34818,8 +34818,8 @@ audio_stream_player3d<public> := class(node3d):
     VolumeLinearSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_volume_linear", array{VhFromFloat(Value)})
     GetBus<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_bus", array{}))
     GetPlaybackPosition<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_playback_position", array{}))
-    GetStream<public>()<decides><transacts>:audio_stream = audio_stream{Handle := VhToHandle[VhCallValue(Handle, "get_stream", array{})]}
-    GetStreamPlayback<public>()<decides><transacts>:audio_stream_playback = audio_stream_playback{Handle := VhToHandle[VhCallValue(Handle, "get_stream_playback", array{})]}
+    GetStream<public>()<decides><transacts>:audio_stream = audio_stream[VhObjectFrom[VhCallValue(Handle, "get_stream", array{})]]
+    GetStreamPlayback<public>()<decides><transacts>:audio_stream_playback = audio_stream_playback[VhObjectFrom[VhCallValue(Handle, "get_stream_playback", array{})]]
     HasStreamPlayback<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_stream_playback", array{}))
     Play<public>(?FromPosition:float = 0.0)<transacts>:void = VhCallVoid(Handle, "play", array{VhFromFloat(FromPosition)})
     Seek<public>(ToPosition:float)<transacts>:void = VhCallVoid(Handle, "seek", array{VhFromFloat(ToPosition)})
@@ -34829,7 +34829,7 @@ audio_stream_player3d<public> := class(node3d):
 
 bit_map<public> := class(resource):
 
-    ConvertToImage<public>()<decides><transacts>:image = image{Handle := VhToHandle[VhCallValue(Handle, "convert_to_image", array{})]}
+    ConvertToImage<public>()<decides><transacts>:image = image[VhObjectFrom[VhCallValue(Handle, "convert_to_image", array{})]]
     Create<public>(Size:vector2i)<transacts>:void = VhCallVoid(Handle, "create", array{VhFromVector2i(Size)})
     CreateFromImageAlpha<public>(Image:image, ?Threshold:float = 0.1)<transacts>:void = VhCallVoid(Handle, "create_from_image_alpha", array{VhFromObject(Image), VhFromFloat(Threshold)})
     GetBit<public>(X:int, Y:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_bit", array{VhFromInt(X), VhFromInt(Y)}))
@@ -34856,7 +34856,7 @@ bone_attachment3d<public> := class(node3d):
     UseExternalSkeletonSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_use_external_skeleton", array{VhFromLogic(Value)})
     GetBoneName<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_bone_name", array{}))
     GetExternalSkeleton<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_external_skeleton", array{}))
-    GetSkeleton<public>()<decides><transacts>:skeleton3d = skeleton3d{Handle := VhToHandle[VhCallValue(Handle, "get_skeleton", array{})]}
+    GetSkeleton<public>()<decides><transacts>:skeleton3d = skeleton3d[VhObjectFrom[VhCallValue(Handle, "get_skeleton", array{})]]
     OnSkeletonUpdate<public>()<transacts>:void = VhCallVoid(Handle, "on_skeleton_update", array{})
     SetBoneName<public>(BoneName:string)<transacts>:void = VhCallVoid(Handle, "set_bone_name", array{VhFromString(BoneName)})
     SetExternalSkeleton<public>(ExternalSkeleton:string)<transacts>:void = VhCallVoid(Handle, "set_external_skeleton", array{VhFromNodePath(ExternalSkeleton)})
@@ -34864,7 +34864,7 @@ bone_attachment3d<public> := class(node3d):
 bone_map<public> := class(resource):
 
     FindProfileBoneName<public>(SkeletonBoneName:string)<transacts>:string = VhToString(VhCallValue(Handle, "find_profile_bone_name", array{VhFromStringName(SkeletonBoneName)}))
-    GetProfile<public>()<decides><transacts>:skeleton_profile = skeleton_profile{Handle := VhToHandle[VhCallValue(Handle, "get_profile", array{})]}
+    GetProfile<public>()<decides><transacts>:skeleton_profile = skeleton_profile[VhObjectFrom[VhCallValue(Handle, "get_profile", array{})]]
     GetSkeletonBoneName<public>(ProfileBoneName:string)<transacts>:string = VhToString(VhCallValue(Handle, "get_skeleton_bone_name", array{VhFromStringName(ProfileBoneName)}))
     SetProfile<public>(Profile:skeleton_profile)<transacts>:void = VhCallVoid(Handle, "set_profile", array{VhFromObject(Profile)})
     SetSkeletonBoneName<public>(ProfileBoneName:string, SkeletonBoneName:string)<transacts>:void = VhCallVoid(Handle, "set_skeleton_bone_name", array{VhFromStringName(ProfileBoneName), VhFromStringName(SkeletonBoneName)})
@@ -34875,11 +34875,11 @@ button_group<public> := class(resource):
     AllowUnpressGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_allow_unpress", array{}))
     AllowUnpressSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_allow_unpress", array{VhFromLogic(Value)})
     GetButtons<public>()<transacts>:typed_array(base_button) = VhToBaseButtonArray(VhCallValue(Handle, "get_buttons", array{}))
-    GetPressedButton<public>()<decides><transacts>:base_button = base_button{Handle := VhToHandle[VhCallValue(Handle, "get_pressed_button", array{})]}
+    GetPressedButton<public>()<decides><transacts>:base_button = base_button[VhObjectFrom[VhCallValue(Handle, "get_pressed_button", array{})]]
 
 callback_tweener<public> := class(tweener):
 
-    SetDelay<public>(Delay:float)<decides><transacts>:callback_tweener = callback_tweener{Handle := VhToHandle[VhCallValue(Handle, "set_delay", array{VhFromFloat(Delay)})]}
+    SetDelay<public>(Delay:float)<decides><transacts>:callback_tweener = callback_tweener[VhObjectFrom[VhCallValue(Handle, "set_delay", array{VhFromFloat(Delay)})]]
 
 camera3d<public> := class(node3d):
 
@@ -34929,13 +34929,13 @@ camera3d<public> := class(node3d):
     VOffsetGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_v_offset", array{}))
     VOffsetSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_v_offset", array{VhFromFloat(Value)})
     ClearCurrent<public>(?EnableNext:logic = true)<transacts>:void = VhCallVoid(Handle, "clear_current", array{VhFromLogic(EnableNext)})
-    GetAttributes<public>()<decides><transacts>:camera_attributes = camera_attributes{Handle := VhToHandle[VhCallValue(Handle, "get_attributes", array{})]}
+    GetAttributes<public>()<decides><transacts>:camera_attributes = camera_attributes[VhObjectFrom[VhCallValue(Handle, "get_attributes", array{})]]
     GetCameraProjection<public>()<transacts>:projection = VhToProjection(VhCallValue(Handle, "get_camera_projection", array{}))
     GetCameraRid<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_camera_rid", array{}))
     GetCameraTransform<public>()<transacts>:transform3d = VhToTransform3D(VhCallValue(Handle, "get_camera_transform", array{}))
-    GetCompositor<public>()<decides><transacts>:compositor = compositor{Handle := VhToHandle[VhCallValue(Handle, "get_compositor", array{})]}
+    GetCompositor<public>()<decides><transacts>:compositor = compositor[VhObjectFrom[VhCallValue(Handle, "get_compositor", array{})]]
     GetCullMaskValue<public>(LayerNumber:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_cull_mask_value", array{VhFromInt(LayerNumber)}))
-    GetEnvironment<public>()<decides><transacts>:environment = environment{Handle := VhToHandle[VhCallValue(Handle, "get_environment", array{})]}
+    GetEnvironment<public>()<decides><transacts>:environment = environment[VhObjectFrom[VhCallValue(Handle, "get_environment", array{})]]
     GetFrustum<public>()<transacts>:typed_array(plane) = VhToPlaneArray(VhCallValue(Handle, "get_frustum", array{}))
     GetPyramidShapeRid<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_pyramid_shape_rid", array{}))
     IsPositionBehind<public>(WorldPoint:vector3)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_position_behind", array{VhFromVector3(WorldPoint)}))
@@ -35004,8 +35004,8 @@ collision_object3d<public> := class(node3d):
     ShapeFindOwner<public>(ShapeIndex:int)<transacts>:int = VhToInt(VhCallValue(Handle, "shape_find_owner", array{VhFromInt(ShapeIndex)}))
     ShapeOwnerAddShape<public>(OwnerId:int, Shape:shape3d)<transacts>:void = VhCallVoid(Handle, "shape_owner_add_shape", array{VhFromInt(OwnerId), VhFromObject(Shape)})
     ShapeOwnerClearShapes<public>(OwnerId:int)<transacts>:void = VhCallVoid(Handle, "shape_owner_clear_shapes", array{VhFromInt(OwnerId)})
-    ShapeOwnerGetOwner<public>(OwnerId:int)<decides><transacts>:object = object{Handle := VhToHandle[VhCallValue(Handle, "shape_owner_get_owner", array{VhFromInt(OwnerId)})]}
-    ShapeOwnerGetShape<public>(OwnerId:int, ShapeId:int)<decides><transacts>:shape3d = shape3d{Handle := VhToHandle[VhCallValue(Handle, "shape_owner_get_shape", array{VhFromInt(OwnerId), VhFromInt(ShapeId)})]}
+    ShapeOwnerGetOwner<public>(OwnerId:int)<decides><transacts>:object = object[VhObjectFrom[VhCallValue(Handle, "shape_owner_get_owner", array{VhFromInt(OwnerId)})]]
+    ShapeOwnerGetShape<public>(OwnerId:int, ShapeId:int)<decides><transacts>:shape3d = shape3d[VhObjectFrom[VhCallValue(Handle, "shape_owner_get_shape", array{VhFromInt(OwnerId), VhFromInt(ShapeId)})]]
     ShapeOwnerGetShapeCount<public>(OwnerId:int)<transacts>:int = VhToInt(VhCallValue(Handle, "shape_owner_get_shape_count", array{VhFromInt(OwnerId)}))
     ShapeOwnerGetShapeIndex<public>(OwnerId:int, ShapeId:int)<transacts>:int = VhToInt(VhCallValue(Handle, "shape_owner_get_shape_index", array{VhFromInt(OwnerId), VhFromInt(ShapeId)}))
     ShapeOwnerGetTransform<public>(OwnerId:int)<transacts>:transform3d = VhToTransform3D(VhCallValue(Handle, "shape_owner_get_transform", array{VhFromInt(OwnerId)}))
@@ -35070,7 +35070,7 @@ collision_shape3d<public> := class(node3d):
     var Disabled<public><getter(DisabledGetter)><setter(DisabledSetter)>:logic = external {}
     DisabledGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_disabled", array{}))
     DisabledSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_disabled", array{VhFromLogic(Value)})
-    GetShape<public>()<decides><transacts>:shape3d = shape3d{Handle := VhToHandle[VhCallValue(Handle, "get_shape", array{})]}
+    GetShape<public>()<decides><transacts>:shape3d = shape3d[VhObjectFrom[VhCallValue(Handle, "get_shape", array{})]]
     MakeConvexFromSiblings<public>()<transacts>:void = VhCallVoid(Handle, "make_convex_from_siblings", array{})
     ResourceChanged<public>(Resource:resource)<transacts>:void = VhCallVoid(Handle, "resource_changed", array{VhFromObject(Resource)})
     SetShape<public>(Shape:shape3d)<transacts>:void = VhCallVoid(Handle, "set_shape", array{VhFromObject(Shape)})
@@ -35306,9 +35306,9 @@ control<public> := class(canvas_item):
     AddThemeStyleboxOverride<public>(Name:string, Stylebox:style_box)<transacts>:void = VhCallVoid(Handle, "add_theme_stylebox_override", array{VhFromStringName(Name), VhFromObject(Stylebox)})
     BeginBulkThemeOverride<public>()<transacts>:void = VhCallVoid(Handle, "begin_bulk_theme_override", array{})
     EndBulkThemeOverride<public>()<transacts>:void = VhCallVoid(Handle, "end_bulk_theme_override", array{})
-    FindNextValidFocus<public>()<decides><transacts>:control = control{Handle := VhToHandle[VhCallValue(Handle, "find_next_valid_focus", array{})]}
-    FindPrevValidFocus<public>()<decides><transacts>:control = control{Handle := VhToHandle[VhCallValue(Handle, "find_prev_valid_focus", array{})]}
-    FindValidFocusNeighbor<public>(Side:side)<decides><transacts>:control = control{Handle := VhToHandle[VhCallValue(Handle, "find_valid_focus_neighbor", array{VhFromSide(Side)})]}
+    FindNextValidFocus<public>()<decides><transacts>:control = control[VhObjectFrom[VhCallValue(Handle, "find_next_valid_focus", array{})]]
+    FindPrevValidFocus<public>()<decides><transacts>:control = control[VhObjectFrom[VhCallValue(Handle, "find_prev_valid_focus", array{})]]
+    FindValidFocusNeighbor<public>(Side:side)<decides><transacts>:control = control[VhObjectFrom[VhCallValue(Handle, "find_valid_focus_neighbor", array{VhFromSide(Side)})]]
     ForceDrag<public>(Data:variant, Preview:control)<transacts>:void = VhCallVoid(Handle, "force_drag", array{VhFromVariant(Data), VhFromObject(Preview)})
     GetAccessibilityDescription<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_accessibility_description", array{}))
     GetAccessibilityName<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_accessibility_name", array{}))
@@ -35325,20 +35325,20 @@ control<public> := class(canvas_item):
     GetMinimumSize<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_minimum_size", array{}))
     GetMouseFilterWithOverride<public>()<transacts>:control_mouse_filter = VhToControlMouseFilter(VhCallValue(Handle, "get_mouse_filter_with_override", array{}))
     GetParentAreaSize<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_parent_area_size", array{}))
-    GetParentControl<public>()<decides><transacts>:control = control{Handle := VhToHandle[VhCallValue(Handle, "get_parent_control", array{})]}
+    GetParentControl<public>()<decides><transacts>:control = control[VhObjectFrom[VhCallValue(Handle, "get_parent_control", array{})]]
     GetRect<public>()<transacts>:rect2 = VhToRect2(VhCallValue(Handle, "get_rect", array{}))
     GetScreenPosition<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_screen_position", array{}))
-    GetShortcutContext<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_shortcut_context", array{})]}
-    GetTheme<public>()<decides><transacts>:theme = theme{Handle := VhToHandle[VhCallValue(Handle, "get_theme", array{})]}
+    GetShortcutContext<public>()<decides><transacts>:node = node[VhObjectFrom[VhCallValue(Handle, "get_shortcut_context", array{})]]
+    GetTheme<public>()<decides><transacts>:theme = theme[VhObjectFrom[VhCallValue(Handle, "get_theme", array{})]]
     GetThemeColor<public>(Name:string, ?ThemeType:string = "")<transacts>:color = VhToColor(VhCallValue(Handle, "get_theme_color", array{VhFromStringName(Name), VhFromStringName(ThemeType)}))
     GetThemeConstant<public>(Name:string, ?ThemeType:string = "")<transacts>:int = VhToInt(VhCallValue(Handle, "get_theme_constant", array{VhFromStringName(Name), VhFromStringName(ThemeType)}))
     GetThemeDefaultBaseScale<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_theme_default_base_scale", array{}))
-    GetThemeDefaultFont<public>()<decides><transacts>:font = font{Handle := VhToHandle[VhCallValue(Handle, "get_theme_default_font", array{})]}
+    GetThemeDefaultFont<public>()<decides><transacts>:font = font[VhObjectFrom[VhCallValue(Handle, "get_theme_default_font", array{})]]
     GetThemeDefaultFontSize<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_theme_default_font_size", array{}))
-    GetThemeFont<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:font = font{Handle := VhToHandle[VhCallValue(Handle, "get_theme_font", array{VhFromStringName(Name), VhFromStringName(ThemeType)})]}
+    GetThemeFont<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:font = font[VhObjectFrom[VhCallValue(Handle, "get_theme_font", array{VhFromStringName(Name), VhFromStringName(ThemeType)})]]
     GetThemeFontSize<public>(Name:string, ?ThemeType:string = "")<transacts>:int = VhToInt(VhCallValue(Handle, "get_theme_font_size", array{VhFromStringName(Name), VhFromStringName(ThemeType)}))
-    GetThemeIcon<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_theme_icon", array{VhFromStringName(Name), VhFromStringName(ThemeType)})]}
-    GetThemeStylebox<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:style_box = style_box{Handle := VhToHandle[VhCallValue(Handle, "get_theme_stylebox", array{VhFromStringName(Name), VhFromStringName(ThemeType)})]}
+    GetThemeIcon<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_theme_icon", array{VhFromStringName(Name), VhFromStringName(ThemeType)})]]
+    GetThemeStylebox<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:style_box = style_box[VhObjectFrom[VhCallValue(Handle, "get_theme_stylebox", array{VhFromStringName(Name), VhFromStringName(ThemeType)})]]
     GetThemeTypeVariation<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_theme_type_variation", array{}))
     GetTooltip<public>(?AtPosition:vector2 = vector2{X := 0.0, Y := 0.0})<transacts>:string = VhToString(VhCallValue(Handle, "get_tooltip", array{VhFromVector2(AtPosition)}))
     GetTooltipText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_tooltip_text", array{}))
@@ -35556,8 +35556,8 @@ editor_node3d_gizmo<public> := class(node3d_gizmo):
     AddMesh<public>(Mesh:mesh, Material:material, Transform:transform3d, Skeleton:skin_reference)<transacts>:void = VhCallVoid(Handle, "add_mesh", array{VhFromObject(Mesh), VhFromObject(Material), VhFromTransform3D(Transform), VhFromObject(Skeleton)})
     AddUnscaledBillboard<public>(Material:material, ?DefaultScale:float = 1.0, ?Modulate:color = color{R := 1.0, G := 1.0, B := 1.0, A := 1.0})<transacts>:void = VhCallVoid(Handle, "add_unscaled_billboard", array{VhFromObject(Material), VhFromFloat(DefaultScale), VhFromColor(Modulate)})
     Clear<public>()<transacts>:void = VhCallVoid(Handle, "clear", array{})
-    GetNode3d<public>()<decides><transacts>:node3d = node3d{Handle := VhToHandle[VhCallValue(Handle, "get_node_3d", array{})]}
-    GetPlugin<public>()<decides><transacts>:editor_node3d_gizmo_plugin = editor_node3d_gizmo_plugin{Handle := VhToHandle[VhCallValue(Handle, "get_plugin", array{})]}
+    GetNode3d<public>()<decides><transacts>:node3d = node3d[VhObjectFrom[VhCallValue(Handle, "get_node_3d", array{})]]
+    GetPlugin<public>()<decides><transacts>:editor_node3d_gizmo_plugin = editor_node3d_gizmo_plugin[VhObjectFrom[VhCallValue(Handle, "get_plugin", array{})]]
     GetSubgizmoSelection<public>()<transacts>:[]int = VhToInts(VhCallValue(Handle, "get_subgizmo_selection", array{}))
     IsSubgizmoSelected<public>(Id:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_subgizmo_selected", array{VhFromInt(Id)}))
     SetHidden<public>(Hidden:logic)<transacts>:void = VhCallVoid(Handle, "set_hidden", array{VhFromLogic(Hidden)})
@@ -35569,7 +35569,7 @@ editor_node3d_gizmo_plugin<public> := class(resource):
     CreateHandleMaterial<public>(Name:string, Billboard:logic, Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "create_handle_material", array{VhFromString(Name), VhFromLogic(Billboard), VhFromObject(Texture)})
     CreateIconMaterial<public>(Name:string, Texture:texture2d, ?OnTop:logic = false, ?Color:color = color{R := 1.0, G := 1.0, B := 1.0, A := 1.0})<transacts>:void = VhCallVoid(Handle, "create_icon_material", array{VhFromString(Name), VhFromObject(Texture), VhFromLogic(OnTop), VhFromColor(Color)})
     CreateMaterial<public>(Name:string, Color:color, ?Billboard:logic = false, ?OnTop:logic = false, ?UseVertexColor:logic = false)<transacts>:void = VhCallVoid(Handle, "create_material", array{VhFromString(Name), VhFromColor(Color), VhFromLogic(Billboard), VhFromLogic(OnTop), VhFromLogic(UseVertexColor)})
-    GetMaterial<public>(Name:string, Gizmo:editor_node3d_gizmo)<decides><transacts>:standard_material3d = standard_material3d{Handle := VhToHandle[VhCallValue(Handle, "get_material", array{VhFromString(Name), VhFromObject(Gizmo)})]}
+    GetMaterial<public>(Name:string, Gizmo:editor_node3d_gizmo)<decides><transacts>:standard_material3d = standard_material3d[VhObjectFrom[VhCallValue(Handle, "get_material", array{VhFromString(Name), VhFromObject(Gizmo)})]]
 
 editor_scene_format_importer_blend<public> := class(editor_scene_format_importer):
 
@@ -35590,7 +35590,7 @@ editor_settings<public> := class(resource):
     GetProjectMetadata<public>(Section:string, Key:string, Default:variant)<transacts>:variant = VhToVariant(VhCallValue(Handle, "get_project_metadata", array{VhFromString(Section), VhFromString(Key), VhFromVariant(Default)}))
     GetRecentDirs<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_recent_dirs", array{}))
     GetSetting<public>(Name:string)<transacts>:variant = VhToVariant(VhCallValue(Handle, "get_setting", array{VhFromString(Name)}))
-    GetShortcut<public>(Path:string)<decides><transacts>:shortcut = shortcut{Handle := VhToHandle[VhCallValue(Handle, "get_shortcut", array{VhFromString(Path)})]}
+    GetShortcut<public>(Path:string)<decides><transacts>:shortcut = shortcut[VhObjectFrom[VhCallValue(Handle, "get_shortcut", array{VhFromString(Path)})]]
     GetShortcutList<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_shortcut_list", array{}))
     HasSetting<public>(Name:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_setting", array{VhFromString(Name)}))
     HasShortcut<public>(Path:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_shortcut", array{VhFromString(Path)}))
@@ -35952,10 +35952,10 @@ environment<public> := class(resource):
     var VolumetricFogTemporalReprojectionEnabled<public><getter(VolumetricFogTemporalReprojectionEnabledGetter)><setter(VolumetricFogTemporalReprojectionEnabledSetter)>:logic = external {}
     VolumetricFogTemporalReprojectionEnabledGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_volumetric_fog_temporal_reprojection_enabled", array{}))
     VolumetricFogTemporalReprojectionEnabledSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_volumetric_fog_temporal_reprojection_enabled", array{VhFromLogic(Value)})
-    GetAdjustmentColorCorrection<public>()<decides><transacts>:texture = texture{Handle := VhToHandle[VhCallValue(Handle, "get_adjustment_color_correction", array{})]}
+    GetAdjustmentColorCorrection<public>()<decides><transacts>:texture = texture[VhObjectFrom[VhCallValue(Handle, "get_adjustment_color_correction", array{})]]
     GetGlowLevel<public>(Idx:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_glow_level", array{VhFromInt(Idx)}))
-    GetGlowMap<public>()<decides><transacts>:texture = texture{Handle := VhToHandle[VhCallValue(Handle, "get_glow_map", array{})]}
-    GetSky<public>()<decides><transacts>:sky = sky{Handle := VhToHandle[VhCallValue(Handle, "get_sky", array{})]}
+    GetGlowMap<public>()<decides><transacts>:texture = texture[VhObjectFrom[VhCallValue(Handle, "get_glow_map", array{})]]
+    GetSky<public>()<decides><transacts>:sky = sky[VhObjectFrom[VhCallValue(Handle, "get_sky", array{})]]
     SetAdjustmentColorCorrection<public>(ColorCorrection:texture)<transacts>:void = VhCallVoid(Handle, "set_adjustment_color_correction", array{VhFromObject(ColorCorrection)})
     SetGlowLevel<public>(Idx:int, Intensity:float)<transacts>:void = VhCallVoid(Handle, "set_glow_level", array{VhFromInt(Idx), VhFromFloat(Intensity)})
     SetGlowMap<public>(Mode:texture)<transacts>:void = VhCallVoid(Handle, "set_glow_map", array{VhFromObject(Mode)})
@@ -35967,7 +35967,7 @@ foldable_group<public> := class(resource):
     AllowFoldingAllGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_allow_folding_all", array{}))
     AllowFoldingAllSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_allow_folding_all", array{VhFromLogic(Value)})
     GetContainers<public>()<transacts>:typed_array(foldable_container) = VhToFoldableContainerArray(VhCallValue(Handle, "get_containers", array{}))
-    GetExpandedContainer<public>()<decides><transacts>:foldable_container = foldable_container{Handle := VhToHandle[VhCallValue(Handle, "get_expanded_container", array{})]}
+    GetExpandedContainer<public>()<decides><transacts>:foldable_container = foldable_container[VhObjectFrom[VhCallValue(Handle, "get_expanded_container", array{})]]
 
 font<public> := class(resource):
 
@@ -36110,7 +36110,7 @@ gltf_camera<public> := class(resource):
     SizeMagGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_size_mag", array{}))
     SizeMagSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_size_mag", array{VhFromFloat(Value)})
     ToDictionary<public>()<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "to_dictionary", array{}))
-    ToNode<public>()<decides><transacts>:camera3d = camera3d{Handle := VhToHandle[VhCallValue(Handle, "to_node", array{})]}
+    ToNode<public>()<decides><transacts>:camera3d = camera3d[VhObjectFrom[VhCallValue(Handle, "to_node", array{})]]
 
 gltf_document<public> := class(resource):
 
@@ -36130,7 +36130,7 @@ gltf_document<public> := class(resource):
     AppendFromFile<public>(Path:string, State:gltf_state, ?Flags:int = 0, ?BasePath:string = "")<transacts>:error = VhToError(VhCallValue(Handle, "append_from_file", array{VhFromString(Path), VhFromObject(State), VhFromInt(Flags), VhFromString(BasePath)}))
     AppendFromScene<public>(Node:node, State:gltf_state, ?Flags:int = 0)<transacts>:error = VhToError(VhCallValue(Handle, "append_from_scene", array{VhFromObject(Node), VhFromObject(State), VhFromInt(Flags)}))
     GenerateBuffer<public>(State:gltf_state)<transacts>:[]int = VhToInts(VhCallValue(Handle, "generate_buffer", array{VhFromObject(State)}))
-    GenerateScene<public>(State:gltf_state, ?BakeFps:float = 30.0, ?Trimming:logic = false, ?RemoveImmutableTracks:logic = true)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "generate_scene", array{VhFromObject(State), VhFromFloat(BakeFps), VhFromLogic(Trimming), VhFromLogic(RemoveImmutableTracks)})]}
+    GenerateScene<public>(State:gltf_state, ?BakeFps:float = 30.0, ?Trimming:logic = false, ?RemoveImmutableTracks:logic = true)<decides><transacts>:node = node[VhObjectFrom[VhCallValue(Handle, "generate_scene", array{VhFromObject(State), VhFromFloat(BakeFps), VhFromLogic(Trimming), VhFromLogic(RemoveImmutableTracks)})]]
     GetFallbackImageFormat<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_fallback_image_format", array{}))
     GetImageFormat<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_image_format", array{}))
     SetFallbackImageFormat<public>(FallbackImageFormat:string)<transacts>:void = VhCallVoid(Handle, "set_fallback_image_format", array{VhFromString(FallbackImageFormat)})
@@ -36174,14 +36174,14 @@ gltf_light<public> := class(resource):
     SetAdditionalData<public>(ExtensionName:string, AdditionalData:variant)<transacts>:void = VhCallVoid(Handle, "set_additional_data", array{VhFromStringName(ExtensionName), VhFromVariant(AdditionalData)})
     SetLightType<public>(LightType:string)<transacts>:void = VhCallVoid(Handle, "set_light_type", array{VhFromString(LightType)})
     ToDictionary<public>()<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "to_dictionary", array{}))
-    ToNode<public>()<decides><transacts>:light3d = light3d{Handle := VhToHandle[VhCallValue(Handle, "to_node", array{})]}
+    ToNode<public>()<decides><transacts>:light3d = light3d[VhObjectFrom[VhCallValue(Handle, "to_node", array{})]]
 
 gltf_mesh<public> := class(resource):
 
     GetAdditionalData<public>(ExtensionName:string)<transacts>:variant = VhToVariant(VhCallValue(Handle, "get_additional_data", array{VhFromStringName(ExtensionName)}))
     GetBlendWeights<public>()<transacts>:[]float = VhToFloats(VhCallValue(Handle, "get_blend_weights", array{}))
     GetInstanceMaterials<public>()<transacts>:typed_array(material) = VhToMaterialArray(VhCallValue(Handle, "get_instance_materials", array{}))
-    GetMesh<public>()<decides><transacts>:importer_mesh = importer_mesh{Handle := VhToHandle[VhCallValue(Handle, "get_mesh", array{})]}
+    GetMesh<public>()<decides><transacts>:importer_mesh = importer_mesh[VhObjectFrom[VhCallValue(Handle, "get_mesh", array{})]]
     GetOriginalName<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_original_name", array{}))
     SetAdditionalData<public>(ExtensionName:string, AdditionalData:variant)<transacts>:void = VhCallVoid(Handle, "set_additional_data", array{VhFromStringName(ExtensionName), VhFromVariant(AdditionalData)})
     SetBlendWeights<public>(BlendWeights:[]float)<transacts>:void = VhCallVoid(Handle, "set_blend_weights", array{VhFromFloat32Array(BlendWeights)})
@@ -36352,7 +36352,7 @@ gltf_physics_body<public> := class(resource):
     SetBodyType<public>(BodyType:string)<transacts>:void = VhCallVoid(Handle, "set_body_type", array{VhFromString(BodyType)})
     SetInertiaTensor<public>(InertiaTensor:basis)<transacts>:void = VhCallVoid(Handle, "set_inertia_tensor", array{VhFromBasis(InertiaTensor)})
     ToDictionary<public>()<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "to_dictionary", array{}))
-    ToNode<public>()<decides><transacts>:collision_object3d = collision_object3d{Handle := VhToHandle[VhCallValue(Handle, "to_node", array{})]}
+    ToNode<public>()<decides><transacts>:collision_object3d = collision_object3d[VhObjectFrom[VhCallValue(Handle, "to_node", array{})]]
 
 gltf_physics_shape<public> := class(resource):
 
@@ -36382,20 +36382,20 @@ gltf_physics_shape<public> := class(resource):
             VhCallVoid(Handle, "set_size", array{VhFromVector3(vector3{X := Current.X, Y := Value, Z := Current.Z})})
         else:
             VhCallVoid(Handle, "set_size", array{VhFromVector3(vector3{X := Current.X, Y := Current.Y, Z := Value})})
-    GetImporterMesh<public>()<decides><transacts>:importer_mesh = importer_mesh{Handle := VhToHandle[VhCallValue(Handle, "get_importer_mesh", array{})]}
+    GetImporterMesh<public>()<decides><transacts>:importer_mesh = importer_mesh[VhObjectFrom[VhCallValue(Handle, "get_importer_mesh", array{})]]
     GetShapeType<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_shape_type", array{}))
     SetImporterMesh<public>(ImporterMesh:importer_mesh)<transacts>:void = VhCallVoid(Handle, "set_importer_mesh", array{VhFromObject(ImporterMesh)})
     SetShapeType<public>(ShapeType:string)<transacts>:void = VhCallVoid(Handle, "set_shape_type", array{VhFromString(ShapeType)})
     ToDictionary<public>()<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "to_dictionary", array{}))
-    ToNode<public>(?CacheShapes:logic = false)<decides><transacts>:collision_shape3d = collision_shape3d{Handle := VhToHandle[VhCallValue(Handle, "to_node", array{VhFromLogic(CacheShapes)})]}
-    ToResource<public>(?CacheShapes:logic = false)<decides><transacts>:shape3d = shape3d{Handle := VhToHandle[VhCallValue(Handle, "to_resource", array{VhFromLogic(CacheShapes)})]}
+    ToNode<public>(?CacheShapes:logic = false)<decides><transacts>:collision_shape3d = collision_shape3d[VhObjectFrom[VhCallValue(Handle, "to_node", array{VhFromLogic(CacheShapes)})]]
+    ToResource<public>(?CacheShapes:logic = false)<decides><transacts>:shape3d = shape3d[VhObjectFrom[VhCallValue(Handle, "to_resource", array{VhFromLogic(CacheShapes)})]]
 
 gltf_skeleton<public> := class(resource):
 
-    GetBoneAttachment<public>(Idx:int)<decides><transacts>:bone_attachment3d = bone_attachment3d{Handle := VhToHandle[VhCallValue(Handle, "get_bone_attachment", array{VhFromInt(Idx)})]}
+    GetBoneAttachment<public>(Idx:int)<decides><transacts>:bone_attachment3d = bone_attachment3d[VhObjectFrom[VhCallValue(Handle, "get_bone_attachment", array{VhFromInt(Idx)})]]
     GetBoneAttachmentCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_bone_attachment_count", array{}))
     GetGodotBoneNode<public>()<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_godot_bone_node", array{}))
-    GetGodotSkeleton<public>()<decides><transacts>:skeleton3d = skeleton3d{Handle := VhToHandle[VhCallValue(Handle, "get_godot_skeleton", array{})]}
+    GetGodotSkeleton<public>()<decides><transacts>:skeleton3d = skeleton3d[VhObjectFrom[VhCallValue(Handle, "get_godot_skeleton", array{})]]
     GetJoints<public>()<transacts>:[]int = VhToInts(VhCallValue(Handle, "get_joints", array{}))
     GetRoots<public>()<transacts>:[]int = VhToInts(VhCallValue(Handle, "get_roots", array{}))
     GetUniqueNames<public>()<transacts>:typed_array(string) = VhToStringArray(VhCallValue(Handle, "get_unique_names", array{}))
@@ -36412,7 +36412,7 @@ gltf_skin<public> := class(resource):
     var SkinRoot<public><getter(SkinRootGetter)><setter(SkinRootSetter)>:int = external {}
     SkinRootGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_skin_root", array{}))
     SkinRootSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_skin_root", array{VhFromInt(Value)})
-    GetGodotSkin<public>()<decides><transacts>:skin = skin{Handle := VhToHandle[VhCallValue(Handle, "get_godot_skin", array{})]}
+    GetGodotSkin<public>()<decides><transacts>:skin = skin[VhObjectFrom[VhCallValue(Handle, "get_godot_skin", array{})]]
     GetInverseBinds<public>()<transacts>:typed_array(transform3d) = VhToTransform3DArray(VhCallValue(Handle, "get_inverse_binds", array{}))
     GetJointIToBoneI<public>()<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_joint_i_to_bone_i", array{}))
     GetJointIToName<public>()<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_joint_i_to_name", array{}))
@@ -36466,8 +36466,8 @@ gltf_spec_gloss<public> := class(resource):
             VhCallVoid(Handle, "set_specular_factor", array{VhFromColor(color{R := Current.R, G := Current.G, B := Value, A := Current.A})})
         else:
             VhCallVoid(Handle, "set_specular_factor", array{VhFromColor(color{R := Current.R, G := Current.G, B := Current.B, A := Value})})
-    GetDiffuseImg<public>()<decides><transacts>:image = image{Handle := VhToHandle[VhCallValue(Handle, "get_diffuse_img", array{})]}
-    GetSpecGlossImg<public>()<decides><transacts>:image = image{Handle := VhToHandle[VhCallValue(Handle, "get_spec_gloss_img", array{})]}
+    GetDiffuseImg<public>()<decides><transacts>:image = image[VhObjectFrom[VhCallValue(Handle, "get_diffuse_img", array{})]]
+    GetSpecGlossImg<public>()<decides><transacts>:image = image[VhObjectFrom[VhCallValue(Handle, "get_spec_gloss_img", array{})]]
     SetDiffuseImg<public>(DiffuseImg:image)<transacts>:void = VhCallVoid(Handle, "set_diffuse_img", array{VhFromObject(DiffuseImg)})
     SetSpecGlossImg<public>(SpecGlossImg:image)<transacts>:void = VhCallVoid(Handle, "set_spec_gloss_img", array{VhFromObject(SpecGlossImg)})
 
@@ -36502,7 +36502,7 @@ gltf_state<public> := class(resource):
     AppendGltfNode<public>(GltfNode:gltf_node, GodotSceneNode:node, ParentNodeIndex:int)<transacts>:int = VhToInt(VhCallValue(Handle, "append_gltf_node", array{VhFromObject(GltfNode), VhFromObject(GodotSceneNode), VhFromInt(ParentNodeIndex)}))
     GetAccessors<public>()<transacts>:typed_array(gltf_accessor) = VhToGLTFAccessorArray(VhCallValue(Handle, "get_accessors", array{}))
     GetAdditionalData<public>(ExtensionName:string)<transacts>:variant = VhToVariant(VhCallValue(Handle, "get_additional_data", array{VhFromStringName(ExtensionName)}))
-    GetAnimationPlayer<public>(AnimPlayerIndex:int)<decides><transacts>:animation_player = animation_player{Handle := VhToHandle[VhCallValue(Handle, "get_animation_player", array{VhFromInt(AnimPlayerIndex)})]}
+    GetAnimationPlayer<public>(AnimPlayerIndex:int)<decides><transacts>:animation_player = animation_player[VhObjectFrom[VhCallValue(Handle, "get_animation_player", array{VhFromInt(AnimPlayerIndex)})]]
     GetAnimationPlayersCount<public>(AnimPlayerIndex:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_animation_players_count", array{VhFromInt(AnimPlayerIndex)}))
     GetAnimations<public>()<transacts>:typed_array(gltf_animation) = VhToGLTFAnimationArray(VhCallValue(Handle, "get_animations", array{}))
     GetBasePath<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_base_path", array{}))
@@ -36521,7 +36521,7 @@ gltf_state<public> := class(resource):
     GetNodes<public>()<transacts>:typed_array(gltf_node) = VhToGLTFNodeArray(VhCallValue(Handle, "get_nodes", array{}))
     GetRootNodes<public>()<transacts>:[]int = VhToInts(VhCallValue(Handle, "get_root_nodes", array{}))
     GetSceneName<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_scene_name", array{}))
-    GetSceneNode<public>(GltfNodeIndex:int)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_scene_node", array{VhFromInt(GltfNodeIndex)})]}
+    GetSceneNode<public>(GltfNodeIndex:int)<decides><transacts>:node = node[VhObjectFrom[VhCallValue(Handle, "get_scene_node", array{VhFromInt(GltfNodeIndex)})]]
     GetSkeletons<public>()<transacts>:typed_array(gltf_skeleton) = VhToGLTFSkeletonArray(VhCallValue(Handle, "get_skeletons", array{}))
     GetSkins<public>()<transacts>:typed_array(gltf_skin) = VhToGLTFSkinArray(VhCallValue(Handle, "get_skins", array{}))
     GetTextureSamplers<public>()<transacts>:typed_array(gltf_texture_sampler) = VhToGLTFTextureSamplerArray(VhCallValue(Handle, "get_texture_samplers", array{}))
@@ -36652,11 +36652,11 @@ grid_map<public> := class(node3d):
     GetCellItemOrientation<public>(Arg0:vector3i)<transacts>:int = VhToInt(VhCallValue(Handle, "get_cell_item_orientation", array{VhFromVector3i(Arg0)}))
     GetCollisionLayerValue<public>(LayerNumber:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_collision_layer_value", array{VhFromInt(LayerNumber)}))
     GetCollisionMaskValue<public>(LayerNumber:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_collision_mask_value", array{VhFromInt(LayerNumber)}))
-    GetMeshLibrary<public>()<decides><transacts>:mesh_library = mesh_library{Handle := VhToHandle[VhCallValue(Handle, "get_mesh_library", array{})]}
+    GetMeshLibrary<public>()<decides><transacts>:mesh_library = mesh_library[VhObjectFrom[VhCallValue(Handle, "get_mesh_library", array{})]]
     GetMeshes<public>()<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_meshes", array{}))
     GetNavigationMap<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_navigation_map", array{}))
     GetOrthogonalIndexFromBasis<public>(Basis:basis)<transacts>:int = VhToInt(VhCallValue(Handle, "get_orthogonal_index_from_basis", array{VhFromBasis(Basis)}))
-    GetPhysicsMaterial<public>()<decides><transacts>:physics_material = physics_material{Handle := VhToHandle[VhCallValue(Handle, "get_physics_material", array{})]}
+    GetPhysicsMaterial<public>()<decides><transacts>:physics_material = physics_material[VhObjectFrom[VhCallValue(Handle, "get_physics_material", array{})]]
     GetUsedCells<public>()<transacts>:typed_array(vector3i) = VhToVector3iArray(VhCallValue(Handle, "get_used_cells", array{}))
     GetUsedCellsByItem<public>(Item:int)<transacts>:typed_array(vector3i) = VhToVector3iArray(VhCallValue(Handle, "get_used_cells_by_item", array{VhFromInt(Item)}))
     LocalToMap<public>(LocalPosition:vector3)<transacts>:vector3i = VhToVector3i(VhCallValue(Handle, "local_to_map", array{VhFromVector3(LocalPosition)}))
@@ -36673,7 +36673,7 @@ grid_map<public> := class(node3d):
 grid_map_editor_plugin<public> := class(editor_plugin):
 
     ClearSelection<public>()<transacts>:void = VhCallVoid(Handle, "clear_selection", array{})
-    GetCurrentGridMap<public>()<decides><transacts>:grid_map = grid_map{Handle := VhToHandle[VhCallValue(Handle, "get_current_grid_map", array{})]}
+    GetCurrentGridMap<public>()<decides><transacts>:grid_map = grid_map[VhObjectFrom[VhCallValue(Handle, "get_current_grid_map", array{})]]
     GetSelectedCells<public>()<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_selected_cells", array{}))
     GetSelectedPaletteItem<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_selected_palette_item", array{}))
     GetSelection<public>()<transacts>:aabb = VhToAABB(VhCallValue(Handle, "get_selection", array{}))
@@ -36713,7 +36713,7 @@ image<public> := class(resource):
     GetMipmapOffset<public>(Mipmap:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_mipmap_offset", array{VhFromInt(Mipmap)}))
     GetPixel<public>(X:int, Y:int)<transacts>:color = VhToColor(VhCallValue(Handle, "get_pixel", array{VhFromInt(X), VhFromInt(Y)}))
     GetPixelv<public>(Point:vector2i)<transacts>:color = VhToColor(VhCallValue(Handle, "get_pixelv", array{VhFromVector2i(Point)}))
-    GetRegion<public>(Region:rect2i)<decides><transacts>:image = image{Handle := VhToHandle[VhCallValue(Handle, "get_region", array{VhFromRect2i(Region)})]}
+    GetRegion<public>(Region:rect2i)<decides><transacts>:image = image[VhObjectFrom[VhCallValue(Handle, "get_region", array{VhFromRect2i(Region)})]]
     GetSize<public>()<transacts>:vector2i = VhToVector2i(VhCallValue(Handle, "get_size", array{}))
     GetUsedRect<public>()<transacts>:rect2i = VhToRect2i(VhCallValue(Handle, "get_used_rect", array{}))
     GetWidth<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_width", array{}))
@@ -36737,7 +36737,7 @@ image<public> := class(resource):
     PremultiplyAlpha<public>()<transacts>:void = VhCallVoid(Handle, "premultiply_alpha", array{})
     Resize<public>(Width:int, Height:int, Interpolation:image_interpolation)<transacts>:void = VhCallVoid(Handle, "resize", array{VhFromInt(Width), VhFromInt(Height), VhFromImageInterpolation(Interpolation)})
     ResizeToPo2<public>(Square:logic, Interpolation:image_interpolation)<transacts>:void = VhCallVoid(Handle, "resize_to_po2", array{VhFromLogic(Square), VhFromImageInterpolation(Interpolation)})
-    RgbeToSrgb<public>()<decides><transacts>:image = image{Handle := VhToHandle[VhCallValue(Handle, "rgbe_to_srgb", array{})]}
+    RgbeToSrgb<public>()<decides><transacts>:image = image[VhObjectFrom[VhCallValue(Handle, "rgbe_to_srgb", array{})]]
     Rotate180<public>()<transacts>:void = VhCallVoid(Handle, "rotate_180", array{})
     Rotate90<public>(Direction:clock_direction)<transacts>:void = VhCallVoid(Handle, "rotate_90", array{VhFromClockDirection(Direction)})
     SaveDds<public>(Path:string)<transacts>:error = VhToError(VhCallValue(Handle, "save_dds", array{VhFromString(Path)}))
@@ -36771,7 +36771,7 @@ importer_mesh<public> := class(resource):
     GetBlendShapeMode<public>()<transacts>:mesh_blend_shape_mode = VhToMeshBlendShapeMode(VhCallValue(Handle, "get_blend_shape_mode", array{}))
     GetBlendShapeName<public>(BlendShapeIdx:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_blend_shape_name", array{VhFromInt(BlendShapeIdx)}))
     GetLightmapSizeHint<public>()<transacts>:vector2i = VhToVector2i(VhCallValue(Handle, "get_lightmap_size_hint", array{}))
-    GetMesh<public>(BaseMesh:array_mesh)<decides><transacts>:array_mesh = array_mesh{Handle := VhToHandle[VhCallValue(Handle, "get_mesh", array{VhFromObject(BaseMesh)})]}
+    GetMesh<public>(BaseMesh:array_mesh)<decides><transacts>:array_mesh = array_mesh[VhObjectFrom[VhCallValue(Handle, "get_mesh", array{VhFromObject(BaseMesh)})]]
     GetSurfaceArrays<public>(SurfaceIdx:int)<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_surface_arrays", array{VhFromInt(SurfaceIdx)}))
     GetSurfaceBlendShapeArrays<public>(SurfaceIdx:int, BlendShapeIdx:int)<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_surface_blend_shape_arrays", array{VhFromInt(SurfaceIdx), VhFromInt(BlendShapeIdx)}))
     GetSurfaceCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_surface_count", array{}))
@@ -36779,7 +36779,7 @@ importer_mesh<public> := class(resource):
     GetSurfaceLodCount<public>(SurfaceIdx:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_surface_lod_count", array{VhFromInt(SurfaceIdx)}))
     GetSurfaceLodIndices<public>(SurfaceIdx:int, LodIdx:int)<transacts>:[]int = VhToInts(VhCallValue(Handle, "get_surface_lod_indices", array{VhFromInt(SurfaceIdx), VhFromInt(LodIdx)}))
     GetSurfaceLodSize<public>(SurfaceIdx:int, LodIdx:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_surface_lod_size", array{VhFromInt(SurfaceIdx), VhFromInt(LodIdx)}))
-    GetSurfaceMaterial<public>(SurfaceIdx:int)<decides><transacts>:material = material{Handle := VhToHandle[VhCallValue(Handle, "get_surface_material", array{VhFromInt(SurfaceIdx)})]}
+    GetSurfaceMaterial<public>(SurfaceIdx:int)<decides><transacts>:material = material[VhObjectFrom[VhCallValue(Handle, "get_surface_material", array{VhFromInt(SurfaceIdx)})]]
     GetSurfaceName<public>(SurfaceIdx:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_surface_name", array{VhFromInt(SurfaceIdx)}))
     GetSurfacePrimitiveType<public>(SurfaceIdx:int)<transacts>:mesh_primitive_type = VhToMeshPrimitiveType(VhCallValue(Handle, "get_surface_primitive_type", array{VhFromInt(SurfaceIdx)}))
     SetBlendShapeMode<public>(Mode:mesh_blend_shape_mode)<transacts>:void = VhCallVoid(Handle, "set_blend_shape_mode", array{VhFromMeshBlendShapeMode(Mode)})
@@ -36810,9 +36810,9 @@ importer_mesh_instance3d<public> := class(node3d):
     var VisibilityRangeFadeMode<public><getter(VisibilityRangeFadeModeGetter)><setter(VisibilityRangeFadeModeSetter)>:geometry_instance3d_visibility_range_fade_mode = external {}
     VisibilityRangeFadeModeGetter<epic_internal>(Accessor:accessor)<transacts>:geometry_instance3d_visibility_range_fade_mode = VhToGeometryInstance3dVisibilityRangeFadeMode(VhCallValue(Handle, "get_visibility_range_fade_mode", array{}))
     VisibilityRangeFadeModeSetter<epic_internal>(Accessor:accessor, Value:geometry_instance3d_visibility_range_fade_mode)<transacts>:void = VhCallVoid(Handle, "set_visibility_range_fade_mode", array{VhFromGeometryInstance3dVisibilityRangeFadeMode(Value)})
-    GetMesh<public>()<decides><transacts>:importer_mesh = importer_mesh{Handle := VhToHandle[VhCallValue(Handle, "get_mesh", array{})]}
+    GetMesh<public>()<decides><transacts>:importer_mesh = importer_mesh[VhObjectFrom[VhCallValue(Handle, "get_mesh", array{})]]
     GetSkeletonPath<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_skeleton_path", array{}))
-    GetSkin<public>()<decides><transacts>:skin = skin{Handle := VhToHandle[VhCallValue(Handle, "get_skin", array{})]}
+    GetSkin<public>()<decides><transacts>:skin = skin[VhObjectFrom[VhCallValue(Handle, "get_skin", array{})]]
     SetMesh<public>(Mesh:importer_mesh)<transacts>:void = VhCallVoid(Handle, "set_mesh", array{VhFromObject(Mesh)})
     SetSkeletonPath<public>(SkeletonPath:string)<transacts>:void = VhCallVoid(Handle, "set_skeleton_path", array{VhFromNodePath(SkeletonPath)})
     SetSkin<public>(Skin:skin)<transacts>:void = VhCallVoid(Handle, "set_skin", array{VhFromObject(Skin)})
@@ -36834,7 +36834,7 @@ input_event<public> := class(resource):
     IsMatch<public>(Event:input_event, ?ExactMatch:logic = true)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_match", array{VhFromObject(Event), VhFromLogic(ExactMatch)}))
     IsPressed<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_pressed", array{}))
     IsReleased<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_released", array{}))
-    XformedBy<public>(Xform:transform2d, ?LocalOfs:vector2 = vector2{X := 0.0, Y := 0.0})<decides><transacts>:input_event = input_event{Handle := VhToHandle[VhCallValue(Handle, "xformed_by", array{VhFromTransform2D(Xform), VhFromVector2(LocalOfs)})]}
+    XformedBy<public>(Xform:transform2d, ?LocalOfs:vector2 = vector2{X := 0.0, Y := 0.0})<decides><transacts>:input_event = input_event[VhObjectFrom[VhCallValue(Handle, "xformed_by", array{VhFromTransform2D(Xform), VhFromVector2(LocalOfs)})]]
 
 interval_tweener<public> := class(tweener):
 
@@ -36948,7 +36948,7 @@ label_settings<public> := class(resource):
     StackedShadowCountSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_stacked_shadow_count", array{VhFromInt(Value)})
     AddStackedOutline<public>(?Index:int = -1)<transacts>:void = VhCallVoid(Handle, "add_stacked_outline", array{VhFromInt(Index)})
     AddStackedShadow<public>(?Index:int = -1)<transacts>:void = VhCallVoid(Handle, "add_stacked_shadow", array{VhFromInt(Index)})
-    GetFont<public>()<decides><transacts>:font = font{Handle := VhToHandle[VhCallValue(Handle, "get_font", array{})]}
+    GetFont<public>()<decides><transacts>:font = font[VhObjectFrom[VhCallValue(Handle, "get_font", array{})]]
     GetStackedOutlineColor<public>(Index:int)<transacts>:color = VhToColor(VhCallValue(Handle, "get_stacked_outline_color", array{VhFromInt(Index)}))
     GetStackedOutlineSize<public>(Index:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_stacked_outline_size", array{VhFromInt(Index)}))
     GetStackedShadowColor<public>(Index:int)<transacts>:color = VhToColor(VhCallValue(Handle, "get_stacked_shadow_color", array{VhFromInt(Index)}))
@@ -36978,7 +36978,7 @@ lightmap_gi_data<public> := class(resource):
     UsesSphericalHarmonicsSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_uses_spherical_harmonics", array{VhFromLogic(Value)})
     AddUser<public>(Path:string, UvScale:rect2, SliceIndex:int, SubInstance:int)<transacts>:void = VhCallVoid(Handle, "add_user", array{VhFromNodePath(Path), VhFromRect2(UvScale), VhFromInt(SliceIndex), VhFromInt(SubInstance)})
     ClearUsers<public>()<transacts>:void = VhCallVoid(Handle, "clear_users", array{})
-    GetLightTexture<public>()<decides><transacts>:texture_layered = texture_layered{Handle := VhToHandle[VhCallValue(Handle, "get_light_texture", array{})]}
+    GetLightTexture<public>()<decides><transacts>:texture_layered = texture_layered[VhObjectFrom[VhCallValue(Handle, "get_light_texture", array{})]]
     GetUserCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_user_count", array{}))
     GetUserPath<public>(UserIdx:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_user_path", array{VhFromInt(UserIdx)}))
     SetLightTexture<public>(LightTexture:texture_layered)<transacts>:void = VhCallVoid(Handle, "set_light_texture", array{VhFromObject(LightTexture)})
@@ -36998,8 +36998,8 @@ material<public> := class(resource):
     var RenderPriority<public><getter(RenderPriorityGetter)><setter(RenderPrioritySetter)>:int = external {}
     RenderPriorityGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_render_priority", array{}))
     RenderPrioritySetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_render_priority", array{VhFromInt(Value)})
-    CreatePlaceholder<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "create_placeholder", array{})]}
-    GetNextPass<public>()<decides><transacts>:material = material{Handle := VhToHandle[VhCallValue(Handle, "get_next_pass", array{})]}
+    CreatePlaceholder<public>()<decides><transacts>:resource = resource[VhObjectFrom[VhCallValue(Handle, "create_placeholder", array{})]]
+    GetNextPass<public>()<decides><transacts>:material = material[VhObjectFrom[VhCallValue(Handle, "get_next_pass", array{})]]
     InspectNativeShaderCode<public>()<transacts>:void = VhCallVoid(Handle, "inspect_native_shader_code", array{})
     SetNextPass<public>(NextPass:material)<transacts>:void = VhCallVoid(Handle, "set_next_pass", array{VhFromObject(NextPass)})
 
@@ -37017,17 +37017,17 @@ mesh<public> := class(resource):
             VhCallVoid(Handle, "set_lightmap_size_hint", array{VhFromVector2i(vector2i{X := Value, Y := Current.Y})})
         else:
             VhCallVoid(Handle, "set_lightmap_size_hint", array{VhFromVector2i(vector2i{X := Current.X, Y := Value})})
-    CreateConvexShape<public>(?Clean:logic = true, ?Simplify:logic = false)<decides><transacts>:convex_polygon_shape3d = convex_polygon_shape3d{Handle := VhToHandle[VhCallValue(Handle, "create_convex_shape", array{VhFromLogic(Clean), VhFromLogic(Simplify)})]}
-    CreateOutline<public>(Margin:float)<decides><transacts>:mesh = mesh{Handle := VhToHandle[VhCallValue(Handle, "create_outline", array{VhFromFloat(Margin)})]}
-    CreatePlaceholder<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "create_placeholder", array{})]}
-    CreateTrimeshShape<public>()<decides><transacts>:concave_polygon_shape3d = concave_polygon_shape3d{Handle := VhToHandle[VhCallValue(Handle, "create_trimesh_shape", array{})]}
-    GenerateTriangleMesh<public>()<decides><transacts>:triangle_mesh = triangle_mesh{Handle := VhToHandle[VhCallValue(Handle, "generate_triangle_mesh", array{})]}
+    CreateConvexShape<public>(?Clean:logic = true, ?Simplify:logic = false)<decides><transacts>:convex_polygon_shape3d = convex_polygon_shape3d[VhObjectFrom[VhCallValue(Handle, "create_convex_shape", array{VhFromLogic(Clean), VhFromLogic(Simplify)})]]
+    CreateOutline<public>(Margin:float)<decides><transacts>:mesh = mesh[VhObjectFrom[VhCallValue(Handle, "create_outline", array{VhFromFloat(Margin)})]]
+    CreatePlaceholder<public>()<decides><transacts>:resource = resource[VhObjectFrom[VhCallValue(Handle, "create_placeholder", array{})]]
+    CreateTrimeshShape<public>()<decides><transacts>:concave_polygon_shape3d = concave_polygon_shape3d[VhObjectFrom[VhCallValue(Handle, "create_trimesh_shape", array{})]]
+    GenerateTriangleMesh<public>()<decides><transacts>:triangle_mesh = triangle_mesh[VhObjectFrom[VhCallValue(Handle, "generate_triangle_mesh", array{})]]
     GetAabb<public>()<transacts>:aabb = VhToAABB(VhCallValue(Handle, "get_aabb", array{}))
     GetFaces<public>()<transacts>:[]vector3 = VhToVector3s(VhCallValue(Handle, "get_faces", array{}))
     GetSurfaceCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_surface_count", array{}))
     SurfaceGetArrays<public>(SurfIdx:int)<transacts>:godot_array = VhToArray(VhCallValue(Handle, "surface_get_arrays", array{VhFromInt(SurfIdx)}))
     SurfaceGetBlendShapeArrays<public>(SurfIdx:int)<transacts>:typed_array(godot_array) = VhToArrayArray(VhCallValue(Handle, "surface_get_blend_shape_arrays", array{VhFromInt(SurfIdx)}))
-    SurfaceGetMaterial<public>(SurfIdx:int)<decides><transacts>:material = material{Handle := VhToHandle[VhCallValue(Handle, "surface_get_material", array{VhFromInt(SurfIdx)})]}
+    SurfaceGetMaterial<public>(SurfIdx:int)<decides><transacts>:material = material[VhObjectFrom[VhCallValue(Handle, "surface_get_material", array{VhFromInt(SurfIdx)})]]
     SurfaceSetMaterial<public>(SurfIdx:int, Material:material)<transacts>:void = VhCallVoid(Handle, "surface_set_material", array{VhFromInt(SurfIdx), VhFromObject(Material)})
 
 mesh_library<public> := class(resource):
@@ -37036,14 +37036,14 @@ mesh_library<public> := class(resource):
     CreateItem<public>(Id:int)<transacts>:void = VhCallVoid(Handle, "create_item", array{VhFromInt(Id)})
     FindItemByName<public>(Name:string)<transacts>:int = VhToInt(VhCallValue(Handle, "find_item_by_name", array{VhFromString(Name)}))
     GetItemList<public>()<transacts>:[]int = VhToInts(VhCallValue(Handle, "get_item_list", array{}))
-    GetItemMesh<public>(Id:int)<decides><transacts>:mesh = mesh{Handle := VhToHandle[VhCallValue(Handle, "get_item_mesh", array{VhFromInt(Id)})]}
+    GetItemMesh<public>(Id:int)<decides><transacts>:mesh = mesh[VhObjectFrom[VhCallValue(Handle, "get_item_mesh", array{VhFromInt(Id)})]]
     GetItemMeshCastShadow<public>(Id:int)<transacts>:rendering_server_shadow_casting_setting = VhToRenderingServerShadowCastingSetting(VhCallValue(Handle, "get_item_mesh_cast_shadow", array{VhFromInt(Id)}))
     GetItemMeshTransform<public>(Id:int)<transacts>:transform3d = VhToTransform3D(VhCallValue(Handle, "get_item_mesh_transform", array{VhFromInt(Id)}))
     GetItemName<public>(Id:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_item_name", array{VhFromInt(Id)}))
     GetItemNavigationLayers<public>(Id:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_item_navigation_layers", array{VhFromInt(Id)}))
-    GetItemNavigationMesh<public>(Id:int)<decides><transacts>:navigation_mesh = navigation_mesh{Handle := VhToHandle[VhCallValue(Handle, "get_item_navigation_mesh", array{VhFromInt(Id)})]}
+    GetItemNavigationMesh<public>(Id:int)<decides><transacts>:navigation_mesh = navigation_mesh[VhObjectFrom[VhCallValue(Handle, "get_item_navigation_mesh", array{VhFromInt(Id)})]]
     GetItemNavigationMeshTransform<public>(Id:int)<transacts>:transform3d = VhToTransform3D(VhCallValue(Handle, "get_item_navigation_mesh_transform", array{VhFromInt(Id)}))
-    GetItemPreview<public>(Id:int)<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_item_preview", array{VhFromInt(Id)})]}
+    GetItemPreview<public>(Id:int)<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_item_preview", array{VhFromInt(Id)})]]
     GetItemShapes<public>(Id:int)<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_item_shapes", array{VhFromInt(Id)}))
     GetLastUnusedItemId<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_last_unused_item_id", array{}))
     RemoveItem<public>(Id:int)<transacts>:void = VhCallVoid(Handle, "remove_item", array{VhFromInt(Id)})
@@ -37059,9 +37059,9 @@ mesh_library<public> := class(resource):
 
 method_tweener<public> := class(tweener):
 
-    SetDelay<public>(Delay:float)<decides><transacts>:method_tweener = method_tweener{Handle := VhToHandle[VhCallValue(Handle, "set_delay", array{VhFromFloat(Delay)})]}
-    SetEase<public>(Ease:tween_ease_type)<decides><transacts>:method_tweener = method_tweener{Handle := VhToHandle[VhCallValue(Handle, "set_ease", array{VhFromTweenEaseType(Ease)})]}
-    SetTrans<public>(Trans:tween_transition_type)<decides><transacts>:method_tweener = method_tweener{Handle := VhToHandle[VhCallValue(Handle, "set_trans", array{VhFromTweenTransitionType(Trans)})]}
+    SetDelay<public>(Delay:float)<decides><transacts>:method_tweener = method_tweener[VhObjectFrom[VhCallValue(Handle, "set_delay", array{VhFromFloat(Delay)})]]
+    SetEase<public>(Ease:tween_ease_type)<decides><transacts>:method_tweener = method_tweener[VhObjectFrom[VhCallValue(Handle, "set_ease", array{VhFromTweenEaseType(Ease)})]]
+    SetTrans<public>(Trans:tween_transition_type)<decides><transacts>:method_tweener = method_tweener[VhObjectFrom[VhCallValue(Handle, "set_trans", array{VhFromTweenTransitionType(Trans)})]]
 
 missing_resource<public> := class(resource):
 
@@ -37130,7 +37130,7 @@ multi_mesh<public> := class(resource):
     GetInstanceCustomData<public>(Instance:int)<transacts>:color = VhToColor(VhCallValue(Handle, "get_instance_custom_data", array{VhFromInt(Instance)}))
     GetInstanceTransform<public>(Instance:int)<transacts>:transform3d = VhToTransform3D(VhCallValue(Handle, "get_instance_transform", array{VhFromInt(Instance)}))
     GetInstanceTransform2d<public>(Instance:int)<transacts>:transform2d = VhToTransform2D(VhCallValue(Handle, "get_instance_transform_2d", array{VhFromInt(Instance)}))
-    GetMesh<public>()<decides><transacts>:mesh = mesh{Handle := VhToHandle[VhCallValue(Handle, "get_mesh", array{})]}
+    GetMesh<public>()<decides><transacts>:mesh = mesh[VhObjectFrom[VhCallValue(Handle, "get_mesh", array{})]]
     ResetInstancePhysicsInterpolation<public>(Instance:int)<transacts>:void = VhCallVoid(Handle, "reset_instance_physics_interpolation", array{VhFromInt(Instance)})
     ResetInstancesPhysicsInterpolation<public>()<transacts>:void = VhCallVoid(Handle, "reset_instances_physics_interpolation", array{})
     SetBuffer<public>(Buffer:[]float)<transacts>:void = VhCallVoid(Handle, "set_buffer", array{VhFromFloat32Array(Buffer)})
@@ -37441,7 +37441,7 @@ navigation_polygon<public> := class(resource):
     ClearOutlines<public>()<transacts>:void = VhCallVoid(Handle, "clear_outlines", array{})
     ClearPolygons<public>()<transacts>:void = VhCallVoid(Handle, "clear_polygons", array{})
     GetBakingRect<public>()<transacts>:rect2 = VhToRect2(VhCallValue(Handle, "get_baking_rect", array{}))
-    GetNavigationMesh<public>()<decides><transacts>:navigation_mesh = navigation_mesh{Handle := VhToHandle[VhCallValue(Handle, "get_navigation_mesh", array{})]}
+    GetNavigationMesh<public>()<decides><transacts>:navigation_mesh = navigation_mesh[VhObjectFrom[VhCallValue(Handle, "get_navigation_mesh", array{})]]
     GetOutline<public>(Idx:int)<transacts>:[]vector2 = VhToVector2s(VhCallValue(Handle, "get_outline", array{VhFromInt(Idx)}))
     GetOutlineCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_outline_count", array{}))
     GetParsedCollisionMaskValue<public>(LayerNumber:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_parsed_collision_mask_value", array{VhFromInt(LayerNumber)}))
@@ -37478,7 +37478,7 @@ navigation_region3d<public> := class(node3d):
     GetBounds<public>()<transacts>:aabb = VhToAABB(VhCallValue(Handle, "get_bounds", array{}))
     GetNavigationLayerValue<public>(LayerNumber:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_navigation_layer_value", array{VhFromInt(LayerNumber)}))
     GetNavigationMap<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_navigation_map", array{}))
-    GetNavigationMesh<public>()<decides><transacts>:navigation_mesh = navigation_mesh{Handle := VhToHandle[VhCallValue(Handle, "get_navigation_mesh", array{})]}
+    GetNavigationMesh<public>()<decides><transacts>:navigation_mesh = navigation_mesh[VhObjectFrom[VhCallValue(Handle, "get_navigation_mesh", array{})]]
     GetRegionRid<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_region_rid", array{}))
     GetRid<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_rid", array{}))
     IsBaking<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_baking", array{}))
@@ -37570,14 +37570,14 @@ node2d<public> := class(canvas_item):
 
 noise<public> := class(resource):
 
-    GetImage<public>(Width:int, Height:int, ?Invert:logic = false, ?In3dSpace:logic = false, ?Normalize:logic = true)<decides><transacts>:image = image{Handle := VhToHandle[VhCallValue(Handle, "get_image", array{VhFromInt(Width), VhFromInt(Height), VhFromLogic(Invert), VhFromLogic(In3dSpace), VhFromLogic(Normalize)})]}
+    GetImage<public>(Width:int, Height:int, ?Invert:logic = false, ?In3dSpace:logic = false, ?Normalize:logic = true)<decides><transacts>:image = image[VhObjectFrom[VhCallValue(Handle, "get_image", array{VhFromInt(Width), VhFromInt(Height), VhFromLogic(Invert), VhFromLogic(In3dSpace), VhFromLogic(Normalize)})]]
     GetImage3d<public>(Width:int, Height:int, Depth:int, ?Invert:logic = false, ?Normalize:logic = true)<transacts>:typed_array(image) = VhToImageArray(VhCallValue(Handle, "get_image_3d", array{VhFromInt(Width), VhFromInt(Height), VhFromInt(Depth), VhFromLogic(Invert), VhFromLogic(Normalize)}))
     GetNoise1d<public>(X:float)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_noise_1d", array{VhFromFloat(X)}))
     GetNoise2d<public>(X:float, Y:float)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_noise_2d", array{VhFromFloat(X), VhFromFloat(Y)}))
     GetNoise2dv<public>(V:vector2)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_noise_2dv", array{VhFromVector2(V)}))
     GetNoise3d<public>(X:float, Y:float, Z:float)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_noise_3d", array{VhFromFloat(X), VhFromFloat(Y), VhFromFloat(Z)}))
     GetNoise3dv<public>(V:vector3)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_noise_3dv", array{VhFromVector3(V)}))
-    GetSeamlessImage<public>(Width:int, Height:int, ?Invert:logic = false, ?In3dSpace:logic = false, ?Skirt:float = 0.1, ?Normalize:logic = true)<decides><transacts>:image = image{Handle := VhToHandle[VhCallValue(Handle, "get_seamless_image", array{VhFromInt(Width), VhFromInt(Height), VhFromLogic(Invert), VhFromLogic(In3dSpace), VhFromFloat(Skirt), VhFromLogic(Normalize)})]}
+    GetSeamlessImage<public>(Width:int, Height:int, ?Invert:logic = false, ?In3dSpace:logic = false, ?Skirt:float = 0.1, ?Normalize:logic = true)<decides><transacts>:image = image[VhObjectFrom[VhCallValue(Handle, "get_seamless_image", array{VhFromInt(Width), VhFromInt(Height), VhFromLogic(Invert), VhFromLogic(In3dSpace), VhFromFloat(Skirt), VhFromLogic(Normalize)})]]
     GetSeamlessImage3d<public>(Width:int, Height:int, Depth:int, ?Invert:logic = false, ?Skirt:float = 0.1, ?Normalize:logic = true)<transacts>:typed_array(image) = VhToImageArray(VhCallValue(Handle, "get_seamless_image_3d", array{VhFromInt(Width), VhFromInt(Height), VhFromInt(Depth), VhFromLogic(Invert), VhFromFloat(Skirt), VhFromLogic(Normalize)}))
 
 occluder3d<public> := class(resource):
@@ -37623,12 +37623,12 @@ open_xr_action_map<public> := class(resource):
     AddActionSet<public>(ActionSet:open_xr_action_set)<transacts>:void = VhCallVoid(Handle, "add_action_set", array{VhFromObject(ActionSet)})
     AddInteractionProfile<public>(InteractionProfile:open_xr_interaction_profile)<transacts>:void = VhCallVoid(Handle, "add_interaction_profile", array{VhFromObject(InteractionProfile)})
     CreateDefaultActionSets<public>()<transacts>:void = VhCallVoid(Handle, "create_default_action_sets", array{})
-    FindActionSet<public>(Name:string)<decides><transacts>:open_xr_action_set = open_xr_action_set{Handle := VhToHandle[VhCallValue(Handle, "find_action_set", array{VhFromString(Name)})]}
-    FindInteractionProfile<public>(Name:string)<decides><transacts>:open_xr_interaction_profile = open_xr_interaction_profile{Handle := VhToHandle[VhCallValue(Handle, "find_interaction_profile", array{VhFromString(Name)})]}
-    GetActionSet<public>(Idx:int)<decides><transacts>:open_xr_action_set = open_xr_action_set{Handle := VhToHandle[VhCallValue(Handle, "get_action_set", array{VhFromInt(Idx)})]}
+    FindActionSet<public>(Name:string)<decides><transacts>:open_xr_action_set = open_xr_action_set[VhObjectFrom[VhCallValue(Handle, "find_action_set", array{VhFromString(Name)})]]
+    FindInteractionProfile<public>(Name:string)<decides><transacts>:open_xr_interaction_profile = open_xr_interaction_profile[VhObjectFrom[VhCallValue(Handle, "find_interaction_profile", array{VhFromString(Name)})]]
+    GetActionSet<public>(Idx:int)<decides><transacts>:open_xr_action_set = open_xr_action_set[VhObjectFrom[VhCallValue(Handle, "get_action_set", array{VhFromInt(Idx)})]]
     GetActionSetCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_action_set_count", array{}))
     GetActionSets<public>()<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_action_sets", array{}))
-    GetInteractionProfile<public>(Idx:int)<decides><transacts>:open_xr_interaction_profile = open_xr_interaction_profile{Handle := VhToHandle[VhCallValue(Handle, "get_interaction_profile", array{VhFromInt(Idx)})]}
+    GetInteractionProfile<public>(Idx:int)<decides><transacts>:open_xr_interaction_profile = open_xr_interaction_profile[VhObjectFrom[VhCallValue(Handle, "get_interaction_profile", array{VhFromInt(Idx)})]]
     GetInteractionProfileCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_interaction_profile_count", array{}))
     GetInteractionProfiles<public>()<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_interaction_profiles", array{}))
     RemoveActionSet<public>(ActionSet:open_xr_action_set)<transacts>:void = VhCallVoid(Handle, "remove_action_set", array{VhFromObject(ActionSet)})
@@ -37726,8 +37726,8 @@ open_xr_composition_layer<public> := class(node3d):
     var UseAndroidSurface<public><getter(UseAndroidSurfaceGetter)><setter(UseAndroidSurfaceSetter)>:logic = external {}
     UseAndroidSurfaceGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_use_android_surface", array{}))
     UseAndroidSurfaceSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_use_android_surface", array{VhFromLogic(Value)})
-    GetAndroidSurface<public>()<decides><transacts>:java_object = java_object{Handle := VhToHandle[VhCallValue(Handle, "get_android_surface", array{})]}
-    GetLayerViewport<public>()<decides><transacts>:sub_viewport = sub_viewport{Handle := VhToHandle[VhCallValue(Handle, "get_layer_viewport", array{})]}
+    GetAndroidSurface<public>()<decides><transacts>:java_object = java_object[VhObjectFrom[VhCallValue(Handle, "get_android_surface", array{})]]
+    GetLayerViewport<public>()<decides><transacts>:sub_viewport = sub_viewport[VhObjectFrom[VhCallValue(Handle, "get_layer_viewport", array{})]]
     IntersectsRay<public>(Origin:vector3, Direction:vector3)<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "intersects_ray", array{VhFromVector3(Origin), VhFromVector3(Direction)}))
     IsNativelySupported<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_natively_supported", array{}))
     SetLayerViewport<public>(Viewport:sub_viewport)<transacts>:void = VhCallVoid(Handle, "set_layer_viewport", array{VhFromObject(Viewport)})
@@ -37753,9 +37753,9 @@ open_xr_haptic_base<public> := class(resource):
 
 open_xr_interaction_profile<public> := class(resource):
 
-    GetBinding<public>(Index:int)<decides><transacts>:open_xrip_binding = open_xrip_binding{Handle := VhToHandle[VhCallValue(Handle, "get_binding", array{VhFromInt(Index)})]}
+    GetBinding<public>(Index:int)<decides><transacts>:open_xrip_binding = open_xrip_binding[VhObjectFrom[VhCallValue(Handle, "get_binding", array{VhFromInt(Index)})]]
     GetBindingCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_binding_count", array{}))
-    GetBindingModifier<public>(Index:int)<decides><transacts>:open_xrip_binding_modifier = open_xrip_binding_modifier{Handle := VhToHandle[VhCallValue(Handle, "get_binding_modifier", array{VhFromInt(Index)})]}
+    GetBindingModifier<public>(Index:int)<decides><transacts>:open_xrip_binding_modifier = open_xrip_binding_modifier[VhObjectFrom[VhCallValue(Handle, "get_binding_modifier", array{VhFromInt(Index)})]]
     GetBindingModifierCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_binding_modifier_count", array{}))
     GetBindingModifiers<public>()<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_binding_modifiers", array{}))
     GetBindings<public>()<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_bindings", array{}))
@@ -37881,7 +37881,7 @@ open_xr_spatial_component_mesh2d_list<public> := class(open_xr_spatial_component
 
 open_xr_spatial_component_mesh3d_list<public> := class(open_xr_spatial_component_data):
 
-    GetMesh<public>(Index:int)<decides><transacts>:mesh = mesh{Handle := VhToHandle[VhCallValue(Handle, "get_mesh", array{VhFromInt(Index)})]}
+    GetMesh<public>(Index:int)<decides><transacts>:mesh = mesh[VhObjectFrom[VhCallValue(Handle, "get_mesh", array{VhFromInt(Index)})]]
     GetTransform<public>(Index:int)<transacts>:transform3d = VhToTransform3D(VhCallValue(Handle, "get_transform", array{VhFromInt(Index)}))
 
 open_xr_spatial_component_parent_list<public> := class(open_xr_spatial_component_data):
@@ -37920,8 +37920,8 @@ open_xr_spatial_query_result_data<public> := class(open_xr_spatial_component_dat
 open_xrip_binding<public> := class(resource):
 
     AddPath<public>(Path:string)<transacts>:void = VhCallVoid(Handle, "add_path", array{VhFromString(Path)})
-    GetAction<public>()<decides><transacts>:open_xr_action = open_xr_action{Handle := VhToHandle[VhCallValue(Handle, "get_action", array{})]}
-    GetBindingModifier<public>(Index:int)<decides><transacts>:open_xr_action_binding_modifier = open_xr_action_binding_modifier{Handle := VhToHandle[VhCallValue(Handle, "get_binding_modifier", array{VhFromInt(Index)})]}
+    GetAction<public>()<decides><transacts>:open_xr_action = open_xr_action[VhObjectFrom[VhCallValue(Handle, "get_action", array{})]]
+    GetBindingModifier<public>(Index:int)<decides><transacts>:open_xr_action_binding_modifier = open_xr_action_binding_modifier[VhObjectFrom[VhCallValue(Handle, "get_binding_modifier", array{VhFromInt(Index)})]]
     GetBindingModifierCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_binding_modifier_count", array{}))
     GetBindingModifiers<public>()<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_binding_modifiers", array{}))
     GetBindingPath<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_binding_path", array{}))
@@ -37942,8 +37942,8 @@ packed_data_container<public> := class(resource):
 packed_scene<public> := class(resource):
 
     CanInstantiate<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "can_instantiate", array{}))
-    GetState<public>()<decides><transacts>:scene_state = scene_state{Handle := VhToHandle[VhCallValue(Handle, "get_state", array{})]}
-    Instantiate<public>(EditState:packed_scene_gen_edit_state)<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "instantiate", array{VhFromPackedSceneGenEditState(EditState)})]}
+    GetState<public>()<decides><transacts>:scene_state = scene_state[VhObjectFrom[VhCallValue(Handle, "get_state", array{})]]
+    Instantiate<public>(EditState:packed_scene_gen_edit_state)<decides><transacts>:node = node[VhObjectFrom[VhCallValue(Handle, "instantiate", array{VhFromPackedSceneGenEditState(EditState)})]]
     Pack<public>(Path:node)<transacts>:error = VhToError(VhCallValue(Handle, "pack", array{VhFromObject(Path)}))
 
 packet_peer_dtls<public> := class(packet_peer):
@@ -37963,7 +37963,7 @@ packet_peer_stream<public> := class(packet_peer):
     var OutputBufferMaxSize<public><getter(OutputBufferMaxSizeGetter)><setter(OutputBufferMaxSizeSetter)>:int = external {}
     OutputBufferMaxSizeGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_output_buffer_max_size", array{}))
     OutputBufferMaxSizeSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_output_buffer_max_size", array{VhFromInt(Value)})
-    GetStreamPeer<public>()<decides><transacts>:stream_peer = stream_peer{Handle := VhToHandle[VhCallValue(Handle, "get_stream_peer", array{})]}
+    GetStreamPeer<public>()<decides><transacts>:stream_peer = stream_peer[VhObjectFrom[VhCallValue(Handle, "get_stream_peer", array{})]]
     SetStreamPeer<public>(Peer:stream_peer)<transacts>:void = VhCallVoid(Handle, "set_stream_peer", array{VhFromObject(Peer)})
 
 packet_peer_udp<public> := class(packet_peer):
@@ -38066,7 +38066,7 @@ path3d<public> := class(node3d):
             VhCallVoid(Handle, "set_debug_custom_color", array{VhFromColor(color{R := Current.R, G := Current.G, B := Value, A := Current.A})})
         else:
             VhCallVoid(Handle, "set_debug_custom_color", array{VhFromColor(color{R := Current.R, G := Current.G, B := Current.B, A := Value})})
-    GetCurve<public>()<decides><transacts>:curve3d = curve3d{Handle := VhToHandle[VhCallValue(Handle, "get_curve", array{})]}
+    GetCurve<public>()<decides><transacts>:curve3d = curve3d[VhObjectFrom[VhCallValue(Handle, "get_curve", array{})]]
     SetCurve<public>(Curve:curve3d)<transacts>:void = VhCallVoid(Handle, "set_curve", array{VhFromObject(Curve)})
 
 path_follow3d<public> := class(node3d):
@@ -38127,13 +38127,13 @@ polygon_path_finder<public> := class(resource):
 
 property_tweener<public> := class(tweener):
 
-    AsRelative<public>()<decides><transacts>:property_tweener = property_tweener{Handle := VhToHandle[VhCallValue(Handle, "as_relative", array{})]}
-    From<public>(Value:variant)<decides><transacts>:property_tweener = property_tweener{Handle := VhToHandle[VhCallValue(Handle, "from", array{VhFromVariant(Value)})]}
-    FromCurrent<public>()<decides><transacts>:property_tweener = property_tweener{Handle := VhToHandle[VhCallValue(Handle, "from_current", array{})]}
-    SetCustomInterpolator<public>(InterpolatorMethod:callable)<decides><transacts>:property_tweener = property_tweener{Handle := VhToHandle[VhCallValue(Handle, "set_custom_interpolator", array{VhFromCallable(InterpolatorMethod)})]}
-    SetDelay<public>(Delay:float)<decides><transacts>:property_tweener = property_tweener{Handle := VhToHandle[VhCallValue(Handle, "set_delay", array{VhFromFloat(Delay)})]}
-    SetEase<public>(Ease:tween_ease_type)<decides><transacts>:property_tweener = property_tweener{Handle := VhToHandle[VhCallValue(Handle, "set_ease", array{VhFromTweenEaseType(Ease)})]}
-    SetTrans<public>(Trans:tween_transition_type)<decides><transacts>:property_tweener = property_tweener{Handle := VhToHandle[VhCallValue(Handle, "set_trans", array{VhFromTweenTransitionType(Trans)})]}
+    AsRelative<public>()<decides><transacts>:property_tweener = property_tweener[VhObjectFrom[VhCallValue(Handle, "as_relative", array{})]]
+    From<public>(Value:variant)<decides><transacts>:property_tweener = property_tweener[VhObjectFrom[VhCallValue(Handle, "from", array{VhFromVariant(Value)})]]
+    FromCurrent<public>()<decides><transacts>:property_tweener = property_tweener[VhObjectFrom[VhCallValue(Handle, "from_current", array{})]]
+    SetCustomInterpolator<public>(InterpolatorMethod:callable)<decides><transacts>:property_tweener = property_tweener[VhObjectFrom[VhCallValue(Handle, "set_custom_interpolator", array{VhFromCallable(InterpolatorMethod)})]]
+    SetDelay<public>(Delay:float)<decides><transacts>:property_tweener = property_tweener[VhObjectFrom[VhCallValue(Handle, "set_delay", array{VhFromFloat(Delay)})]]
+    SetEase<public>(Ease:tween_ease_type)<decides><transacts>:property_tweener = property_tweener[VhObjectFrom[VhCallValue(Handle, "set_ease", array{VhFromTweenEaseType(Ease)})]]
+    SetTrans<public>(Trans:tween_transition_type)<decides><transacts>:property_tweener = property_tweener[VhObjectFrom[VhCallValue(Handle, "set_trans", array{VhFromTweenTransitionType(Trans)})]]
 
 ray_cast3d<public> := class(node3d):
 
@@ -38195,7 +38195,7 @@ ray_cast3d<public> := class(node3d):
     AddExceptionRid<public>(Rid:int)<transacts>:void = VhCallVoid(Handle, "add_exception_rid", array{VhFromRid(Rid)})
     ClearExceptions<public>()<transacts>:void = VhCallVoid(Handle, "clear_exceptions", array{})
     ForceRaycastUpdate<public>()<transacts>:void = VhCallVoid(Handle, "force_raycast_update", array{})
-    GetCollider<public>()<decides><transacts>:object = object{Handle := VhToHandle[VhCallValue(Handle, "get_collider", array{})]}
+    GetCollider<public>()<decides><transacts>:object = object[VhObjectFrom[VhCallValue(Handle, "get_collider", array{})]]
     GetColliderRid<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_collider_rid", array{}))
     GetColliderShape<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_collider_shape", array{}))
     GetCollisionFaceIndex<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_collision_face_index", array{}))
@@ -38210,7 +38210,7 @@ ray_cast3d<public> := class(node3d):
 rd_shader_file<public> := class(resource):
 
     GetBaseError<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_base_error", array{}))
-    GetSpirv<public>(?Version:string = "")<decides><transacts>:rd_shader_spirv = rd_shader_spirv{Handle := VhToHandle[VhCallValue(Handle, "get_spirv", array{VhFromStringName(Version)})]}
+    GetSpirv<public>(?Version:string = "")<decides><transacts>:rd_shader_spirv = rd_shader_spirv[VhObjectFrom[VhCallValue(Handle, "get_spirv", array{VhFromStringName(Version)})]]
     GetVersionList<public>()<transacts>:typed_array(string) = VhToStringNameArray(VhCallValue(Handle, "get_version_list", array{}))
     SetBaseError<public>(Error:string)<transacts>:void = VhCallVoid(Handle, "set_base_error", array{VhFromString(Error)})
     SetBytecode<public>(Bytecode:rd_shader_spirv, ?Version:string = "")<transacts>:void = VhCallVoid(Handle, "set_bytecode", array{VhFromObject(Bytecode), VhFromStringName(Version)})
@@ -38260,7 +38260,7 @@ render_scene_buffers_rd<public> := class(render_scene_buffers):
     GetScreenSpaceAa<public>()<transacts>:rendering_server_viewport_screen_space_aa = VhToRenderingServerViewportScreenSpaceAa(VhCallValue(Handle, "get_screen_space_aa", array{}))
     GetTargetSize<public>()<transacts>:vector2i = VhToVector2i(VhCallValue(Handle, "get_target_size", array{}))
     GetTexture<public>(Context:string, Name:string)<transacts>:int = VhToInt(VhCallValue(Handle, "get_texture", array{VhFromStringName(Context), VhFromStringName(Name)}))
-    GetTextureFormat<public>(Context:string, Name:string)<decides><transacts>:rd_texture_format = rd_texture_format{Handle := VhToHandle[VhCallValue(Handle, "get_texture_format", array{VhFromStringName(Context), VhFromStringName(Name)})]}
+    GetTextureFormat<public>(Context:string, Name:string)<decides><transacts>:rd_texture_format = rd_texture_format[VhObjectFrom[VhCallValue(Handle, "get_texture_format", array{VhFromStringName(Context), VhFromStringName(Name)})]]
     GetTextureSamples<public>()<transacts>:rendering_device_texture_samples = VhToRenderingDeviceTextureSamples(VhCallValue(Handle, "get_texture_samples", array{}))
     GetTextureSlice<public>(Context:string, Name:string, Layer:int, Mipmap:int, Layers:int, Mipmaps:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_texture_slice", array{VhFromStringName(Context), VhFromStringName(Name), VhFromInt(Layer), VhFromInt(Mipmap), VhFromInt(Layers), VhFromInt(Mipmaps)}))
     GetTextureSliceSize<public>(Context:string, Name:string, Mipmap:int)<transacts>:vector2i = VhToVector2i(VhCallValue(Handle, "get_texture_slice_size", array{VhFromStringName(Context), VhFromStringName(Name), VhFromInt(Mipmap)}))
@@ -38356,7 +38356,7 @@ scene_replication_config<public> := class(resource):
 script<public> := class(resource):
 
     CanInstantiate<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "can_instantiate", array{}))
-    GetBaseScript<public>()<decides><transacts>:script = script{Handle := VhToHandle[VhCallValue(Handle, "get_base_script", array{})]}
+    GetBaseScript<public>()<decides><transacts>:script = script[VhObjectFrom[VhCallValue(Handle, "get_base_script", array{})]]
     GetGlobalName<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_global_name", array{}))
     GetInstanceBaseType<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_instance_base_type", array{}))
     GetPropertyDefaultValue<public>(Property:string)<transacts>:variant = VhToVariant(VhCallValue(Handle, "get_property_default_value", array{VhFromStringName(Property)}))
@@ -38377,7 +38377,7 @@ script<public> := class(resource):
 shader<public> := class(resource):
 
     GetCode<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_code", array{}))
-    GetDefaultTextureParameter<public>(Name:string, ?Index:int = 0)<decides><transacts>:texture = texture{Handle := VhToHandle[VhCallValue(Handle, "get_default_texture_parameter", array{VhFromStringName(Name), VhFromInt(Index)})]}
+    GetDefaultTextureParameter<public>(Name:string, ?Index:int = 0)<decides><transacts>:texture = texture[VhObjectFrom[VhCallValue(Handle, "get_default_texture_parameter", array{VhFromStringName(Name), VhFromInt(Index)})]]
     GetMode<public>()<transacts>:shader_mode = VhToShaderMode(VhCallValue(Handle, "get_mode", array{}))
     GetShaderUniformList<public>(?GetGroups:logic = false)<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_shader_uniform_list", array{VhFromLogic(GetGroups)}))
     InspectNativeShaderCode<public>()<transacts>:void = VhCallVoid(Handle, "inspect_native_shader_code", array{})
@@ -38409,7 +38409,7 @@ shape3d<public> := class(resource):
     var Margin<public><getter(MarginGetter)><setter(MarginSetter)>:float = external {}
     MarginGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_margin", array{}))
     MarginSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_margin", array{VhFromFloat(Value)})
-    GetDebugMesh<public>()<decides><transacts>:array_mesh = array_mesh{Handle := VhToHandle[VhCallValue(Handle, "get_debug_mesh", array{})]}
+    GetDebugMesh<public>()<decides><transacts>:array_mesh = array_mesh[VhObjectFrom[VhCallValue(Handle, "get_debug_mesh", array{})]]
 
 shape_cast3d<public> := class(node3d):
 
@@ -38470,7 +38470,7 @@ shape_cast3d<public> := class(node3d):
     ForceShapecastUpdate<public>()<transacts>:void = VhCallVoid(Handle, "force_shapecast_update", array{})
     GetClosestCollisionSafeFraction<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_closest_collision_safe_fraction", array{}))
     GetClosestCollisionUnsafeFraction<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_closest_collision_unsafe_fraction", array{}))
-    GetCollider<public>(Index:int)<decides><transacts>:object = object{Handle := VhToHandle[VhCallValue(Handle, "get_collider", array{VhFromInt(Index)})]}
+    GetCollider<public>(Index:int)<decides><transacts>:object = object[VhObjectFrom[VhCallValue(Handle, "get_collider", array{VhFromInt(Index)})]]
     GetColliderRid<public>(Index:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_collider_rid", array{VhFromInt(Index)}))
     GetColliderShape<public>(Index:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_collider_shape", array{VhFromInt(Index)}))
     GetCollisionCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_collision_count", array{}))
@@ -38478,7 +38478,7 @@ shape_cast3d<public> := class(node3d):
     GetCollisionNormal<public>(Index:int)<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_collision_normal", array{VhFromInt(Index)}))
     GetCollisionPoint<public>(Index:int)<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_collision_point", array{VhFromInt(Index)}))
     GetCollisionResult<public>()<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_collision_result", array{}))
-    GetShape<public>()<decides><transacts>:shape3d = shape3d{Handle := VhToHandle[VhCallValue(Handle, "get_shape", array{})]}
+    GetShape<public>()<decides><transacts>:shape3d = shape3d[VhObjectFrom[VhCallValue(Handle, "get_shape", array{})]]
     IsColliding<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_colliding", array{}))
     RemoveException<public>(Node:collision_object3d)<transacts>:void = VhCallVoid(Handle, "remove_exception", array{VhFromObject(Node)})
     RemoveExceptionRid<public>(Rid:int)<transacts>:void = VhCallVoid(Handle, "remove_exception_rid", array{VhFromRid(Rid)})
@@ -38513,7 +38513,7 @@ skeleton3d<public> := class(node3d):
     Advance<public>(Delta:float)<transacts>:void = VhCallVoid(Handle, "advance", array{VhFromFloat(Delta)})
     ClearBones<public>()<transacts>:void = VhCallVoid(Handle, "clear_bones", array{})
     ClearBonesGlobalPoseOverride<public>()<transacts>:void = VhCallVoid(Handle, "clear_bones_global_pose_override", array{})
-    CreateSkinFromRestTransforms<public>()<decides><transacts>:skin = skin{Handle := VhToHandle[VhCallValue(Handle, "create_skin_from_rest_transforms", array{})]}
+    CreateSkinFromRestTransforms<public>()<decides><transacts>:skin = skin[VhObjectFrom[VhCallValue(Handle, "create_skin_from_rest_transforms", array{})]]
     FindBone<public>(Name:string)<transacts>:int = VhToInt(VhCallValue(Handle, "find_bone", array{VhFromString(Name)}))
     ForceUpdateAllBoneTransforms<public>()<transacts>:void = VhCallVoid(Handle, "force_update_all_bone_transforms", array{})
     ForceUpdateBoneChildTransform<public>(BoneIdx:int)<transacts>:void = VhCallVoid(Handle, "force_update_bone_child_transform", array{VhFromInt(BoneIdx)})
@@ -38542,7 +38542,7 @@ skeleton3d<public> := class(node3d):
     PhysicalBonesRemoveCollisionException<public>(Exception:int)<transacts>:void = VhCallVoid(Handle, "physical_bones_remove_collision_exception", array{VhFromRid(Exception)})
     PhysicalBonesStartSimulation<public>(Bones:typed_array(string))<transacts>:void = VhCallVoid(Handle, "physical_bones_start_simulation", array{VhFromStringNameArray(Bones)})
     PhysicalBonesStopSimulation<public>()<transacts>:void = VhCallVoid(Handle, "physical_bones_stop_simulation", array{})
-    RegisterSkin<public>(Skin:skin)<decides><transacts>:skin_reference = skin_reference{Handle := VhToHandle[VhCallValue(Handle, "register_skin", array{VhFromObject(Skin)})]}
+    RegisterSkin<public>(Skin:skin)<decides><transacts>:skin_reference = skin_reference[VhObjectFrom[VhCallValue(Handle, "register_skin", array{VhFromObject(Skin)})]]
     ResetBonePose<public>(BoneIdx:int)<transacts>:void = VhCallVoid(Handle, "reset_bone_pose", array{VhFromInt(BoneIdx)})
     ResetBonePoses<public>()<transacts>:void = VhCallVoid(Handle, "reset_bone_poses", array{})
     SetBoneEnabled<public>(BoneIdx:int, ?Enabled:logic = true)<transacts>:void = VhCallVoid(Handle, "set_bone_enabled", array{VhFromInt(BoneIdx), VhFromLogic(Enabled)})
@@ -38569,7 +38569,7 @@ skeleton_modification2d<public> := class(resource):
     ClampAngle<public>(Angle:float, Arg1:float, Arg2:float, Invert:logic)<transacts>:float = VhToFloat(VhCallValue(Handle, "clamp_angle", array{VhFromFloat(Angle), VhFromFloat(Arg1), VhFromFloat(Arg2), VhFromLogic(Invert)}))
     GetEditorDrawGizmo<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_editor_draw_gizmo", array{}))
     GetIsSetup<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_is_setup", array{}))
-    GetModificationStack<public>()<decides><transacts>:skeleton_modification_stack2d = skeleton_modification_stack2d{Handle := VhToHandle[VhCallValue(Handle, "get_modification_stack", array{})]}
+    GetModificationStack<public>()<decides><transacts>:skeleton_modification_stack2d = skeleton_modification_stack2d[VhObjectFrom[VhCallValue(Handle, "get_modification_stack", array{})]]
     SetEditorDrawGizmo<public>(DrawGizmo:logic)<transacts>:void = VhCallVoid(Handle, "set_editor_draw_gizmo", array{VhFromLogic(DrawGizmo)})
     SetIsSetup<public>(IsSetup:logic)<transacts>:void = VhCallVoid(Handle, "set_is_setup", array{VhFromLogic(IsSetup)})
 
@@ -38589,8 +38589,8 @@ skeleton_modification_stack2d<public> := class(resource):
     EnableAllModifications<public>(Arg0:logic)<transacts>:void = VhCallVoid(Handle, "enable_all_modifications", array{VhFromLogic(Arg0)})
     Execute<public>(Delta:float, ExecutionMode:int)<transacts>:void = VhCallVoid(Handle, "execute", array{VhFromFloat(Delta), VhFromInt(ExecutionMode)})
     GetIsSetup<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_is_setup", array{}))
-    GetModification<public>(ModIdx:int)<decides><transacts>:skeleton_modification2d = skeleton_modification2d{Handle := VhToHandle[VhCallValue(Handle, "get_modification", array{VhFromInt(ModIdx)})]}
-    GetSkeleton<public>()<decides><transacts>:skeleton2d = skeleton2d{Handle := VhToHandle[VhCallValue(Handle, "get_skeleton", array{})]}
+    GetModification<public>(ModIdx:int)<decides><transacts>:skeleton_modification2d = skeleton_modification2d[VhObjectFrom[VhCallValue(Handle, "get_modification", array{VhFromInt(ModIdx)})]]
+    GetSkeleton<public>()<decides><transacts>:skeleton2d = skeleton2d[VhObjectFrom[VhCallValue(Handle, "get_skeleton", array{})]]
     SetModification<public>(ModIdx:int, Modification:skeleton_modification2d)<transacts>:void = VhCallVoid(Handle, "set_modification", array{VhFromInt(ModIdx), VhFromObject(Modification)})
     Setup<public>()<transacts>:void = VhCallVoid(Handle, "setup", array{})
 
@@ -38602,7 +38602,7 @@ skeleton_modifier3d<public> := class(node3d):
     var Influence<public><getter(InfluenceGetter)><setter(InfluenceSetter)>:float = external {}
     InfluenceGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_influence", array{}))
     InfluenceSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_influence", array{VhFromFloat(Value)})
-    GetSkeleton<public>()<decides><transacts>:skeleton3d = skeleton3d{Handle := VhToHandle[VhCallValue(Handle, "get_skeleton", array{})]}
+    GetSkeleton<public>()<decides><transacts>:skeleton3d = skeleton3d[VhObjectFrom[VhCallValue(Handle, "get_skeleton", array{})]]
 
 skeleton_profile<public> := class(resource):
 
@@ -38623,7 +38623,7 @@ skeleton_profile<public> := class(resource):
     GetRootBone<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_root_bone", array{}))
     GetScaleBaseBone<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_scale_base_bone", array{}))
     GetTailDirection<public>(BoneIdx:int)<transacts>:skeleton_profile_tail_direction = VhToSkeletonProfileTailDirection(VhCallValue(Handle, "get_tail_direction", array{VhFromInt(BoneIdx)}))
-    GetTexture<public>(GroupIdx:int)<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture", array{VhFromInt(GroupIdx)})]}
+    GetTexture<public>(GroupIdx:int)<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_texture", array{VhFromInt(GroupIdx)})]]
     IsRequired<public>(BoneIdx:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_required", array{VhFromInt(BoneIdx)}))
     SetBoneName<public>(BoneIdx:int, BoneName:string)<transacts>:void = VhCallVoid(Handle, "set_bone_name", array{VhFromInt(BoneIdx), VhFromStringName(BoneName)})
     SetBoneParent<public>(BoneIdx:int, BoneParent:string)<transacts>:void = VhCallVoid(Handle, "set_bone_parent", array{VhFromInt(BoneIdx), VhFromStringName(BoneParent)})
@@ -38660,7 +38660,7 @@ sky<public> := class(resource):
     var RadianceSize<public><getter(RadianceSizeGetter)><setter(RadianceSizeSetter)>:sky_radiance_size = external {}
     RadianceSizeGetter<epic_internal>(Accessor:accessor)<transacts>:sky_radiance_size = VhToSkyRadianceSize(VhCallValue(Handle, "get_radiance_size", array{}))
     RadianceSizeSetter<epic_internal>(Accessor:accessor, Value:sky_radiance_size)<transacts>:void = VhCallVoid(Handle, "set_radiance_size", array{VhFromSkyRadianceSize(Value)})
-    GetMaterial<public>()<decides><transacts>:material = material{Handle := VhToHandle[VhCallValue(Handle, "get_material", array{})]}
+    GetMaterial<public>()<decides><transacts>:material = material[VhObjectFrom[VhCallValue(Handle, "get_material", array{})]]
     SetMaterial<public>(Material:material)<transacts>:void = VhCallVoid(Handle, "set_material", array{VhFromObject(Material)})
 
 spring_arm3d<public> := class(node3d):
@@ -38677,7 +38677,7 @@ spring_arm3d<public> := class(node3d):
     AddExcludedObject<public>(RID:int)<transacts>:void = VhCallVoid(Handle, "add_excluded_object", array{VhFromRid(RID)})
     ClearExcludedObjects<public>()<transacts>:void = VhCallVoid(Handle, "clear_excluded_objects", array{})
     GetHitLength<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_hit_length", array{}))
-    GetShape<public>()<decides><transacts>:shape3d = shape3d{Handle := VhToHandle[VhCallValue(Handle, "get_shape", array{})]}
+    GetShape<public>()<decides><transacts>:shape3d = shape3d[VhObjectFrom[VhCallValue(Handle, "get_shape", array{})]]
     RemoveExcludedObject<public>(RID:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "remove_excluded_object", array{VhFromRid(RID)}))
     SetShape<public>(Shape:shape3d)<transacts>:void = VhCallVoid(Handle, "set_shape", array{VhFromObject(Shape)})
 
@@ -38717,7 +38717,7 @@ spring_bone_collision3d<public> := class(node3d):
         else:
             VhCallVoid(Handle, "set_rotation_offset", array{VhFromQuaternion(quaternion{X := Current.X, Y := Current.Y, Z := Current.Z, W := Value})})
     GetBoneName<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_bone_name", array{}))
-    GetSkeleton<public>()<decides><transacts>:skeleton3d = skeleton3d{Handle := VhToHandle[VhCallValue(Handle, "get_skeleton", array{})]}
+    GetSkeleton<public>()<decides><transacts>:skeleton3d = skeleton3d[VhObjectFrom[VhCallValue(Handle, "get_skeleton", array{})]]
     SetBoneName<public>(BoneName:string)<transacts>:void = VhCallVoid(Handle, "set_bone_name", array{VhFromString(BoneName)})
 
 sprite_frames<public> := class(resource):
@@ -38732,7 +38732,7 @@ sprite_frames<public> := class(resource):
     GetAnimationSpeed<public>(Anim:string)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_animation_speed", array{VhFromStringName(Anim)}))
     GetFrameCount<public>(Anim:string)<transacts>:int = VhToInt(VhCallValue(Handle, "get_frame_count", array{VhFromStringName(Anim)}))
     GetFrameDuration<public>(Anim:string, Idx:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_frame_duration", array{VhFromStringName(Anim), VhFromInt(Idx)}))
-    GetFrameTexture<public>(Anim:string, Idx:int)<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_frame_texture", array{VhFromStringName(Anim), VhFromInt(Idx)})]}
+    GetFrameTexture<public>(Anim:string, Idx:int)<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_frame_texture", array{VhFromStringName(Anim), VhFromInt(Idx)})]]
     HasAnimation<public>(Anim:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_animation", array{VhFromStringName(Anim)}))
     RemoveAnimation<public>(Anim:string)<transacts>:void = VhCallVoid(Handle, "remove_animation", array{VhFromStringName(Anim)})
     RemoveFrame<public>(Anim:string, Idx:int)<transacts>:void = VhCallVoid(Handle, "remove_frame", array{VhFromStringName(Anim), VhFromInt(Idx)})
@@ -38744,7 +38744,7 @@ sprite_frames<public> := class(resource):
 stream_peer_buffer<public> := class(stream_peer):
 
     Clear<public>()<transacts>:void = VhCallVoid(Handle, "clear", array{})
-    Duplicate<public>()<decides><transacts>:stream_peer_buffer = stream_peer_buffer{Handle := VhToHandle[VhCallValue(Handle, "duplicate", array{})]}
+    Duplicate<public>()<decides><transacts>:stream_peer_buffer = stream_peer_buffer[VhObjectFrom[VhCallValue(Handle, "duplicate", array{})]]
     GetDataArray<public>()<transacts>:[]int = VhToInts(VhCallValue(Handle, "get_data_array", array{}))
     GetPosition<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_position", array{}))
     GetSize<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_size", array{}))
@@ -38773,7 +38773,7 @@ stream_peer_tls<public> := class(stream_peer):
     ConnectToStream<public>(Stream:stream_peer, CommonName:string, ClientOptions:tls_options)<transacts>:error = VhToError(VhCallValue(Handle, "connect_to_stream", array{VhFromObject(Stream), VhFromString(CommonName), VhFromObject(ClientOptions)}))
     DisconnectFromStream<public>()<transacts>:void = VhCallVoid(Handle, "disconnect_from_stream", array{})
     GetStatus<public>()<transacts>:stream_peer_tls_status = VhToStreamPeerTlsStatus(VhCallValue(Handle, "get_status", array{}))
-    GetStream<public>()<decides><transacts>:stream_peer = stream_peer{Handle := VhToHandle[VhCallValue(Handle, "get_stream", array{})]}
+    GetStream<public>()<decides><transacts>:stream_peer = stream_peer[VhObjectFrom[VhCallValue(Handle, "get_stream", array{})]]
     Poll<public>()<transacts>:void = VhCallVoid(Handle, "poll", array{})
 
 style_box<public> := class(resource):
@@ -38791,7 +38791,7 @@ style_box<public> := class(resource):
     ContentMarginTopGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_content_margin", array{VhFromInt(1)}))
     ContentMarginTopSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_content_margin", array{VhFromInt(1), VhFromFloat(Value)})
     Draw<public>(CanvasItem:int, Rect:rect2)<transacts>:void = VhCallVoid(Handle, "draw", array{VhFromRid(CanvasItem), VhFromRect2(Rect)})
-    GetCurrentItemDrawn<public>()<decides><transacts>:canvas_item = canvas_item{Handle := VhToHandle[VhCallValue(Handle, "get_current_item_drawn", array{})]}
+    GetCurrentItemDrawn<public>()<decides><transacts>:canvas_item = canvas_item[VhObjectFrom[VhCallValue(Handle, "get_current_item_drawn", array{})]]
     GetMargin<public>(Margin:side)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_margin", array{VhFromSide(Margin)}))
     GetMinimumSize<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_minimum_size", array{}))
     GetOffset<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_offset", array{}))
@@ -38836,20 +38836,20 @@ sub_viewport<public> := class(viewport):
 
 subtween_tweener<public> := class(tweener):
 
-    SetDelay<public>(Delay:float)<decides><transacts>:subtween_tweener = subtween_tweener{Handle := VhToHandle[VhCallValue(Handle, "set_delay", array{VhFromFloat(Delay)})]}
+    SetDelay<public>(Delay:float)<decides><transacts>:subtween_tweener = subtween_tweener[VhObjectFrom[VhCallValue(Handle, "set_delay", array{VhFromFloat(Delay)})]]
 
 syntax_highlighter<public> := class(resource):
 
     ClearHighlightingCache<public>()<transacts>:void = VhCallVoid(Handle, "clear_highlighting_cache", array{})
     GetLineSyntaxHighlighting<public>(Line:int)<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_line_syntax_highlighting", array{VhFromInt(Line)}))
-    GetTextEdit<public>()<decides><transacts>:text_edit = text_edit{Handle := VhToHandle[VhCallValue(Handle, "get_text_edit", array{})]}
+    GetTextEdit<public>()<decides><transacts>:text_edit = text_edit[VhObjectFrom[VhCallValue(Handle, "get_text_edit", array{})]]
     UpdateCache<public>()<transacts>:void = VhCallVoid(Handle, "update_cache", array{})
 
 tcp_server<public> := class(socket_server):
 
     GetLocalPort<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_local_port", array{}))
     Listen<public>(Port:int, ?BindAddress:string = "*")<transacts>:error = VhToError(VhCallValue(Handle, "listen", array{VhFromInt(Port), VhFromString(BindAddress)}))
-    TakeConnection<public>()<decides><transacts>:stream_peer_tcp = stream_peer_tcp{Handle := VhToHandle[VhCallValue(Handle, "take_connection", array{})]}
+    TakeConnection<public>()<decides><transacts>:stream_peer_tcp = stream_peer_tcp[VhObjectFrom[VhCallValue(Handle, "take_connection", array{})]]
 
 text_server_extension<public> := class(text_server):
 
@@ -38879,17 +38879,17 @@ theme<public> := class(resource):
     GetConstant<public>(Name:string, ThemeType:string)<transacts>:int = VhToInt(VhCallValue(Handle, "get_constant", array{VhFromStringName(Name), VhFromStringName(ThemeType)}))
     GetConstantList<public>(ThemeType:string)<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_constant_list", array{VhFromString(ThemeType)}))
     GetConstantTypeList<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_constant_type_list", array{}))
-    GetDefaultFont<public>()<decides><transacts>:font = font{Handle := VhToHandle[VhCallValue(Handle, "get_default_font", array{})]}
-    GetFont<public>(Name:string, ThemeType:string)<decides><transacts>:font = font{Handle := VhToHandle[VhCallValue(Handle, "get_font", array{VhFromStringName(Name), VhFromStringName(ThemeType)})]}
+    GetDefaultFont<public>()<decides><transacts>:font = font[VhObjectFrom[VhCallValue(Handle, "get_default_font", array{})]]
+    GetFont<public>(Name:string, ThemeType:string)<decides><transacts>:font = font[VhObjectFrom[VhCallValue(Handle, "get_font", array{VhFromStringName(Name), VhFromStringName(ThemeType)})]]
     GetFontList<public>(ThemeType:string)<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_font_list", array{VhFromString(ThemeType)}))
     GetFontSize<public>(Name:string, ThemeType:string)<transacts>:int = VhToInt(VhCallValue(Handle, "get_font_size", array{VhFromStringName(Name), VhFromStringName(ThemeType)}))
     GetFontSizeList<public>(ThemeType:string)<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_font_size_list", array{VhFromString(ThemeType)}))
     GetFontSizeTypeList<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_font_size_type_list", array{}))
     GetFontTypeList<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_font_type_list", array{}))
-    GetIcon<public>(Name:string, ThemeType:string)<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_icon", array{VhFromStringName(Name), VhFromStringName(ThemeType)})]}
+    GetIcon<public>(Name:string, ThemeType:string)<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_icon", array{VhFromStringName(Name), VhFromStringName(ThemeType)})]]
     GetIconList<public>(ThemeType:string)<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_icon_list", array{VhFromString(ThemeType)}))
     GetIconTypeList<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_icon_type_list", array{}))
-    GetStylebox<public>(Name:string, ThemeType:string)<decides><transacts>:style_box = style_box{Handle := VhToHandle[VhCallValue(Handle, "get_stylebox", array{VhFromStringName(Name), VhFromStringName(ThemeType)})]}
+    GetStylebox<public>(Name:string, ThemeType:string)<decides><transacts>:style_box = style_box[VhObjectFrom[VhCallValue(Handle, "get_stylebox", array{VhFromStringName(Name), VhFromStringName(ThemeType)})]]
     GetStyleboxList<public>(ThemeType:string)<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_stylebox_list", array{VhFromString(ThemeType)}))
     GetStyleboxTypeList<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_stylebox_type_list", array{}))
     GetThemeItem<public>(DataType:theme_data_type, Name:string, ThemeType:string)<transacts>:variant = VhToVariant(VhCallValue(Handle, "get_theme_item", array{VhFromThemeDataType(DataType), VhFromStringName(Name), VhFromStringName(ThemeType)}))
@@ -38991,14 +38991,14 @@ tile_set<public> := class(resource):
     GetOcclusionLayerLightMask<public>(LayerIndex:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_occlusion_layer_light_mask", array{VhFromInt(LayerIndex)}))
     GetOcclusionLayerSdfCollision<public>(LayerIndex:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_occlusion_layer_sdf_collision", array{VhFromInt(LayerIndex)}))
     GetOcclusionLayersCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_occlusion_layers_count", array{}))
-    GetPattern<public>(?Index:int = -1)<decides><transacts>:tile_map_pattern = tile_map_pattern{Handle := VhToHandle[VhCallValue(Handle, "get_pattern", array{VhFromInt(Index)})]}
+    GetPattern<public>(?Index:int = -1)<decides><transacts>:tile_map_pattern = tile_map_pattern[VhObjectFrom[VhCallValue(Handle, "get_pattern", array{VhFromInt(Index)})]]
     GetPatternsCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_patterns_count", array{}))
     GetPhysicsLayerCollisionLayer<public>(LayerIndex:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_physics_layer_collision_layer", array{VhFromInt(LayerIndex)}))
     GetPhysicsLayerCollisionMask<public>(LayerIndex:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_physics_layer_collision_mask", array{VhFromInt(LayerIndex)}))
     GetPhysicsLayerCollisionPriority<public>(LayerIndex:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_physics_layer_collision_priority", array{VhFromInt(LayerIndex)}))
-    GetPhysicsLayerPhysicsMaterial<public>(LayerIndex:int)<decides><transacts>:physics_material = physics_material{Handle := VhToHandle[VhCallValue(Handle, "get_physics_layer_physics_material", array{VhFromInt(LayerIndex)})]}
+    GetPhysicsLayerPhysicsMaterial<public>(LayerIndex:int)<decides><transacts>:physics_material = physics_material[VhObjectFrom[VhCallValue(Handle, "get_physics_layer_physics_material", array{VhFromInt(LayerIndex)})]]
     GetPhysicsLayersCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_physics_layers_count", array{}))
-    GetSource<public>(SourceId:int)<decides><transacts>:tile_set_source = tile_set_source{Handle := VhToHandle[VhCallValue(Handle, "get_source", array{VhFromInt(SourceId)})]}
+    GetSource<public>(SourceId:int)<decides><transacts>:tile_set_source = tile_set_source[VhObjectFrom[VhCallValue(Handle, "get_source", array{VhFromInt(SourceId)})]]
     GetSourceCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_source_count", array{}))
     GetSourceId<public>(Index:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_source_id", array{VhFromInt(Index)}))
     GetSourceLevelTileProxy<public>(SourceFrom:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_source_level_tile_proxy", array{VhFromInt(SourceFrom)}))
@@ -39075,7 +39075,7 @@ translation<public> := class(resource):
 uds_server<public> := class(socket_server):
 
     Listen<public>(Path:string)<transacts>:error = VhToError(VhCallValue(Handle, "listen", array{VhFromString(Path)}))
-    TakeConnection<public>()<decides><transacts>:stream_peer_uds = stream_peer_uds{Handle := VhToHandle[VhCallValue(Handle, "take_connection", array{})]}
+    TakeConnection<public>()<decides><transacts>:stream_peer_uds = stream_peer_uds[VhObjectFrom[VhCallValue(Handle, "take_connection", array{})]]
 
 vehicle_wheel3d<public> := class(node3d):
 
@@ -39121,7 +39121,7 @@ vehicle_wheel3d<public> := class(node3d):
     var WheelRollInfluence<public><getter(WheelRollInfluenceGetter)><setter(WheelRollInfluenceSetter)>:float = external {}
     WheelRollInfluenceGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_roll_influence", array{}))
     WheelRollInfluenceSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_roll_influence", array{VhFromFloat(Value)})
-    GetContactBody<public>()<decides><transacts>:node3d = node3d{Handle := VhToHandle[VhCallValue(Handle, "get_contact_body", array{})]}
+    GetContactBody<public>()<decides><transacts>:node3d = node3d[VhObjectFrom[VhCallValue(Handle, "get_contact_body", array{})]]
     GetContactNormal<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_contact_normal", array{}))
     GetContactPoint<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_contact_point", array{}))
     GetRpm<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_rpm", array{}))
@@ -39263,7 +39263,7 @@ web_xr_interface<public> := class(xr_interface):
     GetDisplayRefreshRate<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_display_refresh_rate", array{}))
     GetEnabledFeatures<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_enabled_features", array{}))
     GetInputSourceTargetRayMode<public>(InputSourceId:int)<transacts>:web_xr_interface_target_ray_mode = VhToWebXrInterfaceTargetRayMode(VhCallValue(Handle, "get_input_source_target_ray_mode", array{VhFromInt(InputSourceId)}))
-    GetInputSourceTracker<public>(InputSourceId:int)<decides><transacts>:xr_controller_tracker = xr_controller_tracker{Handle := VhToHandle[VhCallValue(Handle, "get_input_source_tracker", array{VhFromInt(InputSourceId)})]}
+    GetInputSourceTracker<public>(InputSourceId:int)<decides><transacts>:xr_controller_tracker = xr_controller_tracker[VhObjectFrom[VhCallValue(Handle, "get_input_source_tracker", array{VhFromInt(InputSourceId)})]]
     GetOptionalFeatures<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_optional_features", array{}))
     GetReferenceSpaceType<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_reference_space_type", array{}))
     GetRequestedReferenceSpaceTypes<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_requested_reference_space_types", array{}))
@@ -39442,16 +39442,16 @@ window<public> := class(viewport):
     GetNonclientArea<public>()<transacts>:rect2i = VhToRect2i(VhCallValue(Handle, "get_nonclient_area", array{}))
     GetPositionWithDecorations<public>()<transacts>:vector2i = VhToVector2i(VhCallValue(Handle, "get_position_with_decorations", array{}))
     GetSizeWithDecorations<public>()<transacts>:vector2i = VhToVector2i(VhCallValue(Handle, "get_size_with_decorations", array{}))
-    GetTheme<public>()<decides><transacts>:theme = theme{Handle := VhToHandle[VhCallValue(Handle, "get_theme", array{})]}
+    GetTheme<public>()<decides><transacts>:theme = theme[VhObjectFrom[VhCallValue(Handle, "get_theme", array{})]]
     GetThemeColor<public>(Name:string, ?ThemeType:string = "")<transacts>:color = VhToColor(VhCallValue(Handle, "get_theme_color", array{VhFromStringName(Name), VhFromStringName(ThemeType)}))
     GetThemeConstant<public>(Name:string, ?ThemeType:string = "")<transacts>:int = VhToInt(VhCallValue(Handle, "get_theme_constant", array{VhFromStringName(Name), VhFromStringName(ThemeType)}))
     GetThemeDefaultBaseScale<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_theme_default_base_scale", array{}))
-    GetThemeDefaultFont<public>()<decides><transacts>:font = font{Handle := VhToHandle[VhCallValue(Handle, "get_theme_default_font", array{})]}
+    GetThemeDefaultFont<public>()<decides><transacts>:font = font[VhObjectFrom[VhCallValue(Handle, "get_theme_default_font", array{})]]
     GetThemeDefaultFontSize<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_theme_default_font_size", array{}))
-    GetThemeFont<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:font = font{Handle := VhToHandle[VhCallValue(Handle, "get_theme_font", array{VhFromStringName(Name), VhFromStringName(ThemeType)})]}
+    GetThemeFont<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:font = font[VhObjectFrom[VhCallValue(Handle, "get_theme_font", array{VhFromStringName(Name), VhFromStringName(ThemeType)})]]
     GetThemeFontSize<public>(Name:string, ?ThemeType:string = "")<transacts>:int = VhToInt(VhCallValue(Handle, "get_theme_font_size", array{VhFromStringName(Name), VhFromStringName(ThemeType)}))
-    GetThemeIcon<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_theme_icon", array{VhFromStringName(Name), VhFromStringName(ThemeType)})]}
-    GetThemeStylebox<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:style_box = style_box{Handle := VhToHandle[VhCallValue(Handle, "get_theme_stylebox", array{VhFromStringName(Name), VhFromStringName(ThemeType)})]}
+    GetThemeIcon<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_theme_icon", array{VhFromStringName(Name), VhFromStringName(ThemeType)})]]
+    GetThemeStylebox<public>(Name:string, ?ThemeType:string = "")<decides><transacts>:style_box = style_box[VhObjectFrom[VhCallValue(Handle, "get_theme_stylebox", array{VhFromStringName(Name), VhFromStringName(ThemeType)})]]
     GetThemeTypeVariation<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_theme_type_variation", array{}))
     GetTitle<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_title", array{}))
     GetWindowId<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_window_id", array{}))
@@ -39513,16 +39513,16 @@ window<public> := class(viewport):
 world2d<public> := class(resource):
 
     GetCanvas<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_canvas", array{}))
-    GetDirectSpaceState<public>()<decides><transacts>:physics_direct_space_state2d = physics_direct_space_state2d{Handle := VhToHandle[VhCallValue(Handle, "get_direct_space_state", array{})]}
+    GetDirectSpaceState<public>()<decides><transacts>:physics_direct_space_state2d = physics_direct_space_state2d[VhObjectFrom[VhCallValue(Handle, "get_direct_space_state", array{})]]
     GetNavigationMap<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_navigation_map", array{}))
     GetSpace<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_space", array{}))
 
 world3d<public> := class(resource):
 
-    GetCameraAttributes<public>()<decides><transacts>:camera_attributes = camera_attributes{Handle := VhToHandle[VhCallValue(Handle, "get_camera_attributes", array{})]}
-    GetDirectSpaceState<public>()<decides><transacts>:physics_direct_space_state3d = physics_direct_space_state3d{Handle := VhToHandle[VhCallValue(Handle, "get_direct_space_state", array{})]}
-    GetEnvironment<public>()<decides><transacts>:environment = environment{Handle := VhToHandle[VhCallValue(Handle, "get_environment", array{})]}
-    GetFallbackEnvironment<public>()<decides><transacts>:environment = environment{Handle := VhToHandle[VhCallValue(Handle, "get_fallback_environment", array{})]}
+    GetCameraAttributes<public>()<decides><transacts>:camera_attributes = camera_attributes[VhObjectFrom[VhCallValue(Handle, "get_camera_attributes", array{})]]
+    GetDirectSpaceState<public>()<decides><transacts>:physics_direct_space_state3d = physics_direct_space_state3d[VhObjectFrom[VhCallValue(Handle, "get_direct_space_state", array{})]]
+    GetEnvironment<public>()<decides><transacts>:environment = environment[VhObjectFrom[VhCallValue(Handle, "get_environment", array{})]]
+    GetFallbackEnvironment<public>()<decides><transacts>:environment = environment[VhObjectFrom[VhCallValue(Handle, "get_fallback_environment", array{})]]
     GetNavigationMap<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_navigation_map", array{}))
     GetScenario<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_scenario", array{}))
     GetSpace<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_space", array{}))
@@ -39566,7 +39566,7 @@ xr_node3d<public> := class(node3d):
     ShowWhenTrackedSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_show_when_tracked", array{VhFromLogic(Value)})
     GetHasTrackingData<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_has_tracking_data", array{}))
     GetIsActive<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_is_active", array{}))
-    GetPose<public>()<decides><transacts>:xr_pose = xr_pose{Handle := VhToHandle[VhCallValue(Handle, "get_pose", array{})]}
+    GetPose<public>()<decides><transacts>:xr_pose = xr_pose[VhObjectFrom[VhCallValue(Handle, "get_pose", array{})]]
     GetPoseName<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_pose_name", array{}))
     GetTracker<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_tracker", array{}))
     SetPoseName<public>(Pose:string)<transacts>:void = VhCallVoid(Handle, "set_pose_name", array{VhFromStringName(Pose)})
@@ -39588,7 +39588,7 @@ xr_positional_tracker<public> := class(xr_tracker):
     HandGetter<epic_internal>(Accessor:accessor)<transacts>:xr_positional_tracker_tracker_hand = VhToXrPositionalTrackerTrackerHand(VhCallValue(Handle, "get_tracker_hand", array{}))
     HandSetter<epic_internal>(Accessor:accessor, Value:xr_positional_tracker_tracker_hand)<transacts>:void = VhCallVoid(Handle, "set_tracker_hand", array{VhFromXrPositionalTrackerTrackerHand(Value)})
     GetInput<public>(Name:string)<transacts>:variant = VhToVariant(VhCallValue(Handle, "get_input", array{VhFromStringName(Name)}))
-    GetPose<public>(Name:string)<decides><transacts>:xr_pose = xr_pose{Handle := VhToHandle[VhCallValue(Handle, "get_pose", array{VhFromStringName(Name)})]}
+    GetPose<public>(Name:string)<decides><transacts>:xr_pose = xr_pose[VhObjectFrom[VhCallValue(Handle, "get_pose", array{VhFromStringName(Name)})]]
     GetTrackerProfile<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_tracker_profile", array{}))
     HasPose<public>(Name:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_pose", array{VhFromStringName(Name)}))
     InvalidatePose<public>(Name:string)<transacts>:void = VhCallVoid(Handle, "invalidate_pose", array{VhFromStringName(Name)})
@@ -39607,10 +39607,10 @@ accept_dialog<public> := class(window):
     var DialogHideOnOk<public><getter(DialogHideOnOkGetter)><setter(DialogHideOnOkSetter)>:logic = external {}
     DialogHideOnOkGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_hide_on_ok", array{}))
     DialogHideOnOkSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_hide_on_ok", array{VhFromLogic(Value)})
-    AddButton<public>(Text:string, ?Right:logic = false, ?Action:string = "")<decides><transacts>:button = button{Handle := VhToHandle[VhCallValue(Handle, "add_button", array{VhFromString(Text), VhFromLogic(Right), VhFromString(Action)})]}
-    AddCancelButton<public>(Name:string)<decides><transacts>:button = button{Handle := VhToHandle[VhCallValue(Handle, "add_cancel_button", array{VhFromString(Name)})]}
-    GetLabel<public>()<decides><transacts>:label = label{Handle := VhToHandle[VhCallValue(Handle, "get_label", array{})]}
-    GetOkButton<public>()<decides><transacts>:button = button{Handle := VhToHandle[VhCallValue(Handle, "get_ok_button", array{})]}
+    AddButton<public>(Text:string, ?Right:logic = false, ?Action:string = "")<decides><transacts>:button = button[VhObjectFrom[VhCallValue(Handle, "add_button", array{VhFromString(Text), VhFromLogic(Right), VhFromString(Action)})]]
+    AddCancelButton<public>(Name:string)<decides><transacts>:button = button[VhObjectFrom[VhCallValue(Handle, "add_cancel_button", array{VhFromString(Name)})]]
+    GetLabel<public>()<decides><transacts>:label = label[VhObjectFrom[VhCallValue(Handle, "get_label", array{})]]
+    GetOkButton<public>()<decides><transacts>:button = button[VhObjectFrom[VhCallValue(Handle, "get_ok_button", array{})]]
     GetOkButtonText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_ok_button_text", array{}))
     GetText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_text", array{}))
     RegisterTextEnter<public>(LineEdit:line_edit)<transacts>:void = VhCallVoid(Handle, "register_text_enter", array{VhFromObject(LineEdit)})
@@ -39653,7 +39653,7 @@ animated_sprite2d<public> := class(node2d):
     GetAnimation<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_animation", array{}))
     GetAutoplay<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_autoplay", array{}))
     GetPlayingSpeed<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_playing_speed", array{}))
-    GetSpriteFrames<public>()<decides><transacts>:sprite_frames = sprite_frames{Handle := VhToHandle[VhCallValue(Handle, "get_sprite_frames", array{})]}
+    GetSpriteFrames<public>()<decides><transacts>:sprite_frames = sprite_frames[VhObjectFrom[VhCallValue(Handle, "get_sprite_frames", array{})]]
     IsPlaying<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_playing", array{}))
     Pause<public>()<transacts>:void = VhCallVoid(Handle, "pause", array{})
     Play<public>(?Name:string = "", ?CustomSpeed:float = 1.0, ?FromEnd:logic = false)<transacts>:void = VhCallVoid(Handle, "play", array{VhFromStringName(Name), VhFromFloat(CustomSpeed), VhFromLogic(FromEnd)})
@@ -39790,7 +39790,7 @@ array_mesh<public> := class(mesh):
     GetBlendShapeCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_blend_shape_count", array{}))
     GetBlendShapeName<public>(Index:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_blend_shape_name", array{VhFromInt(Index)}))
     GetCustomAabb<public>()<transacts>:aabb = VhToAABB(VhCallValue(Handle, "get_custom_aabb", array{}))
-    GetShadowMesh<public>()<decides><transacts>:array_mesh = array_mesh{Handle := VhToHandle[VhCallValue(Handle, "get_shadow_mesh", array{})]}
+    GetShadowMesh<public>()<decides><transacts>:array_mesh = array_mesh[VhObjectFrom[VhCallValue(Handle, "get_shadow_mesh", array{})]]
     LightmapUnwrap<public>(Transform:transform3d, TexelSize:float)<transacts>:error = VhToError(VhCallValue(Handle, "lightmap_unwrap", array{VhFromTransform3D(Transform), VhFromFloat(TexelSize)}))
     RegenNormalMaps<public>()<transacts>:void = VhCallVoid(Handle, "regen_normal_maps", array{})
     SetBlendShapeName<public>(Index:int, Name:string)<transacts>:void = VhCallVoid(Handle, "set_blend_shape_name", array{VhFromInt(Index), VhFromStringName(Name)})
@@ -40032,7 +40032,7 @@ audio_effect_record<public> := class(audio_effect):
     var Format<public><getter(FormatGetter)><setter(FormatSetter)>:audio_stream_wav_format = external {}
     FormatGetter<epic_internal>(Accessor:accessor)<transacts>:audio_stream_wav_format = VhToAudioStreamWavFormat(VhCallValue(Handle, "get_format", array{}))
     FormatSetter<epic_internal>(Accessor:accessor, Value:audio_stream_wav_format)<transacts>:void = VhCallVoid(Handle, "set_format", array{VhFromAudioStreamWavFormat(Value)})
-    GetRecording<public>()<decides><transacts>:audio_stream_wav = audio_stream_wav{Handle := VhToHandle[VhCallValue(Handle, "get_recording", array{})]}
+    GetRecording<public>()<decides><transacts>:audio_stream_wav = audio_stream_wav[VhObjectFrom[VhCallValue(Handle, "get_recording", array{})]]
     IsRecordingActive<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_recording_active", array{}))
     SetRecordingActive<public>(Record:logic)<transacts>:void = VhCallVoid(Handle, "set_recording_active", array{VhFromLogic(Record)})
 
@@ -40127,7 +40127,7 @@ audio_stream_interactive<public> := class(audio_stream):
     GetClipAutoAdvance<public>(ClipIndex:int)<transacts>:audio_stream_interactive_auto_advance_mode = VhToAudioStreamInteractiveAutoAdvanceMode(VhCallValue(Handle, "get_clip_auto_advance", array{VhFromInt(ClipIndex)}))
     GetClipAutoAdvanceNextClip<public>(ClipIndex:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_clip_auto_advance_next_clip", array{VhFromInt(ClipIndex)}))
     GetClipName<public>(ClipIndex:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_clip_name", array{VhFromInt(ClipIndex)}))
-    GetClipStream<public>(ClipIndex:int)<decides><transacts>:audio_stream = audio_stream{Handle := VhToHandle[VhCallValue(Handle, "get_clip_stream", array{VhFromInt(ClipIndex)})]}
+    GetClipStream<public>(ClipIndex:int)<decides><transacts>:audio_stream = audio_stream[VhObjectFrom[VhCallValue(Handle, "get_clip_stream", array{VhFromInt(ClipIndex)})]]
     GetTransitionFadeBeats<public>(FromClip:int, ToClip:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_transition_fade_beats", array{VhFromInt(FromClip), VhFromInt(ToClip)}))
     GetTransitionFadeMode<public>(FromClip:int, ToClip:int)<transacts>:audio_stream_interactive_fade_mode = VhToAudioStreamInteractiveFadeMode(VhCallValue(Handle, "get_transition_fade_mode", array{VhFromInt(FromClip), VhFromInt(ToClip)}))
     GetTransitionFillerClip<public>(FromClip:int, ToClip:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_transition_filler_clip", array{VhFromInt(FromClip), VhFromInt(ToClip)}))
@@ -40181,7 +40181,7 @@ audio_stream_ogg_vorbis<public> := class(audio_stream):
     var LoopOffset<public><getter(LoopOffsetGetter)><setter(LoopOffsetSetter)>:float = external {}
     LoopOffsetGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_loop_offset", array{}))
     LoopOffsetSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_loop_offset", array{VhFromFloat(Value)})
-    GetPacketSequence<public>()<decides><transacts>:ogg_packet_sequence = ogg_packet_sequence{Handle := VhToHandle[VhCallValue(Handle, "get_packet_sequence", array{})]}
+    GetPacketSequence<public>()<decides><transacts>:ogg_packet_sequence = ogg_packet_sequence[VhObjectFrom[VhCallValue(Handle, "get_packet_sequence", array{})]]
     GetTags<public>()<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_tags", array{}))
     SetPacketSequence<public>(PacketSequence:ogg_packet_sequence)<transacts>:void = VhCallVoid(Handle, "set_packet_sequence", array{VhFromObject(PacketSequence)})
     SetTags<public>(Tags:dictionary)<transacts>:void = VhCallVoid(Handle, "set_tags", array{VhFromDictionary(Tags)})
@@ -40228,8 +40228,8 @@ audio_stream_player2d<public> := class(node2d):
     VolumeLinearSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_volume_linear", array{VhFromFloat(Value)})
     GetBus<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_bus", array{}))
     GetPlaybackPosition<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_playback_position", array{}))
-    GetStream<public>()<decides><transacts>:audio_stream = audio_stream{Handle := VhToHandle[VhCallValue(Handle, "get_stream", array{})]}
-    GetStreamPlayback<public>()<decides><transacts>:audio_stream_playback = audio_stream_playback{Handle := VhToHandle[VhCallValue(Handle, "get_stream_playback", array{})]}
+    GetStream<public>()<decides><transacts>:audio_stream = audio_stream[VhObjectFrom[VhCallValue(Handle, "get_stream", array{})]]
+    GetStreamPlayback<public>()<decides><transacts>:audio_stream_playback = audio_stream_playback[VhObjectFrom[VhCallValue(Handle, "get_stream_playback", array{})]]
     HasStreamPlayback<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_stream_playback", array{}))
     Play<public>(?FromPosition:float = 0.0)<transacts>:void = VhCallVoid(Handle, "play", array{VhFromFloat(FromPosition)})
     Seek<public>(ToPosition:float)<transacts>:void = VhCallVoid(Handle, "seek", array{VhFromFloat(ToPosition)})
@@ -40252,7 +40252,7 @@ audio_stream_playlist<public> := class(audio_stream):
     StreamCountGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_stream_count", array{}))
     StreamCountSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_stream_count", array{VhFromInt(Value)})
     GetBpm<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_bpm", array{}))
-    GetListStream<public>(StreamIndex:int)<decides><transacts>:audio_stream = audio_stream{Handle := VhToHandle[VhCallValue(Handle, "get_list_stream", array{VhFromInt(StreamIndex)})]}
+    GetListStream<public>(StreamIndex:int)<decides><transacts>:audio_stream = audio_stream[VhObjectFrom[VhCallValue(Handle, "get_list_stream", array{VhFromInt(StreamIndex)})]]
     SetListStream<public>(StreamIndex:int, AudioStream:audio_stream)<transacts>:void = VhCallVoid(Handle, "set_list_stream", array{VhFromInt(StreamIndex), VhFromObject(AudioStream)})
 
 audio_stream_polyphonic<public> := class(audio_stream):
@@ -40279,7 +40279,7 @@ audio_stream_randomizer<public> := class(audio_stream):
     StreamsCountGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_streams_count", array{}))
     StreamsCountSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_streams_count", array{VhFromInt(Value)})
     AddStream<public>(Index:int, Stream:audio_stream, ?Weight:float = 1.0)<transacts>:void = VhCallVoid(Handle, "add_stream", array{VhFromInt(Index), VhFromObject(Stream), VhFromFloat(Weight)})
-    GetStream<public>(Index:int)<decides><transacts>:audio_stream = audio_stream{Handle := VhToHandle[VhCallValue(Handle, "get_stream", array{VhFromInt(Index)})]}
+    GetStream<public>(Index:int)<decides><transacts>:audio_stream = audio_stream[VhObjectFrom[VhCallValue(Handle, "get_stream", array{VhFromInt(Index)})]]
     GetStreamProbabilityWeight<public>(Index:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_stream_probability_weight", array{VhFromInt(Index)}))
     MoveStream<public>(IndexFrom:int, IndexTo:int)<transacts>:void = VhCallVoid(Handle, "move_stream", array{VhFromInt(IndexFrom), VhFromInt(IndexTo)})
     RemoveStream<public>(Index:int)<transacts>:void = VhCallVoid(Handle, "remove_stream", array{VhFromInt(Index)})
@@ -40291,7 +40291,7 @@ audio_stream_synchronized<public> := class(audio_stream):
     var StreamCount<public><getter(StreamCountGetter)><setter(StreamCountSetter)>:int = external {}
     StreamCountGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_stream_count", array{}))
     StreamCountSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_stream_count", array{VhFromInt(Value)})
-    GetSyncStream<public>(StreamIndex:int)<decides><transacts>:audio_stream = audio_stream{Handle := VhToHandle[VhCallValue(Handle, "get_sync_stream", array{VhFromInt(StreamIndex)})]}
+    GetSyncStream<public>(StreamIndex:int)<decides><transacts>:audio_stream = audio_stream[VhObjectFrom[VhCallValue(Handle, "get_sync_stream", array{VhFromInt(StreamIndex)})]]
     GetSyncStreamVolume<public>(StreamIndex:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_sync_stream_volume", array{VhFromInt(StreamIndex)}))
     SetSyncStream<public>(StreamIndex:int, AudioStream:audio_stream)<transacts>:void = VhCallVoid(Handle, "set_sync_stream", array{VhFromInt(StreamIndex), VhFromObject(AudioStream)})
     SetSyncStreamVolume<public>(StreamIndex:int, VolumeDb:float)<transacts>:void = VhCallVoid(Handle, "set_sync_stream_volume", array{VhFromInt(StreamIndex), VhFromFloat(VolumeDb)})
@@ -40356,9 +40356,9 @@ base_button<public> := class(control):
     var ToggleMode<public><getter(ToggleModeGetter)><setter(ToggleModeSetter)>:logic = external {}
     ToggleModeGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_toggle_mode", array{}))
     ToggleModeSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_toggle_mode", array{VhFromLogic(Value)})
-    GetButtonGroup<public>()<decides><transacts>:button_group = button_group{Handle := VhToHandle[VhCallValue(Handle, "get_button_group", array{})]}
+    GetButtonGroup<public>()<decides><transacts>:button_group = button_group[VhObjectFrom[VhCallValue(Handle, "get_button_group", array{})]]
     GetDrawMode<public>()<transacts>:base_button_draw_mode = VhToBaseButtonDrawMode(VhCallValue(Handle, "get_draw_mode", array{}))
-    GetShortcut<public>()<decides><transacts>:shortcut = shortcut{Handle := VhToHandle[VhCallValue(Handle, "get_shortcut", array{})]}
+    GetShortcut<public>()<decides><transacts>:shortcut = shortcut[VhObjectFrom[VhCallValue(Handle, "get_shortcut", array{})]]
     IsHovered<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_hovered", array{}))
     SetButtonGroup<public>(ButtonGroup:button_group)<transacts>:void = VhCallVoid(Handle, "set_button_group", array{VhFromObject(ButtonGroup)})
     SetPressedNoSignal<public>(Arg0:logic)<transacts>:void = VhCallVoid(Handle, "set_pressed_no_signal", array{VhFromLogic(Arg0)})
@@ -40811,7 +40811,7 @@ base_material3d<public> := class(material):
     var ZClipScale<public><getter(ZClipScaleGetter)><setter(ZClipScaleSetter)>:float = external {}
     ZClipScaleGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_z_clip_scale", array{}))
     ZClipScaleSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_z_clip_scale", array{VhFromFloat(Value)})
-    GetTexture<public>(Param:base_material3d_texture_param)<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture", array{VhFromBaseMaterial3dTextureParam(Param)})]}
+    GetTexture<public>(Param:base_material3d_texture_param)<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_texture", array{VhFromBaseMaterial3dTextureParam(Param)})]]
     SetTexture<public>(Param:base_material3d_texture_param, Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_texture", array{VhFromBaseMaterial3dTextureParam(Param), VhFromObject(Texture)})
 
 bone2d<public> := class(node2d):
@@ -40857,7 +40857,7 @@ bone_twist_disperser3d<public> := class(skeleton_modifier3d):
     SettingCountGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_setting_count", array{}))
     SettingCountSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_setting_count", array{VhFromInt(Value)})
     ClearSettings<public>()<transacts>:void = VhCallVoid(Handle, "clear_settings", array{})
-    GetDampingCurve<public>(Index:int)<decides><transacts>:curve = curve{Handle := VhToHandle[VhCallValue(Handle, "get_damping_curve", array{VhFromInt(Index)})]}
+    GetDampingCurve<public>(Index:int)<decides><transacts>:curve = curve[VhObjectFrom[VhCallValue(Handle, "get_damping_curve", array{VhFromInt(Index)})]]
     GetDisperseMode<public>(Index:int)<transacts>:bone_twist_disperser3d_disperse_mode = VhToBoneTwistDisperser3dDisperseMode(VhCallValue(Handle, "get_disperse_mode", array{VhFromInt(Index)}))
     GetEndBone<public>(Index:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_end_bone", array{VhFromInt(Index)}))
     GetEndBoneDirection<public>(Index:int)<transacts>:skeleton_modifier3d_bone_direction = VhToSkeletonModifier3dBoneDirection(VhCallValue(Handle, "get_end_bone_direction", array{VhFromInt(Index)}))
@@ -41024,7 +41024,7 @@ camera2d<public> := class(node2d):
             VhCallVoid(Handle, "set_zoom", array{VhFromVector2(vector2{X := Current.X, Y := Value})})
     Align<public>()<transacts>:void = VhCallVoid(Handle, "align", array{})
     ForceUpdateScroll<public>()<transacts>:void = VhCallVoid(Handle, "force_update_scroll", array{})
-    GetCustomViewport<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_custom_viewport", array{})]}
+    GetCustomViewport<public>()<decides><transacts>:node = node[VhObjectFrom[VhCallValue(Handle, "get_custom_viewport", array{})]]
     GetScreenCenterPosition<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_screen_center_position", array{}))
     GetScreenRotation<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_screen_rotation", array{}))
     GetTargetPosition<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_target_position", array{}))
@@ -41291,8 +41291,8 @@ collision_object2d<public> := class(node2d):
     ShapeFindOwner<public>(ShapeIndex:int)<transacts>:int = VhToInt(VhCallValue(Handle, "shape_find_owner", array{VhFromInt(ShapeIndex)}))
     ShapeOwnerAddShape<public>(OwnerId:int, Shape:shape2d)<transacts>:void = VhCallVoid(Handle, "shape_owner_add_shape", array{VhFromInt(OwnerId), VhFromObject(Shape)})
     ShapeOwnerClearShapes<public>(OwnerId:int)<transacts>:void = VhCallVoid(Handle, "shape_owner_clear_shapes", array{VhFromInt(OwnerId)})
-    ShapeOwnerGetOwner<public>(OwnerId:int)<decides><transacts>:object = object{Handle := VhToHandle[VhCallValue(Handle, "shape_owner_get_owner", array{VhFromInt(OwnerId)})]}
-    ShapeOwnerGetShape<public>(OwnerId:int, ShapeId:int)<decides><transacts>:shape2d = shape2d{Handle := VhToHandle[VhCallValue(Handle, "shape_owner_get_shape", array{VhFromInt(OwnerId), VhFromInt(ShapeId)})]}
+    ShapeOwnerGetOwner<public>(OwnerId:int)<decides><transacts>:object = object[VhObjectFrom[VhCallValue(Handle, "shape_owner_get_owner", array{VhFromInt(OwnerId)})]]
+    ShapeOwnerGetShape<public>(OwnerId:int, ShapeId:int)<decides><transacts>:shape2d = shape2d[VhObjectFrom[VhCallValue(Handle, "shape_owner_get_shape", array{VhFromInt(OwnerId), VhFromInt(ShapeId)})]]
     ShapeOwnerGetShapeCount<public>(OwnerId:int)<transacts>:int = VhToInt(VhCallValue(Handle, "shape_owner_get_shape_count", array{VhFromInt(OwnerId)}))
     ShapeOwnerGetShapeIndex<public>(OwnerId:int, ShapeId:int)<transacts>:int = VhToInt(VhCallValue(Handle, "shape_owner_get_shape_index", array{VhFromInt(OwnerId), VhFromInt(ShapeId)}))
     ShapeOwnerGetTransform<public>(OwnerId:int)<transacts>:transform2d = VhToTransform2D(VhCallValue(Handle, "shape_owner_get_transform", array{VhFromInt(OwnerId)}))
@@ -41346,7 +41346,7 @@ collision_shape2d<public> := class(node2d):
     var OneWayCollisionMargin<public><getter(OneWayCollisionMarginGetter)><setter(OneWayCollisionMarginSetter)>:float = external {}
     OneWayCollisionMarginGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_one_way_collision_margin", array{}))
     OneWayCollisionMarginSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_one_way_collision_margin", array{VhFromFloat(Value)})
-    GetShape<public>()<decides><transacts>:shape2d = shape2d{Handle := VhToHandle[VhCallValue(Handle, "get_shape", array{})]}
+    GetShape<public>()<decides><transacts>:shape2d = shape2d[VhObjectFrom[VhCallValue(Handle, "get_shape", array{})]]
     SetShape<public>(Shape:shape2d)<transacts>:void = VhCallVoid(Handle, "set_shape", array{VhFromObject(Shape)})
 
 color_rect<public> := class(control):
@@ -41608,15 +41608,15 @@ cpu_particles2d<public> := class(node2d):
     UseFixedSeedGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_use_fixed_seed", array{}))
     UseFixedSeedSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_use_fixed_seed", array{VhFromLogic(Value)})
     ConvertFromParticles<public>(Particles:node)<transacts>:void = VhCallVoid(Handle, "convert_from_particles", array{VhFromObject(Particles)})
-    GetColorInitialRamp<public>()<decides><transacts>:gradient = gradient{Handle := VhToHandle[VhCallValue(Handle, "get_color_initial_ramp", array{})]}
-    GetColorRamp<public>()<decides><transacts>:gradient = gradient{Handle := VhToHandle[VhCallValue(Handle, "get_color_ramp", array{})]}
+    GetColorInitialRamp<public>()<decides><transacts>:gradient = gradient[VhObjectFrom[VhCallValue(Handle, "get_color_initial_ramp", array{})]]
+    GetColorRamp<public>()<decides><transacts>:gradient = gradient[VhObjectFrom[VhCallValue(Handle, "get_color_ramp", array{})]]
     GetEmissionColors<public>()<transacts>:[]color = VhToColors(VhCallValue(Handle, "get_emission_colors", array{}))
     GetEmissionNormals<public>()<transacts>:[]vector2 = VhToVector2s(VhCallValue(Handle, "get_emission_normals", array{}))
     GetEmissionPoints<public>()<transacts>:[]vector2 = VhToVector2s(VhCallValue(Handle, "get_emission_points", array{}))
-    GetParamCurve<public>(Param:cpu_particles2d_parameter)<decides><transacts>:curve = curve{Handle := VhToHandle[VhCallValue(Handle, "get_param_curve", array{VhFromCpuParticles2dParameter(Param)})]}
-    GetScaleCurveX<public>()<decides><transacts>:curve = curve{Handle := VhToHandle[VhCallValue(Handle, "get_scale_curve_x", array{})]}
-    GetScaleCurveY<public>()<decides><transacts>:curve = curve{Handle := VhToHandle[VhCallValue(Handle, "get_scale_curve_y", array{})]}
-    GetTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture", array{})]}
+    GetParamCurve<public>(Param:cpu_particles2d_parameter)<decides><transacts>:curve = curve[VhObjectFrom[VhCallValue(Handle, "get_param_curve", array{VhFromCpuParticles2dParameter(Param)})]]
+    GetScaleCurveX<public>()<decides><transacts>:curve = curve[VhObjectFrom[VhCallValue(Handle, "get_scale_curve_x", array{})]]
+    GetScaleCurveY<public>()<decides><transacts>:curve = curve[VhObjectFrom[VhCallValue(Handle, "get_scale_curve_y", array{})]]
+    GetTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_texture", array{})]]
     RequestParticlesProcess<public>(ProcessTime:float)<transacts>:void = VhCallVoid(Handle, "request_particles_process", array{VhFromFloat(ProcessTime)})
     Restart<public>(?KeepSeed:logic = false)<transacts>:void = VhCallVoid(Handle, "restart", array{VhFromLogic(KeepSeed)})
     SetColorInitialRamp<public>(Ramp:gradient)<transacts>:void = VhCallVoid(Handle, "set_color_initial_ramp", array{VhFromObject(Ramp)})
@@ -41697,7 +41697,7 @@ decal<public> := class(visual_instance3d):
     var UpperFade<public><getter(UpperFadeGetter)><setter(UpperFadeSetter)>:float = external {}
     UpperFadeGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_upper_fade", array{}))
     UpperFadeSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_upper_fade", array{VhFromFloat(Value)})
-    GetTexture<public>(Type:decal_decal_texture)<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture", array{VhFromDecalDecalTexture(Type)})]}
+    GetTexture<public>(Type:decal_decal_texture)<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_texture", array{VhFromDecalDecalTexture(Type)})]]
     SetTexture<public>(Type:decal_decal_texture, Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_texture", array{VhFromDecalDecalTexture(Type), VhFromObject(Texture)})
 
 e_net_multiplayer_peer<public> := class(multiplayer_peer):
@@ -41706,8 +41706,8 @@ e_net_multiplayer_peer<public> := class(multiplayer_peer):
     CreateClient<public>(Address:string, Port:int, ?ChannelCount:int = 0, ?InBandwidth:int = 0, ?OutBandwidth:int = 0, ?LocalPort:int = 0)<transacts>:error = VhToError(VhCallValue(Handle, "create_client", array{VhFromString(Address), VhFromInt(Port), VhFromInt(ChannelCount), VhFromInt(InBandwidth), VhFromInt(OutBandwidth), VhFromInt(LocalPort)}))
     CreateMesh<public>(UniqueId:int)<transacts>:error = VhToError(VhCallValue(Handle, "create_mesh", array{VhFromInt(UniqueId)}))
     CreateServer<public>(Port:int, ?MaxClients:int = 32, ?MaxChannels:int = 0, ?InBandwidth:int = 0, ?OutBandwidth:int = 0)<transacts>:error = VhToError(VhCallValue(Handle, "create_server", array{VhFromInt(Port), VhFromInt(MaxClients), VhFromInt(MaxChannels), VhFromInt(InBandwidth), VhFromInt(OutBandwidth)}))
-    GetHost<public>()<decides><transacts>:e_net_connection = e_net_connection{Handle := VhToHandle[VhCallValue(Handle, "get_host", array{})]}
-    GetPeer<public>(Id:int)<decides><transacts>:e_net_packet_peer = e_net_packet_peer{Handle := VhToHandle[VhCallValue(Handle, "get_peer", array{VhFromInt(Id)})]}
+    GetHost<public>()<decides><transacts>:e_net_connection = e_net_connection[VhObjectFrom[VhCallValue(Handle, "get_host", array{})]]
+    GetPeer<public>(Id:int)<decides><transacts>:e_net_packet_peer = e_net_packet_peer[VhObjectFrom[VhCallValue(Handle, "get_peer", array{VhFromInt(Id)})]]
     SetBindIp<public>(Ip:string)<transacts>:void = VhCallVoid(Handle, "set_bind_ip", array{VhFromString(Ip)})
 
 editor_export_platform_ios<public> := class(editor_export_platform_apple_embedded):
@@ -41848,7 +41848,7 @@ fog_material<public> := class(material):
     var HeightFalloff<public><getter(HeightFalloffGetter)><setter(HeightFalloffSetter)>:float = external {}
     HeightFalloffGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_height_falloff", array{}))
     HeightFalloffSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_height_falloff", array{VhFromFloat(Value)})
-    GetDensityTexture<public>()<decides><transacts>:texture3d = texture3d{Handle := VhToHandle[VhCallValue(Handle, "get_density_texture", array{})]}
+    GetDensityTexture<public>()<decides><transacts>:texture3d = texture3d[VhObjectFrom[VhCallValue(Handle, "get_density_texture", array{})]]
     SetDensityTexture<public>(DensityTexture:texture3d)<transacts>:void = VhCallVoid(Handle, "set_density_texture", array{VhFromObject(DensityTexture)})
 
 fog_volume<public> := class(visual_instance3d):
@@ -41870,7 +41870,7 @@ fog_volume<public> := class(visual_instance3d):
             VhCallVoid(Handle, "set_size", array{VhFromVector3(vector3{X := Current.X, Y := Value, Z := Current.Z})})
         else:
             VhCallVoid(Handle, "set_size", array{VhFromVector3(vector3{X := Current.X, Y := Current.Y, Z := Value})})
-    GetMaterial<public>()<decides><transacts>:material = material{Handle := VhToHandle[VhCallValue(Handle, "get_material", array{})]}
+    GetMaterial<public>()<decides><transacts>:material = material[VhObjectFrom[VhCallValue(Handle, "get_material", array{})]]
     SetMaterial<public>(Material:material)<transacts>:void = VhCallVoid(Handle, "set_material", array{VhFromObject(Material)})
 
 font_file<public> := class(font):
@@ -41962,7 +41962,7 @@ font_file<public> := class(font):
     GetScriptSupportOverrides<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_script_support_overrides", array{}))
     GetSizeCacheList<public>(CacheIndex:int)<transacts>:typed_array(vector2i) = VhToVector2iArray(VhCallValue(Handle, "get_size_cache_list", array{VhFromInt(CacheIndex)}))
     GetTextureCount<public>(CacheIndex:int, Size:vector2i)<transacts>:int = VhToInt(VhCallValue(Handle, "get_texture_count", array{VhFromInt(CacheIndex), VhFromVector2i(Size)}))
-    GetTextureImage<public>(CacheIndex:int, Size:vector2i, TextureIndex:int)<decides><transacts>:image = image{Handle := VhToHandle[VhCallValue(Handle, "get_texture_image", array{VhFromInt(CacheIndex), VhFromVector2i(Size), VhFromInt(TextureIndex)})]}
+    GetTextureImage<public>(CacheIndex:int, Size:vector2i, TextureIndex:int)<decides><transacts>:image = image[VhObjectFrom[VhCallValue(Handle, "get_texture_image", array{VhFromInt(CacheIndex), VhFromVector2i(Size), VhFromInt(TextureIndex)})]]
     GetTextureOffsets<public>(CacheIndex:int, Size:vector2i, TextureIndex:int)<transacts>:[]int = VhToInts(VhCallValue(Handle, "get_texture_offsets", array{VhFromInt(CacheIndex), VhFromVector2i(Size), VhFromInt(TextureIndex)}))
     GetTransform<public>(CacheIndex:int)<transacts>:transform2d = VhToTransform2D(VhCallValue(Handle, "get_transform", array{VhFromInt(CacheIndex)}))
     GetVariationCoordinates<public>(CacheIndex:int)<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_variation_coordinates", array{VhFromInt(CacheIndex)}))
@@ -42026,7 +42026,7 @@ font_variation<public> := class(font):
     var VariationFaceIndex<public><getter(VariationFaceIndexGetter)><setter(VariationFaceIndexSetter)>:int = external {}
     VariationFaceIndexGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_variation_face_index", array{}))
     VariationFaceIndexSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_variation_face_index", array{VhFromInt(Value)})
-    GetBaseFont<public>()<decides><transacts>:font = font{Handle := VhToHandle[VhCallValue(Handle, "get_base_font", array{})]}
+    GetBaseFont<public>()<decides><transacts>:font = font[VhObjectFrom[VhCallValue(Handle, "get_base_font", array{})]]
     GetVariationOpentype<public>()<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_variation_opentype", array{}))
     GetVariationTransform<public>()<transacts>:transform2d = VhToTransform2D(VhCallValue(Handle, "get_variation_transform", array{}))
     SetBaseFont<public>(Font:font)<transacts>:void = VhCallVoid(Handle, "set_base_font", array{VhFromObject(Font)})
@@ -42094,8 +42094,8 @@ geometry_instance3d<public> := class(visual_instance3d):
     VisibilityRangeFadeModeSetter<epic_internal>(Accessor:accessor, Value:geometry_instance3d_visibility_range_fade_mode)<transacts>:void = VhCallVoid(Handle, "set_visibility_range_fade_mode", array{VhFromGeometryInstance3dVisibilityRangeFadeMode(Value)})
     GetCustomAabb<public>()<transacts>:aabb = VhToAABB(VhCallValue(Handle, "get_custom_aabb", array{}))
     GetInstanceShaderParameter<public>(Name:string)<transacts>:variant = VhToVariant(VhCallValue(Handle, "get_instance_shader_parameter", array{VhFromStringName(Name)}))
-    GetMaterialOverlay<public>()<decides><transacts>:material = material{Handle := VhToHandle[VhCallValue(Handle, "get_material_overlay", array{})]}
-    GetMaterialOverride<public>()<decides><transacts>:material = material{Handle := VhToHandle[VhCallValue(Handle, "get_material_override", array{})]}
+    GetMaterialOverlay<public>()<decides><transacts>:material = material[VhObjectFrom[VhCallValue(Handle, "get_material_overlay", array{})]]
+    GetMaterialOverride<public>()<decides><transacts>:material = material[VhObjectFrom[VhCallValue(Handle, "get_material_override", array{})]]
     SetCustomAabb<public>(Aabb:aabb)<transacts>:void = VhCallVoid(Handle, "set_custom_aabb", array{VhFromAABB(Aabb)})
     SetInstanceShaderParameter<public>(Name:string, Value:variant)<transacts>:void = VhCallVoid(Handle, "set_instance_shader_parameter", array{VhFromStringName(Name), VhFromVariant(Value)})
     SetMaterialOverlay<public>(Material:material)<transacts>:void = VhCallVoid(Handle, "set_material_overlay", array{VhFromObject(Material)})
@@ -42174,9 +42174,9 @@ gpu_particles2d<public> := class(node2d):
     CaptureRect<public>()<transacts>:rect2 = VhToRect2(VhCallValue(Handle, "capture_rect", array{}))
     ConvertFromParticles<public>(Particles:node)<transacts>:void = VhCallVoid(Handle, "convert_from_particles", array{VhFromObject(Particles)})
     EmitParticle<public>(Xform:transform2d, Velocity:vector2, Color:color, Custom:color, Flags:int)<transacts>:void = VhCallVoid(Handle, "emit_particle", array{VhFromTransform2D(Xform), VhFromVector2(Velocity), VhFromColor(Color), VhFromColor(Custom), VhFromInt(Flags)})
-    GetProcessMaterial<public>()<decides><transacts>:material = material{Handle := VhToHandle[VhCallValue(Handle, "get_process_material", array{})]}
+    GetProcessMaterial<public>()<decides><transacts>:material = material[VhObjectFrom[VhCallValue(Handle, "get_process_material", array{})]]
     GetSubEmitter<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_sub_emitter", array{}))
-    GetTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture", array{})]}
+    GetTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_texture", array{})]]
     GetVisibilityRect<public>()<transacts>:rect2 = VhToRect2(VhCallValue(Handle, "get_visibility_rect", array{}))
     RequestParticlesProcess<public>(ProcessTime:float)<transacts>:void = VhCallVoid(Handle, "request_particles_process", array{VhFromFloat(ProcessTime)})
     Restart<public>(?KeepSeed:logic = false)<transacts>:void = VhCallVoid(Handle, "restart", array{VhFromLogic(KeepSeed)})
@@ -42317,8 +42317,8 @@ graph_edit<public> := class(control):
     GetConnectionLine<public>(FromNode:vector2, ToNode:vector2)<transacts>:[]vector2 = VhToVector2s(VhCallValue(Handle, "get_connection_line", array{VhFromVector2(FromNode), VhFromVector2(ToNode)}))
     GetConnectionListFromNode<public>(Node:string)<transacts>:typed_array(dictionary) = VhToDictionaryArray(VhCallValue(Handle, "get_connection_list_from_node", array{VhFromStringName(Node)}))
     GetConnectionsIntersectingWithRect<public>(Rect:rect2)<transacts>:typed_array(dictionary) = VhToDictionaryArray(VhCallValue(Handle, "get_connections_intersecting_with_rect", array{VhFromRect2(Rect)}))
-    GetElementFrame<public>(Element:string)<decides><transacts>:graph_frame = graph_frame{Handle := VhToHandle[VhCallValue(Handle, "get_element_frame", array{VhFromStringName(Element)})]}
-    GetMenuHbox<public>()<decides><transacts>:h_box_container = h_box_container{Handle := VhToHandle[VhCallValue(Handle, "get_menu_hbox", array{})]}
+    GetElementFrame<public>(Element:string)<decides><transacts>:graph_frame = graph_frame[VhObjectFrom[VhCallValue(Handle, "get_element_frame", array{VhFromStringName(Element)})]]
+    GetMenuHbox<public>()<decides><transacts>:h_box_container = h_box_container[VhObjectFrom[VhCallValue(Handle, "get_menu_hbox", array{})]]
     IsNodeConnected<public>(FromNode:string, FromPort:int, ToNode:string, ToPort:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_node_connected", array{VhFromStringName(FromNode), VhFromInt(FromPort), VhFromStringName(ToNode), VhFromInt(ToPort)}))
     IsValidConnectionType<public>(FromType:int, ToType:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_valid_connection_type", array{VhFromInt(FromType), VhFromInt(ToType)}))
     RemoveValidConnectionType<public>(FromType:int, ToType:int)<transacts>:void = VhCallVoid(Handle, "remove_valid_connection_type", array{VhFromInt(FromType), VhFromInt(ToType)})
@@ -42441,7 +42441,7 @@ input_event_midi<public> := class(input_event):
 
 input_event_shortcut<public> := class(input_event):
 
-    GetShortcut<public>()<decides><transacts>:shortcut = shortcut{Handle := VhToHandle[VhCallValue(Handle, "get_shortcut", array{})]}
+    GetShortcut<public>()<decides><transacts>:shortcut = shortcut[VhObjectFrom[VhCallValue(Handle, "get_shortcut", array{})]]
     SetShortcut<public>(Shortcut:shortcut)<transacts>:void = VhCallVoid(Handle, "set_shortcut", array{VhFromObject(Shortcut)})
 
 item_list<public> := class(control):
@@ -42516,12 +42516,12 @@ item_list<public> := class(control):
     DeselectAll<public>()<transacts>:void = VhCallVoid(Handle, "deselect_all", array{})
     EnsureCurrentIsVisible<public>()<transacts>:void = VhCallVoid(Handle, "ensure_current_is_visible", array{})
     ForceUpdateListSize<public>()<transacts>:void = VhCallVoid(Handle, "force_update_list_size", array{})
-    GetHScrollBar<public>()<decides><transacts>:h_scroll_bar = h_scroll_bar{Handle := VhToHandle[VhCallValue(Handle, "get_h_scroll_bar", array{})]}
+    GetHScrollBar<public>()<decides><transacts>:h_scroll_bar = h_scroll_bar[VhObjectFrom[VhCallValue(Handle, "get_h_scroll_bar", array{})]]
     GetItemAtPosition<public>(Arg0:vector2, ?Exact:logic = false)<transacts>:int = VhToInt(VhCallValue(Handle, "get_item_at_position", array{VhFromVector2(Arg0), VhFromLogic(Exact)}))
     GetItemAutoTranslateMode<public>(Idx:int)<transacts>:node_auto_translate_mode = VhToNodeAutoTranslateMode(VhCallValue(Handle, "get_item_auto_translate_mode", array{VhFromInt(Idx)}))
     GetItemCustomBgColor<public>(Idx:int)<transacts>:color = VhToColor(VhCallValue(Handle, "get_item_custom_bg_color", array{VhFromInt(Idx)}))
     GetItemCustomFgColor<public>(Idx:int)<transacts>:color = VhToColor(VhCallValue(Handle, "get_item_custom_fg_color", array{VhFromInt(Idx)}))
-    GetItemIcon<public>(Idx:int)<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_item_icon", array{VhFromInt(Idx)})]}
+    GetItemIcon<public>(Idx:int)<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_item_icon", array{VhFromInt(Idx)})]]
     GetItemIconModulate<public>(Idx:int)<transacts>:color = VhToColor(VhCallValue(Handle, "get_item_icon_modulate", array{VhFromInt(Idx)}))
     GetItemIconRegion<public>(Idx:int)<transacts>:rect2 = VhToRect2(VhCallValue(Handle, "get_item_icon_region", array{VhFromInt(Idx)}))
     GetItemLanguage<public>(Idx:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_item_language", array{VhFromInt(Idx)}))
@@ -42531,7 +42531,7 @@ item_list<public> := class(control):
     GetItemTextDirection<public>(Idx:int)<transacts>:control_text_direction = VhToControlTextDirection(VhCallValue(Handle, "get_item_text_direction", array{VhFromInt(Idx)}))
     GetItemTooltip<public>(Idx:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_item_tooltip", array{VhFromInt(Idx)}))
     GetSelectedItems<public>()<transacts>:[]int = VhToInts(VhCallValue(Handle, "get_selected_items", array{}))
-    GetVScrollBar<public>()<decides><transacts>:v_scroll_bar = v_scroll_bar{Handle := VhToHandle[VhCallValue(Handle, "get_v_scroll_bar", array{})]}
+    GetVScrollBar<public>()<decides><transacts>:v_scroll_bar = v_scroll_bar[VhObjectFrom[VhCallValue(Handle, "get_v_scroll_bar", array{})]]
     IsAnythingSelected<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_anything_selected", array{}))
     IsItemDisabled<public>(Idx:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_item_disabled", array{VhFromInt(Idx)}))
     IsItemIconTransposed<public>(Idx:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_item_icon_transposed", array{VhFromInt(Idx)}))
@@ -42627,7 +42627,7 @@ label<public> := class(control):
     VisibleRatioSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_visible_ratio", array{VhFromFloat(Value)})
     GetCharacterBounds<public>(Pos:int)<transacts>:rect2 = VhToRect2(VhCallValue(Handle, "get_character_bounds", array{VhFromInt(Pos)}))
     GetEllipsisChar<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_ellipsis_char", array{}))
-    GetLabelSettings<public>()<decides><transacts>:label_settings = label_settings{Handle := VhToHandle[VhCallValue(Handle, "get_label_settings", array{})]}
+    GetLabelSettings<public>()<decides><transacts>:label_settings = label_settings[VhObjectFrom[VhCallValue(Handle, "get_label_settings", array{})]]
     GetLanguage<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_language", array{}))
     GetLineCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_line_count", array{}))
     GetLineHeight<public>(?Line:int = -1)<transacts>:int = VhToInt(VhCallValue(Handle, "get_line_height", array{VhFromInt(Line)}))
@@ -42815,7 +42815,7 @@ light3d<public> := class(visual_instance3d):
     ShadowTransmittanceBiasGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_param", array{VhFromInt(19)}))
     ShadowTransmittanceBiasSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_param", array{VhFromInt(19), VhFromFloat(Value)})
     GetCorrelatedColor<public>()<transacts>:color = VhToColor(VhCallValue(Handle, "get_correlated_color", array{}))
-    GetProjector<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_projector", array{})]}
+    GetProjector<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_projector", array{})]]
     SetProjector<public>(Projector:texture2d)<transacts>:void = VhCallVoid(Handle, "set_projector", array{VhFromObject(Projector)})
 
 light_occluder2d<public> := class(node2d):
@@ -42826,7 +42826,7 @@ light_occluder2d<public> := class(node2d):
     var SdfCollision<public><getter(SdfCollisionGetter)><setter(SdfCollisionSetter)>:logic = external {}
     SdfCollisionGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_set_as_sdf_collision", array{}))
     SdfCollisionSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_as_sdf_collision", array{VhFromLogic(Value)})
-    GetOccluderPolygon<public>()<decides><transacts>:occluder_polygon2d = occluder_polygon2d{Handle := VhToHandle[VhCallValue(Handle, "get_occluder_polygon", array{})]}
+    GetOccluderPolygon<public>()<decides><transacts>:occluder_polygon2d = occluder_polygon2d[VhObjectFrom[VhCallValue(Handle, "get_occluder_polygon", array{})]]
     SetOccluderPolygon<public>(Polygon:occluder_polygon2d)<transacts>:void = VhCallVoid(Handle, "set_occluder_polygon", array{VhFromObject(Polygon)})
 
 lightmap_gi<public> := class(visual_instance3d):
@@ -42901,9 +42901,9 @@ lightmap_gi<public> := class(visual_instance3d):
     var UseTextureForBounces<public><getter(UseTextureForBouncesGetter)><setter(UseTextureForBouncesSetter)>:logic = external {}
     UseTextureForBouncesGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_using_texture_for_bounces", array{}))
     UseTextureForBouncesSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_use_texture_for_bounces", array{VhFromLogic(Value)})
-    GetCameraAttributes<public>()<decides><transacts>:camera_attributes = camera_attributes{Handle := VhToHandle[VhCallValue(Handle, "get_camera_attributes", array{})]}
-    GetEnvironmentCustomSky<public>()<decides><transacts>:sky = sky{Handle := VhToHandle[VhCallValue(Handle, "get_environment_custom_sky", array{})]}
-    GetLightData<public>()<decides><transacts>:lightmap_gi_data = lightmap_gi_data{Handle := VhToHandle[VhCallValue(Handle, "get_light_data", array{})]}
+    GetCameraAttributes<public>()<decides><transacts>:camera_attributes = camera_attributes[VhObjectFrom[VhCallValue(Handle, "get_camera_attributes", array{})]]
+    GetEnvironmentCustomSky<public>()<decides><transacts>:sky = sky[VhObjectFrom[VhCallValue(Handle, "get_environment_custom_sky", array{})]]
+    GetLightData<public>()<decides><transacts>:lightmap_gi_data = lightmap_gi_data[VhObjectFrom[VhCallValue(Handle, "get_light_data", array{})]]
     SetCameraAttributes<public>(CameraAttributes:camera_attributes)<transacts>:void = VhCallVoid(Handle, "set_camera_attributes", array{VhFromObject(CameraAttributes)})
     SetEnvironmentCustomSky<public>(Sky:sky)<transacts>:void = VhCallVoid(Handle, "set_environment_custom_sky", array{VhFromObject(Sky)})
     SetLightData<public>(Data:lightmap_gi_data)<transacts>:void = VhCallVoid(Handle, "set_light_data", array{VhFromObject(Data)})
@@ -42977,12 +42977,12 @@ line2d<public> := class(node2d):
     WidthSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_width", array{VhFromFloat(Value)})
     AddPoint<public>(Arg0:vector2, ?Index:int = -1)<transacts>:void = VhCallVoid(Handle, "add_point", array{VhFromVector2(Arg0), VhFromInt(Index)})
     ClearPoints<public>()<transacts>:void = VhCallVoid(Handle, "clear_points", array{})
-    GetCurve<public>()<decides><transacts>:curve = curve{Handle := VhToHandle[VhCallValue(Handle, "get_curve", array{})]}
-    GetGradient<public>()<decides><transacts>:gradient = gradient{Handle := VhToHandle[VhCallValue(Handle, "get_gradient", array{})]}
+    GetCurve<public>()<decides><transacts>:curve = curve[VhObjectFrom[VhCallValue(Handle, "get_curve", array{})]]
+    GetGradient<public>()<decides><transacts>:gradient = gradient[VhObjectFrom[VhCallValue(Handle, "get_gradient", array{})]]
     GetPointCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_point_count", array{}))
     GetPointPosition<public>(Index:int)<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_point_position", array{VhFromInt(Index)}))
     GetPoints<public>()<transacts>:[]vector2 = VhToVector2s(VhCallValue(Handle, "get_points", array{}))
-    GetTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture", array{})]}
+    GetTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_texture", array{})]]
     RemovePoint<public>(Index:int)<transacts>:void = VhCallVoid(Handle, "remove_point", array{VhFromInt(Index)})
     SetCurve<public>(Curve:curve)<transacts>:void = VhCallVoid(Handle, "set_curve", array{VhFromObject(Curve)})
     SetGradient<public>(Color:gradient)<transacts>:void = VhCallVoid(Handle, "set_gradient", array{VhFromObject(Color)})
@@ -43090,11 +43090,11 @@ line_edit<public> := class(control):
     Deselect<public>()<transacts>:void = VhCallVoid(Handle, "deselect", array{})
     Edit<public>(?HideFocus:logic = false)<transacts>:void = VhCallVoid(Handle, "edit", array{VhFromLogic(HideFocus)})
     GetLanguage<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_language", array{}))
-    GetMenu<public>()<decides><transacts>:popup_menu = popup_menu{Handle := VhToHandle[VhCallValue(Handle, "get_menu", array{})]}
+    GetMenu<public>()<decides><transacts>:popup_menu = popup_menu[VhObjectFrom[VhCallValue(Handle, "get_menu", array{})]]
     GetNextCompositeCharacterColumn<public>(Column:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_next_composite_character_column", array{VhFromInt(Column)}))
     GetPlaceholder<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_placeholder", array{}))
     GetPreviousCompositeCharacterColumn<public>(Column:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_previous_composite_character_column", array{VhFromInt(Column)}))
-    GetRightIcon<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_right_icon", array{})]}
+    GetRightIcon<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_right_icon", array{})]]
     GetScrollOffset<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_scroll_offset", array{}))
     GetSecretCharacter<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_secret_character", array{}))
     GetSelectedText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_selected_text", array{}))
@@ -43248,7 +43248,7 @@ menu_bar<public> := class(control):
     TextDirectionSetter<epic_internal>(Accessor:accessor, Value:control_text_direction)<transacts>:void = VhCallVoid(Handle, "set_text_direction", array{VhFromControlTextDirection(Value)})
     GetLanguage<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_language", array{}))
     GetMenuCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_menu_count", array{}))
-    GetMenuPopup<public>(Menu:int)<decides><transacts>:popup_menu = popup_menu{Handle := VhToHandle[VhCallValue(Handle, "get_menu_popup", array{VhFromInt(Menu)})]}
+    GetMenuPopup<public>(Menu:int)<decides><transacts>:popup_menu = popup_menu[VhObjectFrom[VhCallValue(Handle, "get_menu_popup", array{VhFromInt(Menu)})]]
     GetMenuTitle<public>(Menu:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_menu_title", array{VhFromInt(Menu)}))
     GetMenuTooltip<public>(Menu:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_menu_tooltip", array{VhFromInt(Menu)}))
     IsMenuDisabled<public>(Menu:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_menu_disabled", array{VhFromInt(Menu)}))
@@ -43263,8 +43263,8 @@ menu_bar<public> := class(control):
 
 mesh_instance2d<public> := class(node2d):
 
-    GetMesh<public>()<decides><transacts>:mesh = mesh{Handle := VhToHandle[VhCallValue(Handle, "get_mesh", array{})]}
-    GetTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture", array{})]}
+    GetMesh<public>()<decides><transacts>:mesh = mesh[VhObjectFrom[VhCallValue(Handle, "get_mesh", array{})]]
+    GetTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_texture", array{})]]
     SetMesh<public>(Mesh:mesh)<transacts>:void = VhCallVoid(Handle, "set_mesh", array{VhFromObject(Mesh)})
     SetTexture<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_texture", array{VhFromObject(Texture)})
 
@@ -43278,8 +43278,8 @@ modifier_bone_target3d<public> := class(skeleton_modifier3d):
 
 multi_mesh_instance2d<public> := class(node2d):
 
-    GetMultimesh<public>()<decides><transacts>:multi_mesh = multi_mesh{Handle := VhToHandle[VhCallValue(Handle, "get_multimesh", array{})]}
-    GetTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture", array{})]}
+    GetMultimesh<public>()<decides><transacts>:multi_mesh = multi_mesh[VhObjectFrom[VhCallValue(Handle, "get_multimesh", array{})]]
+    GetTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_texture", array{})]]
     SetMultimesh<public>(Multimesh:multi_mesh)<transacts>:void = VhCallVoid(Handle, "set_multimesh", array{VhFromObject(Multimesh)})
     SetTexture<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_texture", array{VhFromObject(Texture)})
 
@@ -43394,7 +43394,7 @@ navigation_region2d<public> := class(node2d):
     GetBounds<public>()<transacts>:rect2 = VhToRect2(VhCallValue(Handle, "get_bounds", array{}))
     GetNavigationLayerValue<public>(LayerNumber:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_navigation_layer_value", array{VhFromInt(LayerNumber)}))
     GetNavigationMap<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_navigation_map", array{}))
-    GetNavigationPolygon<public>()<decides><transacts>:navigation_polygon = navigation_polygon{Handle := VhToHandle[VhCallValue(Handle, "get_navigation_polygon", array{})]}
+    GetNavigationPolygon<public>()<decides><transacts>:navigation_polygon = navigation_polygon[VhObjectFrom[VhCallValue(Handle, "get_navigation_polygon", array{})]]
     GetRegionRid<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_region_rid", array{}))
     GetRid<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_rid", array{}))
     IsBaking<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_baking", array{}))
@@ -43426,7 +43426,7 @@ nine_patch_rect<public> := class(control):
     PatchMarginTopGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_patch_margin", array{VhFromInt(1)}))
     PatchMarginTopSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_patch_margin", array{VhFromInt(1), VhFromInt(Value)})
     GetRegionRect<public>()<transacts>:rect2 = VhToRect2(VhCallValue(Handle, "get_region_rect", array{}))
-    GetTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture", array{})]}
+    GetTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_texture", array{})]]
     SetRegionRect<public>(Rect:rect2)<transacts>:void = VhCallVoid(Handle, "set_region_rect", array{VhFromRect2(Rect)})
     SetTexture<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_texture", array{VhFromObject(Texture)})
 
@@ -43439,7 +43439,7 @@ occluder_instance3d<public> := class(visual_instance3d):
     BakeSimplificationDistanceGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_bake_simplification_distance", array{}))
     BakeSimplificationDistanceSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_bake_simplification_distance", array{VhFromFloat(Value)})
     GetBakeMaskValue<public>(LayerNumber:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_bake_mask_value", array{VhFromInt(LayerNumber)}))
-    GetOccluder<public>()<decides><transacts>:occluder3d = occluder3d{Handle := VhToHandle[VhCallValue(Handle, "get_occluder", array{})]}
+    GetOccluder<public>()<decides><transacts>:occluder3d = occluder3d[VhObjectFrom[VhCallValue(Handle, "get_occluder", array{})]]
     SetBakeMaskValue<public>(LayerNumber:int, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_bake_mask_value", array{VhFromInt(LayerNumber), VhFromLogic(Value)})
     SetOccluder<public>(Occluder:occluder3d)<transacts>:void = VhCallVoid(Handle, "set_occluder", array{VhFromObject(Occluder)})
 
@@ -43534,7 +43534,7 @@ panorama_sky_material<public> := class(material):
     var Filter<public><getter(FilterGetter)><setter(FilterSetter)>:logic = external {}
     FilterGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_filtering_enabled", array{}))
     FilterSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_filtering_enabled", array{VhFromLogic(Value)})
-    GetPanorama<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_panorama", array{})]}
+    GetPanorama<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_panorama", array{})]]
     SetPanorama<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_panorama", array{VhFromObject(Texture)})
 
 parallax2d<public> := class(node2d):
@@ -44198,15 +44198,15 @@ particle_process_material<public> := class(material):
             VhCallVoid(Handle, "set_velocity_pivot", array{VhFromVector3(vector3{X := Current.X, Y := Value, Z := Current.Z})})
         else:
             VhCallVoid(Handle, "set_velocity_pivot", array{VhFromVector3(vector3{X := Current.X, Y := Current.Y, Z := Value})})
-    GetAlphaCurve<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_alpha_curve", array{})]}
-    GetColorInitialRamp<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_color_initial_ramp", array{})]}
-    GetColorRamp<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_color_ramp", array{})]}
-    GetEmissionColorTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_emission_color_texture", array{})]}
-    GetEmissionCurve<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_emission_curve", array{})]}
-    GetEmissionNormalTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_emission_normal_texture", array{})]}
-    GetEmissionPointTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_emission_point_texture", array{})]}
-    GetParamTexture<public>(Param:particle_process_material_parameter)<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_param_texture", array{VhFromParticleProcessMaterialParameter(Param)})]}
-    GetVelocityLimitCurve<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_velocity_limit_curve", array{})]}
+    GetAlphaCurve<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_alpha_curve", array{})]]
+    GetColorInitialRamp<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_color_initial_ramp", array{})]]
+    GetColorRamp<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_color_ramp", array{})]]
+    GetEmissionColorTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_emission_color_texture", array{})]]
+    GetEmissionCurve<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_emission_curve", array{})]]
+    GetEmissionNormalTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_emission_normal_texture", array{})]]
+    GetEmissionPointTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_emission_point_texture", array{})]]
+    GetParamTexture<public>(Param:particle_process_material_parameter)<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_param_texture", array{VhFromParticleProcessMaterialParameter(Param)})]]
+    GetVelocityLimitCurve<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_velocity_limit_curve", array{})]]
     SetAlphaCurve<public>(Curve:texture2d)<transacts>:void = VhCallVoid(Handle, "set_alpha_curve", array{VhFromObject(Curve)})
     SetColorInitialRamp<public>(Ramp:texture2d)<transacts>:void = VhCallVoid(Handle, "set_color_initial_ramp", array{VhFromObject(Ramp)})
     SetColorRamp<public>(Ramp:texture2d)<transacts>:void = VhCallVoid(Handle, "set_color_ramp", array{VhFromObject(Ramp)})
@@ -44219,7 +44219,7 @@ particle_process_material<public> := class(material):
 
 path2d<public> := class(node2d):
 
-    GetCurve<public>()<decides><transacts>:curve2d = curve2d{Handle := VhToHandle[VhCallValue(Handle, "get_curve", array{})]}
+    GetCurve<public>()<decides><transacts>:curve2d = curve2d[VhObjectFrom[VhCallValue(Handle, "get_curve", array{})]]
     SetCurve<public>(Curve:curve2d)<transacts>:void = VhCallVoid(Handle, "set_curve", array{VhFromObject(Curve)})
 
 path_follow2d<public> := class(node2d):
@@ -44325,7 +44325,7 @@ physical_sky_material<public> := class(material):
     var UseDebanding<public><getter(UseDebandingGetter)><setter(UseDebandingSetter)>:logic = external {}
     UseDebandingGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_use_debanding", array{}))
     UseDebandingSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_use_debanding", array{VhFromLogic(Value)})
-    GetNightSky<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_night_sky", array{})]}
+    GetNightSky<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_night_sky", array{})]]
     SetNightSky<public>(NightSky:texture2d)<transacts>:void = VhCallVoid(Handle, "set_night_sky", array{VhFromObject(NightSky)})
 
 physics_body3d<public> := class(collision_object3d):
@@ -44351,7 +44351,7 @@ physics_body3d<public> := class(collision_object3d):
     AddCollisionExceptionWith<public>(Body:node)<transacts>:void = VhCallVoid(Handle, "add_collision_exception_with", array{VhFromObject(Body)})
     GetCollisionExceptions<public>()<transacts>:typed_array(physics_body3d) = VhToPhysicsBody3DArray(VhCallValue(Handle, "get_collision_exceptions", array{}))
     GetGravity<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_gravity", array{}))
-    MoveAndCollide<public>(Motion:vector3, ?TestOnly:logic = false, ?SafeMargin:float = 0.001, ?RecoveryAsCollision:logic = false, ?MaxCollisions:int = 1)<decides><transacts>:kinematic_collision3d = kinematic_collision3d{Handle := VhToHandle[VhCallValue(Handle, "move_and_collide", array{VhFromVector3(Motion), VhFromLogic(TestOnly), VhFromFloat(SafeMargin), VhFromLogic(RecoveryAsCollision), VhFromInt(MaxCollisions)})]}
+    MoveAndCollide<public>(Motion:vector3, ?TestOnly:logic = false, ?SafeMargin:float = 0.001, ?RecoveryAsCollision:logic = false, ?MaxCollisions:int = 1)<decides><transacts>:kinematic_collision3d = kinematic_collision3d[VhObjectFrom[VhCallValue(Handle, "move_and_collide", array{VhFromVector3(Motion), VhFromLogic(TestOnly), VhFromFloat(SafeMargin), VhFromLogic(RecoveryAsCollision), VhFromInt(MaxCollisions)})]]
     RemoveCollisionExceptionWith<public>(Body:node)<transacts>:void = VhCallVoid(Handle, "remove_collision_exception_with", array{VhFromObject(Body)})
     TestMove<public>(From:transform3d, Motion:vector3, Collision:kinematic_collision3d, ?SafeMargin:float = 0.001, ?RecoveryAsCollision:logic = false, ?MaxCollisions:int = 1)<transacts>:logic = VhToLogic(VhCallValue(Handle, "test_move", array{VhFromTransform3D(From), VhFromVector3(Motion), VhFromObject(Collision), VhFromFloat(SafeMargin), VhFromLogic(RecoveryAsCollision), VhFromInt(MaxCollisions)}))
 
@@ -44444,7 +44444,7 @@ polygon2d<public> := class(node2d):
     GetPolygon<public>()<transacts>:[]vector2 = VhToVector2s(VhCallValue(Handle, "get_polygon", array{}))
     GetPolygons<public>()<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_polygons", array{}))
     GetSkeleton<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_skeleton", array{}))
-    GetTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture", array{})]}
+    GetTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_texture", array{})]]
     GetUv<public>()<transacts>:[]vector2 = VhToVector2s(VhCallValue(Handle, "get_uv", array{}))
     GetVertexColors<public>()<transacts>:[]color = VhToColors(VhCallValue(Handle, "get_vertex_colors", array{}))
     SetBonePath<public>(Index:int, Path:string)<transacts>:void = VhCallVoid(Handle, "set_bone_path", array{VhFromInt(Index), VhFromNodePath(Path)})
@@ -44475,7 +44475,7 @@ primitive_mesh<public> := class(mesh):
     Uv2PaddingGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_uv2_padding", array{}))
     Uv2PaddingSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_uv2_padding", array{VhFromFloat(Value)})
     GetCustomAabb<public>()<transacts>:aabb = VhToAABB(VhCallValue(Handle, "get_custom_aabb", array{}))
-    GetMaterial<public>()<decides><transacts>:material = material{Handle := VhToHandle[VhCallValue(Handle, "get_material", array{})]}
+    GetMaterial<public>()<decides><transacts>:material = material[VhObjectFrom[VhCallValue(Handle, "get_material", array{})]]
     GetMeshArrays<public>()<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_mesh_arrays", array{}))
     RequestUpdate<public>()<transacts>:void = VhCallVoid(Handle, "request_update", array{})
     SetCustomAabb<public>(Aabb:aabb)<transacts>:void = VhCallVoid(Handle, "set_custom_aabb", array{VhFromAABB(Aabb)})
@@ -44587,7 +44587,7 @@ procedural_sky_material<public> := class(material):
     var UseDebanding<public><getter(UseDebandingGetter)><setter(UseDebandingSetter)>:logic = external {}
     UseDebandingGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_use_debanding", array{}))
     UseDebandingSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_use_debanding", array{VhFromLogic(Value)})
-    GetSkyCover<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_sky_cover", array{})]}
+    GetSkyCover<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_sky_cover", array{})]]
     SetSkyCover<public>(SkyCover:texture2d)<transacts>:void = VhCallVoid(Handle, "set_sky_cover", array{VhFromObject(SkyCover)})
 
 quad_occluder3d<public> := class(occluder3d):
@@ -44677,7 +44677,7 @@ ray_cast2d<public> := class(node2d):
     AddExceptionRid<public>(Rid:int)<transacts>:void = VhCallVoid(Handle, "add_exception_rid", array{VhFromRid(Rid)})
     ClearExceptions<public>()<transacts>:void = VhCallVoid(Handle, "clear_exceptions", array{})
     ForceRaycastUpdate<public>()<transacts>:void = VhCallVoid(Handle, "force_raycast_update", array{})
-    GetCollider<public>()<decides><transacts>:object = object{Handle := VhToHandle[VhCallValue(Handle, "get_collider", array{})]}
+    GetCollider<public>()<decides><transacts>:object = object[VhObjectFrom[VhCallValue(Handle, "get_collider", array{})]]
     GetColliderRid<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_collider_rid", array{}))
     GetColliderShape<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_collider_shape", array{}))
     GetCollisionMaskValue<public>(LayerNumber:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_collision_mask_value", array{VhFromInt(LayerNumber)}))
@@ -44837,7 +44837,7 @@ retarget_modifier3d<public> := class(skeleton_modifier3d):
     var UseGlobalPose<public><getter(UseGlobalPoseGetter)><setter(UseGlobalPoseSetter)>:logic = external {}
     UseGlobalPoseGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_using_global_pose", array{}))
     UseGlobalPoseSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_use_global_pose", array{VhFromLogic(Value)})
-    GetProfile<public>()<decides><transacts>:skeleton_profile = skeleton_profile{Handle := VhToHandle[VhCallValue(Handle, "get_profile", array{})]}
+    GetProfile<public>()<decides><transacts>:skeleton_profile = skeleton_profile[VhObjectFrom[VhCallValue(Handle, "get_profile", array{})]]
     IsPositionEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_position_enabled", array{}))
     IsRotationEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_rotation_enabled", array{}))
     IsScaleEnabled<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_scale_enabled", array{}))
@@ -44942,7 +44942,7 @@ rich_text_label<public> := class(control):
     GetLineOffset<public>(Line:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_line_offset", array{VhFromInt(Line)}))
     GetLineRange<public>(Line:int)<transacts>:vector2i = VhToVector2i(VhCallValue(Handle, "get_line_range", array{VhFromInt(Line)}))
     GetLineWidth<public>(Line:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_line_width", array{VhFromInt(Line)}))
-    GetMenu<public>()<decides><transacts>:popup_menu = popup_menu{Handle := VhToHandle[VhCallValue(Handle, "get_menu", array{})]}
+    GetMenu<public>()<decides><transacts>:popup_menu = popup_menu[VhObjectFrom[VhCallValue(Handle, "get_menu", array{})]]
     GetParagraphCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_paragraph_count", array{}))
     GetParagraphOffset<public>(Paragraph:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_paragraph_offset", array{VhFromInt(Paragraph)}))
     GetParsedText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_parsed_text", array{}))
@@ -44954,7 +44954,7 @@ rich_text_label<public> := class(control):
     GetTabStops<public>()<transacts>:[]float = VhToFloats(VhCallValue(Handle, "get_tab_stops", array{}))
     GetText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_text", array{}))
     GetTotalCharacterCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_total_character_count", array{}))
-    GetVScrollBar<public>()<decides><transacts>:v_scroll_bar = v_scroll_bar{Handle := VhToHandle[VhCallValue(Handle, "get_v_scroll_bar", array{})]}
+    GetVScrollBar<public>()<decides><transacts>:v_scroll_bar = v_scroll_bar[VhObjectFrom[VhCallValue(Handle, "get_v_scroll_bar", array{})]]
     GetVisibleContentRect<public>()<transacts>:rect2i = VhToRect2i(VhCallValue(Handle, "get_visible_content_rect", array{}))
     GetVisibleLineCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_visible_line_count", array{}))
     GetVisibleParagraphCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_visible_paragraph_count", array{}))
@@ -45094,7 +45094,7 @@ separator<public> := class(control):
 
 shader_material<public> := class(material):
 
-    GetShader<public>()<decides><transacts>:shader = shader{Handle := VhToHandle[VhCallValue(Handle, "get_shader", array{})]}
+    GetShader<public>()<decides><transacts>:shader = shader[VhObjectFrom[VhCallValue(Handle, "get_shader", array{})]]
     GetShaderParameter<public>(Param:string)<transacts>:variant = VhToVariant(VhCallValue(Handle, "get_shader_parameter", array{VhFromStringName(Param)}))
     SetShader<public>(Shader:shader)<transacts>:void = VhCallVoid(Handle, "set_shader", array{VhFromObject(Shader)})
     SetShaderParameter<public>(Param:string, Value:variant)<transacts>:void = VhCallVoid(Handle, "set_shader_parameter", array{VhFromStringName(Param), VhFromVariant(Value)})
@@ -45140,7 +45140,7 @@ shape_cast2d<public> := class(node2d):
     ForceShapecastUpdate<public>()<transacts>:void = VhCallVoid(Handle, "force_shapecast_update", array{})
     GetClosestCollisionSafeFraction<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_closest_collision_safe_fraction", array{}))
     GetClosestCollisionUnsafeFraction<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_closest_collision_unsafe_fraction", array{}))
-    GetCollider<public>(Index:int)<decides><transacts>:object = object{Handle := VhToHandle[VhCallValue(Handle, "get_collider", array{VhFromInt(Index)})]}
+    GetCollider<public>(Index:int)<decides><transacts>:object = object[VhObjectFrom[VhCallValue(Handle, "get_collider", array{VhFromInt(Index)})]]
     GetColliderRid<public>(Index:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_collider_rid", array{VhFromInt(Index)}))
     GetColliderShape<public>(Index:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_collider_shape", array{VhFromInt(Index)}))
     GetCollisionCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_collision_count", array{}))
@@ -45148,7 +45148,7 @@ shape_cast2d<public> := class(node2d):
     GetCollisionNormal<public>(Index:int)<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_collision_normal", array{VhFromInt(Index)}))
     GetCollisionPoint<public>(Index:int)<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_collision_point", array{VhFromInt(Index)}))
     GetCollisionResult<public>()<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_collision_result", array{}))
-    GetShape<public>()<decides><transacts>:shape2d = shape2d{Handle := VhToHandle[VhCallValue(Handle, "get_shape", array{})]}
+    GetShape<public>()<decides><transacts>:shape2d = shape2d[VhObjectFrom[VhCallValue(Handle, "get_shape", array{})]]
     IsColliding<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_colliding", array{}))
     RemoveException<public>(Node:collision_object2d)<transacts>:void = VhCallVoid(Handle, "remove_exception", array{VhFromObject(Node)})
     RemoveExceptionRid<public>(Rid:int)<transacts>:void = VhCallVoid(Handle, "remove_exception_rid", array{VhFromRid(Rid)})
@@ -45158,10 +45158,10 @@ shape_cast2d<public> := class(node2d):
 skeleton2d<public> := class(node2d):
 
     ExecuteModifications<public>(Delta:float, ExecutionMode:int)<transacts>:void = VhCallVoid(Handle, "execute_modifications", array{VhFromFloat(Delta), VhFromInt(ExecutionMode)})
-    GetBone<public>(Idx:int)<decides><transacts>:bone2d = bone2d{Handle := VhToHandle[VhCallValue(Handle, "get_bone", array{VhFromInt(Idx)})]}
+    GetBone<public>(Idx:int)<decides><transacts>:bone2d = bone2d[VhObjectFrom[VhCallValue(Handle, "get_bone", array{VhFromInt(Idx)})]]
     GetBoneCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_bone_count", array{}))
     GetBoneLocalPoseOverride<public>(BoneIdx:int)<transacts>:transform2d = VhToTransform2D(VhCallValue(Handle, "get_bone_local_pose_override", array{VhFromInt(BoneIdx)}))
-    GetModificationStack<public>()<decides><transacts>:skeleton_modification_stack2d = skeleton_modification_stack2d{Handle := VhToHandle[VhCallValue(Handle, "get_modification_stack", array{})]}
+    GetModificationStack<public>()<decides><transacts>:skeleton_modification_stack2d = skeleton_modification_stack2d[VhObjectFrom[VhCallValue(Handle, "get_modification_stack", array{})]]
     GetSkeleton<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_skeleton", array{}))
     SetBoneLocalPoseOverride<public>(BoneIdx:int, OverridePose:transform2d, Strength:float, Persistent:logic)<transacts>:void = VhCallVoid(Handle, "set_bone_local_pose_override", array{VhFromInt(BoneIdx), VhFromTransform2D(OverridePose), VhFromFloat(Strength), VhFromLogic(Persistent)})
     SetModificationStack<public>(ModificationStack:skeleton_modification_stack2d)<transacts>:void = VhCallVoid(Handle, "set_modification_stack", array{VhFromObject(ModificationStack)})
@@ -45197,7 +45197,7 @@ skeleton_ik3d<public> := class(skeleton_modifier3d):
     var UseMagnet<public><getter(UseMagnetGetter)><setter(UseMagnetSetter)>:logic = external {}
     UseMagnetGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_using_magnet", array{}))
     UseMagnetSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_use_magnet", array{VhFromLogic(Value)})
-    GetParentSkeleton<public>()<decides><transacts>:skeleton3d = skeleton3d{Handle := VhToHandle[VhCallValue(Handle, "get_parent_skeleton", array{})]}
+    GetParentSkeleton<public>()<decides><transacts>:skeleton3d = skeleton3d[VhObjectFrom[VhCallValue(Handle, "get_parent_skeleton", array{})]]
     GetRootBone<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_root_bone", array{}))
     GetTargetNode<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_target_node", array{}))
     GetTargetTransform<public>()<transacts>:transform3d = VhToTransform3D(VhCallValue(Handle, "get_target_transform", array{}))
@@ -45295,7 +45295,7 @@ skeleton_modification2d_physical_bones<public> := class(skeleton_modification2d)
 
 skeleton_modification2d_stack_holder<public> := class(skeleton_modification2d):
 
-    GetHeldModificationStack<public>()<decides><transacts>:skeleton_modification_stack2d = skeleton_modification_stack2d{Handle := VhToHandle[VhCallValue(Handle, "get_held_modification_stack", array{})]}
+    GetHeldModificationStack<public>()<decides><transacts>:skeleton_modification_stack2d = skeleton_modification_stack2d[VhObjectFrom[VhCallValue(Handle, "get_held_modification_stack", array{})]]
     SetHeldModificationStack<public>(HeldModificationStack:skeleton_modification_stack2d)<transacts>:void = VhCallVoid(Handle, "set_held_modification_stack", array{VhFromObject(HeldModificationStack)})
 
 skeleton_modification2d_two_bone_ik<public> := class(skeleton_modification2d):
@@ -45438,7 +45438,7 @@ spring_bone_simulator3d<public> := class(skeleton_modifier3d):
     GetCollisionCount<public>(Index:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_collision_count", array{VhFromInt(Index)}))
     GetCollisionPath<public>(Index:int, Collision:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_collision_path", array{VhFromInt(Index), VhFromInt(Collision)}))
     GetDrag<public>(Index:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_drag", array{VhFromInt(Index)}))
-    GetDragDampingCurve<public>(Index:int)<decides><transacts>:curve = curve{Handle := VhToHandle[VhCallValue(Handle, "get_drag_damping_curve", array{VhFromInt(Index)})]}
+    GetDragDampingCurve<public>(Index:int)<decides><transacts>:curve = curve[VhObjectFrom[VhCallValue(Handle, "get_drag_damping_curve", array{VhFromInt(Index)})]]
     GetEndBone<public>(Index:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_end_bone", array{VhFromInt(Index)}))
     GetEndBoneDirection<public>(Index:int)<transacts>:skeleton_modifier3d_bone_direction = VhToSkeletonModifier3dBoneDirection(VhCallValue(Handle, "get_end_bone_direction", array{VhFromInt(Index)}))
     GetEndBoneLength<public>(Index:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_end_bone_length", array{VhFromInt(Index)}))
@@ -45446,7 +45446,7 @@ spring_bone_simulator3d<public> := class(skeleton_modifier3d):
     GetExcludeCollisionCount<public>(Index:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_exclude_collision_count", array{VhFromInt(Index)}))
     GetExcludeCollisionPath<public>(Index:int, Collision:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_exclude_collision_path", array{VhFromInt(Index), VhFromInt(Collision)}))
     GetGravity<public>(Index:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_gravity", array{VhFromInt(Index)}))
-    GetGravityDampingCurve<public>(Index:int)<decides><transacts>:curve = curve{Handle := VhToHandle[VhCallValue(Handle, "get_gravity_damping_curve", array{VhFromInt(Index)})]}
+    GetGravityDampingCurve<public>(Index:int)<decides><transacts>:curve = curve[VhObjectFrom[VhCallValue(Handle, "get_gravity_damping_curve", array{VhFromInt(Index)})]]
     GetGravityDirection<public>(Index:int)<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_gravity_direction", array{VhFromInt(Index)}))
     GetJointBone<public>(Index:int, Joint:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_joint_bone", array{VhFromInt(Index), VhFromInt(Joint)}))
     GetJointBoneName<public>(Index:int, Joint:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_joint_bone_name", array{VhFromInt(Index), VhFromInt(Joint)}))
@@ -45459,13 +45459,13 @@ spring_bone_simulator3d<public> := class(skeleton_modifier3d):
     GetJointRotationAxisVector<public>(Index:int, Joint:int)<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_joint_rotation_axis_vector", array{VhFromInt(Index), VhFromInt(Joint)}))
     GetJointStiffness<public>(Index:int, Joint:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_joint_stiffness", array{VhFromInt(Index), VhFromInt(Joint)}))
     GetRadius<public>(Index:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_radius", array{VhFromInt(Index)}))
-    GetRadiusDampingCurve<public>(Index:int)<decides><transacts>:curve = curve{Handle := VhToHandle[VhCallValue(Handle, "get_radius_damping_curve", array{VhFromInt(Index)})]}
+    GetRadiusDampingCurve<public>(Index:int)<decides><transacts>:curve = curve[VhObjectFrom[VhCallValue(Handle, "get_radius_damping_curve", array{VhFromInt(Index)})]]
     GetRootBone<public>(Index:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_root_bone", array{VhFromInt(Index)}))
     GetRootBoneName<public>(Index:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_root_bone_name", array{VhFromInt(Index)}))
     GetRotationAxis<public>(Index:int)<transacts>:skeleton_modifier3d_rotation_axis = VhToSkeletonModifier3dRotationAxis(VhCallValue(Handle, "get_rotation_axis", array{VhFromInt(Index)}))
     GetRotationAxisVector<public>(Index:int)<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_rotation_axis_vector", array{VhFromInt(Index)}))
     GetStiffness<public>(Index:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_stiffness", array{VhFromInt(Index)}))
-    GetStiffnessDampingCurve<public>(Index:int)<decides><transacts>:curve = curve{Handle := VhToHandle[VhCallValue(Handle, "get_stiffness_damping_curve", array{VhFromInt(Index)})]}
+    GetStiffnessDampingCurve<public>(Index:int)<decides><transacts>:curve = curve[VhObjectFrom[VhCallValue(Handle, "get_stiffness_damping_curve", array{VhFromInt(Index)})]]
     IsConfigIndividual<public>(Index:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_config_individual", array{VhFromInt(Index)}))
     IsEndBoneExtended<public>(Index:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_end_bone_extended", array{VhFromInt(Index)}))
     Reset<public>()<transacts>:void = VhCallVoid(Handle, "reset", array{})
@@ -45557,7 +45557,7 @@ sprite2d<public> := class(node2d):
     VframesSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_vframes", array{VhFromInt(Value)})
     GetRect<public>()<transacts>:rect2 = VhToRect2(VhCallValue(Handle, "get_rect", array{}))
     GetRegionRect<public>()<transacts>:rect2 = VhToRect2(VhCallValue(Handle, "get_region_rect", array{}))
-    GetTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture", array{})]}
+    GetTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_texture", array{})]]
     IsPixelOpaque<public>(Pos:vector2)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_pixel_opaque", array{VhFromVector2(Pos)}))
     SetRegionRect<public>(Rect:rect2)<transacts>:void = VhCallVoid(Handle, "set_region_rect", array{VhFromRect2(Rect)})
     SetTexture<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_texture", array{VhFromObject(Texture)})
@@ -45795,7 +45795,7 @@ style_box_texture<public> := class(style_box):
     TextureMarginTopGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_texture_margin", array{VhFromInt(1)}))
     TextureMarginTopSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_texture_margin", array{VhFromInt(1), VhFromFloat(Value)})
     GetRegionRect<public>()<transacts>:rect2 = VhToRect2(VhCallValue(Handle, "get_region_rect", array{}))
-    GetTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture", array{})]}
+    GetTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_texture", array{})]]
     SetExpandMarginAll<public>(Size:float)<transacts>:void = VhCallVoid(Handle, "set_expand_margin_all", array{VhFromFloat(Size)})
     SetRegionRect<public>(Region:rect2)<transacts>:void = VhCallVoid(Handle, "set_region_rect", array{VhFromRect2(Region)})
     SetTexture<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_texture", array{VhFromObject(Texture)})
@@ -45903,8 +45903,8 @@ tab_bar<public> := class(control):
     EnsureTabVisible<public>(Idx:int)<transacts>:void = VhCallVoid(Handle, "ensure_tab_visible", array{VhFromInt(Idx)})
     GetOffsetButtonsVisible<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_offset_buttons_visible", array{}))
     GetPreviousTab<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_previous_tab", array{}))
-    GetTabButtonIcon<public>(TabIdx:int)<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_tab_button_icon", array{VhFromInt(TabIdx)})]}
-    GetTabIcon<public>(TabIdx:int)<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_tab_icon", array{VhFromInt(TabIdx)})]}
+    GetTabButtonIcon<public>(TabIdx:int)<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_tab_button_icon", array{VhFromInt(TabIdx)})]]
+    GetTabIcon<public>(TabIdx:int)<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_tab_icon", array{VhFromInt(TabIdx)})]]
     GetTabIconMaxWidth<public>(TabIdx:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_tab_icon_max_width", array{VhFromInt(TabIdx)}))
     GetTabIdxAtPoint<public>(Point:vector2)<transacts>:int = VhToInt(VhCallValue(Handle, "get_tab_idx_at_point", array{VhFromVector2(Point)}))
     GetTabLanguage<public>(TabIdx:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_tab_language", array{VhFromInt(TabIdx)}))
@@ -46091,7 +46091,7 @@ text_edit<public> := class(control):
     GetGutterName<public>(Gutter:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_gutter_name", array{VhFromInt(Gutter)}))
     GetGutterType<public>(Gutter:int)<transacts>:text_edit_gutter_type = VhToTextEditGutterType(VhCallValue(Handle, "get_gutter_type", array{VhFromInt(Gutter)}))
     GetGutterWidth<public>(Gutter:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_gutter_width", array{VhFromInt(Gutter)}))
-    GetHScrollBar<public>()<decides><transacts>:h_scroll_bar = h_scroll_bar{Handle := VhToHandle[VhCallValue(Handle, "get_h_scroll_bar", array{})]}
+    GetHScrollBar<public>()<decides><transacts>:h_scroll_bar = h_scroll_bar[VhObjectFrom[VhCallValue(Handle, "get_h_scroll_bar", array{})]]
     GetIndentLevel<public>(Line:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_indent_level", array{VhFromInt(Line)}))
     GetLanguage<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_language", array{}))
     GetLastFullVisibleLine<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_last_full_visible_line", array{}))
@@ -46101,7 +46101,7 @@ text_edit<public> := class(control):
     GetLineBackgroundColor<public>(Line:int)<transacts>:color = VhToColor(VhCallValue(Handle, "get_line_background_color", array{VhFromInt(Line)}))
     GetLineColumnAtPos<public>(Arg0:vector2i, ?ClampLine:logic = true, ?ClampColumn:logic = true)<transacts>:vector2i = VhToVector2i(VhCallValue(Handle, "get_line_column_at_pos", array{VhFromVector2i(Arg0), VhFromLogic(ClampLine), VhFromLogic(ClampColumn)}))
     GetLineCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_line_count", array{}))
-    GetLineGutterIcon<public>(Line:int, Gutter:int)<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_line_gutter_icon", array{VhFromInt(Line), VhFromInt(Gutter)})]}
+    GetLineGutterIcon<public>(Line:int, Gutter:int)<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_line_gutter_icon", array{VhFromInt(Line), VhFromInt(Gutter)})]]
     GetLineGutterItemColor<public>(Line:int, Gutter:int)<transacts>:color = VhToColor(VhCallValue(Handle, "get_line_gutter_item_color", array{VhFromInt(Line), VhFromInt(Gutter)}))
     GetLineGutterMetadata<public>(Line:int, Gutter:int)<transacts>:variant = VhToVariant(VhCallValue(Handle, "get_line_gutter_metadata", array{VhFromInt(Line), VhFromInt(Gutter)}))
     GetLineGutterText<public>(Line:int, Gutter:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_line_gutter_text", array{VhFromInt(Line), VhFromInt(Gutter)}))
@@ -46113,7 +46113,7 @@ text_edit<public> := class(control):
     GetLineWrapIndexAtColumn<public>(Line:int, Column:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_line_wrap_index_at_column", array{VhFromInt(Line), VhFromInt(Column)}))
     GetLineWrappedText<public>(Line:int)<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_line_wrapped_text", array{VhFromInt(Line)}))
     GetLocalMousePos<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_local_mouse_pos", array{}))
-    GetMenu<public>()<decides><transacts>:popup_menu = popup_menu{Handle := VhToHandle[VhCallValue(Handle, "get_menu", array{})]}
+    GetMenu<public>()<decides><transacts>:popup_menu = popup_menu[VhObjectFrom[VhCallValue(Handle, "get_menu", array{})]]
     GetMinimapLineAtPos<public>(Arg0:vector2i)<transacts>:int = VhToInt(VhCallValue(Handle, "get_minimap_line_at_pos", array{VhFromVector2i(Arg0)}))
     GetMinimapVisibleLines<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_minimap_visible_lines", array{}))
     GetNextCompositeCharacterColumn<public>(Line:int, Column:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_next_composite_character_column", array{VhFromInt(Line), VhFromInt(Column)}))
@@ -46138,12 +46138,12 @@ text_edit<public> := class(control):
     GetSelectionToLine<public>(?CaretIndex:int = 0)<transacts>:int = VhToInt(VhCallValue(Handle, "get_selection_to_line", array{VhFromInt(CaretIndex)}))
     GetSortedCarets<public>(?IncludeIgnoredCarets:logic = false)<transacts>:[]int = VhToInts(VhCallValue(Handle, "get_sorted_carets", array{VhFromLogic(IncludeIgnoredCarets)}))
     GetStructuredTextBidiOverrideOptions<public>()<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_structured_text_bidi_override_options", array{}))
-    GetSyntaxHighlighter<public>()<decides><transacts>:syntax_highlighter = syntax_highlighter{Handle := VhToHandle[VhCallValue(Handle, "get_syntax_highlighter", array{})]}
+    GetSyntaxHighlighter<public>()<decides><transacts>:syntax_highlighter = syntax_highlighter[VhObjectFrom[VhCallValue(Handle, "get_syntax_highlighter", array{})]]
     GetTabSize<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_tab_size", array{}))
     GetText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_text", array{}))
     GetTotalGutterWidth<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_total_gutter_width", array{}))
     GetTotalVisibleLineCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_total_visible_line_count", array{}))
-    GetVScrollBar<public>()<decides><transacts>:v_scroll_bar = v_scroll_bar{Handle := VhToHandle[VhCallValue(Handle, "get_v_scroll_bar", array{})]}
+    GetVScrollBar<public>()<decides><transacts>:v_scroll_bar = v_scroll_bar[VhObjectFrom[VhCallValue(Handle, "get_v_scroll_bar", array{})]]
     GetVersion<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_version", array{}))
     GetVisibleLineCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_visible_line_count", array{}))
     GetVisibleLineCountInRange<public>(FromLine:int, ToLine:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_visible_line_count_in_range", array{VhFromInt(FromLine), VhFromInt(ToLine)}))
@@ -46229,19 +46229,19 @@ text_server_dummy<public> := class(text_server_extension):
 
 texture2d<public> := class(texture):
 
-    CreatePlaceholder<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "create_placeholder", array{})]}
+    CreatePlaceholder<public>()<decides><transacts>:resource = resource[VhObjectFrom[VhCallValue(Handle, "create_placeholder", array{})]]
     Draw<public>(CanvasItem:int, Position:vector2, ?Modulate:color = color{R := 1.0, G := 1.0, B := 1.0, A := 1.0}, ?Transpose:logic = false)<transacts>:void = VhCallVoid(Handle, "draw", array{VhFromRid(CanvasItem), VhFromVector2(Position), VhFromColor(Modulate), VhFromLogic(Transpose)})
     DrawRect<public>(CanvasItem:int, Rect:rect2, Tile:logic, ?Modulate:color = color{R := 1.0, G := 1.0, B := 1.0, A := 1.0}, ?Transpose:logic = false)<transacts>:void = VhCallVoid(Handle, "draw_rect", array{VhFromRid(CanvasItem), VhFromRect2(Rect), VhFromLogic(Tile), VhFromColor(Modulate), VhFromLogic(Transpose)})
     DrawRectRegion<public>(CanvasItem:int, Rect:rect2, SrcRect:rect2, ?Modulate:color = color{R := 1.0, G := 1.0, B := 1.0, A := 1.0}, ?Transpose:logic = false, ?ClipUv:logic = true)<transacts>:void = VhCallVoid(Handle, "draw_rect_region", array{VhFromRid(CanvasItem), VhFromRect2(Rect), VhFromRect2(SrcRect), VhFromColor(Modulate), VhFromLogic(Transpose), VhFromLogic(ClipUv)})
     GetHeight<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_height", array{}))
-    GetImage<public>()<decides><transacts>:image = image{Handle := VhToHandle[VhCallValue(Handle, "get_image", array{})]}
+    GetImage<public>()<decides><transacts>:image = image[VhObjectFrom[VhCallValue(Handle, "get_image", array{})]]
     GetSize<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_size", array{}))
     GetWidth<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_width", array{}))
     HasAlpha<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_alpha", array{}))
 
 texture3d<public> := class(texture):
 
-    CreatePlaceholder<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "create_placeholder", array{})]}
+    CreatePlaceholder<public>()<decides><transacts>:resource = resource[VhObjectFrom[VhCallValue(Handle, "create_placeholder", array{})]]
     GetData<public>()<transacts>:typed_array(image) = VhToImageArray(VhCallValue(Handle, "get_data", array{}))
     GetDepth<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_depth", array{}))
     GetFormat<public>()<transacts>:image_format = VhToImageFormat(VhCallValue(Handle, "get_format", array{}))
@@ -46253,7 +46253,7 @@ texture_layered<public> := class(texture):
 
     GetFormat<public>()<transacts>:image_format = VhToImageFormat(VhCallValue(Handle, "get_format", array{}))
     GetHeight<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_height", array{}))
-    GetLayerData<public>(Layer:int)<decides><transacts>:image = image{Handle := VhToHandle[VhCallValue(Handle, "get_layer_data", array{VhFromInt(Layer)})]}
+    GetLayerData<public>(Layer:int)<decides><transacts>:image = image[VhObjectFrom[VhCallValue(Handle, "get_layer_data", array{VhFromInt(Layer)})]]
     GetLayeredType<public>()<transacts>:texture_layered_layered_type = VhToTextureLayeredLayeredType(VhCallValue(Handle, "get_layered_type", array{}))
     GetLayers<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_layers", array{}))
     GetWidth<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_width", array{}))
@@ -46273,7 +46273,7 @@ texture_rect<public> := class(control):
     var StretchMode<public><getter(StretchModeGetter)><setter(StretchModeSetter)>:texture_rect_stretch_mode = external {}
     StretchModeGetter<epic_internal>(Accessor:accessor)<transacts>:texture_rect_stretch_mode = VhToTextureRectStretchMode(VhCallValue(Handle, "get_stretch_mode", array{}))
     StretchModeSetter<epic_internal>(Accessor:accessor, Value:texture_rect_stretch_mode)<transacts>:void = VhCallVoid(Handle, "set_stretch_mode", array{VhFromTextureRectStretchMode(Value)})
-    GetTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture", array{})]}
+    GetTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_texture", array{})]]
     SetTexture<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_texture", array{VhFromObject(Texture)})
 
 tile_map<public> := class(node2d):
@@ -46299,7 +46299,7 @@ tile_map<public> := class(node2d):
     GetCellAlternativeTile<public>(Layer:int, Coords:vector2i, ?UseProxies:logic = false)<transacts>:int = VhToInt(VhCallValue(Handle, "get_cell_alternative_tile", array{VhFromInt(Layer), VhFromVector2i(Coords), VhFromLogic(UseProxies)}))
     GetCellAtlasCoords<public>(Layer:int, Coords:vector2i, ?UseProxies:logic = false)<transacts>:vector2i = VhToVector2i(VhCallValue(Handle, "get_cell_atlas_coords", array{VhFromInt(Layer), VhFromVector2i(Coords), VhFromLogic(UseProxies)}))
     GetCellSourceId<public>(Layer:int, Coords:vector2i, ?UseProxies:logic = false)<transacts>:int = VhToInt(VhCallValue(Handle, "get_cell_source_id", array{VhFromInt(Layer), VhFromVector2i(Coords), VhFromLogic(UseProxies)}))
-    GetCellTileData<public>(Layer:int, Coords:vector2i, ?UseProxies:logic = false)<decides><transacts>:tile_data = tile_data{Handle := VhToHandle[VhCallValue(Handle, "get_cell_tile_data", array{VhFromInt(Layer), VhFromVector2i(Coords), VhFromLogic(UseProxies)})]}
+    GetCellTileData<public>(Layer:int, Coords:vector2i, ?UseProxies:logic = false)<decides><transacts>:tile_data = tile_data[VhObjectFrom[VhCallValue(Handle, "get_cell_tile_data", array{VhFromInt(Layer), VhFromVector2i(Coords), VhFromLogic(UseProxies)})]]
     GetCoordsForBodyRid<public>(Body:int)<transacts>:vector2i = VhToVector2i(VhCallValue(Handle, "get_coords_for_body_rid", array{VhFromRid(Body)}))
     GetLayerForBodyRid<public>(Body:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_layer_for_body_rid", array{VhFromRid(Body)}))
     GetLayerModulate<public>(Layer:int)<transacts>:color = VhToColor(VhCallValue(Handle, "get_layer_modulate", array{VhFromInt(Layer)}))
@@ -46310,9 +46310,9 @@ tile_map<public> := class(node2d):
     GetLayersCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_layers_count", array{}))
     GetNavigationMap<public>(Layer:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_navigation_map", array{VhFromInt(Layer)}))
     GetNeighborCell<public>(Coords:vector2i, Neighbor:tile_set_cell_neighbor)<transacts>:vector2i = VhToVector2i(VhCallValue(Handle, "get_neighbor_cell", array{VhFromVector2i(Coords), VhFromTileSetCellNeighbor(Neighbor)}))
-    GetPattern<public>(Layer:int, CoordsArray:typed_array(vector2i))<decides><transacts>:tile_map_pattern = tile_map_pattern{Handle := VhToHandle[VhCallValue(Handle, "get_pattern", array{VhFromInt(Layer), VhFromVector2iArray(CoordsArray)})]}
+    GetPattern<public>(Layer:int, CoordsArray:typed_array(vector2i))<decides><transacts>:tile_map_pattern = tile_map_pattern[VhObjectFrom[VhCallValue(Handle, "get_pattern", array{VhFromInt(Layer), VhFromVector2iArray(CoordsArray)})]]
     GetSurroundingCells<public>(Coords:vector2i)<transacts>:typed_array(vector2i) = VhToVector2iArray(VhCallValue(Handle, "get_surrounding_cells", array{VhFromVector2i(Coords)}))
-    GetTileset<public>()<decides><transacts>:tile_set = tile_set{Handle := VhToHandle[VhCallValue(Handle, "get_tileset", array{})]}
+    GetTileset<public>()<decides><transacts>:tile_set = tile_set[VhObjectFrom[VhCallValue(Handle, "get_tileset", array{})]]
     GetUsedCells<public>(Layer:int)<transacts>:typed_array(vector2i) = VhToVector2iArray(VhCallValue(Handle, "get_used_cells", array{VhFromInt(Layer)}))
     GetUsedCellsById<public>(Layer:int, ?SourceId:int = -1, ?AtlasCoords:vector2i = vector2i{X := -1, Y := -1}, ?AlternativeTile:int = -1)<transacts>:typed_array(vector2i) = VhToVector2iArray(VhCallValue(Handle, "get_used_cells_by_id", array{VhFromInt(Layer), VhFromInt(SourceId), VhFromVector2i(AtlasCoords), VhFromInt(AlternativeTile)}))
     GetUsedRect<public>()<transacts>:rect2i = VhToRect2i(VhCallValue(Handle, "get_used_rect", array{}))
@@ -46385,14 +46385,14 @@ tile_map_layer<public> := class(node2d):
     GetCellAlternativeTile<public>(Coords:vector2i)<transacts>:int = VhToInt(VhCallValue(Handle, "get_cell_alternative_tile", array{VhFromVector2i(Coords)}))
     GetCellAtlasCoords<public>(Coords:vector2i)<transacts>:vector2i = VhToVector2i(VhCallValue(Handle, "get_cell_atlas_coords", array{VhFromVector2i(Coords)}))
     GetCellSourceId<public>(Coords:vector2i)<transacts>:int = VhToInt(VhCallValue(Handle, "get_cell_source_id", array{VhFromVector2i(Coords)}))
-    GetCellTileData<public>(Coords:vector2i)<decides><transacts>:tile_data = tile_data{Handle := VhToHandle[VhCallValue(Handle, "get_cell_tile_data", array{VhFromVector2i(Coords)})]}
+    GetCellTileData<public>(Coords:vector2i)<decides><transacts>:tile_data = tile_data[VhObjectFrom[VhCallValue(Handle, "get_cell_tile_data", array{VhFromVector2i(Coords)})]]
     GetCoordsForBodyRid<public>(Body:int)<transacts>:vector2i = VhToVector2i(VhCallValue(Handle, "get_coords_for_body_rid", array{VhFromRid(Body)}))
     GetNavigationMap<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_navigation_map", array{}))
     GetNeighborCell<public>(Coords:vector2i, Neighbor:tile_set_cell_neighbor)<transacts>:vector2i = VhToVector2i(VhCallValue(Handle, "get_neighbor_cell", array{VhFromVector2i(Coords), VhFromTileSetCellNeighbor(Neighbor)}))
-    GetPattern<public>(CoordsArray:typed_array(vector2i))<decides><transacts>:tile_map_pattern = tile_map_pattern{Handle := VhToHandle[VhCallValue(Handle, "get_pattern", array{VhFromVector2iArray(CoordsArray)})]}
+    GetPattern<public>(CoordsArray:typed_array(vector2i))<decides><transacts>:tile_map_pattern = tile_map_pattern[VhObjectFrom[VhCallValue(Handle, "get_pattern", array{VhFromVector2iArray(CoordsArray)})]]
     GetSurroundingCells<public>(Coords:vector2i)<transacts>:typed_array(vector2i) = VhToVector2iArray(VhCallValue(Handle, "get_surrounding_cells", array{VhFromVector2i(Coords)}))
     GetTileMapDataAsArray<public>()<transacts>:[]int = VhToInts(VhCallValue(Handle, "get_tile_map_data_as_array", array{}))
-    GetTileSet<public>()<decides><transacts>:tile_set = tile_set{Handle := VhToHandle[VhCallValue(Handle, "get_tile_set", array{})]}
+    GetTileSet<public>()<decides><transacts>:tile_set = tile_set[VhObjectFrom[VhCallValue(Handle, "get_tile_set", array{})]]
     GetUsedCells<public>()<transacts>:typed_array(vector2i) = VhToVector2iArray(VhCallValue(Handle, "get_used_cells", array{}))
     GetUsedCellsById<public>(?SourceId:int = -1, ?AtlasCoords:vector2i = vector2i{X := -1, Y := -1}, ?AlternativeTile:int = -1)<transacts>:typed_array(vector2i) = VhToVector2iArray(VhCallValue(Handle, "get_used_cells_by_id", array{VhFromInt(SourceId), VhFromVector2i(AtlasCoords), VhFromInt(AlternativeTile)}))
     GetUsedRect<public>()<transacts>:rect2i = VhToRect2i(VhCallValue(Handle, "get_used_rect", array{}))
@@ -46459,9 +46459,9 @@ tile_set_atlas_source<public> := class(tile_set_source):
     CreateTile<public>(AtlasCoords:vector2i, ?Size:vector2i = vector2i{X := 1, Y := 1})<transacts>:void = VhCallVoid(Handle, "create_tile", array{VhFromVector2i(AtlasCoords), VhFromVector2i(Size)})
     GetAtlasGridSize<public>()<transacts>:vector2i = VhToVector2i(VhCallValue(Handle, "get_atlas_grid_size", array{}))
     GetNextAlternativeTileId<public>(AtlasCoords:vector2i)<transacts>:int = VhToInt(VhCallValue(Handle, "get_next_alternative_tile_id", array{VhFromVector2i(AtlasCoords)}))
-    GetRuntimeTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_runtime_texture", array{})]}
+    GetRuntimeTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_runtime_texture", array{})]]
     GetRuntimeTileTextureRegion<public>(AtlasCoords:vector2i, Frame:int)<transacts>:rect2i = VhToRect2i(VhCallValue(Handle, "get_runtime_tile_texture_region", array{VhFromVector2i(AtlasCoords), VhFromInt(Frame)}))
-    GetTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture", array{})]}
+    GetTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_texture", array{})]]
     GetTileAnimationColumns<public>(AtlasCoords:vector2i)<transacts>:int = VhToInt(VhCallValue(Handle, "get_tile_animation_columns", array{VhFromVector2i(AtlasCoords)}))
     GetTileAnimationFrameDuration<public>(AtlasCoords:vector2i, FrameIndex:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_tile_animation_frame_duration", array{VhFromVector2i(AtlasCoords), VhFromInt(FrameIndex)}))
     GetTileAnimationFramesCount<public>(AtlasCoords:vector2i)<transacts>:int = VhToInt(VhCallValue(Handle, "get_tile_animation_frames_count", array{VhFromVector2i(AtlasCoords)}))
@@ -46470,7 +46470,7 @@ tile_set_atlas_source<public> := class(tile_set_source):
     GetTileAnimationSpeed<public>(AtlasCoords:vector2i)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_tile_animation_speed", array{VhFromVector2i(AtlasCoords)}))
     GetTileAnimationTotalDuration<public>(AtlasCoords:vector2i)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_tile_animation_total_duration", array{VhFromVector2i(AtlasCoords)}))
     GetTileAtCoords<public>(AtlasCoords:vector2i)<transacts>:vector2i = VhToVector2i(VhCallValue(Handle, "get_tile_at_coords", array{VhFromVector2i(AtlasCoords)}))
-    GetTileData<public>(AtlasCoords:vector2i, AlternativeTile:int)<decides><transacts>:tile_data = tile_data{Handle := VhToHandle[VhCallValue(Handle, "get_tile_data", array{VhFromVector2i(AtlasCoords), VhFromInt(AlternativeTile)})]}
+    GetTileData<public>(AtlasCoords:vector2i, AlternativeTile:int)<decides><transacts>:tile_data = tile_data[VhObjectFrom[VhCallValue(Handle, "get_tile_data", array{VhFromVector2i(AtlasCoords), VhFromInt(AlternativeTile)})]]
     GetTileSizeInAtlas<public>(AtlasCoords:vector2i)<transacts>:vector2i = VhToVector2i(VhCallValue(Handle, "get_tile_size_in_atlas", array{VhFromVector2i(AtlasCoords)}))
     GetTileTextureRegion<public>(AtlasCoords:vector2i, ?Frame:int = 0)<transacts>:rect2i = VhToRect2i(VhCallValue(Handle, "get_tile_texture_region", array{VhFromVector2i(AtlasCoords), VhFromInt(Frame)}))
     GetTilesToBeRemovedOnChange<public>(Texture:texture2d, Arg1:vector2i, Arg2:vector2i, Arg3:vector2i)<transacts>:[]vector2 = VhToVector2s(VhCallValue(Handle, "get_tiles_to_be_removed_on_change", array{VhFromObject(Texture), VhFromVector2i(Arg1), VhFromVector2i(Arg2), VhFromVector2i(Arg3)}))
@@ -46494,7 +46494,7 @@ tile_set_scenes_collection_source<public> := class(tile_set_source):
     GetNextSceneTileId<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_next_scene_tile_id", array{}))
     GetSceneTileDisplayPlaceholder<public>(Id:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_scene_tile_display_placeholder", array{VhFromInt(Id)}))
     GetSceneTileId<public>(Index:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_scene_tile_id", array{VhFromInt(Index)}))
-    GetSceneTileScene<public>(Id:int)<decides><transacts>:packed_scene = packed_scene{Handle := VhToHandle[VhCallValue(Handle, "get_scene_tile_scene", array{VhFromInt(Id)})]}
+    GetSceneTileScene<public>(Id:int)<decides><transacts>:packed_scene = packed_scene[VhObjectFrom[VhCallValue(Handle, "get_scene_tile_scene", array{VhFromInt(Id)})]]
     GetSceneTilesCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_scene_tiles_count", array{}))
     HasSceneTileId<public>(Id:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_scene_tile_id", array{VhFromInt(Id)}))
     RemoveSceneTile<public>(Id:int)<transacts>:void = VhCallVoid(Handle, "remove_scene_tile", array{VhFromInt(Id)})
@@ -46517,10 +46517,10 @@ touch_screen_button<public> := class(node2d):
     VisibilityModeGetter<epic_internal>(Accessor:accessor)<transacts>:touch_screen_button_visibility_mode = VhToTouchScreenButtonVisibilityMode(VhCallValue(Handle, "get_visibility_mode", array{}))
     VisibilityModeSetter<epic_internal>(Accessor:accessor, Value:touch_screen_button_visibility_mode)<transacts>:void = VhCallVoid(Handle, "set_visibility_mode", array{VhFromTouchScreenButtonVisibilityMode(Value)})
     GetAction<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_action", array{}))
-    GetBitmask<public>()<decides><transacts>:bit_map = bit_map{Handle := VhToHandle[VhCallValue(Handle, "get_bitmask", array{})]}
-    GetShape<public>()<decides><transacts>:shape2d = shape2d{Handle := VhToHandle[VhCallValue(Handle, "get_shape", array{})]}
-    GetTextureNormal<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture_normal", array{})]}
-    GetTexturePressed<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture_pressed", array{})]}
+    GetBitmask<public>()<decides><transacts>:bit_map = bit_map[VhObjectFrom[VhCallValue(Handle, "get_bitmask", array{})]]
+    GetShape<public>()<decides><transacts>:shape2d = shape2d[VhObjectFrom[VhCallValue(Handle, "get_shape", array{})]]
+    GetTextureNormal<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_texture_normal", array{})]]
+    GetTexturePressed<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_texture_pressed", array{})]]
     IsPressed<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_pressed", array{}))
     SetAction<public>(Action:string)<transacts>:void = VhCallVoid(Handle, "set_action", array{VhFromString(Action)})
     SetBitmask<public>(Bitmask:bit_map)<transacts>:void = VhCallVoid(Handle, "set_bitmask", array{VhFromObject(Bitmask)})
@@ -46579,7 +46579,7 @@ tree<public> := class(control):
     TileScrollHintGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_scroll_hint_tiled", array{}))
     TileScrollHintSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_tile_scroll_hint", array{VhFromLogic(Value)})
     Clear<public>()<transacts>:void = VhCallVoid(Handle, "clear", array{})
-    CreateItem<public>(Parent:tree_item, ?Index:int = -1)<decides><transacts>:tree_item = tree_item{Handle := VhToHandle[VhCallValue(Handle, "create_item", array{VhFromObject(Parent), VhFromInt(Index)})]}
+    CreateItem<public>(Parent:tree_item, ?Index:int = -1)<decides><transacts>:tree_item = tree_item[VhObjectFrom[VhCallValue(Handle, "create_item", array{VhFromObject(Parent), VhFromInt(Index)})]]
     DeselectAll<public>()<transacts>:void = VhCallVoid(Handle, "deselect_all", array{})
     EditSelected<public>(?ForceEdit:logic = false)<transacts>:logic = VhToLogic(VhCallValue(Handle, "edit_selected", array{VhFromLogic(ForceEdit)}))
     EnsureCursorIsVisible<public>()<transacts>:void = VhCallVoid(Handle, "ensure_cursor_is_visible", array{})
@@ -46594,15 +46594,15 @@ tree<public> := class(control):
     GetColumnWidth<public>(Column:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_column_width", array{VhFromInt(Column)}))
     GetCustomPopupRect<public>()<transacts>:rect2 = VhToRect2(VhCallValue(Handle, "get_custom_popup_rect", array{}))
     GetDropSectionAtPosition<public>(Arg0:vector2)<transacts>:int = VhToInt(VhCallValue(Handle, "get_drop_section_at_position", array{VhFromVector2(Arg0)}))
-    GetEdited<public>()<decides><transacts>:tree_item = tree_item{Handle := VhToHandle[VhCallValue(Handle, "get_edited", array{})]}
+    GetEdited<public>()<decides><transacts>:tree_item = tree_item[VhObjectFrom[VhCallValue(Handle, "get_edited", array{})]]
     GetEditedColumn<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_edited_column", array{}))
     GetItemAreaRect<public>(Item:tree_item, ?Column:int = -1, ?ButtonIndex:int = -1)<transacts>:rect2 = VhToRect2(VhCallValue(Handle, "get_item_area_rect", array{VhFromObject(Item), VhFromInt(Column), VhFromInt(ButtonIndex)}))
-    GetItemAtPosition<public>(Arg0:vector2)<decides><transacts>:tree_item = tree_item{Handle := VhToHandle[VhCallValue(Handle, "get_item_at_position", array{VhFromVector2(Arg0)})]}
-    GetNextSelected<public>(From:tree_item)<decides><transacts>:tree_item = tree_item{Handle := VhToHandle[VhCallValue(Handle, "get_next_selected", array{VhFromObject(From)})]}
+    GetItemAtPosition<public>(Arg0:vector2)<decides><transacts>:tree_item = tree_item[VhObjectFrom[VhCallValue(Handle, "get_item_at_position", array{VhFromVector2(Arg0)})]]
+    GetNextSelected<public>(From:tree_item)<decides><transacts>:tree_item = tree_item[VhObjectFrom[VhCallValue(Handle, "get_next_selected", array{VhFromObject(From)})]]
     GetPressedButton<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_pressed_button", array{}))
-    GetRoot<public>()<decides><transacts>:tree_item = tree_item{Handle := VhToHandle[VhCallValue(Handle, "get_root", array{})]}
+    GetRoot<public>()<decides><transacts>:tree_item = tree_item[VhObjectFrom[VhCallValue(Handle, "get_root", array{})]]
     GetScroll<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_scroll", array{}))
-    GetSelected<public>()<decides><transacts>:tree_item = tree_item{Handle := VhToHandle[VhCallValue(Handle, "get_selected", array{})]}
+    GetSelected<public>()<decides><transacts>:tree_item = tree_item[VhObjectFrom[VhCallValue(Handle, "get_selected", array{})]]
     GetSelectedColumn<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_selected_column", array{}))
     IsColumnClippingContent<public>(Column:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_column_clipping_content", array{VhFromInt(Column)}))
     IsColumnExpanding<public>(Column:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_column_expanding", array{VhFromInt(Column)}))
@@ -46651,10 +46651,10 @@ video_stream_player<public> := class(control):
     VolumeDbGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_volume_db", array{}))
     VolumeDbSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_volume_db", array{VhFromFloat(Value)})
     GetBus<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_bus", array{}))
-    GetStream<public>()<decides><transacts>:video_stream = video_stream{Handle := VhToHandle[VhCallValue(Handle, "get_stream", array{})]}
+    GetStream<public>()<decides><transacts>:video_stream = video_stream[VhObjectFrom[VhCallValue(Handle, "get_stream", array{})]]
     GetStreamLength<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_stream_length", array{}))
     GetStreamName<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_stream_name", array{}))
-    GetVideoTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_video_texture", array{})]}
+    GetVideoTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_video_texture", array{})]]
     IsPlaying<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_playing", array{}))
     Play<public>()<transacts>:void = VhCallVoid(Handle, "play", array{})
     SetBus<public>(Bus:string)<transacts>:void = VhCallVoid(Handle, "set_bus", array{VhFromStringName(Bus)})
@@ -46699,7 +46699,7 @@ visual_shader<public> := class(shader):
     ConnectNodesForced<public>(Type:visual_shader_type, FromNode:int, FromPort:int, ToNode:int, ToPort:int)<transacts>:void = VhCallVoid(Handle, "connect_nodes_forced", array{VhFromVisualShaderType(Type), VhFromInt(FromNode), VhFromInt(FromPort), VhFromInt(ToNode), VhFromInt(ToPort)})
     DetachNodeFromFrame<public>(Type:visual_shader_type, Id:int)<transacts>:void = VhCallVoid(Handle, "detach_node_from_frame", array{VhFromVisualShaderType(Type), VhFromInt(Id)})
     DisconnectNodes<public>(Type:visual_shader_type, FromNode:int, FromPort:int, ToNode:int, ToPort:int)<transacts>:void = VhCallVoid(Handle, "disconnect_nodes", array{VhFromVisualShaderType(Type), VhFromInt(FromNode), VhFromInt(FromPort), VhFromInt(ToNode), VhFromInt(ToPort)})
-    GetNode<public>(Type:visual_shader_type, Id:int)<decides><transacts>:visual_shader_node = visual_shader_node{Handle := VhToHandle[VhCallValue(Handle, "get_node", array{VhFromVisualShaderType(Type), VhFromInt(Id)})]}
+    GetNode<public>(Type:visual_shader_type, Id:int)<decides><transacts>:visual_shader_node = visual_shader_node[VhObjectFrom[VhCallValue(Handle, "get_node", array{VhFromVisualShaderType(Type), VhFromInt(Id)})]]
     GetNodeConnections<public>(Type:visual_shader_type)<transacts>:typed_array(dictionary) = VhToDictionaryArray(VhCallValue(Handle, "get_node_connections", array{VhFromVisualShaderType(Type)}))
     GetNodeList<public>(Type:visual_shader_type)<transacts>:[]int = VhToInts(VhCallValue(Handle, "get_node_list", array{VhFromVisualShaderType(Type)}))
     GetNodePosition<public>(Type:visual_shader_type, Id:int)<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_node_position", array{VhFromVisualShaderType(Type), VhFromInt(Id)}))
@@ -46761,7 +46761,7 @@ visual_shader_node_cubemap<public> := class(visual_shader_node):
     var TextureType<public><getter(TextureTypeGetter)><setter(TextureTypeSetter)>:visual_shader_node_cubemap_texture_type = external {}
     TextureTypeGetter<epic_internal>(Accessor:accessor)<transacts>:visual_shader_node_cubemap_texture_type = VhToVisualShaderNodeCubemapTextureType(VhCallValue(Handle, "get_texture_type", array{}))
     TextureTypeSetter<epic_internal>(Accessor:accessor, Value:visual_shader_node_cubemap_texture_type)<transacts>:void = VhCallVoid(Handle, "set_texture_type", array{VhFromVisualShaderNodeCubemapTextureType(Value)})
-    GetCubeMap<public>()<decides><transacts>:texture_layered = texture_layered{Handle := VhToHandle[VhCallValue(Handle, "get_cube_map", array{})]}
+    GetCubeMap<public>()<decides><transacts>:texture_layered = texture_layered[VhObjectFrom[VhCallValue(Handle, "get_cube_map", array{})]]
     SetCubeMap<public>(Value:texture_layered)<transacts>:void = VhCallVoid(Handle, "set_cube_map", array{VhFromObject(Value)})
 
 visual_shader_node_custom<public> := class(visual_shader_node):
@@ -46971,7 +46971,7 @@ visual_shader_node_texture<public> := class(visual_shader_node):
     var TextureType<public><getter(TextureTypeGetter)><setter(TextureTypeSetter)>:visual_shader_node_texture_texture_type = external {}
     TextureTypeGetter<epic_internal>(Accessor:accessor)<transacts>:visual_shader_node_texture_texture_type = VhToVisualShaderNodeTextureTextureType(VhCallValue(Handle, "get_texture_type", array{}))
     TextureTypeSetter<epic_internal>(Accessor:accessor, Value:visual_shader_node_texture_texture_type)<transacts>:void = VhCallVoid(Handle, "set_texture_type", array{VhFromVisualShaderNodeTextureTextureType(Value)})
-    GetTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture", array{})]}
+    GetTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_texture", array{})]]
     SetTexture<public>(Value:texture2d)<transacts>:void = VhCallVoid(Handle, "set_texture", array{VhFromObject(Value)})
 
 visual_shader_node_texture_sdf<public> := class(visual_shader_node):
@@ -47057,8 +47057,8 @@ voxel_gi<public> := class(visual_instance3d):
     SubdivSetter<epic_internal>(Accessor:accessor, Value:voxel_gi_subdiv)<transacts>:void = VhCallVoid(Handle, "set_subdiv", array{VhFromVoxelGiSubdiv(Value)})
     Bake<public>(FromNode:node, ?CreateVisualDebug:logic = false)<transacts>:void = VhCallVoid(Handle, "bake", array{VhFromObject(FromNode), VhFromLogic(CreateVisualDebug)})
     DebugBake<public>()<transacts>:void = VhCallVoid(Handle, "debug_bake", array{})
-    GetCameraAttributes<public>()<decides><transacts>:camera_attributes = camera_attributes{Handle := VhToHandle[VhCallValue(Handle, "get_camera_attributes", array{})]}
-    GetProbeData<public>()<decides><transacts>:voxel_gi_data = voxel_gi_data{Handle := VhToHandle[VhCallValue(Handle, "get_probe_data", array{})]}
+    GetCameraAttributes<public>()<decides><transacts>:camera_attributes = camera_attributes[VhObjectFrom[VhCallValue(Handle, "get_camera_attributes", array{})]]
+    GetProbeData<public>()<decides><transacts>:voxel_gi_data = voxel_gi_data[VhObjectFrom[VhCallValue(Handle, "get_probe_data", array{})]]
     SetCameraAttributes<public>(CameraAttributes:camera_attributes)<transacts>:void = VhCallVoid(Handle, "set_camera_attributes", array{VhFromObject(CameraAttributes)})
     SetProbeData<public>(Data:voxel_gi_data)<transacts>:void = VhCallVoid(Handle, "set_probe_data", array{VhFromObject(Data)})
 
@@ -47092,7 +47092,7 @@ web_socket_multiplayer_peer<public> := class(multiplayer_peer):
     CreateClient<public>(Url:string, TlsClientOptions:tls_options)<transacts>:error = VhToError(VhCallValue(Handle, "create_client", array{VhFromString(Url), VhFromObject(TlsClientOptions)}))
     CreateServer<public>(Port:int, BindAddress:string, TlsServerOptions:tls_options)<transacts>:error = VhToError(VhCallValue(Handle, "create_server", array{VhFromInt(Port), VhFromString(BindAddress), VhFromObject(TlsServerOptions)}))
     GetHandshakeHeaders<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_handshake_headers", array{}))
-    GetPeer<public>(PeerId:int)<decides><transacts>:web_socket_peer = web_socket_peer{Handle := VhToHandle[VhCallValue(Handle, "get_peer", array{VhFromInt(PeerId)})]}
+    GetPeer<public>(PeerId:int)<decides><transacts>:web_socket_peer = web_socket_peer[VhObjectFrom[VhCallValue(Handle, "get_peer", array{VhFromInt(PeerId)})]]
     GetPeerAddress<public>(Id:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_peer_address", array{VhFromInt(Id)}))
     GetPeerPort<public>(Id:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_peer_port", array{VhFromInt(Id)}))
     GetSupportedProtocols<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_supported_protocols", array{}))
@@ -47224,7 +47224,7 @@ animated_texture<public> := class(texture2d):
     SpeedScaleGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_speed_scale", array{}))
     SpeedScaleSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_speed_scale", array{VhFromFloat(Value)})
     GetFrameDuration<public>(Frame:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_frame_duration", array{VhFromInt(Frame)}))
-    GetFrameTexture<public>(Frame:int)<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_frame_texture", array{VhFromInt(Frame)})]}
+    GetFrameTexture<public>(Frame:int)<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_frame_texture", array{VhFromInt(Frame)})]]
     SetFrameDuration<public>(Frame:int, Duration:float)<transacts>:void = VhCallVoid(Handle, "set_frame_duration", array{VhFromInt(Frame), VhFromFloat(Duration)})
     SetFrameTexture<public>(Frame:int, Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_frame_texture", array{VhFromInt(Frame), VhFromObject(Texture)})
 
@@ -47281,7 +47281,7 @@ animation_node_blend_space1d<public> := class(animation_root_node):
     SyncSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_use_sync", array{VhFromLogic(Value)})
     AddBlendPoint<public>(Node:animation_root_node, Pos:float, ?AtIndex:int = -1)<transacts>:void = VhCallVoid(Handle, "add_blend_point", array{VhFromObject(Node), VhFromFloat(Pos), VhFromInt(AtIndex)})
     GetBlendPointCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_blend_point_count", array{}))
-    GetBlendPointNode<public>(Point:int)<decides><transacts>:animation_root_node = animation_root_node{Handle := VhToHandle[VhCallValue(Handle, "get_blend_point_node", array{VhFromInt(Point)})]}
+    GetBlendPointNode<public>(Point:int)<decides><transacts>:animation_root_node = animation_root_node[VhObjectFrom[VhCallValue(Handle, "get_blend_point_node", array{VhFromInt(Point)})]]
     GetBlendPointPosition<public>(Point:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_blend_point_position", array{VhFromInt(Point)}))
     GetValueLabel<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_value_label", array{}))
     RemoveBlendPoint<public>(Point:int)<transacts>:void = VhCallVoid(Handle, "remove_blend_point", array{VhFromInt(Point)})
@@ -47339,7 +47339,7 @@ animation_node_blend_space2d<public> := class(animation_root_node):
     AddBlendPoint<public>(Node:animation_root_node, Pos:vector2, ?AtIndex:int = -1)<transacts>:void = VhCallVoid(Handle, "add_blend_point", array{VhFromObject(Node), VhFromVector2(Pos), VhFromInt(AtIndex)})
     AddTriangle<public>(X:int, Y:int, Z:int, ?AtIndex:int = -1)<transacts>:void = VhCallVoid(Handle, "add_triangle", array{VhFromInt(X), VhFromInt(Y), VhFromInt(Z), VhFromInt(AtIndex)})
     GetBlendPointCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_blend_point_count", array{}))
-    GetBlendPointNode<public>(Point:int)<decides><transacts>:animation_root_node = animation_root_node{Handle := VhToHandle[VhCallValue(Handle, "get_blend_point_node", array{VhFromInt(Point)})]}
+    GetBlendPointNode<public>(Point:int)<decides><transacts>:animation_root_node = animation_root_node[VhObjectFrom[VhCallValue(Handle, "get_blend_point_node", array{VhFromInt(Point)})]]
     GetBlendPointPosition<public>(Point:int)<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_blend_point_position", array{VhFromInt(Point)}))
     GetTriangleCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_triangle_count", array{}))
     GetTrianglePoint<public>(Triangle:int, Point:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_triangle_point", array{VhFromInt(Triangle), VhFromInt(Point)}))
@@ -47369,7 +47369,7 @@ animation_node_blend_tree<public> := class(animation_root_node):
     AddNode<public>(Name:string, Node:animation_node, ?Position:vector2 = vector2{X := 0.0, Y := 0.0})<transacts>:void = VhCallVoid(Handle, "add_node", array{VhFromStringName(Name), VhFromObject(Node), VhFromVector2(Position)})
     ConnectNode<public>(InputNode:string, InputIndex:int, OutputNode:string)<transacts>:void = VhCallVoid(Handle, "connect_node", array{VhFromStringName(InputNode), VhFromInt(InputIndex), VhFromStringName(OutputNode)})
     DisconnectNode<public>(InputNode:string, InputIndex:int)<transacts>:void = VhCallVoid(Handle, "disconnect_node", array{VhFromStringName(InputNode), VhFromInt(InputIndex)})
-    GetNode<public>(Name:string)<decides><transacts>:animation_node = animation_node{Handle := VhToHandle[VhCallValue(Handle, "get_node", array{VhFromStringName(Name)})]}
+    GetNode<public>(Name:string)<decides><transacts>:animation_node = animation_node[VhObjectFrom[VhCallValue(Handle, "get_node", array{VhFromStringName(Name)})]]
     GetNodeList<public>()<transacts>:typed_array(string) = VhToStringNameArray(VhCallValue(Handle, "get_node_list", array{}))
     GetNodePosition<public>(Name:string)<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_node_position", array{VhFromStringName(Name)}))
     HasNode<public>(Name:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_node", array{VhFromStringName(Name)}))
@@ -47403,8 +47403,8 @@ animation_node_one_shot<public> := class(animation_node_sync):
     var MixMode<public><getter(MixModeGetter)><setter(MixModeSetter)>:animation_node_one_shot_mix_mode = external {}
     MixModeGetter<epic_internal>(Accessor:accessor)<transacts>:animation_node_one_shot_mix_mode = VhToAnimationNodeOneShotMixMode(VhCallValue(Handle, "get_mix_mode", array{}))
     MixModeSetter<epic_internal>(Accessor:accessor, Value:animation_node_one_shot_mix_mode)<transacts>:void = VhCallVoid(Handle, "set_mix_mode", array{VhFromAnimationNodeOneShotMixMode(Value)})
-    GetFadeinCurve<public>()<decides><transacts>:curve = curve{Handle := VhToHandle[VhCallValue(Handle, "get_fadein_curve", array{})]}
-    GetFadeoutCurve<public>()<decides><transacts>:curve = curve{Handle := VhToHandle[VhCallValue(Handle, "get_fadeout_curve", array{})]}
+    GetFadeinCurve<public>()<decides><transacts>:curve = curve[VhObjectFrom[VhCallValue(Handle, "get_fadein_curve", array{})]]
+    GetFadeoutCurve<public>()<decides><transacts>:curve = curve[VhObjectFrom[VhCallValue(Handle, "get_fadeout_curve", array{})]]
     SetFadeinCurve<public>(Curve:curve)<transacts>:void = VhCallVoid(Handle, "set_fadein_curve", array{VhFromObject(Curve)})
     SetFadeoutCurve<public>(Curve:curve)<transacts>:void = VhCallVoid(Handle, "set_fadeout_curve", array{VhFromObject(Curve)})
 
@@ -47422,11 +47422,11 @@ animation_node_state_machine<public> := class(animation_root_node):
     AddNode<public>(Name:string, Node:animation_node, ?Position:vector2 = vector2{X := 0.0, Y := 0.0})<transacts>:void = VhCallVoid(Handle, "add_node", array{VhFromStringName(Name), VhFromObject(Node), VhFromVector2(Position)})
     AddTransition<public>(From:string, To:string, Transition:animation_node_state_machine_transition)<transacts>:void = VhCallVoid(Handle, "add_transition", array{VhFromStringName(From), VhFromStringName(To), VhFromObject(Transition)})
     GetGraphOffset<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_graph_offset", array{}))
-    GetNode<public>(Name:string)<decides><transacts>:animation_node = animation_node{Handle := VhToHandle[VhCallValue(Handle, "get_node", array{VhFromStringName(Name)})]}
+    GetNode<public>(Name:string)<decides><transacts>:animation_node = animation_node[VhObjectFrom[VhCallValue(Handle, "get_node", array{VhFromStringName(Name)})]]
     GetNodeList<public>()<transacts>:typed_array(string) = VhToStringNameArray(VhCallValue(Handle, "get_node_list", array{}))
     GetNodeName<public>(Node:animation_node)<transacts>:string = VhToString(VhCallValue(Handle, "get_node_name", array{VhFromObject(Node)}))
     GetNodePosition<public>(Name:string)<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_node_position", array{VhFromStringName(Name)}))
-    GetTransition<public>(Idx:int)<decides><transacts>:animation_node_state_machine_transition = animation_node_state_machine_transition{Handle := VhToHandle[VhCallValue(Handle, "get_transition", array{VhFromInt(Idx)})]}
+    GetTransition<public>(Idx:int)<decides><transacts>:animation_node_state_machine_transition = animation_node_state_machine_transition[VhObjectFrom[VhCallValue(Handle, "get_transition", array{VhFromInt(Idx)})]]
     GetTransitionCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_transition_count", array{}))
     GetTransitionFrom<public>(Idx:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_transition_from", array{VhFromInt(Idx)}))
     GetTransitionTo<public>(Idx:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_transition_to", array{VhFromInt(Idx)}))
@@ -47453,7 +47453,7 @@ animation_node_transition<public> := class(animation_node_sync):
     var XfadeTime<public><getter(XfadeTimeGetter)><setter(XfadeTimeSetter)>:float = external {}
     XfadeTimeGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_xfade_time", array{}))
     XfadeTimeSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_xfade_time", array{VhFromFloat(Value)})
-    GetXfadeCurve<public>()<decides><transacts>:curve = curve{Handle := VhToHandle[VhCallValue(Handle, "get_xfade_curve", array{})]}
+    GetXfadeCurve<public>()<decides><transacts>:curve = curve[VhObjectFrom[VhCallValue(Handle, "get_xfade_curve", array{})]]
     IsInputLoopBrokenAtEnd<public>(Input:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_input_loop_broken_at_end", array{VhFromInt(Input)}))
     IsInputReset<public>(Input:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_input_reset", array{VhFromInt(Input)}))
     IsInputSetAsAutoAdvance<public>(Input:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_input_set_as_auto_advance", array{VhFromInt(Input)}))
@@ -47553,7 +47553,7 @@ atlas_texture<public> := class(texture2d):
     var FilterClip<public><getter(FilterClipGetter)><setter(FilterClipSetter)>:logic = external {}
     FilterClipGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "has_filter_clip", array{}))
     FilterClipSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_filter_clip", array{VhFromLogic(Value)})
-    GetAtlas<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_atlas", array{})]}
+    GetAtlas<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_atlas", array{})]]
     GetMargin<public>()<transacts>:rect2 = VhToRect2(VhCallValue(Handle, "get_margin", array{}))
     GetRegion<public>()<transacts>:rect2 = VhToRect2(VhCallValue(Handle, "get_region", array{}))
     SetAtlas<public>(Atlas:texture2d)<transacts>:void = VhCallVoid(Handle, "set_atlas", array{VhFromObject(Atlas)})
@@ -47588,7 +47588,7 @@ box_container<public> := class(container):
     var Vertical<public><getter(VerticalGetter)><setter(VerticalSetter)>:logic = external {}
     VerticalGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_vertical", array{}))
     VerticalSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_vertical", array{VhFromLogic(Value)})
-    AddSpacer<public>(Begin:logic)<decides><transacts>:control = control{Handle := VhToHandle[VhCallValue(Handle, "add_spacer", array{VhFromLogic(Begin)})]}
+    AddSpacer<public>(Begin:logic)<decides><transacts>:control = control[VhObjectFrom[VhCallValue(Handle, "add_spacer", array{VhFromLogic(Begin)})]]
 
 box_mesh<public> := class(primitive_mesh):
 
@@ -47648,7 +47648,7 @@ button<public> := class(base_button):
     var VerticalIconAlignment<public><getter(VerticalIconAlignmentGetter)><setter(VerticalIconAlignmentSetter)>:vertical_alignment = external {}
     VerticalIconAlignmentGetter<epic_internal>(Accessor:accessor)<transacts>:vertical_alignment = VhToVerticalAlignment(VhCallValue(Handle, "get_vertical_icon_alignment", array{}))
     VerticalIconAlignmentSetter<epic_internal>(Accessor:accessor, Value:vertical_alignment)<transacts>:void = VhCallVoid(Handle, "set_vertical_icon_alignment", array{VhFromVerticalAlignment(Value)})
-    GetButtonIcon<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_button_icon", array{})]}
+    GetButtonIcon<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_button_icon", array{})]]
     GetLanguage<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_language", array{}))
     GetText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_text", array{}))
     SetButtonIcon<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_button_icon", array{VhFromObject(Texture)})
@@ -47694,9 +47694,9 @@ canvas_texture<public> := class(texture2d):
     var TextureRepeat<public><getter(TextureRepeatGetter)><setter(TextureRepeatSetter)>:canvas_item_texture_repeat = external {}
     TextureRepeatGetter<epic_internal>(Accessor:accessor)<transacts>:canvas_item_texture_repeat = VhToCanvasItemTextureRepeat(VhCallValue(Handle, "get_texture_repeat", array{}))
     TextureRepeatSetter<epic_internal>(Accessor:accessor, Value:canvas_item_texture_repeat)<transacts>:void = VhCallVoid(Handle, "set_texture_repeat", array{VhFromCanvasItemTextureRepeat(Value)})
-    GetDiffuseTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_diffuse_texture", array{})]}
-    GetNormalTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_normal_texture", array{})]}
-    GetSpecularTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_specular_texture", array{})]}
+    GetDiffuseTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_diffuse_texture", array{})]]
+    GetNormalTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_normal_texture", array{})]]
+    GetSpecularTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_specular_texture", array{})]]
     SetDiffuseTexture<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_diffuse_texture", array{VhFromObject(Texture)})
     SetNormalTexture<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_normal_texture", array{VhFromObject(Texture)})
     SetSpecularTexture<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_specular_texture", array{VhFromObject(Texture)})
@@ -47815,12 +47815,12 @@ character_body3d<public> := class(physics_body3d):
     GetFloorAngle<public>(?Arg0:vector3 = vector3{X := 0.0, Y := 1.0, Z := 0.0})<transacts>:float = VhToFloat(VhCallValue(Handle, "get_floor_angle", array{VhFromVector3(Arg0)}))
     GetFloorNormal<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_floor_normal", array{}))
     GetLastMotion<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_last_motion", array{}))
-    GetLastSlideCollision<public>()<decides><transacts>:kinematic_collision3d = kinematic_collision3d{Handle := VhToHandle[VhCallValue(Handle, "get_last_slide_collision", array{})]}
+    GetLastSlideCollision<public>()<decides><transacts>:kinematic_collision3d = kinematic_collision3d[VhObjectFrom[VhCallValue(Handle, "get_last_slide_collision", array{})]]
     GetPlatformAngularVelocity<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_platform_angular_velocity", array{}))
     GetPlatformVelocity<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_platform_velocity", array{}))
     GetPositionDelta<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_position_delta", array{}))
     GetRealVelocity<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_real_velocity", array{}))
-    GetSlideCollision<public>(SlideIdx:int)<decides><transacts>:kinematic_collision3d = kinematic_collision3d{Handle := VhToHandle[VhCallValue(Handle, "get_slide_collision", array{VhFromInt(SlideIdx)})]}
+    GetSlideCollision<public>(SlideIdx:int)<decides><transacts>:kinematic_collision3d = kinematic_collision3d[VhObjectFrom[VhCallValue(Handle, "get_slide_collision", array{VhFromInt(SlideIdx)})]]
     GetSlideCollisionCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_slide_collision_count", array{}))
     GetWallNormal<public>()<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_wall_normal", array{}))
     IsOnCeiling<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_on_ceiling", array{}))
@@ -47980,7 +47980,7 @@ compressed_texture_layered<public> := class(texture_layered):
 
 confirmation_dialog<public> := class(accept_dialog):
 
-    GetCancelButton<public>()<decides><transacts>:button = button{Handle := VhToHandle[VhCallValue(Handle, "get_cancel_button", array{})]}
+    GetCancelButton<public>()<decides><transacts>:button = button[VhObjectFrom[VhCallValue(Handle, "get_cancel_button", array{})]]
     GetCancelButtonText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_cancel_button_text", array{}))
     SetCancelButtonText<public>(Text:string)<transacts>:void = VhCallVoid(Handle, "set_cancel_button_text", array{VhFromString(Text)})
 
@@ -48273,16 +48273,16 @@ cpu_particles3d<public> := class(geometry_instance3d):
     UseFixedSeedSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_use_fixed_seed", array{VhFromLogic(Value)})
     CaptureAabb<public>()<transacts>:aabb = VhToAABB(VhCallValue(Handle, "capture_aabb", array{}))
     ConvertFromParticles<public>(Particles:node)<transacts>:void = VhCallVoid(Handle, "convert_from_particles", array{VhFromObject(Particles)})
-    GetColorInitialRamp<public>()<decides><transacts>:gradient = gradient{Handle := VhToHandle[VhCallValue(Handle, "get_color_initial_ramp", array{})]}
-    GetColorRamp<public>()<decides><transacts>:gradient = gradient{Handle := VhToHandle[VhCallValue(Handle, "get_color_ramp", array{})]}
+    GetColorInitialRamp<public>()<decides><transacts>:gradient = gradient[VhObjectFrom[VhCallValue(Handle, "get_color_initial_ramp", array{})]]
+    GetColorRamp<public>()<decides><transacts>:gradient = gradient[VhObjectFrom[VhCallValue(Handle, "get_color_ramp", array{})]]
     GetEmissionColors<public>()<transacts>:[]color = VhToColors(VhCallValue(Handle, "get_emission_colors", array{}))
     GetEmissionNormals<public>()<transacts>:[]vector3 = VhToVector3s(VhCallValue(Handle, "get_emission_normals", array{}))
     GetEmissionPoints<public>()<transacts>:[]vector3 = VhToVector3s(VhCallValue(Handle, "get_emission_points", array{}))
-    GetMesh<public>()<decides><transacts>:mesh = mesh{Handle := VhToHandle[VhCallValue(Handle, "get_mesh", array{})]}
-    GetParamCurve<public>(Param:cpu_particles3d_parameter)<decides><transacts>:curve = curve{Handle := VhToHandle[VhCallValue(Handle, "get_param_curve", array{VhFromCpuParticles3dParameter(Param)})]}
-    GetScaleCurveX<public>()<decides><transacts>:curve = curve{Handle := VhToHandle[VhCallValue(Handle, "get_scale_curve_x", array{})]}
-    GetScaleCurveY<public>()<decides><transacts>:curve = curve{Handle := VhToHandle[VhCallValue(Handle, "get_scale_curve_y", array{})]}
-    GetScaleCurveZ<public>()<decides><transacts>:curve = curve{Handle := VhToHandle[VhCallValue(Handle, "get_scale_curve_z", array{})]}
+    GetMesh<public>()<decides><transacts>:mesh = mesh[VhObjectFrom[VhCallValue(Handle, "get_mesh", array{})]]
+    GetParamCurve<public>(Param:cpu_particles3d_parameter)<decides><transacts>:curve = curve[VhObjectFrom[VhCallValue(Handle, "get_param_curve", array{VhFromCpuParticles3dParameter(Param)})]]
+    GetScaleCurveX<public>()<decides><transacts>:curve = curve[VhObjectFrom[VhCallValue(Handle, "get_scale_curve_x", array{})]]
+    GetScaleCurveY<public>()<decides><transacts>:curve = curve[VhObjectFrom[VhCallValue(Handle, "get_scale_curve_y", array{})]]
+    GetScaleCurveZ<public>()<decides><transacts>:curve = curve[VhObjectFrom[VhCallValue(Handle, "get_scale_curve_z", array{})]]
     GetVisibilityAabb<public>()<transacts>:aabb = VhToAABB(VhCallValue(Handle, "get_visibility_aabb", array{}))
     RequestParticlesProcess<public>(ProcessTime:float)<transacts>:void = VhCallVoid(Handle, "request_particles_process", array{VhFromFloat(ProcessTime)})
     Restart<public>(?KeepSeed:logic = false)<transacts>:void = VhCallVoid(Handle, "restart", array{VhFromLogic(KeepSeed)})
@@ -48321,8 +48321,8 @@ csg_shape3d<public> := class(geometry_instance3d):
     var UseCollision<public><getter(UseCollisionGetter)><setter(UseCollisionSetter)>:logic = external {}
     UseCollisionGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_using_collision", array{}))
     UseCollisionSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_use_collision", array{VhFromLogic(Value)})
-    BakeCollisionShape<public>()<decides><transacts>:concave_polygon_shape3d = concave_polygon_shape3d{Handle := VhToHandle[VhCallValue(Handle, "bake_collision_shape", array{})]}
-    BakeStaticMesh<public>()<decides><transacts>:array_mesh = array_mesh{Handle := VhToHandle[VhCallValue(Handle, "bake_static_mesh", array{})]}
+    BakeCollisionShape<public>()<decides><transacts>:concave_polygon_shape3d = concave_polygon_shape3d[VhObjectFrom[VhCallValue(Handle, "bake_collision_shape", array{})]]
+    BakeStaticMesh<public>()<decides><transacts>:array_mesh = array_mesh[VhObjectFrom[VhCallValue(Handle, "bake_static_mesh", array{})]]
     GetCollisionLayerValue<public>(LayerNumber:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_collision_layer_value", array{VhFromInt(LayerNumber)}))
     GetCollisionMaskValue<public>(LayerNumber:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_collision_mask_value", array{VhFromInt(LayerNumber)}))
     GetMeshes<public>()<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_meshes", array{}))
@@ -48338,7 +48338,7 @@ curve_texture<public> := class(texture2d):
     var Width<public><getter(WidthGetter)><setter(WidthSetter)>:int = external {}
     WidthGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_width", array{}))
     WidthSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_width", array{VhFromInt(Value)})
-    GetCurve<public>()<decides><transacts>:curve = curve{Handle := VhToHandle[VhCallValue(Handle, "get_curve", array{})]}
+    GetCurve<public>()<decides><transacts>:curve = curve[VhObjectFrom[VhCallValue(Handle, "get_curve", array{})]]
     SetCurve<public>(Curve:curve)<transacts>:void = VhCallVoid(Handle, "set_curve", array{VhFromObject(Curve)})
 
 curve_xyz_texture<public> := class(texture2d):
@@ -48346,9 +48346,9 @@ curve_xyz_texture<public> := class(texture2d):
     var Width<public><getter(WidthGetter)><setter(WidthSetter)>:int = external {}
     WidthGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_width", array{}))
     WidthSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_width", array{VhFromInt(Value)})
-    GetCurveX<public>()<decides><transacts>:curve = curve{Handle := VhToHandle[VhCallValue(Handle, "get_curve_x", array{})]}
-    GetCurveY<public>()<decides><transacts>:curve = curve{Handle := VhToHandle[VhCallValue(Handle, "get_curve_y", array{})]}
-    GetCurveZ<public>()<decides><transacts>:curve = curve{Handle := VhToHandle[VhCallValue(Handle, "get_curve_z", array{})]}
+    GetCurveX<public>()<decides><transacts>:curve = curve[VhObjectFrom[VhCallValue(Handle, "get_curve_x", array{})]]
+    GetCurveY<public>()<decides><transacts>:curve = curve[VhObjectFrom[VhCallValue(Handle, "get_curve_y", array{})]]
+    GetCurveZ<public>()<decides><transacts>:curve = curve[VhObjectFrom[VhCallValue(Handle, "get_curve_z", array{})]]
     SetCurveX<public>(Curve:curve)<transacts>:void = VhCallVoid(Handle, "set_curve_x", array{VhFromObject(Curve)})
     SetCurveY<public>(Curve:curve)<transacts>:void = VhCallVoid(Handle, "set_curve_y", array{VhFromObject(Curve)})
     SetCurveZ<public>(Curve:curve)<transacts>:void = VhCallVoid(Handle, "set_curve_z", array{VhFromObject(Curve)})
@@ -48485,7 +48485,7 @@ editor_property<public> := class(container):
     AddFocusable<public>(Control:control)<transacts>:void = VhCallVoid(Handle, "add_focusable", array{VhFromObject(Control)})
     Deselect<public>()<transacts>:void = VhCallVoid(Handle, "deselect", array{})
     EmitChanged<public>(Property:string, Value:variant, ?Field:string = "", ?Changing:logic = false)<transacts>:void = VhCallVoid(Handle, "emit_changed", array{VhFromStringName(Property), VhFromVariant(Value), VhFromStringName(Field), VhFromLogic(Changing)})
-    GetEditedObject<public>()<decides><transacts>:object = object{Handle := VhToHandle[VhCallValue(Handle, "get_edited_object", array{})]}
+    GetEditedObject<public>()<decides><transacts>:object = object[VhObjectFrom[VhCallValue(Handle, "get_edited_object", array{})]]
     GetEditedProperty<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_edited_property", array{}))
     GetLabel<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_label", array{}))
     IsSelected<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_selected", array{}))
@@ -48571,7 +48571,7 @@ foldable_container<public> := class(container):
     AddTitleBarControl<public>(Control:control)<transacts>:void = VhCallVoid(Handle, "add_title_bar_control", array{VhFromObject(Control)})
     Expand<public>()<transacts>:void = VhCallVoid(Handle, "expand", array{})
     Fold<public>()<transacts>:void = VhCallVoid(Handle, "fold", array{})
-    GetFoldableGroup<public>()<decides><transacts>:foldable_group = foldable_group{Handle := VhToHandle[VhCallValue(Handle, "get_foldable_group", array{})]}
+    GetFoldableGroup<public>()<decides><transacts>:foldable_group = foldable_group[VhObjectFrom[VhCallValue(Handle, "get_foldable_group", array{})]]
     GetLanguage<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_language", array{}))
     GetTitle<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_title", array{}))
     RemoveTitleBarControl<public>(Control:control)<transacts>:void = VhCallVoid(Handle, "remove_title_bar_control", array{VhFromObject(Control)})
@@ -48652,9 +48652,9 @@ gpu_particles3d<public> := class(geometry_instance3d):
     CaptureAabb<public>()<transacts>:aabb = VhToAABB(VhCallValue(Handle, "capture_aabb", array{}))
     ConvertFromParticles<public>(Particles:node)<transacts>:void = VhCallVoid(Handle, "convert_from_particles", array{VhFromObject(Particles)})
     EmitParticle<public>(Xform:transform3d, Velocity:vector3, Color:color, Custom:color, Flags:int)<transacts>:void = VhCallVoid(Handle, "emit_particle", array{VhFromTransform3D(Xform), VhFromVector3(Velocity), VhFromColor(Color), VhFromColor(Custom), VhFromInt(Flags)})
-    GetDrawPassMesh<public>(Pass:int)<decides><transacts>:mesh = mesh{Handle := VhToHandle[VhCallValue(Handle, "get_draw_pass_mesh", array{VhFromInt(Pass)})]}
-    GetProcessMaterial<public>()<decides><transacts>:material = material{Handle := VhToHandle[VhCallValue(Handle, "get_process_material", array{})]}
-    GetSkin<public>()<decides><transacts>:skin = skin{Handle := VhToHandle[VhCallValue(Handle, "get_skin", array{})]}
+    GetDrawPassMesh<public>(Pass:int)<decides><transacts>:mesh = mesh[VhObjectFrom[VhCallValue(Handle, "get_draw_pass_mesh", array{VhFromInt(Pass)})]]
+    GetProcessMaterial<public>()<decides><transacts>:material = material[VhObjectFrom[VhCallValue(Handle, "get_process_material", array{})]]
+    GetSkin<public>()<decides><transacts>:skin = skin[VhObjectFrom[VhCallValue(Handle, "get_skin", array{})]]
     GetSubEmitter<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_sub_emitter", array{}))
     GetVisibilityAabb<public>()<transacts>:aabb = VhToAABB(VhCallValue(Handle, "get_visibility_aabb", array{}))
     RequestParticlesProcess<public>(ProcessTime:float)<transacts>:void = VhCallVoid(Handle, "request_particles_process", array{VhFromFloat(ProcessTime)})
@@ -48704,7 +48704,7 @@ gpu_particles_attractor_vector_field3d<public> := class(gpu_particles_attractor3
             VhCallVoid(Handle, "set_size", array{VhFromVector3(vector3{X := Current.X, Y := Value, Z := Current.Z})})
         else:
             VhCallVoid(Handle, "set_size", array{VhFromVector3(vector3{X := Current.X, Y := Current.Y, Z := Value})})
-    GetTexture<public>()<decides><transacts>:texture3d = texture3d{Handle := VhToHandle[VhCallValue(Handle, "get_texture", array{})]}
+    GetTexture<public>()<decides><transacts>:texture3d = texture3d[VhObjectFrom[VhCallValue(Handle, "get_texture", array{})]]
     SetTexture<public>(Texture:texture3d)<transacts>:void = VhCallVoid(Handle, "set_texture", array{VhFromObject(Texture)})
 
 gpu_particles_collision_box3d<public> := class(gpu_particles_collision3d):
@@ -48781,7 +48781,7 @@ gpu_particles_collision_sdf3d<public> := class(gpu_particles_collision3d):
     ThicknessGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_thickness", array{}))
     ThicknessSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_thickness", array{VhFromFloat(Value)})
     GetBakeMaskValue<public>(LayerNumber:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_bake_mask_value", array{VhFromInt(LayerNumber)}))
-    GetTexture<public>()<decides><transacts>:texture3d = texture3d{Handle := VhToHandle[VhCallValue(Handle, "get_texture", array{})]}
+    GetTexture<public>()<decides><transacts>:texture3d = texture3d[VhObjectFrom[VhCallValue(Handle, "get_texture", array{})]]
     SetBakeMaskValue<public>(LayerNumber:int, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_bake_mask_value", array{VhFromInt(LayerNumber), VhFromLogic(Value)})
     SetTexture<public>(Texture:texture3d)<transacts>:void = VhCallVoid(Handle, "set_texture", array{VhFromObject(Texture)})
 
@@ -48799,7 +48799,7 @@ gradient_texture1d<public> := class(texture2d):
     var Width<public><getter(WidthGetter)><setter(WidthSetter)>:int = external {}
     WidthGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_width", array{}))
     WidthSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_width", array{VhFromInt(Value)})
-    GetGradient<public>()<decides><transacts>:gradient = gradient{Handle := VhToHandle[VhCallValue(Handle, "get_gradient", array{})]}
+    GetGradient<public>()<decides><transacts>:gradient = gradient[VhObjectFrom[VhCallValue(Handle, "get_gradient", array{})]]
     SetGradient<public>(Gradient:gradient)<transacts>:void = VhCallVoid(Handle, "set_gradient", array{VhFromObject(Gradient)})
 
 gradient_texture2d<public> := class(texture2d):
@@ -48843,7 +48843,7 @@ gradient_texture2d<public> := class(texture2d):
     var Width<public><getter(WidthGetter)><setter(WidthSetter)>:int = external {}
     WidthGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_width", array{}))
     WidthSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_width", array{VhFromInt(Value)})
-    GetGradient<public>()<decides><transacts>:gradient = gradient{Handle := VhToHandle[VhCallValue(Handle, "get_gradient", array{})]}
+    GetGradient<public>()<decides><transacts>:gradient = gradient[VhObjectFrom[VhCallValue(Handle, "get_gradient", array{})]]
     SetGradient<public>(Gradient:gradient)<transacts>:void = VhCallVoid(Handle, "set_gradient", array{VhFromObject(Gradient)})
 
 graph_element<public> := class(container):
@@ -49165,8 +49165,8 @@ label3d<public> := class(geometry_instance3d):
     var Width<public><getter(WidthGetter)><setter(WidthSetter)>:float = external {}
     WidthGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_width", array{}))
     WidthSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_width", array{VhFromFloat(Value)})
-    GenerateTriangleMesh<public>()<decides><transacts>:triangle_mesh = triangle_mesh{Handle := VhToHandle[VhCallValue(Handle, "generate_triangle_mesh", array{})]}
-    GetFont<public>()<decides><transacts>:font = font{Handle := VhToHandle[VhCallValue(Handle, "get_font", array{})]}
+    GenerateTriangleMesh<public>()<decides><transacts>:triangle_mesh = triangle_mesh[VhObjectFrom[VhCallValue(Handle, "generate_triangle_mesh", array{})]]
+    GetFont<public>()<decides><transacts>:font = font[VhObjectFrom[VhCallValue(Handle, "get_font", array{})]]
     GetLanguage<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_language", array{}))
     GetStructuredTextBidiOverrideOptions<public>()<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_structured_text_bidi_override_options", array{}))
     GetText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_text", array{}))
@@ -49204,21 +49204,21 @@ margin_container<public> := class(container):
 
 mesh_instance3d<public> := class(geometry_instance3d):
 
-    BakeMeshFromCurrentBlendShapeMix<public>(Existing:array_mesh)<decides><transacts>:array_mesh = array_mesh{Handle := VhToHandle[VhCallValue(Handle, "bake_mesh_from_current_blend_shape_mix", array{VhFromObject(Existing)})]}
-    BakeMeshFromCurrentSkeletonPose<public>(Existing:array_mesh)<decides><transacts>:array_mesh = array_mesh{Handle := VhToHandle[VhCallValue(Handle, "bake_mesh_from_current_skeleton_pose", array{VhFromObject(Existing)})]}
+    BakeMeshFromCurrentBlendShapeMix<public>(Existing:array_mesh)<decides><transacts>:array_mesh = array_mesh[VhObjectFrom[VhCallValue(Handle, "bake_mesh_from_current_blend_shape_mix", array{VhFromObject(Existing)})]]
+    BakeMeshFromCurrentSkeletonPose<public>(Existing:array_mesh)<decides><transacts>:array_mesh = array_mesh[VhObjectFrom[VhCallValue(Handle, "bake_mesh_from_current_skeleton_pose", array{VhFromObject(Existing)})]]
     CreateConvexCollision<public>(?Clean:logic = true, ?Simplify:logic = false)<transacts>:void = VhCallVoid(Handle, "create_convex_collision", array{VhFromLogic(Clean), VhFromLogic(Simplify)})
     CreateDebugTangents<public>()<transacts>:void = VhCallVoid(Handle, "create_debug_tangents", array{})
     CreateMultipleConvexCollisions<public>(Settings:mesh_convex_decomposition_settings)<transacts>:void = VhCallVoid(Handle, "create_multiple_convex_collisions", array{VhFromObject(Settings)})
     CreateTrimeshCollision<public>()<transacts>:void = VhCallVoid(Handle, "create_trimesh_collision", array{})
     FindBlendShapeByName<public>(Name:string)<transacts>:int = VhToInt(VhCallValue(Handle, "find_blend_shape_by_name", array{VhFromStringName(Name)}))
-    GetActiveMaterial<public>(Surface:int)<decides><transacts>:material = material{Handle := VhToHandle[VhCallValue(Handle, "get_active_material", array{VhFromInt(Surface)})]}
+    GetActiveMaterial<public>(Surface:int)<decides><transacts>:material = material[VhObjectFrom[VhCallValue(Handle, "get_active_material", array{VhFromInt(Surface)})]]
     GetBlendShapeCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_blend_shape_count", array{}))
     GetBlendShapeValue<public>(BlendShapeIdx:int)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_blend_shape_value", array{VhFromInt(BlendShapeIdx)}))
-    GetMesh<public>()<decides><transacts>:mesh = mesh{Handle := VhToHandle[VhCallValue(Handle, "get_mesh", array{})]}
+    GetMesh<public>()<decides><transacts>:mesh = mesh[VhObjectFrom[VhCallValue(Handle, "get_mesh", array{})]]
     GetSkeletonPath<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_skeleton_path", array{}))
-    GetSkin<public>()<decides><transacts>:skin = skin{Handle := VhToHandle[VhCallValue(Handle, "get_skin", array{})]}
-    GetSkinReference<public>()<decides><transacts>:skin_reference = skin_reference{Handle := VhToHandle[VhCallValue(Handle, "get_skin_reference", array{})]}
-    GetSurfaceOverrideMaterial<public>(Surface:int)<decides><transacts>:material = material{Handle := VhToHandle[VhCallValue(Handle, "get_surface_override_material", array{VhFromInt(Surface)})]}
+    GetSkin<public>()<decides><transacts>:skin = skin[VhObjectFrom[VhCallValue(Handle, "get_skin", array{})]]
+    GetSkinReference<public>()<decides><transacts>:skin_reference = skin_reference[VhObjectFrom[VhCallValue(Handle, "get_skin_reference", array{})]]
+    GetSurfaceOverrideMaterial<public>(Surface:int)<decides><transacts>:material = material[VhObjectFrom[VhCallValue(Handle, "get_surface_override_material", array{VhFromInt(Surface)})]]
     GetSurfaceOverrideMaterialCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_surface_override_material_count", array{}))
     SetBlendShapeValue<public>(BlendShapeIdx:int, Value:float)<transacts>:void = VhCallVoid(Handle, "set_blend_shape_value", array{VhFromInt(BlendShapeIdx), VhFromFloat(Value)})
     SetMesh<public>(Mesh:mesh)<transacts>:void = VhCallVoid(Handle, "set_mesh", array{VhFromObject(Mesh)})
@@ -49240,14 +49240,14 @@ mesh_texture<public> := class(texture2d):
             VhCallVoid(Handle, "set_image_size", array{VhFromVector2(vector2{X := Value, Y := Current.Y})})
         else:
             VhCallVoid(Handle, "set_image_size", array{VhFromVector2(vector2{X := Current.X, Y := Value})})
-    GetBaseTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_base_texture", array{})]}
-    GetMesh<public>()<decides><transacts>:mesh = mesh{Handle := VhToHandle[VhCallValue(Handle, "get_mesh", array{})]}
+    GetBaseTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_base_texture", array{})]]
+    GetMesh<public>()<decides><transacts>:mesh = mesh[VhObjectFrom[VhCallValue(Handle, "get_mesh", array{})]]
     SetBaseTexture<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_base_texture", array{VhFromObject(Texture)})
     SetMesh<public>(Mesh:mesh)<transacts>:void = VhCallVoid(Handle, "set_mesh", array{VhFromObject(Mesh)})
 
 multi_mesh_instance3d<public> := class(geometry_instance3d):
 
-    GetMultimesh<public>()<decides><transacts>:multi_mesh = multi_mesh{Handle := VhToHandle[VhCallValue(Handle, "get_multimesh", array{})]}
+    GetMultimesh<public>()<decides><transacts>:multi_mesh = multi_mesh[VhObjectFrom[VhCallValue(Handle, "get_multimesh", array{})]]
     SetMultimesh<public>(Multimesh:multi_mesh)<transacts>:void = VhCallVoid(Handle, "set_multimesh", array{VhFromObject(Multimesh)})
 
 noise_texture2d<public> := class(texture2d):
@@ -49282,8 +49282,8 @@ noise_texture2d<public> := class(texture2d):
     var Width<public><getter(WidthGetter)><setter(WidthSetter)>:int = external {}
     WidthGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_width", array{}))
     WidthSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_width", array{VhFromInt(Value)})
-    GetColorRamp<public>()<decides><transacts>:gradient = gradient{Handle := VhToHandle[VhCallValue(Handle, "get_color_ramp", array{})]}
-    GetNoise<public>()<decides><transacts>:noise = noise{Handle := VhToHandle[VhCallValue(Handle, "get_noise", array{})]}
+    GetColorRamp<public>()<decides><transacts>:gradient = gradient[VhObjectFrom[VhCallValue(Handle, "get_color_ramp", array{})]]
+    GetNoise<public>()<decides><transacts>:noise = noise[VhObjectFrom[VhCallValue(Handle, "get_noise", array{})]]
     SetColorRamp<public>(Gradient:gradient)<transacts>:void = VhCallVoid(Handle, "set_color_ramp", array{VhFromObject(Gradient)})
     SetNoise<public>(Noise:noise)<transacts>:void = VhCallVoid(Handle, "set_noise", array{VhFromObject(Noise)})
 
@@ -49310,8 +49310,8 @@ noise_texture3d<public> := class(texture3d):
     var Width<public><getter(WidthGetter)><setter(WidthSetter)>:int = external {}
     WidthGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_width", array{}))
     WidthSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_width", array{VhFromInt(Value)})
-    GetColorRamp<public>()<decides><transacts>:gradient = gradient{Handle := VhToHandle[VhCallValue(Handle, "get_color_ramp", array{})]}
-    GetNoise<public>()<decides><transacts>:noise = noise{Handle := VhToHandle[VhCallValue(Handle, "get_noise", array{})]}
+    GetColorRamp<public>()<decides><transacts>:gradient = gradient[VhObjectFrom[VhCallValue(Handle, "get_color_ramp", array{})]]
+    GetNoise<public>()<decides><transacts>:noise = noise[VhObjectFrom[VhCallValue(Handle, "get_noise", array{})]]
     SetColorRamp<public>(Gradient:gradient)<transacts>:void = VhCallVoid(Handle, "set_color_ramp", array{VhFromObject(Gradient)})
     SetNoise<public>(Noise:noise)<transacts>:void = VhCallVoid(Handle, "set_noise", array{VhFromObject(Noise)})
 
@@ -49335,8 +49335,8 @@ open_xr_analog_threshold_modifier<public> := class(open_xr_action_binding_modifi
     var OnThreshold<public><getter(OnThresholdGetter)><setter(OnThresholdSetter)>:float = external {}
     OnThresholdGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_on_threshold", array{}))
     OnThresholdSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_on_threshold", array{VhFromFloat(Value)})
-    GetOffHaptic<public>()<decides><transacts>:open_xr_haptic_base = open_xr_haptic_base{Handle := VhToHandle[VhCallValue(Handle, "get_off_haptic", array{})]}
-    GetOnHaptic<public>()<decides><transacts>:open_xr_haptic_base = open_xr_haptic_base{Handle := VhToHandle[VhCallValue(Handle, "get_on_haptic", array{})]}
+    GetOffHaptic<public>()<decides><transacts>:open_xr_haptic_base = open_xr_haptic_base[VhObjectFrom[VhCallValue(Handle, "get_off_haptic", array{})]]
+    GetOnHaptic<public>()<decides><transacts>:open_xr_haptic_base = open_xr_haptic_base[VhObjectFrom[VhCallValue(Handle, "get_on_haptic", array{})]]
     SetOffHaptic<public>(Haptic:open_xr_haptic_base)<transacts>:void = VhCallVoid(Handle, "set_off_haptic", array{VhFromObject(Haptic)})
     SetOnHaptic<public>(Haptic:open_xr_haptic_base)<transacts>:void = VhCallVoid(Handle, "set_on_haptic", array{VhFromObject(Haptic)})
 
@@ -49363,10 +49363,10 @@ open_xr_dpad_binding_modifier<public> := class(open_xrip_binding_modifier):
     var WedgeAngle<public><getter(WedgeAngleGetter)><setter(WedgeAngleSetter)>:float = external {}
     WedgeAngleGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_wedge_angle", array{}))
     WedgeAngleSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_wedge_angle", array{VhFromFloat(Value)})
-    GetActionSet<public>()<decides><transacts>:open_xr_action_set = open_xr_action_set{Handle := VhToHandle[VhCallValue(Handle, "get_action_set", array{})]}
+    GetActionSet<public>()<decides><transacts>:open_xr_action_set = open_xr_action_set[VhObjectFrom[VhCallValue(Handle, "get_action_set", array{})]]
     GetInputPath<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_input_path", array{}))
-    GetOffHaptic<public>()<decides><transacts>:open_xr_haptic_base = open_xr_haptic_base{Handle := VhToHandle[VhCallValue(Handle, "get_off_haptic", array{})]}
-    GetOnHaptic<public>()<decides><transacts>:open_xr_haptic_base = open_xr_haptic_base{Handle := VhToHandle[VhCallValue(Handle, "get_on_haptic", array{})]}
+    GetOffHaptic<public>()<decides><transacts>:open_xr_haptic_base = open_xr_haptic_base[VhObjectFrom[VhCallValue(Handle, "get_off_haptic", array{})]]
+    GetOnHaptic<public>()<decides><transacts>:open_xr_haptic_base = open_xr_haptic_base[VhObjectFrom[VhCallValue(Handle, "get_on_haptic", array{})]]
     SetActionSet<public>(ActionSet:open_xr_action_set)<transacts>:void = VhCallVoid(Handle, "set_action_set", array{VhFromObject(ActionSet)})
     SetInputPath<public>(InputPath:string)<transacts>:void = VhCallVoid(Handle, "set_input_path", array{VhFromString(InputPath)})
     SetOffHaptic<public>(Haptic:open_xr_haptic_base)<transacts>:void = VhCallVoid(Handle, "set_off_haptic", array{VhFromObject(Haptic)})
@@ -49395,10 +49395,10 @@ open_xr_plane_tracker<public> := class(open_xr_spatial_entity_tracker):
     PlaneAlignmentGetter<epic_internal>(Accessor:accessor)<transacts>:open_xr_spatial_component_plane_alignment_list_plane_alignment = VhToOpenXrSpatialComponentPlaneAlignmentListPlaneAlignment(VhCallValue(Handle, "get_plane_alignment", array{}))
     PlaneAlignmentSetter<epic_internal>(Accessor:accessor, Value:open_xr_spatial_component_plane_alignment_list_plane_alignment)<transacts>:void = VhCallVoid(Handle, "set_plane_alignment", array{VhFromOpenXrSpatialComponentPlaneAlignmentListPlaneAlignment(Value)})
     ClearMeshData<public>()<transacts>:void = VhCallVoid(Handle, "clear_mesh_data", array{})
-    GetMesh<public>()<decides><transacts>:mesh = mesh{Handle := VhToHandle[VhCallValue(Handle, "get_mesh", array{})]}
+    GetMesh<public>()<decides><transacts>:mesh = mesh[VhObjectFrom[VhCallValue(Handle, "get_mesh", array{})]]
     GetMeshOffset<public>()<transacts>:transform3d = VhToTransform3D(VhCallValue(Handle, "get_mesh_offset", array{}))
     GetPlaneLabel<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_plane_label", array{}))
-    GetShape<public>(?Thickness:float = 0.01)<decides><transacts>:shape3d = shape3d{Handle := VhToHandle[VhCallValue(Handle, "get_shape", array{VhFromFloat(Thickness)})]}
+    GetShape<public>(?Thickness:float = 0.01)<decides><transacts>:shape3d = shape3d[VhObjectFrom[VhCallValue(Handle, "get_shape", array{VhFromFloat(Thickness)})]]
     SetMeshData<public>(Origin:transform3d, Vertices:[]vector2, Indices:[]int)<transacts>:void = VhCallVoid(Handle, "set_mesh_data", array{VhFromTransform3D(Origin), VhFromVector2s(Vertices), VhFromInt32Array(Indices)})
     SetPlaneLabel<public>(PlaneLabel:string)<transacts>:void = VhCallVoid(Handle, "set_plane_label", array{VhFromString(PlaneLabel)})
 
@@ -49498,7 +49498,7 @@ physics_body2d<public> := class(collision_object2d):
     AddCollisionExceptionWith<public>(Body:node)<transacts>:void = VhCallVoid(Handle, "add_collision_exception_with", array{VhFromObject(Body)})
     GetCollisionExceptions<public>()<transacts>:typed_array(physics_body2d) = VhToPhysicsBody2DArray(VhCallValue(Handle, "get_collision_exceptions", array{}))
     GetGravity<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_gravity", array{}))
-    MoveAndCollide<public>(Motion:vector2, ?TestOnly:logic = false, ?SafeMargin:float = 0.08, ?RecoveryAsCollision:logic = false)<decides><transacts>:kinematic_collision2d = kinematic_collision2d{Handle := VhToHandle[VhCallValue(Handle, "move_and_collide", array{VhFromVector2(Motion), VhFromLogic(TestOnly), VhFromFloat(SafeMargin), VhFromLogic(RecoveryAsCollision)})]}
+    MoveAndCollide<public>(Motion:vector2, ?TestOnly:logic = false, ?SafeMargin:float = 0.08, ?RecoveryAsCollision:logic = false)<decides><transacts>:kinematic_collision2d = kinematic_collision2d[VhObjectFrom[VhCallValue(Handle, "move_and_collide", array{VhFromVector2(Motion), VhFromLogic(TestOnly), VhFromFloat(SafeMargin), VhFromLogic(RecoveryAsCollision)})]]
     RemoveCollisionExceptionWith<public>(Body:node)<transacts>:void = VhCallVoid(Handle, "remove_collision_exception_with", array{VhFromObject(Body)})
     TestMove<public>(From:transform2d, Motion:vector2, Collision:kinematic_collision2d, ?SafeMargin:float = 0.08, ?RecoveryAsCollision:logic = false)<transacts>:logic = VhToLogic(VhCallValue(Handle, "test_move", array{VhFromTransform2D(From), VhFromVector2(Motion), VhFromObject(Collision), VhFromFloat(SafeMargin), VhFromLogic(RecoveryAsCollision)}))
 
@@ -49631,7 +49631,7 @@ point_light2d<public> := class(light2d):
     var TextureScale<public><getter(TextureScaleGetter)><setter(TextureScaleSetter)>:float = external {}
     TextureScaleGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_texture_scale", array{}))
     TextureScaleSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_texture_scale", array{VhFromFloat(Value)})
-    GetTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture", array{})]}
+    GetTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_texture", array{})]]
     SetTexture<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_texture", array{VhFromObject(Texture)})
 
 point_mesh<public> := class(primitive_mesh):
@@ -49689,7 +49689,7 @@ popup_menu<public> := class(popup):
     GetFocusedItem<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_focused_item", array{}))
     GetItemAccelerator<public>(Index:int)<transacts>:key = VhToKey(VhCallValue(Handle, "get_item_accelerator", array{VhFromInt(Index)}))
     GetItemAutoTranslateMode<public>(Index:int)<transacts>:node_auto_translate_mode = VhToNodeAutoTranslateMode(VhCallValue(Handle, "get_item_auto_translate_mode", array{VhFromInt(Index)}))
-    GetItemIcon<public>(Index:int)<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_item_icon", array{VhFromInt(Index)})]}
+    GetItemIcon<public>(Index:int)<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_item_icon", array{VhFromInt(Index)})]]
     GetItemIconMaxWidth<public>(Index:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_item_icon_max_width", array{VhFromInt(Index)}))
     GetItemIconModulate<public>(Index:int)<transacts>:color = VhToColor(VhCallValue(Handle, "get_item_icon_modulate", array{VhFromInt(Index)}))
     GetItemId<public>(Index:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_item_id", array{VhFromInt(Index)}))
@@ -49699,9 +49699,9 @@ popup_menu<public> := class(popup):
     GetItemMetadata<public>(Index:int)<transacts>:variant = VhToVariant(VhCallValue(Handle, "get_item_metadata", array{VhFromInt(Index)}))
     GetItemMultistate<public>(Index:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_item_multistate", array{VhFromInt(Index)}))
     GetItemMultistateMax<public>(Index:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_item_multistate_max", array{VhFromInt(Index)}))
-    GetItemShortcut<public>(Index:int)<decides><transacts>:shortcut = shortcut{Handle := VhToHandle[VhCallValue(Handle, "get_item_shortcut", array{VhFromInt(Index)})]}
+    GetItemShortcut<public>(Index:int)<decides><transacts>:shortcut = shortcut[VhObjectFrom[VhCallValue(Handle, "get_item_shortcut", array{VhFromInt(Index)})]]
     GetItemSubmenu<public>(Index:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_item_submenu", array{VhFromInt(Index)}))
-    GetItemSubmenuNode<public>(Index:int)<decides><transacts>:popup_menu = popup_menu{Handle := VhToHandle[VhCallValue(Handle, "get_item_submenu_node", array{VhFromInt(Index)})]}
+    GetItemSubmenuNode<public>(Index:int)<decides><transacts>:popup_menu = popup_menu[VhObjectFrom[VhCallValue(Handle, "get_item_submenu_node", array{VhFromInt(Index)})]]
     GetItemText<public>(Index:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_item_text", array{VhFromInt(Index)}))
     GetItemTextDirection<public>(Index:int)<transacts>:control_text_direction = VhToControlTextDirection(VhCallValue(Handle, "get_item_text_direction", array{VhFromInt(Index)}))
     GetItemTooltip<public>(Index:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_item_tooltip", array{VhFromInt(Index)}))
@@ -49827,7 +49827,7 @@ ribbon_trail_mesh<public> := class(primitive_mesh):
     var Size<public><getter(SizeGetter)><setter(SizeSetter)>:float = external {}
     SizeGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_size", array{}))
     SizeSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_size", array{VhFromFloat(Value)})
-    GetCurve<public>()<decides><transacts>:curve = curve{Handle := VhToHandle[VhCallValue(Handle, "get_curve", array{})]}
+    GetCurve<public>()<decides><transacts>:curve = curve[VhObjectFrom[VhCallValue(Handle, "get_curve", array{})]]
     SetCurve<public>(Curve:curve)<transacts>:void = VhCallVoid(Handle, "set_curve", array{VhFromObject(Curve)})
 
 rigid_body3d<public> := class(physics_body3d):
@@ -49976,7 +49976,7 @@ rigid_body3d<public> := class(physics_body3d):
     GetCollidingBodies<public>()<transacts>:typed_array(node3d) = VhToNode3DArray(VhCallValue(Handle, "get_colliding_bodies", array{}))
     GetContactCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_contact_count", array{}))
     GetInverseInertiaTensor<public>()<transacts>:basis = VhToBasis(VhCallValue(Handle, "get_inverse_inertia_tensor", array{}))
-    GetPhysicsMaterialOverride<public>()<decides><transacts>:physics_material = physics_material{Handle := VhToHandle[VhCallValue(Handle, "get_physics_material_override", array{})]}
+    GetPhysicsMaterialOverride<public>()<decides><transacts>:physics_material = physics_material[VhObjectFrom[VhCallValue(Handle, "get_physics_material_override", array{})]]
     SetAxisVelocity<public>(AxisVelocity:vector3)<transacts>:void = VhCallVoid(Handle, "set_axis_velocity", array{VhFromVector3(AxisVelocity)})
     SetPhysicsMaterialOverride<public>(PhysicsMaterialOverride:physics_material)<transacts>:void = VhCallVoid(Handle, "set_physics_material_override", array{VhFromObject(PhysicsMaterialOverride)})
 
@@ -50022,8 +50022,8 @@ scroll_container<public> := class(container):
     VerticalScrollModeGetter<epic_internal>(Accessor:accessor)<transacts>:scroll_container_scroll_mode = VhToScrollContainerScrollMode(VhCallValue(Handle, "get_vertical_scroll_mode", array{}))
     VerticalScrollModeSetter<epic_internal>(Accessor:accessor, Value:scroll_container_scroll_mode)<transacts>:void = VhCallVoid(Handle, "set_vertical_scroll_mode", array{VhFromScrollContainerScrollMode(Value)})
     EnsureControlVisible<public>(Control:control)<transacts>:void = VhCallVoid(Handle, "ensure_control_visible", array{VhFromObject(Control)})
-    GetHScrollBar<public>()<decides><transacts>:h_scroll_bar = h_scroll_bar{Handle := VhToHandle[VhCallValue(Handle, "get_h_scroll_bar", array{})]}
-    GetVScrollBar<public>()<decides><transacts>:v_scroll_bar = v_scroll_bar{Handle := VhToHandle[VhCallValue(Handle, "get_v_scroll_bar", array{})]}
+    GetHScrollBar<public>()<decides><transacts>:h_scroll_bar = h_scroll_bar[VhObjectFrom[VhCallValue(Handle, "get_h_scroll_bar", array{})]]
+    GetVScrollBar<public>()<decides><transacts>:v_scroll_bar = v_scroll_bar[VhObjectFrom[VhCallValue(Handle, "get_v_scroll_bar", array{})]]
 
 slider<public> := class(range):
 
@@ -50082,7 +50082,7 @@ spin_box<public> := class(range):
     UpdateOnTextChangedGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_update_on_text_changed", array{}))
     UpdateOnTextChangedSetter<epic_internal>(Accessor:accessor, Arg2:logic)<transacts>:void = VhCallVoid(Handle, "set_update_on_text_changed", array{VhFromLogic(Arg2)})
     Apply<public>()<transacts>:void = VhCallVoid(Handle, "apply", array{})
-    GetLineEdit<public>()<decides><transacts>:line_edit = line_edit{Handle := VhToHandle[VhCallValue(Handle, "get_line_edit", array{})]}
+    GetLineEdit<public>()<decides><transacts>:line_edit = line_edit[VhObjectFrom[VhCallValue(Handle, "get_line_edit", array{})]]
     GetPrefix<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_prefix", array{}))
     GetSuffix<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_suffix", array{}))
     SetPrefix<public>(Prefix:string)<transacts>:void = VhCallVoid(Handle, "set_prefix", array{VhFromString(Prefix)})
@@ -50121,7 +50121,7 @@ split_container<public> := class(container):
     VerticalGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_vertical", array{}))
     VerticalSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_vertical", array{VhFromLogic(Value)})
     ClampSplitOffset<public>(?PriorityIndex:int = 0)<transacts>:void = VhCallVoid(Handle, "clamp_split_offset", array{VhFromInt(PriorityIndex)})
-    GetDragAreaControl<public>()<decides><transacts>:control = control{Handle := VhToHandle[VhCallValue(Handle, "get_drag_area_control", array{})]}
+    GetDragAreaControl<public>()<decides><transacts>:control = control[VhObjectFrom[VhCallValue(Handle, "get_drag_area_control", array{})]]
     GetDragAreaControls<public>()<transacts>:typed_array(control) = VhToControlArray(VhCallValue(Handle, "get_drag_area_controls", array{}))
     GetSplitOffsets<public>()<transacts>:[]int = VhToInts(VhCallValue(Handle, "get_split_offsets", array{}))
     SetSplitOffsets<public>(Offsets:[]int)<transacts>:void = VhCallVoid(Handle, "set_split_offsets", array{VhFromInt32Array(Offsets)})
@@ -50225,7 +50225,7 @@ sprite_base3d<public> := class(geometry_instance3d):
     var Transparent<public><getter(TransparentGetter)><setter(TransparentSetter)>:logic = external {}
     TransparentGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_draw_flag", array{VhFromInt(0)}))
     TransparentSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_draw_flag", array{VhFromInt(0), VhFromLogic(Value)})
-    GenerateTriangleMesh<public>()<decides><transacts>:triangle_mesh = triangle_mesh{Handle := VhToHandle[VhCallValue(Handle, "generate_triangle_mesh", array{})]}
+    GenerateTriangleMesh<public>()<decides><transacts>:triangle_mesh = triangle_mesh[VhObjectFrom[VhCallValue(Handle, "generate_triangle_mesh", array{})]]
     GetItemRect<public>()<transacts>:rect2 = VhToRect2(VhCallValue(Handle, "get_item_rect", array{}))
 
 standard_material3d<public> := class(base_material3d):
@@ -50260,7 +50260,7 @@ static_body3d<public> := class(physics_body3d):
             VhCallVoid(Handle, "set_constant_linear_velocity", array{VhFromVector3(vector3{X := Current.X, Y := Value, Z := Current.Z})})
         else:
             VhCallVoid(Handle, "set_constant_linear_velocity", array{VhFromVector3(vector3{X := Current.X, Y := Current.Y, Z := Value})})
-    GetPhysicsMaterialOverride<public>()<decides><transacts>:physics_material = physics_material{Handle := VhToHandle[VhCallValue(Handle, "get_physics_material_override", array{})]}
+    GetPhysicsMaterialOverride<public>()<decides><transacts>:physics_material = physics_material[VhObjectFrom[VhCallValue(Handle, "get_physics_material_override", array{})]]
     SetPhysicsMaterialOverride<public>(PhysicsMaterialOverride:physics_material)<transacts>:void = VhCallVoid(Handle, "set_physics_material_override", array{VhFromObject(PhysicsMaterialOverride)})
 
 sub_viewport_container<public> := class(container):
@@ -50313,14 +50313,14 @@ tab_container<public> := class(container):
     var UseHiddenTabsForMinSize<public><getter(UseHiddenTabsForMinSizeGetter)><setter(UseHiddenTabsForMinSizeSetter)>:logic = external {}
     UseHiddenTabsForMinSizeGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_use_hidden_tabs_for_min_size", array{}))
     UseHiddenTabsForMinSizeSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_use_hidden_tabs_for_min_size", array{VhFromLogic(Value)})
-    GetCurrentTabControl<public>()<decides><transacts>:control = control{Handle := VhToHandle[VhCallValue(Handle, "get_current_tab_control", array{})]}
-    GetPopup<public>()<decides><transacts>:popup = popup{Handle := VhToHandle[VhCallValue(Handle, "get_popup", array{})]}
+    GetCurrentTabControl<public>()<decides><transacts>:control = control[VhObjectFrom[VhCallValue(Handle, "get_current_tab_control", array{})]]
+    GetPopup<public>()<decides><transacts>:popup = popup[VhObjectFrom[VhCallValue(Handle, "get_popup", array{})]]
     GetPreviousTab<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_previous_tab", array{}))
-    GetTabBar<public>()<decides><transacts>:tab_bar = tab_bar{Handle := VhToHandle[VhCallValue(Handle, "get_tab_bar", array{})]}
-    GetTabButtonIcon<public>(TabIdx:int)<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_tab_button_icon", array{VhFromInt(TabIdx)})]}
-    GetTabControl<public>(TabIdx:int)<decides><transacts>:control = control{Handle := VhToHandle[VhCallValue(Handle, "get_tab_control", array{VhFromInt(TabIdx)})]}
+    GetTabBar<public>()<decides><transacts>:tab_bar = tab_bar[VhObjectFrom[VhCallValue(Handle, "get_tab_bar", array{})]]
+    GetTabButtonIcon<public>(TabIdx:int)<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_tab_button_icon", array{VhFromInt(TabIdx)})]]
+    GetTabControl<public>(TabIdx:int)<decides><transacts>:control = control[VhObjectFrom[VhCallValue(Handle, "get_tab_control", array{VhFromInt(TabIdx)})]]
     GetTabCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_tab_count", array{}))
-    GetTabIcon<public>(TabIdx:int)<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_tab_icon", array{VhFromInt(TabIdx)})]}
+    GetTabIcon<public>(TabIdx:int)<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_tab_icon", array{VhFromInt(TabIdx)})]]
     GetTabIconMaxWidth<public>(TabIdx:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_tab_icon_max_width", array{VhFromInt(TabIdx)}))
     GetTabIdxAtPoint<public>(Point:vector2)<transacts>:int = VhToInt(VhCallValue(Handle, "get_tab_idx_at_point", array{VhFromVector2(Point)}))
     GetTabIdxFromControl<public>(Control:control)<transacts>:int = VhToInt(VhCallValue(Handle, "get_tab_idx_from_control", array{VhFromObject(Control)}))
@@ -50394,7 +50394,7 @@ text_mesh<public> := class(primitive_mesh):
     var Width<public><getter(WidthGetter)><setter(WidthSetter)>:float = external {}
     WidthGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_width", array{}))
     WidthSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_width", array{VhFromFloat(Value)})
-    GetFont<public>()<decides><transacts>:font = font{Handle := VhToHandle[VhCallValue(Handle, "get_font", array{})]}
+    GetFont<public>()<decides><transacts>:font = font[VhObjectFrom[VhCallValue(Handle, "get_font", array{})]]
     GetLanguage<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_language", array{}))
     GetStructuredTextBidiOverrideOptions<public>()<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_structured_text_bidi_override_options", array{}))
     GetText<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_text", array{}))
@@ -50429,12 +50429,12 @@ texture_button<public> := class(base_button):
     var StretchMode<public><getter(StretchModeGetter)><setter(StretchModeSetter)>:texture_button_stretch_mode = external {}
     StretchModeGetter<epic_internal>(Accessor:accessor)<transacts>:texture_button_stretch_mode = VhToTextureButtonStretchMode(VhCallValue(Handle, "get_stretch_mode", array{}))
     StretchModeSetter<epic_internal>(Accessor:accessor, Value:texture_button_stretch_mode)<transacts>:void = VhCallVoid(Handle, "set_stretch_mode", array{VhFromTextureButtonStretchMode(Value)})
-    GetClickMask<public>()<decides><transacts>:bit_map = bit_map{Handle := VhToHandle[VhCallValue(Handle, "get_click_mask", array{})]}
-    GetTextureDisabled<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture_disabled", array{})]}
-    GetTextureFocused<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture_focused", array{})]}
-    GetTextureHover<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture_hover", array{})]}
-    GetTextureNormal<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture_normal", array{})]}
-    GetTexturePressed<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture_pressed", array{})]}
+    GetClickMask<public>()<decides><transacts>:bit_map = bit_map[VhObjectFrom[VhCallValue(Handle, "get_click_mask", array{})]]
+    GetTextureDisabled<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_texture_disabled", array{})]]
+    GetTextureFocused<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_texture_focused", array{})]]
+    GetTextureHover<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_texture_hover", array{})]]
+    GetTextureNormal<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_texture_normal", array{})]]
+    GetTexturePressed<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_texture_pressed", array{})]]
     SetClickMask<public>(Mask:bit_map)<transacts>:void = VhCallVoid(Handle, "set_click_mask", array{VhFromObject(Mask)})
     SetTextureDisabled<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_texture_disabled", array{VhFromObject(Texture)})
     SetTextureFocused<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_texture_focused", array{VhFromObject(Texture)})
@@ -50546,9 +50546,9 @@ texture_progress_bar<public> := class(range):
             VhCallVoid(Handle, "set_tint_under", array{VhFromColor(color{R := Current.R, G := Current.G, B := Arg2, A := Current.A})})
         else:
             VhCallVoid(Handle, "set_tint_under", array{VhFromColor(color{R := Current.R, G := Current.G, B := Current.B, A := Arg2})})
-    GetOverTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_over_texture", array{})]}
-    GetProgressTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_progress_texture", array{})]}
-    GetUnderTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_under_texture", array{})]}
+    GetOverTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_over_texture", array{})]]
+    GetProgressTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_progress_texture", array{})]]
+    GetUnderTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_under_texture", array{})]]
     SetOverTexture<public>(Tex:texture2d)<transacts>:void = VhCallVoid(Handle, "set_over_texture", array{VhFromObject(Tex)})
     SetProgressTexture<public>(Tex:texture2d)<transacts>:void = VhCallVoid(Handle, "set_progress_texture", array{VhFromObject(Tex)})
     SetUnderTexture<public>(Tex:texture2d)<transacts>:void = VhCallVoid(Handle, "set_under_texture", array{VhFromObject(Tex)})
@@ -50591,7 +50591,7 @@ tube_trail_mesh<public> := class(primitive_mesh):
     var Sections<public><getter(SectionsGetter)><setter(SectionsSetter)>:int = external {}
     SectionsGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_sections", array{}))
     SectionsSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_sections", array{VhFromInt(Value)})
-    GetCurve<public>()<decides><transacts>:curve = curve{Handle := VhToHandle[VhCallValue(Handle, "get_curve", array{})]}
+    GetCurve<public>()<decides><transacts>:curve = curve[VhObjectFrom[VhCallValue(Handle, "get_curve", array{})]]
     SetCurve<public>(Curve:curve)<transacts>:void = VhCallVoid(Handle, "set_curve", array{VhFromObject(Curve)})
 
 two_bone_ik3d<public> := class(ik_modifier3d):
@@ -50709,12 +50709,12 @@ visual_shader_node_color_parameter<public> := class(visual_shader_node_parameter
 
 visual_shader_node_curve_texture<public> := class(visual_shader_node_resizable_base):
 
-    GetTexture<public>()<decides><transacts>:curve_texture = curve_texture{Handle := VhToHandle[VhCallValue(Handle, "get_texture", array{})]}
+    GetTexture<public>()<decides><transacts>:curve_texture = curve_texture[VhObjectFrom[VhCallValue(Handle, "get_texture", array{})]]
     SetTexture<public>(Texture:curve_texture)<transacts>:void = VhCallVoid(Handle, "set_texture", array{VhFromObject(Texture)})
 
 visual_shader_node_curve_xyz_texture<public> := class(visual_shader_node_resizable_base):
 
-    GetTexture<public>()<decides><transacts>:curve_xyz_texture = curve_xyz_texture{Handle := VhToHandle[VhCallValue(Handle, "get_texture", array{})]}
+    GetTexture<public>()<decides><transacts>:curve_xyz_texture = curve_xyz_texture[VhObjectFrom[VhCallValue(Handle, "get_texture", array{})]]
     SetTexture<public>(Texture:curve_xyz_texture)<transacts>:void = VhCallVoid(Handle, "set_texture", array{VhFromObject(Texture)})
 
 visual_shader_node_face_forward<public> := class(visual_shader_node_vector_base):
@@ -50840,7 +50840,7 @@ visual_shader_node_particle_mesh_emitter<public> := class(visual_shader_node_par
     var UseAllSurfaces<public><getter(UseAllSurfacesGetter)><setter(UseAllSurfacesSetter)>:logic = external {}
     UseAllSurfacesGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_use_all_surfaces", array{}))
     UseAllSurfacesSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_use_all_surfaces", array{VhFromLogic(Value)})
-    GetMesh<public>()<decides><transacts>:mesh = mesh{Handle := VhToHandle[VhCallValue(Handle, "get_mesh", array{})]}
+    GetMesh<public>()<decides><transacts>:mesh = mesh[VhObjectFrom[VhCallValue(Handle, "get_mesh", array{})]]
     SetMesh<public>(Mesh:mesh)<transacts>:void = VhCallVoid(Handle, "set_mesh", array{VhFromObject(Mesh)})
 
 visual_shader_node_particle_output<public> := class(visual_shader_node_output):
@@ -50851,12 +50851,12 @@ visual_shader_node_particle_sphere_emitter<public> := class(visual_shader_node_p
 
 visual_shader_node_texture2d_array<public> := class(visual_shader_node_sample3d):
 
-    GetTextureArray<public>()<decides><transacts>:texture_layered = texture_layered{Handle := VhToHandle[VhCallValue(Handle, "get_texture_array", array{})]}
+    GetTextureArray<public>()<decides><transacts>:texture_layered = texture_layered[VhObjectFrom[VhCallValue(Handle, "get_texture_array", array{})]]
     SetTextureArray<public>(Value:texture_layered)<transacts>:void = VhCallVoid(Handle, "set_texture_array", array{VhFromObject(Value)})
 
 visual_shader_node_texture3d<public> := class(visual_shader_node_sample3d):
 
-    GetTexture<public>()<decides><transacts>:texture3d = texture3d{Handle := VhToHandle[VhCallValue(Handle, "get_texture", array{})]}
+    GetTexture<public>()<decides><transacts>:texture3d = texture3d[VhObjectFrom[VhCallValue(Handle, "get_texture", array{})]]
     SetTexture<public>(Value:texture3d)<transacts>:void = VhCallVoid(Handle, "set_texture", array{VhFromObject(Value)})
 
 visual_shader_node_texture_parameter<public> := class(visual_shader_node_parameter):
@@ -51078,7 +51078,7 @@ animated_sprite3d<public> := class(sprite_base3d):
     GetAnimation<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_animation", array{}))
     GetAutoplay<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_autoplay", array{}))
     GetPlayingSpeed<public>()<transacts>:float = VhToFloat(VhCallValue(Handle, "get_playing_speed", array{}))
-    GetSpriteFrames<public>()<decides><transacts>:sprite_frames = sprite_frames{Handle := VhToHandle[VhCallValue(Handle, "get_sprite_frames", array{})]}
+    GetSpriteFrames<public>()<decides><transacts>:sprite_frames = sprite_frames[VhObjectFrom[VhCallValue(Handle, "get_sprite_frames", array{})]]
     IsPlaying<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_playing", array{}))
     Pause<public>()<transacts>:void = VhCallVoid(Handle, "pause", array{})
     Play<public>(?Name:string = "", ?CustomSpeed:float = 1.0, ?FromEnd:logic = false)<transacts>:void = VhCallVoid(Handle, "play", array{VhFromStringName(Name), VhFromFloat(CustomSpeed), VhFromLogic(FromEnd)})
@@ -51158,11 +51158,11 @@ character_body2d<public> := class(physics_body2d):
     GetFloorAngle<public>(?Arg0:vector2 = vector2{X := 0.0, Y := -1.0})<transacts>:float = VhToFloat(VhCallValue(Handle, "get_floor_angle", array{VhFromVector2(Arg0)}))
     GetFloorNormal<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_floor_normal", array{}))
     GetLastMotion<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_last_motion", array{}))
-    GetLastSlideCollision<public>()<decides><transacts>:kinematic_collision2d = kinematic_collision2d{Handle := VhToHandle[VhCallValue(Handle, "get_last_slide_collision", array{})]}
+    GetLastSlideCollision<public>()<decides><transacts>:kinematic_collision2d = kinematic_collision2d[VhObjectFrom[VhCallValue(Handle, "get_last_slide_collision", array{})]]
     GetPlatformVelocity<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_platform_velocity", array{}))
     GetPositionDelta<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_position_delta", array{}))
     GetRealVelocity<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_real_velocity", array{}))
-    GetSlideCollision<public>(SlideIdx:int)<decides><transacts>:kinematic_collision2d = kinematic_collision2d{Handle := VhToHandle[VhCallValue(Handle, "get_slide_collision", array{VhFromInt(SlideIdx)})]}
+    GetSlideCollision<public>(SlideIdx:int)<decides><transacts>:kinematic_collision2d = kinematic_collision2d[VhObjectFrom[VhCallValue(Handle, "get_slide_collision", array{VhFromInt(SlideIdx)})]]
     GetSlideCollisionCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_slide_collision_count", array{}))
     GetWallNormal<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_wall_normal", array{}))
     IsOnCeiling<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_on_ceiling", array{}))
@@ -51201,8 +51201,8 @@ color_picker_button<public> := class(button):
     var EditIntensity<public><getter(EditIntensityGetter)><setter(EditIntensitySetter)>:logic = external {}
     EditIntensityGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_editing_intensity", array{}))
     EditIntensitySetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_edit_intensity", array{VhFromLogic(Value)})
-    GetPicker<public>()<decides><transacts>:color_picker = color_picker{Handle := VhToHandle[VhCallValue(Handle, "get_picker", array{})]}
-    GetPopup<public>()<decides><transacts>:popup_panel = popup_panel{Handle := VhToHandle[VhCallValue(Handle, "get_popup", array{})]}
+    GetPicker<public>()<decides><transacts>:color_picker = color_picker[VhObjectFrom[VhCallValue(Handle, "get_picker", array{})]]
+    GetPopup<public>()<decides><transacts>:popup_panel = popup_panel[VhObjectFrom[VhCallValue(Handle, "get_popup", array{})]]
 
 compressed_cubemap<public> := class(compressed_texture_layered):
 
@@ -51220,11 +51220,11 @@ csg_primitive3d<public> := class(csg_shape3d):
 
 cubemap<public> := class(image_texture_layered):
 
-    CreatePlaceholder<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "create_placeholder", array{})]}
+    CreatePlaceholder<public>()<decides><transacts>:resource = resource[VhObjectFrom[VhCallValue(Handle, "create_placeholder", array{})]]
 
 cubemap_array<public> := class(image_texture_layered):
 
-    CreatePlaceholder<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "create_placeholder", array{})]}
+    CreatePlaceholder<public>()<decides><transacts>:resource = resource[VhObjectFrom[VhCallValue(Handle, "create_placeholder", array{})]]
 
 editor_command_palette<public> := class(confirmation_dialog):
 
@@ -51268,8 +51268,8 @@ editor_dock<public> := class(margin_container):
     TransientGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_transient", array{}))
     TransientSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_transient", array{VhFromLogic(Value)})
     Close<public>()<transacts>:void = VhCallVoid(Handle, "close", array{})
-    GetDockIcon<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_dock_icon", array{})]}
-    GetDockShortcut<public>()<decides><transacts>:shortcut = shortcut{Handle := VhToHandle[VhCallValue(Handle, "get_dock_shortcut", array{})]}
+    GetDockIcon<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_dock_icon", array{})]]
+    GetDockShortcut<public>()<decides><transacts>:shortcut = shortcut[VhObjectFrom[VhCallValue(Handle, "get_dock_shortcut", array{})]]
     GetIconName<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_icon_name", array{}))
     GetLayoutKey<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_layout_key", array{}))
     GetTitle<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_title", array{}))
@@ -51284,7 +51284,7 @@ editor_dock<public> := class(margin_container):
 editor_inspector<public> := class(scroll_container):
 
     Edit<public>(Object:object)<transacts>:void = VhCallVoid(Handle, "edit", array{VhFromObject(Object)})
-    GetEditedObject<public>()<decides><transacts>:object = object{Handle := VhToHandle[VhCallValue(Handle, "get_edited_object", array{})]}
+    GetEditedObject<public>()<decides><transacts>:object = object[VhObjectFrom[VhCallValue(Handle, "get_edited_object", array{})]]
     GetSelectedPath<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_selected_path", array{}))
 
 file_dialog<public> := class(confirmation_dialog):
@@ -51347,13 +51347,13 @@ file_dialog<public> := class(confirmation_dialog):
     GetCurrentPath<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_current_path", array{}))
     GetFilenameFilter<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_filename_filter", array{}))
     GetFilters<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_filters", array{}))
-    GetLineEdit<public>()<decides><transacts>:line_edit = line_edit{Handle := VhToHandle[VhCallValue(Handle, "get_line_edit", array{})]}
+    GetLineEdit<public>()<decides><transacts>:line_edit = line_edit[VhObjectFrom[VhCallValue(Handle, "get_line_edit", array{})]]
     GetOptionDefault<public>(Option:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_option_default", array{VhFromInt(Option)}))
     GetOptionName<public>(Option:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_option_name", array{VhFromInt(Option)}))
     GetOptionValues<public>(Option:int)<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_option_values", array{VhFromInt(Option)}))
     GetRootSubfolder<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_root_subfolder", array{}))
     GetSelectedOptions<public>()<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_selected_options", array{}))
-    GetVbox<public>()<decides><transacts>:v_box_container = v_box_container{Handle := VhToHandle[VhCallValue(Handle, "get_vbox", array{})]}
+    GetVbox<public>()<decides><transacts>:v_box_container = v_box_container[VhObjectFrom[VhCallValue(Handle, "get_vbox", array{})]]
     Invalidate<public>()<transacts>:void = VhCallVoid(Handle, "invalidate", array{})
     PopupFileDialog<public>()<transacts>:void = VhCallVoid(Handle, "popup_file_dialog", array{})
     SetCurrentDir<public>(Dir:string)<transacts>:void = VhCallVoid(Handle, "set_current_dir", array{VhFromString(Dir)})
@@ -51397,7 +51397,7 @@ graph_frame<public> := class(graph_element):
     TintColorEnabledGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_tint_color_enabled", array{}))
     TintColorEnabledSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_tint_color_enabled", array{VhFromLogic(Value)})
     GetTitle<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_title", array{}))
-    GetTitlebarHbox<public>()<decides><transacts>:h_box_container = h_box_container{Handle := VhToHandle[VhCallValue(Handle, "get_titlebar_hbox", array{})]}
+    GetTitlebarHbox<public>()<decides><transacts>:h_box_container = h_box_container[VhObjectFrom[VhCallValue(Handle, "get_titlebar_hbox", array{})]]
     SetTitle<public>(Title:string)<transacts>:void = VhCallVoid(Handle, "set_title", array{VhFromString(Title)})
 
 graph_node<public> := class(graph_element):
@@ -51422,14 +51422,14 @@ graph_node<public> := class(graph_element):
     GetOutputPortType<public>(PortIdx:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_output_port_type", array{VhFromInt(PortIdx)}))
     GetSlotColorLeft<public>(SlotIndex:int)<transacts>:color = VhToColor(VhCallValue(Handle, "get_slot_color_left", array{VhFromInt(SlotIndex)}))
     GetSlotColorRight<public>(SlotIndex:int)<transacts>:color = VhToColor(VhCallValue(Handle, "get_slot_color_right", array{VhFromInt(SlotIndex)}))
-    GetSlotCustomIconLeft<public>(SlotIndex:int)<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_slot_custom_icon_left", array{VhFromInt(SlotIndex)})]}
-    GetSlotCustomIconRight<public>(SlotIndex:int)<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_slot_custom_icon_right", array{VhFromInt(SlotIndex)})]}
+    GetSlotCustomIconLeft<public>(SlotIndex:int)<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_slot_custom_icon_left", array{VhFromInt(SlotIndex)})]]
+    GetSlotCustomIconRight<public>(SlotIndex:int)<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_slot_custom_icon_right", array{VhFromInt(SlotIndex)})]]
     GetSlotMetadataLeft<public>(SlotIndex:int)<transacts>:variant = VhToVariant(VhCallValue(Handle, "get_slot_metadata_left", array{VhFromInt(SlotIndex)}))
     GetSlotMetadataRight<public>(SlotIndex:int)<transacts>:variant = VhToVariant(VhCallValue(Handle, "get_slot_metadata_right", array{VhFromInt(SlotIndex)}))
     GetSlotTypeLeft<public>(SlotIndex:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_slot_type_left", array{VhFromInt(SlotIndex)}))
     GetSlotTypeRight<public>(SlotIndex:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_slot_type_right", array{VhFromInt(SlotIndex)}))
     GetTitle<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_title", array{}))
-    GetTitlebarHbox<public>()<decides><transacts>:h_box_container = h_box_container{Handle := VhToHandle[VhCallValue(Handle, "get_titlebar_hbox", array{})]}
+    GetTitlebarHbox<public>()<decides><transacts>:h_box_container = h_box_container[VhObjectFrom[VhCallValue(Handle, "get_titlebar_hbox", array{})]]
     IsSlotDrawStylebox<public>(SlotIndex:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_slot_draw_stylebox", array{VhFromInt(SlotIndex)}))
     IsSlotEnabledLeft<public>(SlotIndex:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_slot_enabled_left", array{VhFromInt(SlotIndex)}))
     IsSlotEnabledRight<public>(SlotIndex:int)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_slot_enabled_right", array{VhFromInt(SlotIndex)}))
@@ -51550,7 +51550,7 @@ iterate_ik3d<public> := class(chain_ik3d):
     var SettingCount<public><getter(SettingCountGetter)><setter(SettingCountSetter)>:int = external {}
     SettingCountGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_setting_count", array{}))
     SettingCountSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_setting_count", array{VhFromInt(Value)})
-    GetJointLimitation<public>(Index:int, Joint:int)<decides><transacts>:joint_limitation3d = joint_limitation3d{Handle := VhToHandle[VhCallValue(Handle, "get_joint_limitation", array{VhFromInt(Index), VhFromInt(Joint)})]}
+    GetJointLimitation<public>(Index:int, Joint:int)<decides><transacts>:joint_limitation3d = joint_limitation3d[VhObjectFrom[VhCallValue(Handle, "get_joint_limitation", array{VhFromInt(Index), VhFromInt(Joint)})]]
     GetJointLimitationRightAxis<public>(Index:int, Joint:int)<transacts>:skeleton_modifier3d_secondary_direction = VhToSkeletonModifier3dSecondaryDirection(VhCallValue(Handle, "get_joint_limitation_right_axis", array{VhFromInt(Index), VhFromInt(Joint)}))
     GetJointLimitationRightAxisVector<public>(Index:int, Joint:int)<transacts>:vector3 = VhToVector3(VhCallValue(Handle, "get_joint_limitation_right_axis_vector", array{VhFromInt(Index), VhFromInt(Joint)}))
     GetJointLimitationRotationOffset<public>(Index:int, Joint:int)<transacts>:quaternion = VhToQuaternion(VhCallValue(Handle, "get_joint_limitation_rotation_offset", array{VhFromInt(Index), VhFromInt(Joint)}))
@@ -51573,13 +51573,13 @@ menu_button<public> := class(button):
     var SwitchOnHover<public><getter(SwitchOnHoverGetter)><setter(SwitchOnHoverSetter)>:logic = external {}
     SwitchOnHoverGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_switch_on_hover", array{}))
     SwitchOnHoverSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_switch_on_hover", array{VhFromLogic(Value)})
-    GetPopup<public>()<decides><transacts>:popup_menu = popup_menu{Handle := VhToHandle[VhCallValue(Handle, "get_popup", array{})]}
+    GetPopup<public>()<decides><transacts>:popup_menu = popup_menu[VhObjectFrom[VhCallValue(Handle, "get_popup", array{})]]
     SetDisableShortcuts<public>(Arg0:logic)<transacts>:void = VhCallVoid(Handle, "set_disable_shortcuts", array{VhFromLogic(Arg0)})
     ShowPopup<public>()<transacts>:void = VhCallVoid(Handle, "show_popup", array{})
 
 open_xr_binding_modifier_editor<public> := class(panel_container):
 
-    GetBindingModifier<public>()<decides><transacts>:open_xr_binding_modifier = open_xr_binding_modifier{Handle := VhToHandle[VhCallValue(Handle, "get_binding_modifier", array{})]}
+    GetBindingModifier<public>()<decides><transacts>:open_xr_binding_modifier = open_xr_binding_modifier[VhObjectFrom[VhCallValue(Handle, "get_binding_modifier", array{})]]
     Setup<public>(ActionMap:open_xr_action_map, BindingModifier:open_xr_binding_modifier)<transacts>:void = VhCallVoid(Handle, "setup", array{VhFromObject(ActionMap), VhFromObject(BindingModifier)})
 
 option_button<public> := class(button):
@@ -51601,13 +51601,13 @@ option_button<public> := class(button):
     AddSeparator<public>(?Text:string = "")<transacts>:void = VhCallVoid(Handle, "add_separator", array{VhFromString(Text)})
     Clear<public>()<transacts>:void = VhCallVoid(Handle, "clear", array{})
     GetItemAutoTranslateMode<public>(Idx:int)<transacts>:node_auto_translate_mode = VhToNodeAutoTranslateMode(VhCallValue(Handle, "get_item_auto_translate_mode", array{VhFromInt(Idx)}))
-    GetItemIcon<public>(Idx:int)<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_item_icon", array{VhFromInt(Idx)})]}
+    GetItemIcon<public>(Idx:int)<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_item_icon", array{VhFromInt(Idx)})]]
     GetItemId<public>(Idx:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_item_id", array{VhFromInt(Idx)}))
     GetItemIndex<public>(Id:int)<transacts>:int = VhToInt(VhCallValue(Handle, "get_item_index", array{VhFromInt(Id)}))
     GetItemMetadata<public>(Idx:int)<transacts>:variant = VhToVariant(VhCallValue(Handle, "get_item_metadata", array{VhFromInt(Idx)}))
     GetItemText<public>(Idx:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_item_text", array{VhFromInt(Idx)}))
     GetItemTooltip<public>(Idx:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_item_tooltip", array{VhFromInt(Idx)}))
-    GetPopup<public>()<decides><transacts>:popup_menu = popup_menu{Handle := VhToHandle[VhCallValue(Handle, "get_popup", array{})]}
+    GetPopup<public>()<decides><transacts>:popup_menu = popup_menu[VhObjectFrom[VhCallValue(Handle, "get_popup", array{})]]
     GetSelectableItem<public>(?FromLast:logic = false)<transacts>:int = VhToInt(VhCallValue(Handle, "get_selectable_item", array{VhFromLogic(FromLast)}))
     GetSelectedId<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_selected_id", array{}))
     GetSelectedMetadata<public>()<transacts>:variant = VhToVariant(VhCallValue(Handle, "get_selected_metadata", array{}))
@@ -51740,7 +51740,7 @@ rigid_body2d<public> := class(physics_body2d):
     ApplyTorqueImpulse<public>(Torque:float)<transacts>:void = VhCallVoid(Handle, "apply_torque_impulse", array{VhFromFloat(Torque)})
     GetCollidingBodies<public>()<transacts>:typed_array(node2d) = VhToNode2DArray(VhCallValue(Handle, "get_colliding_bodies", array{}))
     GetContactCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_contact_count", array{}))
-    GetPhysicsMaterialOverride<public>()<decides><transacts>:physics_material = physics_material{Handle := VhToHandle[VhCallValue(Handle, "get_physics_material_override", array{})]}
+    GetPhysicsMaterialOverride<public>()<decides><transacts>:physics_material = physics_material[VhObjectFrom[VhCallValue(Handle, "get_physics_material_override", array{})]]
     SetAxisVelocity<public>(AxisVelocity:vector2)<transacts>:void = VhCallVoid(Handle, "set_axis_velocity", array{VhFromVector2(AxisVelocity)})
     SetPhysicsMaterialOverride<public>(PhysicsMaterialOverride:physics_material)<transacts>:void = VhCallVoid(Handle, "set_physics_material_override", array{VhFromObject(PhysicsMaterialOverride)})
 
@@ -51752,8 +51752,8 @@ script_editor<public> := class(panel_container):
 
     ClearDocsFromScript<public>(Script:script)<transacts>:void = VhCallVoid(Handle, "clear_docs_from_script", array{VhFromObject(Script)})
     GetBreakpoints<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_breakpoints", array{}))
-    GetCurrentEditor<public>()<decides><transacts>:script_editor_base = script_editor_base{Handle := VhToHandle[VhCallValue(Handle, "get_current_editor", array{})]}
-    GetCurrentScript<public>()<decides><transacts>:script = script{Handle := VhToHandle[VhCallValue(Handle, "get_current_script", array{})]}
+    GetCurrentEditor<public>()<decides><transacts>:script_editor_base = script_editor_base[VhObjectFrom[VhCallValue(Handle, "get_current_editor", array{})]]
+    GetCurrentScript<public>()<decides><transacts>:script = script[VhObjectFrom[VhCallValue(Handle, "get_current_script", array{})]]
     GetOpenScriptEditors<public>()<transacts>:typed_array(script_editor_base) = VhToScriptEditorBaseArray(VhCallValue(Handle, "get_open_script_editors", array{}))
     GetOpenScripts<public>()<transacts>:typed_array(script) = VhToScriptArray(VhCallValue(Handle, "get_open_scripts", array{}))
     GotoHelp<public>(Topic:string)<transacts>:void = VhCallVoid(Handle, "goto_help", array{VhFromString(Topic)})
@@ -51857,7 +51857,7 @@ sprite3d<public> := class(sprite_base3d):
     VframesGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_vframes", array{}))
     VframesSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_vframes", array{VhFromInt(Value)})
     GetRegionRect<public>()<transacts>:rect2 = VhToRect2(VhCallValue(Handle, "get_region_rect", array{}))
-    GetTexture<public>()<decides><transacts>:texture2d = texture2d{Handle := VhToHandle[VhCallValue(Handle, "get_texture", array{})]}
+    GetTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_texture", array{})]]
     SetRegionRect<public>(Rect:rect2)<transacts>:void = VhCallVoid(Handle, "set_region_rect", array{VhFromRect2(Rect)})
     SetTexture<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_texture", array{VhFromObject(Texture)})
 
@@ -51878,12 +51878,12 @@ static_body2d<public> := class(physics_body2d):
             VhCallVoid(Handle, "set_constant_linear_velocity", array{VhFromVector2(vector2{X := Value, Y := Current.Y})})
         else:
             VhCallVoid(Handle, "set_constant_linear_velocity", array{VhFromVector2(vector2{X := Current.X, Y := Value})})
-    GetPhysicsMaterialOverride<public>()<decides><transacts>:physics_material = physics_material{Handle := VhToHandle[VhCallValue(Handle, "get_physics_material_override", array{})]}
+    GetPhysicsMaterialOverride<public>()<decides><transacts>:physics_material = physics_material[VhObjectFrom[VhCallValue(Handle, "get_physics_material_override", array{})]]
     SetPhysicsMaterialOverride<public>(PhysicsMaterialOverride:physics_material)<transacts>:void = VhCallVoid(Handle, "set_physics_material_override", array{VhFromObject(PhysicsMaterialOverride)})
 
 texture2d_array<public> := class(image_texture_layered):
 
-    CreatePlaceholder<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "create_placeholder", array{})]}
+    CreatePlaceholder<public>()<decides><transacts>:resource = resource[VhObjectFrom[VhCallValue(Handle, "create_placeholder", array{})]]
 
 texture2d_array_rd<public> := class(texture_layered_rd):
 
@@ -52015,7 +52015,7 @@ csg_box3d<public> := class(csg_primitive3d):
             VhCallVoid(Handle, "set_size", array{VhFromVector3(vector3{X := Current.X, Y := Value, Z := Current.Z})})
         else:
             VhCallVoid(Handle, "set_size", array{VhFromVector3(vector3{X := Current.X, Y := Current.Y, Z := Value})})
-    GetMaterial<public>()<decides><transacts>:material = material{Handle := VhToHandle[VhCallValue(Handle, "get_material", array{})]}
+    GetMaterial<public>()<decides><transacts>:material = material[VhObjectFrom[VhCallValue(Handle, "get_material", array{})]]
     SetMaterial<public>(Material:material)<transacts>:void = VhCallVoid(Handle, "set_material", array{VhFromObject(Material)})
 
 csg_cylinder3d<public> := class(csg_primitive3d):
@@ -52035,13 +52035,13 @@ csg_cylinder3d<public> := class(csg_primitive3d):
     var SmoothFaces<public><getter(SmoothFacesGetter)><setter(SmoothFacesSetter)>:logic = external {}
     SmoothFacesGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_smooth_faces", array{}))
     SmoothFacesSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_smooth_faces", array{VhFromLogic(Value)})
-    GetMaterial<public>()<decides><transacts>:material = material{Handle := VhToHandle[VhCallValue(Handle, "get_material", array{})]}
+    GetMaterial<public>()<decides><transacts>:material = material[VhObjectFrom[VhCallValue(Handle, "get_material", array{})]]
     SetMaterial<public>(Material:material)<transacts>:void = VhCallVoid(Handle, "set_material", array{VhFromObject(Material)})
 
 csg_mesh3d<public> := class(csg_primitive3d):
 
-    GetMaterial<public>()<decides><transacts>:material = material{Handle := VhToHandle[VhCallValue(Handle, "get_material", array{})]}
-    GetMesh<public>()<decides><transacts>:mesh = mesh{Handle := VhToHandle[VhCallValue(Handle, "get_mesh", array{})]}
+    GetMaterial<public>()<decides><transacts>:material = material[VhObjectFrom[VhCallValue(Handle, "get_material", array{})]]
+    GetMesh<public>()<decides><transacts>:mesh = mesh[VhObjectFrom[VhCallValue(Handle, "get_mesh", array{})]]
     SetMaterial<public>(Material:material)<transacts>:void = VhCallVoid(Handle, "set_material", array{VhFromObject(Material)})
     SetMesh<public>(Mesh:mesh)<transacts>:void = VhCallVoid(Handle, "set_mesh", array{VhFromObject(Mesh)})
 
@@ -52089,7 +52089,7 @@ csg_polygon3d<public> := class(csg_primitive3d):
     var SpinSides<public><getter(SpinSidesGetter)><setter(SpinSidesSetter)>:int = external {}
     SpinSidesGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_spin_sides", array{}))
     SpinSidesSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_spin_sides", array{VhFromInt(Value)})
-    GetMaterial<public>()<decides><transacts>:material = material{Handle := VhToHandle[VhCallValue(Handle, "get_material", array{})]}
+    GetMaterial<public>()<decides><transacts>:material = material[VhObjectFrom[VhCallValue(Handle, "get_material", array{})]]
     GetPathNode<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_path_node", array{}))
     GetPolygon<public>()<transacts>:[]vector2 = VhToVector2s(VhCallValue(Handle, "get_polygon", array{}))
     SetMaterial<public>(Material:material)<transacts>:void = VhCallVoid(Handle, "set_material", array{VhFromObject(Material)})
@@ -52110,7 +52110,7 @@ csg_sphere3d<public> := class(csg_primitive3d):
     var SmoothFaces<public><getter(SmoothFacesGetter)><setter(SmoothFacesSetter)>:logic = external {}
     SmoothFacesGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_smooth_faces", array{}))
     SmoothFacesSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_smooth_faces", array{VhFromLogic(Value)})
-    GetMaterial<public>()<decides><transacts>:material = material{Handle := VhToHandle[VhCallValue(Handle, "get_material", array{})]}
+    GetMaterial<public>()<decides><transacts>:material = material[VhObjectFrom[VhCallValue(Handle, "get_material", array{})]]
     SetMaterial<public>(Material:material)<transacts>:void = VhCallVoid(Handle, "set_material", array{VhFromObject(Material)})
 
 csg_torus3d<public> := class(csg_primitive3d):
@@ -52130,7 +52130,7 @@ csg_torus3d<public> := class(csg_primitive3d):
     var SmoothFaces<public><getter(SmoothFacesGetter)><setter(SmoothFacesSetter)>:logic = external {}
     SmoothFacesGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_smooth_faces", array{}))
     SmoothFacesSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_smooth_faces", array{VhFromLogic(Value)})
-    GetMaterial<public>()<decides><transacts>:material = material{Handle := VhToHandle[VhCallValue(Handle, "get_material", array{})]}
+    GetMaterial<public>()<decides><transacts>:material = material[VhObjectFrom[VhCallValue(Handle, "get_material", array{})]]
     SetMaterial<public>(Material:material)<transacts>:void = VhCallVoid(Handle, "set_material", array{VhFromObject(Material)})
 
 editor_file_dialog<public> := class(file_dialog):
@@ -52150,7 +52150,7 @@ editor_resource_picker<public> := class(h_box_container):
     ToggleModeSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_toggle_mode", array{VhFromLogic(Value)})
     GetAllowedTypes<public>()<transacts>:[]string = VhToStrings(VhCallValue(Handle, "get_allowed_types", array{}))
     GetBaseType<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_base_type", array{}))
-    GetEditedResource<public>()<decides><transacts>:resource = resource{Handle := VhToHandle[VhCallValue(Handle, "get_edited_resource", array{})]}
+    GetEditedResource<public>()<decides><transacts>:resource = resource[VhObjectFrom[VhCallValue(Handle, "get_edited_resource", array{})]]
     SetBaseType<public>(BaseType:string)<transacts>:void = VhCallVoid(Handle, "set_base_type", array{VhFromString(BaseType)})
     SetEditedResource<public>(Resource:resource)<transacts>:void = VhCallVoid(Handle, "set_edited_resource", array{VhFromObject(Resource)})
     SetTogglePressed<public>(Pressed:logic)<transacts>:void = VhCallVoid(Handle, "set_toggle_pressed", array{VhFromLogic(Pressed)})
@@ -52296,20 +52296,20 @@ physical_bone2d<public> := class(rigid_body2d):
     SimulatePhysicsGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "get_simulate_physics", array{}))
     SimulatePhysicsSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_simulate_physics", array{VhFromLogic(Value)})
     GetBone2dNodepath<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_bone2d_nodepath", array{}))
-    GetJoint<public>()<decides><transacts>:joint2d = joint2d{Handle := VhToHandle[VhCallValue(Handle, "get_joint", array{})]}
+    GetJoint<public>()<decides><transacts>:joint2d = joint2d[VhObjectFrom[VhCallValue(Handle, "get_joint", array{})]]
     IsSimulatingPhysics<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_simulating_physics", array{}))
     SetBone2dNodepath<public>(Nodepath:string)<transacts>:void = VhCallVoid(Handle, "set_bone2d_nodepath", array{VhFromNodePath(Nodepath)})
 
 script_editor_base<public> := class(v_box_container):
 
     AddSyntaxHighlighter<public>(Highlighter:editor_syntax_highlighter)<transacts>:void = VhCallVoid(Handle, "add_syntax_highlighter", array{VhFromObject(Highlighter)})
-    GetBaseEditor<public>()<decides><transacts>:control = control{Handle := VhToHandle[VhCallValue(Handle, "get_base_editor", array{})]}
+    GetBaseEditor<public>()<decides><transacts>:control = control[VhObjectFrom[VhCallValue(Handle, "get_base_editor", array{})]]
 
 visual_shader_node_global_expression<public> := class(visual_shader_node_expression):
 
 editor_script_picker<public> := class(editor_resource_picker):
 
-    GetScriptOwner<public>()<decides><transacts>:node = node{Handle := VhToHandle[VhCallValue(Handle, "get_script_owner", array{})]}
+    GetScriptOwner<public>()<decides><transacts>:node = node[VhObjectFrom[VhCallValue(Handle, "get_script_owner", array{})]]
     SetScriptOwner<public>(OwnerNode:node)<transacts>:void = VhCallVoid(Handle, "set_script_owner", array{VhFromObject(OwnerNode)})
 
 open_xr_interaction_profile_editor<public> := class(open_xr_interaction_profile_editor_base):

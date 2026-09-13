@@ -193,6 +193,7 @@ private:
 	static int32_t api_set_property(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_value);
 	static int32_t api_call_method(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count, vh_arena *p_arena, vh_value *r_value);
 	static vh_handle api_get_singleton(void *p_ctx, const char *p_name_utf8, int32_t p_name_len);
+	static int32_t api_get_class_of(void *p_ctx, vh_handle p_handle, vh_arena *p_arena, vh_value *r_class_name);
 
 	// The reference table (R-TYPE-1). See src/verse_ref_table.h for what is in it and why, and the
 	// ABI header's "reference values" for the ownership rule these implement.

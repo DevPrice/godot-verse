@@ -95,6 +95,18 @@ VhSetValue<native>(Handle:int, Property:string, Value:variant)<transacts>:void
 # accessors in GodotClasses.native.verse are `<decides>` for.
 VhSingleton<native>(Name:string)<decides><transacts>:int
 
+# The Verse object a Godot handle names, built by the host as the most derived mirrored class the
+# object actually is -- or, for a node carrying a Verse script, that script's own object.
+#
+# This is what makes a downcast mean anything (R-SCN-6). Building the object in Verse instead, as
+# `node{Handle := ...}`, gives back the class the *signature* named rather than the class the
+# object *is*, so `animated_sprite2d[GetNode("Sprite")]` could never succeed.
+#
+# Total, and never `false`: a handle Godot has freed, or one whose class this mirror does not
+# carry, answers a bare `vh_object`, which every cast then declines. The caller wrote a failable
+# cast, so a failure is an answer; raising from here would be a different question's error.
+VhObjectOf<native>(Handle:int)<transacts>:vh_object
+
 # --- reference values --------------------------------------------------------
 
 # A Godot value the wire cannot copy: an Array, a Dictionary, a Callable, a Signal, or one of the

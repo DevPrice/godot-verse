@@ -5,6 +5,7 @@
 #include "Containers/Map.h"
 #include "Containers/UnrealString.h"
 #include "GodotClasses.h"
+#include "GodotClassNames.gen.h"
 #include "GodotMathLayout.gen.h"
 #include "HostEventLoop.h"
 #include "HostRuntime.h"
@@ -926,6 +927,10 @@ AUTORTFM_DISABLE bool ScriptPackageLoaded()
 struct GodotVerse::FInstance
 {
     TStrongObjectPtr<UObject> Object;
+
+    /// The Godot object this instance is bound to. Kept so the identity registry can drop its row
+    /// when the instance goes away; it is never reached through as a handle.
+    int64 Handle = 0;
 
     /// Set by the first call into the object, after which a non-var member can no longer be
     /// given a value. See WriteInstanceField.
@@ -2248,6 +2253,117 @@ AUTORTFM_DISABLE UObject* NewMirroredWrapper(UClass* NativeClass, int64 Handle)
     return Wrapper;
 }
 
+/// Handle -> the script instance bound to it. R-SCN-6's identity half: a node carrying a Verse
+/// script has to cross into Verse as *that script's own object*, or `player[GetNode("Player")]`
+/// fails on exactly the case the cast exists for -- a fresh mirror wrapper's class is `node`, and
+/// no downcast to a script class can succeed against one.
+TMap<int64, GodotVerse::FInstance*> GInstancesByHandle;
+
+/// Handle -> the mirrored UClass an object of it crosses as, asked of Godot once per Godot object
+/// rather than once per crossing.
+///
+/// Safe to keep for the life of the process because Godot does not reuse an instance id within a
+/// run: a freed object leaves a row naming a class nothing will ask about again. A null answer is
+/// cached too -- a class the mirror does not carry is not worth asking Godot about twice.
+TMap<int64, UClass*> GHandleClassCache;
+
+/// The mirrored Verse class name for a Godot class name, out of the generated table.
+///
+/// Every Godot class is in that table, not only the emitted ones: with --classes-file a subset is
+/// generated, and each row then names the nearest ancestor that was. Binary search, because the
+/// table is sorted by Godot name and this is asked once per Godot object.
+const char* MirroredNameForGodotClass(FUtf8StringView GodotName)
+{
+    int32 Low = 0;
+    int32 High = UE_ARRAY_COUNT(verse_classes::class_names) - 1;
+    while (Low <= High)
+    {
+        const int32 Mid = Low + ((High - Low) / 2);
+        const FUtf8StringView Candidate(reinterpret_cast<const UTF8CHAR*>(verse_classes::class_names[Mid].godot_name));
+        const int32 Order = Candidate.Compare(GodotName);
+        if (Order == 0)
+        {
+            return verse_classes::class_names[Mid].verse_name;
+        }
+        if (Order < 0)
+        {
+            Low = Mid + 1;
+        }
+        else
+        {
+            High = Mid - 1;
+        }
+    }
+    return nullptr;
+}
+
+/// The mirrored class a live handle should cross as, cached per handle.
+AUTORTFM_DISABLE UClass* MirroredClassForHandle(int64 Handle)
+{
+    if (UClass** Cached = GHandleClassCache.Find(Handle))
+    {
+        return *Cached;
+    }
+
+    UClass* Found = nullptr;
+    GodotVerse::FHostState& Host = GodotVerse::GetHost();
+    if (Host.Godot.GetClassOf)
+    {
+        GodotVerse::FCallArena Arena;
+        vh_value ClassName{};
+        if (Host.Godot.GetClassOf(Host.Godot.Ctx, Handle, &Arena, &ClassName) == VH_CALL_OK
+            && ClassName.Type == VH_TYPE_STRING)
+        {
+            const FUtf8StringView GodotName = GodotVerse::MakeView(ClassName.String.Utf8, ClassName.String.Len);
+            if (const char* VerseName = MirroredNameForGodotClass(GodotName))
+            {
+                Found = FindMirroredClass(FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(VerseName)));
+            }
+        }
+    }
+
+    GHandleClassCache.Add(Handle, Found);
+    return Found;
+}
+
+} // namespace
+
+/// The Verse object a Godot handle crosses as: the script's own instance where the node carries
+/// one, and a fresh mirror wrapper of the handle's actual Godot class otherwise (R-SCN-6).
+///
+/// Never null. Fallback is what to build when Godot will not say what the handle is -- an object
+/// it has already freed, or a Godot class outside this mirror. A caller with a declared type to
+/// fall back on passes it; the generated cast path passes null and gets a bare `vh_object`, which
+/// every downcast then declines. That is the shape the cast asked for: a failure is an answer,
+/// where a raise from here would be a different question's error.
+///
+/// Mirror wrappers are deliberately *not* cached, so two crossings of one un-scripted handle are
+/// two Verse objects. Equality is by handle, and a wrapper cache would need a rule for what
+/// happens to one across a hot-reload generation, which nothing yet needs.
+AUTORTFM_DISABLE UObject* GodotVerse::ObjectForHandle(int64 Handle, UClass* Fallback)
+{
+    if (FInstance** Bound = GInstancesByHandle.Find(Handle))
+    {
+        if (*Bound && (*Bound)->Object.IsValid())
+        {
+            return (*Bound)->Object.Get();
+        }
+    }
+
+    UClass* Resolved = MirroredClassForHandle(Handle);
+    if (!Resolved)
+    {
+        Resolved = Fallback;
+    }
+    if (UObject* Wrapper = NewMirroredWrapper(Resolved, Handle))
+    {
+        return Wrapper;
+    }
+    return NewObject<verse::vh_object>(GetTransientPackage());
+}
+
+namespace {
+
 /// What an optional reference member holds: an option around the object, or Verse's `false` for one
 /// holding nothing.
 /// The Verse class that wraps a reference of this Godot type.
@@ -2395,6 +2511,10 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
     // already exists as some node's instance, and there is nothing in a handle to find it by.
     if (Declared.ReferenceClass != nullptr)
     {
+        // A parameter typed as one of the project's own classes still has no spelling on this
+        // wire: the object it should receive is some node's own instance, and a handle alone does
+        // not say which declaration it was meant to satisfy. R-SCN-6 makes that reachable the
+        // other way round -- take a `node2d` and cast it.
         if (Declared.ReferenceOrigin != EClassOrigin::Mirrored)
         {
             return false;
@@ -2412,9 +2532,14 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
             OutValue = ReferenceOption(Context, nullptr);
             return true;
         }
-        UObject* const Referenced =
-            NewMirroredWrapper(FindMirroredClass(FUtf8StringView(Declared.ReferenceClass->AsNameCString())), Handle);
-        if (!Referenced)
+        // The object the handle *is*, not an instance of the class the signature named (R-SCN-6).
+        // A parameter declared `node2d` receiving a node that carries a script is handed that
+        // script's own object, which is what makes `if (M := mob[Body])` inside the handler work --
+        // the whole point of the cast. The declared class is then the *lower* bound, and a handle
+        // whose object does not meet it is VH_ERR_ARGUMENT rather than a raise.
+        UClass* const DeclaredClass = FindMirroredClass(FUtf8StringView(Declared.ReferenceClass->AsNameCString()));
+        UObject* const Referenced = GodotVerse::ObjectForHandle(Handle, DeclaredClass);
+        if (!Referenced || !DeclaredClass || !Referenced->IsA(DeclaredClass))
         {
             return false;
         }
@@ -2644,10 +2769,9 @@ AUTORTFM_DISABLE bool WriteFieldOf(UObject* Object, FUtf8StringView FieldName, c
         // Built before the VM scope is entered, because constructing it runs the class's Verse
         // constructor through UVerseClass::PostInitInstance, which takes a context of its own.
         const int64 Handle = Value.Type == VH_TYPE_INT ? Value.Int : 0;
-        UObject* Referenced = Handle != 0
-            ? NewMirroredWrapper(FindMirroredClass(FUtf8StringView(Declared.ReferenceClass->AsNameCString())), Handle)
-            : nullptr;
-        if (Handle != 0 && !Referenced)
+        UClass* const DeclaredClass = FindMirroredClass(FUtf8StringView(Declared.ReferenceClass->AsNameCString()));
+        UObject* Referenced = Handle != 0 ? GodotVerse::ObjectForHandle(Handle, DeclaredClass) : nullptr;
+        if (Handle != 0 && (!Referenced || !Referenced->IsA(DeclaredClass)))
         {
             return false;
         }
@@ -3986,11 +4110,22 @@ AUTORTFM_DISABLE GodotVerse::FInstance* GodotVerse::Instantiate(FUtf8StringView 
     verse::vh_object* Shadow = CastChecked<verse::vh_object>(Instance);
     Shadow->Handle.Init(Handle, Shadow);
 
-    return new FInstance{TStrongObjectPtr<UObject>(Instance)};
+    FInstance* Made = new FInstance{TStrongObjectPtr<UObject>(Instance), Handle};
+    GInstancesByHandle.Add(Handle, Made);
+    return Made;
 }
 
 AUTORTFM_DISABLE void GodotVerse::ReleaseInstance(FInstance* Instance)
 {
+    if (Instance)
+    {
+        // Only if this instance is still the one registered: a node freed and its id reused would
+        // be a Godot bug, but a double release here would take the live row with it.
+        if (FInstance** Bound = GInstancesByHandle.Find(Instance->Handle); Bound && *Bound == Instance)
+        {
+            GInstancesByHandle.Remove(Instance->Handle);
+        }
+    }
     delete Instance;
 }
 

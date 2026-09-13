@@ -80,6 +80,15 @@ AUTORTFM_DISABLE bool HasClass(FUtf8StringView ClassName);
 AUTORTFM_DISABLE FInstance* Instantiate(FUtf8StringView ClassName, int64 Handle);
 AUTORTFM_DISABLE void ReleaseInstance(FInstance* Instance);
 
+/// The Verse object a Godot handle crosses as (R-SCN-6). The script's own instance where the node
+/// carries one -- which is what makes a downcast to a script class possible at all -- and a fresh
+/// mirror wrapper of the handle's own Godot class otherwise. Never null.
+///
+/// Fallback is the class to wrap in when Godot will not say what the handle is: a caller that
+/// already has a declared type to hold the value passes it, so a dead handle still produces
+/// something the declaration accepts. The generated cast path passes null on purpose.
+AUTORTFM_DISABLE UObject* ObjectForHandle(int64 Handle, UClass* Fallback = nullptr);
+
 AUTORTFM_DISABLE bool InstanceHasFunction(const FInstance* Instance, FUtf8StringView DecoratedName);
 
 /// One parameter of a script method, described from its declared type.
