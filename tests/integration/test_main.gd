@@ -578,6 +578,15 @@ func _init() -> void:
 		emitter_node.call("EmitTouched", emitter_node)
 		_check("an object payload crosses as the node it names", _signal_object == emitter_node)
 
+		# Godot's own signals, through the accessor the generator emits per signal per class. The
+		# engine emits `renamed` itself, so nothing here emits it: setting the name is the event.
+		# Emitted by hand rather than by setting the name: Node::set_name only emits `renamed` for a
+		# node inside the tree, and a SceneTree script's _init runs before the tree is standing.
+		emitter_node.call("SubscribeToRename")
+		emitter_node.emit_signal("renamed")
+		_check_eq("a Verse handler runs when Godot emits one of its own signals",
+				emitter_node.call("ReadRenames"), 1)
+
 		# Verse subscribes to a signal GDScript emits (R-SIG-6), through the same Callable.
 		var gd_emitter := Object.new()
 		gd_emitter.add_user_signal("Tally", [{"name": "points", "type": TYPE_INT}])

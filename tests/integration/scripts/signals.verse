@@ -67,6 +67,22 @@ signals := class(node2d):
         set Seen = 0
         set SeenBy = ""
 
+    # Godot's own 489 signals, as an accessor per signal per class: the same `godot_signal(t)` the
+    # declaration gives, bound to that handle and that Godot name. This is what makes a scene-file
+    # connection optional -- `Timer.Timeout().Subscribe(OnTimeout)` is a spelling now -- and it is
+    # what Phase 5's `Timer.Timeout().Await()` will be built on.
+    var Renames<public>:int = 0
+
+    # No parameters at all, against a `tuple()` payload: a Verse function's parameter *is* its
+    # tuple, so a nullary function and a one-empty-tuple-parameter callback are the same thing.
+    OnRenamed<public>()<transacts>:void =
+        set Renames = Renames + 1
+
+    SubscribeToRename<public>()<transacts>:void =
+        Renamed().Subscribe(OnRenamed)
+
+    ReadRenames<public>()<transacts>:int = Renames
+
     # R-SIG-6: receiving a signal a *GDScript* node emits. `Subscribe` is for a signal this class
     # declares; this is the general form underneath it, and it is the same Callable either way.
     ConnectTo<public>(Other:object, Name:string)<transacts>:void =

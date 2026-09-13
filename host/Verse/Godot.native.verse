@@ -149,6 +149,19 @@ VhSignalSubscribe<native>(Id:int, Callback:any)<transacts>:int
 # Idempotent, as `event_subscription.Cancel` is in UEFN: a second Cancel does nothing.
 VhSignalCancel<native>(Subscription:int)<transacts>:void
 
+# Binds one of *Godot's own* 489 signals, for the accessors the generator emits per class --
+# `Timer.Timeout()`, `Button.Pressed()`. A script-declared signal is bound at construction instead,
+# because the host walks the class's members for it; an engine signal has no member to walk.
+#
+# Class and Accessor name the generated accessor, which is where the payload's declared type comes
+# from: its return type is a `godot_signal(t)` instantiation, and the type argument is on it as a
+# substitution table -- the same road a member's payload is read by. Name is Godot's own spelling of
+# the signal, which is what `connect` and `emit_signal` are given.
+#
+# One row per (object, signal) rather than one per call, so `Timer.Timeout()` in a loop does not
+# grow the table.
+VhSignalBind<native>(Handle:int, Class:string, Accessor:string, Name:string)<transacts>:int
+
 # --- reference values --------------------------------------------------------
 
 # A Godot value the wire cannot copy: an Array, a Dictionary, a Callable, a Signal, or one of the

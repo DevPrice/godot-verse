@@ -619,6 +619,19 @@ void VhSignalCancel(int64 Subscription)
     AutoRTFM::Open([&] { GodotVerse::CancelSubscription(Subscription); });
 }
 
+int64 VhSignalBind(int64 Handle, verse::string const& Class, verse::string const& Accessor, verse::string const& Name)
+{
+    const FUtf8String OwnClass(ToView(Class));
+    const FUtf8String OwnAccessor(ToView(Accessor));
+    const FUtf8String OwnName(ToView(Name));
+    return AutoRTFM::Open([&] {
+        return GodotVerse::BindEngineSignal(Handle,
+                                            FUtf8StringView(OwnClass),
+                                            FUtf8StringView(OwnAccessor),
+                                            FUtf8StringView(OwnName));
+    });
+}
+
 void VhTypeMismatch(verse::string const& Expected, FGodotValue const& Value)
 {
     const FUtf8String Name(ToView(Expected));

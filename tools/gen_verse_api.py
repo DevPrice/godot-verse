@@ -1225,6 +1225,7 @@ class Coverage:
         self.classes_emitted = 0
         self.methods_emitted = 0
         self.properties_emitted = 0
+        self.signals_emitted = 0
         self.skip_reasons = Counter()
         self.unsupported_types = Counter()
         # Every skip that costs a *name*, for the editor diagnostic. A skip that costs nothing --
@@ -1378,6 +1379,42 @@ def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members
         is_void=is_void,
         default_body=default_body,
     )
+
+
+def emit_signal_accessor(godot_class: str, sig: dict, resolver: TypeResolver, coverage: Coverage):
+    """One of Godot's own signals, as an accessor answering a `godot_signal(t)` bound to that handle.
+
+    A method rather than a data member, which is what C# does too: a mirror wrapper is built per
+    crossing, and a member would have to be filled on each one.
+
+    The payload follows the same rule a declared signal's does -- nothing is `tuple()`, one argument
+    is that argument's own type, more are a tuple -- so a handler written with N parameters
+    subscribes to a signal Godot emits with N arguments, for the reason a Verse function's parameter
+    *is* its tuple.
+    """
+    verse_class = verse_class_name(godot_class)
+    name = verse_method_name(sig["name"])
+
+    infos = []
+    for arg in sig.get("arguments") or []:
+        info = resolver.classify(arg["type"])
+        if info is None or info.pack_fn is None:
+            coverage.skip("signal_unsupported_payload", SkippedMember(
+                verse_class, name, godot_class, sig["name"],
+                "signal_unsupported_payload", f"`{arg['type']}`"))
+            return None
+        infos.append(info)
+
+    if not infos:
+        payload = "tuple()"
+    elif len(infos) == 1:
+        payload = infos[0].verse_type
+    else:
+        payload = "tuple(" + ", ".join(i.verse_type for i in infos) + ")"
+
+    return (name, f'    {name}<public>()<transacts>:godot_signal({payload}) ='
+                  f' godot_signal({payload}){{Id := VhSignalBind(Handle, "{verse_class}",'
+                  f' "{name}", "{sig["name"]}")}}')
 
 
 def emit_call_args(params) -> str:
@@ -1644,6 +1681,7 @@ def generate(api: dict, requested: list, coverage: Coverage, enums: dict):
         # Every name the class will carry, so a parameter can be checked against members that
         # have not been classified yet as well as inherited ones.
         member_names = base_names | {verse_method_name(m["name"]) for m in methods}
+        member_names |= {verse_method_name(sg["name"]) for sg in classes_by_name[name].get("signals", [])}
         for cp in properties:
             member_names |= {cp.verse_name, f"{cp.verse_name}Getter", f"{cp.verse_name}Setter"}
         locals_for_accessors = accessor_locals(member_names)
@@ -1685,6 +1723,24 @@ def generate(api: dict, requested: list, coverage: Coverage, enums: dict):
             emitted_lines.append(emit_method(cm))
             method_map.append((name, verse_class_name(name), cm.godot_name, cm.verse_name))
             coverage.methods_emitted += 1
+
+        # Godot's own signals, last, so a name a method or property already took wins: an accessor
+        # is the convenience and the member is the API. Every collision of the kind that would have
+        # mattered -- `Node.ready`, `CanvasItem.draw`, `Control.gui_input`, `BaseButton.pressed` --
+        # was with a *virtual*, and those keep Godot's leading underscore, so none of them meet.
+        for sig in classes_by_name[name].get("signals", []):
+            emitted = emit_signal_accessor(name, sig, resolver, coverage)
+            if emitted is None:
+                continue
+            signal_name, line = emitted
+            if signal_name in used:
+                coverage.skip("shadow", SkippedMember(
+                    verse_class_name(name), signal_name, name, sig["name"], "shadow", ""))
+                continue
+            used.add(signal_name)
+            all_member_names.add(signal_name)
+            emitted_lines.append(line)
+            coverage.signals_emitted += 1
 
         inherited_names[name] = used
         coverage.classes_emitted += 1
@@ -2154,6 +2210,7 @@ def format_report(coverage: Coverage, class_count_requested: int) -> str:
     lines.append(f"Classes emitted: {coverage.classes_emitted}")
     lines.append(f"Methods emitted: {coverage.methods_emitted}")
     lines.append(f"Properties emitted: {coverage.properties_emitted}")
+    lines.append(f"Signal accessors emitted: {coverage.signals_emitted}")
     lines.append("")
     lines.append("Methods skipped, by reason:")
     total_skipped = sum(coverage.skip_reasons.values())

@@ -151,6 +151,18 @@ AUTORTFM_DISABLE int64 SubscribeSignal(int64 SignalId, const FVerseValue& Callba
 /// Disconnects. Idempotent, as event_subscription::Cancel is in UEFN.
 AUTORTFM_DISABLE void CancelSubscription(int64 SubscriptionId);
 
+/// Binds one of Godot's own signals on one object, for the accessors the generator emits per class
+/// (R-SIG-3's other half). Answers a binding id, deduplicated per (owner, signal) so an accessor
+/// called in a loop does not grow the table.
+///
+/// The payload's declared type is read off the generated accessor's *return* type, which is a
+/// `godot_signal(t)` instantiation -- the same road a declared member's payload is read by, and the
+/// reason nothing here has to be told what a Godot signal carries.
+AUTORTFM_DISABLE int64 BindEngineSignal(int64 Handle,
+                                        FUtf8StringView ClassName,
+                                        FUtf8StringView AccessorName,
+                                        FUtf8StringView SignalName);
+
 /// One method a script's class declares.
 struct FMethodDesc
 {

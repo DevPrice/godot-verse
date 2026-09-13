@@ -2321,6 +2321,15 @@ struct FSubscription
 TMap<int64, FSubscription> GSubscriptions;
 int64 GNextSubscriptionId = 1;
 
+/// "<handle>:<signal>" -> the binding id, so an accessor called twice on one object answers the
+/// same row. A row is never dropped: the ids are small, and nothing tells the host that Godot has
+/// freed an object.
+TMap<FUtf8String, int64> GEngineSignalIds;
+
+/// "<class>.<accessor>" -> a binding holding only the payload shape, which is the expensive half:
+/// every Timer's `timeout` carries the same nothing, and the lookup walks the semantic program.
+TMap<FUtf8String, FSignalBinding> GEngineSignalShapes;
+
 /// The mirrored Verse class name for a Godot class name, out of the generated table.
 ///
 /// Every Godot class is in that table, not only the emitted ones: with --classes-file a subset is
@@ -3483,6 +3492,68 @@ AUTORTFM_DISABLE void BindSignals(UObject* Instance, FUtf8StringView ClassName, 
 }
 
 } // namespace
+
+AUTORTFM_DISABLE int64 GodotVerse::BindEngineSignal(int64 Handle,
+                                                    FUtf8StringView ClassName,
+                                                    FUtf8StringView AccessorName,
+                                                    FUtf8StringView SignalName)
+{
+    // One row per (owner, signal). An accessor is a method, so it runs on every `Timer.Timeout()`
+    // -- minting per call would grow the table for as long as the game does.
+    const FUtf8String Key = FUtf8String::FromInt(Handle) + UTF8TEXT(":") + FUtf8String(SignalName);
+    if (const int64* Existing = GEngineSignalIds.Find(Key))
+    {
+        return *Existing;
+    }
+
+    FSignalBinding Binding;
+    Binding.OwnerHandle = Handle;
+    Binding.Name = FUtf8String(SignalName);
+
+    // The payload, off the accessor's own return type, cached per accessor rather than per object:
+    // every Timer's `timeout` carries the same nothing.
+    const FUtf8String Shape = FUtf8String(ClassName) + UTF8TEXT(".") + FUtf8String(AccessorName);
+    if (const FSignalBinding* Cached = GEngineSignalShapes.Find(Shape))
+    {
+        Binding.ArgTypes = Cached->ArgTypes;
+        Binding.bPayloadIsTuple = Cached->bPayloadIsTuple;
+    }
+    else if (GIde.IsValid())
+    {
+        if (const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager())
+        {
+            const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
+            const FUtf8String Path = FUtf8String(GodotVersePath) + UTF8TEXT("/") + FUtf8String(ClassName);
+            if (const uLang::CClass* const Mirrored = Program->FindDefinitionByVersePath<uLang::CClass>(
+                    FULangConversionUtils::FUtf8StringViewToULangStringView(Path)))
+            {
+                for (const uLang::TSRef<uLang::CFunction>& Function : Mirrored->GetDefinitionsOfKind<uLang::CFunction>())
+                {
+                    if (!FUtf8StringView(Function->AsNameCString()).Equals(AccessorName))
+                    {
+                        continue;
+                    }
+                    const uLang::CFunctionType* const Type = Function->_Signature.GetFunctionType();
+                    bool bIsOption = false;
+                    const uLang::CNormalType* const Returned =
+                        Type ? &UnwrapDeclaredType(Type->GetReturnType(), bIsOption) : nullptr;
+                    if (const uLang::CClass* const Signal = Returned ? Returned->AsNullable<uLang::CClass>() : nullptr)
+                    {
+                        DescribePayload(SignalPayloadType(*Signal), *Program,
+                                        Binding.ArgTypes, Binding.bPayloadIsTuple);
+                    }
+                    break;
+                }
+            }
+        }
+        GEngineSignalShapes.Add(Shape, Binding);
+    }
+
+    const int64 Id = GNextSignalId++;
+    GSignalBindings.Add(Id, MoveTemp(Binding));
+    GEngineSignalIds.Add(Key, Id);
+    return Id;
+}
 
 AUTORTFM_DISABLE void GodotVerse::EmitSignal(int64 SignalId, const FVerseValue& Payload)
 {
