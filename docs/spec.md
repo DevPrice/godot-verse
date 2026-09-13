@@ -506,12 +506,19 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
 - **R-SIG-4 (MUST)** A connection made in the editor to a Verse script's method works — including
   the editor's "connect and create the function for me" flow, which is what `_make_function` is
   for. Status: **part**, and the part that works is the load-bearing one. The Dodge the Creeps port
-  is wired by ten connections in its scene files — five `Timer.timeout`s, `Button.pressed` and
-  `Area2D.body_entered` each to two different scripts, and `screen_exited` — and every one reaches
-  its Verse method, with the signal's arguments marshalled to the declared parameter types. It is
-  the reason the port survives having no signals of its own (`docs/dodge-the-creeps.md` wall 2).
-  What is untested is the editor-side flow: connecting through the Node panel, and `_make_function`
-  writing the handler.
+  is wired by eight connections in its scene files — five `Timer.timeout`s, the player's own
+  `body_entered`, `StartButton.pressed` and `screen_exited` — and every one reaches its Verse
+  method, with the signal's arguments marshalled to the declared parameter types.
+
+  Two of the ten it used to carry are gone, and their going is Phase 4's: `Area2D.body_entered` and
+  `Button.pressed` were each wired to *two* scripts because neither script could declare a signal
+  of its own. They are now the player's `Hit` and the HUD's `StartGame`, subscribed to from code.
+  The rest stayed deliberately: connecting a node's own signal through the Node panel is what a
+  Godot author does, and it keeps this path covered.
+
+  What is still untested is the **editor-side flow**: connecting through the Node panel, and
+  `_make_function` writing the handler. Both need a windowed editor session, which is on the phase's
+  by-hand checklist and is owed.
 - **R-SIG-5 (MUST)** A script `await`s a signal from a concurrent context: the Verse spelling of
   GDScript's `await button.pressed`. Depends on §7.
 - **R-SIG-6 (MUST)** Signals declared in Verse are connectable and emittable from GDScript and C#

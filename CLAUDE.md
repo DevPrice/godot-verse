@@ -24,31 +24,49 @@ one must not use `EPathMode::PackageRelative`, which is fatal for a class with n
 OQ-12's answer (positive: the package name carries the generation, the verse path is pinned).
 Two by-hand checks are still owed — a windowed run of the yardstick, and an editor session.
 
-**Phase 4 is designed and not built.** `docs/phase-4-design.md` is the design, and unusually for this
-repo its spikes ran *before* it was written — **§2 is where they are**, and one of them retired the
-design the document would otherwise have carried: Verse's own `signalable`/`subscribable` interfaces
-cannot be implemented here, because their domains are `no_rollback` and every Godot callback runs in a
-transaction. Three other things in it are worth knowing before touching the generator: a virtual is
-spelled the way Godot spells it (**`_Ready`, not `Ready`** — §6.1 counts the collisions that decided
-it), `_notification` is in no part of `extension_api.json` and so cannot be generated (§6.3), and
-**OQ-11 is closed** — Verse has type-based extension methods and definable operators, so the math
-types are ordinary Verse. The phase splits into 4a (what scene code touches) and 4b (the editor's data
-model).
+**Phase 4a is built; 4b is not.** `docs/phase-4-design.md` is the design, and unusually for this repo
+its spikes ran *before* it was written — **§2 is where they are**. **§13 is the part to read**: written
+after the code, it is where the design turned out to be wrong. The three that matter most are a
+signal member's payload type coming out of the class's *substitution table* rather than off its
+`Signal` method (which reports the bare type variable, so every signal looked like one argument of
+unknown type); §6.7's engine-signal accessors depending on §7.1's underscore, which puts them after
+stage 5 rather than in stage 4; and OQ-14's answer, which is that the whole of the phase's mirror
+growth cost **83 ms** of per-keystroke analysis rather than the collapse §7.4 braced for.
 
-**`docs/dodge-the-creeps.md` is the one to read before adding a Verse-facing feature.** The port
-closed Phase 2 and it plays, so the document is not a progress report — it is the eight things a
-Godot author writes without thinking that have no spelling yet, each with the requirement that will
-give it one, measured in a real game rather than estimated. It also corrects two statuses that were
-recorded as done: R-INT-2 (a script cannot make the `godot_array` `callv` needs) and the cost of
-R-SCN-6's absence.
+Four things it settled are load-bearing everywhere else. A virtual is spelled the way Godot spells
+it — **`_Ready`, not `Ready`**, and §7.1 counts the eight *signal* collisions that decided it.
+`_notification` is in no part of `extension_api.json`, so `_Notification` is hand-written on the
+native root and the rest of that family is R-NODE-10, in 4b. **OQ-11 is closed**: the math types are
+ordinary Verse, with extension methods and definable operators and no ABI at all. And Verse's own
+`signalable`/`subscribable` cannot be implemented here — their domains are `no_rollback` and every
+Godot callback runs in a transaction — so `godot_signal` has their *vocabulary* and not their
+interfaces.
+
+**One cost of the math is easy to trip over.** An extension method is a **module-level** definition:
+`(V:vector2).Angle()` declares `operator'.Angle'`, and Verse resolves a bare `Angle` against it — so
+a parameter or local named `Angle`, `Length`, `Dot`, `Cross`, `Normalized`, `Rotated`, `DistanceTo`
+or `LengthSquared` is *ambiguous*, not shadowing. `gen_verse_api.py`'s `VERSE_STDLIB_NAMES` keeps the
+generated mirror clear of them; a script has to avoid them by hand, the way it already avoids `Abs`
+and `Clamp`.
+
+**`docs/dodge-the-creeps.md` is the one to read before adding a Verse-facing feature.** It is not a
+progress report — it is the eight things a Godot author writes without thinking, each measured in a
+real game rather than estimated, with the requirement that gives it a spelling. **Six of the eight
+are down** since Phase 4 re-ported the game in place; the table says which, and §"After Phase 4" says
+what the diff came to. The two still standing are `await` on a signal (Phase 5) and the
+`<transacts>` trap (Phase 4.5), and the trap fired again *during* the re-port, four declarations
+deep in two other files.
+
+**`docs/by-hand-checklist.md` is what no headless run can see**, and nothing on it has been run. Two
+phases owe it now.
 
 **README predates Phase 1 and is stale on marshalling.** It still describes three hand-written
 value types, a `variant` tuple, `object` as the only `<native>` class, and packed arrays crossing as
 copies — all four now wrong — and it says nothing about general dispatch, the method list, or
-runtime errors with stacks. It is awaiting a rewrite rather than a patch. Two things it says that
-*are* still true and read like they might not be: `Ready`, `Process` and `PhysicsProcess` remain the
-only Godot **virtuals** the bridge carries (the full set is R-NODE-7, Phase 4), and `@GlobalScope` is
-still out of reach (R-SCN-3, which Phase 2 moved to Phase 4 with OQ-11). Its editor-tooling, export and constraints sections are
+runtime errors with stacks. It is awaiting a rewrite rather than a patch. Phase 4 made it staler still: all
+1413 of Godot's virtuals are carried now and are spelled `_Ready`, not `Ready`; `@GlobalScope`'s
+constants and statics are reachable through per-class `...Statics` modules; the math types have
+methods and operators; and a script declares signals as typed members. Its editor-tooling, export and constraints sections are
 unaffected. Where the two disagree, `docs/spec.md` and `docs/abi-v2-design.md` are the record.
 
 Phase 2 makes it staler still, in ways worth knowing before reading it: every one of Godot's 1023
@@ -215,6 +233,7 @@ launching the editor** (`godot --path demo` with no `--headless`), which does.
 | `src/verse_api_classes.h` | `tools/gen_verse_api.py` | same |
 | `host/Private/GodotMathLayout.gen.h` | `tools/gen_verse_api.py` | same — the math types' field trees, so the host builds one the way the Verse struct declares it |
 | `src/verse_api_skipped.h` | `tools/gen_verse_api.py` | same — every Godot member the mirror does not carry under its own name, and why, which is what `_validate` turns into a sentence (R-SCN-2) |
+| `host/Private/GodotClassNames.gen.h` | `tools/gen_verse_api.py` | same — every Godot class and the mirrored Verse class an object of it crosses as, which is what R-SCN-6's cast is built on. Every class, not only the emitted ones: a `--classes-file` build still has to make a handle cross as *something*, so each row names its nearest emitted ancestor |
 | `src/verse_keywords.h` | `tools/gen_verse_keywords.py` | the UE compiler's `ReservedSymbols.inl` |
 
 **Every Godot class is mirrored by default.** `tools/verse_api_classes.txt` is a smaller curated
@@ -230,8 +249,11 @@ says why in place: `VERSE_AMBIGUOUS_MEMBER_NAMES` (five names, compiler-confirme
 `FREE_FUNCTION_REPLACEMENTS` (`Object.to_string` is Verse's own `ToString`, which is also what
 string interpolation desugars to).
 
-`host/Verse/Godot.native.verse` and `GodotApi.native.verse` **are** hand-written: the first is the
-whole native primitive surface, the second the ordinary-Verse packing layer above it. Mirroring
+`host/Verse/Godot.native.verse`, `GodotApi.native.verse` and `GodotMath.native.verse` **are**
+hand-written: the first is the whole native primitive surface, the second the ordinary-Verse packing
+layer above it, and the third the math types' methods and operators — which are ordinary Verse with
+no handle and no ABI, because that is OQ-11's answer. `GodotMath` carries `.native.verse` despite
+declaring nothing native: VNI refuses a plain `.verse` in a VNI-capable package. Mirroring
 another Godot *class* still costs no C++ and no new native function — that rule held through ABI v2.
 What did cost native functions was the reference types: the primitive surface went from 8 to 22,
 because a container has to be asked for its elements rather than decomposed.
@@ -299,6 +321,16 @@ ten element types against four key types is not a list to maintain by hand.
   Authorship comes from a `IPreSemAnalysisInjection`, which must stay registered for the life of
   the process: `CProgramBuildManager::Build` resets the semantic program on every compile *and*
   every analysis, so a one-shot grant is gone by the first build.
+- **An explicit effect specifier narrows, and narrowing is contagious downward.** A function with no
+  specifier carries the *default* set, which is wider than `<transacts>` — it contains
+  `no_rollback`. So a `<transacts>` function may not call a specifier-less one, and anything that
+  forces `<transacts>` on a method (a `Subscribe` handler; a failure context) forces it on
+  everything that method calls, a file at a time. The compiler reports it at the **call** site, not
+  at the declaration that needs changing. This is `dodge-the-creeps.md` wall 8 and Phase 4.5 owns it.
+- **A module-level name and a local of that name are ambiguous, not shadowing** — and an *extension
+  method* is a module-level name. `(V:vector2).Length()` makes `Length` unusable as a parameter name
+  in any file that imports the Godot package, which is every script. See the Phase 4 note above for
+  the list.
 - **Verse rejects mixed tabs and spaces.** Godot's script editor writes tabs; `.vscode/settings.json`
   matches that. Keep `.verse` files tab-indented.
 

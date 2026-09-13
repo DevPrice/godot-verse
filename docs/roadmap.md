@@ -1,14 +1,16 @@
 # godot-verse — Roadmap
 
-**Status:** Draft 7 · 2026-09-12 · **Phases 0–3 complete**, bar the two by-hand checks Phase 3 is
-owed — a windowed run of the yardstick, and an editor session exercising Play, Build and `@tool`.
-Its design is [`phase-3-design.md`](phase-3-design.md), which supersedes four of the bullets below
-and gates the whole phase on a spike. What Phase 2 built, and the four
-places the design was wrong, are in [`phase-2-design.md`](phase-2-design.md) §11. The Dodge the
-Creeps port closed it and **plays** — the eight walls it hit, each mapped to a requirement, are
-[`dodge-the-creeps.md`](dodge-the-creeps.md), and that list is Phase 4's scope. **Phase 4 is
-designed**, in [`phase-4-design.md`](phase-4-design.md), and splits into 4a and 4b; its spikes are
-answered and its gate is the port re-written idiomatically rather than merely without GDScript.
+**Status:** Draft 8 · 2026-09-12 · **Phases 0–3 complete and Phase 4a complete**, bar the by-hand
+checks two phases now owe — Phase 3's windowed yardstick run and editor session, and Phase 4's
+Node-panel and `_make_function` flows. Phase 3's design is
+[`phase-3-design.md`](phase-3-design.md); what Phase 2 built, and the four places its design was
+wrong, are in [`phase-2-design.md`](phase-2-design.md) §11.
+
+**Phase 4a is built.** [`phase-4-design.md`](phase-4-design.md) is the design and §11 is what the
+building corrected. Its gate was the Dodge the Creeps port rewritten *idiomatically* rather than
+merely without GDScript, and the port is: six of its eight walls are down, `vectors.verse` is gone,
+and the 30 headless checks pass. What remains of the phase is **4b**, the editor's data model, which
+the yardstick never touches.
 **Companion to:** `docs/spec.md` (what must be true) and `README.md` (what is true now)
 
 ---
@@ -439,10 +441,10 @@ windowed run** Phase 2 never gave it. Full criteria: `phase-3-design.md` §9.
 
 ## Phase 4 — Parity: signals, virtuals, and the rest of Godot's model
 
-**Designed, not built.** [`phase-4-design.md`](phase-4-design.md) is the whole of it, written after
-its three spikes rather than before them — **§2 is the part to read**, because one spike retired the
-design the phase would otherwise have been built around, and §6.1 is a naming decision that came out
-of a measurement rather than a preference.
+**4a is built; 4b is not.** [`phase-4-design.md`](phase-4-design.md) is the design, written after
+its three spikes rather than before them — **§2 is where they are**, because one spike retired the
+design the phase would otherwise have been built around — and **§11 is what building it corrected**,
+which is the part to read before trusting the rest.
 
 **Why now.** Everything here was blocked on Phase 1's dispatch and Phase 2's surface, and all of it
 is faster to build behind Phase 3's reload loop. This is the phase the yardstick measures.
@@ -490,6 +492,13 @@ Ordered by dependency; the design document has the stage table and what each is 
 is, but free of the workarounds: casts instead of seventeen inspector slots, Verse-declared signals
 instead of two scene connections to one engine signal, no `vectors.verse`, no `Object.Set` with
 string property names. The port is rewritten in place, wall by wall, and the diff is the measurement.
+
+**Met**, and the diff says so: `main` went from nine object-typed exports to one (`MobScene`, which
+*should* be an export), `node_paths=PackedStringArray(...)` is gone from all four scenes, the two
+connections that existed only because a script could not declare a signal are gone with it, and the
+mob is configured through `set Mob.LinearVelocity = ...` behind a cast. The 30 headless checks pass
+and `tools/run_tests.py` is green at 201 integration cases. What is **not** met is the by-hand
+checklist, which needs a windowed editor and is owed.
 
 ### What 4a leaves open
 
