@@ -44,6 +44,25 @@ Verse is a first-class scripting language for Godot. Two bars, both of which mus
 
 Anything past those two bars is a bonus and is marked MAY.
 
+**One stated exception to bar 1, and it is permanent: background threads.** A GDScript author can
+run *their own code* on a `Thread` or a `WorkerThreadPool` task. A Verse author cannot, and this is
+not a gap this project can close. VerseVM asserts the game thread at its top-level entry —
+`ensure(IsInGameThread() && …)` in `VVMEnterVMInline.h`, above the comment "Verse bytecode and
+AutoRTFM transactions must run on the game thread" — and Verse's own concurrency is *cooperative*
+rather than parallel: `spawn`, `race`, `sync` and `branch` interleave tasks on one thread, they do
+not distribute them across cores. So no Verse code ever executes off the game thread, a long Verse
+computation blocks the frame, and there is no Verse spelling of "do this in the background".
+
+What a Verse author keeps is the ability to *ask the engine* for threaded work and observe the
+result on the main thread — threaded resource loading, a `WorkerThreadPool` task whose callable is
+not Verse — and the whole of Verse's concurrency for everything that is about waiting rather than
+about cores. What changes is only who runs the work.
+
+Recorded here, against the bar it fails, rather than buried in §7. **R-ASYNC-8** makes a
+foreign-thread call refuse with a message instead of corrupting the VM; **OQ-6** holds the part that
+could still change, which is whether such a call is *marshalled* to the game thread rather than
+refused. Neither would let Verse code run on another thread; only an engine change could.
+
 ### 1.2 Target user
 
 **A Godot developer who wants a better language than GDScript.** They know Godot's model —
@@ -674,6 +693,16 @@ event, and `vh_tick` pumped once per frame with a budget.
   thread. (Threaded *resource loading* is not one of these: `verse_resource_format.cpp` makes no host
   calls.) Phase 4 enlarges the exposure, because a `Callable` made from a Verse function is a value the
   author may hand to anything.
+
+  **Threaded physics is not one of the hazards, which is worth recording because it is the first
+  thing anyone asks.** `physics/2d/run_on_separate_thread` and its 3D twin exist and default to
+  false, but they move the *simulation*, not the callbacks: `PhysicsServer2DWrapMT::step` is pushed
+  to the physics thread's command queue while `flush_queries()` calls straight through on the calling
+  thread, and `Main::iteration` runs `sync()` → `flush_queries()` → `physics_process()` →
+  `end_sync()` → `step()` from the main thread. So `_physics_process`, `body_entered` and
+  `_integrate_forces` all arrive on the main thread with the physics thread parked, enabled or not.
+  This is a property of Godot's current design rather than a guarantee we hold, which is one more
+  reason to have the guard: if it ever changes, the bridge says so instead of corrupting.
 
   What this requirement asks for is the refusal, not a solution: the id of the `vh_init` thread,
   checked at every entry point, answering a distinct status with a message that names the script and
