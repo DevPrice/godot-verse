@@ -43,6 +43,12 @@ by a spike — both are marked.
 | a script's own statics | **a module with a declared association** | `@statics(player)` on the module, so the class↔module link is checkable rather than a naming convention that fails silently |
 | export hints | **type-driven first, attributes for the rest** | keeps the existing rule that a range comes from the type's own `where` clause, so the slider and the type cannot disagree |
 | `@tool`'s editor virtuals | **4a, riding the mechanism** | if R-NODE-7 is general they cost a test, and R-EXP-5 stops being `part` |
+| signal payload | **tuple, or a struct when you want names** | Verse tuples cannot name their elements, and Godot's signal list and `_make_function` both want names. A tuple keeps the N-parameter handler S-B proved; a struct maps top-level fields to named arguments (§6.2) |
+| emission timing | **immediate, a stated exception** | every other void mutation defers to commit; emission does not, so "emit then read what the handler changed" works and a Verse emission matches a GDScript one. It joins the audited set Phase 4.5 owns (§6.4) |
+| `Subscribe` and rollback | **compensated with `Stm::OnRollback`** | it mutates Godot and returns a value, so it can be neither deferred nor ignored. Epic's own event does the same in reverse. The host's first compensation |
+| connect semantics | **reference equality, duplicates allowed, idempotent `Cancel`, no flags** | *prior art, twice*: Godot's lambda callables compare by reference and UEFN's event inserts one entry per subscribe with an idempotent cancel (§5, §6.3) |
+| callback binding | **a bound method only, in 4a** | Godot's self-capturing lambda dies with its object; its plain lambda is anchored to the script and is Godot's own known leak. We take the half that does not leak; unbound functions are **OQ-16** |
+| effect-semantics review | **its own phase, 4.5** | asked for as a phase rather than an open-question row, and inserted without renumbering so the phase records written earlier stay true |
 | virtual names | **Godot's spelling, `_Ready`** | measured, not preferred: plain names collide with a *signal* on Node, CanvasItem, Control and BaseButton, and with a method 834 times. The underscore Godot already uses is the disambiguation, and C# keeps it too (§7.1) |
 | the rename it causes | **all at once, in stage 5** | `Ready` → `_Ready` across demo, tests and the yardstick in one commit; pre-1.0, no deprecation window |
 | script-level hooks | **`_Notification` only** | it is not in `extension_api.json`, so it is hand-declared rather than generated. `_ToString`, `_Get`, `_Set`, `_GetPropertyList`, `_ValidateProperty` become **R-NODE-10** and land in 4b (§7.3) |
@@ -322,10 +328,24 @@ keeps, pointing the other way:
   `CallableCustom` that holds that id. `godot-cpp` exposes `CallableCustom` (`variant/callable_custom.hpp`).
 - Invoking it crosses back through a new entry point, `vh_callback_invoke(CallbackId, Args, …)`, and
   the `CallableCustom`'s destructor releases through `vh_callback_release`.
-- **The lifetime rule**: a Callable Godot holds keeps the Verse function alive, and a bound method
-  keeps its instance alive with it. `CallableCustom::get_object()` answers the owner's instance id, so
-  Godot's own `is_valid()` still reports a Callable whose object has been freed, and a connection to a
-  freed object behaves the way Godot's does.
+- **Only a function bound to a script instance is accepted in 4a**, and the reason is Godot's own
+  design rather than caution. GDScript has no free functions, but its lambdas are the analogue and
+  Godot answers this question twice, differently:
+
+  | | `get_object()` | `is_valid()` | dies with the object? |
+  | --- | --- | --- | --- |
+  | `GDScriptLambdaSelfCallable` (captures `self`) | the captured object | `CallableCustom::is_valid()` — consults ObjectDB | **yes** |
+  | `GDScriptLambdaCallable` (plain) | **the script resource** | overridden to `function != nullptr` | **no** — anchored to a strong `Ref<GDScript>` |
+
+  The second row is Godot's own known leak — the `GDScriptLambdaCallables` TODO and GH-102327, which
+  this repo already met from the other end (`phase-2-design.md` §11, the exit-time segfault). So the
+  bound case is the half that does not leak: `get_object()` is the script instance's node, `is_valid()`
+  consults ObjectDB, and a freed node drops its subscriptions with no work from us. An unbound
+  function is refused with a diagnostic, and **OQ-16** carries what answering it will require.
+- **Equality is by reference**, which both prior arts agree on: Godot's lambda callables compare
+  `p_a == p_b` ("Lambda callables are only compared by reference") and Epic's event inserts a new
+  entry per `Subscribe`. So two subscriptions of the same method are two connections with two
+  independent `cancelable`s, rather than the duplicate Godot refuses for `Callable(node, "method")`.
 - Epic's `FVerseEventCallbackList` carries the other half of the discipline and is worth copying: each
   callback remembers the `FContentScope` it was subscribed in, and a terminated scope drops it. That
   is what keeps a raise (R-DIAG-3) from leaving callbacks that can never run again.
@@ -346,96 +366,173 @@ player := class(area2d):
 
 	Hit<public>:godot_signal() = godot_signal(){}
 
-	Struck<public>:godot_signal(tuple(int, string)) = godot_signal(tuple(int, string)){}
+	Struck<public>:godot_signal(struck_payload) = godot_signal(struck_payload){}
 
 	OnBodyEntered<public>(Body:node2d):void =
 		Hit.Signal(())
-		Struck.Signal((10, "spike"))
+		Struck.Signal(struck_payload{Damage := 10, By := "spike"})
+
+struck_payload<public> := struct:
+	Damage<public>:int = 0
+	By<public>:string = ""
 ```
 
-and elsewhere, in Verse rather than in a scene file:
+and, elsewhere, in Verse rather than in a scene file:
 
 ```
-	Ready<override>():void =
+	_Ready<override>():void =
 		if (P := Player?):
-			Unsub := P.Hit.Subscribe(GameOver)
+			Unsub := P.Hit.Subscribe(OnPlayerHit)
 ```
 
 `godot_signal()` is the alias for `godot_signal(tuple())`, the way `listenable()` is for
 `listenable(tuple())`.
 
-**There is no `@signal` attribute.** The member's *type* is the marker, and the host reads types out
-of the semantic program already. A bridge attribute exists where the text is the only source —
-`@global_class` survives without compilation because Godot asks about files it has only scanned —
-and §6.3 says the signal list is not one of those cases.
+**There is no `@signal` attribute.** The member's *type* is the marker, and the host reads declared
+types out of the semantic program already. A bridge attribute exists where the text is the only
+source — `@global_class` survives without compilation because Godot asks about files it has only
+scanned — and §6.5 says the signal list is not one of those cases.
 
-### 6.2 What it is underneath
+### 6.2 The payload, and the argument names Godot needs
 
-`godot_signal(t)` is a `<native>` parametric class in the Godot package with a C++ shadow holding two
-things: the **owner handle** and the **signal name**. Both are written by the host at construction,
-the way `Handle` is (S-A), by walking the script class's data members for the ones whose declared
-type is this class. The member's own name is the signal's name — no second place to spell it, and
-nothing to drift.
+Godot's signal list carries an argument *name* per parameter, and `_make_function` writes those names
+into the handler it generates. **Verse tuples cannot name their elements** — `tuple(Damage:int, …)`
+is refused with "Expected a type, got data definition instead" — so the payload type is what decides
+whether the editor sees names:
+
+| payload | Godot arguments | a Verse subscriber writes |
+| --- | --- | --- |
+| `tuple()` | none | `OnHit(P:tuple())` |
+| a bare type, `godot_signal(int)` | one, named for the type — `Int` | `OnHit(Value:int)` |
+| `tuple(int, string)` | two, `Arg0` and `Arg1` | `OnHit(Damage:int, By:string)` — a multi-parameter function satisfies a tuple parameter (S-B) |
+| a **struct** | one per **top-level field**, named by the field | `OnHit(P:struck_payload)`, reading `P.Damage` |
+
+Mapping is **top level only**: a `vector2` field is one `Vector2` argument, not two floats. The trade
+is explicit and per signal — a tuple keeps the ergonomic N-parameter handler and loses names in the
+editor; a struct gets names in the connect dialog and in the generated stub, and hands the Verse
+subscriber one value.
+
+A payload the wire cannot carry is refused **at the member**, reusing R-EXP-3's machinery rather than
+failing at the emission: the rejection reasons already spelled in `vh_export_reject` answer the same
+question about the same lanes.
+
+### 6.3 What it is underneath
+
+`godot_signal(t)` is a `<native>` parametric class in the Godot package whose C++ shadow holds two
+things: the **owner handle** and the **signal name**. Both are written by the host at construction —
+`Instantiate` walks the script class's data members for the ones whose declared type is this class,
+exactly where `Shadow->Handle.Init` runs today (S-A). The member's own name is the signal's name, so
+there is no second place to spell it and nothing to drift.
 
 | the author writes | it becomes |
 | --- | --- |
-| `Hit.Signal(Payload)` | the existing `EmitSignal` Godot callback, payload unpacked from the tuple into N arguments. **No new ABI**: `vh_godot_api::EmitSignal` has been there since v2 |
-| `Hit.Subscribe(F)` | `ConnectSignal` with a Callable made from the Verse function (§5), answering a `cancelable` whose `Cancel` is `DisconnectSignal` |
+| `Hit.Signal(Payload)` | Godot's `emit_signal`, **immediately** (§6.4), payload unpacked per §6.2 |
+| `Hit.Subscribe(F)` | `ConnectSignal` with a Callable made from a Verse function (§5), answering a `cancelable` |
+| `Unsub.Cancel()` | `DisconnectSignal`, **idempotent** — a second `Cancel` does nothing, as `event_subscription::Cancel` does in UEFN |
 | `Hit.Await()` — Phase 5 | `awaitable(t)`, the one Verse interface whose domain fits (§1.2) |
 
-**Subscription goes through Godot rather than through a Verse-side list.** It costs a Callable per
+**Subscription goes through Godot, not through a Verse-side list.** It costs a Callable per
 subscription and it is the only arrangement in which a signal emitted *from GDScript* reaches a Verse
-subscriber, which R-SIG-6 requires.
+subscriber, which R-SIG-6 requires. `Subscribe` takes no flags in 4a; one-shot belongs with `Await` in
+Phase 5, where the idiom that wants it lives.
 
-### 6.3 What Godot is told
+### 6.4 Emission is immediate, and that is a stated exception
 
-A new `vh_class_signal_list(ClassNameUtf8, …)` answers name and payload parameter descriptors per
-signal, read out of the semantic program exactly as `vh_class_method_list` and
-`vh_class_export_list` are — so it refreshes per keystroke rather than per build. `VerseScript`
-answers `_get_script_signal_list` and `_has_script_signal` from it, which is what puts a script's
-signals in the Node panel and lets GDScript connect to them with no knowledge that Verse is involved.
+Every other void mutation in the mirror defers to `AutoRTFM::OnCommit`, which is what makes
+`<transacts>` literally true for 6813 methods. Emission does **not**: handlers run synchronously, as
+they do in GDScript, so "emit, then read what the handler changed" behaves the way a Godot author
+expects, and a Verse emission is indistinguishable from a GDScript one. The cost is stated rather
+than hidden — if the emitting transaction later aborts, the handlers have already run. That puts
+emission in the same documented set as the 1354 value-returning mutators, and **Phase 4.5** is where
+that whole set is audited.
+
+**`Subscribe`, by contrast, is compensated.** It mutates Godot *and* returns a value, so it can be
+neither deferred nor ignored; the native registers `Verse::Stm::OnRollback` to disconnect. That is
+Epic's own pattern in the other direction — `subscribable_event_intrnl`'s unsubscribe re-subscribes on
+rollback — and without it a failed transaction leaves a live connection the script believes it never
+made. This is the host's first rollback compensation and the shape to copy for anything later that
+mutates Godot and cannot defer.
+
+### 6.5 What Godot is told
+
+A new `vh_class_signal_list(ClassNameUtf8, …)` answers a name and argument descriptors per signal,
+read out of the semantic program exactly as `vh_class_method_list` and `vh_class_export_list` are, so
+it refreshes per keystroke rather than per build. `VerseScript::_get_script_signal_list` (:512) and
+`_has_script_signal` (:508) answer from it; both exist and return empty today.
 
 The name Godot sees is the **Verse spelling verbatim** — `Hit`, `MobSpawned` — following C# and
-following what a Verse method already does in every scene connection the port carries.
+following what a Verse method already does in every scene connection the port carries. A signal
+declared in a script that has never been built appears after the next Build, the same bargain an
+`@export` *default* already makes.
 
-A signal declared in a script that has never been built does not appear until the next Build. That
-is the same bargain an `@export` *default* already makes (§10 of the spec), and it is the reason
-this is one source rather than two.
+### 6.6 The rules that will otherwise be found by accident
 
-### 6.4 Godot's own 489 signals
+- **Signals inherit.** A script class deriving from another script class has that class's signals, and
+  both the list and the construction-time binding must walk the whole chain. Phase 2 shipped this bug
+  once already, for `@export` on a base script class, in two places that had been correct right up
+  until a script could derive from a script.
+- **A `godot_signal` member must not be `var`**, and must be `<public>` to be registered. A private one
+  is a diagnostic rather than a silently absent signal.
+- **A class with no Godot object has nowhere to bind**, so a `godot_signal` member on a class that is
+  never instantiated against a handle is a diagnostic at the member.
+- **Two subscriptions of one handler are two connections** (§5, equality by reference), each with its
+  own `cancelable`. Cancelling one leaves the other alive.
+- **A freed node drops its subscriptions**, because `get_object()` is the subscriber's node and Godot
+  cleans up connections when an object is freed. Nothing in the host tracks that.
+- **Generations**: an instance made against generation N keeps generation N's class and therefore its
+  signals. Nothing adopts, which is R-ITER-4 and needs no work here.
+
+### 6.7 Godot's own 489 signals
 
 Generated per class, as C# generates them: an accessor returning a `godot_signal(t)` bound to that
-handle and that Godot name, with the payload tuple built from the signal's declared arguments.
+handle and that Godot name, with the payload built from the signal's declared arguments — which Godot
+*does* name, so these get real names and need no struct.
 
 ```
-	Ready<override>():void =
+	_Ready<override>():void =
 		if (Timer := MobTimer?):
 			Unsub := Timer.Timeout().Subscribe(OnMobTimerTimeout)
 ```
 
 A method rather than a data member, because a mirror wrapper is built per crossing and a member would
-have to be filled on each one. The name is the signal's PascalCase spelling, and the eight cases where
-that would have collided — `Node.ready`, `CanvasItem.draw`, `Control.gui_input`, `BaseButton.pressed`
-among them — are collisions with a **virtual**, not with a method, so §7.1's underscore dissolves all
-eight and no signal needs an invented name.
+have to be filled on each one. The eight cases where the accessor name would have collided —
+`Node.ready`, `CanvasItem.draw`, `Control.gui_input`, `BaseButton.pressed` among them — are collisions
+with a **virtual**, not with a method, so §7.1's underscore dissolves all eight and no signal needs an
+invented name.
 
 This is also what makes wall 3 answerable in Phase 5: `Timer.Timeout().Await()` is a spelling only
 because the accessor exists.
 
-### 6.5 The editor's half of R-SIG-4
+### 6.8 The editor's half of R-SIG-4
 
 Connecting through the Node panel and `_make_function` are the untested half of a requirement whose
-load-bearing half the port leans on. `_make_function` writes a handler into the script the way
-R-TOOL-12 writes a `using` line — `ScriptEditor::get_current_editor()->get_base_editor()` is the
-`CodeEdit`, which Phase 3 established a GDExtension can write into — with the signal's parameters
-spelled from the same descriptors §6.3 reports:
+load-bearing half the port leans on. `_make_function` (`src/verse_script_language.cpp`:596) writes a
+handler into the script the way R-TOOL-12 writes a `using` line —
+`ScriptEditor::get_current_editor()->get_base_editor()` is the `CodeEdit`, which Phase 3 established a
+GDExtension can write into — with parameters spelled from the same descriptors §6.5 reports:
 
 ```
 	OnStartButtonPressed<public>():void =
 		# TODO
 ```
 
-Both flows are on the by-hand checklist (§11.2); neither is automatable headless today.
+### 6.9 What proves it
+
+Integration cases, each one line in `tests/integration/test_main.gd`:
+
+1. GDScript reads `get_signal_list()` on a node carrying a Verse script and finds the declared signal
+   with the right argument count and names.
+2. GDScript connects to a Verse-declared signal and receives it when the Verse script emits.
+3. A Verse script `Subscribe`s to a signal a **GDScript** node emits, and the handler runs.
+4. A Verse script subscribes twice and cancels once; the surviving subscription still fires.
+5. `Cancel` twice is not an error.
+6. A scene-file connection to a Verse method still works — regression, because that is the port's
+   existing wiring and this stage must not disturb it.
+7. Freeing the subscriber's node stops delivery, with no error on the next emission.
+8. A struct-payload signal reaches GDScript as named arguments and a tuple-payload one as positional.
+
+By hand, because nothing headless can see them: the Node panel lists the signal, connecting through it
+writes a working handler, and `_make_function` names the parameters from §6.2's mapping.
 
 ---
 
@@ -675,7 +772,7 @@ stage-level design when 4a's exit is met.
 | **1** | the cast and object identity (R-SCN-6) | a node Godot hands back casts to its own script's class, and to its mirror class; a wrong cast fails |
 | **2** | making a container (R-TYPE-2, R-INT-2) | a Verse script calls a GDScript method with arguments it built itself |
 | **3** | Callable from a Verse function (R-INT-4) | a Verse function connected to an engine signal runs when Godot emits it |
-| **4** | signals (R-SIG-1/2/3/4/6) | a Verse-declared signal is in the Node panel, emits to GDScript, and a Verse `Subscribe` receives a GDScript emission |
+| **4** | signals (R-SIG-1/2/3/4/6) | §6.9's eight integration cases pass, and the Node panel lists a Verse-declared signal by hand |
 | **5** | the virtual set under `_Ready` naming, `_Notification`, `@tool`'s editor virtuals (R-NODE-7/8, R-EXP-5), and the rename of the existing three | `_Input`, `_Draw`, `_UnhandledInput`, `_Notification` and `_GetConfigurationWarnings` all reach a script; every script in the repo overrides `_Ready`; the analysis number is recorded |
 | **6** | constants, statics, `@GlobalScope`, math (R-SCN-3, OQ-11, R-NODE-4/5) | `vectors.verse` is deleted and the port still plays |
 | **7** | the idiomatic re-port | the eight walls, wall by wall, each in its own commit |
@@ -730,7 +827,10 @@ storage discipline worth copying); the `CallableCustom` subclass is new in `src/
 `godot-cpp/include/godot_cpp/variant/callable_custom.hpp`.
 
 **Stage 4 — signals.** `godot_signal(t)` is declared in `host/Verse/Godot.native.verse` with its
-shadow in `host/Private/GodotClasses.h`; the construction-time binding goes in `Instantiate`
+shadow in `host/Private/GodotClasses.h`; the rollback compensation is `Verse::Stm::OnRollback`,
+which the host has never used — `Engine/Plugins/Verse/VerseTags/…/TagContainer.cpp` and
+`VerseEvent.cpp` are the two worked examples, and note their `if (!AutoRTFM::IsTransactional())`
+guard does *not* apply to us, because nothing on the Godot side is instrumented; the construction-time binding goes in `Instantiate`
 (`HostScript.cpp`:3968) beside `Shadow->Handle.Init`; the signal list is a new `GetClassSignals`
 next to `GetClassMethods` (:2868) and `GetClassExports` (:2951), which are the two worked examples of
 reading declarations out of the semantic program. On the Godot side, `VerseScript::_has_script_signal`
@@ -770,9 +870,24 @@ appear before any math body can be `<computes>` (§8.3 item 1). `../godot`'s
 
 - **OQ-14** (new) — does per-keystroke analysis stay usable after the mirror grows? Recorded at
   Stage 5, with no threshold attached by decision. Blocks nothing; informs Phase 7's priority.
+- **OQ-16** (new) — what anchors a callback that is *not* a bound method? 4a accepts only a method
+  bound to a script instance, because that is the half of Godot's own design that does not leak.
+  Answering it means choosing an owner for an unbound function — Godot anchors a plain lambda to
+  the script resource and accepts the leak — and deciding whether the bridge should offer an
+  explicit-owner spelling instead. Wanted by library-level handlers and by anything Phase 5's
+  concurrency work hands to Godot.
+- **OQ-17** (new) — **C# interop is asserted by four MUST requirements and has never been run.**
+  R-SIG-6, R-INT-1, R-INT-2 and R-INT-5 all name C#, every test in the repo is GDScript, and
+  exercising C# needs a .NET Godot build the harness does not have. Phase 4 makes the claim
+  larger, not smaller, which is why it is written down here rather than discovered at 1.0.
 - **OQ-15** (new) — Verse's transaction semantics deserve a review of their own: the `<transacts>`
   trap (wall 8), what `no_rollback` costs a library author, and whether the bridge should be saying
   something at the declaration. Deferred out of this phase deliberately.
+- **OQ-15** — no longer a row waiting for a phase: it *is* **Phase 4.5**, between parity and
+  concurrency, and §6.4 hands it emission plus the 1354 value-returning mutators as its subject
+  matter. Whether Godot's 6766 const methods should carry `<reads>` instead of `<transacts>` —
+  which would make the mirror's methods agree with its properties, and shrink the audited set to
+  exactly those 1354 — is the first question that phase inherits, and it is **not decided here**.
 - **OQ-11** — closed by §8.3 and §1.3: operators can be defined, extension methods work, and the
   answer is pure Verse.
 - **OQ-13** — untouched; it is Phase 6's, and it wants R-ASYNC-4 first.

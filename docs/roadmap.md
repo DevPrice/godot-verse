@@ -486,6 +486,20 @@ is, but free of the workarounds: casts instead of seventeen inspector slots, Ver
 instead of two scene connections to one engine signal, no `vectors.verse`, no `Object.Set` with
 string property names. The port is rewritten in place, wall by wall, and the diff is the measurement.
 
+### What 4a leaves open
+
+Written here rather than only in `spec.md` §14, because the next phase's shape depends on them:
+
+- **OQ-16** — a callback that is not a bound method has no owner. 4a accepts only bound methods,
+  which is the half of Godot's own design that does not leak; library-level handlers wait.
+- **OQ-17** — **C# has never been run against this bridge.** Four MUST requirements name it and every
+  fixture in the repo is GDScript. 4a makes the claim bigger by adding signals to it.
+- **OQ-14** — the analysis number after the mirror grows, recorded without a threshold by decision.
+- **R-SIG-5** — `await` on a signal, and with it one-shot connections. Phase 5, and the one yardstick
+  wall 4a cannot close.
+- **The 1354** — methods that mutate Godot *and* return a value, so they can be neither deferred nor
+  compensated. Signal emission joins them by decision. Phase 4.5 below is what audits them.
+
 ### Phase 4b — the editor's data model
 
 - **R-NODE-3** — instantiation without a node, `RefCounted` and `Object` both.
@@ -498,6 +512,47 @@ string property names. The port is rewritten in place, wall by wall, and the dif
 
 **Exit for 4b:** a Verse custom Resource is created, saved to `.tres`, edited in the inspector and
 loaded back; a Verse autoload answers from every scene; and the by-hand checklist is run.
+
+---
+
+## Phase 4.5 — Effects and transactions: what a rollback actually undoes
+
+**Why now.** Parity is when the bridge stops being small enough to hold in one head, and concurrency
+is when a second effect axis (`<suspends>`, task scopes, R-ASYNC-4) lands on top of this one. Between
+those two is the only moment where the effect surface is both complete and still simple. It is a
+phase rather than an open-question row because nothing else owns it, and an audit folded into a phase
+with other goals is an audit that gets skipped.
+
+**Numbered `4.5` rather than renumbering Phases 5–8**, so that the phase records already written —
+Phase 0's spike log, Phase 2's and Phase 3's design documents — keep saying what their authors wrote.
+
+**What it is.** Today the mirror labels every one of its 14,933 methods `<transacts>`, and the label
+is a promise the C++ keeps three different ways — or does not keep at all:
+
+| | count | how the promise is kept |
+| --- | --- | --- |
+| mutating, returns nothing | 6813 | **deferred** to `AutoRTFM::OnCommit`; an aborted transaction never performs it. Honest |
+| const, returns a value | 6728 | nothing to undo. Honest, but mislabelled: a property read is already `reads`, so the method surface disagrees with the property surface |
+| const, returns nothing | 38 | honest, trivially |
+| **mutating, returns a value** | **1354** | **not kept.** The result is needed now, so the call cannot be deferred, and nothing compensates it |
+
+- **Decide `<reads>` for the const surface.** It is measured, mechanical (`is_const` in
+  `extension_api.json`, which the generator does not currently read), and it costs one native
+  primitive declared `<reads>`. It makes the mirror self-consistent and shrinks the dishonest set to
+  exactly the 1354.
+- **Decide what the 1354 do.** Compensation where an action is undoable — `Verse::Stm::OnRollback`,
+  the mechanism Phase 4's `Subscribe` introduces and UE uses throughout; documented non-atomicity
+  where it is not, which is what GDScript offers anyway.
+- **Say it to the author.** `no_rollback` is the first sharp edge a library file hits
+  (`dodge-the-creeps.md` wall 8), the message names an effect they never wrote, and it points at a
+  caller rather than at the declaration. The `.verse` template and the R-SCN-2 diagnostic machinery
+  are both places that could say it where the fix is.
+- **Write the rule down** in a form R-AUD-1 can be tested against: what a Verse author may assume a
+  failed expression undid, and what it did not.
+
+**Exit:** every effect label in the mirror is either true or listed as knowingly untrue, with the
+list in the spec; a failable expression's guarantees are one paragraph an author can act on; and
+OQ-15 closes.
 
 ---
 
