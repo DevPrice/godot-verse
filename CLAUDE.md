@@ -73,7 +73,7 @@ and `Clamp`.
 the design was written *before* the work, so §11 is where the plan is corrected rather than where it
 is summarised. What it settled, all of which is load-bearing:
 
-- **A method's effect is now Godot's `is_const`.** 3942 mirror methods carry `<reads>` where all
+- **A method's effect is now Godot's `is_const`.** 3996 mirror methods carry `<reads>` where all
   9597 carried `<transacts>`, and the test is `const` **and answering a value** — Godot's `const`
   means "does not mutate the C++ object", so the 38 const-and-void methods are `OS.set_environment`,
   `CanvasItem.draw_string` and 36 more that plainly do something. A `<reads>` body dispatches through
@@ -90,9 +90,13 @@ is summarised. What it settled, all of which is load-bearing:
   `AutoRTFM::OnAbort<AutoRTFM::EOpenBehavior::SameAsClosed>` — `SameAsClosed` is load-bearing,
   because every Godot callback reaches C++ inside `AutoRTFM::Open` and a plain `OnAbort` from open
   code is ignored.
-- **`docs/nonatomic-methods.md` is generated** and is R-AUD-3's list: the **1127** emitted methods
-  whose `<transacts>` promises a rollback the bridge cannot perform. Not 1354 — that count included
-  statics and methods the mirror does not emit.
+- **`docs/nonatomic-methods.md` is generated** and is R-AUD-3's list: the **1073** emitted methods
+  whose `<transacts>` promises a rollback the bridge cannot perform. Not 1354 — that count included statics
+  and methods the mirror does not emit.
+- **`CONST_OVERRIDES` is where Godot's flag is missing rather than too broad**, and nothing in it was
+  judged: `tools/audit_const_overrides.py` reads the rows out of a Godot *source* checkout and takes
+  a method only when its body is exactly `return <member>;`. Run it by hand against a newer Godot to
+  revise the list; it needs `../godot`, which nothing else here does, so it is not in `run_tests.py`.
 - **What a failure undoes is measured, not assumed**, and the rule is in `spec.md` next to R-AUD-1.
   A failure at any depth drops the deferred writes; a read does not see a write the same computation
   just made; a raise additionally halts every script until the next `vh_tick`, which is why
@@ -207,6 +211,7 @@ and the `VerseSimulationMetadata` dependency each exist for a reason spelled out
     python tools/build_module_map_test.py # module-map test binary
     python tools/build_bench.py           # host benchmark (timings, not pass/fail)
     python tools/build_verse_probe.py     # the Verse probe (asks the compiler a question)
+    python tools/audit_const_overrides.py # CONST_OVERRIDES, read out of a Godot source checkout
 
 Run the tests:
 

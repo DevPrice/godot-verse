@@ -24,7 +24,7 @@ them. `docs/phase-4-design.md` 6.4 is the argument.
 
 **Why none of these is compensated.** Compensation needs an inverse, and Godot publishes none: there
 is no `un-load`, no `un-create_shape_owner`, no way to take back a `Tween.tween_property`. A
-per-method inverse table would be 1127 rows of invented semantics, each of which would be wrong
+per-method inverse table would be 1073 rows of invented semantics, each of which would be wrong
 for some caller, and a compensation that half works is worse than a documented sharp edge --
 GDScript offers exactly this and says nothing at all. What a script that *wants* rollback-safe
 subscription has is `godot_signal.Subscribe`, which is compensated; `Object.Connect` is the general
@@ -34,14 +34,14 @@ form under it (R-SIG-6) and is in the list below.
 
 | shape | count | what the mutation is |
 | --- | --- | --- |
-| answers a **value** | 708 | a method Godot did not mark `const`. Some of these do not visibly mutate anything -- `Tween.is_running` is not `const` and reads like a query -- but `is_const` is Godot's own annotation and the mirror believes it rather than second-guessing 708 of them |
-| answers an **Error** | 191 | an operation that reports whether it worked: `load`, `save`, `send`, `connect_node`. Undoing one would mean undoing I/O |
-| answers an **object** | 188 | an allocation the caller now owns -- `create_shape_owner`, `Tween.tween_property`. Undoing it means freeing something the caller may still hold |
-| answers its **receiver** | 40 | a builder chaining, where the mutation is the point: `PropertyTweener.SetDelay(...).SetEase(...)` |
+| answers a **value** | 683 | a method Godot did not mark `const`. Some of these do not visibly mutate anything -- `Tween.is_running` is not `const` and reads like a query -- but `is_const` is Godot's own annotation and the mirror believes it rather than second-guessing 708 of them |
+| answers an **Error** | 190 | an operation that reports whether it worked: `load`, `save`, `send`, `connect_node`. Undoing one would mean undoing I/O |
+| answers an **object** | 163 | an allocation the caller now owns -- `create_shape_owner`, `Tween.tween_property`. Undoing it means freeing something the caller may still hold |
+| answers its **receiver** | 37 | a builder chaining, where the mutation is the point: `PropertyTweener.SetDelay(...).SetEase(...)` |
 
 ## The list
 
-1127 methods, by Godot class.
+1073 methods, by Godot class.
 
 ### AESContext (aes_context)
 
@@ -235,12 +235,6 @@ form under it (R-SIG-6) and is in the list below.
 | `GetButtons` | `get_buttons` | object |
 | `GetPressedButton` | `get_pressed_button` | object |
 
-### CSGMesh3D (csg_mesh3d)
-
-| Verse | Godot | shape |
-| --- | --- | --- |
-| `GetMesh` | `get_mesh` | object |
-
 ### CSGShape3D (csg_shape3d)
 
 | Verse | Godot | shape |
@@ -355,12 +349,6 @@ form under it (R-SIG-6) and is in the list below.
 | `Save` | `save` | error |
 | `SaveEncrypted` | `save_encrypted` | error |
 | `SaveEncryptedPass` | `save_encrypted_pass` | error |
-
-### ConfirmationDialog (confirmation_dialog)
-
-| Verse | Godot | shape |
-| --- | --- | --- |
-| `GetCancelButton` | `get_cancel_button` | object |
 
 ### Crypto (crypto)
 
@@ -526,7 +514,6 @@ form under it (R-SIG-6) and is in the list below.
 
 | Verse | Godot | shape |
 | --- | --- | --- |
-| `GetFilesystem` | `get_filesystem` | object |
 | `GetFilesystemPath` | `get_filesystem_path` | object |
 
 ### EditorFileSystemDirectory (editor_file_system_directory)
@@ -534,7 +521,6 @@ form under it (R-SIG-6) and is in the list below.
 | Verse | Godot | shape |
 | --- | --- | --- |
 | `GetName` | `get_name` | value |
-| `GetParent` | `get_parent` | receiver |
 | `GetSubdir` | `get_subdir` | receiver |
 
 ### EditorImportPlugin (editor_import_plugin)
@@ -542,12 +528,6 @@ form under it (R-SIG-6) and is in the list below.
 | Verse | Godot | shape |
 | --- | --- | --- |
 | `AppendImportExternalResource` | `append_import_external_resource` | error |
-
-### EditorInspector (editor_inspector)
-
-| Verse | Godot | shape |
-| --- | --- | --- |
-| `GetEditedObject` | `get_edited_object` | receiver |
 
 ### EditorInterface (editor_interface)
 
@@ -572,12 +552,6 @@ form under it (R-SIG-6) and is in the list below.
 | `GetExportAsMenu` | `get_export_as_menu` | object |
 | `GetScriptCreateDialog` | `get_script_create_dialog` | object |
 | `GetUndoRedo` | `get_undo_redo` | object |
-
-### EditorProperty (editor_property)
-
-| Verse | Godot | shape |
-| --- | --- | --- |
-| `GetEditedObject` | `get_edited_object` | receiver |
 
 ### EditorResourcePicker (editor_resource_picker)
 
@@ -615,7 +589,6 @@ form under it (R-SIG-6) and is in the list below.
 
 | Verse | Godot | shape |
 | --- | --- | --- |
-| `GetFramesDrawn` | `get_frames_drawn` | value |
 | `GetScriptLanguageCount` | `get_script_language_count` | value |
 | `RegisterScriptLanguage` | `register_script_language` | error |
 | `UnregisterScriptLanguage` | `unregister_script_language` | error |
@@ -685,7 +658,6 @@ form under it (R-SIG-6) and is in the list below.
 | Verse | Godot | shape |
 | --- | --- | --- |
 | `GetAdditionalData` | `get_additional_data` | value |
-| `GetOriginalName` | `get_original_name` | value |
 
 ### GLTFDocument (gltf_document)
 
@@ -703,7 +675,6 @@ form under it (R-SIG-6) and is in the list below.
 | Verse | Godot | shape |
 | --- | --- | --- |
 | `GetAdditionalData` | `get_additional_data` | value |
-| `GetLightType` | `get_light_type` | value |
 
 ### GLTFMesh (gltf_mesh)
 
@@ -712,8 +683,6 @@ form under it (R-SIG-6) and is in the list below.
 | `GetAdditionalData` | `get_additional_data` | value |
 | `GetBlendWeights` | `get_blend_weights` | value |
 | `GetInstanceMaterials` | `get_instance_materials` | object |
-| `GetMesh` | `get_mesh` | object |
-| `GetOriginalName` | `get_original_name` | value |
 
 ### GLTFNode (gltf_node)
 
@@ -721,9 +690,7 @@ form under it (R-SIG-6) and is in the list below.
 | --- | --- | --- |
 | `GetAdditionalData` | `get_additional_data` | value |
 | `GetChildren` | `get_children` | value |
-| `GetOriginalName` | `get_original_name` | value |
 | `GetSceneNodePath` | `get_scene_node_path` | value |
-| `GetXform` | `get_xform` | value |
 
 ### GLTFPhysicsShape (gltf_physics_shape)
 
@@ -739,7 +706,6 @@ form under it (R-SIG-6) and is in the list below.
 | `GetBoneAttachment` | `get_bone_attachment` | object |
 | `GetBoneAttachmentCount` | `get_bone_attachment_count` | value |
 | `GetGodotBoneNode` | `get_godot_bone_node` | value |
-| `GetGodotSkeleton` | `get_godot_skeleton` | object |
 | `GetJoints` | `get_joints` | value |
 | `GetRoots` | `get_roots` | value |
 | `GetUniqueNames` | `get_unique_names` | object |
@@ -748,21 +714,9 @@ form under it (R-SIG-6) and is in the list below.
 
 | Verse | Godot | shape |
 | --- | --- | --- |
-| `GetGodotSkin` | `get_godot_skin` | object |
 | `GetInverseBinds` | `get_inverse_binds` | object |
 | `GetJointIToBoneI` | `get_joint_i_to_bone_i` | value |
 | `GetJointIToName` | `get_joint_i_to_name` | value |
-| `GetJoints` | `get_joints` | value |
-| `GetJointsOriginal` | `get_joints_original` | value |
-| `GetNonJoints` | `get_non_joints` | value |
-| `GetRoots` | `get_roots` | value |
-
-### GLTFSpecGloss (gltf_spec_gloss)
-
-| Verse | Godot | shape |
-| --- | --- | --- |
-| `GetDiffuseImg` | `get_diffuse_img` | object |
-| `GetSpecGlossImg` | `get_spec_gloss_img` | object |
 
 ### GLTFState (gltf_state)
 
@@ -823,7 +777,6 @@ form under it (R-SIG-6) and is in the list below.
 
 | Verse | Godot | shape |
 | --- | --- | --- |
-| `IsStarted` | `is_started` | value |
 | `Iteration` | `iteration` | value |
 | `Start` | `start` | value |
 
@@ -843,14 +796,7 @@ form under it (R-SIG-6) and is in the list below.
 | `GetAttachedNodesOfFrame` | `get_attached_nodes_of_frame` | object |
 | `GetConnectionCount` | `get_connection_count` | value |
 | `GetElementFrame` | `get_element_frame` | object |
-| `GetMenuHbox` | `get_menu_hbox` | object |
 | `IsNodeConnected` | `is_node_connected` | value |
-
-### GraphFrame (graph_frame)
-
-| Verse | Godot | shape |
-| --- | --- | --- |
-| `GetTitlebarHbox` | `get_titlebar_hbox` | object |
 
 ### GraphNode (graph_node)
 
@@ -866,7 +812,6 @@ form under it (R-SIG-6) and is in the list below.
 | `GetOutputPortPosition` | `get_output_port_position` | value |
 | `GetOutputPortSlot` | `get_output_port_slot` | value |
 | `GetOutputPortType` | `get_output_port_type` | value |
-| `GetTitlebarHbox` | `get_titlebar_hbox` | object |
 
 ### GridMap (grid_map)
 
@@ -978,12 +923,6 @@ form under it (R-SIG-6) and is in the list below.
 | --- | --- | --- |
 | `Accumulate` | `accumulate` | value |
 
-### InputEventShortcut (input_event_shortcut)
-
-| Verse | Godot | shape |
-| --- | --- | --- |
-| `GetShortcut` | `get_shortcut` | object |
-
 ### InputMap (input_map)
 
 | Verse | Godot | shape |
@@ -1043,13 +982,11 @@ form under it (R-SIG-6) and is in the list below.
 | `GetInterface` | `get_interface` | object |
 | `IsJsBuffer` | `is_js_buffer` | value |
 | `JsBufferToPackedByteArray` | `js_buffer_to_packed_byte_array` | value |
-| `PwaUpdate` | `pwa_update` | error |
 
 ### LineEdit (line_edit)
 
 | Verse | Godot | shape |
 | --- | --- | --- |
-| `GetRightIcon` | `get_right_icon` | object |
 | `GetSelectedText` | `get_selected_text` | value |
 
 ### Marshalls (marshalls)
@@ -1077,7 +1014,6 @@ form under it (R-SIG-6) and is in the list below.
 | `BakeMeshFromCurrentBlendShapeMix` | `bake_mesh_from_current_blend_shape_mix` | object |
 | `BakeMeshFromCurrentSkeletonPose` | `bake_mesh_from_current_skeleton_pose` | object |
 | `FindBlendShapeByName` | `find_blend_shape_by_name` | value |
-| `GetSkeletonPath` | `get_skeleton_path` | value |
 
 ### MethodTweener (method_tweener)
 
@@ -1107,12 +1043,6 @@ form under it (R-SIG-6) and is in the list below.
 | Verse | Godot | shape |
 | --- | --- | --- |
 | `Spawn` | `spawn` | receiver |
-
-### MultiplayerSynchronizer (multiplayer_synchronizer)
-
-| Verse | Godot | shape |
-| --- | --- | --- |
-| `GetReplicationConfig` | `get_replication_config` | object |
 
 ### Mutex (mutex)
 
@@ -1220,18 +1150,6 @@ form under it (R-SIG-6) and is in the list below.
 | Verse | Godot | shape |
 | --- | --- | --- |
 | `GetGlobalTransformInterpolated` | `get_global_transform_interpolated` | value |
-
-### NoiseTexture2D (noise_texture2d)
-
-| Verse | Godot | shape |
-| --- | --- | --- |
-| `GetNoise` | `get_noise` | object |
-
-### NoiseTexture3D (noise_texture3d)
-
-| Verse | Godot | shape |
-| --- | --- | --- |
-| `GetNoise` | `get_noise` | object |
 
 ### OS (os)
 
@@ -1347,7 +1265,6 @@ form under it (R-SIG-6) and is in the list below.
 | `CreateNewAnchor` | `create_new_anchor` | object |
 | `CreatePersistenceContext` | `create_persistence_context` | object |
 | `IsPersistenceScopeSupported` | `is_persistence_scope_supported` | value |
-| `IsSpatialAnchorSupported` | `is_spatial_anchor_supported` | value |
 | `IsSpatialPersistenceSupported` | `is_spatial_persistence_supported` | value |
 | `PersistAnchor` | `persist_anchor` | object |
 | `UnpersistAnchor` | `unpersist_anchor` | object |
@@ -1449,15 +1366,7 @@ form under it (R-SIG-6) and is in the list below.
 | `GetCustomMonitor` | `get_custom_monitor` | value |
 | `GetCustomMonitorNames` | `get_custom_monitor_names` | object |
 | `GetCustomMonitorTypes` | `get_custom_monitor_types` | value |
-| `GetMonitorModificationTime` | `get_monitor_modification_time` | value |
 | `HasCustomMonitor` | `has_custom_monitor` | value |
-
-### PhysicalBone3D (physical_bone3d)
-
-| Verse | Godot | shape |
-| --- | --- | --- |
-| `GetSimulatePhysics` | `get_simulate_physics` | value |
-| `IsSimulatingPhysics` | `is_simulating_physics` | value |
 
 ### PhysicsBody2D (physics_body2d)
 
@@ -1852,13 +1761,6 @@ form under it (R-SIG-6) and is in the list below.
 | `GetBreakpoints` | `get_breakpoints` | value |
 | `GetCurrentScript` | `get_current_script` | object |
 
-### ScrollContainer (scroll_container)
-
-| Verse | Godot | shape |
-| --- | --- | --- |
-| `GetHScrollBar` | `get_h_scroll_bar` | object |
-| `GetVScrollBar` | `get_v_scroll_bar` | object |
-
 ### Semaphore (semaphore)
 
 | Verse | Godot | shape |
@@ -1901,26 +1803,11 @@ form under it (R-SIG-6) and is in the list below.
 | `CreateSkinFromRestTransforms` | `create_skin_from_rest_transforms` | object |
 | `RegisterSkin` | `register_skin` | object |
 
-### SkeletonIK3D (skeleton_ik3d)
-
-| Verse | Godot | shape |
-| --- | --- | --- |
-| `GetTargetNode` | `get_target_node` | value |
-| `IsRunning` | `is_running` | value |
-
 ### SkeletonModification2D (skeleton_modification2d)
 
 | Verse | Godot | shape |
 | --- | --- | --- |
 | `ClampAngle` | `clamp_angle` | value |
-| `GetModificationStack` | `get_modification_stack` | object |
-
-### SkeletonProfile (skeleton_profile)
-
-| Verse | Godot | shape |
-| --- | --- | --- |
-| `GetRootBone` | `get_root_bone` | value |
-| `GetScaleBaseBone` | `get_scale_base_bone` | value |
 
 ### SocketServer (socket_server)
 
@@ -1935,12 +1822,6 @@ form under it (R-SIG-6) and is in the list below.
 | `GetCollisionExceptions` | `get_collision_exceptions` | object |
 | `GetPointTransform` | `get_point_transform` | value |
 
-### SpinBox (spin_box)
-
-| Verse | Godot | shape |
-| --- | --- | --- |
-| `GetLineEdit` | `get_line_edit` | object |
-
 ### SplitContainer (split_container)
 
 | Verse | Godot | shape |
@@ -1952,7 +1833,6 @@ form under it (R-SIG-6) and is in the list below.
 
 | Verse | Godot | shape |
 | --- | --- | --- |
-| `GetHitLength` | `get_hit_length` | value |
 | `RemoveExcludedObject` | `remove_excluded_object` | value |
 
 ### StreamPeer (stream_peer)
@@ -2101,16 +1981,6 @@ form under it (R-SIG-6) and is in the list below.
 | `ShapedTextSortLogical` | `shaped_text_sort_logical` | object |
 | `ShapedTextTabAlign` | `shaped_text_tab_align` | value |
 
-### ThemeDB (theme_db)
-
-| Verse | Godot | shape |
-| --- | --- | --- |
-| `GetDefaultTheme` | `get_default_theme` | object |
-| `GetFallbackFont` | `get_fallback_font` | object |
-| `GetFallbackIcon` | `get_fallback_icon` | object |
-| `GetFallbackStylebox` | `get_fallback_stylebox` | object |
-| `GetProjectTheme` | `get_project_theme` | object |
-
 ### Thread (thread)
 
 | Verse | Godot | shape |
@@ -2215,7 +2085,6 @@ form under it (R-SIG-6) and is in the list below.
 | `BindNode` | `bind_node` | receiver |
 | `Chain` | `chain` | receiver |
 | `CustomStep` | `custom_step` | value |
-| `IsRunning` | `is_running` | value |
 | `IsValid` | `is_valid` | value |
 | `Parallel` | `parallel` | receiver |
 | `SetEase` | `set_ease` | receiver |
@@ -2280,18 +2149,6 @@ form under it (R-SIG-6) and is in the list below.
 | Verse | Godot | shape |
 | --- | --- | --- |
 | `GetRenderInfo` | `get_render_info` | value |
-
-### VisibleOnScreenEnabler2D (visible_on_screen_enabler2d)
-
-| Verse | Godot | shape |
-| --- | --- | --- |
-| `GetEnableNodePath` | `get_enable_node_path` | value |
-
-### VisibleOnScreenEnabler3D (visible_on_screen_enabler3d)
-
-| Verse | Godot | shape |
-| --- | --- | --- |
-| `GetEnableNodePath` | `get_enable_node_path` | value |
 
 ### VisualShader (visual_shader)
 
@@ -2378,7 +2235,6 @@ form under it (R-SIG-6) and is in the list below.
 
 | Verse | Godot | shape |
 | --- | --- | --- |
-| `GetNodeType` | `get_node_type` | value |
 | `Open` | `open` | error |
 | `OpenBuffer` | `open_buffer` | error |
 | `Read` | `read` | error |

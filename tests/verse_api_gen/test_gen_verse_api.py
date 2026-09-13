@@ -173,6 +173,23 @@ def test_a_const_method_reads_and_a_mutating_one_transacts():
     check("a const method that answers is",
           g.classify_method(const_value, resolver, coverage, set(), "Node2D").is_const, True)
 
+    # CONST_OVERRIDES, the other direction: Godot's flag missing rather than too broad. Every row
+    # was read out of Godot's source by tools/audit_const_overrides.py, and `Tween::is_running` is
+    # `bool is_running() { return running; }`.
+    check_true("the override table names a class and a method",
+               ("Tween", "is_running") in g.CONST_OVERRIDES)
+    check("an overridden method is <reads> despite Godot's flag",
+          g.classify_method(_method("is_running", "bool"), resolver, coverage, set(), "Tween").is_const,
+          True)
+    check("and the same name on a class the audit did not accept is not",
+          g.classify_method(_method("is_running", "bool"), resolver, coverage, set(), "AudioStreamPlayer").is_const,
+          False)
+    # The override cannot resurrect a void method: the conjunction above still applies, and a
+    # const-and-void method is `OS.delay_msec`-shaped whatever any table says.
+    check("an override does not make a void method <reads>",
+          g.classify_method(_method("is_running"), resolver, coverage, set(), "Tween").is_const,
+          False)
+
 
 def test_emit_value_method_class_return():
     ti = g.TypeInfo("node", "VhFromObject", False, "VhToHandle", True)

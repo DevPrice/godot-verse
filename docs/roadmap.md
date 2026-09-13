@@ -586,8 +586,8 @@ is a promise the C++ keeps three different ways — or does not keep at all:
 list in the spec; a failable expression's guarantees are one paragraph an author can act on; and
 OQ-15 closes.
 
-**What it came to.** 3942 mirror methods carry `<reads>` where all 9597 carried `<transacts>`; the
-knowingly-untrue set is **1127**, generated into [`nonatomic-methods.md`](nonatomic-methods.md) by
+**What it came to.** 3996 mirror methods carry `<reads>` where all 9597 carried `<transacts>`; the
+knowingly-untrue set is **1073**, generated into [`nonatomic-methods.md`](nonatomic-methods.md) by
 the same pass that writes the mirror so it cannot drift; the rule is in `spec.md` next to R-AUD-1
 and OQ-15 is closed. The spikes found a bug rather than an answer in one case — Phase 4's
 `Subscribe` compensation was registered with `Verse::Stm::OnRollback`, which is the Solaris

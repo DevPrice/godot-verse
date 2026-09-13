@@ -6,7 +6,7 @@ phase's answer to exist before it designed a second effect axis on top of the fi
 
 **§11 is the part to read.** It was written after, and it is where the plan turned out to be wrong:
 two of the four spikes came back the opposite way from what §3 and §4 expected, §1's table has two
-bad rows, and the audited set is **1127** rather than the 1354 estimated below. §0's warning that
+bad rows, and the audited set is **1073** rather than the 1354 estimated below. §0's warning that
 "nothing in §3 onward should be trusted until the spikes have run" now reads the other way round —
 nothing in §1 through §10 should be trusted over §11.
 
@@ -338,7 +338,8 @@ and the test the generator applies is const **and** answering a value.
 
 **"1354" is the wrong number for the audited set**, twice over. 102 of them are statics, which the
 mirror emits as free functions and which are a separate question; and of the remainder only **1127**
-survive into the mirror under their own names. 1127 is the number in `spec.md`, and it is generated
+survive into the mirror under their own names — **1073** once §11.6's override table takes the ones
+Godot's source proves harmless. 1073 is the number in `spec.md`, and it is generated
 rather than asserted — `docs/nonatomic-methods.md` is written by the same pass that writes the
 mirror, the way `verse_api_skipped.h` is, so it cannot drift.
 
@@ -401,26 +402,54 @@ utilities (`type_string`, `error_string`, `instance_from_id`, `is_instance_id_va
 
 | | before | after |
 | --- | --- | --- |
-| mirror methods labelled `<transacts>` | 9597 | 5655 |
-| mirror methods labelled `<reads>` | 0 | 3942 |
-| labels knowingly untrue | unknown, unlisted | **1127**, generated into `docs/nonatomic-methods.md` |
+| mirror methods labelled `<transacts>` | 9597 | 5601 |
+| mirror methods labelled `<reads>` | 0 | 3996 |
+| labels knowingly untrue | unknown, unlisted | **1073**, generated into `docs/nonatomic-methods.md` |
 | native primitives | 22 | 24 (`VhCallValueConst`, `VhCallUtilityConst`) |
 | compensated mutate-and-answer calls | 1, not working | 1, working and tested three ways |
 
-Nothing in `dodge-the-creeps/` or `tests/integration/scripts/` needed a change: narrowing 3942
-declarations is invisible to a caller, which is what S-2 promised and what the yardstick's 29 checks
+Nothing in `dodge-the-creeps/` or `tests/integration/scripts/` needed a change: narrowing 3996
+declarations is invisible to a caller, which is what S-2 promised and what the yardstick's checks
 confirm.
 
-### 11.6 What is still owed
+### 11.6 The three questions it raised, and what was decided
 
-- **`Object.Connect` has no compensated spelling.** `godot_signal.Subscribe` is rollback-safe;
-  connecting to a *GDScript-declared* signal (R-SIG-6) goes through `Object.Connect`, which is in
-  the non-atomic list. A `Subscribe`-shaped wrapper over an arbitrary Godot signal would close it
-  and is not this phase's.
-- **The 708 "answers a value" rows are believed rather than audited.** `Tween.is_running` is not
-  `const` and reads like a query. The mirror believes Godot's annotation rather than second-guessing
-  708 of them, which is the conservative direction: `<transacts>` claims less than it could, where
-  a wrong `<reads>` would claim more than it should.
-- **`docs/by-hand-checklist.md` gains nothing from this phase** and still owes what it owed. The
-  editor-session check would now also see the new template text and the effect diagnostic in the
-  script editor's error list, which no headless run can show.
+Answered after the phase landed rather than left open, so §11.5's numbers are the ones *after* the
+answers.
+
+**Godot's `is_const` may be overridden, from a list read out of Godot's source.** The first draft
+refused to second-guess the flag at all, which left 708 "answers a value" rows believed rather than
+audited — `Tween::is_running` is `bool is_running() { return running; }` and is not marked const.
+That was also inconsistent: the five look-up utilities had *already* been hand-picked, because
+`extension_api.json` carries no `is_const` for a utility at all. So `CONST_OVERRIDES` exists, and
+the thing that makes it defensible is that nothing in it was judged: `tools/audit_const_overrides.py`
+reads Godot's own `.cpp`, accepts a method only when its body is exactly `return <member>;`, and
+rejects a literal return (a stub) or any name declared `virtual` anywhere (which over-rejects —
+`Tween::is_valid` among them — and that is the right direction to be wrong in, because a wrong
+`<reads>` claims more than it should while a conservative `<transacts>` claims less than it could).
+**127 rows accepted out of 1252 candidates, 11 rejected**; 54 reach a method the mirror emits under
+its own name and the rest name a getter superseded by a property, and they stay because the list is
+a statement about Godot rather than about what this mirror happens to emit. The audited set went
+**1127 → 1073**.
+
+**`Object.Connect`'s rollback gap goes to Phase 5.** `godot_signal.Subscribe` is rollback-safe;
+connecting to a *GDScript-declared* signal (R-SIG-6) goes through `Object.Connect`, which the bridge
+forwards rather than performs, and a raise after it leaves the connection behind. Phase 5 §4.2 owns
+it now and §12 checks it, because `signal_ref.Await()` already needs the bridge to own a foreign
+connection — `Call.Defer` disconnecting a cancelled branch is the same bookkeeping with a different
+trigger — and building it twice would be the only other option.
+
+**The `.verse` template indents with tabs now, against Verse's own style guide.** Pre-existing rather
+than this phase's, and found by editing that function: the template emitted four-space indents while
+Godot's `text_editor/behavior/indent/type` defaults to Tabs, so the first line an author typed into
+a new script *mixed* the two, which Verse rejects outright. The editor that will edit the file wins
+over the style guide that will not.
+
+### 11.7 What is still owed
+
+- **`docs/by-hand-checklist.md` gains nothing from this phase** and still owes what it owed, plus
+  the two entries this phase added. The editor-session check would now also see the new template
+  text and the effect diagnostic in the script editor's error list, which no headless run can show.
+- **The 1073 are still `<transacts>` and still knowingly untrue.** The override table shrinks the
+  set where Godot's source proves it safe; it does not, and cannot, compensate anything. Nothing
+  short of a per-method inverse would, and `nonatomic-methods.md` says why that is not on offer.

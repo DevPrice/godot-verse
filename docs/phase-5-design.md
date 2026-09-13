@@ -235,6 +235,28 @@ awaiting a GDScript-declared signal resumes.
 
 ---
 
+### 4.2 The compensated connect Phase 4.5 handed over
+
+**Added after Phase 4.5 ran, by decision**, because it is the same machinery and doing it separately
+would build the same thing twice.
+
+Phase 4.5 made `godot_signal.Subscribe` genuinely rollback-safe — the host registers an
+`AutoRTFM::OnAbort<SameAsClosed>` that disconnects, and `tests/integration` aborts it three ways.
+What it could not reach is the *other* way a script connects: `Object.Connect`, which is how R-SIG-6
+receives a signal a GDScript or C# node declares, and which the bridge merely forwards to Godot. It
+is in [`nonatomic-methods.md`](nonatomic-methods.md) with the other 1072, and measured: a raise after
+it leaves the connection behind.
+
+Phase 5 is where that closes, because §4's `signal_ref.Await()` already needs the bridge to *own* a
+connection to a foreign signal rather than forward one — `Call.Defer` disconnects a cancelled
+branch, which is the same bookkeeping with a different trigger. The shape to reach for is a
+`Subscribe` on `signal_ref` beside that `Await`, compensated the way `godot_signal.Subscribe` is;
+`Object.Connect` then stays what it is, an unforgiving direct call, and the rollback-safe spelling is
+the one a script reaches for first.
+
+**Not a spike.** Nothing about it is uncertain — the mechanism is built and tested, and this is
+where to point it. It is listed here so that the phase's exit can be checked against it.
+
 ## 5. `Sleep`
 
     VhSleep<native>(Seconds:float)<suspends>:void
@@ -393,6 +415,10 @@ The `hud_phase` enum goes, the **second Timer node the port added** goes, and th
 handlers that existed only to read the phase go. Per D7 the port uses the timer awaits, not `Sleep`,
 so `--fixed-fps 60` stays and `headless_check.gd`'s checks stay deterministic. **The diff is the
 measurement**, and `dodge-the-creeps.md`'s wall table gets its seventh row struck.
+
+**`Object.Connect`'s rollback gap closes** §4.2 — a `Subscribe` on `signal_ref`, compensated the
+way `godot_signal.Subscribe` is, with a `tests/integration` case that aborts it and checks no
+connection was left. Phase 4.5 handed this over rather than building the same machinery twice.
 
 **And `docs/by-hand-checklist.md` is run** — one windowed session covering all three phases' entries:
 Phase 3's windowed yardstick run and editor session, Phase 4's Node panel, `_make_function`,

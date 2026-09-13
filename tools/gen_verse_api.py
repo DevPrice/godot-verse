@@ -1363,6 +1363,160 @@ def verse_default_literal(verse_type: str, default: str):
     return None
 
 
+# Godot methods that answer a value, are not marked `const`, and provably do not mutate.
+#
+# A mirrored method's effect comes from Godot's `is_const` (docs/phase-4.5-design.md §3), and that
+# flag is applied unevenly: `Tween::is_running` is `bool is_running() { return running; }` and is
+# not marked const, so without this table it would be `<transacts>` and unusable from a `<reads>`
+# helper. These are the exceptions, and they are **read out of Godot's source rather than judged**:
+# `tools/audit_const_overrides.py` produced every row, each body is exactly `return <member>;`, and
+# the comment on each row is that body. Re-run it against a newer Godot to revise the list.
+#
+# The audit is one-sided on purpose. A wrong `<reads>` claims more than it should and would let a
+# mutation escape the rollback the label promised; a conservative `<transacts>` merely claims less
+# than it could, which costs an author a `<transacts>` on their own helper and nothing else. So the
+# audit rejects a literal return (a base-class stub) and any name declared `virtual` anywhere —
+# which over-rejects, `Tween::is_valid` among them, and that is the right direction to be wrong in.
+#
+# This is the third hand-curated table in this file and the only one whose rows were *verified*
+# rather than decided: VERSE_AMBIGUOUS_MEMBER_NAMES is compiler-confirmed, PROPERTY_RENAMES is
+# invented, and this one is quoted.
+#
+# Most of these rows change nothing today: 54 of the 127 reach a method the mirror emits under its
+# own name, and the rest name a getter superseded by a property. They stay because the list is a
+# statement about *Godot*, not about what this mirror happens to emit -- a property that stops being
+# emitted should bring back a correctly labelled method rather than a silently wrong one.
+CONST_OVERRIDES = frozenset([
+    ("AudioEffectCapture", "get_buffer_length"),  # return buffer_length_seconds;
+    ("AudioEffectDelay", "get_dry"),  # return dry;
+    ("ButtonGroup", "is_allow_unpress"),  # return allow_unpress;
+    ("CPUParticles2D", "get_split_scale"),  # return split_scale;
+    ("CPUParticles3D", "get_split_scale"),  # return split_scale;
+    ("CSGMesh3D", "get_mesh"),  # return mesh;
+    ("CSGPrimitive3D", "get_flip_faces"),  # return flip_faces;
+    ("CharacterBody2D", "get_floor_snap_length"),  # return floor_snap_length;
+    ("CharacterBody3D", "get_floor_snap_length"),  # return floor_snap_length;
+    ("ConfirmationDialog", "get_cancel_button"),  # return cancel;
+    ("EditorFileSystem", "get_filesystem"),  # return filesystem;
+    ("EditorFileSystemDirectory", "get_parent"),  # return parent;
+    ("EditorInspector", "get_edited_object"),  # return object;
+    ("EditorProperty", "get_edited_object"),  # return object;
+    ("Engine", "get_frames_drawn"),  # return frames_drawn;
+    ("FBXState", "get_allow_geometry_helper_nodes"),  # return allow_geometry_helper_nodes;
+    ("GLTFAnimation", "get_original_name"),  # return original_name;
+    ("GLTFLight", "get_inner_cone_angle"),  # return inner_cone_angle;
+    ("GLTFLight", "get_intensity"),  # return intensity;
+    ("GLTFLight", "get_light_type"),  # return light_type;
+    ("GLTFLight", "get_outer_cone_angle"),  # return outer_cone_angle;
+    ("GLTFLight", "get_range"),  # return range;
+    ("GLTFMesh", "get_mesh"),  # return mesh;
+    ("GLTFMesh", "get_original_name"),  # return original_name;
+    ("GLTFNode", "get_camera"),  # return camera;
+    ("GLTFNode", "get_light"),  # return light;
+    ("GLTFNode", "get_mesh"),  # return mesh;
+    ("GLTFNode", "get_original_name"),  # return original_name;
+    ("GLTFNode", "get_parent"),  # return parent;
+    ("GLTFNode", "get_skeleton"),  # return skeleton;
+    ("GLTFNode", "get_skin"),  # return skin;
+    ("GLTFNode", "get_visible"),  # return visible;
+    ("GLTFNode", "get_xform"),  # return transform;
+    ("GLTFSkeleton", "get_godot_skeleton"),  # return godot_skeleton;
+    ("GLTFSkin", "get_godot_skin"),  # return godot_skin;
+    ("GLTFSkin", "get_joints"),  # return joints;
+    ("GLTFSkin", "get_joints_original"),  # return joints_original;
+    ("GLTFSkin", "get_non_joints"),  # return non_joints;
+    ("GLTFSkin", "get_roots"),  # return roots;
+    ("GLTFSkin", "get_skeleton"),  # return skeleton;
+    ("GLTFSkin", "get_skin_root"),  # return skin_root;
+    ("GLTFSpecGloss", "get_diffuse_factor"),  # return diffuse_factor;
+    ("GLTFSpecGloss", "get_diffuse_img"),  # return diffuse_img;
+    ("GLTFSpecGloss", "get_gloss_factor"),  # return gloss_factor;
+    ("GLTFSpecGloss", "get_spec_gloss_img"),  # return spec_gloss_img;
+    ("GLTFSpecGloss", "get_specular_factor"),  # return specular_factor;
+    ("GeometryInstance3D", "is_ignoring_occlusion_culling"),  # return ignore_occlusion_culling;
+    ("GodotInstance", "is_started"),  # return started;
+    ("Gradient", "get_interpolation_color_space"),  # return interpolation_color_space;
+    ("Gradient", "get_interpolation_mode"),  # return interpolation_mode;
+    ("GraphEdit", "get_menu_hbox"),  # return menu_hbox;
+    ("GraphElement", "is_draggable"),  # return draggable;
+    ("GraphElement", "is_selectable"),  # return selectable;
+    ("GraphElement", "is_selected"),  # return selected;
+    ("GraphFrame", "get_titlebar_hbox"),  # return titlebar_hbox;
+    ("GraphNode", "get_titlebar_hbox"),  # return titlebar_hbox;
+    ("GridMap", "is_baking_navigation"),  # return bake_navigation;
+    ("HTTPRequest", "get_timeout"),  # return timeout;
+    ("Input", "is_using_accumulated_input"),  # return use_accumulated_input;
+    ("InputEventShortcut", "get_shortcut"),  # return shortcut;
+    ("ItemList", "is_scroll_hint_tiled"),  # return tile_scroll_hint;
+    ("JavaScriptBridge", "pwa_update"),  # return ERR_UNAVAILABLE;
+    ("LineEdit", "get_right_icon"),  # return right_icon;
+    ("LineEdit", "is_context_menu_enabled"),  # return context_menu_enabled;
+    ("MenuBar", "is_switch_on_hover"),  # return switch_on_hover;
+    ("MenuButton", "is_switch_on_hover"),  # return switch_on_hover;
+    ("MeshInstance3D", "get_skeleton_path"),  # return skeleton_path;
+    ("MultiplayerSynchronizer", "get_replication_config"),  # return replication_config;
+    ("NavigationAgent2D", "get_path_max_distance"),  # return path_max_distance;
+    ("NavigationAgent3D", "get_path_max_distance"),  # return path_max_distance;
+    ("NavigationMesh", "get_agent_radius"),  # return agent_radius;
+    ("NoiseTexture2D", "get_bump_strength"),  # return bump_strength;
+    ("NoiseTexture2D", "get_noise"),  # return noise;
+    ("NoiseTexture2D", "get_seamless"),  # return seamless;
+    ("NoiseTexture2D", "get_seamless_blend_skirt"),  # return seamless_blend_skirt;
+    ("NoiseTexture2D", "is_normal_map"),  # return as_normal_map;
+    ("NoiseTexture3D", "get_noise"),  # return noise;
+    ("NoiseTexture3D", "get_seamless"),  # return seamless;
+    ("NoiseTexture3D", "get_seamless_blend_skirt"),  # return seamless_blend_skirt;
+    ("OpenXRSpatialAnchorCapability", "is_spatial_anchor_supported"),  # return spatial_anchor_supported;
+    ("Parallax2D", "get_follow_viewport"),  # return follow_viewport;
+    ("Parallax2D", "is_ignore_camera_scroll"),  # return ignore_camera_scroll;
+    ("ParallaxBackground", "is_ignore_camera_zoom"),  # return ignore_camera_zoom;
+    ("ParticleProcessMaterial", "get_inherit_velocity_ratio"),  # return inherit_emitter_velocity_ratio;
+    ("ParticleProcessMaterial", "get_velocity_pivot"),  # return velocity_pivot;
+    ("Performance", "get_monitor_modification_time"),  # return _monitor_modification_time;
+    ("PhysicalBone3D", "get_simulate_physics"),  # return simulate_physics;
+    ("PhysicalBone3D", "is_simulating_physics"),  # return _internal_simulate_physics;
+    ("PhysicalBone3D", "is_using_custom_integrator"),  # return custom_integrator;
+    ("ProgressBar", "get_fill_mode"),  # return mode;
+    ("RigidBody2D", "is_using_custom_integrator"),  # return custom_integrator;
+    ("RigidBody3D", "is_using_custom_integrator"),  # return custom_integrator;
+    ("ScrollContainer", "get_draw_focus_border"),  # return draw_focus_border;
+    ("ScrollContainer", "get_h_scroll_bar"),  # return h_scroll;
+    ("ScrollContainer", "get_v_scroll_bar"),  # return v_scroll;
+    ("ScrollContainer", "is_scroll_hint_tiled"),  # return tile_scroll_hint;
+    ("SkeletonIK3D", "get_target_node"),  # return target_node_path_override;
+    ("SkeletonIK3D", "is_running"),  # return internal_active;
+    ("SkeletonModification2D", "get_enabled"),  # return enabled;
+    ("SkeletonModification2D", "get_modification_stack"),  # return stack;
+    ("SkeletonProfile", "get_root_bone"),  # return root_bone;
+    ("SkeletonProfile", "get_scale_base_bone"),  # return scale_base_bone;
+    ("SpinBox", "get_line_edit"),  # return line_edit;
+    ("SpringArm3D", "get_hit_length"),  # return current_spring_length;
+    ("SubViewportContainer", "is_mouse_target_enabled"),  # return mouse_target;
+    ("TextureProgressBar", "get_fill_degrees"),  # return rad_max_degrees;
+    ("TextureProgressBar", "get_fill_mode"),  # return mode;
+    ("TextureProgressBar", "get_radial_center_offset"),  # return rad_center_off;
+    ("TextureProgressBar", "get_radial_initial_angle"),  # return rad_init_angle;
+    ("ThemeDB", "get_default_theme"),  # return default_theme;
+    ("ThemeDB", "get_fallback_base_scale"),  # return fallback_base_scale;
+    ("ThemeDB", "get_fallback_font"),  # return fallback_font;
+    ("ThemeDB", "get_fallback_font_size"),  # return fallback_font_size;
+    ("ThemeDB", "get_fallback_icon"),  # return fallback_icon;
+    ("ThemeDB", "get_fallback_stylebox"),  # return fallback_stylebox;
+    ("ThemeDB", "get_project_theme"),  # return project_theme;
+    ("Timer", "is_ignoring_time_scale"),  # return ignore_time_scale;
+    ("Tree", "is_scroll_hint_tiled"),  # return tile_scroll_hint;
+    ("TreeItem", "is_collapsed"),  # return collapsed;
+    ("TreeItem", "is_visible"),  # return visible;
+    ("Tween", "is_running"),  # return running;
+    ("Viewport", "get_physics_object_picking_first_only"),  # return physics_object_picking_first_only;
+    ("VisibleOnScreenEnabler2D", "get_enable_mode"),  # return enable_mode;
+    ("VisibleOnScreenEnabler2D", "get_enable_node_path"),  # return enable_node_path;
+    ("VisibleOnScreenEnabler3D", "get_enable_mode"),  # return enable_mode;
+    ("VisibleOnScreenEnabler3D", "get_enable_node_path"),  # return enable_node_path;
+    ("XMLParser", "get_node_type"),  # return node_type;
+])
+
+
 def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members: set,
                     godot_class: str = ""):
     """Returns a ClassifiedMethod, or None (and records why in coverage) if the method is skipped."""
@@ -1441,7 +1595,11 @@ def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members
         # which is not the same as "has no effect": the 38 methods that are const and return nothing
         # are `OS.set_environment`, `OS.delay_msec`, `CanvasItem.draw_string` and 35 more of that
         # shape. Every one does something a later read can see, so the conjunction is the test.
-        is_const=bool(m.get("is_const")) and not is_void,
+        #
+        # CONST_OVERRIDES is the other direction, where Godot's flag is missing rather than too
+        # broad, and every row in it was read out of Godot's source by tools/audit_const_overrides.py.
+        is_const=(bool(m.get("is_const")) or (godot_class, m["name"]) in CONST_OVERRIDES)
+        and not is_void,
         # Godot's own spelling of the return type, kept only so the R-AUD-3 appendix can say what
         # shape a non-atomic method is -- an Error, the receiver, an object, or a plain value.
         godot_return=return_value["type"] if return_value else "",

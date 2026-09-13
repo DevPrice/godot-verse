@@ -387,12 +387,17 @@ Ref<Script> VerseScriptLanguage::_make_template(const String &p_template, const 
 			// the compiler reports its absence at the call rather than at the declaration.
 			"# A helper of your own wants `<transacts>` -- `Step()<transacts>:void = ...` -- or the\n"
 			"# first failable expression that calls it is refused, on the line that calls it.\n"
+			// Tabs, not spaces. Verse's own style guide prefers spaces and this deliberately does
+			// not follow it: Godot's `text_editor/behavior/indent/type` defaults to Tabs, so the
+			// first line the author types into a space-indented template *mixes* the two, which
+			// Verse rejects outright. The editor that will edit the file wins over the style guide
+			// that will not.
 			"_CLASS_ := class(_BASE_):\n"
 			"\n"
-			"    _Ready<override>():void =\n"
-			"        Print(\"_CLASS_ is ready\")\n"
+			"\t_Ready<override>():void =\n"
+			"\t\tPrint(\"_CLASS_ is ready\")\n"
 			"\n"
-			"    _Process<override>(Delta:float):void =\n";
+			"\t_Process<override>(Delta:float):void =\n";
 	source = source.replace("_CLASS_", class_name.to_snake_case());
 	source = source.replace("_BASE_", verse_base_class_for(p_base_class_name));
 
