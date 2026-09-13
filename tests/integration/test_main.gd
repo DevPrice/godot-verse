@@ -13,6 +13,11 @@ var _thread_answer: Variant = null
 var _signal_hits := 0
 var _signal_points := 0
 var _signal_by := ""
+var _signal_object: Object = null
+
+
+func _on_verse_touched(body: Node2D) -> void:
+	_signal_object = body
 
 
 func _on_verse_hit() -> void:
@@ -497,6 +502,11 @@ func _init() -> void:
 		emitter_node.call("EmitStruck", 9, "spike")
 		_check_eq("and a tuple payload arrives as positional arguments",
 				[_signal_points, _signal_by], [9, "spike"])
+
+		_signal_object = null
+		emitter_node.connect("Touched", _on_verse_touched)
+		emitter_node.call("EmitTouched", emitter_node)
+		_check("an object payload crosses as the node it names", _signal_object == emitter_node)
 
 		# Verse subscribes to a signal GDScript emits (R-SIG-6), through the same Callable.
 		var gd_emitter := Object.new()

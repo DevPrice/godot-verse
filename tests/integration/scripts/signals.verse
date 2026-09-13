@@ -21,6 +21,11 @@ signals := class(node2d):
     # tuple.
     Struck<public>:godot_signal(tuple(int, string)) = godot_signal(tuple(int, string)){}
 
+    # An object payload, which is what `body_entered` shaped signals carry.
+    Touched<public>:godot_signal(node2d) = godot_signal(node2d){}
+
+    EmitTouched<public>(Body:node2d)<transacts>:void = Touched.Signal(Body)
+
     EmitHit<public>()<transacts>:void = Hit.Signal(())
     EmitScored<public>(Points:int)<transacts>:void = Scored.Signal(Points)
     EmitStruck<public>(Damage:int, By:string)<transacts>:void = Struck.Signal((Damage, By))

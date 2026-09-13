@@ -1990,6 +1990,15 @@ AUTORTFM_DISABLE bool ValueToWire(Verse::FRunningContext Context,
     {
         bIsReference = Declared.ReferenceClass != nullptr;
     }
+    else if (Declared.Described.VariantTag == VH_VARIANT_OBJECT)
+    {
+        // A *bare* object, which a member never is -- an exported reference must be optional,
+        // because the inspector can leave a slot empty -- but a signal payload and a method
+        // parameter both are. Without this a `godot_signal(node2d)` emitted nothing and said the
+        // payload had no representation, which is true of no object at all.
+        ReferenceHandle = HandleOf(Value);
+        bIsReference = ReferenceHandle != 0;
+    }
 
     if (bIsReference)
     {
