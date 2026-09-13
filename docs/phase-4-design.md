@@ -51,7 +51,7 @@ by a spike — both are marked.
 | `@tool`'s editor virtuals | **4a, riding the mechanism** | if R-NODE-7 is general they cost a test, and R-EXP-5 stops being `part` |
 | signal payload | **tuple, or a struct when you want names** | Verse tuples cannot name their elements, and Godot's signal list and `_make_function` both want names. A tuple keeps the N-parameter handler S-B proved; a struct maps top-level fields to named arguments (§6.2) |
 | emission timing | **immediate, a stated exception** | every other void mutation defers to commit; emission does not, so "emit then read what the handler changed" works and a Verse emission matches a GDScript one. It joins the audited set Phase 4.5 owns (§6.4) |
-| `Subscribe` and rollback | **compensated with `Stm::OnRollback`** | it mutates Godot and returns a value, so it can be neither deferred nor ignored. Epic's own event does the same in reverse. The host's first compensation |
+| `Subscribe` and rollback | **compensated with `Stm::OnRollback`** — *wrong, and Phase 4.5 §11.1 says why: that API is a no-op here. It is `AutoRTFM::OnAbort<SameAsClosed>` now* | it mutates Godot and returns a value, so it can be neither deferred nor ignored. Epic's own event does the same in reverse. The host's first compensation |
 | connect semantics | **reference equality, duplicates allowed, idempotent `Cancel`, no flags** | *prior art, twice*: Godot's lambda callables compare by reference and UEFN's event inserts one entry per subscribe with an idempotent cancel (§5, §6.3) |
 | callback binding | **a bound method only, in 4a** | Godot's self-capturing lambda dies with its object; its plain lambda is anchored to the script and is Godot's own known leak. We take the half that does not leak; unbound functions are **OQ-16** |
 | foreign-thread calls | **refused, in this phase (R-ASYNC-8)** | VerseVM asserts `IsInGameThread()` and then carries on, so today a worker-thread call is a logged callstack followed by undefined behaviour. A mutex cannot fix thread *identity*; the guard belongs where the exposure grows (§5) |
@@ -477,7 +477,10 @@ emission in the same documented set as the 1354 value-returning mutators, and **
 that whole set is audited.
 
 **`Subscribe`, by contrast, is compensated.** It mutates Godot *and* returns a value, so it can be
-neither deferred nor ignored; the native registers `Verse::Stm::OnRollback` to disconnect. That is
+neither deferred nor ignored; the native registers `Verse::Stm::OnRollback` to disconnect. **That
+last clause is wrong** — `Stm::OnRollback` is the Solaris interpreter's STM and never ran from this
+bridge, which Phase 4.5's S-3 measured and fixed; it is `AutoRTFM::OnAbort<SameAsClosed>` now. The
+paragraph is otherwise right, and the rest of it is why the compensation exists at all. That is
 Epic's own pattern in the other direction — `subscribable_event_intrnl`'s unsubscribe re-subscribes on
 rollback — and without it a failed transaction leaves a live connection the script believes it never
 made. This is the host's first rollback compensation and the shape to copy for anything later that

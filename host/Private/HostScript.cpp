@@ -20,7 +20,6 @@
 #include "ULangUEUtils.h"
 #include "VerseComputationLimitControl.h"
 #include "VerseContentScope.h"
-#include "VerseStm.h"
 #include "VerseString.h"
 #include "VerseTask.h"
 #include "UObject/StrongObjectPtr.h"
@@ -4317,10 +4316,21 @@ AUTORTFM_DISABLE int64 GodotVerse::SubscribeSignal(int64 SignalId, const FVerseV
 
     // Compensated rather than deferred. This mutates Godot *and* returns a value, so it can be
     // neither queued for commit nor ignored -- and without the compensation a failed transaction
-    // leaves a live connection the script believes it never made. Epic's own event does the same in
-    // reverse: its unsubscribe re-subscribes on rollback. The host's first rollback compensation,
-    // and the shape to copy for anything later that mutates Godot and cannot defer.
-    Verse::Stm::OnRollback([Id] { GodotVerse::CancelSubscription(Id); });
+    // leaves a live connection the script believes it never made. The host's only rollback
+    // compensation, and the shape to copy for anything later that mutates Godot and cannot defer.
+    //
+    // **Not `Verse::Stm::OnRollback`**, which is what Phase 4 wrote and what Phase 4.5's S-3
+    // measured as doing nothing: that is the Solaris *interpreter's* STM, and `VerseStm.h` says of
+    // it "Noop if StmActive() returns false" -- StmActive being "true if in a failure context",
+    // which is a BPVM-era notion VerseVM never sets from here. The connection survived all three
+    // kinds of failure.
+    //
+    // `SameAsClosed` is the load-bearing half. Every Godot callback reaches C++ through
+    // `AutoRTFM::Open` (see VhSignalSubscribe), and a plain `OnAbort` from open code is documented
+    // to be *ignored*; `SameAsClosed` registers it against the active transaction as if the call
+    // had been closed, which is the one spelling that survives the Open this call is inside.
+    AutoRTFM::OnAbort<AutoRTFM::EOpenBehavior::SameAsClosed>(
+        [Id] { GodotVerse::CancelSubscription(Id); });
     return Id;
 }
 

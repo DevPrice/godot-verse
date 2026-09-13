@@ -6,9 +6,10 @@ Node-panel and `_make_function` flows. Phase 3's design is
 [`phase-3-design.md`](phase-3-design.md); what Phase 2 built, and the four places its design was
 wrong, are in [`phase-2-design.md`](phase-2-design.md) §11.
 
-**Phase 4.5 and Phase 5 are now planned**, in that order and for the first time before the work
-rather than after it: [`phase-4.5-design.md`](phase-4.5-design.md) and
-[`phase-5-design.md`](phase-5-design.md). Neither has run its spikes, and both say so at the top.
+**Phase 4.5 is built.** [`phase-4.5-design.md`](phase-4.5-design.md) is the design and **§11 is
+the part to read**: it was planned before the work, so §11 is where the plan turned out to be
+wrong — two of the four spikes came back the opposite way, and §1's table has two bad rows.
+[`phase-5-design.md`](phase-5-design.md) is still a plan and has not run its spikes.
 
 **Phase 4a is built.** [`phase-4-design.md`](phase-4-design.md) is the design, and
 [`phase-4-gaps.md`](phase-4-gaps.md) is where the implementation and that design disagree — twenty
@@ -544,9 +545,9 @@ loaded back; a Verse autoload answers from every scene; and the by-hand checklis
 
 ## Phase 4.5 — Effects and transactions: what a rollback actually undoes
 
-**Planned, not started.** [`phase-4.5-design.md`](phase-4.5-design.md) is the plan, written
-before the work rather than after it — **§2 is its spikes, and §3 onward is not to be trusted
-until they have run.**
+**Built.** [`phase-4.5-design.md`](phase-4.5-design.md) is the design, written before the work
+rather than after it — which makes **§11 the part to read**, because that is where the plan is
+corrected. The table below is §1's, kept as written; §11.2 says which two of its rows are wrong.
 
 **Why now.** Parity is when the bridge stops being small enough to hold in one head, and concurrency
 is when a second effect axis (`<suspends>`, task scopes, R-ASYNC-4) lands on top of this one. Between
@@ -564,7 +565,7 @@ is a promise the C++ keeps three different ways — or does not keep at all:
 | --- | --- | --- |
 | mutating, returns nothing | 6813 | **deferred** to `AutoRTFM::OnCommit`; an aborted transaction never performs it. Honest |
 | const, returns a value | 6728 | nothing to undo. Honest, but mislabelled: a property read is already `reads`, so the method surface disagrees with the property surface |
-| const, returns nothing | 38 | honest, trivially |
+| const, returns nothing | 38 | honest, trivially — **wrong**, see §11.2: these are `OS.set_environment`, `CanvasItem.draw_string` and 36 more that plainly do something |
 | **mutating, returns a value** | **1354** | **not kept.** The result is needed now, so the call cannot be deferred, and nothing compensates it |
 
 - **Decide `<reads>` for the const surface.** It is measured, mechanical (`is_const` in
@@ -584,6 +585,15 @@ is a promise the C++ keeps three different ways — or does not keep at all:
 **Exit:** every effect label in the mirror is either true or listed as knowingly untrue, with the
 list in the spec; a failable expression's guarantees are one paragraph an author can act on; and
 OQ-15 closes.
+
+**What it came to.** 3942 mirror methods carry `<reads>` where all 9597 carried `<transacts>`; the
+knowingly-untrue set is **1127**, generated into [`nonatomic-methods.md`](nonatomic-methods.md) by
+the same pass that writes the mirror so it cannot drift; the rule is in `spec.md` next to R-AUD-1
+and OQ-15 is closed. The spikes found a bug rather than an answer in one case — Phase 4's
+`Subscribe` compensation was registered with `Verse::Stm::OnRollback`, which is the Solaris
+interpreter's STM and had never run; it is `AutoRTFM::OnAbort<SameAsClosed>` now and
+`tests/integration` aborts it three ways. Nothing in `dodge-the-creeps/` or `tests/` needed a
+change: narrowing a callee is invisible to its callers.
 
 ---
 

@@ -1,8 +1,14 @@
 # Phase 4.5 — Effects and transactions: what a rollback actually undoes
 
-**Status:** Plan · 2026-09-13 · **not started.** Written before the work rather than after it, which
-is the opposite of this repo's habit and is deliberate: Phase 5 was planned in the same sitting and
-needs this phase's answer to exist before it designs a second effect axis on top of the first.
+**Status:** **Built, 2026-09-13.** §1–§10 were written *before* the work, which is the opposite of
+this repo's habit and was deliberate: Phase 5 was planned in the same sitting and needed this
+phase's answer to exist before it designed a second effect axis on top of the first.
+
+**§11 is the part to read.** It was written after, and it is where the plan turned out to be wrong:
+two of the four spikes came back the opposite way from what §3 and §4 expected, §1's table has two
+bad rows, and the audited set is **1127** rather than the 1354 estimated below. §0's warning that
+"nothing in §3 onward should be trusted until the spikes have run" now reads the other way round —
+nothing in §1 through §10 should be trusted over §11.
 
 **Read `roadmap.md` "Phase 4.5" first** — it is the two-paragraph version, and the table in it is
 the whole subject. This document is what that table turns into.
@@ -279,7 +285,142 @@ the list in `spec.md`; a failed expression's guarantees are one paragraph an aut
 
 ## 11. What building this corrected
 
-*Empty. Fill it in after, the way `phase-2-design.md` §11 and `phase-3-design.md` §11 were filled
-in — those are the most-read sections of both documents and they only exist because someone wrote
-them afterwards. Record what §1's table got wrong, what the spikes retired, and what the
-implementation could not do.*
+**Status: built, 2026-09-13.** Written after the work, which is the point of the section. The
+spikes ran first, as §0 asked, and two of the four came back the opposite way from what §3 and §4
+were written to expect.
+
+### 11.1 The spikes
+
+| | question | answer |
+| --- | --- | --- |
+| **S-1** | does a `<reads>` function satisfy the `<getter(…)>` protocol? | **No**, and it did not matter |
+| **S-2** | is `<reads>` callable from `<transacts>`, and can a native be `<reads>`? | **Yes**, both halves |
+| **S-3** | does `Verse::Stm::OnRollback` work from this bridge's call path? | **No.** It was a no-op, and had been since Phase 4 wrote it |
+| **S-4** | what does a failure context undo today? | More than §4 assumed, and one thing less |
+
+**S-1 is refused, in the compiler's own words.** The accessor protocol matches an *exact signature*
+rather than accepting a narrower effect:
+
+    `Score`'s accessors contain the following errors:
+    Incorrect definitions:
+        ScoreGetter(:accessor)<reads>:int
+            - needs the <transacts> effect
+            - the signature of this accessor should be: ScoreGetter(:accessor)<transacts>:int
+
+Under §2 that answer was supposed to halve the phase's benefit. **It cost nothing**, because of a
+thing nobody had asked: a `<getter(…)>` var's *read* is not effect-checked against its getter. A
+`<reads>` function may read `Position` and the call reaches `VhCallValue` — a `<transacts>` native —
+at runtime, which `tests/verse_probe/reads_property.verse` shows compiling *and* running. The
+*write* is checked and correctly refused ("This assignment has the 'transacts' effect"). So the 3232
+property getters stay `<transacts>` and are usable from `<reads>` code anyway, and stage 1 needed to
+touch only the method surface. The fixture is kept because this is a rule that could change.
+
+**S-3 found a bug rather than answering a question.** `Verse::Stm::OnRollback` is the *Solaris
+interpreter's* STM, and `VerseStm.h` says of it: *"Noop if StmActive() returns false"*, `StmActive`
+being "true if in a failure context" — a BPVM-era notion VerseVM never sets from here. Phase 4's
+`Subscribe` compensation therefore never ran, and nothing had noticed: the integration case that
+would have caught it did not exist until this phase wrote it. Measured, the connection survived all
+three kinds of failure. The working mechanism is
+`AutoRTFM::OnAbort<AutoRTFM::EOpenBehavior::SameAsClosed>`, and `SameAsClosed` is the load-bearing
+half — every Godot callback reaches C++ through `AutoRTFM::Open`, and a plain `OnAbort` from open
+code is documented to be *ignored*. Fixed, and `tests/integration` now aborts a Subscribe three ways
+and checks the connection came back.
+
+### 11.2 What §1's table got wrong
+
+The counts were right — 6813 / 6728 / 38 / 1354, exactly. Two of the four rows were not.
+
+**"const, returns nothing — 38 — honest, trivially" is wrong.** Godot's `const` means "does not
+mutate the C++ object", not "has no effect". The 38 are `OS.set_environment`, `OS.unset_environment`,
+`OS.delay_msec`, `OS.delay_usec`, `DisplayServer.beep`, `Texture2D.draw`, `CanvasItem.draw_string`
+and 31 more of that shape — every one does something a later read can see. They stay `<transacts>`,
+and the test the generator applies is const **and** answering a value.
+
+**"1354" is the wrong number for the audited set**, twice over. 102 of them are statics, which the
+mirror emits as free functions and which are a separate question; and of the remainder only **1127**
+survive into the mirror under their own names. 1127 is the number in `spec.md`, and it is generated
+rather than asserted — `docs/nonatomic-methods.md` is written by the same pass that writes the
+mirror, the way `verse_api_skipped.h` is, so it cannot drift.
+
+The property-accessor point in §1.1 was right and led nowhere: the getters are `<transacts>`, they
+stay `<transacts>`, and it does not matter. See 11.1.
+
+### 11.3 What S-4 measured
+
+The rule in `spec.md` next to R-AUD-1 is written from these, and `tests/integration` keeps every one
+as a case. Four were expected; two were not.
+
+- A write inside a **failure context that declines** is dropped. Expected.
+- A write in a **`<decides>` method that declines at the top level** is dropped too. **Not
+  expected** — `InstanceCall` reads that as `FOpResult::Fail` and its own `AutoRTFM::Transact`
+  commits normally, so the host's transaction is not what drops it. VerseVM wraps the invocation of
+  a `<decides>` function in a failure context of its own, and that is the transaction the deferral
+  was registered against.
+- A write followed by a **raise** is dropped. Expected.
+- A **read after a deferred write in the same call sees the old value.** Expected, and it is the
+  sharp edge the rule had to name.
+- **Deferred writes commit in order**, so the last write to a property wins.
+- **A raise stops every script until the next `vh_tick`** (R-ASYNC-4), which is *why*
+  `test_main.gd`'s transaction section runs a step per frame. Three of its cases raise deliberately,
+  and a second Verse call in the same frame answers `VH_ERR_HALTED` and never runs. This is recorded
+  behaviour, but it had never bitten a test before, and it is the first thing anyone writing one of
+  these will trip over.
+
+### 11.4 What stage 1 cost that §3 did not predict
+
+§3 said "`gen_verse_api.py` reads `is_const` and emits `<reads>`", and that part was one line. Three
+others were not, and all three came from **one fact nobody had written down: an archetype
+instantiation carries the constructing class's own effect.** `variant{Tag := …}` is how every packer
+in the bridge works, so narrowing the packers made them refuse to build the thing they exist to
+build. The repo already knew — `emit_math_structs` carries a comment saying `<concrete><computes>`
+is why the math structs can be built from `<computes>` code — but nothing connected it to `variant`.
+
+- `variant` and `godot_ref` are `struct<computes>` / `class<computes>` now, and so are the container
+  wrappers (`godot_array`, `dictionary`, `typed_array`, `typed_dictionary`, `callable`,
+  `signal_ref`).
+- The **singleton accessors** could not follow: a mirrored class descends from the native
+  `vh_object`, and making 1023 classes `<computes>` would change what a *script's* own class may
+  put in a field initializer. They construct no longer — `GetInput()` is
+  `input[VhObjectOf(VhSingleton["Input"])]`, a cast over what the host built. That is R-SCN-6's own
+  rule, which the accessors had been quietly violating since Phase 2, so the change is a correction
+  and not a workaround.
+- Effects are **contravariant** in a function type, which had to be checked because
+  `typed_array(t)` carries its packers as typed members: a `<reads>` function satisfies a
+  `<transacts>` member. `tests/verse_probe/effects_variance.verse` is that check.
+
+Two things the mirror could not narrow, and both are worth an author knowing. **`ToString` stays
+`<transacts>`**, because `Object.to_string` is not `const` in Godot — `_to_string` is a script hook
+that can do anything — so `Print("hit {Body}")` is not available inside a `<reads>` function. And
+**no static narrows**, because not one of Godot's 114 statics is `const`. Of the 114 utilities only
+the eight random ones are dispatched at all, and those genuinely move the RNG; the five look-up
+utilities (`type_string`, `error_string`, `instance_from_id`, `is_instance_id_valid`,
+`rid_from_int64`) got a `<reads>` dispatch native of their own, chosen by hand because
+`extension_api.json` carries no `is_const` for a utility.
+
+### 11.5 What it came to
+
+| | before | after |
+| --- | --- | --- |
+| mirror methods labelled `<transacts>` | 9597 | 5655 |
+| mirror methods labelled `<reads>` | 0 | 3942 |
+| labels knowingly untrue | unknown, unlisted | **1127**, generated into `docs/nonatomic-methods.md` |
+| native primitives | 22 | 24 (`VhCallValueConst`, `VhCallUtilityConst`) |
+| compensated mutate-and-answer calls | 1, not working | 1, working and tested three ways |
+
+Nothing in `dodge-the-creeps/` or `tests/integration/scripts/` needed a change: narrowing 3942
+declarations is invisible to a caller, which is what S-2 promised and what the yardstick's 29 checks
+confirm.
+
+### 11.6 What is still owed
+
+- **`Object.Connect` has no compensated spelling.** `godot_signal.Subscribe` is rollback-safe;
+  connecting to a *GDScript-declared* signal (R-SIG-6) goes through `Object.Connect`, which is in
+  the non-atomic list. A `Subscribe`-shaped wrapper over an arbitrary Godot signal would close it
+  and is not this phase's.
+- **The 708 "answers a value" rows are believed rather than audited.** `Tween.is_running` is not
+  `const` and reads like a query. The mirror believes Godot's annotation rather than second-guessing
+  708 of them, which is the conservative direction: `<transacts>` claims less than it could, where
+  a wrong `<reads>` would claim more than it should.
+- **`docs/by-hand-checklist.md` gains nothing from this phase** and still owes what it owed. The
+  editor-session check would now also see the new template text and the effect diagnostic in the
+  script editor's error list, which no headless run can show.

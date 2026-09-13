@@ -63,7 +63,7 @@ TagPackedVector4Array:int = 38
 # Hand-written rather than generated with the rest of the API. Godot's own signature takes a
 # Variant, so a faithful mirror would read `IsInstanceValid(Value:variant)` and hand a script the
 # one type this package deliberately keeps to itself.
-IsInstanceValid<public>(Object:object)<decides><transacts>:void = VhIsValid(Object.Handle)?
+IsInstanceValid<public>(Object:object)<decides><reads>:void = VhIsValid(Object.Handle)?
 
 # Godot's Object.to_string, as Verse's own ToString rather than as a method.
 #
@@ -86,24 +86,24 @@ ToString<public>(Value:object)<transacts>:string = VhToString(VhCallValue(Value.
 # the integer vectors -- a double stops counting exactly above 2^53, and Godot's are 32-bit values
 # that have to survive a round trip.
 
-VhFromLogic(Value:logic)<transacts>:variant = variant{Tag := TagBool, I0 := if (Value?) then 1 else 0}
-VhFromInt(Value:int)<transacts>:variant = variant{Tag := TagInt, I0 := Value}
-VhFromFloat(Value:float)<transacts>:variant = variant{Tag := TagFloat, F0 := Value}
-VhFromString(Value:string)<transacts>:variant = variant{Tag := TagString, Text := Value}
-VhFromStringName(Value:string)<transacts>:variant = variant{Tag := TagStringName, Text := Value}
-VhFromNodePath(Value:string)<transacts>:variant = variant{Tag := TagNodePath, Text := Value}
-VhFromObject(Value:object)<transacts>:variant = variant{Tag := TagObject, Ref := Value.Handle}
-VhFromRid(Value:int)<transacts>:variant = variant{Tag := TagRid, Ref := Value}
+VhFromLogic(Value:logic)<reads>:variant = variant{Tag := TagBool, I0 := if (Value?) then 1 else 0}
+VhFromInt(Value:int)<reads>:variant = variant{Tag := TagInt, I0 := Value}
+VhFromFloat(Value:float)<reads>:variant = variant{Tag := TagFloat, F0 := Value}
+VhFromString(Value:string)<reads>:variant = variant{Tag := TagString, Text := Value}
+VhFromStringName(Value:string)<reads>:variant = variant{Tag := TagStringName, Text := Value}
+VhFromNodePath(Value:string)<reads>:variant = variant{Tag := TagNodePath, Text := Value}
+VhFromObject(Value:object)<reads>:variant = variant{Tag := TagObject, Ref := Value.Handle}
+VhFromRid(Value:int)<reads>:variant = variant{Tag := TagRid, Ref := Value}
 
 # --- variant unpacking -------------------------------------------------------
 
 # Plain lane reads. Nothing here is failable, because FromWire on the host side fills the lane the
 # tag names -- a number Godot spelled as an integer where the mirror declared a float has already
 # been widened by the time a variant exists.
-VhToLogic(Value:variant)<transacts>:logic = if (Value.I0 <> 0) then true else false
-VhToInt(Value:variant)<transacts>:int = Value.I0
-VhToFloat(Value:variant)<transacts>:float = Value.F0
-VhToString(Value:variant)<transacts>:string = Value.Text
+VhToLogic(Value:variant)<reads>:logic = if (Value.I0 <> 0) then true else false
+VhToInt(Value:variant)<reads>:int = Value.I0
+VhToFloat(Value:variant)<reads>:float = Value.F0
+VhToString(Value:variant)<reads>:string = Value.Text
 
 # Raises unless the value is what the caller was generated to read.
 #
@@ -111,7 +111,7 @@ VhToString(Value:variant)<transacts>:string = Value.Text
 # variant gives (0.0, 0.0) rather than failing to find a slot, which is silently wrong where the
 # encoding this replaced was loudly wrong. So the check is explicit, and it is R-TYPE-5's runtime
 # half: the message names both the type expected and the tag that arrived.
-VhExpect(Value:variant, Tag:int, Expected:string)<transacts>:void =
+VhExpect(Value:variant, Tag:int, Expected:string)<reads>:void =
     if (Value.Tag <> Tag):
         VhTypeMismatch(Expected, Value)
 
@@ -123,7 +123,7 @@ VhExpect(Value:variant, Tag:int, Expected:string)<transacts>:void =
 # Nullability is a property of the type rather than of the method (spec R-TYPE-4): across Godot's
 # 5304 documented value-typed returns exactly one is documented as nullable, and it is editor-only,
 # so an object return is the only thing that is `<decides>`.
-VhToHandle(Value:variant)<decides><transacts>:int =
+VhToHandle(Value:variant)<decides><reads>:int =
     Value.Ref <> 0
     Value.Ref
 
@@ -131,7 +131,7 @@ VhToHandle(Value:variant)<decides><transacts>:int =
 # generated object return goes through this and then casts, which is where R-SCN-6 lives: the cast
 # is what turns `node` into `animated_sprite2d`, and it can only succeed because the host built the
 # object rather than the signature did.
-VhObjectFrom(Value:variant)<decides><transacts>:vh_object = VhObjectOf(VhToHandle[Value])
+VhObjectFrom(Value:variant)<decides><reads>:vh_object = VhObjectOf(VhToHandle[Value])
 
 # --- reference types ---------------------------------------------------------
 
@@ -155,7 +155,7 @@ VhObjectFrom(Value:variant)<decides><transacts>:vh_object = VhObjectOf(VhToHandl
 # callable and signal_ref stay here rather than being generated: they have no elements to index, so
 # there is nothing per-type to emit.
 
-callable<public> := class(godot_ref):
+callable<public> := class<computes>(godot_ref):
     # R-TYPE-3. The arguments are a Verse array of whatever the callee takes, and the result comes
     # back as one of the container element types the accessors above spell.
     CallInt<public>(Args:[]int)<transacts>:int =
@@ -169,30 +169,30 @@ callable<public> := class(godot_ref):
 
 # Godot's Signal. Held and passed back; connecting and emitting are signals' own requirement
 # (spec 5.3) and arrive in Phase 4.
-signal_ref<public> := class(godot_ref) {}
+signal_ref<public> := class<computes>(godot_ref) {}
 
 # --- reference packing -------------------------------------------------------
 
 # Every wrapper is adopted on the way in, which is what puts the UObject shadow behind it and so
 # what makes dropping it release the table entry.
-VhAdopt(Value:godot_ref)<transacts>:void = VhAdoptRef(Value)
+VhAdopt(Value:godot_ref)<reads>:void = VhAdoptRef(Value)
 
-VhToArray(Value:variant)<transacts>:godot_array =
+VhToArray(Value:variant)<reads>:godot_array =
     Made := godot_array{Ref := Value.Ref}
     VhAdopt(Made)
     Made
 
-VhToDictionary(Value:variant)<transacts>:dictionary =
+VhToDictionary(Value:variant)<reads>:dictionary =
     Made := dictionary{Ref := Value.Ref}
     VhAdopt(Made)
     Made
 
-VhToCallable(Value:variant)<transacts>:callable =
+VhToCallable(Value:variant)<reads>:callable =
     Made := callable{Ref := Value.Ref}
     VhAdopt(Made)
     Made
 
-VhToSignal(Value:variant)<transacts>:signal_ref =
+VhToSignal(Value:variant)<reads>:signal_ref =
     Made := signal_ref{Ref := Value.Ref}
     VhAdopt(Made)
     Made
@@ -208,12 +208,12 @@ VhToSignal(Value:variant)<transacts>:signal_ref =
 #
 # Adopted on the way out, like every other wrapper: that is what puts the UObject shadow behind it,
 # and the shadow is what releases the table entry when Verse drops the value.
-MakeArray<public>()<transacts>:godot_array =
+MakeArray<public>()<reads>:godot_array =
     Made := godot_array{Ref := VhRefNew(TagArray)}
     VhAdopt(Made)
     Made
 
-MakeDictionary<public>()<transacts>:dictionary =
+MakeDictionary<public>()<reads>:dictionary =
     Made := dictionary{Ref := VhRefNew(TagDictionary)}
     VhAdopt(Made)
     Made
@@ -239,10 +239,10 @@ MakeCallable<public>(t:type, Callback(:t)<transacts>:void)<transacts>:callable =
     VhAdopt(Made)
     Made
 
-VhFromArray(Value:godot_array)<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
-VhFromDictionary(Value:dictionary)<transacts>:variant = variant{Tag := TagDictionary, Ref := Value.Ref}
-VhFromCallable(Value:callable)<transacts>:variant = variant{Tag := TagCallable, Ref := Value.Ref}
-VhFromSignal(Value:signal_ref)<transacts>:variant = variant{Tag := TagSignal, Ref := Value.Ref}
+VhFromArray(Value:godot_array)<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+VhFromDictionary(Value:dictionary)<reads>:variant = variant{Tag := TagDictionary, Ref := Value.Ref}
+VhFromCallable(Value:callable)<reads>:variant = variant{Tag := TagCallable, Ref := Value.Ref}
+VhFromSignal(Value:signal_ref)<reads>:variant = variant{Tag := TagSignal, Ref := Value.Ref}
 
 # --- packed arrays -----------------------------------------------------------
 
@@ -250,25 +250,25 @@ VhFromSignal(Value:signal_ref)<transacts>:variant = variant{Tag := TagSignal, Re
 # fixed-width variant and ride as a reference like the containers do. What the author sees is a
 # Verse array either way: these converters read the whole thing out, and build a fresh one going
 # back, so the generated signatures stay `[]float` rather than becoming a handle to unwrap.
-VhToInts(Value:variant)<transacts>:[]int = VhRefInts(Value.Ref)
-VhToFloats(Value:variant)<transacts>:[]float = VhRefFloats(Value.Ref)
-VhToStrings(Value:variant)<transacts>:[]string = VhRefStrings(Value.Ref)
+VhToInts(Value:variant)<reads>:[]int = VhRefInts(Value.Ref)
+VhToFloats(Value:variant)<reads>:[]float = VhRefFloats(Value.Ref)
+VhToStrings(Value:variant)<reads>:[]string = VhRefStrings(Value.Ref)
 
-VhFromInts(Tag:int, Values:[]int)<transacts>:variant = variant{Tag := Tag, Ref := VhRefFromInts(Tag, Values)}
-VhFromFloats(Tag:int, Values:[]float)<transacts>:variant = variant{Tag := Tag, Ref := VhRefFromFloats(Tag, Values)}
-VhFromStrings(Tag:int, Values:[]string)<transacts>:variant = variant{Tag := Tag, Ref := VhRefFromStrings(Tag, Values)}
+VhFromInts(Tag:int, Values:[]int)<reads>:variant = variant{Tag := Tag, Ref := VhRefFromInts(Tag, Values)}
+VhFromFloats(Tag:int, Values:[]float)<reads>:variant = variant{Tag := Tag, Ref := VhRefFromFloats(Tag, Values)}
+VhFromStrings(Tag:int, Values:[]string)<reads>:variant = variant{Tag := Tag, Ref := VhRefFromStrings(Tag, Values)}
 
 # The packed arrays whose elements are math structs rather than scalars -- PackedVector2Array
 # and its three siblings. One variant per element, because a vector2 has no single lane to
 # flatten into the way an int does.
-VhFromValues(Tag:int, Values:[]variant)<transacts>:variant = variant{Tag := Tag, Ref := VhRefFromValues(Tag, Values)}
+VhFromValues(Tag:int, Values:[]variant)<reads>:variant = variant{Tag := Tag, Ref := VhRefFromValues(Tag, Values)}
 
-VhFromByteArray(Values:[]int)<transacts>:variant = VhFromInts(TagPackedByteArray, Values)
-VhFromInt32Array(Values:[]int)<transacts>:variant = VhFromInts(TagPackedInt32Array, Values)
-VhFromInt64Array(Values:[]int)<transacts>:variant = VhFromInts(TagPackedInt64Array, Values)
-VhFromFloat32Array(Values:[]float)<transacts>:variant = VhFromFloats(TagPackedFloat32Array, Values)
-VhFromFloat64Array(Values:[]float)<transacts>:variant = VhFromFloats(TagPackedFloat64Array, Values)
-VhFromStringArray(Values:[]string)<transacts>:variant = VhFromStrings(TagPackedStringArray, Values)
+VhFromByteArray(Values:[]int)<reads>:variant = VhFromInts(TagPackedByteArray, Values)
+VhFromInt32Array(Values:[]int)<reads>:variant = VhFromInts(TagPackedInt32Array, Values)
+VhFromInt64Array(Values:[]int)<reads>:variant = VhFromInts(TagPackedInt64Array, Values)
+VhFromFloat32Array(Values:[]float)<reads>:variant = VhFromFloats(TagPackedFloat32Array, Values)
+VhFromFloat64Array(Values:[]float)<reads>:variant = VhFromFloats(TagPackedFloat64Array, Values)
+VhFromStringArray(Values:[]string)<reads>:variant = VhFromStrings(TagPackedStringArray, Values)
 
 # --- signals -----------------------------------------------------------------
 
@@ -333,21 +333,21 @@ godot_subscription<public> := class(cancelable):
 # That costs nothing, because the gate on building one is `Ref` -- inherited from godot_ref, never
 # public, and worthless at its default of 0. A script can write `typed_array(node){Unpack := ...}`
 # and get a container naming nothing.
-typed_array<public>(t:type) := class(godot_ref):
-    Unpack<public>:type{_(:variant)<decides><transacts>:t}
-    Pack<public>:type{_(:t)<transacts>:variant}
+typed_array<public>(t:type) := class<computes>(godot_ref):
+    Unpack<public>:type{_(:variant)<decides><reads>:t}
+    Pack<public>:type{_(:t)<reads>:variant}
 
     # How many elements it holds.
-    Length<public>()<transacts>:int = VhRefSize(Ref)
+    Length<public>()<reads>:int = VhRefSize(Ref)
 
     # Element at Index. Failable for two reasons that read the same to the caller: the index is out
     # of range, or the element is not a t after all -- Godot's typed arrays are checked on write,
     # but a null object is still a miss.
-    Get<public>(Index:int)<decides><transacts>:t = Unpack[VhRefGet[Ref, VhFromInt(Index)]]
+    Get<public>(Index:int)<decides><reads>:t = Unpack[VhRefGet[Ref, VhFromInt(Index)]]
 
     # The whole thing as a Verse array, which is a copy: elements that do not convert are dropped
     # rather than failing the call, the way `for` with a failable body already reads.
-    ToArray<public>()<transacts>:[]t = for (V : VhRefValues(Ref), E := Unpack[V]) { E }
+    ToArray<public>()<reads>:[]t = for (V : VhRefValues(Ref), E := Unpack[V]) { E }
 
     # Writes through to the container Godot owns, which every other holder sees. An index one past
     # the end appends; further than that is the error GDScript makes it.
@@ -361,16 +361,16 @@ typed_array<public>(t:type) := class(godot_ref):
 
 # Godot's Dictionary with a key and a value type -- `typeddictionary::int;String`. The same shape as
 # typed_array with one more converter, because a key has to be packed to be looked up.
-typed_dictionary<public>(k:type, v:type) := class(godot_ref):
-    PackKey<public>:type{_(:k)<transacts>:variant}
-    Unpack<public>:type{_(:variant)<decides><transacts>:v}
-    Pack<public>:type{_(:v)<transacts>:variant}
+typed_dictionary<public>(k:type, v:type) := class<computes>(godot_ref):
+    PackKey<public>:type{_(:k)<reads>:variant}
+    Unpack<public>:type{_(:variant)<decides><reads>:v}
+    Pack<public>:type{_(:v)<reads>:variant}
 
-    Length<public>()<transacts>:int = VhRefSize(Ref)
+    Length<public>()<reads>:int = VhRefSize(Ref)
 
     # Failable on both counts, and they read the same to the caller: no such key, or a value that is
     # not a v after all.
-    Get<public>(Key:k)<decides><transacts>:v = Unpack[VhRefGet[Ref, PackKey(Key)]]
+    Get<public>(Key:k)<decides><reads>:v = Unpack[VhRefGet[Ref, PackKey(Key)]]
 
     Set<public>(Key:k, Value:v)<transacts>:void = VhRefSet(Ref, PackKey(Key), Pack(Value))
 
@@ -412,21 +412,21 @@ PrintRaw<public>(Text:string)<transacts>:void = { VhCallUtility("printraw", arra
 # generated enums (`property_hint` and `variant_type`) and a module-level function of that name is
 # ambiguous with both. Enumerators are a collision class the generator's parameter table does not
 # cover, which is why this one is renamed rather than registered.
-VariantTypeName<public>(VariantType:int)<transacts>:string = VhToString(VhCallUtility("type_string", array{VhFromInt(VariantType)}))
-ErrorString<public>(Error:int)<transacts>:string = VhToString(VhCallUtility("error_string", array{VhFromInt(Error)}))
+VariantTypeName<public>(VariantType:int)<reads>:string = VhToString(VhCallUtilityConst("type_string", array{VhFromInt(VariantType)}))
+ErrorString<public>(Error:int)<reads>:string = VhToString(VhCallUtilityConst("error_string", array{VhFromInt(Error)}))
 
 # The object registry. `InstanceFromId` is the inverse of every handle this bridge carries, and it
 # fails rather than raising for an id Godot has freed -- which is the same bargain every other
 # object-returning call makes (R-TYPE-4).
-InstanceFromId<public>(Id:int)<decides><transacts>:object =
-    object[VhObjectFrom[VhCallUtility("instance_from_id", array{VhFromInt(Id)})]]
+InstanceFromId<public>(Id:int)<decides><reads>:object =
+    object[VhObjectFrom[VhCallUtilityConst("instance_from_id", array{VhFromInt(Id)})]]
 
-IsInstanceIdValid<public>(Id:int)<decides><transacts>:void =
-    VhToLogic(VhCallUtility("is_instance_id_valid", array{VhFromInt(Id)}))?
+IsInstanceIdValid<public>(Id:int)<decides><reads>:void =
+    VhToLogic(VhCallUtilityConst("is_instance_id_valid", array{VhFromInt(Id)}))?
 
 # The RID allocator, which a script writing against a Server needs and can get nowhere else.
 RidAllocateId<public>()<transacts>:int = VhToInt(VhCallUtility("rid_allocate_id", array{}))
 
 # A RID from its integer, which is the other half of `RidAllocateId`. A RID crosses as that integer
 # everywhere in the mirror, so this is an identity on the wire and a *validation* in Godot.
-RidFromInt64<public>(From:int)<transacts>:int = VhToInt(VhCallUtility("rid_from_int64", array{VhFromInt(From)}))
+RidFromInt64<public>(From:int)<reads>:int = VhToInt(VhCallUtilityConst("rid_from_int64", array{VhFromInt(From)}))

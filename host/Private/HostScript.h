@@ -169,10 +169,10 @@ AUTORTFM_DISABLE bool IsClassAbstract(FUtf8StringView ClassName);
 /// Emits the signal a binding id names, now. See the Verse declaration for why "now".
 AUTORTFM_DISABLE void EmitSignal(int64 SignalId, const FVerseValue& Payload);
 
-/// Connects Callback and answers a subscription id, or 0. Registers an Stm::OnRollback that
-/// disconnects: this mutates Godot *and* returns a value, so it can be neither deferred to commit
-/// nor ignored, and a rolled-back transaction must not leave a connection the script believes it
-/// never made.
+/// Connects Callback and answers a subscription id, or 0. Registers an
+/// `AutoRTFM::OnAbort<SameAsClosed>` that disconnects: this mutates Godot *and* returns a value, so
+/// it can be neither deferred to commit nor ignored, and an aborted transaction must not leave a
+/// connection the script believes it never made.
 AUTORTFM_DISABLE int64 SubscribeSignal(int64 SignalId, const FVerseValue& Callback);
 
 /// Disconnects. Idempotent, as event_subscription::Cancel is in UEFN.

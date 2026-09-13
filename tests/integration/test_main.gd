@@ -15,6 +15,8 @@ var _signal_points := 0
 var _signal_by := ""
 var _signal_object: Object = null
 var _signal_report: Array = []
+var _tx: Node2D = null
+var _tx_step := 0
 
 
 func _on_verse_touched(body: Node2D) -> void:
@@ -1013,5 +1015,115 @@ func _init() -> void:
 		_check_eq("while a node with no script declines that cast",
 				caster.call("DescribeGiven", sprite2d_as_node2d(sprite)), "no")
 
-	print("[integration] %d passed, %d failed" % [_passed, _failed])
-	quit(1 if _failed > 0 else 0)
+	# --- R-AUD-1: what a failure undoes ---------------------------------------------------------
+	#
+	# Phase 4.5's spikes S-3 and S-4, kept as behavioural cases because the rule written next to
+	# R-AUD-1 has to describe measured behaviour rather than intended behaviour. `transactions.verse`
+	# carries the commentary; what is only visible here is what the node's properties ended up as.
+	#
+	# It runs a step per frame rather than inline, and that is the first thing the spike found: **a
+	# raise stops every script until the next `vh_tick`** (R-ASYNC-4), so a second Verse call in the
+	# same frame answers VH_ERR_HALTED and never runs. Three of these cases raise deliberately, so
+	# each needs a frame of its own. `_process` is where the frames are.
+	var tx_script: Script = load("res://scripts/transactions.verse")
+	_check("transactions.verse compiles", tx_script != null and tx_script.can_instantiate())
+	if tx_script == null:
+		print("[integration] %d passed, %d failed" % [_passed, _failed])
+		quit(1)
+		return
+	_tx = Node2D.new()
+	_tx.set_script(tx_script)
+	root.add_child(_tx)
+
+
+# Returning true quits the loop, which is how the suite ends now that its last section spans frames.
+func _process(_delta: float) -> bool:
+	if _tx == null:
+		return false
+	_tx_step += 1
+	match _tx_step:
+		1:
+			# Phase 4.5 stage 1: a helper narrowed to `<reads>`, which is the whole point of giving
+			# Godot's 6728 const-and-answering methods that effect. It compiling at all is the
+			# assertion; the numbers only say it ran.
+			var kid := Node2D.new()
+			kid.name = "Kid"
+			_tx.add_child(kid)
+			_tx.position = Vector2(3, 4)
+			_check_eq("a <reads> helper reads the scene", _tx.call("DescribeReads"), 6.0)
+			_check_eq("and a <transacts> caller can still reach it",
+					_tx.call("ReadFromTransacts"), 6.0)
+			_check_eq("a failure context works inside a <reads> body",
+					_tx.call("FirstChildName"), "Kid")
+			_tx.remove_child(kid)
+			kid.free()
+
+			# A write inside a failure context that declines. `set Position` defers to commit, and
+			# the Verse-level unwind has to take the deferral with it.
+			_tx.position = Vector2(1, 1)
+			_tx.call("SetThenFailInner")
+			_check_eq("a write inside a failed context does not reach Godot",
+					_tx.position, Vector2(1, 1))
+			_check_eq("and nothing after the failed context runs either", _tx.rotation, 0.0)
+
+			# The same write declining at the *top* level of the call. `InstanceCall` reads that as
+			# `FOpResult::Fail` and its own AutoRTFM transaction still commits -- so were the host's
+			# transaction the only one, this write would land. It does not: VerseVM wraps the
+			# invocation of a `<decides>` function in a failure context of its own, and that is the
+			# transaction the deferral was registered against.
+			_tx.position = Vector2(1, 1)
+			_check_eq("a <decides> method that declines answers nothing",
+					_tx.call("SetThenDecline"), null)
+			_check_eq("and a top-level decline drops its deferred write too",
+					_tx.position, Vector2(1, 1))
+
+			# A read after a deferred write in the same call sees the *old* value: the write has not
+			# happened yet. This is the sharp edge, not a defect.
+			_tx.position = Vector2(7, 7)
+			_tx.call("SetThenRead")
+			_check_eq("the deferred write lands at commit", _tx.position, Vector2(44, 44))
+			_check_eq("but a read in the same call saw the value from before it",
+					_tx.call("ReadObservedX"), 7.0)
+
+			# Two deferred writes to one property: the queue is ordered, so the second wins.
+			_tx.call("SetTwice")
+			_check_eq("deferred writes commit in the order they were made",
+					_tx.position, Vector2(66, 66))
+
+			# S-3's control, and its two non-raising failures. `Subscribe` mutates Godot and answers,
+			# so it is compensated rather than deferred: the host registers an
+			# `AutoRTFM::OnAbort<SameAsClosed>` that disconnects. These are what say it runs.
+			_tx.call("SubscribePlainly")
+			_check_eq("a plain Subscribe connects",
+					_tx.get_signal_connection_list("Hit").size(), 1)
+			_tx.call("SubscribeThenDecline")
+			_check_eq("a Subscribe undone by a top-level decline leaves no connection",
+					_tx.get_signal_connection_list("Hit").size(), 1)
+			_tx.call("SubscribeThenFailInner")
+			_check_eq("a Subscribe undone by a failed context leaves no connection",
+					_tx.get_signal_connection_list("Hit").size(), 1)
+		2:
+			# A raise, which aborts the host's transaction and drops what it had deferred. On its
+			# own frame: everything after it this frame would be halted.
+			_tx.position = Vector2(1, 1)
+			_tx.call("SetThenRaise")
+			_check_eq("a raise drops the writes its transaction had deferred",
+					_tx.position, Vector2(1, 1))
+		3:
+			_check_eq("and the next frame runs Verse again", _tx.call("ReadObservedX"), 7.0)
+
+			var before: int = _tx.get_signal_connection_list("Hit").size()
+			_tx.call("SubscribeThenRaise")
+			_check_eq("a Subscribe undone by a raise leaves no connection",
+					_tx.get_signal_connection_list("Hit").size(), before)
+		4:
+			# The uncompensated shape beside it: `Object.connect` mutates Godot *and* answers, so it
+			# can be neither deferred nor ignored, and nothing undoes it.
+			_tx.call("ConnectThenRaise")
+			_check_eq("a mutate-and-answer call survives the raise that follows it",
+					_tx.get_signal_connection_list("Scored").size(), 1)
+		_:
+			print("[integration] %d passed, %d failed" % [_passed, _failed])
+			quit(1 if _failed > 0 else 0)
+			return true
+	return false

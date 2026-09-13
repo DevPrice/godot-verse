@@ -380,6 +380,13 @@ Ref<Script> VerseScriptLanguage::_make_template(const String &p_template, const 
 			"using { /Godot.org/Godot }\n"
 			"\n"
 			"# The class is named after this file, which is how the node it is attached to finds it.\n"
+			"#\n"
+			// The one thing a template can say that stops wall 8 before it happens. An override
+			// carries no specifier on purpose -- the default effect set is the widest, so an
+			// overriding body may call anything -- but a helper the author writes needs one, and
+			// the compiler reports its absence at the call rather than at the declaration.
+			"# A helper of your own wants `<transacts>` -- `Step()<transacts>:void = ...` -- or the\n"
+			"# first failable expression that calls it is refused, on the line that calls it.\n"
 			"_CLASS_ := class(_BASE_):\n"
 			"\n"
 			"    _Ready<override>():void =\n"
@@ -2432,6 +2439,61 @@ void VerseScriptLanguage::explain_skipped_members(const TypedArray<Dictionary> &
 	}
 }
 
+// uLang's ErrSemantic_EffectNotAllowed, from Glitch.h. The message reads
+//
+//   This invocation calls a function (`(/user@localhost/player:)Helper`) that has the
+//   'no_rollback' effect, which is not allowed by its context.
+//
+// and it is reported at the **call**, which for the common shape is not where the fix goes.
+static constexpr int64_t EFFECT_NOT_ALLOWED_CODE = 3512;
+
+// The package-qualified callee out of that message: uLang writes `(/package/class:)Member`, and it
+// is the only backticked thing in it. Answers the qualified path and the bare member name.
+static bool parse_effect_callee(const String &p_message, String &r_qualified, String &r_member) {
+	const int64_t open = p_message.find("`");
+	const int64_t close = open < 0 ? -1 : p_message.find("`", open + 1);
+	if (close <= open + 1) {
+		return false;
+	}
+	r_qualified = p_message.substr(open + 1, close - open - 1);
+	const int64_t split = r_qualified.rfind(":)");
+	r_member = split < 0 ? r_qualified : r_qualified.substr(split + 2);
+	return !r_member.is_empty();
+}
+
+void VerseScriptLanguage::explain_effect_errors(const TypedArray<Dictionary> &p_errors) {
+	for (int64_t i = 0; i < p_errors.size(); i++) {
+		Dictionary error = p_errors[i];
+		if (!error.has("code") || (int64_t)error["code"] != EFFECT_NOT_ALLOWED_CODE) {
+			continue;
+		}
+		String qualified;
+		String member;
+		if (!parse_effect_callee(String(error["message"]), qualified, member)) {
+			continue;
+		}
+
+		// Two shapes with the fix in two different places, and the callee's package is what tells
+		// them apart. A mirrored Godot method that says `<transacts>` means it: the caller is what
+		// has to widen. Anything else is the author's own, and the usual cause is a declaration
+		// written with no specifier at all -- which carries Verse's *default* effect set, wider
+		// than `<transacts>` because it contains `no_rollback`.
+		String added;
+		if (qualified.begins_with("(/Godot.org/Godot")) {
+			added = " `" + member + "` is one of Godot's own and does change the scene, so it is"
+					" this function that has to widen rather than that one: write `<transacts>` on"
+					" the function containing this line. A Godot method that only reads carries"
+					" `<reads>` and needs no widening.";
+		} else {
+			added = " Write `<transacts>` on `" + member + "`'s own declaration, which is where the"
+					" fix goes even though the error is reported here: a function with no effect"
+					" specifier carries Verse's default effect set, which contains `no_rollback` and"
+					" is wider than `<transacts>`.";
+		}
+		error["message"] = String(error["message"]) + added;
+	}
+}
+
 // The Verse compiler's code for "Unknown identifier %s." -- uLang's ErrSemantic_UnknownIdentifier,
 // from Glitch.h. Matched on the code rather than on the message, which is English and is not ours.
 static constexpr int64_t UNKNOWN_IDENTIFIER_CODE = 3506;
@@ -2577,6 +2639,7 @@ bool VerseScriptLanguage::record_diagnostics(const Dictionary &p_errors_by_globa
 			error["path"] = path;
 		}
 		explain_skipped_members(errors);
+		explain_effect_errors(errors);
 		note_missing_imports(path, errors);
 		diagnostics_by_path[path] = errors;
 	}

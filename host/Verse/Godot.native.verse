@@ -11,7 +11,7 @@ using {/Verse.org/Native}
 
 Print<public><native>(Message:string)<transacts>:void
 
-VhIsValid<native>(Handle:int)<transacts>:logic
+VhIsValid<native>(Handle:int)<reads>:logic
 
 # One Godot Variant on the wire: a fixed-width struct of scalars, with Tag saying which lanes to
 # read. Tag is Godot's own Variant::Type.
@@ -35,7 +35,7 @@ VhIsValid<native>(Handle:int)<transacts>:logic
 # Nothing follows from a script holding one. Every lane reads as its default -- a Tag of 0 is Nil --
 # so the worst a hand-built variant can say is "nothing", and the readers in GodotApi.native.verse
 # are what turn one into a value.
-variant<public><native> := struct:
+variant<public><native> := struct<computes>:
 	# Godot's Variant::Type. Decides which of the lanes below carry the value.
 	Tag<native>:int = 0
 
@@ -76,16 +76,40 @@ variant<public><native> := struct:
 # Raises a Verse runtime error naming the type that was expected. It never returns: the raise
 # unwinds to the root failure context, which is what lets the unpackers in GodotApi.native.verse
 # be total functions despite bottoming out in failable array indexing.
-VhTypeMismatch<native>(Expected:string, Value:variant)<transacts>:void
+VhTypeMismatch<native>(Expected:string, Value:variant)<reads>:void
 
 # Reads and calls happen now; they observe a Godot the transaction cannot roll back.
+#
+# The effect on each declaration in this file follows one rule, which Phase 4.5 wrote down: a native
+# is `<reads>` if calling it cannot change Godot, and cannot change any reference the bridge is
+# already holding. Building a *fresh* reference is not a change by that rule -- nothing else can
+# observe it yet -- which is why `VhRefNew` and the `VhRefFrom...` family are `<reads>` while
+# `VhRefSet` is not. Everything that reaches Godot to mutate it, or that hands Godot something of
+# Verse's (`VhCallableFrom`, the signal family), is `<transacts>`.
 #
 # VhCallValue is total. A dead receiver, an unknown method and a value that does not fit the wire
 # all raise inside the host, and a null object comes back as an object-tagged zero rather than as
 # a missing value -- so there is nothing left for the caller to handle. Property reads keep their
 # failure: Godot cannot tell an absent property from a nil one.
 VhCallValue<native>(Handle:int, Method:string, Args:[]variant)<transacts>:variant
-VhGetValue<native>(Handle:int, Property:string)<decides><transacts>:variant
+VhGetValue<native>(Handle:int, Property:string)<decides><reads>:variant
+
+# The same call, narrowed. 6728 of Godot's 14,933 methods are `const` *and* answer a value, and a
+# call to one observes the scene without changing it -- which is `<reads>`, not `<transacts>`. The
+# distinction is not cosmetic: an explicit specifier *narrows* in Verse, so a `<reads>` helper a
+# script writes may not call a `<transacts>` function, and before this every read of Godot state
+# forced `<transacts>` onto its caller and from there onto that caller's callers, a file at a time.
+#
+# A separate native rather than a narrower `VhCallValue`, because the mutating half genuinely is
+# `<transacts>` and one declaration cannot be both. The C++ behind the two is the same call; what
+# differs is what the compiler will let a caller be.
+#
+# **`const` and answering, not `const` alone.** Godot's `const` means "does not mutate the C++
+# object", which is not the same as "has no effect": the 38 methods that are const and return
+# *nothing* are `OS.set_environment`, `OS.delay_msec`, `CanvasItem.draw_string` and 35 more of that
+# shape, and every one of them does something a later read can see. They stay `<transacts>`, and
+# docs/phase-4.5-design.md 11 records that its own table called them "honest, trivially".
+VhCallValueConst<native>(Handle:int, Method:string, Args:[]variant)<reads>:variant
 
 # Mutations defer to transaction commit, so a failed expression leaves the scene untouched.
 VhCallVoid<native>(Handle:int, Method:string, Args:[]variant)<transacts>:void
@@ -93,7 +117,7 @@ VhSetValue<native>(Handle:int, Property:string, Value:variant)<transacts>:void
 
 # Engine::get_singleton. Fails for a name Godot does not register, which is what the generated
 # accessors in GodotClasses.native.verse are `<decides>` for.
-VhSingleton<native>(Name:string)<decides><transacts>:int
+VhSingleton<native>(Name:string)<decides><reads>:int
 
 # The Verse object a Godot handle names, built by the host as the most derived mirrored class the
 # object actually is -- or, for a node carrying a Verse script, that script's own object.
@@ -105,7 +129,7 @@ VhSingleton<native>(Name:string)<decides><transacts>:int
 # Total, and never `false`: a handle Godot has freed, or one whose class this mirror does not
 # carry, answers a bare `vh_object`, which every cast then declines. The caller wrote a failable
 # cast, so a failure is an answer; raising from here would be a different question's error.
-VhObjectOf<native>(Handle:int)<transacts>:vh_object
+VhObjectOf<native>(Handle:int)<reads>:vh_object
 
 # A Verse function as a Godot Callable, answered as a reference id in the same table an Array rides
 # in (R-TYPE-3's other direction, R-INT-4, and what a signal subscribes with).
@@ -142,8 +166,9 @@ VhSignalEmit<native>(Id:int, Payload:any)<transacts>:void
 
 # Connects, and answers a subscription id -- 0 if the callback is not a method bound to a live
 # script instance. Unlike emission this is compensated rather than deferred or immediate-and-
-# forgotten: it mutates Godot *and* returns a value, so a rolled-back transaction has to
-# disconnect, which is what the host registers with Stm::OnRollback.
+# forgotten: it mutates Godot *and* returns a value, so an aborted transaction has to disconnect,
+# which is what the host registers with AutoRTFM::OnAbort. Phase 4 wrote that compensation against
+# Verse::Stm::OnRollback and Phase 4.5's S-3 measured it doing nothing; HostScript.cpp says why.
 VhSignalSubscribe<native>(Id:int, Callback:any)<transacts>:int
 
 # Idempotent, as `event_subscription.Cancel` is in UEFN: a second Cancel does nothing.
@@ -168,6 +193,15 @@ VhSignalBind<native>(Handle:int, Class:string, Accessor:string, Name:string)<tra
 VhCallStatic<native>(Class:string, Method:string, Args:[]variant)<transacts>:variant
 VhCallUtility<native>(Name:string, Args:[]variant)<transacts>:variant
 
+# `VhCallUtility` for a utility that only looks something up: `type_string`, `error_string`,
+# `instance_from_id`, `is_instance_id_valid`, `rid_from_int64`. Judged one at a time rather than
+# read off a flag, because `extension_api.json` carries no `is_const` for a utility -- and the
+# distinction is real: `randf` and `randomize` move the global RNG, so a `<reads>` spelling of them
+# would let a replay silently diverge.
+#
+# No static counterpart, and none is needed: not one of Godot's 114 statics is `const`.
+VhCallUtilityConst<native>(Name:string, Args:[]variant)<reads>:variant
+
 # --- reference values --------------------------------------------------------
 
 # A Godot value the wire cannot copy: an Array, a Dictionary, a Callable, a Signal, or one of the
@@ -178,7 +212,7 @@ VhCallUtility<native>(Name:string, Args:[]variant)<transacts>:variant
 # Native so that it has a UObject shadow, and so that dropping the last Verse reference to it
 # releases the table entry. That only works for an object that has crossed to native at least once,
 # which is why VhAdoptRef exists and why every wrapper is built through it.
-godot_ref<public><native> := class:
+godot_ref<public><native> := class<computes>:
     Ref<native>:int = 0
 
 # Forces the UObject shadow into existence and takes ownership of the id.
@@ -186,17 +220,17 @@ godot_ref<public><native> := class:
 # A Verse object that never crosses to native is a VM cell with no UObject behind it, so nothing
 # would ever run to release what it holds. Passing it here is what materialises the shadow; the
 # release then happens on the collection that drops it.
-VhAdoptRef<native>(Value:godot_ref)<transacts>:void
+VhAdoptRef<native>(Value:godot_ref)<reads>:void
 
 # Element access on an Array, a Dictionary or a packed array. `<decides>` because a key that is
 # absent and an index out of range are ordinary misses rather than errors -- which is the whole
 # reason a Dictionary read composes into a guard.
-VhRefGet<native>(Ref:int, Key:variant)<decides><transacts>:variant
+VhRefGet<native>(Ref:int, Key:variant)<decides><reads>:variant
 VhRefSet<native>(Ref:int, Key:variant, Value:variant)<transacts>:void
-VhRefSize<native>(Ref:int)<transacts>:int
+VhRefSize<native>(Ref:int)<reads>:int
 
 # A fresh empty container of the Godot type Tag names.
-VhRefNew<native>(Tag:int)<transacts>:int
+VhRefNew<native>(Tag:int)<reads>:int
 
 # Invokes a Callable. What makes a callback-taking engine API reachable (R-TYPE-3).
 VhRefInvoke<native>(Ref:int, Args:[]variant)<transacts>:variant
@@ -204,16 +238,16 @@ VhRefInvokeVoid<native>(Ref:int, Args:[]variant)<transacts>:void
 
 # The whole container at once, for the bulk converters. One native function per element shape
 # rather than one per Godot type: eleven packed and unpacked types share four payloads.
-VhRefInts<native>(Ref:int)<transacts>:[]int
-VhRefFloats<native>(Ref:int)<transacts>:[]float
-VhRefStrings<native>(Ref:int)<transacts>:[]string
-VhRefValues<native>(Ref:int)<transacts>:[]variant
+VhRefInts<native>(Ref:int)<reads>:[]int
+VhRefFloats<native>(Ref:int)<reads>:[]float
+VhRefStrings<native>(Ref:int)<reads>:[]string
+VhRefValues<native>(Ref:int)<reads>:[]variant
 
 # The reverse: a fresh container of Tag holding these.
-VhRefFromInts<native>(Tag:int, Values:[]int)<transacts>:int
-VhRefFromFloats<native>(Tag:int, Values:[]float)<transacts>:int
-VhRefFromStrings<native>(Tag:int, Values:[]string)<transacts>:int
-VhRefFromValues<native>(Tag:int, Values:[]variant)<transacts>:int
+VhRefFromInts<native>(Tag:int, Values:[]int)<reads>:int
+VhRefFromFloats<native>(Tag:int, Values:[]float)<reads>:int
+VhRefFromStrings<native>(Tag:int, Values:[]string)<reads>:int
+VhRefFromValues<native>(Tag:int, Values:[]variant)<reads>:int
 
 # The one native class in the API, and the root of every mirrored one. Everything above it is
 # ordinary Verse, which is what keeps a thousand mirrored classes from needing a thousand C++

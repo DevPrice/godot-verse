@@ -136,6 +136,44 @@ def test_emit_value_method_scalar():
     check("emit value method, scalar return does not claim it can fail", g.emit_method(cm), want)
 
 
+def test_a_const_method_reads_and_a_mutating_one_transacts():
+    """R-AUD-1 / Phase 4.5 3. `is_const` is the only thing that decides this, and the effect and
+    the native it dispatches through have to move together: a `<reads>` body may not call
+    `VhCallValue`."""
+    cm = g.ClassifiedMethod(
+        godot_name="get_position",
+        verse_name="GetPosition",
+        params=[],
+        return_type=g.SCALAR_TYPES["Vector2"],
+        is_void=False,
+        is_const=True,
+    )
+    want = ('    GetPosition<public>()<reads>:vector2 = '
+            'VhToVector2(VhCallValueConst(Handle, "get_position", array{}))')
+    check("a const method is <reads> and dispatches through the const native", g.emit_method(cm), want)
+
+    # The same method with Godot's flag off, which is the only difference between the two lines.
+    check("and without the flag it is <transacts> again",
+          g.emit_method(cm._replace(is_const=False)),
+          '    GetPosition<public>()<transacts>:vector2 = '
+          'VhToVector2(VhCallValue(Handle, "get_position", array{}))')
+
+    # Godot's `const` means "does not mutate the C++ object", not "has no effect": the 38 methods
+    # that are const and return nothing are OS.set_environment, CanvasItem.draw_string and 36 more
+    # of that shape. classify_method is where the conjunction is applied.
+    coverage = g.Coverage()
+    resolver = g.TypeResolver({}, set(), {})
+    const_void = _method("draw_string")
+    const_void["is_const"] = True
+    classified = g.classify_method(const_void, resolver, coverage, set(), "CanvasItem")
+    check("a const method that returns nothing is not <reads>", classified.is_const, False)
+
+    const_value = _method("get_position", "Vector2")
+    const_value["is_const"] = True
+    check("a const method that answers is",
+          g.classify_method(const_value, resolver, coverage, set(), "Node2D").is_const, True)
+
+
 def test_emit_value_method_class_return():
     ti = g.TypeInfo("node", "VhFromObject", False, "VhToHandle", True)
     cm = g.ClassifiedMethod(
@@ -236,7 +274,7 @@ def test_singleton_accessors_cover_only_emitted_classes():
     check(
         "an accessor for the emitted singleton and nothing else",
         lines,
-        ['GetInput<public>()<decides><transacts>:input = input{Handle := VhSingleton["Input"]}'],
+        ['GetInput<public>()<decides><reads>:input = input[VhObjectOf(VhSingleton["Input"])]'],
     )
 
 
@@ -398,7 +436,7 @@ def test_typed_array_parameter_takes_the_parametric_class():
     )
     check_true(
         "a class element gets one, because the converter has to name the class",
-        "VhToThingElement(Value:variant)<decides><transacts>:thing" in converters,
+        "VhToThingElement(Value:variant)<decides><reads>:thing" in converters,
     )
 
 
@@ -800,7 +838,7 @@ def test_generated_file_matches_hand_written_slice():
     )
     check_true(
         "an accessor a mirrored method already names is the one that moves",
-        'GetInputSingleton<public>()<decides><transacts>:input' in text
+        'GetInputSingleton<public>()<decides><reads>:input' in text
         and "\nGetInput<public>()" not in text,
     )
 
@@ -891,12 +929,12 @@ def test_enums_drop_sentinels_and_aliases():
     emitted = "\n".join(g.emit_enums(enums))
     check_true("the enum is declared public", "thing<public> := enum:" in emitted)
     check_true("int -> enum reads the variant it was handed",
-               "VhToThing(Value:variant)<transacts>:thing" in emitted)
+               "VhToThing(Value:variant)<reads>:thing" in emitted)
     check_true("a number no enumerator has raises rather than guessing",
                'VhTypeMismatch("thing", Value)' in emitted)
-    check_true("enum -> int is the one public name", "ToInt<public>(Value:thing)<transacts>:int" in emitted)
+    check_true("enum -> int is the one public name", "ToInt<public>(Value:thing)<reads>:int" in emitted)
     check_true("and the packer goes through it",
-               "VhFromThing(Value:thing)<transacts>:variant = VhFromInt(ToInt(Value))" in emitted)
+               "VhFromThing(Value:thing)<reads>:variant = VhFromInt(ToInt(Value))" in emitted)
 
 
 def test_a_property_takes_its_enum_from_the_getter():

@@ -69,13 +69,43 @@ or `LengthSquared` is *ambiguous*, not shadowing. `gen_verse_api.py`'s `VERSE_ST
 generated mirror clear of them; a script has to avoid them by hand, the way it already avoids `Abs`
 and `Clamp`.
 
+**Phase 4.5 is built, and its `docs/phase-4.5-design.md` §11 is the one section of it to read** —
+the design was written *before* the work, so §11 is where the plan is corrected rather than where it
+is summarised. What it settled, all of which is load-bearing:
+
+- **A method's effect is now Godot's `is_const`.** 3942 mirror methods carry `<reads>` where all
+  9597 carried `<transacts>`, and the test is `const` **and answering a value** — Godot's `const`
+  means "does not mutate the C++ object", so the 38 const-and-void methods are `OS.set_environment`,
+  `CanvasItem.draw_string` and 36 more that plainly do something. A `<reads>` body dispatches through
+  `VhCallValueConst`, not `VhCallValue`; the two have to move together.
+- **An archetype instantiation carries the constructing class's own effect.** This is why `variant`
+  and `godot_ref` are `<computes>` now, and why the singleton accessors stopped constructing:
+  `GetInput()` is `input[VhObjectOf(VhSingleton["Input"])]`, a cast over what the host built, which
+  is R-SCN-6's rule and what they should always have been. A mirrored class cannot be `<computes>`
+  — it descends from the native `vh_object` — so anything a `<reads>` body must build has to be a
+  cast rather than a construction.
+- **`Verse::Stm::OnRollback` does nothing here.** It is the Solaris *interpreter's* STM and
+  `VerseStm.h` says "Noop if StmActive() returns false". Phase 4's `Subscribe` compensation was
+  written with it and had never run. The mechanism that works from this bridge is
+  `AutoRTFM::OnAbort<AutoRTFM::EOpenBehavior::SameAsClosed>` — `SameAsClosed` is load-bearing,
+  because every Godot callback reaches C++ inside `AutoRTFM::Open` and a plain `OnAbort` from open
+  code is ignored.
+- **`docs/nonatomic-methods.md` is generated** and is R-AUD-3's list: the **1127** emitted methods
+  whose `<transacts>` promises a rollback the bridge cannot perform. Not 1354 — that count included
+  statics and methods the mirror does not emit.
+- **What a failure undoes is measured, not assumed**, and the rule is in `spec.md` next to R-AUD-1.
+  A failure at any depth drops the deferred writes; a read does not see a write the same computation
+  just made; a raise additionally halts every script until the next `vh_tick`, which is why
+  `test_main.gd`'s transaction section runs a step per frame.
+
 **`docs/dodge-the-creeps.md` is the one to read before adding a Verse-facing feature.** It is not a
 progress report — it is the eight things a Godot author writes without thinking, each measured in a
 real game rather than estimated, with the requirement that gives it a spelling. **Six of the eight
 are down** since Phase 4 re-ported the game in place; the table says which, and §"After Phase 4" says
 what the diff came to. The two still standing are `await` on a signal (Phase 5) and the
-`<transacts>` trap (Phase 4.5), and the trap fired again *during* the re-port, four declarations
-deep in two other files.
+`<transacts>` trap, which Phase 4.5 **narrowed rather than removed**: reading Godot no longer starts
+the cascade, the diagnostic says which declaration to edit, and the `.verse` template says it before
+it happens — but a helper that *writes* still needs the word.
 
 **`docs/by-hand-checklist.md` is what no headless run can see**, and nothing on it has been run. Two
 phases owe it now.
@@ -254,6 +284,7 @@ launching the editor** (`godot --path demo` with no `--headless`), which does.
 | `host/Private/GodotMathLayout.gen.h` | `tools/gen_verse_api.py` | same — the math types' field trees, so the host builds one the way the Verse struct declares it |
 | `src/verse_api_skipped.h` | `tools/gen_verse_api.py` | same — every Godot member the mirror does not carry under its own name, and why, which is what `_validate` turns into a sentence (R-SCN-2) |
 | `host/Private/GodotClassNames.gen.h` | `tools/gen_verse_api.py` | same — every Godot class and the mirrored Verse class an object of it crosses as, which is what R-SCN-6's cast is built on. Every class, not only the emitted ones: a `--classes-file` build still has to make a handle cross as *something*, so each row names its nearest emitted ancestor |
+| `docs/nonatomic-methods.md` | `tools/gen_verse_api.py` | same — R-AUD-3's list: every emitted method that mutates Godot *and* answers a value, so its `<transacts>` promises a rollback the bridge cannot perform. Written by the pass that writes the mirror, so it cannot drift |
 | `src/verse_keywords.h` | `tools/gen_verse_keywords.py` | the UE compiler's `ReservedSymbols.inl` |
 
 **Every Godot class is mirrored by default.** `tools/verse_api_classes.txt` is a smaller curated
@@ -281,7 +312,8 @@ layer above it, and the third the math types' methods and operators — which ar
 no handle and no ABI, because that is OQ-11's answer. `GodotMath` carries `.native.verse` despite
 declaring nothing native: VNI refuses a plain `.verse` in a VNI-capable package. Mirroring
 another Godot *class* still costs no C++ and no new native function — that rule held through ABI v2.
-What did cost native functions was the reference types: the primitive surface went from 8 to 22,
+What did cost native functions was the reference types: the primitive surface went from 8 to 22
+(24 since Phase 4.5 added the two `<reads>` dispatchers),
 because a container has to be asked for its elements rather than decomposed.
 
 The container wrappers (`godot_array`, `dictionary`) are **generated**, not hand-written, even
@@ -352,7 +384,19 @@ ten element types against four key types is not a list to maintain by hand.
   `no_rollback`. So a `<transacts>` function may not call a specifier-less one, and anything that
   forces `<transacts>` on a method (a `Subscribe` handler; a failure context) forces it on
   everything that method calls, a file at a time. The compiler reports it at the **call** site, not
-  at the declaration that needs changing. This is `dodge-the-creeps.md` wall 8 and Phase 4.5 owns it.
+  at the declaration that needs changing — `ErrSemantic_EffectNotAllowed`, uLang glitch **3512**,
+  which `verse_script_language.cpp` now recognises and answers with the declaration to edit. This is
+  `dodge-the-creeps.md` wall 8; Phase 4.5 narrowed it and did not remove it. **Reading Godot no
+  longer starts the cascade** — a const-and-answering method is `<reads>` — but a helper that
+  writes still needs the word, and effects are *contravariant*, so a `<reads>` callee satisfies a
+  `<transacts>` caller and a `<transacts>` function type alike.
+- **An archetype instantiation carries the constructing class's own effect.** `variant{Tag := ...}`
+  inside a `<reads>` or `<computes>` function is *"This archetype instantiation constructs a class
+  that has the 'transacts' effect"* unless the class says `<computes>`. `variant`, `godot_ref` and
+  every container wrapper do; a **mirrored Godot class cannot**, because it descends from the native
+  `vh_object`, so anything a narrowed body needs must be reached by a *cast* over what the host
+  built rather than by construction — which is what the singleton accessors do now, and what
+  R-SCN-6 says they should always have done.
 - **A class member may not shadow an inherited mirrored one, and Godot's signals are members too.**
   `Hidden:godot_signal(int)` on a `node2d` is *"Instance data member `Hidden` is already defined in
   `canvas_item`, did you mean to add the `<override>` specifier?"* — because `canvas_item` mirrors

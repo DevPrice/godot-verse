@@ -1,8 +1,9 @@
 # The by-hand checklist
 
-**Status:** 2026-09-13 · **nothing on it has been run**, and it has grown: it is now the *whole* of
-what Phase 4 still owes, every numbered gap having been closed or answered. It is the list of things
-no headless run can see, which is why they are here and not in `tools/run_tests.py`.
+**Status:** 2026-09-13 · **nothing on it has been run.** It is the *whole* of what Phase 4 still
+owes — every numbered gap having been closed or answered — plus the two things Phase 4.5 added.
+It is the list of things no headless run can see, which is why they are here and not in
+`tools/run_tests.py`.
 
 Three of the entries below are not merely untested but **untestable** from a headless run, and that
 was measured rather than assumed: `_make_function` has no ClassDB entry and `Script.get_language()`
@@ -115,6 +116,28 @@ Each line is one thing to do and one thing to see. Tick nothing you have not wat
       utilities answer one of three ways now and none is unexplained (`phase-4-gaps.md` G11), so try
       `hash(X)` as well: that one must say its Variant parameter is unspellable rather than offering
       an alternative.
+
+## Phase 4.5
+
+Both of these are *sentences in the editor*, and the automated layers can only see them in the
+output log — `tests/coverage_diagnostic` asserts the text, never where it is drawn.
+
+- [ ] **The `<transacts>` trap says where the fix goes.** In `demo`, write a helper with no effect
+      specifier and call it from a failure context:
+
+          Helper():int = 7
+          Uses()<transacts>:int = Helper()
+
+      The script editor's error list must show the compiler's own sentence *followed by* "Write
+      `<transacts>` on `Helper`'s own declaration, which is where the fix goes even though the error
+      is reported here". Then write `QueueFree()` inside a `()<reads>:void` function: the same
+      diagnostic must take the *other* sentence, the one that says this function is what has to
+      widen. Both must appear per keystroke, and both must clear when the fix is typed.
+- [ ] **A new script's template carries the warning.** Attach a new Verse script to a node through
+      the editor's Attach Script dialog. The generated file must carry the two comment lines above
+      the class saying a helper of your own wants `<transacts>`. The template is never read by any
+      automated layer, so this is the only thing that sees it. (It does not compile as generated and
+      is not meant to: `_Process`'s body is left empty for the author's cursor.)
 
 ## What a failure here means
 

@@ -263,6 +263,12 @@ COVERAGE_EXPLANATIONS = [
     "ClassDB is one flat namespace and a module is deliberately not part of it",
     "derives from `widget`, and more than one script answers to that name",
     "it offers Node as this script's base type",
+    # Phase 4.5 stage 3: the `no_rollback` trap, in both shapes. The compiler reports it at the
+    # call; what is asserted here is the half that says where the fix goes.
+    "Write `<transacts>` on `Helper`'s own declaration, which is where the fix goes even though "
+    "the error is reported here",
+    "`QueueFree` is one of Godot's own and does change the scene, so it is this function that has "
+    "to widen rather than that one",
     # R-TOOL-12's sentence, in both shapes: the one module that would fix it, and the two that
     # leave the choice to the author.
     "It is declared in a module this file does not import; add "

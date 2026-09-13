@@ -39,7 +39,7 @@ measure of how far the bridge has got.
 | **5** | `mob.linear_velocity = v` on an instantiated scene | `Mob.Set("linear_velocity", VariantFromVector2(V))` | **R-SCN-6** | **down** (stage 1) |
 | **6** | `get_tree().call_group(&"mobs", &"queue_free")` | walk `GetNodesInGroup("mobs")` and free each | vararg, R-SCN-2 permits | **standing**, and permitted |
 | **7** | `node.callv("method", [args])` | nothing: it is spellable and cannot be given arguments | **R-INT-2** | **down** (stage 2) |
-| **8** | *(no counterpart)* | `<transacts>` on every helper, or it fails at its first call site | — | **standing**, and Phase 4.5 owns it |
+| **8** | *(no counterpart)* | `<transacts>` on every helper, or it fails at its first call site | — | **narrowed, not gone** — Phase 4.5 |
 
 Wall 7 is the one that corrects an earlier document, and wall 8 is the only one that is not a
 missing feature. Both are below.
@@ -279,9 +279,25 @@ so is every cast R-SCN-6 will add — so in this codebase the trap fires almost 
 what made the wrong explanation look right.
 
 Nothing here is wrong, and the fix is one word. But it is the first thing a Godot author hits on
-their first library file, and it is invisible in the file they have to change. Worth a line in the
-eventual authoring guide, and worth considering whether the `.verse` template and the R-SCN-2-style
-diagnostic machinery can say it at the declaration.
+their first library file, and it is invisible in the file they have to change.
+
+**Phase 4.5 did the two things the paragraph above asked for, and a third the paragraph did not
+know to ask for.** The trap still exists — a helper that writes still needs `<transacts>` — but:
+
+- the **diagnostic says where the fix goes**. It now ends *"Write `<transacts>` on `V2Length`'s own
+  declaration, which is where the fix goes even though the error is reported here"*, and it tells
+  the other shape apart: a Godot method that is honestly `<transacts>` gets the opposite advice,
+  because there the caller is what has to widen. `tests/coverage_diagnostic` asserts both sentences;
+- the **`.verse` template says it before it happens**, in two lines above the class;
+- and the cascade is **much shorter**, because reading Godot no longer starts it. `V2Length`'s
+  problem was never Godot — it is pure arithmetic — but a helper that reads `Position` or calls
+  `GetChildCount()` used to be forced to `<transacts>` by the read alone, and is now spellable as
+  `<reads>`: Godot's 6728 const-and-answering methods carry that effect since Phase 4.5, and a
+  `<reads>` function is callable from a `<transacts>` one. A helper that only *looks* at the scene
+  no longer infects anything.
+
+`vectors.verse` is gone, so the file this wall was measured on no longer exists; what would replace
+it today is a `<reads>` file with no `<transacts>` in it at all.
 
 ---
 

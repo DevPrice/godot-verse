@@ -676,6 +676,14 @@ void VhCallValue(int64 Handle, verse::string const& Method, TArray<FGodotValue> 
     OutValue = FromWire(Result);
 }
 
+/// `VhCallValue` for a method Godot marks `const`. The same work: what differs is the Verse-side
+/// effect, and the promise that goes with it -- this one may not defer anything to commit and may
+/// not compensate anything on abort, because there is nothing to undo.
+void VhCallValueConst(int64 Handle, verse::string const& Method, TArray<FGodotValue> const& Args, FGodotValue& OutValue)
+{
+    VhCallValue(Handle, Method, Args, OutValue);
+}
+
 void VhCallStatic(verse::string const& Class,
                   verse::string const& Method,
                   TArray<FGodotValue> const& Args,
@@ -744,6 +752,13 @@ void VhCallUtility(verse::string const& Name, TArray<FGodotValue> const& Args, F
         return;
     }
     OutValue = FromWire(Result);
+}
+
+/// `VhCallUtility` for a utility that only looks something up. Same work; see the Verse declaration
+/// for why the set is chosen by hand rather than read off a flag.
+void VhCallUtilityConst(verse::string const& Name, TArray<FGodotValue> const& Args, FGodotValue& OutValue)
+{
+    VhCallUtility(Name, Args, OutValue);
 }
 
 void VhCallVoid(int64 Handle, verse::string const& Method, TArray<FGodotValue> const& Args)

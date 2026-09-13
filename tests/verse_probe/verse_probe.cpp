@@ -76,10 +76,13 @@ static void ProbeOnDiagnostic(void*, const vh_diagnostic* Diagnostic)
 	{
 		++ErrorCount;
 	}
-	printf("[probe] %.*s:%d:%d: %s: %.*s\n",
+	/* The reference code as well as the message, because that is the half a recogniser in
+	 * verse_script_language.cpp should match on: the message is English and is not ours, and the
+	 * code is uLang's own glitch id from Glitch.h. Phase 4.5 needed it and had to add it. */
+	printf("[probe] %.*s:%d:%d: %s %d: %.*s\n",
 		   Diagnostic->FilePathLen, Diagnostic->FilePathUtf8,
 		   Diagnostic->Line, Diagnostic->Column,
-		   SeverityName(Diagnostic->Severity),
+		   SeverityName(Diagnostic->Severity), Diagnostic->ReferenceCode,
 		   Diagnostic->MessageLen, Diagnostic->MessageUtf8);
 }
 

@@ -670,7 +670,7 @@ def emit_enums(enums: dict) -> list:
         # produce one.
         arms = "\n".join(f"        {number} => {info.verse_name}.{name}" for name, number in info.values)
         blocks.append(
-            f"VhTo{stem}(Value:variant)<transacts>:{info.verse_name} =\n"
+            f"VhTo{stem}(Value:variant)<reads>:{info.verse_name} =\n"
             f"    case (VhToInt(Value)):\n"
             f"{arms}\n"
             f"        _ =>\n"
@@ -678,13 +678,13 @@ def emit_enums(enums: dict) -> list:
             f"            {info.verse_name}.{first}")
 
         blocks.append(
-            f"VhFrom{stem}(Value:{info.verse_name})<transacts>:variant = VhFromInt(ToInt(Value))")
+            f"VhFrom{stem}(Value:{info.verse_name})<reads>:variant = VhFromInt(ToInt(Value))")
 
         # The one public name, and the mapping lives here rather than in the packer so that a
         # bitfield combination has a spelling: BitOr(ToInt(A), ToInt(B)).
         back = "\n".join(f"        {info.verse_name}.{name} => {number}" for name, number in info.values)
         blocks.append(
-            f"ToInt<public>(Value:{info.verse_name})<transacts>:int =\n"
+            f"ToInt<public>(Value:{info.verse_name})<reads>:int =\n"
             f"    case (Value):\n"
             f"{back}")
     return blocks
@@ -855,10 +855,10 @@ def emit_math_packed_converters() -> list:
         element = lane.verse_type[2:]
         godot_element = next(n for n in MATH_TYPES if verse_class_name(n) == element)
         lines.append(
-            f"{lane.to_fn}(Value:variant)<transacts>:{lane.verse_type} ="
+            f"{lane.to_fn}(Value:variant)<reads>:{lane.verse_type} ="
             f" for (V : VhRefValues(Value.Ref)) {{ VhTo{godot_element}(V) }}")
         lines.append(
-            f"{lane.from_fn}(Values:{lane.verse_type})<transacts>:variant ="
+            f"{lane.from_fn}(Values:{lane.verse_type})<reads>:variant ="
             f" VhFromValues({lane.tag}, for (V : Values) {{ VhFrom{godot_element}(V) }})")
     return lines
 
@@ -880,31 +880,31 @@ def emit_variant_readers(api: dict, enums: dict) -> list:
         f"        {values[lane.godot_type]} => {kind_enum.verse_name}.{by_number[values[lane.godot_type]]}"
         for lane in VARIANT_LANES if values[lane.godot_type] in by_number)
     blocks.append(
-        f"VariantKind<public>(Value:variant)<transacts>:{kind_enum.verse_name} =\n"
+        f"VariantKind<public>(Value:variant)<reads>:{kind_enum.verse_name} =\n"
         "    case (Value.Tag):\n"
         f"{case_arms}\n"
         f"        _ => {kind_enum.verse_name}.{by_number[values[VARIANT_NIL]]}")
 
-    blocks.append("VhToObject(Value:variant)<decides><transacts>:object = object[VhObjectFrom[Value]]")
+    blocks.append("VhToObject(Value:variant)<decides><reads>:object = object[VhObjectFrom[Value]]")
 
     # Identity, so a `variant` parameter or return needs no special case in emit_method: the wire
     # already carries exactly this.
-    blocks.append("VhToVariant(Value:variant)<transacts>:variant = Value")
-    blocks.append("VhFromVariant(Value:variant)<transacts>:variant = Value")
+    blocks.append("VhToVariant(Value:variant)<reads>:variant = Value")
+    blocks.append("VhFromVariant(Value:variant)<reads>:variant = Value")
 
     readers = []
     for lane in VARIANT_LANES:
         convert = (f"{lane.to_fn}[Value]" if lane.to_fn in VARIANT_DECIDES_CONVERTERS
                    else f"{lane.to_fn}(Value)")
         readers.append(
-            f"As{lane.reader}<public>(Value:variant)<decides><transacts>:{lane.verse_type} =\n"
+            f"As{lane.reader}<public>(Value:variant)<decides><reads>:{lane.verse_type} =\n"
             f"    Value.Tag = {lane.tag}\n"
             f"    {convert}")
     blocks.extend(readers)
 
     for lane in VARIANT_LANES:
         blocks.append(
-            f"VariantFrom{lane.reader}<public>(Value:{lane.verse_type})<transacts>:variant"
+            f"VariantFrom{lane.reader}<public>(Value:{lane.verse_type})<reads>:variant"
             f" = {lane.from_fn}(Value)")
     return blocks
 
@@ -969,9 +969,9 @@ def element_converters(suffix: str, info: TypeInfo):
     read = f"VhTo{suffix}Element"
     write = f"VhFrom{suffix}Element"
     return read, write, [
-        f"{read}(Value:variant)<decides><transacts>:{info.verse_type} ="
+        f"{read}(Value:variant)<decides><reads>:{info.verse_type} ="
         f" {info.verse_type}[VhObjectFrom[Value]]",
-        f"{write}(Value:{info.verse_type})<transacts>:variant = VhFromObject(Value)",
+        f"{write}(Value:{info.verse_type})<reads>:variant = VhFromObject(Value)",
     ]
 
 
@@ -996,19 +996,19 @@ def emit_typed_array_converters(typed_arrays: dict, typed_dictionaries: dict) ->
         info = typed_arrays[suffix]
         read, write = element_pair(suffix, info)
         blocks.append(
-            f"VhTo{suffix}Array(Value:variant)<transacts>:typed_array({info.verse_type}) =\n"
+            f"VhTo{suffix}Array(Value:variant)<reads>:typed_array({info.verse_type}) =\n"
             f"    Made := typed_array({info.verse_type})"
             f"{{Ref := Value.Ref, Unpack := {read}, Pack := {write}}}\n"
             f"    VhAdopt(Made)\n"
             f"    Made")
         blocks.append(
-            f"VhFrom{suffix}Array(Value:typed_array({info.verse_type}))<transacts>:variant ="
+            f"VhFrom{suffix}Array(Value:typed_array({info.verse_type}))<reads>:variant ="
             f" variant{{Tag := TagArray, Ref := Value.Ref}}")
         # A script cannot spell the converter pair -- element_pair's functions are module-scoped --
         # so an empty typed container has to be minted here or not at all. R-TYPE-2's other half:
         # the mirrored methods taking a typed Array had nothing a script could pass them.
         blocks.append(
-            f"Make{suffix}Array<public>()<transacts>:typed_array({info.verse_type}) ="
+            f"Make{suffix}Array<public>()<reads>:typed_array({info.verse_type}) ="
             f" VhTo{suffix}Array(variant{{Tag := TagArray, Ref := VhRefNew(TagArray)}})")
 
     for suffix, (key_info, value_info) in sorted(typed_dictionaries.items()):
@@ -1016,16 +1016,16 @@ def emit_typed_array_converters(typed_arrays: dict, typed_dictionaries: dict) ->
         value_read, value_write = element_pair(f"{suffix}Value", value_info)
         spelling = f"typed_dictionary({key_info.verse_type}, {value_info.verse_type})"
         blocks.append(
-            f"VhTo{suffix}Dict(Value:variant)<transacts>:{spelling} =\n"
+            f"VhTo{suffix}Dict(Value:variant)<reads>:{spelling} =\n"
             f"    Made := {spelling}"
             f"{{Ref := Value.Ref, PackKey := {key_write}, Unpack := {value_read}, Pack := {value_write}}}\n"
             f"    VhAdopt(Made)\n"
             f"    Made")
         blocks.append(
-            f"VhFrom{suffix}Dict(Value:{spelling})<transacts>:variant ="
+            f"VhFrom{suffix}Dict(Value:{spelling})<reads>:variant ="
             f" variant{{Tag := TagDictionary, Ref := Value.Ref}}")
         blocks.append(
-            f"Make{suffix}Dict<public>()<transacts>:{spelling} ="
+            f"Make{suffix}Dict<public>()<reads>:{spelling} ="
             f" VhTo{suffix}Dict(variant{{Tag := TagDictionary, Ref := VhRefNew(TagDictionary)}})")
     return blocks
 
@@ -1084,9 +1084,9 @@ def emit_container_classes() -> list:
     """godot_array and dictionary, with a typed accessor pair per element type and key type."""
     blocks = []
     for verse_name, keys in CONTAINER_KEYS.items():
-        lines = [f"{verse_name}<public> := class(godot_ref):", ""]
+        lines = [f"{verse_name}<public> := class<computes>(godot_ref):", ""]
         lines.append("    # How many elements it holds.")
-        lines.append("    Length<public>()<transacts>:int = VhRefSize(Ref)")
+        lines.append("    Length<public>()<reads>:int = VhRefSize(Ref)")
         lines.append("")
         if verse_name == "godot_array":
             lines.append("    # The whole thing as a Verse array of its elements' own type, which is a copy:")
@@ -1100,7 +1100,7 @@ def emit_container_classes() -> list:
                 body = (f"for (V : VhRefValues(Ref), E := {unpack}[V]) {{ E }}"
                         if unpack in VARIANT_DECIDES_CONVERTERS
                         else f"for (V : VhRefValues(Ref)) {{ {unpack}(V) }}")
-                lines.append(f"    To{suffix}s<public>()<transacts>:[]{verse_type} = {body}")
+                lines.append(f"    To{suffix}s<public>()<reads>:[]{verse_type} = {body}")
             lines.append("")
 
         for suffix, verse_type, pack, unpack in CONTAINER_ELEMENTS:
@@ -1110,7 +1110,7 @@ def emit_container_classes() -> list:
                 # value of another type is a miss too rather than a raise -- asking a container for
                 # an int and getting a string back is the caller's question answered "no".
                 lines.append(
-                    f"    Get{suffix}<public>({key_name}:{key_type})<decides><transacts>:{verse_type} ="
+                    f"    Get{suffix}<public>({key_name}:{key_type})<decides><reads>:{verse_type} ="
                     f" {read.format(unpack, f'VhRefGet[Ref, {key_pack}({key_name})]')}")
             for key_name, key_type, key_pack in keys:
                 lines.append(
@@ -1188,7 +1188,7 @@ def emit_math_packers() -> list:
         assigns += [f"I{i} := Value.{path}" for i, path in enumerate(ints)]
         assigns += [f"F{i} := Value.{path}" for i, path in enumerate(floats)]
         blocks.append(
-            f"VhFrom{godot_name}(Value:{name})<transacts>:variant = variant{{{', '.join(assigns)}}}")
+            f"VhFrom{godot_name}(Value:{name})<reads>:variant = variant{{{', '.join(assigns)}}}")
 
         reads = {}
         for i, path in enumerate(ints):
@@ -1196,7 +1196,7 @@ def emit_math_packers() -> list:
         for i, path in enumerate(floats):
             reads[path] = f"Value.F{i}"
         blocks.append(
-            f"VhTo{godot_name}(Value:variant)<transacts>:{name} =\n"
+            f"VhTo{godot_name}(Value:variant)<reads>:{name} =\n"
             f"    VhExpect(Value, {tag}, \"{name}\")\n"
             f"    {build_math_literal(godot_name, reads, '')}")
     return blocks
@@ -1204,10 +1204,12 @@ def emit_math_packers() -> list:
 
 ClassifiedMethod = namedtuple(
     "ClassifiedMethod",
-    ["godot_name", "verse_name", "params", "return_type", "is_void", "default_body"],
-    # A virtual is the only method with one, and it is what makes the declaration a declaration
-    # rather than a call: everything else dispatches through the handle.
-    defaults=(None,),
+    ["godot_name", "verse_name", "params", "return_type", "is_void", "default_body", "is_const",
+     "godot_return"],
+    # A virtual is the only method with a default body, and it is what makes the declaration a
+    # declaration rather than a call: everything else dispatches through the handle. `is_const` is
+    # Godot's own flag, and it decides `<reads>` against `<transacts>` (docs/phase-4.5-design.md 3).
+    defaults=(None, False, ""),
 )
 ClassifiedProperty = namedtuple(
     "ClassifiedProperty", ["godot_name", "verse_name", "type_info", "getter", "setter", "index"]
@@ -1283,6 +1285,12 @@ class Coverage:
         # a property whose accessors survive under their own names -- still goes in, because the
         # author who wrote the property name needs telling where it went.
         self.skipped_members = []
+        # R-AUD-3's list: every emitted method whose `<transacts>` label promises a rollback the
+        # bridge cannot perform. A method that mutates Godot *and* answers a value cannot be
+        # deferred to commit -- the answer is needed now -- and the bridge forwards it rather than
+        # performing it, so it has no inverse to register. Rows are
+        # (godot class, godot method, verse class, verse method, return type).
+        self.nonatomic = []
 
     def skip(self, reason: str, member: "SkippedMember | None" = None):
         self.skip_reasons[reason] += 1
@@ -1429,6 +1437,14 @@ def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members
         return_type=return_info,
         is_void=is_void,
         default_body=default_body,
+        # `const` *and* answering a value. Godot's `const` means "does not mutate the C++ object",
+        # which is not the same as "has no effect": the 38 methods that are const and return nothing
+        # are `OS.set_environment`, `OS.delay_msec`, `CanvasItem.draw_string` and 35 more of that
+        # shape. Every one does something a later read can see, so the conjunction is the test.
+        is_const=bool(m.get("is_const")) and not is_void,
+        # Godot's own spelling of the return type, kept only so the R-AUD-3 appendix can say what
+        # shape a non-atomic method is -- an Error, the receiver, an object, or a plain value.
+        godot_return=return_value["type"] if return_value else "",
     )
 
 
@@ -1798,7 +1814,11 @@ def emit_method(cm: ClassifiedMethod) -> str:
         return f"    {cm.verse_name}<public>({param_decl}):{result} = {cm.default_body}"
 
     args = emit_call_args(cm.params)
-    call = f'VhCallValue(Handle, "{cm.godot_name}", array{{{args}}})' if not cm.is_void else None
+    # `<reads>` for a const method, and the native it dispatches through says why. The pair has to
+    # agree: a `<reads>` body may not call `VhCallValue`, which is `<transacts>`.
+    effect = "<reads>" if cm.is_const else "<transacts>"
+    dispatch = "VhCallValueConst" if cm.is_const else "VhCallValue"
+    call = f'{dispatch}(Handle, "{cm.godot_name}", array{{{args}}})' if not cm.is_void else None
 
     if cm.is_void:
         body = f'VhCallVoid(Handle, "{cm.godot_name}", array{{{args}}})'
@@ -1815,7 +1835,7 @@ def emit_method(cm: ClassifiedMethod) -> str:
     else:
         body = f"{ti.unpack_fn}({call})"
 
-    effects = "<decides><transacts>" if ti.unpack_decides else "<transacts>"
+    effects = f"<decides>{effect}" if ti.unpack_decides else effect
     return f"    {cm.verse_name}<public>({param_decl}){effects}:{ti.verse_type} = {body}"
 
 
@@ -2079,6 +2099,11 @@ def generate(api: dict, requested: list, coverage: Coverage, enums: dict):
             emitted_lines.append(emit_method(cm))
             method_map.append((name, verse_class_name(name), cm.godot_name, cm.verse_name))
             coverage.methods_emitted += 1
+            # Recorded as it is emitted rather than recomputed afterwards, so the list cannot
+            # disagree with the mirror -- the same reason verse_api_skipped.h is generated.
+            if not cm.is_const and not cm.is_void and cm.default_body is None:
+                coverage.nonatomic.append((name, cm.godot_name, verse_class_name(name),
+                                           cm.verse_name, cm.godot_return))
 
         # Godot's own signals, last, so a name a method or property already took wins: an accessor
         # is the convenience and the member is the API. Every collision of the kind that would have
@@ -2284,9 +2309,16 @@ def emit_singleton_accessors(api: dict, emit_order: list, member_names: set) -> 
     """One module-level accessor per emitted class that Godot registers as a singleton."""
     singletons = {s["name"] for s in api.get("singletons", [])}
     return [
-        f'{singleton_accessor_name(name, member_names)}<public>()<decides><transacts>'
+        # A cast over what the host built, not a construction -- the same road every object-returning
+        # method takes, and R-SCN-6's rule that the class an object crosses as is the class Godot
+        # says it is rather than the one the signature named. It used to construct, and Phase 4.5 had
+        # to change it: an archetype instantiation carries the constructing class's own effect, a
+        # mirrored class descends from the native `vh_object` and so is `<transacts>` to construct,
+        # and that made a `<reads>` accessor impossible. Casting has no such effect and was the more
+        # correct spelling anyway.
+        f'{singleton_accessor_name(name, member_names)}<public>()<decides><reads>'
         f':{verse_class_name(name)}'
-        f' = {verse_class_name(name)}{{Handle := VhSingleton["{name}"]}}'
+        f' = {verse_class_name(name)}[VhObjectOf(VhSingleton["{name}"])]'
         for name in sorted(n for n in emit_order if n in singletons)
     ]
 
@@ -2457,6 +2489,92 @@ inline constexpr skipped_member skipped[] = {{
 
 }} // namespace verse_api
 """
+
+
+
+NONATOMIC_PATH = "docs/nonatomic-methods.md"
+
+NONATOMIC_HEADER = """<!-- Generated by tools/gen_verse_api.py from {version}. Do not hand-edit. -->
+
+# The methods whose `<transacts>` is not kept
+
+**Generated.** R-AUD-3 asks for a list rather than an assurance, and this is it, written by the same
+pass that writes the mirror so it cannot drift from the code. `docs/spec.md` R-AUD-1 is the rule
+this is the appendix to, and `docs/phase-4.5-design.md` 4 is why it exists.
+
+## What the label promises, and where it is not kept
+
+`<transacts>` says a call takes part in the enclosing transaction: if the transaction fails, the
+call is undone. The bridge keeps that three ways and breaks it one way.
+
+| what | how the promise is kept |
+| --- | --- |
+| a method that mutates and returns **nothing** | deferred to `AutoRTFM::OnCommit`. A failed expression never performs it, which `tests/integration` measures in both directions |
+| a method that is **const and answers a value** | `<reads>` since Phase 4.5. Nothing to undo, and the label no longer forces `<transacts>` onto the caller |
+| `godot_signal.Subscribe` | **compensated**: the host registers an `AutoRTFM::OnAbort<SameAsClosed>` that disconnects |
+| a method that **mutates and answers a value** | **not kept.** The answer is needed now, so the call cannot be deferred, and the bridge forwards it to Godot rather than performing it, so it has no inverse to register |
+
+Signal **emission** joins them by decision rather than by shape: `godot_signal.Signal` runs its
+handlers immediately, the way GDScript does, so a transaction that later aborts has already run
+them. `docs/phase-4-design.md` 6.4 is the argument.
+
+**Why none of these is compensated.** Compensation needs an inverse, and Godot publishes none: there
+is no `un-load`, no `un-create_shape_owner`, no way to take back a `Tween.tween_property`. A
+per-method inverse table would be {count} rows of invented semantics, each of which would be wrong
+for some caller, and a compensation that half works is worse than a documented sharp edge --
+GDScript offers exactly this and says nothing at all. What a script that *wants* rollback-safe
+subscription has is `godot_signal.Subscribe`, which is compensated; `Object.Connect` is the general
+form under it (R-SIG-6) and is in the list below.
+
+## The shapes
+
+| shape | count | what the mutation is |
+| --- | --- | --- |
+| answers a **value** | {value} | a method Godot did not mark `const`. Some of these do not visibly mutate anything -- `Tween.is_running` is not `const` and reads like a query -- but `is_const` is Godot's own annotation and the mirror believes it rather than second-guessing 708 of them |
+| answers an **Error** | {error} | an operation that reports whether it worked: `load`, `save`, `send`, `connect_node`. Undoing one would mean undoing I/O |
+| answers an **object** | {object} | an allocation the caller now owns -- `create_shape_owner`, `Tween.tween_property`. Undoing it means freeing something the caller may still hold |
+| answers its **receiver** | {receiver} | a builder chaining, where the mutation is the point: `PropertyTweener.SetDelay(...).SetEase(...)` |
+
+## The list
+
+{count} methods, by Godot class.
+
+"""
+
+
+def render_nonatomic(api: dict, coverage: "Coverage", parent_map: dict, class_names: set) -> str:
+    """The R-AUD-3 appendix: every emitted method that mutates Godot and answers a value."""
+    def ancestors(name):
+        seen = []
+        while name:
+            seen.append(name)
+            name = parent_map.get(name)
+        return seen
+
+    shapes = {"value": 0, "error": 0, "object": 0, "receiver": 0}
+    by_class = {}
+    for godot_class, godot_name, verse_class, verse_name, raw in coverage.nonatomic:
+        if raw == "enum::Error":
+            shape = "error"
+        elif raw in ancestors(godot_class):
+            shape = "receiver"
+        elif raw in class_names or raw.startswith(TYPED_ARRAY_PREFIX):
+            shape = "object"
+        else:
+            shape = "value"
+        shapes[shape] += 1
+        by_class.setdefault(godot_class, []).append((verse_class, verse_name, godot_name, shape))
+
+    text = NONATOMIC_HEADER.format(version=api["header"]["version_full_name"],
+                                   count=len(coverage.nonatomic), **shapes)
+    for godot_class in sorted(by_class):
+        rows = sorted(by_class[godot_class], key=lambda r: r[1])
+        text += f"### {godot_class} ({rows[0][0]})\n\n"
+        text += "| Verse | Godot | shape |\n| --- | --- | --- |\n"
+        for _verse_class, verse_name, godot_name, shape in rows:
+            text += f"| `{verse_name}` | `{godot_name}` | {shape} |\n"
+        text += "\n"
+    return text
 
 
 def render_skipped_header(api: dict, skipped: list) -> str:
@@ -2740,6 +2858,8 @@ def main() -> int:
     parser.add_argument("--class-names-header", default=CLASS_NAMES_HEADER_PATH)
     parser.add_argument("--classes-header", default=CLASSES_HEADER_PATH)
     parser.add_argument("--skipped-header", default=SKIPPED_HEADER_PATH)
+    parser.add_argument("--nonatomic", default=NONATOMIC_PATH,
+                        help="Where to write the R-AUD-3 appendix of non-atomic methods")
     parser.add_argument("--math-source", default=MATH_SOURCE_PATH,
                         help="The hand-written math file whose definitions decide what is *not* skipped")
     parser.add_argument("--report", default=None, help="Write the coverage report here instead of stdout")
@@ -2799,6 +2919,13 @@ def main() -> int:
     skipped_path.parent.mkdir(parents=True, exist_ok=True)
     skipped_path.write_text(render_skipped_header(api, coverage.skipped_members),
                             encoding="utf-8", newline="\n")
+
+    nonatomic_path = resolve(root, args.nonatomic)
+    nonatomic_path.parent.mkdir(parents=True, exist_ok=True)
+    nonatomic_path.write_text(
+        render_nonatomic(api, coverage, build_parent_map(api["classes"]),
+                         {c["name"] for c in api["classes"]}),
+        encoding="utf-8", newline="\n")
 
     report = format_report(coverage, len(class_blocks))
     if args.report:
