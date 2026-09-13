@@ -37,15 +37,15 @@ by a spike — both are marked.
 | signal name in ClassDB | **the Verse spelling, verbatim** | *prior art* — Godot C# registers `Hit`, not `hit`, and our scene connections already reach `OnMobTimerTimeout` |
 | engine signals | **generate typed accessors** | *prior art* — C# generates an `event` per engine signal plus `SignalName` constants. 489 signals across 149 classes |
 | signal list source | **the built class only** | one source of truth; a brand-new script shows its signals after a Build, as an `@export` default already does |
-| math methods | **pure Verse** | *prior art* — C# reimplements `Vector2.Length()` in managed code and dispatches only the engine utilities. §7.3 bounds what that costs |
+| math methods | **pure Verse** | *prior art* — C# reimplements `Vector2.Length()` in managed code and dispatches only the engine utilities. §8.3 bounds what that costs |
 | `@GlobalScope` utilities | **Verse wins, except random** | the random family is dispatched so `seed()`/`randomize()` steer one stream, which is what C# does; everything else keeps R-AUD-2 |
 | constants and statics | **one suffixed module per class** | `NodeStatics.NotificationReady`, `Vector2Statics.Zero`. *Overturned mid-interview*: unsuffixed `Node`/`Tree` modules would break `Tree := GetTree[]`, which the yardstick writes today |
 | a script's own statics | **a module with a declared association** | `@statics(player)` on the module, so the class↔module link is checkable rather than a naming convention that fails silently |
 | export hints | **type-driven first, attributes for the rest** | keeps the existing rule that a range comes from the type's own `where` clause, so the slider and the type cannot disagree |
 | `@tool`'s editor virtuals | **4a, riding the mechanism** | if R-NODE-7 is general they cost a test, and R-EXP-5 stops being `part` |
-| virtual names | **Godot's spelling, `_Ready`** | measured, not preferred: plain names collide with a *signal* on Node, CanvasItem, Control and BaseButton, and with a method 834 times. The underscore Godot already uses is the disambiguation, and C# keeps it too (§6.1) |
+| virtual names | **Godot's spelling, `_Ready`** | measured, not preferred: plain names collide with a *signal* on Node, CanvasItem, Control and BaseButton, and with a method 834 times. The underscore Godot already uses is the disambiguation, and C# keeps it too (§7.1) |
 | the rename it causes | **all at once, in stage 5** | `Ready` → `_Ready` across demo, tests and the yardstick in one commit; pre-1.0, no deprecation window |
-| script-level hooks | **`_Notification` only** | it is not in `extension_api.json`, so it is hand-declared rather than generated. `_ToString`, `_Get`, `_Set`, `_GetPropertyList`, `_ValidateProperty` become **R-NODE-10** and land in 4b (§6.3) |
+| script-level hooks | **`_Notification` only** | it is not in `extension_api.json`, so it is hand-declared rather than generated. `_ToString`, `_Get`, `_Set`, `_GetPropertyList`, `_ValidateProperty` become **R-NODE-10** and land in 4b (§7.3) |
 | the latency number | **no threshold** | feature parity first, performance goals later. It is recorded when stage 5 lands and acted on when the editor feels slow, not when a number is crossed |
 | statics and abstract | **4a** | Godot's own 114 statics are a visible hole in a phase about parity |
 | the `<transacts>` trap | **deferred** | not this phase; transaction semantics get a review of their own later (**OQ-15**) |
@@ -68,16 +68,16 @@ Read out of `modules/mono/editor/Godot.NET.Sdk/Godot.SourceGenerators/ScriptSign
   too. `GetGodotSignalList()` is what Godot reads.
 - **Emission is a generated typed method**, `EmitSignalHit(int damage)`, whose body is
   `EmitSignal(SignalName.Hit, [damage])`. C# buys its checked emission spelling with a source
-  generator, which is a tool we do not have and, per §5, do not need.
+  generator, which is a tool we do not have and, per §6, do not need.
 - **Engine signals are generated too**: `public event Action Pressed { add => Connect(SignalName.Pressed, Callable.From(value)); remove => Disconnect(...) }`,
-  one per signal per class, plus a `SignalName` constant. That is the precedent for §5.4.
+  one per signal per class, plus a `SignalName` constant. That is the precedent for §6.4.
 - **The math types are reimplemented in the language.** `Vector2.Length()` is
   `Mathf.Sqrt((X * X) + (Y * Y))` in C#; `Mathf.cs` redefines the constants "with Decimal precision
   and cast down". No engine round trip for any of it.
 - **The engine utilities are dispatched.** `GD.BytesToVar`, `GD.Hash`, `GD.Print` and — worth
   noticing — `GD.Randf` all call `NativeFuncs.godotsharp_*`, so the engine's RNG is one stream.
 
-One fact reframes "exact parity" for §7: Verse's `float` is 64-bit and Godot's `real_t` is 32-bit in
+One fact reframes "exact parity" for §8: Verse's `float` is 64-bit and Godot's `real_t` is 32-bit in
 a standard build, so a `vector2`'s components are truncated on every crossing whatever we do.
 Dispatch does not buy bit-exactness. It buys *edge-case semantics*, which is a much narrower prize.
 
@@ -124,9 +124,9 @@ this repository already believed.
 - **The mirror's math structs are not `<computes>`-constructible.** `vector2{X := …, Y := …}` inside a
   `<computes>` function is refused — "This archetype instantiation constructs a class that has the
   'transacts' effect". Epic's own vector2 is `struct<concrete><computes><persistable>`; ours is not,
-  and §7.3 has to fix that in the generator before any of the math can be `<computes>`.
+  and §8.3 has to fix that in the generator before any of the math can be `<computes>`.
 - **Inline modules exist and need no `using`**: `NamedColors<public> := module:` with members reached
-  as `NamedColors.White`. This is what §7.1's class modules are made of.
+  as `NamedColors.White`. This is what §8.1's class modules are made of.
 - **Verse rejects a definition that resolves ambiguously against anything visible**
   (`SemanticAnalyzer.cpp`, `RequireUnambiguousDefinition`), and the external-package carve-out
   exempts definitions *in* the external package, not a user's local that collides with one. So a
@@ -148,17 +148,17 @@ From `godot-cpp/gdextension/extension_api.json`, which is what the generator rea
 
 | | count | where it lands |
 | --- | --- | --- |
-| virtual methods | **1413**, declared by 106 classes | §6, generated into the mirror as `_Ready`-style names |
-| …of those, names that collide with a member or signal on the same class | **834** + **8** | §6.1 — the reason the underscore stays |
-| signals | **489**, across 149 classes | §5.4, generated accessors |
-| static methods | **114** | §7.2, by-name dispatch |
-| class constants | **161** (46 of them `Node`'s `NOTIFICATION_*`) | §7.1 |
-| math-type constants | **210** across the 16 math types | §7.1 |
-| utility functions | **114**, of which ~28 have no `/Verse.org` counterpart | §7.2 |
-| math-type methods / operators | **367** / **261** | §7.3, the largest hand-written surface in the phase |
+| virtual methods | **1413**, declared by 106 classes | §7, generated into the mirror as `_Ready`-style names |
+| …of those, names that collide with a member or signal on the same class | **834** + **8** | §7.1 — the reason the underscore stays |
+| signals | **489**, across 149 classes | §6.4, generated accessors |
+| static methods | **114** | §8.2, by-name dispatch |
+| class constants | **161** (46 of them `Node`'s `NOTIFICATION_*`) | §8.1 |
+| math-type constants | **210** across the 16 math types | §8.1 |
+| utility functions | **114**, of which ~28 have no `/Verse.org` counterpart | §8.2 |
+| math-type methods / operators | **367** / **261** | §8.3, the largest hand-written surface in the phase |
 
 `global_constants` in the JSON is **empty**: `PI`, `TAU`, `INF` and `NAN` are not in the extension
-API at all, so the handful that matter are hand-written rather than generated (§7.1).
+API at all, so the handful that matter are hand-written rather than generated (§8.1).
 
 ---
 
@@ -176,7 +176,7 @@ The signal design needs the host to fill a member's owner and name the way it fi
 production paths already do exactly this: `NewMirroredWrapper` builds a mirrored-class instance
 around a handle and the export path writes it into a declared member, and `NewReferenceWrapper` does
 the same for a native class carrying C++ state (`godot_ref`). Dodge the Creeps then calls
-`Sprite?.Play()` on the result, so the write survives and dispatches. What is new in §5 is only
+`Sprite?.Play()` on the result, so the write survives and dispatches. What is new in §6 is only
 *which* members to fill and *when*: chosen by declared type, inside `Instantiate`, before the
 instance seals.
 
@@ -226,7 +226,7 @@ free function ran with 5
 
 The guessed C++ signature compiled first try, which is itself the answer: VNI's function-parameter
 marshalling is available to any native package, not only Epic's. What remains unproven, and is
-therefore §8's risk rather than its assumption, is the *Godot* half — a `CallableCustom` (which
+therefore §5's risk rather than its assumption, is the *Godot* half — a `CallableCustom` (which
 godot-cpp does expose, `variant/callable_custom.hpp`) round-tripping through the ABI.
 
 ---
@@ -296,11 +296,36 @@ itself, and R-INT-2 goes from `part` to `done` in the spec.
 
 ---
 
-## 5. Stage 4 — signals (R-SIG-1, R-SIG-2, R-SIG-3, R-SIG-4, R-SIG-6)
+## 5. Stage 3 — a Callable made from a Verse function (R-TYPE-3's other direction, R-INT-4, R-SIG-3)
 
-Sequenced after Stage 3 (§8) because `Subscribe` is a Callable made from a Verse function.
+S-C proved the host half. The design is symmetric with the reference table the GDExtension already
+keeps, pointing the other way:
 
-### 5.1 What a script writes
+- A native function taking `Callback(:t)<transacts>:void` receives a `TVerseFunction`. The host keeps
+  it in a `godot_callback` native class — a UObject, so the VM traces it and `BeginDestroy` is the
+  release signal, exactly as `godot_ref` does — and mints an id.
+- A new Godot callback, `MakeCallable(CallbackId)`, asks the GDExtension for a `Callable` wrapping a
+  `CallableCustom` that holds that id. `godot-cpp` exposes `CallableCustom` (`variant/callable_custom.hpp`).
+- Invoking it crosses back through a new entry point, `vh_callback_invoke(CallbackId, Args, …)`, and
+  the `CallableCustom`'s destructor releases through `vh_callback_release`.
+- **The lifetime rule**: a Callable Godot holds keeps the Verse function alive, and a bound method
+  keeps its instance alive with it. `CallableCustom::get_object()` answers the owner's instance id, so
+  Godot's own `is_valid()` still reports a Callable whose object has been freed, and a connection to a
+  freed object behaves the way Godot's does.
+- Epic's `FVerseEventCallbackList` carries the other half of the discipline and is worth copying: each
+  callback remembers the `FContentScope` it was subscribed in, and a terminated scope drops it. That
+  is what keeps a raise (R-DIAG-3) from leaving callbacks that can never run again.
+
+With this, R-SIG-3 takes a Verse function; R-INT-4 crosses a Callable in both directions; and any
+callback-taking engine API — `sort_custom`, tween callbacks, `Array.filter` — becomes reachable.
+
+---
+
+## 6. Stage 4 — signals (R-SIG-1, R-SIG-2, R-SIG-3, R-SIG-4, R-SIG-6)
+
+Sequenced after Stage 3 (§5) because `Subscribe` is a Callable made from a Verse function.
+
+### 6.1 What a script writes
 
 ```
 player := class(area2d):
@@ -328,9 +353,9 @@ and elsewhere, in Verse rather than in a scene file:
 **There is no `@signal` attribute.** The member's *type* is the marker, and the host reads types out
 of the semantic program already. A bridge attribute exists where the text is the only source —
 `@global_class` survives without compilation because Godot asks about files it has only scanned —
-and §5.3 says the signal list is not one of those cases.
+and §6.3 says the signal list is not one of those cases.
 
-### 5.2 What it is underneath
+### 6.2 What it is underneath
 
 `godot_signal(t)` is a `<native>` parametric class in the Godot package with a C++ shadow holding two
 things: the **owner handle** and the **signal name**. Both are written by the host at construction,
@@ -341,14 +366,14 @@ nothing to drift.
 | the author writes | it becomes |
 | --- | --- |
 | `Hit.Signal(Payload)` | the existing `EmitSignal` Godot callback, payload unpacked from the tuple into N arguments. **No new ABI**: `vh_godot_api::EmitSignal` has been there since v2 |
-| `Hit.Subscribe(F)` | `ConnectSignal` with a Callable made from the Verse function (§8), answering a `cancelable` whose `Cancel` is `DisconnectSignal` |
+| `Hit.Subscribe(F)` | `ConnectSignal` with a Callable made from the Verse function (§5), answering a `cancelable` whose `Cancel` is `DisconnectSignal` |
 | `Hit.Await()` — Phase 5 | `awaitable(t)`, the one Verse interface whose domain fits (§1.2) |
 
 **Subscription goes through Godot rather than through a Verse-side list.** It costs a Callable per
 subscription and it is the only arrangement in which a signal emitted *from GDScript* reaches a Verse
 subscriber, which R-SIG-6 requires.
 
-### 5.3 What Godot is told
+### 6.3 What Godot is told
 
 A new `vh_class_signal_list(ClassNameUtf8, …)` answers name and payload parameter descriptors per
 signal, read out of the semantic program exactly as `vh_class_method_list` and
@@ -363,7 +388,7 @@ A signal declared in a script that has never been built does not appear until th
 is the same bargain an `@export` *default* already makes (§10 of the spec), and it is the reason
 this is one source rather than two.
 
-### 5.4 Godot's own 489 signals
+### 6.4 Godot's own 489 signals
 
 Generated per class, as C# generates them: an accessor returning a `godot_signal(t)` bound to that
 handle and that Godot name, with the payload tuple built from the signal's declared arguments.
@@ -377,19 +402,19 @@ handle and that Godot name, with the payload tuple built from the signal's decla
 A method rather than a data member, because a mirror wrapper is built per crossing and a member would
 have to be filled on each one. The name is the signal's PascalCase spelling, and the eight cases where
 that would have collided — `Node.ready`, `CanvasItem.draw`, `Control.gui_input`, `BaseButton.pressed`
-among them — are collisions with a **virtual**, not with a method, so §6.1's underscore dissolves all
+among them — are collisions with a **virtual**, not with a method, so §7.1's underscore dissolves all
 eight and no signal needs an invented name.
 
 This is also what makes wall 3 answerable in Phase 5: `Timer.Timeout().Await()` is a spelling only
 because the accessor exists.
 
-### 5.5 The editor's half of R-SIG-4
+### 6.5 The editor's half of R-SIG-4
 
 Connecting through the Node panel and `_make_function` are the untested half of a requirement whose
 load-bearing half the port leans on. `_make_function` writes a handler into the script the way
 R-TOOL-12 writes a `using` line — `ScriptEditor::get_current_editor()->get_base_editor()` is the
 `CodeEdit`, which Phase 3 established a GDExtension can write into — with the signal's parameters
-spelled from the same descriptors §5.3 reports:
+spelled from the same descriptors §6.3 reports:
 
 ```
 	OnStartButtonPressed<public>():void =
@@ -400,7 +425,7 @@ Both flows are on the by-hand checklist (§11.2); neither is automatable headles
 
 ---
 
-## 6. Stage 5 — the full virtual set, `_Notification`, and `@tool`'s editor surface
+## 7. Stage 5 — the full virtual set, `_Notification`, and `@tool`'s editor surface
 
 R-NODE-7 asks for a mechanism general enough that a virtual added by a future Godot version needs no
 code change here. **Most of that mechanism already exists** and has since Phase 1: `GodotVirtualNameOf`
@@ -412,14 +437,14 @@ What is missing is the **declarations to override**. The generator skips all 141
 methods, and the three that exist — `Ready`, `Process`, `PhysicsProcess` — are hand-written on
 `vh_object`, the native root, which is why every script has them whether or not its base class does.
 
-### 6.1 The name: `_Ready`, not `Ready`
+### 7.1 The name: `_Ready`, not `Ready`
 
 Counted before it was decided, because the plain spelling looked free and is not:
 
 | collision | count | where |
 | --- | --- | --- |
 | a virtual against a **method or property** of the same PascalCase name | **834**, in 41 classes | almost entirely server-extension classes nobody derives from: `TextServerExtension` 235, `PhysicsServer3DExtension` 175, `PhysicsServer2DExtension` 119. On classes a game script derives from: `Control` 2 (`_get_minimum_size`, `_get_tooltip`), `Resource` 4, and **zero** on Node, Node2D, CanvasItem, Object |
-| a virtual against a **signal** of the same name (§5.4) | **8** | `Node.ready` vs `_ready`, `CanvasItem.draw` vs `_draw`, `Control.gui_input` vs `_gui_input`, `BaseButton.pressed` vs `_pressed`, `Range.value_changed` vs `_value_changed`, `CollisionObject2D/3D.input_event` vs `_input_event`, `BaseButton.toggled` vs `_toggled` — that is, on the most-used classes in the engine |
+| a virtual against a **signal** of the same name (§6.4) | **8** | `Node.ready` vs `_ready`, `CanvasItem.draw` vs `_draw`, `Control.gui_input` vs `_gui_input`, `BaseButton.pressed` vs `_pressed`, `Range.value_changed` vs `_value_changed`, `CollisionObject2D/3D.input_event` vs `_input_event`, `BaseButton.toggled` vs `_toggled` — that is, on the most-used classes in the engine |
 
 The second row is what decides it. A virtual and a method are two roles that rarely meet — `_get_length`
 is what a subclass *implements*, `get_length()` is what a caller *invokes* — and if that were the whole
@@ -440,7 +465,7 @@ stage** — `demo/`, `tests/integration/`, `tests/host_smoke/` and the yardstick
 old names gone rather than deprecated. Pre-1.0, no compatibility obligation; the roadmap's standing
 rule, and the phase is rewriting the yardstick anyway.
 
-### 6.2 The generator work
+### 7.2 The generator work
 
 - Emit each class's virtuals as ordinary Verse methods with a default body, on the class that
   declares them — `_Input` on `node`, `_Draw` on `canvas_item`, `_GuiInput` on `control`,
@@ -456,7 +481,7 @@ rule, and the phase is rewriting the yardstick anyway.
 - `@tool`'s editor-only surface (R-EXP-5) is then a *test*, not a feature: `_GetConfigurationWarnings`
   and the gizmo virtuals are among the 1413.
 
-### 6.3 What the generator cannot reach: the script-level hooks
+### 7.3 What the generator cannot reach: the script-level hooks
 
 `_notification` **is not in `extension_api.json`** — `Object` declares zero virtuals there, and
 neither `_to_string`, `_get`, `_set` nor `_get_property_list` appear anywhere in it. They are hooks
@@ -465,13 +490,13 @@ produces them and R-NODE-8 does **not** ride R-NODE-7 after all.
 
 `_Notification(What:int):void` is therefore hand-declared on the native root beside today's three,
 and the GDExtension's existing `notification_func` calls it through `vh_instance_call` — **no new
-ABI**. Its `What` is an int, and §7.1's `NodeStatics.NotificationReady` is what makes it readable.
+ABI**. Its `What` is an int, and §8.1's `NodeStatics.NotificationReady` is what makes it readable.
 
 The rest of that set — `_ToString`, `_Get`, `_Set`, `_GetPropertyList`, `_ValidateProperty` — becomes
 a requirement of its own (**R-NODE-10**) rather than being quietly skipped, and sits in **4b**, where
 `_Get`/`_Set` can be designed against the export machinery they overlap with.
 
-### 6.4 The cost
+### 7.4 The cost
 
 Analysis latency, already 1190 ms with 1023 classes and 758 enums. The decision is to generate
 everything and **not** to set a threshold: feature parity first, performance goals later, with the
@@ -480,9 +505,9 @@ cooked route Phase 7 owns.
 
 ---
 
-## 7. Stage 6 — constants, statics, `@GlobalScope` and the math types (R-SCN-3, OQ-11, R-NODE-4's Godot half)
+## 8. Stage 6 — constants, statics, `@GlobalScope` and the math types (R-SCN-3, OQ-11, R-NODE-4's Godot half)
 
-### 7.1 Class modules
+### 8.1 Class modules
 
 Verse has no constant on a type, and Epic hit the same wall (`Zero2()` with a TODO wishing for
 `vector2.Zero`). What Verse does have is inline modules with qualified access, so:
@@ -505,7 +530,7 @@ in `main.verse` would stop compiling (§1.3). `…Statics` is a name nobody reac
 `GodotStatics` module carries the few that Verse's own stdlib does not already spell — and per
 R-AUD-2 the ones it does spell are not duplicated.
 
-### 7.2 Dispatch with no handle
+### 8.2 Dispatch with no handle
 
 Godot's 114 statics and the ~28 utility functions with no `/Verse.org` counterpart share one problem
 and get one solution: a by-name call that carries no object. Two new Godot callbacks —
@@ -519,7 +544,7 @@ does the same thing for the same reason. Everything else keeps the rule: where V
 counterpart, Verse's spelling wins, and the 78 math and 8 random names that would collide are not
 mirrored under Godot's names.
 
-### 7.3 The math types, in Verse
+### 8.3 The math types, in Verse
 
 Value-type methods become extension functions and operators, with **Verse bodies**:
 
@@ -548,30 +573,36 @@ Three things this needs before it can be written:
 When this lands, `dodge-the-creeps/scripts/vectors.verse` is deleted — the file OQ-11 was opened
 about — and `position += velocity * delta` has its ordinary spelling back.
 
----
+### 8.4 A script's own statics and constants (R-NODE-4), and abstract classes (R-NODE-5)
 
-## 8. Stage 3 — a Callable made from a Verse function (R-TYPE-3's other direction, R-INT-4, R-SIG-3)
+Godot asks a script class for `_has_static_method` and `_get_constants`, and Verse has no `static`
+keyword. The same inline module that carries Godot's constants carries a script's, in the script's
+own file, with the association **declared** rather than inferred from a name:
 
-S-C proved the host half. The design is symmetric with the reference table the GDExtension already
-keeps, pointing the other way:
+```
+@statics(player)
+PlayerStatics<public> := module:
+	MaxSpeed<public>:float = 400.0
+	Describe<public>()<transacts>:string = "the player"
+```
 
-- A native function taking `Callback(:t)<transacts>:void` receives a `TVerseFunction`. The host keeps
-  it in a `godot_callback` native class — a UObject, so the VM traces it and `BeginDestroy` is the
-  release signal, exactly as `godot_ref` does — and mints an id.
-- A new Godot callback, `MakeCallable(CallbackId)`, asks the GDExtension for a `Callable` wrapping a
-  `CallableCustom` that holds that id. `godot-cpp` exposes `CallableCustom` (`variant/callable_custom.hpp`).
-- Invoking it crosses back through a new entry point, `vh_callback_invoke(CallbackId, Args, …)`, and
-  the `CallableCustom`'s destructor releases through `vh_callback_release`.
-- **The lifetime rule**: a Callable Godot holds keeps the Verse function alive, and a bound method
-  keeps its instance alive with it. `CallableCustom::get_object()` answers the owner's instance id, so
-  Godot's own `is_valid()` still reports a Callable whose object has been freed, and a connection to a
-  freed object behaves the way Godot's does.
-- Epic's `FVerseEventCallbackList` carries the other half of the discipline and is worth copying: each
-  callback remembers the `FContentScope` it was subscribed in, and a terminated scope drops it. That
-  is what keeps a raise (R-DIAG-3) from leaving callbacks that can never run again.
+A naming convention (module `Player` for class `player`) was the first proposal and was rejected in
+the interview for a good reason: a typo produces a silently empty statics module rather than an
+error, and a file may declare any number of `@global_class` classes, so there is no single obvious
+name to convene on. With the attribute, a module naming a class that does not exist — or two modules
+naming one class — is a diagnostic.
 
-With this, R-SIG-3 takes a Verse function; R-INT-4 crosses a Callable in both directions; and any
-callback-taking engine API — `sort_custom`, tween callbacks, `Array.filter` — becomes reachable.
+`@statics` is declared where `@global_class` and `@export` are: the attribute package the host adds
+at runtime, **before the first `AddDataSource`** (`FSolarisIde::EnsureDataSourcePackageExists`
+snapshots dependencies exactly once — CLAUDE.md's constraint, and the one that bites silently).
+
+The host reads the module's members out of the semantic program the way it already reads a class's
+exports and methods, and it reads their *values* the way `vh_class_default_field` reads an export's
+default — no instance required, which is the whole point of a static.
+
+**R-NODE-5** is the small one beside it: Verse has `class<abstract>`, so `_is_abstract` answers from
+the semantic program instead of returning false unconditionally, and Godot stops offering to
+instantiate a base script that was never meant to be attached.
 
 ---
 
@@ -581,10 +612,10 @@ callback-taking engine API — `sort_custom`, tween callbacks, `Array.filter` �
 
 | addition | why |
 | --- | --- |
-| `vh_class_signal_list` | §5.3, the Node panel and GDScript |
-| `vh_callback_invoke`, `vh_callback_release` | §8 |
-| `vh_godot_api::MakeCallable` | §8, the GDExtension mints the `Callable` |
-| `vh_godot_api::CallStatic`, `CallUtility` | §7.2 |
+| `vh_class_signal_list` | §6.3, the Node panel and GDScript |
+| `vh_callback_invoke`, `vh_callback_release` | §5 |
+| `vh_godot_api::MakeCallable` | §5, the GDExtension mints the `Callable` |
+| `vh_godot_api::CallStatic`, `CallUtility` | §8.2 |
 | `vh_godot_api::GetClassOf` | §3: a handle's Godot class and, when it has one, its Verse class |
 
 **Not added, deliberately:** emission (the v2 `EmitSignal` callback already does it), connection
@@ -612,7 +643,7 @@ stage-level design when 4a's exit is met.
   subgroups and categories. Type-driven where the Verse type can say it, attributes only where it
   cannot.
 - **R-NODE-10** *(new)* — the remaining script-level hooks: `_ToString`, `_Get`, `_Set`,
-  `_GetPropertyList`, `_ValidateProperty`. None are in `extension_api.json` (§6.3), so each is a
+  `_GetPropertyList`, `_ValidateProperty`. None are in `extension_api.json` (§7.3), so each is a
   hand-declared virtual on the native root, and `_Get`/`_Set` overlap the export machinery enough
   that they want designing beside it rather than before it.
 - **R-NODE-5** — abstract classes: Verse has `class<abstract>`, so `_is_abstract` answers from the
@@ -656,6 +687,58 @@ measurement is worth taking once the larger of the two has landed.
   R-NODE-7/8 to `done`, R-INT-2/R-TYPE-2 to `done`, R-SCN-3 and OQ-11 closed, R-EXP-5 to `done`,
   R-AUD-2 carrying the random exception, and **R-NODE-10** added for the script hooks 4b inherits.
 
+### 11.3 Where the code is
+
+Line numbers are from the commit this document was written against and will drift; the names will
+not. `CLAUDE.md` has the build and test commands, every stage ends with `python tools/run_tests.py`,
+and the generated-files table there is binding — `GodotClasses.native.verse`, `verse_api_classes.h`,
+`verse_api_skipped.h` and `GodotMathLayout.gen.h` are `gen_verse_api.py`'s output and are never
+hand-edited.
+
+**Stage 1 — the cast.** `host/Private/HostScript.cpp`: `NewMirroredWrapper` (:2239) and
+`FindMirroredClass` beside it are what builds a wrapper today; `Instantiate` (:3968) is the shape to
+copy for identity. The GDExtension already has the map — `VerseScriptLanguage::instance_for`
+(`src/verse_script_language.cpp`:1916), used by `VerseScriptInstance::set_field`
+(`src/verse_script_instance.cpp`:~460), which exists precisely so a node carrying a script is not
+wrapped twice. The new `GetClassOf` callback goes in the table in `src/verse_runtime.cpp` and the
+struct in `include/verse_host_abi.h`.
+
+**Stage 2 — containers.** `VhRefNew` is already there (`host/Private/GodotBindings.cpp`:775) and
+module-scoped; the public surface goes in `host/Verse/GodotApi.native.verse`, and the typed adders
+in `tools/gen_verse_api.py` beside the accessors it already emits. The id lifetime is
+`src/verse_ref_table.cpp` and `godot_ref::BeginDestroy` (`host/Private/GodotClasses.h`).
+
+**Stage 3 — the Callable.** A `godot_callback` shadow beside `godot_ref` in
+`host/Private/GodotClasses.h`; the native function taking `TVerseFunction` in
+`host/Private/GodotBindings.cpp` (the reverted spike is §2's S-C, and Epic's
+`FVerseEventCallbackList` in `Engine/Plugins/Verse/Verse/Source/Verse/Private/VerseEvent.cpp` is the
+storage discipline worth copying); the `CallableCustom` subclass is new in `src/`, over
+`godot-cpp/include/godot_cpp/variant/callable_custom.hpp`.
+
+**Stage 4 — signals.** `godot_signal(t)` is declared in `host/Verse/Godot.native.verse` with its
+shadow in `host/Private/GodotClasses.h`; the construction-time binding goes in `Instantiate`
+(`HostScript.cpp`:3968) beside `Shadow->Handle.Init`; the signal list is a new `GetClassSignals`
+next to `GetClassMethods` (:2868) and `GetClassExports` (:2951), which are the two worked examples of
+reading declarations out of the semantic program. On the Godot side, `VerseScript::_has_script_signal`
+(:508) and `_get_script_signal_list` (:512) exist and answer empty today. `_make_function`
+(`src/verse_script_language.cpp`:596) and `_can_make_function` (:513) are R-SIG-4's editor half.
+
+**Stage 5 — virtuals.** All generator: `tools/gen_verse_api.py`:1238 is the `is_virtual` skip, and
+`LIFECYCLE_METHODS` (:1935) is the table that exists because the three are hand-written today. The
+host's rule is `GodotVirtualNameOf` (`HostScript.cpp`:2833) and `OverridesMirroredDefinition` beside
+it. `_Notification` is hand-declared on the native root in `host/Verse/Godot.native.verse` (where
+`Ready`/`Process`/`PhysicsProcess` are today, and from which they move to `node`), and the vtable
+entry that will call it is `notification_func` (`src/verse_script_instance.cpp`:327). The rename
+sweep touches `demo/scripts/`, `tests/integration/scripts/`, `tests/host_smoke/*.verse` and
+`dodge-the-creeps/scripts/`.
+
+**Stage 6 — constants, statics, math.** `tools/gen_verse_api.py` again, plus the math bodies as
+ordinary Verse: a new file in `host/Verse/` rather than in the generated one, because they are
+hand-written and the generated file is not. The struct specifiers that must change first are emitted at
+`gen_verse_api.py`:1032 — `<name><public> := struct:`, which is where `<concrete><computes>` has to
+appear before any math body can be `<computes>` (§8.3 item 1). `../godot`'s
+`core/math/*.h` is the reference for the edge cases, per the memory note about that checkout.
+
 ---
 
 ## 12. Risks, and what this phase opens
@@ -663,8 +746,8 @@ measurement is worth taking once the larger of the two has landed.
 | risk | mitigation |
 | --- | --- |
 | per-keystroke analysis, already 1190 ms, gets materially worse with 1413 virtuals, 489 signal accessors and ~1200 module members | recorded at Stage 5 with `tools/build_bench.py`, and **deliberately without a threshold**: parity first, performance goals later. This is **OQ-14**, and what it informs is whether Phase 7's cooked route is urgent or merely planned |
-| the math surface is the largest hand-written body of code in the project, and every method is a chance to disagree with Godot quietly | tiered (§7.3): a written list, a recorded skip for the tail, and a test table whose expected values are read out of Godot rather than derived |
-| `CallableCustom` round-tripping through the ABI is the one part of §8 no spike touched | Stage 3 is its own stage, before signals, precisely so that finding out is cheap. The fallback for R-SIG-3 is a method-name Callable, which already works and which would leave closures to Phase 5 |
+| the math surface is the largest hand-written body of code in the project, and every method is a chance to disagree with Godot quietly | tiered (§8.3): a written list, a recorded skip for the tail, and a test table whose expected values are read out of Godot rather than derived |
+| `CallableCustom` round-tripping through the ABI is the one part of §5 no spike touched | Stage 3 is its own stage, before signals, precisely so that finding out is cheap. The fallback for R-SIG-3 is a method-name Callable, which already works and which would leave closures to Phase 5 |
 | signals registered through `ScriptExtension` may not behave identically to GDScript's for the editor's Node panel | Stage 4's by-hand check is the first thing in it, not the last |
 | a generated virtual with a wrong default return value changes engine behaviour silently — Godot asking "is this handled?" and being told yes | the default body for a value-returning virtual is chosen from Godot's own documented default, and the ones that gate engine behaviour (`_can_drop_data`, `_has_point`) get a test each |
 | the re-port rewrites the yardstick, so a regression in the old shape stops being covered | the old spellings stay legal and the integration suite keeps a case for each — the export-slot path, `Object.Set`, and the scene-file connection |
@@ -676,6 +759,6 @@ measurement is worth taking once the larger of the two has landed.
 - **OQ-15** (new) — Verse's transaction semantics deserve a review of their own: the `<transacts>`
   trap (wall 8), what `no_rollback` costs a library author, and whether the bridge should be saying
   something at the declaration. Deferred out of this phase deliberately.
-- **OQ-11** — closed by §7.3 and §1.3: operators can be defined, extension methods work, and the
+- **OQ-11** — closed by §8.3 and §1.3: operators can be defined, extension methods work, and the
   answer is pure Verse.
 - **OQ-13** — untouched; it is Phase 6's, and it wants R-ASYNC-4 first.
