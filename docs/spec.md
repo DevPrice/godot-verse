@@ -309,13 +309,23 @@ on closing it.
   Status: **none** beyond the three.
 - **R-NODE-8 (MUST)** `_notification` reaches a script, with the notification constant, so
   `NOTIFICATION_WM_CLOSE_REQUEST` and friends are handleable. Status: **none**
-  (`notification_func` is wired to the vtable but does not reach Verse).
+  (`notification_func` is wired to the vtable but does not reach Verse). It does **not** ride
+  R-NODE-7's general mechanism, which was Phase 4's first assumption: `_notification` is absent from
+  `extension_api.json` entirely — `Object` declares no virtuals there — so it is hand-declared on the
+  native root beside `_Ready`, and the constants it takes are R-SCN-3's
+  (`NodeStatics.NotificationReady`). See `docs/phase-4-design.md` §6.3.
 - **R-NODE-9 (MUST)** A script method list (`_get_script_method_list`, `_get_method_info`,
   `_has_method`) reports what the script actually defines. Status: **done**. `vh_class_method_list`
   reads the class's own declarations out of the semantic program — names, parameters with their own
   names and types, result type, `<decides>`/`<suspends>`, and Godot's name for the virtual it
   overrides — and the script instance answers `has_method`, `get_method_list` and
   `get_method_argument_count` from it.
+- **R-NODE-10 (SHOULD)** The script-level hooks Godot offers a script rather than registering in
+  ClassDB are reachable: `_to_string`, `_get`, `_set`, `_get_property_list`, `_validate_property`.
+  Status: **none**. Named by Phase 4 once `_notification` proved that none of this family is in
+  `extension_api.json` and so none of it can be generated. `_to_string` is what makes `print(node)`
+  in GDScript show something a Verse author chose; `_get`/`_set` overlap §5.4's export machinery,
+  which is why the set is scheduled with it (roadmap, Phase 4b) rather than with R-NODE-7.
 
 ### 5.3 Signals
 
@@ -996,8 +1006,11 @@ A closed question keeps its row so that the reason it is closed is not lost.
 | **OQ-8** ✅ | Which hot-reload mechanism: fresh package name per generation, out-of-process compilation, or an engine change? | all of §10, and R-EXP-5 | **Closed: fresh package name per generation**, with `IncrementalizeProjectSource` before each build. See §14.1. |
 | **OQ-9** | Can any DAP client speak `Verse::SocketDebugger`'s framing? | R-DIAG-6 | Only worth answering if R-DIAG-4 (Godot's own debugger) turns out to be blocked. |
 | **OQ-10** | Can an editor-class UBT Program target be built — `bCompileAgainstEditor`, and therefore `bCompileAgainstEngine`? Cooking Verse needs `WITH_EDITOR=1` (§14.1), and nothing else this project builds does. | R-DIST-9, R-DIST-10, R-DIST-11 | Opened by the S-1 answer. Attempt it at the start of Phase 7. The one prior attempt failed on Engine module links, but it was made for a *lean* host, where the weight was the objection; a cooker that runs only at export has no such constraint. Fallback: cook through a real UE editor or commandlet process. |
+| **OQ-11** ✅ | How do free functions and value-type methods cross, given that every mirrored call rides `VhCallValue(Handle, …)` and neither a `@GlobalScope` function nor a `vector2` has a handle? Named by Phase 2 §8 and never recorded here until Phase 4's spikes answered it. | R-SCN-3, and the 16 math types' methods | **Closed: Verse can carry the value types itself.** Type-based extension methods (`(V:vector2).Length<public>()<computes>:float`) and definable operators (`operator'+'(:vector2, :vector2)`) both compile against the mirror's own structs, so the math is ordinary Verse with no handle and no ABI — which is also what Godot's C# does. What genuinely has no handle is Godot's 114 statics and the ~28 utility functions with no `/Verse.org` counterpart, and those get one by-name dispatch callback apiece. See `docs/phase-4-design.md` §1.3 and §7. |
 | **OQ-12** ✅ | Does a generation change the package *name* only, or the *verse path* too? S-2 varied the name; whether `/user@localhost` held across generations was not recorded. Module paths are user-visible text that R-TOOL-12 writes into the author's file, and `ScriptVersePath` is compiled into eight lookup sites in `HostScript.cpp`. | R-LANG-6, R-TOOL-12, and the shape of Phase 3 | **Closed: the name only.** The verse path is pinned at `/user@localhost` across generations and nothing in `HostScript.cpp` learns which generation it is asking about. See §14.1. |
 | **OQ-13** | What bounds a script that raises every frame? A raise now stops script code for the rest of the frame and the next tick resumes it, so a `Process` that raises raises again next frame, forever — the error is reported each time, which is what Godot does for GDScript, and no progress is ever made. Options: report it once and stop calling that method, disable the instance, disable the script, or leave it and rely on the author reading the log. | R-DIAG-3 | Phase 6, with the rest of R-DIAG-3. Opened by Phase 3's fix: before it, the first raise silenced everything and the question could not arise, which is not the same as it having an answer. Whatever is chosen has to be per instance rather than per process, so it wants R-ASYNC-4 first. |
+| **OQ-14** | Does per-keystroke analysis stay usable once the mirror carries the 1413 virtuals, the 489 signal accessors and the per-class constant modules Phase 4 adds? It is 1190 ms today, from 158 ms curated. | R-TOOL-2, and the urgency of Phase 7's cooked route | Record it at Phase 4 stage 5 with `tools/build_bench.py`, **with no threshold attached** — feature parity first, performance goals later, by decision. It changes no design: the decision to mirror everything is made (`phase-2-design.md` §3), and the fix if the number turns out to matter is the cooked digest OQ-10 already owns. |
+| **OQ-15** | What should the bridge say about Verse's transaction semantics? A function with no effect specifier carries a default set wider than `<transacts>`, so an explicit `<transacts>` *narrows* and then cannot call it — which is why a library file's helpers compile alone and fail at their first call site inside a Godot callback (`dodge-the-creeps.md` wall 8). | R-AUD-1, R-AUD-3, and the manual | Deferred out of Phase 4 by decision. Wants a review of its own: what `no_rollback` costs a library author, whether the `.verse` template should say `<transacts>`, and whether the R-SCN-2 diagnostic machinery can say it at the declaration rather than at the call. |
 | **RISK-1** | UE's licensing applies to games shipped with the host, including royalties. This is a permanent property of the current distribution model and may deter adoption regardless of anything built here. | adoption | Disclose prominently (R-DIST-3). No mitigation available. |
 | **RISK-2** | Tracking Godot `master` and UE `main` simultaneously means two moving dependencies with no compatibility window. | R-QUAL-7 | Accepted deliberately while pre-1.0; revisit at the first release. |
 

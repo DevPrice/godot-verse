@@ -1,12 +1,14 @@
 # godot-verse — Roadmap
 
-**Status:** Draft 6 · 2026-09-12 · **Phases 0–3 complete**, bar the two by-hand checks Phase 3 is
+**Status:** Draft 7 · 2026-09-12 · **Phases 0–3 complete**, bar the two by-hand checks Phase 3 is
 owed — a windowed run of the yardstick, and an editor session exercising Play, Build and `@tool`.
 Its design is [`phase-3-design.md`](phase-3-design.md), which supersedes four of the bullets below
 and gates the whole phase on a spike. What Phase 2 built, and the four
 places the design was wrong, are in [`phase-2-design.md`](phase-2-design.md) §11. The Dodge the
 Creeps port closed it and **plays** — the eight walls it hit, each mapped to a requirement, are
-[`dodge-the-creeps.md`](dodge-the-creeps.md), and that list is Phase 4's scope.
+[`dodge-the-creeps.md`](dodge-the-creeps.md), and that list is Phase 4's scope. **Phase 4 is
+designed**, in [`phase-4-design.md`](phase-4-design.md), and splits into 4a and 4b; its spikes are
+answered and its gate is the port re-written idiomatically rather than merely without GDScript.
 **Companion to:** `docs/spec.md` (what must be true) and `README.md` (what is true now)
 
 ---
@@ -437,32 +439,65 @@ windowed run** Phase 2 never gave it. Full criteria: `phase-3-design.md` §9.
 
 ## Phase 4 — Parity: signals, virtuals, and the rest of Godot's model
 
+**Designed, not built.** [`phase-4-design.md`](phase-4-design.md) is the whole of it, written after
+its three spikes rather than before them — **§2 is the part to read**, because one spike retired the
+design the phase would otherwise have been built around, and §6.1 is a naming decision that came out
+of a measurement rather than a preference.
+
 **Why now.** Everything here was blocked on Phase 1's dispatch and Phase 2's surface, and all of it
 is faster to build behind Phase 3's reload loop. This is the phase the yardstick measures.
 
-- **§5.3 in full** — signal declaration with typed arguments, emission, connection and
-  disconnection, editor-side connection including the create-the-function flow (`_make_function`),
-  and signals crossing to GDScript and C# (R-SIG-1 … R-SIG-4, R-SIG-6). R-SIG-5 (`await` a signal)
-  waits for Phase 5.
-- **R-NODE-7, R-NODE-8** — the complete virtual set and `_notification`, by a general mechanism: a
-  virtual added by a future Godot version must not require a code change here.
-- **R-NODE-3, R-NODE-4, R-NODE-5** — instantiation without a node, statics and constants,
-  abstract classes.
-- **R-EXP-6, R-EXP-7, R-EXP-8, R-EXP-9** — custom Resources, autoloads, icons, RPC config.
-- **R-EXP-1** — the remaining `@export` surface, including enums and structs from R-LANG-2.
-- **R-SCN-3 and OQ-11** — `@GlobalScope`'s utility functions, and the value-type methods and
-  operators the math types still lack. Both moved here from Phase 2 because they are one problem: a
-  free function has no handle to ride `VhCallValue` on, and neither does a `vector2`. One by-name
-  dispatch entry point answers both, and deciding them together costs one rather than two. The
-  naming is already decided — **Verse's own stdlib wins**, so of 114 utility functions only the ~28
-  with no `/Verse.org` counterpart are mirrored (R-AUD-2).
-- **§8 interop** — R-INT-1 … R-INT-4. R-INT-2 (calling a GDScript-defined method from Verse
-  dynamically) was the one with no existing path; Phase 2's `Object` mirror is expected to deliver
-  it through `callv`, so **verify it rather than scoping it**, and spend the time on R-INT-3 and
-  R-INT-4 instead.
+**The phase splits.** 4a is what scene code touches every day and what the yardstick can measure; 4b
+is the editor's data model, which Dodge the Creeps never touches.
 
-**Exit:** **Dodge the Creeps runs with no GDScript in it.** That is the phase gate, and it is
-binary.
+### Phase 4a — what scene code touches
+
+Ordered by dependency; the design document has the stage table and what each is done when.
+
+- **R-SCN-6 first** — the failable cast, and object identity with it: a handle that carries a Verse
+  script crosses as *that script's own object*, or `player[GetNode(…)]` can never succeed. Measured
+  as the most expensive absence in the port: seventeen `@export` slots, three stringly-typed
+  `Object.Set` calls, an `?option` unwrap per node lookup.
+- **R-TYPE-2's other half, and R-INT-2** — a script can make a container rather than only pass one
+  on. Small, and it unblocks `Callv` with arguments, `AddUserSignal`, and 173 mirrored parameters.
+- **R-TYPE-3's other direction, R-INT-4** — a `Callable` backed by a Verse function. Ahead of
+  signals, because `Subscribe` is one.
+- **§5.3 in full** — R-SIG-1 … R-SIG-4 and R-SIG-6: a signal is a typed member (`Hit:godot_signal()`),
+  emission is `Hit.Signal(…)`, subscription takes a Verse function, and Godot's own 489 signals get
+  typed accessors. R-SIG-5 (`await`) waits for Phase 5, and is the one wall 4a cannot close.
+- **R-NODE-7, R-NODE-8** — the complete virtual set, generated, spelled the way Godot spells it
+  (`_Ready`, `_Process`, `_Draw`) because plain names collide with signals on Node, CanvasItem,
+  Control and BaseButton. `_notification` turns out **not** to ride that mechanism — it is in no part
+  of `extension_api.json` — so it is hand-declared, and the rest of that family becomes **R-NODE-10**
+  in 4b.
+- **R-SCN-3 and OQ-11** — `@GlobalScope`'s utility functions, Godot's 114 statics, its constants, and
+  the math types' methods. **OQ-11 is closed**: Verse has type-based extension methods and definable
+  operators, so the math is ordinary Verse with no handle and no ABI, which is also what C# does. What
+  genuinely has no handle — the statics and the ~28 utilities with no `/Verse.org` counterpart — gets
+  one by-name dispatch callback. The random family is the single exception to R-AUD-2, dispatched so
+  `seed()` steers one stream.
+- **R-NODE-4, R-NODE-5** — a script's own statics and constants (a module with a declared
+  association), and abstract classes.
+- **R-EXP-5's remainder** — the editor-only virtual surface, which rides R-NODE-7 rather than being
+  built twice.
+
+**Exit for 4a:** **Dodge the Creeps is idiomatic** — not merely free of GDScript, which it already
+is, but free of the workarounds: casts instead of seventeen inspector slots, Verse-declared signals
+instead of two scene connections to one engine signal, no `vectors.verse`, no `Object.Set` with
+string property names. The port is rewritten in place, wall by wall, and the diff is the measurement.
+
+### Phase 4b — the editor's data model
+
+- **R-NODE-3** — instantiation without a node, `RefCounted` and `Object` both.
+- **R-EXP-6, R-EXP-7, R-EXP-8, R-EXP-9** — custom Resources, autoloads, icons, RPC config.
+- **R-EXP-1** — the remaining `@export` surface, type-driven where the Verse type can say it and
+  attributes only where it cannot.
+- **R-NODE-10** — the script-level hooks that are in no JSON: `_ToString`, `_Get`, `_Set`,
+  `_GetPropertyList`, `_ValidateProperty`. Here rather than in 4a because `_Get`/`_Set` overlap the
+  export machinery above them.
+
+**Exit for 4b:** a Verse custom Resource is created, saved to `.tres`, edited in the inspector and
+loaded back; a Verse autoload answers from every scene; and the by-hand checklist is run.
 
 ---
 

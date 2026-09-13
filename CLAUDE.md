@@ -24,6 +24,17 @@ one must not use `EPathMode::PackageRelative`, which is fatal for a class with n
 OQ-12's answer (positive: the package name carries the generation, the verse path is pinned).
 Two by-hand checks are still owed — a windowed run of the yardstick, and an editor session.
 
+**Phase 4 is designed and not built.** `docs/phase-4-design.md` is the design, and unusually for this
+repo its spikes ran *before* it was written — **§2 is where they are**, and one of them retired the
+design the document would otherwise have carried: Verse's own `signalable`/`subscribable` interfaces
+cannot be implemented here, because their domains are `no_rollback` and every Godot callback runs in a
+transaction. Three other things in it are worth knowing before touching the generator: a virtual is
+spelled the way Godot spells it (**`_Ready`, not `Ready`** — §6.1 counts the collisions that decided
+it), `_notification` is in no part of `extension_api.json` and so cannot be generated (§6.3), and
+**OQ-11 is closed** — Verse has type-based extension methods and definable operators, so the math
+types are ordinary Verse. The phase splits into 4a (what scene code touches) and 4b (the editor's data
+model).
+
 **`docs/dodge-the-creeps.md` is the one to read before adding a Verse-facing feature.** The port
 closed Phase 2 and it plays, so the document is not a progress report — it is the eight things a
 Godot author writes without thinking that have no spelling yet, each with the requirement that will
