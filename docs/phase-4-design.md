@@ -974,10 +974,19 @@ the split cost nothing — but the table should say so.
 
 ### 13.4 Two things the design's spellings could not be given
 
-**A struct payload maps to one argument, not one per field.** §6.2's fourth row — a struct payload
-becoming one *named* argument per top-level field, which is how the connect dialog and
-`_make_function` would get real names — is not implemented. It is the nicety in that table rather
-than its substance, and it is the first thing to add when the editor flow is taken up.
+**A struct payload does not work at all**, which §6.2 does not anticipate. Its fourth row reads as a
+trade — "a tuple keeps the ergonomic N-parameter handler and loses names in the editor; a struct
+gets names in the connect dialog" — so it sounds as though both spellings work and an author picks.
+They do not. A `godot_signal(my_struct)` registers one argument named `Value` of type NIL and emits
+nothing, because the payload's shape comes from `FMemberType::Struct`, which is filled only from the
+generated table of Godot's own 16 math structs.
+
+Two things follow. The feature is a **hole rather than a nicety**, and the effort to close it is
+small: a Verse struct is a `CClass`, `GetClassExports` already walks a class's data members, and
+`ReadStructValue` already reads one back by field. And §6.2's *other* sentence — "a payload the wire
+cannot carry is refused **at the member**, reusing R-EXP-3's machinery rather than failing at the
+emission" — is the right fallback and is also not implemented, so the failure lands at the worst of
+the three available moments.
 
 **`@statics` names its class as a string.** §8.4 writes `@statics(player)`, unquoted, and the reason
 it is `@statics("player")` is uLang rather than taste: `GetAttributeTextValue` is how the host reads

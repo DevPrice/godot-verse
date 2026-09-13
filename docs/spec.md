@@ -452,10 +452,19 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
 
   Verse tuples cannot name their elements (`tuple(Damage:int, ...)` is "Expected a type, got data
   definition instead"), which is why the names are positional. The design's fourth row — a **struct**
-  payload mapping to one named argument per top-level field, which is how the connect dialog and
-  `_make_function` would get real names — is **not implemented**: a struct payload crosses as one
-  argument. It is the nicety in that table rather than its substance, and it is the first thing to
-  add when the editor flow is taken up.
+  payload mapping to one named argument per top-level field — is **not implemented**, and the
+  fallback is worse than the design's framing suggests. A `godot_signal(my_struct)` registers a
+  signal with one argument named `Value` of type NIL, and **emits nothing**: the payload's shape is
+  read through `FMemberType::Struct`, which is filled from the generated table of Godot's 16 math
+  structs, so a *user* struct leaves it null and `ValueToWire` refuses the value at the first
+  emission.
+
+  That is not a missing nicety, it is a member that compiles and does not work. §6.2's own answer
+  for a payload the wire cannot carry — **refuse it at the member**, reusing R-EXP-3's machinery
+  — is not implemented either, so the failure lands at runtime rather than in the editor. Either
+  fix closes it; describing the struct's fields is the one that keeps the feature, and the
+  machinery is there (`GetClassExports` already walks a class's data members, and `ReadStructValue`
+  already reads one back by field).
 
   Signals **inherit**: a script class deriving from another has that class's signals, and both the
   list and the construction-time binding walk the whole chain. Phase 2 shipped exactly this bug once
