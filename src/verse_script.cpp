@@ -206,6 +206,7 @@ void VerseScript::refresh_from_analysis() {
 	// The method table comes from the same analysis as the exports and is cached for the same
 	// reason: Godot asks _has_method on per-frame paths, and every ask walks the semantic program.
 	methods_cache = has_own_class ? runtime->class_methods(verse_class_name()) : Vector<VerseMethodInfo>();
+	signals_cache = has_own_class ? runtime->class_signals(verse_class_name()) : Vector<VerseSignalInfo>();
 
 	// The export list only exists once the project has been analysed, and a placeholder created
 	// before that got an empty one.
@@ -269,6 +270,10 @@ int32_t VerseScript::call_instance(vh_instance *p_instance,
 
 const Vector<VerseMethodInfo> &VerseScript::methods() const {
 	return methods_cache;
+}
+
+const Vector<VerseSignalInfo> &VerseScript::signals() const {
+	return signals_cache;
 }
 
 const VerseMethodInfo *VerseScript::find_method(const StringName &p_name) const {
@@ -505,12 +510,33 @@ bool VerseScript::_inherits_script(const Ref<Script> &p_script) const {
 	return false;
 }
 
+// R-SIG-1's Godot half, and what makes `connect` and `emit_signal` legal on a node carrying this
+// script: Object::connect validates against has_script_signal, and emit_signalp refuses a name
+// neither ClassDB nor the script knows.
 bool VerseScript::_has_script_signal(const StringName &p_signal) const {
+	for (int64_t i = 0; i < signals_cache.size(); i++) {
+		if (signals_cache[i].name == p_signal) {
+			return true;
+		}
+	}
 	return false;
 }
 
 TypedArray<Dictionary> VerseScript::_get_script_signal_list() const {
-	return TypedArray<Dictionary>();
+	TypedArray<Dictionary> out;
+	for (int64_t i = 0; i < signals_cache.size(); i++) {
+		const VerseSignalInfo &signal = signals_cache[i];
+		Array args;
+		for (int64_t j = 0; j < signal.args.size(); j++) {
+			args.push_back(typed_argument(String(signal.args[j].name), signal.args[j].type));
+		}
+		Dictionary info;
+		info["name"] = String(signal.name);
+		info["args"] = args;
+		info["flags"] = METHOD_FLAG_NORMAL;
+		out.push_back(info);
+	}
+	return out;
 }
 
 bool VerseScript::_has_property_default_value(const StringName &p_property) const {

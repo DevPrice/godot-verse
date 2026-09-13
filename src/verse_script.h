@@ -102,6 +102,7 @@ public:
 
 	// Every method this script's class declares, from the last analysis.
 	const godot::Vector<VerseMethodInfo> &methods() const;
+	const godot::Vector<VerseSignalInfo> &signals() const;
 
 	// The method Godot would call p_name: a script method answers to its Verse name verbatim, and
 	// one that overrides a Godot virtual answers to Godot's name for it as well. Null for a name
@@ -160,6 +161,7 @@ private:
 	// rather than re-asked because Godot calls _has_method on paths that run per frame, and each
 	// ask walks the semantic program.
 	mutable godot::Vector<VerseMethodInfo> methods_cache;
+	mutable godot::Vector<VerseSignalInfo> signals_cache;
 
 	// Set while exports_cache describes a program older than the file. Godot reads this through
 	// _is_placeholder_fallback_enabled and switches every placeholder to serving its own stored

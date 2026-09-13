@@ -119,6 +119,36 @@ VhObjectOf<native>(Handle:int)<transacts>:vh_object
 # is Godot's known leak (GH-102327), so the half taken here is the half that dies with its object.
 VhCallableFrom<native>(Callback:any)<transacts>:int
 
+# --- signals -----------------------------------------------------------------
+
+# The binding half of a script-declared signal (R-SIG-1). The typed half is `godot_signal(t)` in
+# GodotApi.native.verse, which is ordinary parametric Verse over this -- the same split as
+# `vh_object` and `object`, and for the same two reasons: a native class cannot be parametric, and
+# Verse cannot reopen a class to add the typed API afterwards.
+#
+# Id is written by the host at construction, the way Handle is: it names the owner, the signal's
+# name and the payload's declared shape, all of which the host read out of the semantic program.
+# A `godot_signal` a script builds for itself holds 0 and names nothing, which is the same bargain
+# `godot_array{}` makes.
+vh_signal<public><native> := class:
+    Id<native>:int = 0
+
+# Emission is **immediate**, unlike every other void mutation in the mirror, and that is a stated
+# exception rather than an oversight (docs/phase-4-design.md 6.4): handlers run synchronously, as
+# they do in GDScript, so "emit, then read what the handler changed" behaves the way a Godot author
+# expects. The cost is stated rather than hidden -- if the emitting transaction later aborts, the
+# handlers have already run. Phase 4.5 audits that set.
+VhSignalEmit<native>(Id:int, Payload:any)<transacts>:void
+
+# Connects, and answers a subscription id -- 0 if the callback is not a method bound to a live
+# script instance. Unlike emission this is compensated rather than deferred or immediate-and-
+# forgotten: it mutates Godot *and* returns a value, so a rolled-back transaction has to
+# disconnect, which is what the host registers with Stm::OnRollback.
+VhSignalSubscribe<native>(Id:int, Callback:any)<transacts>:int
+
+# Idempotent, as `event_subscription.Cancel` is in UEFN: a second Cancel does nothing.
+VhSignalCancel<native>(Subscription:int)<transacts>:void
+
 # --- reference values --------------------------------------------------------
 
 # A Godot value the wire cannot copy: an Array, a Dictionary, a Callable, a Signal, or one of the

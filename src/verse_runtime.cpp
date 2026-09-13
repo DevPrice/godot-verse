@@ -146,6 +146,9 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 	godot_api.GetSingleton = &VerseRuntime::api_get_singleton;
 	godot_api.GetClassOf = &VerseRuntime::api_get_class_of;
 	godot_api.MakeCallable = &VerseRuntime::api_make_callable;
+	godot_api.EmitSignal = &VerseRuntime::api_emit_signal;
+	godot_api.ConnectSignal = &VerseRuntime::api_connect_signal;
+	godot_api.DisconnectSignal = &VerseRuntime::api_disconnect_signal;
 	godot_api.ReleaseRef = &VerseRuntime::api_release_ref;
 	godot_api.RetainRef = &VerseRuntime::api_retain_ref;
 	godot_api.NewRef = &VerseRuntime::api_new_ref;
@@ -599,6 +602,86 @@ Vector<VerseMethodInfo> VerseRuntime::class_methods(const String &p_class_name) 
 		}
 	}
 	return methods;
+}
+
+Vector<VerseSignalInfo> VerseRuntime::class_signals(const String &p_class_name) const {
+	Vector<VerseSignalInfo> signals;
+	if (!host.is_loaded() || host.ClassSignalList == nullptr) {
+		return signals;
+	}
+
+	const vh_signal_desc *descs = nullptr;
+	int32_t count = 0;
+	if (host.ClassSignalList(p_class_name.utf8().get_data(), &descs, &count) != VH_OK) {
+		return signals;
+	}
+
+	signals.resize(count);
+	for (int32_t i = 0; i < count; ++i) {
+		const vh_signal_desc &desc = descs[i];
+		VerseSignalInfo &info = signals.write[i];
+		info.name = StringName(String::utf8(desc.NameUtf8, desc.NameLen));
+		info.args.resize(desc.ArgCount);
+		for (int32_t j = 0; j < desc.ArgCount; ++j) {
+			const vh_param_desc &arg = desc.Args[j];
+			VerseSignalInfo::Arg &out = info.args.write[j];
+			out.name = StringName(String::utf8(arg.NameUtf8, arg.NameLen));
+			out.type = variant_type_for(arg.Type, arg.VariantTag);
+		}
+	}
+	return signals;
+}
+
+// Emission is immediate on the Verse side too, which is the stated exception to "a write defers to
+// commit": a handler runs before emit_signal returns, so "emit, then read what the handler changed"
+// behaves the way a Godot author expects.
+int32_t VerseRuntime::api_emit_signal(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count) {
+	Object *obj = UtilityFunctions::instance_from_id(p_handle);
+	if (obj == nullptr) {
+		return VH_CALL_DEAD_OBJECT;
+	}
+
+	// emit_signal is a vararg method, so it is reached through callv with the signal's name as the
+	// first element rather than through a binding of its own.
+	Array args;
+	args.push_back(Variant(StringName(String::utf8(p_name_utf8, p_name_len))));
+	for (int32_t i = 0; i < p_arg_count; ++i) {
+		args.push_back(vh_to_variant(p_args[i]));
+	}
+	obj->callv("emit_signal", args);
+	return VH_CALL_OK;
+}
+
+int32_t VerseRuntime::api_connect_signal(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_target, int32_t p_flags) {
+	Object *obj = UtilityFunctions::instance_from_id(p_handle);
+	if (obj == nullptr || p_target == nullptr) {
+		return VH_CALL_DEAD_OBJECT;
+	}
+	const Variant target = vh_to_variant(*p_target);
+	if (target.get_type() != Variant::CALLABLE) {
+		return VH_CALL_BAD_VALUE;
+	}
+	const StringName name(String::utf8(p_name_utf8, p_name_len));
+	// No flags in 4a: one-shot belongs with Await, in the phase whose idiom wants it.
+	return obj->connect(name, target, (uint32_t)p_flags) == OK ? VH_CALL_OK : VH_CALL_NO_SUCH_MEMBER;
+}
+
+int32_t VerseRuntime::api_disconnect_signal(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_target) {
+	Object *obj = UtilityFunctions::instance_from_id(p_handle);
+	if (obj == nullptr || p_target == nullptr) {
+		// A freed owner has already dropped every connection it had, so there is nothing to
+		// disconnect and nothing wrong -- which is what makes Cancel idempotent past a free.
+		return VH_CALL_OK;
+	}
+	const Variant target = vh_to_variant(*p_target);
+	if (target.get_type() != Variant::CALLABLE) {
+		return VH_CALL_BAD_VALUE;
+	}
+	const StringName name(String::utf8(p_name_utf8, p_name_len));
+	if (obj->is_connected(name, target)) {
+		obj->disconnect(name, target);
+	}
+	return VH_CALL_OK;
 }
 
 void VerseRuntime::tick(double p_budget_seconds) {

@@ -7,6 +7,7 @@
 
 #include "Godot.vh_object.gen.h"
 #include "Godot.godot_ref.gen.h"
+#include "Godot.vh_signal.gen.h"
 #include "Godot.variant.gen.h"
 
 namespace verse {
@@ -79,6 +80,21 @@ public:
 	/// outlives the Verse value by up to one cycle -- which is why the host asks for a cycle when
 	/// the table grows rather than waiting to be asked.
 	void BeginDestroy() override;
+};
+
+/// The C++ shadow for Verse's `vh_signal`: the binding half of a script-declared signal.
+///
+/// Id names a row the host keeps -- the owner's handle, the signal's name, and what its payload
+/// decomposes into. Written at construction, the way vh_object's Handle is, so a script never
+/// spells any of it twice.
+class vh_signal : public UObject
+{
+	VH_SIGNAL_BODY();
+
+	// Verse API
+
+public:
+	TVal<int64> Id;
 };
 
 } // namespace verse

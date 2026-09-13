@@ -41,6 +41,20 @@ struct VerseMethodInfo {
 	bool suspends = false;
 };
 
+// One signal a Verse script declares, in Godot's vocabulary. A copy, for the reason
+// VerseMethodInfo is one: the host's descriptors live only until the next call.
+struct VerseSignalInfo {
+	// The Verse spelling verbatim -- `Hit`, not `hit`. Godot's C# does the same, and every scene
+	// connection in this repository already reaches a Verse method by its Verse name.
+	godot::StringName name;
+
+	struct Arg {
+		godot::StringName name;
+		godot::Variant::Type type = godot::Variant::NIL;
+	};
+	godot::Vector<Arg> args;
+};
+
 // The "VerseRuntime" engine singleton. Owns the verse_host.dll loader and the vh_init_desc handed
 // to it. Every method degrades to ERR_UNAVAILABLE plus a warning when no host is loaded; nothing
 // here may crash for that reason.
@@ -171,6 +185,11 @@ public:
 	// only promises until the next call, so nothing here may hold a pointer into it.
 	godot::Vector<VerseMethodInfo> class_methods(const godot::String &p_class_name) const;
 
+	// The signals a class declares, its base script classes' included. Read out of the last
+	// analysis rather than the running program, so a signal added in the editor shows up without
+	// a build -- the same bargain the export list makes.
+	godot::Vector<VerseSignalInfo> class_signals(const godot::String &p_class_name) const;
+
 	// One data member read off a live instance, and off the class default object respectively.
 	// Unlike class_exports these go through the VM, because a value exists nowhere else. A nil
 	// Variant means the field is absent or holds a Verse type with no Variant counterpart.
@@ -201,6 +220,11 @@ private:
 	static vh_handle api_get_singleton(void *p_ctx, const char *p_name_utf8, int32_t p_name_len);
 	static int32_t api_get_class_of(void *p_ctx, vh_handle p_handle, vh_arena *p_arena, vh_value *r_class_name);
 	static int64_t api_make_callable(void *p_ctx, int64_t p_callback_id, vh_handle p_owner_handle);
+
+	// Signals (R-SIG-1..4). Declared in the v2 header and left unsupplied until now.
+	static int32_t api_emit_signal(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count);
+	static int32_t api_connect_signal(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_target, int32_t p_flags);
+	static int32_t api_disconnect_signal(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_target);
 
 	// The reference table (R-TYPE-1). See src/verse_ref_table.h for what is in it and why, and the
 	// ABI header's "reference values" for the ownership rule these implement.

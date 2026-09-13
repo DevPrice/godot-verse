@@ -354,10 +354,85 @@ is parity-critical. What already works is receiving one — a scene-file connect
 method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port be wired at all.
 
 - **R-SIG-1 (MUST)** A Verse script declares signals with argument types, and they appear in the
-  editor's Node panel where a designer connects them.
-- **R-SIG-2 (MUST)** A script emits a declared signal with arguments.
+  editor's Node panel where a designer connects them. Status: **done** for the declaration and the
+  list (Phase 4 stage 4); the Node panel itself is R-SIG-4's by-hand check.
+
+  **There is no `@signal` attribute.** The member's *type* is the declaration and its *name* is the
+  signal's name, so there is no second place to spell either and nothing to drift:
+
+  ```
+  player := class(area2d):
+      Hit<public>:godot_signal(tuple()) = godot_signal(tuple()){}
+      Struck<public>:godot_signal(tuple(int, string)) = godot_signal(tuple(int, string)){}
+  ```
+
+  A bridge attribute exists where the *text* is the only source — `@global_class` survives without
+  compilation because Godot asks about files it has only scanned — and a signal list is not one of
+  those cases: the host reads declared types out of the semantic program already, so
+  `vh_class_signal_list` refreshes per keystroke the way the method and export lists do. A signal
+  declared in a script that has never been built appears after the next Build, which is the same
+  bargain an `@export` *default* already makes.
+
+  The shape is Verse's own `listenable` **without implementing it**, and the difference is forced
+  rather than preferred: `signalable.Signal` is `no_rollback`, so it would be uncallable from
+  inside the transaction every Godot callback runs in, and `subscribable.Subscribe` fixes its
+  callback at a no_rollback domain that could not touch Godot. `cancelable` is the one of the four
+  whose domain fits, and `Subscribe` answers it. `awaitable` is Phase 5's.
+
+  **The payload is one type, and tuples carry arity above one.** A multi-parameter Verse function
+  satisfies a one-tuple-parameter callback, because a function's parameter *is* its tuple, so
+  `OnStruck(Damage:int, By:string)` subscribes to a `godot_signal(tuple(int, string))` and Godot
+  still sees two arguments. What Godot is told, per `docs/phase-4-design.md` §6.2:
+
+  | payload | Godot arguments |
+  | --- | --- |
+  | `tuple()` | none |
+  | a bare type | one, named for the type — `Int`, `Float`, `Text` |
+  | `tuple(a, b)` | two, `Arg0` and `Arg1` |
+
+  Verse tuples cannot name their elements (`tuple(Damage:int, ...)` is "Expected a type, got data
+  definition instead"), which is why the names are positional. The design's fourth row — a **struct**
+  payload mapping to one named argument per top-level field, which is how the connect dialog and
+  `_make_function` would get real names — is **not implemented**: a struct payload crosses as one
+  argument. It is the nicety in that table rather than its substance, and it is the first thing to
+  add when the editor flow is taken up.
+
+  Signals **inherit**: a script class deriving from another has that class's signals, and both the
+  list and the construction-time binding walk the whole chain. Phase 2 shipped exactly this bug once
+  already, for `@export` on a base script class.
+- **R-SIG-2 (MUST)** A script emits a declared signal with arguments. Status: **done** (Phase 4
+  stage 4). `Hit.Signal(())`, `Struck.Signal((9, "spike"))`.
+
+  **Emission is immediate, and that is a stated exception.** Every other void mutation in the mirror
+  defers to `AutoRTFM::OnCommit`, which is what makes `<transacts>` literally true for 6813 methods.
+  Emission does not: handlers run synchronously, as they do in GDScript, so "emit, then read what the
+  handler changed" behaves the way a Godot author expects and a Verse emission is indistinguishable
+  from a GDScript one. The cost is stated rather than hidden — if the emitting transaction later
+  aborts, the handlers have already run. It joins the container write as the second member of the
+  set **Phase 4.5** audits.
+
+  Underneath, a `godot_signal(t)` member is bound at construction: the host walks the class's data
+  members for the ones whose declared type reaches the native `vh_signal`, mints an id per member
+  per instance, and writes it into the member's own object exactly where `Handle` is written. The
+  payload's decomposition is read off the *instantiation* — the declared type comes back as the
+  generic `godot_signal(t)`, and the type argument is on it as a substitution table.
 - **R-SIG-3 (MUST)** A script connects to any signal on any object, with a Verse function or
-  closure as the target, and disconnects.
+  closure as the target, and disconnects. Status: **done** for a Verse function bound to a script
+  instance, which is the only shape 4a accepts (R-TYPE-3 says why, and OQ-16 carries the rest).
+
+  `Hit.Subscribe(OnHit)` answers a `cancelable`, and `Cancel()` disconnects and is **idempotent**,
+  as `event_subscription::Cancel` is in UEFN. Subscription goes **through Godot**, not through a
+  list on the Verse side: it costs a Callable per subscription and it is the only arrangement in
+  which a signal emitted from GDScript reaches a Verse subscriber, which R-SIG-6 requires. Two
+  subscriptions of one handler are two connections with two independent cancels, because equality
+  is by reference. `Subscribe` takes no flags in 4a; one-shot belongs with `Await` in Phase 5.
+
+  **`Subscribe` is compensated**, where emission is immediate and every other mutation defers. It
+  mutates Godot *and* returns a value, so it can be neither queued for commit nor ignored, and the
+  native registers `Verse::Stm::OnRollback` to disconnect — without it a failed transaction leaves
+  a live connection the script believes it never made. Epic's own event does the same in reverse.
+  This is the host's first rollback compensation and the shape to copy for anything later that
+  mutates Godot and cannot defer.
 - **R-SIG-4 (MUST)** A connection made in the editor to a Verse script's method works — including
   the editor's "connect and create the function for me" flow, which is what `_make_function` is
   for. Status: **part**, and the part that works is the load-bearing one. The Dodge the Creeps port
@@ -370,7 +445,13 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
 - **R-SIG-5 (MUST)** A script `await`s a signal from a concurrent context: the Verse spelling of
   GDScript's `await button.pressed`. Depends on §7.
 - **R-SIG-6 (MUST)** Signals declared in Verse are connectable and emittable from GDScript and C#
-  with no knowledge that Verse is involved (§8).
+  with no knowledge that Verse is involved (§8). Status: **done for GDScript** (Phase 4 stage 4).
+  `Object::connect` validates against `has_script_signal` and `emit_signalp` refuses a name neither
+  ClassDB nor the script knows, so answering `_has_script_signal` and `_get_script_signal_list` is
+  the whole of it: GDScript connects to `Hit` by name and receives it when the Verse script emits.
+  The reverse direction works too, through the same Callable: a Verse handler runs when a GDScript
+  object emits. **C# has never been run** — that is OQ-17, which this requirement is one of the
+  four that assert it.
 
 ### 5.4 The inspector and the editor's data model
 

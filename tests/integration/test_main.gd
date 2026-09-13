@@ -10,6 +10,23 @@ extends SceneTree
 var _passed := 0
 var _failed := 0
 var _thread_answer: Variant = null
+var _signal_hits := 0
+var _signal_points := 0
+var _signal_by := ""
+
+
+func _on_verse_hit() -> void:
+	_signal_hits += 1
+
+
+func _on_verse_scored(points: int) -> void:
+	_signal_points = points
+
+
+func _on_verse_struck(damage: int, by: String) -> void:
+	_signal_points = damage
+	_signal_by = by
+
 
 
 # Runs on a WorkerThreadPool thread. `call` on a Verse-scripted node from here must come back
@@ -427,6 +444,92 @@ func _init() -> void:
 		_check("and reports itself a tool script", tool_script.is_tool())
 	var plain_script: Script = load("res://scripts/marshal.verse")
 	_check("while an unmarked one does not", plain_script != null and not plain_script.is_tool())
+
+	# --- R-SIG-1/2/3/4: signals a script declares -----------------------------------------------
+	#
+	# There is no @signal attribute: the member's type is the declaration and its name is the
+	# signal's name. Godot learns both through _get_script_signal_list, which is read out of the
+	# last analysis rather than the running program -- so a signal added in the editor shows up
+	# without a build, the same bargain the export list makes.
+	var sig_script: Script = load("res://scripts/signals.verse")
+	_check("signals.verse compiles", sig_script != null and sig_script.can_instantiate())
+	if sig_script != null:
+		var emitter_node := Node2D.new()
+		emitter_node.set_script(sig_script)
+		root.add_child(emitter_node)
+
+		var by_name := {}
+		for entry in emitter_node.get_signal_list():
+			by_name[String(entry["name"])] = entry
+		_check("a Verse-declared signal appears in get_signal_list", by_name.has("Hit"))
+		_check("and so do the ones with payloads",
+				by_name.has("Scored") and by_name.has("Struck"))
+		if by_name.has("Hit"):
+			_check_eq("a tuple() payload is a signal with no arguments",
+					(by_name["Hit"]["args"] as Array).size(), 0)
+		if by_name.has("Scored"):
+			var scored_args: Array = by_name["Scored"]["args"]
+			_check_eq("a bare payload is one argument", scored_args.size(), 1)
+			if scored_args.size() == 1:
+				_check_eq("named for its type, because Verse tuples cannot name their elements",
+						String(scored_args[0]["name"]), "Int")
+				_check_eq("and typed", int(scored_args[0]["type"]), TYPE_INT)
+		if by_name.has("Struck"):
+			var struck_args: Array = by_name["Struck"]["args"]
+			_check_eq("a tuple payload is one argument per element", struck_args.size(), 2)
+			if struck_args.size() == 2:
+				_check_eq("positionally named", String(struck_args[0]["name"]), "Arg0")
+				_check_eq("and typed element by element", int(struck_args[1]["type"]), TYPE_STRING)
+
+		_check("Object.has_signal sees it", emitter_node.has_signal("Hit"))
+
+		# GDScript connects, Verse emits.
+		_signal_hits = 0
+		_signal_points = 0
+		_signal_by = ""
+		emitter_node.connect("Hit", _on_verse_hit)
+		emitter_node.connect("Scored", _on_verse_scored)
+		emitter_node.connect("Struck", _on_verse_struck)
+		emitter_node.call("EmitHit")
+		_check_eq("GDScript receives a signal a Verse script emitted", _signal_hits, 1)
+		emitter_node.call("EmitScored", 5)
+		_check_eq("with its payload", _signal_points, 5)
+		emitter_node.call("EmitStruck", 9, "spike")
+		_check_eq("and a tuple payload arrives as positional arguments",
+				[_signal_points, _signal_by], [9, "spike"])
+
+		# Verse subscribes to a signal GDScript emits (R-SIG-6), through the same Callable.
+		var gd_emitter := Object.new()
+		gd_emitter.add_user_signal("Tally", [{"name": "points", "type": TYPE_INT}])
+		emitter_node.call("ResetSeen")
+		emitter_node.call("ConnectTo", gd_emitter, "Tally")
+		gd_emitter.emit_signal("Tally", 4)
+		_check_eq("a Verse handler runs when a GDScript object emits",
+				emitter_node.call("ReadSeen"), 4)
+		gd_emitter.free()
+
+		# Two subscriptions of one handler are two connections, each with its own cancel.
+		emitter_node.call("ResetSeen")
+		emitter_node.call("SubscribeTwice")
+		emitter_node.call("EmitScored", 1)
+		_check_eq("subscribing twice connects twice", emitter_node.call("ReadSeen"), 2)
+		emitter_node.call("CancelFirst")
+		emitter_node.call("ResetSeen")
+		emitter_node.call("EmitScored", 1)
+		_check_eq("cancelling one leaves the other alive", emitter_node.call("ReadSeen"), 1)
+		emitter_node.call("CancelFirstAgain")
+		_check("cancelling twice is not an error", true)
+
+		# A freed subscriber stops delivery, and emitting again is not an error: get_object() is
+		# the node, so Godot drops the connection itself.
+		var subscriber := Node2D.new()
+		subscriber.set_script(sig_script)
+		root.add_child(subscriber)
+		emitter_node.connect("Scored", Callable(subscriber, "OnScored"))
+		root.remove_child(subscriber)
+		subscriber.free()
+		emitter_node.call("EmitScored", 1)
+		_check("emitting after the subscriber was freed is not an error", true)
 
 	# --- R-ASYNC-8: a call from another thread is refused rather than served --------------------
 	#

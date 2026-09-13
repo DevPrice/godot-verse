@@ -20,6 +20,7 @@
 #include "ULangUEUtils.h"
 #include "VerseComputationLimitControl.h"
 #include "VerseContentScope.h"
+#include "VerseStm.h"
 #include "VerseString.h"
 #include "VerseTask.h"
 #include "UObject/StrongObjectPtr.h"
@@ -2282,6 +2283,35 @@ struct FCallbackTarget
 TMap<int64, FCallbackTarget> GCallbacks;
 int64 GNextCallbackId = 1;
 
+/// One `godot_signal` member of one live instance: everything the member's *type* and *name* said,
+/// resolved once at construction so neither has to be spelled again.
+struct FSignalBinding
+{
+    int64 OwnerHandle = 0;
+    FUtf8String Name;
+    /// What the payload decomposes into. Empty for a `tuple()` payload; one entry for a bare type;
+    /// N for `tuple(a, b, ...)`. The same list the signal descriptor reports to Godot, so the
+    /// arguments a handler is generated for and the arguments an emission carries cannot disagree.
+    TArray<FMemberType> ArgTypes;
+    bool bPayloadIsTuple = false;
+};
+
+TMap<int64, FSignalBinding> GSignalBindings;
+int64 GNextSignalId = 1;
+
+/// One live connection, which is what a `godot_subscription` names.
+struct FSubscription
+{
+    int64 OwnerHandle = 0;
+    FUtf8String Name;
+    /// The reference id of the Callable Godot holds. Released when the subscription is cancelled,
+    /// which is also what drops the host's claim on the callback behind it.
+    int64 CallableRef = 0;
+};
+
+TMap<int64, FSubscription> GSubscriptions;
+int64 GNextSubscriptionId = 1;
+
 /// The mirrored Verse class name for a Godot class name, out of the generated table.
 ///
 /// Every Godot class is in that table, not only the emitted ones: with --classes-file a subset is
@@ -3189,6 +3219,394 @@ AUTORTFM_DISABLE bool GodotVerse::GetClassExports(FUtf8StringView ClassName, TAr
         OutExports.Add(MoveTemp(Desc));
     }
     return true;
+}
+
+namespace {
+
+/// Whether a declared type is a `godot_signal(...)`: a class whose chain reaches the native
+/// `vh_signal`, which is the one thing every signal type has in common and the one thing a script
+/// cannot accidentally be.
+AUTORTFM_DISABLE bool IsSignalClass(const uLang::CClass& Declared)
+{
+    for (const uLang::CClass* Cursor = &Declared; Cursor != nullptr; Cursor = Cursor->GetSuperClass())
+    {
+        if (FUtf8StringView(Cursor->AsNameCString()).Equals(UTF8TEXT("vh_signal")))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// The payload type of a signal class: the type argument the member's declaration instantiated it
+/// with.
+///
+/// The declared type comes back as the *generic* `godot_signal(t)` -- `AsCode` prints it that way
+/// and its `Signal` method's parameter is still the type variable -- but the instantiation is
+/// recorded on the class as a substitution table, with one entry per polarity. Both carry the same
+/// type for a class this shape, so the first is the answer.
+AUTORTFM_DISABLE const uLang::CTypeBase* SignalPayloadType(const uLang::CClass& Declared)
+{
+    for (const uLang::STypeVariableSubstitution& Substitution : Declared._TypeVariableSubstitutions)
+    {
+        if (Substitution._PositiveType)
+        {
+            return Substitution._PositiveType;
+        }
+    }
+    return nullptr;
+}
+
+/// What a payload becomes on Godot's side (phase-4-design 6.2).
+///
+/// A `tuple()` is no arguments; a tuple of N is N; anything else is one. The mapping is top level
+/// only -- a `vector2` payload is one Vector2 argument, not two floats -- and it is the same list
+/// the signal descriptor reports and an emission fills, so the arguments a generated handler is
+/// written for and the arguments that arrive cannot disagree.
+AUTORTFM_DISABLE void DescribePayload(const uLang::CTypeBase* Payload,
+                                      const uLang::CSemanticProgram& Program,
+                                      TArray<FMemberType>& OutArgs,
+                                      bool& bOutIsTuple)
+{
+    OutArgs.Reset();
+    bOutIsTuple = false;
+    if (!Payload)
+    {
+        return;
+    }
+    bool bIsOption = false;
+    const uLang::CNormalType& Normal = UnwrapDeclaredType(*Payload, bIsOption);
+    if (const uLang::CTupleType* Tuple = Normal.AsNullable<uLang::CTupleType>())
+    {
+        bOutIsTuple = true;
+        for (const uLang::CTypeBase* Element : Tuple->GetElements())
+        {
+            OutArgs.Add(DescribeType(Element, Program));
+        }
+        return;
+    }
+    OutArgs.Add(DescribeType(Payload, Program));
+}
+
+/// The argument name Godot is told, for a payload that carries no names of its own.
+///
+/// Verse tuples cannot name their elements -- `tuple(Damage:int, ...)` is "Expected a type, got
+/// data definition instead" -- so a tuple payload gets positional names and a bare one is named
+/// for its type, which is what the connect dialog and `_make_function` then write.
+AUTORTFM_DISABLE FUtf8String SignalArgName(const FMemberType& Arg, int32 Index, bool bIsTuple)
+{
+    if (bIsTuple)
+    {
+        return FUtf8String(UTF8TEXT("Arg")) + FUtf8String::FromInt(Index);
+    }
+    switch (Arg.Described.Type)
+    {
+    case VH_TYPE_LOGIC:  return FUtf8String(UTF8TEXT("Logic"));
+    case VH_TYPE_INT:    return FUtf8String(UTF8TEXT("Int"));
+    case VH_TYPE_FLOAT:  return FUtf8String(UTF8TEXT("Float"));
+    case VH_TYPE_STRING: return FUtf8String(UTF8TEXT("Text"));
+    case VH_TYPE_ARRAY:  return FUtf8String(UTF8TEXT("Items"));
+    case VH_TYPE_REF:    return FUtf8String(UTF8TEXT("Ref"));
+    default:             return FUtf8String(UTF8TEXT("Value"));
+    }
+}
+
+/// The UObject a class-typed member holds, or null.
+///
+/// The read half of WriteFieldOf, narrowed to the one case signal binding needs: a `godot_signal`
+/// member's own object, so the host can write the id into it.
+AUTORTFM_DISABLE UObject* PeekFieldObject(UObject* Object, FUtf8StringView FieldName)
+{
+    if (!Object)
+    {
+        return nullptr;
+    }
+    UObject* Found = nullptr;
+    Verse::FRunningContext Context = Verse::FRunningContextPromise{};
+    EnterVerse(Context, [&] {
+        FUtf8String DeclaringClass;
+        const Verse::VShape::VEntry* Field = FindShapeField(Context, Object, FieldName, DeclaringClass);
+        if (Field == nullptr)
+        {
+            return;
+        }
+        Verse::VValue Value = Field->Type == Verse::EFieldType::FPropertyVar
+            ? Verse::VNativeRef::Peek(Context, Object, Field->UProperty)
+            : UVerseClass::PeekField(Context, Object, Field);
+        if (Verse::VRef* Ref = Value.DynamicCast<Verse::VRef>())
+        {
+            Value = Ref->Get(Context);
+        }
+        Found = Value.ExtractUObject();
+    });
+    return Found;
+}
+
+} // namespace
+
+AUTORTFM_DISABLE bool GodotVerse::GetClassSignals(FUtf8StringView ClassName, TArray<FSignalDesc>& OutSignals)
+{
+    OutSignals.Reset();
+
+    if (!GIde.IsValid())
+    {
+        return false;
+    }
+    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
+    if (!BuildManager.IsValid())
+    {
+        return false;
+    }
+    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
+
+    const FUtf8String ClassPath = FUtf8String(ScriptVersePath) + UTF8TEXT("/") + FUtf8String(ClassName);
+    const uLang::CClass* Class = Program->FindDefinitionByVersePath<uLang::CClass>(
+        FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath));
+    if (!Class)
+    {
+        return false;
+    }
+
+    // Base first, and the whole chain: **signals inherit**. Phase 2 shipped exactly this bug once
+    // already, for @export on a base script class, in two places that had been correct right up
+    // until a script could derive from a script.
+    TArray<const uLang::CClass*> Chain;
+    for (const uLang::CClass* Cursor = Class;
+         Cursor != nullptr && ClassOriginOf(*Cursor, *Program) == EClassOrigin::Script;
+         Cursor = Cursor->GetSuperClass())
+    {
+        Chain.Insert(Cursor, 0);
+    }
+
+    for (const uLang::CClass* Link : Chain)
+    {
+        for (const uLang::TSRef<uLang::CDataDefinition>& Member : Link->GetDefinitionsOfKind<uLang::CDataDefinition>())
+        {
+            bool bIsOption = false;
+            const uLang::CTypeBase* const MemberType = Member->GetType();
+            const uLang::CNormalType* const Normal = MemberType ? &UnwrapDeclaredType(*MemberType, bIsOption) : nullptr;
+            const uLang::CClass* const Declared = Normal ? Normal->AsNullable<uLang::CClass>() : nullptr;
+            if (!Declared || !IsSignalClass(*Declared))
+            {
+                continue;
+            }
+
+            FSignalDesc Desc;
+            Desc.Name = FUtf8String(Member->AsNameCString());
+
+            TArray<FMemberType> ArgTypes;
+            bool bIsTuple = false;
+            DescribePayload(SignalPayloadType(*Declared), *Program, ArgTypes, bIsTuple);
+            for (int32 Index = 0; Index < ArgTypes.Num(); ++Index)
+            {
+                FParamDesc Arg;
+                Arg.Name = SignalArgName(ArgTypes[Index], Index, bIsTuple);
+                Arg.Type = ArgTypes[Index].Described.Type;
+                Arg.VariantTag = ArgTypes[Index].Described.VariantTag;
+                Desc.Args.Add(MoveTemp(Arg));
+            }
+
+            FUtf8String DeclaredIn;
+            FillLocation(*Member, DeclaredIn, Desc.Line, Desc.Column);
+            OutSignals.Add(MoveTemp(Desc));
+        }
+    }
+    return true;
+}
+
+namespace {
+
+/// Mints the binding rows for every `godot_signal` member of a fresh instance, and writes each id
+/// into the member's own object.
+///
+/// This is where a signal stops being a declaration and becomes a thing that can be emitted: the
+/// member's *type* said what the payload is and its *name* is the signal's name, and both are
+/// resolved here once rather than at every emission. S-A is the spike that says the write survives
+/// -- two production paths already fill a class-typed member at construction.
+AUTORTFM_DISABLE void BindSignals(UObject* Instance, FUtf8StringView ClassName, int64 Handle)
+{
+    TArray<GodotVerse::FSignalDesc> Signals;
+    if (!GodotVerse::GetClassSignals(ClassName, Signals) || Signals.IsEmpty())
+    {
+        return;
+    }
+
+    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde.IsValid() ? GIde->GetBuildManager() : nullptr;
+    if (!BuildManager.IsValid())
+    {
+        return;
+    }
+    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
+
+    for (const GodotVerse::FSignalDesc& Signal : Signals)
+    {
+        verse::vh_signal* const Shadow = Cast<verse::vh_signal>(PeekFieldObject(Instance, FUtf8StringView(Signal.Name)));
+        if (!Shadow)
+        {
+            // A declared signal whose member holds nothing. Saying so beats emitting into the void
+            // later, which is what an unbound id does.
+            GodotVerse::ReportError(FUtf8String(UTF8TEXT("The signal `")) + Signal.Name
+                + UTF8TEXT("` on ") + FUtf8String(ClassName)
+                + UTF8TEXT(" could not be bound: its member holds no signal object."));
+            continue;
+        }
+
+        const FMemberType Declared = DescribeMemberType(ClassName, FUtf8StringView(Signal.Name));
+        FSignalBinding Binding;
+        Binding.OwnerHandle = Handle;
+        Binding.Name = Signal.Name;
+        if (Declared.ReferenceClass)
+        {
+            DescribePayload(SignalPayloadType(*Declared.ReferenceClass), *Program,
+                            Binding.ArgTypes, Binding.bPayloadIsTuple);
+        }
+
+        const int64 Id = GNextSignalId++;
+        GSignalBindings.Add(Id, MoveTemp(Binding));
+        Shadow->Id.Init(Id, Shadow);
+    }
+}
+
+} // namespace
+
+AUTORTFM_DISABLE void GodotVerse::EmitSignal(int64 SignalId, const FVerseValue& Payload)
+{
+    const FSignalBinding* const Binding = GSignalBindings.Find(SignalId);
+    if (!Binding)
+    {
+        ReportError(UTF8TEXT("A signal was emitted through an unbound `godot_signal`. One a script "
+                             "built for itself rather than declared as a member of a class Godot "
+                             "instantiated names nothing, the way `godot_array{}` does."));
+        return;
+    }
+
+    FHostState& Host = GetHost();
+    if (!Host.Godot.EmitSignal)
+    {
+        return;
+    }
+
+    // One storage per argument: FFieldStorage carries a single Text, so two string arguments
+    // sharing one would clobber each other.
+    const int32 Count = Binding->ArgTypes.Num();
+    TArray<FFieldStorage> Storages;
+    Storages.SetNum(Count);
+    TArray<vh_value> Args;
+    Args.SetNum(Count);
+
+    bool bConverted = true;
+    Verse::FRunningContext Context = Verse::FRunningContextPromise{};
+    EnterVerse(Context, [&] {
+        const Verse::VValue Value = Payload.GetValue();
+        const Verse::VArrayBase* const Tuple = Binding->bPayloadIsTuple
+            ? Value.DynamicCast<Verse::VArrayBase>()
+            : nullptr;
+        for (int32 Index = 0; Index < Count; ++Index)
+        {
+            // A Verse tuple is an array at runtime, and its elements are the arguments Godot sees.
+            const Verse::VValue Element = Binding->bPayloadIsTuple
+                ? (Tuple && Index < (int32)Tuple->Num() ? Tuple->GetValue((uint32)Index) : Verse::VValue())
+                : Value;
+            if (!ValueToWire(Context, Element, Binding->ArgTypes[Index], Storages[Index], Args[Index]))
+            {
+                bConverted = false;
+                return;
+            }
+        }
+    });
+
+    if (!bConverted)
+    {
+        ReportError(FUtf8String(UTF8TEXT("The payload of signal `")) + Binding->Name
+            + UTF8TEXT("` has no representation on the Godot wire, so nothing was emitted."));
+        return;
+    }
+
+    Host.Godot.EmitSignal(Host.Godot.Ctx,
+                          Binding->OwnerHandle,
+                          reinterpret_cast<const char*>(*Binding->Name),
+                          Binding->Name.Len(),
+                          Args.GetData(),
+                          Args.Num());
+}
+
+AUTORTFM_DISABLE int64 GodotVerse::SubscribeSignal(int64 SignalId, const FVerseValue& Callback)
+{
+    const FSignalBinding* const Binding = GSignalBindings.Find(SignalId);
+    if (!Binding)
+    {
+        ReportError(UTF8TEXT("Subscribe was called on an unbound `godot_signal`, which names nothing."));
+        return 0;
+    }
+
+    FHostState& Host = GetHost();
+    if (!Host.Godot.ConnectSignal || !Host.Godot.ReleaseRef)
+    {
+        return 0;
+    }
+
+    const int64 CallableRef = MakeCallableFor(Callback);
+    if (CallableRef == 0)
+    {
+        return 0;
+    }
+
+    vh_value Target{};
+    Target.Type = VH_TYPE_REF;
+    Target.VariantTag = VH_VARIANT_CALLABLE;
+    Target.Ref = CallableRef;
+
+    const int64 OwnerHandle = Binding->OwnerHandle;
+    const FUtf8String Name = Binding->Name;
+    const int32 Status = Host.Godot.ConnectSignal(
+        Host.Godot.Ctx, OwnerHandle, reinterpret_cast<const char*>(*Name), Name.Len(), &Target, 0);
+    if (Status != VH_CALL_OK)
+    {
+        Host.Godot.ReleaseRef(Host.Godot.Ctx, CallableRef);
+        return 0;
+    }
+
+    const int64 Id = GNextSubscriptionId++;
+    GSubscriptions.Add(Id, FSubscription{OwnerHandle, Name, CallableRef});
+
+    // Compensated rather than deferred. This mutates Godot *and* returns a value, so it can be
+    // neither queued for commit nor ignored -- and without the compensation a failed transaction
+    // leaves a live connection the script believes it never made. Epic's own event does the same in
+    // reverse: its unsubscribe re-subscribes on rollback. The host's first rollback compensation,
+    // and the shape to copy for anything later that mutates Godot and cannot defer.
+    Verse::Stm::OnRollback([Id] { GodotVerse::CancelSubscription(Id); });
+    return Id;
+}
+
+AUTORTFM_DISABLE void GodotVerse::CancelSubscription(int64 SubscriptionId)
+{
+    const FSubscription* const Found = GSubscriptions.Find(SubscriptionId);
+    if (!Found)
+    {
+        // Idempotent, as event_subscription::Cancel is in UEFN: a second Cancel does nothing and
+        // says nothing.
+        return;
+    }
+    const FSubscription Subscription = *Found;
+    GSubscriptions.Remove(SubscriptionId);
+
+    FHostState& Host = GetHost();
+    if (Host.Godot.DisconnectSignal)
+    {
+        vh_value Target{};
+        Target.Type = VH_TYPE_REF;
+        Target.VariantTag = VH_VARIANT_CALLABLE;
+        Target.Ref = Subscription.CallableRef;
+        Host.Godot.DisconnectSignal(Host.Godot.Ctx,
+                                    Subscription.OwnerHandle,
+                                    reinterpret_cast<const char*>(*Subscription.Name),
+                                    Subscription.Name.Len(),
+                                    &Target);
+    }
+    if (Host.Godot.ReleaseRef)
+    {
+        Host.Godot.ReleaseRef(Host.Godot.Ctx, Subscription.CallableRef);
+    }
 }
 
 namespace {
@@ -4124,6 +4542,9 @@ AUTORTFM_DISABLE GodotVerse::FInstance* GodotVerse::Instantiate(FUtf8StringView 
 
     verse::vh_object* Shadow = CastChecked<verse::vh_object>(Instance);
     Shadow->Handle.Init(Handle, Shadow);
+
+    // Before the instance is handed back, so a Ready() that emits already has a bound signal.
+    BindSignals(Instance, ClassName, Handle);
 
     FInstance* Made = new FInstance{TStrongObjectPtr<UObject>(Instance), Handle};
     GInstancesByHandle.Add(Handle, Made);

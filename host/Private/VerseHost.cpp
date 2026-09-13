@@ -591,6 +591,73 @@ extern "C" int32_t vh_class_method_list(const char* ClassNameUtf8, const vh_meth
     return VH_OK;
 }
 
+extern "C" int32_t vh_class_signal_list(const char* ClassNameUtf8, const vh_signal_desc** OutSignals, int32_t* OutCount)
+{
+    GodotVerse::WaitForBackgroundCheck();
+    if (!ClassNameUtf8 || !OutSignals || !OutCount)
+    {
+        return VH_ERR_ABI;
+    }
+    *OutSignals = nullptr;
+    *OutCount = 0;
+
+    if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+
+    // Static and rebuilt per call, the same discipline vh_class_method_list follows: the
+    // descriptors point into the FSignalDesc strings, so the two have to live exactly as long as
+    // each other, and the header promises only until the next call.
+    static TArray<GodotVerse::FSignalDesc> Signals;
+    static TArray<vh_param_desc> Args;
+    static TArray<vh_signal_desc> Descs;
+    if (!GodotVerse::GetClassSignals(Cstr(ClassNameUtf8), Signals))
+    {
+        return VH_ERR_NOT_FOUND;
+    }
+
+    // Filled and sized before the descriptors, because a descriptor holds a bare pointer into it.
+    int32 TotalArgs = 0;
+    for (const GodotVerse::FSignalDesc& Signal : Signals)
+    {
+        TotalArgs += Signal.Args.Num();
+    }
+    Args.Reset();
+    Args.Reserve(TotalArgs);
+    for (const GodotVerse::FSignalDesc& Signal : Signals)
+    {
+        for (const GodotVerse::FParamDesc& Arg : Signal.Args)
+        {
+            vh_param_desc& Out = Args.AddDefaulted_GetRef();
+            Out.NameUtf8 = reinterpret_cast<const char*>(*Arg.Name);
+            Out.NameLen = Arg.Name.Len();
+            Out.Type = Arg.Type;
+            Out.VariantTag = Arg.VariantTag;
+            Out.HasDefault = 0;
+        }
+    }
+
+    Descs.Reset();
+    Descs.Reserve(Signals.Num());
+    int32 ArgCursor = 0;
+    for (const GodotVerse::FSignalDesc& Signal : Signals)
+    {
+        vh_signal_desc& Out = Descs.AddDefaulted_GetRef();
+        Out.NameUtf8 = reinterpret_cast<const char*>(*Signal.Name);
+        Out.NameLen = Signal.Name.Len();
+        Out.Args = Signal.Args.Num() > 0 ? Args.GetData() + ArgCursor : nullptr;
+        Out.ArgCount = Signal.Args.Num();
+        Out.Line = Signal.Line;
+        Out.Column = Signal.Column;
+        ArgCursor += Signal.Args.Num();
+    }
+
+    *OutSignals = Descs.GetData();
+    *OutCount = Descs.Num();
+    return VH_OK;
+}
+
 extern "C" int32_t vh_class_export_list(const char* ClassNameUtf8, const vh_export_desc** OutExports, int32_t* OutCount)
 {
     GodotVerse::WaitForBackgroundCheck();

@@ -107,6 +107,7 @@ AUTORTFM_DISABLE int32 InvokeCallback(int64 CallbackId,
 
 AUTORTFM_DISABLE void ReleaseCallback(int64 CallbackId);
 
+
 AUTORTFM_DISABLE bool InstanceHasFunction(const FInstance* Instance, FUtf8StringView DecoratedName);
 
 /// One parameter of a script method, described from its declared type.
@@ -118,6 +119,37 @@ struct FParamDesc
     /// A `?Named:t = default` parameter, which a caller may omit.
     bool bHasDefault{false};
 };
+
+/// One signal a script's class declares (R-SIG-1), as Godot's signal list wants it.
+struct FSignalDesc
+{
+    /// The Verse spelling, verbatim -- `Hit`, `MobSpawned`. This is what Godot sees, following C#
+    /// (which registers `Hit`, not `hit`) and what a Verse method already does in every scene
+    /// connection.
+    FUtf8String Name;
+    /// One per Godot argument. A `tuple()` payload has none; a tuple of N has N; anything else has
+    /// one.
+    TArray<FParamDesc> Args;
+    int32 Line{0};
+    int32 Column{0};
+};
+
+/// The signals ClassName declares, its base script classes' included (R-SIG-6.6: signals inherit,
+/// and Phase 2 shipped that bug once already for @export). Read out of the semantic program, so it
+/// refreshes per keystroke the way the method and export lists do.
+AUTORTFM_DISABLE bool GetClassSignals(FUtf8StringView ClassName, TArray<FSignalDesc>& OutSignals);
+
+/// Emits the signal a binding id names, now. See the Verse declaration for why "now".
+AUTORTFM_DISABLE void EmitSignal(int64 SignalId, const FVerseValue& Payload);
+
+/// Connects Callback and answers a subscription id, or 0. Registers an Stm::OnRollback that
+/// disconnects: this mutates Godot *and* returns a value, so it can be neither deferred to commit
+/// nor ignored, and a rolled-back transaction must not leave a connection the script believes it
+/// never made.
+AUTORTFM_DISABLE int64 SubscribeSignal(int64 SignalId, const FVerseValue& Callback);
+
+/// Disconnects. Idempotent, as event_subscription::Cancel is in UEFN.
+AUTORTFM_DISABLE void CancelSubscription(int64 SubscriptionId);
 
 /// One method a script's class declares.
 struct FMethodDesc

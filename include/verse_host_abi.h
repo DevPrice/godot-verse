@@ -595,6 +595,44 @@ typedef struct vh_method_desc
 	int32_t Column;
 } vh_method_desc;
 
+/* One signal a script's class declares (R-SIG-1).
+ *
+ * There is no `@signal` attribute: the member's *type* is the declaration -- `Hit:godot_signal(t)`
+ * -- and the host reads declared types out of the semantic program already. A bridge attribute
+ * exists where the text is the only source, which is why `@global_class` needs one and this does
+ * not.
+ *
+ * The name is the **Verse spelling verbatim** -- `Hit`, `MobSpawned` -- following C# (which
+ * registers `Hit`, not `hit`) and following what a Verse method already does in every scene
+ * connection this repository carries. */
+typedef struct vh_signal_desc
+{
+	const char* NameUtf8;
+	int32_t NameLen;
+
+	/* One per Godot argument. A `tuple()` payload has none; `tuple(int, string)` has two, named
+	 * `Arg0` and `Arg1` because Verse tuples cannot name their elements; anything else has one,
+	 * named for its type. Mapping is top level only -- a `vector2` payload is one Vector2
+	 * argument, not two floats. */
+	const vh_param_desc* Args;
+	int32_t ArgCount;
+
+	/* Where the member is declared: zero-based row, utf8 byte column. */
+	int32_t Line;
+	int32_t Column;
+} vh_signal_desc;
+
+/* Every signal ClassNameUtf8 declares, its base script classes' included -- signals inherit.
+ *
+ * Read out of the semantic program the last analysis left behind, like vh_class_method_list and
+ * vh_class_export_list, so it refreshes per keystroke rather than per build. A signal declared in
+ * a script that has never been built appears after the next Build, which is the same bargain an
+ * `@export` *default* already makes.
+ *
+ * The descriptors are the host's and live until the next call to this function.
+ * Returns VH_ERR_NOT_FOUND when the class does not exist in the analysed program. */
+VH_ATTR VH_API int32_t vh_class_signal_list(const char* ClassNameUtf8, const vh_signal_desc** OutSignals, int32_t* OutCount);
+
 /* Every method ClassNameUtf8 declares, including the ones that override a Godot virtual.
  *
  * Read out of the semantic program the last analysis left behind, like vh_class_export_list and
@@ -1147,6 +1185,7 @@ typedef vh_bool (*vh_has_class_fn)(const char*);
 typedef int32_t (*vh_instantiate_fn)(const char*, vh_handle, vh_instance**);
 typedef void (*vh_release_instance_fn)(vh_instance*);
 typedef int32_t (*vh_class_method_list_fn)(const char*, const vh_method_desc**, int32_t*);
+typedef int32_t (*vh_class_signal_list_fn)(const char*, const vh_signal_desc**, int32_t*);
 typedef vh_bool (*vh_instance_has_function_fn)(vh_instance*, const char*);
 typedef int32_t (*vh_instance_call_fn)(vh_instance*, const char*, const vh_value*, int32_t, vh_arena*, vh_value*);
 typedef int32_t (*vh_callback_invoke_fn)(int64_t, const vh_value*, int32_t, vh_arena*, vh_value*);

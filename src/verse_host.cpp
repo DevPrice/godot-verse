@@ -44,6 +44,7 @@ void VerseHostLibrary::clear_function_pointers() {
 	CallbackInvoke = nullptr;
 	CallbackRelease = nullptr;
 	ClassMethodList = nullptr;
+	ClassSignalList = nullptr;
 	ClassExportList = nullptr;
 	InstanceGetField = nullptr;
 	ClassDefaultField = nullptr;
@@ -89,6 +90,7 @@ bool VerseHostLibrary::load(const String &p_dll_path, String &r_error) {
 	ok = ok && resolve(handle, "vh_callback_invoke", CallbackInvoke, r_error);
 	ok = ok && resolve(handle, "vh_callback_release", CallbackRelease, r_error);
 	ok = ok && resolve(handle, "vh_class_method_list", ClassMethodList, r_error);
+	ok = ok && resolve(handle, "vh_class_signal_list", ClassSignalList, r_error);
 	ok = ok && resolve(handle, "vh_class_export_list", ClassExportList, r_error);
 	ok = ok && resolve(handle, "vh_instance_get_field", InstanceGetField, r_error);
 	ok = ok && resolve(handle, "vh_class_default_field", ClassDefaultField, r_error);

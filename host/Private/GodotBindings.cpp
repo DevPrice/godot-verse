@@ -600,6 +600,25 @@ int64 VhCallableFrom(FVerseValue const& Callback)
     return AutoRTFM::Open([&] { return GodotVerse::MakeCallableFor(Callback); });
 }
 
+// --- signals ------------------------------------------------------------------------------
+
+void VhSignalEmit(int64 Id, FVerseValue const& Payload)
+{
+    // Immediate, and the comment on the Verse declaration says why. Open for the usual reason:
+    // decomposing the payload reads the semantic program and the emission calls into Godot.
+    AutoRTFM::Open([&] { GodotVerse::EmitSignal(Id, Payload); });
+}
+
+int64 VhSignalSubscribe(int64 Id, FVerseValue const& Callback)
+{
+    return AutoRTFM::Open([&] { return GodotVerse::SubscribeSignal(Id, Callback); });
+}
+
+void VhSignalCancel(int64 Subscription)
+{
+    AutoRTFM::Open([&] { GodotVerse::CancelSubscription(Subscription); });
+}
+
 void VhTypeMismatch(verse::string const& Expected, FGodotValue const& Value)
 {
     const FUtf8String Name(ToView(Expected));

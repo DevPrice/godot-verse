@@ -6,6 +6,7 @@
 
 #include "Godot.vh_object.gen.ipp"
 #include "Godot.godot_ref.gen.ipp"
+#include "Godot.vh_signal.gen.ipp"
 #include "Godot.variant.gen.ipp"
 
 void verse::godot_ref::BeginDestroy()

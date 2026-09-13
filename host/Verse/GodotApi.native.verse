@@ -270,6 +270,44 @@ VhFromFloat32Array(Values:[]float)<transacts>:variant = VhFromFloats(TagPackedFl
 VhFromFloat64Array(Values:[]float)<transacts>:variant = VhFromFloats(TagPackedFloat64Array, Values)
 VhFromStringArray(Values:[]string)<transacts>:variant = VhFromStrings(TagPackedStringArray, Values)
 
+# --- signals -----------------------------------------------------------------
+
+# A signal a script declares, as a typed member (R-SIG-1). The member's *type* is the declaration
+# and its *name* is the signal's name, so there is no second place to spell it and nothing to
+# drift:
+#
+#     player := class(area2d):
+#         Hit<public>:godot_signal(tuple()) = godot_signal(tuple()){}
+#         Struck<public>:godot_signal(tuple(int, string)) = godot_signal(tuple(int, string)){}
+#
+# Shaped like Verse's own `listenable` rather than implementing it, and the difference is not a
+# preference: `signalable.Signal` is `no_rollback`, so it would be uncallable from inside the
+# transaction every Godot callback runs in, and `subscribable.Subscribe` fixes its callback at a
+# no_rollback domain that could not touch Godot. `cancelable` is the one of the four whose domain
+# fits, and Subscribe answers it.
+#
+# The payload is one type, and tuples carry arity above one: a multi-parameter Verse function
+# satisfies a one-tuple-parameter callback, because a Verse function's parameter *is* its tuple. So
+# `OnStruck(Damage:int, By:string)` subscribes to a `godot_signal(tuple(int, string))` and Godot
+# still sees two arguments.
+godot_signal<public>(t:type) := class(vh_signal):
+
+    # Emits, now. See VhSignalEmit for why "now" is the exception it is.
+    Signal<public>(Val:t)<transacts>:void = VhSignalEmit(Id, Val)
+
+    # Connects Callback and answers the thing that disconnects it. Two subscriptions of one handler
+    # are two connections with two independent cancels -- equality is by reference, which is what
+    # Godot's own lambda callables do and what UEFN's event does.
+    Subscribe<public>(Callback(:t)<transacts>:void)<transacts>:cancelable =
+        godot_subscription{Subscription := VhSignalSubscribe(Id, Callback)}
+
+# What Subscribe answers. Verse's own `cancelable` is implementable -- its `Cancel` is
+# `<transacts>` rather than `no_rollback` -- so this is Verse's vocabulary rather than an invention.
+godot_subscription<public> := class(cancelable):
+    Subscription:int = 0
+
+    Cancel<override>()<transacts>:void = VhSignalCancel(Subscription)
+
 # --- typed containers --------------------------------------------------------
 
 # Godot's Array with an element type, which is what `typedarray::Node` means and what
