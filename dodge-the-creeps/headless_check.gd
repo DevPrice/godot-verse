@@ -35,9 +35,13 @@ func _initialize() -> void:
 	player = main.get_node("Player")
 	hud = main.get_node("HUD")
 	check("main.tscn instantiates with a Verse script", main.get_script() != null)
-	check("an export slot typed as another script's class resolves",
-		main.get("Player") == player and main.get("Hud") == hud)
-	check("an export slot typed as a Resource resolves", main.get("MobScene") != null)
+	# The nine node references main used to expose as inspector slots are lookups again: `GetNode`
+	# and a cast (R-SCN-6). What is left as an export is the one thing that should be -- a
+	# PackedScene is a resource the designer chooses, not a child the script can look up.
+	check("the node references are gone from the inspector", main.get("Player") == null)
+	check("an export slot typed as a Resource still resolves", main.get("MobScene") != null)
+	check("a script-declared signal is visible to Godot",
+		player.has_signal("Hit") and hud.has_signal("StartGame"))
 	check("a Verse method is visible to Godot", main.has_method("NewGame"))
 
 func _process(_delta: float) -> bool:
@@ -51,7 +55,9 @@ func _process(_delta: float) -> bool:
 			hud.get_node("StartButton").pressed.emit()
 			check("the button's pressed signal reached the HUD's Verse handler",
 				not hud.get_node("StartButton").visible)
-			check("the same signal reached main's Verse handler, which started the round",
+			# The HUD's own `start_game`, which main subscribed to: `pressed` reaches only the HUD
+			# now, where the port used to wire that one engine signal to two scripts.
+			check("the HUD's own StartGame signal reached main, which started the round",
 				hud.get_node("MessageLabel").text == "Get Ready"
 				and hud.get_node("ScoreLabel").text == "0",
 				hud.get_node("MessageLabel").text)
@@ -84,11 +90,13 @@ func _process(_delta: float) -> bool:
 			check("mobs spawn", get_nodes_in_group("mobs").size() > 0)
 			var mob = get_nodes_in_group("mobs").front()
 			if mob != null:
-				check("Object.set placed the mob on the spawn path",
+				# Typed properties on a cast node, where these were `Object.set` with string
+				# names and a hand-built variant apiece.
+				check("the cast mob was placed on the spawn path",
 					mob.position != Vector2.ZERO, str(mob.position))
-				check("Object.set gave the mob a velocity",
+				check("and given a velocity through its own property",
 					mob.linear_velocity.length() > 100.0, str(mob.linear_velocity))
-				check("Object.set rotated the mob", mob.rotation != 0.0, str(mob.rotation))
+				check("and rotated", mob.rotation != 0.0, str(mob.rotation))
 				check("mob.Ready picked one of the three animations",
 					mob.get_node("AnimatedSprite2D").animation in
 						[StringName("walk"), StringName("swim"), StringName("fly")],
@@ -106,7 +114,9 @@ func _process(_delta: float) -> bool:
 			player.body_entered.emit(get_nodes_in_group("mobs").front())
 		207:
 			check("body_entered reached the player's Verse handler", not player.visible)
-			check("body_entered reached main's Verse handler too, which stopped the round",
+			# main subscribed to the *player's* own `Hit`, rather than the scene wiring one engine
+			# signal to two scripts.
+			check("the player's own Hit signal reached main, which stopped the round",
 				(main.get_node("ScoreTimer") as Timer).is_stopped()
 				and (main.get_node("MobTimer") as Timer).is_stopped())
 			check("the game-over message shows",

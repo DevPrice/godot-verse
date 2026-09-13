@@ -9,13 +9,8 @@ action = &"start_game"
 [sub_resource type="Shortcut" id="4"]
 events = [SubResource("3")]
 
-[node name="HUD" type="CanvasLayer" node_paths=PackedStringArray("ScoreLabel", "MessageLabel", "StartButton", "MessageTimer", "TitleTimer")]
+[node name="HUD" type="CanvasLayer"]
 script = ExtResource("1")
-ScoreLabel = NodePath("ScoreLabel")
-MessageLabel = NodePath("MessageLabel")
-StartButton = NodePath("StartButton")
-MessageTimer = NodePath("MessageTimer")
-TitleTimer = NodePath("TitleTimer")
 
 [node name="ScoreLabel" type="Label" parent="."]
 anchors_preset = 10

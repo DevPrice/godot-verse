@@ -1,61 +1,67 @@
 using { /Godot.org/Godot }
-using { /Verse.org/Random }
 
-# main.gd, ported. Three things in it are where the port is least like the original, and all three
-# are in docs/dodge-the-creeps.md:
-#
-# `$Player` and `$HUD` are `@export`-ed slots typed as the other *scripts'* classes, which is how
-# this file reaches Start, UpdateScore and ShowGameOver at all. Typed as the Godot classes they
-# derive from -- `?area2d`, `?canvas_layer` -- those methods would not be on the type.
+# main.gd, ported. One thing in it is still not like the original, and it is not a missing feature:
 #
 # `get_tree().call_group(&"mobs", &"queue_free")` is a vararg, and a vararg is not mirrored, so the
 # group is walked instead: GetNodesInGroup returns a typed_array(node) whose elements are objects
 # with methods, which is the thing Phase 2 set out to make true.
 #
-# The mob's position, rotation and velocity are set through Object.set with a variant, not as
-# properties. PackedScene.instantiate returns a `node`, and turning that into the rigid_body2d whose
-# LinearVelocity this wants needs `is`/`as` (R-SCN-6), which is specified and not built.
+# Everything else reads as the GDScript does. The nine `$Name` lookups are lookups again rather than
+# inspector slots; the mob is configured through its own typed properties rather than through
+# `Object.set` with string names; and the two signals this file listens for -- the player's `hit`
+# and the HUD's `start_game` -- are the other scripts' own, subscribed to here rather than wired
+# twice in the scene file.
 @global_class
 main := class(node):
 
+	# Still an `@export`, and rightly: a PackedScene is a *resource* the designer chooses, not a
+	# child node the script can look up.
 	@export
 	var MobScene<public>:?packed_scene = false
 
-	@export
-	@export_group("Nodes")
-	var Player<public>:?player = false
-
-	@export
-	var Hud<public>:?hud = false
-
-	@export
-	var StartPosition<public>:?marker2d = false
-
-	@export
-	var MobSpawnLocation<public>:?path_follow2d = false
-
-	@export
-	@export_group("Timers")
-	var MobTimer<public>:?timer = false
-
-	@export
-	var ScoreTimer<public>:?timer = false
-
-	@export
-	var StartTimer<public>:?timer = false
-
-	@export
-	@export_group("Audio")
-	var Music<public>:?audio_stream_player = false
-
-	@export
-	var DeathSound<public>:?audio_stream_player = false
+	var Player:?player = false
+	var Hud:?hud = false
+	var StartPosition:?marker2d = false
+	var MobSpawnLocation:?path_follow2d = false
+	var MobTimer:?timer = false
+	var ScoreTimer:?timer = false
+	var StartTimer:?timer = false
+	var Music:?audio_stream_player = false
+	var DeathSound:?audio_stream_player = false
 
 	var Score:int = 0
 
-	# Connected in main.tscn to Player.body_entered. It takes a body it does not use because the
-	# signal it is standing in for -- the player's own `hit` -- cannot be declared in Verse.
-	GameOver<public>(Body:node2d):void =
+	_Ready<override>():void =
+		if (Found := GetNode["Player"], Typed := player[Found]):
+			set Player = option{Typed}
+		if (FoundHud := GetNode["HUD"], TypedHud := hud[FoundHud]):
+			set Hud = option{TypedHud}
+		if (FoundStart := GetNode["StartPosition"], TypedStart := marker2d[FoundStart]):
+			set StartPosition = option{TypedStart}
+		if (FoundSpawn := GetNode["MobPath/MobSpawnLocation"], TypedSpawn := path_follow2d[FoundSpawn]):
+			set MobSpawnLocation = option{TypedSpawn}
+		if (FoundMob := GetNode["MobTimer"], TypedMob := timer[FoundMob]):
+			set MobTimer = option{TypedMob}
+		if (FoundScore := GetNode["ScoreTimer"], TypedScore := timer[FoundScore]):
+			set ScoreTimer = option{TypedScore}
+		if (FoundStartTimer := GetNode["StartTimer"], TypedStartTimer := timer[FoundStartTimer]):
+			set StartTimer = option{TypedStartTimer}
+		if (FoundMusic := GetNode["Music"], TypedMusic := audio_stream_player[FoundMusic]):
+			set Music = option{TypedMusic}
+		if (FoundDeath := GetNode["DeathSound"], TypedDeath := audio_stream_player[FoundDeath]):
+			set DeathSound = option{TypedDeath}
+
+		# The other scripts' own signals, subscribed to from code. The port used to wire
+		# Area2D.body_entered to both the player's handler and this one, and StartButton.pressed to
+		# both the HUD's and this one, because neither script could declare a signal of its own --
+		# which is why GameOver used to take a body it never looked at.
+		if (Hero := Player?):
+			Hero.Hit.Subscribe(GameOver)
+		if (Overlay := Hud?):
+			Overlay.StartGame.Subscribe(NewGame)
+
+	# The player's own `hit`, not Godot's body_entered.
+	GameOver<public>()<transacts>:void =
 		if (Countdown := ScoreTimer?):
 			Countdown.Stop()
 		if (Countdown := MobTimer?):
@@ -67,8 +73,8 @@ main := class(node):
 		if (Sound := DeathSound?):
 			Sound.Play()
 
-	# Connected in main.tscn to HUD/StartButton.pressed.
-	NewGame<public>():void =
+	# The HUD's own `start_game`.
+	NewGame<public>()<transacts>:void =
 		if (Tree := GetTree[]):
 			for (Mob : Tree.GetNodesInGroup("mobs").ToArray()):
 				Mob.QueueFree()
@@ -88,16 +94,19 @@ main := class(node):
 		if (Scene := MobScene?, Spawn := MobSpawnLocation?):
 			# A random location on the Path2D, read back after it is set: Position and Rotation are
 			# where the PathFollow2D now is, not where it was.
-			set Spawn.ProgressRatio = GetRandomFloat(0.0, 1.0)
+			set Spawn.ProgressRatio = GodotStatics.RandfRange(0.0, 1.0)
 
 			# Perpendicular to the path direction, with some randomness added.
-			Direction := Spawn.Rotation + HalfPi + GetRandomFloat(-QuarterPi, QuarterPi)
-			Velocity := V2Rotated(vector2{X := GetRandomFloat(150.0, 250.0), Y := 0.0}, Direction)
+			Heading := Spawn.Rotation + PiFloat * 0.5 + GodotStatics.RandfRange(-PiFloat * 0.25, PiFloat * 0.25)
+			Velocity := vector2{X := GodotStatics.RandfRange(150.0, 250.0), Y := 0.0}.Rotated(Heading)
 
-			if (Mob := Scene.Instantiate[packed_scene_gen_edit_state.Disabled]):
-				Mob.Set("position", VariantFromVector2(Spawn.Position))
-				Mob.Set("rotation", VariantFromFloat(Direction))
-				Mob.Set("linear_velocity", VariantFromVector2(Velocity))
+			# `PackedScene.instantiate` answers a `node`, and the cast is what turns it into the
+			# rigid_body2d whose LinearVelocity this wants. Before it, the three lines below were
+			# `Object.set` with string names and a hand-built variant apiece.
+			if (Spawned := Scene.Instantiate[packed_scene_gen_edit_state.Disabled], Mob := rigid_body2d[Spawned]):
+				set Mob.Position = Spawn.Position
+				set Mob.Rotation = Heading
+				set Mob.LinearVelocity = Velocity
 				AddChild(Mob, false, node_internal_mode.Disabled)
 
 	# Connected in main.tscn to ScoreTimer.timeout.

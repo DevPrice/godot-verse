@@ -13,18 +13,9 @@ _data = {
 }
 point_count = 5
 
-[node name="Main" type="Node" node_paths=PackedStringArray("Player", "Hud", "StartPosition", "MobSpawnLocation", "MobTimer", "ScoreTimer", "StartTimer", "Music", "DeathSound")]
+[node name="Main" type="Node"]
 script = ExtResource("1")
 MobScene = ExtResource("2")
-Player = NodePath("Player")
-Hud = NodePath("HUD")
-StartPosition = NodePath("StartPosition")
-MobSpawnLocation = NodePath("MobPath/MobSpawnLocation")
-MobTimer = NodePath("MobTimer")
-ScoreTimer = NodePath("ScoreTimer")
-StartTimer = NodePath("StartTimer")
-Music = NodePath("Music")
-DeathSound = NodePath("DeathSound")
 
 [node name="ColorRect" type="ColorRect" parent="."]
 anchors_preset = 15
@@ -61,8 +52,6 @@ stream = ExtResource("5")
 [node name="DeathSound" type="AudioStreamPlayer" parent="."]
 stream = ExtResource("6")
 
-[connection signal="body_entered" from="Player" to="." method="GameOver"]
-[connection signal="pressed" from="HUD/StartButton" to="." method="NewGame"]
 [connection signal="timeout" from="MobTimer" to="." method="OnMobTimerTimeout"]
 [connection signal="timeout" from="ScoreTimer" to="." method="OnScoreTimerTimeout"]
 [connection signal="timeout" from="StartTimer" to="." method="OnStartTimerTimeout"]

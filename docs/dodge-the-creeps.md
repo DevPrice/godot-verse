@@ -1,8 +1,13 @@
 # Dodge the Creeps — the port, and what it cost
 
-**Status:** 2026-09-12 · **it plays.** Phase 2, Stage 7. The project is
-[`dodge-the-creeps/`](../dodge-the-creeps); the game is five `.verse` files and four scenes, with no
-GDScript in it.
+**Status:** 2026-09-12 · **it plays, and it is idiomatic now.** Written at the close of Phase 2
+stage 7; re-ported in place at the close of **Phase 4**, which is what the walls below were
+measured for. The project is [`dodge-the-creeps/`](../dodge-the-creeps); the game is four `.verse`
+files and four scenes, with no GDScript in it.
+
+**Six of the eight walls are down.** Read the table for what each cost while it stood — that is
+what the document is for, and it is still the record of what the absences were worth. What changed
+in the port is in §"After Phase 4" at the end.
 
 Godot's canonical first game is the yardstick this project set itself:
 [`roadmap.md`](roadmap.md) says a Godot developer who is not the author should be able to build a
@@ -17,7 +22,7 @@ requirement with a phase attached, and one trap with no GDScript counterpart at 
 
 `headless_check.gd` is the only GDScript in the directory and is not part of the game: it presses
 Start, holds a movement key, kills the player, and asserts on what Godot sees of the Verse scripts
-— 29 checks, one line each. `--fixed-fps` is not optional, and the reason is in that file. The port
+— 30 checks, one line each. `--fixed-fps` is not optional, and the reason is in that file. The port
 is **not** wired into `tools/run_tests.py`: a yardstick that gates the build stops being an honest
 measure of how far the bridge has got.
 
@@ -25,16 +30,16 @@ measure of how far the bridge has got.
 
 ## The walls
 
-| | what a GDScript author writes | what the port writes instead | requirement | phase |
+| | what a GDScript author writes | what the port wrote instead | requirement | state |
 | --- | --- | --- | --- | --- |
-| **1** | `$AnimatedSprite2D.play()` | an `@export`-ed typed slot per child, filled in by the scene | **R-SCN-6** | 4 |
-| **2** | `signal hit` / `hit.emit()` | one engine signal wired to two scripts in the scene file | **R-SIG-1, R-SIG-2** | 4 |
-| **3** | `await $MessageTimer.timeout` | a four-state enum, a second Timer node, two handlers | **R-SIG-5** | 4 |
-| **4** | `velocity.normalized() * speed`, `PI`, `randf()` | `scripts/vectors.verse`, six functions and three constants | **R-SCN-3** / OQ-11 | 4 |
-| **5** | `mob.linear_velocity = v` on an instantiated scene | `Mob.Set("linear_velocity", VariantFromVector2(V))` | **R-SCN-6** | 4 |
-| **6** | `get_tree().call_group(&"mobs", &"queue_free")` | walk `GetNodesInGroup("mobs")` and free each | vararg, R-SCN-2 permits | — |
-| **7** | `node.callv("method", [args])` | nothing: it is spellable and cannot be given arguments | **R-INT-2** | see below |
-| **8** | *(no counterpart)* | `<transacts>` on every helper in a library file, or it fails at its first call site | — | — |
+| **1** | `$AnimatedSprite2D.play()` | an `@export`-ed typed slot per child, filled in by the scene | **R-SCN-6** | **down** (Phase 4 stage 1) |
+| **2** | `signal hit` / `hit.emit()` | one engine signal wired to two scripts in the scene file | **R-SIG-1, R-SIG-2** | **down** (stage 4) |
+| **3** | `await $MessageTimer.timeout` | a four-state enum, a second Timer node, two handlers | **R-SIG-5** | **standing** — Phase 5's |
+| **4** | `velocity.normalized() * speed`, `PI`, `randf()` | `scripts/vectors.verse`, six functions and three constants | **R-SCN-3** / OQ-11 | **down** (stage 6) |
+| **5** | `mob.linear_velocity = v` on an instantiated scene | `Mob.Set("linear_velocity", VariantFromVector2(V))` | **R-SCN-6** | **down** (stage 1) |
+| **6** | `get_tree().call_group(&"mobs", &"queue_free")` | walk `GetNodesInGroup("mobs")` and free each | vararg, R-SCN-2 permits | **standing**, and permitted |
+| **7** | `node.callv("method", [args])` | nothing: it is spellable and cannot be given arguments | **R-INT-2** | **down** (stage 2) |
+| **8** | *(no counterpart)* | `<transacts>` on every helper, or it fails at its first call site | — | **standing**, and Phase 4.5 owns it |
 
 Wall 7 is the one that corrects an earlier document, and wall 8 is the only one that is not a
 missing feature. Both are below.
@@ -327,3 +332,42 @@ and none of it needed a second attempt:
   reports anything without a drawn viewport is its own question.
 - **Nobody has played it with a window.** Every claim above is the headless check's; the port is
   owed one windowed run before Phase 3 closes.
+
+
+---
+
+## After Phase 4
+
+The re-port was the phase's exit gate, and it was done in place rather than beside the old one: one
+yardstick, one maintenance burden, and each wall visibly falling. What the diff says, against the
+port this document was originally written about:
+
+- **`scripts/vectors.verse` is gone.** It was forty-six lines of hand-written arithmetic and three
+  constants, and the file OQ-11 was opened about. `velocity.Normalized() * Speed` and
+  `(Position + Velocity * Delta).Clamp(Vector2Statics.Zero, ScreenSize)` are ordinary Verse now.
+- **Seventeen inspector slots became four lines of lookup.** `main` had nine object-typed exports
+  and now has one — `MobScene`, which *should* be an export, because a PackedScene is a resource
+  the designer chooses and not a child the script can look up. The others are `GetNode` and a cast
+  in `_Ready`, which is what GDScript's `@onready var sprite = $AnimatedSprite2D` is.
+- **The scene files stopped carrying what the scripts carry.** `node_paths=PackedStringArray(...)`
+  is gone from all four, and so are the two connections that existed only because a script could
+  not declare a signal: `Player.body_entered` to main's `GameOver`, and `HUD/StartButton.pressed`
+  to main's `NewGame`. The player declares `Hit` and the HUD declares `StartGame`; main subscribes
+  to both in `_Ready`. `GameOver` no longer takes a body it never looked at.
+- **The mob is configured through its own properties.** `Object.set("linear_velocity", ...)` with a
+  hand-built variant became `set Mob.LinearVelocity = Velocity`, behind one cast of what
+  `PackedScene.instantiate` answered.
+- **Godot's own randomness.** `randf_range` and `randi_range` rather than Verse's `GetRandomFloat`,
+  which is R-AUD-2's one exception: a Verse-side RNG would silently ignore `seed()`, so a project
+  that seeds for a replay would get a different game.
+
+**The timer connections stayed in the scene files**, and that is not a wall: connecting a node's own
+signal through the Node panel is what a Godot author does, and `Timer.Timeout().Subscribe(...)` is
+now a spelling rather than the only one. The scene-file path is also the one the port is the
+regression test for.
+
+**Wall 8 fired again during the re-port**, exactly where §"8" says it would. `Subscribe` takes a
+`<transacts>` callback, so `main.GameOver` and `main.NewGame` had to narrow — and narrowing them
+refused their calls to `hud.ShowGameOver`, `hud.UpdateScore`, `hud.ShowMessage` and `player.Start`,
+which carried the default (wider) effect set. Four declarations in two other files had to change,
+and the compiler reported it at the *call* site each time. That is the trap Phase 4.5 inherits.

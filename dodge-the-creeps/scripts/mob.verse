@@ -1,20 +1,19 @@
 using { /Godot.org/Godot }
-using { /Verse.org/Random }
 
-# mob.gd, ported. `mob_types.pick_random()` is an Array method Godot's Array has and
-# `godot_array` does not, so the animation names come back as a Verse `[]string` from
-# SpriteFrames.get_animation_names and the pick is Verse's own GetRandomInt -- which is the naming
-# rule R-AUD-2 already set: where Verse's stdlib has a counterpart, Verse's spelling wins.
+# mob.gd, ported. `mob_types.pick_random()` is an Array method Godot's Array has and `godot_array`
+# does not, so the animation names come back as a Verse `[]string` from
+# SpriteFrames.get_animation_names and the pick is Godot's own `randi_range`.
+#
+# Godot's rather than Verse's `GetRandomInt`, and that is R-AUD-2's one exception: a Verse-side RNG
+# would silently ignore `seed()` and `randomize()`, so a project that seeds for a replay would get a
+# different game. Everything else still follows the rule that Verse's spelling wins.
 @global_class
 mob := class(rigid_body2d):
 
-	@export
-	var Sprite<public>:?animated_sprite2d = false
-
 	_Ready<override>():void =
-		if (Animation := Sprite?, Frames := Animation.GetSpriteFrames[]):
+		if (Found := GetNode["AnimatedSprite2D"], Animation := animated_sprite2d[Found], Frames := Animation.GetSpriteFrames[]):
 			Names := Frames.GetAnimationNames()
-			if (Picked := Names[GetRandomInt(0, Names.Length - 1)]):
+			if (Picked := Names[GodotStatics.RandiRange(0, Names.Length - 1)]):
 				Animation.SetAnimation(Picked)
 			Animation.Play()
 
