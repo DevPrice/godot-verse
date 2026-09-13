@@ -30,9 +30,9 @@ part to read before trusting it**: twenty-one numbered entries saying where the 
 the design disagree, what is unbuilt, and what would close each. §13 of the design summarises the
 phase and carries its measurements.
 
-**Twelve of those entries are now closed, one more is built, and one is answered** — what is left is
-**G13** (math bodies for twelve of the sixteen types), **G11** (utility dispatch) and the by-hand
-checklist. Closing them took the ABI to **v5** — a layout change, so both DLLs must be rebuilt and
+**Every one of those entries is now closed, built or answered** — G13 (the math bodies) and G11 (the
+utilities) went with the rest, so **the by-hand checklist is the whole of what Phase 4 still owes**.
+Closing them took the ABI to **v5** — a layout change, so both DLLs must be rebuilt and
 `run_tests.py --build` is how the test binaries follow.
 
 The four ways a signal declaration could compile and not work (G1–G4) are one validation pass in

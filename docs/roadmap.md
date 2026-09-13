@@ -1,10 +1,14 @@
 # godot-verse — Roadmap
 
-**Status:** Draft 8 · 2026-09-12 · **Phases 0–3 complete and Phase 4a complete**, bar the by-hand
+**Status:** Draft 9 · 2026-09-13 · **Phases 0–3 complete and Phase 4a complete**, bar the by-hand
 checks two phases now owe — Phase 3's windowed yardstick run and editor session, and Phase 4's
 Node-panel and `_make_function` flows. Phase 3's design is
 [`phase-3-design.md`](phase-3-design.md); what Phase 2 built, and the four places its design was
 wrong, are in [`phase-2-design.md`](phase-2-design.md) §11.
+
+**Phase 4.5 and Phase 5 are now planned**, in that order and for the first time before the work
+rather than after it: [`phase-4.5-design.md`](phase-4.5-design.md) and
+[`phase-5-design.md`](phase-5-design.md). Neither has run its spikes, and both say so at the top.
 
 **Phase 4a is built.** [`phase-4-design.md`](phase-4-design.md) is the design, and
 [`phase-4-gaps.md`](phase-4-gaps.md) is where the implementation and that design disagree — twenty
@@ -540,6 +544,10 @@ loaded back; a Verse autoload answers from every scene; and the by-hand checklis
 
 ## Phase 4.5 — Effects and transactions: what a rollback actually undoes
 
+**Planned, not started.** [`phase-4.5-design.md`](phase-4.5-design.md) is the plan, written
+before the work rather than after it — **§2 is its spikes, and §3 onward is not to be trusted
+until they have run.**
+
 **Why now.** Parity is when the bridge stops being small enough to hold in one head, and concurrency
 is when a second effect axis (`<suspends>`, task scopes, R-ASYNC-4) lands on top of this one. Between
 those two is the only moment where the effect surface is both complete and still simple. It is a
@@ -580,6 +588,13 @@ OQ-15 closes.
 ---
 
 ## Phase 5 — Concurrency
+
+**Planned, not started, and Phase 4.5 comes first by decision.**
+[`phase-5-design.md`](phase-5-design.md) is the plan. **§1 is eighteen decisions already made**,
+each against prior art read in Godot's and Unreal's sources — the load-bearing ones are that
+resumption is event-driven rather than pumped (GDScript has no scheduler), that scopes are
+two-tier, and that freeing a node cancels its tasks while leaving the tree does not, which
+**amends R-ASYNC-5's wording**. §2 is its four spikes.
 
 **Why now.** It needs Phase 1's ABI, Phase 4's signals, and a stable enough surface that the task
 lifetime rules can be written down rather than discovered.
