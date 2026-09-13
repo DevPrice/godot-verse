@@ -1,7 +1,13 @@
 # The by-hand checklist
 
-**Status:** 2026-09-12 · **nothing on it has been run.** It is the list of things no headless run
-can see, which is why they are here and not in `tools/run_tests.py`.
+**Status:** 2026-09-13 · **nothing on it has been run**, and it has grown: it is now the *whole* of
+what Phase 4 still owes, every numbered gap having been closed or answered. It is the list of things
+no headless run can see, which is why they are here and not in `tools/run_tests.py`.
+
+Three of the entries below are not merely untested but **untestable** from a headless run, and that
+was measured rather than assumed: `_make_function` has no ClassDB entry and `Script.get_language()`
+is not in the public API, so GDScript can reach neither; `_HasPoint` and `_CanDropData` have no
+public caller at all. For those three this list is not the cheaper option, it is the only one.
 
 Every automated layer in this repository drives Godot with `--headless`, and the editor is exactly
 what `--headless` does not start. So the flows below have never been exercised by anything: they
@@ -90,16 +96,25 @@ Each line is one thing to do and one thing to see. Tick nothing you have not wat
       and select Main: the only exported property must be `MobScene`. The nine that were there
       before Phase 4 are lookups in `_Ready` now, and a stale `node_paths` entry left in a `.tscn`
       would show up here.
-- [ ] **A statics module shows in the editor.** With `@statics("...")` applied, the script's
-      constants must appear where Godot shows a script's constant map. A module naming a class
-      that does not exist **will not** say so — that diagnostic is unbuilt, `phase-4-gaps.md` G10 —
-      so this checks the constants only.
-- [ ] **A missing math method explains itself.** Write `Position.Snapped(vector2{X := 8.0, Y := 8.0})`
-      in a `.verse`. The diagnostic must not stop at "Unknown member `Snapped` in `vector2`": it must
-      append that the math types are ordinary Verse, this one has not been written yet, and
-      `host/Verse/GodotMath.native.verse` is where it goes. 585 members answer this way now
-      (`phase-4-gaps.md` G12); before, every one of them was silence. Try an operator too —
-      `SomeVector / OtherVector` — which takes the other of the two sentences.
+- [ ] **A statics module shows in the editor, and a mistyped one says so.** With `@statics("...")`
+      applied, the script's constants must appear where Godot shows a script's constant map. Then
+      mistype the class name: the editor must report that the module names a class no script
+      declares, at the module's own line. Add a *second* module claiming the same class and it must
+      say that too. Those two diagnostics are the entire argument for the attribute over a naming
+      convention (`phase-4-gaps.md` G10), so a silent failure here means the attribute bought
+      nothing.
+- [ ] **A missing math method explains itself.** Write `SomeBasis.GetEuler()` in a `.verse` — one of
+      the 410 still unwritten, and deliberately so. The diagnostic must not stop at "Unknown member
+      `GetEuler` in `basis`": it must append that the math types are ordinary Verse, this one has not
+      been written yet, and `host/Verse/GodotMath.native.verse` is where it goes (`phase-4-gaps.md`
+      G12); before, every one of them was silence. Try an operator too — `SomeVector2 * 2` with an
+      *integer* right-hand side, which is unwritten where the float one is — and it must take the
+      other of the two sentences.
+- [ ] **A utility explains itself too.** Write `floor(X)` in a `.verse`. The diagnostic must name the
+      Verse spelling — `FloorF(X)` — rather than saying the utility was skipped. All 114 of Godot's
+      utilities answer one of three ways now and none is unexplained (`phase-4-gaps.md` G11), so try
+      `hash(X)` as well: that one must say its Variant parameter is unspellable rather than offering
+      an alternative.
 
 ## What a failure here means
 

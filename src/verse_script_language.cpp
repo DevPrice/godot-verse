@@ -2304,6 +2304,9 @@ String skipped_member_explanation(const verse_api::skipped_member &p_entry) {
 		return String("its parameter or result is a Variant, which a script cannot spell -- the ")
 				+ String("packers are module-scoped by R-TYPE-7, so there is no signature for it to have.");
 	}
+	// Currently unreachable, and deliberately kept: the generator's three tables cover all 114 of
+	// Godot's utilities today, so this is what a utility a *future* Godot adds would fall to until
+	// someone classifies it. An unexplained skip is the failure mode R-SCN-2 exists to prevent.
 	if (reason == "utility_not_dispatched") {
 		return String("it has no Verse counterpart and is not dispatched to Godot yet.");
 	}

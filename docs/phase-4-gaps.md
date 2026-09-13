@@ -21,7 +21,7 @@ here), [`spec.md`](spec.md) (per-requirement status), [`by-hand-checklist.md`](b
 (what no headless run can see).
 
 **Who this is for.** Someone picking Phase 4 back up with no memory of building it. The phase is
-green — `tools/run_tests.py` is 7/7 with 220 integration cases and the yardstick's 30 headless
+green — `tools/run_tests.py` is 7/7 with 266 integration cases and the yardstick's 30 headless
 checks pass — so nothing here is a broken build. What is here is the difference between "the tests
 pass" and "the design was delivered", which are not the same thing and were not the same thing at
 the end of this phase.
@@ -487,7 +487,8 @@ What the 86 buys is the thing this entry was really about. Before, a script that
 **Built:** `gen_verse_api.py` reads `host/Verse/GodotMath.native.verse`, extracts what it defines —
 extension methods from `^\(X:type\).Name`, operators from `^operator'sym'(A:type, B:type)` and
 `^prefix'sym'(V:type)` — and records every `builtin_classes` method and operator for a `MATH_TYPES`
-entry that is not among them. **585 rows**, 342 methods and 243 operators, against 43 written.
+entry that is not among them. **585 rows** when it landed, 342 methods and 243 operators against
+43 written; 410 today, because G13 then wrote most of the difference.
 
 Reading the file rather than maintaining a list is the whole requirement: add a method to `GodotMath`
 and its skip disappears on the next generation. The generator test asserts the *negative* property —
@@ -605,12 +606,12 @@ what makes `floor(inf)` agree with Godot rather than decline. `VERSE_STDLIB_NAME
 is what made it look otherwise — that list is a *reserved-name* list, not an availability one, as its
 own comment says.
 
-**Built.** 585 skips down to **466**. Scalars first, because the vector methods are built on them:
+**Built.** Scalars first, because the vector methods are built on them:
 `FloorF`, `CeilF`, `RoundF`, `Snapped`, `IsEqualApprox`, `IsZeroApprox`, `InverseLerp`, `Remap`,
 `MoveToward`, `RotateToward`, `Smoothstep`, `WrapF`, `PingPong`, `AngleDifference`, `LerpAngle`,
 `DegToRad`, `RadToDeg`, `Ease`, `CubicInterpolate`, `BezierInterpolate`, `BezierDerivative`,
 `Asinh`, `Acosh`, `Atanh`, `LinearToDb`, `DbToLinear`, `IsNan`, `IsInf`, `IsFinite` and
-`TruncatedQuotient` — which double as G11's answer for 86 of Godot's utilities.
+`TruncatedQuotient` — which double as G11's answer for most of Godot's utilities.
 
 Then all sixteen types. The vectors and `color` first, then `rect2`/`rect2i`, then the transform
 family: `plane`, `quaternion` (Hamilton product, `Xform`, `Slerp`, `Inverse`), `aabb`, `basis`,

@@ -930,8 +930,9 @@ appear before any math body can be `<computes>` (§8.3 item 1). `../godot`'s
 
 Written after building 4a. **The full list lives in [`phase-4-gaps.md`](phase-4-gaps.md)**, which is
 the single record of where the implementation and this document disagree and is written for someone
-picking the phase back up with no memory of it. Twenty entries, each with what the design said, what
-is there, why, and what closing it would take.
+picking the phase back up with no memory of it. Twenty-one entries, each with what the design said,
+what is there, why, and what closing it would take. **All of them are now closed, answered or
+deliberately narrowed**; what the phase still owes is the by-hand checklist.
 
 The short version, for a reader who is here rather than there:
 
@@ -943,8 +944,9 @@ The short version, for a reader who is here rather than there:
 - **§6.7 depends on §7.1, so §11.1's stage order is wrong.** The eight colliding signal-accessor names
   collide with *virtuals*, and it is the underscore that dissolves them — so Godot's own 489 signals
   cannot be generated until stage 5 has landed. Stage 4 split in two to build it.
-- **§6.2's fourth row does not degrade, it breaks.** A struct payload reads as a trade in that table
-  and is not one: it registers a bogus signal and emits nothing. `phase-4-gaps.md` G1.
+- **§6.2's fourth row did not degrade, it broke.** A struct payload read as a trade in that table and
+  was not one: it registered a bogus signal and emitted nothing. Since fixed — it decomposes into one
+  named argument per field, and a Verse handler receives it as one value. `phase-4-gaps.md` G1, G21.
 - **Two latent bugs surfaced**, neither caused by this design. `GodotVirtualNameOf` turned `_Ready`
   into `__ready`; and `InstanceHasFunction` — which decides whether Godot puts a node in the process
   list at all — compared *function cells* rather than procedures, so every method had looked

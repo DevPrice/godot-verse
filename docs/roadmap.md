@@ -498,8 +498,16 @@ string property names. The port is rewritten in place, wall by wall, and the dif
 *should* be an export), `node_paths=PackedStringArray(...)` is gone from all four scenes, the two
 connections that existed only because a script could not declare a signal are gone with it, and the
 mob is configured through `set Mob.LinearVelocity = ...` behind a cast. The 30 headless checks pass
-and `tools/run_tests.py` is green at 220 integration cases. What is **not** met is the by-hand
+and `tools/run_tests.py` is green at 266 integration cases. What is **not** met is the by-hand
 checklist, which needs a windowed editor and is owed.
+
+**Everything `phase-4-gaps.md` found afterwards is now closed, answered or deliberately narrowed**,
+and the ABI went to v5 doing it: signals are refused at the member rather than at the emission, a
+struct payload crosses both ways, the thread guard covers every entry point, all sixteen math types
+carry their operators and the methods scene code reaches, and all 114 `@GlobalScope` utilities are
+classified with none unexplained. `_make_function` is written. So the by-hand checklist is now the
+*whole* of what the phase owes — and three of its entries were measured to be unreachable from a
+headless run rather than merely untested, which makes that list the only way to close them.
 
 ### What 4a leaves open
 

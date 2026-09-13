@@ -692,7 +692,8 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   `builtin_classes[*].methods` and 367 methods and 261 operators across the sixteen types were absent
   with nothing recorded. The generator now **reads `host/Verse/GodotMath.native.verse`** to find out
   what is written and records everything else as `math_not_written` / `math_operator_not_written` —
-  585 rows today, against 43 written. Reading the file rather than maintaining a list is the whole
+  585 rows when it landed, against 43 written, and 410 today after the math was written. Reading the
+  file rather than maintaining a list is the whole
   point: adding a method makes its skip disappear on the next generation, so the record cannot drift
   from the code. The sentence says the truth about these, which is different from every other skip:
   not "the bridge cannot carry this" but "nobody has written it yet, and here is the file it goes in".

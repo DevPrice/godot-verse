@@ -265,8 +265,8 @@ setting. It costs per-keystroke analysis latency, which is measured and recorded
 `src/verse_api_skipped.h` also carries what the **math** file does not define, and that row source is
 unusual: `gen_verse_api.py` *reads* `host/Verse/GodotMath.native.verse` to find out what is written
 and records every other `builtin_classes` method and operator as a skip. So adding a method there
-deletes its own skip row on the next generation, and the record cannot drift from the code. 585 rows
-today.
+deletes its own skip row on the next generation, and the record cannot drift from the code. 410 rows
+today, from 585 before the math was written.
 
 `gen_verse_api.py`'s type table is the other half, and it no longer skips anything for a type it
 cannot carry — `unsupported_type` is zero. Three small tables decide the awkward names, and each
