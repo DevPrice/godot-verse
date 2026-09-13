@@ -2293,6 +2293,20 @@ String skipped_member_explanation(const verse_api::skipped_member &p_entry) {
 		return String("the math types are ordinary Verse rather than calls into Godot, and this one ")
 				+ String("has not been written yet -- host/Verse/GodotMath.native.verse is where it goes.");
 	}
+	// R-AUD-2's rule made visible: where Verse and Godot differ only in spelling, Verse's wins, and
+	// this is where an author who typed Godot's finds that out. 86 of the 114 utilities answer here.
+	if (reason == "utility_has_verse_spelling") {
+		return String("Verse spells it ") + detail + String(".");
+	}
+	// A `variant` is deliberately unspellable by a script (R-TYPE-7 keeps the packers module-scoped),
+	// so these have no signature a script could call even if the bridge dispatched them.
+	if (reason == "utility_variant_only") {
+		return String("its parameter or result is a Variant, which a script cannot spell -- the ")
+				+ String("packers are module-scoped by R-TYPE-7, so there is no signature for it to have.");
+	}
+	if (reason == "utility_not_dispatched") {
+		return String("it has no Verse counterpart and is not dispatched to Godot yet.");
+	}
 	if (reason == "math_operator_not_written") {
 		return String("this operator has not been written for those operands yet -- the math types are ")
 				+ String("ordinary Verse, and host/Verse/GodotMath.native.verse is where it goes.");

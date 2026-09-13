@@ -805,6 +805,36 @@ int32_t VerseRuntime::api_call_utility(void *p_ctx, const char *p_name_utf8, int
 		UtilityFunctions::seed((int64_t)*args[0]);
 	} else if (name == StringName("rand_from_seed") && p_arg_count == 1) {
 		result = UtilityFunctions::rand_from_seed((int64_t)*args[0]);
+
+		// The rest are here for the *other* reason: not that Verse's answer would be wrong, but
+		// that Verse has no answer at all. Each is engine behaviour -- the editor's error list,
+		// Godot's own type and error names, the object registry, the RID allocator -- and
+		// GodotApi.native.verse gives each a typed Verse spelling over this call.
+		//
+		// The print family is vararg in Godot and takes one argument here, which is what a script
+		// writes. godot-cpp binds them as variadic templates, so one argument is a legal call.
+	} else if (name == StringName("push_error") && p_arg_count == 1) {
+		UtilityFunctions::push_error(*args[0]);
+	} else if (name == StringName("push_warning") && p_arg_count == 1) {
+		UtilityFunctions::push_warning(*args[0]);
+	} else if (name == StringName("print_rich") && p_arg_count == 1) {
+		UtilityFunctions::print_rich(*args[0]);
+	} else if (name == StringName("printerr") && p_arg_count == 1) {
+		UtilityFunctions::printerr(*args[0]);
+	} else if (name == StringName("print_verbose") && p_arg_count == 1) {
+		UtilityFunctions::print_verbose(*args[0]);
+	} else if (name == StringName("printraw") && p_arg_count == 1) {
+		UtilityFunctions::printraw(*args[0]);
+	} else if (name == StringName("type_string") && p_arg_count == 1) {
+		result = UtilityFunctions::type_string((int64_t)*args[0]);
+	} else if (name == StringName("error_string") && p_arg_count == 1) {
+		result = UtilityFunctions::error_string((int64_t)*args[0]);
+	} else if (name == StringName("instance_from_id") && p_arg_count == 1) {
+		result = UtilityFunctions::instance_from_id((int64_t)*args[0]);
+	} else if (name == StringName("is_instance_id_valid") && p_arg_count == 1) {
+		result = UtilityFunctions::is_instance_id_valid((int64_t)*args[0]);
+	} else if (name == StringName("rid_allocate_id")) {
+		result = UtilityFunctions::rid_allocate_id();
 	} else {
 		return VH_CALL_NO_SUCH_MEMBER;
 	}

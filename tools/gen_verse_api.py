@@ -98,6 +98,24 @@ VERSE_STDLIB_NAMES = {
     # and is Epic's own: SpatialMath declares `(V:vector2).Length` too.
     "Angle", "AngleTo", "AngleToPoint", "Cross", "Dot", "DistanceTo", "DistanceSquaredTo",
     "LengthSquared", "Normalized", "Rotated", "Vector2FromAngle",
+    # The scalar @GlobalScope math GodotMath carries, and the extension methods added with it. Every
+    # one is a module-level definition and so a name a mirrored *parameter* may not reuse -- two of
+    # these (`Remap` on EditorExportPlugin.add_file, `Aspect` on XRInterface.get_projection_for_view)
+    # were live collisions the moment they were written, and the compiler reported them in generated
+    # code rather than in the file that caused them.
+    "MathPi", "MathTau", "FloorF", "CeilF", "RoundF", "Snapped", "IsEqualApprox", "IsZeroApprox",
+    "InverseLerp", "Remap", "MoveToward", "Smoothstep", "WrapF", "PingPong", "AngleDifference",
+    "LerpAngle", "RotateToward", "DegToRad", "RadToDeg",
+    "Floor", "Ceil", "Round", "DirectionTo", "LimitLength", "Aspect", "Slide", "Bounce", "Reflect",
+    "Project", "Orthogonal",
+    "Expand", "Merge", "Grow", "HasPoint", "HasArea", "Intersects", "GetEnd", "GetCenter", "GetArea",
+    "Darkened", "Lightened", "Inverted", "GetLuminance",
+    "Sinh", "Cosh", "Tanh", "Asinh", "Acosh", "Atanh", "Ease", "LinearToDb", "DbToLinear",
+    "CubicInterpolate", "BezierInterpolate", "BezierDerivative", "IsNan", "IsInf", "IsFinite",
+    "TruncatedQuotient",
+    # GodotApi.native.verse's hand-written utility wrappers.
+    "PushError", "PushWarning", "PrintRich", "PrintErr", "PrintVerbose", "PrintRaw",
+    "VariantTypeName", "ErrorString", "InstanceFromId", "IsInstanceIdValid", "RidAllocateId",
 }
 
 TypeInfo = namedtuple("TypeInfo", ["verse_type", "pack_fn", "pack_decides", "unpack_fn", "unpack_decides"])
@@ -1433,6 +1451,68 @@ DISPATCHED_UTILITIES = {
     "randf", "randi", "randf_range", "randi_range", "randfn", "randomize", "seed", "rand_from_seed",
 }
 
+# Godot's utility -> the Verse spelling that answers it. R-AUD-2 decides these: where the two differ
+# only in *spelling*, Verse's wins, so the utility is not emitted and the author is told what to
+# write instead. Without this the skip said "utility_not_dispatched" and nothing else, which told an
+# author who typed `floor(x)` exactly nothing.
+#
+# The `...F` names are GodotMath's, and they exist because Verse's own Floor, Ceil and Round answer
+# an *int* where Godot's answer a float -- two different functions, not one renamed.
+UTILITY_VERSE_SPELLINGS = {
+    "abs": "Abs(X)", "absf": "Abs(X)", "absi": "Abs(X)",
+    "ceil": "Ceil[X]", "ceilf": "CeilF(X)", "ceili": "Ceil[X]",
+    "floor": "Floor[X]", "floorf": "FloorF(X)", "floori": "Floor[X]",
+    "round": "Round[X]", "roundf": "RoundF(X)", "roundi": "Round[X]",
+    "clamp": "Clamp(X, Low, High)", "clampf": "Clamp(X, Low, High)", "clampi": "Clamp(X, Low, High)",
+    "min": "Min(A, B)", "minf": "Min(A, B)", "mini": "Min(A, B)",
+    "max": "Max(A, B)", "maxf": "Max(A, B)", "maxi": "Max(A, B)",
+    "sign": "Sgn(X)", "signf": "Sgn(X)", "signi": "Sgn(X)",
+    "sqrt": "Sqrt(X)", "exp": "Exp(X)", "log": "Ln(X)", "pow": "Pow(X, Y)",
+    "sinh": "Sinh(X)", "cosh": "Cosh(X)", "tanh": "Tanh(X)",
+    "asinh": "Asinh(X)", "acosh": "Acosh[X]", "atanh": "Atanh[X]",
+    "ease": "Ease(X, Curve)", "db_to_linear": "DbToLinear(Db)", "linear_to_db": "LinearToDb[Linear]",
+    "cubic_interpolate": "CubicInterpolate(From, To, Pre, Post, T)",
+    "bezier_interpolate": "BezierInterpolate(Start, C1, C2, End, T)",
+    "bezier_derivative": "BezierDerivative(Start, C1, C2, End, T)",
+    "is_nan": "IsNan[X]", "is_inf": "IsInf[X]", "is_finite": "IsFinite[X]",
+    "sin": "Sin(X)", "cos": "Cos(X)", "tan": "Tan(X)",
+    "asin": "ArcSin(X)", "acos": "ArcCos(X)", "atan": "ArcTan(X)", "atan2": "ArcTan(Y, X)",
+    "lerp": "Lerp(A, B, T)", "lerpf": "Lerp(A, B, T)",
+    "fmod": "Mod[X, Y]", "posmod": "Mod[X, Y]", "fposmod": "Mod[X, Y]",
+    "snapped": "Snapped(X, Step)", "snappedf": "Snapped(X, Step)", "snappedi": "Snapped(X, Step)",
+    "is_equal_approx": "IsEqualApprox[A, B]", "is_zero_approx": "IsZeroApprox[X]",
+    "inverse_lerp": "InverseLerp(From, To, X)",
+    "remap": "Remap(X, InFrom, InTo, OutFrom, OutTo)",
+    "move_toward": "MoveToward(From, To, Delta)",
+    "rotate_toward": "RotateToward(From, To, Delta)",
+    "smoothstep": "Smoothstep(From, To, X)",
+    "wrap": "WrapF(X, Min, Max)", "wrapf": "WrapF(X, Min, Max)", "wrapi": "WrapF(X, Min, Max)",
+    "pingpong": "PingPong(X, Length)",
+    "lerp_angle": "LerpAngle(From, To, T)",
+    "angle_difference": "AngleDifference(From, To)",
+    "deg_to_rad": "DegToRad(Degrees)", "rad_to_deg": "RadToDeg(Radians)",
+    "is_instance_valid": "IsInstanceValid[Object]",
+    "print": "Print(Text)",
+    # Dispatched, and spelled by hand in GodotApi.native.verse rather than generated, because the
+    # Verse signature is deliberately not Godot's: these are vararg there and one argument here.
+    "push_error": "PushError(Text)", "push_warning": "PushWarning(Text)",
+    "print_rich": "PrintRich(Text)", "printerr": "PrintErr(Text)",
+    "print_verbose": "PrintVerbose(Text)", "printraw": "PrintRaw(Text)",
+    "type_string": "VariantTypeName(VariantType)", "error_string": "ErrorString(Error)",
+    "instance_from_id": "InstanceFromId[Id]", "is_instance_id_valid": "IsInstanceIdValid[Id]",
+    "rid_allocate_id": "RidAllocateId()",
+}
+
+# Utilities whose parameter or return type is a `Variant`, which R-TYPE-7 keeps a script from
+# spelling: the packers are module-scoped, so there is no signature these could be given that a
+# script could call. Structural rather than unbuilt, which is why they get a reason of their own.
+UTILITY_VARIANT_ONLY = {
+    "hash", "typeof", "type_convert", "is_same", "weakref",
+    "var_to_str", "str_to_var", "var_to_bytes", "bytes_to_var",
+    "var_to_bytes_with_objects", "bytes_to_var_with_objects",
+    "str", "printt", "prints",
+}
+
 
 def emit_utility_functions(api: dict, resolver: TypeResolver, coverage: Coverage) -> list:
     """The `@GlobalScope` utilities the bridge dispatches, as module-level Verse functions."""
@@ -1441,9 +1521,15 @@ def emit_utility_functions(api: dict, resolver: TypeResolver, coverage: Coverage
         name = utility["name"]
         verse_name = UTILITY_RENAMES.get(name, verse_method_name(name))
         if name not in DISPATCHED_UTILITIES:
-            coverage.skip("utility_not_dispatched", SkippedMember(
-                "", verse_name, "@GlobalScope", name, "utility_not_dispatched",
-                "Verse's own" if utility.get("category") == "math" else ""))
+            # Three reasons, and only the third is a gap. Which one it is decides what the editor
+            # tells an author who typed the Godot name.
+            if name in UTILITY_VERSE_SPELLINGS:
+                reason, detail = "utility_has_verse_spelling", UTILITY_VERSE_SPELLINGS[name]
+            elif name in UTILITY_VARIANT_ONLY:
+                reason, detail = "utility_variant_only", ""
+            else:
+                reason, detail = "utility_not_dispatched", ""
+            coverage.skip(reason, SkippedMember("", verse_name, "@GlobalScope", name, reason, detail))
             continue
 
         params = []

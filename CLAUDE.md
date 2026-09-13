@@ -363,6 +363,24 @@ ten element types against four key types is not a list to maintain by hand.
   method* is a module-level name. `(V:vector2).Length()` makes `Length` unusable as a parameter name
   in any file that imports the Godot package, which is every script. See the Phase 4 note above for
   the list.
+- **Verse silently drops a continuation line that begins with an operator.** An expression written
+  as `0.5 * ((A * 2.0)` then `+ B * W` on the next line compiles, runs, and answers *the first line
+  only* — no diagnostic, no warning. Two of `GodotMath.native.verse`'s formulas answered 0.0 that
+  way. Keep arithmetic on one line or bind a term at a time.
+- **Verse's float `=` is reflexive for NaN**, unlike IEEE and unlike C: both `X = X` and `X <> X`
+  answer "equal", so the usual NaN test never fires. What does distinguish NaN is that it is
+  *unordered* — it fails `<=` and `>=` against everything, itself included.
+- **Float division is total** and answers `Inf`/`-Inf`/`NaN` exactly as C does; **integer division
+  is `Quotient`, which floors**, where C and Godot truncate toward zero — so `Quotient[-3, 2]` is -2
+  where Godot's `-3 / 2` is -1. `GodotMath`'s `TruncatedQuotient` is the bridge.
+- **There is no `ToFloat`.** `X * 1.0` is the int-to-float conversion, and it works on a value and
+  not only on a literal. `Floor`, `Ceil` and `Round` are `<decides>` and answer an `int`, so a
+  float-valued floor is `if (V := Floor[X]) then V * 1.0 else X` — which is also the shape that
+  makes `floor(inf)` agree with Godot.
+- **A host build passing is not enough to know a `.verse` file compiles.** VNI compiles `host/Verse`
+  at build time against one package set, and the *runtime* compiler re-reads those same files
+  against another — a bare `Pi` passes the first and is an unknown identifier in the second. Run
+  `tests/verse_probe` after touching anything in `host/Verse`.
 - **Verse rejects mixed tabs and spaces.** Godot's script editor writes tabs; `.vscode/settings.json`
   matches that. Keep `.verse` files tab-indented.
 

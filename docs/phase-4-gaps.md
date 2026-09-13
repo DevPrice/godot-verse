@@ -5,13 +5,14 @@
 code or measured by running it; none is recalled. Where a previous document said something that
 turned out to be false, that is noted and the document has been corrected.
 
-**Twelve entries are now closed** — G1, G2, G3, G4, G6, G7, G8, G10, G12, G19, G20 and G21 — G5 is
-built (and provably unverifiable without a window), and G9 was answered with a "do not build this".
-Closing them took the ABI to **v5**. **G13 and G11 are what is left**, plus the by-hand checklist,
-which nothing here can substitute for. G21 was raised *and* half closed in the same pass: G1 exposed
-it, and the half it was actually about turned out to need no ABI change at all. What is left of it is
-R-LANG-2, a MUST that has been at `part` since Phase 2. Each closed entry keeps its original
-diagnosis below its **Built** note, because the diagnosis is the part worth re-reading: §0 is why.
+**Thirteen entries are now closed** — G1, G2, G3, G4, G6, G7, G8, G10, G11, G12, G19, G20 and G21 —
+**G13 is part** (9 of the 16 math types; 466 skips, from 585), G5 is built and provably unverifiable
+without a window, and G9 was answered with a "do not build this". Closing them took the ABI to **v5**.
+
+**What Phase 4 still owes is the by-hand checklist**, which nothing here can substitute for, plus
+G13's seven transform types and six utilities. Each closed entry keeps its original diagnosis below
+its **Built** note, because the diagnosis is the part worth re-reading: §0 is why — and §0 earned
+its keep again here, since G13's stated blocker and G11's stated shape were both wrong.
 
 **Companion to:** [`phase-4-design.md`](phase-4-design.md) (the design, and §13's short note pointing
 here), [`spec.md`](spec.md) (per-requirement status), [`by-hand-checklist.md`](by-hand-checklist.md)
@@ -69,9 +70,9 @@ Sized as **S** (an afternoon), **M** (a day), **L** (more, or needs a decision f
 | **G8** | `godot_array` has no `AddObject` | unbuilt | S | **closed** |
 | **G9** | a callback does not remember its `FContentScope` | unbuilt | M | open |
 | **G10** | `@statics` emits neither of the two diagnostics the design promised | unbuilt | S | **closed** |
-| **G11** | 106 of 114 `@GlobalScope` utilities are undispatched | unbuilt | L | open |
+| **G11** | 106 of 114 `@GlobalScope` utilities are undispatched | unbuilt | L | **closed**: 86 spell it in Verse, 14 cannot be spelled, 6 left |
 | **G12** | 367 math methods and 261 operators are absent with nothing recorded | unbuilt | M | **closed** |
-| **G13** | math exists for 4 of 16 types; `snapped`, `min`/`max`, `floor`/`ceil`/`round` unwritten | narrower | M | open |
+| **G13** | math exists for 4 of 16 types; `snapped`, `min`/`max`, `floor`/`ceil`/`round` unwritten | narrower | M | **part**: 9 of 16 types, 466 skips from 585 |
 | **G14** | `GetClassOf` answers only the Godot class | structural | — | as built |
 | **G15** | there is no `godot_callback` native class; a callback is `(handle, decorated name)` | structural | — | as built |
 | **G16** | `vh_signal` is non-parametric; the payload lives in a host-side table | structural | — | as built |
@@ -453,27 +454,31 @@ reports anything.
 `CModule` definitions. The reporting channel is `ReportDiagnostic`, with the module's own location
 from `FillLocation`.
 
-### G11 — 106 of 114 utilities are undispatched
+### G11 — 106 of 114 utilities are undispatched · **closed, and mostly not by dispatching**
 
-**Design:** §8.2. *"Two new Godot callbacks — `CallStatic(...)` and `CallUtility(...)` — and the
-generator emits Verse free functions and module members over them."* The design expected ~28 to need
-dispatching.
+**The check this entry asked for came first, and it changed the answer.** "Generate the if-chain for
+106" would have been the wrong build: the 106 divide three ways, and only one of them is a gap.
 
-**What is there.** `CallStatic` is generic over `ClassDB.class_call_static`, so **all 114 statics
-work** with no per-method code. `CallUtility` is a **fixed if-chain of eight** in
-`VerseRuntime::api_call_utility` — the random family, which §8.2 names as mandatory. The other 106
-are recorded as `utility_not_dispatched` skips in `src/verse_api_skipped.h`.
+| what it is | how many | what happens now |
+| --- | --- | --- |
+| Verse or GodotMath already spells it | **86** | recorded as `utility_has_verse_spelling`, and the editor says *"Verse spells it `FloorF(X)`"* |
+| its parameter or result is a `Variant` | **14** | `utility_variant_only` — R-TYPE-7 keeps a script from spelling one, so there is no signature these could be given |
+| genuinely Godot, and now dispatched | **11** | `CallUtility`, with hand-written Verse wrappers |
+| left | **6** | `nearest_po2`, `step_decimals`, `rid_from_int64`, and the three `cubic_interpolate_angle` variants |
 
-**Why.** The GDExtension interface offers **no by-name utility call that takes Variants**. The only
-route is `variant_get_ptr_utility_function`, which hands back a *ptrcall* wanting typed argument
-pointers and a signature hash. godot-cpp binds each utility as an ordinary C++ function instead.
+The eleven dispatched are the ones whose *behaviour* is the engine's rather than whose spelling is:
+`push_error` and `push_warning` (the editor's Debugger panel, where a `Print` goes to stdout and is
+gone), `print_rich` (BBCode), `printerr`, `print_verbose`, `printraw`, `type_string` and
+`error_string` (engine tables), `instance_from_id`, `is_instance_id_valid` and `rid_allocate_id`.
 
-**To fix, if it is worth it.** Generate the if-chain from `extension_api.json` into a
-`src/verse_api_utilities.h`, one branch per utility, with a Godot-type → C++-type table in the
-generator. Mechanical but new machinery. **Check first**: for most of the 106, Verse's own stdlib is
-the right answer under R-AUD-2 and the skip is correct rather than a gap. The ones actually missing
-are the `@GlobalScope` names with no Verse counterpart — `print_rich`, `var_to_bytes`, `hash`,
-`type_string`, `instance_from_id` and the like.
+Their Verse wrappers are **hand-written in `GodotApi.native.verse` rather than generated**, because
+the signature is deliberately not Godot's: the print family is `vararg` there and one argument here,
+which is what a script writes. `VariantTypeName` rather than `TypeString`, because `TypeString` is
+already an *enumerator* in two generated enums — a collision class the generator's parameter table
+does not cover.
+
+What the 86 buys is the thing this entry was really about. Before, a script that typed `floor(x)` got
+*"it was skipped: utility_not_dispatched"*. Now it gets the spelling that works.
 
 ### G12 — the math tail is absent *and* unrecorded · **closed (the recording half)**
 
@@ -584,24 +589,57 @@ tuple path, which allocates nothing outside the arena.
 
 ## 4. Narrower than the design
 
-### G13 — math coverage
+### G13 — math coverage · **part: 9 of 16 types, and the blocker was imaginary**
 
 **Design:** §8.3 names a written list — *"length, normalized, distance, dot, cross, lerp, clamp, abs,
 sign, floor/ceil/round, rotated, angle, snapped, min/max"* — across 16 types.
 
-**What is there.** `host/Verse/GodotMath.native.verse` covers **`vector2`, `vector2i`, `vector3` and
-`color`**. The other twelve types have **no operators at all** — `vector4`, `rect2`, `rect2i`,
-`plane`, `quaternion`, `aabb`, `basis`, `transform2d`, `transform3d`, `projection`, `vector3i`,
-`vector4i`. Within the four, missing from §8.3's own list: **`snapped`**, **`min`/`max`**, and
-**`floor`/`ceil`/`round`**.
+**The stated blocker was false, and probing it took ten minutes.** This entry said `floor`/`ceil`/
+`round` could not be written because *"Verse's own answer an `int` and are `<decides>`, Godot's
+answer a vector of whole floats, and Verse has no int-to-float conversion"*. The first two clauses
+are right; the third is not. **`X * 1.0` is the conversion**, it works on a value and not only on a
+literal, and `if (V := Floor[X]) then V * 1.0 else X` is a total float floor whose `else` branch is
+what makes `floor(inf)` agree with Godot rather than decline. `VERSE_STDLIB_NAMES` listing `ToFloat`
+is what made it look otherwise — that list is a *reserved-name* list, not an availability one, as its
+own comment says.
 
-`floor`/`ceil`/`round` have a reason worth keeping: Verse's own answer an `int` and are `<decides>`,
-Godot's answer a vector of whole floats, and **Verse has no int-to-float conversion** to bridge them.
-Solve that first (or write the conversion) before attempting them.
+**Built.** 585 skips down to **466**. Scalars first, because the vector methods are built on them:
+`FloorF`, `CeilF`, `RoundF`, `Snapped`, `IsEqualApprox`, `IsZeroApprox`, `InverseLerp`, `Remap`,
+`MoveToward`, `RotateToward`, `Smoothstep`, `WrapF`, `PingPong`, `AngleDifference`, `LerpAngle`,
+`DegToRad`, `RadToDeg`, `Ease`, `CubicInterpolate`, `BezierInterpolate`, `BezierDerivative`,
+`Asinh`, `Acosh`, `Atanh`, `LinearToDb`, `DbToLinear`, `IsNan`, `IsInf`, `IsFinite` and
+`TruncatedQuotient` — which double as G11's answer for 86 of Godot's utilities.
 
-The rest is ordinary work. Match Godot's edge cases rather than its formulas —
-`../godot/core/math/*.h` is the reference, per the memory note about that checkout — and remember
-that every extension method name becomes a module-level name (see §5 below).
+Then the types: **vector2** completed to §8.3's list and past it, **vector2i**, **vector3**,
+**vector3i**, **vector4**, **vector4i**, **color** (`Darkened`, `Lightened`, `Inverted`,
+`GetLuminance`, `Clamp`), and **rect2**/**rect2i** (`HasPoint`, `Intersects`, `Merge`, `Expand`,
+`Abs`, `Grow`, `GetArea`, `GetCenter`, `GetEnd`). Seven types still have nothing: `plane`,
+`quaternion`, `aabb`, `basis`, `transform2d`, `transform3d`, `projection` — the transform family,
+which is where the remaining 466 mostly live.
+
+**Four things the probe caught that reading would not have.** Each is now a landmine note in
+`CLAUDE.md`, because each cost a wrong answer that compiled:
+
+1. **Verse silently drops a continuation line beginning with an operator.** `CubicInterpolate` and
+   `BezierDerivative` were written as multi-line sums and answered *their first term* — 0.0 for every
+   input, no diagnostic. Both are asserted against Godot's own functions now.
+2. **Verse's float `=` is reflexive for NaN.** `not (X = X)` never fires, so the first `IsNan`
+   reported that nothing was ever NaN. NaN is *unordered* instead: it fails `<=` and `>=` alike.
+3. **`Quotient` floors where C truncates.** `Quotient[-3, 2]` is -2 and Godot's `-3 / 2` is -1, so
+   every integer vector's `/` would have been off by one for exactly the negative operands nobody
+   tests. `TruncatedQuotient` is the fix and the integration suite compares against `Vector2i`.
+4. **A host build passing does not mean a `.verse` file compiles.** VNI compiles `host/Verse` at
+   build time against one package set and the runtime compiler re-reads them against another: a bare
+   `Pi` passes the first and is unknown in the second. The constants are declared locally now, which
+   is what this file's header already said Godot's C# does.
+
+**One correction to the file's own comment, kept separate because it changes no behaviour.**
+`operator'/'(vector2, float)` is `<decides>` and its comment said this is *"because float division is
+[failable]: Godot answers `inf` and Verse declines"*. Verse does not decline — float division is
+total and answers `Inf`, `-Inf` and `NaN` exactly as Godot does. The comment is corrected; the
+`<decides>` stays, because its *other* argument — that a caller who did not think about a zero
+divisor was going to get `inf` and not notice — stands on its own and changing it would break call
+sites on no one's authority but mine.
 
 ---
 
@@ -743,11 +781,11 @@ Items 1–4 are **done**, struck through, and their entries above say what shipp
 5. ~~**G5** — `_make_function`.~~ Built. Still needs the by-hand checklist to *verify*, and now
    provably so: it is unreachable from GDScript, so there is no automated check to write.
 6. ~~**G7**, **G8**, **G10**, **G19**, **G20**~~ — done.
-7. **G13** — the math bodies, and **G11** — the utilities. The two that are left, and both are
-   bounded rather than open: G13's progress is *generated* (every body written deletes its own skip
-   row), and G11 should start by checking which of the 106 actually need dispatching, since most are
-   correctly skipped under R-AUD-2 and only the `@GlobalScope` names with no Verse counterpart --
-   `print_rich`, `var_to_bytes`, `hash`, `type_string`, `instance_from_id` -- are really missing.
+7. ~~**G13** and **G11**.~~ G11 is closed and G13 is part. What is left of G13 is the **transform
+   family** — `plane`, `quaternion`, `aabb`, `basis`, `transform2d`, `transform3d`, `projection` —
+   which is where most of the remaining 466 skips live, and which is a bigger piece of work than the
+   vectors were: a basis is nine components and its `*` is composition rather than anything
+   componentwise. Six utilities are left with it.
 8. ~~**G21** — needs an ABI decision before it is ordinary work.~~ The signal half needed no such
    decision and is done. What is left is **R-LANG-2**'s general case — a struct as a method
    parameter, a return value, an `@export` — and the spec has already chosen the Dictionary; it wants

@@ -373,3 +373,56 @@ typed_dictionary<public>(k:type, v:type) := class(godot_ref):
     Get<public>(Key:k)<decides><transacts>:v = Unpack[VhRefGet[Ref, PackKey(Key)]]
 
     Set<public>(Key:k, Value:v)<transacts>:void = VhRefSet(Ref, PackKey(Key), Pack(Value))
+
+# --- @GlobalScope utilities that are Godot's behaviour rather than Verse's spelling -------------
+#
+# R-SCN-3/G11. Godot has 114 utility functions and Verse's own stdlib answers most of them, so under
+# R-AUD-2 those keep Verse's spelling and are recorded as skips pointing at it. What is left divides
+# in two, and only one half is reachable:
+#
+#   - These. Their *behaviour* is the engine's -- the editor's error list, Godot's own type names,
+#     the object registry, the RID allocator -- so there is nothing for Verse to answer with.
+#   - The ones whose parameter or return is a `Variant`: `hash`, `var_to_str`, `str_to_var`,
+#     `var_to_bytes`, `type_convert`, `is_same`, `weakref`. A script cannot spell `variant`
+#     (R-TYPE-7 keeps the packers module-scoped), so these have no signature a script could call
+#     even if they were dispatched. They stay skips, with that as the reason.
+#
+# The print family is `vararg` in Godot and one argument in practice. These take the one, which is
+# what a script writes; the N-argument form is not carried and is recorded as such.
+
+# The editor's error list, which is the whole reason these are not Verse's `Print`: a `push_error`
+# shows up in the Debugger panel with a stack, where a print goes to stdout and is gone.
+PushError<public>(Text:string)<transacts>:void = { VhCallUtility("push_error", array{VhFromString(Text)}) }
+PushWarning<public>(Text:string)<transacts>:void = { VhCallUtility("push_warning", array{VhFromString(Text)}) }
+
+# BBCode, which is the one thing Verse's Print cannot do: `PrintRich("[b]bold[/b]")`.
+PrintRich<public>(Text:string)<transacts>:void = { VhCallUtility("print_rich", array{VhFromString(Text)}) }
+
+# stderr rather than stdout, and the verbose channel that `--verbose` gates.
+PrintErr<public>(Text:string)<transacts>:void = { VhCallUtility("printerr", array{VhFromString(Text)}) }
+PrintVerbose<public>(Text:string)<transacts>:void = { VhCallUtility("print_verbose", array{VhFromString(Text)}) }
+
+# No newline, which is what a progress indicator writes.
+PrintRaw<public>(Text:string)<transacts>:void = { VhCallUtility("printraw", array{VhFromString(Text)}) }
+
+# Godot's own name for a Variant type number and for an Error code -- `TYPE_VECTOR2`,
+# `ERR_FILE_NOT_FOUND`. Both are engine tables, so neither has a Verse answer.
+#
+# `VariantTypeName` rather than `TypeString`, because `TypeString` is already an *enumerator* in two
+# generated enums (`property_hint` and `variant_type`) and a module-level function of that name is
+# ambiguous with both. Enumerators are a collision class the generator's parameter table does not
+# cover, which is why this one is renamed rather than registered.
+VariantTypeName<public>(VariantType:int)<transacts>:string = VhToString(VhCallUtility("type_string", array{VhFromInt(VariantType)}))
+ErrorString<public>(Error:int)<transacts>:string = VhToString(VhCallUtility("error_string", array{VhFromInt(Error)}))
+
+# The object registry. `InstanceFromId` is the inverse of every handle this bridge carries, and it
+# fails rather than raising for an id Godot has freed -- which is the same bargain every other
+# object-returning call makes (R-TYPE-4).
+InstanceFromId<public>(Id:int)<decides><transacts>:object =
+    object[VhObjectFrom[VhCallUtility("instance_from_id", array{VhFromInt(Id)})]]
+
+IsInstanceIdValid<public>(Id:int)<decides><transacts>:void =
+    VhToLogic(VhCallUtility("is_instance_id_valid", array{VhFromInt(Id)}))?
+
+# The RID allocator, which a script writing against a Server needs and can get nowhere else.
+RidAllocateId<public>()<transacts>:int = VhToInt(VhCallUtility("rid_allocate_id", array{}))

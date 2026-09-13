@@ -1555,23 +1555,23 @@ ToInt<public>(Value:base_material3d_depth_draw_mode)<transacts>:int =
 
 # Godot's BaseMaterial3D.DepthTest.
 base_material3d_depth_test<public> := enum:
-    Default
-    Inverted
+    DepthTestDefault
+    DepthTestInverted
 
 VhToBaseMaterial3dDepthTest(Value:variant)<transacts>:base_material3d_depth_test =
     case (VhToInt(Value)):
-        0 => base_material3d_depth_test.Default
-        1 => base_material3d_depth_test.Inverted
+        0 => base_material3d_depth_test.DepthTestDefault
+        1 => base_material3d_depth_test.DepthTestInverted
         _ =>
             VhTypeMismatch("base_material3d_depth_test", Value)
-            base_material3d_depth_test.Default
+            base_material3d_depth_test.DepthTestDefault
 
 VhFromBaseMaterial3dDepthTest(Value:base_material3d_depth_test)<transacts>:variant = VhFromInt(ToInt(Value))
 
 ToInt<public>(Value:base_material3d_depth_test)<transacts>:int =
     case (Value):
-        base_material3d_depth_test.Default => 0
-        base_material3d_depth_test.Inverted => 1
+        base_material3d_depth_test.DepthTestDefault => 0
+        base_material3d_depth_test.DepthTestInverted => 1
 
 # Godot's BaseMaterial3D.DetailUV.
 base_material3d_detail_uv<public> := enum:
@@ -2249,26 +2249,26 @@ ToInt<public>(Value:camera3d_keep_aspect)<transacts>:int =
 
 # Godot's Camera3D.ProjectionType.
 camera3d_projection_type<public> := enum:
-    Perspective
-    Orthogonal
-    Frustum
+    ProjectionPerspective
+    ProjectionOrthogonal
+    ProjectionFrustum
 
 VhToCamera3dProjectionType(Value:variant)<transacts>:camera3d_projection_type =
     case (VhToInt(Value)):
-        0 => camera3d_projection_type.Perspective
-        1 => camera3d_projection_type.Orthogonal
-        2 => camera3d_projection_type.Frustum
+        0 => camera3d_projection_type.ProjectionPerspective
+        1 => camera3d_projection_type.ProjectionOrthogonal
+        2 => camera3d_projection_type.ProjectionFrustum
         _ =>
             VhTypeMismatch("camera3d_projection_type", Value)
-            camera3d_projection_type.Perspective
+            camera3d_projection_type.ProjectionPerspective
 
 VhFromCamera3dProjectionType(Value:camera3d_projection_type)<transacts>:variant = VhFromInt(ToInt(Value))
 
 ToInt<public>(Value:camera3d_projection_type)<transacts>:int =
     case (Value):
-        camera3d_projection_type.Perspective => 0
-        camera3d_projection_type.Orthogonal => 1
-        camera3d_projection_type.Frustum => 2
+        camera3d_projection_type.ProjectionPerspective => 0
+        camera3d_projection_type.ProjectionOrthogonal => 1
+        camera3d_projection_type.ProjectionFrustum => 2
 
 # Godot's CameraFeed.FeedDataType.
 camera_feed_feed_data_type<public> := enum:
@@ -3190,35 +3190,35 @@ ToInt<public>(Value:control_mouse_filter)<transacts>:int =
 
 # Godot's Control.SizeFlags.
 control_size_flags<public> := enum:
-    ShrinkBegin
-    Fill
-    Expand
-    ExpandFill
-    ShrinkCenter
-    ShrinkEnd
+    SizeShrinkBegin
+    SizeFill
+    SizeExpand
+    SizeExpandFill
+    SizeShrinkCenter
+    SizeShrinkEnd
 
 VhToControlSizeFlags(Value:variant)<transacts>:control_size_flags =
     case (VhToInt(Value)):
-        0 => control_size_flags.ShrinkBegin
-        1 => control_size_flags.Fill
-        2 => control_size_flags.Expand
-        3 => control_size_flags.ExpandFill
-        4 => control_size_flags.ShrinkCenter
-        8 => control_size_flags.ShrinkEnd
+        0 => control_size_flags.SizeShrinkBegin
+        1 => control_size_flags.SizeFill
+        2 => control_size_flags.SizeExpand
+        3 => control_size_flags.SizeExpandFill
+        4 => control_size_flags.SizeShrinkCenter
+        8 => control_size_flags.SizeShrinkEnd
         _ =>
             VhTypeMismatch("control_size_flags", Value)
-            control_size_flags.ShrinkBegin
+            control_size_flags.SizeShrinkBegin
 
 VhFromControlSizeFlags(Value:control_size_flags)<transacts>:variant = VhFromInt(ToInt(Value))
 
 ToInt<public>(Value:control_size_flags)<transacts>:int =
     case (Value):
-        control_size_flags.ShrinkBegin => 0
-        control_size_flags.Fill => 1
-        control_size_flags.Expand => 2
-        control_size_flags.ExpandFill => 3
-        control_size_flags.ShrinkCenter => 4
-        control_size_flags.ShrinkEnd => 8
+        control_size_flags.SizeShrinkBegin => 0
+        control_size_flags.SizeFill => 1
+        control_size_flags.SizeExpand => 2
+        control_size_flags.SizeExpandFill => 3
+        control_size_flags.SizeShrinkCenter => 4
+        control_size_flags.SizeShrinkEnd => 8
 
 # Godot's Control.TextDirection.
 control_text_direction<public> := enum:
@@ -3766,26 +3766,26 @@ ToInt<public>(Value:decal_decal_texture)<transacts>:int =
 
 # Godot's DirectionalLight3D.ShadowMode.
 directional_light3d_shadow_mode<public> := enum:
-    Orthogonal
-    Parallel2Splits
-    Parallel4Splits
+    ShadowOrthogonal
+    ShadowParallel2Splits
+    ShadowParallel4Splits
 
 VhToDirectionalLight3dShadowMode(Value:variant)<transacts>:directional_light3d_shadow_mode =
     case (VhToInt(Value)):
-        0 => directional_light3d_shadow_mode.Orthogonal
-        1 => directional_light3d_shadow_mode.Parallel2Splits
-        2 => directional_light3d_shadow_mode.Parallel4Splits
+        0 => directional_light3d_shadow_mode.ShadowOrthogonal
+        1 => directional_light3d_shadow_mode.ShadowParallel2Splits
+        2 => directional_light3d_shadow_mode.ShadowParallel4Splits
         _ =>
             VhTypeMismatch("directional_light3d_shadow_mode", Value)
-            directional_light3d_shadow_mode.Orthogonal
+            directional_light3d_shadow_mode.ShadowOrthogonal
 
 VhFromDirectionalLight3dShadowMode(Value:directional_light3d_shadow_mode)<transacts>:variant = VhFromInt(ToInt(Value))
 
 ToInt<public>(Value:directional_light3d_shadow_mode)<transacts>:int =
     case (Value):
-        directional_light3d_shadow_mode.Orthogonal => 0
-        directional_light3d_shadow_mode.Parallel2Splits => 1
-        directional_light3d_shadow_mode.Parallel4Splits => 2
+        directional_light3d_shadow_mode.ShadowOrthogonal => 0
+        directional_light3d_shadow_mode.ShadowParallel2Splits => 1
+        directional_light3d_shadow_mode.ShadowParallel4Splits => 2
 
 # Godot's DirectionalLight3D.SkyMode.
 directional_light3d_sky_mode<public> := enum:
@@ -3812,86 +3812,86 @@ ToInt<public>(Value:directional_light3d_sky_mode)<transacts>:int =
 
 # Godot's DisplayServer.AccessibilityAction.
 display_server_accessibility_action<public> := enum:
-    Click
-    Focus
-    Blur
-    Collapse
-    Expand
-    Decrement
-    Increment
-    HideTooltip
-    ShowTooltip
-    SetTextSelection
-    ReplaceSelectedText
-    ScrollBackward
-    ScrollDown
-    ScrollForward
-    ScrollLeft
-    ScrollRight
-    ScrollUp
-    ScrollIntoView
-    ScrollToPoint
-    SetScrollOffset
-    SetValue
-    ShowContextMenu
-    Custom
+    ActionClick
+    ActionFocus
+    ActionBlur
+    ActionCollapse
+    ActionExpand
+    ActionDecrement
+    ActionIncrement
+    ActionHideTooltip
+    ActionShowTooltip
+    ActionSetTextSelection
+    ActionReplaceSelectedText
+    ActionScrollBackward
+    ActionScrollDown
+    ActionScrollForward
+    ActionScrollLeft
+    ActionScrollRight
+    ActionScrollUp
+    ActionScrollIntoView
+    ActionScrollToPoint
+    ActionSetScrollOffset
+    ActionSetValue
+    ActionShowContextMenu
+    ActionCustom
 
 VhToDisplayServerAccessibilityAction(Value:variant)<transacts>:display_server_accessibility_action =
     case (VhToInt(Value)):
-        0 => display_server_accessibility_action.Click
-        1 => display_server_accessibility_action.Focus
-        2 => display_server_accessibility_action.Blur
-        3 => display_server_accessibility_action.Collapse
-        4 => display_server_accessibility_action.Expand
-        5 => display_server_accessibility_action.Decrement
-        6 => display_server_accessibility_action.Increment
-        7 => display_server_accessibility_action.HideTooltip
-        8 => display_server_accessibility_action.ShowTooltip
-        9 => display_server_accessibility_action.SetTextSelection
-        10 => display_server_accessibility_action.ReplaceSelectedText
-        11 => display_server_accessibility_action.ScrollBackward
-        12 => display_server_accessibility_action.ScrollDown
-        13 => display_server_accessibility_action.ScrollForward
-        14 => display_server_accessibility_action.ScrollLeft
-        15 => display_server_accessibility_action.ScrollRight
-        16 => display_server_accessibility_action.ScrollUp
-        17 => display_server_accessibility_action.ScrollIntoView
-        18 => display_server_accessibility_action.ScrollToPoint
-        19 => display_server_accessibility_action.SetScrollOffset
-        20 => display_server_accessibility_action.SetValue
-        21 => display_server_accessibility_action.ShowContextMenu
-        22 => display_server_accessibility_action.Custom
+        0 => display_server_accessibility_action.ActionClick
+        1 => display_server_accessibility_action.ActionFocus
+        2 => display_server_accessibility_action.ActionBlur
+        3 => display_server_accessibility_action.ActionCollapse
+        4 => display_server_accessibility_action.ActionExpand
+        5 => display_server_accessibility_action.ActionDecrement
+        6 => display_server_accessibility_action.ActionIncrement
+        7 => display_server_accessibility_action.ActionHideTooltip
+        8 => display_server_accessibility_action.ActionShowTooltip
+        9 => display_server_accessibility_action.ActionSetTextSelection
+        10 => display_server_accessibility_action.ActionReplaceSelectedText
+        11 => display_server_accessibility_action.ActionScrollBackward
+        12 => display_server_accessibility_action.ActionScrollDown
+        13 => display_server_accessibility_action.ActionScrollForward
+        14 => display_server_accessibility_action.ActionScrollLeft
+        15 => display_server_accessibility_action.ActionScrollRight
+        16 => display_server_accessibility_action.ActionScrollUp
+        17 => display_server_accessibility_action.ActionScrollIntoView
+        18 => display_server_accessibility_action.ActionScrollToPoint
+        19 => display_server_accessibility_action.ActionSetScrollOffset
+        20 => display_server_accessibility_action.ActionSetValue
+        21 => display_server_accessibility_action.ActionShowContextMenu
+        22 => display_server_accessibility_action.ActionCustom
         _ =>
             VhTypeMismatch("display_server_accessibility_action", Value)
-            display_server_accessibility_action.Click
+            display_server_accessibility_action.ActionClick
 
 VhFromDisplayServerAccessibilityAction(Value:display_server_accessibility_action)<transacts>:variant = VhFromInt(ToInt(Value))
 
 ToInt<public>(Value:display_server_accessibility_action)<transacts>:int =
     case (Value):
-        display_server_accessibility_action.Click => 0
-        display_server_accessibility_action.Focus => 1
-        display_server_accessibility_action.Blur => 2
-        display_server_accessibility_action.Collapse => 3
-        display_server_accessibility_action.Expand => 4
-        display_server_accessibility_action.Decrement => 5
-        display_server_accessibility_action.Increment => 6
-        display_server_accessibility_action.HideTooltip => 7
-        display_server_accessibility_action.ShowTooltip => 8
-        display_server_accessibility_action.SetTextSelection => 9
-        display_server_accessibility_action.ReplaceSelectedText => 10
-        display_server_accessibility_action.ScrollBackward => 11
-        display_server_accessibility_action.ScrollDown => 12
-        display_server_accessibility_action.ScrollForward => 13
-        display_server_accessibility_action.ScrollLeft => 14
-        display_server_accessibility_action.ScrollRight => 15
-        display_server_accessibility_action.ScrollUp => 16
-        display_server_accessibility_action.ScrollIntoView => 17
-        display_server_accessibility_action.ScrollToPoint => 18
-        display_server_accessibility_action.SetScrollOffset => 19
-        display_server_accessibility_action.SetValue => 20
-        display_server_accessibility_action.ShowContextMenu => 21
-        display_server_accessibility_action.Custom => 22
+        display_server_accessibility_action.ActionClick => 0
+        display_server_accessibility_action.ActionFocus => 1
+        display_server_accessibility_action.ActionBlur => 2
+        display_server_accessibility_action.ActionCollapse => 3
+        display_server_accessibility_action.ActionExpand => 4
+        display_server_accessibility_action.ActionDecrement => 5
+        display_server_accessibility_action.ActionIncrement => 6
+        display_server_accessibility_action.ActionHideTooltip => 7
+        display_server_accessibility_action.ActionShowTooltip => 8
+        display_server_accessibility_action.ActionSetTextSelection => 9
+        display_server_accessibility_action.ActionReplaceSelectedText => 10
+        display_server_accessibility_action.ActionScrollBackward => 11
+        display_server_accessibility_action.ActionScrollDown => 12
+        display_server_accessibility_action.ActionScrollForward => 13
+        display_server_accessibility_action.ActionScrollLeft => 14
+        display_server_accessibility_action.ActionScrollRight => 15
+        display_server_accessibility_action.ActionScrollUp => 16
+        display_server_accessibility_action.ActionScrollIntoView => 17
+        display_server_accessibility_action.ActionScrollToPoint => 18
+        display_server_accessibility_action.ActionSetScrollOffset => 19
+        display_server_accessibility_action.ActionSetValue => 20
+        display_server_accessibility_action.ActionShowContextMenu => 21
+        display_server_accessibility_action.ActionCustom => 22
 
 # Godot's DisplayServer.AccessibilityFlags.
 display_server_accessibility_flags<public> := enum:
@@ -5976,29 +5976,29 @@ ToInt<public>(Value:fast_noise_lite_domain_warp_type)<transacts>:int =
 
 # Godot's FastNoiseLite.FractalType.
 fast_noise_lite_fractal_type<public> := enum:
-    None
-    Fbm
-    Ridged
-    PingPong
+    FractalNone
+    FractalFbm
+    FractalRidged
+    FractalPingPong
 
 VhToFastNoiseLiteFractalType(Value:variant)<transacts>:fast_noise_lite_fractal_type =
     case (VhToInt(Value)):
-        0 => fast_noise_lite_fractal_type.None
-        1 => fast_noise_lite_fractal_type.Fbm
-        2 => fast_noise_lite_fractal_type.Ridged
-        3 => fast_noise_lite_fractal_type.PingPong
+        0 => fast_noise_lite_fractal_type.FractalNone
+        1 => fast_noise_lite_fractal_type.FractalFbm
+        2 => fast_noise_lite_fractal_type.FractalRidged
+        3 => fast_noise_lite_fractal_type.FractalPingPong
         _ =>
             VhTypeMismatch("fast_noise_lite_fractal_type", Value)
-            fast_noise_lite_fractal_type.None
+            fast_noise_lite_fractal_type.FractalNone
 
 VhFromFastNoiseLiteFractalType(Value:fast_noise_lite_fractal_type)<transacts>:variant = VhFromInt(ToInt(Value))
 
 ToInt<public>(Value:fast_noise_lite_fractal_type)<transacts>:int =
     case (Value):
-        fast_noise_lite_fractal_type.None => 0
-        fast_noise_lite_fractal_type.Fbm => 1
-        fast_noise_lite_fractal_type.Ridged => 2
-        fast_noise_lite_fractal_type.PingPong => 3
+        fast_noise_lite_fractal_type.FractalNone => 0
+        fast_noise_lite_fractal_type.FractalFbm => 1
+        fast_noise_lite_fractal_type.FractalRidged => 2
+        fast_noise_lite_fractal_type.FractalPingPong => 3
 
 # Godot's FastNoiseLite.NoiseType.
 fast_noise_lite_noise_type<public> := enum:
@@ -12718,47 +12718,47 @@ ToInt<public>(Value:physics_server2d_body_mode)<transacts>:int =
 
 # Godot's PhysicsServer2D.BodyParameter.
 physics_server2d_body_parameter<public> := enum:
-    Bounce
-    Friction
-    Mass
-    Inertia
-    CenterOfMass
-    GravityScale
-    LinearDampMode
-    AngularDampMode
-    LinearDamp
-    AngularDamp
+    BodyParamBounce
+    BodyParamFriction
+    BodyParamMass
+    BodyParamInertia
+    BodyParamCenterOfMass
+    BodyParamGravityScale
+    BodyParamLinearDampMode
+    BodyParamAngularDampMode
+    BodyParamLinearDamp
+    BodyParamAngularDamp
 
 VhToPhysicsServer2dBodyParameter(Value:variant)<transacts>:physics_server2d_body_parameter =
     case (VhToInt(Value)):
-        0 => physics_server2d_body_parameter.Bounce
-        1 => physics_server2d_body_parameter.Friction
-        2 => physics_server2d_body_parameter.Mass
-        3 => physics_server2d_body_parameter.Inertia
-        4 => physics_server2d_body_parameter.CenterOfMass
-        5 => physics_server2d_body_parameter.GravityScale
-        6 => physics_server2d_body_parameter.LinearDampMode
-        7 => physics_server2d_body_parameter.AngularDampMode
-        8 => physics_server2d_body_parameter.LinearDamp
-        9 => physics_server2d_body_parameter.AngularDamp
+        0 => physics_server2d_body_parameter.BodyParamBounce
+        1 => physics_server2d_body_parameter.BodyParamFriction
+        2 => physics_server2d_body_parameter.BodyParamMass
+        3 => physics_server2d_body_parameter.BodyParamInertia
+        4 => physics_server2d_body_parameter.BodyParamCenterOfMass
+        5 => physics_server2d_body_parameter.BodyParamGravityScale
+        6 => physics_server2d_body_parameter.BodyParamLinearDampMode
+        7 => physics_server2d_body_parameter.BodyParamAngularDampMode
+        8 => physics_server2d_body_parameter.BodyParamLinearDamp
+        9 => physics_server2d_body_parameter.BodyParamAngularDamp
         _ =>
             VhTypeMismatch("physics_server2d_body_parameter", Value)
-            physics_server2d_body_parameter.Bounce
+            physics_server2d_body_parameter.BodyParamBounce
 
 VhFromPhysicsServer2dBodyParameter(Value:physics_server2d_body_parameter)<transacts>:variant = VhFromInt(ToInt(Value))
 
 ToInt<public>(Value:physics_server2d_body_parameter)<transacts>:int =
     case (Value):
-        physics_server2d_body_parameter.Bounce => 0
-        physics_server2d_body_parameter.Friction => 1
-        physics_server2d_body_parameter.Mass => 2
-        physics_server2d_body_parameter.Inertia => 3
-        physics_server2d_body_parameter.CenterOfMass => 4
-        physics_server2d_body_parameter.GravityScale => 5
-        physics_server2d_body_parameter.LinearDampMode => 6
-        physics_server2d_body_parameter.AngularDampMode => 7
-        physics_server2d_body_parameter.LinearDamp => 8
-        physics_server2d_body_parameter.AngularDamp => 9
+        physics_server2d_body_parameter.BodyParamBounce => 0
+        physics_server2d_body_parameter.BodyParamFriction => 1
+        physics_server2d_body_parameter.BodyParamMass => 2
+        physics_server2d_body_parameter.BodyParamInertia => 3
+        physics_server2d_body_parameter.BodyParamCenterOfMass => 4
+        physics_server2d_body_parameter.BodyParamGravityScale => 5
+        physics_server2d_body_parameter.BodyParamLinearDampMode => 6
+        physics_server2d_body_parameter.BodyParamAngularDampMode => 7
+        physics_server2d_body_parameter.BodyParamLinearDamp => 8
+        physics_server2d_body_parameter.BodyParamAngularDamp => 9
 
 # Godot's PhysicsServer2D.BodyState.
 physics_server2d_body_state<public> := enum:
@@ -13217,47 +13217,47 @@ ToInt<public>(Value:physics_server3d_body_mode)<transacts>:int =
 
 # Godot's PhysicsServer3D.BodyParameter.
 physics_server3d_body_parameter<public> := enum:
-    Bounce
-    Friction
-    Mass
-    Inertia
-    CenterOfMass
-    GravityScale
-    LinearDampMode
-    AngularDampMode
-    LinearDamp
-    AngularDamp
+    BodyParamBounce
+    BodyParamFriction
+    BodyParamMass
+    BodyParamInertia
+    BodyParamCenterOfMass
+    BodyParamGravityScale
+    BodyParamLinearDampMode
+    BodyParamAngularDampMode
+    BodyParamLinearDamp
+    BodyParamAngularDamp
 
 VhToPhysicsServer3dBodyParameter(Value:variant)<transacts>:physics_server3d_body_parameter =
     case (VhToInt(Value)):
-        0 => physics_server3d_body_parameter.Bounce
-        1 => physics_server3d_body_parameter.Friction
-        2 => physics_server3d_body_parameter.Mass
-        3 => physics_server3d_body_parameter.Inertia
-        4 => physics_server3d_body_parameter.CenterOfMass
-        5 => physics_server3d_body_parameter.GravityScale
-        6 => physics_server3d_body_parameter.LinearDampMode
-        7 => physics_server3d_body_parameter.AngularDampMode
-        8 => physics_server3d_body_parameter.LinearDamp
-        9 => physics_server3d_body_parameter.AngularDamp
+        0 => physics_server3d_body_parameter.BodyParamBounce
+        1 => physics_server3d_body_parameter.BodyParamFriction
+        2 => physics_server3d_body_parameter.BodyParamMass
+        3 => physics_server3d_body_parameter.BodyParamInertia
+        4 => physics_server3d_body_parameter.BodyParamCenterOfMass
+        5 => physics_server3d_body_parameter.BodyParamGravityScale
+        6 => physics_server3d_body_parameter.BodyParamLinearDampMode
+        7 => physics_server3d_body_parameter.BodyParamAngularDampMode
+        8 => physics_server3d_body_parameter.BodyParamLinearDamp
+        9 => physics_server3d_body_parameter.BodyParamAngularDamp
         _ =>
             VhTypeMismatch("physics_server3d_body_parameter", Value)
-            physics_server3d_body_parameter.Bounce
+            physics_server3d_body_parameter.BodyParamBounce
 
 VhFromPhysicsServer3dBodyParameter(Value:physics_server3d_body_parameter)<transacts>:variant = VhFromInt(ToInt(Value))
 
 ToInt<public>(Value:physics_server3d_body_parameter)<transacts>:int =
     case (Value):
-        physics_server3d_body_parameter.Bounce => 0
-        physics_server3d_body_parameter.Friction => 1
-        physics_server3d_body_parameter.Mass => 2
-        physics_server3d_body_parameter.Inertia => 3
-        physics_server3d_body_parameter.CenterOfMass => 4
-        physics_server3d_body_parameter.GravityScale => 5
-        physics_server3d_body_parameter.LinearDampMode => 6
-        physics_server3d_body_parameter.AngularDampMode => 7
-        physics_server3d_body_parameter.LinearDamp => 8
-        physics_server3d_body_parameter.AngularDamp => 9
+        physics_server3d_body_parameter.BodyParamBounce => 0
+        physics_server3d_body_parameter.BodyParamFriction => 1
+        physics_server3d_body_parameter.BodyParamMass => 2
+        physics_server3d_body_parameter.BodyParamInertia => 3
+        physics_server3d_body_parameter.BodyParamCenterOfMass => 4
+        physics_server3d_body_parameter.BodyParamGravityScale => 5
+        physics_server3d_body_parameter.BodyParamLinearDampMode => 6
+        physics_server3d_body_parameter.BodyParamAngularDampMode => 7
+        physics_server3d_body_parameter.BodyParamLinearDamp => 8
+        physics_server3d_body_parameter.BodyParamAngularDamp => 9
 
 # Godot's PhysicsServer3D.BodyState.
 physics_server3d_body_state<public> := enum:
@@ -17431,26 +17431,26 @@ ToInt<public>(Value:rendering_server_light_bake_mode)<transacts>:int =
 
 # Godot's RenderingServer.LightDirectionalShadowMode.
 rendering_server_light_directional_shadow_mode<public> := enum:
-    Orthogonal
-    Parallel2Splits
-    Parallel4Splits
+    LightDirectionalShadowOrthogonal
+    LightDirectionalShadowParallel2Splits
+    LightDirectionalShadowParallel4Splits
 
 VhToRenderingServerLightDirectionalShadowMode(Value:variant)<transacts>:rendering_server_light_directional_shadow_mode =
     case (VhToInt(Value)):
-        0 => rendering_server_light_directional_shadow_mode.Orthogonal
-        1 => rendering_server_light_directional_shadow_mode.Parallel2Splits
-        2 => rendering_server_light_directional_shadow_mode.Parallel4Splits
+        0 => rendering_server_light_directional_shadow_mode.LightDirectionalShadowOrthogonal
+        1 => rendering_server_light_directional_shadow_mode.LightDirectionalShadowParallel2Splits
+        2 => rendering_server_light_directional_shadow_mode.LightDirectionalShadowParallel4Splits
         _ =>
             VhTypeMismatch("rendering_server_light_directional_shadow_mode", Value)
-            rendering_server_light_directional_shadow_mode.Orthogonal
+            rendering_server_light_directional_shadow_mode.LightDirectionalShadowOrthogonal
 
 VhFromRenderingServerLightDirectionalShadowMode(Value:rendering_server_light_directional_shadow_mode)<transacts>:variant = VhFromInt(ToInt(Value))
 
 ToInt<public>(Value:rendering_server_light_directional_shadow_mode)<transacts>:int =
     case (Value):
-        rendering_server_light_directional_shadow_mode.Orthogonal => 0
-        rendering_server_light_directional_shadow_mode.Parallel2Splits => 1
-        rendering_server_light_directional_shadow_mode.Parallel4Splits => 2
+        rendering_server_light_directional_shadow_mode.LightDirectionalShadowOrthogonal => 0
+        rendering_server_light_directional_shadow_mode.LightDirectionalShadowParallel2Splits => 1
+        rendering_server_light_directional_shadow_mode.LightDirectionalShadowParallel4Splits => 2
 
 # Godot's RenderingServer.LightDirectionalSkyMode.
 rendering_server_light_directional_sky_mode<public> := enum:
@@ -21749,53 +21749,53 @@ ToInt<public>(Value:tween_ease_type)<transacts>:int =
 
 # Godot's Tween.TransitionType.
 tween_transition_type<public> := enum:
-    Linear
-    Sine
-    Quint
-    Quart
-    Quad
-    Expo
-    Elastic
-    Cubic
-    Circ
-    Bounce
-    Back
-    Spring
+    TransLinear
+    TransSine
+    TransQuint
+    TransQuart
+    TransQuad
+    TransExpo
+    TransElastic
+    TransCubic
+    TransCirc
+    TransBounce
+    TransBack
+    TransSpring
 
 VhToTweenTransitionType(Value:variant)<transacts>:tween_transition_type =
     case (VhToInt(Value)):
-        0 => tween_transition_type.Linear
-        1 => tween_transition_type.Sine
-        2 => tween_transition_type.Quint
-        3 => tween_transition_type.Quart
-        4 => tween_transition_type.Quad
-        5 => tween_transition_type.Expo
-        6 => tween_transition_type.Elastic
-        7 => tween_transition_type.Cubic
-        8 => tween_transition_type.Circ
-        9 => tween_transition_type.Bounce
-        10 => tween_transition_type.Back
-        11 => tween_transition_type.Spring
+        0 => tween_transition_type.TransLinear
+        1 => tween_transition_type.TransSine
+        2 => tween_transition_type.TransQuint
+        3 => tween_transition_type.TransQuart
+        4 => tween_transition_type.TransQuad
+        5 => tween_transition_type.TransExpo
+        6 => tween_transition_type.TransElastic
+        7 => tween_transition_type.TransCubic
+        8 => tween_transition_type.TransCirc
+        9 => tween_transition_type.TransBounce
+        10 => tween_transition_type.TransBack
+        11 => tween_transition_type.TransSpring
         _ =>
             VhTypeMismatch("tween_transition_type", Value)
-            tween_transition_type.Linear
+            tween_transition_type.TransLinear
 
 VhFromTweenTransitionType(Value:tween_transition_type)<transacts>:variant = VhFromInt(ToInt(Value))
 
 ToInt<public>(Value:tween_transition_type)<transacts>:int =
     case (Value):
-        tween_transition_type.Linear => 0
-        tween_transition_type.Sine => 1
-        tween_transition_type.Quint => 2
-        tween_transition_type.Quart => 3
-        tween_transition_type.Quad => 4
-        tween_transition_type.Expo => 5
-        tween_transition_type.Elastic => 6
-        tween_transition_type.Cubic => 7
-        tween_transition_type.Circ => 8
-        tween_transition_type.Bounce => 9
-        tween_transition_type.Back => 10
-        tween_transition_type.Spring => 11
+        tween_transition_type.TransLinear => 0
+        tween_transition_type.TransSine => 1
+        tween_transition_type.TransQuint => 2
+        tween_transition_type.TransQuart => 3
+        tween_transition_type.TransQuad => 4
+        tween_transition_type.TransExpo => 5
+        tween_transition_type.TransElastic => 6
+        tween_transition_type.TransCubic => 7
+        tween_transition_type.TransCirc => 8
+        tween_transition_type.TransBounce => 9
+        tween_transition_type.TransBack => 10
+        tween_transition_type.TransSpring => 11
 
 # Godot's Tween.TweenPauseMode.
 tween_tween_pause_mode<public> := enum:
@@ -24761,32 +24761,32 @@ ToInt<public>(Value:web_xr_interface_target_ray_mode)<transacts>:int =
 
 # Godot's Window.ContentScaleAspect.
 window_content_scale_aspect<public> := enum:
-    Ignore
-    Keep
-    KeepWidth
-    KeepHeight
-    Expand
+    ContentScaleAspectIgnore
+    ContentScaleAspectKeep
+    ContentScaleAspectKeepWidth
+    ContentScaleAspectKeepHeight
+    ContentScaleAspectExpand
 
 VhToWindowContentScaleAspect(Value:variant)<transacts>:window_content_scale_aspect =
     case (VhToInt(Value)):
-        0 => window_content_scale_aspect.Ignore
-        1 => window_content_scale_aspect.Keep
-        2 => window_content_scale_aspect.KeepWidth
-        3 => window_content_scale_aspect.KeepHeight
-        4 => window_content_scale_aspect.Expand
+        0 => window_content_scale_aspect.ContentScaleAspectIgnore
+        1 => window_content_scale_aspect.ContentScaleAspectKeep
+        2 => window_content_scale_aspect.ContentScaleAspectKeepWidth
+        3 => window_content_scale_aspect.ContentScaleAspectKeepHeight
+        4 => window_content_scale_aspect.ContentScaleAspectExpand
         _ =>
             VhTypeMismatch("window_content_scale_aspect", Value)
-            window_content_scale_aspect.Ignore
+            window_content_scale_aspect.ContentScaleAspectIgnore
 
 VhFromWindowContentScaleAspect(Value:window_content_scale_aspect)<transacts>:variant = VhFromInt(ToInt(Value))
 
 ToInt<public>(Value:window_content_scale_aspect)<transacts>:int =
     case (Value):
-        window_content_scale_aspect.Ignore => 0
-        window_content_scale_aspect.Keep => 1
-        window_content_scale_aspect.KeepWidth => 2
-        window_content_scale_aspect.KeepHeight => 3
-        window_content_scale_aspect.Expand => 4
+        window_content_scale_aspect.ContentScaleAspectIgnore => 0
+        window_content_scale_aspect.ContentScaleAspectKeep => 1
+        window_content_scale_aspect.ContentScaleAspectKeepWidth => 2
+        window_content_scale_aspect.ContentScaleAspectKeepHeight => 3
+        window_content_scale_aspect.ContentScaleAspectExpand => 4
 
 # Godot's Window.ContentScaleMode.
 window_content_scale_mode<public> := enum:
@@ -31486,7 +31486,7 @@ editor_export_plugin<public> := class(ref_counted):
     AddAppleEmbeddedPlatformLinkerFlags<public>(Flags:string)<transacts>:void = VhCallVoid(Handle, "add_apple_embedded_platform_linker_flags", array{VhFromString(Flags)})
     AddAppleEmbeddedPlatformPlistContent<public>(PlistContent:string)<transacts>:void = VhCallVoid(Handle, "add_apple_embedded_platform_plist_content", array{VhFromString(PlistContent)})
     AddAppleEmbeddedPlatformProjectStaticLib<public>(Path:string)<transacts>:void = VhCallVoid(Handle, "add_apple_embedded_platform_project_static_lib", array{VhFromString(Path)})
-    AddFile<public>(Path:string, File:[]int, Remap:logic)<transacts>:void = VhCallVoid(Handle, "add_file", array{VhFromString(Path), VhFromByteArray(File), VhFromLogic(Remap)})
+    AddFile<public>(Path:string, File:[]int, Arg2:logic)<transacts>:void = VhCallVoid(Handle, "add_file", array{VhFromString(Path), VhFromByteArray(File), VhFromLogic(Arg2)})
     AddIosBundleFile<public>(Path:string)<transacts>:void = VhCallVoid(Handle, "add_ios_bundle_file", array{VhFromString(Path)})
     AddIosCppCode<public>(Code:string)<transacts>:void = VhCallVoid(Handle, "add_ios_cpp_code", array{VhFromString(Code)})
     AddIosEmbeddedFramework<public>(Path:string)<transacts>:void = VhCallVoid(Handle, "add_ios_embedded_framework", array{VhFromString(Path)})
@@ -35052,7 +35052,7 @@ tween<public> := class(ref_counted):
     Parallel<public>()<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "parallel", array{})]]
     Pause<public>()<transacts>:void = VhCallVoid(Handle, "pause", array{})
     Play<public>()<transacts>:void = VhCallVoid(Handle, "play", array{})
-    SetEase<public>(Ease:tween_ease_type)<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "set_ease", array{VhFromTweenEaseType(Ease)})]]
+    SetEase<public>(Arg0:tween_ease_type)<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "set_ease", array{VhFromTweenEaseType(Arg0)})]]
     SetIgnoreTimeScale<public>(?Ignore:logic = true)<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "set_ignore_time_scale", array{VhFromLogic(Ignore)})]]
     SetLoops<public>(?Loops:int = 0)<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "set_loops", array{VhFromInt(Loops)})]]
     SetParallel<public>(?Arg0:logic = true)<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "set_parallel", array{VhFromLogic(Arg0)})]]
@@ -35383,7 +35383,7 @@ xr_interface<public> := class(ref_counted):
     GetCapabilities<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_capabilities", array{}))
     GetName<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_name", array{}))
     GetPlayArea<public>()<transacts>:[]vector3 = VhToVector3s(VhCallValue(Handle, "get_play_area", array{}))
-    GetProjectionForView<public>(View:int, Aspect:float, Near:float, Far:float)<transacts>:projection = VhToProjection(VhCallValue(Handle, "get_projection_for_view", array{VhFromInt(View), VhFromFloat(Aspect), VhFromFloat(Near), VhFromFloat(Far)}))
+    GetProjectionForView<public>(View:int, Arg1:float, Near:float, Far:float)<transacts>:projection = VhToProjection(VhCallValue(Handle, "get_projection_for_view", array{VhFromInt(View), VhFromFloat(Arg1), VhFromFloat(Near), VhFromFloat(Far)}))
     GetRenderTargetSize<public>()<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "get_render_target_size", array{}))
     GetSupportedEnvironmentBlendModes<public>()<transacts>:godot_array = VhToArray(VhCallValue(Handle, "get_supported_environment_blend_modes", array{}))
     GetSystemInfo<public>()<transacts>:dictionary = VhToDictionary(VhCallValue(Handle, "get_system_info", array{}))
@@ -38218,7 +38218,7 @@ mesh_library<public> := class(resource):
 method_tweener<public> := class(tweener):
 
     SetDelay<public>(Delay:float)<decides><transacts>:method_tweener = method_tweener[VhObjectFrom[VhCallValue(Handle, "set_delay", array{VhFromFloat(Delay)})]]
-    SetEase<public>(Ease:tween_ease_type)<decides><transacts>:method_tweener = method_tweener[VhObjectFrom[VhCallValue(Handle, "set_ease", array{VhFromTweenEaseType(Ease)})]]
+    SetEase<public>(Arg0:tween_ease_type)<decides><transacts>:method_tweener = method_tweener[VhObjectFrom[VhCallValue(Handle, "set_ease", array{VhFromTweenEaseType(Arg0)})]]
     SetTrans<public>(Trans:tween_transition_type)<decides><transacts>:method_tweener = method_tweener[VhObjectFrom[VhCallValue(Handle, "set_trans", array{VhFromTweenTransitionType(Trans)})]]
 
 missing_resource<public> := class(resource):
@@ -39325,7 +39325,7 @@ property_tweener<public> := class(tweener):
     FromCurrent<public>()<decides><transacts>:property_tweener = property_tweener[VhObjectFrom[VhCallValue(Handle, "from_current", array{})]]
     SetCustomInterpolator<public>(InterpolatorMethod:callable)<decides><transacts>:property_tweener = property_tweener[VhObjectFrom[VhCallValue(Handle, "set_custom_interpolator", array{VhFromCallable(InterpolatorMethod)})]]
     SetDelay<public>(Delay:float)<decides><transacts>:property_tweener = property_tweener[VhObjectFrom[VhCallValue(Handle, "set_delay", array{VhFromFloat(Delay)})]]
-    SetEase<public>(Ease:tween_ease_type)<decides><transacts>:property_tweener = property_tweener[VhObjectFrom[VhCallValue(Handle, "set_ease", array{VhFromTweenEaseType(Ease)})]]
+    SetEase<public>(Arg0:tween_ease_type)<decides><transacts>:property_tweener = property_tweener[VhObjectFrom[VhCallValue(Handle, "set_ease", array{VhFromTweenEaseType(Arg0)})]]
     SetTrans<public>(Trans:tween_transition_type)<decides><transacts>:property_tweener = property_tweener[VhObjectFrom[VhCallValue(Handle, "set_trans", array{VhFromTweenTransitionType(Trans)})]]
 
 ray_cast3d<public> := class(node3d):
@@ -41083,7 +41083,7 @@ xr_interface_extension<public> := class(xr_interface):
     _GetName<public>():string = ""
     _GetPlayArea<public>():[]vector3 = array{}
     _GetPlayAreaMode<public>():xr_interface_play_area_mode = xr_interface_play_area_mode.XrPlayAreaUnknown
-    _GetProjectionForView<public>(View:int, Aspect:float, ZNear:float, ZFar:float):[]float = array{}
+    _GetProjectionForView<public>(View:int, Arg1:float, ZNear:float, ZFar:float):[]float = array{}
     _GetRenderTargetSize<public>():vector2 = vector2{}
     _GetSuggestedPoseNames<public>(TrackerName:string):[]string = array{}
     _GetSuggestedTrackerNames<public>():[]string = array{}
@@ -44148,7 +44148,7 @@ item_list<public> := class(control):
     GetItemIconRegion<public>(Idx:int)<transacts>:rect2 = VhToRect2(VhCallValue(Handle, "get_item_icon_region", array{VhFromInt(Idx)}))
     GetItemLanguage<public>(Idx:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_item_language", array{VhFromInt(Idx)}))
     GetItemMetadata<public>(Idx:int)<transacts>:variant = VhToVariant(VhCallValue(Handle, "get_item_metadata", array{VhFromInt(Idx)}))
-    GetItemRect<public>(Idx:int, ?Expand:logic = true)<transacts>:rect2 = VhToRect2(VhCallValue(Handle, "get_item_rect", array{VhFromInt(Idx), VhFromLogic(Expand)}))
+    GetItemRect<public>(Idx:int, ?Arg1:logic = true)<transacts>:rect2 = VhToRect2(VhCallValue(Handle, "get_item_rect", array{VhFromInt(Idx), VhFromLogic(Arg1)}))
     GetItemText<public>(Idx:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_item_text", array{VhFromInt(Idx)}))
     GetItemTextDirection<public>(Idx:int)<transacts>:control_text_direction = VhToControlTextDirection(VhCallValue(Handle, "get_item_text_direction", array{VhFromInt(Idx)}))
     GetItemTooltip<public>(Idx:int)<transacts>:string = VhToString(VhCallValue(Handle, "get_item_tooltip", array{VhFromInt(Idx)}))
@@ -46674,7 +46674,7 @@ rich_text_label<public> := class(control):
     SetLanguage<public>(Language:string)<transacts>:void = VhCallVoid(Handle, "set_language", array{VhFromString(Language)})
     SetStructuredTextBidiOverrideOptions<public>(Args:godot_array)<transacts>:void = VhCallVoid(Handle, "set_structured_text_bidi_override_options", array{VhFromArray(Args)})
     SetTabStops<public>(TabStops:[]float)<transacts>:void = VhCallVoid(Handle, "set_tab_stops", array{VhFromFloat32Array(TabStops)})
-    SetTableColumnExpand<public>(Column:int, Expand:logic, ?Ratio:int = 1, ?Shrink:logic = true)<transacts>:void = VhCallVoid(Handle, "set_table_column_expand", array{VhFromInt(Column), VhFromLogic(Expand), VhFromInt(Ratio), VhFromLogic(Shrink)})
+    SetTableColumnExpand<public>(Column:int, Arg1:logic, ?Ratio:int = 1, ?Shrink:logic = true)<transacts>:void = VhCallVoid(Handle, "set_table_column_expand", array{VhFromInt(Column), VhFromLogic(Arg1), VhFromInt(Ratio), VhFromLogic(Shrink)})
     SetTableColumnName<public>(Column:int, Name:string)<transacts>:void = VhCallVoid(Handle, "set_table_column_name", array{VhFromInt(Column), VhFromString(Name)})
     SetText<public>(Text:string)<transacts>:void = VhCallVoid(Handle, "set_text", array{VhFromString(Text)})
     UpdateImage<public>(Key:variant, Mask:int, Image:texture2d, Width:int, Height:int, Color:color, InlineAlign:inline_alignment, Region:rect2, ?Pad:logic = false, ?Tooltip:string = "", ?WidthInPercent:logic = false, ?HeightInPercent:logic = false)<transacts>:void = VhCallVoid(Handle, "update_image", array{VhFromVariant(Key), VhFromInt(Mask), VhFromObject(Image), VhFromInt(Width), VhFromInt(Height), VhFromColor(Color), VhFromInlineAlignment(InlineAlign), VhFromRect2(Region), VhFromLogic(Pad), VhFromString(Tooltip), VhFromLogic(WidthInPercent), VhFromLogic(HeightInPercent)})
@@ -48358,7 +48358,7 @@ tree<public> := class(control):
     ScrollToItem<public>(Item:tree_item, ?CenterOnItem:logic = false)<transacts>:void = VhCallVoid(Handle, "scroll_to_item", array{VhFromObject(Item), VhFromLogic(CenterOnItem)})
     SetColumnClipContent<public>(Column:int, Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_column_clip_content", array{VhFromInt(Column), VhFromLogic(Enable)})
     SetColumnCustomMinimumWidth<public>(Column:int, MinWidth:int)<transacts>:void = VhCallVoid(Handle, "set_column_custom_minimum_width", array{VhFromInt(Column), VhFromInt(MinWidth)})
-    SetColumnExpand<public>(Column:int, Expand:logic)<transacts>:void = VhCallVoid(Handle, "set_column_expand", array{VhFromInt(Column), VhFromLogic(Expand)})
+    SetColumnExpand<public>(Column:int, Arg1:logic)<transacts>:void = VhCallVoid(Handle, "set_column_expand", array{VhFromInt(Column), VhFromLogic(Arg1)})
     SetColumnExpandRatio<public>(Column:int, Ratio:int)<transacts>:void = VhCallVoid(Handle, "set_column_expand_ratio", array{VhFromInt(Column), VhFromInt(Ratio)})
     SetColumnTitle<public>(Column:int, Title:string)<transacts>:void = VhCallVoid(Handle, "set_column_title", array{VhFromInt(Column), VhFromString(Title)})
     SetColumnTitleAlignment<public>(Column:int, TitleAlignment:horizontal_alignment)<transacts>:void = VhCallVoid(Handle, "set_column_title_alignment", array{VhFromInt(Column), VhFromHorizontalAlignment(TitleAlignment)})

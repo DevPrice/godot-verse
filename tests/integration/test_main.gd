@@ -807,6 +807,81 @@ func _init() -> void:
 		_check_eq("a signal on a class that does not derive from `object` is not registered",
 				orphan_names.has("Orphan"), false)
 
+	# --- R-SCN-3 / OQ-11: the math written in Verse -----------------------------------------------
+	#
+	# Every expected value here is Godot's own answer, computed by the engine in this very script
+	# where it can be, so the two are compared rather than the Verse side being compared to a
+	# number someone believed. The cases are edges: negative floors, integer division of a negative,
+	# an angle lerp across the wrap point.
+	var mx_script: Script = load("res://scripts/mathx.verse")
+	_check("mathx.verse compiles", mx_script != null and mx_script.can_instantiate())
+	if mx_script != null:
+		var mx := Node2D.new()
+		mx.set_script(mx_script)
+		root.add_child(mx)
+
+		_check_eq("floor rounds toward negative infinity, as Godot's does",
+				mx.call("FloorY", 2.7, -1.2), Vector2(2.7, -1.2).floor().y)
+		_check_eq("and ceil away from it", mx.call("CeilY", 2.7, -1.2), Vector2(2.7, -1.2).ceil().y)
+		_check_eq("and round", mx.call("RoundY", 2.7, -1.2), Vector2(2.7, -1.2).round().y)
+		_check_eq("snapped lands on the step", mx.call("SnappedX", 7.3, 0.5),
+				Vector2(7.3, 0.0).snapped(Vector2(0.5, 0.5)).x)
+		_check_eq("vector min is componentwise", mx.call("MinX", 1.0, 5.0, 4.0, 2.0),
+				Vector2(1, 5).min(Vector2(4, 2)).x)
+		_check_eq("and so is max", mx.call("MaxY", 1.0, 5.0, 4.0, 2.0),
+				Vector2(1, 5).max(Vector2(4, 2)).y)
+
+		# The one that would have been off by one: Verse's own Quotient floors where C truncates.
+		_check_eq("integer vector division truncates toward zero", mx.call("IntDivY", -3, 2),
+				(Vector2i(0, -3) / 2).y)
+		_check_eq("an integer vector's length is a float",
+				mx.call("IntLength", 7, -3), Vector2i(7, -3).length())
+		_check_eq("a vector4 dot", mx.call("Vector4Dot"),
+				Vector4(1, 2, 3, 4).dot(Vector4(1, 2, 3, 4)))
+
+		_check_eq("lerp_angle takes the short arc across the wrap point",
+				mx.call("LerpAngleHalf", 0.0, 6.0), lerp_angle(0.0, 6.0, 0.5))
+		_check_eq("wrapf handles a negative value", mx.call("WrapNegative", -1.0, 0.0, 5.0),
+				wrapf(-1.0, 0.0, 5.0))
+		_check_eq("smoothstep is the clamped cubic", mx.call("SmoothstepAt", 0.25),
+				smoothstep(0.0, 1.0, 0.25))
+		_check_eq("ease with a positive curve", mx.call("EaseAt", 0.5, 2.0), ease(0.5, 2.0))
+		_check_eq("ease with a negative curve is in-out", mx.call("EaseAt", 0.75, -2.0),
+				ease(0.75, -2.0))
+
+		# Both of these answered 0.0 until a continuation line that began with an operator was
+		# found to be silently dropped, so they are asserted against Godot rather than eyeballed.
+		_check_eq("cubic_interpolate", mx.call("CubicAt"),
+				cubic_interpolate(0.0, 10.0, -10.0, 20.0, 0.5))
+		_check_eq("bezier_derivative", mx.call("BezierDerivAt"),
+				bezier_derivative(0.0, 0.0, 1.0, 1.0, 0.5))
+
+		_check_eq("darkened leaves alpha alone", mx.call("DarkenedAlpha"),
+				Color(0.5, 0.5, 0.5, 0.25).darkened(0.5).a)
+		_check_eq("and lightened moves toward white", mx.call("LightenedRed"),
+				Color(0.5, 0.5, 0.5, 1.0).lightened(0.5).r)
+
+		_check_eq("a rect with a negative size contains nothing",
+				mx.call("NegativeRectHasPoint"), Rect2(10, 10, -4, -2).has_point(Vector2(8, 9)))
+		_check_eq("and its abs contains the point",
+				mx.call("AbsRectHasPoint"), Rect2(10, 10, -4, -2).abs().has_point(Vector2(8, 9)))
+		_check_eq("rect area", mx.call("RectArea", 10.0, 4.0), Rect2(0, 0, 10, 4).get_area())
+
+		_check_eq("acosh declines below its domain", mx.call("AcoshOk", 0.5), false)
+		_check_eq("and answers inside it", mx.call("AcoshOk", 2.0), true)
+		_check("is_nan recognises 0/0", mx.call("IsNanOfZeroOverZero"))
+
+		# The utilities that are Godot's behaviour rather than Verse's spelling: these have no
+		# Verse answer at all, so the assertion is that the engine's own reaches the script.
+		_check_eq("type_string reaches Godot's table", mx.call("TypeNameOf", TYPE_VECTOR2),
+				type_string(TYPE_VECTOR2))
+		_check_eq("and error_string", mx.call("ErrorNameOf", ERR_FILE_NOT_FOUND),
+				error_string(ERR_FILE_NOT_FOUND))
+		_check("instance_from_id finds the node back", mx.call("SelfFromId"))
+
+		root.remove_child(mx)
+		mx.free()
+
 	# --- R-ASYNC-8: a call from another thread is refused rather than served --------------------
 	#
 	# VerseVM asserts the game thread at the top of every VM entry, and it is an `ensure` rather
