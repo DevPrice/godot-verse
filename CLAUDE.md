@@ -138,6 +138,7 @@ and the `VerseSimulationMetadata` dependency each exist for a reason spelled out
     python tools/build_class_decl_test.py # class-declaration scanner test binary
     python tools/build_module_map_test.py # module-map test binary
     python tools/build_bench.py           # host benchmark (timings, not pass/fail)
+    python tools/build_verse_probe.py     # the Verse probe (asks the compiler a question)
 
 Run the tests:
 
@@ -161,6 +162,19 @@ fail on a slower machine. It is what took the numbers in `phase-2-design.md` §3
 them again. A layer whose prerequisites
 are absent is **skipped and said to be skipped**, never counted as a pass. `UE_ROOT` names the
 Unreal checkout and `GODOT` the Godot binary; both are guessed when unset.
+
+`tests/verse_probe`, built by `tools/build_verse_probe.py`, is not in `run_tests.py` either, and for
+a different reason: it asserts nothing. It compiles whatever `.verse` files it is handed as one
+project, prints every diagnostic, and calls a class's zero-argument methods — which makes a language
+question ("does a two-parameter function satisfy a tuple-parameter callback?") something you *run*
+rather than something you read out of `SemanticAnalyzer.cpp`. Six of Phase 4's design decisions were
+settled with it in one sitting, and `tests/verse_probe/example.verse` is the fixture behind one of
+them, kept so the claim can be re-run:
+
+    bin/verse_probe.exe <engine>/Engine/Binaries/Win64/verse_host.dll <engine>/Engine         tests/verse_probe/example.verse --class example
+
+Run it **from `bin/`**, where `build_host.py` leaves `tbbmalloc.dll`: without it `LoadLibrary`
+answers a bare 126 and names nothing.
 
 The binaries still run standalone, which is what to reach for when bisecting one failure:
 

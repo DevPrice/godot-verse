@@ -164,11 +164,13 @@ API at all, so the handful that matter are hand-written rather than generated (�
 
 ## 2. The three spikes, and what they answered
 
-The driver was a throwaway `spike.exe` — 200 lines over `verse_host_abi.h` that loads the host,
-compiles an arbitrary list of `.verse` files, prints diagnostics, and instantiates a class and calls
-its zero-argument methods. It is not in the repo; the phase-0 rule holds, and the output is this
-section. Everything the spikes touched in `host/` was reverted, the host rebuilt clean, and
-`tools/run_tests.py` re-run: **7 passed, 0 failed, 0 skipped.**
+The driver is `tests/verse_probe`, built by `tools/build_verse_probe.py`: it loads the host, compiles
+an arbitrary list of `.verse` files, prints every diagnostic, and instantiates a class and calls its
+zero-argument methods. It was written for these three and kept, because the questions it answers
+recur — `tests/verse_probe/example.verse` is S-B's fixture, so the finding below can be re-run rather
+than believed. What was *not* kept is the prototype each spike put in `host/`: the phase-0 rule holds,
+those were reverted, the host rebuilt clean, and `tools/run_tests.py` re-run — **7 passed, 0 failed,
+0 skipped.**
 
 ### S-A — can the host bind a class-typed member at construction? **Yes, and it already does.**
 
