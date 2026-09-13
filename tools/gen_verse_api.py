@@ -915,6 +915,12 @@ def emit_typed_array_converters(typed_arrays: dict, typed_dictionaries: dict) ->
         blocks.append(
             f"VhFrom{suffix}Array(Value:typed_array({info.verse_type}))<transacts>:variant ="
             f" variant{{Tag := TagArray, Ref := Value.Ref}}")
+        # A script cannot spell the converter pair -- element_pair's functions are module-scoped --
+        # so an empty typed container has to be minted here or not at all. R-TYPE-2's other half:
+        # the mirrored methods taking a typed Array had nothing a script could pass them.
+        blocks.append(
+            f"Make{suffix}Array<public>()<transacts>:typed_array({info.verse_type}) ="
+            f" VhTo{suffix}Array(variant{{Tag := TagArray, Ref := VhRefNew(TagArray)}})")
 
     for suffix, (key_info, value_info) in sorted(typed_dictionaries.items()):
         _key_read, key_write = element_pair(f"{suffix}Key", key_info)
@@ -929,6 +935,9 @@ def emit_typed_array_converters(typed_arrays: dict, typed_dictionaries: dict) ->
         blocks.append(
             f"VhFrom{suffix}Dict(Value:{spelling})<transacts>:variant ="
             f" variant{{Tag := TagDictionary, Ref := Value.Ref}}")
+        blocks.append(
+            f"Make{suffix}Dict<public>()<transacts>:{spelling} ="
+            f" VhTo{suffix}Dict(variant{{Tag := TagDictionary, Ref := VhRefNew(TagDictionary)}})")
     return blocks
 
 
@@ -1007,6 +1016,11 @@ def emit_container_classes() -> list:
                 lines.append(
                     f"    Set{suffix}<public>({key_name}:{key_type}, Value:{verse_type})<transacts>:void ="
                     f" VhRefSet(Ref, {key_pack}({key_name}), {pack}(Value))")
+            # An Array grows; a Dictionary has no position to append at.
+            if verse_name == "godot_array":
+                lines.append(
+                    f"    Add{suffix}<public>(Value:{verse_type})<transacts>:void ="
+                    f" VhRefSet(Ref, VhFromInt(VhRefSize(Ref)), {pack}(Value))")
         blocks.append("\n".join(lines))
     return blocks
 

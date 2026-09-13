@@ -752,21 +752,32 @@ void VhRefGet(int64 Ref, FGodotValue const& Key, TOptional<FGodotValue>& OutValu
     OutValue = FromWire(Result);
 }
 
+/// A container write happens now, unlike every other mutation in the mirror, and it is the second
+/// stated exception to "writes defer to commit" (signal emission is the other -- phase-4-design
+/// 6.4, and Phase 4.5 audits the set).
+///
+/// Two reasons, and the first is that deferring was never consistent: VhRefGet and VhRefSize are
+/// immediate, so a deferred write left a container disagreeing with itself inside one expression --
+/// `A.SetInt(0, 5)` followed by `A.GetInt[0]` read the old value. The second is that it made a
+/// container the script built itself useless, which is the whole of R-TYPE-2's other half: the
+/// append that `MakeArray()` exists for is a write at the current size, and the call that consumes
+/// the result happens before the commit that would have filled it.
 void VhRefSet(int64 Ref, FGodotValue const& Key, FGodotValue const& Value)
 {
-    FOwnedValue OwnedKey = Own(Key);
-    FOwnedValue OwnedValue = Own(Value);
-    DeferToCommit([Ref, OwnedKey = MoveTemp(OwnedKey), OwnedValue = MoveTemp(OwnedValue)] {
-        FHostState& Host = GetHost();
-        if (!Host.Godot.RefSet)
-        {
-            return;
-        }
-        FWireStore Store;
-        const vh_value WireKey = Store.Wire(OwnedKey);
-        const vh_value WireValue = Store.Wire(OwnedValue);
-        Host.Godot.RefSet(Host.Godot.Ctx, Ref, &WireKey, &WireValue);
-    });
+    FHostState& Host = GetHost();
+    if (!Host.Godot.RefSet)
+    {
+        return;
+    }
+    FWireStore Store;
+    const vh_value WireKey = Store.Wire(Own(Key));
+    const vh_value WireValue = Store.Wire(Own(Value));
+    const int32 Status =
+        CallGodot([&] { return Host.Godot.RefSet(Host.Godot.Ctx, Ref, &WireKey, &WireValue); });
+    if (Status != VH_CALL_OK && Status != VH_CALL_NO_SUCH_MEMBER)
+    {
+        RaiseRefStatus(Status, Ref, TEXT("Wrote"));
+    }
 }
 
 int64 VhRefSize(int64 Ref)

@@ -26630,26 +26630,37 @@ godot_array<public> := class(godot_ref):
 
     GetVariant<public>(Index:int)<decides><transacts>:variant = VhToVariant(VhRefGet[Ref, VhFromInt(Index)])
     SetVariant<public>(Index:int, Value:variant)<transacts>:void = VhRefSet(Ref, VhFromInt(Index), VhFromVariant(Value))
+    AddVariant<public>(Value:variant)<transacts>:void = VhRefSet(Ref, VhFromInt(VhRefSize(Ref)), VhFromVariant(Value))
     GetLogic<public>(Index:int)<decides><transacts>:logic = VhToLogic(VhRefGet[Ref, VhFromInt(Index)])
     SetLogic<public>(Index:int, Value:logic)<transacts>:void = VhRefSet(Ref, VhFromInt(Index), VhFromLogic(Value))
+    AddLogic<public>(Value:logic)<transacts>:void = VhRefSet(Ref, VhFromInt(VhRefSize(Ref)), VhFromLogic(Value))
     GetInt<public>(Index:int)<decides><transacts>:int = VhToInt(VhRefGet[Ref, VhFromInt(Index)])
     SetInt<public>(Index:int, Value:int)<transacts>:void = VhRefSet(Ref, VhFromInt(Index), VhFromInt(Value))
+    AddInt<public>(Value:int)<transacts>:void = VhRefSet(Ref, VhFromInt(VhRefSize(Ref)), VhFromInt(Value))
     GetFloat<public>(Index:int)<decides><transacts>:float = VhToFloat(VhRefGet[Ref, VhFromInt(Index)])
     SetFloat<public>(Index:int, Value:float)<transacts>:void = VhRefSet(Ref, VhFromInt(Index), VhFromFloat(Value))
+    AddFloat<public>(Value:float)<transacts>:void = VhRefSet(Ref, VhFromInt(VhRefSize(Ref)), VhFromFloat(Value))
     GetString<public>(Index:int)<decides><transacts>:string = VhToString(VhRefGet[Ref, VhFromInt(Index)])
     SetString<public>(Index:int, Value:string)<transacts>:void = VhRefSet(Ref, VhFromInt(Index), VhFromString(Value))
+    AddString<public>(Value:string)<transacts>:void = VhRefSet(Ref, VhFromInt(VhRefSize(Ref)), VhFromString(Value))
     GetVector2<public>(Index:int)<decides><transacts>:vector2 = VhToVector2(VhRefGet[Ref, VhFromInt(Index)])
     SetVector2<public>(Index:int, Value:vector2)<transacts>:void = VhRefSet(Ref, VhFromInt(Index), VhFromVector2(Value))
+    AddVector2<public>(Value:vector2)<transacts>:void = VhRefSet(Ref, VhFromInt(VhRefSize(Ref)), VhFromVector2(Value))
     GetVector2i<public>(Index:int)<decides><transacts>:vector2i = VhToVector2i(VhRefGet[Ref, VhFromInt(Index)])
     SetVector2i<public>(Index:int, Value:vector2i)<transacts>:void = VhRefSet(Ref, VhFromInt(Index), VhFromVector2i(Value))
+    AddVector2i<public>(Value:vector2i)<transacts>:void = VhRefSet(Ref, VhFromInt(VhRefSize(Ref)), VhFromVector2i(Value))
     GetVector3<public>(Index:int)<decides><transacts>:vector3 = VhToVector3(VhRefGet[Ref, VhFromInt(Index)])
     SetVector3<public>(Index:int, Value:vector3)<transacts>:void = VhRefSet(Ref, VhFromInt(Index), VhFromVector3(Value))
+    AddVector3<public>(Value:vector3)<transacts>:void = VhRefSet(Ref, VhFromInt(VhRefSize(Ref)), VhFromVector3(Value))
     GetColor<public>(Index:int)<decides><transacts>:color = VhToColor(VhRefGet[Ref, VhFromInt(Index)])
     SetColor<public>(Index:int, Value:color)<transacts>:void = VhRefSet(Ref, VhFromInt(Index), VhFromColor(Value))
+    AddColor<public>(Value:color)<transacts>:void = VhRefSet(Ref, VhFromInt(VhRefSize(Ref)), VhFromColor(Value))
     GetArray<public>(Index:int)<decides><transacts>:godot_array = VhToArray(VhRefGet[Ref, VhFromInt(Index)])
     SetArray<public>(Index:int, Value:godot_array)<transacts>:void = VhRefSet(Ref, VhFromInt(Index), VhFromArray(Value))
+    AddArray<public>(Value:godot_array)<transacts>:void = VhRefSet(Ref, VhFromInt(VhRefSize(Ref)), VhFromArray(Value))
     GetDictionary<public>(Index:int)<decides><transacts>:dictionary = VhToDictionary(VhRefGet[Ref, VhFromInt(Index)])
     SetDictionary<public>(Index:int, Value:dictionary)<transacts>:void = VhRefSet(Ref, VhFromInt(Index), VhFromDictionary(Value))
+    AddDictionary<public>(Value:dictionary)<transacts>:void = VhRefSet(Ref, VhFromInt(VhRefSize(Ref)), VhFromDictionary(Value))
 
 dictionary<public> := class(godot_ref):
 
@@ -26744,6 +26755,8 @@ VhToArea2DArray(Value:variant)<transacts>:typed_array(area2d) =
 
 VhFromArea2DArray(Value:typed_array(area2d))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeArea2DArray<public>()<transacts>:typed_array(area2d) = VhToArea2DArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToArea3DElement(Value:variant)<decides><transacts>:area3d = area3d[VhObjectFrom[Value]]
 
 VhFromArea3DElement(Value:area3d)<transacts>:variant = VhFromObject(Value)
@@ -26755,12 +26768,16 @@ VhToArea3DArray(Value:variant)<transacts>:typed_array(area3d) =
 
 VhFromArea3DArray(Value:typed_array(area3d))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeArea3DArray<public>()<transacts>:typed_array(area3d) = VhToArea3DArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToArrayArray(Value:variant)<transacts>:typed_array(godot_array) =
     Made := typed_array(godot_array){Ref := Value.Ref, Unpack := AsArray, Pack := VariantFromArray}
     VhAdopt(Made)
     Made
 
 VhFromArrayArray(Value:typed_array(godot_array))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+
+MakeArrayArray<public>()<transacts>:typed_array(godot_array) = VhToArrayArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToBaseButtonElement(Value:variant)<decides><transacts>:base_button = base_button[VhObjectFrom[Value]]
 
@@ -26773,6 +26790,8 @@ VhToBaseButtonArray(Value:variant)<transacts>:typed_array(base_button) =
 
 VhFromBaseButtonArray(Value:typed_array(base_button))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeBaseButtonArray<public>()<transacts>:typed_array(base_button) = VhToBaseButtonArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToCameraFeedElement(Value:variant)<decides><transacts>:camera_feed = camera_feed[VhObjectFrom[Value]]
 
 VhFromCameraFeedElement(Value:camera_feed)<transacts>:variant = VhFromObject(Value)
@@ -26783,6 +26802,8 @@ VhToCameraFeedArray(Value:variant)<transacts>:typed_array(camera_feed) =
     Made
 
 VhFromCameraFeedArray(Value:typed_array(camera_feed))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+
+MakeCameraFeedArray<public>()<transacts>:typed_array(camera_feed) = VhToCameraFeedArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToCompositorEffectElement(Value:variant)<decides><transacts>:compositor_effect = compositor_effect[VhObjectFrom[Value]]
 
@@ -26795,6 +26816,8 @@ VhToCompositorEffectArray(Value:variant)<transacts>:typed_array(compositor_effec
 
 VhFromCompositorEffectArray(Value:typed_array(compositor_effect))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeCompositorEffectArray<public>()<transacts>:typed_array(compositor_effect) = VhToCompositorEffectArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToControlElement(Value:variant)<decides><transacts>:control = control[VhObjectFrom[Value]]
 
 VhFromControlElement(Value:control)<transacts>:variant = VhFromObject(Value)
@@ -26806,12 +26829,16 @@ VhToControlArray(Value:variant)<transacts>:typed_array(control) =
 
 VhFromControlArray(Value:typed_array(control))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeControlArray<public>()<transacts>:typed_array(control) = VhToControlArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToDictionaryArray(Value:variant)<transacts>:typed_array(dictionary) =
     Made := typed_array(dictionary){Ref := Value.Ref, Unpack := AsDictionary, Pack := VariantFromDictionary}
     VhAdopt(Made)
     Made
 
 VhFromDictionaryArray(Value:typed_array(dictionary))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+
+MakeDictionaryArray<public>()<transacts>:typed_array(dictionary) = VhToDictionaryArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToENetPacketPeerElement(Value:variant)<decides><transacts>:e_net_packet_peer = e_net_packet_peer[VhObjectFrom[Value]]
 
@@ -26824,6 +26851,8 @@ VhToENetPacketPeerArray(Value:variant)<transacts>:typed_array(e_net_packet_peer)
 
 VhFromENetPacketPeerArray(Value:typed_array(e_net_packet_peer))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeENetPacketPeerArray<public>()<transacts>:typed_array(e_net_packet_peer) = VhToENetPacketPeerArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToFoldableContainerElement(Value:variant)<decides><transacts>:foldable_container = foldable_container[VhObjectFrom[Value]]
 
 VhFromFoldableContainerElement(Value:foldable_container)<transacts>:variant = VhFromObject(Value)
@@ -26834,6 +26863,8 @@ VhToFoldableContainerArray(Value:variant)<transacts>:typed_array(foldable_contai
     Made
 
 VhFromFoldableContainerArray(Value:typed_array(foldable_container))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+
+MakeFoldableContainerArray<public>()<transacts>:typed_array(foldable_container) = VhToFoldableContainerArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToFontElement(Value:variant)<decides><transacts>:font = font[VhObjectFrom[Value]]
 
@@ -26846,6 +26877,8 @@ VhToFontArray(Value:variant)<transacts>:typed_array(font) =
 
 VhFromFontArray(Value:typed_array(font))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeFontArray<public>()<transacts>:typed_array(font) = VhToFontArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToGLTFAccessorElement(Value:variant)<decides><transacts>:gltf_accessor = gltf_accessor[VhObjectFrom[Value]]
 
 VhFromGLTFAccessorElement(Value:gltf_accessor)<transacts>:variant = VhFromObject(Value)
@@ -26856,6 +26889,8 @@ VhToGLTFAccessorArray(Value:variant)<transacts>:typed_array(gltf_accessor) =
     Made
 
 VhFromGLTFAccessorArray(Value:typed_array(gltf_accessor))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+
+MakeGLTFAccessorArray<public>()<transacts>:typed_array(gltf_accessor) = VhToGLTFAccessorArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToGLTFAnimationElement(Value:variant)<decides><transacts>:gltf_animation = gltf_animation[VhObjectFrom[Value]]
 
@@ -26868,6 +26903,8 @@ VhToGLTFAnimationArray(Value:variant)<transacts>:typed_array(gltf_animation) =
 
 VhFromGLTFAnimationArray(Value:typed_array(gltf_animation))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeGLTFAnimationArray<public>()<transacts>:typed_array(gltf_animation) = VhToGLTFAnimationArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToGLTFBufferViewElement(Value:variant)<decides><transacts>:gltf_buffer_view = gltf_buffer_view[VhObjectFrom[Value]]
 
 VhFromGLTFBufferViewElement(Value:gltf_buffer_view)<transacts>:variant = VhFromObject(Value)
@@ -26878,6 +26915,8 @@ VhToGLTFBufferViewArray(Value:variant)<transacts>:typed_array(gltf_buffer_view) 
     Made
 
 VhFromGLTFBufferViewArray(Value:typed_array(gltf_buffer_view))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+
+MakeGLTFBufferViewArray<public>()<transacts>:typed_array(gltf_buffer_view) = VhToGLTFBufferViewArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToGLTFCameraElement(Value:variant)<decides><transacts>:gltf_camera = gltf_camera[VhObjectFrom[Value]]
 
@@ -26890,6 +26929,8 @@ VhToGLTFCameraArray(Value:variant)<transacts>:typed_array(gltf_camera) =
 
 VhFromGLTFCameraArray(Value:typed_array(gltf_camera))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeGLTFCameraArray<public>()<transacts>:typed_array(gltf_camera) = VhToGLTFCameraArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToGLTFLightElement(Value:variant)<decides><transacts>:gltf_light = gltf_light[VhObjectFrom[Value]]
 
 VhFromGLTFLightElement(Value:gltf_light)<transacts>:variant = VhFromObject(Value)
@@ -26900,6 +26941,8 @@ VhToGLTFLightArray(Value:variant)<transacts>:typed_array(gltf_light) =
     Made
 
 VhFromGLTFLightArray(Value:typed_array(gltf_light))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+
+MakeGLTFLightArray<public>()<transacts>:typed_array(gltf_light) = VhToGLTFLightArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToGLTFMeshElement(Value:variant)<decides><transacts>:gltf_mesh = gltf_mesh[VhObjectFrom[Value]]
 
@@ -26912,6 +26955,8 @@ VhToGLTFMeshArray(Value:variant)<transacts>:typed_array(gltf_mesh) =
 
 VhFromGLTFMeshArray(Value:typed_array(gltf_mesh))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeGLTFMeshArray<public>()<transacts>:typed_array(gltf_mesh) = VhToGLTFMeshArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToGLTFNodeElement(Value:variant)<decides><transacts>:gltf_node = gltf_node[VhObjectFrom[Value]]
 
 VhFromGLTFNodeElement(Value:gltf_node)<transacts>:variant = VhFromObject(Value)
@@ -26922,6 +26967,8 @@ VhToGLTFNodeArray(Value:variant)<transacts>:typed_array(gltf_node) =
     Made
 
 VhFromGLTFNodeArray(Value:typed_array(gltf_node))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+
+MakeGLTFNodeArray<public>()<transacts>:typed_array(gltf_node) = VhToGLTFNodeArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToGLTFSkeletonElement(Value:variant)<decides><transacts>:gltf_skeleton = gltf_skeleton[VhObjectFrom[Value]]
 
@@ -26934,6 +26981,8 @@ VhToGLTFSkeletonArray(Value:variant)<transacts>:typed_array(gltf_skeleton) =
 
 VhFromGLTFSkeletonArray(Value:typed_array(gltf_skeleton))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeGLTFSkeletonArray<public>()<transacts>:typed_array(gltf_skeleton) = VhToGLTFSkeletonArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToGLTFSkinElement(Value:variant)<decides><transacts>:gltf_skin = gltf_skin[VhObjectFrom[Value]]
 
 VhFromGLTFSkinElement(Value:gltf_skin)<transacts>:variant = VhFromObject(Value)
@@ -26944,6 +26993,8 @@ VhToGLTFSkinArray(Value:variant)<transacts>:typed_array(gltf_skin) =
     Made
 
 VhFromGLTFSkinArray(Value:typed_array(gltf_skin))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+
+MakeGLTFSkinArray<public>()<transacts>:typed_array(gltf_skin) = VhToGLTFSkinArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToGLTFTextureElement(Value:variant)<decides><transacts>:gltf_texture = gltf_texture[VhObjectFrom[Value]]
 
@@ -26956,6 +27007,8 @@ VhToGLTFTextureArray(Value:variant)<transacts>:typed_array(gltf_texture) =
 
 VhFromGLTFTextureArray(Value:typed_array(gltf_texture))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeGLTFTextureArray<public>()<transacts>:typed_array(gltf_texture) = VhToGLTFTextureArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToGLTFTextureSamplerElement(Value:variant)<decides><transacts>:gltf_texture_sampler = gltf_texture_sampler[VhObjectFrom[Value]]
 
 VhFromGLTFTextureSamplerElement(Value:gltf_texture_sampler)<transacts>:variant = VhFromObject(Value)
@@ -26966,6 +27019,8 @@ VhToGLTFTextureSamplerArray(Value:variant)<transacts>:typed_array(gltf_texture_s
     Made
 
 VhFromGLTFTextureSamplerArray(Value:typed_array(gltf_texture_sampler))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+
+MakeGLTFTextureSamplerArray<public>()<transacts>:typed_array(gltf_texture_sampler) = VhToGLTFTextureSamplerArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToImageElement(Value:variant)<decides><transacts>:image = image[VhObjectFrom[Value]]
 
@@ -26978,6 +27033,8 @@ VhToImageArray(Value:variant)<transacts>:typed_array(image) =
 
 VhFromImageArray(Value:typed_array(image))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeImageArray<public>()<transacts>:typed_array(image) = VhToImageArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToInputEventElement(Value:variant)<decides><transacts>:input_event = input_event[VhObjectFrom[Value]]
 
 VhFromInputEventElement(Value:input_event)<transacts>:variant = VhFromObject(Value)
@@ -26989,12 +27046,16 @@ VhToInputEventArray(Value:variant)<transacts>:typed_array(input_event) =
 
 VhFromInputEventArray(Value:typed_array(input_event))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeInputEventArray<public>()<transacts>:typed_array(input_event) = VhToInputEventArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToIntArray(Value:variant)<transacts>:typed_array(int) =
     Made := typed_array(int){Ref := Value.Ref, Unpack := AsInt, Pack := VariantFromInt}
     VhAdopt(Made)
     Made
 
 VhFromIntArray(Value:typed_array(int))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+
+MakeIntArray<public>()<transacts>:typed_array(int) = VhToIntArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToMaterialElement(Value:variant)<decides><transacts>:material = material[VhObjectFrom[Value]]
 
@@ -27007,6 +27068,8 @@ VhToMaterialArray(Value:variant)<transacts>:typed_array(material) =
 
 VhFromMaterialArray(Value:typed_array(material))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeMaterialArray<public>()<transacts>:typed_array(material) = VhToMaterialArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToMeshElement(Value:variant)<decides><transacts>:mesh = mesh[VhObjectFrom[Value]]
 
 VhFromMeshElement(Value:mesh)<transacts>:variant = VhFromObject(Value)
@@ -27017,6 +27080,8 @@ VhToMeshArray(Value:variant)<transacts>:typed_array(mesh) =
     Made
 
 VhFromMeshArray(Value:typed_array(mesh))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+
+MakeMeshArray<public>()<transacts>:typed_array(mesh) = VhToMeshArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToNodeElement(Value:variant)<decides><transacts>:node = node[VhObjectFrom[Value]]
 
@@ -27029,6 +27094,8 @@ VhToNodeArray(Value:variant)<transacts>:typed_array(node) =
 
 VhFromNodeArray(Value:typed_array(node))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeNodeArray<public>()<transacts>:typed_array(node) = VhToNodeArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToNode2DElement(Value:variant)<decides><transacts>:node2d = node2d[VhObjectFrom[Value]]
 
 VhFromNode2DElement(Value:node2d)<transacts>:variant = VhFromObject(Value)
@@ -27039,6 +27106,8 @@ VhToNode2DArray(Value:variant)<transacts>:typed_array(node2d) =
     Made
 
 VhFromNode2DArray(Value:typed_array(node2d))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+
+MakeNode2DArray<public>()<transacts>:typed_array(node2d) = VhToNode2DArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToNode3DElement(Value:variant)<decides><transacts>:node3d = node3d[VhObjectFrom[Value]]
 
@@ -27051,6 +27120,8 @@ VhToNode3DArray(Value:variant)<transacts>:typed_array(node3d) =
 
 VhFromNode3DArray(Value:typed_array(node3d))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeNode3DArray<public>()<transacts>:typed_array(node3d) = VhToNode3DArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToNode3DGizmoElement(Value:variant)<decides><transacts>:node3d_gizmo = node3d_gizmo[VhObjectFrom[Value]]
 
 VhFromNode3DGizmoElement(Value:node3d_gizmo)<transacts>:variant = VhFromObject(Value)
@@ -27062,12 +27133,16 @@ VhToNode3DGizmoArray(Value:variant)<transacts>:typed_array(node3d_gizmo) =
 
 VhFromNode3DGizmoArray(Value:typed_array(node3d_gizmo))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeNode3DGizmoArray<public>()<transacts>:typed_array(node3d_gizmo) = VhToNode3DGizmoArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToNodePathArray(Value:variant)<transacts>:typed_array(string) =
     Made := typed_array(string){Ref := Value.Ref, Unpack := AsNodePath, Pack := VariantFromNodePath}
     VhAdopt(Made)
     Made
 
 VhFromNodePathArray(Value:typed_array(string))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+
+MakeNodePathArray<public>()<transacts>:typed_array(string) = VhToNodePathArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToOpenXRSpatialCapabilityConfigurationBaseHeaderElement(Value:variant)<decides><transacts>:open_xr_spatial_capability_configuration_base_header = open_xr_spatial_capability_configuration_base_header[VhObjectFrom[Value]]
 
@@ -27080,6 +27155,8 @@ VhToOpenXRSpatialCapabilityConfigurationBaseHeaderArray(Value:variant)<transacts
 
 VhFromOpenXRSpatialCapabilityConfigurationBaseHeaderArray(Value:typed_array(open_xr_spatial_capability_configuration_base_header))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeOpenXRSpatialCapabilityConfigurationBaseHeaderArray<public>()<transacts>:typed_array(open_xr_spatial_capability_configuration_base_header) = VhToOpenXRSpatialCapabilityConfigurationBaseHeaderArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToOpenXRSpatialComponentDataElement(Value:variant)<decides><transacts>:open_xr_spatial_component_data = open_xr_spatial_component_data[VhObjectFrom[Value]]
 
 VhFromOpenXRSpatialComponentDataElement(Value:open_xr_spatial_component_data)<transacts>:variant = VhFromObject(Value)
@@ -27091,12 +27168,16 @@ VhToOpenXRSpatialComponentDataArray(Value:variant)<transacts>:typed_array(open_x
 
 VhFromOpenXRSpatialComponentDataArray(Value:typed_array(open_xr_spatial_component_data))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeOpenXRSpatialComponentDataArray<public>()<transacts>:typed_array(open_xr_spatial_component_data) = VhToOpenXRSpatialComponentDataArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToPackedByteArrayArray(Value:variant)<transacts>:typed_array([]int) =
     Made := typed_array([]int){Ref := Value.Ref, Unpack := AsPackedByteArray, Pack := VariantFromPackedByteArray}
     VhAdopt(Made)
     Made
 
 VhFromPackedByteArrayArray(Value:typed_array([]int))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+
+MakePackedByteArrayArray<public>()<transacts>:typed_array([]int) = VhToPackedByteArrayArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToPackedStringArrayArray(Value:variant)<transacts>:typed_array([]string) =
     Made := typed_array([]string){Ref := Value.Ref, Unpack := AsPackedStringArray, Pack := VariantFromPackedStringArray}
@@ -27105,12 +27186,16 @@ VhToPackedStringArrayArray(Value:variant)<transacts>:typed_array([]string) =
 
 VhFromPackedStringArrayArray(Value:typed_array([]string))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakePackedStringArrayArray<public>()<transacts>:typed_array([]string) = VhToPackedStringArrayArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToPackedVector2ArrayArray(Value:variant)<transacts>:typed_array([]vector2) =
     Made := typed_array([]vector2){Ref := Value.Ref, Unpack := AsPackedVector2Array, Pack := VariantFromPackedVector2Array}
     VhAdopt(Made)
     Made
 
 VhFromPackedVector2ArrayArray(Value:typed_array([]vector2))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+
+MakePackedVector2ArrayArray<public>()<transacts>:typed_array([]vector2) = VhToPackedVector2ArrayArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToPhysicsBody2DElement(Value:variant)<decides><transacts>:physics_body2d = physics_body2d[VhObjectFrom[Value]]
 
@@ -27123,6 +27208,8 @@ VhToPhysicsBody2DArray(Value:variant)<transacts>:typed_array(physics_body2d) =
 
 VhFromPhysicsBody2DArray(Value:typed_array(physics_body2d))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakePhysicsBody2DArray<public>()<transacts>:typed_array(physics_body2d) = VhToPhysicsBody2DArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToPhysicsBody3DElement(Value:variant)<decides><transacts>:physics_body3d = physics_body3d[VhObjectFrom[Value]]
 
 VhFromPhysicsBody3DElement(Value:physics_body3d)<transacts>:variant = VhFromObject(Value)
@@ -27134,12 +27221,16 @@ VhToPhysicsBody3DArray(Value:variant)<transacts>:typed_array(physics_body3d) =
 
 VhFromPhysicsBody3DArray(Value:typed_array(physics_body3d))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakePhysicsBody3DArray<public>()<transacts>:typed_array(physics_body3d) = VhToPhysicsBody3DArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToPlaneArray(Value:variant)<transacts>:typed_array(plane) =
     Made := typed_array(plane){Ref := Value.Ref, Unpack := AsPlane, Pack := VariantFromPlane}
     VhAdopt(Made)
     Made
 
 VhFromPlaneArray(Value:typed_array(plane))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+
+MakePlaneArray<public>()<transacts>:typed_array(plane) = VhToPlaneArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToRDAttachmentFormatElement(Value:variant)<decides><transacts>:rd_attachment_format = rd_attachment_format[VhObjectFrom[Value]]
 
@@ -27152,6 +27243,8 @@ VhToRDAttachmentFormatArray(Value:variant)<transacts>:typed_array(rd_attachment_
 
 VhFromRDAttachmentFormatArray(Value:typed_array(rd_attachment_format))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeRDAttachmentFormatArray<public>()<transacts>:typed_array(rd_attachment_format) = VhToRDAttachmentFormatArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToRDFramebufferPassElement(Value:variant)<decides><transacts>:rd_framebuffer_pass = rd_framebuffer_pass[VhObjectFrom[Value]]
 
 VhFromRDFramebufferPassElement(Value:rd_framebuffer_pass)<transacts>:variant = VhFromObject(Value)
@@ -27162,6 +27255,8 @@ VhToRDFramebufferPassArray(Value:variant)<transacts>:typed_array(rd_framebuffer_
     Made
 
 VhFromRDFramebufferPassArray(Value:typed_array(rd_framebuffer_pass))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+
+MakeRDFramebufferPassArray<public>()<transacts>:typed_array(rd_framebuffer_pass) = VhToRDFramebufferPassArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToRDPipelineColorBlendStateAttachmentElement(Value:variant)<decides><transacts>:rd_pipeline_color_blend_state_attachment = rd_pipeline_color_blend_state_attachment[VhObjectFrom[Value]]
 
@@ -27174,6 +27269,8 @@ VhToRDPipelineColorBlendStateAttachmentArray(Value:variant)<transacts>:typed_arr
 
 VhFromRDPipelineColorBlendStateAttachmentArray(Value:typed_array(rd_pipeline_color_blend_state_attachment))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeRDPipelineColorBlendStateAttachmentArray<public>()<transacts>:typed_array(rd_pipeline_color_blend_state_attachment) = VhToRDPipelineColorBlendStateAttachmentArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToRDPipelineSpecializationConstantElement(Value:variant)<decides><transacts>:rd_pipeline_specialization_constant = rd_pipeline_specialization_constant[VhObjectFrom[Value]]
 
 VhFromRDPipelineSpecializationConstantElement(Value:rd_pipeline_specialization_constant)<transacts>:variant = VhFromObject(Value)
@@ -27184,6 +27281,8 @@ VhToRDPipelineSpecializationConstantArray(Value:variant)<transacts>:typed_array(
     Made
 
 VhFromRDPipelineSpecializationConstantArray(Value:typed_array(rd_pipeline_specialization_constant))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+
+MakeRDPipelineSpecializationConstantArray<public>()<transacts>:typed_array(rd_pipeline_specialization_constant) = VhToRDPipelineSpecializationConstantArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToRDUniformElement(Value:variant)<decides><transacts>:rd_uniform = rd_uniform[VhObjectFrom[Value]]
 
@@ -27196,6 +27295,8 @@ VhToRDUniformArray(Value:variant)<transacts>:typed_array(rd_uniform) =
 
 VhFromRDUniformArray(Value:typed_array(rd_uniform))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeRDUniformArray<public>()<transacts>:typed_array(rd_uniform) = VhToRDUniformArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToRDVertexAttributeElement(Value:variant)<decides><transacts>:rd_vertex_attribute = rd_vertex_attribute[VhObjectFrom[Value]]
 
 VhFromRDVertexAttributeElement(Value:rd_vertex_attribute)<transacts>:variant = VhFromObject(Value)
@@ -27207,6 +27308,8 @@ VhToRDVertexAttributeArray(Value:variant)<transacts>:typed_array(rd_vertex_attri
 
 VhFromRDVertexAttributeArray(Value:typed_array(rd_vertex_attribute))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeRDVertexAttributeArray<public>()<transacts>:typed_array(rd_vertex_attribute) = VhToRDVertexAttributeArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToRIDArray(Value:variant)<transacts>:typed_array(int) =
     Made := typed_array(int){Ref := Value.Ref, Unpack := AsRid, Pack := VariantFromRid}
     VhAdopt(Made)
@@ -27214,12 +27317,16 @@ VhToRIDArray(Value:variant)<transacts>:typed_array(int) =
 
 VhFromRIDArray(Value:typed_array(int))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeRIDArray<public>()<transacts>:typed_array(int) = VhToRIDArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToRect2Array(Value:variant)<transacts>:typed_array(rect2) =
     Made := typed_array(rect2){Ref := Value.Ref, Unpack := AsRect2, Pack := VariantFromRect2}
     VhAdopt(Made)
     Made
 
 VhFromRect2Array(Value:typed_array(rect2))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+
+MakeRect2Array<public>()<transacts>:typed_array(rect2) = VhToRect2Array(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToRegExMatchElement(Value:variant)<decides><transacts>:reg_ex_match = reg_ex_match[VhObjectFrom[Value]]
 
@@ -27232,6 +27339,8 @@ VhToRegExMatchArray(Value:variant)<transacts>:typed_array(reg_ex_match) =
 
 VhFromRegExMatchArray(Value:typed_array(reg_ex_match))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeRegExMatchArray<public>()<transacts>:typed_array(reg_ex_match) = VhToRegExMatchArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToRichTextEffectElement(Value:variant)<decides><transacts>:rich_text_effect = rich_text_effect[VhObjectFrom[Value]]
 
 VhFromRichTextEffectElement(Value:rich_text_effect)<transacts>:variant = VhFromObject(Value)
@@ -27242,6 +27351,8 @@ VhToRichTextEffectArray(Value:variant)<transacts>:typed_array(rich_text_effect) 
     Made
 
 VhFromRichTextEffectArray(Value:typed_array(rich_text_effect))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+
+MakeRichTextEffectArray<public>()<transacts>:typed_array(rich_text_effect) = VhToRichTextEffectArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToScriptElement(Value:variant)<decides><transacts>:script = script[VhObjectFrom[Value]]
 
@@ -27254,6 +27365,8 @@ VhToScriptArray(Value:variant)<transacts>:typed_array(script) =
 
 VhFromScriptArray(Value:typed_array(script))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeScriptArray<public>()<transacts>:typed_array(script) = VhToScriptArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToScriptBacktraceElement(Value:variant)<decides><transacts>:script_backtrace = script_backtrace[VhObjectFrom[Value]]
 
 VhFromScriptBacktraceElement(Value:script_backtrace)<transacts>:variant = VhFromObject(Value)
@@ -27264,6 +27377,8 @@ VhToScriptBacktraceArray(Value:variant)<transacts>:typed_array(script_backtrace)
     Made
 
 VhFromScriptBacktraceArray(Value:typed_array(script_backtrace))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+
+MakeScriptBacktraceArray<public>()<transacts>:typed_array(script_backtrace) = VhToScriptBacktraceArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToScriptEditorBaseElement(Value:variant)<decides><transacts>:script_editor_base = script_editor_base[VhObjectFrom[Value]]
 
@@ -27276,6 +27391,8 @@ VhToScriptEditorBaseArray(Value:variant)<transacts>:typed_array(script_editor_ba
 
 VhFromScriptEditorBaseArray(Value:typed_array(script_editor_base))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeScriptEditorBaseArray<public>()<transacts>:typed_array(script_editor_base) = VhToScriptEditorBaseArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToStringArray(Value:variant)<transacts>:typed_array(string) =
     Made := typed_array(string){Ref := Value.Ref, Unpack := AsString, Pack := VariantFromString}
     VhAdopt(Made)
@@ -27283,12 +27400,16 @@ VhToStringArray(Value:variant)<transacts>:typed_array(string) =
 
 VhFromStringArray(Value:typed_array(string))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeStringArray<public>()<transacts>:typed_array(string) = VhToStringArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToStringNameArray(Value:variant)<transacts>:typed_array(string) =
     Made := typed_array(string){Ref := Value.Ref, Unpack := AsStringName, Pack := VariantFromStringName}
     VhAdopt(Made)
     Made
 
 VhFromStringNameArray(Value:typed_array(string))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+
+MakeStringNameArray<public>()<transacts>:typed_array(string) = VhToStringNameArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToTexture2DElement(Value:variant)<decides><transacts>:texture2d = texture2d[VhObjectFrom[Value]]
 
@@ -27301,6 +27422,8 @@ VhToTexture2DArray(Value:variant)<transacts>:typed_array(texture2d) =
 
 VhFromTexture2DArray(Value:typed_array(texture2d))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeTexture2DArray<public>()<transacts>:typed_array(texture2d) = VhToTexture2DArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToTextureLayeredElement(Value:variant)<decides><transacts>:texture_layered = texture_layered[VhObjectFrom[Value]]
 
 VhFromTextureLayeredElement(Value:texture_layered)<transacts>:variant = VhFromObject(Value)
@@ -27312,12 +27435,16 @@ VhToTextureLayeredArray(Value:variant)<transacts>:typed_array(texture_layered) =
 
 VhFromTextureLayeredArray(Value:typed_array(texture_layered))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeTextureLayeredArray<public>()<transacts>:typed_array(texture_layered) = VhToTextureLayeredArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToTransform3DArray(Value:variant)<transacts>:typed_array(transform3d) =
     Made := typed_array(transform3d){Ref := Value.Ref, Unpack := AsTransform3D, Pack := VariantFromTransform3D}
     VhAdopt(Made)
     Made
 
 VhFromTransform3DArray(Value:typed_array(transform3d))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+
+MakeTransform3DArray<public>()<transacts>:typed_array(transform3d) = VhToTransform3DArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToTranslationElement(Value:variant)<decides><transacts>:translation = translation[VhObjectFrom[Value]]
 
@@ -27330,6 +27457,8 @@ VhToTranslationArray(Value:variant)<transacts>:typed_array(translation) =
 
 VhFromTranslationArray(Value:typed_array(translation))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeTranslationArray<public>()<transacts>:typed_array(translation) = VhToTranslationArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToTreeItemElement(Value:variant)<decides><transacts>:tree_item = tree_item[VhObjectFrom[Value]]
 
 VhFromTreeItemElement(Value:tree_item)<transacts>:variant = VhFromObject(Value)
@@ -27340,6 +27469,8 @@ VhToTreeItemArray(Value:variant)<transacts>:typed_array(tree_item) =
     Made
 
 VhFromTreeItemArray(Value:typed_array(tree_item))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+
+MakeTreeItemArray<public>()<transacts>:typed_array(tree_item) = VhToTreeItemArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToTweenElement(Value:variant)<decides><transacts>:tween = tween[VhObjectFrom[Value]]
 
@@ -27352,12 +27483,16 @@ VhToTweenArray(Value:variant)<transacts>:typed_array(tween) =
 
 VhFromTweenArray(Value:typed_array(tween))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeTweenArray<public>()<transacts>:typed_array(tween) = VhToTweenArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToVector2Array(Value:variant)<transacts>:typed_array(vector2) =
     Made := typed_array(vector2){Ref := Value.Ref, Unpack := AsVector2, Pack := VariantFromVector2}
     VhAdopt(Made)
     Made
 
 VhFromVector2Array(Value:typed_array(vector2))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+
+MakeVector2Array<public>()<transacts>:typed_array(vector2) = VhToVector2Array(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToVector2iArray(Value:variant)<transacts>:typed_array(vector2i) =
     Made := typed_array(vector2i){Ref := Value.Ref, Unpack := AsVector2i, Pack := VariantFromVector2i}
@@ -27366,6 +27501,8 @@ VhToVector2iArray(Value:variant)<transacts>:typed_array(vector2i) =
 
 VhFromVector2iArray(Value:typed_array(vector2i))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeVector2iArray<public>()<transacts>:typed_array(vector2i) = VhToVector2iArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToVector3Array(Value:variant)<transacts>:typed_array(vector3) =
     Made := typed_array(vector3){Ref := Value.Ref, Unpack := AsVector3, Pack := VariantFromVector3}
     VhAdopt(Made)
@@ -27373,12 +27510,16 @@ VhToVector3Array(Value:variant)<transacts>:typed_array(vector3) =
 
 VhFromVector3Array(Value:typed_array(vector3))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeVector3Array<public>()<transacts>:typed_array(vector3) = VhToVector3Array(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToVector3iArray(Value:variant)<transacts>:typed_array(vector3i) =
     Made := typed_array(vector3i){Ref := Value.Ref, Unpack := AsVector3i, Pack := VariantFromVector3i}
     VhAdopt(Made)
     Made
 
 VhFromVector3iArray(Value:typed_array(vector3i))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
+
+MakeVector3iArray<public>()<transacts>:typed_array(vector3i) = VhToVector3iArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToWindowElement(Value:variant)<decides><transacts>:window = window[VhObjectFrom[Value]]
 
@@ -27391,6 +27532,8 @@ VhToWindowArray(Value:variant)<transacts>:typed_array(window) =
 
 VhFromWindowArray(Value:typed_array(window))<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
+MakeWindowArray<public>()<transacts>:typed_array(window) = VhToWindowArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+
 VhToColorColorDict(Value:variant)<transacts>:typed_dictionary(color, color) =
     Made := typed_dictionary(color, color){Ref := Value.Ref, PackKey := VariantFromColor, Unpack := AsColor, Pack := VariantFromColor}
     VhAdopt(Made)
@@ -27398,12 +27541,16 @@ VhToColorColorDict(Value:variant)<transacts>:typed_dictionary(color, color) =
 
 VhFromColorColorDict(Value:typed_dictionary(color, color))<transacts>:variant = variant{Tag := TagDictionary, Ref := Value.Ref}
 
+MakeColorColorDict<public>()<transacts>:typed_dictionary(color, color) = VhToColorColorDict(variant{Tag := TagDictionary, Ref := VhRefNew(TagDictionary)})
+
 VhToIntStringDict(Value:variant)<transacts>:typed_dictionary(int, string) =
     Made := typed_dictionary(int, string){Ref := Value.Ref, PackKey := VariantFromInt, Unpack := AsString, Pack := VariantFromString}
     VhAdopt(Made)
     Made
 
 VhFromIntStringDict(Value:typed_dictionary(int, string))<transacts>:variant = variant{Tag := TagDictionary, Ref := Value.Ref}
+
+MakeIntStringDict<public>()<transacts>:typed_dictionary(int, string) = VhToIntStringDict(variant{Tag := TagDictionary, Ref := VhRefNew(TagDictionary)})
 
 object<public> := class(vh_object):
 

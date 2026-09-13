@@ -256,6 +256,46 @@ marshal := class(node2d):
     CallSibling<public>(Target:object, Method:string, Args:godot_array)<decides>:int =
         AsInt[Target.Callv(Method, Args)]
 
+    # The same call, with the argument list built here rather than handed over. This is what
+    # `godot_array{}` could not do: it compiles and holds reference 0, which crosses as Nil, so
+    # `Callv` had no way to be given arguments from Verse at all (R-TYPE-2, R-INT-2).
+    CallSiblingWith<public>(Target:object, Method:string, Value:int)<decides>:int =
+        Args := MakeArray()
+        Args.AddInt(Value)
+        AsInt[Target.Callv(Method, Args)]
+
+    # A container built in Verse and handed *back* to Godot as a value, which is the other half:
+    # what comes out the far side has to be the thing that was built, elements and all.
+    MakeMixed<public>(Count:int, Label:string):godot_array =
+        Made := MakeArray()
+        for (I := 0..Count - 1):
+            Made.AddInt(I)
+        Made.AddString(Label)
+        Made
+
+    MakeLookup<public>(Key:string, Value:int):dictionary =
+        Made := MakeDictionary()
+        Made.SetInt(Key, Value)
+        Made
+
+    # A *typed* container, which no script could build either: the element converters are
+    # module-scoped, so `typed_array(node){...}` cannot be spelled outside the Godot package.
+    # The length rather than the container: a `typed_array(t)` has no entry in the host's reference
+    # table, so it has no spelling as a *return* across the ABI. What is being asked here is that
+    # the container can be built and filled at all, which is what had no spelling before.
+    MakeChildListLength<public>(First:node, Second:node):int =
+        Made := MakeNodeArray()
+        Made.Add(First)
+        Made.Add(Second)
+        Made.Length()
+
+    # And that what went in comes back out at its own type.
+    MakeChildListFirstName<public>(First:node, Second:node)<decides>:string =
+        Made := MakeNodeArray()
+        Made.Add(First)
+        Made.Add(Second)
+        Made.Get[1].GetName()
+
     # Object's reflection, which is the rest of what mirroring it bought.
     ClassOf<public>(Target:object):string = Target.GetClass()
 

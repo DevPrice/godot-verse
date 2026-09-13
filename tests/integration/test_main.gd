@@ -266,6 +266,26 @@ func _init() -> void:
 	_check_eq("a Verse script calls a GDScript method dynamically",
 			node.call("CallSibling", self, "_double", [21]), 42)
 	_check("Object.has_method sees a GDScript method", node.call("CanCall", self, "_double"))
+
+	# --- R-TYPE-2 / R-INT-2: a container the script built itself --------------------------------
+	#
+	# Until now a script could only hold a container Godot handed it. `godot_array{}` compiles and
+	# holds reference 0, which crosses as Nil, so the one method that takes an argument list could
+	# never be given one from Verse.
+	_check_eq("a script calls a GDScript method with an argument list it built itself",
+			node.call("CallSiblingWith", self, "_double", 16), 32)
+	var built: Variant = node.call("MakeMixed", 3, "tail")
+	_check_eq("an Array built in Verse crosses back as an Array", typeof(built), TYPE_ARRAY)
+	if typeof(built) == TYPE_ARRAY:
+		_check_eq("with the elements it was given, in order", built, [0, 1, 2, "tail"])
+	var lookup: Variant = node.call("MakeLookup", "hp", 7)
+	_check_eq("a Dictionary built in Verse crosses back as a Dictionary", typeof(lookup), TYPE_DICTIONARY)
+	if typeof(lookup) == TYPE_DICTIONARY:
+		_check_eq("with the key it was given", lookup.get("hp"), 7)
+	_check_eq("a typed Array built in Verse holds what was added to it",
+			node.call("MakeChildListLength", node, node), 2)
+	_check_eq("and its elements come back at their own type",
+			node.call("MakeChildListFirstName", node, node), String(node.name))
 	_check("and denies one nothing declares", not node.call("CanCall", self, "_no_such_method"))
 
 	# --- Object.to_string reached as Verse's own ToString -----------------------------------------

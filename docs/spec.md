@@ -559,6 +559,18 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   carrying their element conversion as a function value rather than needing a generated wrapper class
   per element type. All 70 element types and both key/value pairs the API spells are covered.
 
+  Phase 4 added the half that was missing: **a script can now make one.** Until then a container
+  could only be held, never built — `godot_array{}` compiles, because the wrappers are public so
+  they can be named in a signature, and holds reference 0, which crosses as `Nil`.
+
+  That fix carried a semantic change worth naming, because it is the second stated exception to
+  "a write defers to commit": **a container write happens immediately.** Deferring it was never
+  consistent — `VhRefGet` and `VhRefSize` were always immediate, so a container disagreed with
+  itself inside one expression — and it made a freshly built container useless, since the append
+  that fills one is a write at the current size and the call that consumes the result runs before
+  the commit that would have filled it. Signal emission is the other exception, and **Phase 4.5**
+  audits the set.
+
   What this unblocked is larger than the requirement. `GetChildren()` returned
   `typedarray::Node` and was therefore skipped entirely, along with `GetNodesInGroup` and
   `GetOverlappingBodies`: a `godot_array` offers ten typed element accessors and not one of them is an
@@ -748,21 +760,19 @@ indistinguishable from a GDScript one.
   signals — with no Verse-specific API and no knowledge that Verse is involved. Depends on
   R-NODE-6 and §5.3.
 - **R-INT-2 (MUST)** A Verse script calls methods on, and reads properties of, an object whose
-  script is GDScript or C#, dynamically. Status: **part**, and as a side effect rather than as work
-  of its own: `Object.callv(StringName, Array) -> Variant` is an ordinary concrete method, and Godot's
+  script is GDScript or C#, dynamically. Status: **done** (Phase 4 stage 2 closed the argument
+  array). The dispatch itself arrived as a side effect rather than as work of its own: `Object.callv(StringName, Array) -> Variant` is an ordinary concrete method, and Godot's
   `Object` became mirrorable the moment Variant and Array both crossed (Phase 2 §4.4). A script
   writes `AsInt[Target.Callv("_double", Args)]` and the GDScript method runs. `get`, `set`,
   `has_method` and `get_class` came with it.
 
-  **What is missing is the argument array**, which the Dodge the Creeps port found and
-  `docs/dodge-the-creeps.md` records as its wall 7: the `Args` in that test came from GDScript, and
-  a script cannot make a `godot_array` of its own. `godot_array{}` compiles — the wrappers are
-  public so they can be named in a signature — and holds reference 0, which crosses as `Nil`. So
-  dispatch by name works and *originating* such a call does not, `Object.add_user_signal` is
-  unusable, and every mirrored method taking an `Array` or a `Dictionary` can only be passed a
-  container Godot supplied. The fix is a public way to make an empty container and add to it:
-  `VhRefNew` is already the native function, and the generator already emits typed element
-  accessors. This is R-TYPE-2's remaining half and belongs with it.
+  **The argument array** was what was missing, which the Dodge the Creeps port found and
+  `docs/dodge-the-creeps.md` records as its wall 7: a script could not make a `godot_array` of its
+  own, so dispatch by name worked and *originating* such a call did not. `MakeArray()` and
+  `MakeDictionary()` now mint one through `VhRefNew`, `Make<Element>Array()` and
+  `Make<Key><Value>Dict()` do the same for the typed forms — which no script could ever have
+  spelled, since their converters are module-scoped — and `Add<Element>` appends. This is
+  R-TYPE-2's other half and landed with it.
 
   Proving it turned up a rule that had leaked out of the place it belonged: an object-typed
   *exported member* must be optional, because the inspector can leave a slot empty, and that rule was

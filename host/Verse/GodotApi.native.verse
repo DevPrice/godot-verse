@@ -197,6 +197,27 @@ VhToSignal(Value:variant)<transacts>:signal_ref =
     VhAdopt(Made)
     Made
 
+# --- making one ---------------------------------------------------------------------------
+
+# A fresh, empty Godot container, owned by the value that comes back (R-TYPE-2, R-INT-2).
+#
+# Without these a script could only ever hold a container Godot handed it, which is what made
+# `Callv` unusable -- `godot_array{}` compiles and holds reference 0, which crosses as Nil, so the
+# one method that takes an argument list could not be given one. Every other way of reaching a
+# Godot API that takes an Array was closed for the same reason.
+#
+# Adopted on the way out, like every other wrapper: that is what puts the UObject shadow behind it,
+# and the shadow is what releases the table entry when Verse drops the value.
+MakeArray<public>()<transacts>:godot_array =
+    Made := godot_array{Ref := VhRefNew(TagArray)}
+    VhAdopt(Made)
+    Made
+
+MakeDictionary<public>()<transacts>:dictionary =
+    Made := dictionary{Ref := VhRefNew(TagDictionary)}
+    VhAdopt(Made)
+    Made
+
 VhFromArray(Value:godot_array)<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 VhFromDictionary(Value:dictionary)<transacts>:variant = variant{Tag := TagDictionary, Ref := Value.Ref}
 VhFromCallable(Value:callable)<transacts>:variant = variant{Tag := TagCallable, Ref := Value.Ref}
@@ -263,6 +284,11 @@ typed_array<public>(t:type) := class(godot_ref):
     # Writes through to the container Godot owns, which every other holder sees. An index one past
     # the end appends; further than that is the error GDScript makes it.
     Set<public>(Index:int, Value:t)<transacts>:void = VhRefSet(Ref, VhFromInt(Index), Pack(Value))
+
+    # Appends. One past the end is the only index that grows a Godot container -- its indexed
+    # setter refuses anything further rather than resizing -- so this is Set at exactly that index,
+    # and it is how a container built in Verse gets its contents.
+    Add<public>(Value:t)<transacts>:void = VhRefSet(Ref, VhFromInt(VhRefSize(Ref)), Pack(Value))
 
 
 # Godot's Dictionary with a key and a value type -- `typeddictionary::int;String`. The same shape as
