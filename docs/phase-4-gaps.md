@@ -5,14 +5,16 @@
 code or measured by running it; none is recalled. Where a previous document said something that
 turned out to be false, that is noted and the document has been corrected.
 
-**Thirteen entries are now closed** — G1, G2, G3, G4, G6, G7, G8, G10, G11, G12, G19, G20 and G21 —
-**G13 is part** (9 of the 16 math types; 466 skips, from 585), G5 is built and provably unverifiable
-without a window, and G9 was answered with a "do not build this". Closing them took the ABI to **v5**.
+**Every numbered entry is now closed, answered, or deliberately narrowed.** G1–G4, G6–G8, G10–G13,
+G19–G21 are built; G5 is built and provably unverifiable without a window; G9 was answered with a
+"do not build this"; G14–G18 were always working as built. The ABI is at **v5**.
 
-**What Phase 4 still owes is the by-hand checklist**, which nothing here can substitute for, plus
-G13's seven transform types and six utilities. Each closed entry keeps its original diagnosis below
-its **Built** note, because the diagnosis is the part worth re-reading: §0 is why — and §0 earned
-its keep again here, since G13's stated blocker and G11's stated shape were both wrong.
+**What Phase 4 still owes is the by-hand checklist** — and nothing here can substitute for it: three
+of its entries (`_make_function`, `_HasPoint`, `_CanDropData`) were *measured* to be unreachable from
+a headless run, rather than merely untested. Each closed entry keeps its original diagnosis below its
+**Built** note, because the diagnosis is the part worth re-reading: §0 is why, and §0 earned its keep
+repeatedly — G13's stated blocker, G11's stated shape, and G9's stated fix were all wrong, and each
+took minutes to disprove and would have taken days to build wrongly.
 
 **Companion to:** [`phase-4-design.md`](phase-4-design.md) (the design, and §13's short note pointing
 here), [`spec.md`](spec.md) (per-requirement status), [`by-hand-checklist.md`](by-hand-checklist.md)
@@ -70,9 +72,9 @@ Sized as **S** (an afternoon), **M** (a day), **L** (more, or needs a decision f
 | **G8** | `godot_array` has no `AddObject` | unbuilt | S | **closed** |
 | **G9** | a callback does not remember its `FContentScope` | unbuilt | M | open |
 | **G10** | `@statics` emits neither of the two diagnostics the design promised | unbuilt | S | **closed** |
-| **G11** | 106 of 114 `@GlobalScope` utilities are undispatched | unbuilt | L | **closed**: 86 spell it in Verse, 14 cannot be spelled, 6 left |
+| **G11** | 106 of 114 `@GlobalScope` utilities are undispatched | unbuilt | L | **closed**: 92 spell it in Verse, 14 cannot be spelled, 8 dispatched, 0 unexplained |
 | **G12** | 367 math methods and 261 operators are absent with nothing recorded | unbuilt | M | **closed** |
-| **G13** | math exists for 4 of 16 types; `snapped`, `min`/`max`, `floor`/`ceil`/`round` unwritten | narrower | M | **part**: 9 of 16 types, 466 skips from 585 |
+| **G13** | math exists for 4 of 16 types; `snapped`, `min`/`max`, `floor`/`ceil`/`round` unwritten | narrower | M | **closed**: all 16 types, 410 skips from 585 |
 | **G14** | `GetClassOf` answers only the Godot class | structural | — | as built |
 | **G15** | there is no `godot_callback` native class; a callback is `(handle, decorated name)` | structural | — | as built |
 | **G16** | `vh_signal` is non-parametric; the payload lives in a host-side table | structural | — | as built |
@@ -461,15 +463,15 @@ from `FillLocation`.
 
 | what it is | how many | what happens now |
 | --- | --- | --- |
-| Verse or GodotMath already spells it | **86** | recorded as `utility_has_verse_spelling`, and the editor says *"Verse spells it `FloorF(X)`"* |
+| Verse or GodotMath already spells it | **92** | recorded as `utility_has_verse_spelling`, and the editor says *"Verse spells it `FloorF(X)`"* |
 | its parameter or result is a `Variant` | **14** | `utility_variant_only` — R-TYPE-7 keeps a script from spelling one, so there is no signature these could be given |
-| genuinely Godot, and now dispatched | **11** | `CallUtility`, with hand-written Verse wrappers |
-| left | **6** | `nearest_po2`, `step_decimals`, `rid_from_int64`, and the three `cubic_interpolate_angle` variants |
+| genuinely Godot, and dispatched | **8** | `CallUtility`, with hand-written Verse wrappers |
+| **unexplained** | **0** | — |
 
 The eleven dispatched are the ones whose *behaviour* is the engine's rather than whose spelling is:
 `push_error` and `push_warning` (the editor's Debugger panel, where a `Print` goes to stdout and is
 gone), `print_rich` (BBCode), `printerr`, `print_verbose`, `printraw`, `type_string` and
-`error_string` (engine tables), `instance_from_id`, `is_instance_id_valid` and `rid_allocate_id`.
+`error_string` (engine tables), `instance_from_id`, `is_instance_id_valid`, `rid_allocate_id` and `rid_from_int64`.
 
 Their Verse wrappers are **hand-written in `GodotApi.native.verse` rather than generated**, because
 the signature is deliberately not Godot's: the print family is `vararg` there and one argument here,
@@ -589,7 +591,7 @@ tuple path, which allocates nothing outside the arena.
 
 ## 4. Narrower than the design
 
-### G13 — math coverage · **part: 9 of 16 types, and the blocker was imaginary**
+### G13 — math coverage · **closed: all 16 types, and the blocker was imaginary**
 
 **Design:** §8.3 names a written list — *"length, normalized, distance, dot, cross, lerp, clamp, abs,
 sign, floor/ceil/round, rotated, angle, snapped, min/max"* — across 16 types.
@@ -610,12 +612,25 @@ own comment says.
 `Asinh`, `Acosh`, `Atanh`, `LinearToDb`, `DbToLinear`, `IsNan`, `IsInf`, `IsFinite` and
 `TruncatedQuotient` — which double as G11's answer for 86 of Godot's utilities.
 
-Then the types: **vector2** completed to §8.3's list and past it, **vector2i**, **vector3**,
-**vector3i**, **vector4**, **vector4i**, **color** (`Darkened`, `Lightened`, `Inverted`,
-`GetLuminance`, `Clamp`), and **rect2**/**rect2i** (`HasPoint`, `Intersects`, `Merge`, `Expand`,
-`Abs`, `Grow`, `GetArea`, `GetCenter`, `GetEnd`). Seven types still have nothing: `plane`,
-`quaternion`, `aabb`, `basis`, `transform2d`, `transform3d`, `projection` — the transform family,
-which is where the remaining 466 mostly live.
+Then all sixteen types. The vectors and `color` first, then `rect2`/`rect2i`, then the transform
+family: `plane`, `quaternion` (Hamilton product, `Xform`, `Slerp`, `Inverse`), `aabb`, `basis`,
+`transform2d` (including `AffineInverse`, written out of `core/math/transform_2d.cpp` rather than
+derived), `transform3d` and `projection`. **585 skips down to 410.**
+
+**`X`, `Y` and `Z` on a `basis` are Godot's *columns*, not its rows**, and every body is written in
+column terms because of it — Phase 1 shipped the transposed version of this once already. In columns
+the operators come out simple: transforming a vector is the weighted sum of the columns, and column
+*i* of `A * B` is `A` applied to column *i* of `B`, because `(AB)e = A(Be)`.
+
+**What is left in those 410 is deliberate rather than pending**: the *general* inverse of a `basis`
+or a `transform3d` (a rotation's inverse is its transpose, which is written, and that is the case
+scene code has), the Euler and axis-angle conversions, and the `projection` constructors — a
+projection is built by the engine and consumed, not assembled by hand.
+
+**A fifth measurement, found writing the tests.** A *computed* float cannot be compared for equality
+across this boundary: Verse's `float` is 64-bit and Godot's `real_t` is 32-bit in a standard build,
+so a quaternion product agrees to about 1e-8 and no further. The suite has a `_check_close` for those
+and keeps exact equality for values that are exact — a floor, a snap, an integer division.
 
 **Four things the probe caught that reading would not have.** Each is now a landmine note in
 `CLAUDE.md`, because each cost a wrong answer that compiled:
@@ -781,11 +796,11 @@ Items 1–4 are **done**, struck through, and their entries above say what shipp
 5. ~~**G5** — `_make_function`.~~ Built. Still needs the by-hand checklist to *verify*, and now
    provably so: it is unreachable from GDScript, so there is no automated check to write.
 6. ~~**G7**, **G8**, **G10**, **G19**, **G20**~~ — done.
-7. ~~**G13** and **G11**.~~ G11 is closed and G13 is part. What is left of G13 is the **transform
-   family** — `plane`, `quaternion`, `aabb`, `basis`, `transform2d`, `transform3d`, `projection` —
-   which is where most of the remaining 466 skips live, and which is a bigger piece of work than the
-   vectors were: a basis is nine components and its `*` is composition rather than anything
-   componentwise. Six utilities are left with it.
+7. ~~**G13** and **G11**.~~ Both closed. All sixteen math types carry their operators and the
+   methods scene code reaches; all 114 utilities are classified with none unexplained.
+
+**Nothing on this list is open.** What remains for the phase is
+[`by-hand-checklist.md`](by-hand-checklist.md), which needs a person and a window.
 8. ~~**G21** — needs an ABI decision before it is ordinary work.~~ The signal half needed no such
    decision and is done. What is left is **R-LANG-2**'s general case — a struct as a method
    parameter, a return value, an `@export` — and the spec has already chosen the Dictionary; it wants

@@ -835,6 +835,9 @@ int32_t VerseRuntime::api_call_utility(void *p_ctx, const char *p_name_utf8, int
 		result = UtilityFunctions::is_instance_id_valid((int64_t)*args[0]);
 	} else if (name == StringName("rid_allocate_id")) {
 		result = UtilityFunctions::rid_allocate_id();
+	} else if (name == StringName("rid_from_int64") && p_arg_count == 1) {
+		// A RID crosses as the integer it wraps, which is how the mirror types it everywhere else.
+		result = (int64_t)UtilityFunctions::rid_from_int64((int64_t)*args[0]).get_id();
 	} else {
 		return VH_CALL_NO_SUCH_MEMBER;
 	}

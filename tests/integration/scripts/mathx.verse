@@ -84,3 +84,84 @@ mathx := class(node2d):
     SelfFromId<public>()<transacts>:logic =
         Id := GetInstanceId()
         if (Found := InstanceFromId[Id], Found.GetInstanceId() = Id) then true else false
+
+    # --- the transform family ---------------------------------------------------
+
+    # Quaternion composition is not commutative and `A * B` applies B first, so a half-turn about Y
+    # then a half-turn about X is a different rotation from the reverse.
+    QuatMulW<public>(AX:float, AY:float, AZ:float, AW:float, BX:float, BY:float, BZ:float, BW:float)<transacts>:float =
+        A := quaternion{X := AX, Y := AY, Z := AZ, W := AW}
+        B := quaternion{X := BX, Y := BY, Z := BZ, W := BW}
+        (A * B).W
+
+    # Rotating a vector by a quarter turn about Z takes +X to +Y.
+    QuatXformY<public>()<reads>:float =
+        Half := Sqrt(2.0) / 2.0
+        Q := quaternion{X := 0.0, Y := 0.0, Z := Half, W := Half}
+        (Q * vector3{X := 1.0, Y := 0.0, Z := 0.0}).Y
+
+    QuatSlerpW<public>(Weight:float)<reads>:float =
+        A := quaternion{X := 0.0, Y := 0.0, Z := 0.0, W := 1.0}
+        B := quaternion{X := 0.0, Y := 0.0, Z := 1.0, W := 0.0}
+        A.Slerp(B, Weight).W
+
+    # A basis whose columns are scaled axes: the determinant is the volume scale, and `* V` is the
+    # weighted sum of the columns. A transposed-vs-columns mistake shows up here as a wrong Y.
+    BasisXformY<public>()<transacts>:float =
+        B := basis{
+            X := vector3{X := 1.0, Y := 2.0, Z := 0.0},
+            Y := vector3{X := 0.0, Y := 1.0, Z := 0.0},
+            Z := vector3{X := 0.0, Y := 0.0, Z := 1.0}}
+        (B * vector3{X := 3.0, Y := 0.0, Z := 0.0}).Y
+
+    BasisDet<public>(SX:float, SY:float, SZ:float)<transacts>:float =
+        basis{
+            X := vector3{X := SX, Y := 0.0, Z := 0.0},
+            Y := vector3{X := 0.0, Y := SY, Z := 0.0},
+            Z := vector3{X := 0.0, Y := 0.0, Z := SZ}}.Determinant()
+
+    # A translation must not reach a *direction*, which is the whole point of BasisXform.
+    Transform2dXformX<public>(OX:float, VX:float)<transacts>:float =
+        T := transform2d{
+            X := vector2{X := 2.0, Y := 0.0},
+            Y := vector2{X := 0.0, Y := 2.0},
+            Origin := vector2{X := OX, Y := 0.0}}
+        (T * vector2{X := VX, Y := 0.0}).X
+
+    Transform2dBasisXformX<public>(OX:float, VX:float)<transacts>:float =
+        T := transform2d{
+            X := vector2{X := 2.0, Y := 0.0},
+            Y := vector2{X := 0.0, Y := 2.0},
+            Origin := vector2{X := OX, Y := 0.0}}
+        T.BasisXform(vector2{X := VX, Y := 0.0}).X
+
+    # Composition, then the affine inverse undoing it: inverse(T) * (T * v) must be v.
+    Transform2dRoundTripX<public>(VX:float, VY:float)<transacts>:float =
+        T := transform2d{
+            X := vector2{X := 0.0, Y := 2.0},
+            Y := vector2{X := -3.0, Y := 0.0},
+            Origin := vector2{X := 5.0, Y := 7.0}}
+        V := vector2{X := VX, Y := VY}
+        if (Inv := T.AffineInverse[]) then (Inv * (T * V)).X else -999.0
+
+    Transform3dXformZ<public>()<transacts>:float =
+        T := transform3d{
+            Basis := basis{
+                X := vector3{X := 1.0, Y := 0.0, Z := 0.0},
+                Y := vector3{X := 0.0, Y := 1.0, Z := 0.0},
+                Z := vector3{X := 0.0, Y := 0.0, Z := 2.0}},
+            Origin := vector3{X := 0.0, Y := 0.0, Z := 5.0}}
+        (T * vector3{X := 0.0, Y := 0.0, Z := 3.0}).Z
+
+    PlaneDistance<public>(PX:float)<transacts>:float =
+        P := plane{Normal := vector3{X := 1.0, Y := 0.0, Z := 0.0}, D := 2.0}
+        P.DistanceTo(vector3{X := PX, Y := 0.0, Z := 0.0})
+
+    AabbVolume<public>(W:float, H:float, D:float)<transacts>:float =
+        aabb{Position := vector3{}, Size := vector3{X := W, Y := H, Z := D}}.GetVolume()
+
+    # The last six utilities.
+    FModAt<public>(A:float, B:float)<transacts>:float = FMod(A, B)
+    NearestPo2At<public>(V:int)<transacts>:int = NearestPo2(V)
+    StepDecimalsAt<public>(S:float)<transacts>:int = StepDecimals(S)
+    CubicAngleAt<public>()<transacts>:float = CubicInterpolateAngle(0.1, 0.2, 0.0, 0.3, 0.5)

@@ -116,6 +116,13 @@ VERSE_STDLIB_NAMES = {
     # GodotApi.native.verse's hand-written utility wrappers.
     "PushError", "PushWarning", "PrintRich", "PrintErr", "PrintVerbose", "PrintRaw",
     "VariantTypeName", "ErrorString", "InstanceFromId", "IsInstanceIdValid", "RidAllocateId",
+    "RidFromInt64",
+    # The transform family's methods, and the last six utilities.
+    "IsPointOver", "Inverse", "Xform", "Slerp", "GetVolume", "HasVolume", "Transposed",
+    "Determinant", "GetScale", "Scaled", "BasisXform", "GetRotation", "Translated",
+    "AffineInverse", "InverseOrthonormal",
+    "FMod", "Po2AtLeast", "NearestPo2", "StepDecimals", "CubicInterpolateInTime", "NearestAngle",
+    "CubicInterpolateAngle", "CubicInterpolateAngleInTime",
 }
 
 TypeInfo = namedtuple("TypeInfo", ["verse_type", "pack_fn", "pack_decides", "unpack_fn", "unpack_decides"])
@@ -1475,6 +1482,11 @@ UTILITY_VERSE_SPELLINGS = {
     "bezier_interpolate": "BezierInterpolate(Start, C1, C2, End, T)",
     "bezier_derivative": "BezierDerivative(Start, C1, C2, End, T)",
     "is_nan": "IsNan[X]", "is_inf": "IsInf[X]", "is_finite": "IsFinite[X]",
+    "fmod": "FMod(A, B)", "nearest_po2": "NearestPo2(Value)", "step_decimals": "StepDecimals(Step)",
+    "rid_from_int64": "RidFromInt64(From)",
+    "cubic_interpolate_in_time": "CubicInterpolateInTime(...)",
+    "cubic_interpolate_angle": "CubicInterpolateAngle(From, To, Pre, Post, T)",
+    "cubic_interpolate_angle_in_time": "CubicInterpolateAngleInTime(...)",
     "sin": "Sin(X)", "cos": "Cos(X)", "tan": "Tan(X)",
     "asin": "ArcSin(X)", "acos": "ArcCos(X)", "atan": "ArcTan(X)", "atan2": "ArcTan(Y, X)",
     "lerp": "Lerp(A, B, T)", "lerpf": "Lerp(A, B, T)",

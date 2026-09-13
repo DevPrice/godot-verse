@@ -67,6 +67,19 @@ func _check(name: String, ok: bool) -> void:
 		print("[integration] %s: FAIL" % name)
 
 
+# For a *computed* float, where exact equality is the wrong question: Verse's float is 64-bit and
+# Godot's real_t is 32-bit in a standard build, so anything that accumulates -- a quaternion product,
+# a slerp -- differs in the last bits however right both sides are. An exact comparison still belongs
+# on values that are exact, like a floor or a snap, and those keep using _check_eq.
+func _check_close(name: String, got: float, expected: float, tol: float = 1e-6) -> void:
+	if absf(got - expected) <= tol:
+		_passed += 1
+		print("[integration] %s: ok" % name)
+	else:
+		_failed += 1
+		print("[integration] %s: FAIL (got %s, expected %s)" % [name, str(got), str(expected)])
+
+
 func _check_eq(name: String, got: Variant, expected: Variant) -> void:
 	var ok: bool = typeof(got) == typeof(expected) and got == expected
 	if not ok:
@@ -878,6 +891,51 @@ func _init() -> void:
 		_check_eq("and error_string", mx.call("ErrorNameOf", ERR_FILE_NOT_FOUND),
 				error_string(ERR_FILE_NOT_FOUND))
 		_check("instance_from_id finds the node back", mx.call("SelfFromId"))
+
+		# --- the transform family -----------------------------------------------------------
+		#
+		# Godot's Basis.x is column 0, and Phase 1 shipped the transposed version of this once
+		# already, so every one of these is compared against the engine building the same value.
+		var qa := Quaternion(0.1, 0.2, 0.3, 0.4)
+		var qb := Quaternion(0.5, 0.6, 0.7, 0.8)
+		_check_close("quaternion composition matches Godot's, order included",
+				mx.call("QuatMulW", qa.x, qa.y, qa.z, qa.w, qb.x, qb.y, qb.z, qb.w), (qa * qb).w)
+		var quarter := Quaternion(0, 0, sqrt(2.0) / 2.0, sqrt(2.0) / 2.0)
+		_check_close("a quarter turn about Z takes +X to +Y",
+				mx.call("QuatXformY"), (quarter * Vector3(1, 0, 0)).y)
+		_check_close("slerp halfway takes the short arc", mx.call("QuatSlerpW", 0.5),
+				Quaternion(0, 0, 0, 1).slerp(Quaternion(0, 0, 1, 0), 0.5).w)
+
+		var bs := Basis(Vector3(1, 2, 0), Vector3(0, 1, 0), Vector3(0, 0, 1))
+		_check_eq("a basis transforms by its columns, not its rows",
+				mx.call("BasisXformY"), (bs * Vector3(3, 0, 0)).y)
+		_check_close("and its determinant is the volume scale", mx.call("BasisDet", 2.0, 3.0, 4.0),
+				Basis.from_scale(Vector3(2, 3, 4)).determinant())
+
+		var t2 := Transform2D(Vector2(2, 0), Vector2(0, 2), Vector2(5, 0))
+		_check_eq("a transform2d applies its origin to a point",
+				mx.call("Transform2dXformX", 5.0, 3.0), (t2 * Vector2(3, 0)).x)
+		_check_eq("and does not apply it to a direction",
+				mx.call("Transform2dBasisXformX", 5.0, 3.0), t2.basis_xform(Vector2(3, 0)).x)
+		_check_close("the affine inverse undoes the transform",
+				mx.call("Transform2dRoundTripX", 4.0, -1.0), 4.0)
+
+		var t3 := Transform3D(Basis(Vector3(1, 0, 0), Vector3(0, 1, 0), Vector3(0, 0, 2)), Vector3(0, 0, 5))
+		_check_eq("a transform3d composes basis then origin",
+				mx.call("Transform3dXformZ"), (t3 * Vector3(0, 0, 3)).z)
+
+		_check_eq("a plane's distance is signed", mx.call("PlaneDistance", 0.0),
+				Plane(Vector3(1, 0, 0), 2.0).distance_to(Vector3(0, 0, 0)))
+		_check_eq("an aabb's volume", mx.call("AabbVolume", 2.0, 3.0, 4.0),
+				AABB(Vector3(), Vector3(2, 3, 4)).get_volume())
+
+		# The last six utilities. fmod truncates toward zero, so -7 mod 3 is -1 and not 2.
+		_check_close("fmod truncates toward zero", mx.call("FModAt", -7.0, 3.0), fmod(-7.0, 3.0))
+		_check_eq("nearest_po2", mx.call("NearestPo2At", 100), nearest_po2(100))
+		_check_eq("and is exact on a power of two", mx.call("NearestPo2At", 64), nearest_po2(64))
+		_check_eq("step_decimals", mx.call("StepDecimalsAt", 0.01), step_decimals(0.01))
+		_check_close("cubic_interpolate_angle",
+				mx.call("CubicAngleAt"), cubic_interpolate_angle(0.1, 0.2, 0.0, 0.3, 0.5))
 
 		root.remove_child(mx)
 		mx.free()

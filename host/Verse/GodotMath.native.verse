@@ -22,18 +22,21 @@ using { /Verse.org/Native }
 # Both are narrower than `<transacts>`, so either is callable from a Godot callback and from inside
 # a failure context.
 #
-# **Not everything is here, and what is missing is on the record.** Godot has 367 methods and 261
-# operators across its 16 math types, and C# solved that by writing them all. Nine types are covered
-# here -- the six vectors, `color`, `rect2` and `rect2i` -- plus the `@GlobalScope` scalar math Verse
-# has no name for. The **transform family** is what is left: `plane`, `quaternion`, `aabb`, `basis`,
-# `transform2d`, `transform3d` and `projection` have nothing, and that is where most of the 466
-# remaining skips live.
+# **All sixteen types are covered, and what is still missing is on the record.** Godot has 367
+# methods and 261 operators across them, and C# solved that by writing every one. This writes the
+# operators and the methods scene code reaches, plus the `@GlobalScope` scalar math Verse has no name
+# for -- which is also R-SCN-3's answer for 92 of Godot's 114 utilities.
+#
+# What is deliberately *not* written, rather than merely absent: the **general inverse** of a `basis`
+# or a `transform3d` (a rotation's inverse is its transpose, which is written and is the case scene
+# code has), the Euler and axis-angle **conversions**, and the `projection` constructors -- a
+# projection is built by the engine and consumed, not assembled by hand.
 #
 # `tools/gen_verse_api.py` reads *this file* to find out what is written and records everything else
 # as a `math_not_written` skip, which is what makes the absence say so in the editor instead of
 # being a name that is simply not there (R-SCN-2, docs/phase-4-design.md 8.3). Reading the file
 # rather than maintaining a list is the point: **add a method below and its skip disappears on the
-# next generation**, with nothing else to update. 466 of the 628 are skips today, from 585.
+# next generation**, with nothing else to update. 410 of the 628 are skips today, from 585.
 #
 # The parsing is line-based, so a definition has to start at column zero to be seen -- which every
 # one below does, because a Verse module-level definition has nowhere else to start.
@@ -739,3 +742,337 @@ IsInf<public>(X:float)<decides><computes>:void =
 IsFinite<public>(X:float)<decides><computes>:void =
     not IsNan[X]
     not IsInf[X]
+
+# --- plane -------------------------------------------------------------------
+#
+# A plane is a unit normal and a distance along it from the origin, so `D` is signed and the sign
+# convention is Godot's: a point is "over" the plane when `Normal.Dot(P) - D` is positive.
+
+(P:plane).Normalized<public>()<reads>:plane =
+    L := P.Normal.Length()
+    if (L > 0.0, N := P.Normal / L) then plane{Normal := N, D := P.D / L} else plane{}
+
+# Signed: negative behind the plane, which is what makes it usable as a half-space test rather than
+# only as a distance.
+(P:plane).DistanceTo<public>(Point:vector3)<computes>:float = P.Normal.Dot(Point) - P.D
+
+(P:plane).HasPoint<public>(Point:vector3)<decides><transacts>:void = IsZeroApprox[P.DistanceTo(Point)]
+(P:plane).IsPointOver<public>(Point:vector3)<decides><computes>:void = P.DistanceTo(Point) > 0.0
+
+# The point on the plane nearest to the origin, and the projection of an arbitrary point onto it.
+(P:plane).GetCenter<public>()<computes>:vector3 = P.Normal * P.D
+(P:plane).Project<public>(Point:vector3)<computes>:vector3 = Point - P.Normal * P.DistanceTo(Point)
+
+prefix'-'<public>(P:plane)<computes>:plane = plane{Normal := -P.Normal, D := -P.D}
+
+# --- quaternion --------------------------------------------------------------
+
+operator'+'<public>(L:quaternion, R:quaternion)<computes>:quaternion =
+    quaternion{X := L.X + R.X, Y := L.Y + R.Y, Z := L.Z + R.Z, W := L.W + R.W}
+operator'-'<public>(L:quaternion, R:quaternion)<computes>:quaternion =
+    quaternion{X := L.X - R.X, Y := L.Y - R.Y, Z := L.Z - R.Z, W := L.W - R.W}
+operator'*'<public>(L:quaternion, S:float)<computes>:quaternion =
+    quaternion{X := L.X * S, Y := L.Y * S, Z := L.Z * S, W := L.W * S}
+prefix'-'<public>(Q:quaternion)<computes>:quaternion =
+    quaternion{X := -Q.X, Y := -Q.Y, Z := -Q.Z, W := -Q.W}
+
+# The Hamilton product, component for component as core/math/quaternion.h writes it. Composition is
+# **not** commutative and the order is Godot's: `A * B` applies B first.
+operator'*'<public>(L:quaternion, R:quaternion)<computes>:quaternion =
+    Nx := L.W * R.X + L.X * R.W + L.Y * R.Z - L.Z * R.Y
+    Ny := L.W * R.Y + L.Y * R.W + L.Z * R.X - L.X * R.Z
+    Nz := L.W * R.Z + L.Z * R.W + L.X * R.Y - L.Y * R.X
+    Nw := L.W * R.W - L.X * R.X - L.Y * R.Y - L.Z * R.Z
+    quaternion{X := Nx, Y := Ny, Z := Nz, W := Nw}
+
+(Q:quaternion).LengthSquared<public>()<computes>:float =
+    Q.X * Q.X + Q.Y * Q.Y + Q.Z * Q.Z + Q.W * Q.W
+(Q:quaternion).Length<public>()<reads>:float = Sqrt(Q.LengthSquared())
+
+(Q:quaternion).Normalized<public>()<reads>:quaternion =
+    L := Q.Length()
+    if (L > 0.0) then Q * (1.0 / L) else quaternion{}
+
+(Q:quaternion).Dot<public>(Other:quaternion)<computes>:float =
+    Q.X * Other.X + Q.Y * Other.Y + Q.Z * Other.Z + Q.W * Other.W
+
+# The conjugate, which is the inverse for a *unit* quaternion -- and Godot's `inverse()` asserts
+# normalisation rather than dividing, so this matches it exactly.
+(Q:quaternion).Inverse<public>()<computes>:quaternion =
+    quaternion{X := -Q.X, Y := -Q.Y, Z := -Q.Z, W := -Q.W}
+
+# Rotating a vector: `v + 2 * (u x (u x v) + w * (u x v))`, with u the vector part. Godot spells it
+# this way rather than as a matrix because it is fewer operations for one vector.
+(Q:quaternion).Xform<public>(V:vector3)<computes>:vector3 =
+    U := vector3{X := Q.X, Y := Q.Y, Z := Q.Z}
+    Uv := U.Cross(V)
+    V + (Uv * Q.W + U.Cross(Uv)) * 2.0
+
+operator'*'<public>(Q:quaternion, V:vector3)<computes>:vector3 = Q.Xform(V)
+
+# Shortest-arc interpolation. The negation when the dot is negative is what keeps it short -- a
+# quaternion and its negation are the same rotation, and without this a slerp past 180 degrees spins
+# the long way. Near-parallel falls back to a linear blend, because sin(omega) goes to zero.
+(Q:quaternion).Slerp<public>(To:quaternion, Weight:float)<reads>:quaternion =
+    RawCos := Q.Dot(To)
+    Target := if (RawCos < 0.0) then -To else To
+    Cosom := Abs(RawCos)
+    if (1.0 - Cosom > 0.00001):
+        Omega := ArcCos(Cosom)
+        Sinom := Sin(Omega)
+        Scale0 := Sin((1.0 - Weight) * Omega) / Sinom
+        Scale1 := Sin(Weight * Omega) / Sinom
+        Q * Scale0 + Target * Scale1
+    else:
+        Q * (1.0 - Weight) + Target * Weight
+
+(Q:quaternion).IsEqualApprox<public>(Other:quaternion)<decides><transacts>:void =
+    IsEqualApprox[Q.X, Other.X]
+    IsEqualApprox[Q.Y, Other.Y]
+    IsEqualApprox[Q.Z, Other.Z]
+    IsEqualApprox[Q.W, Other.W]
+
+# --- aabb --------------------------------------------------------------------
+#
+# The 3D rect2, and it carries the same assumption: a negative extent means the box is empty rather
+# than inside out, so `Abs` is what a dragged volume calls first.
+
+(B:aabb).GetEnd<public>()<computes>:vector3 = B.Position + B.Size
+(B:aabb).GetCenter<public>()<computes>:vector3 = B.Position + B.Size * 0.5
+(B:aabb).GetVolume<public>()<computes>:float = B.Size.X * B.Size.Y * B.Size.Z
+
+(B:aabb).HasVolume<public>()<decides><computes>:void =
+    B.Size.X > 0.0
+    B.Size.Y > 0.0
+    B.Size.Z > 0.0
+
+(B:aabb).HasPoint<public>(Point:vector3)<decides><computes>:void =
+    Point.X >= B.Position.X
+    Point.Y >= B.Position.Y
+    Point.Z >= B.Position.Z
+    Point.X < B.Position.X + B.Size.X
+    Point.Y < B.Position.Y + B.Size.Y
+    Point.Z < B.Position.Z + B.Size.Z
+
+(B:aabb).Intersects<public>(Other:aabb)<decides><computes>:void =
+    B.Position.X < Other.Position.X + Other.Size.X
+    B.Position.X + B.Size.X > Other.Position.X
+    B.Position.Y < Other.Position.Y + Other.Size.Y
+    B.Position.Y + B.Size.Y > Other.Position.Y
+    B.Position.Z < Other.Position.Z + Other.Size.Z
+    B.Position.Z + B.Size.Z > Other.Position.Z
+
+(B:aabb).Abs<public>()<computes>:aabb =
+    Low := vector3{
+        X := B.Position.X + Min(B.Size.X, 0.0),
+        Y := B.Position.Y + Min(B.Size.Y, 0.0),
+        Z := B.Position.Z + Min(B.Size.Z, 0.0)}
+    aabb{Position := Low, Size := B.Size.Abs()}
+
+(B:aabb).Merge<public>(Other:aabb)<computes>:aabb =
+    Low := B.Position.Min(Other.Position)
+    High := B.GetEnd().Max(Other.GetEnd())
+    aabb{Position := Low, Size := High - Low}
+
+(B:aabb).Expand<public>(Point:vector3)<computes>:aabb =
+    Low := B.Position.Min(Point)
+    High := B.GetEnd().Max(Point)
+    aabb{Position := Low, Size := High - Low}
+
+(B:aabb).Grow<public>(Amount:float)<computes>:aabb =
+    Offset := vector3{X := Amount, Y := Amount, Z := Amount}
+    aabb{Position := B.Position - Offset, Size := B.Size + Offset * 2.0}
+
+# --- basis -------------------------------------------------------------------
+#
+# **`X`, `Y` and `Z` are Godot's columns, not its rows**, and that is the one thing to hold on to
+# here: `Basis.x` is `get_column(0)`. Phase 1 shipped the transposed version of this once already --
+# it serialised rows and rebuilt from columns, so every basis that crossed came back transposed --
+# and every body below is written in column terms so the mistake cannot come back.
+#
+# In columns, transforming a vector is just the weighted sum of the columns, which is why the
+# operator reads as simply as it does.
+
+operator'*'<public>(B:basis, V:vector3)<computes>:vector3 = B.X * V.X + B.Y * V.Y + B.Z * V.Z
+
+# Column i of `A * B` is `A` applied to column i of `B`, because `(AB)e = A(Be)`. Composition, and
+# not commutative: `A * B` applies B first.
+operator'*'<public>(L:basis, R:basis)<computes>:basis =
+    basis{X := L * R.X, Y := L * R.Y, Z := L * R.Z}
+
+operator'*'<public>(B:basis, S:float)<computes>:basis =
+    basis{X := B.X * S, Y := B.Y * S, Z := B.Z * S}
+
+# Rows become columns. For a *rotation* -- an orthonormal basis -- this is also the inverse, which is
+# the case scene code actually has; the general inverse is not written.
+(B:basis).Transposed<public>()<computes>:basis =
+    basis{
+        X := vector3{X := B.X.X, Y := B.Y.X, Z := B.Z.X},
+        Y := vector3{X := B.X.Y, Y := B.Y.Y, Z := B.Z.Y},
+        Z := vector3{X := B.X.Z, Y := B.Y.Z, Z := B.Z.Z}}
+
+# The scalar triple product of the columns, which is the signed volume the basis scales by. Negative
+# means it flips handedness.
+(B:basis).Determinant<public>()<computes>:float = B.X.Dot(B.Y.Cross(B.Z))
+
+# Each column's length is that axis's scale, which is what `get_scale` reports for a basis without
+# shear -- and the sign of the determinant is what tells a flipped one from a rotated one.
+(B:basis).GetScale<public>()<reads>:vector3 =
+    Magnitude := vector3{X := B.X.Length(), Y := B.Y.Length(), Z := B.Z.Length()}
+    if (B.Determinant() < 0.0) then -Magnitude else Magnitude
+
+(B:basis).Scaled<public>(Scale:vector3)<computes>:basis =
+    basis{X := B.X * Scale.X, Y := B.Y * Scale.Y, Z := B.Z * Scale.Z}
+
+# --- transform2d -------------------------------------------------------------
+#
+# Columns again: `X` and `Y` are the basis and `Origin` is the translation.
+
+# The basis alone, which is what a *direction* is transformed by -- a normal or a velocity must not
+# pick up the translation, and forgetting that is the classic 2D transform bug.
+(T:transform2d).BasisXform<public>(V:vector2)<computes>:vector2 = T.X * V.X + T.Y * V.Y
+
+operator'*'<public>(T:transform2d, V:vector2)<computes>:vector2 = T.BasisXform(V) + T.Origin
+
+operator'*'<public>(L:transform2d, R:transform2d)<computes>:transform2d =
+    transform2d{
+        X := L.BasisXform(R.X),
+        Y := L.BasisXform(R.Y),
+        Origin := L * R.Origin}
+
+(T:transform2d).Determinant<public>()<computes>:float = T.X.X * T.Y.Y - T.X.Y * T.Y.X
+
+# The rotation the basis carries, and the scale along each axis.
+(T:transform2d).GetRotation<public>()<reads>:float = ArcTan(T.X.Y, T.X.X)
+(T:transform2d).GetScale<public>()<reads>:vector2 =
+    Magnitude := vector2{X := T.X.Length(), Y := T.Y.Length()}
+    if (T.Determinant() < 0.0) then vector2{X := Magnitude.X, Y := -Magnitude.Y} else Magnitude
+
+(T:transform2d).Translated<public>(Offset:vector2)<computes>:transform2d =
+    transform2d{X := T.X, Y := T.Y, Origin := T.Origin + Offset}
+
+(T:transform2d).Scaled<public>(Scale:vector2)<computes>:transform2d =
+    transform2d{
+        X := vector2{X := T.X.X * Scale.X, Y := T.X.Y * Scale.Y},
+        Y := vector2{X := T.Y.X * Scale.X, Y := T.Y.Y * Scale.Y},
+        Origin := vector2{X := T.Origin.X * Scale.X, Y := T.Origin.Y * Scale.Y}}
+
+# Godot's `affine_inverse`, written out of core/math/transform_2d.cpp rather than derived: the
+# component swap and the two sign patterns are its own, and the origin is the *inverted* basis
+# applied to the negated origin -- not the original basis, which is the easy mistake.
+(T:transform2d).AffineInverse<public>()<decides><computes>:transform2d =
+    Det := T.Determinant()
+    Det <> 0.0
+    Idet := 1.0 / Det
+    InvX := vector2{X := T.Y.Y * Idet, Y := -T.X.Y * Idet}
+    InvY := vector2{X := -T.Y.X * Idet, Y := T.X.X * Idet}
+    Inverted := transform2d{X := InvX, Y := InvY, Origin := vector2{}}
+    transform2d{X := InvX, Y := InvY, Origin := Inverted.BasisXform(-T.Origin)}
+
+# --- transform3d -------------------------------------------------------------
+
+operator'*'<public>(T:transform3d, V:vector3)<computes>:vector3 = T.Basis * V + T.Origin
+
+operator'*'<public>(L:transform3d, R:transform3d)<computes>:transform3d =
+    transform3d{Basis := L.Basis * R.Basis, Origin := L * R.Origin}
+
+(T:transform3d).Translated<public>(Offset:vector3)<computes>:transform3d =
+    transform3d{Basis := T.Basis, Origin := T.Origin + Offset}
+
+(T:transform3d).Scaled<public>(Scale:vector3)<computes>:transform3d =
+    transform3d{
+        Basis := T.Basis.Scaled(Scale),
+        Origin := vector3{
+            X := T.Origin.X * Scale.X,
+            Y := T.Origin.Y * Scale.Y,
+            Z := T.Origin.Z * Scale.Z}}
+
+# The inverse of a transform whose basis is a *rotation*, which is what a camera or a bone has. The
+# general affine inverse needs a general basis inverse and is not written; this one is a transpose,
+# so it is exact rather than a division.
+(T:transform3d).InverseOrthonormal<public>()<computes>:transform3d =
+    Inverted := T.Basis.Transposed()
+    transform3d{Basis := Inverted, Origin := Inverted * -T.Origin}
+
+# --- projection --------------------------------------------------------------
+#
+# Four vector4 columns, and the same column rule as basis. Only the products are written: a
+# projection is built by the engine (`Camera3D.get_camera_projection()`) and consumed, rather than
+# assembled by hand in scene code.
+
+operator'*'<public>(P:projection, V:vector4)<computes>:vector4 =
+    P.X * V.X + P.Y * V.Y + P.Z * V.Z + P.W * V.W
+
+operator'*'<public>(L:projection, R:projection)<computes>:projection =
+    projection{X := L * R.X, Y := L * R.Y, Z := L * R.Z, W := L * R.W}
+
+# --- the last six @GlobalScope utilities --------------------------------------
+
+# C's `fmod`, which Verse has no float counterpart for -- its own `Mod` is integer. Truncating
+# toward zero rather than flooring, which is what makes `FMod(-7.0, 3.0)` answer -1.0 and not 2.0,
+# and which is what the angle interpolations below depend on.
+FMod<public>(A:float, B:float)<transacts>:float =
+    if (B = 0.0):
+        A
+    else:
+        Ratio := A / B
+        Truncated := if (Ratio < 0.0) then CeilF(Ratio) else FloorF(Ratio)
+        A - B * Truncated
+
+# `nearest_po2`. Written as a recursion rather than Godot's bit-smearing, because the smear is an
+# unsigned-32-bit trick and Verse's int is a signed 64.
+Po2AtLeast<public>(Value:int, Candidate:int)<transacts>:int =
+    if (Candidate >= Value) then Candidate else Po2AtLeast(Value, Candidate * 2)
+
+NearestPo2<public>(Value:int)<transacts>:int = if (Value <= 0) then 0 else Po2AtLeast(Value, 1)
+
+# `step_decimals`: how many decimal places a step implies, which is what an inspector spinbox uses to
+# decide how to render itself. The thresholds are Godot's own, nines and all -- they exist to absorb
+# float error, so rounding them to 0.1, 0.01 would change the answer at the boundary.
+StepDecimals<public>(Step:float)<transacts>:int =
+    Magnitude := Abs(Step)
+    Decs := Magnitude - FloorF(Magnitude)
+    if (Decs >= 0.9999) then 0
+    else if (Decs >= 0.09999) then 1
+    else if (Decs >= 0.009999) then 2
+    else if (Decs >= 0.0009999) then 3
+    else if (Decs >= 0.00009999) then 4
+    else if (Decs >= 0.000009999) then 5
+    else if (Decs >= 0.0000009999) then 6
+    else if (Decs >= 0.00000009999) then 7
+    else if (Decs >= 0.000000009999) then 8
+    else if (Decs >= 0.0000000009999) then 9
+    else 0
+
+# The Barry-Goldman form of `cubic_interpolate_in_time`, where the three neighbours carry their own
+# timestamps -- which is what an animation track with uneven keys needs. Each zero-denominator guard
+# is Godot's own and answers the limit rather than declining.
+CubicInterpolateInTime<public>(From:float, To:float, Pre:float, Post:float, Weight:float, ToT:float, PreT:float, PostT:float)<transacts>:float =
+    T := Lerp(0.0, ToT, Weight)
+    A1 := Lerp(Pre, From, if (PreT = 0.0) then 0.0 else (T - PreT) / -PreT)
+    A2 := Lerp(From, To, if (ToT = 0.0) then 0.5 else T / ToT)
+    A3 := Lerp(To, Post, if (PostT - ToT = 0.0) then 1.0 else (T - ToT) / (PostT - ToT))
+    B1 := Lerp(A1, A2, if (ToT - PreT = 0.0) then 0.0 else (T - PreT) / (ToT - PreT))
+    B2 := Lerp(A2, A3, if (PostT = 0.0) then 1.0 else T / PostT)
+    Lerp(B1, B2, if (ToT = 0.0) then 0.5 else T / ToT)
+
+# The angle forms. Each neighbour is first brought onto the same turn as `From` -- the
+# `fmod(2*diff) - diff` dance is Godot's, and it is what keeps a curve through 350, 10, 20 degrees
+# from sweeping backwards through the whole circle.
+NearestAngle<public>(Reference:float, Angle:float)<transacts>:float =
+    Difference := FMod(Angle - Reference, MathTau)
+    Reference + FMod(2.0 * Difference, MathTau) - Difference
+
+CubicInterpolateAngle<public>(From:float, To:float, Pre:float, Post:float, Weight:float)<transacts>:float =
+    FromRot := FMod(From, MathTau)
+    PreRot := NearestAngle(FromRot, Pre)
+    ToRot := NearestAngle(FromRot, To)
+    PostRot := NearestAngle(ToRot, Post)
+    CubicInterpolate(FromRot, ToRot, PreRot, PostRot, Weight)
+
+CubicInterpolateAngleInTime<public>(From:float, To:float, Pre:float, Post:float, Weight:float, ToT:float, PreT:float, PostT:float)<transacts>:float =
+    FromRot := FMod(From, MathTau)
+    PreRot := NearestAngle(FromRot, Pre)
+    ToRot := NearestAngle(FromRot, To)
+    PostRot := NearestAngle(ToRot, Post)
+    CubicInterpolateInTime(FromRot, ToRot, PreRot, PostRot, Weight, ToT, PreT, PostT)

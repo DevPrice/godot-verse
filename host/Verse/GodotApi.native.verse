@@ -426,3 +426,7 @@ IsInstanceIdValid<public>(Id:int)<decides><transacts>:void =
 
 # The RID allocator, which a script writing against a Server needs and can get nowhere else.
 RidAllocateId<public>()<transacts>:int = VhToInt(VhCallUtility("rid_allocate_id", array{}))
+
+# A RID from its integer, which is the other half of `RidAllocateId`. A RID crosses as that integer
+# everywhere in the mirror, so this is an identity on the wire and a *validation* in Godot.
+RidFromInt64<public>(From:int)<transacts>:int = VhToInt(VhCallUtility("rid_from_int64", array{VhFromInt(From)}))

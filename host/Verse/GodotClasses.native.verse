@@ -24065,23 +24065,23 @@ ToInt<public>(Value:visual_shader_node_texture_texture_type)<transacts>:int =
 
 # Godot's VisualShaderNodeTransformFunc.Function.
 visual_shader_node_transform_func_function<public> := enum:
-    Inverse
-    Transpose
+    FuncInverse
+    FuncTranspose
 
 VhToVisualShaderNodeTransformFuncFunction(Value:variant)<transacts>:visual_shader_node_transform_func_function =
     case (VhToInt(Value)):
-        0 => visual_shader_node_transform_func_function.Inverse
-        1 => visual_shader_node_transform_func_function.Transpose
+        0 => visual_shader_node_transform_func_function.FuncInverse
+        1 => visual_shader_node_transform_func_function.FuncTranspose
         _ =>
             VhTypeMismatch("visual_shader_node_transform_func_function", Value)
-            visual_shader_node_transform_func_function.Inverse
+            visual_shader_node_transform_func_function.FuncInverse
 
 VhFromVisualShaderNodeTransformFuncFunction(Value:visual_shader_node_transform_func_function)<transacts>:variant = VhFromInt(ToInt(Value))
 
 ToInt<public>(Value:visual_shader_node_transform_func_function)<transacts>:int =
     case (Value):
-        visual_shader_node_transform_func_function.Inverse => 0
-        visual_shader_node_transform_func_function.Transpose => 1
+        visual_shader_node_transform_func_function.FuncInverse => 0
+        visual_shader_node_transform_func_function.FuncTranspose => 1
 
 # Godot's VisualShaderNodeTransformOp.Operator.
 visual_shader_node_transform_op_operator<public> := enum:
@@ -31157,7 +31157,7 @@ canvas_item<public> := class(node):
     DrawPrimitive<public>(Points:[]vector2, Colors:[]color, Uvs:[]vector2, Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "draw_primitive", array{VhFromVector2s(Points), VhFromColors(Colors), VhFromVector2s(Uvs), VhFromObject(Texture)})
     DrawRect<public>(Rect:rect2, Color:color, ?Filled:logic = true, ?Width:float = -1.0, ?Antialiased:logic = false)<transacts>:void = VhCallVoid(Handle, "draw_rect", array{VhFromRect2(Rect), VhFromColor(Color), VhFromLogic(Filled), VhFromFloat(Width), VhFromLogic(Antialiased)})
     DrawSetTransform<public>(Position:vector2, ?Rotation:float = 0.0, ?Scale:vector2 = vector2{X := 1.0, Y := 1.0})<transacts>:void = VhCallVoid(Handle, "draw_set_transform", array{VhFromVector2(Position), VhFromFloat(Rotation), VhFromVector2(Scale)})
-    DrawSetTransformMatrix<public>(Xform:transform2d)<transacts>:void = VhCallVoid(Handle, "draw_set_transform_matrix", array{VhFromTransform2D(Xform)})
+    DrawSetTransformMatrix<public>(Arg0:transform2d)<transacts>:void = VhCallVoid(Handle, "draw_set_transform_matrix", array{VhFromTransform2D(Arg0)})
     DrawString<public>(Font:font, Pos:vector2, Text:string, Alignment:horizontal_alignment, Width:float, FontSize:int, Arg6:color, JustificationFlags:int, Direction:text_server_direction, Orientation:text_server_orientation, ?Oversampling:float = 0.0)<transacts>:void = VhCallVoid(Handle, "draw_string", array{VhFromObject(Font), VhFromVector2(Pos), VhFromString(Text), VhFromHorizontalAlignment(Alignment), VhFromFloat(Width), VhFromInt(FontSize), VhFromColor(Arg6), VhFromInt(JustificationFlags), VhFromTextServerDirection(Direction), VhFromTextServerOrientation(Orientation), VhFromFloat(Oversampling)})
     DrawStringOutline<public>(Font:font, Pos:vector2, Text:string, Alignment:horizontal_alignment, Width:float, FontSize:int, Size:int, Arg7:color, JustificationFlags:int, Direction:text_server_direction, Orientation:text_server_orientation, ?Oversampling:float = 0.0)<transacts>:void = VhCallVoid(Handle, "draw_string_outline", array{VhFromObject(Font), VhFromVector2(Pos), VhFromString(Text), VhFromHorizontalAlignment(Alignment), VhFromFloat(Width), VhFromInt(FontSize), VhFromInt(Size), VhFromColor(Arg7), VhFromInt(JustificationFlags), VhFromTextServerDirection(Direction), VhFromTextServerOrientation(Orientation), VhFromFloat(Oversampling)})
     DrawStyleBox<public>(StyleBox:style_box, Rect:rect2)<transacts>:void = VhCallVoid(Handle, "draw_style_box", array{VhFromObject(StyleBox), VhFromRect2(Rect)})
@@ -35304,8 +35304,8 @@ viewport<public> := class(node):
     PushTextInput<public>(Text:string)<transacts>:void = VhCallVoid(Handle, "push_text_input", array{VhFromString(Text)})
     PushUnhandledInput<public>(Event:input_event, ?InLocalCoords:logic = false)<transacts>:void = VhCallVoid(Handle, "push_unhandled_input", array{VhFromObject(Event), VhFromLogic(InLocalCoords)})
     SetCanvasCullMaskBit<public>(Layer:int, Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_canvas_cull_mask_bit", array{VhFromInt(Layer), VhFromLogic(Enable)})
-    SetCanvasTransform<public>(Xform:transform2d)<transacts>:void = VhCallVoid(Handle, "set_canvas_transform", array{VhFromTransform2D(Xform)})
-    SetGlobalCanvasTransform<public>(Xform:transform2d)<transacts>:void = VhCallVoid(Handle, "set_global_canvas_transform", array{VhFromTransform2D(Xform)})
+    SetCanvasTransform<public>(Arg0:transform2d)<transacts>:void = VhCallVoid(Handle, "set_canvas_transform", array{VhFromTransform2D(Arg0)})
+    SetGlobalCanvasTransform<public>(Arg0:transform2d)<transacts>:void = VhCallVoid(Handle, "set_global_canvas_transform", array{VhFromTransform2D(Arg0)})
     SetInputAsHandled<public>()<transacts>:void = VhCallVoid(Handle, "set_input_as_handled", array{})
     SetVrsTexture<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_vrs_texture", array{VhFromObject(Texture)})
     SetWorld2d<public>(World2d:world2d)<transacts>:void = VhCallVoid(Handle, "set_world_2d", array{VhFromObject(World2d)})
@@ -37406,7 +37406,7 @@ gltf_node<public> := class(resource):
     SetAdditionalData<public>(ExtensionName:string, AdditionalData:variant)<transacts>:void = VhCallVoid(Handle, "set_additional_data", array{VhFromStringName(ExtensionName), VhFromVariant(AdditionalData)})
     SetChildren<public>(Children:[]int)<transacts>:void = VhCallVoid(Handle, "set_children", array{VhFromInt32Array(Children)})
     SetOriginalName<public>(OriginalName:string)<transacts>:void = VhCallVoid(Handle, "set_original_name", array{VhFromString(OriginalName)})
-    SetXform<public>(Xform:transform3d)<transacts>:void = VhCallVoid(Handle, "set_xform", array{VhFromTransform3D(Xform)})
+    SetXform<public>(Arg0:transform3d)<transacts>:void = VhCallVoid(Handle, "set_xform", array{VhFromTransform3D(Arg0)})
 
 gltf_physics_body<public> := class(resource):
 
@@ -37976,7 +37976,7 @@ input_event<public> := class(resource):
     IsMatch<public>(Event:input_event, ?ExactMatch:logic = true)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_match", array{VhFromObject(Event), VhFromLogic(ExactMatch)}))
     IsPressed<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_pressed", array{}))
     IsReleased<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_released", array{}))
-    XformedBy<public>(Xform:transform2d, ?LocalOfs:vector2 = vector2{X := 0.0, Y := 0.0})<decides><transacts>:input_event = input_event[VhObjectFrom[VhCallValue(Handle, "xformed_by", array{VhFromTransform2D(Xform), VhFromVector2(LocalOfs)})]]
+    XformedBy<public>(Arg0:transform2d, ?LocalOfs:vector2 = vector2{X := 0.0, Y := 0.0})<decides><transacts>:input_event = input_event[VhObjectFrom[VhCallValue(Handle, "xformed_by", array{VhFromTransform2D(Arg0), VhFromVector2(LocalOfs)})]]
 
 interval_tweener<public> := class(tweener):
 
@@ -38506,9 +38506,9 @@ navigation_mesh_source_geometry_data2d<public> := class(resource):
 
 navigation_mesh_source_geometry_data3d<public> := class(resource):
 
-    AddFaces<public>(Faces:[]vector3, Xform:transform3d)<transacts>:void = VhCallVoid(Handle, "add_faces", array{VhFromVector3s(Faces), VhFromTransform3D(Xform)})
-    AddMesh<public>(Mesh:mesh, Xform:transform3d)<transacts>:void = VhCallVoid(Handle, "add_mesh", array{VhFromObject(Mesh), VhFromTransform3D(Xform)})
-    AddMeshArray<public>(MeshArray:godot_array, Xform:transform3d)<transacts>:void = VhCallVoid(Handle, "add_mesh_array", array{VhFromArray(MeshArray), VhFromTransform3D(Xform)})
+    AddFaces<public>(Faces:[]vector3, Arg1:transform3d)<transacts>:void = VhCallVoid(Handle, "add_faces", array{VhFromVector3s(Faces), VhFromTransform3D(Arg1)})
+    AddMesh<public>(Mesh:mesh, Arg1:transform3d)<transacts>:void = VhCallVoid(Handle, "add_mesh", array{VhFromObject(Mesh), VhFromTransform3D(Arg1)})
+    AddMeshArray<public>(MeshArray:godot_array, Arg1:transform3d)<transacts>:void = VhCallVoid(Handle, "add_mesh_array", array{VhFromArray(MeshArray), VhFromTransform3D(Arg1)})
     AddProjectedObstruction<public>(Vertices:[]vector3, Elevation:float, Height:float, Carve:logic)<transacts>:void = VhCallVoid(Handle, "add_projected_obstruction", array{VhFromVector3s(Vertices), VhFromFloat(Elevation), VhFromFloat(Height), VhFromLogic(Carve)})
     AppendArrays<public>(Vertices:[]float, Indices:[]int)<transacts>:void = VhCallVoid(Handle, "append_arrays", array{VhFromFloat32Array(Vertices), VhFromInt32Array(Indices)})
     Clear<public>()<transacts>:void = VhCallVoid(Handle, "clear", array{})
@@ -38730,11 +38730,11 @@ node2d<public> := class(canvas_item):
     GetRelativeTransformToParent<public>(Parent:node)<transacts>:transform2d = VhToTransform2D(VhCallValue(Handle, "get_relative_transform_to_parent", array{VhFromObject(Parent)}))
     GlobalTranslate<public>(Offset:vector2)<transacts>:void = VhCallVoid(Handle, "global_translate", array{VhFromVector2(Offset)})
     LookAt<public>(Point:vector2)<transacts>:void = VhCallVoid(Handle, "look_at", array{VhFromVector2(Point)})
-    MoveLocalX<public>(Delta:float, ?Scaled:logic = false)<transacts>:void = VhCallVoid(Handle, "move_local_x", array{VhFromFloat(Delta), VhFromLogic(Scaled)})
-    MoveLocalY<public>(Delta:float, ?Scaled:logic = false)<transacts>:void = VhCallVoid(Handle, "move_local_y", array{VhFromFloat(Delta), VhFromLogic(Scaled)})
+    MoveLocalX<public>(Delta:float, ?Arg1:logic = false)<transacts>:void = VhCallVoid(Handle, "move_local_x", array{VhFromFloat(Delta), VhFromLogic(Arg1)})
+    MoveLocalY<public>(Delta:float, ?Arg1:logic = false)<transacts>:void = VhCallVoid(Handle, "move_local_y", array{VhFromFloat(Delta), VhFromLogic(Arg1)})
     Rotate<public>(Radians:float)<transacts>:void = VhCallVoid(Handle, "rotate", array{VhFromFloat(Radians)})
-    SetGlobalTransform<public>(Xform:transform2d)<transacts>:void = VhCallVoid(Handle, "set_global_transform", array{VhFromTransform2D(Xform)})
-    SetTransform<public>(Xform:transform2d)<transacts>:void = VhCallVoid(Handle, "set_transform", array{VhFromTransform2D(Xform)})
+    SetGlobalTransform<public>(Arg0:transform2d)<transacts>:void = VhCallVoid(Handle, "set_global_transform", array{VhFromTransform2D(Arg0)})
+    SetTransform<public>(Arg0:transform2d)<transacts>:void = VhCallVoid(Handle, "set_transform", array{VhFromTransform2D(Arg0)})
     ToGlobal<public>(LocalPoint:vector2)<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "to_global", array{VhFromVector2(LocalPoint)}))
     ToLocal<public>(GlobalPoint:vector2)<transacts>:vector2 = VhToVector2(VhCallValue(Handle, "to_local", array{VhFromVector2(GlobalPoint)}))
     Translate<public>(Offset:vector2)<transacts>:void = VhCallVoid(Handle, "translate", array{VhFromVector2(Offset)})
@@ -43771,7 +43771,7 @@ gpu_particles2d<public> := class(node2d):
     UseFixedSeedSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_use_fixed_seed", array{VhFromLogic(Value)})
     CaptureRect<public>()<transacts>:rect2 = VhToRect2(VhCallValue(Handle, "capture_rect", array{}))
     ConvertFromParticles<public>(Particles:node)<transacts>:void = VhCallVoid(Handle, "convert_from_particles", array{VhFromObject(Particles)})
-    EmitParticle<public>(Xform:transform2d, Velocity:vector2, Color:color, Custom:color, Flags:int)<transacts>:void = VhCallVoid(Handle, "emit_particle", array{VhFromTransform2D(Xform), VhFromVector2(Velocity), VhFromColor(Color), VhFromColor(Custom), VhFromInt(Flags)})
+    EmitParticle<public>(Arg0:transform2d, Velocity:vector2, Color:color, Custom:color, Flags:int)<transacts>:void = VhCallVoid(Handle, "emit_particle", array{VhFromTransform2D(Arg0), VhFromVector2(Velocity), VhFromColor(Color), VhFromColor(Custom), VhFromInt(Flags)})
     GetProcessMaterial<public>()<decides><transacts>:material = material[VhObjectFrom[VhCallValue(Handle, "get_process_material", array{})]]
     GetSubEmitter<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_sub_emitter", array{}))
     GetTexture<public>()<decides><transacts>:texture2d = texture2d[VhObjectFrom[VhCallValue(Handle, "get_texture", array{})]]
@@ -44170,7 +44170,7 @@ item_list<public> := class(control):
     SetItemIcon<public>(Idx:int, Icon:texture2d)<transacts>:void = VhCallVoid(Handle, "set_item_icon", array{VhFromInt(Idx), VhFromObject(Icon)})
     SetItemIconModulate<public>(Idx:int, Arg1:color)<transacts>:void = VhCallVoid(Handle, "set_item_icon_modulate", array{VhFromInt(Idx), VhFromColor(Arg1)})
     SetItemIconRegion<public>(Idx:int, Rect:rect2)<transacts>:void = VhCallVoid(Handle, "set_item_icon_region", array{VhFromInt(Idx), VhFromRect2(Rect)})
-    SetItemIconTransposed<public>(Idx:int, Transposed:logic)<transacts>:void = VhCallVoid(Handle, "set_item_icon_transposed", array{VhFromInt(Idx), VhFromLogic(Transposed)})
+    SetItemIconTransposed<public>(Idx:int, Arg1:logic)<transacts>:void = VhCallVoid(Handle, "set_item_icon_transposed", array{VhFromInt(Idx), VhFromLogic(Arg1)})
     SetItemLanguage<public>(Idx:int, Language:string)<transacts>:void = VhCallVoid(Handle, "set_item_language", array{VhFromInt(Idx), VhFromString(Language)})
     SetItemMetadata<public>(Idx:int, Metadata:variant)<transacts>:void = VhCallVoid(Handle, "set_item_metadata", array{VhFromInt(Idx), VhFromVariant(Metadata)})
     SetItemSelectable<public>(Idx:int, Selectable:logic)<transacts>:void = VhCallVoid(Handle, "set_item_selectable", array{VhFromInt(Idx), VhFromLogic(Selectable)})
@@ -50503,7 +50503,7 @@ gpu_particles3d<public> := class(geometry_instance3d):
     UseFixedSeedSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_use_fixed_seed", array{VhFromLogic(Value)})
     CaptureAabb<public>()<transacts>:aabb = VhToAABB(VhCallValue(Handle, "capture_aabb", array{}))
     ConvertFromParticles<public>(Particles:node)<transacts>:void = VhCallVoid(Handle, "convert_from_particles", array{VhFromObject(Particles)})
-    EmitParticle<public>(Xform:transform3d, Velocity:vector3, Color:color, Custom:color, Flags:int)<transacts>:void = VhCallVoid(Handle, "emit_particle", array{VhFromTransform3D(Xform), VhFromVector3(Velocity), VhFromColor(Color), VhFromColor(Custom), VhFromInt(Flags)})
+    EmitParticle<public>(Arg0:transform3d, Velocity:vector3, Color:color, Custom:color, Flags:int)<transacts>:void = VhCallVoid(Handle, "emit_particle", array{VhFromTransform3D(Arg0), VhFromVector3(Velocity), VhFromColor(Color), VhFromColor(Custom), VhFromInt(Flags)})
     GetDrawPassMesh<public>(Pass:int)<decides><transacts>:mesh = mesh[VhObjectFrom[VhCallValue(Handle, "get_draw_pass_mesh", array{VhFromInt(Pass)})]]
     GetProcessMaterial<public>()<decides><transacts>:material = material[VhObjectFrom[VhCallValue(Handle, "get_process_material", array{})]]
     GetSkin<public>()<decides><transacts>:skin = skin[VhObjectFrom[VhCallValue(Handle, "get_skin", array{})]]

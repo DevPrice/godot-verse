@@ -701,11 +701,12 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   Variant type, not a class — so the chain walk that answers for `node2d` answers nothing for
   `vector2`, and the lookup matches on the Verse name the skip row carries instead.
 
-  **466 of those skips remain, from 585**, and what closed the difference was writing the math rather
-  than recording it: nine of the sixteen types are covered now (the six vectors, `color`, `rect2`,
-  `rect2i`) along with the `@GlobalScope` scalars Verse has no name for. The transform family —
-  `plane`, `quaternion`, `aabb`, `basis`, `transform2d`, `transform3d`, `projection` — is what is
-  left, and it is where most of the remainder lives.
+  **410 of those skips remain, from 585**, and what closed the difference was writing the math rather
+  than recording it: **all sixteen types** carry their operators and the methods scene code reaches,
+  along with the `@GlobalScope` scalars Verse has no name for. What is left is deliberate rather than
+  pending — the *general* inverse of a `basis` or a `transform3d` (a rotation's inverse is its
+  transpose, which is written, and that is the case scene code has), the Euler and axis-angle
+  conversions, and the `projection` constructors.
 - **R-SCN-3 (MUST)** Godot's `@GlobalScope` utility functions and constants are reachable under
   names that do not collide with `/Verse.org/Simulation`. Status: **done** (Phase 4 stage 6), and
   in three pieces because the question turned out to be three questions.
@@ -721,14 +722,14 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   **The statics need one by-name call that carries no object**, `vh_godot_api::CallStatic`, over
   Godot's own `ClassDB.class_call_static` — generic, so all 114 arrive with no per-method code.
 
-  **The rest of the 114 are now classified rather than merely absent.** 86 are answered by a Verse
+  **All 114 are now classified, with none unexplained.** 92 are answered by a Verse
   spelling, and the editor names it — a script that types `floor(x)` is told to write `FloorF(X)`,
   where before it got "utility_not_dispatched" and nothing else. 14 have a `Variant` parameter or
   result, which R-TYPE-7 keeps a script from spelling, so they have no signature to be given and
   that is their recorded reason. 11 more are dispatched because their *behaviour* is the engine's —
   `push_error` and `push_warning` reach the editor's Debugger panel where a `Print` reaches stdout,
   `print_rich` carries BBCode, `type_string` and `error_string` are engine tables,
-  `instance_from_id` is the object registry. 6 are left.
+  `instance_from_id` is the object registry. Nothing is left over.
 
   The dispatched wrappers are hand-written rather than generated, because their Verse signature is
   deliberately not Godot's: the print family is `vararg` there and one argument here, which is what
