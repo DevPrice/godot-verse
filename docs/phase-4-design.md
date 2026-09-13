@@ -48,6 +48,7 @@ by a spike — both are marked.
 | `Subscribe` and rollback | **compensated with `Stm::OnRollback`** | it mutates Godot and returns a value, so it can be neither deferred nor ignored. Epic's own event does the same in reverse. The host's first compensation |
 | connect semantics | **reference equality, duplicates allowed, idempotent `Cancel`, no flags** | *prior art, twice*: Godot's lambda callables compare by reference and UEFN's event inserts one entry per subscribe with an idempotent cancel (§5, §6.3) |
 | callback binding | **a bound method only, in 4a** | Godot's self-capturing lambda dies with its object; its plain lambda is anchored to the script and is Godot's own known leak. We take the half that does not leak; unbound functions are **OQ-16** |
+| foreign-thread calls | **refused, in this phase (R-ASYNC-8)** | VerseVM asserts `IsInGameThread()` and then carries on, so today a worker-thread call is a logged callstack followed by undefined behaviour. A mutex cannot fix thread *identity*; the guard belongs where the exposure grows (§5) |
 | effect-semantics review | **its own phase, 4.5** | asked for as a phase rather than an open-question row, and inserted without renumbering so the phase records written earlier stay true |
 | virtual names | **Godot's spelling, `_Ready`** | measured, not preferred: plain names collide with a *signal* on Node, CanvasItem, Control and BaseButton, and with a method 834 times. The underscore Godot already uses is the disambiguation, and C# keeps it too (§7.1) |
 | the rename it causes | **all at once, in stage 5** | `Ready` → `_Ready` across demo, tests and the yardstick in one commit; pre-1.0, no deprecation window |
@@ -352,6 +353,29 @@ keeps, pointing the other way:
 
 With this, R-SIG-3 takes a Verse function; R-INT-4 crosses a Callable in both directions; and any
 callback-taking engine API — `sort_custom`, tween callbacks, `Array.filter` — becomes reachable.
+
+### 5.1 The thread guard this stage makes necessary (R-ASYNC-8)
+
+A `Callable` is a value, and an author may hand it to a `WorkerThreadPool` task. So this stage is
+what turns "Godot could in principle call us from another thread" into a surface the bridge itself
+offers, and the guard belongs with it.
+
+**VerseVM asserts the game thread** — `VVMEnterVMInline.h`, at the top-level VM entry:
+`ensure(IsInGameThread() && (!IsInAsyncLoadingThread() || …))`, above the comment "Verse bytecode and
+AutoRTFM transactions must run on the game thread." It is thread *identity*, so serialising entry
+does not satisfy it, and AutoRTFM's transaction state is per-thread besides. It is an `ensure`, not a
+`check`, so the current behaviour is a logged callstack and then undefined behaviour — the worst of
+the available failure modes.
+
+The guard is small: record the `vh_init` thread at init, compare at every entry point, answer
+`VH_ERR_THREAD` having run nothing, and report through the diagnostic callback with the script and
+method named. The GDExtension can check on its own side too, so the message can say which node it
+came from. Serving such a call rather than refusing it is OQ-6's, and the spec now records the
+deadlock a blocking hand-off invites.
+
+The precedent is already in the host: while a background analysis owns the program, `vh_tick` is a
+no-op and the entry points that read the semantic program block, because proceeding trips
+`ensure(!bBlockAllExecution)` and takes the process down.
 
 ---
 
@@ -728,6 +752,7 @@ instantiate a base script that was never meant to be attached.
 | `vh_godot_api::MakeCallable` | §5, the GDExtension mints the `Callable` |
 | `vh_godot_api::CallStatic`, `CallUtility` | §8.2 |
 | `vh_godot_api::GetClassOf` | §3: a handle's Godot class and, when it has one, its Verse class |
+| `VH_ERR_THREAD` | §5.1: an entry point called from a thread other than `vh_init`'s, having run nothing |
 
 **Not added, deliberately:** emission (the v2 `EmitSignal` callback already does it), connection
 (`ConnectSignal`/`DisconnectSignal`, likewise), and `_Notification` (a hand-declared virtual reached
@@ -771,7 +796,7 @@ stage-level design when 4a's exit is met.
 | **0** | the three spikes | **done** — §2, and this document is written against them |
 | **1** | the cast and object identity (R-SCN-6) | a node Godot hands back casts to its own script's class, and to its mirror class; a wrong cast fails |
 | **2** | making a container (R-TYPE-2, R-INT-2) | a Verse script calls a GDScript method with arguments it built itself |
-| **3** | Callable from a Verse function (R-INT-4) | a Verse function connected to an engine signal runs when Godot emits it |
+| **3** | Callable from a Verse function (R-INT-4), and the thread guard (R-ASYNC-8) | a Verse function connected to an engine signal runs when Godot emits it; a call from a worker thread is refused with a message rather than entering the VM |
 | **4** | signals (R-SIG-1/2/3/4/6) | §6.9's eight integration cases pass, and the Node panel lists a Verse-declared signal by hand |
 | **5** | the virtual set under `_Ready` naming, `_Notification`, `@tool`'s editor virtuals (R-NODE-7/8, R-EXP-5), and the rename of the existing three | `_Input`, `_Draw`, `_UnhandledInput`, `_Notification` and `_GetConfigurationWarnings` all reach a script; every script in the repo overrides `_Ready`; the analysis number is recorded |
 | **6** | constants, statics, `@GlobalScope`, math (R-SCN-3, OQ-11, R-NODE-4/5) | `vectors.verse` is deleted and the port still plays |

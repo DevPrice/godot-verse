@@ -656,6 +656,33 @@ event, and `vh_tick` pumped once per frame with a budget.
   dismissed: the design of R-ASYNC-3 and R-ASYNC-4 must not foreclose it, and §14 **OQ-6** holds
   the questions that scoping has to answer.
 
+- **R-ASYNC-8 (MUST)** A call that enters the host from any thread other than the one that called
+  `vh_init` is **refused with a diagnosable error, and nothing runs**. Status: **none** — the ABI
+  states the contract in its header comment and nothing enforces it.
+
+  *Rationale, and why a lock is not the answer.* VerseVM does not merely prefer the game thread, it
+  asserts it: `VVMEnterVMInline.h` opens the top-level VM entry with
+  `ensure(IsInGameThread() && (!IsInAsyncLoadingThread() || …))` above the comment "Verse bytecode and
+  AutoRTFM transactions must run on the game thread." That is thread *identity*, so a mutex around
+  entry does not satisfy it — a single uncontended call from a `WorkerThreadPool` task is already a
+  violation, and AutoRTFM's transaction state is per-thread besides. Because it is an `ensure` rather
+  than a `check`, the current failure mode is the worst available: a logged callstack in a development
+  build and then execution *continues* into undefined behaviour.
+
+  Godot can reach us this way today — a `Thread` or `WorkerThreadPool` task calling a method on a node
+  that carries a Verse script, or a signal emitted from a worker thread, whose handlers run on that
+  thread. (Threaded *resource loading* is not one of these: `verse_resource_format.cpp` makes no host
+  calls.) Phase 4 enlarges the exposure, because a `Callable` made from a Verse function is a value the
+  author may hand to anything.
+
+  What this requirement asks for is the refusal, not a solution: the id of the `vh_init` thread,
+  checked at every entry point, answering a distinct status with a message that names the script and
+  method. Serving such a call — by marshalling to the game thread, blocking or deferred — is
+  R-ASYNC-7's and **OQ-6**'s, and the deadlock that a blocking hand-off invites is recorded there. The
+  host already has the discipline in one place: while a background analysis owns the program, `vh_tick`
+  is a no-op and the entry points that read the semantic program block, because proceeding anyway trips
+  `ensure(!bBlockAllExecution)` and takes the process down.
+
 ---
 
 ## 8. Interop with GDScript and C#
@@ -1001,7 +1028,7 @@ A closed question keeps its row so that the reason it is closed is not lost.
 | **OQ-3** | Is a monolithic UE Program target viable on Android and iOS — binary size, and whether VerseVM requires JIT that iOS forbids? | R-PLAT-2 | Attempt a UBT Program build for Android first; it is the permissive platform and answers the size question. Narrowed by OQ-2: the question is only about the **runtime** host, which carries no compiler. |
 | **OQ-4** | Is Verse on wasm reachable at all? UBT has no wasm Program target; Godot's web export is constrained wasm. | R-PLAT-3 | Narrowed by OQ-2 — a web target would need only the runtime host, not Solaris — but still blocked on UBT having no wasm Program target at all. |
 | **OQ-5** ✅ | How does a project escape the single flat `/user@localhost` scope, so it can have modules, subdirectories and shared library code? | R-LANG-6 | **Closed: submodules within the one user package, built from the project's directory tree.** See §14.1. |
-| **OQ-6** | What is the correct interaction between Verse's task model and Godot's threading — `WorkerThreadPool`, threaded loading, calls into Verse off the main thread? | R-ASYNC-7 | Its own scoping document. Until it exists, §7 must not adopt a design that assumes single-threaded forever. |
+| **OQ-6** | What is the correct interaction between Verse's task model and Godot's threading — `WorkerThreadPool`, threaded loading, calls into Verse off the main thread? **Half of it is already answered by the engine, against us:** VerseVM's top-level entry asserts `IsInGameThread()` (`VVMEnterVMInline.h`) with the comment "Verse bytecode and AutoRTFM transactions must run on the game thread", so the question is not *whether* Verse can run on a worker thread — it cannot — but what a call from one should *do*. A mutex is not an answer: the assertion is thread identity, not mutual exclusion. | R-ASYNC-7, and now R-ASYNC-8 | Its own scoping document, which must choose between three tiers: **refuse** (R-ASYNC-8, which Phase 4 builds, because it converts corruption into a message); **marshal and block**, whose deadlock is concrete — the game thread is routinely inside Verse calling out into Godot, and anything on that path that waits on the worker hangs both; or **marshal and defer**, which cannot return a value and is Godot's own `call_deferred` bargain. Until it exists, §7 must not adopt a design that assumes single-threaded forever. |
 | **OQ-7** | Build our own LSP over `verse_host_abi.h`, or get `uLangLSP` into a linkable target? | R-TOOL-10 | Low priority — Godot's editor is primary (§9). |
 | **OQ-8** ✅ | Which hot-reload mechanism: fresh package name per generation, out-of-process compilation, or an engine change? | all of §10, and R-EXP-5 | **Closed: fresh package name per generation**, with `IncrementalizeProjectSource` before each build. See §14.1. |
 | **OQ-9** | Can any DAP client speak `Verse::SocketDebugger`'s framing? | R-DIAG-6 | Only worth answering if R-DIAG-4 (Godot's own debugger) turns out to be blocked. |

@@ -480,6 +480,11 @@ Ordered by dependency; the design document has the stage table and what each is 
   association), and abstract classes.
 - **R-EXP-5's remainder** — the editor-only virtual surface, which rides R-NODE-7 rather than being
   built twice.
+- **R-ASYNC-8** — refuse a call that enters the host from a foreign thread, with a message rather
+  than corruption. Small, and it belongs here rather than in Phase 5 because *this* phase creates the
+  exposure: a `Callable` made from a Verse function is a value an author can hand to a
+  `WorkerThreadPool` task. VerseVM already asserts `IsInGameThread()` and then carries on, so the
+  status quo is a logged callstack followed by undefined behaviour.
 
 **Exit for 4a:** **Dodge the Creeps is idiomatic** — not merely free of GDScript, which it already
 is, but free of the workarounds: casts instead of seventeen inspector slots, Verse-declared signals
@@ -575,7 +580,11 @@ lifetime rules can be written down rather than discovered.
 - **R-ASYNC-3, R-ASYNC-6** — documented ordering against `_process`/`_physics_process`; the frame
   budget configurable and overruns reported.
 - **R-ASYNC-7** — spawn the threading scoping document (OQ-6). It is not built here, but nothing
-  in this phase may foreclose it.
+  in this phase may foreclose it. It starts from a narrower question than it used to: Phase 4's
+  R-ASYNC-8 makes a foreign-thread call *refuse*, and the engine has already settled that Verse
+  cannot run off the game thread (`VVMEnterVMInline.h` asserts it), so what is left is whether such a
+  call should be marshalled — blocking, with the deadlock OQ-6 now records, or deferred, with no
+  return value.
 
 **Exit:** a concurrency-heavy script is a reasonable thing to write. Dodge the Creeps port attempt
 — this is where the second demo, the one that shows what Verse buys you, becomes writable.
