@@ -4,9 +4,30 @@
 `phase-4.5-design.md` and unlike every other design in this repo. §2's spikes have **not** run, so
 §3 onward is written against assumptions that the spikes exist to break.
 
-**Prerequisite: Phase 4.5 is complete.** By decision. `<suspends>` is a second effect axis and it
-lands on top of the one 4.5 settles; the alternative — designing both at once — was considered and
-rejected. If 4.5 has not run, stop here.
+**Prerequisite: Phase 4.5 is complete — and it is: built 2026-09-13.** By decision. `<suspends>` is
+a second effect axis and it lands on top of the one 4.5 settled; the alternative — designing both at
+once — was considered and rejected.
+
+**Five things 4.5 changed under this document**, none of which it was written against. Read
+[`phase-4.5-design.md`](phase-4.5-design.md) §11 before §2's spikes, because two of *its* four
+spikes came back the opposite way from what its own plan assumed and the same may happen here.
+
+- **The lattice has a third level now.** Godot's const-and-answering methods are `<reads>`, so
+  `<computes>` ⊂ `<reads>` ⊂ `<transacts>` ⊂ default is the real shape a `<suspends>` design sits
+  beside, not the two levels §3 onward assumes. Effects are **contravariant** in a function type,
+  which was measured.
+- **An archetype instantiation carries the constructing class's own effect.** `variant`, `godot_ref`
+  and the container wrappers are `<computes>`; a *mirrored* class cannot be, because it descends from
+  the native `vh_object`. Anything a narrowed body must obtain is reached by a **cast** over what the
+  host built, never by construction. If `Await` returns an object, this decides how.
+- **`Verse::Stm::OnRollback` does nothing here**, which is what §4's `Call.Defer` should not be
+  written against. The mechanism that works from inside `AutoRTFM::Open` is
+  `AutoRTFM::OnAbort<AutoRTFM::EOpenBehavior::SameAsClosed>`.
+- **A raise halts every script until the next `vh_tick`** (R-ASYNC-4), measured rather than recalled,
+  and `tests/integration`'s transaction section runs a step per frame because of it. Anything this
+  phase writes that raises has the same constraint.
+- **§4.2 is new scope 4.5 handed over**: `Object.Connect` has no rollback-safe spelling, and the
+  machinery to give it one is the machinery `signal_ref.Await()` needs anyway.
 
 **Companion to:** `spec.md` §7 (R-ASYNC-1 … R-ASYNC-8), §5.3's R-SIG-5, `roadmap.md` "Phase 5",
 `dodge-the-creeps.md` wall 3, `phase-4-gaps.md` G9, and §14's **OQ-6**, **OQ-13** and **OQ-16**.
