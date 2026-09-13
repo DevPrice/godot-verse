@@ -239,24 +239,39 @@ named anything, and it now says so.
 
 Not a missing feature — a trap, and the only wall the port hit that no requirement covers.
 
-A module-scope function with no effect specifier is `no_rollback`, and a `no_rollback` function
-cannot be called from inside a transaction. Every Godot callback runs inside one, because the host
-opens a transaction around `Ready`, `Process` and every signal handler. So this compiles on its
-own:
+A module-scope function with no effect specifier is `no_rollback`. So this compiles on its own:
 
 ```
 	V2Length<public>(A:vector2):float = Sqrt(A.X * A.X + A.Y * A.Y)
 ```
 
-and fails at its first call site, in another file, with
+and fails elsewhere with
 
     This invocation calls a function (`V2Length`) that has the 'no_rollback' effect, which is not
     allowed by its context.
 
-— a message naming an effect the author never wrote down, pointing at the caller rather than at the
-declaration that needs fixing. Every function in `vectors.verse` says `<transacts>` for this reason,
-and writing `<decides>` *instead of* `<transacts>` on the one failable helper reproduced it, because
-an explicit specifier **replaces** the default set rather than adding to it.
+— a message naming an effect the author never wrote down, pointing at a caller rather than at the
+declaration that needs fixing.
+
+**Why the context refuses it was recorded wrongly here, and Phase 4's probes corrected it.** This
+document said a Godot callback runs inside a transaction and that this is what narrows the context.
+It is not: the host's AutoRTFM transaction is a runtime arrangement the Verse effect checker cannot
+see, and an override of `Ready` calling a specifier-less helper compiles perfectly well
+(`tests/verse_probe`, and `docs/phase-4-design.md` §1.3). What actually refuses it is **failure**:
+
+- a **failure context** — the condition of `if (X := F[])`, an option unwrap `Slot?`, a failable
+  index — must be able to unwind, so what it invokes has to be rollbackable. A `no_rollback` callee
+  is refused there and nowhere else;
+- `<decides>` **alone does not make a function rollbackable**, because an explicit specifier replaces
+  the default set rather than adding to it, and the default set contains `no_rollback`. A failable
+  helper therefore needs `<decides><transacts>`, which is what `V2Normalized` carries;
+- and *that* is the cascade: once `V2Normalized` says `<transacts>` it is narrowed, so its own call
+  to a specifier-less `V2Length` is refused in turn. One failable helper pulls `<transacts>` onto
+  everything it touches, which is why **every** function in `vectors.verse` carries it.
+
+The port is full of failure contexts — every `?` unwrap of the seventeen inspector slots is one, and
+so is every cast R-SCN-6 will add — so in this codebase the trap fires almost immediately, which is
+what made the wrong explanation look right.
 
 Nothing here is wrong, and the fix is one word. But it is the first thing a Godot author hits on
 their first library file, and it is invisible in the file they have to change. Worth a line in the

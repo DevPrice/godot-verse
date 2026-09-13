@@ -135,12 +135,24 @@ this repository already believed.
 - **A module-scoped `var` must be a `weak_map`** — there is no global mutable state in Verse, which
   matters for anything tempted to keep a registry in project code.
 - **An explicit effect specifier replaces the default set, and the default set is wider than
-  `<transacts>`.** A method with no specifier may call anything; one that says `<transacts>` may not
-  call a no-specifier function. That is why `Ready<override>():void =` works in every script in the
-  repo while `CallIt<public>()<transacts>:int = NoSpecifierMethod()` is refused — and it corrects a
-  reading taken mid-interview that a no-specifier *class* method is itself no_rollback. It is not;
-  the caller's narrowing is what fails. `dodge-the-creeps.md` wall 8 is unaffected: a library helper
-  still needs `<transacts>` because its *caller* is narrowed.
+  `<transacts>`** — it contains `no_rollback`. A function with no specifier may call anything; one
+  that says `<transacts>` may not call a no-specifier function. That is why `Ready<override>():void =`
+  works in every script in the repo while `CallIt<public>()<transacts>:int = NoSpecifierMethod()` is
+  refused: the caller's narrowing is what fails, not the callee's declaration.
+- **What forbids `no_rollback` is failure, not the host's transaction** — and this corrects
+  `dodge-the-creeps.md` wall 8, which recorded the cause as "every Godot callback runs inside a
+  transaction". It does, but AutoRTFM is a runtime arrangement the Verse effect checker cannot see:
+  a `Ready` override calling a specifier-less module helper compiles. What refuses one is a **failure
+  context** — the condition of `if (X := F[])`, an option unwrap `Slot?`, a failable index — because
+  failure has to unwind, so what it invokes must be rollbackable. `<decides>` alone does not make a
+  function rollbackable (it replaces the default set, which contained `no_rollback`), so a failable
+  helper needs `<decides><transacts>` — and *that* narrowing is what then refuses its own call to a
+  specifier-less helper. One failable function pulls `<transacts>` onto everything beneath it. All
+  four steps were re-run against the compiler rather than reasoned about; the probe files are the
+  shape of `tests/verse_probe/example.verse`.
+- **This is why the mirror's methods must keep `<transacts>`.** Every cast R-SCN-6 adds is a failure
+  context, so a generated method that carried the default set instead would be uncallable inside the
+  one construct the phase exists to introduce.
 
 ### 1.4 The surface, counted
 
