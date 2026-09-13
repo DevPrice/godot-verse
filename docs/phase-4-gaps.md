@@ -16,7 +16,7 @@ here), [`spec.md`](spec.md) (per-requirement status), [`by-hand-checklist.md`](b
 (what no headless run can see).
 
 **Who this is for.** Someone picking Phase 4 back up with no memory of building it. The phase is
-green — `tools/run_tests.py` is 7/7 with 201 integration cases and the yardstick's 30 headless
+green — `tools/run_tests.py` is 7/7 with 220 integration cases and the yardstick's 30 headless
 checks pass — so nothing here is a broken build. What is here is the difference between "the tests
 pass" and "the design was delivered", which are not the same thing and were not the same thing at
 the end of this phase.

@@ -498,7 +498,7 @@ string property names. The port is rewritten in place, wall by wall, and the dif
 *should* be an export), `node_paths=PackedStringArray(...)` is gone from all four scenes, the two
 connections that existed only because a script could not declare a signal are gone with it, and the
 mob is configured through `set Mob.LinearVelocity = ...` behind a cast. The 30 headless checks pass
-and `tools/run_tests.py` is green at 201 integration cases. What is **not** met is the by-hand
+and `tools/run_tests.py` is green at 220 integration cases. What is **not** met is the by-hand
 checklist, which needs a windowed editor and is owed.
 
 ### What 4a leaves open
