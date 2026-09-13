@@ -22,12 +22,18 @@ using { /Verse.org/Native }
 # Both are narrower than `<transacts>`, so either is callable from a Godot callback and from inside
 # a failure context.
 #
-# **Not everything is here.** Godot has 367 methods and 261 operators across its 16 math types, and
-# C# solved that by writing them all. This writes what the yardstick and ordinary scene code reach;
-# the long tail -- `bezier_interpolate`, `cubic_interpolate`, `orthonormalized`, `slerp`, the
-# Basis/Quaternion conversions -- is absent, and absent *on the record*: `tools/gen_verse_api.py`
-# reports each as a skip with a reason, which is what turns a gap into a sentence in the editor
-# rather than a name that is simply not there (R-SCN-2).
+# **Not everything is here, and the gap is not yet on the record.** Godot has 367 methods and 261
+# operators across its 16 math types, and C# solved that by writing them all. This writes what the
+# yardstick and ordinary scene code reach, and only for `vector2`, `vector2i`, `vector3` and
+# `color`: the other twelve types have no operators at all, and the long tail --
+# `bezier_interpolate`, `cubic_interpolate`, `orthonormalized`, `slerp`, `snapped`, the
+# Basis/Quaternion conversions -- is absent everywhere.
+#
+# `docs/phase-4-design.md` 8.3 asked for each of those to be **recorded as a skip with a reason**,
+# so the gap says so in the editor rather than being a name that is simply not there (R-SCN-2).
+# That is not built: `tools/gen_verse_api.py` never enumerates `builtin_classes[*].methods`, so
+# only these types' *constants* appear in `src/verse_api_skipped.h`. It is the largest hole left in
+# R-SCN-2's promise and it is tracked in phase-4-design.md 13.5.
 
 # --- vector2 -----------------------------------------------------------------
 

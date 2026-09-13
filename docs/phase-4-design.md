@@ -999,7 +999,19 @@ cost the design counted as zero, and a project that wants a local called `Length
 
 `floor()`, `ceil()` and `round()` are also **not written**, for a reason §8.3 could not have
 predicted: Verse's own answer an `int`, Godot's answer a vector of whole floats, and Verse has no
-int-to-float conversion to bridge them.
+int-to-float conversion to bridge them. Neither are `snapped` or `min`/`max`, which §8.3's written
+list did name.
+
+**And the tail is not on the record.** §8.3 item 2 says the long tail is "recorded as a skip with a
+reason, which is machinery R-SCN-2 already has". That machinery is `Coverage.skip`, and it only ever
+sees what the generator *enumerates* — which is `classes`, never `builtin_classes[*].methods`. So
+367 methods and 261 operators are absent with nothing said about them, where the design's whole
+point was that a gap should produce a sentence in the editor. Only the math types' **constants**
+reach `src/verse_api_skipped.h` (20 rows), because those go through the statics module.
+
+This is the largest hole left in R-SCN-2's promise after the phase, and the fix is mechanical: read
+the names `GodotMath.native.verse` defines, and record every `builtin_classes` method and operator
+that is not among them.
 
 ### 13.6 What §8.2's "one solution" turned out to be two
 
