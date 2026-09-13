@@ -25,13 +25,12 @@ OQ-12's answer (positive: the package name carries the generation, the verse pat
 Two by-hand checks are still owed — a windowed run of the yardstick, and an editor session.
 
 **Phase 4a is built; 4b is not.** `docs/phase-4-design.md` is the design, and unusually for this repo
-its spikes ran *before* it was written — **§2 is where they are**. **§13 is the part to read**: written
-after the code, it is where the design turned out to be wrong. The three that matter most are a
-signal member's payload type coming out of the class's *substitution table* rather than off its
-`Signal` method (which reports the bare type variable, so every signal looked like one argument of
-unknown type); §6.7's engine-signal accessors depending on §7.1's underscore, which puts them after
-stage 5 rather than in stage 4; and OQ-14's answer, which is that the whole of the phase's mirror
-growth cost **83 ms** of per-keystroke analysis rather than the collapse §7.4 braced for.
+its spikes ran *before* it was written — **§2 is where they are**. **`docs/phase-4-gaps.md` is the
+part to read before trusting it**: twenty numbered entries saying where the implementation and the
+design disagree, what is unbuilt, and what would close each. Several things the design describes
+read as delivered and are not — including four ways a signal declaration can compile and
+not work (G1–G4), and `_make_function`, which is still a stub (G5). §13 of the design summarises it and
+carries the phase's measurements.
 
 Four things it settled are load-bearing everywhere else. A virtual is spelled the way Godot spells
 it — **`_Ready`, not `Ready`**, and §7.1 counts the eight *signal* collisions that decided it.

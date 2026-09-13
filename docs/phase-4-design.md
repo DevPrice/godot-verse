@@ -1,8 +1,10 @@
 # Phase 4 — parity: signals, virtuals, and the rest of Godot's model
 
-**Status:** Draft 1 · 2026-09-12 · **4a is built; 4b is not.** §13 was written after the code and is
-where this design turned out to be wrong — read it before trusting §6 or §8. Everything else below
-is the design as it was written, kept so the reasoning can be checked against what happened.
+**Status:** Draft 1 · 2026-09-12 · **4a is built; 4b is not.** Read
+[`phase-4-gaps.md`](phase-4-gaps.md) before trusting §6 or §8: it is the record of where the
+implementation and this document disagree, and several things below read as delivered and are not.
+§13 summarises it. Everything else here is the design as it was written, kept so the reasoning can
+be checked against what happened.
 
 **Originally:** designed, not built. The three spikes §2 names were run
 *before* this document was written rather than during the phase, so what is below rests on compiler
@@ -926,115 +928,35 @@ appear before any math body can be `<computes>` (§8.3 item 1). `../godot`'s
 
 ## 13. Where this design was wrong
 
-Written after building 4a, which is what §11 of the Phase 2 and Phase 3 designs are for: the design
-above is a good record of the *reasoning* and a partial record of the *outcome*. Six things moved.
+Written after building 4a. **The full list lives in [`phase-4-gaps.md`](phase-4-gaps.md)**, which is
+the single record of where the implementation and this document disagree and is written for someone
+picking the phase back up with no memory of it. Twenty entries, each with what the design said, what
+is there, why, and what closing it would take.
 
-### 13.1 The payload type is not on the `Signal` method (§6.3)
+The short version, for a reader who is here rather than there:
 
-§6.3 says the host reads a signal member's payload by walking the class's data members and taking
-their declared types, which is true. What it does not say — because nothing suggested it — is that
-the declared type comes back as the **generic** `godot_signal(t)`. `AsCode` prints it that way, and
-the `Signal` method found on it still has the *type variable* as its parameter. Reading the payload
-off that method, which was the first implementation, gave `t` for every signal: every one reported
-one argument of unknown type, so a zero-payload signal emitted one argument and a two-payload signal
-emitted one tuple.
+- **The payload type is not where §6.3 implies.** A signal member's declared type comes back as the
+  *generic* `godot_signal(t)` — its `Signal` method still has the type variable as its parameter — so
+  the type argument has to be read off the class's `_TypeVariableSubstitutions`. The first
+  implementation read the method and had every signal reporting one argument of unknown type. This
+  is the only thing in the phase that had to be found by asking the compiler rather than by reading.
+- **§6.7 depends on §7.1, so §11.1's stage order is wrong.** The eight colliding signal-accessor names
+  collide with *virtuals*, and it is the underscore that dissolves them — so Godot's own 489 signals
+  cannot be generated until stage 5 has landed. Stage 4 split in two to build it.
+- **§6.2's fourth row does not degrade, it breaks.** A struct payload reads as a trade in that table
+  and is not one: it registers a bogus signal and emits nothing. `phase-4-gaps.md` G1.
+- **Two latent bugs surfaced**, neither caused by this design. `GodotVirtualNameOf` turned `_Ready`
+  into `__ready`; and `InstanceHasFunction` — which decides whether Godot puts a node in the process
+  list at all — compared *function cells* rather than procedures, so every method had looked
+  overridden since Phase 1. Both fixed.
+- **§8.2's "one solution" is two.** `ClassDB.class_call_static` is generic enough for all 114 statics;
+  the GDExtension interface has no by-name utility call taking Variants at all, so the utilities are
+  a fixed table of eight.
+- **§8.3 counted one cost as zero.** An extension method is a *module-level* definition, so
+  `(V:vector2).Length()` makes `Length` ambiguous as a parameter or local name in every file that
+  imports the package.
 
-The type argument is on the class as `_TypeVariableSubstitutions`, one entry per polarity, and both
-carry the same type for a class this shape. That is where it is read from now, and the same road
-answers an engine signal's payload — off the generated accessor's *return* type.
-
-This is the only thing in the phase that had to be found by asking the compiler rather than by
-reading, and it is worth knowing before adding a second parametric type to the bridge.
-
-### 13.2 Two bugs the virtuals exposed, neither of them new (§7)
-
-`GodotVirtualNameOf` turned `_Ready` into `__ready`: it prepended a separator before every capital,
-and Godot's own name already starts with one. §7.1 said the rule "stays a rule", and it does — with
-one more clause.
-
-`InstanceHasFunction`, which decides whether Godot puts a node in the process list at all, compared
-**function cells** to tell an override from an inherited body. A method is stored once per shape and
-`Bind` makes a fresh `VFunction` around it on every field load, so two loads of one method are two
-cells whatever they run — which means every method looked overridden, and had since Phase 1. It
-compares **procedures** now. The same fact bit `MakeCallableFor` in stage 3 on its first run, which
-is how it was found.
-
-Neither was a design error; both were latent, and generating 1413 virtuals is what made them visible.
-
-### 13.3 §6.7's accessors depend on §7.1, so the stage order is wrong
-
-§6.7 says the eight colliding signal-accessor names are collisions with a *virtual* and that §7.1's
-underscore dissolves them. True — which means the accessors cannot be generated until stage 5 has
-landed. §11.1 puts signals at stage 4 and virtuals at stage 5. Built in that order, `Node.ready`'s
-accessor would have collided with the hand-written `Ready`.
-
-The fix was to split stage 4: script-declared signals (which §6.9's cases are all about) landed
-first, and Godot's own 489 after stage 5. Nothing in stage 4's "done when" needed the accessors, so
-the split cost nothing — but the table should say so.
-
-### 13.4 Two things the design's spellings could not be given
-
-**A struct payload does not work at all**, which §6.2 does not anticipate. Its fourth row reads as a
-trade — "a tuple keeps the ergonomic N-parameter handler and loses names in the editor; a struct
-gets names in the connect dialog" — so it sounds as though both spellings work and an author picks.
-They do not. A `godot_signal(my_struct)` registers one argument named `Value` of type NIL and emits
-nothing, because the payload's shape comes from `FMemberType::Struct`, which is filled only from the
-generated table of Godot's own 16 math structs.
-
-Two things follow. The feature is a **hole rather than a nicety**, and the effort to close it is
-small: a Verse struct is a `CClass`, `GetClassExports` already walks a class's data members, and
-`ReadStructValue` already reads one back by field. And §6.2's *other* sentence — "a payload the wire
-cannot carry is refused **at the member**, reusing R-EXP-3's machinery rather than failing at the
-emission" — is the right fallback and is also not implemented, so the failure lands at the worst of
-the three available moments.
-
-**`@statics` names its class as a string.** §8.4 writes `@statics(player)`, unquoted, and the reason
-it is `@statics("player")` is uLang rather than taste: `GetAttributeTextValue` is how the host reads
-an attribute's argument and there is no equivalent for a `type`, so the unquoted form would mean
-walking the attribute's own AST. The property §8.4 was actually buying — that a mistyped association
-is *told about* rather than silently empty — survives, because the string is checked.
-
-### 13.5 What the math cost that §8.3 did not mention
-
-§8.3 names three things the math needed and all three were real. A fourth was not anticipated: **an
-extension method is a module-level definition.** `(V:vector2).Angle()` declares `operator'.Angle'`
-beside everything else in the package, and Verse resolves a bare `Angle` against it — so a
-*parameter* named `Angle` becomes ambiguous. Eight methods on `Node3D` and two elsewhere reported it
-on the first generation, and the same rule reaches a script's locals.
-
-It is the constraint Verse's own `Abs`, `Clamp` and `Length` already impose, now widened by eleven
-names, and it is Epic's too — `SpatialMath` declares `(V:vector2).Length` the same way. But it is a
-cost the design counted as zero, and a project that wants a local called `Length` cannot have one.
-
-`floor()`, `ceil()` and `round()` are also **not written**, for a reason §8.3 could not have
-predicted: Verse's own answer an `int`, Godot's answer a vector of whole floats, and Verse has no
-int-to-float conversion to bridge them. Neither are `snapped` or `min`/`max`, which §8.3's written
-list did name.
-
-**And the tail is not on the record.** §8.3 item 2 says the long tail is "recorded as a skip with a
-reason, which is machinery R-SCN-2 already has". That machinery is `Coverage.skip`, and it only ever
-sees what the generator *enumerates* — which is `classes`, never `builtin_classes[*].methods`. So
-367 methods and 261 operators are absent with nothing said about them, where the design's whole
-point was that a gap should produce a sentence in the editor. Only the math types' **constants**
-reach `src/verse_api_skipped.h` (20 rows), because those go through the statics module.
-
-This is the largest hole left in R-SCN-2's promise after the phase, and the fix is mechanical: read
-the names `GodotMath.native.verse` defines, and record every `builtin_classes` method and operator
-that is not among them.
-
-### 13.6 What §8.2's "one solution" turned out to be two
-
-§8.2 says Godot's 114 statics and the ~28 utility functions "share one problem and get one
-solution". They share the problem. The solutions differ: `ClassDB.class_call_static` takes a name
-and an array, so all 114 statics arrive with no per-method code — while the GDExtension interface
-offers **no by-name utility call that takes Variants**, only `variant_get_ptr_utility_function`,
-which hands back a ptrcall wanting typed argument pointers and a signature hash.
-
-So the utilities are a fixed table of the eight the design names as mandatory (the random family),
-and the other 106 are recorded skips. Where Verse has a counterpart that is the right answer anyway;
-where it does not, the gap is real and says so.
-
-### 13.7 What the numbers came to
+### 13.1 What the numbers came to
 
 | | before Phase 4 | after 4a |
 | --- | --- | --- |
@@ -1050,9 +972,12 @@ accessors about 24; the constants and statics the rest. Eighty-three millisecond
 the phase's mirror growth. No threshold is attached, by the decision §0 records, and Phase 7's
 cooked route is informed rather than urgent.
 
-### 13.8 What is still owed
+
+### 13.2 What is still owed
 
 - **The by-hand checklist**, which needs a windowed editor: connecting a signal through the Node
   panel, `_make_function` writing the handler, a `@tool` script's `_get_configuration_warnings` on
   the node, an `_input` handler receiving a key. Phase 3's two owed checks are still owed with them.
+  It is [`by-hand-checklist.md`](by-hand-checklist.md) and nothing on it has been run.
+- **The twenty gaps in [`phase-4-gaps.md`](phase-4-gaps.md)**, §9 of which suggests an order.
 - **4b**, which this document sketches in §10 and does not design.

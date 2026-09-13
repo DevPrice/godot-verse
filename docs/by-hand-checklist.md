@@ -38,8 +38,8 @@ Each line is one thing to do and one thing to see. Tick nothing you have not wat
 - [ ] **A signal with arguments names them.** Do the same for the HUD's `StartGame`, and for a
       signal declared `godot_signal(tuple(int, string))` — the connect dialog must show two
       arguments, `Arg0` and `Arg1`, and the generated stub must take two parameters. (Verse tuples
-      cannot name their elements; a *struct* payload would give real names and is not implemented —
-      `phase-4-design.md` §13.4.)
+      cannot name their elements; a *struct* payload would give real names and does not merely lack
+      them — it registers a bogus signal and emits nothing. `phase-4-gaps.md` G1.)
 - [ ] **A `@tool` script's configuration warning shows on the node.** Give a `@tool` script a
       `_GetConfigurationWarnings<override>():[]string` that returns one string. The node must show
       the warning triangle in the Scene dock with that text in its tooltip, and it must clear when
@@ -52,12 +52,14 @@ Each line is one thing to do and one thing to see. Tick nothing you have not wat
       before Phase 4 are lookups in `_Ready` now, and a stale `node_paths` entry left in a `.tscn`
       would show up here.
 - [ ] **A statics module shows in the editor.** With `@statics("...")` applied, the script's
-      constants must appear where Godot shows a script's constant map — and a module naming a class
-      that does not exist must say so rather than being silently empty.
+      constants must appear where Godot shows a script's constant map. A module naming a class
+      that does not exist **will not** say so — that diagnostic is unbuilt, `phase-4-gaps.md` G10 —
+      so this checks the constants only.
 
 ## What a failure here means
 
 These are the flows a *person* meets first and the automated layers never reach. A failure is not a
 regression in something tested elsewhere; it is a gap that has never been covered. Record what you
-saw in the relevant design document's "where this design was wrong" section, the way every other
-correction in this repository is recorded, and only then decide whether it is worth automating.
+saw in [`phase-4-gaps.md`](phase-4-gaps.md) — or the relevant design document's "where this design
+was wrong" section, for an older phase — the way every other correction in this repository is
+recorded, and only then decide whether it is worth automating.

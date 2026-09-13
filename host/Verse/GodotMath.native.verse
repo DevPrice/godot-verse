@@ -33,7 +33,7 @@ using { /Verse.org/Native }
 # so the gap says so in the editor rather than being a name that is simply not there (R-SCN-2).
 # That is not built: `tools/gen_verse_api.py` never enumerates `builtin_classes[*].methods`, so
 # only these types' *constants* appear in `src/verse_api_skipped.h`. It is the largest hole left in
-# R-SCN-2's promise and it is tracked in phase-4-design.md 13.5.
+# R-SCN-2's promise and it is tracked as G12 in docs/phase-4-gaps.md.
 
 # --- vector2 -----------------------------------------------------------------
 

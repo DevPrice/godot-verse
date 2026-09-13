@@ -6,8 +6,9 @@ Node-panel and `_make_function` flows. Phase 3's design is
 [`phase-3-design.md`](phase-3-design.md); what Phase 2 built, and the four places its design was
 wrong, are in [`phase-2-design.md`](phase-2-design.md) §11.
 
-**Phase 4a is built.** [`phase-4-design.md`](phase-4-design.md) is the design and §11 is what the
-building corrected. Its gate was the Dodge the Creeps port rewritten *idiomatically* rather than
+**Phase 4a is built.** [`phase-4-design.md`](phase-4-design.md) is the design, and
+[`phase-4-gaps.md`](phase-4-gaps.md) is where the implementation and that design disagree — twenty
+numbered entries, read it before picking the phase back up. Its gate was the Dodge the Creeps port rewritten *idiomatically* rather than
 merely without GDScript, and the port is: six of its eight walls are down, `vectors.verse` is gone,
 and the 30 headless checks pass. What remains of the phase is **4b**, the editor's data model, which
 the yardstick never touches.
