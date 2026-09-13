@@ -593,6 +593,13 @@ TNonNullPtr<verse::vh_object> VhObjectOf(int64 Handle)
     });
 }
 
+int64 VhCallableFrom(FVerseValue const& Callback)
+{
+    // Open: the lookup walks the semantic program and asks Godot to mint the Callable, and neither
+    // is instrumented. AutoRTFM::Open rather than CallGodot, for the reason VhObjectOf gives.
+    return AutoRTFM::Open([&] { return GodotVerse::MakeCallableFor(Callback); });
+}
+
 void VhTypeMismatch(verse::string const& Expected, FGodotValue const& Value)
 {
     const FUtf8String Name(ToView(Expected));

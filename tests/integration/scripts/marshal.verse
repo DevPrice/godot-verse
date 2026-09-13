@@ -296,6 +296,27 @@ marshal := class(node2d):
         Made.Add(Second)
         Made.Get[1].GetName()
 
+    # --- R-INT-4 / R-SIG-3: a Verse function as a Godot Callable -------------
+    #
+    # The reference table pointing the other way: Godot holds a Verse value. The handler writes a
+    # var so the call is observable from GDScript afterwards -- a Callable made this way returns
+    # nothing, which is what a signal handler is.
+    var CallbackSeen<public>:int = 0
+
+    OnCalled<public>(Value:int)<transacts>:void =
+        set CallbackSeen = Value
+
+    OnCalledTwice<public>(First:int, Second:int)<transacts>:void =
+        set CallbackSeen = First * 100 + Second
+
+    MakeOnCalled<public>()<transacts>:callable = MakeCallable(int, OnCalled)
+
+    # Two parameters against a one-tuple-parameter callback, which is the whole reason a signal
+    # needs no per-arity family: a Verse function's parameter *is* its tuple.
+    MakeOnCalledTwice<public>()<transacts>:callable = MakeCallable(tuple(int, int), OnCalledTwice)
+
+    ReadCallbackSeen<public>()<transacts>:int = CallbackSeen
+
     # Object's reflection, which is the rest of what mirroring it bought.
     ClassOf<public>(Target:object):string = Target.GetClass()
 

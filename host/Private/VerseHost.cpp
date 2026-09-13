@@ -65,6 +65,43 @@ extern "C" int32_t vh_abi_version(void)
     return VH_ABI_VERSION;
 }
 
+namespace {
+/// The thread vh_init ran on, which is the only one that may enter the VM (R-ASYNC-8).
+///
+/// VerseVM asserts it: VVMEnterVMInline.h's `ensure(IsInGameThread() && ...)`, above the comment
+/// "Verse bytecode and AutoRTFM transactions must run on the game thread". It is an `ensure`, not
+/// a `check`, so serving a call from a worker thread is a logged callstack followed by undefined
+/// behaviour -- the worst of the available failure modes. And it is thread *identity*: serialising
+/// entry would not satisfy it, and AutoRTFM's transaction state is per-thread besides.
+///
+/// So the guard is a comparison, not a lock. What a foreign-thread call *should* do instead of
+/// being refused -- hand the work to the game thread and wait, say -- is OQ-6's, and the deadlock
+/// a blocking hand-off invites is why it is not decided here.
+///
+/// Stage 3 is where this becomes necessary rather than theoretical: a Callable is a value, and an
+/// author may hand one to a WorkerThreadPool task.
+uint32 GVerseThreadId = 0;
+
+/// Reports the refusal through the diagnostic callback, which is the only channel a call from the
+/// wrong thread has -- it cannot raise, because raising is itself entering the VM.
+bool WrongThread(const char* What)
+{
+    if (GVerseThreadId == 0 || FPlatformTLS::GetCurrentThreadId() == GVerseThreadId)
+    {
+        return false;
+    }
+    const FUtf8String Message = FUtf8String(UTF8TEXT("Verse: "))
+        + FUtf8String(FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(What)))
+        + UTF8TEXT(" was called from a thread other than the one Verse runs on, and was refused "
+                   "having run nothing. Verse bytecode and its transactions are pinned to the game "
+                   "thread; marshal the work back to it -- call_deferred, or a signal emitted from "
+                   "the main thread -- rather than calling a Verse method from a WorkerThreadPool "
+                   "task.");
+    GodotVerse::ReportError(FUtf8StringView(Message));
+    return true;
+}
+}
+
 extern "C" int32_t vh_init(const vh_init_desc* Desc)
 {
     // Majors must match exactly and minors need not, which is the policy written at the top of
@@ -83,6 +120,8 @@ extern "C" int32_t vh_init(const vh_init_desc* Desc)
     {
         return VH_ERR_STATE;
     }
+
+    GVerseThreadId = FPlatformTLS::GetCurrentThreadId();
 
     Host.Godot = Desc->Godot;
     Host.OnDiagnostic = Desc->OnDiagnostic;
@@ -393,6 +432,10 @@ extern "C" int32_t vh_instance_call(vh_instance* Instance,
                                    vh_arena* Arena,
                                    vh_value* OutResult)
 {
+    if (WrongThread("vh_instance_call"))
+    {
+        return VH_ERR_THREAD;
+    }
     GodotVerse::WaitForBackgroundCheck();
     if (!Instance || !DecoratedName || ArgCount < 0 || (ArgCount > 0 && !Args))
     {
@@ -423,6 +466,52 @@ extern "C" int32_t vh_instance_call(vh_instance* Instance,
     }
     (void)Arena;
     return Status;
+}
+
+extern "C" int32_t vh_callback_invoke(int64_t CallbackId,
+                                     const vh_value* Args,
+                                     int32_t ArgCount,
+                                     vh_arena* Arena,
+                                     vh_value* OutResult)
+{
+    if (WrongThread("vh_callback_invoke"))
+    {
+        return VH_ERR_THREAD;
+    }
+    GodotVerse::WaitForBackgroundCheck();
+    if (ArgCount < 0 || (ArgCount > 0 && !Args))
+    {
+        return VH_ERR_ABI;
+    }
+    if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+    if (GodotVerse::IsHaltedUntilTick())
+    {
+        return VH_ERR_HALTED;
+    }
+
+    static vh_value Result;
+    static GodotVerse::FFieldStorage Storage;
+    const int32_t Status = GodotVerse::InvokeCallback(CallbackId, Args, ArgCount, Result, Storage);
+    if (OutResult)
+    {
+        *OutResult = Status == VH_OK ? Result : vh_value{};
+    }
+    (void)Arena;
+    return Status;
+}
+
+extern "C" void vh_callback_release(int64_t CallbackId)
+{
+    if (!GetHost().bInitialized)
+    {
+        return;
+    }
+    // No thread guard: releasing touches a map and never enters the VM, and a Callable can be
+    // destroyed on whatever thread dropped the last reference to it.
+    GodotVerse::ReleaseCallback(CallbackId);
 }
 
 extern "C" int32_t vh_class_method_list(const char* ClassNameUtf8, const vh_method_desc** OutMethods, int32_t* OutCount)

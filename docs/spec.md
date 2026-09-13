@@ -590,9 +590,24 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   is something a script passes on rather than something it can originate, which is what stops
   R-INT-2 short — see `docs/dodge-the-creeps.md` wall 7.
 - **R-TYPE-3 (MUST)** `Callable` is a Verse value a script can hold, invoke, and hand back to
-  Godot — this is what makes R-SIG-3 and any callback-taking engine API work. Status: **done.** A `callable` is
-  held, passed back, and invoked with arguments. The other direction — a Verse function *as* a
-  Callable — is R-SIG-3's and arrives in Phase 4.
+  Godot — this is what makes R-SIG-3 and any callback-taking engine API work. Status: **done**,
+  both directions since Phase 4 stage 3. A `callable` is held, passed back, and invoked with
+  arguments; and `MakeCallable(t, F)` turns a Verse function into one Godot can call.
+
+  The Verse-function direction is the reference table pointing the other way, and it accepts
+  **only a method bound to a script instance**. That is Godot's own design rather than caution:
+  `GDScriptLambdaSelfCallable` reports the captured object and dies with it, while
+  `GDScriptLambdaCallable` reports the *script resource*, overrides `is_valid()` to "the function
+  exists", and outlives the object — which is Godot's own known leak (GH-102327, the same defect
+  this repo met from the other end). The bound half needs no lifetime tracking at all:
+  `get_object()` is the node, `is_valid()` is ObjectDB's answer, and Godot drops a freed object's
+  connections itself. The unbound case is **OQ-16**.
+
+  `MakeCallable` is parametric over the payload rather than one maker per arity, because a Verse
+  function's parameter *is* its tuple: `MakeCallable(tuple(int, int), OnCalledTwice)` reaches a
+  handler written with two parameters, and Godot emits two arguments. Equality is by reference,
+  which both prior arts agree on — Godot's lambda callables compare by pointer, and UEFN's event
+  inserts one entry per subscribe — so two subscriptions of one handler are two connections.
 
   **An upstream Godot defect shows through this, and is not ours.** A GDScript *lambda* that has
   been called, and that is still referenced when `ScriptServer::finish_languages()` runs, segfaults
@@ -712,8 +727,13 @@ event, and `vh_tick` pumped once per frame with a budget.
   the questions that scoping has to answer.
 
 - **R-ASYNC-8 (MUST)** A call that enters the host from any thread other than the one that called
-  `vh_init` is **refused with a diagnosable error, and nothing runs**. Status: **none** — the ABI
-  states the contract in its header comment and nothing enforces it.
+  `vh_init` is **refused with a diagnosable error, and nothing runs**. Status: **done** (Phase 4
+  stage 3). `vh_init` records its thread; every execution entry point compares against it and
+  answers `VH_ERR_THREAD` having run nothing, reporting through the diagnostic callback with the
+  entry point named and what to do instead. The GDExtension turns that into an invalid call, so
+  GDScript sees it where it made the mistake. It landed with the Callable because that is the stage
+  that enlarges the exposure: a Callable is a value, and an author may hand one to a
+  `WorkerThreadPool` task.
 
   *Rationale, and why a lock is not the answer.* VerseVM does not merely prefer the game thread, it
   asserts it: `VVMEnterVMInline.h` opens the top-level VM entry with
@@ -782,7 +802,9 @@ indistinguishable from a GDScript one.
   null handle for one is refused as a bad argument rather than becoming an empty option.
 - **R-INT-3 (MUST)** Signals cross in both directions (R-SIG-6).
 - **R-INT-4 (MUST)** A `Callable` produced by any language is invocable from any other, including
-  a Verse function handed to a GDScript API (R-TYPE-3).
+  a Verse function handed to a GDScript API (R-TYPE-3). Status: **done** (Phase 4 stage 3).
+  Proved from both ends in the integration suite: GDScript calls a Callable a Verse script made,
+  and a Verse function connected to a Godot signal runs when Godot emits it.
 - **R-INT-5 (SHOULD)** A scene may mix Verse, GDScript and C# scripts on different nodes with no
   ordering caveats beyond Godot's own. Status: **done** for the subset that works.
 - **R-INT-6 (MAY)** A Verse class extends a class *defined by a GDScript or C# script*. Godot does

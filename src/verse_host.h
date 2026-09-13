@@ -43,6 +43,8 @@ public:
 	vh_release_instance_fn ReleaseInstance = nullptr;
 	vh_instance_has_function_fn InstanceHasFunction = nullptr;
 	vh_instance_call_fn InstanceCall = nullptr;
+	vh_callback_invoke_fn CallbackInvoke = nullptr;
+	vh_callback_release_fn CallbackRelease = nullptr;
 	vh_class_method_list_fn ClassMethodList = nullptr;
 	vh_class_export_list_fn ClassExportList = nullptr;
 	vh_instance_get_field_fn InstanceGetField = nullptr;

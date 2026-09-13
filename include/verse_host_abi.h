@@ -70,7 +70,17 @@ typedef enum vh_status
 	 * The error itself was already reported through OnRuntimeError -- this is what every *other*
 	 * call gets for the rest of that frame, and it exists so that "did not run" cannot be
 	 * mistaken for "ran and found nothing", which is what it used to look like. */
-	VH_ERR_HALTED
+	VH_ERR_HALTED,
+
+	/* An entry point was called from a thread other than the one that called vh_init, having run
+	 * nothing (R-ASYNC-8).
+	 *
+	 * VerseVM asserts the game thread at the top of every VM entry -- VVMEnterVMInline.h's
+	 * `ensure(IsInGameThread() && ...)`, above "Verse bytecode and AutoRTFM transactions must run
+	 * on the game thread". It is an `ensure`, so proceeding is a logged callstack followed by
+	 * undefined behaviour: the worst of the available failure modes. It is thread *identity*, so
+	 * serialising entry does not satisfy it and a mutex cannot fix it. */
+	VH_ERR_THREAD
 } vh_status;
 
 /* Outcome of a property read/write or a method call. The distinction is load bearing: the host
@@ -298,6 +308,16 @@ typedef struct vh_godot_api
 
 	/* Invokes a Callable. The one thing that makes a callback-taking engine API reachable. */
 	int32_t (*InvokeCallable)(void* Ctx, int64_t Ref, const vh_value* Args, int32_t ArgCount, vh_arena* Arena, vh_value* OutValue);
+
+	/* A Godot Callable that calls back into the host, as a reference id in the same table an Array
+	 * or a Dictionary rides in. CallbackId is what vh_callback_invoke will be handed; OwnerHandle
+	 * is the Godot object the Verse function is bound to, which the Callable reports as its
+	 * `get_object()` -- so a freed node drops its connections with no work from the host, and
+	 * `is_valid()` is ObjectDB's answer rather than a guess.
+	 *
+	 * The consumer releases the id through vh_callback_release when the Callable is destroyed.
+	 * 0 if one could not be made. */
+	int64_t (*MakeCallable)(void* Ctx, int64_t CallbackId, vh_handle OwnerHandle);
 
 	/* --- signals: declared in v2.0, implemented in roadmap Phase 4 (spec 5.3) --- */
 
@@ -622,6 +642,25 @@ VH_ATTR VH_API int32_t vh_instance_call(vh_instance* Instance,
 										int32_t ArgCount,
 										vh_arena* Arena,
 										vh_value* OutResult);
+
+/* Invokes the Verse function a Callable was made from (R-TYPE-3's other direction, R-INT-4).
+ *
+ * CallbackId is what vh_godot_api::MakeCallable was given. Args are converted to the declared
+ * parameter types of the Verse method, exactly as vh_instance_call converts them, so the same
+ * answers apply: VH_ERR_ARGUMENT for the wrong shape, VH_ERR_FAILED for a <decides> method that
+ * declined, VH_ERR_RUNTIME for one that raised. VH_ERR_NOT_FOUND for a callback id that has been
+ * released, or whose object Godot has freed -- which the consumer should already have caught
+ * through is_valid(). */
+VH_ATTR VH_API int32_t vh_callback_invoke(int64_t CallbackId,
+										  const vh_value* Args,
+										  int32_t ArgCount,
+										  vh_arena* Arena,
+										  vh_value* OutResult);
+
+/* Drops the host's record of a callback. Called when the Callable holding the id is destroyed,
+ * which is the only moment "Godot has finished with this" is knowable. Releasing an id twice, or
+ * one that was never minted, does nothing. */
+VH_ATTR VH_API void vh_callback_release(int64_t CallbackId);
 
 /* ---------------------------------------------------------- class exports -- */
 
@@ -1110,6 +1149,8 @@ typedef void (*vh_release_instance_fn)(vh_instance*);
 typedef int32_t (*vh_class_method_list_fn)(const char*, const vh_method_desc**, int32_t*);
 typedef vh_bool (*vh_instance_has_function_fn)(vh_instance*, const char*);
 typedef int32_t (*vh_instance_call_fn)(vh_instance*, const char*, const vh_value*, int32_t, vh_arena*, vh_value*);
+typedef int32_t (*vh_callback_invoke_fn)(int64_t, const vh_value*, int32_t, vh_arena*, vh_value*);
+typedef void (*vh_callback_release_fn)(int64_t);
 typedef int32_t (*vh_class_export_list_fn)(const char*, const vh_export_desc**, int32_t*);
 typedef int32_t (*vh_instance_get_field_fn)(vh_instance*, const char*, const vh_value**);
 typedef int32_t (*vh_class_default_field_fn)(const char*, const char*, const vh_value**);

@@ -75,6 +75,12 @@ public:
 	// its own source path as { line, column, message, path } instead of reaching the output log.
 	godot::Error compile_project(const godot::PackedStringArray &p_globalized_paths, const godot::PackedStringArray &p_module_paths, godot::Dictionary *r_diagnostics_by_path);
 
+	// The two halves of a Godot Callable that calls a Verse function (R-INT-4, R-SIG-3). Called
+	// by VerseCallable, which is what Godot actually holds; see src/verse_callable.h for why only
+	// a function bound to a script instance is accepted.
+	int32_t invoke_callback(int64_t p_callback_id, const godot::Variant **p_args, int32_t p_arg_count, godot::Variant &r_result);
+	void release_callback(int64_t p_callback_id);
+
 	// Which generation the last successful compile_project published, counting from 1; 0 before
 	// the first. A failed build does not advance it.
 	int32_t script_generation() const { return generation; }
@@ -194,6 +200,7 @@ private:
 	static int32_t api_call_method(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count, vh_arena *p_arena, vh_value *r_value);
 	static vh_handle api_get_singleton(void *p_ctx, const char *p_name_utf8, int32_t p_name_len);
 	static int32_t api_get_class_of(void *p_ctx, vh_handle p_handle, vh_arena *p_arena, vh_value *r_class_name);
+	static int64_t api_make_callable(void *p_ctx, int64_t p_callback_id, vh_handle p_owner_handle);
 
 	// The reference table (R-TYPE-1). See src/verse_ref_table.h for what is in it and why, and the
 	// ABI header's "reference values" for the ownership rule these implement.

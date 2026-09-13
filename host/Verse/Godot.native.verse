@@ -107,6 +107,18 @@ VhSingleton<native>(Name:string)<decides><transacts>:int
 # cast, so a failure is an answer; raising from here would be a different question's error.
 VhObjectOf<native>(Handle:int)<transacts>:vh_object
 
+# A Verse function as a Godot Callable, answered as a reference id in the same table an Array rides
+# in (R-TYPE-3's other direction, R-INT-4, and what a signal subscribes with).
+#
+# `any` rather than a function type, because one native has to serve every arity: a Verse function's
+# parameter *is* its tuple, so `(:t)->void` covers them all, and a native cannot be parametric. The
+# type check is in the public wrapper above it, which is ordinary parametric Verse.
+#
+# 0 for a value that is not a Verse function bound to a live script instance. That is the only shape
+# 4a accepts -- Godot's own plain lambda, the unbound case, is anchored to the script resource and
+# is Godot's known leak (GH-102327), so the half taken here is the half that dies with its object.
+VhCallableFrom<native>(Callback:any)<transacts>:int
+
 # --- reference values --------------------------------------------------------
 
 # A Godot value the wire cannot copy: an Array, a Dictionary, a Callable, a Signal, or one of the

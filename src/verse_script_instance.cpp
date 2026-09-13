@@ -315,6 +315,14 @@ void call_func(GDExtensionScriptInstanceDataPtr p_self, GDExtensionConstStringNa
 			r_error->error = GDEXTENSION_CALL_OK;
 			return;
 
+		// Called from a thread other than the one Verse runs on (R-ASYNC-8). The host ran nothing
+		// and has already said so with the method named; this is a call error because, unlike a
+		// halted frame, the caller did something wrong and can fix it -- marshal the call back to
+		// the main thread.
+		case VH_ERR_THREAD:
+			r_error->error = GDEXTENSION_CALL_ERROR_INVALID_METHOD;
+			return;
+
 		// A raise in this call. It has already been reported with its file, line and Verse stack
 		// through the runtime error callback, so saying anything more here would only duplicate it
 		// -- and the call did happen, so it is not a call error either.

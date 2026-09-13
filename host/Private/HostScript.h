@@ -8,6 +8,8 @@
 #include "VerseString.h"
 #include "verse_host_abi.h"
 
+struct FVerseValue;
+
 namespace GodotVerse {
 
 /// Creates the placeholder outer and enters the content scope Verse allocations need.
@@ -88,6 +90,22 @@ AUTORTFM_DISABLE void ReleaseInstance(FInstance* Instance);
 /// already has a declared type to hold the value passes it, so a dead handle still produces
 /// something the declaration accepts. The generated cast path passes null on purpose.
 AUTORTFM_DISABLE UObject* ObjectForHandle(int64 Handle, UClass* Fallback = nullptr);
+
+/// A Verse function value as a Godot Callable (R-TYPE-3's other direction, R-INT-4, and what
+/// signals subscribe with). Answers the reference id of a Callable the GDExtension minted, or 0
+/// for a value that is not a Verse function bound to a live script instance -- which is the only
+/// shape 4a accepts, because it is the half of Godot's own design that does not leak.
+AUTORTFM_DISABLE int64 MakeCallableFor(const FVerseValue& Callback);
+
+/// Runs the Verse function behind a callback id, converting Args to its declared parameter types
+/// exactly as a call from Godot's own dispatch would. Same answers as vh_instance_call.
+AUTORTFM_DISABLE int32 InvokeCallback(int64 CallbackId,
+                                      const vh_value* Args,
+                                      int32 ArgCount,
+                                      vh_value& OutResult,
+                                      struct FFieldStorage& OutStorage);
+
+AUTORTFM_DISABLE void ReleaseCallback(int64 CallbackId);
 
 AUTORTFM_DISABLE bool InstanceHasFunction(const FInstance* Instance, FUtf8StringView DecoratedName);
 

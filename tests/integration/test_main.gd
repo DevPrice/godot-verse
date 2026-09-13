@@ -9,6 +9,14 @@ extends SceneTree
 
 var _passed := 0
 var _failed := 0
+var _thread_answer: Variant = null
+
+
+# Runs on a WorkerThreadPool thread. `call` on a Verse-scripted node from here must come back
+# without having entered the VM.
+func _call_verse_off_thread(target: Node) -> void:
+	_thread_answer = "ran"
+	_thread_answer = target.call("EchoInt", 7)
 
 
 func _double(n: int) -> int:
@@ -419,6 +427,47 @@ func _init() -> void:
 		_check("and reports itself a tool script", tool_script.is_tool())
 	var plain_script: Script = load("res://scripts/marshal.verse")
 	_check("while an unmarked one does not", plain_script != null and not plain_script.is_tool())
+
+	# --- R-ASYNC-8: a call from another thread is refused rather than served --------------------
+	#
+	# VerseVM asserts the game thread at the top of every VM entry, and it is an `ensure` rather
+	# than a `check`: proceeding would be a logged callstack followed by undefined behaviour. So
+	# the host compares the thread it was initialised on and answers VH_ERR_THREAD having run
+	# nothing, which reaches GDScript as an invalid call.
+	_thread_answer = "not started"
+	var task_id := WorkerThreadPool.add_task(_call_verse_off_thread.bind(node))
+	WorkerThreadPool.wait_for_task_completion(task_id)
+	_check_eq("the worker task ran", _thread_answer != "not started", true)
+	_check_eq("but the Verse method it called did not", _thread_answer, "ran")
+	_check_eq("and the main thread still works afterwards", node.call("EchoInt", 3), 3)
+
+	# --- R-INT-4 / R-SIG-3: a Verse function as a Godot Callable --------------------------------
+	var verse_callable: Variant = node.call("MakeOnCalled")
+	_check_eq("a Verse function crosses as a Callable", typeof(verse_callable), TYPE_CALLABLE)
+	if typeof(verse_callable) == TYPE_CALLABLE:
+		_check("and it reports the node it is bound to", (verse_callable as Callable).get_object() == node)
+		_check("and is valid while that node lives", (verse_callable as Callable).is_valid())
+		(verse_callable as Callable).call(21)
+		_check_eq("calling it from Godot runs the Verse method", node.call("ReadCallbackSeen"), 21)
+
+		# The engine half: Godot emits, and a Verse function connected to the signal runs. A user
+		# signal on a bare Object rather than a timer, because a headless run has no time to wait.
+		var emitter := Object.new()
+		emitter.add_user_signal("ping", [{"name": "value", "type": TYPE_INT}])
+		emitter.connect("ping", verse_callable as Callable)
+		emitter.emit_signal("ping", 34)
+		_check_eq("a Verse function connected to a signal runs when Godot emits it",
+				node.call("ReadCallbackSeen"), 34)
+
+		var two: Variant = node.call("MakeOnCalledTwice")
+		if typeof(two) == TYPE_CALLABLE:
+			emitter.add_user_signal("ping2", [
+				{"name": "a", "type": TYPE_INT}, {"name": "b", "type": TYPE_INT}])
+			emitter.connect("ping2", two as Callable)
+			emitter.emit_signal("ping2", 7, 9)
+			_check_eq("a two-parameter handler takes a two-argument emission",
+					node.call("ReadCallbackSeen"), 709)
+		emitter.free()
 
 	# --- R-SCN-6: the cast, and object identity ------------------------------------------------
 	#

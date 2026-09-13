@@ -1,5 +1,6 @@
 #include "verse_runtime.h"
 
+#include "verse_callable.h"
 #include "verse_ref_table.h"
 #include "verse_script_language.h"
 #include "verse_value.h"
@@ -144,6 +145,7 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 	godot_api.CallMethod = &VerseRuntime::api_call_method;
 	godot_api.GetSingleton = &VerseRuntime::api_get_singleton;
 	godot_api.GetClassOf = &VerseRuntime::api_get_class_of;
+	godot_api.MakeCallable = &VerseRuntime::api_make_callable;
 	godot_api.ReleaseRef = &VerseRuntime::api_release_ref;
 	godot_api.RetainRef = &VerseRuntime::api_retain_ref;
 	godot_api.NewRef = &VerseRuntime::api_new_ref;
@@ -523,6 +525,42 @@ int32_t VerseRuntime::call_instance(vh_instance *p_instance,
 		r_result = vh_to_variant(result);
 	}
 	return status;
+}
+
+int32_t VerseRuntime::invoke_callback(int64_t p_callback_id, const Variant **p_args, int32_t p_arg_count, Variant &r_result) {
+	r_result = Variant();
+	if (!host.is_loaded() || host.CallbackInvoke == nullptr) {
+		return VH_ERR_STATE;
+	}
+
+	VerseArena arena;
+	std::vector<vh_value> wire;
+	wire.resize((size_t)p_arg_count);
+	for (int32_t i = 0; i < p_arg_count; ++i) {
+		if (!variant_to_vh(*p_args[i], arena.get(), wire[(size_t)i])) {
+			return VH_ERR_ARGUMENT;
+		}
+	}
+
+	vh_value result = {};
+	const int32_t status = host.CallbackInvoke(
+			p_callback_id, wire.empty() ? nullptr : wire.data(), p_arg_count, nullptr, &result);
+	if (status == VH_OK) {
+		r_result = vh_to_variant(result);
+	}
+	return status;
+}
+
+void VerseRuntime::release_callback(int64_t p_callback_id) {
+	if (host.is_loaded() && host.CallbackRelease != nullptr) {
+		host.CallbackRelease(p_callback_id);
+	}
+}
+
+// The Callable goes straight into the reference table, because that is the one place the host can
+// name a Godot value from: a `callable` in Verse is a godot_ref, and the id is what it holds.
+int64_t VerseRuntime::api_make_callable(void *p_ctx, int64_t p_callback_id, vh_handle p_owner_handle) {
+	return verse_ref_table().mint(Variant(VerseCallable::make(p_callback_id, p_owner_handle)));
 }
 
 Vector<VerseMethodInfo> VerseRuntime::class_methods(const String &p_class_name) const {

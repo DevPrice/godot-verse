@@ -218,6 +218,27 @@ MakeDictionary<public>()<transacts>:dictionary =
     VhAdopt(Made)
     Made
 
+# A Verse function as a Godot Callable (R-TYPE-3's other direction, R-INT-4). What makes every
+# callback-taking engine API reachable, and what a signal subscribes with.
+#
+# Parametric rather than one maker per arity, because a Verse function's parameter *is* its tuple:
+# `t` is `tuple()` for a handler that takes nothing, `int` for one that takes a number, and
+# `tuple(int, string)` for one written as two parameters -- a multi-parameter function satisfies a
+# one-tuple-parameter callback, which is what makes `MakeCallable(tuple(int, string), OnStruck)`
+# reach `OnStruck(Damage:int, By:string)`.
+#
+# `<transacts>` on the callback, and it is load-bearing: a function with *no* specifier carries the
+# default effect set, which is wider than `<transacts>` and includes `no_rollback`, so it could not
+# be called from where this one will be. A handler therefore says `<transacts>`.
+#
+# Only a method bound to a script instance is accepted, which is checked at the far end rather than
+# here: a function this cannot name answers 0 and the callable names nothing. See
+# src/verse_callable.h for why that half of Godot's own design is the one taken.
+MakeCallable<public>(t:type, Callback(:t)<transacts>:void)<transacts>:callable =
+    Made := callable{Ref := VhCallableFrom(Callback)}
+    VhAdopt(Made)
+    Made
+
 VhFromArray(Value:godot_array)<transacts>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 VhFromDictionary(Value:dictionary)<transacts>:variant = variant{Tag := TagDictionary, Ref := Value.Ref}
 VhFromCallable(Value:callable)<transacts>:variant = variant{Tag := TagCallable, Ref := Value.Ref}

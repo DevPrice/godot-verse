@@ -2267,6 +2267,21 @@ TMap<int64, GodotVerse::FInstance*> GInstancesByHandle;
 /// cached too -- a class the mirror does not carry is not worth asking Godot about twice.
 TMap<int64, UClass*> GHandleClassCache;
 
+/// A Verse function Godot holds as a Callable, as the pair that can name it again later.
+///
+/// Not the function *value*: 4a accepts only a method bound to a script instance (OQ-16 carries
+/// the unbound case), and for one of those the owner's handle and the method's decorated name say
+/// everything -- which means nothing here has to keep a VM cell alive, and invoking is the same
+/// InstanceCall path Godot's own dispatch takes, argument conversion and all.
+struct FCallbackTarget
+{
+    int64 OwnerHandle = 0;
+    FUtf8String DecoratedName;
+};
+
+TMap<int64, FCallbackTarget> GCallbacks;
+int64 GNextCallbackId = 1;
+
 /// The mirrored Verse class name for a Godot class name, out of the generated table.
 ///
 /// Every Godot class is in that table, not only the emitted ones: with --classes-file a subset is
@@ -4312,6 +4327,113 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
         return VH_ERR_RUNTIME;
     }
     return bBodyRan ? Status : VH_ERR_HALTED;
+}
+
+/// The decorated name of a bound Verse method, found by asking the object for each method its
+/// class declares and comparing the function that comes back.
+///
+/// There is no reading the semantic program's spelling back off a VFunction -- the bytecode has
+/// erased it -- so the comparison is the lookup, which is the same thing InstanceHasFunction does
+/// to tell an override from an inherited body. Once per Subscribe, never per emission.
+AUTORTFM_DISABLE bool DescribeBoundFunction(Verse::VFunction* Function, int64& OutHandle, FUtf8String& OutDecorated)
+{
+    if (!Function)
+    {
+        return false;
+    }
+    UObject* const Self = Function->Self.Get().ExtractUObject();
+    verse::vh_object* const Shadow = Cast<verse::vh_object>(Self);
+    if (!Shadow)
+    {
+        return false;
+    }
+
+    const FUtf8String ClassName = QualifiedClassName(Self->GetClass());
+    TArray<GodotVerse::FMethodDesc> Methods;
+    if (!GodotVerse::GetClassMethods(FUtf8StringView(ClassName), Methods))
+    {
+        return false;
+    }
+
+    // The *procedure*, not the function cell. A method is stored once per shape and `Bind` makes a
+    // fresh VFunction around it every time the field is loaded, so two loads of one method are two
+    // cells; what they share is the code they run.
+    Verse::VCell* const Wanted = Function->Procedure.Get().ExtractCell();
+    if (!Wanted)
+    {
+        return false;
+    }
+
+    const verse::FExecutionContext ExecContext = verse::FExecutionContext::GetActiveContext();
+    for (const GodotVerse::FMethodDesc& Method : Methods)
+    {
+        const FVerseFunction Candidate(ExecContext, Self, FUtf8StringView(Method.DecoratedName));
+        if (Candidate.IsValid() && Candidate.Function->Procedure.Get().ExtractCell() == Wanted)
+        {
+            OutHandle = Shadow->Handle.Get();
+            OutDecorated = Method.DecoratedName;
+            return true;
+        }
+    }
+    return false;
+}
+
+AUTORTFM_DISABLE int64 GodotVerse::MakeCallableFor(const FVerseValue& Callback)
+{
+    Verse::VFunction* const Function = Callback.GetValue().DynamicCast<Verse::VFunction>();
+    int64 OwnerHandle = 0;
+    FUtf8String Decorated;
+    if (!DescribeBoundFunction(Function, OwnerHandle, Decorated))
+    {
+        ReportError(Function
+            ? UTF8TEXT("MakeCallable was given a Verse function that is not a method bound to a live "
+                       "script instance. Only a bound method can be made into a Callable today "
+                       "(OQ-16): Godot's own unbound spelling is anchored to the script resource and "
+                       "is its known leak.")
+            : UTF8TEXT("MakeCallable was given a value that is not a Verse function."));
+        return 0;
+    }
+
+    FHostState& Host = GetHost();
+    if (!Host.Godot.MakeCallable)
+    {
+        return 0;
+    }
+
+    const int64 Id = GNextCallbackId++;
+    GCallbacks.Add(Id, FCallbackTarget{OwnerHandle, Decorated});
+    const int64 Ref = Host.Godot.MakeCallable(Host.Godot.Ctx, Id, OwnerHandle);
+    if (Ref == 0)
+    {
+        GCallbacks.Remove(Id);
+    }
+    return Ref;
+}
+
+AUTORTFM_DISABLE void GodotVerse::ReleaseCallback(int64 CallbackId)
+{
+    GCallbacks.Remove(CallbackId);
+}
+
+AUTORTFM_DISABLE int32 GodotVerse::InvokeCallback(int64 CallbackId,
+                                                  const vh_value* Args,
+                                                  int32 ArgCount,
+                                                  vh_value& OutResult,
+                                                  FFieldStorage& OutStorage)
+{
+    const FCallbackTarget* const Target = GCallbacks.Find(CallbackId);
+    if (!Target)
+    {
+        return VH_ERR_NOT_FOUND;
+    }
+    FInstance** const Bound = GInstancesByHandle.Find(Target->OwnerHandle);
+    if (!Bound || !*Bound)
+    {
+        // The node was freed. Godot's own is_valid() should have caught this first; answering
+        // rather than raising is what keeps a late emission from taking the frame down.
+        return VH_ERR_NOT_FOUND;
+    }
+    return InstanceCall(*Bound, FUtf8StringView(Target->DecoratedName), Args, ArgCount, OutResult, OutStorage);
 }
 
 namespace {
