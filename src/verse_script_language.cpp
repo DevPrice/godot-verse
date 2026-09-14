@@ -406,10 +406,13 @@ static const char *DEFAULT_TEMPLATE =
 // `_make_template` does with "" -- which for this one was the full template, ignoring the
 // checkbox entirely.
 //
-// Not actually empty, and cannot be. A `.verse` with no class named after the file is a library
-// file (R-LANG-6) and will not attach to anything, so the minimum that is still a script is the
-// declaration itself. A class with an empty indented body compiles and instantiates -- probed, not
-// assumed. This is the same bargain as GDScript's `empty.gd`, which is one `extends` line.
+// Not actually empty, and the reason is the dialog rather than the language. A blank `.verse` is
+// perfectly good Verse -- a file with no class named after itself is a library file (R-LANG-6),
+// which is how most of a project's shared code is written -- but this template exists to be
+// *attached to a node*, and a library file cannot be: `_get_instance_base_type` answers nothing
+// for one, which is how Godot refuses. So the minimum here is the declaration, and a class with an
+// empty indented body compiles and instantiates -- probed, not assumed. GDScript's `empty.gd` is
+// one `extends` line for the same reason and not for a different one.
 static const char *EMPTY_TEMPLATE =
 		"using { /Godot.org/Godot }\n"
 		"\n"

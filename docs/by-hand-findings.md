@@ -148,15 +148,19 @@ template that did not exist, got `""`, and `_make_template`'s fallback answered 
 default. Two changes: an `"Empty"` row, and a fallback that is the empty content rather than the
 default one, so a caller with no template at all gets the smaller thing rather than the larger.
 
-Verse's "empty" is not empty. A `.verse` with no class named after the file is a library file
-(R-LANG-6) and attaches to nothing, so the minimum that is still a script is the declaration:
+This template is not blank, and the reason is the dialog rather than the language. A blank `.verse`
+is perfectly good Verse — a file with no class named after itself is a **library file** (R-LANG-6),
+which is how a project's shared code is written and is a thing this bridge supports on purpose. But
+the Attach Script dialog exists to put a script *on a node*, and a library file cannot go on one:
+`_get_instance_base_type` answers nothing for it, which is how Godot refuses the attach. So the
+minimum that does the dialog's job is the declaration:
 
     using { /Godot.org/Godot }
 
     _CLASS_ := class(_BASE_):
 
-A class with an empty indented body compiles and instantiates — probed rather than assumed. This is
-the same bargain as GDScript's `empty.gd`, which is one `extends` line.
+A class with an empty indented body compiles and instantiates — probed rather than assumed.
+GDScript's `empty.gd` is one `extends` line for exactly this reason and not for a different one.
 
 ## B6. The template becomes a direct translation of GDScript's · **done**
 
