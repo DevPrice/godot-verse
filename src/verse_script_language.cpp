@@ -1221,6 +1221,45 @@ static Dictionary completion_option_for(const Dictionary &p_item) {
 	return option;
 }
 
+// Every class a receiver of type p_verse_class reaches a member of, nearest first.
+//
+// Only a mirrored hierarchy is walked past its first link. A script class's own base is written in
+// its file and in no table the host answers for, so following it would mean reading another file on
+// the keystroke that opened the popup -- which costs more than a partial answer is worth when the
+// full one is a frame or two behind it.
+static PackedStringArray member_bearing_chain(const String &p_verse_class) {
+	PackedStringArray chain;
+	if (p_verse_class.is_empty()) {
+		return chain;
+	}
+	chain.push_back(p_verse_class);
+	const char *godot_name = verse_godot_class_for(p_verse_class);
+	if (godot_name == nullptr) {
+		return chain;
+	}
+	for (String name = ClassDB::get_parent_class(String(godot_name)); !name.is_empty();
+			name = ClassDB::get_parent_class(name)) {
+		if (const char *verse_name = mirrored_class(name)) {
+			chain.push_back(String(verse_name));
+		}
+	}
+	return chain;
+}
+
+// The class a member's declared type names, or empty. A `var` reads as `^node2d` and an `option`
+// as `?node2d`; anything with a bracket in it is a container or a function type, which names no one
+// class and is not worth a guess.
+static String class_named_by_type(const String &p_type) {
+	String name = p_type.strip_edges();
+	while (!name.is_empty() && (name[0] == '^' || name[0] == '?')) {
+		name = name.substr(1).strip_edges();
+	}
+	if (name.is_empty() || name.find("(") >= 0 || name.find("[") >= 0 || name.find(":") >= 0) {
+		return String();
+	}
+	return name;
+}
+
 // One inherited method as the declaration that would override it, which is what GDScript
 // completes inside a class body -- the whole `func _ready() -> void:` rather than the name.
 //
@@ -1398,6 +1437,56 @@ static bool completing_in_string(const String &p_code, int64_t p_marker) {
 // a member being declared, and an inherited method offered there completes to the whole
 // declaration that overrides it rather than to a call. Everything else in scope is still offered,
 // so a misread of the position costs nothing beyond an option that was already going to be there.
+// The classes whose members a `.` at p_receiver_end reaches, nearest first, decided from the
+// buffer and the snapshot alone -- which is the whole of what exists while the analysis that would
+// answer properly is still running.
+//
+// Three receivers are knowable without one. `Self` is the class this file declares, and the class
+// header names its base. A bare name the class declares carries a declared type, which the snapshot
+// spells. And a mirrored class written outright is its own answer. Everything else -- a call's
+// result, a local, a dotted chain -- needs the types this deliberately does not build, and answers
+// nothing rather than guessing: a wrong member list is worse than a late one, because the author
+// acts on it.
+PackedStringArray VerseScriptLanguage::receiver_classes_from_text(const String &p_source, const String &p_path, int64_t p_receiver_end) const {
+	VerseRuntime *runtime = get_runtime();
+	const String word = word_ending_at(p_source, p_receiver_end);
+	if (runtime == nullptr || word.is_empty()) {
+		return PackedStringArray();
+	}
+	const int64_t word_start = p_receiver_end - word.length() + 1;
+	if (word_start > 0 && p_source[word_start - 1] == '.') {
+		return PackedStringArray();
+	}
+
+	const String own_class = qualified_class_name(p_path);
+	if (word == String("Self")) {
+		PackedStringArray chain;
+		chain.push_back(own_class);
+		// The base out of the buffer rather than out of the snapshot: a class header the author
+		// has just changed is exactly the case this branch exists for, and verse_scan_class_decl
+		// reads the text in front of them.
+		const VerseClassDecl decl = verse_scan_class_decl(
+				verse_newline_normalized(p_source).utf8().get_data(),
+				p_path.get_file().get_basename().utf8().get_data());
+		if (!decl.name.empty()) {
+			if (const char *verse_base = mirrored_class(base_types_for(decl).instance_base)) {
+				chain.append_array(member_bearing_chain(String(verse_base)));
+			}
+		}
+		return chain;
+	}
+
+	const TypedArray<Dictionary> members = runtime->class_members(own_class);
+	for (int64_t i = 0; i < members.size(); i++) {
+		const Dictionary item = members[i];
+		if (String(item["name"]) == word) {
+			return member_bearing_chain(class_named_by_type(item["type"]));
+		}
+	}
+
+	return verse_godot_class_for(word) != nullptr ? member_bearing_chain(word) : PackedStringArray();
+}
+
 Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const String &p_path, Object *p_owner) const {
 	Dictionary result;
 	result["result"] = (int64_t)OK;
@@ -1641,6 +1730,30 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 				if (!declaring_in_class.is_empty() && completes_as_override(item, declaring_in_class)) {
 					options.push_back(override_option_for(item));
 				} else {
+					options.push_back(completion_option_for(item));
+				}
+			}
+		} else if (completing_members) {
+			// The partial answer after a `.`, which without it is an empty popup that opens only
+			// once the analysis lands -- late enough that the author has typed past it. What the
+			// receiver's class and its bases declare, off the same snapshot and described by the
+			// same host code the refined answer will use, so the rows offered here are the rows
+			// that replace them.
+			//
+			// Nearest first, and a name a nearer class already answered is not offered twice: a
+			// redeclared member belongs to the class that redeclared it, which is what
+			// vh_complete_symbol would say too.
+			const PackedStringArray chain = receiver_classes_from_text(source, p_path, receiver_end);
+			HashSet<String> offered;
+			for (int64_t c = 0; c < chain.size(); c++) {
+				const TypedArray<Dictionary> members = runtime->class_members(chain[c]);
+				for (int64_t i = 0; i < members.size(); i++) {
+					const Dictionary item = members[i];
+					const String name = item["name"];
+					if (!matches_typed_prefix(name, prefix) || offered.has(name)) {
+						continue;
+					}
+					offered.insert(name);
 					options.push_back(completion_option_for(item));
 				}
 			}

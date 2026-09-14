@@ -189,6 +189,11 @@ public:
 	// holds this exact text.
 	godot::TypedArray<godot::Dictionary> check_buffer(const godot::String &p_path, const godot::String &p_source) const;
 
+	// The classes a `.` at p_receiver_end reaches a member of, nearest first, or empty when the
+	// buffer does not say which. Text and the analysis snapshot only: this is what completion has
+	// to answer from before any analysis of the buffer in front of the author exists.
+	godot::PackedStringArray receiver_classes_from_text(const godot::String &p_source, const godot::String &p_path, int64_t p_receiver_end) const;
+
 	godot::TypedArray<godot::Dictionary> diagnostics_for(const godot::String &p_path) const;
 
 	// The compiler's warnings against one script, in the same shape as its errors; _validate
