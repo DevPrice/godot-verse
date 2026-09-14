@@ -391,6 +391,10 @@ bool GProgramIsAnalysisOnly = false;
 /// simply re-analyses what the IDE already holds.
 AUTORTFM_DISABLE bool RunCheck(const FUtf8String& Path, const FUtf8String& SourceText, TFunction<void(const FSolDiagnostic&)> Sink);
 
+/// Declared here and defined beside the completion walk it borrows: the answer comes off the AST,
+/// which only exists once the analysis that produced the diagnostic has finished.
+AUTORTFM_DISABLE FUtf8String SubjectTypeOfDiagnostic(FUtf8StringView Path, int32 Row, int32 Column);
+
 /// Records where /Godot.org/Godot's definitions were written, off a program that still read them
 /// from their own files, and retires the package to its digest once it has. Defined beside
 /// FillLocation, which is what the recording is for.
@@ -620,6 +624,8 @@ struct FCapturedDiagnostic
     int32 EndLine;
     int32 EndColumn;
     int32 ReferenceCode;
+    /// Filled after the analysis rather than at capture; see vh_diagnostic::SubjectTypeUtf8.
+    FUtf8String SubjectType;
 };
 
 struct FBackgroundCheck
@@ -724,33 +730,54 @@ AUTORTFM_DISABLE vh_severity ToVhSeverity(ELogVerbosity::Type Verbosity)
     }
 }
 
+AUTORTFM_DISABLE FCapturedDiagnostic CaptureSolDiagnostic(const FSolDiagnostic& Diagnostic)
+{
+    return FCapturedDiagnostic{ToVhSeverity(Diagnostic.Info.Severity),
+                               FUtf8String(Diagnostic.Info.Message),
+                               FUtf8String(Diagnostic.Location.FilePath),
+                               Diagnostic.Location.RowSpan.X,
+                               Diagnostic.Location.ColSpan.X,
+                               Diagnostic.Location.RowSpan.Y,
+                               Diagnostic.Location.ColSpan.Y,
+                               static_cast<int32>(Diagnostic.Info.ReferenceCode)};
+}
+
+AUTORTFM_DISABLE void ForwardCapturedDiagnostic(const FCapturedDiagnostic& Diagnostic)
+{
+    GodotVerse::ReportDiagnostic(Diagnostic.Severity,
+                                 Diagnostic.Message,
+                                 Diagnostic.FilePath,
+                                 Diagnostic.Line,
+                                 Diagnostic.Column,
+                                 Diagnostic.EndLine,
+                                 Diagnostic.EndColumn,
+                                 Diagnostic.SubjectType,
+                                 Diagnostic.ReferenceCode);
+}
+
+/// uLang's ErrSemantic_UnknownIdentifier, which is both "Unknown identifier `X`." and "Unknown
+/// member `X` in `Y`." -- the only two diagnostics with a subject to find a type for.
+constexpr int32 UnknownIdentifierCode = 3506;
+
+/// Asked once per analysis, over the diagnostics it produced, because the AST the answer is read
+/// off does not exist until the analysis has finished. Every other diagnostic is left alone: this
+/// walks the project's AST per entry, and one glitch code is the whole of what it can answer for.
+AUTORTFM_DISABLE void ResolveSubjectTypes(TArray<FCapturedDiagnostic>& Diagnostics)
+{
+    for (FCapturedDiagnostic& Diagnostic : Diagnostics)
+    {
+        if (Diagnostic.ReferenceCode == UnknownIdentifierCode)
+        {
+            Diagnostic.SubjectType = SubjectTypeOfDiagnostic(Diagnostic.FilePath, Diagnostic.Line, Diagnostic.Column);
+        }
+    }
+}
+
+/// The sink for diagnostics nothing will post-process: the project source's own, which are about
+/// the project rather than about any file in it.
 AUTORTFM_DISABLE void ForwardSolDiagnostic(const FSolDiagnostic& Diagnostic)
 {
-    vh_severity Severity = VH_SEVERITY_INFO;
-    switch (Diagnostic.Info.Severity)
-    {
-    case ELogVerbosity::Error:
-        Severity = VH_SEVERITY_ERROR;
-        break;
-    case ELogVerbosity::Warning:
-        Severity = VH_SEVERITY_WARNING;
-        break;
-    default:
-        Severity = VH_SEVERITY_INFO;
-        break;
-    }
-
-    const FUtf8String Message(Diagnostic.Info.Message);
-    const FUtf8String FilePath(Diagnostic.Location.FilePath);
-
-    GodotVerse::ReportDiagnostic(Severity,
-                                 Message,
-                                 FilePath,
-                                 Diagnostic.Location.RowSpan.X,
-                                 Diagnostic.Location.ColSpan.X,
-                                 Diagnostic.Location.RowSpan.Y,
-                                 Diagnostic.Location.ColSpan.Y,
-                                 static_cast<int32>(Diagnostic.Info.ReferenceCode));
+    ForwardCapturedDiagnostic(CaptureSolDiagnostic(Diagnostic));
 }
 
 AUTORTFM_DISABLE bool EnsureIde()
@@ -901,10 +928,24 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FScriptSource>& So
     FSolIdeBuildSettings Settings{.LinkSettings = uLang::SBuildParams::ELinkParam::RequireComplete};
     FAnalysisTrace Trace;
     const double BuildStarted = FPlatformTime::Seconds();
+    // Held rather than forwarded as they arrive, for the reason CheckProject holds its own: the
+    // subject type each one may carry is read off the AST. A build that succeeds generates code and
+    // puts the AST out of reach, so these are forwarded after the analysis-only pass below has put
+    // it back; a build that fails never reached codegen, and its AST is still whole where it
+    // returns.
+    TArray<FCapturedDiagnostic> BuildDiagnostics;
     const bool bBuilt = GIde->BuildAll(
         Settings,
-        MakeIdeDiagnostics(ForwardSolDiagnostic,
+        MakeIdeDiagnostics([&BuildDiagnostics](const FSolDiagnostic& Diagnostic) { BuildDiagnostics.Add(CaptureSolDiagnostic(Diagnostic)); },
                            [&Trace](const uLang::SBuildEventInfo& Event) { Trace.OnEvent(Event); }));
+
+    auto ForwardBuildDiagnostics = [&BuildDiagnostics] {
+        ResolveSubjectTypes(BuildDiagnostics);
+        for (const FCapturedDiagnostic& Diagnostic : BuildDiagnostics)
+        {
+            ForwardCapturedDiagnostic(Diagnostic);
+        }
+    };
 
     // And again, now that the build has deployed what it compiled. The first call could not retire
     // a native package: IncrementalizeProjectSource leaves a VNI package Source while
@@ -961,6 +1002,7 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FScriptSource>& So
         // build that fails would otherwise leave every class-describing read answering not-found.
         TakeAnalysisSnapshot();
         PublishAnalysisSnapshot();
+        ForwardBuildDiagnostics();
         return false;
     }
 
@@ -975,6 +1017,8 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FScriptSource>& So
     // symbol resolves on the first hover rather than only after the author's first edit. Its
     // diagnostics are dropped: the build above already reported every one of them.
     RunCheck(FUtf8String(), FUtf8String(), [](const FSolDiagnostic&) {});
+
+    ForwardBuildDiagnostics();
 
     // And this is the program to read the mirror's own files out of -- the last one that has them.
     // Only reached by a build that succeeded: a project that does not compile is not where the
@@ -1067,17 +1111,11 @@ AUTORTFM_DISABLE void BackgroundCheckMain()
     GBackgroundCheck.bResult = RunCheck(
         GBackgroundCheck.Path,
         GBackgroundCheck.SourceText,
-        [](const FSolDiagnostic& Diagnostic) {
-            GBackgroundCheck.Diagnostics.Add(FCapturedDiagnostic{
-                ToVhSeverity(Diagnostic.Info.Severity),
-                FUtf8String(Diagnostic.Info.Message),
-                FUtf8String(Diagnostic.Location.FilePath),
-                Diagnostic.Location.RowSpan.X,
-                Diagnostic.Location.ColSpan.X,
-                Diagnostic.Location.RowSpan.Y,
-                Diagnostic.Location.ColSpan.Y,
-                static_cast<int32>(Diagnostic.Info.ReferenceCode)});
-        });
+        [](const FSolDiagnostic& Diagnostic) { GBackgroundCheck.Diagnostics.Add(CaptureSolDiagnostic(Diagnostic)); });
+
+    // On this thread, which is the one that just built the AST being read -- and before bRunning
+    // clears, so the game thread cannot start another analysis under it.
+    ResolveSubjectTypes(GBackgroundCheck.Diagnostics);
 
     // Last, so the game thread never observes bRunning false with the results half written.
     GBackgroundCheck.bRunning.store(false, std::memory_order_release);
@@ -1088,7 +1126,19 @@ AUTORTFM_DISABLE void BackgroundCheckMain()
 AUTORTFM_DISABLE bool GodotVerse::CheckProject(const FUtf8String& Path, const FUtf8String& SourceText)
 {
     WaitForBackgroundCheck();
-    return RunCheck(Path, SourceText, [](const FSolDiagnostic& Diagnostic) { ForwardSolDiagnostic(Diagnostic); });
+
+    // Held rather than forwarded as they arrive: a diagnostic's subject type is read off the AST,
+    // and the AST is only whole once the analysis raising them has finished.
+    TArray<FCapturedDiagnostic> Diagnostics;
+    const bool bResult =
+        RunCheck(Path, SourceText, [&Diagnostics](const FSolDiagnostic& Diagnostic) { Diagnostics.Add(CaptureSolDiagnostic(Diagnostic)); });
+
+    ResolveSubjectTypes(Diagnostics);
+    for (const FCapturedDiagnostic& Diagnostic : Diagnostics)
+    {
+        ForwardCapturedDiagnostic(Diagnostic);
+    }
+    return bResult;
 }
 
 AUTORTFM_DISABLE bool GodotVerse::ProgramDescribes(const FUtf8String& Path, const FUtf8String& SourceText)
@@ -1213,14 +1263,7 @@ AUTORTFM_DISABLE bool GodotVerse::PollBackgroundCheck(bool& OutFinished)
 
     for (const FCapturedDiagnostic& Diagnostic : GBackgroundCheck.Diagnostics)
     {
-        GodotVerse::ReportDiagnostic(Diagnostic.Severity,
-                                     Diagnostic.Message,
-                                     Diagnostic.FilePath,
-                                     Diagnostic.Line,
-                                     Diagnostic.Column,
-                                     Diagnostic.EndLine,
-                                     Diagnostic.EndColumn,
-                                     Diagnostic.ReferenceCode);
+        ForwardCapturedDiagnostic(Diagnostic);
     }
     GBackgroundCheck.Diagnostics.Empty();
     GBackgroundCheck.bResultPending = false;
@@ -4543,7 +4586,7 @@ AUTORTFM_DISABLE void ReportStaticsDiagnostics()
                     + ModuleName + UTF8TEXT("` names a class no script declares, so nothing will ever read these ")
                     + UTF8TEXT("constants. The name is the class's Verse name, module-qualified the way every ")
                     + UTF8TEXT("other one is -- `gameplay/player` for a class in a module.")),
-                FUtf8StringView(Path), Line, Column, Line, Column, 0);
+                FUtf8StringView(Path), Line, Column, Line, Column, FUtf8StringView(), 0);
             continue;
         }
 
@@ -4554,7 +4597,7 @@ AUTORTFM_DISABLE void ReportStaticsDiagnostics()
                     + UTF8TEXT("` both declare themselves the statics of `") + ClassName
                     + UTF8TEXT("`. A class has one statics module: Godot asks it for a single constant map, so ")
                     + UTF8TEXT("which of the two answers is not a question the bridge can decide. Merge them.")),
-                FUtf8StringView(Path), Line, Column, Line, Column, 0);
+                FUtf8StringView(Path), Line, Column, Line, Column, FUtf8StringView(), 0);
             continue;
         }
         ClaimedBy.Add(ClassName, ModuleName);
@@ -6025,6 +6068,117 @@ AUTORTFM_DISABLE const uLang::CNormalType* UnwrapToMemberBearingType(const uLang
     return Normal;
 }
 
+/// The byte offset of a 1-based row and utf8 byte column in Text, or -1 when the text is shorter
+/// than that. uLang's diagnostic locus counts both from one; everything else here counts from zero.
+AUTORTFM_DISABLE int32 OffsetOfRowColumn(const FUtf8String& Text, int32 Row, int32 Column)
+{
+    if (Row < 1 || Column < 1)
+    {
+        return -1;
+    }
+    int32 Offset = 0;
+    for (int32 Line = 1; Line < Row; ++Line)
+    {
+        while (Offset < Text.Len() && Text[Offset] != UTF8CHAR('\n'))
+        {
+            ++Offset;
+        }
+        if (Offset >= Text.Len())
+        {
+            return -1;
+        }
+        ++Offset;
+    }
+    const int32 Result = Offset + Column - 1;
+    return Result < Text.Len() ? Result : -1;
+}
+
+AUTORTFM_DISABLE FUtf8String SubjectTypeOfDiagnostic(FUtf8StringView Path, int32 Row, int32 Column)
+{
+    using namespace uLang;
+
+    // A name with a receiver needs at least a receiver byte and a dot in front of it, so a column
+    // below three cannot be one and the arithmetic below would run off the start of the line.
+    if (!GIde.IsValid() || Column < 3)
+    {
+        return FUtf8String();
+    }
+
+    // Whether there is a receiver at all is a question about the text, and the text is here: the
+    // snippets the analysis ran over are the host's own. Asking the AST instead would mean trusting
+    // whatever expression happens to sit two bytes before a bare unresolved identifier.
+    const FHostSourceSnippet* Found = nullptr;
+    for (const TSRef<FHostSourceSnippet>& Candidate : GScriptSnippets)
+    {
+        if (FULangConversionUtils::ULangStrToFUtf8String(Candidate->GetPath()).Equals(FUtf8String(Path), ESearchCase::IgnoreCase))
+        {
+            Found = &*Candidate;
+            break;
+        }
+    }
+    if (!Found)
+    {
+        return FUtf8String();
+    }
+    const uLang::TOptional<CUTF8String> MaybeText = Found->GetText();
+    if (!MaybeText.IsSet())
+    {
+        return FUtf8String();
+    }
+    const FUtf8String Text = FULangConversionUtils::ULangStrToFUtf8String(*MaybeText);
+    const int32 NameOffset = OffsetOfRowColumn(Text, Row, Column);
+    if (NameOffset < 2 || Text[NameOffset - 1] != UTF8CHAR('.'))
+    {
+        return FUtf8String();
+    }
+
+    const TSPtr<CProgramBuildManager> BuildManager = GIde->GetBuildManager();
+    if (!BuildManager.IsValid())
+    {
+        return FUtf8String();
+    }
+    const TSRef<CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
+    if (!Program->_AstProject)
+    {
+        return FUtf8String();
+    }
+
+    // The receiver's last byte, which is the position member completion asks about for the very
+    // same expression -- and the reason this works at all: the analyzer replaces a failed member
+    // access with an error node and hangs the *analysed* receiver under it, so the receiver's type
+    // outlives the error that named it.
+    const FUtf8String ProjectVersePath(ScriptVersePath);
+    for (const CAstCompilationUnit* CompilationUnit : Program->_AstProject->OrderedCompilationUnits())
+    {
+        for (const CAstPackage* Package : CompilationUnit->Packages())
+        {
+            if (FUtf8String(Package->_VersePath.AsCString()) != ProjectVersePath
+                || !Package->_RootModule || !Package->_RootModule->GetAstPackage())
+            {
+                continue;
+            }
+            FCompletionVisitor Visitor(FUtf8String(Path), (uint32)(Row - 1), (uint32)(Column - 3), Package->_RootModule);
+            Package->_RootModule->GetAstPackage()->VisitChildren(Visitor);
+            if (!Visitor.bSawPath || !Visitor.Expr)
+            {
+                continue;
+            }
+            const CNormalType* Type = UnwrapToMemberBearingType(Visitor.Expr->GetResultType(*Program));
+            // A receiver written as a type name -- `node_process_mode.Inherit` -- resolves to the
+            // type of types, wrapping the one the message would have named.
+            if (const CTypeType* TypeType = Type ? Type->AsNullable<CTypeType>() : nullptr)
+            {
+                Type = TypeType->PositiveType() ? UnwrapToMemberBearingType(TypeType->PositiveType()) : nullptr;
+            }
+            if (Type)
+            {
+                return FULangConversionUtils::ULangStrToFUtf8String(Type->AsCode());
+            }
+        }
+    }
+    return FUtf8String();
+}
+
 /// Everything a function's declaration spells after its name, as Verse source:
 /// "(Delta:float)<transacts>:void". The function type cannot stand in for it -- the parameter
 /// names live on the signature, and the type spells the same definition "float->void".
@@ -6301,6 +6455,7 @@ AUTORTFM_DISABLE bool DescribeCompletion(const uLang::CDefinition& Definition, E
 AUTORTFM_DISABLE void CollectScope(const uLang::CLogicalScope& From,
                                    const uLang::CScope* AccessFrom,
                                    ECompleteFilter Filter,
+                                   int32 Distance,
                                    TSet<FUtf8String>& Seen,
                                    TArray<GodotVerse::FCompleteItem>& OutItems)
 {
@@ -6330,6 +6485,7 @@ AUTORTFM_DISABLE void CollectScope(const uLang::CLogicalScope& From,
         GodotVerse::FCompleteItem Item;
         if (DescribeCompletion(*Definition, Filter, Item))
         {
+            Item.OwnerDistance = Distance;
             Seen.Add(MoveTemp(Name));
             OutItems.Add(MoveTemp(Item));
         }
@@ -6338,22 +6494,28 @@ AUTORTFM_DISABLE void CollectScope(const uLang::CLogicalScope& From,
 
 /// A class and everything it inherits. An override is declared in both, so the subclass' copy
 /// wins by arriving first and the duplicate is dropped by Seen.
+///
+/// Distance is what the class itself is worth; every superclass step adds one, which is the number
+/// an editor ranks by. An interface counts as a step from the class that lists it, because that is
+/// where its members come from as far as anyone reading the subclass is concerned.
 AUTORTFM_DISABLE void CollectClassAndSupers(const uLang::CClass& Class,
                                             const uLang::CScope* AccessFrom,
                                             ECompleteFilter Filter,
+                                            int32 Distance,
                                             TSet<FUtf8String>& Seen,
                                             TArray<GodotVerse::FCompleteItem>& OutItems)
 {
     // An interface is a CClass too, so the same walk covers `class(a, b)` as well as a superclass
     // chain; a diamond is dropped by Seen rather than tracked here.
-    for (const uLang::CClass* Current = &Class; Current; Current = Current->GetSuperClass())
+    int32 Depth = Distance;
+    for (const uLang::CClass* Current = &Class; Current; Current = Current->GetSuperClass(), ++Depth)
     {
-        CollectScope(*Current, AccessFrom, Filter, Seen, OutItems);
+        CollectScope(*Current, AccessFrom, Filter, Depth, Seen, OutItems);
         for (const uLang::CClass* Interface : Current->_SuperInterfaces)
         {
             if (Interface)
             {
-                CollectScope(*Interface, AccessFrom, Filter, Seen, OutItems);
+                CollectScope(*Interface, AccessFrom, Filter, Depth + 1, Seen, OutItems);
             }
         }
     }
@@ -6564,7 +6726,7 @@ AUTORTFM_DISABLE bool GodotVerse::Complete(FUtf8StringView Path,
                 {
                     continue;
                 }
-                CollectClassAndSupers(*Class, Visitor.Scope, ECompleteFilter::Fields, Seen, OutItems);
+                CollectClassAndSupers(*Class, Visitor.Scope, ECompleteFilter::Fields, 0, Seen, OutItems);
             }
             else if (Mode == VH_COMPLETE_MEMBERS)
             {
@@ -6601,7 +6763,7 @@ AUTORTFM_DISABLE bool GodotVerse::Complete(FUtf8StringView Path,
                     // compile.
                     if (!bIsTypeName)
                     {
-                        CollectClassAndSupers(*Class, Visitor.Scope, ECompleteFilter::Any, Seen, OutItems);
+                        CollectClassAndSupers(*Class, Visitor.Scope, ECompleteFilter::Any, 0, Seen, OutItems);
 
                         // A math value's methods (Length, Normalized, ...) are extension methods,
                         // not class members -- see CollectExtensionMethods for why this needs a
@@ -6614,13 +6776,13 @@ AUTORTFM_DISABLE bool GodotVerse::Complete(FUtf8StringView Path,
                     // An enumeration's enumerators are reachable both ways -- `node_process_mode.`
                     // and a value already of that type both resolve here -- because CEnumeration is
                     // its own FindTypeMember target as well as an enum value's ordinary type.
-                    CollectScope(*Enumeration, Visitor.Scope, ECompleteFilter::Any, Seen, OutItems);
+                    CollectScope(*Enumeration, Visitor.Scope, ECompleteFilter::Any, 0, Seen, OutItems);
                 }
                 else if (const uLang::CModule* Module = Type->AsNullable<uLang::CModule>())
                 {
                     if (!bIsTypeName)
                     {
-                        CollectScope(*Module, Visitor.Scope, ECompleteFilter::Any, Seen, OutItems);
+                        CollectScope(*Module, Visitor.Scope, ECompleteFilter::Any, 0, Seen, OutItems);
                     }
                 }
             }
@@ -6653,6 +6815,7 @@ AUTORTFM_DISABLE bool GodotVerse::Complete(FUtf8StringView Path,
                         FUtf8String Name(Local->AsNameCString());
                         if (!Seen.Contains(Name) && DescribeCompletion(*Local, Filter, Item))
                         {
+                            Item.OwnerDistance = 0;
                             Seen.Add(MoveTemp(Name));
                             OutItems.Add(MoveTemp(Item));
                         }
@@ -6662,21 +6825,27 @@ AUTORTFM_DISABLE bool GodotVerse::Complete(FUtf8StringView Path,
                 // Out through the enclosing class and its superclasses, then the modules above it,
                 // picking up each scope's `using` along the way -- which is where the whole
                 // mirrored Godot API enters, since a script reaches it through `using {/Godot.org/Godot}`.
-                for (const uLang::CScope* Current = Visitor.Scope; Current; Current = Current->GetParentScope())
+                //
+                // One step outward per scope, and a superclass chain counts its own steps within
+                // that. A `using` is -1 instead: it is not further out, it is elsewhere, and
+                // counting the hop to the scope that carries it would rank all 9597 mirrored
+                // methods a step or two from the cursor.
+                int32 Distance = 0;
+                for (const uLang::CScope* Current = Visitor.Scope; Current; Current = Current->GetParentScope(), ++Distance)
                 {
                     if (Current->GetKind() == uLang::CScope::EKind::Class)
                     {
-                        CollectClassAndSupers(static_cast<const uLang::CClass&>(*Current), Visitor.Scope, Filter, Seen, OutItems);
+                        CollectClassAndSupers(static_cast<const uLang::CClass&>(*Current), Visitor.Scope, Filter, Distance, Seen, OutItems);
                     }
                     else
                     {
-                        CollectScope(Current->GetLogicalScope(), Visitor.Scope, Filter, Seen, OutItems);
+                        CollectScope(Current->GetLogicalScope(), Visitor.Scope, Filter, Distance, Seen, OutItems);
                     }
                     for (const uLang::CLogicalScope* Using : Current->GetUsingScopes())
                     {
                         if (Using)
                         {
-                            CollectScope(*Using, Visitor.Scope, Filter, Seen, OutItems);
+                            CollectScope(*Using, Visitor.Scope, Filter, -1, Seen, OutItems);
                         }
                     }
                 }
@@ -6741,7 +6910,7 @@ AUTORTFM_DISABLE bool ClassMembersLive(FUtf8StringView ClassName, TArray<GodotVe
     // The class' own scope only. What it inherits is documented by the class that declares it,
     // and for a mirrored Godot class that is Godot's own documentation rather than anything here.
     TSet<FUtf8String> Seen;
-    CollectScope(*Class, nullptr, ECompleteFilter::Any, Seen, OutItems);
+    CollectScope(*Class, nullptr, ECompleteFilter::Any, 0, Seen, OutItems);
     OutItems.Sort([](const FCompleteItem& Left, const FCompleteItem& Right) { return Left.Name < Right.Name; });
     return true;
 }
@@ -6783,7 +6952,7 @@ AUTORTFM_DISABLE bool ClassOverrideCandidatesLive(FUtf8StringView ClassName,
 
     // The class itself as the access scope, which is where the cursor is: a superclass member the
     // class body could not name is not one it could override either.
-    CollectClassAndSupers(*Class, Class, ECompleteFilter::Any, Seen, OutItems);
+    CollectClassAndSupers(*Class, Class, ECompleteFilter::Any, 0, Seen, OutItems);
     OutItems.RemoveAll([](const FCompleteItem& Item) { return !Item.bIsOverridable; });
     OutItems.Sort([](const FCompleteItem& Left, const FCompleteItem& Right) { return Left.Name < Right.Name; });
     return true;

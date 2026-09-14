@@ -28,6 +28,7 @@
 #endif
 
 #include <algorithm>
+#include <cctype>
 #include <iterator>
 
 using namespace godot;
@@ -1200,14 +1201,28 @@ static Dictionary completion_option_for(const Dictionary &p_item) {
 	const int64_t param_count = p_item["param_count"];
 	const bool is_function = kind == VH_LOOKUP_FUNCTION;
 
-	// `location` is the only lever Godot offers over the order options appear in, and the one
-	// distinction worth making with it is the mirrored Godot API against everything else --
-	// which is a class the author wrote, a local, or a Verse standard-library name. All three
-	// are nearer to what is being typed than a thousand generated accessors.
+	// `location` is the only lever Godot offers over the order options appear in, and the host now
+	// says how far each item is from what was asked about -- in the same hops Godot's own
+	// LOCATION_PARENT_MASK counts, so a class's own members sort above its parent's above Object's.
+	// Before this the whole mirror tied at LOCATION_OTHER and `Position`, `Name` and `Connect` came
+	// back in one undifferentiated two-thousand-item list.
+	//
+	// A -1 is not a distance: it is a name reached through a `using`, which is how all 1026
+	// mirrored classes and the Verse standard library come into scope at once. Those keep the older
+	// distinction, the only one that could be drawn without the host -- the generated API below
+	// anything a script or Verse itself declared.
 	const String owner = p_item["owner"];
-	const int64_t location = verse_godot_class_for(owner) == nullptr
+	const int64_t distance = p_item.get("owner_distance", -1);
+	int64_t location = verse_godot_class_for(owner) == nullptr
 			? ScriptLanguageExtension::LOCATION_LOCAL
 			: ScriptLanguageExtension::LOCATION_OTHER;
+	if (distance == 0) {
+		location = ScriptLanguageExtension::LOCATION_LOCAL;
+	} else if (distance > 0) {
+		// Godot reads the low byte as the hop count, so a hierarchy deeper than that saturates
+		// rather than wrapping into LOCATION_OTHER_USER_CODE.
+		location = ScriptLanguageExtension::LOCATION_PARENT_MASK | (distance > 255 ? 255 : distance);
+	}
 
 	Dictionary option = completion_option(name, completion_kind_for(kind), location);
 	if (is_function) {
@@ -1748,11 +1763,15 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 			for (int64_t c = 0; c < chain.size(); c++) {
 				const TypedArray<Dictionary> members = runtime->class_members(chain[c]);
 				for (int64_t i = 0; i < members.size(); i++) {
-					const Dictionary item = members[i];
+					Dictionary item = Dictionary(members[i]).duplicate();
 					const String name = item["name"];
 					if (!matches_typed_prefix(name, prefix) || offered.has(name)) {
 						continue;
 					}
+					// class_members answers for one class, so every item it hands back calls itself
+					// distance zero; here the step along the chain is the distance, and ranking is
+					// the whole reason the chain is walked nearest-first.
+					item["owner_distance"] = c;
 					offered.insert(name);
 					options.push_back(completion_option_for(item));
 				}
@@ -2541,10 +2560,10 @@ Error VerseScriptLanguage::build_project() {
 	Dictionary errors_by_globalized;
 	const Error status = runtime->compile_project(globalized, modules, &errors_by_globalized);
 
-	record_diagnostics(errors_by_globalized);
-
 	// The host loaded each of these from disk just now, so this is the text it holds. Seeding it
-	// here is what makes the *first* validate of a file free rather than only the repeats.
+	// here is what makes the *first* validate of a file free rather than only the repeats -- and
+	// record_diagnostics below measures a diagnostic's span against it, so it has to be filled
+	// first.
 	analyzed_source_by_path.clear();
 	std::vector<std::string> texts;
 	texts.reserve(sources.size());
@@ -2556,6 +2575,8 @@ Error VerseScriptLanguage::build_project() {
 		}
 		texts.push_back(read ? std::string(text.utf8().get_data()) : std::string());
 	}
+
+	record_diagnostics(errors_by_globalized);
 
 	// Every source is in hand exactly once per build, which is the only affordable moment to ask
 	// the three questions that are about the project rather than about a file.
@@ -3083,46 +3104,69 @@ const verse_api::skipped_member *unambiguous_skipped_member(const String &p_memb
 	return found;
 }
 
-// `Unknown member \`GetPosition\` in \`node2d\`.` and `Unknown identifier \`GetPosition\`.` are the
-// compiler's two wordings, and the names in them are everything the lookup needs. Parsed rather than
-// asked for, because the diagnostic is the only place either name appears: the ABI carries a message,
-// a severity and a location. An empty class means the second form.
-bool parse_unknown_name(const String &p_message, String &r_member, String &r_class) {
-	const PackedStringArray parts = p_message.split("`");
-	if (p_message.begins_with("Unknown member `")) {
-		// "Unknown member ", member, " in ", class, "."
-		if (parts.size() < 4) {
-			return false;
-		}
-		r_member = parts[1];
-		r_class = parts[3];
-		return !r_member.is_empty() && !r_class.is_empty();
-	}
-	if (p_message.begins_with("Unknown identifier `")) {
-		if (parts.size() < 2) {
-			return false;
-		}
-		r_member = parts[1];
-		r_class = String();
-		return !r_member.is_empty();
-	}
-	return false;
+} // namespace
+
+// The Verse compiler's code for both "Unknown identifier %s." and "Unknown member %s in %s." --
+// uLang's ErrSemantic_UnknownIdentifier, from Glitch.h, which is one code for the two wordings.
+// Matched on the code rather than on the message, which is English and is not ours.
+static constexpr int64_t UNKNOWN_IDENTIFIER_CODE = 3506;
+
+// Verse identifiers are ASCII, so a byte test is the same test as a character test and can be made
+// against the utf8 the compiler's columns count.
+static bool is_identifier_byte(char p_c) {
+	return std::isalnum(static_cast<unsigned char>(p_c)) || p_c == '_';
 }
 
-} // namespace
+// The identifier a diagnostic's span begins at, taken out of the source the analysis read.
+//
+// The span's *end* is only used to reject a span that cannot be naming one identifier: uLang
+// documents its locus as one-indexed and says nothing about whether the end is inclusive, and an
+// identifier carries its own boundary, so the run of identifier bytes from the first byte is both
+// simpler than trusting the end and exact. Columns are utf8 bytes, which is how the compiler counts
+// and is not how Godot counts -- so the slice is taken out of the line's bytes and decoded back.
+static String identifier_at_span(const String &p_source, const Dictionary &p_diagnostic) {
+	const int64_t line = p_diagnostic.get("line", 0);
+	const int64_t column = p_diagnostic.get("column", 0);
+	const int64_t end_line = p_diagnostic.get("end_line", 0);
+	if (line < 1 || column < 1 || (end_line > 0 && end_line != line)) {
+		return String();
+	}
+	const PackedStringArray lines = p_source.split("\n");
+	if (line > lines.size()) {
+		return String();
+	}
+	const CharString utf8 = lines[line - 1].utf8();
+	int64_t end = column - 1;
+	if (end >= utf8.length()) {
+		return String();
+	}
+	while (end < utf8.length() && is_identifier_byte(utf8[end])) {
+		end++;
+	}
+	return String::utf8(utf8.get_data() + column - 1, (int)(end - column + 1));
+}
 
 // Appends to any diagnostic that named a member the mirror deliberately does not carry (R-SCN-2).
 //
 // Where the author meets the problem, which is the only place it prevents the failure mode: a
 // coverage report in the repository is read by whoever wrote the generator and by nobody else.
-void VerseScriptLanguage::explain_skipped_members(const TypedArray<Dictionary> &p_errors) {
+void VerseScriptLanguage::explain_skipped_members(const String &p_path, const TypedArray<Dictionary> &p_errors) const {
+	// The text the analysis read, which is what the compiler's spans are measured against. A file
+	// no analysis has seen has none, and nothing here can be said about it.
+	const String source = analyzed_source_by_path.has(p_path) ? String(analyzed_source_by_path[p_path]) : String();
 	for (int64_t i = 0; i < p_errors.size(); i++) {
 		Dictionary error = p_errors[i];
-		String member;
-		String verse_class;
-		if (!parse_unknown_name(String(error["message"]), member, verse_class)) {
+		if ((int64_t)error.get("code", 0) != UNKNOWN_IDENTIFIER_CODE) {
 			continue;
 		}
+		// The name out of the buffer and the class off the diagnostic, where both used to be split
+		// out of the message's backticks. uLang raises the member and the bare-identifier wordings
+		// under one code, so an empty subject type is what says which of the two this is.
+		const String member = identifier_at_span(source, error);
+		if (member.is_empty()) {
+			continue;
+		}
+		const String verse_class = error.get("subject_type", String());
 		const verse_api::skipped_member *entry = verse_class.is_empty()
 				? unambiguous_skipped_member(member)
 				: skipped_member_for(verse_class, member);
@@ -3137,36 +3181,20 @@ void VerseScriptLanguage::explain_skipped_members(const TypedArray<Dictionary> &
 	}
 }
 
-// The Verse compiler's code for "Unknown identifier %s." -- uLang's ErrSemantic_UnknownIdentifier,
-// from Glitch.h. Matched on the code rather than on the message, which is English and is not ours.
-static constexpr int64_t UNKNOWN_IDENTIFIER_CODE = 3506;
-
-// The name out of "Unknown identifier `foo`.", or empty. uLang quotes an identifier in backticks
-// everywhere it names one, and nothing else in that message is backticked.
-static String backtick_quoted_name(const String &p_message) {
-	const int64_t open = p_message.find("`");
-	if (open < 0) {
-		return String();
-	}
-	const int64_t close = p_message.find("`", open + 1);
-	if (close <= open + 1) {
-		return String();
-	}
-	return p_message.substr(open + 1, close - open - 1);
-}
-
 void VerseScriptLanguage::note_missing_imports(const String &p_path, const TypedArray<Dictionary> &p_errors) const {
 	VerseRuntime *runtime = get_runtime();
 	if (runtime == nullptr || !runtime->is_host_loaded()) {
 		return;
 	}
 
+	const String source = analyzed_source_by_path.has(p_path) ? String(analyzed_source_by_path[p_path]) : String();
+
 	for (int64_t i = 0; i < p_errors.size(); i++) {
 		Dictionary error = p_errors[i];
 		if (!error.has("code") || (int64_t)error["code"] != UNKNOWN_IDENTIFIER_CODE) {
 			continue;
 		}
-		const String name = backtick_quoted_name(error["message"]);
+		const String name = identifier_at_span(source, error);
 		if (name.is_empty()) {
 			continue;
 		}
@@ -3295,7 +3323,7 @@ bool VerseScriptLanguage::record_diagnostics(const Dictionary &p_diagnostics_by_
 			}
 			// An info has no row in the editor; the build's log is where it is read.
 		}
-		explain_skipped_members(errors);
+		explain_skipped_members(path, errors);
 		note_missing_imports(path, errors);
 		diagnostics_by_path[path] = errors;
 		if (!warnings.is_empty()) {

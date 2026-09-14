@@ -368,7 +368,7 @@ private:
 
 	// Adds "Godot has Node.foo, but ..." to any diagnostic that named a member the mirror
 	// deliberately does not carry. R-SCN-2: the reason has to reach the author, not a report file.
-	static void explain_skipped_members(const godot::TypedArray<godot::Dictionary> &p_errors);
+	void explain_skipped_members(const godot::String &p_path, const godot::TypedArray<godot::Dictionary> &p_errors) const;
 
 	// Set by an analysis that moved something the editor has already drawn -- diagnostics that
 	// differ from the last one's, or a script that settled its validity on this result -- and

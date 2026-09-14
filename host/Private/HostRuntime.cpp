@@ -20,6 +20,7 @@ void ReportDiagnostic(vh_severity Severity,
                       int32 Column,
                       int32 EndLine,
                       int32 EndColumn,
+                      FUtf8StringView SubjectType,
                       int32 ReferenceCode)
 {
     FHostState& Host = GetHost();
@@ -38,6 +39,8 @@ void ReportDiagnostic(vh_severity Severity,
     Diagnostic.Column = Column;
     Diagnostic.EndLine = EndLine;
     Diagnostic.EndColumn = EndColumn;
+    Diagnostic.SubjectTypeUtf8 = reinterpret_cast<const char*>(SubjectType.GetData());
+    Diagnostic.SubjectTypeLen = SubjectType.Len();
     Diagnostic.ReferenceCode = ReferenceCode;
 
     Host.OnDiagnostic(Host.DiagnosticCtx, &Diagnostic);
@@ -54,12 +57,12 @@ void ReleaseGodotRef(int64 Ref)
 
 void ReportError(FUtf8StringView Message)
 {
-    ReportDiagnostic(VH_SEVERITY_ERROR, Message, FUtf8StringView(), 0, 0, 0, 0, 0);
+    ReportDiagnostic(VH_SEVERITY_ERROR, Message, FUtf8StringView(), 0, 0, 0, 0, FUtf8StringView(), 0);
 }
 
 void ReportInfo(FUtf8StringView Message)
 {
-    ReportDiagnostic(VH_SEVERITY_INFO, Message, FUtf8StringView(), 0, 0, 0, 0, 0);
+    ReportDiagnostic(VH_SEVERITY_INFO, Message, FUtf8StringView(), 0, 0, 0, 0, FUtf8StringView(), 0);
 }
 
 void ReportRuntimeError(FUtf8StringView Message, const FString& Callstack)
@@ -69,7 +72,7 @@ void ReportRuntimeError(FUtf8StringView Message, const FString& Callstack)
     {
         // No runtime error callback: fold it into the ordinary diagnostics so the message is not
         // simply lost, which is what v1 did for every runtime error.
-        ReportDiagnostic(VH_SEVERITY_ERROR, Message, FUtf8StringView(), 0, 0, 0, 0, 0);
+        ReportDiagnostic(VH_SEVERITY_ERROR, Message, FUtf8StringView(), 0, 0, 0, 0, FUtf8StringView(), 0);
         return;
     }
 

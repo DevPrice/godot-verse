@@ -427,6 +427,10 @@ struct FCompleteItem
     FUtf8String Signature;
     /// Whether a subclass could declare this with <override>.
     bool bIsOverridable{false};
+    /// Hops from the class or scope the query was about to the one that declares this, or -1 when
+    /// it was reached through a `using`. See vh_complete_item::OwnerDistance for why an import is
+    /// not a number of hops.
+    int32 OwnerDistance{-1};
 };
 
 /// The parameters of one function, for an editor's argument hint.

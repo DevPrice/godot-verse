@@ -42,8 +42,8 @@ extern "C" {
  * The mismatch surfaces at vh_init, not at compile time, because the two sides are compiled by
  * different toolchains and nothing links them.
  */
-#define VH_ABI_VERSION_MAJOR 7
-#define VH_ABI_VERSION_MINOR 3
+#define VH_ABI_VERSION_MAJOR 8
+#define VH_ABI_VERSION_MINOR 0
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
 typedef int32_t vh_bool;
@@ -391,6 +391,22 @@ typedef struct vh_diagnostic
 	int32_t EndLine;
 	int32_t EndColumn;
 	int32_t ReferenceCode;
+
+	/* The type the subject of this diagnostic was looked for in, spelled as Verse source, or empty
+	 * -- `node2d` for "Unknown member `GetPosition` in `node2d`.".
+	 *
+	 * The message already says it, and parsing it back out of English is what this replaces: uLang
+	 * formats both that wording and the bare "Unknown identifier `X`." under one reference code
+	 * (3506, ErrSemantic_UnknownIdentifier), so the code cannot tell the two apart and only the
+	 * prose could. Non-empty *is* the distinction now: a member access resolved its receiver, and a
+	 * bare identifier had none to resolve.
+	 *
+	 * Filled from the AST after the analysis, not at the moment the glitch is raised -- the error
+	 * node the analyzer leaves behind keeps the receiver as its child, with its type intact. Empty
+	 * whenever that lookup finds nothing, which a consumer must treat as "not said" rather than as
+	 * "no receiver". */
+	const char* SubjectTypeUtf8;
+	int32_t SubjectTypeLen;
 } vh_diagnostic;
 
 typedef void (*vh_diagnostic_fn)(void* Ctx, const vh_diagnostic* Diagnostic);
@@ -1305,6 +1321,20 @@ typedef struct vh_complete_item
 	 * Godot answers here, and overriding one changes nothing about what Godot dispatches --
 	 * which is why a script that does so is reported (docs/abi-v2-design.md §4, collision 3). */
 	vh_bool IsOverridable;
+
+	/* Hops from the class or scope the completion was asked about to the one that declares this
+	 * item: 0 for that class itself, 1 for its immediate superclass, and so on outwards. -1 when
+	 * the item was reached through a `using` rather than by inheritance or by an enclosing scope.
+	 *
+	 * The -1 is not "far away", it is a different kind of distance: a script reaches the whole
+	 * mirrored Godot API through `using { /Godot.org/Godot }` written on its own module, so by hops
+	 * the 9597 mirrored methods would sit a step or two from the cursor and outrank the class's own
+	 * members. Only the chain a name is inherited or enclosed by is counted here; what an import
+	 * costs is the consumer's to decide.
+	 *
+	 * Here so an editor can rank a class's own members above its parent's above Object's, which
+	 * Godot's own LOCATION_PARENT_MASK is exactly the shape of. */
+	int32_t OwnerDistance;
 } vh_complete_item;
 
 /* Lists what could be written at Line/Column of PathUtf8, as the program describes that file

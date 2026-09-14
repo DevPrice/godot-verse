@@ -381,6 +381,7 @@ static Dictionary complete_item_to_dict(const vh_complete_item &p_item) {
 	entry["param_count"] = (int64_t)p_item.ParamCount;
 	entry["signature"] = String::utf8(p_item.SignatureUtf8, p_item.SignatureLen);
 	entry["is_overridable"] = p_item.IsOverridable != 0;
+	entry["owner_distance"] = (int64_t)p_item.OwnerDistance;
 	return entry;
 }
 
@@ -1293,6 +1294,13 @@ void VerseRuntime::on_diagnostic(void *p_ctx, const vh_diagnostic *p_diagnostic)
 		entry["severity"] = p_diagnostic->Severity;
 		entry["line"] = p_diagnostic->Line;
 		entry["column"] = p_diagnostic->Column;
+		// The rest of the span, which is what makes the offending identifier a slice of the buffer
+		// rather than something to recover out of the message's backticks.
+		entry["end_line"] = p_diagnostic->EndLine;
+		entry["end_column"] = p_diagnostic->EndColumn;
+		entry["subject_type"] = p_diagnostic->SubjectTypeLen > 0
+				? String::utf8(p_diagnostic->SubjectTypeUtf8, p_diagnostic->SubjectTypeLen)
+				: String();
 		entry["message"] = message;
 		entry["path"] = file;
 		// The compiler's own code for the diagnostic, which is how a caller recognises one

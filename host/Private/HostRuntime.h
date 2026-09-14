@@ -28,6 +28,7 @@ void ReportDiagnostic(vh_severity Severity,
                       int32 Column,
                       int32 EndLine,
                       int32 EndColumn,
+                      FUtf8StringView SubjectType,
                       int32 ReferenceCode);
 
 /// Drops the host's claim on a GDExtension reference id. Called from godot_ref::BeginDestroy, so
