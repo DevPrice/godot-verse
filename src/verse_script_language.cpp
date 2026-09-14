@@ -499,7 +499,36 @@ static Dictionary editor_warning_from(const Dictionary &p_diagnostic) {
 }
 
 Dictionary VerseScriptLanguage::_validate(const String &p_script, const String &p_path, bool p_validate_functions, bool p_validate_errors, bool p_validate_warnings, bool p_validate_safe_lines) const {
-	const TypedArray<Dictionary> errors = diagnostics_fitted_to(check_buffer(p_path, p_script), p_script);
+	TypedArray<Dictionary> errors = diagnostics_fitted_to(check_buffer(p_path, p_script), p_script);
+
+	// A Verse build is the whole project, so a file elsewhere that fails to compile refuses Play
+	// with no sign in the editor until that moment. diagnostics_by_path already holds every file's
+	// errors from the last whole-project analysis, each already carrying its own "path" key --
+	// ScriptTextEditor::_validate_script partitions any error whose path differs from this one into
+	// its own clickable depended_errors section, but only when this answers invalid. The trade-off
+	// is the one GDScript already accepts for its own dependency errors: a clean file loses its
+	// method outline and connection gutter for as long as some other file in the project is broken.
+	const Array other_paths = diagnostics_by_path.keys();
+	for (int64_t i = 0; i < other_paths.size(); i++) {
+		const String other_path = other_paths[i];
+		if (other_path == p_path) {
+			continue;
+		}
+		const TypedArray<Dictionary> filed = TypedArray<Dictionary>(diagnostics_by_path[other_path]);
+		if (filed.is_empty()) {
+			continue;
+		}
+		// Fitted against that file's own last-analyzed source, never p_script's -- a depended error
+		// is only listed and clicked through here, but the column still has to sit inside a real
+		// line before the editor displays it (see diagnostics_fitted_to above). No entry means no
+		// analysis has read that file yet; pass its diagnostics through rather than fit them to the
+		// wrong buffer.
+		if (analyzed_source_by_path.has(other_path)) {
+			errors.append_array(diagnostics_fitted_to(filed, String(analyzed_source_by_path[other_path])));
+		} else {
+			errors.append_array(filed);
+		}
+	}
 
 	Dictionary result;
 	result["valid"] = errors.is_empty();
