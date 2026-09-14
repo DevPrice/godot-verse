@@ -122,6 +122,33 @@ bool is_call_position(const std::string &p_line, int p_pos) {
 	return char_at(p_line, pos) == '(' || char_at(p_line, pos) == '[';
 }
 
+// A `/`-led run at the start of a Verse path (`/Godot.org/Godot`) rather than a division: the
+// slash must open a token -- preceded by start of line, whitespace, `{`, `(` or `,` -- and lead
+// straight into a label with no space, which `A / B` never does.
+bool at_verse_path_start(const std::string &p_line, int p_pos) {
+	if (char_at(p_line, p_pos) != '/' || !is_ident_start(char_at(p_line, p_pos + 1))) {
+		return false;
+	}
+	if (p_pos == 0) {
+		return true;
+	}
+	const char prev = p_line[(size_t)(p_pos - 1)];
+	return prev == ' ' || prev == '\t' || prev == '\r' || prev == '{' || prev == '(' || prev == ',';
+}
+
+int scan_verse_path_end(const std::string &p_line, int p_start) {
+	const int len = (int)p_line.size();
+	int end = p_start;
+	while (end < len) {
+		const char c = p_line[(size_t)end];
+		if (c == ' ' || c == '\t' || c == '\r' || c == '}' || c == ')' || c == ',') {
+			break;
+		}
+		end += 1;
+	}
+	return end;
+}
+
 bool starts_line(const std::string &p_line, int p_start) {
 	for (int i = 0; i < p_start; i++) {
 		const char c = p_line[(size_t)i];
@@ -164,14 +191,15 @@ int matching_bracket_end(const std::string &p_line, int p_pos) {
 // A definition binds the name it starts with: `Ready<override>():void =`. Verse has no `func`
 // keyword, so the discriminator is the `=` after the parameter list -- a call never has one,
 // and the `=` of a comparison or of an interpolated string sits inside the brackets, which this
-// scan has already passed.
+// scan has already passed. Only `(` counts here, unlike is_call_position: a function is always
+// declared with parentheses, and `[` is only ever a call to a <decides> function.
 bool is_definition_position(const std::string &p_line, int p_pos) {
 	int pos = p_pos;
 	int end = 0;
 	while (char_at(p_line, pos) == '<' && at_attribute(p_line, pos, end)) {
 		pos = end;
 	}
-	if (char_at(p_line, pos) != '(' && char_at(p_line, pos) != '[') {
+	if (char_at(p_line, pos) != '(') {
 		return false;
 	}
 	pos = matching_bracket_end(p_line, pos);
@@ -319,10 +347,6 @@ void verse_lex_line(const std::string &p_line, VerseLexState &p_state, std::vect
 				frames.push_back('I');
 				emit(col, VerseTokenKind::Interpolation);
 				col += 1;
-			} else if (at_indent_comment_open(p_line, col)) {
-				p_state.indent_comment_column = leading_indent_columns(p_line);
-				emit(col, VerseTokenKind::Comment);
-				col = len;
 			} else if (at_block_comment_open(p_line, col)) {
 				emit(col, VerseTokenKind::Comment);
 				block_depth += 1;
@@ -331,6 +355,10 @@ void verse_lex_line(const std::string &p_line, VerseLexState &p_state, std::vect
 				emit(col, VerseTokenKind::Comment);
 				col = len;
 			} else {
+				// "<#>" is not tested here: Text<EPlace::String>'s '<' case only reaches IndCmt
+				// for Space, Content and IndCmt places, and falls to plain text otherwise. Each of
+				// the three characters lands in this branch in turn and coalesces into one String
+				// token.
 				emit(col, VerseTokenKind::String);
 				col += 1;
 			}
@@ -406,6 +434,12 @@ void verse_lex_line(const std::string &p_line, VerseLexState &p_state, std::vect
 				emit(col, VerseTokenKind::Symbol);
 				col += 1;
 			}
+		} else if (c == '/' && at_verse_path_start(p_line, col)) {
+			// Lexed whole so its internal `.`s never set pending_member -- a path segment is not
+			// a member access, and `using { /Godot.org/Godot }` is the first line of every script.
+			const int end = scan_verse_path_end(p_line, col);
+			emit(col, VerseTokenKind::Identifier);
+			col = end;
 		} else {
 			// Whitespace carries no glyph to colour, and calling it a symbol would split every
 			// run of plain text in two for nothing.
@@ -426,7 +460,15 @@ void verse_lex_line(const std::string &p_line, VerseLexState &p_state, std::vect
 	}
 }
 
-bool verse_position_in_comment(const std::string &p_source, int p_line, int p_column) {
+namespace {
+
+// Lexes p_source line by line up to p_line and hands p_on_line that line's tokens, plus the
+// state the lexer carried into it -- which is what a line with no tokens at all (a blank line
+// inside a block comment, or inside an unterminated string) has to be classified by instead.
+// Shared by verse_position_in_comment and verse_position_in_string, which differ only in which
+// token kinds count as a match and what "inherited" means for their own kind.
+template <typename OnLine>
+void verse_walk_to_line(const std::string &p_source, int p_line, OnLine p_on_line) {
 	VerseLexState state;
 	std::vector<VerseToken> tokens;
 
@@ -439,30 +481,64 @@ bool verse_position_in_comment(const std::string &p_source, int p_line, int p_co
 			line.pop_back();
 		}
 
-		// A comment the line opened above it covers the line whole, column zero included -- where
-		// there is no character behind the cursor to classify, and where a blank line inside a
-		// block comment has no token at all.
-		const bool inherited = state.block_comment_depth > 0 || state.indent_comment_column >= 0;
-
+		const VerseLexState state_before = state;
 		tokens.clear();
 		verse_lex_line(line, state, tokens);
 
 		if (row < p_line) {
 			if (newline == std::string::npos) {
-				return false;
+				return;
 			}
 			start = newline + 1;
 			continue;
 		}
 
+		p_on_line(tokens, state_before);
+		return;
+	}
+}
+
+} // namespace
+
+bool verse_position_in_comment(const std::string &p_source, int p_line, int p_column) {
+	bool result = false;
+	verse_walk_to_line(p_source, p_line, [&](const std::vector<VerseToken> &tokens, const VerseLexState &state_before) {
+		// A comment the line opened above it covers the line whole, column zero included -- where
+		// there is no character behind the cursor to classify, and where a blank line inside a
+		// block comment has no token at all.
+		const bool inherited = state_before.block_comment_depth > 0 || state_before.indent_comment_column >= 0;
+
 		if (tokens.empty()) {
-			return inherited;
+			result = inherited;
+			return;
 		}
 		VerseTokenKind kind = VerseTokenKind::Text;
 		if (p_column == 0) {
-			return inherited && kind_at(tokens, 0, kind) && kind == VerseTokenKind::Comment;
+			result = inherited && kind_at(tokens, 0, kind) && kind == VerseTokenKind::Comment;
+			return;
 		}
-		return kind_at(tokens, p_column - 1, kind) && kind == VerseTokenKind::Comment;
-	}
-	return false;
+		result = kind_at(tokens, p_column - 1, kind) && kind == VerseTokenKind::Comment;
+	});
+	return result;
+}
+
+bool verse_position_in_string(const std::string &p_source, int p_line, int p_column) {
+	bool result = false;
+	verse_walk_to_line(p_source, p_line, [&](const std::vector<VerseToken> &tokens, const VerseLexState &state_before) {
+		// An unterminated string left open by the line above covers a blank line whole, the same
+		// way an open block comment does.
+		const bool inherited = state_before.in_string;
+
+		if (tokens.empty()) {
+			result = inherited;
+			return;
+		}
+		VerseTokenKind kind = VerseTokenKind::Text;
+		if (p_column == 0) {
+			result = inherited && kind_at(tokens, 0, kind) && (kind == VerseTokenKind::String || kind == VerseTokenKind::Escape);
+			return;
+		}
+		result = kind_at(tokens, p_column - 1, kind) && (kind == VerseTokenKind::String || kind == VerseTokenKind::Escape);
+	});
+	return result;
 }

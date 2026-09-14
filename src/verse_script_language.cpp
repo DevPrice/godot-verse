@@ -1202,6 +1202,15 @@ static bool completing_in_comment(const String &p_code, int64_t p_marker) {
 			(int)before.count("\n"), (int)before.substr(line_start).utf8().length());
 }
 
+// Same question, for a string literal. Same marker-removal reasoning as completing_in_comment.
+static bool completing_in_string(const String &p_code, int64_t p_marker) {
+	const String before = p_code.substr(0, p_marker);
+	const int64_t line_start = before.rfind("\n") + 1;
+	const String source = before + p_code.substr(p_marker + 1);
+	return verse_position_in_string(source.utf8().get_data(),
+			(int)before.count("\n"), (int)before.substr(line_start).utf8().length());
+}
+
 // Completion, answered by the compiler wherever it can be.
 //
 // Godot marks the cursor by splicing U+FFFF into the buffer, and everything here is derived from
@@ -1238,8 +1247,10 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 
 	// A comment is prose, and every set below is names. Godot raises the popup on its own as soon
 	// as one of them matches what is being typed, so answering here puts the Godot API over the
-	// middle of a sentence.
-	if (completing_in_comment(p_code, marker)) {
+	// middle of a sentence. A string literal declines for the same reason from the other end:
+	// CodeEdit re-quotes every option it is handed when the caret is inside one, so a class list
+	// would come back as a list of quoted class names.
+	if (completing_in_comment(p_code, marker) || completing_in_string(p_code, marker)) {
 		return result;
 	}
 

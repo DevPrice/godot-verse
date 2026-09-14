@@ -48,3 +48,10 @@ void verse_lex_line(const std::string &p_line, VerseLexState &p_state, std::vect
 // character behind it: `Print #` with the caret on the `#` is still in code. Lexing runs from the
 // start of the source, since a `<#` several lines above is what makes the line a comment at all.
 bool verse_position_in_comment(const std::string &p_source, int p_line, int p_column);
+
+// Whether a cursor at p_line/p_column of p_source stands inside a string literal. Same contract
+// and the same "the character behind the cursor decides" rule as verse_position_in_comment.
+//
+// True for String and Escape tokens. False for Interpolation and for anything lexed inside a
+// `{...}` interpolation -- that is code, and completion there is wanted the same as anywhere else.
+bool verse_position_in_string(const std::string &p_source, int p_line, int p_column);

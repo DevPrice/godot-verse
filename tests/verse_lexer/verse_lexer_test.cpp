@@ -342,6 +342,86 @@ bool TestPositionInComment()
 	return Ok;
 }
 
+bool TestAngleHashAngleInsideString()
+{
+	// Text<EPlace::String>'s '<' case only reaches IndCmt for Space, Content and IndCmt places;
+	// inside a string it falls to plain text, three characters at a time.
+	auto Results = LexAll({ "Print(\"a <#> b\")", "Code()" });
+
+	const auto& Line0 = Results[0].Tokens;
+	bool Ok = KindAt(Line0, 9) == VerseTokenKind::String; // <
+	Ok = Ok && KindAt(Line0, 10) == VerseTokenKind::String; // #
+	Ok = Ok && KindAt(Line0, 11) == VerseTokenKind::String; // >
+	Ok = Ok && KindAt(Line0, 14) == VerseTokenKind::String; // the closing quote
+	Ok = Ok && !Results[0].StateAfter.in_string;
+	Ok = Ok && Results[0].StateAfter.indent_comment_column == -1;
+
+	// The string closed, so the next line lexes as ordinary code rather than more string content.
+	Ok = Ok && KindAt(Results[1].Tokens, 0) == VerseTokenKind::Function;
+
+	return Step("<#> inside a string is string content, not an indented comment", Ok);
+}
+
+bool TestBracketedAssignmentIsNotDefinition()
+{
+	auto Results = LexAll({
+			"Values[0] = 1",
+			"Compare<public>(A:int)<decides>:void =",
+	});
+
+	// `[` calls or indexes a <decides> function; it never declares one, whatever follows it.
+	bool Ok = KindAt(Results[0].Tokens, 0) == VerseTokenKind::Function;
+	Ok = Ok && KindAt(Results[1].Tokens, 0) == VerseTokenKind::FunctionDefinition;
+
+	return Step("`Values[0] = 1` is not a definition; a parenthesized one still is", Ok);
+}
+
+bool TestVersePathIsNotMemberAccess()
+{
+	auto Results = LexAll({ "using { /Godot.org/Godot }", "X := A / B" });
+
+	const auto& PathLine = Results[0].Tokens;
+	bool Ok = KindAt(PathLine, 8) == VerseTokenKind::Identifier; // the path, as one token
+	Ok = Ok && KindAt(PathLine, 18) == VerseTokenKind::Identifier; // its second `/`, still inside it
+	Ok = Ok && KindAt(PathLine, 25) == VerseTokenKind::Symbol; // the closing `}`, past the path
+	Ok = Ok && !HasKind(PathLine, VerseTokenKind::Member);
+
+	// A `/` with a space on both sides is division, not a path, and stays a Symbol.
+	Ok = Ok && KindAt(Results[1].Tokens, 7) == VerseTokenKind::Symbol;
+
+	return Step("a Verse path lexes as one Identifier; plain division stays a Symbol", Ok);
+}
+
+bool TestPositionInString()
+{
+	const std::string Source =
+			"Print(\"hello {Name} world\")\n"
+			"# just a comment\n"
+			"Code()\n";
+
+	struct Case
+	{
+		const char* What;
+		int Row;
+		int Column;
+		bool Expect;
+	};
+	const Case Cases[] = {
+		{ "inside the string content", 0, 9, true },
+		{ "code inside a {} interpolation is not a string", 0, 17, false },
+		{ "back inside the string past the interpolation", 0, 20, true },
+		{ "a comment is not a string", 1, 5, false },
+		{ "ordinary code is not a string", 2, 3, false },
+	};
+
+	bool Ok = true;
+	for (const Case& C : Cases)
+	{
+		Ok = Step(C.What, verse_position_in_string(Source, C.Row, C.Column) == C.Expect) && Ok;
+	}
+	return Ok;
+}
+
 } // namespace
 
 int main()
@@ -364,6 +444,10 @@ int main()
 	Ok = TestIdentifierTokensDoNotMerge() && Ok;
 	Ok = TestIdentifierInsideCommentOrString() && Ok;
 	Ok = TestPositionInComment() && Ok;
+	Ok = TestAngleHashAngleInsideString() && Ok;
+	Ok = TestBracketedAssignmentIsNotDefinition() && Ok;
+	Ok = TestVersePathIsNotMemberAccess() && Ok;
+	Ok = TestPositionInString() && Ok;
 
 	printf("[verse_lexer_test] %s\n", Ok ? "ALL PASS" : "FAILURES");
 	return Ok ? 0 : 1;
