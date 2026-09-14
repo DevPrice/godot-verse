@@ -1325,10 +1325,16 @@ external editor is secondary.
   local parse. Status: **done** — analysis re-runs per keystroke, off the main thread, and is not
   subject to the single-generation rule. The editor's thread does not wait for one: what `_validate`
   answers is the analysis that last landed, and the fresh one replaces it when it does. R-PERF-2 has
-  the latency. A file's errors are reported under **its own path**, so a project whose build would
-  be refused by a *different* file says so in the errors panel rather than only at Play — Godot
-  partitions those into a per-file section, at the cost of the edited file reading as invalid (and
-  so losing its outline and gutter) for as long as any other file is broken.
+  the latency. A build is the whole project, so a file that fails to compile elsewhere used to
+  refuse Play with no sign in the editor until that moment; now it is reported either way, but not
+  at the same price. Godot reads its per-file `depended_errors` partition **only when `_validate`
+  answers invalid**, and answering invalid clears the connection gutter, freezes the method outline,
+  marks the tab errored in the script list and leaves a stale error bar uncleared. GDScript pays
+  that for a file the script *depends on*; here every file is a dependency, so paying it for an
+  unrelated one would degrade every open tab. The split: a file that **already has its own errors**
+  also carries the other files' (free @EM@ all of the above is being paid anyway, and the sections are
+  clickable), and a **clean** file gets one row in the warnings panel naming them instead, which
+  Godot reads whatever `valid` says and which costs none of it.
 - **R-TOOL-3 (MUST)** Code completion: members, locals, types in scope, imported package contents,
   and keywords. Status: **part** — the popup opens at once from what the last analysis left, and
   refines in place when the analysis this buffer needs lands. At a bare identifier that first answer

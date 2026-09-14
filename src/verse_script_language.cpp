@@ -501,16 +501,57 @@ static Dictionary editor_warning_from(const Dictionary &p_diagnostic) {
 	return warning;
 }
 
+// The one warning a file that compiles can still need: some *other* file does not, so the next
+// build publishes nothing and Play is refused.
+//
+// Named rather than counted where the list is short, because "4 files do not compile" sends the
+// author looking and "mover.verse does not compile" sends them to the file. On line 1, since it is
+// about the project and not about anything the author wrote here.
+static Dictionary project_build_warning(const PackedStringArray &p_paths) {
+	constexpr int64_t max_named = 3;
+	String named;
+	for (int64_t i = 0; i < p_paths.size() && i < max_named; i++) {
+		named += (i > 0 ? String(", ") : String()) + p_paths[i].get_file();
+	}
+	const int64_t remaining = p_paths.size() - max_named;
+	if (remaining > 0) {
+		named += String(" and ") + String::num_int64(remaining) + String(remaining == 1 ? " more" : " more files");
+	}
+
+	Dictionary warning;
+	warning["start_line"] = 1;
+	warning["end_line"] = 1;
+	warning["leftmost_column"] = 1;
+	warning["rightmost_column"] = 1;
+	warning["code"] = 0;
+	warning["string_code"] = String("VERSE_PROJECT_BUILD");
+	warning["message"] = String("This file compiles, but ") + named
+			+ String(p_paths.size() == 1 ? " does not" : " do not")
+			+ String(", so the project will not build and Play will be refused. Open ")
+			+ String(p_paths.size() == 1 ? "it" : "them")
+			+ String(" to see why, or Project > Tools > Build Verse to log every error at once.");
+	return warning;
+}
+
 Dictionary VerseScriptLanguage::_validate(const String &p_script, const String &p_path, bool p_validate_functions, bool p_validate_errors, bool p_validate_warnings, bool p_validate_safe_lines) const {
 	TypedArray<Dictionary> errors = diagnostics_fitted_to(check_buffer(p_path, p_script), p_script);
 
 	// A Verse build is the whole project, so a file elsewhere that fails to compile refuses Play
 	// with no sign in the editor until that moment. diagnostics_by_path already holds every file's
-	// errors from the last whole-project analysis, each already carrying its own "path" key --
+	// errors from the last whole-project analysis, each already carrying its own "path" key, and
 	// ScriptTextEditor::_validate_script partitions any error whose path differs from this one into
-	// its own clickable depended_errors section, but only when this answers invalid. The trade-off
-	// is the one GDScript already accepts for its own dependency errors: a clean file loses its
-	// method outline and connection gutter for as long as some other file in the project is broken.
+	// its own clickable section of the errors panel.
+	//
+	// It reads that partition **only on the invalid branch**, though, and answering invalid is
+	// expensive in a way that has nothing to do with this file: the connection gutter is cleared,
+	// the method outline stops refreshing, the script list marks the tab as errored, and a stale
+	// error bar is never cleared. GDScript pays that for a file this one *depends on*; here the
+	// whole project is the dependency, so an unrelated broken file would degrade every open tab.
+	//
+	// So the list is appended only when this file is already invalid, where all of that is being
+	// paid anyway and the extra sections are free. A clean file gets the warning below instead.
+	PackedStringArray broken_elsewhere;
+	TypedArray<Dictionary> elsewhere;
 	const Array other_paths = diagnostics_by_path.keys();
 	for (int64_t i = 0; i < other_paths.size(); i++) {
 		const String other_path = other_paths[i];
@@ -521,16 +562,22 @@ Dictionary VerseScriptLanguage::_validate(const String &p_script, const String &
 		if (filed.is_empty()) {
 			continue;
 		}
+		broken_elsewhere.push_back(other_path);
 		// Fitted against that file's own last-analyzed source, never p_script's -- a depended error
 		// is only listed and clicked through here, but the column still has to sit inside a real
 		// line before the editor displays it (see diagnostics_fitted_to above). No entry means no
 		// analysis has read that file yet; pass its diagnostics through rather than fit them to the
 		// wrong buffer.
 		if (analyzed_source_by_path.has(other_path)) {
-			errors.append_array(diagnostics_fitted_to(filed, String(analyzed_source_by_path[other_path])));
+			elsewhere.append_array(diagnostics_fitted_to(filed, String(analyzed_source_by_path[other_path])));
 		} else {
-			errors.append_array(filed);
+			elsewhere.append_array(filed);
 		}
+	}
+
+	const bool own_errors = !errors.is_empty();
+	if (own_errors) {
+		errors.append_array(elsewhere);
 	}
 
 	Dictionary result;
@@ -545,6 +592,13 @@ Dictionary VerseScriptLanguage::_validate(const String &p_script, const String &
 	// unreachable code, an empty block -- follow, fitted to the buffer the way the errors are.
 	if (p_validate_warnings) {
 		TypedArray<Dictionary> warnings;
+		// The half of the cross-file report a clean file can afford. Godot reads the warnings key
+		// whatever `valid` says, so this costs none of what appending the errors above would: it
+		// says the build will be refused and by whom, and the errors themselves are one click away
+		// in that file or one build away in the log.
+		if (!own_errors && !broken_elsewhere.is_empty()) {
+			warnings.push_back(project_build_warning(broken_elsewhere));
+		}
 		if (script_warnings_by_path.has(p_path)) {
 			warnings.append_array(TypedArray<Dictionary>(script_warnings_by_path[p_path]));
 		}
