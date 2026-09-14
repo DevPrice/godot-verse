@@ -194,6 +194,15 @@ public:
 	// to answer from before any analysis of the buffer in front of the author exists.
 	godot::PackedStringArray receiver_classes_from_text(const godot::String &p_source, const godot::String &p_path, int64_t p_receiver_end) const;
 
+	// Fills r_result with what a string literal at p_marker can be completed to -- a node path, a
+	// res:// path, an input action or a signal name -- decided by the call the literal is an
+	// argument to. Leaves it untouched when the literal is not one of those.
+	void complete_in_string(const godot::String &p_code, const godot::String &p_path, int64_t p_marker, godot::Object *p_owner, godot::Dictionary &r_result) const;
+
+	// The signals reachable on the receiver ending at p_receiver_end: the class's own Verse-spelled
+	// ones, or Godot's for a mirrored class.
+	void collect_signal_names(const godot::String &p_source, const godot::String &p_path, int64_t p_receiver_end, godot::Array &r_options) const;
+
 	godot::TypedArray<godot::Dictionary> diagnostics_for(const godot::String &p_path) const;
 
 	// The compiler's warnings against one script, in the same shape as its errors; _validate

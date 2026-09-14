@@ -11,6 +11,7 @@
 
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/engine.hpp>
+#include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
@@ -22,6 +23,7 @@
 #ifdef TOOLS_ENABLED
 #include <godot_cpp/classes/code_edit.hpp>
 #include <godot_cpp/classes/editor_file_system.hpp>
+#include <godot_cpp/classes/editor_file_system_directory.hpp>
 #include <godot_cpp/classes/editor_interface.hpp>
 #include <godot_cpp/classes/script_editor.hpp>
 #include <godot_cpp/classes/script_editor_base.hpp>
@@ -1429,6 +1431,158 @@ static bool completing_in_string(const String &p_code, int64_t p_marker) {
 			(int)before.count("\n"), (int)before.substr(line_start).utf8().length());
 }
 
+// The offset of the quote that opened the string literal the cursor is inside, or -1.
+//
+// Only ever asked after the lexer has said the cursor is in one, so this is a backward scan for the
+// nearest unescaped quote rather than a second opinion about where strings begin. A Verse string
+// does not span lines, so the scan stops at one.
+static int64_t enclosing_string_start(const String &p_before) {
+	for (int64_t i = p_before.length() - 1; i >= 0; i--) {
+		const char32_t c = p_before[i];
+		if (c == '\n') {
+			return -1;
+		}
+		if (c != '"') {
+			continue;
+		}
+		int64_t backslashes = 0;
+		while (i - 1 - backslashes >= 0 && p_before[i - 1 - backslashes] == '\\') {
+			backslashes++;
+		}
+		if (backslashes % 2 == 0) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+// What a string literal is naming, when it is naming something the editor can enumerate.
+enum class string_argument {
+	none,
+	node_path,
+	resource_path,
+	input_action,
+	signal_name,
+};
+
+// The callee whose argument it is, which is the same key GDScript answers this question by --
+// Object::get_argument_options, a virtual no GDExtension can reach. The callee is a word in the
+// buffer, though, so the table is written out here instead of asked for.
+//
+// Names are the mirror's, which is Godot's own PascalCased: `get_node` is `GetNode`. An argument of
+// -1 means every string argument of that call is one of these, which is what `GetVector`'s four
+// action names need.
+struct string_argument_rule {
+	const char *callee;
+	string_argument kind;
+	int argument;
+};
+
+constexpr string_argument_rule string_argument_rules[] = {
+	{ "GetNode", string_argument::node_path, 0 },
+	{ "GetNodeOrNull", string_argument::node_path, 0 },
+	{ "HasNode", string_argument::node_path, 0 },
+	{ "FindChild", string_argument::node_path, 0 },
+	{ "FindChildren", string_argument::node_path, 0 },
+	{ "GetNodeAndResource", string_argument::node_path, 0 },
+
+	{ "Load", string_argument::resource_path, 0 },
+	{ "Exists", string_argument::resource_path, 0 },
+	{ "LoadThreadedRequest", string_argument::resource_path, 0 },
+	{ "ChangeSceneToFile", string_argument::resource_path, 0 },
+	{ "Save", string_argument::resource_path, 1 },
+
+	{ "IsActionPressed", string_argument::input_action, 0 },
+	{ "IsActionJustPressed", string_argument::input_action, 0 },
+	{ "IsActionJustReleased", string_argument::input_action, 0 },
+	{ "IsActionReleased", string_argument::input_action, 0 },
+	{ "IsAction", string_argument::input_action, 0 },
+	{ "GetActionStrength", string_argument::input_action, 0 },
+	{ "GetActionRawStrength", string_argument::input_action, 0 },
+	{ "ActionPress", string_argument::input_action, 0 },
+	{ "ActionRelease", string_argument::input_action, 0 },
+	{ "HasAction", string_argument::input_action, 0 },
+	{ "EraseAction", string_argument::input_action, 0 },
+	{ "GetAxis", string_argument::input_action, -1 },
+	{ "GetVector", string_argument::input_action, -1 },
+
+	{ "Connect", string_argument::signal_name, 0 },
+	{ "Disconnect", string_argument::signal_name, 0 },
+	{ "IsConnected", string_argument::signal_name, 0 },
+	{ "HasSignal", string_argument::signal_name, 0 },
+	{ "GetSignalConnectionList", string_argument::signal_name, 0 },
+	{ "MakeSignal", string_argument::signal_name, 1 },
+};
+
+static string_argument string_argument_kind(const String &p_callee, int64_t p_argument) {
+	for (size_t i = 0; i < std::size(string_argument_rules); i++) {
+		const string_argument_rule &rule = string_argument_rules[i];
+		if (p_callee == rule.callee && (rule.argument < 0 || rule.argument == p_argument)) {
+			return rule.kind;
+		}
+	}
+	return string_argument::none;
+}
+
+// Every descendant of p_base, spelled the way a NodePath argument to GetNode wants it.
+static void collect_node_paths(Node *p_base, Node *p_from, Array &r_options) {
+	for (int64_t i = 0; i < p_from->get_child_count(); i++) {
+		Node *child = p_from->get_child(i);
+		if (child == nullptr) {
+			continue;
+		}
+		r_options.push_back(completion_option(String(p_base->get_path_to(child)),
+				ScriptLanguageExtension::CODE_COMPLETION_KIND_NODE_PATH,
+				ScriptLanguageExtension::LOCATION_LOCAL));
+		collect_node_paths(p_base, child, r_options);
+	}
+}
+
+// Every file the editor's filesystem knows about, which is where a res:// path argument points.
+// EditorFileSystem rather than a DirAccess walk for the reason GDScript uses it: the editor has
+// already scanned the project, and a completion is not the place to scan it again.
+static void collect_resource_paths(Array &r_options) {
+#ifdef TOOLS_ENABLED
+	EditorInterface *editor = EditorInterface::get_singleton();
+	EditorFileSystem *filesystem = editor != nullptr ? editor->get_resource_filesystem() : nullptr;
+	if (filesystem == nullptr) {
+		return;
+	}
+	std::vector<EditorFileSystemDirectory *> pending;
+	pending.push_back(filesystem->get_filesystem());
+	while (!pending.empty()) {
+		EditorFileSystemDirectory *directory = pending.back();
+		pending.pop_back();
+		if (directory == nullptr) {
+			continue;
+		}
+		for (int32_t i = 0; i < directory->get_file_count(); i++) {
+			r_options.push_back(completion_option(directory->get_file_path(i),
+					ScriptLanguageExtension::CODE_COMPLETION_KIND_FILE_PATH,
+					ScriptLanguageExtension::LOCATION_OTHER_USER_CODE));
+		}
+		for (int32_t i = 0; i < directory->get_subdir_count(); i++) {
+			pending.push_back(directory->get_subdir(i));
+		}
+	}
+#endif
+}
+
+// The project's input actions, which live in the settings under `input/` and nowhere else -- there
+// is no InputMap to ask in the editor, because the editor does not load the project's own map.
+static void collect_input_actions(Array &r_options) {
+	const TypedArray<Dictionary> settings = ProjectSettings::get_singleton()->get_property_list();
+	for (int64_t i = 0; i < settings.size(); i++) {
+		const String name = Dictionary(settings[i])["name"];
+		if (!name.begins_with("input/")) {
+			continue;
+		}
+		r_options.push_back(completion_option(name.substr(6),
+				ScriptLanguageExtension::CODE_COMPLETION_KIND_CONSTANT,
+				ScriptLanguageExtension::LOCATION_OTHER_USER_CODE));
+	}
+}
+
 // Completion, answered by the compiler wherever it can be.
 //
 // Godot marks the cursor by splicing U+FFFF into the buffer, and everything here is derived from
@@ -1502,6 +1656,97 @@ PackedStringArray VerseScriptLanguage::receiver_classes_from_text(const String &
 	return verse_godot_class_for(word) != nullptr ? member_bearing_chain(word) : PackedStringArray();
 }
 
+// What a string literal at the cursor can be completed to, or nothing.
+//
+// Godot re-quotes every option handed back while the caret is inside a string (CodeEdit's
+// _filter_code_completion_candidates), so the names here are bare and the editor puts the quotes
+// back. Forced, because the popup is worth opening on the quote itself: none of these four is a
+// name the author can be expected to have typed a prefix of.
+void VerseScriptLanguage::complete_in_string(const String &p_code, const String &p_path, int64_t p_marker, Object *p_owner, Dictionary &r_result) const {
+	const String before = p_code.substr(0, p_marker);
+	const int64_t quote = enclosing_string_start(before);
+	if (quote < 0) {
+		return;
+	}
+
+	// The call scan starts at the quote rather than at the cursor: a bracket inside the literal is
+	// text, and letting it count would make `GetNode("(")` look like a call that opened one.
+	const String head = before.substr(0, quote);
+	const int64_t callee_end = enclosing_call_callee_end(head);
+	if (callee_end < 0) {
+		return;
+	}
+	const String callee = word_ending_at(head, callee_end);
+	const string_argument kind = string_argument_kind(callee, argument_index_in_call(head, callee_end));
+
+	Array options;
+	switch (kind) {
+		case string_argument::node_path: {
+			// The node this script is attached to in the edited scene, which Godot resolves before
+			// asking and hands over here. Without one -- a script open with no scene around it --
+			// there is no tree to name paths against.
+			if (Node *base = Object::cast_to<Node>(p_owner)) {
+				collect_node_paths(base, base, options);
+			}
+		} break;
+		case string_argument::resource_path:
+			collect_resource_paths(options);
+			break;
+		case string_argument::input_action:
+			collect_input_actions(options);
+			break;
+		case string_argument::signal_name:
+			collect_signal_names(p_code, p_path, callee_end - callee.length() - 1, options);
+			break;
+		case string_argument::none:
+			return;
+	}
+
+	if (options.is_empty()) {
+		return;
+	}
+	r_result["options"] = options;
+	r_result["force"] = true;
+}
+
+// The signals the receiver of a `Connect`-like call can be asked for.
+//
+// Two sources, because a scripted node has two kinds: the Verse-spelled ones its own class declares
+// (`Hit`, registered with Godot under that name) and Godot's own snake_case ones, which the nearest
+// mirrored ancestor answers for with inheritance included. The chain is the same one member
+// completion resolves a receiver by, so `Self.Connect("` and `Enemy.Connect("` both work.
+void VerseScriptLanguage::collect_signal_names(const String &p_source, const String &p_path, int64_t p_receiver_end, Array &r_options) const {
+	VerseRuntime *runtime = get_runtime();
+	if (runtime == nullptr || !runtime->is_host_loaded()) {
+		return;
+	}
+
+	PackedStringArray chain = receiver_classes_from_text(p_source, p_path, p_receiver_end);
+	if (chain.is_empty()) {
+		chain.push_back(qualified_class_name(p_path));
+	}
+
+	for (int64_t i = 0; i < chain.size(); i++) {
+		if (const char *godot_class = verse_godot_class_for(chain[i])) {
+			// With inheritance, so the first mirrored class in the chain is the last one to ask.
+			const TypedArray<Dictionary> signals = ClassDB::class_get_signal_list(String(godot_class), false);
+			for (int64_t s = 0; s < signals.size(); s++) {
+				r_options.push_back(completion_option(Dictionary(signals[s])["name"],
+						ScriptLanguageExtension::CODE_COMPLETION_KIND_SIGNAL,
+						ScriptLanguageExtension::LOCATION_OTHER));
+			}
+			return;
+		}
+
+		const Vector<VerseSignalInfo> declared = runtime->class_signals(chain[i]);
+		for (int64_t s = 0; s < declared.size(); s++) {
+			r_options.push_back(completion_option(String(declared[s].name),
+					ScriptLanguageExtension::CODE_COMPLETION_KIND_SIGNAL,
+					ScriptLanguageExtension::LOCATION_LOCAL));
+		}
+	}
+}
+
 Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const String &p_path, Object *p_owner) const {
 	Dictionary result;
 	result["result"] = (int64_t)OK;
@@ -1515,10 +1760,16 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 
 	// A comment is prose, and every set below is names. Godot raises the popup on its own as soon
 	// as one of them matches what is being typed, so answering here puts the Godot API over the
-	// middle of a sentence. A string literal declines for the same reason from the other end:
-	// CodeEdit re-quotes every option it is handed when the caret is inside one, so a class list
-	// would come back as a list of quoted class names.
-	if (completing_in_comment(p_code, marker) || completing_in_string(p_code, marker)) {
+	// middle of a sentence.
+	if (completing_in_comment(p_code, marker)) {
+		return result;
+	}
+
+	// A string is not names either, and for a while answered nothing for that reason. What it holds
+	// is decided by the call it is an argument to, and four of those name something the editor can
+	// enumerate -- which is the whole of what GDScript completes inside a string too.
+	if (completing_in_string(p_code, marker)) {
+		complete_in_string(p_code, p_path, marker, p_owner, result);
 		return result;
 	}
 
