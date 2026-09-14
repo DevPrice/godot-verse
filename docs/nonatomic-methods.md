@@ -15,10 +15,10 @@ call is undone. The bridge keeps that three ways and breaks it one way.
 | --- | --- |
 | a method that mutates and returns **nothing** | deferred to `AutoRTFM::OnCommit`. A failed expression never performs it, which `tests/integration` measures in both directions |
 | a method that is **const and answers a value** | `<reads>` since Phase 4.5. Nothing to undo, and the label no longer forces `<transacts>` onto the caller |
-| `godot_signal.Subscribe` | **compensated**: the host registers an `AutoRTFM::OnAbort<SameAsClosed>` that disconnects |
+| `signal.Subscribe` | **compensated**: the host registers an `AutoRTFM::OnAbort<SameAsClosed>` that disconnects |
 | a method that **mutates and answers a value** | **not kept.** The answer is needed now, so the call cannot be deferred, and the bridge forwards it to Godot rather than performing it, so it has no inverse to register |
 
-Signal **emission** joins them by decision rather than by shape: `godot_signal.Signal` runs its
+Signal **emission** joins them by decision rather than by shape: `signal.Signal` runs its
 handlers immediately, the way GDScript does, so a transaction that later aborts has already run
 them. `docs/phase-4-design.md` 6.4 is the argument.
 
@@ -29,7 +29,7 @@ for some caller, and a compensation that half works is worse than a documented s
 GDScript offers exactly this and says nothing at all.
 
 **Subscription is the exception, and there is now a compensated spelling for both halves of it.**
-`godot_signal.Subscribe` covers a signal the mirror knows about, and since Phase 5
+`signal.Subscribe` covers a signal the mirror knows about, and since Phase 5
 `MakeSignal(Owner, Name).Subscribe(...)` covers one it does not -- a signal a GDScript or C# script
 declared, or one made with `add_user_signal`. Both register an `AutoRTFM::OnAbort` that disconnects.
 `Object.Connect` is the unforgiving general form under them (R-SIG-6) and is in the list below; it

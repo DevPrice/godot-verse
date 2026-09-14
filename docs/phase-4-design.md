@@ -212,13 +212,13 @@ instance seals.
 Three rounds of probes. The third compiles clean and runs:
 
 ```
-godot_signal<public>(t:type) := class:
+signal<public>(t:type) := class:
 	Signal<public>(Val:t)<transacts>:void = {}
 	Subscribe<public>(Callback(:t)<transacts>:void)<transacts>:cancelable = probe_cancel{}
 
 probe3 := class(object):
-	Hit<public>:godot_signal(int) = godot_signal(int){}
-	Struck<public>:godot_signal(tuple(int, string)) = godot_signal(tuple(int, string)){}
+	Hit<public>:signal(int) = signal(int){}
+	Struck<public>:signal(tuple(int, string)) = signal(tuple(int, string)){}
 	OnStruck<public>(Damage:int, By:string)<transacts>:void = {}
 	WireAll<public>()<transacts>:void = { Unsub := Struck.Subscribe(OnStruck); Unsub.Cancel() }
 ```
@@ -227,7 +227,7 @@ probe3 := class(object):
 one-tuple-parameter callback, because a Verse function's parameter *is* its tuple. So the payload
 question dissolves: the author writes `OnStruck(Damage:int, By:string)`, Godot sees two arguments,
 and nothing in between needs a per-arity family of signal types. A zero-argument signal is
-`godot_signal(tuple())`, whose handler decorates as `OnEmpty()` with no parameters at all.
+`signal(tuple())`, whose handler decorates as `OnEmpty()` with no parameters at all.
 
 What this spike *cost* was the `listenable` interfaces (§1.2). The first two rounds tried to
 implement them and were refused; the third stopped trying and compiled.
@@ -394,9 +394,9 @@ Sequenced after Stage 3 (§5) because `Subscribe` is a Callable made from a Vers
 ```
 player := class(area2d):
 
-	Hit<public>:godot_signal() = godot_signal(){}
+	Hit<public>:signal() = signal(){}
 
-	Struck<public>:godot_signal(struck_payload) = godot_signal(struck_payload){}
+	Struck<public>:signal(struck_payload) = signal(struck_payload){}
 
 	OnBodyEntered<public>(Body:node2d):void =
 		Hit.Signal(())
@@ -415,7 +415,7 @@ and, elsewhere, in Verse rather than in a scene file:
 			Unsub := P.Hit.Subscribe(OnPlayerHit)
 ```
 
-`godot_signal()` is the alias for `godot_signal(tuple())`, the way `listenable()` is for
+`signal()` is the alias for `signal(tuple())`, the way `listenable()` is for
 `listenable(tuple())`.
 
 **There is no `@signal` attribute.** The member's *type* is the marker, and the host reads declared
@@ -433,7 +433,7 @@ whether the editor sees names:
 | payload | Godot arguments | a Verse subscriber writes |
 | --- | --- | --- |
 | `tuple()` | none | `OnHit(P:tuple())` |
-| a bare type, `godot_signal(int)` | one, named for the type — `Int` | `OnHit(Value:int)` |
+| a bare type, `signal(int)` | one, named for the type — `Int` | `OnHit(Value:int)` |
 | `tuple(int, string)` | two, `Arg0` and `Arg1` | `OnHit(Damage:int, By:string)` — a multi-parameter function satisfies a tuple parameter (S-B) |
 | a **struct** | one per **top-level field**, named by the field | `OnHit(P:struck_payload)`, reading `P.Damage` |
 
@@ -448,7 +448,7 @@ question about the same lanes.
 
 ### 6.3 What it is underneath
 
-`godot_signal(t)` is a `<native>` parametric class in the Godot package whose C++ shadow holds two
+`signal(t)` is a `<native>` parametric class in the Godot package whose C++ shadow holds two
 things: the **owner handle** and the **signal name**. Both are written by the host at construction —
 `Instantiate` walks the script class's data members for the ones whose declared type is this class,
 exactly where `Shadow->Handle.Init` runs today (S-A). The member's own name is the signal's name, so
@@ -504,9 +504,9 @@ declared in a script that has never been built appears after the next Build, the
   both the list and the construction-time binding must walk the whole chain. Phase 2 shipped this bug
   once already, for `@export` on a base script class, in two places that had been correct right up
   until a script could derive from a script.
-- **A `godot_signal` member must not be `var`**, and must be `<public>` to be registered. A private one
+- **A `signal` member must not be `var`**, and must be `<public>` to be registered. A private one
   is a diagnostic rather than a silently absent signal.
-- **A class with no Godot object has nowhere to bind**, so a `godot_signal` member on a class that is
+- **A class with no Godot object has nowhere to bind**, so a `signal` member on a class that is
   never instantiated against a handle is a diagnostic at the member.
 - **Two subscriptions of one handler are two connections** (§5, equality by reference), each with its
   own `cancelable`. Cancelling one leaves the other alive.
@@ -517,7 +517,7 @@ declared in a script that has never been built appears after the next Build, the
 
 ### 6.7 Godot's own 489 signals
 
-Generated per class, as C# generates them: an accessor returning a `godot_signal(t)` bound to that
+Generated per class, as C# generates them: an accessor returning a `signal(t)` bound to that
 handle and that Godot name, with the payload built from the signal's declared arguments — which Godot
 *does* name, so these get real names and need no struct.
 
@@ -861,7 +861,7 @@ in `tools/gen_verse_api.py` beside the accessors it already emits. The id lifeti
 storage discipline worth copying); the `CallableCustom` subclass is new in `src/`, over
 `godot-cpp/include/godot_cpp/variant/callable_custom.hpp`.
 
-**Stage 4 — signals.** `godot_signal(t)` is declared in `host/Verse/Godot.native.verse` with its
+**Stage 4 — signals.** `signal(t)` is declared in `host/Verse/Godot.native.verse` with its
 shadow in `host/Private/GodotClasses.h`; the rollback compensation is `Verse::Stm::OnRollback`,
 which the host has never used — `Engine/Plugins/Verse/VerseTags/…/TagContainer.cpp` and
 `VerseEvent.cpp` are the two worked examples, and note their `if (!AutoRTFM::IsTransactional())`
@@ -942,7 +942,7 @@ deliberately narrowed**, and the by-hand checks have since been run and what the
 The short version, for a reader who is here rather than there:
 
 - **The payload type is not where §6.3 implies.** A signal member's declared type comes back as the
-  *generic* `godot_signal(t)` — its `Signal` method still has the type variable as its parameter — so
+  *generic* `signal(t)` — its `Signal` method still has the type variable as its parameter — so
   the type argument has to be read off the class's `_TypeVariableSubstitutions`. The first
   implementation read the method and had every signal reporting one argument of unknown type. This
   is the only thing in the phase that had to be found by asking the compiler rather than by reading.

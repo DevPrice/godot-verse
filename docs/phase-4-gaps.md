@@ -65,12 +65,12 @@ Sized as **S** (an afternoon), **M** (a day), **L** (more, or needs a decision f
 | id | gap | kind | size | state |
 | --- | --- | --- | --- | --- |
 | **G1** | a struct signal payload compiles, registers a bogus signal, and emits nothing | accepted-but-broken | M | **closed** |
-| **G2** | a `var` or non-`public` `godot_signal` member is silently absent from the signal list | accepted-but-broken | S | **closed** |
-| **G3** | a `godot_signal` on a class never bound to a handle is only reported at emission | accepted-but-broken | S | **closed** |
+| **G2** | a `var` or non-`public` `signal` member is silently absent from the signal list | accepted-but-broken | S | **closed** |
+| **G3** | a `signal` on a class never bound to a handle is only reported at emission | accepted-but-broken | S | **closed** |
 | **G4** | a payload the wire cannot carry is refused at *emission*, not at the member | accepted-but-broken | S | **closed** |
 | **G5** | `_make_function` and `_can_make_function` are stubs — R-SIG-4's editor half | unbuilt | M | **built**; verifiable only by hand |
 | **G6** | the thread guard covers 2 of 31 entry points | unbuilt | S | **closed** |
-| **G7** | `godot_signal()` has no zero-argument alias | unbuilt | S | **closed** |
+| **G7** | `signal()` has no zero-argument alias | unbuilt | S | **closed** |
 | **G8** | `godot_array` has no `AddObject` | unbuilt | S | **closed** |
 | **G9** | a callback does not remember its `FContentScope` | unbuilt | M | open |
 | **G10** | `@statics` emits neither of the two diagnostics the design promised | unbuilt | S | **closed** |
@@ -131,9 +131,9 @@ was rejected" and "it was rejected for the right reason" are different claims an
 helps an author. As of this pass they read:
 
 ```
-The signal `Unseen` was never registered with Godot: a `godot_signal` member must be
+The signal `Unseen` was never registered with Godot: a `signal` member must be
   `<public>` for anything outside the class to connect to it. Nothing was emitted.
-The signal `Reassignable` ...: a `godot_signal` member must not be `var`.
+The signal `Reassignable` ...: a `signal` member must not be `var`.
 The signal `Nested` ...: its payload field `Inner` is itself a struct, and a payload
   decomposes one level only.
 The signal `Maybe` ...: its payload argument `Value` has no Godot type.
@@ -161,11 +161,11 @@ mechanism. A Verse handler takes the struct as one value now, so both halves of 
 
 **Original diagnosis, kept because the method is the point:**
 
-**Design:** §6.2's fourth row. A `godot_signal(my_struct)` should report **one Godot argument per
+**Design:** §6.2's fourth row. A `signal(my_struct)` should report **one Godot argument per
 top-level field**, named by the field, so the connect dialog and `_make_function` get real names;
 the Verse subscriber receives one value and reads `P.Damage`.
 
-**What happens** (measured, by adding a `godot_signal(probe_payload)` to
+**What happens** (measured, by adding a `signal(probe_payload)` to
 `tests/integration/scripts/signals.verse` and emitting it):
 
 ```
@@ -204,7 +204,7 @@ today, but loses the feature.
 
 ### G2 — a `var` or non-`public` signal member is silently absent
 
-**Design:** §6.6. *"A `godot_signal` member must not be `var`, and must be `<public>` to be
+**Design:** §6.6. *"A `signal` member must not be `var`, and must be `<public>` to be
 registered. A private one is a diagnostic rather than a silently absent signal."*
 
 **What happens.** `GetClassSignals` checks neither. It collects every data member whose declared
@@ -217,7 +217,7 @@ rule.
 
 ### G3 — a signal on a never-instantiated class is reported late
 
-**Design:** §6.6. *"A class with no Godot object has nowhere to bind, so a `godot_signal` member on a
+**Design:** §6.6. *"A class with no Godot object has nowhere to bind, so a `signal` member on a
 class that is never instantiated against a handle is a diagnostic at the member."*
 
 **What happens.** `BindSignals` reports `"The signal ... could not be bound"` — but only when an
@@ -331,25 +331,25 @@ the guard is incomplete on its own terms.
 `vh_callback_release` stays unguarded — it is deliberately unguarded today, because a `Callable` can
 be destroyed on whatever thread dropped the last reference and releasing only touches a map.
 
-### G7 — `godot_signal()` has no alias · **closed**
+### G7 — `signal()` has no alias · **closed**
 
-**Built:** `godot_signal<public>() := godot_signal(tuple())`, which is exactly how
+**Built:** `signal<public>() := signal(tuple())`, which is exactly how
 `/Verse.org/Concurrency` spells its own — `listenable<public>() := listenable(tuple())` in
 `Listenable.native.verse` — rather than an invention. It works as a type *and* as a constructor, so
-`Hit<public>:godot_signal() = godot_signal(){}` compiles; that was the part worth checking rather
+`Hit<public>:signal() = signal(){}` compiles; that was the part worth checking rather
 than assuming, since `listenable` is an interface and this is a class. The yardstick's two
 declarations and the integration fixture's use it now.
 
 **Original entry:**
 
-**Design:** §6.1. *"`godot_signal()` is the alias for `godot_signal(tuple())`, the way `listenable()`
+**Design:** §6.1. *"`signal()` is the alias for `signal(tuple())`, the way `listenable()`
 is for `listenable(tuple())`."*
 
-**What is there.** Only `godot_signal(t:type)`. Every zero-payload declaration in the repo spells
-`godot_signal(tuple())`, twice per line:
+**What is there.** Only `signal(t:type)`. Every zero-payload declaration in the repo spells
+`signal(tuple())`, twice per line:
 
 ```
-	Hit<public>:godot_signal(tuple()) = godot_signal(tuple()){}
+	Hit<public>:signal(tuple()) = signal(tuple()){}
 ```
 
 **To fix.** Find out how `/Verse.org/Concurrency` spells `listenable()` — it is in
@@ -708,10 +708,10 @@ and the design's shape is probably right then.
 
 ### G16 — `vh_signal` is not parametric
 
-**Design:** §6.3 — `godot_signal(t)` is a `<native>` **parametric** class whose C++ shadow holds the
+**Design:** §6.3 — `signal(t)` is a `<native>` **parametric** class whose C++ shadow holds the
 owner handle and the signal name.
 
-**Built:** `vh_signal` is a non-parametric native class holding one `int64 Id`; `godot_signal(t)` is
+**Built:** `vh_signal` is a non-parametric native class holding one `int64 Id`; `signal(t)` is
 ordinary parametric Verse deriving from it (`host/Verse/GodotApi.native.verse`). Owner, name and
 payload shape live in `GSignalBindings`, keyed by that id.
 

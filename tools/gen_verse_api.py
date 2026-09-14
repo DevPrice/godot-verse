@@ -1912,7 +1912,7 @@ def emit_statics_modules(api: dict, emit_order: list, resolver: TypeResolver,
 
 
 def emit_signal_accessor(godot_class: str, sig: dict, resolver: TypeResolver, coverage: Coverage):
-    """One of Godot's own signals, as an accessor answering a `godot_signal(t)` bound to that handle.
+    """One of Godot's own signals, as an accessor answering a `signal(t)` bound to that handle.
 
     A method rather than a data member, which is what C# does too: a mirror wrapper is built per
     crossing, and a member would have to be filled on each one.
@@ -1942,8 +1942,8 @@ def emit_signal_accessor(godot_class: str, sig: dict, resolver: TypeResolver, co
     else:
         payload = "tuple(" + ", ".join(i.verse_type for i in infos) + ")"
 
-    return (name, f'    {name}<public>()<transacts>:godot_signal({payload}) ='
-                  f' godot_signal({payload}){{Id := VhSignalBind(Handle, "{verse_class}",'
+    return (name, f'    {name}<public>()<transacts>:signal({payload}) ='
+                  f' signal({payload}){{Id := VhSignalBind(Handle, "{verse_class}",'
                   f' "{name}", "{sig["name"]}")}}')
 
 
@@ -2675,10 +2675,10 @@ call is undone. The bridge keeps that three ways and breaks it one way.
 | --- | --- |
 | a method that mutates and returns **nothing** | deferred to `AutoRTFM::OnCommit`. A failed expression never performs it, which `tests/integration` measures in both directions |
 | a method that is **const and answers a value** | `<reads>` since Phase 4.5. Nothing to undo, and the label no longer forces `<transacts>` onto the caller |
-| `godot_signal.Subscribe` | **compensated**: the host registers an `AutoRTFM::OnAbort<SameAsClosed>` that disconnects |
+| `signal.Subscribe` | **compensated**: the host registers an `AutoRTFM::OnAbort<SameAsClosed>` that disconnects |
 | a method that **mutates and answers a value** | **not kept.** The answer is needed now, so the call cannot be deferred, and the bridge forwards it to Godot rather than performing it, so it has no inverse to register |
 
-Signal **emission** joins them by decision rather than by shape: `godot_signal.Signal` runs its
+Signal **emission** joins them by decision rather than by shape: `signal.Signal` runs its
 handlers immediately, the way GDScript does, so a transaction that later aborts has already run
 them. `docs/phase-4-design.md` 6.4 is the argument.
 
@@ -2689,7 +2689,7 @@ for some caller, and a compensation that half works is worse than a documented s
 GDScript offers exactly this and says nothing at all.
 
 **Subscription is the exception, and there is now a compensated spelling for both halves of it.**
-`godot_signal.Subscribe` covers a signal the mirror knows about, and since Phase 5
+`signal.Subscribe` covers a signal the mirror knows about, and since Phase 5
 `MakeSignal(Owner, Name).Subscribe(...)` covers one it does not -- a signal a GDScript or C# script
 declared, or one made with `add_user_signal`. Both register an `AutoRTFM::OnAbort` that disconnects.
 `Object.Connect` is the unforgiving general form under them (R-SIG-6) and is in the list below; it

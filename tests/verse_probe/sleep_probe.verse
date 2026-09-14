@@ -4,7 +4,7 @@ using { /Godot.org/Godot }
 # `<suspends>` Sleep actually suspend and resume from the pump, and does a `defer` in a suspending
 # body run when the task is cancelled rather than resumed?
 #
-# The second is what `godot_signal.Await` rests on -- its `defer` is the only thing that takes the
+# The second is what `signal.Await` rests on -- its `defer` is the only thing that takes the
 # Godot connection away when a `race` loses, a node is freed, or a rebuild cancels everything -- and
 # nothing about it is obvious from the language reference.
 #
@@ -71,7 +71,7 @@ sleep_probe := class(object):
 		spawn{Waker()}
 
 	Connect<public>()<transacts>:void =
-		Sig := godot_signal(int){}
+		Sig := signal(int){}
 		Sig.Subscribe(Narrow)
 		Sig.Subscribe(Wide)
 		Print("both handlers satisfied Subscribe")

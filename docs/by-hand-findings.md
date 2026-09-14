@@ -196,7 +196,7 @@ sentence is enough.
 The session produced a second, harder argument for dropping it. A fixture written for B10 asked a
 `<suspends>` body from the wrong caller and got:
 
-> This invocation calls a function (`(/Godot.org/Godot/godot_signal:)Await`) that has the
+> This invocation calls a function (`(/Godot.org/Godot/signal:)Await`) that has the
 > 'suspends' effect, which is not allowed by its context. **`Await` is one of Godot's own and does
 > change the scene, so it is this function that has to widen rather than that one: write
 > `<transacts>` on the function containing this line.**

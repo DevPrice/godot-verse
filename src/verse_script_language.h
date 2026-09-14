@@ -290,7 +290,7 @@ private:
 	godot::Dictionary path_by_globalized;
 
 	// Warnings for the members a script declared and the host refused -- an `@export` the inspector
-	// cannot draw, a `godot_signal` Godot cannot register -- keyed by res:// path and shaped the
+	// cannot draw, a `signal` Godot cannot register -- keyed by res:// path and shaped the
 	// way _validate hands one over. Harvested when an analysis lands rather than asked for at
 	// _validate: both lists describe the analysis the snapshot came from, so taking them in the
 	// poll is what pairs a warning set with the diagnostics reported out of the same one.

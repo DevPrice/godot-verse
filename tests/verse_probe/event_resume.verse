@@ -3,7 +3,7 @@ using { /Godot.org/Godot }
 # Phase 5 spike S-5, the half that decides whether `Await` needs a native at all. event_probe.verse
 # established that /Verse.org/Verse's `event(t)` is nameable from the script package and that a
 # parametric Verse class can hold one and answer `t` from it. This asks the two things that decide
-# whether that is usable as `godot_signal(t).Await()`:
+# whether that is usable as `signal(t).Await()`:
 #
 #   - can a *narrowed* <suspends> body await an event, or does `awaitable.Await` carry no_rollback
 #     the way `signalable.Signal` does? If it is wide, only a specifier-less body -- which is what

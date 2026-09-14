@@ -18,18 +18,18 @@ strike_report := struct:
 signals := class(node2d):
 
     # No payload. `tuple()` is the empty tuple, and Godot sees a signal with no arguments.
-    Hit<public>:godot_signal() = godot_signal(){}
+    Hit<public>:signal() = signal(){}
 
     # One argument, named for its type because Verse tuples cannot name their elements.
-    Scored<public>:godot_signal(int) = godot_signal(int){}
+    Scored<public>:signal(int) = signal(int){}
 
     # Two, as `Arg0` and `Arg1`. A handler still writes two parameters: a multi-parameter Verse
     # function satisfies a one-tuple-parameter callback, because a function's parameter *is* its
     # tuple.
-    Struck<public>:godot_signal(tuple(int, string)) = godot_signal(tuple(int, string)){}
+    Struck<public>:signal(tuple(int, string)) = signal(tuple(int, string)){}
 
     # An object payload, which is what `body_entered` shaped signals carry.
-    Touched<public>:godot_signal(node2d) = godot_signal(node2d){}
+    Touched<public>:signal(node2d) = signal(node2d){}
 
     # A struct payload: one Godot argument per top-level field, *named by the field*. This is the
     # spelling that gives the connect dialog and "Make Function" real names instead of `Arg0`, and
@@ -41,7 +41,7 @@ signals := class(node2d):
     # one value. Verse already reads a multi-parameter function as satisfying a one-tuple-parameter
     # callback for the same reason -- a function's parameter *is* its tuple -- so this is that rule
     # reaching the one spelling that carries names.
-    Reported<public>:godot_signal(strike_report) = godot_signal(strike_report){}
+    Reported<public>:signal(strike_report) = signal(strike_report){}
 
     EmitReported<public>(Amount:int, Source:string)<transacts>:void =
         Reported.Signal(strike_report{Damage := Amount, By := Source, Point := vector2{X := 3.0, Y := 4.0}})
@@ -107,7 +107,7 @@ signals := class(node2d):
         set Seen = 0
         set SeenBy = ""
 
-    # Godot's own 489 signals, as an accessor per signal per class: the same `godot_signal(t)` the
+    # Godot's own 489 signals, as an accessor per signal per class: the same `signal(t)` the
     # declaration gives, bound to that handle and that Godot name. This is what makes a scene-file
     # connection optional -- `Timer.Timeout().Subscribe(OnTimeout)` is a spelling now -- and it is
     # what Phase 5's `Timer.Timeout().Await()` will be built on.

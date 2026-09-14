@@ -27609,8 +27609,8 @@ object<public> := class(vh_object):
     SetTranslationDomain<public>(Domain:string)<transacts>:void = VhCallVoid(Handle, "set_translation_domain", array{VhFromStringName(Domain)})
     Tr<public>(Message:string, ?Context:string = "")<reads>:string = VhToString(VhCallValueConst(Handle, "tr", array{VhFromStringName(Message), VhFromStringName(Context)}))
     TrN<public>(Message:string, PluralMessage:string, N:int, ?Context:string = "")<reads>:string = VhToString(VhCallValueConst(Handle, "tr_n", array{VhFromStringName(Message), VhFromStringName(PluralMessage), VhFromInt(N), VhFromStringName(Context)}))
-    ScriptChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "object", "ScriptChanged", "script_changed")}
-    PropertyListChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "object", "PropertyListChanged", "property_list_changed")}
+    ScriptChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "object", "ScriptChanged", "script_changed")}
+    PropertyListChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "object", "PropertyListChanged", "property_list_changed")}
 
 audio_server<public> := class(object):
 
@@ -27673,8 +27673,8 @@ audio_server<public> := class(object):
     SetOutputDevice<public>(Name:string)<transacts>:void = VhCallVoid(Handle, "set_output_device", array{VhFromString(Name)})
     SwapBusEffects<public>(BusIdx:int, EffectIdx:int, ByEffectIdx:int)<transacts>:void = VhCallVoid(Handle, "swap_bus_effects", array{VhFromInt(BusIdx), VhFromInt(EffectIdx), VhFromInt(ByEffectIdx)})
     Unlock<public>()<transacts>:void = VhCallVoid(Handle, "unlock", array{})
-    BusLayoutChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "audio_server", "BusLayoutChanged", "bus_layout_changed")}
-    BusRenamed<public>()<transacts>:godot_signal(tuple(int, string, string)) = godot_signal(tuple(int, string, string)){Id := VhSignalBind(Handle, "audio_server", "BusRenamed", "bus_renamed")}
+    BusLayoutChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "audio_server", "BusLayoutChanged", "bus_layout_changed")}
+    BusRenamed<public>()<transacts>:signal(tuple(int, string, string)) = signal(tuple(int, string, string)){Id := VhSignalBind(Handle, "audio_server", "BusRenamed", "bus_renamed")}
 
 camera_server<public> := class(object):
 
@@ -27686,9 +27686,9 @@ camera_server<public> := class(object):
     GetFeed<public>(Index:int)<decides><transacts>:camera_feed = camera_feed[VhObjectFrom[VhCallValue(Handle, "get_feed", array{VhFromInt(Index)})]]
     GetFeedCount<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "get_feed_count", array{}))
     RemoveFeed<public>(Feed:camera_feed)<transacts>:void = VhCallVoid(Handle, "remove_feed", array{VhFromObject(Feed)})
-    CameraFeedAdded<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "camera_server", "CameraFeedAdded", "camera_feed_added")}
-    CameraFeedRemoved<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "camera_server", "CameraFeedRemoved", "camera_feed_removed")}
-    CameraFeedsUpdated<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "camera_server", "CameraFeedsUpdated", "camera_feeds_updated")}
+    CameraFeedAdded<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "camera_server", "CameraFeedAdded", "camera_feed_added")}
+    CameraFeedRemoved<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "camera_server", "CameraFeedRemoved", "camera_feed_removed")}
+    CameraFeedsUpdated<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "camera_server", "CameraFeedsUpdated", "camera_feeds_updated")}
 
 class_db<public> := class(object):
 
@@ -28103,7 +28103,7 @@ editor_selection<public> := class(object):
     GetTopSelectedNodes<public>()<transacts>:typed_array(node) = VhToNodeArray(VhCallValue(Handle, "get_top_selected_nodes", array{}))
     GetTransformableSelectedNodes<public>()<transacts>:typed_array(node) = VhToNodeArray(VhCallValue(Handle, "get_transformable_selected_nodes", array{}))
     RemoveNode<public>(Node:node)<transacts>:void = VhCallVoid(Handle, "remove_node", array{VhFromObject(Node)})
-    SelectionChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "editor_selection", "SelectionChanged", "selection_changed")}
+    SelectionChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "editor_selection", "SelectionChanged", "selection_changed")}
 
 editor_undo_redo_manager<public> := class(object):
 
@@ -28118,8 +28118,8 @@ editor_undo_redo_manager<public> := class(object):
     GetHistoryUndoRedo<public>(Id:int)<decides><reads>:undo_redo = undo_redo[VhObjectFrom[VhCallValueConst(Handle, "get_history_undo_redo", array{VhFromInt(Id)})]]
     GetObjectHistoryId<public>(Object:object)<reads>:int = VhToInt(VhCallValueConst(Handle, "get_object_history_id", array{VhFromObject(Object)}))
     IsCommittingAction<public>()<reads>:logic = VhToLogic(VhCallValueConst(Handle, "is_committing_action", array{}))
-    HistoryChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "editor_undo_redo_manager", "HistoryChanged", "history_changed")}
-    VersionChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "editor_undo_redo_manager", "VersionChanged", "version_changed")}
+    HistoryChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "editor_undo_redo_manager", "HistoryChanged", "history_changed")}
+    VersionChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "editor_undo_redo_manager", "VersionChanged", "version_changed")}
 
 editor_vcs_interface<public> := class(object):
 
@@ -28236,9 +28236,9 @@ gd_extension_manager<public> := class(object):
     LoadExtension<public>(Path:string)<transacts>:gd_extension_manager_load_status = VhToGdExtensionManagerLoadStatus(VhCallValue(Handle, "load_extension", array{VhFromString(Path)}))
     ReloadExtension<public>(Path:string)<transacts>:gd_extension_manager_load_status = VhToGdExtensionManagerLoadStatus(VhCallValue(Handle, "reload_extension", array{VhFromString(Path)}))
     UnloadExtension<public>(Path:string)<transacts>:gd_extension_manager_load_status = VhToGdExtensionManagerLoadStatus(VhCallValue(Handle, "unload_extension", array{VhFromString(Path)}))
-    ExtensionsReloaded<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "gd_extension_manager", "ExtensionsReloaded", "extensions_reloaded")}
-    ExtensionLoaded<public>()<transacts>:godot_signal(gd_extension) = godot_signal(gd_extension){Id := VhSignalBind(Handle, "gd_extension_manager", "ExtensionLoaded", "extension_loaded")}
-    ExtensionUnloading<public>()<transacts>:godot_signal(gd_extension) = godot_signal(gd_extension){Id := VhSignalBind(Handle, "gd_extension_manager", "ExtensionUnloading", "extension_unloading")}
+    ExtensionsReloaded<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "gd_extension_manager", "ExtensionsReloaded", "extensions_reloaded")}
+    ExtensionLoaded<public>()<transacts>:signal(gd_extension) = signal(gd_extension){Id := VhSignalBind(Handle, "gd_extension_manager", "ExtensionLoaded", "extension_loaded")}
+    ExtensionUnloading<public>()<transacts>:signal(gd_extension) = signal(gd_extension){Id := VhSignalBind(Handle, "gd_extension_manager", "ExtensionUnloading", "extension_unloading")}
 
 geometry2d<public> := class(object):
 
@@ -28359,7 +28359,7 @@ input<public> := class(object):
     StopJoyVibration<public>(Device:int)<transacts>:void = VhCallVoid(Handle, "stop_joy_vibration", array{VhFromInt(Device)})
     VibrateHandheld<public>(?DurationMs:int = 500, ?Amplitude:float = -1.0)<transacts>:void = VhCallVoid(Handle, "vibrate_handheld", array{VhFromInt(DurationMs), VhFromFloat(Amplitude)})
     WarpMouse<public>(Position:vector2)<transacts>:void = VhCallVoid(Handle, "warp_mouse", array{VhFromVector2(Position)})
-    JoyConnectionChanged<public>()<transacts>:godot_signal(tuple(int, logic)) = godot_signal(tuple(int, logic)){Id := VhSignalBind(Handle, "input", "JoyConnectionChanged", "joy_connection_changed")}
+    JoyConnectionChanged<public>()<transacts>:signal(tuple(int, logic)) = signal(tuple(int, logic)){Id := VhSignalBind(Handle, "input", "JoyConnectionChanged", "joy_connection_changed")}
 
 input_map<public> := class(object):
 
@@ -28407,7 +28407,7 @@ java_script_bridge<public> := class(object):
     JsBufferToPackedByteArray<public>(JavascriptBuffer:java_script_object)<transacts>:[]int = VhToInts(VhCallValue(Handle, "js_buffer_to_packed_byte_array", array{VhFromObject(JavascriptBuffer)}))
     PwaNeedsUpdate<public>()<reads>:logic = VhToLogic(VhCallValueConst(Handle, "pwa_needs_update", array{}))
     PwaUpdate<public>()<reads>:error = VhToError(VhCallValueConst(Handle, "pwa_update", array{}))
-    PwaUpdateAvailable<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "java_script_bridge", "PwaUpdateAvailable", "pwa_update_available")}
+    PwaUpdateAvailable<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "java_script_bridge", "PwaUpdateAvailable", "pwa_update_available")}
 
 jni_singleton<public> := class(object):
 
@@ -28429,7 +28429,7 @@ main_loop<public> := class(object):
     _Initialize<public>():void = {}
     _PhysicsProcess<public>(Delta:float):logic = false
     _Process<public>(Delta:float):logic = false
-    OnRequestPermissionsResult<public>()<transacts>:godot_signal(tuple(string, logic)) = godot_signal(tuple(string, logic)){Id := VhSignalBind(Handle, "main_loop", "OnRequestPermissionsResult", "on_request_permissions_result")}
+    OnRequestPermissionsResult<public>()<transacts>:signal(tuple(string, logic)) = signal(tuple(string, logic)){Id := VhSignalBind(Handle, "main_loop", "OnRequestPermissionsResult", "on_request_permissions_result")}
 
 marshalls<public> := class(object):
 
@@ -28665,9 +28665,9 @@ navigation_server2d<public> := class(object):
     SimplifyPath<public>(Path:[]vector2, Arg1:float)<transacts>:[]vector2 = VhToVector2s(VhCallValue(Handle, "simplify_path", array{VhFromVector2s(Path), VhFromFloat(Arg1)}))
     SourceGeometryParserCreate<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "source_geometry_parser_create", array{}))
     SourceGeometryParserSetCallback<public>(Parser:int, Callback:callable)<transacts>:void = VhCallVoid(Handle, "source_geometry_parser_set_callback", array{VhFromRid(Parser), VhFromCallable(Callback)})
-    MapChanged<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "navigation_server2d", "MapChanged", "map_changed")}
-    NavigationDebugChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "navigation_server2d", "NavigationDebugChanged", "navigation_debug_changed")}
-    AvoidanceDebugChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "navigation_server2d", "AvoidanceDebugChanged", "avoidance_debug_changed")}
+    MapChanged<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "navigation_server2d", "MapChanged", "map_changed")}
+    NavigationDebugChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "navigation_server2d", "NavigationDebugChanged", "navigation_debug_changed")}
+    AvoidanceDebugChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "navigation_server2d", "AvoidanceDebugChanged", "avoidance_debug_changed")}
 
 navigation_server2d_manager<public> := class(object):
 
@@ -28830,9 +28830,9 @@ navigation_server3d<public> := class(object):
     SimplifyPath<public>(Path:[]vector3, Arg1:float)<transacts>:[]vector3 = VhToVector3s(VhCallValue(Handle, "simplify_path", array{VhFromVector3s(Path), VhFromFloat(Arg1)}))
     SourceGeometryParserCreate<public>()<transacts>:int = VhToInt(VhCallValue(Handle, "source_geometry_parser_create", array{}))
     SourceGeometryParserSetCallback<public>(Parser:int, Callback:callable)<transacts>:void = VhCallVoid(Handle, "source_geometry_parser_set_callback", array{VhFromRid(Parser), VhFromCallable(Callback)})
-    MapChanged<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "navigation_server3d", "MapChanged", "map_changed")}
-    NavigationDebugChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "navigation_server3d", "NavigationDebugChanged", "navigation_debug_changed")}
-    AvoidanceDebugChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "navigation_server3d", "AvoidanceDebugChanged", "avoidance_debug_changed")}
+    MapChanged<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "navigation_server3d", "MapChanged", "map_changed")}
+    NavigationDebugChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "navigation_server3d", "NavigationDebugChanged", "navigation_debug_changed")}
+    AvoidanceDebugChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "navigation_server3d", "AvoidanceDebugChanged", "avoidance_debug_changed")}
 
 navigation_server3d_manager<public> := class(object):
 
@@ -28977,17 +28977,17 @@ node<public> := class(object):
     _ShortcutInput<public>(Event:input_event):void = {}
     _UnhandledInput<public>(Event:input_event):void = {}
     _UnhandledKeyInput<public>(Event:input_event):void = {}
-    Ready<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "node", "Ready", "ready")}
-    Renamed<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "node", "Renamed", "renamed")}
-    TreeEntered<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "node", "TreeEntered", "tree_entered")}
-    TreeExiting<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "node", "TreeExiting", "tree_exiting")}
-    TreeExited<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "node", "TreeExited", "tree_exited")}
-    ChildEnteredTree<public>()<transacts>:godot_signal(node) = godot_signal(node){Id := VhSignalBind(Handle, "node", "ChildEnteredTree", "child_entered_tree")}
-    ChildExitingTree<public>()<transacts>:godot_signal(node) = godot_signal(node){Id := VhSignalBind(Handle, "node", "ChildExitingTree", "child_exiting_tree")}
-    ChildOrderChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "node", "ChildOrderChanged", "child_order_changed")}
-    ReplacingBy<public>()<transacts>:godot_signal(node) = godot_signal(node){Id := VhSignalBind(Handle, "node", "ReplacingBy", "replacing_by")}
-    EditorDescriptionChanged<public>()<transacts>:godot_signal(node) = godot_signal(node){Id := VhSignalBind(Handle, "node", "EditorDescriptionChanged", "editor_description_changed")}
-    EditorStateChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "node", "EditorStateChanged", "editor_state_changed")}
+    Ready<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "node", "Ready", "ready")}
+    Renamed<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "node", "Renamed", "renamed")}
+    TreeEntered<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "node", "TreeEntered", "tree_entered")}
+    TreeExiting<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "node", "TreeExiting", "tree_exiting")}
+    TreeExited<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "node", "TreeExited", "tree_exited")}
+    ChildEnteredTree<public>()<transacts>:signal(node) = signal(node){Id := VhSignalBind(Handle, "node", "ChildEnteredTree", "child_entered_tree")}
+    ChildExitingTree<public>()<transacts>:signal(node) = signal(node){Id := VhSignalBind(Handle, "node", "ChildExitingTree", "child_exiting_tree")}
+    ChildOrderChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "node", "ChildOrderChanged", "child_order_changed")}
+    ReplacingBy<public>()<transacts>:signal(node) = signal(node){Id := VhSignalBind(Handle, "node", "ReplacingBy", "replacing_by")}
+    EditorDescriptionChanged<public>()<transacts>:signal(node) = signal(node){Id := VhSignalBind(Handle, "node", "EditorDescriptionChanged", "editor_description_changed")}
+    EditorStateChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "node", "EditorStateChanged", "editor_state_changed")}
 
 open_xr_extension_wrapper<public> := class(object):
 
@@ -29635,7 +29635,7 @@ project_settings<public> := class(object):
     SetOrder<public>(Name:string, Position:int)<transacts>:void = VhCallVoid(Handle, "set_order", array{VhFromString(Name), VhFromInt(Position)})
     SetRestartIfChanged<public>(Name:string, Restart:logic)<transacts>:void = VhCallVoid(Handle, "set_restart_if_changed", array{VhFromString(Name), VhFromLogic(Restart)})
     SetSetting<public>(Name:string, Value:variant)<transacts>:void = VhCallVoid(Handle, "set_setting", array{VhFromString(Name), VhFromVariant(Value)})
-    SettingsChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "project_settings", "SettingsChanged", "settings_changed")}
+    SettingsChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "project_settings", "SettingsChanged", "settings_changed")}
 
 ref_counted<public> := class(object):
 
@@ -30310,8 +30310,8 @@ rendering_server<public> := class(object):
     VoxelGiSetPropagation<public>(VoxelGi:int, Amount:float)<transacts>:void = VhCallVoid(Handle, "voxel_gi_set_propagation", array{VhFromRid(VoxelGi), VhFromFloat(Amount)})
     VoxelGiSetQuality<public>(Quality:rendering_server_voxel_gi_quality)<transacts>:void = VhCallVoid(Handle, "voxel_gi_set_quality", array{VhFromRenderingServerVoxelGiQuality(Quality)})
     VoxelGiSetUseTwoBounces<public>(VoxelGi:int, Enable:logic)<transacts>:void = VhCallVoid(Handle, "voxel_gi_set_use_two_bounces", array{VhFromRid(VoxelGi), VhFromLogic(Enable)})
-    FramePreDraw<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "rendering_server", "FramePreDraw", "frame_pre_draw")}
-    FramePostDraw<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "rendering_server", "FramePostDraw", "frame_post_draw")}
+    FramePreDraw<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "rendering_server", "FramePreDraw", "frame_pre_draw")}
+    FramePostDraw<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "rendering_server", "FramePostDraw", "frame_post_draw")}
 
 resource_loader<public> := class(object):
 
@@ -30365,8 +30365,8 @@ text_server_manager<public> := class(object):
     GetPrimaryInterface<public>()<decides><reads>:text_server = text_server[VhObjectFrom[VhCallValueConst(Handle, "get_primary_interface", array{})]]
     RemoveInterface<public>(Interface:text_server)<transacts>:void = VhCallVoid(Handle, "remove_interface", array{VhFromObject(Interface)})
     SetPrimaryInterface<public>(Index:text_server)<transacts>:void = VhCallVoid(Handle, "set_primary_interface", array{VhFromObject(Index)})
-    InterfaceAdded<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "text_server_manager", "InterfaceAdded", "interface_added")}
-    InterfaceRemoved<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "text_server_manager", "InterfaceRemoved", "interface_removed")}
+    InterfaceAdded<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "text_server_manager", "InterfaceAdded", "interface_added")}
+    InterfaceRemoved<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "text_server_manager", "InterfaceRemoved", "interface_removed")}
 
 theme_db<public> := class(object):
 
@@ -30384,7 +30384,7 @@ theme_db<public> := class(object):
     SetFallbackFont<public>(Font:font)<transacts>:void = VhCallVoid(Handle, "set_fallback_font", array{VhFromObject(Font)})
     SetFallbackIcon<public>(Icon:texture2d)<transacts>:void = VhCallVoid(Handle, "set_fallback_icon", array{VhFromObject(Icon)})
     SetFallbackStylebox<public>(Stylebox:style_box)<transacts>:void = VhCallVoid(Handle, "set_fallback_stylebox", array{VhFromObject(Stylebox)})
-    FallbackChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "theme_db", "FallbackChanged", "fallback_changed")}
+    FallbackChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "theme_db", "FallbackChanged", "fallback_changed")}
 
 tile_data<public> := class(object):
 
@@ -30474,7 +30474,7 @@ tile_data<public> := class(object):
     SetOccluderPolygon<public>(LayerId:int, PolygonIndex:int, Polygon:occluder_polygon2d)<transacts>:void = VhCallVoid(Handle, "set_occluder_polygon", array{VhFromInt(LayerId), VhFromInt(PolygonIndex), VhFromObject(Polygon)})
     SetOccluderPolygonsCount<public>(LayerId:int, PolygonsCount:int)<transacts>:void = VhCallVoid(Handle, "set_occluder_polygons_count", array{VhFromInt(LayerId), VhFromInt(PolygonsCount)})
     SetTerrainPeeringBit<public>(PeeringBit:tile_set_cell_neighbor, Arg1:int)<transacts>:void = VhCallVoid(Handle, "set_terrain_peering_bit", array{VhFromTileSetCellNeighbor(PeeringBit), VhFromInt(Arg1)})
-    Changed<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "tile_data", "Changed", "changed")}
+    Changed<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "tile_data", "Changed", "changed")}
 
 time<public> := class(object):
 
@@ -30691,7 +30691,7 @@ undo_redo<public> := class(object):
     Redo<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "redo", array{}))
     StartForceKeepInMergeEnds<public>()<transacts>:void = VhCallVoid(Handle, "start_force_keep_in_merge_ends", array{})
     Undo<public>()<transacts>:logic = VhToLogic(VhCallValue(Handle, "undo", array{}))
-    VersionChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "undo_redo", "VersionChanged", "version_changed")}
+    VersionChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "undo_redo", "VersionChanged", "version_changed")}
 
 uniform_set_cache_rd<public> := class(object):
 
@@ -30745,12 +30745,12 @@ xr_server<public> := class(object):
     RemoveInterface<public>(Interface:xr_interface)<transacts>:void = VhCallVoid(Handle, "remove_interface", array{VhFromObject(Interface)})
     RemoveTracker<public>(Tracker:xr_tracker)<transacts>:void = VhCallVoid(Handle, "remove_tracker", array{VhFromObject(Tracker)})
     SetPrimaryInterface<public>(Interface:xr_interface)<transacts>:void = VhCallVoid(Handle, "set_primary_interface", array{VhFromObject(Interface)})
-    ReferenceFrameChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "xr_server", "ReferenceFrameChanged", "reference_frame_changed")}
-    InterfaceAdded<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "xr_server", "InterfaceAdded", "interface_added")}
-    InterfaceRemoved<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "xr_server", "InterfaceRemoved", "interface_removed")}
-    TrackerAdded<public>()<transacts>:godot_signal(tuple(string, int)) = godot_signal(tuple(string, int)){Id := VhSignalBind(Handle, "xr_server", "TrackerAdded", "tracker_added")}
-    TrackerUpdated<public>()<transacts>:godot_signal(tuple(string, int)) = godot_signal(tuple(string, int)){Id := VhSignalBind(Handle, "xr_server", "TrackerUpdated", "tracker_updated")}
-    TrackerRemoved<public>()<transacts>:godot_signal(tuple(string, int)) = godot_signal(tuple(string, int)){Id := VhSignalBind(Handle, "xr_server", "TrackerRemoved", "tracker_removed")}
+    ReferenceFrameChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "xr_server", "ReferenceFrameChanged", "reference_frame_changed")}
+    InterfaceAdded<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "xr_server", "InterfaceAdded", "interface_added")}
+    InterfaceRemoved<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "xr_server", "InterfaceRemoved", "interface_removed")}
+    TrackerAdded<public>()<transacts>:signal(tuple(string, int)) = signal(tuple(string, int)){Id := VhSignalBind(Handle, "xr_server", "TrackerAdded", "tracker_added")}
+    TrackerUpdated<public>()<transacts>:signal(tuple(string, int)) = signal(tuple(string, int)){Id := VhSignalBind(Handle, "xr_server", "TrackerUpdated", "tracker_updated")}
+    TrackerRemoved<public>()<transacts>:signal(tuple(string, int)) = signal(tuple(string, int)){Id := VhSignalBind(Handle, "xr_server", "TrackerRemoved", "tracker_removed")}
 
 xrvrs<public> := class(object):
 
@@ -30959,13 +30959,13 @@ animation_mixer<public> := class(node):
     SetRootMotionTrack<public>(Path:string)<transacts>:void = VhCallVoid(Handle, "set_root_motion_track", array{VhFromNodePath(Path)})
     SetRootNode<public>(Path:string)<transacts>:void = VhCallVoid(Handle, "set_root_node", array{VhFromNodePath(Path)})
     _PostProcessKeyValue<public>(Animation:animation, Track:int, Value:variant, ObjectId:int, ObjectSubIdx:int):variant = variant{}
-    AnimationListChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "animation_mixer", "AnimationListChanged", "animation_list_changed")}
-    AnimationLibrariesUpdated<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "animation_mixer", "AnimationLibrariesUpdated", "animation_libraries_updated")}
-    AnimationFinished<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "animation_mixer", "AnimationFinished", "animation_finished")}
-    AnimationStarted<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "animation_mixer", "AnimationStarted", "animation_started")}
-    CachesCleared<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "animation_mixer", "CachesCleared", "caches_cleared")}
-    MixerApplied<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "animation_mixer", "MixerApplied", "mixer_applied")}
-    MixerUpdated<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "animation_mixer", "MixerUpdated", "mixer_updated")}
+    AnimationListChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "animation_mixer", "AnimationListChanged", "animation_list_changed")}
+    AnimationLibrariesUpdated<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "animation_mixer", "AnimationLibrariesUpdated", "animation_libraries_updated")}
+    AnimationFinished<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "animation_mixer", "AnimationFinished", "animation_finished")}
+    AnimationStarted<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "animation_mixer", "AnimationStarted", "animation_started")}
+    CachesCleared<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "animation_mixer", "CachesCleared", "caches_cleared")}
+    MixerApplied<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "animation_mixer", "MixerApplied", "mixer_applied")}
+    MixerUpdated<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "animation_mixer", "MixerUpdated", "mixer_updated")}
 
 audio_effect_instance<public> := class(ref_counted):
 
@@ -31035,7 +31035,7 @@ audio_stream_player<public> := class(node):
     SetBus<public>(Bus:string)<transacts>:void = VhCallVoid(Handle, "set_bus", array{VhFromStringName(Bus)})
     SetStream<public>(Stream:audio_stream)<transacts>:void = VhCallVoid(Handle, "set_stream", array{VhFromObject(Stream)})
     Stop<public>()<transacts>:void = VhCallVoid(Handle, "stop", array{})
-    Finished<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "audio_stream_player", "Finished", "finished")}
+    Finished<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "audio_stream_player", "Finished", "finished")}
 
 camera_feed<public> := class(ref_counted):
 
@@ -31059,8 +31059,8 @@ camera_feed<public> := class(ref_counted):
     SetYcbcrImages<public>(YImage:image, CbcrImage:image)<transacts>:void = VhCallVoid(Handle, "set_ycbcr_images", array{VhFromObject(YImage), VhFromObject(CbcrImage)})
     _ActivateFeed<public>():logic = false
     _DeactivateFeed<public>():void = {}
-    FrameChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "camera_feed", "FrameChanged", "frame_changed")}
-    FormatChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "camera_feed", "FormatChanged", "format_changed")}
+    FrameChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "camera_feed", "FrameChanged", "frame_changed")}
+    FormatChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "camera_feed", "FormatChanged", "format_changed")}
 
 canvas_item<public> := class(node):
 
@@ -31196,10 +31196,10 @@ canvas_item<public> := class(node):
     SetVisibilityLayerBit<public>(Layer:int, Enabled:logic)<transacts>:void = VhCallVoid(Handle, "set_visibility_layer_bit", array{VhFromInt(Layer), VhFromLogic(Enabled)})
     Show<public>()<transacts>:void = VhCallVoid(Handle, "show", array{})
     _Draw<public>():void = {}
-    Draw<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "canvas_item", "Draw", "draw")}
-    VisibilityChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "canvas_item", "VisibilityChanged", "visibility_changed")}
-    Hidden<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "canvas_item", "Hidden", "hidden")}
-    ItemRectChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "canvas_item", "ItemRectChanged", "item_rect_changed")}
+    Draw<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "canvas_item", "Draw", "draw")}
+    VisibilityChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "canvas_item", "VisibilityChanged", "visibility_changed")}
+    Hidden<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "canvas_item", "Hidden", "hidden")}
+    ItemRectChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "canvas_item", "ItemRectChanged", "item_rect_changed")}
 
 canvas_layer<public> := class(node):
 
@@ -31250,7 +31250,7 @@ canvas_layer<public> := class(node):
     SetCustomViewport<public>(Viewport:node)<transacts>:void = VhCallVoid(Handle, "set_custom_viewport", array{VhFromObject(Viewport)})
     SetTransform<public>(Transform:transform2d)<transacts>:void = VhCallVoid(Handle, "set_transform", array{VhFromTransform2D(Transform)})
     Show<public>()<transacts>:void = VhCallVoid(Handle, "show", array{})
-    VisibilityChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "canvas_layer", "VisibilityChanged", "visibility_changed")}
+    VisibilityChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "canvas_layer", "VisibilityChanged", "visibility_changed")}
 
 char_fx_transform<public> := class(ref_counted):
 
@@ -31443,10 +31443,10 @@ editor_debugger_session<public> := class(ref_counted):
     SendMessage<public>(Message:string, Data:godot_array)<transacts>:void = VhCallVoid(Handle, "send_message", array{VhFromString(Message), VhFromArray(Data)})
     SetBreakpoint<public>(Path:string, Line:int, Enabled:logic)<transacts>:void = VhCallVoid(Handle, "set_breakpoint", array{VhFromString(Path), VhFromInt(Line), VhFromLogic(Enabled)})
     ToggleProfiler<public>(Profiler:string, Enable:logic, Data:godot_array)<transacts>:void = VhCallVoid(Handle, "toggle_profiler", array{VhFromString(Profiler), VhFromLogic(Enable), VhFromArray(Data)})
-    Started<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "editor_debugger_session", "Started", "started")}
-    Stopped<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "editor_debugger_session", "Stopped", "stopped")}
-    Breaked<public>()<transacts>:godot_signal(logic) = godot_signal(logic){Id := VhSignalBind(Handle, "editor_debugger_session", "Breaked", "breaked")}
-    Continued<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "editor_debugger_session", "Continued", "continued")}
+    Started<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "editor_debugger_session", "Started", "started")}
+    Stopped<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "editor_debugger_session", "Stopped", "stopped")}
+    Breaked<public>()<transacts>:signal(logic) = signal(logic){Id := VhSignalBind(Handle, "editor_debugger_session", "Breaked", "breaked")}
+    Continued<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "editor_debugger_session", "Continued", "continued")}
 
 editor_export_platform<public> := class(ref_counted):
 
@@ -31576,12 +31576,12 @@ editor_file_system<public> := class(node):
     Scan<public>()<transacts>:void = VhCallVoid(Handle, "scan", array{})
     ScanSources<public>()<transacts>:void = VhCallVoid(Handle, "scan_sources", array{})
     UpdateFile<public>(Path:string)<transacts>:void = VhCallVoid(Handle, "update_file", array{VhFromString(Path)})
-    FilesystemChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "editor_file_system", "FilesystemChanged", "filesystem_changed")}
-    ScriptClassesUpdated<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "editor_file_system", "ScriptClassesUpdated", "script_classes_updated")}
-    SourcesChanged<public>()<transacts>:godot_signal(logic) = godot_signal(logic){Id := VhSignalBind(Handle, "editor_file_system", "SourcesChanged", "sources_changed")}
-    ResourcesReimporting<public>()<transacts>:godot_signal([]string) = godot_signal([]string){Id := VhSignalBind(Handle, "editor_file_system", "ResourcesReimporting", "resources_reimporting")}
-    ResourcesReimported<public>()<transacts>:godot_signal([]string) = godot_signal([]string){Id := VhSignalBind(Handle, "editor_file_system", "ResourcesReimported", "resources_reimported")}
-    ResourcesReload<public>()<transacts>:godot_signal([]string) = godot_signal([]string){Id := VhSignalBind(Handle, "editor_file_system", "ResourcesReload", "resources_reload")}
+    FilesystemChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "editor_file_system", "FilesystemChanged", "filesystem_changed")}
+    ScriptClassesUpdated<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "editor_file_system", "ScriptClassesUpdated", "script_classes_updated")}
+    SourcesChanged<public>()<transacts>:signal(logic) = signal(logic){Id := VhSignalBind(Handle, "editor_file_system", "SourcesChanged", "sources_changed")}
+    ResourcesReimporting<public>()<transacts>:signal([]string) = signal([]string){Id := VhSignalBind(Handle, "editor_file_system", "ResourcesReimporting", "resources_reimporting")}
+    ResourcesReimported<public>()<transacts>:signal([]string) = signal([]string){Id := VhSignalBind(Handle, "editor_file_system", "ResourcesReimported", "resources_reimported")}
+    ResourcesReload<public>()<transacts>:signal([]string) = signal([]string){Id := VhSignalBind(Handle, "editor_file_system", "ResourcesReload", "resources_reload")}
 
 editor_file_system_import_format_support_query<public> := class(ref_counted):
 
@@ -31678,12 +31678,12 @@ editor_plugin<public> := class(node):
     _SaveExternalData<public>():void = {}
     _SetState<public>(State:dictionary):void = {}
     _SetWindowLayout<public>(Configuration:config_file):void = {}
-    SceneChanged<public>()<transacts>:godot_signal(node) = godot_signal(node){Id := VhSignalBind(Handle, "editor_plugin", "SceneChanged", "scene_changed")}
-    SceneClosed<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "editor_plugin", "SceneClosed", "scene_closed")}
-    MainScreenChanged<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "editor_plugin", "MainScreenChanged", "main_screen_changed")}
-    ResourceSaved<public>()<transacts>:godot_signal(resource) = godot_signal(resource){Id := VhSignalBind(Handle, "editor_plugin", "ResourceSaved", "resource_saved")}
-    SceneSaved<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "editor_plugin", "SceneSaved", "scene_saved")}
-    ProjectSettingsChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "editor_plugin", "ProjectSettingsChanged", "project_settings_changed")}
+    SceneChanged<public>()<transacts>:signal(node) = signal(node){Id := VhSignalBind(Handle, "editor_plugin", "SceneChanged", "scene_changed")}
+    SceneClosed<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "editor_plugin", "SceneClosed", "scene_closed")}
+    MainScreenChanged<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "editor_plugin", "MainScreenChanged", "main_screen_changed")}
+    ResourceSaved<public>()<transacts>:signal(resource) = signal(resource){Id := VhSignalBind(Handle, "editor_plugin", "ResourceSaved", "resource_saved")}
+    SceneSaved<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "editor_plugin", "SceneSaved", "scene_saved")}
+    ProjectSettingsChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "editor_plugin", "ProjectSettingsChanged", "project_settings_changed")}
 
 editor_resource_conversion_plugin<public> := class(ref_counted):
 
@@ -31697,7 +31697,7 @@ editor_resource_preview<public> := class(node):
     QueueEditedResourcePreview<public>(Resource:resource, Receiver:object, ReceiverFunc:string, Userdata:variant)<transacts>:void = VhCallVoid(Handle, "queue_edited_resource_preview", array{VhFromObject(Resource), VhFromObject(Receiver), VhFromStringName(ReceiverFunc), VhFromVariant(Userdata)})
     QueueResourcePreview<public>(Path:string, Receiver:object, ReceiverFunc:string, Userdata:variant)<transacts>:void = VhCallVoid(Handle, "queue_resource_preview", array{VhFromString(Path), VhFromObject(Receiver), VhFromStringName(ReceiverFunc), VhFromVariant(Userdata)})
     RemovePreviewGenerator<public>(Generator:editor_resource_preview_generator)<transacts>:void = VhCallVoid(Handle, "remove_preview_generator", array{VhFromObject(Generator)})
-    PreviewInvalidated<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "editor_resource_preview", "PreviewInvalidated", "preview_invalidated")}
+    PreviewInvalidated<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "editor_resource_preview", "PreviewInvalidated", "preview_invalidated")}
 
 editor_resource_preview_generator<public> := class(ref_counted):
 
@@ -31906,7 +31906,7 @@ http_request<public> := class(node):
     SetHttpProxy<public>(Host:string, Port:int)<transacts>:void = VhCallVoid(Handle, "set_http_proxy", array{VhFromString(Host), VhFromInt(Port)})
     SetHttpsProxy<public>(Host:string, Port:int)<transacts>:void = VhCallVoid(Handle, "set_https_proxy", array{VhFromString(Host), VhFromInt(Port)})
     SetTlsOptions<public>(ClientOptions:tls_options)<transacts>:void = VhCallVoid(Handle, "set_tls_options", array{VhFromObject(ClientOptions)})
-    RequestCompleted<public>()<transacts>:godot_signal(tuple(int, int, []string, []int)) = godot_signal(tuple(int, int, []string, []int)){Id := VhSignalBind(Handle, "http_request", "RequestCompleted", "request_completed")}
+    RequestCompleted<public>()<transacts>:signal(tuple(int, int, []string, []int)) = signal(tuple(int, int, []string, []int)){Id := VhSignalBind(Handle, "http_request", "RequestCompleted", "request_completed")}
 
 image_format_loader<public> := class(ref_counted):
 
@@ -32079,11 +32079,11 @@ multiplayer_api<public> := class(ref_counted):
     Poll<public>()<transacts>:error = VhToError(VhCallValue(Handle, "poll", array{}))
     Rpc<public>(Peer:int, Object:object, Method:string, Arguments:godot_array)<transacts>:error = VhToError(VhCallValue(Handle, "rpc", array{VhFromInt(Peer), VhFromObject(Object), VhFromStringName(Method), VhFromArray(Arguments)}))
     SetMultiplayerPeer<public>(Peer:multiplayer_peer)<transacts>:void = VhCallVoid(Handle, "set_multiplayer_peer", array{VhFromObject(Peer)})
-    PeerConnected<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "multiplayer_api", "PeerConnected", "peer_connected")}
-    PeerDisconnected<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "multiplayer_api", "PeerDisconnected", "peer_disconnected")}
-    ConnectedToServer<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "multiplayer_api", "ConnectedToServer", "connected_to_server")}
-    ConnectionFailed<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "multiplayer_api", "ConnectionFailed", "connection_failed")}
-    ServerDisconnected<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "multiplayer_api", "ServerDisconnected", "server_disconnected")}
+    PeerConnected<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "multiplayer_api", "PeerConnected", "peer_connected")}
+    PeerDisconnected<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "multiplayer_api", "PeerDisconnected", "peer_disconnected")}
+    ConnectedToServer<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "multiplayer_api", "ConnectedToServer", "connected_to_server")}
+    ConnectionFailed<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "multiplayer_api", "ConnectionFailed", "connection_failed")}
+    ServerDisconnected<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "multiplayer_api", "ServerDisconnected", "server_disconnected")}
 
 multiplayer_spawner<public> := class(node):
 
@@ -32099,8 +32099,8 @@ multiplayer_spawner<public> := class(node):
     SetSpawnFunction<public>(SpawnFunction:callable)<transacts>:void = VhCallVoid(Handle, "set_spawn_function", array{VhFromCallable(SpawnFunction)})
     SetSpawnPath<public>(Path:string)<transacts>:void = VhCallVoid(Handle, "set_spawn_path", array{VhFromNodePath(Path)})
     Spawn<public>(Data:variant)<decides><transacts>:node = node[VhObjectFrom[VhCallValue(Handle, "spawn", array{VhFromVariant(Data)})]]
-    Despawned<public>()<transacts>:godot_signal(node) = godot_signal(node){Id := VhSignalBind(Handle, "multiplayer_spawner", "Despawned", "despawned")}
-    Spawned<public>()<transacts>:godot_signal(node) = godot_signal(node){Id := VhSignalBind(Handle, "multiplayer_spawner", "Spawned", "spawned")}
+    Despawned<public>()<transacts>:signal(node) = signal(node){Id := VhSignalBind(Handle, "multiplayer_spawner", "Despawned", "despawned")}
+    Spawned<public>()<transacts>:signal(node) = signal(node){Id := VhSignalBind(Handle, "multiplayer_spawner", "Spawned", "spawned")}
 
 multiplayer_synchronizer<public> := class(node):
 
@@ -32125,9 +32125,9 @@ multiplayer_synchronizer<public> := class(node):
     SetRootPath<public>(Path:string)<transacts>:void = VhCallVoid(Handle, "set_root_path", array{VhFromNodePath(Path)})
     SetVisibilityFor<public>(Peer:int, Visible:logic)<transacts>:void = VhCallVoid(Handle, "set_visibility_for", array{VhFromInt(Peer), VhFromLogic(Visible)})
     UpdateVisibility<public>(?ForPeer:int = 0)<transacts>:void = VhCallVoid(Handle, "update_visibility", array{VhFromInt(ForPeer)})
-    Synchronized<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "multiplayer_synchronizer", "Synchronized", "synchronized")}
-    DeltaSynchronized<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "multiplayer_synchronizer", "DeltaSynchronized", "delta_synchronized")}
-    VisibilityChanged<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "multiplayer_synchronizer", "VisibilityChanged", "visibility_changed")}
+    Synchronized<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "multiplayer_synchronizer", "Synchronized", "synchronized")}
+    DeltaSynchronized<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "multiplayer_synchronizer", "DeltaSynchronized", "delta_synchronized")}
+    VisibilityChanged<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "multiplayer_synchronizer", "VisibilityChanged", "visibility_changed")}
 
 mutex<public> := class(ref_counted):
 
@@ -32278,12 +32278,12 @@ navigation_agent2d<public> := class(node):
     SetNavigationLayerValue<public>(LayerNumber:int, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_navigation_layer_value", array{VhFromInt(LayerNumber), VhFromLogic(Value)})
     SetNavigationMap<public>(NavigationMap:int)<transacts>:void = VhCallVoid(Handle, "set_navigation_map", array{VhFromRid(NavigationMap)})
     SetVelocityForced<public>(Arg0:vector2)<transacts>:void = VhCallVoid(Handle, "set_velocity_forced", array{VhFromVector2(Arg0)})
-    PathChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "navigation_agent2d", "PathChanged", "path_changed")}
-    TargetReached<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "navigation_agent2d", "TargetReached", "target_reached")}
-    WaypointReached<public>()<transacts>:godot_signal(dictionary) = godot_signal(dictionary){Id := VhSignalBind(Handle, "navigation_agent2d", "WaypointReached", "waypoint_reached")}
-    LinkReached<public>()<transacts>:godot_signal(dictionary) = godot_signal(dictionary){Id := VhSignalBind(Handle, "navigation_agent2d", "LinkReached", "link_reached")}
-    NavigationFinished<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "navigation_agent2d", "NavigationFinished", "navigation_finished")}
-    VelocityComputed<public>()<transacts>:godot_signal(vector2) = godot_signal(vector2){Id := VhSignalBind(Handle, "navigation_agent2d", "VelocityComputed", "velocity_computed")}
+    PathChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "navigation_agent2d", "PathChanged", "path_changed")}
+    TargetReached<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "navigation_agent2d", "TargetReached", "target_reached")}
+    WaypointReached<public>()<transacts>:signal(dictionary) = signal(dictionary){Id := VhSignalBind(Handle, "navigation_agent2d", "WaypointReached", "waypoint_reached")}
+    LinkReached<public>()<transacts>:signal(dictionary) = signal(dictionary){Id := VhSignalBind(Handle, "navigation_agent2d", "LinkReached", "link_reached")}
+    NavigationFinished<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "navigation_agent2d", "NavigationFinished", "navigation_finished")}
+    VelocityComputed<public>()<transacts>:signal(vector2) = signal(vector2){Id := VhSignalBind(Handle, "navigation_agent2d", "VelocityComputed", "velocity_computed")}
 
 navigation_agent3d<public> := class(node):
 
@@ -32441,12 +32441,12 @@ navigation_agent3d<public> := class(node):
     SetNavigationLayerValue<public>(LayerNumber:int, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_navigation_layer_value", array{VhFromInt(LayerNumber), VhFromLogic(Value)})
     SetNavigationMap<public>(NavigationMap:int)<transacts>:void = VhCallVoid(Handle, "set_navigation_map", array{VhFromRid(NavigationMap)})
     SetVelocityForced<public>(Arg0:vector3)<transacts>:void = VhCallVoid(Handle, "set_velocity_forced", array{VhFromVector3(Arg0)})
-    PathChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "navigation_agent3d", "PathChanged", "path_changed")}
-    TargetReached<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "navigation_agent3d", "TargetReached", "target_reached")}
-    WaypointReached<public>()<transacts>:godot_signal(dictionary) = godot_signal(dictionary){Id := VhSignalBind(Handle, "navigation_agent3d", "WaypointReached", "waypoint_reached")}
-    LinkReached<public>()<transacts>:godot_signal(dictionary) = godot_signal(dictionary){Id := VhSignalBind(Handle, "navigation_agent3d", "LinkReached", "link_reached")}
-    NavigationFinished<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "navigation_agent3d", "NavigationFinished", "navigation_finished")}
-    VelocityComputed<public>()<transacts>:godot_signal(vector3) = godot_signal(vector3){Id := VhSignalBind(Handle, "navigation_agent3d", "VelocityComputed", "velocity_computed")}
+    PathChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "navigation_agent3d", "PathChanged", "path_changed")}
+    TargetReached<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "navigation_agent3d", "TargetReached", "target_reached")}
+    WaypointReached<public>()<transacts>:signal(dictionary) = signal(dictionary){Id := VhSignalBind(Handle, "navigation_agent3d", "WaypointReached", "waypoint_reached")}
+    LinkReached<public>()<transacts>:signal(dictionary) = signal(dictionary){Id := VhSignalBind(Handle, "navigation_agent3d", "LinkReached", "link_reached")}
+    NavigationFinished<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "navigation_agent3d", "NavigationFinished", "navigation_finished")}
+    VelocityComputed<public>()<transacts>:signal(vector3) = signal(vector3){Id := VhSignalBind(Handle, "navigation_agent3d", "VelocityComputed", "velocity_computed")}
 
 navigation_path_query_parameters2d<public> := class(ref_counted):
 
@@ -32791,7 +32791,7 @@ node3d<public> := class(node):
     Translate<public>(Offset:vector3)<transacts>:void = VhCallVoid(Handle, "translate", array{VhFromVector3(Offset)})
     TranslateObjectLocal<public>(Offset:vector3)<transacts>:void = VhCallVoid(Handle, "translate_object_local", array{VhFromVector3(Offset)})
     UpdateGizmos<public>()<transacts>:void = VhCallVoid(Handle, "update_gizmos", array{})
-    VisibilityChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "node3d", "VisibilityChanged", "visibility_changed")}
+    VisibilityChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "node3d", "VisibilityChanged", "visibility_changed")}
 
 node3d_gizmo<public> := class(ref_counted):
 
@@ -32827,7 +32827,7 @@ open_xr_future_result<public> := class(ref_counted):
     GetResultValue<public>()<reads>:variant = VhToVariant(VhCallValueConst(Handle, "get_result_value", array{}))
     GetStatus<public>()<reads>:open_xr_future_result_result_status = VhToOpenXrFutureResultResultStatus(VhCallValueConst(Handle, "get_status", array{}))
     SetResultValue<public>(ResultValue:variant)<transacts>:void = VhCallVoid(Handle, "set_result_value", array{VhFromVariant(ResultValue)})
-    Completed<public>()<transacts>:godot_signal(open_xr_future_result) = godot_signal(open_xr_future_result){Id := VhSignalBind(Handle, "open_xr_future_result", "Completed", "completed")}
+    Completed<public>()<transacts>:signal(open_xr_future_result) = signal(open_xr_future_result){Id := VhSignalBind(Handle, "open_xr_future_result", "Completed", "completed")}
 
 open_xr_render_model_extension<public> := class(open_xr_extension_wrapper):
 
@@ -32844,9 +32844,9 @@ open_xr_render_model_extension<public> := class(open_xr_extension_wrapper):
     RenderModelGetTopLevelPath<public>(RenderModel:int)<reads>:string = VhToString(VhCallValueConst(Handle, "render_model_get_top_level_path", array{VhFromRid(RenderModel)}))
     RenderModelIsAnimatableNodeVisible<public>(RenderModel:int, Index:int)<reads>:logic = VhToLogic(VhCallValueConst(Handle, "render_model_is_animatable_node_visible", array{VhFromRid(RenderModel), VhFromInt(Index)}))
     RenderModelNewSceneInstance<public>(RenderModel:int)<decides><reads>:node3d = node3d[VhObjectFrom[VhCallValueConst(Handle, "render_model_new_scene_instance", array{VhFromRid(RenderModel)})]]
-    RenderModelAdded<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "open_xr_render_model_extension", "RenderModelAdded", "render_model_added")}
-    RenderModelRemoved<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "open_xr_render_model_extension", "RenderModelRemoved", "render_model_removed")}
-    RenderModelTopLevelPathChanged<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "open_xr_render_model_extension", "RenderModelTopLevelPathChanged", "render_model_top_level_path_changed")}
+    RenderModelAdded<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "open_xr_render_model_extension", "RenderModelAdded", "render_model_added")}
+    RenderModelRemoved<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "open_xr_render_model_extension", "RenderModelRemoved", "render_model_removed")}
+    RenderModelTopLevelPathChanged<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "open_xr_render_model_extension", "RenderModelTopLevelPathChanged", "render_model_top_level_path_changed")}
 
 open_xr_spatial_anchor_capability<public> := class(open_xr_extension_wrapper):
 
@@ -32901,7 +32901,7 @@ open_xr_spatial_entity_extension<public> := class(open_xr_extension_wrapper):
     SupportsCapability<public>(Capability:open_xr_spatial_entity_extension_capability)<transacts>:logic = VhToLogic(VhCallValue(Handle, "supports_capability", array{VhFromOpenXrSpatialEntityExtensionCapability(Capability)}))
     SupportsComponentType<public>(Capability:open_xr_spatial_entity_extension_capability, ComponentType:open_xr_spatial_entity_extension_component_type)<transacts>:logic = VhToLogic(VhCallValue(Handle, "supports_component_type", array{VhFromOpenXrSpatialEntityExtensionCapability(Capability), VhFromOpenXrSpatialEntityExtensionComponentType(ComponentType)}))
     UpdateSpatialEntities<public>(SpatialContext:int, Entities:typed_array(int), ComponentTypes:[]int, Next:open_xr_structure_base)<transacts>:int = VhToInt(VhCallValue(Handle, "update_spatial_entities", array{VhFromRid(SpatialContext), VhFromRIDArray(Entities), VhFromInt64Array(ComponentTypes), VhFromObject(Next)}))
-    SpatialDiscoveryRecommended<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "open_xr_spatial_entity_extension", "SpatialDiscoveryRecommended", "spatial_discovery_recommended")}
+    SpatialDiscoveryRecommended<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "open_xr_spatial_entity_extension", "SpatialDiscoveryRecommended", "spatial_discovery_recommended")}
 
 open_xr_spatial_marker_tracking_capability<public> := class(open_xr_extension_wrapper):
 
@@ -34262,8 +34262,8 @@ resource<public> := class(ref_counted):
     _ResetState<public>():void = {}
     _SetPathCache<public>(Path:string):void = {}
     _SetupLocalToScene<public>():void = {}
-    Changed<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "resource", "Changed", "changed")}
-    SetupLocalToSceneRequested<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "resource", "SetupLocalToSceneRequested", "setup_local_to_scene_requested")}
+    Changed<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "resource", "Changed", "changed")}
+    SetupLocalToSceneRequested<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "resource", "SetupLocalToSceneRequested", "setup_local_to_scene_requested")}
 
 resource_format_loader<public> := class(ref_counted):
 
@@ -34381,22 +34381,22 @@ scene_tree<public> := class(main_loop):
     SetGroupFlags<public>(CallFlags:int, Group:string, Property:string, Value:variant)<transacts>:void = VhCallVoid(Handle, "set_group_flags", array{VhFromInt(CallFlags), VhFromStringName(Group), VhFromString(Property), VhFromVariant(Value)})
     SetMultiplayer<public>(Multiplayer:multiplayer_api, ?RootPath:string = "")<transacts>:void = VhCallVoid(Handle, "set_multiplayer", array{VhFromObject(Multiplayer), VhFromNodePath(RootPath)})
     UnloadCurrentScene<public>()<transacts>:void = VhCallVoid(Handle, "unload_current_scene", array{})
-    TreeChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "scene_tree", "TreeChanged", "tree_changed")}
-    SceneChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "scene_tree", "SceneChanged", "scene_changed")}
-    TreeProcessModeChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "scene_tree", "TreeProcessModeChanged", "tree_process_mode_changed")}
-    NodeAdded<public>()<transacts>:godot_signal(node) = godot_signal(node){Id := VhSignalBind(Handle, "scene_tree", "NodeAdded", "node_added")}
-    NodeRemoved<public>()<transacts>:godot_signal(node) = godot_signal(node){Id := VhSignalBind(Handle, "scene_tree", "NodeRemoved", "node_removed")}
-    NodeRenamed<public>()<transacts>:godot_signal(node) = godot_signal(node){Id := VhSignalBind(Handle, "scene_tree", "NodeRenamed", "node_renamed")}
-    NodeConfigurationWarningChanged<public>()<transacts>:godot_signal(node) = godot_signal(node){Id := VhSignalBind(Handle, "scene_tree", "NodeConfigurationWarningChanged", "node_configuration_warning_changed")}
-    ProcessFrame<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "scene_tree", "ProcessFrame", "process_frame")}
-    PhysicsFrame<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "scene_tree", "PhysicsFrame", "physics_frame")}
+    TreeChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "scene_tree", "TreeChanged", "tree_changed")}
+    SceneChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "scene_tree", "SceneChanged", "scene_changed")}
+    TreeProcessModeChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "scene_tree", "TreeProcessModeChanged", "tree_process_mode_changed")}
+    NodeAdded<public>()<transacts>:signal(node) = signal(node){Id := VhSignalBind(Handle, "scene_tree", "NodeAdded", "node_added")}
+    NodeRemoved<public>()<transacts>:signal(node) = signal(node){Id := VhSignalBind(Handle, "scene_tree", "NodeRemoved", "node_removed")}
+    NodeRenamed<public>()<transacts>:signal(node) = signal(node){Id := VhSignalBind(Handle, "scene_tree", "NodeRenamed", "node_renamed")}
+    NodeConfigurationWarningChanged<public>()<transacts>:signal(node) = signal(node){Id := VhSignalBind(Handle, "scene_tree", "NodeConfigurationWarningChanged", "node_configuration_warning_changed")}
+    ProcessFrame<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "scene_tree", "ProcessFrame", "process_frame")}
+    PhysicsFrame<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "scene_tree", "PhysicsFrame", "physics_frame")}
 
 scene_tree_timer<public> := class(ref_counted):
 
     var TimeLeft<public><getter(TimeLeftGetter)><setter(TimeLeftSetter)>:float = external {}
     TimeLeftGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_time_left", array{}))
     TimeLeftSetter<epic_internal>(Accessor:accessor, Value:float)<transacts>:void = VhCallVoid(Handle, "set_time_left", array{VhFromFloat(Value)})
-    Timeout<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "scene_tree_timer", "Timeout", "timeout")}
+    Timeout<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "scene_tree_timer", "Timeout", "timeout")}
 
 script_backtrace<public> := class(ref_counted):
 
@@ -34503,7 +34503,7 @@ status_indicator<public> := class(node):
     SetIcon<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_icon", array{VhFromObject(Texture)})
     SetMenu<public>(Menu:string)<transacts>:void = VhCallVoid(Handle, "set_menu", array{VhFromNodePath(Menu)})
     SetTooltip<public>(Tooltip:string)<transacts>:void = VhCallVoid(Handle, "set_tooltip", array{VhFromString(Tooltip)})
-    Pressed<public>()<transacts>:godot_signal(tuple(int, vector2i)) = godot_signal(tuple(int, vector2i)){Id := VhSignalBind(Handle, "status_indicator", "Pressed", "pressed")}
+    Pressed<public>()<transacts>:signal(tuple(int, vector2i)) = signal(tuple(int, vector2i)){Id := VhSignalBind(Handle, "status_indicator", "Pressed", "pressed")}
 
 stream_peer<public> := class(ref_counted):
 
@@ -34977,7 +34977,7 @@ timer<public> := class(node):
     IsStopped<public>()<reads>:logic = VhToLogic(VhCallValueConst(Handle, "is_stopped", array{}))
     Start<public>(?TimeSec:float = -1.0)<transacts>:void = VhCallVoid(Handle, "start", array{VhFromFloat(TimeSec)})
     Stop<public>()<transacts>:void = VhCallVoid(Handle, "stop", array{})
-    Timeout<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "timer", "Timeout", "timeout")}
+    Timeout<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "timer", "Timeout", "timeout")}
 
 tls_options<public> := class(ref_counted):
 
@@ -35066,13 +35066,13 @@ tween<public> := class(ref_counted):
     TweenMethod<public>(Method:callable, From:variant, To:variant, Duration:float)<decides><transacts>:method_tweener = method_tweener[VhObjectFrom[VhCallValue(Handle, "tween_method", array{VhFromCallable(Method), VhFromVariant(From), VhFromVariant(To), VhFromFloat(Duration)})]]
     TweenProperty<public>(Object:object, Property:string, FinalVal:variant, Duration:float)<decides><transacts>:property_tweener = property_tweener[VhObjectFrom[VhCallValue(Handle, "tween_property", array{VhFromObject(Object), VhFromNodePath(Property), VhFromVariant(FinalVal), VhFromFloat(Duration)})]]
     TweenSubtween<public>(Subtween:tween)<decides><transacts>:subtween_tweener = subtween_tweener[VhObjectFrom[VhCallValue(Handle, "tween_subtween", array{VhFromObject(Subtween)})]]
-    StepFinished<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "tween", "StepFinished", "step_finished")}
-    LoopFinished<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "tween", "LoopFinished", "loop_finished")}
-    Finished<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "tween", "Finished", "finished")}
+    StepFinished<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "tween", "StepFinished", "step_finished")}
+    LoopFinished<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "tween", "LoopFinished", "loop_finished")}
+    Finished<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "tween", "Finished", "finished")}
 
 tweener<public> := class(ref_counted):
 
-    Finished<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "tweener", "Finished", "finished")}
+    Finished<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "tweener", "Finished", "finished")}
 
 udp_server<public> := class(ref_counted):
 
@@ -35312,8 +35312,8 @@ viewport<public> := class(node):
     SetWorld3d<public>(World3d:world3d)<transacts>:void = VhCallVoid(Handle, "set_world_3d", array{VhFromObject(World3d)})
     UpdateMouseCursorState<public>()<transacts>:void = VhCallVoid(Handle, "update_mouse_cursor_state", array{})
     WarpMouse<public>(Position:vector2)<transacts>:void = VhCallVoid(Handle, "warp_mouse", array{VhFromVector2(Position)})
-    SizeChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "viewport", "SizeChanged", "size_changed")}
-    GuiFocusChanged<public>()<transacts>:godot_signal(control) = godot_signal(control){Id := VhSignalBind(Handle, "viewport", "GuiFocusChanged", "gui_focus_changed")}
+    SizeChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "viewport", "SizeChanged", "size_changed")}
+    GuiFocusChanged<public>()<transacts>:signal(control) = signal(control){Id := VhSignalBind(Handle, "viewport", "GuiFocusChanged", "gui_focus_changed")}
 
 weak_ref<public> := class(ref_counted):
 
@@ -35332,9 +35332,9 @@ web_rtc_peer_connection<public> := class(ref_counted):
     Poll<public>()<transacts>:error = VhToError(VhCallValue(Handle, "poll", array{}))
     SetLocalDescription<public>(Type:string, Sdp:string)<transacts>:error = VhToError(VhCallValue(Handle, "set_local_description", array{VhFromString(Type), VhFromString(Sdp)}))
     SetRemoteDescription<public>(Type:string, Sdp:string)<transacts>:error = VhToError(VhCallValue(Handle, "set_remote_description", array{VhFromString(Type), VhFromString(Sdp)}))
-    SessionDescriptionCreated<public>()<transacts>:godot_signal(tuple(string, string)) = godot_signal(tuple(string, string)){Id := VhSignalBind(Handle, "web_rtc_peer_connection", "SessionDescriptionCreated", "session_description_created")}
-    IceCandidateCreated<public>()<transacts>:godot_signal(tuple(string, int, string)) = godot_signal(tuple(string, int, string)){Id := VhSignalBind(Handle, "web_rtc_peer_connection", "IceCandidateCreated", "ice_candidate_created")}
-    DataChannelReceived<public>()<transacts>:godot_signal(web_rtc_data_channel) = godot_signal(web_rtc_data_channel){Id := VhSignalBind(Handle, "web_rtc_peer_connection", "DataChannelReceived", "data_channel_received")}
+    SessionDescriptionCreated<public>()<transacts>:signal(tuple(string, string)) = signal(tuple(string, string)){Id := VhSignalBind(Handle, "web_rtc_peer_connection", "SessionDescriptionCreated", "session_description_created")}
+    IceCandidateCreated<public>()<transacts>:signal(tuple(string, int, string)) = signal(tuple(string, int, string)){Id := VhSignalBind(Handle, "web_rtc_peer_connection", "IceCandidateCreated", "ice_candidate_created")}
+    DataChannelReceived<public>()<transacts>:signal(web_rtc_data_channel) = signal(web_rtc_data_channel){Id := VhSignalBind(Handle, "web_rtc_peer_connection", "DataChannelReceived", "data_channel_received")}
 
 world_environment<public> := class(node):
 
@@ -35399,7 +35399,7 @@ xr_interface<public> := class(ref_counted):
     SupportsPlayAreaMode<public>(Mode:xr_interface_play_area_mode)<transacts>:logic = VhToLogic(VhCallValue(Handle, "supports_play_area_mode", array{VhFromXrInterfacePlayAreaMode(Mode)}))
     TriggerHapticPulse<public>(ActionName:string, TrackerName:string, Frequency:float, Amplitude:float, DurationSec:float, DelaySec:float)<transacts>:void = VhCallVoid(Handle, "trigger_haptic_pulse", array{VhFromString(ActionName), VhFromStringName(TrackerName), VhFromFloat(Frequency), VhFromFloat(Amplitude), VhFromFloat(DurationSec), VhFromFloat(DelaySec)})
     Uninitialize<public>()<transacts>:void = VhCallVoid(Handle, "uninitialize", array{})
-    PlayAreaChanged<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "xr_interface", "PlayAreaChanged", "play_area_changed")}
+    PlayAreaChanged<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "xr_interface", "PlayAreaChanged", "play_area_changed")}
 
 xr_pose<public> := class(ref_counted):
 
@@ -35549,10 +35549,10 @@ animation_library<public> := class(resource):
     HasAnimation<public>(Name:string)<reads>:logic = VhToLogic(VhCallValueConst(Handle, "has_animation", array{VhFromStringName(Name)}))
     RemoveAnimation<public>(Name:string)<transacts>:void = VhCallVoid(Handle, "remove_animation", array{VhFromStringName(Name)})
     RenameAnimation<public>(Name:string, Newname:string)<transacts>:void = VhCallVoid(Handle, "rename_animation", array{VhFromStringName(Name), VhFromStringName(Newname)})
-    AnimationAdded<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "animation_library", "AnimationAdded", "animation_added")}
-    AnimationRemoved<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "animation_library", "AnimationRemoved", "animation_removed")}
-    AnimationRenamed<public>()<transacts>:godot_signal(tuple(string, string)) = godot_signal(tuple(string, string)){Id := VhSignalBind(Handle, "animation_library", "AnimationRenamed", "animation_renamed")}
-    AnimationChanged<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "animation_library", "AnimationChanged", "animation_changed")}
+    AnimationAdded<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "animation_library", "AnimationAdded", "animation_added")}
+    AnimationRemoved<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "animation_library", "AnimationRemoved", "animation_removed")}
+    AnimationRenamed<public>()<transacts>:signal(tuple(string, string)) = signal(tuple(string, string)){Id := VhSignalBind(Handle, "animation_library", "AnimationRenamed", "animation_renamed")}
+    AnimationChanged<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "animation_library", "AnimationChanged", "animation_changed")}
 
 animation_node<public> := class(resource):
 
@@ -35581,9 +35581,9 @@ animation_node<public> := class(resource):
     _HasFilter<public>():logic = false
     _IsParameterReadOnly<public>(Parameter:string):logic = false
     _Process<public>(Time:float, Seek:logic, IsExternalSeeking:logic, TestOnly:logic):float = 0.0
-    TreeChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "animation_node", "TreeChanged", "tree_changed")}
-    AnimationNodeRenamed<public>()<transacts>:godot_signal(tuple(int, string, string)) = godot_signal(tuple(int, string, string)){Id := VhSignalBind(Handle, "animation_node", "AnimationNodeRenamed", "animation_node_renamed")}
-    AnimationNodeRemoved<public>()<transacts>:godot_signal(tuple(int, string)) = godot_signal(tuple(int, string)){Id := VhSignalBind(Handle, "animation_node", "AnimationNodeRemoved", "animation_node_removed")}
+    TreeChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "animation_node", "TreeChanged", "tree_changed")}
+    AnimationNodeRenamed<public>()<transacts>:signal(tuple(int, string, string)) = signal(tuple(int, string, string)){Id := VhSignalBind(Handle, "animation_node", "AnimationNodeRenamed", "animation_node_renamed")}
+    AnimationNodeRemoved<public>()<transacts>:signal(tuple(int, string)) = signal(tuple(int, string)){Id := VhSignalBind(Handle, "animation_node", "AnimationNodeRemoved", "animation_node_removed")}
 
 animation_node_state_machine_playback<public> := class(resource):
 
@@ -35601,8 +35601,8 @@ animation_node_state_machine_playback<public> := class(resource):
     Start<public>(Node:string, ?Reset:logic = true)<transacts>:void = VhCallVoid(Handle, "start", array{VhFromStringName(Node), VhFromLogic(Reset)})
     Stop<public>()<transacts>:void = VhCallVoid(Handle, "stop", array{})
     Travel<public>(ToNode:string, ?ResetOnTeleport:logic = true)<transacts>:void = VhCallVoid(Handle, "travel", array{VhFromStringName(ToNode), VhFromLogic(ResetOnTeleport)})
-    StateStarted<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "animation_node_state_machine_playback", "StateStarted", "state_started")}
-    StateFinished<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "animation_node_state_machine_playback", "StateFinished", "state_finished")}
+    StateStarted<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "animation_node_state_machine_playback", "StateStarted", "state_started")}
+    StateFinished<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "animation_node_state_machine_playback", "StateFinished", "state_finished")}
 
 animation_node_state_machine_transition<public> := class(resource):
 
@@ -35630,7 +35630,7 @@ animation_node_state_machine_transition<public> := class(resource):
     SetAdvanceCondition<public>(Name:string)<transacts>:void = VhCallVoid(Handle, "set_advance_condition", array{VhFromStringName(Name)})
     SetAdvanceExpression<public>(Text:string)<transacts>:void = VhCallVoid(Handle, "set_advance_expression", array{VhFromString(Text)})
     SetXfadeCurve<public>(Curve:curve)<transacts>:void = VhCallVoid(Handle, "set_xfade_curve", array{VhFromObject(Curve)})
-    AdvanceConditionChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "animation_node_state_machine_transition", "AdvanceConditionChanged", "advance_condition_changed")}
+    AdvanceConditionChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "animation_node_state_machine_transition", "AdvanceConditionChanged", "advance_condition_changed")}
 
 animation_player<public> := class(animation_mixer):
 
@@ -35695,8 +35695,8 @@ animation_player<public> := class(animation_mixer):
     SetSection<public>(?StartTime:float = -1.0, ?EndTime:float = -1.0)<transacts>:void = VhCallVoid(Handle, "set_section", array{VhFromFloat(StartTime), VhFromFloat(EndTime)})
     SetSectionWithMarkers<public>(?StartMarker:string = "", ?EndMarker:string = "")<transacts>:void = VhCallVoid(Handle, "set_section_with_markers", array{VhFromStringName(StartMarker), VhFromStringName(EndMarker)})
     Stop<public>(?KeepState:logic = false)<transacts>:void = VhCallVoid(Handle, "stop", array{VhFromLogic(KeepState)})
-    CurrentAnimationChanged<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "animation_player", "CurrentAnimationChanged", "current_animation_changed")}
-    AnimationChanged<public>()<transacts>:godot_signal(tuple(string, string)) = godot_signal(tuple(string, string)){Id := VhSignalBind(Handle, "animation_player", "AnimationChanged", "animation_changed")}
+    CurrentAnimationChanged<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "animation_player", "CurrentAnimationChanged", "current_animation_changed")}
+    AnimationChanged<public>()<transacts>:signal(tuple(string, string)) = signal(tuple(string, string)){Id := VhSignalBind(Handle, "animation_player", "AnimationChanged", "animation_changed")}
 
 animation_tree<public> := class(animation_mixer):
 
@@ -35708,7 +35708,7 @@ animation_tree<public> := class(animation_mixer):
     SetAnimationPlayer<public>(Path:string)<transacts>:void = VhCallVoid(Handle, "set_animation_player", array{VhFromNodePath(Path)})
     SetProcessCallback<public>(Mode:animation_tree_animation_process_callback)<transacts>:void = VhCallVoid(Handle, "set_process_callback", array{VhFromAnimationTreeAnimationProcessCallback(Mode)})
     SetTreeRoot<public>(AnimationNode:animation_root_node)<transacts>:void = VhCallVoid(Handle, "set_tree_root", array{VhFromObject(AnimationNode)})
-    AnimationPlayerChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "animation_tree", "AnimationPlayerChanged", "animation_player_changed")}
+    AnimationPlayerChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "animation_tree", "AnimationPlayerChanged", "animation_player_changed")}
 
 audio_bus_layout<public> := class(resource):
 
@@ -35744,7 +35744,7 @@ audio_stream<public> := class(resource):
     _GetTags<public>():dictionary = dictionary{}
     _HasLoop<public>():logic = false
     _IsMonophonic<public>():logic = false
-    ParameterListChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "audio_stream", "ParameterListChanged", "parameter_list_changed")}
+    ParameterListChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "audio_stream", "ParameterListChanged", "parameter_list_changed")}
 
 audio_stream_playback_interactive<public> := class(audio_stream_playback):
 
@@ -35841,7 +35841,7 @@ audio_stream_player3d<public> := class(node3d):
     SetBus<public>(Bus:string)<transacts>:void = VhCallVoid(Handle, "set_bus", array{VhFromStringName(Bus)})
     SetStream<public>(Stream:audio_stream)<transacts>:void = VhCallVoid(Handle, "set_stream", array{VhFromObject(Stream)})
     Stop<public>()<transacts>:void = VhCallVoid(Handle, "stop", array{})
-    Finished<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "audio_stream_player3d", "Finished", "finished")}
+    Finished<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "audio_stream_player3d", "Finished", "finished")}
 
 bit_map<public> := class(resource):
 
@@ -35884,8 +35884,8 @@ bone_map<public> := class(resource):
     GetSkeletonBoneName<public>(ProfileBoneName:string)<reads>:string = VhToString(VhCallValueConst(Handle, "get_skeleton_bone_name", array{VhFromStringName(ProfileBoneName)}))
     SetProfile<public>(Profile:skeleton_profile)<transacts>:void = VhCallVoid(Handle, "set_profile", array{VhFromObject(Profile)})
     SetSkeletonBoneName<public>(ProfileBoneName:string, SkeletonBoneName:string)<transacts>:void = VhCallVoid(Handle, "set_skeleton_bone_name", array{VhFromStringName(ProfileBoneName), VhFromStringName(SkeletonBoneName)})
-    BoneMapUpdated<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "bone_map", "BoneMapUpdated", "bone_map_updated")}
-    ProfileUpdated<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "bone_map", "ProfileUpdated", "profile_updated")}
+    BoneMapUpdated<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "bone_map", "BoneMapUpdated", "bone_map_updated")}
+    ProfileUpdated<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "bone_map", "ProfileUpdated", "profile_updated")}
 
 button_group<public> := class(resource):
 
@@ -35894,7 +35894,7 @@ button_group<public> := class(resource):
     AllowUnpressSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_allow_unpress", array{VhFromLogic(Value)})
     GetButtons<public>()<transacts>:typed_array(base_button) = VhToBaseButtonArray(VhCallValue(Handle, "get_buttons", array{}))
     GetPressedButton<public>()<decides><transacts>:base_button = base_button[VhObjectFrom[VhCallValue(Handle, "get_pressed_button", array{})]]
-    Pressed<public>()<transacts>:godot_signal(base_button) = godot_signal(base_button){Id := VhSignalBind(Handle, "button_group", "Pressed", "pressed")}
+    Pressed<public>()<transacts>:signal(base_button) = signal(base_button){Id := VhSignalBind(Handle, "button_group", "Pressed", "pressed")}
 
 callback_tweener<public> := class(tweener):
 
@@ -36034,9 +36034,9 @@ collision_object3d<public> := class(node3d):
     _InputEvent<public>(Camera:camera3d, Event:input_event, EventPosition:vector3, Normal:vector3, ShapeIdx:int):void = {}
     _MouseEnter<public>():void = {}
     _MouseExit<public>():void = {}
-    InputEvent<public>()<transacts>:godot_signal(tuple(node, input_event, vector3, vector3, int)) = godot_signal(tuple(node, input_event, vector3, vector3, int)){Id := VhSignalBind(Handle, "collision_object3d", "InputEvent", "input_event")}
-    MouseEntered<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "collision_object3d", "MouseEntered", "mouse_entered")}
-    MouseExited<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "collision_object3d", "MouseExited", "mouse_exited")}
+    InputEvent<public>()<transacts>:signal(tuple(node, input_event, vector3, vector3, int)) = signal(tuple(node, input_event, vector3, vector3, int)){Id := VhSignalBind(Handle, "collision_object3d", "InputEvent", "input_event")}
+    MouseEntered<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "collision_object3d", "MouseEntered", "mouse_entered")}
+    MouseExited<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "collision_object3d", "MouseExited", "mouse_exited")}
 
 collision_polygon3d<public> := class(node3d):
 
@@ -36425,15 +36425,15 @@ control<public> := class(canvas_item):
     _GetTooltip<public>(AtPosition:vector2):string = ""
     _GuiInput<public>(Event:input_event):void = {}
     _HasPoint<public>(Point:vector2):logic = false
-    Resized<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "control", "Resized", "resized")}
-    GuiInput<public>()<transacts>:godot_signal(input_event) = godot_signal(input_event){Id := VhSignalBind(Handle, "control", "GuiInput", "gui_input")}
-    MouseEntered<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "control", "MouseEntered", "mouse_entered")}
-    MouseExited<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "control", "MouseExited", "mouse_exited")}
-    FocusEntered<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "control", "FocusEntered", "focus_entered")}
-    FocusExited<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "control", "FocusExited", "focus_exited")}
-    SizeFlagsChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "control", "SizeFlagsChanged", "size_flags_changed")}
-    MinimumSizeChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "control", "MinimumSizeChanged", "minimum_size_changed")}
-    ThemeChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "control", "ThemeChanged", "theme_changed")}
+    Resized<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "control", "Resized", "resized")}
+    GuiInput<public>()<transacts>:signal(input_event) = signal(input_event){Id := VhSignalBind(Handle, "control", "GuiInput", "gui_input")}
+    MouseEntered<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "control", "MouseEntered", "mouse_entered")}
+    MouseExited<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "control", "MouseExited", "mouse_exited")}
+    FocusEntered<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "control", "FocusEntered", "focus_entered")}
+    FocusExited<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "control", "FocusExited", "focus_exited")}
+    SizeFlagsChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "control", "SizeFlagsChanged", "size_flags_changed")}
+    MinimumSizeChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "control", "MinimumSizeChanged", "minimum_size_changed")}
+    ThemeChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "control", "ThemeChanged", "theme_changed")}
 
 crypto_key<public> := class(resource):
 
@@ -36483,8 +36483,8 @@ curve<public> := class(resource):
     SetPointRightMode<public>(Index:int, Mode:curve_tangent_mode)<transacts>:void = VhCallVoid(Handle, "set_point_right_mode", array{VhFromInt(Index), VhFromCurveTangentMode(Mode)})
     SetPointRightTangent<public>(Index:int, Tangent:float)<transacts>:void = VhCallVoid(Handle, "set_point_right_tangent", array{VhFromInt(Index), VhFromFloat(Tangent)})
     SetPointValue<public>(Index:int, Y:float)<transacts>:void = VhCallVoid(Handle, "set_point_value", array{VhFromInt(Index), VhFromFloat(Y)})
-    RangeChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "curve", "RangeChanged", "range_changed")}
-    DomainChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "curve", "DomainChanged", "domain_changed")}
+    RangeChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "curve", "RangeChanged", "range_changed")}
+    DomainChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "curve", "DomainChanged", "domain_changed")}
 
 curve2d<public> := class(resource):
 
@@ -36718,7 +36718,7 @@ editor_settings<public> := class(resource):
     SetProjectMetadata<public>(Section:string, Key:string, Data:variant)<transacts>:void = VhCallVoid(Handle, "set_project_metadata", array{VhFromString(Section), VhFromString(Key), VhFromVariant(Data)})
     SetRecentDirs<public>(Dirs:[]string)<transacts>:void = VhCallVoid(Handle, "set_recent_dirs", array{VhFromStringArray(Dirs)})
     SetSetting<public>(Name:string, Value:variant)<transacts>:void = VhCallVoid(Handle, "set_setting", array{VhFromString(Name), VhFromVariant(Value)})
-    SettingsChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "editor_settings", "SettingsChanged", "settings_changed")}
+    SettingsChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "editor_settings", "SettingsChanged", "settings_changed")}
 
 environment<public> := class(resource):
 
@@ -37084,7 +37084,7 @@ foldable_group<public> := class(resource):
     AllowFoldingAllSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_allow_folding_all", array{VhFromLogic(Value)})
     GetContainers<public>()<reads>:typed_array(foldable_container) = VhToFoldableContainerArray(VhCallValueConst(Handle, "get_containers", array{}))
     GetExpandedContainer<public>()<decides><reads>:foldable_container = foldable_container[VhObjectFrom[VhCallValueConst(Handle, "get_expanded_container", array{})]]
-    Expanded<public>()<transacts>:godot_signal(foldable_container) = godot_signal(foldable_container){Id := VhSignalBind(Handle, "foldable_group", "Expanded", "expanded")}
+    Expanded<public>()<transacts>:signal(foldable_container) = signal(foldable_container){Id := VhSignalBind(Handle, "foldable_group", "Expanded", "expanded")}
 
 font<public> := class(resource):
 
@@ -37807,8 +37807,8 @@ grid_map<public> := class(node3d):
     SetMeshLibrary<public>(MeshLibrary:mesh_library)<transacts>:void = VhCallVoid(Handle, "set_mesh_library", array{VhFromObject(MeshLibrary)})
     SetNavigationMap<public>(NavigationMap:int)<transacts>:void = VhCallVoid(Handle, "set_navigation_map", array{VhFromRid(NavigationMap)})
     SetPhysicsMaterial<public>(Material:physics_material)<transacts>:void = VhCallVoid(Handle, "set_physics_material", array{VhFromObject(Material)})
-    CellSizeChanged<public>()<transacts>:godot_signal(vector3) = godot_signal(vector3){Id := VhSignalBind(Handle, "grid_map", "CellSizeChanged", "cell_size_changed")}
-    Changed<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "grid_map", "Changed", "changed")}
+    CellSizeChanged<public>()<transacts>:signal(vector3) = signal(vector3){Id := VhSignalBind(Handle, "grid_map", "CellSizeChanged", "cell_size_changed")}
+    Changed<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "grid_map", "Changed", "changed")}
 
 grid_map_editor_plugin<public> := class(editor_plugin):
 
@@ -38333,8 +38333,8 @@ multiplayer_peer<public> := class(packet_peer):
     IsServerRelaySupported<public>()<reads>:logic = VhToLogic(VhCallValueConst(Handle, "is_server_relay_supported", array{}))
     Poll<public>()<transacts>:void = VhCallVoid(Handle, "poll", array{})
     SetTargetPeer<public>(Id:int)<transacts>:void = VhCallVoid(Handle, "set_target_peer", array{VhFromInt(Id)})
-    PeerConnected<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "multiplayer_peer", "PeerConnected", "peer_connected")}
-    PeerDisconnected<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "multiplayer_peer", "PeerDisconnected", "peer_disconnected")}
+    PeerConnected<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "multiplayer_peer", "PeerConnected", "peer_connected")}
+    PeerDisconnected<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "multiplayer_peer", "PeerDisconnected", "peer_disconnected")}
 
 navigation_link3d<public> := class(node3d):
 
@@ -38654,8 +38654,8 @@ navigation_region3d<public> := class(node3d):
     SetNavigationLayerValue<public>(LayerNumber:int, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_navigation_layer_value", array{VhFromInt(LayerNumber), VhFromLogic(Value)})
     SetNavigationMap<public>(NavigationMap:int)<transacts>:void = VhCallVoid(Handle, "set_navigation_map", array{VhFromRid(NavigationMap)})
     SetNavigationMesh<public>(NavigationMesh:navigation_mesh)<transacts>:void = VhCallVoid(Handle, "set_navigation_mesh", array{VhFromObject(NavigationMesh)})
-    NavigationMeshChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "navigation_region3d", "NavigationMeshChanged", "navigation_mesh_changed")}
-    BakeFinished<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "navigation_region3d", "BakeFinished", "bake_finished")}
+    NavigationMeshChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "navigation_region3d", "NavigationMeshChanged", "navigation_mesh_changed")}
+    BakeFinished<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "navigation_region3d", "BakeFinished", "bake_finished")}
 
 node2d<public> := class(canvas_item):
 
@@ -38978,17 +38978,17 @@ open_xr_interface<public> := class(xr_interface):
     SetCpuLevel<public>(Level:open_xr_interface_perf_settings_level)<transacts>:void = VhCallVoid(Handle, "set_cpu_level", array{VhFromOpenXrInterfacePerfSettingsLevel(Level)})
     SetGpuLevel<public>(Level:open_xr_interface_perf_settings_level)<transacts>:void = VhCallVoid(Handle, "set_gpu_level", array{VhFromOpenXrInterfacePerfSettingsLevel(Level)})
     SetMotionRange<public>(Hand:open_xr_interface_hand, MotionRange:open_xr_interface_hand_motion_range)<transacts>:void = VhCallVoid(Handle, "set_motion_range", array{VhFromOpenXrInterfaceHand(Hand), VhFromOpenXrInterfaceHandMotionRange(MotionRange)})
-    SessionBegun<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "open_xr_interface", "SessionBegun", "session_begun")}
-    SessionStopping<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "open_xr_interface", "SessionStopping", "session_stopping")}
-    SessionSynchronized<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "open_xr_interface", "SessionSynchronized", "session_synchronized")}
-    SessionFocussed<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "open_xr_interface", "SessionFocussed", "session_focussed")}
-    SessionVisible<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "open_xr_interface", "SessionVisible", "session_visible")}
-    SessionLossPending<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "open_xr_interface", "SessionLossPending", "session_loss_pending")}
-    InstanceExiting<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "open_xr_interface", "InstanceExiting", "instance_exiting")}
-    PoseRecentered<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "open_xr_interface", "PoseRecentered", "pose_recentered")}
-    RefreshRateChanged<public>()<transacts>:godot_signal(float) = godot_signal(float){Id := VhSignalBind(Handle, "open_xr_interface", "RefreshRateChanged", "refresh_rate_changed")}
-    CpuLevelChanged<public>()<transacts>:godot_signal(tuple(int, int, int)) = godot_signal(tuple(int, int, int)){Id := VhSignalBind(Handle, "open_xr_interface", "CpuLevelChanged", "cpu_level_changed")}
-    GpuLevelChanged<public>()<transacts>:godot_signal(tuple(int, int, int)) = godot_signal(tuple(int, int, int)){Id := VhSignalBind(Handle, "open_xr_interface", "GpuLevelChanged", "gpu_level_changed")}
+    SessionBegun<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "open_xr_interface", "SessionBegun", "session_begun")}
+    SessionStopping<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "open_xr_interface", "SessionStopping", "session_stopping")}
+    SessionSynchronized<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "open_xr_interface", "SessionSynchronized", "session_synchronized")}
+    SessionFocussed<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "open_xr_interface", "SessionFocussed", "session_focussed")}
+    SessionVisible<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "open_xr_interface", "SessionVisible", "session_visible")}
+    SessionLossPending<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "open_xr_interface", "SessionLossPending", "session_loss_pending")}
+    InstanceExiting<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "open_xr_interface", "InstanceExiting", "instance_exiting")}
+    PoseRecentered<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "open_xr_interface", "PoseRecentered", "pose_recentered")}
+    RefreshRateChanged<public>()<transacts>:signal(float) = signal(float){Id := VhSignalBind(Handle, "open_xr_interface", "RefreshRateChanged", "refresh_rate_changed")}
+    CpuLevelChanged<public>()<transacts>:signal(tuple(int, int, int)) = signal(tuple(int, int, int)){Id := VhSignalBind(Handle, "open_xr_interface", "CpuLevelChanged", "cpu_level_changed")}
+    GpuLevelChanged<public>()<transacts>:signal(tuple(int, int, int)) = signal(tuple(int, int, int)){Id := VhSignalBind(Handle, "open_xr_interface", "GpuLevelChanged", "gpu_level_changed")}
 
 open_xr_render_model<public> := class(node3d):
 
@@ -38996,7 +38996,7 @@ open_xr_render_model<public> := class(node3d):
     RenderModelGetter<epic_internal>(Accessor:accessor)<transacts>:int = VhToInt(VhCallValue(Handle, "get_render_model", array{}))
     RenderModelSetter<epic_internal>(Accessor:accessor, Value:int)<transacts>:void = VhCallVoid(Handle, "set_render_model", array{VhFromRid(Value)})
     GetTopLevelPath<public>()<reads>:string = VhToString(VhCallValueConst(Handle, "get_top_level_path", array{}))
-    RenderModelTopLevelPathChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "open_xr_render_model", "RenderModelTopLevelPathChanged", "render_model_top_level_path_changed")}
+    RenderModelTopLevelPathChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "open_xr_render_model", "RenderModelTopLevelPathChanged", "render_model_top_level_path_changed")}
 
 open_xr_render_model_manager<public> := class(node3d):
 
@@ -39005,8 +39005,8 @@ open_xr_render_model_manager<public> := class(node3d):
     TrackerSetter<epic_internal>(Accessor:accessor, Value:open_xr_render_model_manager_render_model_tracker)<transacts>:void = VhCallVoid(Handle, "set_tracker", array{VhFromOpenXrRenderModelManagerRenderModelTracker(Value)})
     GetMakeLocalToPose<public>()<reads>:string = VhToString(VhCallValueConst(Handle, "get_make_local_to_pose", array{}))
     SetMakeLocalToPose<public>(MakeLocalToPose:string)<transacts>:void = VhCallVoid(Handle, "set_make_local_to_pose", array{VhFromString(MakeLocalToPose)})
-    RenderModelAdded<public>()<transacts>:godot_signal(open_xr_render_model) = godot_signal(open_xr_render_model){Id := VhSignalBind(Handle, "open_xr_render_model_manager", "RenderModelAdded", "render_model_added")}
-    RenderModelRemoved<public>()<transacts>:godot_signal(open_xr_render_model) = godot_signal(open_xr_render_model){Id := VhSignalBind(Handle, "open_xr_render_model_manager", "RenderModelRemoved", "render_model_removed")}
+    RenderModelAdded<public>()<transacts>:signal(open_xr_render_model) = signal(open_xr_render_model){Id := VhSignalBind(Handle, "open_xr_render_model_manager", "RenderModelAdded", "render_model_added")}
+    RenderModelRemoved<public>()<transacts>:signal(open_xr_render_model) = signal(open_xr_render_model){Id := VhSignalBind(Handle, "open_xr_render_model_manager", "RenderModelRemoved", "render_model_removed")}
 
 open_xr_spatial_capability_configuration_anchor<public> := class(open_xr_spatial_capability_configuration_base_header):
 
@@ -39259,8 +39259,8 @@ path3d<public> := class(node3d):
             VhCallVoid(Handle, "set_debug_custom_color", array{VhFromColor(color{R := Current.R, G := Current.G, B := Current.B, A := Value})})
     GetCurve<public>()<decides><reads>:curve3d = curve3d[VhObjectFrom[VhCallValueConst(Handle, "get_curve", array{})]]
     SetCurve<public>(Curve:curve3d)<transacts>:void = VhCallVoid(Handle, "set_curve", array{VhFromObject(Curve)})
-    CurveChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "path3d", "CurveChanged", "curve_changed")}
-    DebugColorChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "path3d", "DebugColorChanged", "debug_color_changed")}
+    CurveChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "path3d", "CurveChanged", "curve_changed")}
+    DebugColorChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "path3d", "DebugColorChanged", "debug_color_changed")}
 
 path_follow3d<public> := class(node3d):
 
@@ -39537,9 +39537,9 @@ scene_multiplayer<public> := class(multiplayer_api):
     SendBytes<public>(Bytes:[]int, Id:int, Mode:multiplayer_peer_transfer_mode, ?Channel:int = 0)<transacts>:error = VhToError(VhCallValue(Handle, "send_bytes", array{VhFromByteArray(Bytes), VhFromInt(Id), VhFromMultiplayerPeerTransferMode(Mode), VhFromInt(Channel)}))
     SetAuthCallback<public>(Callback:callable)<transacts>:void = VhCallVoid(Handle, "set_auth_callback", array{VhFromCallable(Callback)})
     SetRootPath<public>(Path:string)<transacts>:void = VhCallVoid(Handle, "set_root_path", array{VhFromNodePath(Path)})
-    PeerAuthenticating<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "scene_multiplayer", "PeerAuthenticating", "peer_authenticating")}
-    PeerAuthenticationFailed<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "scene_multiplayer", "PeerAuthenticationFailed", "peer_authentication_failed")}
-    PeerPacket<public>()<transacts>:godot_signal(tuple(int, []int)) = godot_signal(tuple(int, []int)){Id := VhSignalBind(Handle, "scene_multiplayer", "PeerPacket", "peer_packet")}
+    PeerAuthenticating<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "scene_multiplayer", "PeerAuthenticating", "peer_authenticating")}
+    PeerAuthenticationFailed<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "scene_multiplayer", "PeerAuthenticationFailed", "peer_authentication_failed")}
+    PeerPacket<public>()<transacts>:signal(tuple(int, []int)) = signal(tuple(int, []int)){Id := VhSignalBind(Handle, "scene_multiplayer", "PeerPacket", "peer_packet")}
 
 scene_replication_config<public> := class(resource):
 
@@ -39761,12 +39761,12 @@ skeleton3d<public> := class(node3d):
     SetBonePoseScale<public>(BoneIdx:int, Arg1:vector3)<transacts>:void = VhCallVoid(Handle, "set_bone_pose_scale", array{VhFromInt(BoneIdx), VhFromVector3(Arg1)})
     SetBoneRest<public>(BoneIdx:int, Rest:transform3d)<transacts>:void = VhCallVoid(Handle, "set_bone_rest", array{VhFromInt(BoneIdx), VhFromTransform3D(Rest)})
     UnparentBoneAndRest<public>(BoneIdx:int)<transacts>:void = VhCallVoid(Handle, "unparent_bone_and_rest", array{VhFromInt(BoneIdx)})
-    RestUpdated<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "skeleton3d", "RestUpdated", "rest_updated")}
-    PoseUpdated<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "skeleton3d", "PoseUpdated", "pose_updated")}
-    SkeletonUpdated<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "skeleton3d", "SkeletonUpdated", "skeleton_updated")}
-    BoneEnabledChanged<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "skeleton3d", "BoneEnabledChanged", "bone_enabled_changed")}
-    BoneListChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "skeleton3d", "BoneListChanged", "bone_list_changed")}
-    ShowRestOnlyChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "skeleton3d", "ShowRestOnlyChanged", "show_rest_only_changed")}
+    RestUpdated<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "skeleton3d", "RestUpdated", "rest_updated")}
+    PoseUpdated<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "skeleton3d", "PoseUpdated", "pose_updated")}
+    SkeletonUpdated<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "skeleton3d", "SkeletonUpdated", "skeleton_updated")}
+    BoneEnabledChanged<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "skeleton3d", "BoneEnabledChanged", "bone_enabled_changed")}
+    BoneListChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "skeleton3d", "BoneListChanged", "bone_list_changed")}
+    ShowRestOnlyChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "skeleton3d", "ShowRestOnlyChanged", "show_rest_only_changed")}
 
 skeleton_modification2d<public> := class(resource):
 
@@ -39820,7 +39820,7 @@ skeleton_modifier3d<public> := class(node3d):
     _ProcessModificationWithDelta<public>(Delta:float):void = {}
     _SkeletonChanged<public>(OldSkeleton:skeleton3d, NewSkeleton:skeleton3d):void = {}
     _ValidateBoneNames<public>():void = {}
-    ModificationProcessed<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "skeleton_modifier3d", "ModificationProcessed", "modification_processed")}
+    ModificationProcessed<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "skeleton_modifier3d", "ModificationProcessed", "modification_processed")}
 
 skeleton_profile<public> := class(resource):
 
@@ -39855,7 +39855,7 @@ skeleton_profile<public> := class(resource):
     SetScaleBaseBone<public>(BoneName:string)<transacts>:void = VhCallVoid(Handle, "set_scale_base_bone", array{VhFromStringName(BoneName)})
     SetTailDirection<public>(BoneIdx:int, TailDirection:skeleton_profile_tail_direction)<transacts>:void = VhCallVoid(Handle, "set_tail_direction", array{VhFromInt(BoneIdx), VhFromSkeletonProfileTailDirection(TailDirection)})
     SetTexture<public>(GroupIdx:int, Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_texture", array{VhFromInt(GroupIdx), VhFromObject(Texture)})
-    ProfileUpdated<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "skeleton_profile", "ProfileUpdated", "profile_updated")}
+    ProfileUpdated<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "skeleton_profile", "ProfileUpdated", "profile_updated")}
 
 skin<public> := class(resource):
 
@@ -40763,19 +40763,19 @@ web_xr_interface<public> := class(xr_interface):
     SetRequestedReferenceSpaceTypes<public>(RequestedReferenceSpaceTypes:string)<transacts>:void = VhCallVoid(Handle, "set_requested_reference_space_types", array{VhFromString(RequestedReferenceSpaceTypes)})
     SetRequiredFeatures<public>(RequiredFeatures:string)<transacts>:void = VhCallVoid(Handle, "set_required_features", array{VhFromString(RequiredFeatures)})
     SetSessionMode<public>(SessionMode:string)<transacts>:void = VhCallVoid(Handle, "set_session_mode", array{VhFromString(SessionMode)})
-    SessionSupported<public>()<transacts>:godot_signal(tuple(string, logic)) = godot_signal(tuple(string, logic)){Id := VhSignalBind(Handle, "web_xr_interface", "SessionSupported", "session_supported")}
-    SessionStarted<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "web_xr_interface", "SessionStarted", "session_started")}
-    SessionEnded<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "web_xr_interface", "SessionEnded", "session_ended")}
-    SessionFailed<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "web_xr_interface", "SessionFailed", "session_failed")}
-    Selectstart<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "web_xr_interface", "Selectstart", "selectstart")}
-    Select<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "web_xr_interface", "Select", "select")}
-    Selectend<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "web_xr_interface", "Selectend", "selectend")}
-    Squeezestart<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "web_xr_interface", "Squeezestart", "squeezestart")}
-    Squeeze<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "web_xr_interface", "Squeeze", "squeeze")}
-    Squeezeend<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "web_xr_interface", "Squeezeend", "squeezeend")}
-    VisibilityStateChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "web_xr_interface", "VisibilityStateChanged", "visibility_state_changed")}
-    ReferenceSpaceReset<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "web_xr_interface", "ReferenceSpaceReset", "reference_space_reset")}
-    DisplayRefreshRateChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "web_xr_interface", "DisplayRefreshRateChanged", "display_refresh_rate_changed")}
+    SessionSupported<public>()<transacts>:signal(tuple(string, logic)) = signal(tuple(string, logic)){Id := VhSignalBind(Handle, "web_xr_interface", "SessionSupported", "session_supported")}
+    SessionStarted<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "web_xr_interface", "SessionStarted", "session_started")}
+    SessionEnded<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "web_xr_interface", "SessionEnded", "session_ended")}
+    SessionFailed<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "web_xr_interface", "SessionFailed", "session_failed")}
+    Selectstart<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "web_xr_interface", "Selectstart", "selectstart")}
+    Select<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "web_xr_interface", "Select", "select")}
+    Selectend<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "web_xr_interface", "Selectend", "selectend")}
+    Squeezestart<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "web_xr_interface", "Squeezestart", "squeezestart")}
+    Squeeze<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "web_xr_interface", "Squeeze", "squeeze")}
+    Squeezeend<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "web_xr_interface", "Squeezeend", "squeezeend")}
+    VisibilityStateChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "web_xr_interface", "VisibilityStateChanged", "visibility_state_changed")}
+    ReferenceSpaceReset<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "web_xr_interface", "ReferenceSpaceReset", "reference_space_reset")}
+    DisplayRefreshRateChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "web_xr_interface", "DisplayRefreshRateChanged", "display_refresh_rate_changed")}
 
 window<public> := class(viewport):
 
@@ -41009,21 +41009,21 @@ window<public> := class(viewport):
     StartDrag<public>()<transacts>:void = VhCallVoid(Handle, "start_drag", array{})
     StartResize<public>(Edge:display_server_window_resize_edge)<transacts>:void = VhCallVoid(Handle, "start_resize", array{VhFromDisplayServerWindowResizeEdge(Edge)})
     _GetContentsMinimumSize<public>():vector2 = vector2{}
-    WindowInput<public>()<transacts>:godot_signal(input_event) = godot_signal(input_event){Id := VhSignalBind(Handle, "window", "WindowInput", "window_input")}
-    NonclientWindowInput<public>()<transacts>:godot_signal(input_event) = godot_signal(input_event){Id := VhSignalBind(Handle, "window", "NonclientWindowInput", "nonclient_window_input")}
-    FilesDropped<public>()<transacts>:godot_signal([]string) = godot_signal([]string){Id := VhSignalBind(Handle, "window", "FilesDropped", "files_dropped")}
-    MouseEntered<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "window", "MouseEntered", "mouse_entered")}
-    MouseExited<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "window", "MouseExited", "mouse_exited")}
-    FocusEntered<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "window", "FocusEntered", "focus_entered")}
-    FocusExited<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "window", "FocusExited", "focus_exited")}
-    CloseRequested<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "window", "CloseRequested", "close_requested")}
-    GoBackRequested<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "window", "GoBackRequested", "go_back_requested")}
-    VisibilityChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "window", "VisibilityChanged", "visibility_changed")}
-    AboutToPopup<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "window", "AboutToPopup", "about_to_popup")}
-    ThemeChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "window", "ThemeChanged", "theme_changed")}
-    DpiChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "window", "DpiChanged", "dpi_changed")}
-    TitlebarChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "window", "TitlebarChanged", "titlebar_changed")}
-    TitleChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "window", "TitleChanged", "title_changed")}
+    WindowInput<public>()<transacts>:signal(input_event) = signal(input_event){Id := VhSignalBind(Handle, "window", "WindowInput", "window_input")}
+    NonclientWindowInput<public>()<transacts>:signal(input_event) = signal(input_event){Id := VhSignalBind(Handle, "window", "NonclientWindowInput", "nonclient_window_input")}
+    FilesDropped<public>()<transacts>:signal([]string) = signal([]string){Id := VhSignalBind(Handle, "window", "FilesDropped", "files_dropped")}
+    MouseEntered<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "window", "MouseEntered", "mouse_entered")}
+    MouseExited<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "window", "MouseExited", "mouse_exited")}
+    FocusEntered<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "window", "FocusEntered", "focus_entered")}
+    FocusExited<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "window", "FocusExited", "focus_exited")}
+    CloseRequested<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "window", "CloseRequested", "close_requested")}
+    GoBackRequested<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "window", "GoBackRequested", "go_back_requested")}
+    VisibilityChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "window", "VisibilityChanged", "visibility_changed")}
+    AboutToPopup<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "window", "AboutToPopup", "about_to_popup")}
+    ThemeChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "window", "ThemeChanged", "theme_changed")}
+    DpiChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "window", "DpiChanged", "dpi_changed")}
+    TitlebarChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "window", "TitlebarChanged", "titlebar_changed")}
+    TitleChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "window", "TitleChanged", "title_changed")}
 
 world2d<public> := class(resource):
 
@@ -41119,7 +41119,7 @@ xr_node3d<public> := class(node3d):
     SetPoseName<public>(Pose:string)<transacts>:void = VhCallVoid(Handle, "set_pose_name", array{VhFromStringName(Pose)})
     SetTracker<public>(TrackerName:string)<transacts>:void = VhCallVoid(Handle, "set_tracker", array{VhFromStringName(TrackerName)})
     TriggerHapticPulse<public>(ActionName:string, Frequency:float, Amplitude:float, DurationSec:float, DelaySec:float)<transacts>:void = VhCallVoid(Handle, "trigger_haptic_pulse", array{VhFromString(ActionName), VhFromFloat(Frequency), VhFromFloat(Amplitude), VhFromFloat(DurationSec), VhFromFloat(DelaySec)})
-    TrackingChanged<public>()<transacts>:godot_signal(logic) = godot_signal(logic){Id := VhSignalBind(Handle, "xr_node3d", "TrackingChanged", "tracking_changed")}
+    TrackingChanged<public>()<transacts>:signal(logic) = signal(logic){Id := VhSignalBind(Handle, "xr_node3d", "TrackingChanged", "tracking_changed")}
 
 xr_origin3d<public> := class(node3d):
 
@@ -41143,13 +41143,13 @@ xr_positional_tracker<public> := class(xr_tracker):
     SetInput<public>(Name:string, Value:variant)<transacts>:void = VhCallVoid(Handle, "set_input", array{VhFromStringName(Name), VhFromVariant(Value)})
     SetPose<public>(Name:string, Transform:transform3d, LinearVelocity:vector3, AngularVelocity:vector3, TrackingConfidence:xr_pose_tracking_confidence)<transacts>:void = VhCallVoid(Handle, "set_pose", array{VhFromStringName(Name), VhFromTransform3D(Transform), VhFromVector3(LinearVelocity), VhFromVector3(AngularVelocity), VhFromXrPoseTrackingConfidence(TrackingConfidence)})
     SetTrackerProfile<public>(Profile:string)<transacts>:void = VhCallVoid(Handle, "set_tracker_profile", array{VhFromString(Profile)})
-    PoseChanged<public>()<transacts>:godot_signal(xr_pose) = godot_signal(xr_pose){Id := VhSignalBind(Handle, "xr_positional_tracker", "PoseChanged", "pose_changed")}
-    PoseLostTracking<public>()<transacts>:godot_signal(xr_pose) = godot_signal(xr_pose){Id := VhSignalBind(Handle, "xr_positional_tracker", "PoseLostTracking", "pose_lost_tracking")}
-    ButtonPressed<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "xr_positional_tracker", "ButtonPressed", "button_pressed")}
-    ButtonReleased<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "xr_positional_tracker", "ButtonReleased", "button_released")}
-    InputFloatChanged<public>()<transacts>:godot_signal(tuple(string, float)) = godot_signal(tuple(string, float)){Id := VhSignalBind(Handle, "xr_positional_tracker", "InputFloatChanged", "input_float_changed")}
-    InputVector2Changed<public>()<transacts>:godot_signal(tuple(string, vector2)) = godot_signal(tuple(string, vector2)){Id := VhSignalBind(Handle, "xr_positional_tracker", "InputVector2Changed", "input_vector2_changed")}
-    ProfileChanged<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "xr_positional_tracker", "ProfileChanged", "profile_changed")}
+    PoseChanged<public>()<transacts>:signal(xr_pose) = signal(xr_pose){Id := VhSignalBind(Handle, "xr_positional_tracker", "PoseChanged", "pose_changed")}
+    PoseLostTracking<public>()<transacts>:signal(xr_pose) = signal(xr_pose){Id := VhSignalBind(Handle, "xr_positional_tracker", "PoseLostTracking", "pose_lost_tracking")}
+    ButtonPressed<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "xr_positional_tracker", "ButtonPressed", "button_pressed")}
+    ButtonReleased<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "xr_positional_tracker", "ButtonReleased", "button_released")}
+    InputFloatChanged<public>()<transacts>:signal(tuple(string, float)) = signal(tuple(string, float)){Id := VhSignalBind(Handle, "xr_positional_tracker", "InputFloatChanged", "input_float_changed")}
+    InputVector2Changed<public>()<transacts>:signal(tuple(string, vector2)) = signal(tuple(string, vector2)){Id := VhSignalBind(Handle, "xr_positional_tracker", "InputVector2Changed", "input_vector2_changed")}
+    ProfileChanged<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "xr_positional_tracker", "ProfileChanged", "profile_changed")}
 
 accept_dialog<public> := class(window):
 
@@ -41172,9 +41172,9 @@ accept_dialog<public> := class(window):
     RemoveButton<public>(Button:button)<transacts>:void = VhCallVoid(Handle, "remove_button", array{VhFromObject(Button)})
     SetOkButtonText<public>(Text:string)<transacts>:void = VhCallVoid(Handle, "set_ok_button_text", array{VhFromString(Text)})
     SetText<public>(Text:string)<transacts>:void = VhCallVoid(Handle, "set_text", array{VhFromString(Text)})
-    Confirmed<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "accept_dialog", "Confirmed", "confirmed")}
-    Canceled<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "accept_dialog", "Canceled", "canceled")}
-    CustomAction<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "accept_dialog", "CustomAction", "custom_action")}
+    Confirmed<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "accept_dialog", "Confirmed", "confirmed")}
+    Canceled<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "accept_dialog", "Canceled", "canceled")}
+    CustomAction<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "accept_dialog", "CustomAction", "custom_action")}
 
 animated_sprite2d<public> := class(node2d):
 
@@ -41221,11 +41221,11 @@ animated_sprite2d<public> := class(node2d):
     SetFrameAndProgress<public>(Arg0:int, Progress:float)<transacts>:void = VhCallVoid(Handle, "set_frame_and_progress", array{VhFromInt(Arg0), VhFromFloat(Progress)})
     SetSpriteFrames<public>(SpriteFrames:sprite_frames)<transacts>:void = VhCallVoid(Handle, "set_sprite_frames", array{VhFromObject(SpriteFrames)})
     Stop<public>()<transacts>:void = VhCallVoid(Handle, "stop", array{})
-    SpriteFramesChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "animated_sprite2d", "SpriteFramesChanged", "sprite_frames_changed")}
-    AnimationChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "animated_sprite2d", "AnimationChanged", "animation_changed")}
-    FrameChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "animated_sprite2d", "FrameChanged", "frame_changed")}
-    AnimationLooped<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "animated_sprite2d", "AnimationLooped", "animation_looped")}
-    AnimationFinished<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "animated_sprite2d", "AnimationFinished", "animation_finished")}
+    SpriteFramesChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "animated_sprite2d", "SpriteFramesChanged", "sprite_frames_changed")}
+    AnimationChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "animated_sprite2d", "AnimationChanged", "animation_changed")}
+    FrameChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "animated_sprite2d", "FrameChanged", "frame_changed")}
+    AnimationLooped<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "animated_sprite2d", "AnimationLooped", "animation_looped")}
+    AnimationFinished<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "animated_sprite2d", "AnimationFinished", "animation_finished")}
 
 animation_node_extension<public> := class(animation_node):
 
@@ -41342,14 +41342,14 @@ area3d<public> := class(collision_object3d):
     SetAudioBusName<public>(Name:string)<transacts>:void = VhCallVoid(Handle, "set_audio_bus_name", array{VhFromStringName(Name)})
     SetReverbBusName<public>(Name:string)<transacts>:void = VhCallVoid(Handle, "set_reverb_bus_name", array{VhFromStringName(Name)})
     SetWindSourcePath<public>(WindSourcePath:string)<transacts>:void = VhCallVoid(Handle, "set_wind_source_path", array{VhFromNodePath(WindSourcePath)})
-    BodyShapeEntered<public>()<transacts>:godot_signal(tuple(int, node3d, int, int)) = godot_signal(tuple(int, node3d, int, int)){Id := VhSignalBind(Handle, "area3d", "BodyShapeEntered", "body_shape_entered")}
-    BodyShapeExited<public>()<transacts>:godot_signal(tuple(int, node3d, int, int)) = godot_signal(tuple(int, node3d, int, int)){Id := VhSignalBind(Handle, "area3d", "BodyShapeExited", "body_shape_exited")}
-    BodyEntered<public>()<transacts>:godot_signal(node3d) = godot_signal(node3d){Id := VhSignalBind(Handle, "area3d", "BodyEntered", "body_entered")}
-    BodyExited<public>()<transacts>:godot_signal(node3d) = godot_signal(node3d){Id := VhSignalBind(Handle, "area3d", "BodyExited", "body_exited")}
-    AreaShapeEntered<public>()<transacts>:godot_signal(tuple(int, area3d, int, int)) = godot_signal(tuple(int, area3d, int, int)){Id := VhSignalBind(Handle, "area3d", "AreaShapeEntered", "area_shape_entered")}
-    AreaShapeExited<public>()<transacts>:godot_signal(tuple(int, area3d, int, int)) = godot_signal(tuple(int, area3d, int, int)){Id := VhSignalBind(Handle, "area3d", "AreaShapeExited", "area_shape_exited")}
-    AreaEntered<public>()<transacts>:godot_signal(area3d) = godot_signal(area3d){Id := VhSignalBind(Handle, "area3d", "AreaEntered", "area_entered")}
-    AreaExited<public>()<transacts>:godot_signal(area3d) = godot_signal(area3d){Id := VhSignalBind(Handle, "area3d", "AreaExited", "area_exited")}
+    BodyShapeEntered<public>()<transacts>:signal(tuple(int, node3d, int, int)) = signal(tuple(int, node3d, int, int)){Id := VhSignalBind(Handle, "area3d", "BodyShapeEntered", "body_shape_entered")}
+    BodyShapeExited<public>()<transacts>:signal(tuple(int, node3d, int, int)) = signal(tuple(int, node3d, int, int)){Id := VhSignalBind(Handle, "area3d", "BodyShapeExited", "body_shape_exited")}
+    BodyEntered<public>()<transacts>:signal(node3d) = signal(node3d){Id := VhSignalBind(Handle, "area3d", "BodyEntered", "body_entered")}
+    BodyExited<public>()<transacts>:signal(node3d) = signal(node3d){Id := VhSignalBind(Handle, "area3d", "BodyExited", "body_exited")}
+    AreaShapeEntered<public>()<transacts>:signal(tuple(int, area3d, int, int)) = signal(tuple(int, area3d, int, int)){Id := VhSignalBind(Handle, "area3d", "AreaShapeEntered", "area_shape_entered")}
+    AreaShapeExited<public>()<transacts>:signal(tuple(int, area3d, int, int)) = signal(tuple(int, area3d, int, int)){Id := VhSignalBind(Handle, "area3d", "AreaShapeExited", "area_shape_exited")}
+    AreaEntered<public>()<transacts>:signal(area3d) = signal(area3d){Id := VhSignalBind(Handle, "area3d", "AreaEntered", "area_entered")}
+    AreaExited<public>()<transacts>:signal(area3d) = signal(area3d){Id := VhSignalBind(Handle, "area3d", "AreaExited", "area_exited")}
 
 array_mesh<public> := class(mesh):
 
@@ -41809,7 +41809,7 @@ audio_stream_player2d<public> := class(node2d):
     SetBus<public>(Bus:string)<transacts>:void = VhCallVoid(Handle, "set_bus", array{VhFromStringName(Bus)})
     SetStream<public>(Stream:audio_stream)<transacts>:void = VhCallVoid(Handle, "set_stream", array{VhFromObject(Stream)})
     Stop<public>()<transacts>:void = VhCallVoid(Handle, "stop", array{})
-    Finished<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "audio_stream_player2d", "Finished", "finished")}
+    Finished<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "audio_stream_player2d", "Finished", "finished")}
 
 audio_stream_playlist<public> := class(audio_stream):
 
@@ -41939,10 +41939,10 @@ base_button<public> := class(control):
     SetShortcut<public>(Shortcut:shortcut)<transacts>:void = VhCallVoid(Handle, "set_shortcut", array{VhFromObject(Shortcut)})
     _Pressed<public>():void = {}
     _Toggled<public>(ToggledOn:logic):void = {}
-    Pressed<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "base_button", "Pressed", "pressed")}
-    ButtonUp<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "base_button", "ButtonUp", "button_up")}
-    ButtonDown<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "base_button", "ButtonDown", "button_down")}
-    Toggled<public>()<transacts>:godot_signal(logic) = godot_signal(logic){Id := VhSignalBind(Handle, "base_button", "Toggled", "toggled")}
+    Pressed<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "base_button", "Pressed", "pressed")}
+    ButtonUp<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "base_button", "ButtonUp", "button_up")}
+    ButtonDown<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "base_button", "ButtonDown", "button_down")}
+    Toggled<public>()<transacts>:signal(logic) = signal(logic){Id := VhSignalBind(Handle, "base_button", "Toggled", "toggled")}
 
 base_material3d<public> := class(material):
 
@@ -42886,11 +42886,11 @@ collision_object2d<public> := class(node2d):
     _MouseExit<public>():void = {}
     _MouseShapeEnter<public>(ShapeIdx:int):void = {}
     _MouseShapeExit<public>(ShapeIdx:int):void = {}
-    InputEvent<public>()<transacts>:godot_signal(tuple(node, input_event, int)) = godot_signal(tuple(node, input_event, int)){Id := VhSignalBind(Handle, "collision_object2d", "InputEvent", "input_event")}
-    MouseEntered<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "collision_object2d", "MouseEntered", "mouse_entered")}
-    MouseExited<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "collision_object2d", "MouseExited", "mouse_exited")}
-    MouseShapeEntered<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "collision_object2d", "MouseShapeEntered", "mouse_shape_entered")}
-    MouseShapeExited<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "collision_object2d", "MouseShapeExited", "mouse_shape_exited")}
+    InputEvent<public>()<transacts>:signal(tuple(node, input_event, int)) = signal(tuple(node, input_event, int)){Id := VhSignalBind(Handle, "collision_object2d", "InputEvent", "input_event")}
+    MouseEntered<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "collision_object2d", "MouseEntered", "mouse_entered")}
+    MouseExited<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "collision_object2d", "MouseExited", "mouse_exited")}
+    MouseShapeEntered<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "collision_object2d", "MouseShapeEntered", "mouse_shape_entered")}
+    MouseShapeExited<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "collision_object2d", "MouseShapeExited", "mouse_shape_exited")}
 
 collision_polygon2d<public> := class(node2d):
 
@@ -42995,8 +42995,8 @@ container<public> := class(control):
     QueueSort<public>()<transacts>:void = VhCallVoid(Handle, "queue_sort", array{})
     _GetAllowedSizeFlagsHorizontal<public>():[]int = array{}
     _GetAllowedSizeFlagsVertical<public>():[]int = array{}
-    PreSortChildren<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "container", "PreSortChildren", "pre_sort_children")}
-    SortChildren<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "container", "SortChildren", "sort_children")}
+    PreSortChildren<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "container", "PreSortChildren", "pre_sort_children")}
+    SortChildren<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "container", "SortChildren", "sort_children")}
 
 convex_polygon_shape2d<public> := class(shape2d):
 
@@ -43222,7 +43222,7 @@ cpu_particles2d<public> := class(node2d):
     SetScaleCurveX<public>(ScaleCurve:curve)<transacts>:void = VhCallVoid(Handle, "set_scale_curve_x", array{VhFromObject(ScaleCurve)})
     SetScaleCurveY<public>(ScaleCurve:curve)<transacts>:void = VhCallVoid(Handle, "set_scale_curve_y", array{VhFromObject(ScaleCurve)})
     SetTexture<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_texture", array{VhFromObject(Texture)})
-    Finished<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "cpu_particles2d", "Finished", "finished")}
+    Finished<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "cpu_particles2d", "Finished", "finished")}
 
 cylinder_shape3d<public> := class(shape3d):
 
@@ -43782,7 +43782,7 @@ gpu_particles2d<public> := class(node2d):
     SetSubEmitter<public>(Path:string)<transacts>:void = VhCallVoid(Handle, "set_sub_emitter", array{VhFromNodePath(Path)})
     SetTexture<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_texture", array{VhFromObject(Texture)})
     SetVisibilityRect<public>(VisibilityRect:rect2)<transacts>:void = VhCallVoid(Handle, "set_visibility_rect", array{VhFromRect2(VisibilityRect)})
-    Finished<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "gpu_particles2d", "Finished", "finished")}
+    Finished<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "gpu_particles2d", "Finished", "finished")}
 
 gpu_particles_attractor3d<public> := class(visual_instance3d):
 
@@ -43929,25 +43929,25 @@ graph_edit<public> := class(control):
     _IsInInputHotzone<public>(InNode:object, InPort:int, MousePosition:vector2):logic = false
     _IsInOutputHotzone<public>(InNode:object, InPort:int, MousePosition:vector2):logic = false
     _IsNodeHoverValid<public>(FromNode:string, FromPort:int, ToNode:string, ToPort:int):logic = false
-    ConnectionRequest<public>()<transacts>:godot_signal(tuple(string, int, string, int)) = godot_signal(tuple(string, int, string, int)){Id := VhSignalBind(Handle, "graph_edit", "ConnectionRequest", "connection_request")}
-    DisconnectionRequest<public>()<transacts>:godot_signal(tuple(string, int, string, int)) = godot_signal(tuple(string, int, string, int)){Id := VhSignalBind(Handle, "graph_edit", "DisconnectionRequest", "disconnection_request")}
-    ConnectionToEmpty<public>()<transacts>:godot_signal(tuple(string, int, vector2)) = godot_signal(tuple(string, int, vector2)){Id := VhSignalBind(Handle, "graph_edit", "ConnectionToEmpty", "connection_to_empty")}
-    ConnectionFromEmpty<public>()<transacts>:godot_signal(tuple(string, int, vector2)) = godot_signal(tuple(string, int, vector2)){Id := VhSignalBind(Handle, "graph_edit", "ConnectionFromEmpty", "connection_from_empty")}
-    ConnectionDragStarted<public>()<transacts>:godot_signal(tuple(string, int, logic)) = godot_signal(tuple(string, int, logic)){Id := VhSignalBind(Handle, "graph_edit", "ConnectionDragStarted", "connection_drag_started")}
-    ConnectionDragEnded<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "graph_edit", "ConnectionDragEnded", "connection_drag_ended")}
-    CopyNodesRequest<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "graph_edit", "CopyNodesRequest", "copy_nodes_request")}
-    CutNodesRequest<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "graph_edit", "CutNodesRequest", "cut_nodes_request")}
-    PasteNodesRequest<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "graph_edit", "PasteNodesRequest", "paste_nodes_request")}
-    DuplicateNodesRequest<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "graph_edit", "DuplicateNodesRequest", "duplicate_nodes_request")}
-    DeleteNodesRequest<public>()<transacts>:godot_signal(typed_array(string)) = godot_signal(typed_array(string)){Id := VhSignalBind(Handle, "graph_edit", "DeleteNodesRequest", "delete_nodes_request")}
-    NodeSelected<public>()<transacts>:godot_signal(node) = godot_signal(node){Id := VhSignalBind(Handle, "graph_edit", "NodeSelected", "node_selected")}
-    NodeDeselected<public>()<transacts>:godot_signal(node) = godot_signal(node){Id := VhSignalBind(Handle, "graph_edit", "NodeDeselected", "node_deselected")}
-    FrameRectChanged<public>()<transacts>:godot_signal(tuple(graph_frame, rect2)) = godot_signal(tuple(graph_frame, rect2)){Id := VhSignalBind(Handle, "graph_edit", "FrameRectChanged", "frame_rect_changed")}
-    PopupRequest<public>()<transacts>:godot_signal(vector2) = godot_signal(vector2){Id := VhSignalBind(Handle, "graph_edit", "PopupRequest", "popup_request")}
-    BeginNodeMove<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "graph_edit", "BeginNodeMove", "begin_node_move")}
-    EndNodeMove<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "graph_edit", "EndNodeMove", "end_node_move")}
-    GraphElementsLinkedToFrameRequest<public>()<transacts>:godot_signal(tuple(godot_array, string)) = godot_signal(tuple(godot_array, string)){Id := VhSignalBind(Handle, "graph_edit", "GraphElementsLinkedToFrameRequest", "graph_elements_linked_to_frame_request")}
-    ScrollOffsetChanged<public>()<transacts>:godot_signal(vector2) = godot_signal(vector2){Id := VhSignalBind(Handle, "graph_edit", "ScrollOffsetChanged", "scroll_offset_changed")}
+    ConnectionRequest<public>()<transacts>:signal(tuple(string, int, string, int)) = signal(tuple(string, int, string, int)){Id := VhSignalBind(Handle, "graph_edit", "ConnectionRequest", "connection_request")}
+    DisconnectionRequest<public>()<transacts>:signal(tuple(string, int, string, int)) = signal(tuple(string, int, string, int)){Id := VhSignalBind(Handle, "graph_edit", "DisconnectionRequest", "disconnection_request")}
+    ConnectionToEmpty<public>()<transacts>:signal(tuple(string, int, vector2)) = signal(tuple(string, int, vector2)){Id := VhSignalBind(Handle, "graph_edit", "ConnectionToEmpty", "connection_to_empty")}
+    ConnectionFromEmpty<public>()<transacts>:signal(tuple(string, int, vector2)) = signal(tuple(string, int, vector2)){Id := VhSignalBind(Handle, "graph_edit", "ConnectionFromEmpty", "connection_from_empty")}
+    ConnectionDragStarted<public>()<transacts>:signal(tuple(string, int, logic)) = signal(tuple(string, int, logic)){Id := VhSignalBind(Handle, "graph_edit", "ConnectionDragStarted", "connection_drag_started")}
+    ConnectionDragEnded<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "graph_edit", "ConnectionDragEnded", "connection_drag_ended")}
+    CopyNodesRequest<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "graph_edit", "CopyNodesRequest", "copy_nodes_request")}
+    CutNodesRequest<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "graph_edit", "CutNodesRequest", "cut_nodes_request")}
+    PasteNodesRequest<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "graph_edit", "PasteNodesRequest", "paste_nodes_request")}
+    DuplicateNodesRequest<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "graph_edit", "DuplicateNodesRequest", "duplicate_nodes_request")}
+    DeleteNodesRequest<public>()<transacts>:signal(typed_array(string)) = signal(typed_array(string)){Id := VhSignalBind(Handle, "graph_edit", "DeleteNodesRequest", "delete_nodes_request")}
+    NodeSelected<public>()<transacts>:signal(node) = signal(node){Id := VhSignalBind(Handle, "graph_edit", "NodeSelected", "node_selected")}
+    NodeDeselected<public>()<transacts>:signal(node) = signal(node){Id := VhSignalBind(Handle, "graph_edit", "NodeDeselected", "node_deselected")}
+    FrameRectChanged<public>()<transacts>:signal(tuple(graph_frame, rect2)) = signal(tuple(graph_frame, rect2)){Id := VhSignalBind(Handle, "graph_edit", "FrameRectChanged", "frame_rect_changed")}
+    PopupRequest<public>()<transacts>:signal(vector2) = signal(vector2){Id := VhSignalBind(Handle, "graph_edit", "PopupRequest", "popup_request")}
+    BeginNodeMove<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "graph_edit", "BeginNodeMove", "begin_node_move")}
+    EndNodeMove<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "graph_edit", "EndNodeMove", "end_node_move")}
+    GraphElementsLinkedToFrameRequest<public>()<transacts>:signal(tuple(godot_array, string)) = signal(tuple(godot_array, string)){Id := VhSignalBind(Handle, "graph_edit", "GraphElementsLinkedToFrameRequest", "graph_elements_linked_to_frame_request")}
+    ScrollOffsetChanged<public>()<transacts>:signal(vector2) = signal(vector2){Id := VhSignalBind(Handle, "graph_edit", "ScrollOffsetChanged", "scroll_offset_changed")}
 
 height_map_shape3d<public> := class(shape3d):
 
@@ -44179,11 +44179,11 @@ item_list<public> := class(control):
     SetItemTooltip<public>(Idx:int, Tooltip:string)<transacts>:void = VhCallVoid(Handle, "set_item_tooltip", array{VhFromInt(Idx), VhFromString(Tooltip)})
     SetItemTooltipEnabled<public>(Idx:int, Enable:logic)<transacts>:void = VhCallVoid(Handle, "set_item_tooltip_enabled", array{VhFromInt(Idx), VhFromLogic(Enable)})
     SortItemsByText<public>()<transacts>:void = VhCallVoid(Handle, "sort_items_by_text", array{})
-    ItemSelected<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "item_list", "ItemSelected", "item_selected")}
-    EmptyClicked<public>()<transacts>:godot_signal(tuple(vector2, int)) = godot_signal(tuple(vector2, int)){Id := VhSignalBind(Handle, "item_list", "EmptyClicked", "empty_clicked")}
-    ItemClicked<public>()<transacts>:godot_signal(tuple(int, vector2, int)) = godot_signal(tuple(int, vector2, int)){Id := VhSignalBind(Handle, "item_list", "ItemClicked", "item_clicked")}
-    MultiSelected<public>()<transacts>:godot_signal(tuple(int, logic)) = godot_signal(tuple(int, logic)){Id := VhSignalBind(Handle, "item_list", "MultiSelected", "multi_selected")}
-    ItemActivated<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "item_list", "ItemActivated", "item_activated")}
+    ItemSelected<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "item_list", "ItemSelected", "item_selected")}
+    EmptyClicked<public>()<transacts>:signal(tuple(vector2, int)) = signal(tuple(vector2, int)){Id := VhSignalBind(Handle, "item_list", "EmptyClicked", "empty_clicked")}
+    ItemClicked<public>()<transacts>:signal(tuple(int, vector2, int)) = signal(tuple(int, vector2, int)){Id := VhSignalBind(Handle, "item_list", "ItemClicked", "item_clicked")}
+    MultiSelected<public>()<transacts>:signal(tuple(int, logic)) = signal(tuple(int, logic)){Id := VhSignalBind(Handle, "item_list", "MultiSelected", "multi_selected")}
+    ItemActivated<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "item_list", "ItemActivated", "item_activated")}
 
 joint2d<public> := class(node2d):
 
@@ -44746,10 +44746,10 @@ line_edit<public> := class(control):
     SetStructuredTextBidiOverrideOptions<public>(Args:godot_array)<transacts>:void = VhCallVoid(Handle, "set_structured_text_bidi_override_options", array{VhFromArray(Args)})
     SetText<public>(Text:string)<transacts>:void = VhCallVoid(Handle, "set_text", array{VhFromString(Text)})
     Unedit<public>()<transacts>:void = VhCallVoid(Handle, "unedit", array{})
-    TextChanged<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "line_edit", "TextChanged", "text_changed")}
-    TextChangeRejected<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "line_edit", "TextChangeRejected", "text_change_rejected")}
-    TextSubmitted<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "line_edit", "TextSubmitted", "text_submitted")}
-    EditingToggled<public>()<transacts>:godot_signal(logic) = godot_signal(logic){Id := VhSignalBind(Handle, "line_edit", "EditingToggled", "editing_toggled")}
+    TextChanged<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "line_edit", "TextChanged", "text_changed")}
+    TextChangeRejected<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "line_edit", "TextChangeRejected", "text_change_rejected")}
+    TextSubmitted<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "line_edit", "TextSubmitted", "text_submitted")}
+    EditingToggled<public>()<transacts>:signal(logic) = signal(logic){Id := VhSignalBind(Handle, "line_edit", "EditingToggled", "editing_toggled")}
 
 look_at_modifier3d<public> := class(skeleton_modifier3d):
 
@@ -44898,7 +44898,7 @@ mesh_instance2d<public> := class(node2d):
     GetTexture<public>()<decides><reads>:texture2d = texture2d[VhObjectFrom[VhCallValueConst(Handle, "get_texture", array{})]]
     SetMesh<public>(Mesh:mesh)<transacts>:void = VhCallVoid(Handle, "set_mesh", array{VhFromObject(Mesh)})
     SetTexture<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_texture", array{VhFromObject(Texture)})
-    TextureChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "mesh_instance2d", "TextureChanged", "texture_changed")}
+    TextureChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "mesh_instance2d", "TextureChanged", "texture_changed")}
 
 modifier_bone_target3d<public> := class(skeleton_modifier3d):
 
@@ -44914,7 +44914,7 @@ multi_mesh_instance2d<public> := class(node2d):
     GetTexture<public>()<decides><reads>:texture2d = texture2d[VhObjectFrom[VhCallValueConst(Handle, "get_texture", array{})]]
     SetMultimesh<public>(Multimesh:multi_mesh)<transacts>:void = VhCallVoid(Handle, "set_multimesh", array{VhFromObject(Multimesh)})
     SetTexture<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_texture", array{VhFromObject(Texture)})
-    TextureChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "multi_mesh_instance2d", "TextureChanged", "texture_changed")}
+    TextureChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "multi_mesh_instance2d", "TextureChanged", "texture_changed")}
 
 multiplayer_peer_extension<public> := class(multiplayer_peer):
 
@@ -45056,8 +45056,8 @@ navigation_region2d<public> := class(node2d):
     SetNavigationLayerValue<public>(LayerNumber:int, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_navigation_layer_value", array{VhFromInt(LayerNumber), VhFromLogic(Value)})
     SetNavigationMap<public>(NavigationMap:int)<transacts>:void = VhCallVoid(Handle, "set_navigation_map", array{VhFromRid(NavigationMap)})
     SetNavigationPolygon<public>(NavigationPolygon:navigation_polygon)<transacts>:void = VhCallVoid(Handle, "set_navigation_polygon", array{VhFromObject(NavigationPolygon)})
-    NavigationPolygonChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "navigation_region2d", "NavigationPolygonChanged", "navigation_polygon_changed")}
-    BakeFinished<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "navigation_region2d", "BakeFinished", "bake_finished")}
+    NavigationPolygonChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "navigation_region2d", "NavigationPolygonChanged", "navigation_polygon_changed")}
+    BakeFinished<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "navigation_region2d", "BakeFinished", "bake_finished")}
 
 nine_patch_rect<public> := class(control):
 
@@ -45086,7 +45086,7 @@ nine_patch_rect<public> := class(control):
     GetTexture<public>()<decides><reads>:texture2d = texture2d[VhObjectFrom[VhCallValueConst(Handle, "get_texture", array{})]]
     SetRegionRect<public>(Rect:rect2)<transacts>:void = VhCallVoid(Handle, "set_region_rect", array{VhFromRect2(Rect)})
     SetTexture<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_texture", array{VhFromObject(Texture)})
-    TextureChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "nine_patch_rect", "TextureChanged", "texture_changed")}
+    TextureChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "nine_patch_rect", "TextureChanged", "texture_changed")}
 
 occluder_instance3d<public> := class(visual_instance3d):
 
@@ -45173,7 +45173,7 @@ open_xr_spatial_entity_tracker<public> := class(xr_positional_tracker):
     var SpatialTrackingState<public><getter(SpatialTrackingStateGetter)><setter(SpatialTrackingStateSetter)>:open_xr_spatial_entity_tracker_entity_tracking_state = external {}
     SpatialTrackingStateGetter<epic_internal>(Accessor:accessor)<transacts>:open_xr_spatial_entity_tracker_entity_tracking_state = VhToOpenXrSpatialEntityTrackerEntityTrackingState(VhCallValue(Handle, "get_spatial_tracking_state", array{}))
     SpatialTrackingStateSetter<epic_internal>(Accessor:accessor, Value:open_xr_spatial_entity_tracker_entity_tracking_state)<transacts>:void = VhCallVoid(Handle, "set_spatial_tracking_state", array{VhFromOpenXrSpatialEntityTrackerEntityTrackingState(Value)})
-    SpatialTrackingStateChanged<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "open_xr_spatial_entity_tracker", "SpatialTrackingStateChanged", "spatial_tracking_state_changed")}
+    SpatialTrackingStateChanged<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "open_xr_spatial_entity_tracker", "SpatialTrackingStateChanged", "spatial_tracking_state_changed")}
 
 open_xr_visibility_mask<public> := class(visual_instance3d):
 
@@ -45875,7 +45875,7 @@ particle_process_material<public> := class(material):
     SetEmissionPointTexture<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_emission_point_texture", array{VhFromObject(Texture)})
     SetParamTexture<public>(Param:particle_process_material_parameter, Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_param_texture", array{VhFromParticleProcessMaterialParameter(Param), VhFromObject(Texture)})
     SetVelocityLimitCurve<public>(Curve:texture2d)<transacts>:void = VhCallVoid(Handle, "set_velocity_limit_curve", array{VhFromObject(Curve)})
-    EmissionShapeChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "particle_process_material", "EmissionShapeChanged", "emission_shape_changed")}
+    EmissionShapeChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "particle_process_material", "EmissionShapeChanged", "emission_shape_changed")}
 
 path2d<public> := class(node2d):
 
@@ -46123,7 +46123,7 @@ polygon_occluder3d<public> := class(occluder3d):
 
 popup<public> := class(window):
 
-    PopupHide<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "popup", "PopupHide", "popup_hide")}
+    PopupHide<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "popup", "PopupHide", "popup_hide")}
 
 primitive_mesh<public> := class(mesh):
 
@@ -46304,8 +46304,8 @@ range<public> := class(control):
     Share<public>(With:node)<transacts>:void = VhCallVoid(Handle, "share", array{VhFromObject(With)})
     Unshare<public>()<transacts>:void = VhCallVoid(Handle, "unshare", array{})
     _ValueChanged<public>(NewValue:float):void = {}
-    ValueChanged<public>()<transacts>:godot_signal(float) = godot_signal(float){Id := VhSignalBind(Handle, "range", "ValueChanged", "value_changed")}
-    Changed<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "range", "Changed", "changed")}
+    ValueChanged<public>()<transacts>:signal(float) = signal(float){Id := VhSignalBind(Handle, "range", "ValueChanged", "value_changed")}
+    Changed<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "range", "Changed", "changed")}
 
 ray_cast2d<public> := class(node2d):
 
@@ -46678,10 +46678,10 @@ rich_text_label<public> := class(control):
     SetTableColumnName<public>(Column:int, Name:string)<transacts>:void = VhCallVoid(Handle, "set_table_column_name", array{VhFromInt(Column), VhFromString(Name)})
     SetText<public>(Text:string)<transacts>:void = VhCallVoid(Handle, "set_text", array{VhFromString(Text)})
     UpdateImage<public>(Key:variant, Mask:int, Image:texture2d, Width:int, Height:int, Color:color, InlineAlign:inline_alignment, Region:rect2, ?Pad:logic = false, ?Tooltip:string = "", ?WidthInPercent:logic = false, ?HeightInPercent:logic = false)<transacts>:void = VhCallVoid(Handle, "update_image", array{VhFromVariant(Key), VhFromInt(Mask), VhFromObject(Image), VhFromInt(Width), VhFromInt(Height), VhFromColor(Color), VhFromInlineAlignment(InlineAlign), VhFromRect2(Region), VhFromLogic(Pad), VhFromString(Tooltip), VhFromLogic(WidthInPercent), VhFromLogic(HeightInPercent)})
-    MetaClicked<public>()<transacts>:godot_signal(variant) = godot_signal(variant){Id := VhSignalBind(Handle, "rich_text_label", "MetaClicked", "meta_clicked")}
-    MetaHoverStarted<public>()<transacts>:godot_signal(variant) = godot_signal(variant){Id := VhSignalBind(Handle, "rich_text_label", "MetaHoverStarted", "meta_hover_started")}
-    MetaHoverEnded<public>()<transacts>:godot_signal(variant) = godot_signal(variant){Id := VhSignalBind(Handle, "rich_text_label", "MetaHoverEnded", "meta_hover_ended")}
-    Finished<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "rich_text_label", "Finished", "finished")}
+    MetaClicked<public>()<transacts>:signal(variant) = signal(variant){Id := VhSignalBind(Handle, "rich_text_label", "MetaClicked", "meta_clicked")}
+    MetaHoverStarted<public>()<transacts>:signal(variant) = signal(variant){Id := VhSignalBind(Handle, "rich_text_label", "MetaHoverStarted", "meta_hover_started")}
+    MetaHoverEnded<public>()<transacts>:signal(variant) = signal(variant){Id := VhSignalBind(Handle, "rich_text_label", "MetaHoverEnded", "meta_hover_ended")}
+    Finished<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "rich_text_label", "Finished", "finished")}
 
 root_motion_view<public> := class(visual_instance3d):
 
@@ -46863,7 +46863,7 @@ skeleton2d<public> := class(node2d):
     GetSkeleton<public>()<reads>:int = VhToInt(VhCallValueConst(Handle, "get_skeleton", array{}))
     SetBoneLocalPoseOverride<public>(BoneIdx:int, OverridePose:transform2d, Strength:float, Persistent:logic)<transacts>:void = VhCallVoid(Handle, "set_bone_local_pose_override", array{VhFromInt(BoneIdx), VhFromTransform2D(OverridePose), VhFromFloat(Strength), VhFromLogic(Persistent)})
     SetModificationStack<public>(ModificationStack:skeleton_modification_stack2d)<transacts>:void = VhCallVoid(Handle, "set_modification_stack", array{VhFromObject(ModificationStack)})
-    BoneSetupChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "skeleton2d", "BoneSetupChanged", "bone_setup_changed")}
+    BoneSetupChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "skeleton2d", "BoneSetupChanged", "bone_setup_changed")}
 
 skeleton_ik3d<public> := class(skeleton_modifier3d):
 
@@ -47260,8 +47260,8 @@ sprite2d<public> := class(node2d):
     IsPixelOpaque<public>(Pos:vector2)<reads>:logic = VhToLogic(VhCallValueConst(Handle, "is_pixel_opaque", array{VhFromVector2(Pos)}))
     SetRegionRect<public>(Rect:rect2)<transacts>:void = VhCallVoid(Handle, "set_region_rect", array{VhFromRect2(Rect)})
     SetTexture<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_texture", array{VhFromObject(Texture)})
-    FrameChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "sprite2d", "FrameChanged", "frame_changed")}
-    TextureChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "sprite2d", "TextureChanged", "texture_changed")}
+    FrameChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "sprite2d", "FrameChanged", "frame_changed")}
+    TextureChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "sprite2d", "TextureChanged", "texture_changed")}
 
 stream_peer_tcp<public> := class(stream_peer_socket):
 
@@ -47631,14 +47631,14 @@ tab_bar<public> := class(control):
     SetTabTextDirection<public>(TabIdx:int, Direction:control_text_direction)<transacts>:void = VhCallVoid(Handle, "set_tab_text_direction", array{VhFromInt(TabIdx), VhFromControlTextDirection(Direction)})
     SetTabTitle<public>(TabIdx:int, Title:string)<transacts>:void = VhCallVoid(Handle, "set_tab_title", array{VhFromInt(TabIdx), VhFromString(Title)})
     SetTabTooltip<public>(TabIdx:int, Tooltip:string)<transacts>:void = VhCallVoid(Handle, "set_tab_tooltip", array{VhFromInt(TabIdx), VhFromString(Tooltip)})
-    TabSelected<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "tab_bar", "TabSelected", "tab_selected")}
-    TabChanged<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "tab_bar", "TabChanged", "tab_changed")}
-    TabClicked<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "tab_bar", "TabClicked", "tab_clicked")}
-    TabRmbClicked<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "tab_bar", "TabRmbClicked", "tab_rmb_clicked")}
-    TabClosePressed<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "tab_bar", "TabClosePressed", "tab_close_pressed")}
-    TabButtonPressed<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "tab_bar", "TabButtonPressed", "tab_button_pressed")}
-    TabHovered<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "tab_bar", "TabHovered", "tab_hovered")}
-    ActiveTabRearranged<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "tab_bar", "ActiveTabRearranged", "active_tab_rearranged")}
+    TabSelected<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "tab_bar", "TabSelected", "tab_selected")}
+    TabChanged<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "tab_bar", "TabChanged", "tab_changed")}
+    TabClicked<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "tab_bar", "TabClicked", "tab_clicked")}
+    TabRmbClicked<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "tab_bar", "TabRmbClicked", "tab_rmb_clicked")}
+    TabClosePressed<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "tab_bar", "TabClosePressed", "tab_close_pressed")}
+    TabButtonPressed<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "tab_bar", "TabButtonPressed", "tab_button_pressed")}
+    TabHovered<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "tab_bar", "TabHovered", "tab_hovered")}
+    ActiveTabRearranged<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "tab_bar", "ActiveTabRearranged", "active_tab_rearranged")}
 
 text_edit<public> := class(control):
 
@@ -47937,13 +47937,13 @@ text_edit<public> := class(control):
     _HandleUnicodeInput<public>(UnicodeChar:int, CaretIndex:int):void = {}
     _Paste<public>(CaretIndex:int):void = {}
     _PastePrimaryClipboard<public>(CaretIndex:int):void = {}
-    TextSet<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "text_edit", "TextSet", "text_set")}
-    TextChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "text_edit", "TextChanged", "text_changed")}
-    LinesEditedFrom<public>()<transacts>:godot_signal(tuple(int, int)) = godot_signal(tuple(int, int)){Id := VhSignalBind(Handle, "text_edit", "LinesEditedFrom", "lines_edited_from")}
-    CaretChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "text_edit", "CaretChanged", "caret_changed")}
-    GutterClicked<public>()<transacts>:godot_signal(tuple(int, int)) = godot_signal(tuple(int, int)){Id := VhSignalBind(Handle, "text_edit", "GutterClicked", "gutter_clicked")}
-    GutterAdded<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "text_edit", "GutterAdded", "gutter_added")}
-    GutterRemoved<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "text_edit", "GutterRemoved", "gutter_removed")}
+    TextSet<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "text_edit", "TextSet", "text_set")}
+    TextChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "text_edit", "TextChanged", "text_changed")}
+    LinesEditedFrom<public>()<transacts>:signal(tuple(int, int)) = signal(tuple(int, int)){Id := VhSignalBind(Handle, "text_edit", "LinesEditedFrom", "lines_edited_from")}
+    CaretChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "text_edit", "CaretChanged", "caret_changed")}
+    GutterClicked<public>()<transacts>:signal(tuple(int, int)) = signal(tuple(int, int)){Id := VhSignalBind(Handle, "text_edit", "GutterClicked", "gutter_clicked")}
+    GutterAdded<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "text_edit", "GutterAdded", "gutter_added")}
+    GutterRemoved<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "text_edit", "GutterRemoved", "gutter_removed")}
 
 text_server_advanced<public> := class(text_server_extension):
 
@@ -48085,7 +48085,7 @@ tile_map<public> := class(node2d):
     UpdateInternals<public>()<transacts>:void = VhCallVoid(Handle, "update_internals", array{})
     _TileDataRuntimeUpdate<public>(Layer:int, Coords:vector2i, TileData:tile_data):void = {}
     _UseTileDataRuntimeUpdate<public>(Layer:int, Coords:vector2i):logic = false
-    Changed<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "tile_map", "Changed", "changed")}
+    Changed<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "tile_map", "Changed", "changed")}
 
 tile_map_layer<public> := class(node2d):
 
@@ -48158,7 +48158,7 @@ tile_map_layer<public> := class(node2d):
     _TileDataRuntimeUpdate<public>(Coords:vector2i, TileData:tile_data):void = {}
     _UpdateCells<public>(Coords:typed_array(vector2i), ForcedCleanup:logic):void = {}
     _UseTileDataRuntimeUpdate<public>(Coords:vector2i):logic = false
-    Changed<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "tile_map_layer", "Changed", "changed")}
+    Changed<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "tile_map_layer", "Changed", "changed")}
 
 tile_set_atlas_source<public> := class(tile_set_source):
 
@@ -48274,8 +48274,8 @@ touch_screen_button<public> := class(node2d):
     SetShape<public>(Shape:shape2d)<transacts>:void = VhCallVoid(Handle, "set_shape", array{VhFromObject(Shape)})
     SetTextureNormal<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_texture_normal", array{VhFromObject(Texture)})
     SetTexturePressed<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_texture_pressed", array{VhFromObject(Texture)})
-    Pressed<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "touch_screen_button", "Pressed", "pressed")}
-    Released<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "touch_screen_button", "Released", "released")}
+    Pressed<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "touch_screen_button", "Pressed", "pressed")}
+    Released<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "touch_screen_button", "Released", "released")}
 
 tree<public> := class(control):
 
@@ -48366,21 +48366,21 @@ tree<public> := class(control):
     SetColumnTitleLanguage<public>(Column:int, Language:string)<transacts>:void = VhCallVoid(Handle, "set_column_title_language", array{VhFromInt(Column), VhFromString(Language)})
     SetColumnTitleTooltipText<public>(Column:int, TooltipText:string)<transacts>:void = VhCallVoid(Handle, "set_column_title_tooltip_text", array{VhFromInt(Column), VhFromString(TooltipText)})
     SetSelected<public>(Item:tree_item, Column:int)<transacts>:void = VhCallVoid(Handle, "set_selected", array{VhFromObject(Item), VhFromInt(Column)})
-    ItemSelected<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "tree", "ItemSelected", "item_selected")}
-    CellSelected<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "tree", "CellSelected", "cell_selected")}
-    MultiSelected<public>()<transacts>:godot_signal(tuple(tree_item, int, logic)) = godot_signal(tuple(tree_item, int, logic)){Id := VhSignalBind(Handle, "tree", "MultiSelected", "multi_selected")}
-    ItemMouseSelected<public>()<transacts>:godot_signal(tuple(vector2, int)) = godot_signal(tuple(vector2, int)){Id := VhSignalBind(Handle, "tree", "ItemMouseSelected", "item_mouse_selected")}
-    EmptyClicked<public>()<transacts>:godot_signal(tuple(vector2, int)) = godot_signal(tuple(vector2, int)){Id := VhSignalBind(Handle, "tree", "EmptyClicked", "empty_clicked")}
-    ItemEdited<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "tree", "ItemEdited", "item_edited")}
-    CustomItemClicked<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "tree", "CustomItemClicked", "custom_item_clicked")}
-    ItemIconDoubleClicked<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "tree", "ItemIconDoubleClicked", "item_icon_double_clicked")}
-    ItemCollapsed<public>()<transacts>:godot_signal(tree_item) = godot_signal(tree_item){Id := VhSignalBind(Handle, "tree", "ItemCollapsed", "item_collapsed")}
-    CheckPropagatedToItem<public>()<transacts>:godot_signal(tuple(tree_item, int)) = godot_signal(tuple(tree_item, int)){Id := VhSignalBind(Handle, "tree", "CheckPropagatedToItem", "check_propagated_to_item")}
-    ButtonClicked<public>()<transacts>:godot_signal(tuple(tree_item, int, int, int)) = godot_signal(tuple(tree_item, int, int, int)){Id := VhSignalBind(Handle, "tree", "ButtonClicked", "button_clicked")}
-    CustomPopupEdited<public>()<transacts>:godot_signal(logic) = godot_signal(logic){Id := VhSignalBind(Handle, "tree", "CustomPopupEdited", "custom_popup_edited")}
-    ItemActivated<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "tree", "ItemActivated", "item_activated")}
-    ColumnTitleClicked<public>()<transacts>:godot_signal(tuple(int, int)) = godot_signal(tuple(int, int)){Id := VhSignalBind(Handle, "tree", "ColumnTitleClicked", "column_title_clicked")}
-    NothingSelected<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "tree", "NothingSelected", "nothing_selected")}
+    ItemSelected<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "tree", "ItemSelected", "item_selected")}
+    CellSelected<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "tree", "CellSelected", "cell_selected")}
+    MultiSelected<public>()<transacts>:signal(tuple(tree_item, int, logic)) = signal(tuple(tree_item, int, logic)){Id := VhSignalBind(Handle, "tree", "MultiSelected", "multi_selected")}
+    ItemMouseSelected<public>()<transacts>:signal(tuple(vector2, int)) = signal(tuple(vector2, int)){Id := VhSignalBind(Handle, "tree", "ItemMouseSelected", "item_mouse_selected")}
+    EmptyClicked<public>()<transacts>:signal(tuple(vector2, int)) = signal(tuple(vector2, int)){Id := VhSignalBind(Handle, "tree", "EmptyClicked", "empty_clicked")}
+    ItemEdited<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "tree", "ItemEdited", "item_edited")}
+    CustomItemClicked<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "tree", "CustomItemClicked", "custom_item_clicked")}
+    ItemIconDoubleClicked<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "tree", "ItemIconDoubleClicked", "item_icon_double_clicked")}
+    ItemCollapsed<public>()<transacts>:signal(tree_item) = signal(tree_item){Id := VhSignalBind(Handle, "tree", "ItemCollapsed", "item_collapsed")}
+    CheckPropagatedToItem<public>()<transacts>:signal(tuple(tree_item, int)) = signal(tuple(tree_item, int)){Id := VhSignalBind(Handle, "tree", "CheckPropagatedToItem", "check_propagated_to_item")}
+    ButtonClicked<public>()<transacts>:signal(tuple(tree_item, int, int, int)) = signal(tuple(tree_item, int, int, int)){Id := VhSignalBind(Handle, "tree", "ButtonClicked", "button_clicked")}
+    CustomPopupEdited<public>()<transacts>:signal(logic) = signal(logic){Id := VhSignalBind(Handle, "tree", "CustomPopupEdited", "custom_popup_edited")}
+    ItemActivated<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "tree", "ItemActivated", "item_activated")}
+    ColumnTitleClicked<public>()<transacts>:signal(tuple(int, int)) = signal(tuple(int, int)){Id := VhSignalBind(Handle, "tree", "ColumnTitleClicked", "column_title_clicked")}
+    NothingSelected<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "tree", "NothingSelected", "nothing_selected")}
 
 video_stream_player<public> := class(control):
 
@@ -48424,7 +48424,7 @@ video_stream_player<public> := class(control):
     SetBus<public>(Bus:string)<transacts>:void = VhCallVoid(Handle, "set_bus", array{VhFromStringName(Bus)})
     SetStream<public>(Stream:video_stream)<transacts>:void = VhCallVoid(Handle, "set_stream", array{VhFromObject(Stream)})
     Stop<public>()<transacts>:void = VhCallVoid(Handle, "stop", array{})
-    Finished<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "video_stream_player", "Finished", "finished")}
+    Finished<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "video_stream_player", "Finished", "finished")}
 
 video_stream_theora<public> := class(video_stream):
 
@@ -48436,15 +48436,15 @@ visible_on_screen_notifier2d<public> := class(node2d):
     GetRect<public>()<reads>:rect2 = VhToRect2(VhCallValueConst(Handle, "get_rect", array{}))
     IsOnScreen<public>()<reads>:logic = VhToLogic(VhCallValueConst(Handle, "is_on_screen", array{}))
     SetRect<public>(Rect:rect2)<transacts>:void = VhCallVoid(Handle, "set_rect", array{VhFromRect2(Rect)})
-    ScreenEntered<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "visible_on_screen_notifier2d", "ScreenEntered", "screen_entered")}
-    ScreenExited<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "visible_on_screen_notifier2d", "ScreenExited", "screen_exited")}
+    ScreenEntered<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "visible_on_screen_notifier2d", "ScreenEntered", "screen_entered")}
+    ScreenExited<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "visible_on_screen_notifier2d", "ScreenExited", "screen_exited")}
 
 visible_on_screen_notifier3d<public> := class(visual_instance3d):
 
     IsOnScreen<public>()<reads>:logic = VhToLogic(VhCallValueConst(Handle, "is_on_screen", array{}))
     SetAabb<public>(Rect:aabb)<transacts>:void = VhCallVoid(Handle, "set_aabb", array{VhFromAABB(Rect)})
-    ScreenEntered<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "visible_on_screen_notifier3d", "ScreenEntered", "screen_entered")}
-    ScreenExited<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "visible_on_screen_notifier3d", "ScreenExited", "screen_exited")}
+    ScreenEntered<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "visible_on_screen_notifier3d", "ScreenEntered", "screen_entered")}
+    ScreenExited<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "visible_on_screen_notifier3d", "ScreenExited", "screen_exited")}
 
 visual_shader<public> := class(shader):
 
@@ -48600,7 +48600,7 @@ visual_shader_node_input<public> := class(visual_shader_node):
     GetInputName<public>()<reads>:string = VhToString(VhCallValueConst(Handle, "get_input_name", array{}))
     GetInputRealName<public>()<reads>:string = VhToString(VhCallValueConst(Handle, "get_input_real_name", array{}))
     SetInputName<public>(Name:string)<transacts>:void = VhCallVoid(Handle, "set_input_name", array{VhFromString(Name)})
-    InputTypeChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "visual_shader_node_input", "InputTypeChanged", "input_type_changed")}
+    InputTypeChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "visual_shader_node_input", "InputTypeChanged", "input_type_changed")}
 
 visual_shader_node_int_func<public> := class(visual_shader_node):
 
@@ -48968,11 +48968,11 @@ xr_controller3d<public> := class(xr_node3d):
     GetTrackerHand<public>()<reads>:xr_positional_tracker_tracker_hand = VhToXrPositionalTrackerTrackerHand(VhCallValueConst(Handle, "get_tracker_hand", array{}))
     GetVector2<public>(Name:string)<reads>:vector2 = VhToVector2(VhCallValueConst(Handle, "get_vector2", array{VhFromStringName(Name)}))
     IsButtonPressed<public>(Name:string)<reads>:logic = VhToLogic(VhCallValueConst(Handle, "is_button_pressed", array{VhFromStringName(Name)}))
-    ButtonPressed<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "xr_controller3d", "ButtonPressed", "button_pressed")}
-    ButtonReleased<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "xr_controller3d", "ButtonReleased", "button_released")}
-    InputFloatChanged<public>()<transacts>:godot_signal(tuple(string, float)) = godot_signal(tuple(string, float)){Id := VhSignalBind(Handle, "xr_controller3d", "InputFloatChanged", "input_float_changed")}
-    InputVector2Changed<public>()<transacts>:godot_signal(tuple(string, vector2)) = godot_signal(tuple(string, vector2)){Id := VhSignalBind(Handle, "xr_controller3d", "InputVector2Changed", "input_vector2_changed")}
-    ProfileChanged<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "xr_controller3d", "ProfileChanged", "profile_changed")}
+    ButtonPressed<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "xr_controller3d", "ButtonPressed", "button_pressed")}
+    ButtonReleased<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "xr_controller3d", "ButtonReleased", "button_released")}
+    InputFloatChanged<public>()<transacts>:signal(tuple(string, float)) = signal(tuple(string, float)){Id := VhSignalBind(Handle, "xr_controller3d", "InputFloatChanged", "input_float_changed")}
+    InputVector2Changed<public>()<transacts>:signal(tuple(string, vector2)) = signal(tuple(string, vector2)){Id := VhSignalBind(Handle, "xr_controller3d", "InputVector2Changed", "input_vector2_changed")}
+    ProfileChanged<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "xr_controller3d", "ProfileChanged", "profile_changed")}
 
 xr_controller_tracker<public> := class(xr_positional_tracker):
 
@@ -49164,7 +49164,7 @@ animation_node_blend_space2d<public> := class(animation_root_node):
     SetBlendPointPosition<public>(Point:int, Pos:vector2)<transacts>:void = VhCallVoid(Handle, "set_blend_point_position", array{VhFromInt(Point), VhFromVector2(Pos)})
     SetXLabel<public>(Text:string)<transacts>:void = VhCallVoid(Handle, "set_x_label", array{VhFromString(Text)})
     SetYLabel<public>(Text:string)<transacts>:void = VhCallVoid(Handle, "set_y_label", array{VhFromString(Text)})
-    TrianglesUpdated<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "animation_node_blend_space2d", "TrianglesUpdated", "triangles_updated")}
+    TrianglesUpdated<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "animation_node_blend_space2d", "TrianglesUpdated", "triangles_updated")}
 
 animation_node_blend_tree<public> := class(animation_root_node):
 
@@ -49190,7 +49190,7 @@ animation_node_blend_tree<public> := class(animation_root_node):
     RemoveNode<public>(Name:string)<transacts>:void = VhCallVoid(Handle, "remove_node", array{VhFromStringName(Name)})
     RenameNode<public>(Name:string, NewName:string)<transacts>:void = VhCallVoid(Handle, "rename_node", array{VhFromStringName(Name), VhFromStringName(NewName)})
     SetNodePosition<public>(Name:string, Position:vector2)<transacts>:void = VhCallVoid(Handle, "set_node_position", array{VhFromStringName(Name), VhFromVector2(Position)})
-    NodeChanged<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "animation_node_blend_tree", "NodeChanged", "node_changed")}
+    NodeChanged<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "animation_node_blend_tree", "NodeChanged", "node_changed")}
 
 animation_node_one_shot<public> := class(animation_node_sync):
 
@@ -49347,14 +49347,14 @@ area2d<public> := class(collision_object2d):
     OverlapsArea<public>(Area:node)<reads>:logic = VhToLogic(VhCallValueConst(Handle, "overlaps_area", array{VhFromObject(Area)}))
     OverlapsBody<public>(Body:node)<reads>:logic = VhToLogic(VhCallValueConst(Handle, "overlaps_body", array{VhFromObject(Body)}))
     SetAudioBusName<public>(Name:string)<transacts>:void = VhCallVoid(Handle, "set_audio_bus_name", array{VhFromStringName(Name)})
-    BodyShapeEntered<public>()<transacts>:godot_signal(tuple(int, node2d, int, int)) = godot_signal(tuple(int, node2d, int, int)){Id := VhSignalBind(Handle, "area2d", "BodyShapeEntered", "body_shape_entered")}
-    BodyShapeExited<public>()<transacts>:godot_signal(tuple(int, node2d, int, int)) = godot_signal(tuple(int, node2d, int, int)){Id := VhSignalBind(Handle, "area2d", "BodyShapeExited", "body_shape_exited")}
-    BodyEntered<public>()<transacts>:godot_signal(node2d) = godot_signal(node2d){Id := VhSignalBind(Handle, "area2d", "BodyEntered", "body_entered")}
-    BodyExited<public>()<transacts>:godot_signal(node2d) = godot_signal(node2d){Id := VhSignalBind(Handle, "area2d", "BodyExited", "body_exited")}
-    AreaShapeEntered<public>()<transacts>:godot_signal(tuple(int, area2d, int, int)) = godot_signal(tuple(int, area2d, int, int)){Id := VhSignalBind(Handle, "area2d", "AreaShapeEntered", "area_shape_entered")}
-    AreaShapeExited<public>()<transacts>:godot_signal(tuple(int, area2d, int, int)) = godot_signal(tuple(int, area2d, int, int)){Id := VhSignalBind(Handle, "area2d", "AreaShapeExited", "area_shape_exited")}
-    AreaEntered<public>()<transacts>:godot_signal(area2d) = godot_signal(area2d){Id := VhSignalBind(Handle, "area2d", "AreaEntered", "area_entered")}
-    AreaExited<public>()<transacts>:godot_signal(area2d) = godot_signal(area2d){Id := VhSignalBind(Handle, "area2d", "AreaExited", "area_exited")}
+    BodyShapeEntered<public>()<transacts>:signal(tuple(int, node2d, int, int)) = signal(tuple(int, node2d, int, int)){Id := VhSignalBind(Handle, "area2d", "BodyShapeEntered", "body_shape_entered")}
+    BodyShapeExited<public>()<transacts>:signal(tuple(int, node2d, int, int)) = signal(tuple(int, node2d, int, int)){Id := VhSignalBind(Handle, "area2d", "BodyShapeExited", "body_shape_exited")}
+    BodyEntered<public>()<transacts>:signal(node2d) = signal(node2d){Id := VhSignalBind(Handle, "area2d", "BodyEntered", "body_entered")}
+    BodyExited<public>()<transacts>:signal(node2d) = signal(node2d){Id := VhSignalBind(Handle, "area2d", "BodyExited", "body_exited")}
+    AreaShapeEntered<public>()<transacts>:signal(tuple(int, area2d, int, int)) = signal(tuple(int, area2d, int, int)){Id := VhSignalBind(Handle, "area2d", "AreaShapeEntered", "area_shape_entered")}
+    AreaShapeExited<public>()<transacts>:signal(tuple(int, area2d, int, int)) = signal(tuple(int, area2d, int, int)){Id := VhSignalBind(Handle, "area2d", "AreaShapeExited", "area_shape_exited")}
+    AreaEntered<public>()<transacts>:signal(area2d) = signal(area2d){Id := VhSignalBind(Handle, "area2d", "AreaEntered", "area_entered")}
+    AreaExited<public>()<transacts>:signal(area2d) = signal(area2d){Id := VhSignalBind(Handle, "area2d", "AreaExited", "area_exited")}
 
 aspect_ratio_container<public> := class(container):
 
@@ -49787,11 +49787,11 @@ code_edit<public> := class(text_edit):
     UpdateCodeCompletionOptions<public>(Force:logic)<transacts>:void = VhCallVoid(Handle, "update_code_completion_options", array{VhFromLogic(Force)})
     _ConfirmCodeCompletion<public>(Replace:logic):void = {}
     _RequestCodeCompletion<public>(Force:logic):void = {}
-    BreakpointToggled<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "code_edit", "BreakpointToggled", "breakpoint_toggled")}
-    CodeCompletionRequested<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "code_edit", "CodeCompletionRequested", "code_completion_requested")}
-    SymbolLookup<public>()<transacts>:godot_signal(tuple(string, int, int)) = godot_signal(tuple(string, int, int)){Id := VhSignalBind(Handle, "code_edit", "SymbolLookup", "symbol_lookup")}
-    SymbolValidate<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "code_edit", "SymbolValidate", "symbol_validate")}
-    SymbolHovered<public>()<transacts>:godot_signal(tuple(string, int, int)) = godot_signal(tuple(string, int, int)){Id := VhSignalBind(Handle, "code_edit", "SymbolHovered", "symbol_hovered")}
+    BreakpointToggled<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "code_edit", "BreakpointToggled", "breakpoint_toggled")}
+    CodeCompletionRequested<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "code_edit", "CodeCompletionRequested", "code_completion_requested")}
+    SymbolLookup<public>()<transacts>:signal(tuple(string, int, int)) = signal(tuple(string, int, int)){Id := VhSignalBind(Handle, "code_edit", "SymbolLookup", "symbol_lookup")}
+    SymbolValidate<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "code_edit", "SymbolValidate", "symbol_validate")}
+    SymbolHovered<public>()<transacts>:signal(tuple(string, int, int)) = signal(tuple(string, int, int)){Id := VhSignalBind(Handle, "code_edit", "SymbolHovered", "symbol_hovered")}
 
 compressed_texture2d<public> := class(texture2d):
 
@@ -50127,7 +50127,7 @@ cpu_particles3d<public> := class(geometry_instance3d):
     SetScaleCurveY<public>(ScaleCurve:curve)<transacts>:void = VhCallVoid(Handle, "set_scale_curve_y", array{VhFromObject(ScaleCurve)})
     SetScaleCurveZ<public>(ScaleCurve:curve)<transacts>:void = VhCallVoid(Handle, "set_scale_curve_z", array{VhFromObject(ScaleCurve)})
     SetVisibilityAabb<public>(Aabb:aabb)<transacts>:void = VhCallVoid(Handle, "set_visibility_aabb", array{VhFromAABB(Aabb)})
-    Finished<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "cpu_particles3d", "Finished", "finished")}
+    Finished<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "cpu_particles3d", "Finished", "finished")}
 
 csg_shape3d<public> := class(geometry_instance3d):
 
@@ -50328,19 +50328,19 @@ editor_property<public> := class(container):
     UpdateProperty<public>()<transacts>:void = VhCallVoid(Handle, "update_property", array{})
     _SetReadOnly<public>(Arg0:logic):void = {}
     _UpdateProperty<public>():void = {}
-    PropertyChanged<public>()<transacts>:godot_signal(tuple(string, variant, string, logic)) = godot_signal(tuple(string, variant, string, logic)){Id := VhSignalBind(Handle, "editor_property", "PropertyChanged", "property_changed")}
-    MultiplePropertiesChanged<public>()<transacts>:godot_signal(tuple([]string, godot_array)) = godot_signal(tuple([]string, godot_array)){Id := VhSignalBind(Handle, "editor_property", "MultiplePropertiesChanged", "multiple_properties_changed")}
-    PropertyKeyed<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "editor_property", "PropertyKeyed", "property_keyed")}
-    PropertyDeleted<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "editor_property", "PropertyDeleted", "property_deleted")}
-    PropertyKeyedWithValue<public>()<transacts>:godot_signal(tuple(string, variant)) = godot_signal(tuple(string, variant)){Id := VhSignalBind(Handle, "editor_property", "PropertyKeyedWithValue", "property_keyed_with_value")}
-    PropertyChecked<public>()<transacts>:godot_signal(tuple(string, logic)) = godot_signal(tuple(string, logic)){Id := VhSignalBind(Handle, "editor_property", "PropertyChecked", "property_checked")}
-    PropertyOverridden<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "editor_property", "PropertyOverridden", "property_overridden")}
-    PropertyFavorited<public>()<transacts>:godot_signal(tuple(string, logic)) = godot_signal(tuple(string, logic)){Id := VhSignalBind(Handle, "editor_property", "PropertyFavorited", "property_favorited")}
-    PropertyPinned<public>()<transacts>:godot_signal(tuple(string, logic)) = godot_signal(tuple(string, logic)){Id := VhSignalBind(Handle, "editor_property", "PropertyPinned", "property_pinned")}
-    PropertyCanRevertChanged<public>()<transacts>:godot_signal(tuple(string, logic)) = godot_signal(tuple(string, logic)){Id := VhSignalBind(Handle, "editor_property", "PropertyCanRevertChanged", "property_can_revert_changed")}
-    ResourceSelected<public>()<transacts>:godot_signal(tuple(string, resource)) = godot_signal(tuple(string, resource)){Id := VhSignalBind(Handle, "editor_property", "ResourceSelected", "resource_selected")}
-    ObjectIdSelected<public>()<transacts>:godot_signal(tuple(string, int)) = godot_signal(tuple(string, int)){Id := VhSignalBind(Handle, "editor_property", "ObjectIdSelected", "object_id_selected")}
-    Selected<public>()<transacts>:godot_signal(tuple(string, int)) = godot_signal(tuple(string, int)){Id := VhSignalBind(Handle, "editor_property", "Selected", "selected")}
+    PropertyChanged<public>()<transacts>:signal(tuple(string, variant, string, logic)) = signal(tuple(string, variant, string, logic)){Id := VhSignalBind(Handle, "editor_property", "PropertyChanged", "property_changed")}
+    MultiplePropertiesChanged<public>()<transacts>:signal(tuple([]string, godot_array)) = signal(tuple([]string, godot_array)){Id := VhSignalBind(Handle, "editor_property", "MultiplePropertiesChanged", "multiple_properties_changed")}
+    PropertyKeyed<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "editor_property", "PropertyKeyed", "property_keyed")}
+    PropertyDeleted<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "editor_property", "PropertyDeleted", "property_deleted")}
+    PropertyKeyedWithValue<public>()<transacts>:signal(tuple(string, variant)) = signal(tuple(string, variant)){Id := VhSignalBind(Handle, "editor_property", "PropertyKeyedWithValue", "property_keyed_with_value")}
+    PropertyChecked<public>()<transacts>:signal(tuple(string, logic)) = signal(tuple(string, logic)){Id := VhSignalBind(Handle, "editor_property", "PropertyChecked", "property_checked")}
+    PropertyOverridden<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "editor_property", "PropertyOverridden", "property_overridden")}
+    PropertyFavorited<public>()<transacts>:signal(tuple(string, logic)) = signal(tuple(string, logic)){Id := VhSignalBind(Handle, "editor_property", "PropertyFavorited", "property_favorited")}
+    PropertyPinned<public>()<transacts>:signal(tuple(string, logic)) = signal(tuple(string, logic)){Id := VhSignalBind(Handle, "editor_property", "PropertyPinned", "property_pinned")}
+    PropertyCanRevertChanged<public>()<transacts>:signal(tuple(string, logic)) = signal(tuple(string, logic)){Id := VhSignalBind(Handle, "editor_property", "PropertyCanRevertChanged", "property_can_revert_changed")}
+    ResourceSelected<public>()<transacts>:signal(tuple(string, resource)) = signal(tuple(string, resource)){Id := VhSignalBind(Handle, "editor_property", "ResourceSelected", "resource_selected")}
+    ObjectIdSelected<public>()<transacts>:signal(tuple(string, int)) = signal(tuple(string, int)){Id := VhSignalBind(Handle, "editor_property", "ObjectIdSelected", "object_id_selected")}
+    Selected<public>()<transacts>:signal(tuple(string, int)) = signal(tuple(string, int)){Id := VhSignalBind(Handle, "editor_property", "Selected", "selected")}
 
 editor_spin_slider<public> := class(range):
 
@@ -50363,11 +50363,11 @@ editor_spin_slider<public> := class(range):
     GetSuffix<public>()<reads>:string = VhToString(VhCallValueConst(Handle, "get_suffix", array{}))
     SetLabel<public>(Label:string)<transacts>:void = VhCallVoid(Handle, "set_label", array{VhFromString(Label)})
     SetSuffix<public>(Suffix:string)<transacts>:void = VhCallVoid(Handle, "set_suffix", array{VhFromString(Suffix)})
-    Grabbed<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "editor_spin_slider", "Grabbed", "grabbed")}
-    Ungrabbed<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "editor_spin_slider", "Ungrabbed", "ungrabbed")}
-    UpdownPressed<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "editor_spin_slider", "UpdownPressed", "updown_pressed")}
-    ValueFocusEntered<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "editor_spin_slider", "ValueFocusEntered", "value_focus_entered")}
-    ValueFocusExited<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "editor_spin_slider", "ValueFocusExited", "value_focus_exited")}
+    Grabbed<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "editor_spin_slider", "Grabbed", "grabbed")}
+    Ungrabbed<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "editor_spin_slider", "Ungrabbed", "ungrabbed")}
+    UpdownPressed<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "editor_spin_slider", "UpdownPressed", "updown_pressed")}
+    ValueFocusEntered<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "editor_spin_slider", "ValueFocusEntered", "value_focus_entered")}
+    ValueFocusExited<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "editor_spin_slider", "ValueFocusExited", "value_focus_exited")}
 
 external_texture<public> := class(texture2d):
 
@@ -50429,7 +50429,7 @@ foldable_container<public> := class(container):
     SetFoldableGroup<public>(ButtonGroup:foldable_group)<transacts>:void = VhCallVoid(Handle, "set_foldable_group", array{VhFromObject(ButtonGroup)})
     SetLanguage<public>(Language:string)<transacts>:void = VhCallVoid(Handle, "set_language", array{VhFromString(Language)})
     SetTitle<public>(Text:string)<transacts>:void = VhCallVoid(Handle, "set_title", array{VhFromString(Text)})
-    FoldingChanged<public>()<transacts>:godot_signal(logic) = godot_signal(logic){Id := VhSignalBind(Handle, "foldable_container", "FoldingChanged", "folding_changed")}
+    FoldingChanged<public>()<transacts>:signal(logic) = signal(logic){Id := VhSignalBind(Handle, "foldable_container", "FoldingChanged", "folding_changed")}
 
 gd_script_syntax_highlighter<public> := class(editor_syntax_highlighter):
 
@@ -50516,7 +50516,7 @@ gpu_particles3d<public> := class(geometry_instance3d):
     SetSkin<public>(Skin:skin)<transacts>:void = VhCallVoid(Handle, "set_skin", array{VhFromObject(Skin)})
     SetSubEmitter<public>(Path:string)<transacts>:void = VhCallVoid(Handle, "set_sub_emitter", array{VhFromNodePath(Path)})
     SetVisibilityAabb<public>(Aabb:aabb)<transacts>:void = VhCallVoid(Handle, "set_visibility_aabb", array{VhFromAABB(Aabb)})
-    Finished<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "gpu_particles3d", "Finished", "finished")}
+    Finished<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "gpu_particles3d", "Finished", "finished")}
 
 gpu_particles_attractor_box3d<public> := class(gpu_particles_attractor3d):
 
@@ -50728,14 +50728,14 @@ graph_element<public> := class(container):
     var Selected<public><getter(SelectedGetter)><setter(SelectedSetter)>:logic = external {}
     SelectedGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_selected", array{}))
     SelectedSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_selected", array{VhFromLogic(Value)})
-    NodeSelected<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "graph_element", "NodeSelected", "node_selected")}
-    NodeDeselected<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "graph_element", "NodeDeselected", "node_deselected")}
-    RaiseRequest<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "graph_element", "RaiseRequest", "raise_request")}
-    DeleteRequest<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "graph_element", "DeleteRequest", "delete_request")}
-    ResizeRequest<public>()<transacts>:godot_signal(vector2) = godot_signal(vector2){Id := VhSignalBind(Handle, "graph_element", "ResizeRequest", "resize_request")}
-    ResizeEnd<public>()<transacts>:godot_signal(vector2) = godot_signal(vector2){Id := VhSignalBind(Handle, "graph_element", "ResizeEnd", "resize_end")}
-    Dragged<public>()<transacts>:godot_signal(tuple(vector2, vector2)) = godot_signal(tuple(vector2, vector2)){Id := VhSignalBind(Handle, "graph_element", "Dragged", "dragged")}
-    PositionOffsetChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "graph_element", "PositionOffsetChanged", "position_offset_changed")}
+    NodeSelected<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "graph_element", "NodeSelected", "node_selected")}
+    NodeDeselected<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "graph_element", "NodeDeselected", "node_deselected")}
+    RaiseRequest<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "graph_element", "RaiseRequest", "raise_request")}
+    DeleteRequest<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "graph_element", "DeleteRequest", "delete_request")}
+    ResizeRequest<public>()<transacts>:signal(vector2) = signal(vector2){Id := VhSignalBind(Handle, "graph_element", "ResizeRequest", "resize_request")}
+    ResizeEnd<public>()<transacts>:signal(vector2) = signal(vector2){Id := VhSignalBind(Handle, "graph_element", "ResizeEnd", "resize_end")}
+    Dragged<public>()<transacts>:signal(tuple(vector2, vector2)) = signal(tuple(vector2, vector2)){Id := VhSignalBind(Handle, "graph_element", "Dragged", "dragged")}
+    PositionOffsetChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "graph_element", "PositionOffsetChanged", "position_offset_changed")}
 
 grid_container<public> := class(container):
 
@@ -51206,7 +51206,7 @@ open_xr_anchor_tracker<public> := class(open_xr_spatial_entity_tracker):
     GetUuid<public>()<reads>:string = VhToString(VhCallValueConst(Handle, "get_uuid", array{}))
     HasUuid<public>()<reads>:logic = VhToLogic(VhCallValueConst(Handle, "has_uuid", array{}))
     SetUuid<public>(Uuid:string)<transacts>:void = VhCallVoid(Handle, "set_uuid", array{VhFromString(Uuid)})
-    UuidChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "open_xr_anchor_tracker", "UuidChanged", "uuid_changed")}
+    UuidChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "open_xr_anchor_tracker", "UuidChanged", "uuid_changed")}
 
 open_xr_dpad_binding_modifier<public> := class(open_xrip_binding_modifier):
 
@@ -51263,7 +51263,7 @@ open_xr_plane_tracker<public> := class(open_xr_spatial_entity_tracker):
     GetShape<public>(?Thickness:float = 0.01)<decides><transacts>:shape3d = shape3d[VhObjectFrom[VhCallValue(Handle, "get_shape", array{VhFromFloat(Thickness)})]]
     SetMeshData<public>(Origin:transform3d, Vertices:[]vector2, Indices:[]int)<transacts>:void = VhCallVoid(Handle, "set_mesh_data", array{VhFromTransform3D(Origin), VhFromVector2s(Vertices), VhFromInt32Array(Indices)})
     SetPlaneLabel<public>(PlaneLabel:string)<transacts>:void = VhCallVoid(Handle, "set_plane_label", array{VhFromString(PlaneLabel)})
-    MeshChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "open_xr_plane_tracker", "MeshChanged", "mesh_changed")}
+    MeshChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "open_xr_plane_tracker", "MeshChanged", "mesh_changed")}
 
 orm_material3d<public> := class(base_material3d):
 
@@ -51605,10 +51605,10 @@ popup_menu<public> := class(popup):
     SetItemTooltip<public>(Index:int, Tooltip:string)<transacts>:void = VhCallVoid(Handle, "set_item_tooltip", array{VhFromInt(Index), VhFromString(Tooltip)})
     ToggleItemChecked<public>(Index:int)<transacts>:void = VhCallVoid(Handle, "toggle_item_checked", array{VhFromInt(Index)})
     ToggleItemMultistate<public>(Index:int)<transacts>:void = VhCallVoid(Handle, "toggle_item_multistate", array{VhFromInt(Index)})
-    IdPressed<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "popup_menu", "IdPressed", "id_pressed")}
-    IdFocused<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "popup_menu", "IdFocused", "id_focused")}
-    IndexPressed<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "popup_menu", "IndexPressed", "index_pressed")}
-    MenuChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "popup_menu", "MenuChanged", "menu_changed")}
+    IdPressed<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "popup_menu", "IdPressed", "id_pressed")}
+    IdFocused<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "popup_menu", "IdFocused", "id_focused")}
+    IndexPressed<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "popup_menu", "IndexPressed", "index_pressed")}
+    MenuChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "popup_menu", "MenuChanged", "menu_changed")}
 
 popup_panel<public> := class(popup):
 
@@ -51848,18 +51848,18 @@ rigid_body3d<public> := class(physics_body3d):
     SetAxisVelocity<public>(AxisVelocity:vector3)<transacts>:void = VhCallVoid(Handle, "set_axis_velocity", array{VhFromVector3(AxisVelocity)})
     SetPhysicsMaterialOverride<public>(PhysicsMaterialOverride:physics_material)<transacts>:void = VhCallVoid(Handle, "set_physics_material_override", array{VhFromObject(PhysicsMaterialOverride)})
     _IntegrateForces<public>(State:physics_direct_body_state3d):void = {}
-    BodyShapeEntered<public>()<transacts>:godot_signal(tuple(int, node, int, int)) = godot_signal(tuple(int, node, int, int)){Id := VhSignalBind(Handle, "rigid_body3d", "BodyShapeEntered", "body_shape_entered")}
-    BodyShapeExited<public>()<transacts>:godot_signal(tuple(int, node, int, int)) = godot_signal(tuple(int, node, int, int)){Id := VhSignalBind(Handle, "rigid_body3d", "BodyShapeExited", "body_shape_exited")}
-    BodyEntered<public>()<transacts>:godot_signal(node) = godot_signal(node){Id := VhSignalBind(Handle, "rigid_body3d", "BodyEntered", "body_entered")}
-    BodyExited<public>()<transacts>:godot_signal(node) = godot_signal(node){Id := VhSignalBind(Handle, "rigid_body3d", "BodyExited", "body_exited")}
-    SleepingStateChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "rigid_body3d", "SleepingStateChanged", "sleeping_state_changed")}
+    BodyShapeEntered<public>()<transacts>:signal(tuple(int, node, int, int)) = signal(tuple(int, node, int, int)){Id := VhSignalBind(Handle, "rigid_body3d", "BodyShapeEntered", "body_shape_entered")}
+    BodyShapeExited<public>()<transacts>:signal(tuple(int, node, int, int)) = signal(tuple(int, node, int, int)){Id := VhSignalBind(Handle, "rigid_body3d", "BodyShapeExited", "body_shape_exited")}
+    BodyEntered<public>()<transacts>:signal(node) = signal(node){Id := VhSignalBind(Handle, "rigid_body3d", "BodyEntered", "body_entered")}
+    BodyExited<public>()<transacts>:signal(node) = signal(node){Id := VhSignalBind(Handle, "rigid_body3d", "BodyExited", "body_exited")}
+    SleepingStateChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "rigid_body3d", "SleepingStateChanged", "sleeping_state_changed")}
 
 scroll_bar<public> := class(range):
 
     var CustomStep<public><getter(CustomStepGetter)><setter(CustomStepSetter)>:float = external {}
     CustomStepGetter<epic_internal>(Accessor:accessor)<transacts>:float = VhToFloat(VhCallValue(Handle, "get_custom_step", array{}))
     CustomStepSetter<epic_internal>(Accessor:accessor, Arg2:float)<transacts>:void = VhCallVoid(Handle, "set_custom_step", array{VhFromFloat(Arg2)})
-    Scrolling<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "scroll_bar", "Scrolling", "scrolling")}
+    Scrolling<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "scroll_bar", "Scrolling", "scrolling")}
 
 scroll_container<public> := class(container):
 
@@ -51899,8 +51899,8 @@ scroll_container<public> := class(container):
     EnsureControlVisible<public>(Control:control)<transacts>:void = VhCallVoid(Handle, "ensure_control_visible", array{VhFromObject(Control)})
     GetHScrollBar<public>()<decides><reads>:h_scroll_bar = h_scroll_bar[VhObjectFrom[VhCallValueConst(Handle, "get_h_scroll_bar", array{})]]
     GetVScrollBar<public>()<decides><reads>:v_scroll_bar = v_scroll_bar[VhObjectFrom[VhCallValueConst(Handle, "get_v_scroll_bar", array{})]]
-    ScrollStarted<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "scroll_container", "ScrollStarted", "scroll_started")}
-    ScrollEnded<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "scroll_container", "ScrollEnded", "scroll_ended")}
+    ScrollStarted<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "scroll_container", "ScrollStarted", "scroll_started")}
+    ScrollEnded<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "scroll_container", "ScrollEnded", "scroll_ended")}
 
 slider<public> := class(range):
 
@@ -51919,8 +51919,8 @@ slider<public> := class(range):
     var TicksPosition<public><getter(TicksPositionGetter)><setter(TicksPositionSetter)>:slider_tick_position = external {}
     TicksPositionGetter<epic_internal>(Accessor:accessor)<transacts>:slider_tick_position = VhToSliderTickPosition(VhCallValue(Handle, "get_ticks_position", array{}))
     TicksPositionSetter<epic_internal>(Accessor:accessor, Arg2:slider_tick_position)<transacts>:void = VhCallVoid(Handle, "set_ticks_position", array{VhFromSliderTickPosition(Arg2)})
-    DragStarted<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "slider", "DragStarted", "drag_started")}
-    DragEnded<public>()<transacts>:godot_signal(logic) = godot_signal(logic){Id := VhSignalBind(Handle, "slider", "DragEnded", "drag_ended")}
+    DragStarted<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "slider", "DragStarted", "drag_started")}
+    DragEnded<public>()<transacts>:signal(logic) = signal(logic){Id := VhSignalBind(Handle, "slider", "DragEnded", "drag_ended")}
 
 sphere_mesh<public> := class(primitive_mesh):
 
@@ -52004,9 +52004,9 @@ split_container<public> := class(container):
     GetDragAreaControls<public>()<transacts>:typed_array(control) = VhToControlArray(VhCallValue(Handle, "get_drag_area_controls", array{}))
     GetSplitOffsets<public>()<reads>:[]int = VhToInts(VhCallValueConst(Handle, "get_split_offsets", array{}))
     SetSplitOffsets<public>(Offsets:[]int)<transacts>:void = VhCallVoid(Handle, "set_split_offsets", array{VhFromInt32Array(Offsets)})
-    Dragged<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "split_container", "Dragged", "dragged")}
-    DragStarted<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "split_container", "DragStarted", "drag_started")}
-    DragEnded<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "split_container", "DragEnded", "drag_ended")}
+    Dragged<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "split_container", "Dragged", "dragged")}
+    DragStarted<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "split_container", "DragStarted", "drag_started")}
+    DragEnded<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "split_container", "DragEnded", "drag_ended")}
 
 spot_light3d<public> := class(light3d):
 
@@ -52223,13 +52223,13 @@ tab_container<public> := class(container):
     SetTabMetadata<public>(TabIdx:int, Metadata:variant)<transacts>:void = VhCallVoid(Handle, "set_tab_metadata", array{VhFromInt(TabIdx), VhFromVariant(Metadata)})
     SetTabTitle<public>(TabIdx:int, Title:string)<transacts>:void = VhCallVoid(Handle, "set_tab_title", array{VhFromInt(TabIdx), VhFromString(Title)})
     SetTabTooltip<public>(TabIdx:int, Tooltip:string)<transacts>:void = VhCallVoid(Handle, "set_tab_tooltip", array{VhFromInt(TabIdx), VhFromString(Tooltip)})
-    ActiveTabRearranged<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "tab_container", "ActiveTabRearranged", "active_tab_rearranged")}
-    TabChanged<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "tab_container", "TabChanged", "tab_changed")}
-    TabClicked<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "tab_container", "TabClicked", "tab_clicked")}
-    TabHovered<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "tab_container", "TabHovered", "tab_hovered")}
-    TabSelected<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "tab_container", "TabSelected", "tab_selected")}
-    TabButtonPressed<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "tab_container", "TabButtonPressed", "tab_button_pressed")}
-    PrePopupPressed<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "tab_container", "PrePopupPressed", "pre_popup_pressed")}
+    ActiveTabRearranged<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "tab_container", "ActiveTabRearranged", "active_tab_rearranged")}
+    TabChanged<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "tab_container", "TabChanged", "tab_changed")}
+    TabClicked<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "tab_container", "TabClicked", "tab_clicked")}
+    TabHovered<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "tab_container", "TabHovered", "tab_hovered")}
+    TabSelected<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "tab_container", "TabSelected", "tab_selected")}
+    TabButtonPressed<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "tab_container", "TabButtonPressed", "tab_button_pressed")}
+    PrePopupPressed<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "tab_container", "PrePopupPressed", "pre_popup_pressed")}
 
 text_mesh<public> := class(primitive_mesh):
 
@@ -52978,11 +52978,11 @@ animated_sprite3d<public> := class(sprite_base3d):
     SetFrameAndProgress<public>(Arg0:int, Progress:float)<transacts>:void = VhCallVoid(Handle, "set_frame_and_progress", array{VhFromInt(Arg0), VhFromFloat(Progress)})
     SetSpriteFrames<public>(SpriteFrames:sprite_frames)<transacts>:void = VhCallVoid(Handle, "set_sprite_frames", array{VhFromObject(SpriteFrames)})
     Stop<public>()<transacts>:void = VhCallVoid(Handle, "stop", array{})
-    SpriteFramesChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "animated_sprite3d", "SpriteFramesChanged", "sprite_frames_changed")}
-    AnimationChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "animated_sprite3d", "AnimationChanged", "animation_changed")}
-    FrameChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "animated_sprite3d", "FrameChanged", "frame_changed")}
-    AnimationLooped<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "animated_sprite3d", "AnimationLooped", "animation_looped")}
-    AnimationFinished<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "animated_sprite3d", "AnimationFinished", "animation_finished")}
+    SpriteFramesChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "animated_sprite3d", "SpriteFramesChanged", "sprite_frames_changed")}
+    AnimationChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "animated_sprite3d", "AnimationChanged", "animation_changed")}
+    FrameChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "animated_sprite3d", "FrameChanged", "frame_changed")}
+    AnimationLooped<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "animated_sprite3d", "AnimationLooped", "animation_looped")}
+    AnimationFinished<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "animated_sprite3d", "AnimationFinished", "animation_finished")}
 
 character_body2d<public> := class(physics_body2d):
 
@@ -53098,9 +53098,9 @@ color_picker_button<public> := class(button):
     EditIntensitySetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_edit_intensity", array{VhFromLogic(Value)})
     GetPicker<public>()<decides><transacts>:color_picker = color_picker[VhObjectFrom[VhCallValue(Handle, "get_picker", array{})]]
     GetPopup<public>()<decides><transacts>:popup_panel = popup_panel[VhObjectFrom[VhCallValue(Handle, "get_popup", array{})]]
-    ColorChanged<public>()<transacts>:godot_signal(color) = godot_signal(color){Id := VhSignalBind(Handle, "color_picker_button", "ColorChanged", "color_changed")}
-    PopupClosed<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "color_picker_button", "PopupClosed", "popup_closed")}
-    PickerCreated<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "color_picker_button", "PickerCreated", "picker_created")}
+    ColorChanged<public>()<transacts>:signal(color) = signal(color){Id := VhSignalBind(Handle, "color_picker_button", "ColorChanged", "color_changed")}
+    PopupClosed<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "color_picker_button", "PopupClosed", "popup_closed")}
+    PickerCreated<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "color_picker_button", "PickerCreated", "picker_created")}
 
 compressed_cubemap<public> := class(compressed_texture_layered):
 
@@ -53181,22 +53181,22 @@ editor_dock<public> := class(margin_container):
     _LoadLayoutFromConfig<public>(Config:config_file, Section:string):void = {}
     _SaveLayoutToConfig<public>(Config:config_file, Section:string):void = {}
     _UpdateLayout<public>(Layout:int):void = {}
-    Closed<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "editor_dock", "Closed", "closed")}
+    Closed<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "editor_dock", "Closed", "closed")}
 
 editor_inspector<public> := class(scroll_container):
 
     Edit<public>(Object:object)<transacts>:void = VhCallVoid(Handle, "edit", array{VhFromObject(Object)})
     GetEditedObject<public>()<decides><reads>:object = object[VhObjectFrom[VhCallValueConst(Handle, "get_edited_object", array{})]]
     GetSelectedPath<public>()<reads>:string = VhToString(VhCallValueConst(Handle, "get_selected_path", array{}))
-    PropertySelected<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "editor_inspector", "PropertySelected", "property_selected")}
-    PropertyKeyed<public>()<transacts>:godot_signal(tuple(string, variant, logic)) = godot_signal(tuple(string, variant, logic)){Id := VhSignalBind(Handle, "editor_inspector", "PropertyKeyed", "property_keyed")}
-    PropertyDeleted<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "editor_inspector", "PropertyDeleted", "property_deleted")}
-    ResourceSelected<public>()<transacts>:godot_signal(tuple(resource, string)) = godot_signal(tuple(resource, string)){Id := VhSignalBind(Handle, "editor_inspector", "ResourceSelected", "resource_selected")}
-    ObjectIdSelected<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "editor_inspector", "ObjectIdSelected", "object_id_selected")}
-    PropertyEdited<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "editor_inspector", "PropertyEdited", "property_edited")}
-    PropertyToggled<public>()<transacts>:godot_signal(tuple(string, logic)) = godot_signal(tuple(string, logic)){Id := VhSignalBind(Handle, "editor_inspector", "PropertyToggled", "property_toggled")}
-    EditedObjectChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "editor_inspector", "EditedObjectChanged", "edited_object_changed")}
-    RestartRequested<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "editor_inspector", "RestartRequested", "restart_requested")}
+    PropertySelected<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "editor_inspector", "PropertySelected", "property_selected")}
+    PropertyKeyed<public>()<transacts>:signal(tuple(string, variant, logic)) = signal(tuple(string, variant, logic)){Id := VhSignalBind(Handle, "editor_inspector", "PropertyKeyed", "property_keyed")}
+    PropertyDeleted<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "editor_inspector", "PropertyDeleted", "property_deleted")}
+    ResourceSelected<public>()<transacts>:signal(tuple(resource, string)) = signal(tuple(resource, string)){Id := VhSignalBind(Handle, "editor_inspector", "ResourceSelected", "resource_selected")}
+    ObjectIdSelected<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "editor_inspector", "ObjectIdSelected", "object_id_selected")}
+    PropertyEdited<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "editor_inspector", "PropertyEdited", "property_edited")}
+    PropertyToggled<public>()<transacts>:signal(tuple(string, logic)) = signal(tuple(string, logic)){Id := VhSignalBind(Handle, "editor_inspector", "PropertyToggled", "property_toggled")}
+    EditedObjectChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "editor_inspector", "EditedObjectChanged", "edited_object_changed")}
+    RestartRequested<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "editor_inspector", "RestartRequested", "restart_requested")}
 
 file_dialog<public> := class(confirmation_dialog):
 
@@ -53276,10 +53276,10 @@ file_dialog<public> := class(confirmation_dialog):
     SetOptionName<public>(Option:int, Name:string)<transacts>:void = VhCallVoid(Handle, "set_option_name", array{VhFromInt(Option), VhFromString(Name)})
     SetOptionValues<public>(Option:int, Values:[]string)<transacts>:void = VhCallVoid(Handle, "set_option_values", array{VhFromInt(Option), VhFromStringArray(Values)})
     SetRootSubfolder<public>(Dir:string)<transacts>:void = VhCallVoid(Handle, "set_root_subfolder", array{VhFromString(Dir)})
-    FileSelected<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "file_dialog", "FileSelected", "file_selected")}
-    FilesSelected<public>()<transacts>:godot_signal([]string) = godot_signal([]string){Id := VhSignalBind(Handle, "file_dialog", "FilesSelected", "files_selected")}
-    DirSelected<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "file_dialog", "DirSelected", "dir_selected")}
-    FilenameFilterChanged<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "file_dialog", "FilenameFilterChanged", "filename_filter_changed")}
+    FileSelected<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "file_dialog", "FileSelected", "file_selected")}
+    FilesSelected<public>()<transacts>:signal([]string) = signal([]string){Id := VhSignalBind(Handle, "file_dialog", "FilesSelected", "files_selected")}
+    DirSelected<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "file_dialog", "DirSelected", "dir_selected")}
+    FilenameFilterChanged<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "file_dialog", "FilenameFilterChanged", "filename_filter_changed")}
 
 graph_frame<public> := class(graph_element):
 
@@ -53314,7 +53314,7 @@ graph_frame<public> := class(graph_element):
     GetTitle<public>()<reads>:string = VhToString(VhCallValueConst(Handle, "get_title", array{}))
     GetTitlebarHbox<public>()<decides><reads>:h_box_container = h_box_container[VhObjectFrom[VhCallValueConst(Handle, "get_titlebar_hbox", array{})]]
     SetTitle<public>(Title:string)<transacts>:void = VhCallVoid(Handle, "set_title", array{VhFromString(Title)})
-    AutoshrinkChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "graph_frame", "AutoshrinkChanged", "autoshrink_changed")}
+    AutoshrinkChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "graph_frame", "AutoshrinkChanged", "autoshrink_changed")}
 
 graph_node<public> := class(graph_element):
 
@@ -53363,8 +53363,8 @@ graph_node<public> := class(graph_element):
     SetSlotTypeRight<public>(SlotIndex:int, Type:int)<transacts>:void = VhCallVoid(Handle, "set_slot_type_right", array{VhFromInt(SlotIndex), VhFromInt(Type)})
     SetTitle<public>(Title:string)<transacts>:void = VhCallVoid(Handle, "set_title", array{VhFromString(Title)})
     _DrawPort<public>(SlotIndex:int, Arg1:vector2i, Left:logic, Color:color):void = {}
-    SlotUpdated<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "graph_node", "SlotUpdated", "slot_updated")}
-    SlotSizesChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "graph_node", "SlotSizesChanged", "slot_sizes_changed")}
+    SlotUpdated<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "graph_node", "SlotUpdated", "slot_updated")}
+    SlotSizesChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "graph_node", "SlotSizesChanged", "slot_sizes_changed")}
 
 h_box_container<public> := class(box_container):
 
@@ -53495,13 +53495,13 @@ menu_button<public> := class(button):
     GetPopup<public>()<decides><reads>:popup_menu = popup_menu[VhObjectFrom[VhCallValueConst(Handle, "get_popup", array{})]]
     SetDisableShortcuts<public>(Arg0:logic)<transacts>:void = VhCallVoid(Handle, "set_disable_shortcuts", array{VhFromLogic(Arg0)})
     ShowPopup<public>()<transacts>:void = VhCallVoid(Handle, "show_popup", array{})
-    AboutToPopup<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "menu_button", "AboutToPopup", "about_to_popup")}
+    AboutToPopup<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "menu_button", "AboutToPopup", "about_to_popup")}
 
 open_xr_binding_modifier_editor<public> := class(panel_container):
 
     GetBindingModifier<public>()<decides><reads>:open_xr_binding_modifier = open_xr_binding_modifier[VhObjectFrom[VhCallValueConst(Handle, "get_binding_modifier", array{})]]
     Setup<public>(ActionMap:open_xr_action_map, BindingModifier:open_xr_binding_modifier)<transacts>:void = VhCallVoid(Handle, "setup", array{VhFromObject(ActionMap), VhFromObject(BindingModifier)})
-    BindingModifierRemoved<public>()<transacts>:godot_signal(object) = godot_signal(object){Id := VhSignalBind(Handle, "open_xr_binding_modifier_editor", "BindingModifierRemoved", "binding_modifier_removed")}
+    BindingModifierRemoved<public>()<transacts>:signal(object) = signal(object){Id := VhSignalBind(Handle, "open_xr_binding_modifier_editor", "BindingModifierRemoved", "binding_modifier_removed")}
 
 option_button<public> := class(button):
 
@@ -53546,8 +53546,8 @@ option_button<public> := class(button):
     SetItemText<public>(Idx:int, Text:string)<transacts>:void = VhCallVoid(Handle, "set_item_text", array{VhFromInt(Idx), VhFromString(Text)})
     SetItemTooltip<public>(Idx:int, Tooltip:string)<transacts>:void = VhCallVoid(Handle, "set_item_tooltip", array{VhFromInt(Idx), VhFromString(Tooltip)})
     ShowPopup<public>()<transacts>:void = VhCallVoid(Handle, "show_popup", array{})
-    ItemSelected<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "option_button", "ItemSelected", "item_selected")}
-    ItemFocused<public>()<transacts>:godot_signal(int) = godot_signal(int){Id := VhSignalBind(Handle, "option_button", "ItemFocused", "item_focused")}
+    ItemSelected<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "option_button", "ItemSelected", "item_selected")}
+    ItemFocused<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "option_button", "ItemFocused", "item_focused")}
 
 placeholder_cubemap<public> := class(placeholder_texture_layered):
 
@@ -53667,16 +53667,16 @@ rigid_body2d<public> := class(physics_body2d):
     SetAxisVelocity<public>(AxisVelocity:vector2)<transacts>:void = VhCallVoid(Handle, "set_axis_velocity", array{VhFromVector2(AxisVelocity)})
     SetPhysicsMaterialOverride<public>(PhysicsMaterialOverride:physics_material)<transacts>:void = VhCallVoid(Handle, "set_physics_material_override", array{VhFromObject(PhysicsMaterialOverride)})
     _IntegrateForces<public>(State:physics_direct_body_state2d):void = {}
-    BodyShapeEntered<public>()<transacts>:godot_signal(tuple(int, node, int, int)) = godot_signal(tuple(int, node, int, int)){Id := VhSignalBind(Handle, "rigid_body2d", "BodyShapeEntered", "body_shape_entered")}
-    BodyShapeExited<public>()<transacts>:godot_signal(tuple(int, node, int, int)) = godot_signal(tuple(int, node, int, int)){Id := VhSignalBind(Handle, "rigid_body2d", "BodyShapeExited", "body_shape_exited")}
-    BodyEntered<public>()<transacts>:godot_signal(node) = godot_signal(node){Id := VhSignalBind(Handle, "rigid_body2d", "BodyEntered", "body_entered")}
-    BodyExited<public>()<transacts>:godot_signal(node) = godot_signal(node){Id := VhSignalBind(Handle, "rigid_body2d", "BodyExited", "body_exited")}
-    SleepingStateChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "rigid_body2d", "SleepingStateChanged", "sleeping_state_changed")}
+    BodyShapeEntered<public>()<transacts>:signal(tuple(int, node, int, int)) = signal(tuple(int, node, int, int)){Id := VhSignalBind(Handle, "rigid_body2d", "BodyShapeEntered", "body_shape_entered")}
+    BodyShapeExited<public>()<transacts>:signal(tuple(int, node, int, int)) = signal(tuple(int, node, int, int)){Id := VhSignalBind(Handle, "rigid_body2d", "BodyShapeExited", "body_shape_exited")}
+    BodyEntered<public>()<transacts>:signal(node) = signal(node){Id := VhSignalBind(Handle, "rigid_body2d", "BodyEntered", "body_entered")}
+    BodyExited<public>()<transacts>:signal(node) = signal(node){Id := VhSignalBind(Handle, "rigid_body2d", "BodyExited", "body_exited")}
+    SleepingStateChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "rigid_body2d", "SleepingStateChanged", "sleeping_state_changed")}
 
 script_create_dialog<public> := class(confirmation_dialog):
 
     Config<public>(Inherits:string, Path:string, ?BuiltInEnabled:logic = true, ?LoadEnabled:logic = true)<transacts>:void = VhCallVoid(Handle, "config", array{VhFromString(Inherits), VhFromString(Path), VhFromLogic(BuiltInEnabled), VhFromLogic(LoadEnabled)})
-    ScriptCreated<public>()<transacts>:godot_signal(script) = godot_signal(script){Id := VhSignalBind(Handle, "script_create_dialog", "ScriptCreated", "script_created")}
+    ScriptCreated<public>()<transacts>:signal(script) = signal(script){Id := VhSignalBind(Handle, "script_create_dialog", "ScriptCreated", "script_created")}
 
 script_editor<public> := class(panel_container):
 
@@ -53692,8 +53692,8 @@ script_editor<public> := class(panel_container):
     RegisterSyntaxHighlighter<public>(SyntaxHighlighter:editor_syntax_highlighter)<transacts>:void = VhCallVoid(Handle, "register_syntax_highlighter", array{VhFromObject(SyntaxHighlighter)})
     UnregisterSyntaxHighlighter<public>(SyntaxHighlighter:editor_syntax_highlighter)<transacts>:void = VhCallVoid(Handle, "unregister_syntax_highlighter", array{VhFromObject(SyntaxHighlighter)})
     UpdateDocsFromScript<public>(Script:script)<transacts>:void = VhCallVoid(Handle, "update_docs_from_script", array{VhFromObject(Script)})
-    EditorScriptChanged<public>()<transacts>:godot_signal(script) = godot_signal(script){Id := VhSignalBind(Handle, "script_editor", "EditorScriptChanged", "editor_script_changed")}
-    ScriptClose<public>()<transacts>:godot_signal(script) = godot_signal(script){Id := VhSignalBind(Handle, "script_editor", "ScriptClose", "script_close")}
+    EditorScriptChanged<public>()<transacts>:signal(script) = signal(script){Id := VhSignalBind(Handle, "script_editor", "EditorScriptChanged", "editor_script_changed")}
+    ScriptClose<public>()<transacts>:signal(script) = signal(script){Id := VhSignalBind(Handle, "script_editor", "ScriptClose", "script_close")}
 
 soft_body3d<public> := class(mesh_instance3d):
 
@@ -53792,8 +53792,8 @@ sprite3d<public> := class(sprite_base3d):
     GetTexture<public>()<decides><reads>:texture2d = texture2d[VhObjectFrom[VhCallValueConst(Handle, "get_texture", array{})]]
     SetRegionRect<public>(Rect:rect2)<transacts>:void = VhCallVoid(Handle, "set_region_rect", array{VhFromRect2(Rect)})
     SetTexture<public>(Texture:texture2d)<transacts>:void = VhCallVoid(Handle, "set_texture", array{VhFromObject(Texture)})
-    FrameChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "sprite3d", "FrameChanged", "frame_changed")}
-    TextureChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "sprite3d", "TextureChanged", "texture_changed")}
+    FrameChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "sprite3d", "FrameChanged", "frame_changed")}
+    TextureChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "sprite3d", "TextureChanged", "texture_changed")}
 
 static_body2d<public> := class(physics_body2d):
 
@@ -53932,9 +53932,9 @@ color_picker<public> := class(v_box_container):
     EraseRecentPreset<public>(Arg0:color)<transacts>:void = VhCallVoid(Handle, "erase_recent_preset", array{VhFromColor(Arg0)})
     GetPresets<public>()<reads>:[]color = VhToColors(VhCallValueConst(Handle, "get_presets", array{}))
     GetRecentPresets<public>()<reads>:[]color = VhToColors(VhCallValueConst(Handle, "get_recent_presets", array{}))
-    ColorChanged<public>()<transacts>:godot_signal(color) = godot_signal(color){Id := VhSignalBind(Handle, "color_picker", "ColorChanged", "color_changed")}
-    PresetAdded<public>()<transacts>:godot_signal(color) = godot_signal(color){Id := VhSignalBind(Handle, "color_picker", "PresetAdded", "preset_added")}
-    PresetRemoved<public>()<transacts>:godot_signal(color) = godot_signal(color){Id := VhSignalBind(Handle, "color_picker", "PresetRemoved", "preset_removed")}
+    ColorChanged<public>()<transacts>:signal(color) = signal(color){Id := VhSignalBind(Handle, "color_picker", "ColorChanged", "color_changed")}
+    PresetAdded<public>()<transacts>:signal(color) = signal(color){Id := VhSignalBind(Handle, "color_picker", "PresetAdded", "preset_added")}
+    PresetRemoved<public>()<transacts>:signal(color) = signal(color){Id := VhSignalBind(Handle, "color_picker", "PresetRemoved", "preset_removed")}
 
 csg_box3d<public> := class(csg_primitive3d):
 
@@ -54093,8 +54093,8 @@ editor_resource_picker<public> := class(h_box_container):
     SetTogglePressed<public>(Pressed:logic)<transacts>:void = VhCallVoid(Handle, "set_toggle_pressed", array{VhFromLogic(Pressed)})
     _HandleMenuSelected<public>(Id:int):logic = false
     _SetCreateOptions<public>(MenuNode:object):void = {}
-    ResourceSelected<public>()<transacts>:godot_signal(tuple(resource, logic)) = godot_signal(tuple(resource, logic)){Id := VhSignalBind(Handle, "editor_resource_picker", "ResourceSelected", "resource_selected")}
-    ResourceChanged<public>()<transacts>:godot_signal(resource) = godot_signal(resource){Id := VhSignalBind(Handle, "editor_resource_picker", "ResourceChanged", "resource_changed")}
+    ResourceSelected<public>()<transacts>:signal(tuple(resource, logic)) = signal(tuple(resource, logic)){Id := VhSignalBind(Handle, "editor_resource_picker", "ResourceSelected", "resource_selected")}
+    ResourceChanged<public>()<transacts>:signal(resource) = signal(resource){Id := VhSignalBind(Handle, "editor_resource_picker", "ResourceChanged", "resource_changed")}
 
 editor_toaster<public> := class(h_box_container):
 
@@ -54107,16 +54107,16 @@ file_system_dock<public> := class(editor_dock):
     AddResourceTooltipPlugin<public>(Plugin:editor_resource_tooltip_plugin)<transacts>:void = VhCallVoid(Handle, "add_resource_tooltip_plugin", array{VhFromObject(Plugin)})
     NavigateToPath<public>(Path:string)<transacts>:void = VhCallVoid(Handle, "navigate_to_path", array{VhFromString(Path)})
     RemoveResourceTooltipPlugin<public>(Plugin:editor_resource_tooltip_plugin)<transacts>:void = VhCallVoid(Handle, "remove_resource_tooltip_plugin", array{VhFromObject(Plugin)})
-    Inherit<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "file_system_dock", "Inherit", "inherit")}
-    Instantiate<public>()<transacts>:godot_signal([]string) = godot_signal([]string){Id := VhSignalBind(Handle, "file_system_dock", "Instantiate", "instantiate")}
-    ResourceRemoved<public>()<transacts>:godot_signal(resource) = godot_signal(resource){Id := VhSignalBind(Handle, "file_system_dock", "ResourceRemoved", "resource_removed")}
-    FileRemoved<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "file_system_dock", "FileRemoved", "file_removed")}
-    FolderRemoved<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "file_system_dock", "FolderRemoved", "folder_removed")}
-    FilesMoved<public>()<transacts>:godot_signal(tuple(string, string)) = godot_signal(tuple(string, string)){Id := VhSignalBind(Handle, "file_system_dock", "FilesMoved", "files_moved")}
-    FolderMoved<public>()<transacts>:godot_signal(tuple(string, string)) = godot_signal(tuple(string, string)){Id := VhSignalBind(Handle, "file_system_dock", "FolderMoved", "folder_moved")}
-    FolderColorChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "file_system_dock", "FolderColorChanged", "folder_color_changed")}
-    SelectionChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "file_system_dock", "SelectionChanged", "selection_changed")}
-    DisplayModeChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "file_system_dock", "DisplayModeChanged", "display_mode_changed")}
+    Inherit<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "file_system_dock", "Inherit", "inherit")}
+    Instantiate<public>()<transacts>:signal([]string) = signal([]string){Id := VhSignalBind(Handle, "file_system_dock", "Instantiate", "instantiate")}
+    ResourceRemoved<public>()<transacts>:signal(resource) = signal(resource){Id := VhSignalBind(Handle, "file_system_dock", "ResourceRemoved", "resource_removed")}
+    FileRemoved<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "file_system_dock", "FileRemoved", "file_removed")}
+    FolderRemoved<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "file_system_dock", "FolderRemoved", "folder_removed")}
+    FilesMoved<public>()<transacts>:signal(tuple(string, string)) = signal(tuple(string, string)){Id := VhSignalBind(Handle, "file_system_dock", "FilesMoved", "files_moved")}
+    FolderMoved<public>()<transacts>:signal(tuple(string, string)) = signal(tuple(string, string)){Id := VhSignalBind(Handle, "file_system_dock", "FolderMoved", "folder_moved")}
+    FolderColorChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "file_system_dock", "FolderColorChanged", "folder_color_changed")}
+    SelectionChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "file_system_dock", "SelectionChanged", "selection_changed")}
+    DisplayModeChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "file_system_dock", "DisplayModeChanged", "display_mode_changed")}
 
 input_event_magnify_gesture<public> := class(input_event_gesture):
 
@@ -54255,16 +54255,16 @@ script_editor_base<public> := class(v_box_container):
 
     AddSyntaxHighlighter<public>(Highlighter:editor_syntax_highlighter)<transacts>:void = VhCallVoid(Handle, "add_syntax_highlighter", array{VhFromObject(Highlighter)})
     GetBaseEditor<public>()<decides><reads>:control = control[VhObjectFrom[VhCallValueConst(Handle, "get_base_editor", array{})]]
-    NameChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "script_editor_base", "NameChanged", "name_changed")}
-    EditedScriptChanged<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "script_editor_base", "EditedScriptChanged", "edited_script_changed")}
-    RequestHelp<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "script_editor_base", "RequestHelp", "request_help")}
-    RequestOpenScriptAtLine<public>()<transacts>:godot_signal(tuple(object, int)) = godot_signal(tuple(object, int)){Id := VhSignalBind(Handle, "script_editor_base", "RequestOpenScriptAtLine", "request_open_script_at_line")}
-    RequestSaveHistory<public>()<transacts>:godot_signal(tuple()) = godot_signal(tuple()){Id := VhSignalBind(Handle, "script_editor_base", "RequestSaveHistory", "request_save_history")}
-    RequestSavePreviousState<public>()<transacts>:godot_signal(dictionary) = godot_signal(dictionary){Id := VhSignalBind(Handle, "script_editor_base", "RequestSavePreviousState", "request_save_previous_state")}
-    GoToHelp<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "script_editor_base", "GoToHelp", "go_to_help")}
-    SearchInFilesRequested<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "script_editor_base", "SearchInFilesRequested", "search_in_files_requested")}
-    ReplaceInFilesRequested<public>()<transacts>:godot_signal(string) = godot_signal(string){Id := VhSignalBind(Handle, "script_editor_base", "ReplaceInFilesRequested", "replace_in_files_requested")}
-    GoToMethod<public>()<transacts>:godot_signal(tuple(object, string)) = godot_signal(tuple(object, string)){Id := VhSignalBind(Handle, "script_editor_base", "GoToMethod", "go_to_method")}
+    NameChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "script_editor_base", "NameChanged", "name_changed")}
+    EditedScriptChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "script_editor_base", "EditedScriptChanged", "edited_script_changed")}
+    RequestHelp<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "script_editor_base", "RequestHelp", "request_help")}
+    RequestOpenScriptAtLine<public>()<transacts>:signal(tuple(object, int)) = signal(tuple(object, int)){Id := VhSignalBind(Handle, "script_editor_base", "RequestOpenScriptAtLine", "request_open_script_at_line")}
+    RequestSaveHistory<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "script_editor_base", "RequestSaveHistory", "request_save_history")}
+    RequestSavePreviousState<public>()<transacts>:signal(dictionary) = signal(dictionary){Id := VhSignalBind(Handle, "script_editor_base", "RequestSavePreviousState", "request_save_previous_state")}
+    GoToHelp<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "script_editor_base", "GoToHelp", "go_to_help")}
+    SearchInFilesRequested<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "script_editor_base", "SearchInFilesRequested", "search_in_files_requested")}
+    ReplaceInFilesRequested<public>()<transacts>:signal(string) = signal(string){Id := VhSignalBind(Handle, "script_editor_base", "ReplaceInFilesRequested", "replace_in_files_requested")}
+    GoToMethod<public>()<transacts>:signal(tuple(object, string)) = signal(tuple(object, string)){Id := VhSignalBind(Handle, "script_editor_base", "GoToMethod", "go_to_method")}
 
 visual_shader_node_global_expression<public> := class(visual_shader_node_expression):
 

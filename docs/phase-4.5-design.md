@@ -197,7 +197,7 @@ Classify all 1354 by whether the action is undoable, and act per class:
 `spec.md` as the enumerated set of knowingly-untrue labels, because R-AUD-3 needs something to point
 at and because "we audited it" with no list is indistinguishable from not having audited it.
 
-**Signal emission joins the 1354 by decision** — Phase 4 made `godot_signal.Signal` immediate rather
+**Signal emission joins the 1354 by decision** — Phase 4 made `signal.Signal` immediate rather
 than deferred, and the reason is in `phase-4-design.md`. It is in this set and should be listed in
 it.
 
@@ -432,7 +432,7 @@ its own name and the rest name a getter superseded by a property, and they stay 
 a statement about Godot rather than about what this mirror happens to emit. The audited set went
 **1127 → 1073**.
 
-**`Object.Connect`'s rollback gap goes to Phase 5.** `godot_signal.Subscribe` is rollback-safe;
+**`Object.Connect`'s rollback gap goes to Phase 5.** `signal.Subscribe` is rollback-safe;
 connecting to a *GDScript-declared* signal (R-SIG-6) goes through `Object.Connect`, which the bridge
 forwards rather than performs, and a raise after it leaves the connection behind. Phase 5 §4.2 owns
 it now and §12 checks it, because `signal_ref.Await()` already needs the bridge to own a foreign

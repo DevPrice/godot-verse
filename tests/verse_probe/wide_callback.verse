@@ -1,6 +1,6 @@
 using { /Godot.org/Godot }
 
-# Phase 5 spike S-0, round three: what widening `godot_signal.Subscribe`'s callback would cost.
+# Phase 5 spike S-0, round three: what widening `signal.Subscribe`'s callback would cost.
 #
 # Verse's own prior art is `subscribable<native>(t:type) := interface:
 # Subscribe<public>(Callback(:t):void)<transacts>:cancelable` -- the callback parameter is
@@ -30,7 +30,7 @@ wide_callback := class(object):
 	# callback actually leaves Verse today.
 	Store<public>(Callback:any)<transacts>:void = {}
 
-	# Stands in for a widened godot_signal.Subscribe: the method <transacts>, the callback wide,
+	# Stands in for a widened signal.Subscribe: the method <transacts>, the callback wide,
 	# and the callback only handed onward rather than called.
 	SubscribeWide<public>(Callback(:int):void)<transacts>:void =
 		Store(Callback)

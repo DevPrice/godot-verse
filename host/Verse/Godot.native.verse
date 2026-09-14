@@ -145,14 +145,14 @@ VhCallableFrom<native>(Callback:any)<transacts>:int
 
 # --- signals -----------------------------------------------------------------
 
-# The binding half of a script-declared signal (R-SIG-1). The typed half is `godot_signal(t)` in
+# The binding half of a script-declared signal (R-SIG-1). The typed half is `signal(t)` in
 # GodotApi.native.verse, which is ordinary parametric Verse over this -- the same split as
 # `vh_object` and `object`, and for the same two reasons: a native class cannot be parametric, and
 # Verse cannot reopen a class to add the typed API afterwards.
 #
 # Id is written by the host at construction, the way Handle is: it names the owner, the signal's
 # name and the payload's declared shape, all of which the host read out of the semantic program.
-# A `godot_signal` a script builds for itself holds 0 and names nothing, which is the same bargain
+# A `signal` a script builds for itself holds 0 and names nothing, which is the same bargain
 # `godot_array{}` makes.
 vh_signal<public><native> := class:
     Id<native>:int = 0
@@ -179,7 +179,7 @@ VhSignalCancel<native>(Subscription:int)<transacts>:void
 # because the host walks the class's members for it; an engine signal has no member to walk.
 #
 # Class and Accessor name the generated accessor, which is where the payload's declared type comes
-# from: its return type is a `godot_signal(t)` instantiation, and the type argument is on it as a
+# from: its return type is a `signal(t)` instantiation, and the type argument is on it as a
 # substitution table -- the same road a member's payload is read by. Name is Godot's own spelling of
 # the signal, which is what `connect` and `emit_signal` are given.
 #
@@ -189,12 +189,12 @@ VhSignalBind<native>(Handle:int, Class:string, Accessor:string, Name:string)<tra
 
 # --- awaiting -----------------------------------------------------------------
 #
-# `godot_signal(t).Await()` is ordinary Verse over `/Verse.org/Verse`'s own `event(t)` (R-SIG-5).
+# `signal(t).Await()` is ordinary Verse over `/Verse.org/Verse`'s own `event(t)` (R-SIG-5).
 # These two are the whole of what the host owes it: connect a Godot connection that feeds that
 # event for the duration of one wait, and take it away again.
 #
 # The host reaches the event by peeking the `Ev` field off the signal object, which is why the
-# object rather than its id crosses: `Timer.Timeout()` mints a *fresh* `godot_signal` on every
+# object rather than its id crosses: `Timer.Timeout()` mints a *fresh* `signal` on every
 # call, and several of them share one binding id, so an id could not say which one is waiting.
 
 # Connects, and answers a token naming the connection. The signal object is held by the host for
@@ -209,7 +209,7 @@ VhSignalAwaitEnd<native>(Token:int)<transacts>:void
 
 # The same, for a Godot Signal the mirror has no accessor for -- one a GDScript or C# script
 # declared, or one made with `add_user_signal` (R-INT-1). Ref is the signal reference; Waiter is a
-# `godot_signal(godot_array)` whose event the emission's arguments arrive on as one Godot Array.
+# `signal(godot_array)` whose event the emission's arguments arrive on as one Godot Array.
 VhSignalRefAwait<native>(Ref:int, Waiter:vh_signal)<transacts>:int
 
 # Connects Callback to a foreign Godot Signal and answers a subscription id, the way

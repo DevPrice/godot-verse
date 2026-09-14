@@ -58,7 +58,7 @@ design-retiring — included. It retired nothing.
 | D2 | **A raise stops only the raising call.** Its transaction aborts, its Godot writes are dropped, the error is reported, and the next call runs | Today it halts every script until the next `vh_tick`, on the conservative reading that others should not run against a half-rolled-back scene. That reading was only ever about the scene, and a sibling's writes were already committed. Replaces R-DIAG-3's project-wide halt; `GHaltedUntilTick` and its `TickScripts` resume go away |
 | D3 | **Resumption is event-driven, not pumped.** A task awaiting a Godot signal resumes **inside `emit_signal`**, in connection order | GDScript has no scheduler: `GDScriptFunctionState::_signal_callback` is an ordinary `Callable` connected to the awaited signal and it calls `resume()` synchronously (`gdscript_function.cpp:257-286`). C# is the same shape via `SignalAwaiter`. Epic's own native `Sleep` does it this way too (`Simulation.cpp:82-150`). **S-0 F9 measured that this is already true of Verse's own `event`**: a suspended task resumed synchronously inside the call that signalled it |
 | D4 | **`vh_tick` keeps only work with no Godot event behind it** — a `spawn`ed body not yet yielded to anything, `Sleep` resumptions, Verse-internal scheduler jobs, reaping | Falls out of D3. It also gives R-ASYNC-6's budget a coherent meaning: it governs that queue, and a resumption inside an emission is unbudgeted, exactly as GDScript's resume is |
-| D5 | **The Verse-facing surface is `spawn`, `Await()` on `godot_signal(t)`, `Await()` on a `signal_ref`, and a native `Sleep`.** No `AwaitNextFrame`, no `AwaitPhysicsFrame`, no task handle | **Amended by S-0.** The original decision omitted `spawn`, on the assumption that a `<suspends>` method could be called wherever a script wanted one. It cannot: an awaiting body is always wide (F5), and a wide body is reached with `spawn` from a wide caller (F1, F6). `spawn` is therefore part of the surface an author is taught, not an implementation detail. The rest stands — every Godot signal is a mirrored accessor, so one primitive reaches all of them |
+| D5 | **The Verse-facing surface is `spawn`, `Await()` on `signal(t)`, `Await()` on a `signal_ref`, and a native `Sleep`.** No `AwaitNextFrame`, no `AwaitPhysicsFrame`, no task handle | **Amended by S-0.** The original decision omitted `spawn`, on the assumption that a `<suspends>` method could be called wherever a script wanted one. It cannot: an awaiting body is always wide (F5), and a wide body is reached with `spawn` from a wide caller (F1, F6). `spawn` is therefore part of the surface an author is taught, not an implementation detail. The rest stands — every Godot signal is a mirrored accessor, so one primitive reaches all of them |
 | D6 | **`Sleep` is a real native on the host's own real-time clock** (`FPlatformTime::Seconds()`), not `SceneTreeTimer` | It has to work where there is no SceneTree — `host_smoke`, the probe, a `@tool` script. The cost is stated rather than avoided: it ignores `Engine.time_scale` and it counts wall-clock under `--fixed-fps`. See D7 |
 | D7 | **Game code uses timer awaits; `Sleep` is for eventless and host-side work** | The yardstick runs `--fixed-fps 60` headless precisely because "a `Timer` counts real seconds while the loop runs flat out". A real-time `Sleep` is wrong in exactly that run. Wall 3's two waits are both mirrored accessors, so `Await()` alone closes it with no clock question in it |
 | D8 | **Tasks ignore pause.** `SceneTree.paused` and `process_mode` do nothing to a Verse task | Matches Godot: a GDScript coroutine is not paused either, its *source* is — a `Timer` stops emitting, so the await stalls. `SceneTreeTimer` even defaults `process_always = true`. One rule, no new state, and the author steers it by choosing what to await. D6's consequence — a real-time `Sleep` keeps counting in a paused game — is consistent with this and worth one line in the manual |
@@ -73,8 +73,8 @@ design-retiring — included. It retired nothing.
 | D17 | **`signal_ref.Await()` answers `[]variant`**, unpacked with the existing `As*` readers | Consistent with how `Callv` already answers a foreign method and how the container accessors already work. `As<Type>[V]` is a `<decides>` reader the author already uses, arity is whatever the emitter sent, and the failure lands at the unpack where it can be seen |
 | D18 | **The pump resumes in FIFO order** | R-ASYNC-3 asks for deterministic, and `GEnqueuedAsyncJobs` is already a `TQueue`. Stated rather than left emergent; no other order has a claim |
 | **D19** | **A task is started with `spawn`, from a wide context, and a virtual is the wide context a script already has.** The manual says so; nothing diagnoses it | Replaces D14. F6 measured that `_Ready`, `_Process` and `_EnterTree` overrides on a `node2d` may each `spawn` a task, because the mirror generates a virtual with **no effect specifier** and an override therefore carries the default effect set — the widest there is, and the only one `spawn` of an awaiting body is allowed from. The refusal a curious author meets (F7's 3532/3523) is the compiler's, at their own line, and a `_validate` rewrite was considered and declined: the phase is not building suspending virtuals, and a sentence in the docs and the `.verse` template is cheaper than another diagnostic |
-| **D20** | **`godot_signal.Subscribe`'s callback widens to specifier-less**, matching Verse's own `subscribable` | `subscribable<native>(t:type) := interface: Subscribe<public>(Callback(:t):void)<transacts>:cancelable` (`Subscribable.native.verse`) — Epic's callback parameter carries the **default** effect set and only the *method* is `<transacts>`. `GodotApi.native.verse` declares `Callback(:t)<transacts>:void` instead, and the comment justifying it — *"`subscribable.Subscribe` fixes its callback at a no_rollback domain that could not touch Godot"* — has the lattice backwards: the default set **contains** transacts, so a wide callback can touch Godot and more. Measured (F10, F11): an existing `<transacts>` handler still satisfies a widened parameter, so **no script breaks**; a widened handler can `spawn`; and the reason Epic's `signalable.Signal` is wide while `Subscribe` is not is that `Signal` *invokes* the callback and a `<transacts>` body may not — which does not apply here, because our host invokes subscribers from C++ through `VFunction::Invoke`, where Verse's effect checking is not in the way. **This is the one line that unblocks wall 3** |
-| **D21** | **`Await` is Verse's own `event(t)` inside `godot_signal(t)`. No parametric native** | F8 measured that `/Verse.org/Verse`'s `event(t)` is nameable from the script package, that an ordinary parametric Verse class may hold one, and that `Await<public>()<suspends>:t = Ev.Await()` compiles and answers a typed `t`. F9 measured a full suspend-across-`vh_tick`-and-resume cycle over it. That removes the hardest unknown the first draft carried — a native cannot be parametric in its return type, which is why `VhSignalSubscribe` takes `Callback:any` — and it removes the need for any new native on the signal path. **S-5 is what is left of it**: how the host delivers a *typed* payload into that event |
+| **D20** | **`signal.Subscribe`'s callback widens to specifier-less**, matching Verse's own `subscribable` | `subscribable<native>(t:type) := interface: Subscribe<public>(Callback(:t):void)<transacts>:cancelable` (`Subscribable.native.verse`) — Epic's callback parameter carries the **default** effect set and only the *method* is `<transacts>`. `GodotApi.native.verse` declares `Callback(:t)<transacts>:void` instead, and the comment justifying it — *"`subscribable.Subscribe` fixes its callback at a no_rollback domain that could not touch Godot"* — has the lattice backwards: the default set **contains** transacts, so a wide callback can touch Godot and more. Measured (F10, F11): an existing `<transacts>` handler still satisfies a widened parameter, so **no script breaks**; a widened handler can `spawn`; and the reason Epic's `signalable.Signal` is wide while `Subscribe` is not is that `Signal` *invokes* the callback and a `<transacts>` body may not — which does not apply here, because our host invokes subscribers from C++ through `VFunction::Invoke`, where Verse's effect checking is not in the way. **This is the one line that unblocks wall 3** |
+| **D21** | **`Await` is Verse's own `event(t)` inside `signal(t)`. No parametric native** | F8 measured that `/Verse.org/Verse`'s `event(t)` is nameable from the script package, that an ordinary parametric Verse class may hold one, and that `Await<public>()<suspends>:t = Ev.Await()` compiles and answers a typed `t`. F9 measured a full suspend-across-`vh_tick`-and-resume cycle over it. That removes the hardest unknown the first draft carried — a native cannot be parametric in its return type, which is why `VhSignalSubscribe` takes `Callback:any` — and it removes the need for any new native on the signal path. **S-5 is what is left of it**: how the host delivers a *typed* payload into that event |
 | **D22** | **Cancellation triggers on the real free, not on `queue_free`.** The window is documented rather than closed | `~GDScriptInstance` is GDScript's trigger and `vh_release_instance` is ours. Godot defers the actual free to `_flush_delete_queue`, so a `queue_free`d node's task keeps running until then and may emit or write in that window. Matching GDScript exactly is worth more than closing a window Godot leaves open for its own scripts, and a new `is_queued_for_deletion` hook would diverge in a way every author would have to be told about. §7's ordering table gets the row |
 | **D23** | **A per-instance scope is created lazily**, on the instance's first `spawn`, not at `vh_instantiate` | Answers §13's "a GC object per instance" risk directly: a project where three nodes await pays for three scopes rather than one per scripted node. It keeps R-ASYNC-4 literally — the boundary is the instance — while the hot path pays only when there is something to guard. S-2 measures what the guard costs on the entries that do have a scope |
 | **D24** | **A terminated scope is replaced, not revived, and the replacement is immediate** | `ReviveContentScope` exists because one script's first raise ended Verse for the process; it un-terminates the single global scope at the next `vh_tick`. Epic never revives — `ContentScopeRepository` hands out a *fresh* one (`ContentScopeRepository.h:80-92`). With D1 and D2 there is nothing project-wide left to revive, so the instance whose scope terminated gets a new one at its **next call**, not at the next frame boundary. `GHaltedUntilTick`, `GTasksLostToError` and `TickScripts`'s resume message all go with it. What is lost is that instance's suspended work, which is what a raise costs and what D10's count-reporting shape should report |
@@ -170,14 +170,14 @@ transaction. **Also ask:** does a nested `AutoRTFM::Transact` around the resumpt
 to the task's own writes (D15)? If not, D3 needs the pumped fallback it declined, and §14 records why.
 
 **S-5 — how does a typed payload reach the event?** All that is left of the `Await` question. Under
-D21 `godot_signal(t)` holds an `event(t)` and `Await()` forwards to it; the missing half is
-`Signal`. It is wide (F8), so `godot_signal.Signal`, which is `<transacts>`, cannot call it. Two
+D21 `signal(t)` holds an `event(t)` and `Await()` forwards to it; the missing half is
+`Signal`. It is wide (F8), so `signal.Signal`, which is `<transacts>`, cannot call it. Two
 shapes, and the spike picks one:
 
 - **the host invokes a specifier-less `Deliver(Val:t):void = Ev.Signal(Val)`** on the signal object,
   the way it already invokes a subscriber with a converted payload. Needs the host to reach the
-  `godot_signal` VObject from the signal id, which it may not have today.
-- **`godot_signal` subscribes its own `Deliver` through the existing `VhSignalSubscribe` path** at
+  `signal` VObject from the signal id, which it may not have today.
+- **`signal` subscribes its own `Deliver` through the existing `VhSignalSubscribe` path** at
   construction, so the host needs no new ability at all — it is already invoking a Verse callback
   with a converted payload. Smallest possible change; costs one permanent subscription per signal
   whether or not anything ever awaits it.
@@ -234,7 +234,7 @@ budgeted for.
 
 ```verse
 	Subscribe<public>(Callback(:t):void)<transacts>:cancelable =
-		godot_subscription{Subscription := VhSignalSubscribe(Id, Callback)}
+		connection{Subscription := VhSignalSubscribe(Id, Callback)}
 ```
 
 The callback loses its `<transacts>`, matching `subscribable`. Nothing else changes: F10 measured
@@ -243,7 +243,7 @@ that every existing handler still satisfies it, and the host was never effect-ch
 **Then `Await`, on the class `GodotApi.native.verse` already declares** (D21):
 
 ```verse
-godot_signal<public>(t:type) := class(vh_signal):
+signal<public>(t:type) := class(vh_signal):
 	Ev:event(t) = event(t){}
 
 	Await<public>()<suspends>:t = Ev.Await()
@@ -312,7 +312,7 @@ task awaiting a GDScript-declared signal resumes.
 **Added after Phase 4.5 ran, by decision**, because it is the same machinery and doing it separately
 would build the same thing twice.
 
-Phase 4.5 made `godot_signal.Subscribe` genuinely rollback-safe — the host registers an
+Phase 4.5 made `signal.Subscribe` genuinely rollback-safe — the host registers an
 `AutoRTFM::OnAbort<SameAsClosed>` that disconnects, and `tests/integration` aborts it three ways.
 What it could not reach is the *other* way a script connects: `Object.Connect`, which is how R-SIG-6
 receives a signal a GDScript or C# node declares, and which the bridge merely forwards to Godot. It
@@ -321,7 +321,7 @@ it leaves the connection behind.
 
 Phase 5 is where that closes, because §4's `signal_ref.Await()` already needs the bridge to *own* a
 connection to a foreign signal rather than forward one. The shape to reach for is a `Subscribe` on
-`signal_ref` beside that `Await`, compensated the way `godot_signal.Subscribe` is — and with D20's
+`signal_ref` beside that `Await`, compensated the way `signal.Subscribe` is — and with D20's
 widening applied to it from the start, so the two spellings agree. `Object.Connect` then stays what
 it is, an unforgiving direct call, and the rollback-safe spelling is the one a script reaches first.
 
@@ -526,7 +526,7 @@ helper that *writes* and is called from a genuinely narrowed body. `dodge-the-cr
 wall table both need editing, and `hud.verse`'s own comment at its lines 22-27 is now wrong.
 
 **`Object.Connect`'s rollback gap closes** (§4.2) — a `Subscribe` on `signal_ref`, compensated the
-way `godot_signal.Subscribe` is, with a `tests/integration` case that aborts it and checks no
+way `signal.Subscribe` is, with a `tests/integration` case that aborts it and checks no
 connection was left.
 
 **And the by-hand checks are run** — one windowed session covering all three phases' entries:
@@ -619,7 +619,7 @@ had exactly this shape, so the new path is a copy of a tested one rather than a 
 get a typed payload into the event and said "take the second unless it does not work". Both assumed
 the host would invoke a *Verse* callback on the signal object, and `MakeCallableFor` accepts only a
 method bound to a **script instance** — `DescribeBoundFunction` requires a `vh_object` and walks the
-script class's method list. A `godot_signal` is a `vh_signal`, so neither shape could have been
+script class's method list. A `signal` is a `vh_signal`, so neither shape could have been
 built as written.
 
 What the implementation does instead is simpler than either: **`verse::event` is a UObject with a
@@ -666,7 +666,7 @@ lookup, and nothing new on the Verse side of the signal path at all.
   opposite. The fix is Epic's own rule and Epic's own hook: the wait registers on
   `FContentScope::OnContentScopeCleanup`, which is where `event::SubscribeInternal` registers too.
   So `phase-4-gaps.md` G9 closed here not as tidiness but as the other half of cancellation.
-- **An engine-signal accessor mints a *fresh* `godot_signal` on every call.** `Timer.Timeout()` is a
+- **An engine-signal accessor mints a *fresh* `signal` on every call.** `Timer.Timeout()` is a
   method, and several of its results share one binding id — which is why `VhSignalAwait` takes the
   *object* rather than the id, and why the host holds it strongly for the life of the wait.
 - **The event field is found by walking the shape, not by naming it.** A data member's key is

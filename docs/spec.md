@@ -137,7 +137,7 @@ resolves conflicts:
   `CONST_OVERRIDES` carries 127 exceptions, none of them judged: `tools/audit_const_overrides.py`
   reads them out of Godot's own source and accepts a method only when its body is exactly
   `return <member>;`, rejecting a literal return or any name declared `virtual` anywhere. The one mutate-and-answer call the bridge performs itself rather
-  than forwards — `godot_signal.Subscribe` — is compensated with an
+  than forwards — `signal.Subscribe` — is compensated with an
   `AutoRTFM::OnAbort<SameAsClosed>` that disconnects, and `tests/integration` aborts it three ways
   and checks the connection came back.
 
@@ -274,7 +274,7 @@ and packages, never syntax.
   property, a struct member as a Godot struct or dictionary. Status: **part.** Both work in user
   code, nested structs included, and an enum member exports as a dropdown of its own enumerators
   (R-EXP-1). A **struct** member at the boundary is **part**: a project's own struct now crosses as a
-  `godot_signal` payload in both directions — out as one Godot argument per field, named by the
+  `signal` payload in both directions — out as one Godot argument per field, named by the
   field, and back in through `InstanceCall`'s packing rule and `WireToValue`'s user-struct branch
   (R-SIG-1). That path needs no Godot counterpart at all, because a signal delivers the fields as
   separate arguments and the host reassembles them.
@@ -494,8 +494,8 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
 
   ```
   player := class(area2d):
-      Hit<public>:godot_signal(tuple()) = godot_signal(tuple()){}
-      Struck<public>:godot_signal(tuple(int, string)) = godot_signal(tuple(int, string)){}
+      Hit<public>:signal(tuple()) = signal(tuple()){}
+      Struck<public>:signal(tuple(int, string)) = signal(tuple(int, string)){}
   ```
 
   A bridge attribute exists where the *text* is the only source — `@global_class` survives without
@@ -513,7 +513,7 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
 
   **The payload is one type, and tuples carry arity above one.** A multi-parameter Verse function
   satisfies a one-tuple-parameter callback, because a function's parameter *is* its tuple, so
-  `OnStruck(Damage:int, By:string)` subscribes to a `godot_signal(tuple(int, string))` and Godot
+  `OnStruck(Damage:int, By:string)` subscribes to a `signal(tuple(int, string))` and Godot
   still sees two arguments. What Godot is told, per `docs/phase-4-design.md` §6.2:
 
   | payload | Godot arguments |
@@ -580,11 +580,11 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   aborts, the handlers have already run. It joins the container write as the second member of the
   set **Phase 4.5** audits.
 
-  Underneath, a `godot_signal(t)` member is bound at construction: the host walks the class's data
+  Underneath, a `signal(t)` member is bound at construction: the host walks the class's data
   members for the ones whose declared type reaches the native `vh_signal`, mints an id per member
   per instance, and writes it into the member's own object exactly where `Handle` is written. The
   payload's decomposition is read off the *instantiation* — the declared type comes back as the
-  generic `godot_signal(t)`, and the type argument is on it as a substitution table.
+  generic `signal(t)`, and the type argument is on it as a substitution table.
 - **R-SIG-3 (MUST)** A script connects to any signal on any object, with a Verse function or
   closure as the target, and disconnects. Status: **done** for a Verse function bound to a script
   instance, which is the only shape 4a accepts (R-TYPE-3 says why, and OQ-16 carries the rest).
@@ -643,7 +643,7 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   and the Node panel connection have since been watched by hand and work; the stub it wrote did not
   compile the first time, which is `by-hand-findings.md` B3.
 - **R-SIG-5 (MUST)** A script `await`s a signal from a concurrent context: the Verse spelling of
-  GDScript's `await button.pressed`. Status: **done** (Phase 5). `godot_signal(t)` holds a
+  GDScript's `await button.pressed`. Status: **done** (Phase 5). `signal(t)` holds a
   `/Verse.org/Verse` `event(t)` and `Await<public>()<suspends>:t` forwards to it, which is ordinary
   parametric Verse with **no native on the Verse side and no parametric ABI**. One method covers a
   script's own declared signals and all 489 mirrored engine-signal accessors alike, because every
@@ -667,7 +667,7 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   struct payload comes back a struct.
 
   **One line of R-SIG-1's surface changed with it**, and it is a correction rather than an addition:
-  `godot_signal.Subscribe`'s callback is now specifier-less, matching Verse's own
+  `signal.Subscribe`'s callback is now specifier-less, matching Verse's own
   `subscribable<native>(t:type) := interface: Subscribe<public>(Callback(:t):void)<transacts>`.
   Phase 4's `Callback(:t)<transacts>:void` was chosen on the reading that Verse's own fixes its
   callback at a domain that could not touch Godot; the lattice is the other way up — the default
@@ -1090,9 +1090,9 @@ where it arrived**: a task scope per script instance, `Await()` on any Godot sig
   the compiler already refuses them at the author's own line.
 - **R-ASYNC-2 (MUST)** A script awaits a Godot signal, a timer, or a frame from a concurrent
   context. Without this, Verse's concurrency cannot observe the engine and is decorative. Status:
-  **done** (Phase 5) — `godot_signal(t).Await()<suspends>:t`, which covers a script's own declared
+  **done** (Phase 5) — `signal(t).Await()<suspends>:t`, which covers a script's own declared
   signals and all 489 mirrored engine-signal accessors alike because every one of them answers a
-  `godot_signal(t)`. `GetTree[].ProcessFrame()`, `GetTree[].PhysicsFrame()` and
+  `signal(t)`. `GetTree[].ProcessFrame()`, `GetTree[].PhysicsFrame()` and
   `GetTree[].CreateTimer[1.0].Timeout()` are accessors like any other, so a frame and a timer need
   nothing of their own. `Sleep(Seconds)` is the eventless case and is real time, not engine time —
   see R-ASYNC-3's table.
@@ -1276,7 +1276,7 @@ indistinguishable from a GDScript one.
   has to be: there is no declaration to read a type off, so the author unpacks it with the `Get*`
   accessors a `godot_array` already has and a wrong expectation fails at the unpack. `Subscribe`
   there is also the **rollback-safe** way to receive a foreign signal — it compensates on abort the
-  way `godot_signal.Subscribe` does, which `Object.Connect` cannot (see `nonatomic-methods.md`).
+  way `signal.Subscribe` does, which `Object.Connect` cannot (see `nonatomic-methods.md`).
 - **R-INT-2 (MUST)** A Verse script calls methods on, and reads properties of, an object whose
   script is GDScript or C#, dynamically. Status: **done** (Phase 4 stage 2 closed the argument
   array). The dispatch itself arrived as a side effect rather than as work of its own: `Object.callv(StringName, Array) -> Variant` is an ordinary concrete method, and Godot's

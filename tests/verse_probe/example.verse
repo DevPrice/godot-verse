@@ -20,7 +20,7 @@ using { /Godot.org/Godot }
 # Verse's own `signalable`/`subscribable` are deliberately *not* implemented here: their domains are
 # no_rollback, and every Godot callback runs inside a transaction. That is the finding, and it is
 # why this shape is Verse's vocabulary rather than Verse's interfaces.
-godot_signal_probe<public>(t:type) := class:
+signal_probe<public>(t:type) := class:
 	Signal<public>(Val:t)<transacts>:void = {}
 
 	Subscribe<public>(Callback(:t)<transacts>:void)<transacts>:cancelable = probe_cancel{}
@@ -30,9 +30,9 @@ probe_cancel<public> := class(cancelable):
 
 example := class(object):
 
-	Hit<public>:godot_signal_probe(tuple()) = godot_signal_probe(tuple()){}
+	Hit<public>:signal_probe(tuple()) = signal_probe(tuple()){}
 
-	Struck<public>:godot_signal_probe(tuple(int, string)) = godot_signal_probe(tuple(int, string)){}
+	Struck<public>:signal_probe(tuple(int, string)) = signal_probe(tuple(int, string)){}
 
 	OnHit<public>(Payload:tuple())<transacts>:void = {}
 

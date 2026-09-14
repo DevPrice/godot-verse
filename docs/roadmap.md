@@ -477,7 +477,7 @@ Ordered by dependency; the design document has the stage table and what each is 
   on. Small, and it unblocks `Callv` with arguments, `AddUserSignal`, and 173 mirrored parameters.
 - **R-TYPE-3's other direction, R-INT-4** — a `Callable` backed by a Verse function. Ahead of
   signals, because `Subscribe` is one.
-- **§5.3 in full** — R-SIG-1 … R-SIG-4 and R-SIG-6: a signal is a typed member (`Hit:godot_signal()`),
+- **§5.3 in full** — R-SIG-1 … R-SIG-4 and R-SIG-6: a signal is a typed member (`Hit:signal()`),
   emission is `Hit.Signal(…)`, subscription takes a Verse function, and Godot's own 489 signals get
   typed accessors. R-SIG-5 (`await`) waited for Phase 5, and was the one wall 4a could not close.
 - **R-NODE-7, R-NODE-8** — the complete virtual set, generated, spelled the way Godot spells it
@@ -636,7 +636,7 @@ resumption inside an open transaction is safe, because each resumption opens its
 - **R-ASYNC-1** — `spawn`, `race`, `sync`, `branch`, `rush`, `loop`, `<suspends>` in script code
   across frames. **Done**, and most of it was already true; what the phase owed was the
   `host_smoke` tick-loop layer that keeps it that way.
-- **R-ASYNC-2, R-SIG-5** — await a Godot signal, a timer, a frame. **Done.** `godot_signal(t)`
+- **R-ASYNC-2, R-SIG-5** — await a Godot signal, a timer, a frame. **Done.** `signal(t)`
   holds a `/Verse.org/Verse` `event(t)`; the host signals that event directly, because
   `verse::event` is a UObject with a public C++ `Signal`.
 - **R-ASYNC-5** — tasks cancelled when a node is **freed** (the wording is amended: leaving the

@@ -16,9 +16,9 @@ using { /Godot.org/Godot }
 @global_class
 concurrency := class(node2d):
 
-	Fired<public>:godot_signal() = godot_signal(){}
-	Scored<public>:godot_signal(int) = godot_signal(int){}
-	Struck<public>:godot_signal(tuple(int, string)) = godot_signal(tuple(int, string)){}
+	Fired<public>:signal() = signal(){}
+	Scored<public>:signal(int) = signal(int){}
+	Struck<public>:signal(tuple(int, string)) = signal(tuple(int, string)){}
 
 	var Seen<public>:int = 0
 	var SeenBy<public>:string = ""
@@ -68,7 +68,7 @@ concurrency := class(node2d):
 	# --- awaiting one of Godot's own ------------------------------------------
 	#
 	# The same method, because every one of the 489 mirrored engine-signal accessors answers a
-	# `godot_signal(t)` too. Nothing per-signal was written for this.
+	# `signal(t)` too. Nothing per-signal was written for this.
 
 	WaitForTimer(T:timer)<suspends>:void =
 		T.Timeout().Await()

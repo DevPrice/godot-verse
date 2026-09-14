@@ -43,8 +43,8 @@ payload works in **both** directions — out as one Godot argument per field, na
 is what gives the connect dialog real names; back in through `InstanceCall`'s rule that N arguments
 satisfy one struct parameter with N fields (**G21**). That path needs no Godot counterpart for a
 struct, because a signal delivers the fields separately; a struct as a *method parameter* still has
-none, and that half is R-LANG-2's, which the spec answers with a Dictionary. `godot_signal()` is an
-alias for `godot_signal(tuple())` (G7), spelled the way `/Verse.org/Concurrency` spells
+none, and that half is R-LANG-2's, which the spec answers with a Dictionary. `signal()` is an
+alias for `signal(tuple())` (G7), spelled the way `/Verse.org/Concurrency` spells
 `listenable()`. The thread guard covers every entry point (G6), and the math tail is recorded rather
 than silent (G12).
 
@@ -61,7 +61,7 @@ it — **`_Ready`, not `Ready`**, and §7.1 counts the eight *signal* collisions
 native root and the rest of that family is R-NODE-10, in 4b. **OQ-11 is closed**: the math types are
 ordinary Verse, with extension methods and definable operators and no ABI at all. And Verse's own
 `signalable`/`subscribable` cannot be implemented here — their domains are `no_rollback` and every
-Godot callback runs in a transaction — so `godot_signal` has their *vocabulary* and not their
+Godot callback runs in a transaction — so `signal` has their *vocabulary* and not their
 interfaces.
 
 **One cost of the math is easy to trip over.** An extension method is a **module-level** definition:
@@ -139,13 +139,13 @@ What it settled, all of which is load-bearing:
   `vh_tick` is no longer where anything recovers. **D23 is retired**: "lazily at the first `spawn`"
   has no hook to hang on, and the guard has to be already active at that moment. It costs ~2.6 KB
   per scripted node and ~0.06 µs per call, both measured with `tools/build_bench.py`.
-- **`Await` is ordinary Verse over `/Verse.org/Verse`'s `event(t)`.** `godot_signal(t)` holds one
+- **`Await` is ordinary Verse over `/Verse.org/Verse`'s `event(t)`.** `signal(t)` holds one
   and `Await<public>()<suspends>:t` forwards to it, which covers a script's own signals and all 489
   mirrored engine-signal accessors alike. The *host* half is smaller than the design budgeted for:
   **`verse::event` is a UObject with a public C++ `Signal`**, so the host reads the event off the
   signal object and signals it directly — Epic's code then does FIFO resumption, per-task scopes and
   dropping a cancelled awaiter. Neither of S-5's two proposed shapes was reachable, because
-  `MakeCallableFor` accepts only a method bound to a *script instance* and a `godot_signal` is not
+  `MakeCallableFor` accepts only a method bound to a *script instance* and a `signal` is not
   one.
 - **`defer` runs when a task is cancelled, not only when it returns.** The whole connection lifetime
   of `Await` rests on it: `Await` connects with `CONNECT_ONE_SHOT`, holds the signal object, and
@@ -153,7 +153,7 @@ What it settled, all of which is load-bearing:
   loser sleeps for an hour.
 - **An awaiting body cannot be narrowed, and neither can its caller.** `awaitable.Await` carries
   `no_rollback` exactly as `signalable.Signal` does. A mirrored virtual override is specifier-less
-  and so, since this phase widened `godot_signal.Subscribe`'s callback to match Verse's own
+  and so, since this phase widened `signal.Subscribe`'s callback to match Verse's own
   `subscribable`, is a signal handler. **A `<reads>` body may not `spawn` at all** — where 4.5's
   narrowing and this phase collide. And **a virtual cannot be written `<suspends>`**: glitch 3532
   plus 3523, because the specifier makes it a different function. Both are said in the `.verse`
@@ -503,10 +503,10 @@ ten element types against four key types is not a list to maintain by hand.
 - **Awaiting is the one thing that cannot be narrowed, and `spawn` is how a script starts it.**
   `event.Await` carries `no_rollback`, so a `<suspends><transacts>` body that awaits is glitch 3512
   and a `<reads>` body may not `spawn` at all. The caller must be specifier-less too: a mirrored
-  virtual override is, and so is a `godot_signal.Subscribe` handler. `_Ready<override>()<suspends>`
+  virtual override is, and so is a `signal.Subscribe` handler. `_Ready<override>()<suspends>`
   is *not* a spelling — glitch 3532 plus 3523, because the specifier makes it a different function.
 - **`defer` in a suspending body runs on cancellation as well as on return** (measured,
-  `tests/verse_probe/sleep_probe.verse`). `godot_signal.Await`'s Godot connection is taken away in
+  `tests/verse_probe/sleep_probe.verse`). `signal.Await`'s Godot connection is taken away in
   one, which is the only reason a `race` whose loser never resumed leaves nothing behind.
 - **`operator'()'` is a reserved intrinsic.** Verse rewrites `Data[Key]` on a non-function callee
   into a call to it, but refuses to let anything *define* one — as a class member or as a free
@@ -555,7 +555,7 @@ ten element types against four key types is not a list to maintain by hand.
   built rather than by construction — which is what the singleton accessors do now, and what
   R-SCN-6 says they should always have done.
 - **A class member may not shadow an inherited mirrored one, and Godot's signals are members too.**
-  `Hidden:godot_signal(int)` on a `node2d` is *"Instance data member `Hidden` is already defined in
+  `Hidden:signal(int)` on a `node2d` is *"Instance data member `Hidden` is already defined in
   `canvas_item`, did you mean to add the `<override>` specifier?"* — because `canvas_item` mirrors
   Godot's `hidden` signal as a `Hidden` accessor. Every one of the 489 signal accessors and 3232
   properties is a name a script cannot reuse, and the compiler reports it at the *declaration* with

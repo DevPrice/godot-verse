@@ -734,7 +734,7 @@ typedef enum vh_signal_reject
 
 /* One signal a script's class declares (R-SIG-1).
  *
- * There is no `@signal` attribute: the member's *type* is the declaration -- `Hit:godot_signal(t)`
+ * There is no `@signal` attribute: the member's *type* is the declaration -- `Hit:signal(t)`
  * -- and the host reads declared types out of the semantic program already. A bridge attribute
  * exists where the text is the only source, which is why `@global_class` needs one and this does
  * not.

@@ -1238,7 +1238,7 @@ func _process(_delta: float) -> bool:
 
 			# One of Godot's own, through the accessor the generator emits per signal per class.
 			# Nothing per-signal was written for this: every mirrored accessor answers the same
-			# `godot_signal(t)` a declaration does.
+			# `signal(t)` a declaration does.
 			_conc.call("Reset")
 			var awaited_timer := Timer.new()
 			awaited_timer.one_shot = true
@@ -1266,7 +1266,7 @@ func _process(_delta: float) -> bool:
 
 			# The rollback-safe way to *subscribe* to one, which is what `Object.Connect` could not
 			# be: it mutates Godot and answers a value, so a raise after it left the connection
-			# behind. This one is compensated the way godot_signal.Subscribe is.
+			# behind. This one is compensated the way signal.Subscribe is.
 			_conc.call("Reset")
 			_conc.call("SubscribeForeign", _foreign, "Tally")
 			_check_eq("subscribing to a foreign signal connects",

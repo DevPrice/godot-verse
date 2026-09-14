@@ -103,11 +103,11 @@ transactions := class(node2d):
 
 	# --- S-3: does a rollback compensation reach this call path? -------------------------------
 
-	Hit<public>:godot_signal() = godot_signal(){}
+	Hit<public>:signal() = signal(){}
 
 	# The one `ConnectThenRaise` uses: `MakeCallable` wants a type argument, and an int payload is
 	# the plainest one to spell.
-	Scored<public>:godot_signal(int) = godot_signal(int){}
+	Scored<public>:signal(int) = signal(int){}
 
 	var Hits<public>:int = 0
 

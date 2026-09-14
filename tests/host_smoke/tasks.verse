@@ -6,7 +6,7 @@ using { /Godot.org/Godot }
 # happens to two *instances* of one class when one of them raises, because it is the only place
 # where a call and a tick can be put in a chosen order with nothing else running.
 #
-# The event is Verse's own, awaited directly rather than through `godot_signal.Await` -- the Godot
+# The event is Verse's own, awaited directly rather than through `signal.Await` -- the Godot
 # half of that needs a Godot, and what is being asked here is about scopes rather than signals.
 
 tasks := class(object):

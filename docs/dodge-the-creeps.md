@@ -131,7 +131,7 @@ longer readable in one place. This was the wall that most changed the *shape* of
 than its spelling, which is why it was the last one left.
 
 **Phase 5 closed it, and it cost less than this document assumed.** Verse's concurrency does have a
-meeting point with a Godot signal: `godot_signal(t)` holds a `/Verse.org/Verse` `event(t)` and
+meeting point with a Godot signal: `signal(t)` holds a `/Verse.org/Verse` `event(t)` and
 answers a typed payload from it, in ordinary Verse with no native and no ABI. What `hud.verse` says
 now is what `hud.gd` says:
 

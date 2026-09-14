@@ -2207,7 +2207,7 @@ struct FUserStructLayout
     TArray<FMemberType> FieldTypes;
 };
 
-/// How a `godot_signal(t)`'s payload maps onto Godot's argument list.
+/// How a `signal(t)`'s payload maps onto Godot's argument list.
 ///
 /// Three shapes, because Verse has three answers to "what is one value carrying several things":
 /// a tuple, which cannot name its elements; a struct, which can; and everything else, which is one
@@ -2215,7 +2215,7 @@ struct FUserStructLayout
 /// so one shape serves both rather than each deciding for itself.
 enum class EPayloadShape : uint8
 {
-    /// One argument, the payload itself. `godot_signal(int)`, `godot_signal(node2d)`.
+    /// One argument, the payload itself. `signal(int)`, `signal(node2d)`.
     Bare,
     /// One argument per element, positionally named. `tuple()` is this with no arguments.
     Tuple,
@@ -2770,7 +2770,7 @@ AUTORTFM_DISABLE bool ValueToWire(Verse::FRunningContext Context,
     {
         // A *bare* object, which a member never is -- an exported reference must be optional,
         // because the inspector can leave a slot empty -- but a signal payload and a method
-        // parameter both are. Without this a `godot_signal(node2d)` emitted nothing and said the
+        // parameter both are. Without this a `signal(node2d)` emitted nothing and said the
         // payload had no representation, which is true of no object at all.
         ReferenceHandle = HandleOf(Value);
         bIsReference = ReferenceHandle != 0;
@@ -3124,7 +3124,7 @@ int64 GNextCallbackId = 1;
 /// The id counter needs no lock: only the game thread mints one.
 FCriticalSection GCallbacksLock;
 
-/// One `godot_signal` member of one live instance: everything the member's *type* and *name* said,
+/// One `signal` member of one live instance: everything the member's *type* and *name* said,
 /// resolved once at construction so neither has to be spelled again.
 struct FSignalBinding
 {
@@ -3144,7 +3144,7 @@ struct FSignalBinding
 TMap<int64, FSignalBinding> GSignalBindings;
 int64 GNextSignalId = 1;
 
-/// One live connection, which is what a `godot_subscription` names.
+/// One live connection, which is what a `connection` names.
 struct FSubscription
 {
     int64 OwnerHandle = 0;
@@ -3160,9 +3160,9 @@ int64 GNextSubscriptionId = 1;
 /// One task waiting on one Godot signal (R-SIG-5).
 ///
 /// A wait is a connection the host owns for exactly as long as the wait lasts. What it feeds is a
-/// `/Verse.org/Verse` `event(t)` living on the `godot_signal` object the script awaited -- which is
+/// `/Verse.org/Verse` `event(t)` living on the `signal` object the script awaited -- which is
 /// why the object is held here rather than only its binding id: an engine-signal accessor mints a
-/// *fresh* `godot_signal` on every call, several of them share one binding, and only the object
+/// *fresh* `signal` on every call, several of them share one binding, and only the object
 /// says which event a given wait is suspended on.
 struct FAwaiter
 {
@@ -4248,7 +4248,7 @@ AUTORTFM_DISABLE bool GodotVerse::GetClassExports(FUtf8StringView ClassName, TAr
 
 namespace {
 
-/// Whether a declared type is a `godot_signal(...)`: a class whose chain reaches the native
+/// Whether a declared type is a `signal(...)`: a class whose chain reaches the native
 /// `vh_signal`, which is the one thing every signal type has in common and the one thing a script
 /// cannot accidentally be.
 AUTORTFM_DISABLE bool IsSignalClass(const uLang::CClass& Declared)
@@ -4266,7 +4266,7 @@ AUTORTFM_DISABLE bool IsSignalClass(const uLang::CClass& Declared)
 /// The payload type of a signal class: the type argument the member's declaration instantiated it
 /// with.
 ///
-/// The declared type comes back as the *generic* `godot_signal(t)` -- `AsCode` prints it that way
+/// The declared type comes back as the *generic* `signal(t)` -- `AsCode` prints it that way
 /// and its `Signal` method's parameter is still the type variable -- but the instantiation is
 /// recorded on the class as a substitution table, with one entry per polarity. Both carry the same
 /// type for a class this shape, so the first is the answer.
@@ -4314,7 +4314,7 @@ AUTORTFM_DISABLE FUtf8String SignalArgName(const FMemberType& Arg, int32 Index, 
 ///
 ///   - VH_EXPORT_OBJECT_NOT_OPTIONAL is "the inspector can leave a slot empty". Nothing leaves a
 ///     signal argument empty -- the emitter supplies it -- and ValueToWire has the bare-object
-///     branch for exactly this case, added when `godot_signal(node2d)` emitted nothing.
+///     branch for exactly this case, added when `signal(node2d)` emitted nothing.
 ///   - VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL is "ClassDB cannot filter a picker by this name". An
 ///     emission carries a handle; nobody filters anything.
 ///   - VH_EXPORT_UNSUPPORTED_TYPE over a *reference* wrapper is "the inspector has no editor for
@@ -4451,9 +4451,9 @@ AUTORTFM_DISABLE FUtf8String SignalRejectReason(int32 Reject, const FUtf8String&
     switch (Reject)
     {
     case VH_SIGNAL_IS_VAR:
-        return UTF8TEXT("a `godot_signal` member must not be `var`.");
+        return UTF8TEXT("a `signal` member must not be `var`.");
     case VH_SIGNAL_NOT_PUBLIC:
-        return UTF8TEXT("a `godot_signal` member must be `<public>` for anything outside the class to connect to it.");
+        return UTF8TEXT("a `signal` member must be `<public>` for anything outside the class to connect to it.");
     case VH_SIGNAL_NO_GODOT_OWNER:
         return UTF8TEXT("its class does not derive from `object`, so Godot never gives it an object to register on.");
     case VH_SIGNAL_PAYLOAD_UNSUPPORTED:
@@ -4468,7 +4468,7 @@ AUTORTFM_DISABLE FUtf8String SignalRejectReason(int32 Reject, const FUtf8String&
 
 /// The UObject a class-typed member holds, or null.
 ///
-/// The read half of WriteFieldOf, narrowed to the one case signal binding needs: a `godot_signal`
+/// The read half of WriteFieldOf, narrowed to the one case signal binding needs: a `signal`
 /// member's own object, so the host can write the id into it.
 AUTORTFM_DISABLE UObject* PeekFieldObject(UObject* Object, FUtf8StringView FieldName)
 {
@@ -4831,7 +4831,7 @@ AUTORTFM_DISABLE bool GodotVerse::GetClassSignals(FUtf8StringView ClassName, TAr
 
 namespace {
 
-/// Mints the binding rows for every `godot_signal` member of a fresh instance, and writes each id
+/// Mints the binding rows for every `signal` member of a fresh instance, and writes each id
 /// into the member's own object.
 ///
 /// This is where a signal stops being a declaration and becomes a thing that can be emitted: the
@@ -4950,7 +4950,7 @@ AUTORTFM_DISABLE void GodotVerse::EmitSignal(int64 SignalId, const FVerseValue& 
     const FSignalBinding* const Binding = GSignalBindings.Find(SignalId);
     if (!Binding)
     {
-        ReportError(UTF8TEXT("A signal was emitted through an unbound `godot_signal`. One a script "
+        ReportError(UTF8TEXT("A signal was emitted through an unbound `signal`. One a script "
                              "built for itself rather than declared as a member of a class Godot "
                              "instantiated names nothing, the way `godot_array{}` does."));
         return;
@@ -5054,7 +5054,7 @@ AUTORTFM_DISABLE int64 GodotVerse::SubscribeSignal(int64 SignalId, const FVerseV
     const FSignalBinding* const Binding = GSignalBindings.Find(SignalId);
     if (!Binding)
     {
-        ReportError(UTF8TEXT("Subscribe was called on an unbound `godot_signal`, which names nothing."));
+        ReportError(UTF8TEXT("Subscribe was called on an unbound `signal`, which names nothing."));
         return 0;
     }
 
@@ -5150,7 +5150,7 @@ AUTORTFM_DISABLE void GodotVerse::CancelSubscription(int64 SubscriptionId)
 
 namespace {
 
-/// The `/Verse.org/Verse` event a `godot_signal` holds, read off the object rather than named.
+/// The `/Verse.org/Verse` event a `signal` holds, read off the object rather than named.
 ///
 /// Found by walking the shape rather than by building the field's decorated key. The key of a data
 /// member is `(<declaring class' scope path>:)<name>`, and for a member of a *parametric* class
@@ -5469,7 +5469,7 @@ AUTORTFM_DISABLE int64 GodotVerse::BeginSignalAwait(UObject* Signal)
     const FSignalBinding* const Binding = GSignalBindings.Find(SignalId);
     if (!Binding)
     {
-        ReportError(UTF8TEXT("Await was called on an unbound `godot_signal`, which names nothing "
+        ReportError(UTF8TEXT("Await was called on an unbound `signal`, which names nothing "
                              "and so will never be emitted."));
         return 0;
     }
@@ -5576,7 +5576,7 @@ AUTORTFM_DISABLE int64 GodotVerse::SubscribeSignalRef(int64 Ref, const FVerseVal
     const int64 Id = GNextSubscriptionId++;
     GSubscriptions.Add(Id, FSubscription{OwnerHandle, Name, CallableRef});
 
-    // Compensated exactly as godot_signal.Subscribe is, and for the same reason: this mutates Godot
+    // Compensated exactly as signal.Subscribe is, and for the same reason: this mutates Godot
     // and answers a value, so it can be neither deferred to commit nor ignored. It is what closes
     // `Object.Connect`'s rollback gap -- that one stays an unforgiving direct call, and this is the
     // spelling a script reaches first.

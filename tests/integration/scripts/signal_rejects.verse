@@ -1,6 +1,6 @@
 using { /Godot.org/Godot }
 
-# R-SIG-1's refusals: four `godot_signal` members that compile and cannot work.
+# R-SIG-1's refusals: four `signal` members that compile and cannot work.
 #
 # Each one used to be accepted silently -- the member compiled, the signal was absent from Godot,
 # and the author found out at the first emission, at runtime, or never. They are decidable from the
@@ -23,27 +23,27 @@ reject_outer := struct:
 signal_rejects := class(node2d):
 
     # The one that works, so the file proves the pass rejects individually rather than wholesale.
-    Fine<public>:godot_signal(int) = godot_signal(int){}
+    Fine<public>:signal(int) = signal(int){}
 
     # VH_SIGNAL_IS_VAR. A signal is an identity, not a value: the binding is minted once against
     # the object the member was constructed on, so reassigning the member leaves the name pointing
     # at a row nothing emits through.
-    var Reassignable<public>:godot_signal(int) = godot_signal(int){}
+    var Reassignable<public>:signal(int) = signal(int){}
 
     # VH_SIGNAL_NOT_PUBLIC. Connecting is something done from outside the class, and this member
     # cannot be seen from there. Registered with Godot anyway before this pass existed, which is the
     # opposite of what the design asked for.
-    Unseen:godot_signal(int) = godot_signal(int){}
+    Unseen:signal(int) = signal(int){}
 
     # VH_SIGNAL_PAYLOAD_NESTED_STRUCT. A struct payload decomposes one level, into one Godot
     # argument per top-level field. Godot has no argument shape for a struct, so `Inner` has nothing
     # to become.
-    Nested<public>:godot_signal(reject_outer) = godot_signal(reject_outer){}
+    Nested<public>:signal(reject_outer) = signal(reject_outer){}
 
     # VH_SIGNAL_PAYLOAD_UNSUPPORTED. An option around something that is not a Godot object: the
     # wire reads a cleared option as a null reference, so `false` and `option{3}` would arrive
     # indistinguishable.
-    Maybe<public>:godot_signal(?int) = godot_signal(?int){}
+    Maybe<public>:signal(?int) = signal(?int){}
 
     EmitFine<public>(Points:int)<transacts>:void = Fine.Signal(Points)
 
