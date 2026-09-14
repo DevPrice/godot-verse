@@ -1185,7 +1185,8 @@ static bool completing_in_comment(const String &p_code, int64_t p_marker) {
 // was going to be -- `Position.` and `set X = ` are both syntax errors, and a parse error can
 // take the enclosing function's AST with it, while an unknown identifier costs one diagnostic
 // nobody sees. And the substitution is what makes every keystroke of one identifier the same
-// question, and so a cache hit: an analysis costs ~100ms and Godot re-asks on each of them.
+// question, and so a cache hit: the host is already holding that buffer, so the answer is the warm
+// half-millisecond rather than a ~750 ms analysis behind every character.
 //
 // The class-name and keyword sets are still offered alongside the compiler's answer for a bare
 // identifier. They cover what a scope walk cannot -- a class the author has not brought into
@@ -2188,8 +2189,8 @@ TypedArray<Dictionary> VerseScriptLanguage::check_buffer(const String &p_path, c
 		return diagnostics_for(p_path);
 	}
 
-	// Anything the host does not already hold needs a fresh analysis, which takes about as long as
-	// three frames. Start it on the host's thread and answer from the last one: returning stale
+	// Anything the host does not already hold needs a fresh analysis, which takes ~750 ms -- some
+	// forty-five frames. Start it on the host's thread and answer from the last one: returning stale
 	// diagnostics for a moment is a far smaller cost than freezing the editor on every keystroke.
 	// _frame picks the result up, and Godot re-validates often enough that the fresh answer lands
 	// on its own.
@@ -2272,13 +2273,12 @@ void VerseScriptLanguage::request_check(const String &p_path, const String &p_no
 	pending_check_is_completion = p_is_completion;
 	has_pending_check = true;
 
-	// Queued, not started. Every host entry point that reads the semantic program joins the
-	// analysis thread before it answers -- vh_has_class, vh_class_members, vh_class_export_list,
-	// all of them -- so an analysis begun here is one whatever the caller does next pays for.
-	// Saving is where that bites: ScriptEditor::save_current_script asks the script for its
-	// documentation the moment save_resource returns, and starting the analysis inside the save
-	// put the whole ~100ms right back into Ctrl+S. _frame starts it once the frame's own work is
-	// done instead.
+	// Queued, not started. Nothing that describes a class joins the analysis thread any more --
+	// since ABI v7 they answer from the snapshot the last one left -- but an analysis still blocks
+	// the VM for its whole length, so one begun in the middle of the editor's work is the pump and
+	// every `@tool` instance stopped for ~750 ms of it. _frame starts it once the frame's own work
+	// is done, and _frame is also the only thing that polls, so a buffer superseded before the next
+	// one costs nothing at all.
 }
 
 void VerseScriptLanguage::start_pending_check() const {

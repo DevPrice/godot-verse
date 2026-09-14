@@ -189,6 +189,13 @@ for the analysis path: the mirror package is *not* already external, and making 
 R-TOOL-1/2/3 for latency. The latency fix is the expensive one that was already scheduled — cooked
 digests, OQ-10 and Phase 7.
 
+> **2026-09-14.** The trade was real and the price was not what this measured. The mirror is
+> External and read from its digest in every analysis after the project's first successful build,
+> and what that costs, measured again, is **two** things — each definition's file and line, and
+> `CFunction::_bIsAccessorOfSomeClassVar` — worth four `host_smoke` failures, both restored from a
+> side table recorded while the mirror is still source at that first build. Neither OQ-10 nor
+> Phase 7 was needed. Current numbers: `spec.md` R-PERF-2.
+
 **There is no principled middle.** Godot's own `api_type` split removes only 79 classes and 668
 methods — 8% — so "core only" is 790 ms rather than 158 ms. A hand-drawn middle is the curated list
 again, with its failure mode intact.
@@ -691,3 +698,7 @@ R-SCN-2 diagnostic machinery are both places that could say so at the declaratio
 and R-SCN-5 is what they buy. §3.2 named this as the first thing to revisit if the editor turns out to
 be unpleasant to use, and it is still the honest answer: the number is recorded, `tools/build_bench.py`
 takes it again, and the real fix is the cooked-digest route that OQ-10 and Phase 7 already own.
+
+> **2026-09-14.** It did turn out to be unpleasant, and the fix was the digest route without the
+> cook: **721 ms**, and no editor-thread call waiting on it. `spec.md` R-PERF-2 is the current
+> table; the four commits dcd517e…1469dc1 are the record.

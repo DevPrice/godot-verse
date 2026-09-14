@@ -1183,6 +1183,16 @@ where it arrived**: a task scope per script instance, `Await()` on any Godot sig
   resumes inside the emission and is not budgeted — exactly as a GDScript coroutine's resume is not
   — and a `Sleep` whose deadline has passed is woken before the queue and is not budgeted either. A
   budget that could hold a due deadline over would be a frame of drift an author cannot see.
+
+  **After a gap in the pump, the sleepers are drained rather than spread**, which is the one thing
+  Phase 5 left open (`phase-5-design.md` §7.1, closed in its §14.4). In the editor `vh_tick` no-ops
+  for the length of a background analysis — ~750 ms — so a `@tool` script's tasks stall and come
+  back together. That burst cannot grow with the gap: a sleeper's deadline is stamped when `Sleep`
+  is called, not accrued while the pump is stopped, so one task asleep 0.1 s across that gap has one
+  deadline due and not seven, and the whole burst is bounded by the number of sleeping tasks that
+  `vh_tick_stats.Sleeping` reports. What the resumes enqueue is budgeted as any other job is.
+  Spreading them would preserve no ordering that draining loses, since both wake earliest deadline
+  first; it would only add drift to tasks already late.
 - **R-ASYNC-7 (deferred)** Interaction with Godot's own threading — `WorkerThreadPool`, threaded
   resource loading, calling into Verse from a non-main thread, and running Verse tasks off the
   main thread — is **out of scope for this document and requires its own scoping**. It is not
@@ -1310,13 +1320,23 @@ external editor is secondary.
   interpolation. Status: **done**.
 - **R-TOOL-2 (MUST)** Inline diagnostics as you type, from real semantic analysis rather than a
   local parse. Status: **done** — analysis re-runs per keystroke, off the main thread, and is not
-  subject to the single-generation rule.
+  subject to the single-generation rule. The editor's thread does not wait for one: what `_validate`
+  answers is the analysis that last landed, and the fresh one replaces it when it does. R-PERF-2 has
+  the latency.
 - **R-TOOL-3 (MUST)** Code completion: members, locals, types in scope, imported package contents,
-  and keywords. Status: **part**.
+  and keywords. Status: **part** — the popup opens at once from what the last analysis left, and
+  refines in place when the analysis this buffer needs lands. At a bare identifier that first answer
+  is the enclosing class's own members, the class names and the keywords; inside a class body it
+  also carries the inherited members a subclass could still declare with `<override>`, which are
+  what an author reaches for there and used to arrive ~0.7 s late. After a `.` it is empty, so the
+  popup opens late rather than opening wrong.
 - **R-TOOL-4 (MUST)** Hover and ctrl-click: type, signature, doc comment; go to definition, for
   both user code and the mirrored Godot API. Status: **part** — a known defect is that ctrl-hover
-  inside a string interpolation underlines the whole string.
-- **R-TOOL-5 (MUST)** Signature help while typing a call. Status: **part**.
+  inside a string interpolation underlines the whole string. A position resolves against the AST an
+  analysis is rebuilding, which no snapshot describes, so a hover during one **declines** rather
+  than waiting; Godot treats that as "no result" and the next hover answers.
+- **R-TOOL-5 (MUST)** Signature help while typing a call. Status: **part** — declines during an
+  analysis for R-TOOL-4's reason, and queues that buffer so the next ask answers.
 - **R-TOOL-6 (SHOULD)** Find references and rename across the project. Status: **none**.
 - **R-TOOL-7 (SHOULD)** The script editor's outline/member list is populated. Status: **none**.
 - **R-TOOL-8 (SHOULD)** Doc comments on a script's classes and members reach Godot's own
@@ -1567,23 +1587,65 @@ in §14.1 with what the run also confirmed about root being implicit from a subm
 
 ## 13. Performance
 
-**Deliberately deferred.** The posture is correctness first: no targets are committed in this
-draft, and no design decision in §§4–12 may be justified by an unmeasured performance claim.
+**Targets are deliberately deferred; numbers are not.** The posture is correctness first: no target
+is committed in this draft, and no design decision in §§4–12 may be justified by an unmeasured
+performance claim. What is measured is recorded in R-PERF-2 and carries no threshold.
 
 - **R-PERF-1 (MUST)** Before 1.0, this section is replaced by measured numbers and stated targets
   for, at minimum: per-frame overhead of an empty `Process` against an empty GDScript `_process`;
   property read and write cost; a method call with marshalled arguments; project compile time at
-  10, 100 and 1000 scripts; and editor analysis latency per keystroke.
+  10, 100 and 1000 scripts; and editor analysis latency per keystroke. **The last of the five is
+  measured**: R-PERF-2's table has it at 721 ms, with a call cost and an instantiation cost beside
+  it. The empty-`Process` comparison against GDScript, the property costs and the compile-time
+  curve at 10/100/1000 scripts are all still outstanding, and so is every target.
 - **R-PERF-2 (MUST)** Benchmarks exist and run under R-QUAL-3 for visibility, before any target is
   set. What gets measured early is what can be reasoned about later. `tests/host_bench` is where
   they live — reported rather than asserted, because a threshold would fail on a slower machine.
-  The numbers on the machine Phase 3 was written on, against `dodge-the-creeps` and the full
-  1023-class mirror: `vh_init` **72 ms**; the **first** `vh_compile_project` **3.1 s**; a
-  **generation after it 1.27 s**, because `IncrementalizeProjectSource` marks the native packages
-  external and only the script package is rebuilt; `vh_check_project` **1.20 s**, which is Phase 2's
-  enum cost unchanged. The generation figure is the one the build-on-Play trigger rests on: it is a
-  second and a quarter an author pays on Play, and would have been a second and a quarter on every
-  Ctrl+S. If it has to come down, off-thread building becomes a requirement rather than a guess.
+
+  The numbers below are `tools/build_bench.py` on the machine this document is written on, n=10,
+  against the full 1023-class mirror (4360 KB of Verse) with `tests/host_smoke`'s two fixtures as
+  the project and `dodge-the-creeps`' five scripts as the generation. Medians; the mean is quoted
+  only where the bench reports no median.
+
+  | what | figure |
+  | --- | --- |
+  | `vh_init` | **75 ms** |
+  | **first** `vh_compile_project` | **3.70 s** — the mirror is still source here, and this is where the location/accessor side table is recorded |
+  | a **generation** after it | **1.54 s** (min 1.53, max 1.57) |
+  | `vh_check_project` — one whole-project analysis | **721 ms** (min 717, max 753) |
+  | the same through `_begin`/`_poll`, wall clock | **777 ms**, 49 polls |
+  | a read taken **during** an analysis (`vh_class_members`, then `vh_class_export_list`) | **0.0 ms** each, wait counter 0 — it was 1735 ms |
+  | completion, members: refused / behind the analysis / warm | **0.0 / 718 / 0.5 ms** |
+  | completion, scope: refused / behind the analysis / warm | **0.0 / 716 / 6.4 ms** |
+  | `vh_signature_at`: refused / warm | **0.0 / 0.0 ms** |
+  | `vh_lookup_symbol`, warm | **0.1 ms** |
+  | `vh_class_members`, `vh_class_export_list`, with an analysis landed | **0.0 ms** each |
+  | `vh_class_override_candidates` | **0.0 ms**, 248 candidates for a `node2d` |
+  | `vh_instantiate` | **5.2 µs** per node |
+  | `vh_instance_call` | **0.27 µs** per call |
+  | retained per instance | **7.4 KB** |
+  | retained per generation | **1.0 MB** |
+
+  **The per-keystroke editor lag is the analysis figure, 721 ms**, and it is that rather than the
+  1.4–1.8 s it was because every analysis after the project's first successful build reads
+  `/Godot.org/Godot` as an External package from its digest rather than from 4.4 MB of source. A
+  project that has never compiled keeps the mirror as source and pays the larger figure, which is
+  correct: the side table that makes a digest lossless is recorded at the first build.
+
+  **Nothing on the editor's thread waits for that 721 ms.** Every read keyed by a class name answers
+  from the snapshot the last analysis left, at 0.0 ms, including one taken while an analysis is in
+  flight; the three entry points that resolve a *position* refuse with `VH_ERR_STATE` in no time
+  rather than blocking. `verse/analysis_wait_ms` is the custom monitor that says so — it is the
+  stall the other three could not show, because a frame that spent 1.7 s inside a `join` reported a
+  pump that did nothing in no time at all. It reads zero.
+
+  The retained-per-generation figure is a **median** deliberately: the mean is commit-charge noise
+  around a build, and the "10 MB mean" an earlier pass recorded reads −10 MB now while the median
+  has never moved from ~1 MB.
+
+  The generation figure is the one the build-on-Play trigger rests on: a second and a half an author
+  pays on Play, and would have been a second and a half on every Ctrl+S. If it has to come down,
+  off-thread building becomes a requirement rather than a guess.
 - **R-PERF-3 (SHOULD)** Nothing in the design makes a future optimisation structurally impossible —
   specifically, marshalling and dispatch must not bake in per-call allocation (R-TYPE-6).
 
@@ -1613,7 +1675,7 @@ A closed question keeps its row so that the reason it is closed is not lost.
 | **OQ-11** ✅ | How do free functions and value-type methods cross, given that every mirrored call rides `VhCallValue(Handle, …)` and neither a `@GlobalScope` function nor a `vector2` has a handle? Named by Phase 2 §8 and never recorded here until Phase 4's spikes answered it. | R-SCN-3, and the 16 math types' methods | **Closed: Verse can carry the value types itself.** Type-based extension methods (`(V:vector2).Length<public>()<computes>:float`) and definable operators (`operator'+'(:vector2, :vector2)`) both compile against the mirror's own structs, so the math is ordinary Verse with no handle and no ABI — which is also what Godot's C# does. What genuinely has no handle is Godot's 114 statics and the ~28 utility functions with no `/Verse.org` counterpart, and those get one by-name dispatch callback apiece. See `docs/phase-4-design.md` §1.3 and §7. |
 | **OQ-12** ✅ | Does a generation change the package *name* only, or the *verse path* too? S-2 varied the name; whether `/user@localhost` held across generations was not recorded. Module paths are user-visible text that R-TOOL-12 writes into the author's file, and `ScriptVersePath` is compiled into eight lookup sites in `HostScript.cpp`. | R-LANG-6, R-TOOL-12, and the shape of Phase 3 | **Closed: the name only.** The verse path is pinned at `/user@localhost` across generations and nothing in `HostScript.cpp` learns which generation it is asking about. See §14.1. |
 | **OQ-13** | What bounds a script that raises every frame? A raise now stops script code for the rest of the frame and the next tick resumes it, so a `Process` that raises raises again next frame, forever — the error is reported each time, which is what Godot does for GDScript, and no progress is ever made. Options: report it once and stop calling that method, disable the instance, disable the script, or leave it and rely on the author reading the log. | R-DIAG-3 | Phase 6, with the rest of R-DIAG-3. Opened by Phase 3's fix: before it, the first raise silenced everything and the question could not arise, which is not the same as it having an answer. Whatever is chosen has to be per instance rather than per process, so it wants R-ASYNC-4 first. **Phase 5 changes its shape twice.** A raise stops only the raising call and the instance gets a fresh scope at its next call, so "stops script code for the rest of the frame" stops being true and the every-frame raise costs that instance's suspended work each time rather than the project's. And Phase 5 adds a **second** runaway of the same shape, deliberately: `spawn` is the taught way to start a task, so a `spawn` in a `_Process` makes sixty tasks a second on one instance and nothing bounds them. Whatever answers this has to answer both, and per-instance scopes are what make either countable. |
-| **OQ-14** ✅ (measured, open) | Does per-keystroke analysis stay usable once the mirror carries the 1413 virtuals, the 489 signal accessors and the per-class constant modules Phase 4 adds? It was 1190 ms before, from 158 ms curated. **Measured through Phase 4 stage 6: 1273 ms median** (min 1265, max 1364, n=10) with 1283 virtuals, 489 signal accessors, 352 constants and 114 statics emitted, a 4364 KB mirror and a 1395 ms generation. Against 1190 ms before the phase, the whole of Phase 4's mirror growth cost about **83 ms** — far less than the question feared, and no threshold is attached by decision. | R-TOOL-2, and the urgency of Phase 7's cooked route | Record it at Phase 4 stage 5 with `tools/build_bench.py`, **with no threshold attached** — feature parity first, performance goals later, by decision. It changes no design: the decision to mirror everything is made (`phase-2-design.md` §3), and the fix if the number turns out to matter is the cooked digest OQ-10 already owns. |
+| **OQ-14** ✅ (measured, open) | Does per-keystroke analysis stay usable once the mirror carries the 1413 virtuals, the 489 signal accessors and the per-class constant modules Phase 4 adds? It was 1190 ms before, from 158 ms curated. **Measured through Phase 4 stage 6: 1273 ms median** (min 1265, max 1364, n=10) with 1283 virtuals, 489 signal accessors, 352 constants and 114 statics emitted, a 4364 KB mirror and a 1395 ms generation. Against 1190 ms before the phase, the whole of Phase 4's mirror growth cost about **83 ms** — far less than the question feared, and no threshold is attached by decision. **It is 721 ms now**, and the answer to "does it stay usable" turned out to have two halves the question did not separate. The *latency* halved because every analysis after the first successful build reads the mirror as an External package **from its digest** rather than from 4.4 MB of source — a digest drops each definition's file and line and `_bIsAccessorOfSomeClassVar`, both of which a side table recorded at that first build restores, so hover, goto-definition and override completion are unaffected. The *stall* was never the analysis: ~22 entry points began with a `join`, so the editor's own thread paid 1.7 s for a read that costs 0.1 ms once one has landed, and no editor-thread call waits now. What is left is a ~190 ms parse of the mirror's own digest, which is 96% of the parse input and needs two engine-side changes to reuse — `CSourceDataSnippet` implements neither validity virtual, and `bCloneValidSnippetVsts` can only be set by bypassing `FSolarisIde::BuildAll`, whose tail empties a verse-path injection that otherwise grows by a registry of the whole mirror per analysis. R-PERF-2 has the table. | R-TOOL-2, and the urgency of Phase 7's cooked route | Record it at Phase 4 stage 5 with `tools/build_bench.py`, **with no threshold attached** — feature parity first, performance goals later, by decision. It changes no design: the decision to mirror everything is made (`phase-2-design.md` §3), and the fix if the number turns out to matter is the cooked digest OQ-10 already owns. |
 | **OQ-15** ✅ | What should the bridge say about Verse's effect semantics? A function with no effect specifier carries a default set wider than `<transacts>` — it includes `no_rollback` — so an explicit specifier *narrows*, and a **failure context** (an `if (X := F[])`, an option unwrap, a cast) refuses a `no_rollback` callee because failure has to unwind. One failable helper therefore pulls `<transacts>` onto everything it calls, which is what `dodge-the-creeps.md` wall 8 hit. (Wall 8 first recorded the cause as the host's AutoRTFM transaction; that was wrong, and Phase 4's probes corrected it.) | R-AUD-1, R-AUD-3, and the manual | **Closed by Phase 4.5: it says three things, and R-AUD-1 and R-AUD-3 carry them.** (1) Godot's **const and answering** methods are `<reads>`, so a read-only helper stops infecting its callers — 6728 in Godot plus 127 Godot forgot to mark, 3996 in the mirror. The test is const *and* answering: Godot's `const` means "does not mutate the C++ object", and the 38 const-and-void methods are `OS.set_environment` and 37 others that plainly do something. (2) A failure undoes every deferred Godot write at any depth, which is measured rather than assumed; what it does not undo is a method that mutates *and* answers, and those are enumerated in the generated `docs/nonatomic-methods.md` — **1073**, not the 1354 this row once estimated, which counted statics, methods the mirror does not emit, and 54 whose Godot source proves they do not mutate. (3) The trap was answered with an appended diagnostic and a template that warned about it, and **both were removed after the by-hand session**: the appended sentence never checked *which* effect had been refused, so a `suspends` refusal took the `transacts` branch and gave advice that was the opposite of correct (`by-hand-findings.md` B7). The compiler's own text stands, and what the trap still costs is recorded in `dodge-the-creeps.md` wall 8 rather than papered over. The property surface needed nothing: a `<reads>` getter is refused by the accessor protocol (S-1), and a property *read* from `<reads>` code is accepted anyway, because the read site is not checked against the getter's effect. See `phase-4.5-design.md` §11. |
 | **OQ-16** | What anchors a Verse callback that is not a bound method? Godot answers this twice: a `self`-capturing lambda reports the captured object and dies with it, while a plain lambda is anchored to the script resource, overrides `is_valid` to ignore ObjectDB, and is Godot's own documented leak (the `GDScriptLambdaCallables` TODO, GH-102327). | R-SIG-3, R-INT-4, and library-level handlers | Phase 4a accepts only a bound method — the half of Godot's design that does not leak — and refuses an unbound function with a diagnostic. Answering means choosing an owner: a runtime-owned anchor with an explicit `Cancel`, or an explicit-owner spelling (`SubscribeAs(Owner, F)`) that keeps lifetime visible. **Phase 5 closes it for the case it creates and leaves the rest**: an awaiting continuation is owned by its task, which is owned by its instance's scope, so freeing the node cancels the task and drops the connection with no new spelling — one mechanism serving this and R-ASYNC-5 together. An unbound callback *outside* a task stays refused, exactly as Phase 4a decided, so the original question is narrowed rather than answered. |
 | **OQ-17** | Does any of the C# interop work? R-SIG-6, R-INT-1, R-INT-2 and R-INT-5 name C# as a MUST, and **no test in this repository has ever run C#** — every fixture is GDScript, and exercising C# needs a .NET Godot build that `tools/run_tests.py` does not have. | R-SIG-6, R-INT-1, R-INT-2, R-INT-5 | Get a .NET Godot into the harness and run the existing interop cases from C# before 1.0. Until then those four statuses describe GDScript only, and say so. Phase 4 enlarges the claim rather than testing it, which is why this is recorded now. |

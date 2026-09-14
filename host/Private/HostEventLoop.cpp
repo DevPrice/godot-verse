@@ -77,6 +77,11 @@ AUTORTFM_DISABLE void GodotVerse::ResetEventLoop()
 /// Not budgeted. The budget governs the job queue below, where a job is arbitrary queued work; a
 /// sleep that is due is due, and holding one over is a frame of drift an author cannot see. See
 /// vh_tick.
+///
+/// That survives the pump stopping for a whole background analysis, which it does in the editor,
+/// because a deadline is stamped in EnqueueSleep rather than accrued: a gap of any length leaves at
+/// most one due deadline per sleeping task, so the burst is bounded by GSleepers.Num() and not by
+/// the gap. Drained rather than spread, by decision -- spec R-ASYNC-6.
 AUTORTFM_DISABLE static void WakeSleepers()
 {
     if (GSleepers.IsEmpty())

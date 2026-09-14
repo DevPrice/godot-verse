@@ -1,17 +1,19 @@
 # What the by-hand session found
 
-**Status:** 2026-09-13 · the record of the first — and, as it turned out, only — windowed pass over
-what was `docs/by-hand-checklist.md`, and of the work that closed what it found. **The checklist is
+**Status:** 2026-09-14 · the record of the windowed passes over
+what was `docs/by-hand-checklist.md`, and of the work that closed what they found. **The checklist is
 deleted**: all twenty-two of its entries were watched happen, and what is worth keeping is what they
 found rather than the list. §"What is still open" at the bottom carries the two things that
 outlived it. **Every entry below is fixed**, except the two that are not defects: B11 is a
 measurement, and B8 is fixed for the half a headless run can reach and re-checkable by hand for the
 other. `tools/run_tests.py` is 2/2 with **316** integration cases, up from 311.
 
-Three kinds of entry are below. **B1–B9** are what the session saw go wrong, each traced to the code
+Four kinds of entry are below. **B1–B9** are what the session saw go wrong, each traced to the code
 that causes it rather than left as a symptom. **B10–B11** are what the session learned about the
 checklist itself: one entry did not need to be on it, and one belongs there permanently. **B12** is a
-Verse fact found while writing B10's test, which the test had got wrong.
+Verse fact found while writing B10's test, which the test had got wrong. **B13** is from a later
+session, after the editor-performance commits, and is the one entry here that is about latency
+rather than behaviour.
 
 Three of these were checked with the two tools this repository already has for the purpose rather
 than by reasoning about them — `tests/verse_probe` for B2 and B3, a scratch Godot project driven
@@ -334,6 +336,34 @@ occurrence was the fixture written three minutes earlier.
 
 ---
 
+## B13. The hang is gone; the override list arrives ~1.4 s after the bare names · **fixed**
+
+Seen in a later windowed session, after the first three editor-performance commits. Two halves, and
+only one of them was still a defect.
+
+**The hang is gone.** B1's fix made override completion work; what this session saw is that the
+editor no longer stops while it is being typed at. That is `dcd517e` and `40d72f4` — every read
+keyed by a class name answers from the last analysis' snapshot rather than joining the analysis
+thread, and completion stopped running an analysis of its own and stopped waiting for one.
+
+**What was left is a gap, not a stall.** At a member-declaration position the first answer carried
+the class's own members, the class names and the keywords; the inherited methods spelled as whole
+`<override>` declarations — the thing an author is actually reaching for inside a class body —
+only appeared when the completion-shaped analysis landed behind it, about 1.4 s later on the first
+`.verse` of a session and ~0.7 s after, and again after every method added, because each is a new
+buffer. Nothing was wrong with the list; it was late.
+
+`1469dc1` closes it by putting the candidates in the snapshot: each analysis records, per user
+class, the inherited members a subclass could still declare with `<override>`, described by the same
+`CollectClassAndSupers` + `DescribeCompletion` that answers scope completion, with the class itself
+as the access scope — so an item from `vh_class_override_candidates` formats identically to one from
+the refined answer and the full list replaces the partial one without anything moving. 0.8 ms per
+class and 0.2% of the analysis it rides on. **To re-check it by hand:** open a script, type a bare
+identifier on its own line inside the class body, and the `_Ready`/`_Process` declarations must be
+in the *first* popup rather than appearing in it a second later.
+
+---
+
 ## What shipped
 
 Every entry is closed. In the order they were done, which is the order the entry above them argued
@@ -350,6 +380,7 @@ for:
 | **B8** | `VerseScript` tracks its owners; `_reload` re-attaches, carrying exported values across. |
 | **B10** | `tests/integration/scripts/has_point_probe.verse` and two cases, both answers exercised. |
 | **B12** | `CLAUDE.md`, beside the dropped-continuation-line constraint. |
+| **B13** | `vh_class_override_candidates` (ABI 7.1) hands the snapshot's per-class override candidates over without waiting; the language folds them into the first answer through the same `completes_as_override` the refined path uses. |
 
 ---
 

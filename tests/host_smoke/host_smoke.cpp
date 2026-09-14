@@ -2285,7 +2285,7 @@ int main(int argc, char** argv)
 		{
 			CheckProjectPollFn(&Finished);
 			TickFn(0.004, nullptr);
-			Sleep(1); // a frame, roughly; the analysis takes ~100ms of them
+			Sleep(1); // a frame, roughly; the analysis takes ~750 ms of them
 		}
 		AsyncOk = Step("the analysis finished while the frame loop kept ticking", Finished != 0) && AsyncOk;
 		AsyncOk = Step("ticking throughout did not block execution", CheckBusyFn() == 0) && AsyncOk;

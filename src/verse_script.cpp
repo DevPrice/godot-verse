@@ -145,7 +145,7 @@ Error VerseScript::compile() {
 	language->ensure_project_built();
 
 	// Reached on save and on reload, where the answer has to be about the text being saved. When
-	// the host is not already holding it, that costs a whole-project analysis -- ~100ms, which
+	// the host is not already holding it, that costs a whole-project analysis -- ~750 ms, which
 	// blocking here would spend with the editor frozen on every Ctrl+S. Queue it instead and keep
 	// the previous answer until poll_check publishes this one.
 	if (language->analysis_is_current(path, source_code)) {

@@ -742,7 +742,11 @@ Recorded so the omissions are visible rather than forgotten:
   Left unresolved deliberately rather than quietly patched.
 - **Benchmarks** (R-PERF-2) and the performance section generally (§13). Deferred by decision;
   R-PERF-1 still requires §13 to be replaced with measurements before 1.0, and no phase currently
-  does that.
+  does that. **One of R-PERF-1's five numbers is no longer outstanding**: editor analysis latency
+  per keystroke was measured and recorded in R-PERF-2 by the editor-performance commits (dcd517e
+  through 1469dc1), which is work no phase owned and which has no design document by decision. The
+  other four — the empty-`Process` comparison against GDScript, property read and write, a
+  marshalled call, and compile time at 10/100/1000 scripts — and every *target* remain.
 - **CI** (R-QUAL-4) — blocked on OQ-1, since a hosted runner cannot be given a licensed UE
   checkout. R-QUAL-3 is the substitute throughout.
 - **The addon install story** (R-DIST-6, R-DIST-7) — blocked on OQ-1 and outside anyone's control

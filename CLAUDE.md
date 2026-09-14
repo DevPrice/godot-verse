@@ -33,7 +33,7 @@ phase and carries its measurements.
 
 **Every one of those entries is now closed, built or answered** — G13 (the math bodies) and G11 (the
 utilities) went with the rest, and the by-hand checks the phase owed have since been run
-(`docs/by-hand-findings.md`), so **the phase owes nothing**. Closing them took the ABI to v5, and Phase 5 took it to **v6**; either way both DLLs must be
+(`docs/by-hand-findings.md`), so **the phase owes nothing**. Closing them took the ABI to v5, Phase 5 took it to v6 and the editor-performance work to **7.1**; either way both DLLs must be
 rebuilt and `run_tests.py --build` is how the test binaries follow.
 
 The four ways a signal declaration could compile and not work (G1–G4) are one validation pass in
@@ -125,8 +125,9 @@ compiler's words alone.
 **Phase 5 is built, and `docs/phase-5-design.md` §14 is the one section of it to read** — written
 after the work, it is where the design turned out to be wrong. §2 was filled in the same way
 *before* the work, from twelve questions put to the Verse compiler through `tests/verse_probe`
-(eight committed fixtures), which is why so little of the rest needed correcting. The ABI is **v6**:
-both DLLs must be rebuilt, and `run_tests.py --build` is how the test binaries follow.
+(eight committed fixtures), which is why so little of the rest needed correcting. Phase 5 took the
+ABI to v6; the editor-performance work below took it to **7.1**, and either way both DLLs must be
+rebuilt and `run_tests.py --build` is how the test binaries follow.
 
 What it settled, all of which is load-bearing:
 
@@ -171,9 +172,9 @@ What it settled, all of which is load-bearing:
 **The by-hand checks have been run, and `docs/by-hand-checklist.md` is deleted** — all twenty-two
 of its entries were watched happen, and what is worth keeping is what they found rather than the
 list. **`docs/by-hand-findings.md` is that**: B1–B9 are the defects, all fixed, B10–B11 are about
-the list itself, B12 is a Verse fact, its "What shipped" table says what each change came to, and
-its "What is still open" section is where the two remaining by-hand checks live. Four are
-load-bearing outside the editor:
+the list itself, B12 is a Verse fact, B13 is a later session's latency finding, its "What shipped"
+table says what each change came to, and its "What is still open" section is where the two remaining
+by-hand checks live. Four are load-bearing outside the editor:
 
 - **B1** — override completion had offered nothing inside a class body since Phase 4 moved the
   virtuals onto the mirrored classes. `method_mapping` carries `is_virtual` now.
@@ -193,6 +194,16 @@ wrote the template — Godot matches a built-in named exactly `"Empty"`, and the
 **One thing stayed broken and is documented rather than repaired**: adding `@tool` to a script that
 did not have it needs the scene reloaded. With `_CanDropData`, that is the whole of what is known
 to be open.
+
+**The editor-performance work has no design document, by decision — the four commits are the
+record.** `dcd517e` (every class-describing read answers from a snapshot instead of joining the
+analysis thread, and the wait is measured), `40d72f4` (completion and signature help stop analysing
+and stop waiting; ABI 7.0), `8bbba32` (the mirror is read from its digest, with a side table for the
+two things a digest drops) and `1469dc1` (`vh_class_override_candidates`; ABI 7.1) each say what
+changed and why, at more length than a summary would. The headline: a whole-project analysis is
+**721 ms** where it was 1273, a generation **1.54 s** where it was 2.2, and **nothing on the
+editor's thread waits for either** — reads that used to cost 1.7 s during an analysis cost 0.0 ms.
+`docs/spec.md` R-PERF-2 has the whole table and the machine it was taken on.
 
 **README predates Phase 1 and is stale on marshalling.** It still describes three hand-written
 value types, a `variant` tuple, `object` as the only `<native>` class, and packed arrays crossing as
@@ -311,8 +322,18 @@ editor prints.
 
 `tests/host_bench`, built by `tools/build_bench.py`, is not part of `run_tests.py`: it reports
 timings rather than pass/fail, because R-PERF-2 asks for a recorded number and a threshold would
-fail on a slower machine. It is what took the numbers in `phase-2-design.md` §3.1, and how to take
-them again. A layer whose prerequisites
+fail on a slower machine. It is what took the numbers in `phase-2-design.md` §3.1 and in
+`spec.md` R-PERF-2, and how to take them again. Its arguments are the host DLL, the engine, **the
+repo root** and an iteration count — the third is not a project path, it is where the bench finds
+`tests/host_smoke`'s fixtures and `dodge-the-creeps/scripts`:
+
+    bin/host_bench.exe <engine>/Engine/Binaries/Win64/verse_host.dll <engine>/Engine . 10
+
+`VH_TRACE_ANALYSIS=1` is the other instrument, and works against anything that loads the host: the
+host prints a per-analysis trace to **stderr** — each package's role (Source or External), the
+digest bytes read, parse and semantic milliseconds, and what the snapshot cost. stderr rather than
+the diagnostic callback because a background analysis runs off the game thread and every ABI
+callback is the game thread's alone. A layer whose prerequisites
 are absent is **skipped and said to be skipped**, never counted as a pass. `UE_ROOT` names the
 Unreal checkout and `GODOT` the Godot binary; both are guessed when unset.
 
@@ -427,6 +448,36 @@ ten element types against four key types is not a list to maintain by hand.
   against generation N keeps generation N's class for life — which is why `VerseScript::_reload`
   *re-attaches* the script to every object holding it, destroying each instance and building
   another, exported values carried across by hand.
+- **No call on the editor's thread may wait for an analysis.** Every read keyed by a class name —
+  `vh_has_class`, the method, signal, static and member lists, abstractness, the export list with
+  its Reject reasons and every export's declared default — answers from the **snapshot** the last
+  analysis left, and 0.0 ms during one is the whole point: ~22 of these used to begin with a
+  `std::thread::join` and cost the main thread 1.7 s apiece. The three that resolve a *position*
+  cannot be snapshotted, because a position resolves against the AST the worker is rebuilding:
+  `vh_lookup_symbol`, `vh_complete_symbol` and `vh_signature_at` answer `VH_ERR_STATE` while one
+  runs, and the consumer's recourse is to queue that buffer and ask again. **Only the entry points
+  that *execute* Verse still wait**, because Solaris blocks the VM for the length of any build. If
+  you add an entry point, it belongs in one of those three groups and never in a fourth.
+- **A consumer that begins an analysis must poll it to completion.** Nothing else reaps one: until
+  `vh_check_project_poll` says finished, the next `vh_check_project_begin` is refused and `vh_tick`
+  stays a no-op. The bench relied on a later wait to do the reaping and refused forever once the
+  waits were gone.
+- **The mirror is read from its digest after the first successful build**, which is half the
+  per-keystroke cost, and a digest drops exactly two things: every definition's **file and line**
+  (a digest is one synthetic snippet at a path no file is ever written to) and
+  `CFunction::_bIsAccessorOfSomeClassVar` (DigestGenerator re-emits a class var without the
+  `<getter>`/`<setter>` attributes the analyzer reads it off). A side table recorded at the first
+  build's trailing analysis — the last program that reads the mirror's own files — restores both,
+  keyed by qualified name plus the function type's code, because `GodotMath.native.verse` declares
+  eight two-parameter `operator'+'` and a verse path alone is ambiguous. **Anything new that reads a
+  mirror definition's location or accessor flag must go through that table**, `GetScopeName()`
+  included: from a digest a top-level definition's Owner and its path are *both* the digest path,
+  so an `Owner == DeclaredIn` test keeps passing while both are wrong.
+- **The "user package" test is `InternalUser`, and the mirror passes it.** `SetupVerse(...,
+  InternalUser)` in `VerseHost.Build.cs` sets it on `/Godot.org/Godot` and the attribute package
+  sets it too, so "walk every InternalUser package" walks all 4.3 MB of the mirror's AST before
+  reaching the two snippets that could hold a cursor — 97 ms per completion. Walk the package at
+  `ScriptVersePath` and nothing else.
 - **Adding `@tool` to an existing script needs the scene reloaded.** Editing a live `@tool` script
   takes effect on save; giving one `@tool` for the first time does not, because the node is holding
   a *placeholder* and the swap to a real instance does not happen. Known, small, and not fixed —

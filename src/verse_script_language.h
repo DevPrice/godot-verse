@@ -199,9 +199,8 @@ public:
 
 	// Queues p_source as p_path's text for analysis and returns. _frame is what hands it to the
 	// host, and a later one is where the result lands and every script awaiting it is told.
-	// Nothing starts on this thread: while an analysis runs, every host call that reads the
-	// semantic program blocks until it finishes, so an analysis begun in the middle of the
-	// editor's work is one the editor waits out.
+	// Nothing starts on this thread: an analysis blocks the VM for its whole length, so one begun
+	// in the middle of the editor's work stops the pump and every `@tool` instance until it lands.
 	void queue_check(const godot::String &p_path, const godot::String &p_source) const;
 
 	// Scripts that read their validity and export list out of the analysis, so a result landing
@@ -275,8 +274,9 @@ private:
 	// The text the host currently holds for each script, keyed by res:// path. A validate whose
 	// buffer already matches it needs no re-analysis: the host's last analysis answered for
 	// exactly these sources. Godot validates on open, on every tab switch, on an idle timer and
-	// on save, while a whole-project semantic analysis costs ~100ms whether anything changed or
-	// not, so without this the editor stalls on each of them.
+	// on save, while a whole-project semantic analysis costs ~750 ms whether anything changed or
+	// not. Nothing on the editor's thread waits for one any more, but it blocks the VM for its
+	// whole length, so without this every tab switch costs a `@tool` script that long not running.
 	mutable godot::Dictionary analyzed_source_by_path;
 
 	// res:// path for each absolute path the host reports diagnostics against.
@@ -284,9 +284,9 @@ private:
 
 	// Warnings for the members a script declared and the host refused -- an `@export` the inspector
 	// cannot draw, a `godot_signal` Godot cannot register -- keyed by res:// path and shaped the
-	// way _validate hands one over. Kept rather than asked for on demand: reading either list waits
-	// out any analysis in flight, which is exactly what _validate must not do, so both are
-	// harvested at the one moment the host is known to be idle.
+	// way _validate hands one over. Harvested when an analysis lands rather than asked for at
+	// _validate: both lists describe the analysis the snapshot came from, so taking them in the
+	// poll is what pairs a warning set with the diagnostics reported out of the same one.
 	mutable godot::Dictionary script_warnings_by_path;
 
 	// The buffer waiting for an analysis, and the one an analysis is running for. Only one runs

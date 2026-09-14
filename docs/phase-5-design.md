@@ -395,7 +395,9 @@ implementation must:
 - **`vh_tick` no-ops while a background analysis is running** (`VerseHost.cpp:272-275`), because
   VerseVM blocks execution for the length of one. So editor-side tasks stall per keystroke and then
   resume in a burst. With D6's real-time `Sleep` that burst can be several seconds' worth at once.
-  Decide whether the pump drains it or spreads it, and say which.
+  Decide whether the pump drains it or spreads it, and say which. **Drained** — §14.4 has the
+  reason, and the "several seconds' worth" this asked about turns out not to be a thing that can
+  happen.
 - **A `@tool` script's task is still a task**, so D10 cancels it at rebuild like any other — which in
   the editor is every build the author triggers.
 
@@ -680,9 +682,24 @@ lookup, and nothing new on the Verse side of the signal path at all.
 
 - **The pump does not spread an editor burst.** §7.1 asked whether a `@tool` script's tasks, stalled
   for the length of a background analysis, should be drained or spread over the frames that follow.
-  They are drained, because `Sleep` is the only thing that queues and a burst of real-time deadlines
-  that have all passed is one that has genuinely passed. If that is ever wrong it will be wrong
-  visibly, in the editor, with a number on it.
+  They are drained, and §7.1's "several seconds' worth at once" is the part of the question that
+  was wrong: `EnqueueSleep` stamps `FPlatformTime::Seconds() + Delay` at the moment `Sleep` is
+  *called*, so a stopped pump accrues nothing. A task sleeping 0.1 s across the ~750 ms gap an
+  analysis costs has exactly one deadline due when the pump comes back, not seven, and the burst is
+  bounded by the number of sleeping tasks — `vh_tick_stats.Sleeping`, a handful — rather than by the
+  length of the gap. It is the same set a single unstalled frame would have woken had all their
+  deadlines fallen together, which is an ordinary frame and not a special case.
+
+  The two halves that could still be unbounded are bounded elsewhere. `WakeSleepers` lifts the due
+  set out of the list before running any of it, so a task that sleeps again re-enters with a
+  deadline measured from now and cannot feed the burst it is in. And whatever the resumes *enqueue*
+  goes to the job queue below, which is budgeted and reports `Overran`.
+
+  Spreading would buy none of that back. It preserves no ordering that draining loses — both wake
+  earliest-deadline-first — so it would only add drift on top of the gap's own drift, and it would
+  starve `loop { Sleep(0.0) }`, the frame-yielding idiom, by holding over exactly the tasks that are
+  furthest behind. If this is ever wrong it will be wrong visibly, in the editor, with
+  `verse/sleeping_tasks` on it.
 - **D16 is inherited rather than implemented.** "Tasks run in the editor only for `@tool` scripts"
   is true because `_Process` is, and because the only way to start a task is from a method Godot
   calls — a non-tool script's methods are not called in the editor, so nothing spawns. There is no

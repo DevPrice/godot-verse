@@ -571,8 +571,9 @@ VH_ATTR VH_API int32_t vh_compile_project(const vh_source_file* Files, int32_t C
  * unchanged and this is safe to call repeatedly -- unlike vh_compile_project, which publishes a
  * generation every time. Returns VH_OK when the project still analyses clean.
  *
- * Blocks for the length of a whole-project analysis (~100ms on a three-file project), which is a
- * visible stall if called from an editor's UI thread. Prefer the _begin/_poll pair below. */
+ * Blocks for the length of a whole-project analysis -- ~750 ms once the mirror is read from its
+ * digest, ~1.4-1.8 s before the project's first successful build, where it is still source. Either
+ * is a visible stall if called from an editor's UI thread. Prefer the _begin/_poll pair below. */
 VH_ATTR VH_API int32_t vh_check_project(const char* PathUtf8, const char* SourceUtf8);
 
 /* The same analysis, started on a background thread so the caller's UI thread keeps running.
@@ -591,8 +592,13 @@ VH_ATTR VH_API int32_t vh_check_project(const char* PathUtf8, const char* Source
  *
  * The entry points that merely *describe* a class do not block. They answer from a snapshot taken
  * at the end of each analysis and made current by vh_check_project_poll, so what they describe is
- * the last analysis that landed rather than the one in flight. vh_lookup_symbol is the exception
- * that can do neither, and answers VH_ERR_STATE while one runs. */
+ * the last analysis that landed rather than the one in flight. The three that resolve a *position*
+ * are the exception -- vh_lookup_symbol, vh_complete_symbol and vh_signature_at answer against the
+ * AST the worker is rebuilding, which no snapshot describes, so they answer VH_ERR_STATE while one
+ * runs rather than waiting for it.
+ *
+ * An analysis begun here must be polled to completion: nothing else reaps one, and until it is
+ * reaped the next vh_check_project_begin is refused and vh_tick stays a no-op. */
 VH_ATTR VH_API int32_t vh_check_project_begin(const char* PathUtf8, const char* SourceUtf8);
 
 /* Reaps a vh_check_project_begin. Call from the vh_init thread, e.g. once per frame.
