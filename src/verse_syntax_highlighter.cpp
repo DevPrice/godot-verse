@@ -6,11 +6,14 @@
 #include <godot_cpp/classes/editor_interface.hpp>
 #include <godot_cpp/classes/editor_settings.hpp>
 #include <godot_cpp/classes/text_edit.hpp>
+#include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/variant/callable.hpp>
 #include <godot_cpp/variant/char_string.hpp>
 #include <godot_cpp/variant/packed_string_array.hpp>
 #include <godot_cpp/variant/variant.hpp>
 
 #include <iterator>
+#include <utility>
 
 using namespace godot;
 
@@ -65,14 +68,20 @@ int token_text_end(const std::vector<VerseToken> &p_tokens, size_t p_index, int 
 	return p_index + 1 < p_tokens.size() ? p_tokens[p_index + 1].column : p_utf8_length;
 }
 
-// A field declaration is the one thing a class body has at one tab of indent besides a method:
+// A field declaration is the one thing a class body has at one level of indent besides a method:
 // `var Speed<public>:...` or the bare `Greeting<public>:...` non-var form. A method's name lexes
 // as Function/FunctionDefinition instead of Identifier (it is followed by a parameter list), which
 // is what tells the two apart here without re-parsing the type after the name.
-void collect_member_name(const CharString &p_utf8, const std::vector<VerseToken> &p_tokens, std::unordered_set<std::string> &r_names) {
+//
+// "One level of indent" is not one byte: Verse permits either tabs or spaces (only mixing them is
+// forbidden), and most of this repo's own .verse files are space-indented. What one level means is
+// therefore a whole-file question -- answered by rebuild_name_caches, which has seen every line --
+// so this only reports a candidate's own indent column via r_indent_column and leaves the accept/
+// reject decision to the caller.
+bool collect_member_name(const CharString &p_utf8, const std::vector<VerseToken> &p_tokens, std::string &r_name, int &r_indent_column) {
 	const std::vector<size_t> sig = significant_tokens(p_tokens);
-	if (sig.empty() || p_tokens[sig[0]].column != 1) {
-		return;
+	if (sig.empty()) {
+		return false;
 	}
 	size_t pos = 0;
 	if (p_tokens[sig[0]].kind == VerseTokenKind::Keyword &&
@@ -80,13 +89,16 @@ void collect_member_name(const CharString &p_utf8, const std::vector<VerseToken>
 		pos = 1;
 	}
 	if (pos >= sig.size() || p_tokens[sig[pos]].kind != VerseTokenKind::Identifier) {
-		return;
+		return false;
 	}
 	const size_t name_index = sig[pos];
 	const std::string name = word_at(p_utf8, p_tokens[name_index].column, token_text_end(p_tokens, name_index, p_utf8.length()));
-	if (!name.empty()) {
-		r_names.insert(name);
+	if (name.empty()) {
+		return false;
 	}
+	r_name = name;
+	r_indent_column = p_tokens[sig[0]].column;
+	return true;
 }
 
 // The same `name := enum{...}` shape verse_scan_class_decl looks for in `name := class(...):`,
@@ -115,6 +127,7 @@ void collect_enum_name(const CharString &p_utf8, const std::vector<VerseToken> &
 } // namespace
 
 void VerseSyntaxHighlighter::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("_on_lines_edited_from", "from_line", "to_line"), &VerseSyntaxHighlighter::_on_lines_edited_from);
 }
 
 String VerseSyntaxHighlighter::_get_name() const {
@@ -174,16 +187,22 @@ Dictionary VerseSyntaxHighlighter::_get_line_syntax_highlighting(int32_t p_line)
 		return result;
 	}
 
+	if (names_dirty) {
+		rebuild_name_caches();
+	}
+
 	if (line_start_state.empty()) {
 		line_start_state.push_back(VerseLexState());
 	}
 
 	// A gap this large would mean re-lexing potentially tens of thousands of lines just to
 	// answer one query for a freshly scrolled-to line; restarting from p_line with the default
-	// state trades a possibly wrong colouring of that region for not stalling the editor.
+	// state trades a possibly wrong colouring of that region for not stalling the editor. Grown
+	// with resize rather than reassigned, so the states already computed for lines before the gap
+	// -- known good -- survive; only the newly reachable indices up to p_line get the default.
 	constexpr int MAX_CATCH_UP_LINES = 2000;
 	if (p_line - ((int32_t)line_start_state.size() - 1) > MAX_CATCH_UP_LINES) {
-		line_start_state.assign((size_t)p_line + 1, VerseLexState());
+		line_start_state.resize((size_t)p_line + 1, VerseLexState());
 	}
 
 	while ((int32_t)line_start_state.size() <= p_line) {
@@ -248,8 +267,46 @@ void VerseSyntaxHighlighter::_clear_highlighting_cache() {
 	line_start_state.assign(1, VerseLexState());
 }
 
+// TextEdit's own "lines_edited_from" signal, not one of ours: SyntaxHighlighter::set_text_edit
+// (scene/resources/syntax_highlighter.cpp) already connects it to erase highlighting_cache and
+// then calls update_cache(), which is where this connection is (re)established. Comparing by
+// instance id, not by pointer, is what makes a reassignment idempotent -- the same TextEdit
+// triggers _update_cache on every save and every theme change, and reconnecting each time would
+// stack one dead connection per call.
+void VerseSyntaxHighlighter::_on_lines_edited_from(int32_t p_from_line, int32_t p_to_line) {
+	// Godot's own handler (SyntaxHighlighter::_lines_edited_from) takes the same MIN(...) - 1:
+	// the line the edit starts on inherits its start state from the line above, so that line's
+	// state -- not the edited line's -- is the last one still known good.
+	int32_t edit_start = p_from_line < p_to_line ? p_from_line : p_to_line;
+	edit_start -= 1;
+	if (edit_start < 0) {
+		edit_start = 0;
+	}
+	if ((int32_t)line_start_state.size() > edit_start + 1) {
+		line_start_state.resize((size_t)edit_start + 1);
+	}
+	names_dirty = true;
+}
+
 void VerseSyntaxHighlighter::_update_cache() {
 	line_start_state.assign(1, VerseLexState());
+
+	if (TextEdit *text_edit = get_text_edit()) {
+		const uint64_t text_edit_id = text_edit->get_instance_id();
+		if (text_edit_id != connected_text_edit_id) {
+			if (connected_text_edit_id != 0) {
+				// The old TextEdit may already be gone -- ObjectDB::get_instance is how Godot's own
+				// set_text_edit checks the same thing before touching text_edit_instance_id.
+				if (Object *old_object = ObjectDB::get_instance(connected_text_edit_id)) {
+					if (TextEdit *old_text_edit = Object::cast_to<TextEdit>(old_object)) {
+						old_text_edit->disconnect("lines_edited_from", Callable(this, "_on_lines_edited_from"));
+					}
+				}
+			}
+			text_edit->connect("lines_edited_from", Callable(this, "_on_lines_edited_from"));
+			connected_text_edit_id = text_edit_id;
+		}
+	}
 
 	const Ref<EditorSettings> settings = EditorInterface::get_singleton()->get_editor_settings();
 	comment_color = read_color(settings, "text_editor/theme/highlighting/comment_color", comment_color);
@@ -267,18 +324,56 @@ void VerseSyntaxHighlighter::_update_cache() {
 	text_color = read_color(settings, "text_editor/theme/highlighting/text_color", text_color);
 	type_color = read_color(settings, "text_editor/theme/highlighting/base_type_color", type_color);
 
+	rebuild_name_caches();
+}
+
+void VerseSyntaxHighlighter::rebuild_name_caches() const {
 	member_names.clear();
 	type_names.clear();
 	if (TextEdit *text_edit = get_text_edit()) {
 		VerseLexState state;
 		std::vector<VerseToken> tokens;
 		const int line_count = text_edit->get_line_count();
+
+		// Verse forbids mixing tabs and spaces within one file, so every code line's leading run
+		// is one indent character repeated; the smallest nonzero width among lines that open with
+		// code rather than a comment is what "one level under the class header" means here -- one
+		// tab in Godot's own script editor, or however many spaces this project's own files use
+		// (tests/integration/scripts, tests/host_smoke, tests/coverage_diagnostic, host/Verse/*).
+		// A comment-first line is excluded because a comment can be indented to whatever column a
+		// human found readable, which says nothing about the file's structural indent step.
+		int indent_unit = 0;
+		std::vector<std::pair<int, std::string>> member_candidates;
+
 		for (int i = 0; i < line_count; i++) {
 			tokens.clear();
 			const CharString utf8 = text_edit->get_line(i).utf8();
 			verse_lex_line(utf8.get_data(), state, tokens);
-			collect_member_name(utf8, tokens, member_names);
+
+			const std::vector<size_t> sig = significant_tokens(tokens);
+			if (!sig.empty() && tokens[sig[0]].column > 0 && tokens[sig[0]].kind != VerseTokenKind::Comment) {
+				if (indent_unit == 0 || tokens[sig[0]].column < indent_unit) {
+					indent_unit = tokens[sig[0]].column;
+				}
+			}
+
+			std::string member_name;
+			int member_column = 0;
+			if (collect_member_name(utf8, tokens, member_name, member_column)) {
+				member_candidates.emplace_back(member_column, std::move(member_name));
+			}
 			collect_enum_name(utf8, tokens, type_names);
+		}
+
+		// indent_unit == 0 means the file has no indented code at all (a library file of only
+		// top-level definitions), in which case nothing is a class member -- never fall back to
+		// accepting column 0, which is where a top-level `name := ...` sits.
+		if (indent_unit > 0) {
+			for (const std::pair<int, std::string> &candidate : member_candidates) {
+				if (candidate.first == indent_unit) {
+					member_names.insert(candidate.second);
+				}
+			}
 		}
 	}
 
@@ -296,4 +391,5 @@ void VerseSyntaxHighlighter::_update_cache() {
 			type_names.insert(names[i].utf8().get_data());
 		}
 	}
+	names_dirty = false;
 }
