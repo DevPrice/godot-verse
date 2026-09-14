@@ -1288,24 +1288,26 @@ void VerseRuntime::on_diagnostic(void *p_ctx, const vh_diagnostic *p_diagnostic)
 	const String message = String::utf8(p_diagnostic->MessageUtf8, p_diagnostic->MessageLen);
 
 	VerseRuntime *runtime = static_cast<VerseRuntime *>(p_ctx);
-	if (runtime != nullptr && runtime->diagnostic_sink != nullptr && p_diagnostic->Severity == VH_SEVERITY_ERROR) {
-		Dictionary error;
-		error["line"] = p_diagnostic->Line;
-		error["column"] = p_diagnostic->Column;
-		error["message"] = message;
-		error["path"] = file;
+	if (runtime != nullptr && runtime->diagnostic_sink != nullptr) {
+		Dictionary entry;
+		entry["severity"] = p_diagnostic->Severity;
+		entry["line"] = p_diagnostic->Line;
+		entry["column"] = p_diagnostic->Column;
+		entry["message"] = message;
+		entry["path"] = file;
 		// The compiler's own code for the diagnostic, which is how a caller recognises one
 		// without matching on English. 3506 is ErrSemantic_UnknownIdentifier, and R-TOOL-12 is
 		// built on noticing it.
-		error["code"] = p_diagnostic->ReferenceCode;
+		entry["code"] = p_diagnostic->ReferenceCode;
 
 		Dictionary &sink = *runtime->diagnostic_sink;
 		TypedArray<Dictionary> for_file = sink.has(file) ? TypedArray<Dictionary>(sink[file]) : TypedArray<Dictionary>();
-		for_file.push_back(error);
+		for_file.push_back(entry);
 		sink[file] = for_file;
 
-		// Whoever installed the sink decides what reaches the log. Analysis re-runs on every
-		// keystroke and every save, so logging from here repeats one error indefinitely.
+		// Whoever installed the sink decides what reaches the log, and every severity is theirs
+		// to decide: analysis re-runs on every keystroke and every save, and a warning the
+		// compiler repeats each time is the same noise as an error it repeats.
 		return;
 	}
 

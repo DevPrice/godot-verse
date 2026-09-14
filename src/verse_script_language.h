@@ -191,6 +191,10 @@ public:
 
 	godot::TypedArray<godot::Dictionary> diagnostics_for(const godot::String &p_path) const;
 
+	// The compiler's warnings against one script, in the same shape as its errors; _validate
+	// reshapes them into the warnings array, which Godot reads with different keys.
+	godot::TypedArray<godot::Dictionary> compiler_warnings_for(const godot::String &p_path) const;
+
 	// Whether the host's last analysis answered for exactly p_source as p_path's text, so
 	// diagnostics_for describes that text and not the one before it. True as well when there is
 	// no host to ask: the build's diagnostics are then the only answer there will ever be, and a
@@ -270,6 +274,9 @@ private:
 	// a generation of its own.
 	godot::Error project_build_status = godot::OK;
 	mutable godot::Dictionary diagnostics_by_path;
+	// The compiler's warnings, keyed and shaped the same way and recorded by the same analysis.
+	// Kept apart from the errors because diagnostics_for is what decides a script's validity.
+	mutable godot::Dictionary compiler_warnings_by_path;
 
 	// The text the host currently holds for each script, keyed by res:// path. A validate whose
 	// buffer already matches it needs no re-analysis: the host's last analysis answered for
@@ -348,13 +355,11 @@ private:
 	std::vector<VerseScript *> live_scripts;
 	std::unordered_map<int64_t, VerseScriptInstance *> live_instances;
 
-	// Formatted diagnostics last written to the output log, keyed by globalized path.
-	mutable godot::Dictionary logged_diagnostics;
-
-	// Replaces diagnostics_by_path with one analysis' results. Analysis covers the whole project,
-	// so a file absent from the result has no errors and must lose any it had. Returns whether
-	// anything the editor draws actually moved.
-	bool record_diagnostics(const godot::Dictionary &p_errors_by_globalized) const;
+	// Replaces diagnostics_by_path and compiler_warnings_by_path with one analysis' results,
+	// sorted by severity. Analysis covers the whole project, so a file absent from the result
+	// has no errors and must lose any it had. Returns whether anything the editor draws
+	// actually moved.
+	bool record_diagnostics(const godot::Dictionary &p_diagnostics_by_globalized) const;
 
 	// Adds "Godot has Node.foo, but ..." to any diagnostic that named a member the mirror
 	// deliberately does not carry. R-SCN-2: the reason has to reach the author, not a report file.
@@ -388,7 +393,9 @@ private:
 	// not put straight back and a stale diagnostic does not insert a second copy.
 	mutable std::unordered_map<std::string, bool> offered_imports;
 
-	void log_new_diagnostics(const godot::String &p_globalized_path, const godot::TypedArray<godot::Dictionary> &p_errors) const;
+	// Writes one file's build diagnostics to the output log by severity. The build is the only
+	// caller: an analysis's results reach the author through the script editor alone.
+	void log_build_diagnostics(const godot::TypedArray<godot::Dictionary> &p_diagnostics) const;
 
 	// R-TOOL-12. Looks through a file's fresh diagnostics for an unknown identifier that one of
 	// the project's modules declares, and queues the `using` that would fix it -- goimports'

@@ -30,3 +30,9 @@ probe := class(node2d):
 
     # R-SCN-5's other half: the enum is the type now, so the integer that used to work does not.
     ProcessModeFromInt()<transacts>:void = set ProcessMode = 2
+
+    # A compiler *warning* (glitch 2000), not an error: crosses the ABI as one and is logged by
+    # the build as one. Kept last so the line the runner pins it to moves only with an addition.
+    Unreachable()<transacts>:int =
+        return 1
+        2

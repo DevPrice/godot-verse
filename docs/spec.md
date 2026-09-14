@@ -1476,7 +1476,12 @@ in §14.1 with what the run also confirmed about root being implicit from a subm
 ## 11. Diagnostics, debugging and profiling
 
 - **R-DIAG-1 (MUST)** A compile error appears in Godot's script editor at the right line with the
-  compiler's message. Status: **done**.
+  compiler's message. Status: **done**. The output log is the *build's* alone: an analysis — per
+  keystroke, on save — writes nothing to it at any severity, because the log cannot retract a line
+  and the script editor replaces its own list on the next validate; a build writes every diagnostic
+  it filed, every time, since it is something the author asked for. The compiler's warnings
+  (glitches 2000–2007) reach the script editor's warning list through `_validate` the same way its
+  errors reach the error list.
 - **R-DIAG-2 (MUST)** A *runtime* error — a failed unrecoverable expression, a stale object access,
   a division by zero — reports the Verse file, line, and a Verse call stack into Godot's output and
   errors panel, and is clickable to the source. Status: **done**. `vh_init` takes an

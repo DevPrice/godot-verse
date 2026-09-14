@@ -277,6 +277,11 @@ COVERAGE_EXPLANATIONS = [
     "It is declared in a module this file does not import; add "
     "`using { /user@localhost/solo }` at the top of the file.",
     "It is declared in more than one module, so which was meant is yours to say",
+    # A compiler warning, pinned to its severity: the build logs a warning as a warning, where an
+    # analysis logs nothing at any severity. Every diagnostic is filed through one sink now, so a
+    # warning that leaked around it would print as this line without the prefix.
+    "WARNING: res://scripts/probe.verse:38:9: Unreachable code - previous expression is guaranteed "
+    "to exit early.",
 ]
 
 

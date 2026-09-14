@@ -102,8 +102,9 @@ public:
 	// definitions go into, "" being the project's root module. Godot answers that question because
 	// it is a question about res://, which the host knows nothing about.
 	//
-	// While r_diagnostics_by_path is non-null every diagnostic the host reports is filed under
-	// its own source path as { line, column, message, path } instead of reaching the output log.
+	// While r_diagnostics_by_path is non-null every diagnostic the host reports, whatever its
+	// severity, is filed under its own source path as { severity, line, column, message, path,
+	// code } and nothing reaches the output log.
 	godot::Error compile_project(const godot::PackedStringArray &p_globalized_paths, const godot::PackedStringArray &p_module_paths, godot::Dictionary *r_diagnostics_by_path);
 
 	// The two halves of a Godot Callable that calls a Verse function (R-INT-4, R-SIG-3). Called

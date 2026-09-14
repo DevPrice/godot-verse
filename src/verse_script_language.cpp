@@ -451,15 +451,15 @@ Object *VerseScriptLanguage::_create_script() const {
 // character allowed, which is what an "expected something here" error wants to say. Only the
 // editor's copy is moved: the log keeps the compiler's own numbers, which describe the file it
 // actually read.
-static TypedArray<Dictionary> errors_fitted_to(const TypedArray<Dictionary> &p_errors, const String &p_source) {
+static TypedArray<Dictionary> diagnostics_fitted_to(const TypedArray<Dictionary> &p_diagnostics, const String &p_source) {
 	const PackedStringArray lines = verse_newline_normalized(p_source).split("\n");
 	if (lines.is_empty()) {
-		return p_errors;
+		return p_diagnostics;
 	}
 
 	TypedArray<Dictionary> fitted;
-	for (int64_t i = 0; i < p_errors.size(); i++) {
-		Dictionary error = Dictionary(p_errors[i]).duplicate();
+	for (int64_t i = 0; i < p_diagnostics.size(); i++) {
+		Dictionary error = Dictionary(p_diagnostics[i]).duplicate();
 
 		// A diagnostic with no location at all reports 0, which belongs on the first line rather
 		// than one above it.
@@ -477,8 +477,28 @@ static TypedArray<Dictionary> errors_fitted_to(const TypedArray<Dictionary> &p_e
 	return fitted;
 }
 
+// A compiler warning in the shape _validate's warnings array wants, which is not its errors'
+// shape: Godot reads start_line, end_line and a string_code where an error has line and column.
+// The string code is the compiler's own glitch number, which is what its Glitch.h is indexed by
+// and how this repo refers to one; the ABI carries no name for it.
+static Dictionary editor_warning_from(const Dictionary &p_diagnostic) {
+	const int64_t line = p_diagnostic["line"];
+	const int64_t column = p_diagnostic["column"];
+	const int64_t code = p_diagnostic["code"];
+
+	Dictionary warning;
+	warning["start_line"] = line;
+	warning["end_line"] = line;
+	warning["leftmost_column"] = column;
+	warning["rightmost_column"] = column;
+	warning["code"] = code;
+	warning["string_code"] = String("GLITCH_") + String::num_int64(code);
+	warning["message"] = p_diagnostic["message"];
+	return warning;
+}
+
 Dictionary VerseScriptLanguage::_validate(const String &p_script, const String &p_path, bool p_validate_functions, bool p_validate_errors, bool p_validate_warnings, bool p_validate_safe_lines) const {
-	const TypedArray<Dictionary> errors = errors_fitted_to(check_buffer(p_path, p_script), p_script);
+	const TypedArray<Dictionary> errors = diagnostics_fitted_to(check_buffer(p_path, p_script), p_script);
 
 	Dictionary result;
 	result["valid"] = errors.is_empty();
@@ -488,9 +508,18 @@ Dictionary VerseScriptLanguage::_validate(const String &p_script, const String &
 	// fewer property than the author asked for -- and it would be invisible without this: Godot
 	// draws what the property list holds, and a member that never reaches it leaves nothing behind
 	// to explain its absence. The list is whatever the last analysis of this file left behind,
-	// which is the same staleness every diagnostic here has.
-	if (p_validate_warnings && script_warnings_by_path.has(p_path)) {
-		result["warnings"] = script_warnings_by_path[p_path];
+	// which is the same staleness every diagnostic here has. The compiler's own warnings --
+	// unreachable code, an empty block -- follow, fitted to the buffer the way the errors are.
+	if (p_validate_warnings) {
+		TypedArray<Dictionary> warnings;
+		if (script_warnings_by_path.has(p_path)) {
+			warnings.append_array(TypedArray<Dictionary>(script_warnings_by_path[p_path]));
+		}
+		const TypedArray<Dictionary> compiler_warnings = diagnostics_fitted_to(compiler_warnings_for(p_path), p_script);
+		for (int64_t i = 0; i < compiler_warnings.size(); i++) {
+			warnings.push_back(editor_warning_from(compiler_warnings[i]));
+		}
+		result["warnings"] = warnings;
 	}
 
 	// ScriptTextEditor::get_functions() reads this key alone to build the script editor's method
@@ -2155,7 +2184,7 @@ Error VerseScriptLanguage::build_project() {
 
 	const Array reported = errors_by_globalized.keys();
 	for (int64_t i = 0; i < reported.size(); i++) {
-		log_new_diagnostics(reported[i], TypedArray<Dictionary>(errors_by_globalized[reported[i]]));
+		log_build_diagnostics(TypedArray<Dictionary>(errors_by_globalized[reported[i]]));
 	}
 
 	project_built = true;
@@ -2195,22 +2224,19 @@ TypedArray<Dictionary> VerseScriptLanguage::check_buffer(const String &p_path, c
 	// _frame picks the result up, and Godot re-validates often enough that the fresh answer lands
 	// on its own.
 	//
-	// That answer is deliberately not logged. It describes whatever the file said before this
-	// edit, which may be a mistake the author has already undone, and the output log has no way
-	// to retract a line. The script editor's own error list is free to show it because Godot
-	// replaces it wholesale on the next validate; the log is not.
+	// Nothing an analysis finds is written to the output log, neither here nor when the result
+	// lands. It describes what the file said a moment ago, which may be a mistake the author has
+	// already undone, and the log has no way to retract a line; the script editor's own error list
+	// can show it because Godot replaces that wholesale on the next validate. The log is the
+	// build's (build_project): a build is something the author asked for, and a failed one
+	// refuses the run.
 	if (!analysis_is_current(p_path, p_source)) {
 		queue_check(p_path, p_source);
-		return diagnostics_for(p_path);
 	}
-
-	const String globalized = ProjectSettings::get_singleton()->globalize_path(p_path);
 
 	// Analysis covers the whole project, so a broken file elsewhere reports against its own path;
 	// the editor asked about this one.
-	const TypedArray<Dictionary> errors = diagnostics_for(p_path);
-	log_new_diagnostics(globalized, errors);
-	return errors;
+	return diagnostics_for(p_path);
 }
 
 bool VerseScriptLanguage::analysis_is_current(const String &p_path, const String &p_source) const {
@@ -2328,11 +2354,6 @@ void VerseScriptLanguage::poll_check() const {
 					&& completion_refresh_source == in_flight_source;
 		} else {
 			editor_refresh_pending = record_diagnostics(errors_by_globalized) || editor_refresh_pending;
-
-			// This is the authoritative moment for the file that was analysed, and the only one a
-			// validate is not guaranteed to follow, so the log is written from here.
-			const String globalized = ProjectSettings::get_singleton()->globalize_path(in_flight_path);
-			log_new_diagnostics(globalized, diagnostics_for(in_flight_path));
 			refresh_script_warnings(in_flight_path);
 
 			// Every script whose compile() declined to wait for this. Told one at a time rather
@@ -2862,49 +2883,68 @@ void VerseScriptLanguage::insert_pending_import() const {
 #endif
 }
 
-bool VerseScriptLanguage::record_diagnostics(const Dictionary &p_errors_by_globalized) const {
-	const PackedStringArray previous = flattened_diagnostics(diagnostics_by_path);
+bool VerseScriptLanguage::record_diagnostics(const Dictionary &p_diagnostics_by_globalized) const {
+	PackedStringArray previous = flattened_diagnostics(diagnostics_by_path);
+	previous.append_array(flattened_diagnostics(compiler_warnings_by_path));
 
 	diagnostics_by_path.clear();
+	compiler_warnings_by_path.clear();
 
-	const Array reported = p_errors_by_globalized.keys();
+	const Array reported = p_diagnostics_by_globalized.keys();
 	for (int64_t i = 0; i < reported.size(); i++) {
 		const String globalized = reported[i];
 		const String path = path_by_globalized.has(globalized) ? String(path_by_globalized[globalized]) : globalized;
-		const TypedArray<Dictionary> errors = p_errors_by_globalized[globalized];
+		const TypedArray<Dictionary> filed = p_diagnostics_by_globalized[globalized];
 
 		// The host reports the absolute path it was handed, but the script editor compares an
 		// error's path against the *script's* -- `res://scripts/mover.verse` -- and moves every
 		// error that does not match into its depended-errors list. Those are listed but never
 		// marked: the line highlight and the error bar both read the list this filters.
-		for (int64_t e = 0; e < errors.size(); e++) {
-			Dictionary error = errors[e];
-			error["path"] = path;
+		//
+		// The same dictionaries, not copies: the build logs what it filed after this has run,
+		// which is how the log carries the path and the explanations added below.
+		TypedArray<Dictionary> errors;
+		TypedArray<Dictionary> warnings;
+		for (int64_t e = 0; e < filed.size(); e++) {
+			Dictionary entry = filed[e];
+			entry["path"] = path;
+			const int64_t severity = entry["severity"];
+			if (severity == VH_SEVERITY_ERROR) {
+				errors.push_back(entry);
+			} else if (severity == VH_SEVERITY_WARNING) {
+				warnings.push_back(entry);
+			}
+			// An info has no row in the editor; the build's log is where it is read.
 		}
 		explain_skipped_members(errors);
 		note_missing_imports(path, errors);
 		diagnostics_by_path[path] = errors;
+		if (!warnings.is_empty()) {
+			compiler_warnings_by_path[path] = warnings;
+		}
 	}
 
-	return flattened_diagnostics(diagnostics_by_path) != previous;
+	PackedStringArray current = flattened_diagnostics(diagnostics_by_path);
+	current.append_array(flattened_diagnostics(compiler_warnings_by_path));
+	return current != previous;
 }
 
-// Godot re-validates the edited buffer on an idle timer and again on save, so one compile error
-// reaches this several times over. The script editor shows every result itself; the output log
-// only wants a file's diagnostics when they change.
-void VerseScriptLanguage::log_new_diagnostics(const String &p_globalized_path, const TypedArray<Dictionary> &p_errors) const {
-	PackedStringArray formatted;
-	for (int64_t i = 0; i < p_errors.size(); i++) {
-		formatted.push_back(formatted_diagnostic(p_errors[i]));
-	}
-
-	if (logged_diagnostics.has(p_globalized_path) && PackedStringArray(logged_diagnostics[p_globalized_path]) == formatted) {
-		return;
-	}
-	logged_diagnostics[p_globalized_path] = formatted;
-
-	for (int64_t i = 0; i < formatted.size(); i++) {
-		UtilityFunctions::push_error(formatted[i]);
+// The build is the one thing that writes a diagnostic to the output log, and it writes every one
+// it filed, every time: a build is something the author asked for, and the answer to a second
+// build with the same errors is those errors again. An analysis writes nothing -- the script
+// editor shows what it found and replaces it on the next validate, which the log cannot do.
+void VerseScriptLanguage::log_build_diagnostics(const TypedArray<Dictionary> &p_diagnostics) const {
+	for (int64_t i = 0; i < p_diagnostics.size(); i++) {
+		const Dictionary entry = p_diagnostics[i];
+		const String formatted = formatted_diagnostic(entry);
+		const int64_t severity = entry["severity"];
+		if (severity == VH_SEVERITY_ERROR) {
+			UtilityFunctions::push_error(formatted);
+		} else if (severity == VH_SEVERITY_WARNING) {
+			UtilityFunctions::push_warning(formatted);
+		} else {
+			UtilityFunctions::print(formatted);
+		}
 	}
 }
 
@@ -2913,4 +2953,11 @@ TypedArray<Dictionary> VerseScriptLanguage::diagnostics_for(const String &p_path
 		return TypedArray<Dictionary>();
 	}
 	return TypedArray<Dictionary>(diagnostics_by_path[p_path]);
+}
+
+TypedArray<Dictionary> VerseScriptLanguage::compiler_warnings_for(const String &p_path) const {
+	if (!compiler_warnings_by_path.has(p_path)) {
+		return TypedArray<Dictionary>();
+	}
+	return TypedArray<Dictionary>(compiler_warnings_by_path[p_path]);
 }
