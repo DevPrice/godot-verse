@@ -105,7 +105,9 @@ resolves conflicts:
   `if (X := F[])` that declines, a `<decides>` method that declines, an option unwrap, a failed cast
   — **undoes every Godot write the failing computation had made**, at any depth. A write is deferred
   to the transaction's commit, so a failure discards it and the scene never sees it; a **raise** does
-  the same and additionally stops every script in the project until the next frame (R-ASYNC-4). Three
+  the same and additionally cancels the raising *instance's* suspended tasks (R-ASYNC-4). It used to
+  stop every script in the project until the next frame; Phase 5's per-instance task scopes replaced
+  that, so the rest of the project never notices. Three
   things that follow are sharp edges rather than defects, and an author has to know them. **A read
   does not see a write the same computation just made**: the write has not happened yet, so
   `set Position = X` followed by reading `Position` answers the old value. **A method that both
@@ -631,7 +633,37 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   name answers "Nonexistent function", measured. The editor's own C++ is its only caller. That check
   and the Node panel connection are on the by-hand checklist, with the exact text to expect.
 - **R-SIG-5 (MUST)** A script `await`s a signal from a concurrent context: the Verse spelling of
-  GDScript's `await button.pressed`. Depends on §7.
+  GDScript's `await button.pressed`. Status: **done** (Phase 5). `godot_signal(t)` holds a
+  `/Verse.org/Verse` `event(t)` and `Await<public>()<suspends>:t` forwards to it, which is ordinary
+  parametric Verse with **no native on the Verse side and no parametric ABI**. One method covers a
+  script's own declared signals and all 489 mirrored engine-signal accessors alike, because every
+  Godot signal is already a mirrored accessor of that type:
+
+      MessageTimer.Timeout().Await()
+      GetTree[].CreateTimer[1.0].Timeout().Await()
+      Hit.Await()                                    # the script's own
+
+  **The connection lives exactly as long as the wait.** `Await` connects to Godot with
+  `CONNECT_ONE_SHOT`, holds the signal object for the duration, and takes the connection away in a
+  `defer` — which runs whether the task resumed or was cancelled, by `race`, by the node being
+  freed, or by a rebuild. `tests/integration` asserts the connection count is back to zero on both
+  sides of a race.
+
+  **How an emission reaches the event** is the host's half and is smaller than the design budgeted
+  for: `verse::event` is a UObject with a public C++ `Signal`, so the host reads the event off the
+  signal object and signals it directly, and Epic's own code does the FIFO resumption and the
+  per-task content scope. The payload is rebuilt from the emission's Godot arguments against the
+  same shape the signal descriptor was generated from, so a tuple payload comes back a tuple and a
+  struct payload comes back a struct.
+
+  **One line of R-SIG-1's surface changed with it**, and it is a correction rather than an addition:
+  `godot_signal.Subscribe`'s callback is now specifier-less, matching Verse's own
+  `subscribable<native>(t:type) := interface: Subscribe<public>(Callback(:t):void)<transacts>`.
+  Phase 4's `Callback(:t)<transacts>:void` was chosen on the reading that Verse's own fixes its
+  callback at a domain that could not touch Godot; the lattice is the other way up — the default
+  effect set *contains* transacts — and the narrower spelling was what stopped a handler from
+  starting a task, which is what a game-over sequence is. Measured: an existing `<transacts>`
+  handler still satisfies the widened parameter, so no script broke.
 - **R-SIG-6 (MUST)** Signals declared in Verse are connectable and emittable from GDScript and C#
   with no knowledge that Verse is involved (§8). Status: **done for GDScript** (Phase 4 stage 4).
   `Object::connect` validates against `has_script_signal` and `emit_signalp` refuses a name neither
@@ -1022,51 +1054,131 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
 
 ## 7. Concurrency
 
-Verse's structured concurrency is the headline reason to prefer it to GDScript, and it is the part
-least served today: one `verse::FContentScope` for the whole project, no way to await a Godot
-event, and `vh_tick` pumped once per frame with a budget.
+Verse's structured concurrency is the headline reason to prefer it to GDScript, and **Phase 5 is
+where it arrived**: a task scope per script instance, `Await()` on any Godot signal, a real-time
+`Sleep`, and a frame budget whose effect is readable in Godot's own profiler.
 
 - **R-ASYNC-1 (MUST)** `spawn`, `race`, `sync`, `branch`, `rush`, `loop` and `<suspends>` functions
-  work in script code, with tasks resuming across frames.
+  work in script code, with tasks resuming across frames. Status: **done** (Phase 5), and most of it
+  was already true before the phase started — `phase-5-design.md` §2 put it to the compiler and the
+  runtime through `tests/verse_probe` and measured the whole cycle working with no host change: a
+  call spawned a task, the task suspended, the call returned `VH_OK`, `vh_tick` ran, and the task
+  resumed *synchronously* inside the next call that signalled it, with the member it wrote readable
+  afterwards (F9). What the phase added is the scope work R-ASYNC-4 asks for and the tests that keep
+  it passing: `tests/host_smoke`'s tick-loop layer drives a spawn, a suspend, a tick and a resume
+  with no Godot in the way, and `tests/integration` does the same with signals behind it.
+
+  **Two constraints the same measurement found**, and they are language facts rather than bridge
+  choices. An *awaiting* body cannot be narrowed — `awaitable.Await` carries `no_rollback` exactly as
+  `signalable.Signal` does — so it carries no effect specifier, and `spawn` reaching it must come
+  from a caller that carries none either. A mirrored virtual override is such a caller, and since
+  Phase 5 so is a signal handler; a `<reads>` body is not, and may not `spawn` at all. And a virtual
+  **cannot** be written `<suspends>`: the specifier makes it a different function, so the compiler
+  answers *"must have a distinct domain"* and *"could not find a parent function to override"*
+  rather than an effect error. Both are said in the `.verse` template rather than diagnosed, because
+  the compiler already refuses them at the author's own line.
 - **R-ASYNC-2 (MUST)** A script awaits a Godot signal, a timer, or a frame from a concurrent
-  context. Without this, Verse's concurrency cannot observe the engine and is decorative.
+  context. Without this, Verse's concurrency cannot observe the engine and is decorative. Status:
+  **done** (Phase 5) — `godot_signal(t).Await()<suspends>:t`, which covers a script's own declared
+  signals and all 489 mirrored engine-signal accessors alike because every one of them answers a
+  `godot_signal(t)`. `GetTree[].ProcessFrame()`, `GetTree[].PhysicsFrame()` and
+  `GetTree[].CreateTimer[1.0].Timeout()` are accessors like any other, so a frame and a timer need
+  nothing of their own. `Sleep(Seconds)` is the eventless case and is real time, not engine time —
+  see R-ASYNC-3's table.
 - **R-ASYNC-3 (MUST)** Verse tasks run on Godot's main thread and are pumped deterministically
   relative to `_process` and `_physics_process`; the ordering is documented, not emergent.
-  Status: **part** — `_frame` pumps `vh_tick` with a budget; the ordering guarantee is not stated.
-- **R-ASYNC-4 (MUST)** Task scopes are per-script-instance, not per-project. A runtime error in
-  one script's task must not terminate tasks belonging to another script. Today it does. Status:
-  **none**, and now with the mechanism named rather than described: the host makes one
-  `verse::FContentScope` in `EnterContentScope` and it serves the whole project, so the `Terminate()`
-  a raise performs cancels every script's suspended work and `ResetTerminationState()` replaces the
-  task group wholesale. R-DIAG-3's fix makes that survivable — execution resumes at the next tick
-  instead of never — but it cannot narrow it: what was in flight is gone whoever owned it.
-  Two things to settle here rather than there. **Where the scope boundary goes** — per instance is
-  the obvious answer and costs scope lifetime following instance lifetime, GC referencing, and a
-  task group per node. And **when execution resumes**: R-DIAG-3 stops script code for the rest of
-  the frame on the grounds that the other nodes should not run against a half-rolled-back scene,
-  which is the conservative reading — a raise aborts only *its own* call's transaction, so a
-  sibling's writes were already committed. Once scopes are per instance the question is different
-  again, because only one node's code would have stopped.
+  Status: **done** (Phase 5). The rule is that **there is almost nothing to invent**: a task
+  awaiting a Godot signal resumes *inside* that emission, in connection order, which is exactly
+  where GDScript resumes a coroutine (`GDScriptFunctionState::_signal_callback` is an ordinary
+  `Callable` that calls `resume()`). So the ordering is Godot's own:
 
-  **This requirement is also the one blocking `phase-4-gaps.md` G9**, and reading Epic's answer is
-  what established that. `FVerseEventCallbackList` drops a callback when its scope **terminates**
-  (`VerseEvent.cpp:169-188`), never consults `ResetTerminationState()`, and UEFN never revives a
-  terminated scope at all — `ContentScopeRepository` hands out a *fresh* one
-  (`VerseEngine/.../ContentScopeRepository.h:80-92`). That rule is only coherent because their scopes
-  are per entity, per world, per evaluation. Attaching it to one revived process-wide scope would
-  drop every subscription in the project on any raise, which is worse than what this requirement
-  already describes. So the callback→scope link is a *consequence* of R-ASYNC-4 rather than a step
-  toward it, and there is nothing useful to build before the boundary moves.
-- **R-ASYNC-5 (MUST)** A node's tasks are cancelled when the node leaves the tree or is freed, and
-  a scene change cancels the tasks of everything it unloads. Structured concurrency whose
-  structure does not match the scene tree's lifetime is a leak with extra steps.
+  | you await | you resume | where |
+  | --- | --- | --- |
+  | `GetTree[].PhysicsFrame()` | before that step's `_physics_process` pass | `scene_tree.cpp:649`, then `_process(true)` at `:655` |
+  | `GetTree[].ProcessFrame()` | before that frame's `_process` pass | `scene_tree.cpp:713`, then `_process(false)` at `:719` |
+  | a `SceneTreeTimer` timeout | after `_process`, in `process_timers` | `scene_tree.cpp:729` (idle) / `:660` (physics) |
+  | any node's signal | inside that `emit_signal`, in connection order | — |
+  | `Sleep` | at the pump: `ScriptLanguage::frame()`, end of `Main::iteration` | `main.cpp:5107` |
+  | a task on a `queue_free`d node | keeps running until the delete queue flushes | R-ASYNC-5 |
+
+  The one row this bridge owns is the fifth, because nothing in Godot fires it. Within it,
+  resumptions are **FIFO** — the earliest deadline first — and the queue behind it is a `TQueue`,
+  which has no other order to offer. `ScriptLanguage` has no per-physics-step hook at all: `frame()`
+  is the only one (`script_language.h:332`) and `Main::iteration` calls it last, which is why the
+  pump is where it is and why resumption had to be event-driven rather than pumped.
+- **R-ASYNC-4 (MUST)** Task scopes are per-script-instance, not per-project. A runtime error in
+  one script's task must not terminate tasks belonging to another script. Status: **done**
+  (Phase 5). Each `vh_instance` owns a `verse::FContentScope`, made at `vh_instantiate` and
+  terminated at `vh_release_instance`, and every entry that runs that object's code pushes its
+  guard — which is what decides the task group a `spawn` inside it joins
+  (`FRunningContext::EnterVM_Internal` reads the active scope). A raise terminates the **active**
+  scope, so it costs that node's suspended work and nothing else's, and `tests/host_smoke` asserts
+  exactly that: two instances with a task each, one raises, the other's task still resumes.
+
+  **Two things the design expected to have to build were already there**, and both are recorded in
+  `phase-5-design.md` §14.1. `FContentScopeGuard` is a *stack*, so scopes nest and the guard is a
+  thread-local pointer swap — measured at 1.09 µs per `vh_instance_call` against 1.03 µs without,
+  which is inside the noise. And every live scope is batched behind one `FGCObject` registration by
+  Epic's own `FContentScopeGCReferencer`, so N scopes are not N registrations. What a scope does
+  cost is **~2.6 KB per scripted node**, measured the same way.
+
+  **`phase-4-gaps.md` G9 closes with it, and not as tidiness.** Epic's rule — a callback is dropped
+  when the scope it was subscribed in *terminates*, and a terminated scope is replaced rather than
+  revived (`VerseEvent.cpp:169-188`, `ContentScopeRepository.h:80-92`) — was incoherent against one
+  process-wide revived scope and is the obvious rule against per-instance ones. The bridge now
+  follows it: `ReviveContentScope` is gone, a terminated instance scope is replaced at that
+  instance's next call, and `TVerseCall::Return` declines for a scope that was terminated, which is
+  what drops a sleeping task on a freed node with no work from us.
+
+  What made it load-bearing is that **terminating a task group does not unwind the tasks in it**: a
+  `defer` covers a task cancelled by `race` or by completing, and covers nothing when the node dies.
+  So an `Await` registers its Godot connection on `FContentScope::OnContentScopeCleanup` — Epic's
+  own hook, the one `event::SubscribeInternal` uses — and without it freeing an awaiting node left a
+  live connection behind. The case that found it is in `tests/integration`.
+- **R-ASYNC-5 (MUST)** A node's tasks are cancelled when the node is **freed**, and a scene change
+  cancels the tasks of everything it unloads. Structured concurrency whose structure does not match
+  the scene tree's lifetime is a leak with extra steps. Status: **done** (Phase 5) —
+  `vh_release_instance` terminates the instance's scope, which terminates its task group. A scene
+  change falls out of it: the nodes are freed.
+
+  **Amended by Phase 5 (`phase-5-design.md` D9, D22), and the original wording said "leaves the tree
+  or is freed".** Leaving the tree is struck because Godot's own answer is the free and not the
+  removal: `GDScriptInstance::~GDScriptInstance` clears `pending_func_states`
+  (`gdscript.cpp:2069-2073`), and nothing consults the tree. Pooling and re-parenting remove and
+  re-add nodes constantly — Dodge the Creeps' mobs are that shape — and a GDScript coroutine
+  survives it; what actually stalls such a coroutine is the *source* it awaits going quiet, which
+  is the author's own choice of what to await. Cancelling on removal would make Verse's concurrency
+  behave differently from every other scripting language in the engine for no requirement's sake.
+
+  **The trigger is the real free, not `queue_free`.** Godot flushes the delete queue on the next
+  idle (`_flush_delete_queue`), so a queued node's task keeps running until then and may emit or
+  write in that window. That is the window Godot leaves open for its own scripts, and it is a
+  documented row in R-ASYNC-3's table rather than a defect.
+
+  **A rebuild cancels everything**, which needs no mechanism of its own: a new generation replaces
+  every instance, and an instance released takes its scope with it.
 - **R-ASYNC-6 (MUST)** The per-frame Verse time budget is configurable and observable, and
-  overrunning it is reported rather than silently dropping frames.
+  overrunning it is reported rather than silently dropping frames. Status: **done** (Phase 5).
+  `verse/runtime/frame_budget_ms` was already configurable and defaults to 4.0; what the phase
+  added is the observable half. `vh_tick` now fills a `vh_tick_stats` — jobs run, jobs still
+  queued, tasks sleeping, seconds spent, and whether the budget stopped it with work left — and the
+  GDExtension turns that into three Godot **custom monitors** (`verse/queued_jobs`,
+  `verse/pump_ms`, `verse/sleeping_tasks`), which draw in the profiler's Monitors tab beside the
+  engine's own. An overrun is reported as a warning, rate-limited to one per 600 frames, because a
+  project that is over budget is over budget every frame and one line each would bury everything
+  else.
+
+  **What the budget governs is the queue, and only the queue.** A task awaiting a Godot signal
+  resumes inside the emission and is not budgeted — exactly as a GDScript coroutine's resume is not
+  — and a `Sleep` whose deadline has passed is woken before the queue and is not budgeted either. A
+  budget that could hold a due deadline over would be a frame of drift an author cannot see.
 - **R-ASYNC-7 (deferred)** Interaction with Godot's own threading — `WorkerThreadPool`, threaded
   resource loading, calling into Verse from a non-main thread, and running Verse tasks off the
   main thread — is **out of scope for this document and requires its own scoping**. It is not
   dismissed: the design of R-ASYNC-3 and R-ASYNC-4 must not foreclose it, and §14 **OQ-6** holds
-  the questions that scoping has to answer.
+  the questions that scoping has to answer. Phase 5 forecloses nothing and removes one of the
+  worries: there is no scheduler whose thread affinity would have to be redesigned, because
+  resumption is event-driven. What runs on the Verse thread is the pump, where `_frame` does.
 
 - **R-ASYNC-8 (MUST)** A call that enters the host from any thread other than the one that called
   `vh_init` is **refused with a diagnosable error, and nothing runs**. Status: **done** (Phase 4
@@ -1135,6 +1247,15 @@ indistinguishable from a GDScript one.
   methods with arguments and return values, read and write its properties, and connect its
   signals — with no Verse-specific API and no knowledge that Verse is involved. Depends on
   R-NODE-6 and §5.3.
+
+  **The other direction — a Verse script reaching a signal *GDScript* declared — closed in Phase 5.**
+  A signal the mirror has no accessor for, because a script or `add_user_signal` made it, is named
+  with `MakeSignal(Owner, "name")` and answers a `signal_ref` with `Await()` and `Subscribe()` on
+  it. The payload is Godot's own Array of the emission's arguments rather than a typed `t`, and it
+  has to be: there is no declaration to read a type off, so the author unpacks it with the `Get*`
+  accessors a `godot_array` already has and a wrong expectation fails at the unpack. `Subscribe`
+  there is also the **rollback-safe** way to receive a foreign signal — it compensates on abort the
+  way `godot_signal.Subscribe` does, which `Object.Connect` cannot (see `nonatomic-methods.md`).
 - **R-INT-2 (MUST)** A Verse script calls methods on, and reads properties of, an object whose
   script is GDScript or C#, dynamically. Status: **done** (Phase 4 stage 2 closed the argument
   array). The dispatch itself arrived as a side effect rather than as work of its own: `Object.callv(StringName, Array) -> Variant` is an ordinary concrete method, and Godot's
@@ -1336,34 +1457,38 @@ in §14.1 with what the run also confirmed about root being implicit from a subm
   mirror reports the mirror's line as the site, with the script's own frame further out — which is
   where it was raised, and the stack is what carries the author's line.
 - **R-DIAG-3 (MUST)** A script error never takes down the editor or the game process. Status:
-  **part** — a raise no longer ends Verse for the process, which it used to.
+  **part**, and narrowed twice.
   A raised runtime error calls `Terminate()` on the active `FContentScope` (`VVMRuntimeError.cpp`),
   and `FRunningContext::EnterVM_Internal` then returns *without invoking its functor* for every
-  later entry into the VM (`VVMEnterVMInline.h`). Since the host makes one scope that lives for the
-  process, the first raise anywhere stopped everything: a call reported `VH_OK` having not run, and
-  a read reported "no such member". **The fix is `ResetTerminationState()`**, which is the API
-  Epic's own `VerseNativeTests` use after deliberately raising — terminating on error is UEFN's
-  policy, where a misbehaving creator's island stops, and it is not this bridge's.
-  Three rules now hold, each pinned in `host_smoke`:
-  1. **A raise stops script code for the rest of the frame, and no longer.** `vh_tick` is the
-     boundary that resumes it, so a consumer that ticks recovers and one that never ticks does not.
-     A read still answers during that window, because a question about a member runs no script code
-     and an inspector must not be told the member is gone.
-  2. **Nothing pretends to have run.** Every entry point that would run script code answers
-     `VH_ERR_HALTED` while halted, and `vh_instance_call` also checks, after the fact, that the VM
-     actually ran the body — it was that confusion between "did not run" and "ran and found
-     nothing" that kept this invisible for a phase.
-  3. **The author is told what it cost** — when there is something to tell. One line when execution
-     resumes, *only* if suspended work was cancelled with the error, because that is the part the
-     error message cannot carry. Whether any was is sampled in the runtime-error handler, which is
-     the last moment the task group can be asked. Deliberately silent otherwise: a script that
-     raises every frame already reports its error every frame, and a second line saying nothing was
-     lost would double that for no information.
-  What is **missing**, and why this is *part* rather than done: the cancellation is still
-  project-wide (**R-ASYNC-4**); an error in a `@tool` script runs against the scene the author is
-  editing; and nothing bounds a script that raises every frame (**OQ-13**), which this fix opened —
-  before it, the first raise silenced everything and the question could not arise. §14.1 has the
-  measurement.
+  later entry into that scope (`VVMEnterVMInline.h`). Until Phase 3 the host made one scope that
+  lived for the process, so the first raise anywhere stopped everything: a call reported `VH_OK`
+  having not run, and a read reported "no such member". Phase 3 made that survivable with
+  `ResetTerminationState()` at the next `vh_tick`, which is the API Epic's own `VerseNativeTests`
+  use after deliberately raising.
+
+  **Phase 5 replaced that rule rather than refining it**, because R-ASYNC-4 changed what the scope
+  *is*. Three rules hold now, each pinned in `host_smoke`:
+  1. **A raise stops the call that raised, and nothing else.** The scope it terminates is the
+     raising instance's, so another instance's next call runs in the same frame — and so does the
+     raising instance's, because a terminated scope is **replaced** at that instance's next call
+     rather than un-terminated at the next frame boundary. That is Epic's own policy:
+     `ContentScopeRepository` hands out a fresh scope and never resets a terminated one.
+     `GHaltedUntilTick`, `GTasksLostToError` and `ReviveContentScope` are all gone with the old
+     rule, and `vh_tick` is no longer where anything recovers.
+  2. **Nothing pretends to have run.** `vh_instance_call` checks, after the fact, that the VM
+     actually ran the body and answers `VH_ERR_HALTED` when it did not — it was that confusion
+     between "did not run" and "ran and found nothing" that kept this invisible for a phase.
+     `VH_ERR_HALTED` is now a narrow answer rather than what every other call got for a frame.
+  3. **The author is told what it cost** — when there is something to tell. One line when a raise
+     cancels suspended work, saying that it was *this instance's* and that others are unaffected,
+     because that is the part the error message cannot carry. Sampled in the runtime-error handler,
+     which is the last moment the task group can be asked, and silent otherwise: a script that
+     raises every frame already reports its error every frame.
+
+  What is **missing**, and why this is still *part*: an error in a `@tool` script runs against the
+  scene the author is editing; and nothing bounds a script that raises every frame (**OQ-13**),
+  which Phase 3's fix opened and Phase 5 reshaped — the every-frame raise now costs that instance's
+  suspended work each time rather than the project's. §14.1 has the measurement.
 - **R-DIAG-4 (MUST)** Godot's own debugger works on Verse: breakpoints in the script editor, step
   in/over/out, the call stack, local and member inspection, and expression evaluation at a
   breakpoint.
@@ -1469,17 +1594,17 @@ A closed question keeps its row so that the reason it is closed is not lost.
 | **OQ-3** | Is a monolithic UE Program target viable on Android and iOS — binary size, and whether VerseVM requires JIT that iOS forbids? | R-PLAT-2 | Attempt a UBT Program build for Android first; it is the permissive platform and answers the size question. Narrowed by OQ-2: the question is only about the **runtime** host, which carries no compiler. |
 | **OQ-4** | Is Verse on wasm reachable at all? UBT has no wasm Program target; Godot's web export is constrained wasm. | R-PLAT-3 | Narrowed by OQ-2 — a web target would need only the runtime host, not Solaris — but still blocked on UBT having no wasm Program target at all. |
 | **OQ-5** ✅ | How does a project escape the single flat `/user@localhost` scope, so it can have modules, subdirectories and shared library code? | R-LANG-6 | **Closed: submodules within the one user package, built from the project's directory tree.** See §14.1. |
-| **OQ-6** | What is the correct interaction between Verse's task model and Godot's threading — `WorkerThreadPool`, threaded loading, calls into Verse off the main thread? **Half of it is already answered by the engine, against us:** VerseVM's top-level entry asserts `IsInGameThread()` (`VVMEnterVMInline.h`) with the comment "Verse bytecode and AutoRTFM transactions must run on the game thread", so the question is not *whether* Verse can run on a worker thread — it cannot — but what a call from one should *do*. A mutex is not an answer: the assertion is thread identity, not mutual exclusion. | R-ASYNC-7, and now R-ASYNC-8 | Its own scoping document, which must choose between three tiers: **refuse** (R-ASYNC-8, which Phase 4 builds, because it converts corruption into a message); **marshal and block**, whose deadlock is concrete — the game thread is routinely inside Verse calling out into Godot, and anything on that path that waits on the worker hangs both; or **marshal and defer**, which cannot return a value and is Godot's own `call_deferred` bargain. Until it exists, §7 must not adopt a design that assumes single-threaded forever. |
+| **OQ-6** | What is the correct interaction between Verse's task model and Godot's threading — `WorkerThreadPool`, threaded loading, calls into Verse off the main thread? **Half of it is already answered by the engine, against us:** VerseVM's top-level entry asserts `IsInGameThread()` (`VVMEnterVMInline.h`) with the comment "Verse bytecode and AutoRTFM transactions must run on the game thread", so the question is not *whether* Verse can run on a worker thread — it cannot — but what a call from one should *do*. A mutex is not an answer: the assertion is thread identity, not mutual exclusion. | R-ASYNC-7, and now R-ASYNC-8 | Its own scoping document, which must choose between three tiers: **refuse** (R-ASYNC-8, which Phase 4 builds, because it converts corruption into a message); **marshal and block**, whose deadlock is concrete — the game thread is routinely inside Verse calling out into Godot, and anything on that path that waits on the worker hangs both; or **marshal and defer**, which cannot return a value and is Godot's own `call_deferred` bargain. Until it exists, §7 must not adopt a design that assumes single-threaded forever. **Phase 5 forecloses nothing and adds one fact worth carrying in**: resumption is event-driven rather than scheduled — a task resumes synchronously inside the call that signals it, measured — so there is no scheduler whose thread affinity would have to be redesigned, only the pump, which already runs where `_frame` does. |
 | **OQ-7** | Build our own LSP over `verse_host_abi.h`, or get `uLangLSP` into a linkable target? | R-TOOL-10 | Low priority — Godot's editor is primary (§9). |
 | **OQ-8** ✅ | Which hot-reload mechanism: fresh package name per generation, out-of-process compilation, or an engine change? | all of §10, and R-EXP-5 | **Closed: fresh package name per generation**, with `IncrementalizeProjectSource` before each build. See §14.1. |
 | **OQ-9** | Can any DAP client speak `Verse::SocketDebugger`'s framing? | R-DIAG-6 | Only worth answering if R-DIAG-4 (Godot's own debugger) turns out to be blocked. |
 | **OQ-10** | Can an editor-class UBT Program target be built — `bCompileAgainstEditor`, and therefore `bCompileAgainstEngine`? Cooking Verse needs `WITH_EDITOR=1` (§14.1), and nothing else this project builds does. | R-DIST-9, R-DIST-10, R-DIST-11 | Opened by the S-1 answer. Attempt it at the start of Phase 7. The one prior attempt failed on Engine module links, but it was made for a *lean* host, where the weight was the objection; a cooker that runs only at export has no such constraint. Fallback: cook through a real UE editor or commandlet process. |
 | **OQ-11** ✅ | How do free functions and value-type methods cross, given that every mirrored call rides `VhCallValue(Handle, …)` and neither a `@GlobalScope` function nor a `vector2` has a handle? Named by Phase 2 §8 and never recorded here until Phase 4's spikes answered it. | R-SCN-3, and the 16 math types' methods | **Closed: Verse can carry the value types itself.** Type-based extension methods (`(V:vector2).Length<public>()<computes>:float`) and definable operators (`operator'+'(:vector2, :vector2)`) both compile against the mirror's own structs, so the math is ordinary Verse with no handle and no ABI — which is also what Godot's C# does. What genuinely has no handle is Godot's 114 statics and the ~28 utility functions with no `/Verse.org` counterpart, and those get one by-name dispatch callback apiece. See `docs/phase-4-design.md` §1.3 and §7. |
 | **OQ-12** ✅ | Does a generation change the package *name* only, or the *verse path* too? S-2 varied the name; whether `/user@localhost` held across generations was not recorded. Module paths are user-visible text that R-TOOL-12 writes into the author's file, and `ScriptVersePath` is compiled into eight lookup sites in `HostScript.cpp`. | R-LANG-6, R-TOOL-12, and the shape of Phase 3 | **Closed: the name only.** The verse path is pinned at `/user@localhost` across generations and nothing in `HostScript.cpp` learns which generation it is asking about. See §14.1. |
-| **OQ-13** | What bounds a script that raises every frame? A raise now stops script code for the rest of the frame and the next tick resumes it, so a `Process` that raises raises again next frame, forever — the error is reported each time, which is what Godot does for GDScript, and no progress is ever made. Options: report it once and stop calling that method, disable the instance, disable the script, or leave it and rely on the author reading the log. | R-DIAG-3 | Phase 6, with the rest of R-DIAG-3. Opened by Phase 3's fix: before it, the first raise silenced everything and the question could not arise, which is not the same as it having an answer. Whatever is chosen has to be per instance rather than per process, so it wants R-ASYNC-4 first. |
+| **OQ-13** | What bounds a script that raises every frame? A raise now stops script code for the rest of the frame and the next tick resumes it, so a `Process` that raises raises again next frame, forever — the error is reported each time, which is what Godot does for GDScript, and no progress is ever made. Options: report it once and stop calling that method, disable the instance, disable the script, or leave it and rely on the author reading the log. | R-DIAG-3 | Phase 6, with the rest of R-DIAG-3. Opened by Phase 3's fix: before it, the first raise silenced everything and the question could not arise, which is not the same as it having an answer. Whatever is chosen has to be per instance rather than per process, so it wants R-ASYNC-4 first. **Phase 5 changes its shape twice.** A raise stops only the raising call and the instance gets a fresh scope at its next call, so "stops script code for the rest of the frame" stops being true and the every-frame raise costs that instance's suspended work each time rather than the project's. And Phase 5 adds a **second** runaway of the same shape, deliberately: `spawn` is the taught way to start a task, so a `spawn` in a `_Process` makes sixty tasks a second on one instance and nothing bounds them. Whatever answers this has to answer both, and per-instance scopes are what make either countable. |
 | **OQ-14** ✅ (measured, open) | Does per-keystroke analysis stay usable once the mirror carries the 1413 virtuals, the 489 signal accessors and the per-class constant modules Phase 4 adds? It was 1190 ms before, from 158 ms curated. **Measured through Phase 4 stage 6: 1273 ms median** (min 1265, max 1364, n=10) with 1283 virtuals, 489 signal accessors, 352 constants and 114 statics emitted, a 4364 KB mirror and a 1395 ms generation. Against 1190 ms before the phase, the whole of Phase 4's mirror growth cost about **83 ms** — far less than the question feared, and no threshold is attached by decision. | R-TOOL-2, and the urgency of Phase 7's cooked route | Record it at Phase 4 stage 5 with `tools/build_bench.py`, **with no threshold attached** — feature parity first, performance goals later, by decision. It changes no design: the decision to mirror everything is made (`phase-2-design.md` §3), and the fix if the number turns out to matter is the cooked digest OQ-10 already owns. |
 | **OQ-15** ✅ | What should the bridge say about Verse's effect semantics? A function with no effect specifier carries a default set wider than `<transacts>` — it includes `no_rollback` — so an explicit specifier *narrows*, and a **failure context** (an `if (X := F[])`, an option unwrap, a cast) refuses a `no_rollback` callee because failure has to unwind. One failable helper therefore pulls `<transacts>` onto everything it calls, which is what `dodge-the-creeps.md` wall 8 hit. (Wall 8 first recorded the cause as the host's AutoRTFM transaction; that was wrong, and Phase 4's probes corrected it.) | R-AUD-1, R-AUD-3, and the manual | **Closed by Phase 4.5: it says three things, and R-AUD-1 and R-AUD-3 carry them.** (1) Godot's **const and answering** methods are `<reads>`, so a read-only helper stops infecting its callers — 6728 in Godot plus 127 Godot forgot to mark, 3996 in the mirror. The test is const *and* answering: Godot's `const` means "does not mutate the C++ object", and the 38 const-and-void methods are `OS.set_environment` and 37 others that plainly do something. (2) A failure undoes every deferred Godot write at any depth, which is measured rather than assumed; what it does not undo is a method that mutates *and* answers, and those are enumerated in the generated `docs/nonatomic-methods.md` — **1073**, not the 1354 this row once estimated, which counted statics, methods the mirror does not emit, and 54 whose Godot source proves they do not mutate. (3) The trap now says where the fix goes, at the declaration rather than the call, and the `.verse` template says it before it happens. The property surface needed nothing: a `<reads>` getter is refused by the accessor protocol (S-1), and a property *read* from `<reads>` code is accepted anyway, because the read site is not checked against the getter's effect. See `phase-4.5-design.md` §11. |
-| **OQ-16** | What anchors a Verse callback that is not a bound method? Godot answers this twice: a `self`-capturing lambda reports the captured object and dies with it, while a plain lambda is anchored to the script resource, overrides `is_valid` to ignore ObjectDB, and is Godot's own documented leak (the `GDScriptLambdaCallables` TODO, GH-102327). | R-SIG-3, R-INT-4, and library-level handlers | Phase 4a accepts only a bound method — the half of Godot's design that does not leak — and refuses an unbound function with a diagnostic. Answering means choosing an owner: a runtime-owned anchor with an explicit `Cancel`, or an explicit-owner spelling (`SubscribeAs(Owner, F)`) that keeps lifetime visible. Wanted by Phase 5, which will hand Godot more callbacks. |
+| **OQ-16** | What anchors a Verse callback that is not a bound method? Godot answers this twice: a `self`-capturing lambda reports the captured object and dies with it, while a plain lambda is anchored to the script resource, overrides `is_valid` to ignore ObjectDB, and is Godot's own documented leak (the `GDScriptLambdaCallables` TODO, GH-102327). | R-SIG-3, R-INT-4, and library-level handlers | Phase 4a accepts only a bound method — the half of Godot's design that does not leak — and refuses an unbound function with a diagnostic. Answering means choosing an owner: a runtime-owned anchor with an explicit `Cancel`, or an explicit-owner spelling (`SubscribeAs(Owner, F)`) that keeps lifetime visible. **Phase 5 closes it for the case it creates and leaves the rest**: an awaiting continuation is owned by its task, which is owned by its instance's scope, so freeing the node cancels the task and drops the connection with no new spelling — one mechanism serving this and R-ASYNC-5 together. An unbound callback *outside* a task stays refused, exactly as Phase 4a decided, so the original question is narrowed rather than answered. |
 | **OQ-17** | Does any of the C# interop work? R-SIG-6, R-INT-1, R-INT-2 and R-INT-5 name C# as a MUST, and **no test in this repository has ever run C#** — every fixture is GDScript, and exercising C# needs a .NET Godot build that `tools/run_tests.py` does not have. | R-SIG-6, R-INT-1, R-INT-2, R-INT-5 | Get a .NET Godot into the harness and run the existing interop cases from C# before 1.0. Until then those four statuses describe GDScript only, and say so. Phase 4 enlarges the claim rather than testing it, which is why this is recorded now. |
 | **RISK-1** | UE's licensing applies to games shipped with the host, including royalties. This is a permanent property of the current distribution model and may deter adoption regardless of anything built here. | adoption | Disclose prominently (R-DIST-3). No mitigation available. |
 | **RISK-2** | Tracking Godot `master` and UE `main` simultaneously means two moving dependencies with no compatibility window. | R-QUAL-7 | Accepted deliberately while pre-1.0; revisit at the first release. |

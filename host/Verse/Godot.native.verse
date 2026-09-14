@@ -187,6 +187,57 @@ VhSignalCancel<native>(Subscription:int)<transacts>:void
 # grow the table.
 VhSignalBind<native>(Handle:int, Class:string, Accessor:string, Name:string)<transacts>:int
 
+# --- awaiting -----------------------------------------------------------------
+#
+# `godot_signal(t).Await()` is ordinary Verse over `/Verse.org/Verse`'s own `event(t)` (R-SIG-5).
+# These two are the whole of what the host owes it: connect a Godot connection that feeds that
+# event for the duration of one wait, and take it away again.
+#
+# The host reaches the event by peeking the `Ev` field off the signal object, which is why the
+# object rather than its id crosses: `Timer.Timeout()` mints a *fresh* `godot_signal` on every
+# call, and several of them share one binding id, so an id could not say which one is waiting.
+
+# Connects, and answers a token naming the connection. The signal object is held by the host for
+# the life of the token, so a temporary the accessor built survives the wait. 0 for a signal that
+# names nothing or that Godot was never told about -- the wait then never resumes, which is what
+# awaiting a signal nobody emits means anywhere.
+VhSignalAwait<native>(Signal:vh_signal)<transacts>:int
+
+# Disconnects and releases what the token named. Idempotent, and reached from the `defer` of the
+# awaiting body, so a cancelled wait leaves no connection behind.
+VhSignalAwaitEnd<native>(Token:int)<transacts>:void
+
+# The same, for a Godot Signal the mirror has no accessor for -- one a GDScript or C# script
+# declared, or one made with `add_user_signal` (R-INT-1). Ref is the signal reference; Waiter is a
+# `godot_signal(godot_array)` whose event the emission's arguments arrive on as one Godot Array.
+VhSignalRefAwait<native>(Ref:int, Waiter:vh_signal)<transacts>:int
+
+# Connects Callback to a foreign Godot Signal and answers a subscription id, the way
+# VhSignalSubscribe does for a mirrored one -- compensated on abort, which is what
+# `Object.Connect` cannot be. The handler receives the emission's arguments as one Godot Array.
+VhSignalRefSubscribe<native>(Ref:int, Callback:any)<transacts>:int
+
+# Godot's own `Signal(object, "name")`, as a reference id. The direct analogue of VhCallableFrom,
+# and needed for the same reason: without it a script could *receive* a Signal and never name one,
+# so a signal the mirror has no accessor for would be unreachable however good the machinery behind
+# it was. 0 for a handle Godot has freed.
+VhSignalRefFor<native>(Handle:int, Name:string)<reads>:int
+
+# --- sleeping ----------------------------------------------------------------
+
+# Suspends the calling task for Seconds of *real* time, resuming at the next `vh_tick` whose
+# deadline has passed.
+#
+# Deliberately not a `SceneTreeTimer`: it has to work where there is no scene tree at all -- the
+# smoke test, the probe, a `@tool` script. The cost is stated rather than avoided. It ignores
+# `Engine.time_scale`, it counts wall-clock under `--fixed-fps`, and it keeps counting in a paused
+# game. For game timing await a Timer or `GetTree[].CreateTimer[Seconds].Timeout()`: those are the
+# engine's clock and behave the way a Godot author expects.
+#
+# A negative Seconds returns immediately; 0.0 means "resume at the next tick", which is the
+# cheapest way to yield a frame.
+Sleep<public><native>(Seconds:float)<suspends>:void
+
 # A call with no object, for Godot's 114 statics and its `@GlobalScope` utilities: neither has a
 # handle to ride VhCallValue on, which is the whole of what OQ-11 asked about the *free function*
 # half. (The value-type half turned out to need no ABI at all -- see GodotMath.native.verse.)

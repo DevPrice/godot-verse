@@ -1,15 +1,26 @@
 using { /Godot.org/Godot }
 
-# What phase of the game-over sequence the HUD is in.
+# hud.gd, ported. The game-over sequence is the reason this file is worth reading: it is the one
+# thing the port could not spell until Phase 5, and it now reads the way the GDScript does.
 #
-# hud.gd spells that sequence with `await`: show "Game Over", await MessageTimer.timeout, show the
-# title, await a one-second tree timer, show the button. A Verse script cannot await a Godot signal
-# (R-SIG-5), and Verse's own concurrency has no meeting point with one yet, so the sequence stays
-# what it was before `await` existed: a state machine, one timer node per wait, driven by the
-# timeouts the scene connects. It behaves identically and it is four times the code.
+#     func show_game_over() -> void:
+#         show_message("Game Over")
+#         await $MessageTimer.timeout
+#         ...
+#         await get_tree().create_timer(1.0).timeout
+#         ...
 #
-# **This is the one wall Phase 4 deliberately left standing**, and Phase 5 is where it falls.
-hud_phase := enum{Idle, Message, GameOver, Title}
+# What it used to be was a state machine: a `hud_phase` enum, a second Timer node the original
+# scene does not have (because a SceneTreeTimer's timeout had no spelling), and two timeout
+# handlers whose whole job was to read the phase and decide which half of the sequence they were
+# in. All four are gone.
+#
+# **`spawn` is how a script starts one of these**, and it is not decoration. An awaiting body
+# cannot carry an effect specifier -- `event.Await` is `no_rollback`, so `<suspends><transacts>`
+# would not compile -- and a caller of one cannot either. A mirrored virtual override is
+# specifier-less, and so is a signal handler, so both are contexts a `spawn` may happen in. What is
+# *not* a spelling is `_Ready<override>()<suspends>`: the specifier makes it a different function,
+# so it overrides nothing, and the compiler says so at that line.
 
 @global_class
 hud := class(canvas_layer):
@@ -19,24 +30,10 @@ hud := class(canvas_layer):
 	# scripts, because this one had nothing to emit.
 	StartGame<public>:godot_signal() = godot_signal(){}
 
-	# The three methods main calls carry `<transacts>` and that is wall 8, not decoration: a
-	# `Subscribe` handler must be `<transacts>`, an explicit specifier *replaces* the default set
-	# rather than adding to it, and the default set is wider -- it contains `no_rollback`. So a
-	# handler cannot call a specifier-less method, and narrowing one function pulls the specifier
-	# onto everything beneath it. The compiler says so at the *call* site, which is a file away from
-	# the declaration that needs changing.
-
 	var ScoreLabel:?label = false
 	var MessageLabel:?label = false
 	var StartButton:?button = false
 	var MessageTimer:?timer = false
-
-	# The one node this scene has that the GDScript version does not: the second wait in
-	# show_game_over was `get_tree().create_timer(1).timeout`, and a SceneTreeTimer's timeout is a
-	# signal this script has no way to wait on. It goes when `await` arrives.
-	var TitleTimer:?timer = false
-
-	var Phase:hud_phase = hud_phase.Idle
 
 	_Ready<override>():void =
 		if (Found := GetNode["ScoreLabel"], Typed := label[Found]):
@@ -47,44 +44,41 @@ hud := class(canvas_layer):
 			set StartButton = option{TypedButton}
 		if (FoundTimer := GetNode["MessageTimer"], TypedTimer := timer[FoundTimer]):
 			set MessageTimer = option{TypedTimer}
-		if (FoundTitle := GetNode["TitleTimer"], TypedTitle := timer[FoundTitle]):
-			set TitleTimer = option{TypedTitle}
 
 	ShowMessage<public>(Text:string)<transacts>:void =
-		set Phase = hud_phase.Message
 		if (Message := MessageLabel?):
 			Message.SetText(Text)
 			Message.Show()
 		if (Countdown := MessageTimer?):
 			Countdown.Start()
 
-	ShowGameOver<public>()<transacts>:void =
+	# Line for line what show_game_over is in the GDScript. `<suspends>` and no other specifier,
+	# because `Await` is `no_rollback` and an explicit effect would narrow this below it.
+	ShowGameOver<public>()<suspends>:void =
 		ShowMessage("Game Over")
-		set Phase = hud_phase.GameOver
+		if (Countdown := MessageTimer?):
+			Countdown.Timeout().Await()
+		if (Message := MessageLabel?):
+			Message.SetText("Dodge the\nCreeps")
+			Message.Show()
+		if (Tree := GetTree[], Wait := Tree.CreateTimer[1.0]):
+			Wait.Timeout().Await()
+		if (Button := StartButton?):
+			Button.Show()
 
 	UpdateScore<public>(Score:int)<transacts>:void =
 		if (Display := ScoreLabel?):
 			Display.SetText("{Score}")
 
-	# Connected in hud.tscn to MessageTimer.timeout.
-	OnMessageTimeout<public>():void =
-		if (Phase = hud_phase.GameOver):
-			set Phase = hud_phase.Title
-			if (Message := MessageLabel?):
-				Message.SetText("Dodge the\nCreeps")
-				Message.Show()
-			if (Countdown := TitleTimer?):
-				Countdown.Start()
-		else:
-			set Phase = hud_phase.Idle
-			if (Message := MessageLabel?):
-				Message.Hide()
-
-	# Connected in hud.tscn to TitleTimer.timeout.
-	OnTitleTimeout<public>():void =
-		set Phase = hud_phase.Idle
-		if (Button := StartButton?):
-			Button.Show()
+	# The other half of the sequence the state machine used to carry: MessageTimer's timeout when
+	# the message was "Get Ready" rather than "Game Over". Nothing decides which case it is any
+	# more -- the game-over path awaits the same timeout directly, and this is only the plain one.
+	#
+	# Still connected in hud.tscn, because a message that hides itself after a second is a property
+	# of the label rather than of a sequence.
+	OnMessageTimeout<public>()<transacts>:void =
+		if (Message := MessageLabel?):
+			Message.Hide()
 
 	# Connected in hud.tscn to StartButton.pressed.
 	OnStartPressed<public>():void =

@@ -188,6 +188,9 @@ int main(int argc, char** argv)
 	auto ShutdownFn = Resolve<vh_shutdown_fn>(Module, "vh_shutdown", &Ok);
 	auto CompileProjectFn = Resolve<vh_compile_project_fn>(Module, "vh_compile_project", &Ok);
 	auto CheckProjectFn = Resolve<vh_check_project_fn>(Module, "vh_check_project", &Ok);
+	auto InstantiateFn = Resolve<vh_instantiate_fn>(Module, "vh_instantiate", &Ok);
+	auto ReleaseInstanceFn = Resolve<vh_release_instance_fn>(Module, "vh_release_instance", &Ok);
+	auto InstanceCallFn = Resolve<vh_instance_call_fn>(Module, "vh_instance_call", &Ok);
 	if (!Ok)
 	{
 		return 1;
@@ -257,6 +260,72 @@ int main(int argc, char** argv)
 		const Clock::time_point CheckStart = Clock::now();
 		CheckProjectFn(ExportsPathUtf8.c_str(), Edited.c_str());
 		CheckSamples.push_back(MillisSince(CheckStart));
+	}
+
+	// Phase 5's S-2 risk, measured rather than argued: a content scope per instance (R-ASYNC-4)
+	// means one more allocation at vh_instantiate and one guard push/pop per vh_instance_call, and
+	// the call is the hot path -- every _Process on every scripted node, every frame.
+	//
+	// Reported per operation in microseconds and per instance in kilobytes. The memory figure is
+	// the whole cost of an instance, not the scope's share of it, which is the honest way round:
+	// nothing can weigh a UObject and its task group apart from the object they belong to.
+	double InstantiateUs = 0.0;
+	double CallUs = 0.0;
+	double InstanceKb = 0.0;
+	{
+		constexpr int InstanceCount = 200;
+		constexpr int CallsPerInstance = 200;
+		std::vector<vh_instance*> Instances;
+		Instances.reserve(InstanceCount);
+
+		PROCESS_MEMORY_COUNTERS_EX Before{};
+		Before.cb = sizeof(Before);
+		GetProcessMemoryInfo(GetCurrentProcess(), reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&Before), sizeof(Before));
+
+		const Clock::time_point MakeStart = Clock::now();
+		for (int Index = 0; Index < InstanceCount; ++Index)
+		{
+			vh_instance* Made = nullptr;
+			if (InstantiateFn("exports_probe", 1000 + Index, &Made) == VH_OK && Made != nullptr)
+			{
+				Instances.push_back(Made);
+			}
+		}
+		const double MakeMs = MillisSince(MakeStart);
+
+		PROCESS_MEMORY_COUNTERS_EX After{};
+		After.cb = sizeof(After);
+		GetProcessMemoryInfo(GetCurrentProcess(), reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&After), sizeof(After));
+
+		vh_value Args[2] = {};
+		Args[0].Type = VH_TYPE_INT;
+		Args[0].Int = 17;
+		Args[1].Type = VH_TYPE_INT;
+		Args[1].Int = 25;
+		vh_value Result{};
+		const Clock::time_point CallStart = Clock::now();
+		for (int Round = 0; Round < CallsPerInstance; ++Round)
+		{
+			for (vh_instance* Instance : Instances)
+			{
+				InstanceCallFn(Instance, "(/user@localhost/exports:)AddInts(:int,:int)", Args, 2, nullptr, &Result);
+			}
+		}
+		const double CallMs = MillisSince(CallStart);
+
+		for (vh_instance* Instance : Instances)
+		{
+			ReleaseInstanceFn(Instance);
+		}
+
+		if (!Instances.empty())
+		{
+			InstantiateUs = (MakeMs * 1000.0) / static_cast<double>(Instances.size());
+			CallUs = (CallMs * 1000.0)
+				/ (static_cast<double>(Instances.size()) * static_cast<double>(CallsPerInstance));
+			InstanceKb = (static_cast<double>(After.PrivateUsage) - static_cast<double>(Before.PrivateUsage))
+				/ 1024.0 / static_cast<double>(Instances.size());
+		}
 	}
 
 	printf("\n");
@@ -343,6 +412,9 @@ int main(int argc, char** argv)
 			   Total / static_cast<double>(Sorted.size()),
 			   Total);
 	}
+	printf("[bench] %-28s %8.1f us\n", "vh_instantiate (per node)", InstantiateUs);
+	printf("[bench] %-28s %8.2f us\n", "vh_instance_call (per call)", CallUs);
+	printf("[bench] %-28s %8.1f KB\n", "retained per instance", InstanceKb);
 	printf("[bench] diagnostics reported as errors: %d\n", ErrorCount);
 
 	ShutdownFn();

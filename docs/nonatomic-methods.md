@@ -26,9 +26,14 @@ them. `docs/phase-4-design.md` 6.4 is the argument.
 is no `un-load`, no `un-create_shape_owner`, no way to take back a `Tween.tween_property`. A
 per-method inverse table would be 1073 rows of invented semantics, each of which would be wrong
 for some caller, and a compensation that half works is worse than a documented sharp edge --
-GDScript offers exactly this and says nothing at all. What a script that *wants* rollback-safe
-subscription has is `godot_signal.Subscribe`, which is compensated; `Object.Connect` is the general
-form under it (R-SIG-6) and is in the list below.
+GDScript offers exactly this and says nothing at all.
+
+**Subscription is the exception, and there is now a compensated spelling for both halves of it.**
+`godot_signal.Subscribe` covers a signal the mirror knows about, and since Phase 5
+`MakeSignal(Owner, Name).Subscribe(...)` covers one it does not -- a signal a GDScript or C# script
+declared, or one made with `add_user_signal`. Both register an `AutoRTFM::OnAbort` that disconnects.
+`Object.Connect` is the unforgiving general form under them (R-SIG-6) and is in the list below; it
+stays what it is, and a script that cares reaches for one of the two above instead.
 
 ## The shapes
 

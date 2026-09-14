@@ -387,6 +387,15 @@ Ref<Script> VerseScriptLanguage::_make_template(const String &p_template, const 
 			// the compiler reports its absence at the call rather than at the declaration.
 			"# A helper of your own wants `<transacts>` -- `Step()<transacts>:void = ...` -- or the\n"
 			"# first failable expression that calls it is refused, on the line that calls it.\n"
+			"#\n"
+			// D19. The other thing an author gets wrong the first time, and the compiler's refusal
+			// -- glitch 3532/3523, "could not find a parent function to override" -- does not
+			// suggest the fix. A sentence here rather than a diagnostic, because the sentence
+			// arrives before the mistake does.
+			"# To wait on something -- a Timer, a button, a signal of your own -- write a\n"
+			"# `<suspends>` method and start it with `spawn{...}` from a virtual or a signal\n"
+			"# handler. Neither `<suspends>` on the override itself nor any effect specifier on the\n"
+			"# waiting method will compile: awaiting is the one thing that cannot be narrowed.\n"
 			// Tabs, not spaces. Verse's own style guide prefers spaces and this deliberately does
 			// not follow it: Godot's `text_editor/behavior/indent/type` defaults to Tabs, so the
 			// first line the author types into a space-indented template *mixes* the two, which
@@ -1673,6 +1682,8 @@ void VerseScriptLanguage::_frame() {
 		insert_pending_import();
 #endif
 
+		// Before the tick, so the first frame's numbers are readable too. Idempotent.
+		runtime->register_monitors();
 		runtime->tick(frame_budget_ms / 1000.0);
 
 		// Last, so everything above answers against a host that is not mid-analysis. A queued

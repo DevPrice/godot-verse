@@ -57,9 +57,5 @@ text = "Start"
 [node name="MessageTimer" type="Timer" parent="."]
 one_shot = true
 
-[node name="TitleTimer" type="Timer" parent="."]
-one_shot = true
-
 [connection signal="pressed" from="StartButton" to="." method="OnStartPressed"]
 [connection signal="timeout" from="MessageTimer" to="." method="OnMessageTimeout"]
-[connection signal="timeout" from="TitleTimer" to="." method="OnTitleTimeout"]

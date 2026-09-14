@@ -22,7 +22,8 @@ matter — a generation costs **1.27 s** and retains **~1.3 MB** against a real 
 name because `PackageRelativeVersePath` is dead under VerseVM; and asking the *semantic* program for
 one must not use `EPathMode::PackageRelative`, which is fatal for a class with no package. §1.1 has
 OQ-12's answer (positive: the package name carries the generation, the verse path is pinned).
-Two by-hand checks are still owed — a windowed run of the yardstick, and an editor session.
+Two by-hand checks are still owed — a windowed run of the yardstick, and an editor session — and
+they are on `docs/by-hand-checklist.md` with Phase 4's and Phase 5's.
 
 **Phase 4a is built; 4b is not.** `docs/phase-4-design.md` is the design, and unusually for this repo
 its spikes ran *before* it was written — **§2 is where they are**. **`docs/phase-4-gaps.md` is the
@@ -32,8 +33,8 @@ phase and carries its measurements.
 
 **Every one of those entries is now closed, built or answered** — G13 (the math bodies) and G11 (the
 utilities) went with the rest, so **the by-hand checklist is the whole of what Phase 4 still owes**.
-Closing them took the ABI to **v5** — a layout change, so both DLLs must be rebuilt and
-`run_tests.py --build` is how the test binaries follow.
+Closing them took the ABI to v5, and Phase 5 took it to **v6**; either way both DLLs must be
+rebuilt and `run_tests.py --build` is how the test binaries follow.
 
 The four ways a signal declaration could compile and not work (G1–G4) are one validation pass in
 `GetClassSignals` now: `vh_signal_desc` carries a `Reject` the way `vh_export_desc` does, Godot is
@@ -100,19 +101,68 @@ is summarised. What it settled, all of which is load-bearing:
 - **What a failure undoes is measured, not assumed**, and the rule is in `spec.md` next to R-AUD-1.
   A failure at any depth drops the deferred writes; a read does not see a write the same computation
   just made; a raise additionally halts every script until the next `vh_tick`, which is why
-  `test_main.gd`'s transaction section runs a step per frame.
+  `test_main.gd`'s transaction section used to run a step per frame — Phase 5 removed that
+  constraint with it, and the section running raises back to back in one frame is now itself the
+  test that a raise stops only the call that raised.
 
 **`docs/dodge-the-creeps.md` is the one to read before adding a Verse-facing feature.** It is not a
 progress report — it is the eight things a Godot author writes without thinking, each measured in a
-real game rather than estimated, with the requirement that gives it a spelling. **Six of the eight
-are down** since Phase 4 re-ported the game in place; the table says which, and §"After Phase 4" says
-what the diff came to. The two still standing are `await` on a signal (Phase 5) and the
-`<transacts>` trap, which Phase 4.5 **narrowed rather than removed**: reading Godot no longer starts
-the cascade, the diagnostic says which declaration to edit, and the `.verse` template says it before
-it happens — but a helper that *writes* still needs the word.
+real game rather than estimated, with the requirement that gives it a spelling. **Seven of the eight
+are down**, the seventh at the close of Phase 5; the table says which, and §"After Phase 4" and
+§"After Phase 5" say what each diff came to. The one still standing is the `<transacts>` trap, which
+Phase 4.5 and Phase 5 **narrowed twice rather than removed**: reading Godot no longer starts the
+cascade and a signal handler is no longer fixed at `<transacts>`, the diagnostic says which
+declaration to edit, and the `.verse` template says it before it happens — but a helper that
+*writes*, called from a body narrowed on purpose, still needs the word.
 
-**`docs/by-hand-checklist.md` is what no headless run can see**, and nothing on it has been run. Two
-phases owe it now.
+**Phase 5 is built, and `docs/phase-5-design.md` §14 is the one section of it to read** — written
+after the work, it is where the design turned out to be wrong. §2 was filled in the same way
+*before* the work, from twelve questions put to the Verse compiler through `tests/verse_probe`
+(eight committed fixtures), which is why so little of the rest needed correcting. The ABI is **v6**:
+both DLLs must be rebuilt, and `run_tests.py --build` is how the test binaries follow.
+
+What it settled, all of which is load-bearing:
+
+- **A task scope per script instance (R-ASYNC-4), made at `vh_instantiate` and terminated at
+  `vh_release_instance`.** A raise terminates the *active* scope, so it costs that node's suspended
+  work and nothing else's — and the instance gets a **fresh** scope at its next call rather than a
+  revived one at the next tick. `GHaltedUntilTick`, `GTasksLostToError` and `ReviveContentScope` are
+  gone, `VH_ERR_HALTED` is a narrow answer rather than what every other call got for a frame, and
+  `vh_tick` is no longer where anything recovers. **D23 is retired**: "lazily at the first `spawn`"
+  has no hook to hang on, and the guard has to be already active at that moment. It costs ~2.6 KB
+  per scripted node and ~0.06 µs per call, both measured with `tools/build_bench.py`.
+- **`Await` is ordinary Verse over `/Verse.org/Verse`'s `event(t)`.** `godot_signal(t)` holds one
+  and `Await<public>()<suspends>:t` forwards to it, which covers a script's own signals and all 489
+  mirrored engine-signal accessors alike. The *host* half is smaller than the design budgeted for:
+  **`verse::event` is a UObject with a public C++ `Signal`**, so the host reads the event off the
+  signal object and signals it directly — Epic's code then does FIFO resumption, per-task scopes and
+  dropping a cancelled awaiter. Neither of S-5's two proposed shapes was reachable, because
+  `MakeCallableFor` accepts only a method bound to a *script instance* and a `godot_signal` is not
+  one.
+- **`defer` runs when a task is cancelled, not only when it returns.** The whole connection lifetime
+  of `Await` rests on it: `Await` connects with `CONNECT_ONE_SHOT`, holds the signal object, and
+  disconnects in a `defer`. Measured in `tests/verse_probe/sleep_probe.verse` with a `race` whose
+  loser sleeps for an hour.
+- **An awaiting body cannot be narrowed, and neither can its caller.** `awaitable.Await` carries
+  `no_rollback` exactly as `signalable.Signal` does. A mirrored virtual override is specifier-less
+  and so, since this phase widened `godot_signal.Subscribe`'s callback to match Verse's own
+  `subscribable`, is a signal handler. **A `<reads>` body may not `spawn` at all** — where 4.5's
+  narrowing and this phase collide. And **a virtual cannot be written `<suspends>`**: glitch 3532
+  plus 3523, because the specifier makes it a different function. Both are said in the `.verse`
+  template rather than diagnosed.
+- **A foreign signal is named with `MakeSignal(Owner, Name)`** — Godot's own `Signal(object, "name")`,
+  the analogue of `MakeCallable`. Nothing could produce a `signal_ref` before, so `signal_ref.Await()`
+  and `.Subscribe()` would have been unreachable. Its payload is a **`godot_array`** of the emission's
+  arguments (D17 amended: `[]variant` has no description on this bridge), and its `Subscribe` is the
+  rollback-safe way to receive a foreign signal, which `Object.Connect` is not.
+- **`Sleep(Seconds)` is a native `<suspends>` on `FPlatformTime::Seconds()`**, resumed from the pump,
+  because it has to work where there is no scene tree. It ignores `Engine.time_scale` and keeps
+  counting in a paused game; game timing awaits a Timer instead. `vh_tick`'s budget governs the
+  queue and nothing else — a task resuming inside an emission is unbudgeted, exactly as GDScript's
+  resume is — and `vh_tick` now fills a `vh_tick_stats` that becomes three Godot custom monitors.
+
+**`docs/by-hand-checklist.md` is what no headless run can see**, and nothing on it has been run.
+**Three phases owe it now**, and each design asks for one windowed session covering all of them.
 
 **README predates Phase 1 and is stale on marshalling.** It still describes three hand-written
 value types, a `variant` tuple, `object` as the only `<native>` class, and packed arrays crossing as
@@ -241,8 +291,10 @@ a different reason: it asserts nothing. It compiles whatever `.verse` files it i
 project, prints every diagnostic, and calls a class's zero-argument methods — which makes a language
 question ("does a two-parameter function satisfy a tuple-parameter callback?") something you *run*
 rather than something you read out of `SemanticAnalyzer.cpp`. Six of Phase 4's design decisions were
-settled with it in one sitting, and `tests/verse_probe/example.verse` is the fixture behind one of
-them, kept so the claim can be re-run:
+settled with it in one sitting, and **all twelve of Phase 5 §2's answers** came out of it; the eight
+fixtures beside `example.verse` are kept so every claim can be re-run rather than recalled.
+`async_reject.verse` compiles **nothing** on purpose — it is the file of refusals, and the *text* of
+each refusal is its result. Take the path as absolute; the probe resolves nothing relative to `bin/`:
 
     bin/verse_probe.exe <engine>/Engine/Binaries/Win64/verse_host.dll <engine>/Engine         tests/verse_probe/example.verse --class example
 
@@ -270,7 +322,7 @@ means adding it under `scripts/`; the host compiles every `.verse` under `res://
 
 `dodge-the-creeps/` is the third Godot project and the yardstick: the whole game in Verse, with no
 GDScript in it but `headless_check.gd`, which is how to see it work without a window —
-`godot --headless --fixed-fps 60 --path dodge-the-creeps -s res://headless_check.gd`, 29 checks, one
+`godot --headless --fixed-fps 60 --path dodge-the-creeps -s res://headless_check.gd`, 30 checks, one
 line each. `--fixed-fps` is not optional; headless, a `Timer` counts real seconds while the loop
 runs flat out. It is deliberately **not** in `run_tests.py`: a yardstick that gates the build stops
 measuring. `scons` copies the addon into it the way it does for `demo/`.
@@ -352,12 +404,22 @@ ten element types against four key types is not a list to maintain by hand.
   `TVerseFunction::operator()` does for the same reason: a Verse runtime error raised from closed
   code trips `AutoRTFM::UnreachableIfClosed` in `FContext::RaiseVerseRuntimeError` and takes the
   process down instead of unwinding.
-- **A raise stops every script until the next `vh_tick`.** It terminates the host's one
-  `FContentScope`, and `EnterVM` then declines to run *anything* — silently, which is why this was
-  invisible for a phase. Every entry into the VM therefore goes through `EnterVerse`, which revives
-  the scope; `TickScripts` is the frame boundary that resumes execution and says what was cancelled;
-  and `VH_ERR_HALTED` is what an execution entry point answers in between. Never call
-  `Context.EnterVM` directly — use `EnterVerse`. The cancellation is still project-wide (R-ASYNC-4).
+- **A raise terminates the *active* content scope, and `EnterVM` then declines to run anything in
+  it** — silently, which is why this was invisible for a phase. Since Phase 5 that scope is the
+  raising **instance's** (R-ASYNC-4), so the blast radius is that node's suspended work: another
+  instance's next call runs, and so does the raising instance's, because a terminated scope is
+  *replaced* at the next call rather than un-terminated at the next tick. Every entry into the VM
+  goes through `EnterVerse` or `EnterVerseOn`, which is where the scope handling lives — never call
+  `Context.EnterVM` directly. `VH_ERR_HALTED` is what an execution entry point answers when the body
+  genuinely did not run, which is now rare.
+- **Awaiting is the one thing that cannot be narrowed, and `spawn` is how a script starts it.**
+  `event.Await` carries `no_rollback`, so a `<suspends><transacts>` body that awaits is glitch 3512
+  and a `<reads>` body may not `spawn` at all. The caller must be specifier-less too: a mirrored
+  virtual override is, and so is a `godot_signal.Subscribe` handler. `_Ready<override>()<suspends>`
+  is *not* a spelling — glitch 3532 plus 3523, because the specifier makes it a different function.
+- **`defer` in a suspending body runs on cancellation as well as on return** (measured,
+  `tests/verse_probe/sleep_probe.verse`). `godot_signal.Await`'s Godot connection is taken away in
+  one, which is the only reason a `race` whose loser never resumed leaves nothing behind.
 - **`operator'()'` is a reserved intrinsic.** Verse rewrites `Data[Key]` on a non-function callee
   into a call to it, but refuses to let anything *define* one — as a class member or as a free
   function — so the bracket syntax cannot be given a meaning. Container lookup is

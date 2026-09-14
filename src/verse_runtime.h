@@ -86,6 +86,13 @@ public:
 
 	void tick(double p_budget_seconds);
 
+	// R-ASYNC-6's observable half: what the last pump did, as Godot custom monitors in the
+	// profiler's Monitors tab. Registered on the first tick with a host loaded.
+	void register_monitors();
+	double _monitor_queued_jobs() const;
+	double _monitor_pump_ms() const;
+	double _monitor_sleeping_tasks() const;
+
 	// Verse's compilation unit is the package, not the file, so every .verse file in the project
 	// is built together -- a build is always of the whole project. Each successful call publishes
 	// a new generation; instances made against an earlier one keep running against it.
@@ -229,6 +236,17 @@ private:
 	godot::Dictionary *diagnostic_sink = nullptr;
 	int32_t generation = 0;
 
+	// The bytes api_signal_target last handed back. Held here rather than on the stack because the
+	// host reads them after the call returns, which is the bargain every string this side lends
+	// makes: valid until the next call.
+	godot::CharString held_signal_name;
+
+	vh_tick_stats last_tick_stats = {};
+	bool monitors_registered = false;
+	// Frames the pump has been over budget in a row, so the warning can be said once and then
+	// rarely rather than once per frame.
+	int64_t overrun_frames = 0;
+
 	godot::Error load_host_internal(const godot::String &p_dll_path, const godot::String &p_engine_dir, bool p_enable_debugger);
 
 	static void api_print(void *p_ctx, const char *p_utf8, int32_t p_len);
@@ -246,6 +264,8 @@ private:
 	static int32_t api_emit_signal(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count);
 	static int32_t api_connect_signal(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_target, int32_t p_flags);
 	static int32_t api_disconnect_signal(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_target);
+	static int32_t api_signal_target(void *p_ctx, int64_t p_ref, vh_handle *r_handle, const char **r_name_utf8);
+	static int64_t api_make_signal_ref(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len);
 
 	// The reference table (R-TYPE-1). See src/verse_ref_table.h for what is in it and why, and the
 	// ABI header's "reference values" for the ownership rule these implement.

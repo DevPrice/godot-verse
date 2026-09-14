@@ -381,7 +381,7 @@ before adding it: the reader half (`GetObject`) would have to answer `object`, a
 `element_converters` special-cases `VhFromObject` already (see the comment there about taking the
 lane packer's branch and handing back the base `object`).
 
-### G9 — a callback does not remember its content scope · **answered: do not copy it, and here is why**
+### G9 — a callback does not remember its content scope · **answered here, closed in Phase 5**
 
 **Design:** §5. *"Epic's `FVerseEventCallbackList` carries the other half of the discipline and is
 worth copying: each callback remembers the `FContentScope` it was subscribed in, and a terminated
@@ -426,6 +426,17 @@ pointer.
 
 Nothing to build here. **What to do in Phase 5:** implement R-ASYNC-4 first; the callback→scope link
 is a consequence of it, not a precursor.
+
+**Closed by Phase 5, exactly that way round, and it turned out to be load-bearing rather than
+tidy.** With a scope per instance the rule became correct, so an `Await`'s Godot connection is
+registered on `FContentScope::OnContentScopeCleanup` — Epic's own hook, the one
+`event::SubscribeInternal` uses (`VerseEvent.cpp:139-178`). Then the integration suite showed *why*
+it is not optional: terminating a task group does not unwind the tasks in it, so freeing a node
+while one of its tasks awaited a foreign signal left a live Godot connection, a held object and a
+callback row behind. `defer` covers cancellation by `race` and by the task completing; the scope
+cleanup is the only thing that covers the node dying. The case is
+`tests/integration/test_main.gd`'s "freeing the node cancelled its task and took the connection
+with it", which failed the first time it was written.
 
 ### G10 — `@statics` has no diagnostics · **closed**
 

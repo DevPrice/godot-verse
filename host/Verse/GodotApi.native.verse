@@ -167,9 +167,38 @@ callable<public> := class<computes>(godot_ref):
     CallVoid<public>(Args:[]int)<transacts>:void =
         VhRefInvokeVoid(Ref, for (A : Args) { VhFromInt(A) })
 
-# Godot's Signal. Held and passed back; connecting and emitting are signals' own requirement
-# (spec 5.3) and arrive in Phase 4.
-signal_ref<public> := class<computes>(godot_ref) {}
+# Godot's Signal, as a value a script holds: what a `signal` -typed property or return hands over,
+# and the only spelling a signal the mirror has no accessor for has -- one a GDScript or C# script
+# declared, or one made with `add_user_signal` (R-INT-1, R-SIG-6).
+#
+# The payload is a Godot **Array** of the emission's arguments rather than a typed `t`, and it has
+# to be: there is no declaration here to read a type off. The author unpacks it with the accessors
+# a `godot_array` already has -- `Args.GetInt[0]`, `Args.GetObject[1]` -- so a wrong expectation
+# fails at the unpack, where it can be seen, rather than silently.
+signal_ref<public> := class<computes>(godot_ref):
+
+    # Suspends until this signal is emitted. See godot_signal.Await: the same rules about effects
+    # apply, and for the same reason.
+    #
+    # The waiter is a `godot_signal(godot_array)` built for this wait alone. It is not bound to
+    # anything and never emits; it is here because the event has to live on a Verse object the host
+    # can hold, and that class is one.
+    Await<public>()<suspends>:godot_array =
+        Waiter := godot_signal(godot_array){}
+        Token := VhSignalRefAwait(Ref, Waiter)
+        defer:
+            VhSignalAwaitEnd(Token)
+        Waiter.Ev.Await()
+
+    # Connects Callback, and answers the thing that disconnects it -- `godot_signal.Subscribe` for
+    # a signal that has no mirrored accessor.
+    #
+    # This is the rollback-safe way to receive a foreign signal, and the reason to reach for it
+    # over `Object.Connect`: the host registers an `AutoRTFM::OnAbort` that disconnects, so a
+    # failure after the connect leaves nothing behind. `Object.Connect` is an unforgiving direct
+    # call into Godot and is in docs/nonatomic-methods.md with the rest.
+    Subscribe<public>(Callback(:godot_array):void)<transacts>:cancelable =
+        godot_subscription{Subscription := VhSignalRefSubscribe(Ref, Callback)}
 
 # --- reference packing -------------------------------------------------------
 
@@ -239,6 +268,21 @@ MakeCallable<public>(t:type, Callback(:t)<transacts>:void)<transacts>:callable =
     VhAdopt(Made)
     Made
 
+# Godot's own `Signal(object, "name")` -- the one way to *name* a signal the mirror has no accessor
+# for (R-INT-1). `MakeCallable` for the other direction of the same problem.
+#
+# The name is Godot's own spelling, snake_case: `MakeSignal(Player, "health_changed")`. A signal one
+# of the mirrored classes declares has an accessor with a typed payload and should be reached that
+# way instead; this is for a signal a GDScript or C# script declared, or one made with
+# `add_user_signal`, which is the only kind that has no accessor.
+#
+# `<reads>` because building a Signal value observes Godot without changing it -- the same rule
+# `MakeArray` follows, and for the same reason: nothing else can see the fresh reference yet.
+MakeSignal<public>(Owner:object, Name:string)<reads>:signal_ref =
+    Made := signal_ref{Ref := VhSignalRefFor(Owner.Handle, Name)}
+    VhAdopt(Made)
+    Made
+
 VhFromArray(Value:godot_array)<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 VhFromDictionary(Value:dictionary)<reads>:variant = variant{Tag := TagDictionary, Ref := Value.Ref}
 VhFromCallable(Value:callable)<reads>:variant = variant{Tag := TagCallable, Ref := Value.Ref}
@@ -282,9 +326,8 @@ VhFromStringArray(Values:[]string)<reads>:variant = VhFromStrings(TagPackedStrin
 #
 # Shaped like Verse's own `listenable` rather than implementing it, and the difference is not a
 # preference: `signalable.Signal` is `no_rollback`, so it would be uncallable from inside the
-# transaction every Godot callback runs in, and `subscribable.Subscribe` fixes its callback at a
-# no_rollback domain that could not touch Godot. `cancelable` is the one of the four whose domain
-# fits, and Subscribe answers it.
+# transaction every Godot callback runs in. `cancelable` is the one of the four whose domain fits,
+# and Subscribe answers it.
 #
 # The payload is one type, and tuples carry arity above one: a multi-parameter Verse function
 # satisfies a one-tuple-parameter callback, because a Verse function's parameter *is* its tuple. So
@@ -292,14 +335,66 @@ VhFromStringArray(Values:[]string)<reads>:variant = VhFromStrings(TagPackedStrin
 # still sees two arguments.
 godot_signal<public>(t:type) := class(vh_signal):
 
+    # What an awaiting task suspends on, and what the host signals when Godot emits (R-SIG-5).
+    #
+    # Verse's own `event(t)`, held rather than implemented. That is what makes `Await` below
+    # ordinary parametric Verse with no native and no ABI behind it -- a native cannot be
+    # parametric in its return type, and a parametric `Await` native was the one thing the phase
+    # budgeted for and turned out not to need. `event` also brings what a bridge would otherwise
+    # owe: FIFO resumption, a `Defer` that drops a cancelled awaiter, and GC roots for the tasks
+    # suspended on it.
+    #
+    # Nothing listens to it until something awaits. `Await` connects to Godot for the duration of
+    # one wait and disconnects on the way out, resumed or cancelled.
+    Ev<public>:event(t) = event(t){}
+
     # Emits, now. See VhSignalEmit for why "now" is the exception it is.
     Signal<public>(Val:t)<transacts>:void = VhSignalEmit(Id, Val)
 
     # Connects Callback and answers the thing that disconnects it. Two subscriptions of one handler
     # are two connections with two independent cancels -- equality is by reference, which is what
     # Godot's own lambda callables do and what UEFN's event does.
-    Subscribe<public>(Callback(:t)<transacts>:void)<transacts>:cancelable =
+    #
+    # The callback carries **no** effect specifier, matching Verse's own
+    # `subscribable<native>(t:type) := interface: Subscribe<public>(Callback(:t):void)<transacts>`.
+    # Phase 4 wrote `<transacts>` here on the reading that Verse's own fixes its callback at a
+    # domain that could not touch Godot; the lattice is the other way up -- the default effect set
+    # *contains* transacts -- and the narrow spelling was the one thing stopping a signal handler
+    # from `spawn`ing a task, which is what a game-over sequence is made of. Widening breaks
+    # nothing: effects are contravariant in a parameter, so a handler that still says `<transacts>`
+    # satisfies this unchanged.
+    #
+    # Why Epic's own `signalable.Signal` is wide while `subscribable.Subscribe` is not: `Signal`
+    # *invokes* the callback, and a `<transacts>` body may not invoke a wide one. That does not
+    # reach us -- the host invokes subscribers from C++ through `VFunction::Invoke`, where Verse's
+    # effect checking is not in the way.
+    Subscribe<public>(Callback(:t):void)<transacts>:cancelable =
         godot_subscription{Subscription := VhSignalSubscribe(Id, Callback)}
+
+    # Suspends until Godot emits this signal, and answers the payload -- typed, because `t` is the
+    # payload's own type and the event carries it (R-SIG-5, R-ASYNC-2).
+    #
+    #     MessageTimer.Timeout().Await()
+    #     GetTree().CreateTimer(1.0).Timeout().Await()
+    #     Hit.Await()                                   # the script's own
+    #
+    # One method covers a script's own declared signals *and* all 489 mirrored engine-signal
+    # accessors, because every one of them answers a `godot_signal(t)`.
+    #
+    # **No effect specifier, and there cannot be one:** `awaitable.Await` carries `no_rollback`
+    # exactly as `signalable.Signal` does, so a `<suspends><transacts>` body that awaits is glitch
+    # 3512. Which means a caller has to be wide too -- a mirrored virtual override is (the mirror
+    # generates them with no specifier), and after the widening above so is a signal handler.
+    # `spawn` is how a script reaches this from one; a `<reads>` body cannot reach it at all.
+    #
+    # The Godot connection lives exactly as long as the wait. `defer` runs on the way out whether
+    # the task resumed or was cancelled -- by `race`, by the node being freed, by a rebuild -- which
+    # is what keeps a cancelled wait from leaving a connection behind.
+    Await<public>()<suspends>:t =
+        Token := VhSignalAwait(Self)
+        defer:
+            VhSignalAwaitEnd(Token)
+        Ev.Await()
 
 # `godot_signal()` for `godot_signal(tuple())`, which is the payload most declarations have and
 # which was otherwise spelled twice on every line of them:

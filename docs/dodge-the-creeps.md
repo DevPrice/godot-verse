@@ -5,9 +5,10 @@ stage 7; re-ported in place at the close of **Phase 4**, which is what the walls
 measured for. The project is [`dodge-the-creeps/`](../dodge-the-creeps); the game is four `.verse`
 files and four scenes, with no GDScript in it.
 
-**Six of the eight walls are down.** Read the table for what each cost while it stood — that is
-what the document is for, and it is still the record of what the absences were worth. What changed
-in the port is in §"After Phase 4" at the end.
+**Seven of the eight walls are down**, the seventh at the close of **Phase 5**, which re-ported
+`hud.verse` in place. Read the table for what each cost while it stood — that is what the document
+is for, and it is still the record of what the absences were worth. What changed in the port is in
+§"After Phase 4" and §"After Phase 5" at the end.
 
 Godot's canonical first game is the yardstick this project set itself:
 [`roadmap.md`](roadmap.md) says a Godot developer who is not the author should be able to build a
@@ -34,12 +35,12 @@ measure of how far the bridge has got.
 | --- | --- | --- | --- | --- |
 | **1** | `$AnimatedSprite2D.play()` | an `@export`-ed typed slot per child, filled in by the scene | **R-SCN-6** | **down** (Phase 4 stage 1) |
 | **2** | `signal hit` / `hit.emit()` | one engine signal wired to two scripts in the scene file | **R-SIG-1, R-SIG-2** | **down** (stage 4) |
-| **3** | `await $MessageTimer.timeout` | a four-state enum, a second Timer node, two handlers | **R-SIG-5** | **standing** — Phase 5's |
+| ~~**3**~~ | `await $MessageTimer.timeout` | a four-state enum, a second Timer node, two handlers | **R-SIG-5** | **down** (Phase 5) |
 | **4** | `velocity.normalized() * speed`, `PI`, `randf()` | `scripts/vectors.verse`, six functions and three constants | **R-SCN-3** / OQ-11 | **down** (stage 6) |
 | **5** | `mob.linear_velocity = v` on an instantiated scene | `Mob.Set("linear_velocity", VariantFromVector2(V))` | **R-SCN-6** | **down** (stage 1) |
 | **6** | `get_tree().call_group(&"mobs", &"queue_free")` | walk `GetNodesInGroup("mobs")` and free each | vararg, R-SCN-2 permits | **standing**, and permitted |
 | **7** | `node.callv("method", [args])` | nothing: it is spellable and cannot be given arguments | **R-INT-2** | **down** (stage 2) |
-| **8** | *(no counterpart)* | `<transacts>` on every helper, or it fails at its first call site | — | **narrowed, not gone** — Phase 4.5 |
+| **8** | *(no counterpart)* | `<transacts>` on every helper, or it fails at its first call site | — | **narrowed twice, not gone** — Phase 4.5 made reading Godot `<reads>`, Phase 5 widened the handler |
 
 Wall 7 is the one that corrects an earlier document, and wall 8 is the only one that is not a
 missing feature. Both are below.
@@ -58,7 +59,7 @@ becomes an `@export` slot with the child's own type, and the scene fills it in:
 
 Seventeen of the port's eighteen object-typed slots exist for no other reason: one per node
 lookup the GDScript does with `$Name` or `get_node`, and the eighteenth is the extra timer wall 3
-needs. It works, and the inspector is arguably a better place for the wiring than a string in the
+needed before Phase 5 took it away. It works, and the inspector is arguably a better place for the wiring than a string in the
 script — but three things
 are worse. The scene file now carries knowledge the script used to carry, so reading the script no
 longer tells you what it touches. A child renamed in the editor empties the slot silently, where
@@ -105,7 +106,7 @@ scar, because main's handler now receives the collided body it has no use for:
 The half of signals that **does** work is the half that matters most for a port, and it is wall-free:
 see [what needed no workaround](#what-needed-no-workaround).
 
-### 3 · No `await`, so a seven-line sequence becomes a state machine
+### 3 · No `await`, so a seven-line sequence became a state machine — **closed in Phase 5**
 
 `hud.gd`'s game-over sequence is the most compact code in the original game:
 
@@ -124,10 +125,62 @@ A Verse script cannot await a Godot signal (**R-SIG-5**), and Verse's own concur
 `SceneTreeTimer`'s `timeout` is a signal on an object nothing in the scene can connect to, so the
 port adds a **second Timer node** that the GDScript version does not have.
 
-What replaces seven lines is a `hud_phase` enum, an extra node, and two timeout handlers that read
-the phase to decide which step they are — 30 lines for the same behaviour, and the sequence is no
-longer readable in one place. This is the wall that most changes the *shape* of a script rather than
-its spelling.
+What replaced seven lines was a `hud_phase` enum, an extra node, and two timeout handlers that read
+the phase to decide which step they are — 30 lines for the same behaviour, and the sequence was no
+longer readable in one place. This was the wall that most changed the *shape* of a script rather
+than its spelling, which is why it was the last one left.
+
+**Phase 5 closed it, and it cost less than this document assumed.** Verse's concurrency does have a
+meeting point with a Godot signal: `godot_signal(t)` holds a `/Verse.org/Verse` `event(t)` and
+answers a typed payload from it, in ordinary Verse with no native and no ABI. What `hud.verse` says
+now is what `hud.gd` says:
+
+```verse
+	# main.verse -- the handler for the player's own `Hit`
+	GameOver<public>():void =
+		...
+		if (Overlay := Hud?):
+			spawn{Overlay.ShowGameOver()}
+
+	# hud.verse
+	ShowGameOver<public>()<suspends>:void =
+		ShowMessage("Game Over")
+		if (Countdown := MessageTimer?):
+			Countdown.Timeout().Await()
+		if (Message := MessageLabel?):
+			Message.SetText("Dodge the
+Creeps")
+			Message.Show()
+		if (Tree := GetTree[], Wait := Tree.CreateTimer[1.0]):
+			Wait.Timeout().Await()
+		if (Button := StartButton?):
+			Button.Show()
+```
+
+The `if (X := Y?)` lines are wall 1's residue rather than this wall's — the GDScript writes `$Name`
+where the port holds an optional — and everything else is line for line. **The `hud_phase` enum, the
+second Timer node, and both timeout handlers that existed only to read the phase are gone**; the one
+timeout handler that remains is the plain one the GDScript also has, which hides the message.
+`hud.verse` went from 55 lines of code to 44, and `hud.tscn` lost a node and a connection.
+
+The second wait needs no node at all: `GetTree[].CreateTimer[1.0].Timeout()` is a mirrored accessor
+like any other, which is the half of this wall that forced the extra node in the first place.
+
+**Two things about the spelling are not what a GDScript author would guess, and both are language
+facts rather than bridge choices.** An *awaiting* body cannot carry an effect specifier — Verse's own
+`awaitable.Await` is `no_rollback`, exactly as `signalable.Signal` is — and a virtual **cannot** be
+written `<suspends>`, because the specifier makes it a different function and the compiler answers
+*"could not find a parent function to override"*. So the sequence is a named `<suspends>` method and
+the handler reaches it with **`spawn`**.
+
+**One thing had to change for that to be reachable**, and it is the connection between this wall and
+wall 8. `GameOver` is a `Subscribe` handler, `Subscribe` fixed its callback at `<transacts>`, and a
+`<transacts>` body may not `spawn` an awaiting one — so the chain `Hit.Subscribe(GameOver)` →
+`GameOver` → `ShowGameOver` was blocked at the first link. Phase 5 widened `Subscribe`'s callback to
+specifier-less, which is what Verse's own `subscribable` interface declares and what our comment
+claiming to follow it got backwards. Measured: every existing `<transacts>` handler still satisfies
+it, and nothing else in this port changed — `GameOver` is the one handler that dropped its
+specifier, and it did so because it spawns.
 
 ### 4 · No `@GlobalScope` and no math-type methods, so the port ships `vectors.verse`
 
@@ -299,6 +352,16 @@ know to ask for.** The trap still exists — a helper that writes still needs `<
 `vectors.verse` is gone, so the file this wall was measured on no longer exists; what would replace
 it today is a `<reads>` file with no `<transacts>` in it at all.
 
+**Phase 5 narrows it once more, in the place this port felt it most.** `hud.verse`'s own comment
+records the trap arriving through a *signal handler* — "a `Subscribe` handler must be `<transacts>`,
+an explicit specifier replaces the default set rather than adding to it… so a handler cannot call a
+specifier-less method". With `Subscribe`'s callback widened to specifier-less (§3), that is no longer
+true: a handler carries the default set like any other unspecified function, and the three methods
+`main.verse` calls on the HUD stop needing the word. **What survives is narrower still** — a helper
+that genuinely *writes* and is called from a genuinely narrowed body, which is a much smaller
+population than "every helper a signal handler touches". `hud.verse`'s comment needs deleting with
+the port's rewrite, and this row's state should be re-measured then rather than predicted here.
+
 ---
 
 ## What needed no workaround
@@ -328,8 +391,10 @@ and none of it needed a second attempt:
   most-hit one in the mirror, and walking a group is the shape scene code actually has.
 - **`variant` as a parameter**: `Set`, `SetDeferred` and the `VariantFrom<GodotType>` builders carry
   the mob's spawn state and the player's deferred collision disable.
-- **Enums, `@export_group`, and a script's own enum**: `packed_scene_gen_edit_state.Disabled` and
-  `node_internal_mode.Disabled` are named values, and `hud_phase` is the port's own.
+- **Enums and `@export_group`**: `packed_scene_gen_edit_state.Disabled` and
+  `node_internal_mode.Disabled` are named values. The port used to declare an enum of its own too,
+  `hud_phase`, and Phase 5 deleted it — a state machine for a sequence that can now be written as
+  a sequence.
 - **`[]string` out of Godot**: `SpriteFrames.GetAnimationNames()` is a Verse array, indexable with
   Verse's own failable indexing.
 - **Library files** — `vectors.verse`, R-LANG-6's third clause.
@@ -387,3 +452,28 @@ regression test for.
 refused their calls to `hud.ShowGameOver`, `hud.UpdateScore`, `hud.ShowMessage` and `player.Start`,
 which carried the default (wider) effect set. Four declarations in two other files had to change,
 and the compiler reported it at the *call* site each time. That is the trap Phase 4.5 inherits.
+
+---
+
+## After Phase 5
+
+One file changed, which is the measurement: **wall 3 was the whole of what Phase 5 owed this
+yardstick**, and closing it touched `hud.verse`, six lines of `main.verse` and two lines of
+`hud.tscn`.
+
+- **`hud.verse`: 55 lines of code to 44**, and the shape is the GDScript's again. Gone: the
+  `hud_phase` enum, the `TitleTimer` node and its declaration, `OnTitleTimeout`, and the half of
+  `OnMessageTimeout` that read the phase to decide which step it was in.
+- **`hud.tscn` lost a node and a connection.** The scene is now the scene the original game ships.
+- **`main.GameOver` dropped its `<transacts>`** and gained `spawn{Overlay.ShowGameOver()}`. That is
+  the one line wall 8's narrowing still shows in this port, and it reads as what it is: this
+  handler starts something that outlives it.
+- **`headless_check.gd`'s two HUD checks now name what they are testing** — an await resuming,
+  rather than a timer advancing a state machine. Both still pass at `--fixed-fps 60`, which is
+  D7's rule holding: the port awaits Godot's timers and never `Sleep`, so it keeps the engine's
+  clock and the checks stay frame-deterministic.
+
+**Wall 8 did not fire this time**, and that is worth recording because it fired at every previous
+re-port. Phase 4.5 made reading Godot `<reads>` and Phase 5 made a handler specifier-less; between
+them, the one direction left that still forces the word is a helper that *writes* and is called
+from a body that was narrowed on purpose. Nothing in this game is that shape.

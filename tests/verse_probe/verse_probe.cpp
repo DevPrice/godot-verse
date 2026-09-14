@@ -282,7 +282,7 @@ int main(int argc, char** argv)
 					printf("\n");
 					// A raise stops every script until the next tick, so a probe with several
 					// methods needs the frame boundary between them or the rest report VH_ERR_HALTED.
-					TickFn(0.01);
+					TickFn(0.01, nullptr);
 				}
 				ReleaseFn(Instance);
 			}

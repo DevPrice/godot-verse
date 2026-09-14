@@ -123,11 +123,15 @@ func _process(_delta: float) -> bool:
 				hud.get_node("MessageLabel").text == "Game Over",
 				hud.get_node("MessageLabel").text)
 		275:
-			check("MessageTimer advanced the HUD's state machine to the title",
+			# The first `await` in the HUD's game-over sequence: MessageTimer's timeout resumed
+			# the task, which set the title. Nothing reads a phase enum any more -- there is none.
+			check("awaiting MessageTimer.timeout resumed the sequence at the title",
 				hud.get_node("MessageLabel").text == "Dodge the\nCreeps",
 				hud.get_node("MessageLabel").text)
 		345:
-			check("TitleTimer showed the Start button again",
+			# And the second: `get_tree().create_timer(1.0).timeout`, which had no spelling before
+			# Phase 5 and is why this scene used to carry a Timer node the original does not.
+			check("and awaiting a SceneTreeTimer showed the Start button",
 				hud.get_node("StartButton").visible)
 			mobs_seen = get_nodes_in_group("mobs").size()
 			hud.get_node("StartButton").pressed.emit()

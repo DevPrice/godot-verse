@@ -7,6 +7,7 @@
 
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/node.hpp>
+#include <godot_cpp/classes/performance.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/classes/scene_tree.hpp>
 #include <godot_cpp/classes/window.hpp>
@@ -16,6 +17,7 @@
 #include <godot_cpp/variant/char_string.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/node_path.hpp>
+#include <godot_cpp/variant/signal.hpp>
 #include <godot_cpp/variant/string_name.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
@@ -29,6 +31,9 @@ void VerseRuntime::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("unload_host"), &VerseRuntime::unload_host);
 	ClassDB::bind_method(D_METHOD("is_host_loaded"), &VerseRuntime::is_host_loaded);
 	ClassDB::bind_method(D_METHOD("tick", "budget_seconds"), &VerseRuntime::tick);
+	ClassDB::bind_method(D_METHOD("_monitor_queued_jobs"), &VerseRuntime::_monitor_queued_jobs);
+	ClassDB::bind_method(D_METHOD("_monitor_pump_ms"), &VerseRuntime::_monitor_pump_ms);
+	ClassDB::bind_method(D_METHOD("_monitor_sleeping_tasks"), &VerseRuntime::_monitor_sleeping_tasks);
 	ClassDB::bind_method(D_METHOD("build_project"), &VerseRuntime::build_project);
 }
 
@@ -152,6 +157,8 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 	godot_api.EmitSignal = &VerseRuntime::api_emit_signal;
 	godot_api.ConnectSignal = &VerseRuntime::api_connect_signal;
 	godot_api.DisconnectSignal = &VerseRuntime::api_disconnect_signal;
+	godot_api.SignalTarget = &VerseRuntime::api_signal_target;
+	godot_api.MakeSignalRef = &VerseRuntime::api_make_signal_ref;
 	godot_api.ReleaseRef = &VerseRuntime::api_release_ref;
 	godot_api.RetainRef = &VerseRuntime::api_retain_ref;
 	godot_api.NewRef = &VerseRuntime::api_new_ref;
@@ -732,6 +739,43 @@ int32_t VerseRuntime::api_disconnect_signal(void *p_ctx, vh_handle p_handle, con
 	return VH_CALL_OK;
 }
 
+// What a Signal *value* names, which is what connecting to one needs and what a reference id does
+// not say. The only way a script reaches a signal the mirror has no accessor for -- one a GDScript
+// or C# script declared, or one made with add_user_signal (R-INT-1).
+//
+// The name is handed back as a pointer into `held`, which the host copies before its next call:
+// the same bargain every other string this side hands over makes, and the reason it is a member
+// rather than a local.
+int32_t VerseRuntime::api_signal_target(void *p_ctx, int64_t p_ref, vh_handle *r_handle, const char **r_name_utf8) {
+	VerseRuntime *self = static_cast<VerseRuntime *>(p_ctx);
+	const Variant *found = verse_ref_table().find(p_ref);
+	if (self == nullptr || found == nullptr || r_handle == nullptr || r_name_utf8 == nullptr) {
+		return VH_CALL_BAD_VALUE;
+	}
+	if (found->get_type() != Variant::SIGNAL) {
+		return VH_CALL_BAD_VALUE;
+	}
+	const Signal signal = *found;
+	self->held_signal_name = String(signal.get_name()).utf8();
+	*r_handle = (vh_handle)signal.get_object_id();
+	*r_name_utf8 = self->held_signal_name.get_data();
+	return VH_CALL_OK;
+}
+
+// Godot's own `Signal(object, "name")`, which has no other spelling on this wire -- the direct
+// analogue of api_make_callable, and what makes a signal the mirror has no accessor for nameable
+// at all rather than only receivable.
+//
+// Not validated against has_signal: Godot's own Signal value is not either, and a Signal naming a
+// signal that does not exist fails at the connect, which is where the message is about the name.
+int64_t VerseRuntime::api_make_signal_ref(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len) {
+	Object *obj = UtilityFunctions::instance_from_id(p_handle);
+	if (obj == nullptr) {
+		return 0;
+	}
+	return verse_ref_table().mint(Variant(Signal(obj, StringName(String::utf8(p_name_utf8, p_name_len)))));
+}
+
 // R-SCN-3's dispatch half: a call with no object. ClassDB::class_call_static is Godot's own way of
 // reaching a static without an instance, and it is what GDScript's `Tween.interpolate_value(...)`
 // resolves to.
@@ -850,7 +894,57 @@ void VerseRuntime::tick(double p_budget_seconds) {
 		return;
 	}
 
-	host.Tick(p_budget_seconds);
+	vh_tick_stats stats = {};
+	stats.StructSize = sizeof(stats);
+	host.Tick(p_budget_seconds, &stats);
+
+	// R-ASYNC-6. A budget nobody can see the effect of is a number nobody can set, so what the pump
+	// did is both readable as a custom monitor and said out loud when it runs out of time.
+	last_tick_stats = stats;
+
+	if (stats.Overran == 0) {
+		overrun_frames = 0;
+		return;
+	}
+	// Rate limited, and by a count rather than a clock: a project that is consistently over budget
+	// is over budget on every frame, and one line per frame would bury every other message in the
+	// output. The first says it, and then one per 600 frames -- about ten seconds at 60fps.
+	if (overrun_frames % 600 == 0) {
+		UtilityFunctions::push_warning(
+				String("Verse: the frame budget (") + String::num(p_budget_seconds * 1000.0, 1) +
+				" ms, verse/runtime/frame_budget_ms) ran out with " + String::num_int64(stats.JobsPending) +
+				" queued job(s) left. They run next frame. The budget governs queued work only -- a task "
+				"awaiting a Godot signal resumes inside the emission and is not budgeted.");
+	}
+	overrun_frames++;
+}
+
+// The two numbers worth watching, as Godot's own custom monitors: they show up in the profiler's
+// Monitors tab beside the engine's, which is where someone tuning the budget is already looking.
+//
+// Registered lazily, on the first tick after a host is loaded, because Performance is a singleton
+// the editor owns and adding a monitor twice is an error.
+void VerseRuntime::register_monitors() {
+	Performance *perf = Performance::get_singleton();
+	if (perf == nullptr || monitors_registered) {
+		return;
+	}
+	monitors_registered = true;
+	perf->add_custom_monitor("verse/queued_jobs", Callable(this, "_monitor_queued_jobs"));
+	perf->add_custom_monitor("verse/pump_ms", Callable(this, "_monitor_pump_ms"));
+	perf->add_custom_monitor("verse/sleeping_tasks", Callable(this, "_monitor_sleeping_tasks"));
+}
+
+double VerseRuntime::_monitor_queued_jobs() const {
+	return (double)last_tick_stats.JobsPending;
+}
+
+double VerseRuntime::_monitor_pump_ms() const {
+	return last_tick_stats.ElapsedSeconds * 1000.0;
+}
+
+double VerseRuntime::_monitor_sleeping_tasks() const {
+	return (double)last_tick_stats.Sleeping;
 }
 
 void VerseRuntime::api_print(void *p_ctx, const char *p_utf8, int32_t p_len) {

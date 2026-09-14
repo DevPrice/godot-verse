@@ -1,15 +1,21 @@
 # godot-verse — Roadmap
 
-**Status:** Draft 9 · 2026-09-13 · **Phases 0–3 complete and Phase 4a complete**, bar the by-hand
-checks two phases now owe — Phase 3's windowed yardstick run and editor session, and Phase 4's
-Node-panel and `_make_function` flows. Phase 3's design is
+**Status:** Draft 10 · 2026-09-13 · **Phases 0–5 complete**, bar the by-hand checks three phases
+now owe — Phase 3's windowed yardstick run and editor session, Phase 4's Node-panel and
+`_make_function` flows, and Phase 5's five. [`by-hand-checklist.md`](by-hand-checklist.md) is all
+of them, and each design asks for one windowed session rather than three. Phase 3's design is
 [`phase-3-design.md`](phase-3-design.md); what Phase 2 built, and the four places its design was
 wrong, are in [`phase-2-design.md`](phase-2-design.md) §11.
+
+**Phase 5 is built**, and [`phase-5-design.md`](phase-5-design.md) **§14** is where it says what
+the design got wrong. Concurrency is the headline feature and it arrived cheaper than planned: a
+task scope per script instance, `Await()` on any Godot signal with a typed payload, `Sleep`, and a
+frame budget readable in Godot's profiler. ABI **v6**. **`dodge-the-creeps`'s wall 3 is down** —
+seven of its eight now are.
 
 **Phase 4.5 is built.** [`phase-4.5-design.md`](phase-4.5-design.md) is the design and **§11 is
 the part to read**: it was planned before the work, so §11 is where the plan turned out to be
 wrong — two of the four spikes came back the opposite way, and §1's table has two bad rows.
-[`phase-5-design.md`](phase-5-design.md) is still a plan and has not run its spikes.
 
 **Phase 4a is built.** [`phase-4-design.md`](phase-4-design.md) is the design, and
 [`phase-4-gaps.md`](phase-4-gaps.md) is where the implementation and that design disagree — twenty
@@ -472,7 +478,7 @@ Ordered by dependency; the design document has the stage table and what each is 
   signals, because `Subscribe` is one.
 - **§5.3 in full** — R-SIG-1 … R-SIG-4 and R-SIG-6: a signal is a typed member (`Hit:godot_signal()`),
   emission is `Hit.Signal(…)`, subscription takes a Verse function, and Godot's own 489 signals get
-  typed accessors. R-SIG-5 (`await`) waits for Phase 5, and is the one wall 4a cannot close.
+  typed accessors. R-SIG-5 (`await`) waited for Phase 5, and was the one wall 4a could not close.
 - **R-NODE-7, R-NODE-8** — the complete virtual set, generated, spelled the way Godot spells it
   (`_Ready`, `_Process`, `_Draw`) because plain names collide with signals on Node, CanvasItem,
   Control and BaseButton. `_notification` turns out **not** to ride that mechanism — it is in no part
@@ -523,10 +529,11 @@ Written here rather than only in `spec.md` §14, because the next phase's shape 
 - **OQ-17** — **C# has never been run against this bridge.** Four MUST requirements name it and every
   fixture in the repo is GDScript. 4a makes the claim bigger by adding signals to it.
 - **OQ-14** — the analysis number after the mirror grows, recorded without a threshold by decision.
-- **R-SIG-5** — `await` on a signal, and with it one-shot connections. Phase 5, and the one yardstick
-  wall 4a cannot close.
-- **The 1354** — methods that mutate Godot *and* return a value, so they can be neither deferred nor
-  compensated. Signal emission joins them by decision. Phase 4.5 below is what audits them.
+- ~~**R-SIG-5**~~ — `await` on a signal, and with it one-shot connections. **Done in Phase 5**, which
+  is where the one yardstick wall 4a could not close fell.
+- **The 1073** — methods that mutate Godot *and* return a value, so they can be neither deferred nor
+  compensated. Signal emission joins them by decision. Phase 4.5 below is what audits them, and what
+  counted them: the 1354 this line used to say included statics and methods the mirror does not emit.
 
 ### Phase 4b — the editor's data model
 
@@ -599,38 +606,51 @@ change: narrowing a callee is invisible to its callers.
 
 ## Phase 5 — Concurrency
 
-**Planned, not started, and Phase 4.5 comes first by decision.**
-[`phase-5-design.md`](phase-5-design.md) is the plan. **§1 is eighteen decisions already made**,
-each against prior art read in Godot's and Unreal's sources — the load-bearing ones are that
-resumption is event-driven rather than pumped (GDScript has no scheduler), that scopes are
-two-tier, and that freeing a node cancels its tasks while leaving the tree does not, which
-**amends R-ASYNC-5's wording**. §2 is its four spikes.
+**Built**, except for the by-hand checklist. [`phase-5-design.md`](phase-5-design.md) is the
+record, and **§14 is the section to read first** — written after the work, it is where the design
+turned out to be wrong. §2 was filled in the same way *before* the work, from twelve questions put
+to the Verse compiler through `tests/verse_probe`, which is why so little of the rest needed
+correcting.
 
-**Why now.** It needs Phase 1's ABI, Phase 4's signals, and a stable enough surface that the task
-lifetime rules can be written down rather than discovered.
+**What it built.** A `verse::FContentScope` per script instance, so a raise costs that node's
+suspended work and nothing else's; `Await()` on any Godot signal, typed by the payload the
+declaration gives; `Sleep` on the host's own real-time clock; a `signal_ref` that can be *named*
+rather than only received, with a rollback-safe `Subscribe` beside its `Await`; and a frame budget
+whose effect is readable in Godot's profiler. ABI **v6**.
 
-- **R-ASYNC-4** — per-script-instance task scopes. Today one `verse::FContentScope` serves the
-  whole project, so one dead-object access terminates every suspended task in every script. This
-  is first: it is a correctness bug, not a feature. Phase 3 made it *survivable* rather than
-  fatal — before R-DIAG-3's fix the same termination stopped Verse for the whole process, not
-  just its suspended work — but it did not narrow it. Two questions come here with it: where the
-  scope boundary goes, and whether a raise should still stop every script for the rest of the
-  frame once only one instance's tasks are at stake.
-- **R-ASYNC-1** — `spawn`, `race`, `sync`, `branch`, `rush`, `loop`, `<suspends>` verified in
-  script code across frames.
-- **R-ASYNC-2, R-SIG-5** — await a Godot signal, a timer, a frame.
-- **R-ASYNC-5** — tasks cancelled when a node leaves the tree or is freed, and on scene change.
-- **R-ASYNC-3, R-ASYNC-6** — documented ordering against `_process`/`_physics_process`; the frame
-  budget configurable and overruns reported.
-- **R-ASYNC-7** — spawn the threading scoping document (OQ-6). It is not built here, but nothing
-  in this phase may foreclose it. It starts from a narrower question than it used to: Phase 4's
-  R-ASYNC-8 makes a foreign-thread call *refuse*, and the engine has already settled that Verse
-  cannot run off the game thread (`VVMEnterVMInline.h` asserts it), so what is left is whether such a
-  call should be marshalled — blocking, with the deadlock OQ-6 now records, or deferred, with no
-  return value.
+**Three corrections worth carrying forward.** D23 is retired — a scope is made at `vh_instantiate`,
+not at the first `spawn`, because there is no hook that fires when a task starts and the guard must
+already be active at that moment; it costs **~2.6 KB per scripted node**, measured. D17 is amended
+— a foreign signal's payload is a `godot_array`, not `[]variant`, which has no description on this
+bridge. And S-4, which the design twice called design-retiring, retired nothing: re-entrant
+resumption inside an open transaction is safe, because each resumption opens its own nested one.
 
-**Exit:** a concurrency-heavy script is a reasonable thing to write. Dodge the Creeps port attempt
-— this is where the second demo, the one that shows what Verse buys you, becomes writable.
+- **R-ASYNC-4** — per-script-instance task scopes. **Done**, and first, as planned: cancellation
+  hangs off it and building `Await` on a project-wide scope would have meant building its
+  cancellation twice. `GHaltedUntilTick`, `GTasksLostToError` and `ReviveContentScope` are gone,
+  and `phase-4-gaps.md` G9 closed with it — Epic's callback-drops-with-its-scope rule is coherent
+  against per-instance scopes and was not against one revived process-wide one.
+- **R-ASYNC-1** — `spawn`, `race`, `sync`, `branch`, `rush`, `loop`, `<suspends>` in script code
+  across frames. **Done**, and most of it was already true; what the phase owed was the
+  `host_smoke` tick-loop layer that keeps it that way.
+- **R-ASYNC-2, R-SIG-5** — await a Godot signal, a timer, a frame. **Done.** `godot_signal(t)`
+  holds a `/Verse.org/Verse` `event(t)`; the host signals that event directly, because
+  `verse::event` is a UObject with a public C++ `Signal`.
+- **R-ASYNC-5** — tasks cancelled when a node is **freed** (the wording is amended: leaving the
+  tree does not cancel, which is GDScript's own rule), and on scene change. **Done.**
+- **R-ASYNC-3, R-ASYNC-6** — the ordering documented against `_process`/`_physics_process` as a
+  table that cites Godot's own source; the budget observable as three Godot custom monitors plus a
+  rate-limited overrun warning. **Done.**
+- **R-ASYNC-7** — the threading scoping document is **not** written and was never this phase's to
+  write. What the phase owed OQ-6 was to foreclose nothing and to say what it settled: there is no
+  scheduler whose thread affinity would have to be redesigned, because resumption is event-driven.
+  OQ-6's row says so.
+
+**Exit:** met, except the last clause. `dodge-the-creeps`'s **wall 3 fell** — `hud.verse` went from
+55 lines of code to 44, the `hud_phase` enum and the extra Timer node and both phase-reading
+handlers are gone, and all 30 headless checks still pass. What is **still owed** is
+[`by-hand-checklist.md`](by-hand-checklist.md), run in one windowed session covering all three
+phases that owe it.
 
 ---
 
@@ -725,4 +745,7 @@ Recorded so the omissions are visible rather than forgotten:
 - **The addon install story** (R-DIST-6, R-DIST-7) — blocked on OQ-1 and outside anyone's control
   here. If the Verse toolchain is open-sourced during the work above, it becomes a phase of its
   own; until then the project is source-only and every phase assumes it.
-- **Threading** (R-ASYNC-7 / OQ-6) — gets a scoping document in Phase 5, not an implementation.
+- **Threading** (R-ASYNC-7 / OQ-6) — Phase 5 neither implements it nor writes its scoping
+  document: it updates the OQ-6 row with what it settled and what it left, and forecloses
+  nothing. There turns out to be no scheduler whose thread affinity would need redesigning —
+  resumption is event-driven, measured — only the pump, which runs where `_frame` does.

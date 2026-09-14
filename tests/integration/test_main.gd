@@ -17,6 +17,9 @@ var _signal_object: Object = null
 var _signal_report: Array = []
 var _tx: Node2D = null
 var _tx_step := 0
+var _conc: Node2D = null
+var _conc2: Node2D = null
+var _foreign: Object = null
 
 
 func _on_verse_touched(body: Node2D) -> void:
@@ -1021,10 +1024,14 @@ func _init() -> void:
 	# R-AUD-1 has to describe measured behaviour rather than intended behaviour. `transactions.verse`
 	# carries the commentary; what is only visible here is what the node's properties ended up as.
 	#
-	# It runs a step per frame rather than inline, and that is the first thing the spike found: **a
-	# raise stops every script until the next `vh_tick`** (R-ASYNC-4), so a second Verse call in the
-	# same frame answers VH_ERR_HALTED and never runs. Three of these cases raise deliberately, so
-	# each needs a frame of its own. `_process` is where the frames are.
+	# It used to run a step per frame, and that was the first thing Phase 4.5's spike found: a raise
+	# stopped every script until the next `vh_tick`, so a second Verse call in the same frame
+	# answered VH_ERR_HALTED and never ran. Phase 5 replaced that with a task scope per instance
+	# (R-ASYNC-4), so a raise now stops only the call that raised -- and the cases below run one
+	# after another in a single frame, raises included, which is the test that it did.
+	#
+	# `_process` is still where the frames are, because the concurrency section after it needs
+	# them: a task suspended on a signal resumes when Godot emits, and that takes a frame.
 	var tx_script: Script = load("res://scripts/transactions.verse")
 	_check("transactions.verse compiles", tx_script != null and tx_script.can_instantiate())
 	if tx_script == null:
@@ -1103,25 +1110,183 @@ func _process(_delta: float) -> bool:
 			_check_eq("a Subscribe undone by a failed context leaves no connection",
 					_tx.get_signal_connection_list("Hit").size(), 1)
 		2:
-			# A raise, which aborts the host's transaction and drops what it had deferred. On its
-			# own frame: everything after it this frame would be halted.
+			# A raise, which aborts the host's transaction and drops what it had deferred. Three of
+			# them, in one frame, with ordinary calls between: before Phase 5 the second and third
+			# would have answered VH_ERR_HALTED without running, and every assertion after the first
+			# would have been about a call that never happened.
 			_tx.position = Vector2(1, 1)
 			_tx.call("SetThenRaise")
 			_check_eq("a raise drops the writes its transaction had deferred",
 					_tx.position, Vector2(1, 1))
-		3:
-			_check_eq("and the next frame runs Verse again", _tx.call("ReadObservedX"), 7.0)
+			_check_eq("and the very next call in the same frame still runs",
+					_tx.call("ReadObservedX"), 7.0)
 
 			var before: int = _tx.get_signal_connection_list("Hit").size()
 			_tx.call("SubscribeThenRaise")
 			_check_eq("a Subscribe undone by a raise leaves no connection",
 					_tx.get_signal_connection_list("Hit").size(), before)
-		4:
+
 			# The uncompensated shape beside it: `Object.connect` mutates Godot *and* answers, so it
 			# can be neither deferred nor ignored, and nothing undoes it.
 			_tx.call("ConnectThenRaise")
 			_check_eq("a mutate-and-answer call survives the raise that follows it",
 					_tx.get_signal_connection_list("Scored").size(), 1)
+
+		# --- R-ASYNC-1/2/4/5, R-SIG-5: tasks --------------------------------------------------
+		#
+		# A frame apart on purpose. A task spawned in one call suspends; what resumes it happens in
+		# a later one, and a `vh_tick` runs in between -- which is the claim being tested, not a
+		# scheduling detail.
+		3:
+			var conc_script: Script = load("res://scripts/concurrency.verse")
+			_check("concurrency.verse compiles", conc_script != null and conc_script.can_instantiate())
+			if conc_script == null:
+				print("[integration] %d passed, %d failed" % [_passed, _failed])
+				quit(1)
+				return true
+			_conc = Node2D.new()
+			_conc.set_script(conc_script)
+			root.add_child(_conc)
+			_conc2 = Node2D.new()
+			_conc2.set_script(conc_script)
+			root.add_child(_conc2)
+
+			# Awaiting a signal the script itself declares. The task suspends inside the call that
+			# spawned it, and the call returns normally -- which is what "the call returns VH_OK"
+			# means from out here.
+			_conc.call("StartWaitForFired")
+			_check_eq("a spawned task runs up to its first await", _conc.call("ReadStage"), 1)
+
+			# One Godot connection, ours, for the duration of the wait.
+			_check_eq("awaiting connects to the signal",
+					_conc.get_signal_connection_list("Fired").size(), 1)
+		4:
+			_check_eq("and the task is still suspended a frame later", _conc.call("ReadStage"), 1)
+
+			# GDScript emits, and the Verse task resumes inside the emission (R-SIG-5).
+			_conc.emit_signal("Fired")
+			_check_eq("emitting resumes the awaiting task", _conc.call("ReadStage"), 2)
+			_check_eq("and the connection it made is gone again",
+					_conc.get_signal_connection_list("Fired").size(), 0)
+
+			# The payload comes back typed, which is what the event buys.
+			_conc.call("Reset")
+			_conc.call("StartWaitForScored")
+			_conc.emit_signal("Scored", 17)
+			_check_eq("an awaited payload arrives typed", _conc.call("ReadSeen"), 17)
+
+			_conc.call("Reset")
+			_conc.call("StartWaitForStruck")
+			_conc.emit_signal("Struck", 9, "spike")
+			_check_eq("and a tuple payload arrives as its elements",
+					[_conc.call("ReadSeen"), _conc.call("ReadSeenBy")], [9, "spike"])
+
+			# One of Godot's own, through the accessor the generator emits per signal per class.
+			# Nothing per-signal was written for this: every mirrored accessor answers the same
+			# `godot_signal(t)` a declaration does.
+			_conc.call("Reset")
+			var awaited_timer := Timer.new()
+			awaited_timer.one_shot = true
+			root.add_child(awaited_timer)
+			_conc.call("StartWaitForTimer", awaited_timer)
+			_check_eq("awaiting an engine signal connects to it",
+					awaited_timer.get_signal_connection_list("timeout").size(), 1)
+			awaited_timer.emit_signal("timeout")
+			_check_eq("and the task resumes when the engine emits", _conc.call("ReadStage"), 10)
+			root.remove_child(awaited_timer)
+			awaited_timer.free()
+
+			# A signal nothing in the mirror knows about (R-INT-1): one made with add_user_signal,
+			# reached by naming it. There is no declared payload, so the arguments arrive as the
+			# Godot Array they would have been anyway.
+			_conc.call("Reset")
+			_foreign = Object.new()
+			_foreign.add_user_signal("Tally", [{"name": "points", "type": TYPE_INT}])
+			_conc.call("StartWaitForForeign", _foreign, "Tally")
+			_check_eq("awaiting a foreign signal connects to it",
+					_foreign.get_signal_connection_list("Tally").size(), 1)
+			_foreign.emit_signal("Tally", 23)
+			_check_eq("and resumes with the arguments as an Array",
+					[_conc.call("ReadSeen"), _conc.call("ReadStage")], [23, 20])
+
+			# The rollback-safe way to *subscribe* to one, which is what `Object.Connect` could not
+			# be: it mutates Godot and answers a value, so a raise after it left the connection
+			# behind. This one is compensated the way godot_signal.Subscribe is.
+			_conc.call("Reset")
+			_conc.call("SubscribeForeign", _foreign, "Tally")
+			_check_eq("subscribing to a foreign signal connects",
+					_foreign.get_signal_connection_list("Tally").size(), 1)
+			_foreign.emit_signal("Tally", 5)
+			_check_eq("and the handler receives the arguments", _conc.call("ReadSeen"), 5)
+			_conc.call("SubscribeForeignThenFail", _foreign, "Tally")
+			_check_eq("while one undone by a failure leaves no connection",
+					_foreign.get_signal_connection_list("Tally").size(), 1)
+
+			# What a race leaves behind. The loser is cancelled and its `defer` is the only thing
+			# that takes its connection away, so this is the case that says `defer` runs on
+			# cancellation as well as on return.
+			_conc.call("Reset")
+			_conc.call("StartRace")
+			_check_eq("racing two awaits connects to both",
+					[_conc.get_signal_connection_list("Fired").size(),
+							_conc.get_signal_connection_list("Scored").size()], [1, 1])
+			_conc.emit_signal("Fired")
+			_check_eq("the race returns when the first fires", _conc.call("ReadStage"), 30)
+			_check_eq("and the loser leaves no connection behind",
+					[_conc.get_signal_connection_list("Fired").size(),
+							_conc.get_signal_connection_list("Scored").size()], [0, 0])
+
+			# A signal handler may start a task now, which is what widening Subscribe's callback
+			# was for -- and the shape a game-over sequence is written in.
+			_conc.call("Reset")
+			_conc.call("SubscribeStartingTask")
+			_conc.emit_signal("Scored", 1)
+			_check_eq("a signal handler can spawn a task", _conc.call("ReadStage"), 1)
+
+			# R-ASYNC-4: a raise cancels the raising instance's tasks and nobody else's. Two
+			# instances of one script, each with a task suspended on its own signal.
+			_conc.call("Reset")
+			_conc2.call("Reset")
+			_conc.call("StartWaitForFired")
+			_conc2.call("StartWaitForFired")
+			_conc.call("Raise")
+			_conc2.emit_signal("Fired")
+			_check_eq("a raise leaves another instance's suspended task running",
+					_conc2.call("ReadStage"), 2)
+			_conc.emit_signal("Fired")
+			_check_eq("while the raising instance's task is gone -- still at the stage it reached "
+					+ "before it suspended, never the one past the await",
+					_conc.call("ReadStage"), 1)
+
+			# Sleep, on the host's own real-time clock. Sleep(0.0) means "resume at the next pump",
+			# so this one is answered on the next frame rather than in this call.
+			_conc.call("Reset")
+			_conc.call("StartNap")
+			_check_eq("a sleeping task has not resumed yet", _conc.call("ReadStage"), 0)
+		5:
+			_check_eq("Sleep(0.0) resumes at the next tick", _conc.call("ReadStage"), 40)
+
+			# R-ASYNC-5: freeing the node cancels its tasks, which is GDScript's own trigger.
+			#
+			# Asserted on a *foreign* emitter rather than on the node's own signal, because that is
+			# the only way to see it from out here: the connection the wait made lives on an object
+			# that outlives the node, so it can be counted before and after. A cancelled task whose
+			# `defer` never ran would leave it behind.
+			_conc2.call("Reset")
+			_conc2.call("StartWaitForForeign", _foreign, "Tally")
+			_check_eq("a second node's wait connects to the foreign signal",
+					_foreign.get_signal_connection_list("Tally").size(), 2)
+			var doomed := _conc2
+			_conc2 = null
+			root.remove_child(doomed)
+			doomed.free()
+			_check_eq("freeing the node cancelled its task and took the connection with it",
+					_foreign.get_signal_connection_list("Tally").size(), 1)
+			_foreign.emit_signal("Tally", 99)
+			_check("emitting afterwards is not an error", true)
+
+			_foreign.free()
+			_foreign = null
 		_:
 			print("[integration] %d passed, %d failed" % [_passed, _failed])
 			quit(1 if _failed > 0 else 0)

@@ -20,6 +20,7 @@
 #include "ULangUEUtils.h"
 #include "VerseComputationLimitControl.h"
 #include "VerseContentScope.h"
+#include "VerseEvent.h"
 #include "VerseString.h"
 #include "VerseTask.h"
 #include "UObject/StrongObjectPtr.h"
@@ -392,42 +393,68 @@ FUtf8String GAnalysedSource;
 /// The project's source files, in the order vh_compile_project listed them. Owned here rather
 /// than by the IDE because the package is: see ScriptPackageName.
 TArray<uLang::TSRef<FHostSourceSnippet>> GScriptSnippets;
-TSharedPtr<verse::FContentScope> GContentScope;
-TOptional<verse::FContentScopeGuard> GContentScopeGuard;
+/// The outer every content scope instantiates into. Rooted once for the process: a scope holds it
+/// weakly, so nothing here roots one per instance (phase-5-design.md 13's first risk).
+UPlaceholderObjectForContentScope* GScopeOuter = nullptr;
 
-/// Whether a script raised this frame, which stops every script until the next tick.
-bool GHaltedUntilTick = false;
+/// The scope everything that is not a call into one instance runs under: analysis, the statics
+/// reader, `Main`, the pump, and every field access. Its guard is the root of the stack and is
+/// pushed once, at EnterContentScope.
+TSharedPtr<verse::FContentScope> GProjectScope;
+TOptional<verse::FContentScopeGuard> GProjectScopeGuard;
 
-/// Whether anything was suspended when it raised, so the report can say what was lost rather than
-/// guess. Sampled in NoteRuntimeErrorRaised, which is the last moment it can be asked.
-bool GTasksLostToError = false;
+/// How deep the VM entries are nested. Only depth 0 is a moment at which the *root* guard can be
+/// swapped, which is what RefreshProjectScope needs and why this is counted rather than inferred:
+/// FContentScopeGuard exposes no depth, and popping a guard that is not the active one is an
+/// ensure() away from a corrupt stack.
+int32 GVerseEntryDepth = 0;
 
-/// Undoes the content scope's termination, which is UEFN's policy and not this bridge's.
+/// Replaces a terminated project scope with a fresh one, rather than un-terminating it.
 ///
-/// A raised Verse runtime error calls Terminate() on the active content scope
+/// A raised Verse runtime error calls Terminate() on the *active* content scope
 /// (VVMRuntimeError.cpp), and FRunningContext::EnterVM_Internal then returns *without running its
-/// functor* for every later entry into the VM. Nothing downstream can tell that apart from a call
-/// that ran and did nothing, so before this the whole bridge went quiet at the first raise: a
-/// method call reported success having not run, and a read reported "no such member". One script's
-/// first mistake ended Verse for the process, in an editor nobody restarts.
+/// functor* for every later entry into that scope. Nothing downstream can tell that apart from a
+/// call that ran and did nothing, which is why every entry point below reports what actually ran.
 ///
-/// Resetting also builds a fresh task group, so whatever was suspended when the error hit is gone
-/// for good -- and that is *every* script's suspended work rather than the offending one's, because
-/// one scope serves the whole project. Narrowing that is R-ASYNC-4, in Phase 5.
-AUTORTFM_DISABLE void ReviveContentScope()
+/// Phase 3 answered this with ResetTerminationState() on one process-wide scope, at the next frame
+/// boundary; the comment it carried recorded the defect that made it necessary -- one script's
+/// first mistake ended Verse for the process, in an editor nobody restarts. Phase 5 keeps the
+/// answer and narrows the question: Epic never revives either (ContentScopeRepository hands out a
+/// *fresh* scope), the replacement happens at the next entry rather than at the next tick, and
+/// with a scope per instance there is nothing project-wide left to stop. See spec R-DIAG-3.
+AUTORTFM_DISABLE void RefreshProjectScope()
 {
-    if (GContentScope.IsValid() && GContentScope->WasTerminated())
+    if (!GProjectScope.IsValid() || !GProjectScope->WasTerminated())
     {
-        GContentScope->ResetTerminationState();
+        return;
     }
+    GProjectScopeGuard.Reset();
+    GProjectScope = verse::MakeContentScope(GScopeOuter);
+    GProjectScopeGuard.Emplace(GProjectScope.ToSharedRef());
 }
 
+/// Counts one entry into the VM, and replaces a terminated project scope at the outermost one.
+struct FVerseEntry
+{
+    AUTORTFM_DISABLE FVerseEntry()
+    {
+        if (GVerseEntryDepth++ == 0)
+        {
+            RefreshProjectScope();
+        }
+    }
+    AUTORTFM_DISABLE ~FVerseEntry() { --GVerseEntryDepth; }
+
+    FVerseEntry(const FVerseEntry&) = delete;
+    FVerseEntry& operator=(const FVerseEntry&) = delete;
+};
+
 /// Every entry into the VM goes through here rather than calling Context.EnterVM directly, so that
-/// a seventh entry point cannot be added that forgets the revive above.
+/// a seventh entry point cannot be added that forgets the scope handling above.
 template <typename TBody>
 AUTORTFM_DISABLE void EnterVerse(Verse::FRunningContext& Context, TBody&& Body)
 {
-    ReviveContentScope();
+    FVerseEntry Entry;
     Context.EnterVM(Forward<TBody>(Body));
 }
 
@@ -575,24 +602,27 @@ AUTORTFM_DISABLE bool EnsureIde()
 
 AUTORTFM_DISABLE bool GodotVerse::EnterContentScope()
 {
-    if (GContentScopeGuard.IsSet())
+    if (GProjectScopeGuard.IsSet())
     {
         return true;
     }
 
     VerseComputationLimitControl::SetComputationLimits(false);
 
-    // Verse needs a UObject outer to instantiate into and we have no UWorld, so synthesize one.
-    UPlaceholderObjectForContentScope* PlaceholderObject = UPlaceholderObjectForContentScope::MakeRooted();
-    GContentScope = verse::MakeContentScope(PlaceholderObject);
-    GContentScopeGuard.Emplace(GContentScope.ToSharedRef());
+    // Verse needs a UObject outer to instantiate into and we have no UWorld, so synthesize one --
+    // one, for the process. A content scope holds its outer weakly and every instance scope shares
+    // this one, so a project with a thousand awaiting nodes roots no more UObjects than a project
+    // with none.
+    GScopeOuter = UPlaceholderObjectForContentScope::MakeRooted();
+    GProjectScope = verse::MakeContentScope(GScopeOuter);
+    GProjectScopeGuard.Emplace(GProjectScope.ToSharedRef());
     return true;
 }
 
 AUTORTFM_DISABLE void GodotVerse::LeaveContentScope()
 {
-    GContentScopeGuard.Reset();
-    GContentScope.Reset();
+    GProjectScopeGuard.Reset();
+    GProjectScope.Reset();
 }
 
 AUTORTFM_DISABLE void GodotVerse::ResetScriptState()
@@ -953,12 +983,48 @@ struct GodotVerse::FInstance
     /// when the instance goes away; it is never reached through as a handle.
     int64 Handle = 0;
 
+    /// This instance's own task scope (R-ASYNC-4). Every entry that runs this object's code pushes
+    /// its guard, so a task `spawn`ed from one of its methods lands in *its* task group and nobody
+    /// else's -- which is what makes a raise here cancel this node's suspended work and leave the
+    /// rest of the project running.
+    ///
+    /// Terminated and dropped at ReleaseInstance; replaced rather than revived once terminated
+    /// (phase-5-design.md D24).
+    TSharedPtr<verse::FContentScope> Scope;
+
     /// Set by the first call into the object, after which a non-var member can no longer be
     /// given a value. See WriteInstanceField.
     bool bSealed = false;
 };
 
 namespace {
+/// This instance's scope, made if it has none and replaced if the last one was terminated.
+///
+/// Replaced rather than un-terminated: Epic's own ContentScopeRepository hands out a fresh scope,
+/// and what a raise costs is exactly this instance's suspended work. The replacement happens here,
+/// at the next entry, rather than at the next frame boundary.
+AUTORTFM_DISABLE TSharedRef<verse::FContentScope> ScopeFor(GodotVerse::FInstance& Instance)
+{
+    if (!Instance.Scope.IsValid() || Instance.Scope->WasTerminated())
+    {
+        Instance.Scope = verse::MakeContentScope(GScopeOuter);
+    }
+    return Instance.Scope.ToSharedRef();
+}
+
+/// EnterVerse, with one instance's own task scope active for the duration (R-ASYNC-4).
+///
+/// The guard is pushed *outside* EnterVM on purpose: FRunningContext::EnterVM_Internal reads the
+/// active scope to decide which task group a `spawn` inside the body joins, and it declines to run
+/// the body at all when that scope was terminated.
+template <typename TBody>
+AUTORTFM_DISABLE void EnterVerseOn(Verse::FRunningContext& Context, GodotVerse::FInstance& Instance, TBody&& Body)
+{
+    FVerseEntry Entry;
+    verse::FContentScopeGuard Guard(ScopeFor(Instance));
+    Context.EnterVM(Forward<TBody>(Body));
+}
+
 /// The UClass behind a script's top-level Verse class, or null if there is no such class or it
 /// does not derive from object. A class that does not derive from object has no
 /// native representation at all, so `Cast<UClass>` is itself most of the check.
@@ -1624,6 +1690,10 @@ struct FPayloadShape
     /// The struct the payload decomposes, for Kind == Struct and null otherwise. Kept because the
     /// *inbound* direction has to build one back, and the semantic class is what names it.
     const uLang::CClass* StructClass = nullptr;
+    /// The payload as one type, rather than as the arguments it decomposes into. What `Await`
+    /// needs: an emission arrives as N Godot arguments and the event it feeds takes one `t`, so
+    /// the inbound direction has to put back together exactly what DescribePayload took apart.
+    FMemberType Whole;
 };
 
 /// `(<enclosing scope path>:)<name>` -- what the VM knows a definition as. Defined below, beside the
@@ -2473,6 +2543,16 @@ struct FCallbackTarget
 {
     int64 OwnerHandle = 0;
     FUtf8String DecoratedName;
+
+    /// Non-zero for a Callable the host minted to feed a suspended task rather than to call a
+    /// script method: the token of the row in GAwaiters below. Nothing a script hands to
+    /// `MakeCallable` ever carries one.
+    int64 AwaitToken = 0;
+
+    /// Pack the emission's arguments into one Godot Array before dispatching. What a subscriber to
+    /// a *foreign* signal receives, because nothing declares that signal's payload and there is no
+    /// per-argument shape to convert against.
+    bool bArgsAsArray = false;
 };
 
 TMap<int64, FCallbackTarget> GCallbacks;
@@ -2520,6 +2600,42 @@ struct FSubscription
 
 TMap<int64, FSubscription> GSubscriptions;
 int64 GNextSubscriptionId = 1;
+
+/// One task waiting on one Godot signal (R-SIG-5).
+///
+/// A wait is a connection the host owns for exactly as long as the wait lasts. What it feeds is a
+/// `/Verse.org/Verse` `event(t)` living on the `godot_signal` object the script awaited -- which is
+/// why the object is held here rather than only its binding id: an engine-signal accessor mints a
+/// *fresh* `godot_signal` on every call, several of them share one binding, and only the object
+/// says which event a given wait is suspended on.
+struct FAwaiter
+{
+    /// Held strongly: `Timer.Timeout().Await()` awaits a temporary, and nothing else on the Verse
+    /// side has to outlive the statement that made it.
+    TStrongObjectPtr<UObject> Waiter;
+    /// The binding whose payload shape says how to put the emission's arguments back together.
+    /// Zero for a foreign signal, whose arguments become one Godot Array instead.
+    int64 SignalId = 0;
+    /// What to disconnect from, and what to disconnect with.
+    int64 OwnerHandle = 0;
+    FUtf8String Name;
+    int64 CallableRef = 0;
+    /// The callback id the Callable carries, so ending the wait drops its row too.
+    int64 CallbackId = 0;
+
+    /// The scope the wait was started in, and the cleanup it registered there.
+    ///
+    /// This is what ends a wait that never resumes *and* never runs its `defer`: terminating a
+    /// task group does not unwind the tasks in it, so a node freed while awaiting would otherwise
+    /// leave a live Godot connection, a held object and a callback row behind. Epic's own rule, and
+    /// their own hook -- `event::SubscribeInternal` drops a subscription the same way
+    /// (`VerseEvent.cpp:139-178`). `phase-4-gaps.md` G9 is this.
+    TWeakPtr<verse::FContentScope> Scope;
+    FDelegateHandle Cleanup;
+};
+
+TMap<int64, FAwaiter> GAwaiters;
+int64 GNextAwaitToken = 1;
 
 /// "<handle>:<signal>" -> the binding id, so an accessor called twice on one object answers the
 /// same row. A row is never dropped: the ids are small, and nothing tells the host that Godot has
@@ -3633,6 +3749,11 @@ AUTORTFM_DISABLE void DescribePayload(const uLang::CTypeBase* Payload,
     bool bIsOption = false;
     const uLang::CNormalType& Normal = UnwrapDeclaredType(*Payload, bIsOption);
 
+    // The payload as one value, for the direction that has to reassemble it. A tuple has no
+    // description of its own -- DescribeType would answer "nothing" for it -- so Kind and Args are
+    // what the tuple case is rebuilt from and this is only read for Bare and Struct.
+    OutShape.Whole = DescribeType(Payload, Program);
+
     if (const uLang::CTupleType* Tuple = Normal.AsNullable<uLang::CTupleType>())
     {
         OutShape.Kind = EPayloadShape::Tuple;
@@ -4346,7 +4467,7 @@ AUTORTFM_DISABLE void GodotVerse::CancelSubscription(int64 SubscriptionId)
     const FSubscription Subscription = *Found;
     GSubscriptions.Remove(SubscriptionId);
 
-    FHostState& Host = GetHost();
+    GodotVerse::FHostState& Host = GodotVerse::GetHost();
     if (Host.Godot.DisconnectSignal)
     {
         vh_value Target{};
@@ -4363,6 +4484,443 @@ AUTORTFM_DISABLE void GodotVerse::CancelSubscription(int64 SubscriptionId)
     {
         Host.Godot.ReleaseRef(Host.Godot.Ctx, Subscription.CallableRef);
     }
+}
+
+namespace {
+
+/// The `/Verse.org/Verse` event a `godot_signal` holds, read off the object rather than named.
+///
+/// Found by walking the shape rather than by building the field's decorated key. The key of a data
+/// member is `(<declaring class' scope path>:)<name>`, and for a member of a *parametric* class
+/// there is more than one plausible spelling of that path -- so the walk asks the only question
+/// that cannot be got wrong: which field holds an event.
+AUTORTFM_DISABLE verse::event* FindEventField(Verse::FRunningContext Context, UObject* Object)
+{
+    if (!Object)
+    {
+        return nullptr;
+    }
+    Verse::VShape& Shape = UVerseClass::GetShapeForLoadField(Context, Object->GetClass());
+    for (Verse::VShape::FieldsMap::TIterator It = Shape.CreateFieldsIterator(); It; ++It)
+    {
+        const Verse::VShape::VEntry& Entry = It.Value();
+        Verse::VValue Value = Entry.Type == Verse::EFieldType::FPropertyVar
+            ? Verse::VNativeRef::Peek(Context, Object, Entry.UProperty)
+            : UVerseClass::PeekField(Context, Object, &Entry);
+        if (Verse::VRef* Ref = Value.DynamicCast<Verse::VRef>())
+        {
+            Value = Ref->Get(Context);
+        }
+        if (verse::event* const Event = Cast<verse::event>(Value.ExtractUObject()))
+        {
+            return Event;
+        }
+    }
+    return nullptr;
+}
+
+/// A Godot Array holding an emission's arguments, as the reference wrapper a `godot_array` is.
+///
+/// The one payload a foreign signal can carry: nothing declares its arguments, so there is no
+/// per-argument type to convert against and the whole list crosses as the container Godot itself
+/// would have put them in. Ownership of the fresh reference passes to the wrapper, whose
+/// BeginDestroy releases it when Verse drops the value.
+AUTORTFM_DISABLE bool ArgumentArrayValue(Verse::FRunningContext Context,
+                                         const vh_value* Args,
+                                         int32 ArgCount,
+                                         Verse::VValue& OutValue)
+{
+    GodotVerse::FHostState& Host = GodotVerse::GetHost();
+    if (!Host.Godot.NewRef || !Host.Godot.RefSet)
+    {
+        return false;
+    }
+    const int64 Ref = Host.Godot.NewRef(Host.Godot.Ctx, VH_VARIANT_ARRAY);
+    if (Ref == 0)
+    {
+        return false;
+    }
+    for (int32 Index = 0; Index < ArgCount; ++Index)
+    {
+        vh_value Key{};
+        Key.Type = VH_TYPE_INT;
+        Key.Int = Index;
+        Host.Godot.RefSet(Host.Godot.Ctx, Ref, &Key, &Args[Index]);
+    }
+    UObject* const Wrapper = NewReferenceWrapper(FindReferenceClass(VH_VARIANT_ARRAY), Ref);
+    if (!Wrapper)
+    {
+        if (Host.Godot.ReleaseRef)
+        {
+            Host.Godot.ReleaseRef(Host.Godot.Ctx, Ref);
+        }
+        return false;
+    }
+    OutValue = Verse::VValue(Wrapper);
+    return true;
+}
+
+/// Puts an emission's arguments back together as the one value the payload's type names.
+///
+/// The exact inverse of what DescribePayload took apart, and it has to be: `Await` answers `t`,
+/// and `t` is what the declaration said rather than the argument list Godot carried.
+AUTORTFM_DISABLE bool PayloadValue(Verse::FRunningContext Context,
+                                   const FPayloadShape& Shape,
+                                   const vh_value* Args,
+                                   int32 ArgCount,
+                                   Verse::VValue& OutValue)
+{
+    switch (Shape.Kind)
+    {
+    case EPayloadShape::Bare:
+        return Shape.Args.Num() == 1 && ArgCount == 1
+            && WireToValue(Context, Args[0], Shape.Args[0].Type, OutValue);
+
+    case EPayloadShape::Tuple:
+    {
+        // A Verse tuple is an array at runtime, and a `tuple()` payload is an empty one -- which is
+        // what an engine signal carrying nothing answers, and the commonest case there is.
+        if (ArgCount != Shape.Args.Num())
+        {
+            return false;
+        }
+        TArray<Verse::VValue> Elements;
+        Elements.Reserve(ArgCount);
+        for (int32 Index = 0; Index < ArgCount; ++Index)
+        {
+            Verse::VValue Element;
+            if (!WireToValue(Context, Args[Index], Shape.Args[Index].Type, Element))
+            {
+                return false;
+            }
+            Elements.Add(Element);
+        }
+        const auto Init = [&Elements](uint32 Index) { return Elements[(int32)Index]; };
+        OutValue = Verse::VValue(Verse::VArray::New(Context, (uint32)Elements.Num(), Init));
+        return true;
+    }
+
+    case EPayloadShape::Struct:
+    {
+        // The same rule InstanceCall applies to a struct parameter: N Godot arguments satisfy one
+        // struct of N fields, and WireToValue is what builds it. Borrowed for the call, like every
+        // other pointer on this wire.
+        vh_value Packed{};
+        Packed.Type = VH_TYPE_TUPLE;
+        Packed.Seq.Items = Args;
+        Packed.Seq.Count = ArgCount;
+        return WireToValue(Context, Packed, Shape.Whole, OutValue);
+    }
+    }
+    return false;
+}
+
+/// Resumes whatever is waiting on one await token, with the emission's arguments as its payload.
+///
+/// The resumption happens **inside the emission**, synchronously, which is where GDScript resumes a
+/// coroutine too (`GDScriptFunctionState::_signal_callback` calls `resume()` from the connected
+/// Callable). Nothing is queued and nothing is budgeted -- see vh_tick.
+///
+/// Its own `AutoRTFM::Transact`, nested inside whatever transaction the emitting call is already
+/// in. Without that a raise in the resumed task would abort the *emitter's* transaction and drop
+/// writes that had nothing to do with it; with it, "a failure undoes the failing computation's
+/// writes" stays literally true for a task as well as for a call.
+AUTORTFM_DISABLE int32 DeliverToAwaiter(int64 Token, const vh_value* Args, int32 ArgCount)
+{
+    const FAwaiter* const Found = GAwaiters.Find(Token);
+    if (!Found)
+    {
+        // The wait ended between Godot queueing the emission and delivering it. Not an error: a
+        // cancelled task is exactly a wait that stopped waiting.
+        return VH_OK;
+    }
+    UObject* const Waiter = Found->Waiter.Get();
+    const int64 SignalId = Found->SignalId;
+    const FPayloadShape* const Shape = SignalId != 0
+        ? (GSignalBindings.Contains(SignalId) ? &GSignalBindings[SignalId].Payload : nullptr)
+        : nullptr;
+    if (!Waiter || (SignalId != 0 && !Shape))
+    {
+        return VH_ERR_NOT_FOUND;
+    }
+
+    int32 Status = VH_OK;
+    Verse::FRunningContext Context = Verse::FRunningContextPromise{};
+    const AutoRTFM::ETransactionResult TransactionResult = AutoRTFM::Transact([&] {
+        AutoRTFM::Open([&] {
+            EnterVerse(Context, [&] {
+                verse::event* const Event = FindEventField(Context, Waiter);
+                if (!Event)
+                {
+                    Status = VH_ERR_NOT_FOUND;
+                    return;
+                }
+                Verse::VValue Payload;
+                const bool bBuilt = Shape ? PayloadValue(Context, *Shape, Args, ArgCount, Payload)
+                                          : ArgumentArrayValue(Context, Args, ArgCount, Payload);
+                if (!bBuilt)
+                {
+                    Status = VH_ERR_ARGUMENT;
+                    return;
+                }
+                // event::Signal resumes the suspended awaits in FIFO order, under each task's own
+                // content scope, skipping any whose scope was terminated -- Epic's code, and the
+                // reason `Await` needed no scheduler of its own.
+                Event->Signal(FVerseValue(Payload));
+            });
+        });
+    });
+    if (TransactionResult != AutoRTFM::ETransactionResult::Committed)
+    {
+        return VH_ERR_RUNTIME;
+    }
+    return Status;
+}
+
+/// Mints the Callable an await or a foreign subscription is delivered through, and connects it.
+///
+/// Answers the callback id, with OutCallableRef holding the reference Godot keeps. 0 for a
+/// connection Godot refused, having released whatever it had minted.
+AUTORTFM_DISABLE int64 ConnectDelivery(int64 OwnerHandle,
+                                       const FUtf8String& Name,
+                                       FCallbackTarget Target,
+                                       int32 ConnectFlags,
+                                       int64& OutCallableRef)
+{
+    OutCallableRef = 0;
+    GodotVerse::FHostState& Host = GodotVerse::GetHost();
+    if (!Host.Godot.MakeCallable || !Host.Godot.ConnectSignal || !Host.Godot.ReleaseRef || OwnerHandle == 0)
+    {
+        return 0;
+    }
+
+    const int64 CallbackId = GNextCallbackId++;
+    {
+        FScopeLock Lock(&GCallbacksLock);
+        GCallbacks.Add(CallbackId, MoveTemp(Target));
+    }
+    const int64 CallableRef = Host.Godot.MakeCallable(Host.Godot.Ctx, CallbackId, OwnerHandle);
+    if (CallableRef == 0)
+    {
+        FScopeLock Lock(&GCallbacksLock);
+        GCallbacks.Remove(CallbackId);
+        return 0;
+    }
+
+    vh_value Callable{};
+    Callable.Type = VH_TYPE_REF;
+    Callable.VariantTag = VH_VARIANT_CALLABLE;
+    Callable.Ref = CallableRef;
+    const int32 Status = Host.Godot.ConnectSignal(Host.Godot.Ctx,
+                                                  OwnerHandle,
+                                                  reinterpret_cast<const char*>(*Name),
+                                                  Name.Len(),
+                                                  &Callable,
+                                                  ConnectFlags);
+    if (Status != VH_CALL_OK)
+    {
+        Host.Godot.ReleaseRef(Host.Godot.Ctx, CallableRef);
+        FScopeLock Lock(&GCallbacksLock);
+        GCallbacks.Remove(CallbackId);
+        return 0;
+    }
+    OutCallableRef = CallableRef;
+    return CallbackId;
+}
+
+/// The object and signal name a Godot Signal *value* stands for. False for a reference that is not
+/// a Signal, or for a consumer built before v6.0 declared the callback.
+AUTORTFM_DISABLE bool ResolveSignalRef(int64 Ref, int64& OutHandle, FUtf8String& OutName)
+{
+    GodotVerse::FHostState& Host = GodotVerse::GetHost();
+    const char* NameUtf8 = nullptr;
+    if (!Host.Godot.SignalTarget
+        || Host.Godot.SignalTarget(Host.Godot.Ctx, Ref, &OutHandle, &NameUtf8) != VH_CALL_OK
+        || !NameUtf8)
+    {
+        return false;
+    }
+    // Copied now: the consumer owns those bytes only until its next call, and the name outlives
+    // this in an awaiter row.
+    OutName = FUtf8String(FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(NameUtf8)));
+    return !OutName.IsEmpty();
+}
+
+/// Defined below, beside MakeCallableFor, which is its only other caller.
+AUTORTFM_DISABLE bool DescribeBoundFunctionFwd(Verse::VFunction* Function, int64& OutHandle, FUtf8String& OutDecorated);
+
+/// Registers one wait and connects what feeds it. OwnerHandle/Name say what to connect to.
+AUTORTFM_DISABLE int64 BeginAwait(UObject* Waiter, int64 SignalId, int64 OwnerHandle, const FUtf8String& Name)
+{
+    if (!Waiter || OwnerHandle == 0 || Name.IsEmpty())
+    {
+        return 0;
+    }
+    const int64 Token = GNextAwaitToken++;
+
+    FCallbackTarget Target;
+    Target.OwnerHandle = OwnerHandle;
+    Target.AwaitToken = Token;
+
+    int64 CallableRef = 0;
+    // One-shot: a single `Await()` resumes once, so Godot dropping the connection as it fires is
+    // exactly right and saves the disconnect. `loop { X.Await() }` reconnects per iteration, which
+    // is what the source says it does.
+    const int64 CallbackId = ConnectDelivery(OwnerHandle, Name, MoveTemp(Target), VH_CONNECT_ONE_SHOT, CallableRef);
+    if (CallbackId == 0)
+    {
+        return 0;
+    }
+
+    FAwaiter Awaiter;
+    Awaiter.Waiter = TStrongObjectPtr<UObject>(Waiter);
+    Awaiter.SignalId = SignalId;
+    Awaiter.OwnerHandle = OwnerHandle;
+    Awaiter.Name = Name;
+    Awaiter.CallableRef = CallableRef;
+    Awaiter.CallbackId = CallbackId;
+
+    // The active scope is the awaiting task's own: an InstanceCall pushed the instance's before the
+    // spawn, and a resumption pushes the task's again (TVerseCall::Return does it itself). So the
+    // wait is anchored to exactly the thing whose death should end it.
+    if (verse::FContentScopeGuard::IsActive())
+    {
+        const TSharedRef<verse::FContentScope>& Scope = verse::FContentScopeGuard::GetActiveScope();
+        Awaiter.Scope = Scope;
+        Awaiter.Cleanup = Scope->OnContentScopeCleanup.AddLambda(
+            [Token](bool) { GodotVerse::EndSignalAwait(Token); });
+    }
+
+    GAwaiters.Add(Token, MoveTemp(Awaiter));
+    return Token;
+}
+}
+
+AUTORTFM_DISABLE int64 GodotVerse::BeginSignalAwait(UObject* Signal)
+{
+    verse::vh_signal* const Shadow = Cast<verse::vh_signal>(Signal);
+    if (!Shadow)
+    {
+        return 0;
+    }
+    const int64 SignalId = Shadow->Id.Get();
+    const FSignalBinding* const Binding = GSignalBindings.Find(SignalId);
+    if (!Binding)
+    {
+        ReportError(UTF8TEXT("Await was called on an unbound `godot_signal`, which names nothing "
+                             "and so will never be emitted."));
+        return 0;
+    }
+    if (Binding->Reject != VH_SIGNAL_OK)
+    {
+        ReportError(FUtf8String(UTF8TEXT("Cannot await `")) + Binding->Name + UTF8TEXT("`: ")
+            + SignalRejectReason(Binding->Reject, Binding->RejectDetail));
+        return 0;
+    }
+    return BeginAwait(Signal, SignalId, Binding->OwnerHandle, Binding->Name);
+}
+
+AUTORTFM_DISABLE int64 GodotVerse::BeginSignalRefAwait(int64 Ref, UObject* Waiter)
+{
+    int64 OwnerHandle = 0;
+    FUtf8String Name;
+    if (!ResolveSignalRef(Ref, OwnerHandle, Name))
+    {
+        ReportError(UTF8TEXT("Await was called on a Signal value that names no object and signal."));
+        return 0;
+    }
+    return BeginAwait(Waiter, 0, OwnerHandle, Name);
+}
+
+AUTORTFM_DISABLE void GodotVerse::EndSignalAwait(int64 Token)
+{
+    const FAwaiter* const Found = GAwaiters.Find(Token);
+    if (!Found)
+    {
+        // Idempotent. A one-shot connection has already gone by the time a resumed wait ends, and
+        // a `defer` that runs twice -- once on cancel, once on scope teardown -- must not say so.
+        return;
+    }
+    const FAwaiter Awaiter = *Found;
+    GAwaiters.Remove(Token);
+
+    // Removed before anything else, so a wait that ended normally does not leave the scope holding
+    // a lambda for the rest of its life. Harmless if this *is* the cleanup running -- the broadcast
+    // clears its own list, and removing a handle that is already gone does nothing.
+    if (const TSharedPtr<verse::FContentScope> Scope = Awaiter.Scope.Pin(); Scope.IsValid() && Awaiter.Cleanup.IsValid())
+    {
+        Scope->OnContentScopeCleanup.Remove(Awaiter.Cleanup);
+    }
+
+    {
+        FScopeLock Lock(&GCallbacksLock);
+        GCallbacks.Remove(Awaiter.CallbackId);
+    }
+
+    GodotVerse::FHostState& Host = GodotVerse::GetHost();
+    if (Host.Godot.DisconnectSignal)
+    {
+        vh_value Callable{};
+        Callable.Type = VH_TYPE_REF;
+        Callable.VariantTag = VH_VARIANT_CALLABLE;
+        Callable.Ref = Awaiter.CallableRef;
+        // Refuses quietly for the one-shot Godot has already dropped, which is the resumed case.
+        Host.Godot.DisconnectSignal(Host.Godot.Ctx,
+                                    Awaiter.OwnerHandle,
+                                    reinterpret_cast<const char*>(*Awaiter.Name),
+                                    Awaiter.Name.Len(),
+                                    &Callable);
+    }
+    if (Host.Godot.ReleaseRef)
+    {
+        Host.Godot.ReleaseRef(Host.Godot.Ctx, Awaiter.CallableRef);
+    }
+}
+
+AUTORTFM_DISABLE int64 GodotVerse::SubscribeSignalRef(int64 Ref, const FVerseValue& Callback)
+{
+    int64 OwnerHandle = 0;
+    FUtf8String Name;
+    if (!ResolveSignalRef(Ref, OwnerHandle, Name))
+    {
+        ReportError(UTF8TEXT("Subscribe was called on a Signal value that names no object and signal."));
+        return 0;
+    }
+
+    int64 OwnerOfCallback = 0;
+    FUtf8String Decorated;
+    if (!DescribeBoundFunctionFwd(Callback.GetValue().DynamicCast<Verse::VFunction>(), OwnerOfCallback, Decorated))
+    {
+        ReportError(UTF8TEXT("Subscribe was given a Verse function that is not a method bound to a "
+                             "live script instance, which is the only shape a Godot Callable can "
+                             "carry without outliving what it names."));
+        return 0;
+    }
+
+    FCallbackTarget Target;
+    Target.OwnerHandle = OwnerOfCallback;
+    Target.DecoratedName = Decorated;
+    // Nothing declares a foreign signal's payload, so the handler takes the arguments as one Godot
+    // Array and the packing happens on the way in.
+    Target.bArgsAsArray = true;
+
+    int64 CallableRef = 0;
+    const int64 CallbackId = ConnectDelivery(OwnerHandle, Name, MoveTemp(Target), 0, CallableRef);
+    if (CallbackId == 0)
+    {
+        return 0;
+    }
+
+    const int64 Id = GNextSubscriptionId++;
+    GSubscriptions.Add(Id, FSubscription{OwnerHandle, Name, CallableRef});
+
+    // Compensated exactly as godot_signal.Subscribe is, and for the same reason: this mutates Godot
+    // and answers a value, so it can be neither deferred to commit nor ignored. It is what closes
+    // `Object.Connect`'s rollback gap -- that one stays an unforgiving direct call, and this is the
+    // spelling a script reaches first.
+    AutoRTFM::OnAbort<AutoRTFM::EOpenBehavior::SameAsClosed>(
+        [Id] { GodotVerse::CancelSubscription(Id); });
+    return Id;
 }
 
 namespace {
@@ -5288,9 +5846,20 @@ AUTORTFM_DISABLE GodotVerse::FInstance* GodotVerse::Instantiate(FUtf8StringView 
         return nullptr;
     }
 
-    // UVerseClass::PostInitInstance runs the Verse constructor from inside NewObject, so fields
-    // are initialised by the time this returns.
-    UObject* Instance = NewObject<UObject>(GetTransientPackage(), NativeClass);
+    // The instance's own task scope exists before its constructor runs, so a `spawn` from a class
+    // body or from an inherited initializer joins this node's task group like every later call
+    // does. Made eagerly rather than at the first spawn: FContentScopeGuard has no hook that could
+    // say "a task was just started", and UVerseClass::PostInitInstance below is already a VM entry
+    // that would have to pick a scope. What it costs is measured in phase-5-design.md 14.
+    TSharedRef<verse::FContentScope> Scope = verse::MakeContentScope(GScopeOuter);
+
+    UObject* Instance = nullptr;
+    {
+        verse::FContentScopeGuard Guard(Scope);
+        // UVerseClass::PostInitInstance runs the Verse constructor from inside NewObject, so fields
+        // are initialised by the time this returns.
+        Instance = NewObject<UObject>(GetTransientPackage(), NativeClass);
+    }
     if (!Instance)
     {
         return nullptr;
@@ -5302,7 +5871,7 @@ AUTORTFM_DISABLE GodotVerse::FInstance* GodotVerse::Instantiate(FUtf8StringView 
     // Before the instance is handed back, so a Ready() that emits already has a bound signal.
     BindSignals(Instance, ClassName, Handle);
 
-    FInstance* Made = new FInstance{TStrongObjectPtr<UObject>(Instance), Handle};
+    FInstance* Made = new FInstance{TStrongObjectPtr<UObject>(Instance), Handle, Scope};
     GInstancesByHandle.Add(Handle, Made);
     return Made;
 }
@@ -5316,6 +5885,18 @@ AUTORTFM_DISABLE void GodotVerse::ReleaseInstance(FInstance* Instance)
         if (FInstance** Bound = GInstancesByHandle.Find(Instance->Handle); Bound && *Bound == Instance)
         {
             GInstancesByHandle.Remove(Instance->Handle);
+        }
+
+        // R-ASYNC-5: the instance dying is what cancels its tasks, which is GDScript's own trigger
+        // (~GDScriptInstance clears pending_func_states). Leaving the tree is not -- pooling and
+        // re-parenting remove and re-add nodes constantly, and what stalls an await then is the
+        // source no longer emitting.
+        //
+        // Godot defers the real free to _flush_delete_queue, so a `queue_free`d node's tasks run
+        // until then. That window is GDScript's too, and is documented rather than closed.
+        if (Instance->Scope.IsValid() && !Instance->Scope->WasTerminated())
+        {
+            Instance->Scope->Terminate();
         }
     }
     delete Instance;
@@ -5510,7 +6091,7 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
         // AutoRTFM::UnreachableIfClosed in FContext::RaiseVerseRuntimeError and takes the process
         // down, rather than unwinding the way a raise is supposed to.
         AutoRTFM::Open([&] {
-        EnterVerse(Context, [&] {
+        EnterVerseOn(Context, *Instance, [&] {
             bBodyRan = true;
             Verse::VFunction::Args Converted;
             Converted.Reserve(ArgCount);
@@ -5617,6 +6198,15 @@ AUTORTFM_DISABLE bool DescribeBoundFunction(Verse::VFunction* Function, int64& O
     return false;
 }
 
+namespace {
+/// The forward-declared spelling the awaiting path above uses, declared where this file reaches it
+/// and defined here, where the function it forwards to exists.
+AUTORTFM_DISABLE bool DescribeBoundFunctionFwd(Verse::VFunction* Function, int64& OutHandle, FUtf8String& OutDecorated)
+{
+    return DescribeBoundFunction(Function, OutHandle, OutDecorated);
+}
+}
+
 AUTORTFM_DISABLE int64 GodotVerse::MakeCallableFor(const FVerseValue& Callback)
 {
     Verse::VFunction* const Function = Callback.GetValue().DynamicCast<Verse::VFunction>();
@@ -5677,6 +6267,14 @@ AUTORTFM_DISABLE int32 GodotVerse::InvokeCallback(int64 CallbackId,
         }
         Target = *Found;
     }
+
+    // A Callable the host minted to feed a suspended task rather than to call a script method. It
+    // resumes inside this emission, which is where GDScript resumes a coroutine too.
+    if (Target.AwaitToken != 0)
+    {
+        return DeliverToAwaiter(Target.AwaitToken, Args, ArgCount);
+    }
+
     FInstance** const Bound = GInstancesByHandle.Find(Target.OwnerHandle);
     if (!Bound || !*Bound)
     {
@@ -5684,6 +6282,37 @@ AUTORTFM_DISABLE int32 GodotVerse::InvokeCallback(int64 CallbackId,
         // rather than raising is what keeps a late emission from taking the frame down.
         return VH_ERR_NOT_FOUND;
     }
+
+    // A foreign signal's subscriber: nothing declares that signal's payload, so the arguments cross
+    // as the one container Godot itself would have put them in and the handler takes a godot_array.
+    if (Target.bArgsAsArray)
+    {
+        FHostState& Host = GetHost();
+        if (!Host.Godot.NewRef || !Host.Godot.RefSet)
+        {
+            return VH_ERR_STATE;
+        }
+        const int64 Ref = Host.Godot.NewRef(Host.Godot.Ctx, VH_VARIANT_ARRAY);
+        if (Ref == 0)
+        {
+            return VH_ERR_STATE;
+        }
+        for (int32 Index = 0; Index < ArgCount; ++Index)
+        {
+            vh_value Key{};
+            Key.Type = VH_TYPE_INT;
+            Key.Int = Index;
+            Host.Godot.RefSet(Host.Godot.Ctx, Ref, &Key, &Args[Index]);
+        }
+        // Ownership of the fresh reference passes to the `godot_array` WireToValue builds for the
+        // parameter, whose BeginDestroy releases it -- so nothing here releases it on the way out.
+        vh_value Packed{};
+        Packed.Type = VH_TYPE_REF;
+        Packed.VariantTag = VH_VARIANT_ARRAY;
+        Packed.Ref = Ref;
+        return InstanceCall(*Bound, FUtf8StringView(Target.DecoratedName), &Packed, 1, OutResult, OutStorage);
+    }
+
     return InstanceCall(*Bound, FUtf8StringView(Target.DecoratedName), Args, ArgCount, OutResult, OutStorage);
 }
 
@@ -5739,38 +6368,25 @@ AUTORTFM_DISABLE int32 GodotVerse::RunMain(const TArray<verse::string>& Args, in
 
 AUTORTFM_DISABLE void GodotVerse::NoteRuntimeErrorRaised()
 {
-    GTasksLostToError = GContentScope.IsValid() && GContentScope->HasActiveTasks();
-    GHaltedUntilTick = true;
-}
-
-AUTORTFM_DISABLE bool GodotVerse::IsHaltedUntilTick()
-{
-    return GHaltedUntilTick;
-}
-
-AUTORTFM_DISABLE void GodotVerse::TickScripts(double BudgetSeconds)
-{
-    if (GHaltedUntilTick)
+    // The scope UE is about to terminate is the active one, which under R-ASYNC-4 is the raising
+    // instance's. Said here because this delegate is the last moment the task group can be asked
+    // what is about to be thrown away; the scope is replaced at that instance's next call.
+    if (!verse::FContentScopeGuard::IsActive())
     {
-        // The frame boundary. A raise aborts its own call's transaction, and stopping the rest
-        // of the frame's script code keeps "one script raised" from meaning "the others each
-        // saw a different half of the scene". Resuming here rather than at the next call is
-        // what makes that a rule an author can state.
-        GHaltedUntilTick = false;
-        ReviveContentScope();
-
-        // Said only when it carries something the error did not. A script that raises every frame
-        // reports its error every frame -- which is what Godot does for GDScript too -- and a
-        // second line saying nothing was lost would double that for no information. When work
-        // *was* cancelled there is no other way to find out.
-        if (GTasksLostToError)
-        {
-            ReportInfo(UTF8TEXT("Verse has resumed. Suspended work that was in flight anywhere in "
-                                "the project was cancelled by the runtime error above -- one task "
-                                "scope serves every script today (R-ASYNC-4)."));
-        }
-        GTasksLostToError = false;
+        return;
     }
+    const TSharedRef<verse::FContentScope>& Scope = verse::FContentScopeGuard::GetActiveScope();
+    if (Scope->HasActiveTasks())
+    {
+        ReportInfo(&Scope.Get() == GProjectScope.Get()
+            ? UTF8TEXT("Suspended work that was not started by any one script instance was "
+                       "cancelled by the runtime error above.")
+            : UTF8TEXT("This script instance's suspended work was cancelled by the runtime error "
+                       "above. Other instances are unaffected (R-ASYNC-4)."));
+    }
+}
 
-    PumpEventLoop(verse::FExecutionContext::GetActiveContext(), BudgetSeconds);
+AUTORTFM_DISABLE void GodotVerse::TickScripts(double BudgetSeconds, vh_tick_stats* OutStats)
+{
+    PumpEventLoop(verse::FExecutionContext::GetActiveContext(), BudgetSeconds, OutStats);
 }

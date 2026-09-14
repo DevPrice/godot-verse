@@ -254,6 +254,7 @@ int main(int argc, char** argv)
 	fs::path VerseBase = argc > 3 ? fs::path(argv[3]) : ExeDir.parent_path();
 	fs::path VersePath = VerseBase / "tests" / "host_smoke" / "hello.verse";
 	fs::path ExportsPath = VerseBase / "tests" / "host_smoke" / "exports.verse";
+	fs::path TasksPath = VerseBase / "tests" / "host_smoke" / "tasks.verse";
 
 	ReportProvenance(DllPath);
 
@@ -346,13 +347,15 @@ int main(int argc, char** argv)
 	std::string ExportsPathUtf8 = ExportsPath.string();
 	std::string ReloadPathUtf8 = ReloadPath.string();
 	std::string ModuleProbePathUtf8 = ModuleProbePath.string();
-	vh_source_file ProjectFiles[3] = {
+	std::string TasksPathUtf8 = TasksPath.string();
+	vh_source_file ProjectFiles[4] = {
 		{ VersePathUtf8.c_str(), nullptr },
 		{ ExportsPathUtf8.c_str(), nullptr },
 		{ ReloadPathUtf8.c_str(), nullptr },
+		{ TasksPathUtf8.c_str(), nullptr },
 	};
 	int32_t Generation = 0;
-	if (!Step("vh_compile_project", CompileProjectFn(ProjectFiles, 3, &Generation) == VH_OK))
+	if (!Step("vh_compile_project", CompileProjectFn(ProjectFiles, 4, &Generation) == VH_OK))
 	{
 		ShutdownFn();
 		return 1;
@@ -1136,7 +1139,7 @@ int main(int argc, char** argv)
 	printf("[smoke] exit code: %lld\n", static_cast<long long>(ExitCode));
 
 	bool CallsOk = true;
-	TickFn(0.0);
+	TickFn(0.0, nullptr);
 
 	// --- Phase 3 / OQ-12: a second generation, at the same verse path -------------------------
 	//
@@ -1169,15 +1172,16 @@ int main(int argc, char** argv)
 					   WriteFileUtf8(ReloadPath, ReloadProbeSource(2))
 						   && WriteFileUtf8(ModuleProbePath, ModuleProbeSource())) && CallsOk;
 
-		vh_source_file SecondFiles[4] = {
+		vh_source_file SecondFiles[5] = {
 			{ VersePathUtf8.c_str(), nullptr },
 			{ ExportsPathUtf8.c_str(), nullptr },
 			{ ReloadPathUtf8.c_str(), nullptr },
 			{ ModuleProbePathUtf8.c_str(), "gameplay" },
+			{ TasksPathUtf8.c_str(), nullptr },
 		};
 		int32_t SecondGeneration = 0;
 		DiagnosticErrorCount = 0;
-		const bool SecondBuilt = CompileProjectFn(SecondFiles, 4, &SecondGeneration) == VH_OK;
+		const bool SecondBuilt = CompileProjectFn(SecondFiles, 5, &SecondGeneration) == VH_OK;
 		CallsOk = Step("a second vh_compile_project in the same process builds", SecondBuilt) && CallsOk;
 		CallsOk = Step("and reports generation 2", SecondGeneration == 2) && CallsOk;
 		CallsOk = Step("a file in a module reaches a root definition with nothing imported",
@@ -1918,63 +1922,163 @@ int main(int argc, char** argv)
 			Step("and the file that method is declared in",
 				 LastRuntimeErrorStack.find("exports.verse") != std::string::npos);
 
-			// --- R-DIAG-3: the raise stops this frame, and only this frame -------------------
+			// --- R-DIAG-3 / R-ASYNC-4: the raise stops the call that raised, and nothing else ---
 			//
-			// A raised runtime error terminates the content scope, and the VM then declines to run
-			// anything at all -- which used to be invisible, because a call reported success having
-			// not run and a read reported "no such member". Both halves are pinned here: what the
-			// halted frame says, and that the next tick puts it all back.
+			// A raised runtime error terminates the *active* content scope, and the VM then
+			// declines to run anything in that scope at all -- which used to be invisible, because
+			// a call reported success having not run and a read reported "no such member".
+			//
+			// Until Phase 5 that scope was the whole project's, so one script's first mistake
+			// stopped every script until the next `vh_tick`. Now it is this instance's, and the
+			// instance gets a *fresh* scope at its next call rather than an un-terminated one at
+			// the next frame boundary -- so everything below runs in the same frame as the raise.
 			vh_value IntArgs[2] = {};
 			IntArgs[0].Type = VH_TYPE_INT;
 			IntArgs[0].Int = 17;
 			IntArgs[1].Type = VH_TYPE_INT;
 			IntArgs[1].Int = 25;
 			vh_value Result{};
-			Step("a call in the halted frame says so rather than reporting success",
-				 InstanceCallFn(Instance, "(/user@localhost/exports:)AddInts(:int,:int)", IntArgs, 2, nullptr, &Result)
-					 == VH_ERR_HALTED);
-
-			vh_value Ninety{};
-			Ninety.Type = VH_TYPE_FLOAT;
-			Ninety.Float = 90.0;
-			Step("and so does a write, rather than looking like a missing member",
-				 SetFieldFn(Instance, "Scale", &Ninety) == VH_ERR_HALTED);
-
-			vh_instance* DuringHalt = nullptr;
-			Step("and so does instantiating",
-				 InstantiateFn("exports_probe", 9, &DuringHalt) == VH_ERR_HALTED);
-
-			// A read is a question rather than script code, so it is answered rather than deferred:
-			// the inspector asking what a member holds must not be told the member is gone.
-			const vh_value* ScaleDuringHalt = Read("Scale");
-			Step("while a read still answers, because it runs no script code",
-				 ScaleDuringHalt != nullptr && ScaleDuringHalt->Type == VH_TYPE_FLOAT);
-
-			// The frame boundary. vh_tick is where a halted project resumes, so a consumer that
-			// ticks gets everything back and one that never ticks never does.
-			TickFn(0.004);
-
-			Step("after the next tick a call runs again and returns its value",
+			Step("the very next call, in the same frame, runs and returns its value",
 				 InstanceCallFn(Instance, "(/user@localhost/exports:)AddInts(:int,:int)", IntArgs, 2, nullptr, &Result) == VH_OK
 					 && Result.Type == VH_TYPE_INT && Result.Int == 42);
 
-			// The half that matters most, and the half nobody checked when this was first written
-			// up: a void method's *effect*, not just its result.
+			// The half that matters most, and the half nobody checked when the project-wide rule
+			// was first written up: a void method's *effect*, not just its result.
 			const vh_value* BeforeBump = Read("Scale");
 			const double ScaleBeforeBump = BeforeBump ? BeforeBump->Float : -1.0;
-			Step("and a void method has its effect again",
+			Step("and a void method has its effect",
 				 CallVoid(InstanceCallFn, Instance, "(/user@localhost/exports:)Bump") == VH_OK);
 			const vh_value* AfterBump = Read("Scale");
 			Step("which the member shows",
 				 AfterBump != nullptr && AfterBump->Float != ScaleBeforeBump);
 
-			vh_instance* AfterHalt = nullptr;
-			Step("and a class instantiates again",
-				 InstantiateFn("exports_probe", 10, &AfterHalt) == VH_OK && AfterHalt != nullptr);
-			ReleaseInstanceFn(AfterHalt);
+			vh_value Ninety{};
+			Ninety.Type = VH_TYPE_FLOAT;
+			Ninety.Float = 90.0;
+			Step("a write lands rather than being refused", SetFieldFn(Instance, "Scale", &Ninety) == VH_OK);
+
+			// A read is a question rather than script code, and always was answered.
+			const vh_value* ScaleAfterRaise = Read("Scale");
+			Step("and a read answers, because it runs no script code",
+				 ScaleAfterRaise != nullptr && ScaleAfterRaise->Type == VH_TYPE_FLOAT);
+
+			vh_instance* AfterRaise = nullptr;
+			Step("and another class instantiates in the same frame",
+				 InstantiateFn("exports_probe", 9, &AfterRaise) == VH_OK && AfterRaise != nullptr);
+			ReleaseInstanceFn(AfterRaise);
+
+			TickFn(0.004, nullptr);
+			Step("ticking after all that changes nothing, because nothing was waiting for it",
+				 InstanceCallFn(Instance, "(/user@localhost/exports:)AddInts(:int,:int)", IntArgs, 2, nullptr, &Result) == VH_OK
+					 && Result.Int == 42);
 		}
 
 		ReleaseInstanceFn(Instance);
+	}
+
+	// --- R-ASYNC-1/4: tasks, and what a raise costs ------------------------------------------
+	//
+	// The tick-loop layer. No Godot at all, which is exactly what makes this the place to pin the
+	// scope behaviour: a call and a tick happen in a chosen order with nothing else running, and a
+	// task that hangs shows up here rather than as a mysterious timeout in a Godot project.
+	{
+		auto TaskCall = [&](vh_instance* Target, const char* Decorated) {
+			vh_value Ignored{};
+			return InstanceCallFn(Target, Decorated, nullptr, 0, nullptr, &Ignored);
+		};
+		auto TaskRead = [&](vh_instance* Target, const char* Decorated) {
+			vh_value Result{};
+			if (InstanceCallFn(Target, Decorated, nullptr, 0, nullptr, &Result) != VH_OK
+				|| Result.Type != VH_TYPE_INT)
+			{
+				return (int64_t)-1;
+			}
+			return Result.Int;
+		};
+
+		vh_instance* One = nullptr;
+		vh_instance* Two = nullptr;
+		const bool Made = InstantiateFn("tasks", 101, &One) == VH_OK && One != nullptr
+			&& InstantiateFn("tasks", 102, &Two) == VH_OK && Two != nullptr;
+		Step("two instances of the task fixture", Made);
+
+		if (Made)
+		{
+			// R-ASYNC-1: the call that spawns returns VH_OK having *not* run the task to
+			// completion. The task ran up to its first await and stopped there.
+			Step("a call that spawns a task returns normally",
+				 TaskCall(One, "(/user@localhost/tasks:)StartWait") == VH_OK);
+			Step("and the task ran up to its first await",
+				 TaskRead(One, "(/user@localhost/tasks:)ReadReached") == 1);
+			Step("without having got past it",
+				 TaskRead(One, "(/user@localhost/tasks:)ReadSeen") == 0);
+
+			// Across a tick, which is the half of R-ASYNC-1 that a single call cannot show.
+			TickFn(0.004, nullptr);
+			Step("the task is still suspended after a tick",
+				 TaskRead(One, "(/user@localhost/tasks:)ReadSeen") == 0);
+
+			vh_value FireArg{};
+			FireArg.Type = VH_TYPE_INT;
+			FireArg.Int = 7;
+			vh_value Ignored{};
+			Step("and resumes inside the call that signals it",
+				 InstanceCallFn(One, "(/user@localhost/tasks:)Fire(:int)", &FireArg, 1, nullptr, &Ignored) == VH_OK
+					 && TaskRead(One, "(/user@localhost/tasks:)ReadSeen") == 7);
+
+			// D4: work with no event behind it is what `vh_tick` is for. `Sleep(0.0)` means
+			// "resume at the next pump", so nothing has happened until one runs.
+			Step("a sleeping task has not resumed before the tick",
+				 TaskCall(One, "(/user@localhost/tasks:)StartNap") == VH_OK
+					 && TaskRead(One, "(/user@localhost/tasks:)ReadNapped") == 0);
+			TickFn(0.004, nullptr);
+			Step("and has after it",
+				 TaskRead(One, "(/user@localhost/tasks:)ReadNapped") == 1);
+
+			// **The case R-ASYNC-4 exists for.** Two instances, each with a task suspended on its
+			// own event. One raises. Before Phase 5 one content scope served the whole project, so
+			// the raise cancelled both -- and stopped every script until the next tick besides.
+			TaskCall(One, "(/user@localhost/tasks:)StartWait");
+			TaskCall(Two, "(/user@localhost/tasks:)StartWait");
+			Step("a raise in one instance answers VH_ERR_RUNTIME",
+				 TaskCall(One, "(/user@localhost/tasks:)Raise") == VH_ERR_RUNTIME);
+
+			FireArg.Int = 11;
+			Step("the other instance's suspended task is still there, and resumes",
+				 InstanceCallFn(Two, "(/user@localhost/tasks:)Fire(:int)", &FireArg, 1, nullptr, &Ignored) == VH_OK
+					 && TaskRead(Two, "(/user@localhost/tasks:)ReadSeen") == 11);
+
+			// And the raising instance is usable again at its very next call, with a fresh scope
+			// rather than a revived one (D24) -- so the task it lost stays lost and a new one runs.
+			FireArg.Int = 13;
+			InstanceCallFn(One, "(/user@localhost/tasks:)Fire(:int)", &FireArg, 1, nullptr, &Ignored);
+			Step("while the raising instance's own task was cancelled",
+				 TaskRead(One, "(/user@localhost/tasks:)ReadSeen") == 7);
+			Step("and it can start another immediately",
+				 TaskCall(One, "(/user@localhost/tasks:)StartWait") == VH_OK);
+			FireArg.Int = 19;
+			InstanceCallFn(One, "(/user@localhost/tasks:)Fire(:int)", &FireArg, 1, nullptr, &Ignored);
+			Step("which runs", TaskRead(One, "(/user@localhost/tasks:)ReadSeen") == 19);
+
+			// A raise from inside a *task* rather than from a call. Nothing returns VH_ERR_RUNTIME
+			// here -- the call that spawned it is long gone -- so what is asserted is that the
+			// instance survives it.
+			const int ErrorsBeforeTaskRaise = RuntimeErrorCount;
+			TaskCall(Two, "(/user@localhost/tasks:)StartRaiser");
+			TickFn(0.004, nullptr);
+			Step("a raise inside a task is reported", RuntimeErrorCount > ErrorsBeforeTaskRaise);
+			Step("and the instance is callable afterwards",
+				 TaskRead(Two, "(/user@localhost/tasks:)ReadSeen") == 11);
+
+			// R-ASYNC-5: releasing the instance terminates its scope, which cancels its tasks. What
+			// is asserted is that it is not an error -- a leak or a use-after-free would show as a
+			// crash on the next tick rather than as a failed step.
+			TaskCall(Two, "(/user@localhost/tasks:)StartWait");
+			ReleaseInstanceFn(Two);
+			TickFn(0.004, nullptr);
+			Step("releasing an instance with a suspended task is not an error", true);
+			ReleaseInstanceFn(One);
+		}
 	}
 
 	// --- ABI v2: the method list (R-NODE-9) --------------------------------------------------
@@ -2064,7 +2168,7 @@ int main(int argc, char** argv)
 		while (!Finished && GetTickCount64() < Deadline)
 		{
 			CheckProjectPollFn(&Finished);
-			TickFn(0.004);
+			TickFn(0.004, nullptr);
 			Sleep(1); // a frame, roughly; the analysis takes ~100ms of them
 		}
 		AsyncOk = Step("the analysis finished while the frame loop kept ticking", Finished != 0) && AsyncOk;
@@ -2085,7 +2189,7 @@ int main(int argc, char** argv)
 			while (!Finished && GetTickCount64() < BrokenDeadline)
 			{
 				CheckProjectPollFn(&Finished);
-				TickFn(0.004);
+				TickFn(0.004, nullptr);
 				Sleep(1);
 			}
 		}

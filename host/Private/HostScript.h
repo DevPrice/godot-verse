@@ -178,6 +178,30 @@ AUTORTFM_DISABLE int64 SubscribeSignal(int64 SignalId, const FVerseValue& Callba
 /// Disconnects. Idempotent, as event_subscription::Cancel is in UEFN.
 AUTORTFM_DISABLE void CancelSubscription(int64 SubscriptionId);
 
+/// Begins one wait on the signal a `godot_signal` object names (R-SIG-5), answering a token.
+///
+/// The object rather than its id, because an engine-signal accessor mints a fresh `godot_signal`
+/// on every call and several of them share one binding -- only the object says which event a given
+/// wait is suspended on. Held for the life of the token, so awaiting a temporary is safe.
+///
+/// 0 for a signal that names nothing or that Godot refused to register, having said why.
+AUTORTFM_DISABLE int64 BeginSignalAwait(UObject* Signal);
+
+/// The same for a Godot Signal value -- one a GDScript or C# script declared, or one made with
+/// `add_user_signal`. Nothing declares its payload, so the emission's arguments reach Waiter's
+/// event as one Godot Array.
+AUTORTFM_DISABLE int64 BeginSignalRefAwait(int64 Ref, UObject* Waiter);
+
+/// Ends one wait: disconnects, releases the Callable, and drops the host's claim on the object.
+/// Idempotent, because the `defer` that calls it may run after a one-shot connection is already
+/// gone.
+AUTORTFM_DISABLE void EndSignalAwait(int64 Token);
+
+/// Connects Callback to a Godot Signal value, compensated on abort the way SubscribeSignal is.
+/// This is what closes `Object.Connect`'s rollback gap (R-SIG-6): the handler receives the
+/// emission's arguments as one Godot Array, since nothing declares them.
+AUTORTFM_DISABLE int64 SubscribeSignalRef(int64 Ref, const FVerseValue& Callback);
+
 /// Binds one of Godot's own signals on one object, for the accessors the generator emits per class
 /// (R-SIG-3's other half). Answers a binding id, deduplicated per (owner, signal) so an accessor
 /// called in a loop does not grow the table.
@@ -465,21 +489,18 @@ AUTORTFM_DISABLE bool WriteInstanceFieldInstance(FInstance* Instance, FUtf8Strin
 
 AUTORTFM_DISABLE int32 RunMain(const TArray<verse::string>& Args, int64& OutExitCode);
 
-/// Runs queued Verse work, and is the frame boundary a halted project resumes at -- see
-/// IsHaltedUntilTick.
-AUTORTFM_DISABLE void TickScripts(double BudgetSeconds);
+/// Runs queued Verse work: `Sleep` resumptions, `Main`, and anything else with no Godot event
+/// behind it. A task waiting on a Godot signal is not here -- it resumes inside the emission
+/// (phase-5-design.md D3/D4), which is where GDScript resumes its coroutines too.
+AUTORTFM_DISABLE void TickScripts(double BudgetSeconds, vh_tick_stats* OutStats);
 
-/// Records that a script raised, which is the moment everything else stops running.
+/// Reports what a raise is about to cancel.
 ///
 /// Called from the OnVerseRuntimeError delegate, which UE broadcasts immediately *before* it
 /// terminates the content scope -- the last moment the task group can be asked what is about to
-/// be thrown away.
+/// be thrown away. Since Phase 5 the scope being terminated is the raising *instance's*, so what
+/// is lost is that node's suspended work rather than the project's.
 AUTORTFM_DISABLE void NoteRuntimeErrorRaised();
-
-/// Whether a raise has stopped Verse for the rest of this frame. Every entry point that would
-/// run script code answers VH_ERR_HALTED while this is true, rather than running nothing and
-/// reporting success.
-AUTORTFM_DISABLE bool IsHaltedUntilTick();
 
 /// Releases the IDE, its data sources and the content scope. Must run before the engine tears
 /// down: these objects free through GMalloc, which AppExit takes with it.

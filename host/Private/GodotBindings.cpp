@@ -6,10 +6,12 @@
 #include "Containers/Utf8String.h"
 #include "GodotClasses.h"
 #include "HostRuntime.h"
+#include "HostEventLoop.h"
 #include "HostScript.h"
 #include "Templates/UniquePtr.h"
 #include "VerseString.h"
 #include "VerseValue.h"
+#include "VerseVM/VVMCoroutine.h"
 #include "VerseVM/VVMRuntimeError.h"
 
 #include "VerseHost.gen.h"
@@ -630,6 +632,72 @@ int64 VhSignalBind(int64 Handle, verse::string const& Class, verse::string const
                                             FUtf8StringView(OwnAccessor),
                                             FUtf8StringView(OwnName));
     });
+}
+
+int64 VhSignalAwait(TNonNullPtr<verse::vh_signal> Signal)
+{
+    // Open: connecting reaches Godot, and the binding lookup walks host tables. AutoRTFM::Open
+    // rather than CallGodot, for the reason VhObjectOf gives.
+    return AutoRTFM::Open([&] { return GodotVerse::BeginSignalAwait(Signal.Get()); });
+}
+
+void VhSignalAwaitEnd(int64 Token)
+{
+    AutoRTFM::Open([&] { GodotVerse::EndSignalAwait(Token); });
+}
+
+int64 VhSignalRefAwait(int64 Ref, TNonNullPtr<verse::vh_signal> Waiter)
+{
+    return AutoRTFM::Open([&] { return GodotVerse::BeginSignalRefAwait(Ref, Waiter.Get()); });
+}
+
+int64 VhSignalRefSubscribe(int64 Ref, FVerseValue const& Callback)
+{
+    return AutoRTFM::Open([&] { return GodotVerse::SubscribeSignalRef(Ref, Callback); });
+}
+
+int64 VhSignalRefFor(int64 Handle, verse::string const& Name)
+{
+    const FUtf8StringView View = ToView(Name);
+    FHostState& Host = GetHost();
+    if (!Host.Godot.MakeSignalRef)
+    {
+        return 0;
+    }
+    return CallGodot([&] { return Host.Godot.MakeSignalRef(Host.Godot.Ctx, Handle, Bytes(View), View.Len()); });
+}
+
+// --- sleeping -----------------------------------------------------------------------------
+
+/// Verse's own `Sleep`, on the host's real-time clock.
+///
+/// The shape is Epic's (`verse::Simulation::Sleep` in Simulation.cpp): capture the call into a
+/// TStrongVerseCall so it survives GC while the task is suspended, arrange for something to call
+/// `Return` later, and answer `Suspend`. What differs is what "later" means -- Epic uses the
+/// world's TimerManager and this uses the pump, because a bridge that must work with no scene tree
+/// has no world to ask.
+///
+/// `Call.Return` re-enters the suspended task's *own* content scope and declines if that scope was
+/// terminated, so a sleeping task on a freed node is dropped with no work here (R-ASYNC-5).
+FVerseResult Sleep(TVerseCall<void> Call, double Seconds)
+{
+    const verse::FExecutionContext ExecContext = verse::FExecutionContext::GetActiveContext();
+    if (Seconds < 0.0)
+    {
+        // Not a suspension at all, which is what Epic's does with the same input.
+        return Call.Return(ExecContext);
+    }
+
+    AutoRTFM::Open([&] {
+        GodotVerse::EnqueueSleep(Seconds, [StrongCall = TStrongVerseCall<void>(Call)]() mutable {
+            const verse::FExecutionContext ResumeContext = verse::FExecutionContext::GetActiveContext();
+            // Its own transaction, nested inside whatever the pump is already in, for the reason
+            // DeliverToAwaiter gives: a raise in the resumed task must not roll back anything but
+            // the task's own writes.
+            AutoRTFM::Transact([&] { AutoRTFM::Open([&] { StrongCall.Return(ResumeContext); }); });
+        });
+    });
+    return Call.Suspend(ExecContext);
 }
 
 void VhTypeMismatch(verse::string const& Expected, FGodotValue const& Value)

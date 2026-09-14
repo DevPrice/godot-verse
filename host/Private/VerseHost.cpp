@@ -162,9 +162,10 @@ extern "C" int32_t vh_init(const vh_init_desc* Desc)
 
     FVerseRuntimeErrorDelegates::OnVerseRuntimeError.AddLambda(
         [](const Verse::ERuntimeDiagnostic Diagnostic, const FText& MessageText, const FString& RuntimeErrorText) {
-            // UE terminates the active content scope immediately after this delegate returns, which
-            // stops every script in the process until the next tick. Noted here because this is the
-            // last moment the task group can be asked what is about to be cancelled.
+            // UE terminates the active content scope immediately after this delegate returns,
+            // which cancels that scope's suspended work -- since Phase 5 the raising instance's
+            // and nobody else's. Noted here because this is the last moment the task group can be
+            // asked what is about to be cancelled.
             GodotVerse::NoteRuntimeErrorRaised();
 
             const FUtf8String Message(Verse::AsFormattedString(Diagnostic, MessageText));
@@ -255,8 +256,21 @@ extern "C" void vh_shutdown(void)
     Host = GodotVerse::FHostState{};
 }
 
-extern "C" void vh_tick(double BudgetSeconds)
+extern "C" void vh_tick(double BudgetSeconds, vh_tick_stats* OutStats)
 {
+    if (OutStats && OutStats->StructSize >= (int32_t)sizeof(vh_tick_stats))
+    {
+        const int32_t Size = OutStats->StructSize;
+        *OutStats = vh_tick_stats{};
+        OutStats->StructSize = Size;
+    }
+    else
+    {
+        // A consumer built against an older or a newer header. Answering nothing beats writing
+        // fields it did not reserve room for.
+        OutStats = nullptr;
+    }
+
     if (WrongThread("vh_tick"))
     {
         return;
@@ -268,13 +282,14 @@ extern "C" void vh_tick(double BudgetSeconds)
 
     // Ticking runs Verse, and VerseVM blocks execution for the length of a build. Waiting here
     // would hand back the stall vh_check_project_begin exists to remove, so a frame that lands
-    // mid-analysis simply does not tick; the next one will.
+    // mid-analysis simply does not tick; the next one will. Reported as a tick that ran no jobs
+    // rather than as one that did nothing, which is what it is.
     if (GodotVerse::IsBackgroundCheckRunning())
     {
         return;
     }
 
-    GodotVerse::TickScripts(BudgetSeconds);
+    GodotVerse::TickScripts(BudgetSeconds, OutStats);
 }
 
 extern "C" int32_t vh_compile_project(const vh_source_file* Files, int32_t Count, int32_t* OutGeneration)
@@ -445,13 +460,6 @@ extern "C" int32_t vh_instantiate(const char* ClassNameUtf8, vh_handle Handle, v
     {
         return VH_ERR_STATE;
     }
-    // A script raised earlier this frame, so nothing runs until the next tick. Said plainly
-    // rather than attempted, because a write that silently did not happen is indistinguishable
-    // from one that did.
-    if (GodotVerse::IsHaltedUntilTick())
-    {
-        return VH_ERR_HALTED;
-    }
 
     GodotVerse::FInstance* Instance = GodotVerse::Instantiate(Cstr(ClassNameUtf8), Handle);
     if (!Instance)
@@ -506,13 +514,6 @@ extern "C" int32_t vh_instance_call(vh_instance* Instance,
     {
         return VH_ERR_STATE;
     }
-    // A script raised earlier this frame, so nothing runs until the next tick. Said plainly rather
-    // than attempted: InstanceCall would find the VM declining to run the body and report the same
-    // thing, and this saves the lookup.
-    if (GodotVerse::IsHaltedUntilTick())
-    {
-        return VH_ERR_HALTED;
-    }
 
     // The storage is static for the same reason every other descriptor here is: the value points at
     // bytes the host owns, and the caller is told they live until the next call.
@@ -547,10 +548,6 @@ extern "C" int32_t vh_callback_invoke(int64_t CallbackId,
     if (!GetHost().bInitialized)
     {
         return VH_ERR_STATE;
-    }
-    if (GodotVerse::IsHaltedUntilTick())
-    {
-        return VH_ERR_HALTED;
     }
 
     static vh_value Result;
@@ -901,13 +898,6 @@ extern "C" int32_t vh_instance_set_field(vh_instance* Instance, const char* Name
     {
         return VH_ERR_STATE;
     }
-    // A script raised earlier this frame, so nothing runs until the next tick. Said plainly
-    // rather than attempted, because a write that silently did not happen is indistinguishable
-    // from one that did.
-    if (GodotVerse::IsHaltedUntilTick())
-    {
-        return VH_ERR_HALTED;
-    }
     return GodotVerse::WriteInstanceField(reinterpret_cast<GodotVerse::FInstance*>(Instance), Cstr(NameUtf8), *Value)
         ? VH_OK
         : VH_ERR_NOT_FOUND;
@@ -927,13 +917,6 @@ extern "C" int32_t vh_instance_set_field_instance(vh_instance* Instance, const c
     if (!GetHost().bInitialized)
     {
         return VH_ERR_STATE;
-    }
-    // A script raised earlier this frame, so nothing runs until the next tick. Said plainly
-    // rather than attempted, because a write that silently did not happen is indistinguishable
-    // from one that did.
-    if (GodotVerse::IsHaltedUntilTick())
-    {
-        return VH_ERR_HALTED;
     }
     // Value is allowed to be null: that is how a reference member is cleared.
     return GodotVerse::WriteInstanceFieldInstance(reinterpret_cast<GodotVerse::FInstance*>(Instance),

@@ -61,13 +61,20 @@ main := class(node):
 			Overlay.StartGame.Subscribe(NewGame)
 
 	# The player's own `hit`, not Godot's body_entered.
-	GameOver<public>()<transacts>:void =
+	#
+	# No effect specifier, where every other handler in this port carries `<transacts>`, and the
+	# difference is load-bearing: the HUD's game-over sequence awaits two timers, an awaiting body
+	# cannot be narrowed, and `spawn` of one may only happen from a caller that is not narrowed
+	# either. A signal handler is such a caller since Phase 5 widened `Subscribe`'s callback to
+	# match Verse's own `subscribable`. Everything this calls is narrower, which is allowed --
+	# narrowing is contagious downward, not upward.
+	GameOver<public>():void =
 		if (Countdown := ScoreTimer?):
 			Countdown.Stop()
 		if (Countdown := MobTimer?):
 			Countdown.Stop()
 		if (Overlay := Hud?):
-			Overlay.ShowGameOver()
+			spawn{Overlay.ShowGameOver()}
 		if (Track := Music?):
 			Track.Stop()
 		if (Sound := DeathSound?):

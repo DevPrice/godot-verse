@@ -42,7 +42,7 @@ extern "C" {
  * The mismatch surfaces at vh_init, not at compile time, because the two sides are compiled by
  * different toolchains and nothing links them.
  */
-#define VH_ABI_VERSION_MAJOR 5
+#define VH_ABI_VERSION_MAJOR 6
 #define VH_ABI_VERSION_MINOR 0
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
@@ -64,12 +64,16 @@ typedef enum vh_status
 	 * expected to have a spelling for. */
 	VH_ERR_FAILED,
 
-	/* A script raised a runtime error earlier this frame, so no Verse code runs until the next
-	 * vh_tick. Nothing was called and nothing was written; ask again next frame.
+	/* The VM declined to run the body, so nothing was called and nothing was written.
 	 *
-	 * The error itself was already reported through OnRuntimeError -- this is what every *other*
-	 * call gets for the rest of that frame, and it exists so that "did not run" cannot be
-	 * mistaken for "ran and found nothing", which is what it used to look like. */
+	 * Until ABI v6 this was a project-wide state: a raise stopped every script until the next
+	 * vh_tick, and this is what every other call got for the rest of that frame. Since Phase 5 a
+	 * raise terminates only the raising instance's task scope and that instance is given a fresh
+	 * one at its very next call, so this is now a narrow answer rather than a common one -- it
+	 * means the scope the call would have run in was terminated and not yet replaced.
+	 *
+	 * It exists so that "did not run" cannot be mistaken for "ran and found nothing", which is
+	 * what it used to look like. Any error was already reported through OnRuntimeError. */
 	VH_ERR_HALTED,
 
 	/* An entry point was called from a thread other than the one that called vh_init, having run
@@ -96,6 +100,12 @@ typedef enum vh_call_status
 	VH_CALL_BAD_VALUE,      /* an argument or the result has no representation on this wire */
 	VH_CALL_BAD_ARITY       /* the member exists but was called with the wrong number of arguments */
 } vh_call_status;
+
+/* Godot's Object::CONNECT_ONE_SHOT, which is the only connect flag the host passes: a single
+ * `Await` resumes once, so Godot dropping the connection as it fires is exactly the lifetime and
+ * saves the disconnect. Spelled here rather than included, because this header knows nothing of
+ * Godot's own; the value is Godot's and a consumer must forward it unchanged. */
+#define VH_CONNECT_ONE_SHOT 4
 
 /* ---------------------------------------------------------------- values -- */
 
@@ -331,8 +341,32 @@ typedef struct vh_godot_api
 	/* --- signals: declared in v2.0, implemented in roadmap Phase 4 (spec 5.3) --- */
 
 	int32_t (*EmitSignal)(void* Ctx, vh_handle Handle, const char* NameUtf8, int32_t NameLen, const vh_value* Args, int32_t ArgCount);
+	/* Flags is Godot's own Object::ConnectFlags; VH_CONNECT_ONE_SHOT is the only one the host
+	 * passes, for the single connection one `Await` needs. */
 	int32_t (*ConnectSignal)(void* Ctx, vh_handle Handle, const char* NameUtf8, int32_t NameLen, const vh_value* Target, int32_t Flags);
 	int32_t (*DisconnectSignal)(void* Ctx, vh_handle Handle, const char* NameUtf8, int32_t NameLen, const vh_value* Target);
+
+	/* --- v6.0: what a Signal *value* names -------------------------------------------------- */
+
+	/* Splits a Signal reference id into the object that declares it and its name, which is what
+	 * connecting to one needs and what a reference id alone does not say.
+	 *
+	 * This is how a signal the mirror has no accessor for is reached -- one a GDScript or C#
+	 * script declared, or one made with add_user_signal (R-INT-1). The name is written into
+	 * *OutNameUtf8 as a NUL-terminated string the consumer owns until its next call, in the same
+	 * bargain every other string this header hands back makes.
+	 *
+	 * VH_CALL_OK, or VH_CALL_BAD_VALUE for an id that is not a Signal. */
+	int32_t (*SignalTarget)(void* Ctx, int64_t Ref, vh_handle* OutHandle, const char** OutNameUtf8);
+
+	/* The inverse: a Signal value naming one signal of one object, as a reference id already
+	 * claimed by the host -- Godot's own `Signal(object, "name")`, which has no other spelling on
+	 * this wire.
+	 *
+	 * The direct analogue of MakeCallable, and needed for the same reason: without it a script can
+	 * receive a Signal but never name one, so a signal the mirror has no accessor for would be
+	 * unreachable however good the machinery behind it was. 0 for a handle Godot has freed. */
+	int64_t (*MakeSignalRef)(void* Ctx, vh_handle Handle, const char* NameUtf8, int32_t NameLen);
 } vh_godot_api;
 
 /* ----------------------------------------------------------- diagnostics -- */
@@ -443,16 +477,43 @@ VH_API int32_t vh_abi_version(void);
 VH_ATTR VH_API int32_t vh_init(const vh_init_desc* Desc);
 VH_ATTR VH_API void vh_shutdown(void);
 
-/* Runs queued Verse work for at most BudgetSeconds. Call once per frame.
+/* What one vh_tick did, for R-ASYNC-6. A budget nothing can see the effect of is a number nobody
+ * can set: this is what makes "the pump ran out of time" observable rather than inferred from a
+ * frame that got slower. */
+typedef struct vh_tick_stats
+{
+	int32_t StructSize;
+	/* Queued jobs the pump ran. */
+	int32_t JobsRun;
+	/* Queued jobs still waiting when it stopped. Non-zero *and* Overran means the budget cut it
+	 * short; non-zero without it means something queued more work while the pump was running. */
+	int32_t JobsPending;
+	/* Tasks suspended in `Sleep`, waiting for their deadline. Not queue depth: a sleeper is not
+	 * work the budget could have got to sooner. */
+	int32_t Sleeping;
+	/* Seconds the pump spent, garbage collection included -- that is also what the budget covers,
+	 * and hiding it would make an over-budget frame look like an idle one. */
+	double ElapsedSeconds;
+	/* The budget stopped the pump with work still queued. */
+	vh_bool Overran;
+} vh_tick_stats;
+
+/* Runs queued Verse work for at most BudgetSeconds. Call once per frame. OutStats may be NULL.
+ *
+ * **What the budget governs is the queue, and only the queue** (phase-5-design.md D4): `Sleep`
+ * resumptions, `Main`, and anything else with no Godot event behind it. A task awaiting a Godot
+ * signal is not here at all -- it resumes *inside* the emission, synchronously, which is where
+ * GDScript resumes a coroutine too and is therefore as unbudgeted as GDScript's is.
  *
  * Also where collection is driven: requesting a Verse collection cycle from inside running Verse
  * code deadlocks the process (docs/abi-v2-design.md §1a), so the reference table's entries are
  * only ever released from here.
  *
- * And where Verse is restarted after a script raises. A runtime error stops every script in the
- * process until the next tick, which is what VH_ERR_HALTED reports; this is the frame boundary
- * that clears it. A consumer that never ticks never recovers. */
-VH_ATTR VH_API void vh_tick(double BudgetSeconds);
+ * It is no longer where Verse is restarted after a script raises. Until ABI v6 a runtime error
+ * stopped every script in the process until the next tick and this was the frame boundary that
+ * cleared it; now a raise terminates only the raising instance's task scope, and that instance is
+ * given a fresh one at its next call. A consumer that never ticks still never runs queued work. */
+VH_ATTR VH_API void vh_tick(double BudgetSeconds, vh_tick_stats* OutStats);
 
 /* One .verse file, and where in the project's module tree it belongs. */
 typedef struct vh_source_file
@@ -1275,7 +1336,7 @@ VH_ATTR VH_API int32_t vh_signature_at(const char* PathUtf8,
 typedef int32_t (*vh_abi_version_fn)(void);
 typedef int32_t (*vh_init_fn)(const vh_init_desc*);
 typedef void (*vh_shutdown_fn)(void);
-typedef void (*vh_tick_fn)(double);
+typedef void (*vh_tick_fn)(double, vh_tick_stats*);
 typedef int32_t (*vh_compile_project_fn)(const vh_source_file*, int32_t, int32_t*);
 typedef int32_t (*vh_resolve_unknown_name_fn)(const char*, const vh_module_ref**, int32_t*);
 typedef int32_t (*vh_check_project_fn)(const char*, const char*);
