@@ -211,6 +211,13 @@ exports := class(object):
         else if (Mode = exports_mode.Idle):
             set ArraysSeen = 0.0
 
+    # Exists to give completion an anchor for a mirrored Godot enum named as a *type*, not a value
+    # -- `node_process_mode.Always` is the spelling `SetProcessMode` takes, and it has to resolve
+    # the same way `exports_mode.Walking` above does.
+    ReadProcessMode<public>():void =
+        if (node_process_mode.Always = node_process_mode.Always):
+            set TargetSeen = true
+
 # Exists only to give the symbol lookup a Godot API method to resolve against. Analysis never
 # needs a real node behind it, and nothing instantiates this.
 @global_class

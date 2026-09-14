@@ -816,13 +816,140 @@ int main(int argc, char** argv)
 					CompleteOk = Step("X is named as vector2's", Text(X->OwnerUtf8, X->OwnerLen) == "vector2") && CompleteOk;
 					CompleteOk = Step("and typed", Text(X->TypeUtf8, X->TypeLen) == "float") && CompleteOk;
 				}
-				// A value type's fields are the whole of it, so this is the one case where the
-				// list can be pinned exactly -- and a leak of the enclosing scope would show here.
-				CompleteOk = Step("and nothing else", Count == 2) && CompleteOk;
+				// vector2's math surface (Length, Normalized, ...) is extension methods, not class
+				// members -- `(V:vector2).Length()` is a module-level declaration -- so they never
+				// show up in vector2's own member list and have to be found in the scopes a bare
+				// identifier would resolve against instead.
+				CompleteOk = Step("it offers vector2's Length too", Offers(Items, Count, "Length") != nullptr) && CompleteOk;
+				CompleteOk = Step("and Normalized", Offers(Items, Count, "Normalized") != nullptr) && CompleteOk;
+				if (const vh_complete_item* Length = Offers(Items, Count, "Length"))
+				{
+					CompleteOk = Step("Length is offered as a function", Length->Kind == VH_LOOKUP_FUNCTION) && CompleteOk;
+					CompleteOk = Step("taking no arguments once the receiver is dropped", Length->ParamCount == 0) && CompleteOk;
+					CompleteOk = Step("and spelled without the receiver parameter",
+									 Text(Length->SignatureUtf8, Length->SignatureLen) == "()<reads>:float")
+							  && CompleteOk;
+				}
+				// The list is no longer just the fields, so this is the leak check now: nothing
+				// from the enclosing scope should ride in behind vector2's own members.
+				CompleteOk = Step("nothing from the enclosing scope leaks in", Offers(Items, Count, "Print") == nullptr) && CompleteOk;
 			}
 			else
 			{
 				CompleteOk = false;
+			}
+
+			// A different value type's own extension methods are still reachable (color has Lerp),
+			// but vector2's are not offered for it: the receiver-type match has to be by type, not
+			// by name, or `V.Length()` would complete on anything.
+			const size_t TintUse = ExportsSource.find("Tint.B");
+			CompleteOk = Step("located the fixture's other struct field read", TintUse != std::string::npos) && CompleteOk;
+			if (TintUse != std::string::npos)
+			{
+				std::string TintTyping = ExportsSource;
+				TintTyping.replace(TintUse, strlen("Tint.B"), "Tint.VhCompletionCursor");
+				RowColumnOf(TintTyping, TintUse + strlen("Tint") - 1, RecvRow, RecvColumn);
+				AnalyseCompletionBuffer(TintTyping);
+				if (Step("vh_complete_symbol on a color",
+						CompleteSymbolFn(ExportsPathUtf8.c_str(), TintTyping.c_str(), RecvRow, RecvColumn,
+										 VH_COMPLETE_MEMBERS, &Items, &Count) == VH_OK))
+				{
+					CompleteOk = Step("it offers color's own field", Offers(Items, Count, "B") != nullptr) && CompleteOk;
+					CompleteOk = Step("and color's own extension method",
+									 Offers(Items, Count, "Lerp") != nullptr)
+							  && CompleteOk;
+					CompleteOk = Step("but not vector2's Length", Offers(Items, Count, "Length") == nullptr) && CompleteOk;
+					CompleteOk = Step("nor vector2's Normalized", Offers(Items, Count, "Normalized") == nullptr) && CompleteOk;
+				}
+				else
+				{
+					CompleteOk = false;
+				}
+			}
+
+			// An enum used as a *type name* rather than a value -- `node_process_mode.<cursor>`,
+			// which is how an author actually spells an enumerator (`SetProcessMode(node_process_
+			// mode.Always)`) -- has a CTypeType result rather than a CEnumeration one, and used to
+			// answer nothing at all.
+			const size_t ProcessModeUse = ExportsSource.find("node_process_mode.Always = node_process_mode.Always");
+			CompleteOk = Step("located the fixture's process-mode reference", ProcessModeUse != std::string::npos) && CompleteOk;
+			if (ProcessModeUse != std::string::npos)
+			{
+				std::string ProcessModeTyping = ExportsSource;
+				ProcessModeTyping.replace(ProcessModeUse, strlen("node_process_mode.Always = node_process_mode.Always"),
+										  "node_process_mode.VhCompletionCursor");
+				RowColumnOf(ProcessModeTyping, ProcessModeUse + strlen("node_process_mode") - 1, RecvRow, RecvColumn);
+				AnalyseCompletionBuffer(ProcessModeTyping);
+				if (Step("vh_complete_symbol on a mirrored enum named as a type",
+						CompleteSymbolFn(ExportsPathUtf8.c_str(), ProcessModeTyping.c_str(), RecvRow, RecvColumn,
+										 VH_COMPLETE_MEMBERS, &Items, &Count) == VH_OK))
+				{
+					CompleteOk = Step("it offers Inherit", Offers(Items, Count, "Inherit") != nullptr) && CompleteOk;
+					CompleteOk = Step("Pausable", Offers(Items, Count, "Pausable") != nullptr) && CompleteOk;
+					CompleteOk = Step("WhenPaused", Offers(Items, Count, "WhenPaused") != nullptr) && CompleteOk;
+					CompleteOk = Step("Always", Offers(Items, Count, "Always") != nullptr) && CompleteOk;
+					CompleteOk = Step("and Disabled", Offers(Items, Count, "Disabled") != nullptr) && CompleteOk;
+					// A type name is not a value, so nothing an extension method or the enclosing
+					// scope offers should ride along with the enumerators.
+					CompleteOk = Step("nothing from the enclosing scope", Offers(Items, Count, "Speed") == nullptr) && CompleteOk;
+				}
+				else
+				{
+					CompleteOk = false;
+				}
+			}
+
+			// The project's own enum, named as a type the same way: exports_mode is declared here
+			// rather than mirrored, so this exercises the same CTypeType unwrap against a CEnumeration
+			// this file's own analysis produced instead of the generated one.
+			const size_t ExportsModeUse = ExportsSource.find("exports_mode.Walking");
+			CompleteOk = Step("located the fixture's own-enum reference", ExportsModeUse != std::string::npos) && CompleteOk;
+			if (ExportsModeUse != std::string::npos)
+			{
+				std::string ExportsModeTyping = ExportsSource;
+				ExportsModeTyping.replace(ExportsModeUse, strlen("exports_mode.Walking"), "exports_mode.VhCompletionCursor");
+				RowColumnOf(ExportsModeTyping, ExportsModeUse + strlen("exports_mode") - 1, RecvRow, RecvColumn);
+				AnalyseCompletionBuffer(ExportsModeTyping);
+				if (Step("vh_complete_symbol on the fixture's own enum named as a type",
+						CompleteSymbolFn(ExportsPathUtf8.c_str(), ExportsModeTyping.c_str(), RecvRow, RecvColumn,
+										 VH_COMPLETE_MEMBERS, &Items, &Count) == VH_OK))
+				{
+					CompleteOk = Step("it offers Idle", Offers(Items, Count, "Idle") != nullptr) && CompleteOk;
+					CompleteOk = Step("Walking", Offers(Items, Count, "Walking") != nullptr) && CompleteOk;
+					CompleteOk = Step("and Running", Offers(Items, Count, "Running") != nullptr) && CompleteOk;
+					CompleteOk = Step("nothing from the enclosing scope either", Offers(Items, Count, "Speed") == nullptr) && CompleteOk;
+				}
+				else
+				{
+					CompleteOk = false;
+				}
+			}
+
+			// The regression this all sits beside: an enum-typed *value* -- Mode, not the enum's own
+			// name -- already worked, and the CTypeType handling above must not have disturbed it.
+			const size_t ModeUse = ExportsSource.find("Mode = exports_mode.Running");
+			CompleteOk = Step("located the fixture's enum-valued member use", ModeUse != std::string::npos) && CompleteOk;
+			if (ModeUse != std::string::npos)
+			{
+				std::string ModeTyping = ExportsSource;
+				ModeTyping.replace(ModeUse, strlen("Mode = exports_mode.Running"), "Mode.VhCompletionCursor");
+				RowColumnOf(ModeTyping, ModeUse + strlen("Mode") - 1, RecvRow, RecvColumn);
+				AnalyseCompletionBuffer(ModeTyping);
+				if (Step("vh_complete_symbol on an enum-typed value",
+						CompleteSymbolFn(ExportsPathUtf8.c_str(), ModeTyping.c_str(), RecvRow, RecvColumn,
+										 VH_COMPLETE_MEMBERS, &Items, &Count) == VH_OK))
+				{
+					CompleteOk = Step("it offers Idle", Offers(Items, Count, "Idle") != nullptr) && CompleteOk;
+					CompleteOk = Step("Walking", Offers(Items, Count, "Walking") != nullptr) && CompleteOk;
+					CompleteOk = Step("and Running", Offers(Items, Count, "Running") != nullptr) && CompleteOk;
+					// No extension method matches an enum's type, so a value's enumerators are still
+					// the whole list -- unlike vector2 above, where the math surface joined it.
+					CompleteOk = Step("and nothing else", Count == 3) && CompleteOk;
+				}
+				else
+				{
+					CompleteOk = false;
+				}
 			}
 
 			// A node reached through `Self` completes to the mirrored class' surface, inherited

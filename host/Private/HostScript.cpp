@@ -69,6 +69,7 @@
 #include "uLang/Syntax/VstNode.h"
 #include "uLang/SourceProject/PackageRole.h"
 #include "uLang/SourceProject/SourceDataProject.h"
+#include "uLang/SourceProject/UploadedAtFNVersion.h"
 #include "uLang/SourceProject/VerseScope.h"
 #include "uLang/SourceProject/VerseVersion.h"
 #include "uLang/CompilerPasses/ApiLayerInjections.h"
@@ -6031,7 +6032,11 @@ AUTORTFM_DISABLE const uLang::CNormalType* UnwrapToMemberBearingType(const uLang
 /// Effects come out relative to the function default, which is why an ordinary method's
 /// signature carries no specifier at all: BuildEffectAttributeCode emits only what an author
 /// would have had to write.
-AUTORTFM_DISABLE FUtf8String SpellSignature(const uLang::CFunction& Function)
+///
+/// SkipLeadingParams drops the receiver off an extension method's signature: `_Signature` carries
+/// it as parameter 0 (`(V:vector2).Length()` parses "(V:vector2)" as the first parameter clause),
+/// but the call an author writes is `V.Length()`, and the receiver is not part of that spelling.
+AUTORTFM_DISABLE FUtf8String SpellSignature(const uLang::CFunction& Function, int32 SkipLeadingParams = 0)
 {
     const uLang::CFunctionType* Type = Function._Signature.GetFunctionType();
     if (!Type)
@@ -6042,8 +6047,13 @@ AUTORTFM_DISABLE FUtf8String SpellSignature(const uLang::CFunction& Function)
     uLang::CUTF8StringBuilder Builder;
     Builder.Append('(');
     const char* Separator = "";
+    int32 ParamIndex = 0;
     for (const uLang::CDataDefinition* Param : Function._Signature.GetParams())
     {
+        if (ParamIndex++ < SkipLeadingParams)
+        {
+            continue;
+        }
         if (!Param || !Param->GetType())
         {
             continue;
@@ -6291,6 +6301,123 @@ AUTORTFM_DISABLE void CollectClassAndSupers(const uLang::CClass& Class,
     }
 }
 
+/// Fills one item for an extension method, the way DescribeCompletion fills one for an ordinary
+/// member -- same fields, so the client completes `Length()` with its arity and brackets intact.
+/// Split out rather than folded into DescribeCompletion because the two disagree on the name (the
+/// mangled `operator'.Length'` has to become `Length`) and on the arity (parameter 0 is the
+/// receiver, never part of what the author writes).
+AUTORTFM_DISABLE bool DescribeExtensionMethodCompletion(const uLang::CFunction& Function, GodotVerse::FCompleteItem& OutItem)
+{
+    using namespace uLang;
+
+    if (Function.GetName().IsNull())
+    {
+        return false;
+    }
+
+    OutItem.Kind = VH_LOOKUP_FUNCTION;
+    OutItem.ParamCount = Function._Signature.NumParams() - 1;
+    OutItem.Signature = SpellSignature(Function, /*SkipLeadingParams=*/1);
+    OutItem.bIsOverridable = false;
+    if (const CFunctionType* Type = Function._Signature.GetFunctionType())
+    {
+        OutItem.Type = FULangConversionUtils::ULangStrToFUtf8String(Type->AsCode());
+    }
+
+    const CSemanticProgram& Program = Function._EnclosingScope.GetProgram();
+    OutItem.Name = FULangConversionUtils::ULangStrToFUtf8String(
+        CUTF8String(Program._IntrinsicSymbols.StripExtensionFieldOpName(Function.GetName())));
+    OutItem.Owner = FUtf8String(Function._EnclosingScope.GetScopeName().AsCString());
+    int32 UnusedColumn = -1;
+    FillLocation(Function, OutItem.Path, OutItem.Line, UnusedColumn);
+    return true;
+}
+
+/// Extension methods are module-level definitions -- `(V:vector2).Length()` declares
+/// `operator'.Length'` beside whatever else the module holds -- so a class's own member walk never
+/// finds them. This walks the same scopes a bare identifier would resolve against (the cursor's
+/// enclosing scopes, outward, and each one's `using` scopes -- which is how `/Godot.org/Godot`'s
+/// math extension methods come into view for every script) and offers every extension method whose
+/// receiver parameter accepts ReceiverType.
+///
+/// ReceiverType is a CClass rather than the more general CNormalType a resolved expression type
+/// actually is: `void` -- what a position with no real receiver under it resolves to -- sits at the
+/// bottom of the subtype lattice and matches every extension method's receiver parameter, which
+/// turned "nothing under the cursor" into a wall of unrelated completions. Every type an extension
+/// method exists for today is a CClass, so requiring one is not a narrowing an author can feel.
+AUTORTFM_DISABLE void CollectExtensionMethods(const uLang::CScope* FromScope,
+                                              const uLang::CClass& ReceiverType,
+                                              TSet<FUtf8String>& Seen,
+                                              TArray<GodotVerse::FCompleteItem>& OutItems)
+{
+    using namespace uLang;
+
+    auto VisitLogicalScope = [FromScope, &ReceiverType, &Seen, &OutItems](const CLogicalScope& Scope)
+    {
+        for (const TSRef<CDefinition>& Definition : Scope.GetDefinitions())
+        {
+            const CFunction* Function = Definition->AsNullable<CFunction>();
+            if (!Function || Function->_ExtensionFieldAccessorKind != EExtensionFieldAccessorKind::ExtensionMethod)
+            {
+                continue;
+            }
+            if (FromScope && !Definition->IsAccessibleFrom(*FromScope))
+            {
+                continue;
+            }
+            const SSignature::ParamDefinitions& Params = Function->_Signature.GetParams();
+            if (Params.IsEmpty() || !Params[0] || !Params[0]->GetType())
+            {
+                continue;
+            }
+            // Contravariant: matching against the parameter's own type, the same test overload
+            // resolution runs for an extension call, is what lets a subtype receiver still match.
+            if (!SemanticTypeUtils::Matches(&ReceiverType, Params[0]->GetType(), VerseFN::UploadedAtFNVersion::Latest))
+            {
+                continue;
+            }
+            // Recorded only once described, and tested before, for the same reason CollectScope
+            // does it in that order: a definition the describe step refuses must not reserve its
+            // name against a real one further out.
+            GodotVerse::FCompleteItem Item;
+            if (DescribeExtensionMethodCompletion(*Function, Item) && !Seen.Contains(Item.Name))
+            {
+                Seen.Add(Item.Name);
+                OutItems.Add(MoveTemp(Item));
+            }
+        }
+    };
+
+    for (const CScope* Current = FromScope; Current; Current = Current->GetParentScope())
+    {
+        if (Current->GetKind() == CScope::EKind::Class)
+        {
+            for (const CClass* ClassCurrent = &static_cast<const CClass&>(*Current); ClassCurrent; ClassCurrent = ClassCurrent->GetSuperClass())
+            {
+                VisitLogicalScope(*ClassCurrent);
+                for (const CClass* Interface : ClassCurrent->_SuperInterfaces)
+                {
+                    if (Interface)
+                    {
+                        VisitLogicalScope(*Interface);
+                    }
+                }
+            }
+        }
+        else
+        {
+            VisitLogicalScope(Current->GetLogicalScope());
+        }
+        for (const CLogicalScope* Using : Current->GetUsingScopes())
+        {
+            if (Using)
+            {
+                VisitLogicalScope(*Using);
+            }
+        }
+    }
+}
+
 } // namespace
 
 AUTORTFM_DISABLE bool GodotVerse::Complete(FUtf8StringView Path,
@@ -6368,17 +6495,51 @@ AUTORTFM_DISABLE bool GodotVerse::Complete(FUtf8StringView Path,
                 {
                     continue;
                 }
+
+                // A receiver named as a type -- `node_process_mode.<cursor>` -- has a CTypeType
+                // result ("type, the type of types"), wrapping the CEnumeration/CClass rather than
+                // being one. Its own FindInstanceMember reaches through to the positive type, so
+                // completion has to as well or a type name answers nothing.
+                bool bIsTypeName = false;
+                if (const uLang::CTypeType* TypeType = Type->AsNullable<uLang::CTypeType>())
+                {
+                    bIsTypeName = true;
+                    Type = TypeType->PositiveType() ? UnwrapToMemberBearingType(TypeType->PositiveType()) : nullptr;
+                    if (!Type)
+                    {
+                        continue;
+                    }
+                }
+
                 if (const uLang::CClass* Class = Type->AsNullable<uLang::CClass>())
                 {
-                    CollectClassAndSupers(*Class, Visitor.Scope, ECompleteFilter::Any, Seen, OutItems);
+                    // A class named as a type has no members reachable this way: CClass does not
+                    // override FindTypeMember, so `SomeClass.` offers nothing in real Verse, and
+                    // offering its instance members here would be offering something that does not
+                    // compile.
+                    if (!bIsTypeName)
+                    {
+                        CollectClassAndSupers(*Class, Visitor.Scope, ECompleteFilter::Any, Seen, OutItems);
+
+                        // A math value's methods (Length, Normalized, ...) are extension methods,
+                        // not class members -- see CollectExtensionMethods for why this needs a
+                        // CClass rather than the wider Type.
+                        CollectExtensionMethods(Visitor.Scope, *Class, Seen, OutItems);
+                    }
                 }
                 else if (const uLang::CEnumeration* Enumeration = Type->AsNullable<uLang::CEnumeration>())
                 {
+                    // An enumeration's enumerators are reachable both ways -- `node_process_mode.`
+                    // and a value already of that type both resolve here -- because CEnumeration is
+                    // its own FindTypeMember target as well as an enum value's ordinary type.
                     CollectScope(*Enumeration, Visitor.Scope, ECompleteFilter::Any, Seen, OutItems);
                 }
                 else if (const uLang::CModule* Module = Type->AsNullable<uLang::CModule>())
                 {
-                    CollectScope(*Module, Visitor.Scope, ECompleteFilter::Any, Seen, OutItems);
+                    if (!bIsTypeName)
+                    {
+                        CollectScope(*Module, Visitor.Scope, ECompleteFilter::Any, Seen, OutItems);
+                    }
                 }
             }
             else
