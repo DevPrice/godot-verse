@@ -71,6 +71,12 @@ private:
 	// const because the lazy caller is const; the sets it fills are mutable for the same reason.
 	void rebuild_name_caches() const;
 
+	// Fills member_names from the analysis snapshot -- what the edited script's class declares,
+	// plus the properties and signal accessors it inherits. False when there is nothing to read
+	// (no host, nothing built yet, or a file no analysis has seen), which is when the lexical scan
+	// in rebuild_name_caches is the only source there is.
+	bool collect_analysed_members() const;
+
 	// line_start_state[i] is the lexer state line i begins in; index 0 is always the default
 	// state. _get_line_syntax_highlighting is const (Godot's contract), so the lazily-filled
 	// cache has to be mutable.
@@ -95,11 +101,12 @@ private:
 	// author types, which is the one thing per-keystroke recolouring cannot tolerate.
 	mutable std::unordered_set<std::string> type_names;
 
-	// Every field the currently open script declares directly in its class body -- one level of
-	// indent under the class header, the way `mover.verse` indents `Speed` and `Direction`. Verse
-	// code reaches its own members bare (no `self.`), so unlike a dotted access these need their
-	// name on record to colour, and unlike type_names they are rebuilt whenever the file changes:
-	// a field is only a field in the file that declares it.
+	// Every field the currently open script can reach bare (Verse code writes no `self.`), so
+	// unlike a dotted access these need their name on record to colour. Read out of the analysis
+	// where there is one -- the class's own members and everything it inherits from the mirror --
+	// and otherwise scanned out of the buffer, one level of indent under the class header, the way
+	// `mover.verse` indents `Speed` and `Direction`. Rebuilt whenever the file changes, unlike
+	// type_names: a field is only a field in the file that declares it.
 	mutable std::unordered_set<std::string> member_names;
 
 	// Read once per _update_cache, not per line: text_editor/theme/highlighting/comment_markers/

@@ -1,10 +1,12 @@
 #include "verse_syntax_highlighter.h"
 
 #include "verse_api_classes.h"
+#include "verse_script.h"
 #include "verse_script_language.h"
 
 #include <godot_cpp/classes/editor_interface.hpp>
 #include <godot_cpp/classes/editor_settings.hpp>
+#include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/text_edit.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/callable.hpp>
@@ -19,6 +21,35 @@
 using namespace godot;
 
 namespace {
+
+VerseRuntime *get_runtime() {
+	return Object::cast_to<VerseRuntime>(Engine::get_singleton()->get_singleton("VerseRuntime"));
+}
+
+// The Verse class one of Godot's stands for, or null when that class was not mirrored -- which a
+// chain walk meets whenever gen_verse_api.py was run with --classes-file.
+const char *mirrored_class(const StringName &p_godot_class) {
+	for (size_t i = 0; i < std::size(verse_api::classes); i++) {
+		if (p_godot_class == StringName(verse_api::classes[i].godot_name)) {
+			return verse_api::classes[i].verse_name;
+		}
+	}
+	return nullptr;
+}
+
+// Data members only: a method reaches the highlighter as a Function or FunctionDefinition token
+// from its parameter list and never as an Identifier, so the mirror's 9597 method names would
+// colour nothing and cost a lookup per word. A signal accessor is a data member -- which is why
+// `Hidden` cannot be redeclared on a node2d -- so this is properties and signals both.
+void collect_data_members(const VerseRuntime &p_runtime, const String &p_class, std::unordered_set<std::string> &r_names) {
+	const TypedArray<Dictionary> members = p_runtime.class_members(p_class);
+	for (int64_t i = 0; i < members.size(); i++) {
+		const Dictionary member = members[i];
+		if ((int64_t)member["kind"] == VH_LOOKUP_DATA) {
+			r_names.insert(String(member["name"]).utf8().get_data());
+		}
+	}
+}
 
 Color read_color(const Ref<EditorSettings> &p_settings, const String &p_name, const Color &p_fallback) {
 	if (p_settings.is_null() || !p_settings->has_setting(p_name)) {
@@ -411,9 +442,76 @@ void VerseSyntaxHighlighter::_update_cache() {
 	rebuild_name_caches();
 }
 
+// The member set as the last analysis described it, or false when there is none to read.
+//
+// The scan below is a heuristic about indentation, which is all a file that has never been built
+// leaves to read; once a build has happened the program itself says what the class declares. The
+// half no scan of one file could reach is the inherited one: `Position` and `Name` are members of
+// the script exactly the way its own `Speed` is, and colouring one and not the other is the
+// difference the author sees.
+//
+// As stale as every other snapshot read -- it describes the last analysis, and Godot refreshes a
+// highlighter's cache after each successful validation, which is the same hook GDScript rebuilds
+// its own member set on.
+bool VerseSyntaxHighlighter::collect_analysed_members() const {
+	VerseScriptLanguage *language = VerseScriptLanguage::singleton();
+	VerseRuntime *runtime = get_runtime();
+	if (language == nullptr || runtime == nullptr || !runtime->is_host_loaded()) {
+		return false;
+	}
+
+	// EditorSyntaxHighlighter::_get_edited_resource is bound in ClassDB but absent from
+	// extension_api.json, so godot-cpp generated no wrapper for it and a dynamic call is the only
+	// way in. It is also the only way to the script at all: SyntaxHighlighter hands a highlighter
+	// its TextEdit and nothing else, and a TextEdit does not know what it is editing.
+	VerseSyntaxHighlighter *self = const_cast<VerseSyntaxHighlighter *>(this);
+	if (!self->has_method("_get_edited_resource")) {
+		return false;
+	}
+	Object *edited = self->call("_get_edited_resource");
+	VerseScript *script = Object::cast_to<VerseScript>(edited);
+	if (script == nullptr || script->get_path().is_empty()) {
+		return false;
+	}
+
+	// A class the analysis has never seen answers an empty member list, which is indistinguishable
+	// from a class that declares nothing -- and falling back is right for the first and wrong for
+	// the second, so the question is asked separately.
+	const String own_class = language->qualified_class_name(script->get_path());
+	if (!runtime->has_class(own_class)) {
+		return false;
+	}
+	collect_data_members(*runtime, own_class, member_names);
+
+	// A base that is another script declares members of its own, and the chain of base scripts is
+	// the only place they are written down: _get_instance_base_type walks past every one of them to
+	// the Godot class underneath.
+	Ref<Script> base = script->_get_base_script();
+	for (int depth = 0; depth < 32 && base.is_valid(); depth++) {
+		VerseScript *verse_base = Object::cast_to<VerseScript>(base.ptr());
+		if (verse_base == nullptr || verse_base->get_path().is_empty()) {
+			break;
+		}
+		collect_data_members(*runtime, language->qualified_class_name(verse_base->get_path()), member_names);
+		base = verse_base->_get_base_script();
+	}
+
+	// The rest of the chain is Godot's, because every Verse class in it is the mirror of one, and
+	// ClassDB is where that hierarchy is written down -- the mirror's own bases are not something
+	// the ABI answers for.
+	for (StringName godot_class = script->_get_instance_base_type(); !String(godot_class).is_empty();
+			godot_class = ClassDB::get_parent_class(godot_class)) {
+		if (const char *verse_class = mirrored_class(godot_class)) {
+			collect_data_members(*runtime, String(verse_class), member_names);
+		}
+	}
+	return true;
+}
+
 void VerseSyntaxHighlighter::rebuild_name_caches() const {
 	member_names.clear();
 	type_names.clear();
+	const bool analysed = collect_analysed_members();
 	if (TextEdit *text_edit = get_text_edit()) {
 		VerseLexState state;
 		std::vector<VerseToken> tokens;
@@ -443,7 +541,7 @@ void VerseSyntaxHighlighter::rebuild_name_caches() const {
 
 			std::string member_name;
 			int member_column = 0;
-			if (collect_member_name(utf8, tokens, member_name, member_column)) {
+			if (!analysed && collect_member_name(utf8, tokens, member_name, member_column)) {
 				member_candidates.emplace_back(member_column, std::move(member_name));
 			}
 			collect_enum_name(utf8, tokens, type_names);
@@ -452,7 +550,7 @@ void VerseSyntaxHighlighter::rebuild_name_caches() const {
 		// indent_unit == 0 means the file has no indented code at all (a library file of only
 		// top-level definitions), in which case nothing is a class member -- never fall back to
 		// accepting column 0, which is where a top-level `name := ...` sits.
-		if (indent_unit > 0) {
+		if (!analysed && indent_unit > 0) {
 			for (const std::pair<int, std::string> &candidate : member_candidates) {
 				if (candidate.first == indent_unit) {
 					member_names.insert(candidate.second);
