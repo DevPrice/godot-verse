@@ -6103,6 +6103,14 @@ enum class ECompleteFilter : uint8
     PrefixAttributes,
     /// Only what may follow a `<`.
     Specifiers,
+    /// Only what may stand where a type is expected.
+    Types,
+    /// Only what may stand in a class header's parentheses.
+    Supertypes,
+    /// Only what a `set` may assign to.
+    Assignable,
+    /// Only a data member, var or not, which is what an archetype body may give a value.
+    Fields,
 };
 
 /// Whether an attribute class may be written in the position Filter names.
@@ -6165,6 +6173,55 @@ AUTORTFM_DISABLE bool IsAttributeName(const uLang::CDefinition& Definition, ECom
     return false;
 }
 
+/// Whether a definition is a name the position Filter describes will accept.
+///
+/// The positions that narrow are the ones Verse gives a single reading: a type after a `:`, a
+/// superclass in a class header, the target of a `set`. Nothing here is about what *resolves* --
+/// every one of these definitions is in scope either way -- only about what the compiler would
+/// take, which is the difference between a list worth reading and 2773 names.
+AUTORTFM_DISABLE bool DefinitionFitsFilter(const uLang::CDefinition& Definition, ECompleteFilter Filter)
+{
+    using namespace uLang;
+
+    switch (Filter)
+    {
+    case ECompleteFilter::Any:
+        return true;
+
+    case ECompleteFilter::PrefixAttributes:
+    case ECompleteFilter::Specifiers:
+        return IsAttributeName(Definition, Filter);
+
+    case ECompleteFilter::Types:
+        // A module qualifies one -- `/Godot.org/Godot.node2d` -- so it belongs to a type position
+        // even though it is not itself a type.
+        return Definition.AsNullable<CClass>() || Definition.AsNullable<CEnumeration>()
+            || Definition.AsNullable<CTypeAlias>() || Definition.AsNullable<CModule>()
+            || Definition.AsNullable<CModuleAlias>();
+
+    case ECompleteFilter::Supertypes:
+        // An interface is a CClass here, so `class(a, b)` and a superclass chain are the same test.
+        // An enum or an alias to a primitive is not something a class can derive from, which is
+        // two thirds of what a type position admits and the whole reason this is its own filter.
+        return Definition.AsNullable<CClass>() || Definition.AsNullable<CModule>()
+            || Definition.AsNullable<CModuleAlias>();
+
+    case ECompleteFilter::Assignable:
+    {
+        // `set` needs a mutable place. A non-var member is assigned once at construction, so
+        // offering it is offering a compile error -- which is most of what a class body declares.
+        const CDataDefinition* Data = Definition.AsNullable<CDataDefinition>();
+        return Data && Data->IsVar();
+    }
+
+    case ECompleteFilter::Fields:
+        // Deliberately wider than Assignable: construction is the one moment a non-var field is
+        // written, so `vector2{X := 1.0}` sets a field no `set` could ever reach.
+        return Definition.AsNullable<CDataDefinition>() != nullptr;
+    }
+    return false;
+}
+
 /// Fills one item from a definition, or returns false for a definition that is not a name the
 /// author could have written: the compiler generates a constructor and an archetype per class,
 /// and neither is spellable.
@@ -6195,7 +6252,8 @@ AUTORTFM_DISABLE bool DescribeCompletion(const uLang::CDefinition& Definition, E
         // An attribute's `<constructor>` is the one the author writes -- `@clamp_min("0.0")` --
         // and IsAttributeName has already established that this is one. Everywhere else a
         // constructor is the copy the compiler generated per class, which has no spelling.
-        if (Function->IsConstructor() && Filter == ECompleteFilter::Any)
+        if (Function->IsConstructor() && Filter != ECompleteFilter::PrefixAttributes
+            && Filter != ECompleteFilter::Specifiers)
         {
             return false;
         }
@@ -6252,7 +6310,7 @@ AUTORTFM_DISABLE void CollectScope(const uLang::CLogicalScope& From,
         {
             continue;
         }
-        if (Filter != ECompleteFilter::Any && !IsAttributeName(*Definition, Filter))
+        if (!DefinitionFitsFilter(*Definition, Filter))
         {
             continue;
         }
@@ -6484,7 +6542,31 @@ AUTORTFM_DISABLE bool GodotVerse::Complete(FUtf8StringView Path,
             // a type spelled with AsCode, and a whole signature spelled for every function.
             TSet<FUtf8String> Seen;
 
-            if (Mode == VH_COMPLETE_MEMBERS)
+            if (Mode == VH_COMPLETE_ARCHETYPE_FIELDS)
+            {
+                // `vector2{<cursor>}`: the position is the class named before the brace, and what
+                // may be written inside is the fields it and its superclasses declare. Methods are
+                // deliberately absent -- an archetype body gives values, it does not override.
+                //
+                // The name resolves to a type rather than to a value, so the CTypeType unwrap the
+                // member branch does for `node_process_mode.` is the same one needed here.
+                if (!Visitor.Expr)
+                {
+                    continue;
+                }
+                const uLang::CNormalType* Named = UnwrapToMemberBearingType(Visitor.Expr->GetResultType(*Program));
+                if (const uLang::CTypeType* TypeType = Named ? Named->AsNullable<uLang::CTypeType>() : nullptr)
+                {
+                    Named = TypeType->PositiveType() ? UnwrapToMemberBearingType(TypeType->PositiveType()) : nullptr;
+                }
+                const uLang::CClass* Class = Named ? Named->AsNullable<uLang::CClass>() : nullptr;
+                if (!Class)
+                {
+                    continue;
+                }
+                CollectClassAndSupers(*Class, Visitor.Scope, ECompleteFilter::Fields, Seen, OutItems);
+            }
+            else if (Mode == VH_COMPLETE_MEMBERS)
             {
                 if (!Visitor.Expr)
                 {
@@ -6545,21 +6627,28 @@ AUTORTFM_DISABLE bool GodotVerse::Complete(FUtf8StringView Path,
             else
             {
                 ECompleteFilter Filter = ECompleteFilter::Any;
-                if (Mode == VH_COMPLETE_ATTRIBUTES)
+                switch (Mode)
                 {
-                    Filter = ECompleteFilter::PrefixAttributes;
-                }
-                else if (Mode == VH_COMPLETE_SPECIFIERS)
-                {
-                    Filter = ECompleteFilter::Specifiers;
+                case VH_COMPLETE_ATTRIBUTES: Filter = ECompleteFilter::PrefixAttributes; break;
+                case VH_COMPLETE_SPECIFIERS: Filter = ECompleteFilter::Specifiers; break;
+                case VH_COMPLETE_TYPES: Filter = ECompleteFilter::Types; break;
+                case VH_COMPLETE_SUPERTYPES: Filter = ECompleteFilter::Supertypes; break;
+                case VH_COMPLETE_ASSIGNABLE: Filter = ECompleteFilter::Assignable; break;
+                default: break;
                 }
 
-                // A local is a value, and an attribute is a type applied to a declaration: no
-                // local is ever what follows an `@` or a `<`.
-                if (Filter == ECompleteFilter::Any)
+                // A local is a value, so it belongs to a bare identifier and to a `set` target and
+                // to neither of the other narrowed positions: an attribute is a type applied to a
+                // declaration, and a local is never a type nor a superclass. DefinitionFitsFilter
+                // is what drops the locals a `set` cannot take, which is every one that is not var.
+                if (Filter == ECompleteFilter::Any || Filter == ECompleteFilter::Assignable)
                 {
                     for (const uLang::CDataDefinition* Local : Visitor.Locals)
                     {
+                        if (!DefinitionFitsFilter(*Local, Filter))
+                        {
+                            continue;
+                        }
                         FCompleteItem Item;
                         FUtf8String Name(Local->AsNameCString());
                         if (!Seen.Contains(Name) && DescribeCompletion(*Local, Filter, Item))

@@ -1057,8 +1057,7 @@ extern "C" int32_t vh_complete_symbol(const char* PathUtf8,
     {
         return VH_ERR_STATE;
     }
-    if (Mode != VH_COMPLETE_MEMBERS && Mode != VH_COMPLETE_SCOPE && Mode != VH_COMPLETE_ATTRIBUTES
-        && Mode != VH_COMPLETE_SPECIFIERS)
+    if (Mode < VH_COMPLETE_MEMBERS || Mode > VH_COMPLETE_ARCHETYPE_FIELDS)
     {
         return VH_ERR_ABI;
     }

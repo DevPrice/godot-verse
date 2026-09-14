@@ -940,6 +940,125 @@ static int64_t enclosing_call_callee_end(const String &p_before) {
 	return -1;
 }
 
+// The innermost bracket before p_from that nothing has closed, or -1, with the character that
+// opened it in r_opener.
+//
+// Crosses newlines, unlike enclosing_call_callee_end: a class header's parentheses and an
+// archetype's braces both wrap, and the positions below are about which construct encloses the
+// cursor rather than about one line. Strings and comments are not skipped for the same reason and
+// at the same cost as that scan -- and completion declines inside both before reaching here.
+static int64_t enclosing_open_bracket(const String &p_before, int64_t p_from, char32_t &r_opener) {
+	int64_t depth = 0;
+	for (int64_t i = p_from - 1; i >= 0; i--) {
+		const char32_t c = p_before[i];
+		if (c == ')' || c == ']' || c == '}') {
+			depth++;
+		} else if (c == '(' || c == '[' || c == '{') {
+			if (depth > 0) {
+				depth--;
+				continue;
+			}
+			r_opener = c;
+			return i;
+		}
+	}
+	return -1;
+}
+
+static String word_ending_at(const String &p_text, int64_t p_end) {
+	if (p_end < 0 || p_end >= p_text.length() || !is_identifier_char(p_text[p_end])) {
+		return String();
+	}
+	int64_t start = p_end;
+	while (start > 0 && is_identifier_char(p_text[start - 1])) {
+		start--;
+	}
+	return p_text.substr(start, p_end - start + 1);
+}
+
+// Whether the identifier being typed stands where a type is expected.
+//
+// A `:` immediately before it is the whole test, because nothing else in Verse puts an identifier
+// directly after one on the same line: a block header's `:` ends its line, and the `:` of `:=`
+// cannot be adjacent to the name it binds. The run skipped over is the punctuation a type spelling
+// puts between the colon and the name -- `:?node`, `:[]string`.
+static bool completing_a_type(const String &p_before, int64_t p_prefix_start) {
+	int64_t at = p_prefix_start;
+	while (at > 0) {
+		const char32_t c = p_before[at - 1];
+		if (c == '?' || c == '[' || c == ']' || c == ' ' || c == '\t') {
+			at--;
+			continue;
+		}
+		return c == ':';
+	}
+	return false;
+}
+
+// Whether the cursor stands in the parentheses of a `class(...)`, `struct(...)` or
+// `interface(...)` header, where only a class or an interface may be named.
+static bool completing_a_supertype(const String &p_before, int64_t p_prefix_start) {
+	char32_t opener = 0;
+	const int64_t bracket = enclosing_open_bracket(p_before, p_prefix_start, opener);
+	if (bracket < 0 || opener != '(') {
+		return false;
+	}
+	int64_t end = bracket - 1;
+	while (end >= 0 && (p_before[end] == ' ' || p_before[end] == '\t')) {
+		end--;
+	}
+	// `class<unique>(...)` puts the specifiers between the keyword and its parentheses.
+	if (end >= 0 && p_before[end] == '>') {
+		while (end >= 0 && p_before[end] != '<') {
+			end--;
+		}
+		end--;
+		while (end >= 0 && (p_before[end] == ' ' || p_before[end] == '\t')) {
+			end--;
+		}
+	}
+	const String word = word_ending_at(p_before, end);
+	return word == "class" || word == "struct" || word == "interface";
+}
+
+static bool is_reserved_word(const String &p_word) {
+	for (size_t i = 0; i < std::size(verse_keywords::reserved_words); i++) {
+		if (p_word == verse_keywords::reserved_words[i]) {
+			return true;
+		}
+	}
+	return false;
+}
+
+// The last byte of the class named before the `{` the cursor is inside, or -1 when the cursor is
+// not naming one of its fields.
+//
+// Three things disqualify a cursor that is inside the braces. A `{` with no name in front of it is
+// a block rather than an archetype. A field that has already been given its `:=` puts the cursor in
+// the *value* instead, and the commas separate one field from the next, so the scan back stops at
+// one. And a reserved word in front of the brace is one of the constructs that borrows the same
+// syntax without taking field names -- `array{...}`, `map{...}`, `enum{...}`, `spawn{...}` -- where
+// a field list is not merely the wrong answer but an empty popup, since the position declines to
+// append anything else.
+static int64_t archetype_class_end(const String &p_before, int64_t p_prefix_start) {
+	char32_t opener = 0;
+	const int64_t bracket = enclosing_open_bracket(p_before, p_prefix_start, opener);
+	if (bracket < 0 || opener != '{') {
+		return -1;
+	}
+	for (int64_t i = p_prefix_start - 1; i > bracket; i--) {
+		const char32_t c = p_before[i];
+		if (c == ',') {
+			break;
+		}
+		if (c == '=') {
+			return -1;
+		}
+	}
+	const String name = word_ending_at(p_before, bracket - 1);
+	return !name.is_empty() && !is_reserved_word(name) ? bracket - 1 : -1;
+}
+
 // Which argument the cursor sits in: the commas between the call's opening bracket and the cursor,
 // counted at bracket depth zero so a nested call's own commas do not advance the outer one.
 static int64_t argument_index_in_call(const String &p_before, int64_t p_callee_end) {
@@ -1308,14 +1427,44 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 	const bool completing_specifier = !completing_members && !completing_attribute
 			&& prefix_start > 0 && before[prefix_start - 1] == '<';
 
+	const int64_t line_start = before.rfind("\n") + 1;
+	const String ahead_of_prefix = before.substr(line_start, prefix_start - line_start);
+
+	// The four positions that bound the answer by what Verse will accept there rather than by what
+	// is in scope. Each is decided from the buffer alone, and each is a construct with no second
+	// reading -- which is the whole reason to narrow on them and not on, say, an argument, where
+	// any expression is legal and a narrowed list would hide the right name.
+	//
+	// Tested in this order: a `.`, an `@` and a `<` above have already claimed the cursor, and a
+	// `set` target and a type position cannot both be true of one caret.
+	const bool bounded = !completing_members && !completing_attribute && !completing_specifier;
+	const bool completing_assignable = bounded && ahead_of_prefix.strip_edges() == String("set");
+	const bool completing_type = bounded && !completing_assignable && completing_a_type(before, prefix_start);
+	const bool completing_supertype = bounded && !completing_assignable && !completing_type
+			&& completing_a_supertype(before, prefix_start);
+	const int64_t archetype_end = bounded && !completing_assignable && !completing_type && !completing_supertype
+			? archetype_class_end(before, prefix_start)
+			: -1;
+	const bool completing_field = archetype_end >= 0;
+
+	// Whether the position's own answer is the whole of it. The class-name and keyword sets
+	// appended at the end are names written on their own, so they belong to a bare identifier and
+	// to a type position -- a mirrored class is a type -- and nowhere else.
+	const bool answers_alone = completing_members || completing_attribute || completing_specifier
+			|| completing_assignable || completing_field;
+	const bool appends_keywords = !answers_alone && !completing_supertype;
+
+	// A bare identifier, which is the only position the snapshot fallback and the override
+	// declarations below are about: the others each have a narrower question to ask.
+	const bool completing_a_bare_name = bounded && !completing_assignable && !completing_type
+			&& !completing_supertype && !completing_field;
+
 	// The class this is adding a member to, when that is what the cursor is doing: nothing but
 	// indentation ahead of the prefix on its line, and that line belonging to the class body. An
 	// inherited method offered there is being declared rather than called, and completes to the
 	// whole declaration.
-	const int64_t line_start = before.rfind("\n") + 1;
-	const String ahead_of_prefix = before.substr(line_start, prefix_start - line_start);
 	PackedStringArray already_declared;
-	const String declaring_in_class = !completing_members && !completing_attribute && !completing_specifier && !ahead_of_prefix.is_empty() && ahead_of_prefix.strip_edges().is_empty()
+	const String declaring_in_class = completing_a_bare_name && !ahead_of_prefix.is_empty() && ahead_of_prefix.strip_edges().is_empty()
 			? member_declaration_class(verse_newline_normalized(p_code), p_path.get_file().get_basename(),
 					  before.count("\n"), ahead_of_prefix.length(), already_declared)
 			: String();
@@ -1393,23 +1542,42 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 	// Without a dot, a bare cursor would offer every name in scope as one undifferentiated list;
 	// with one, the member set is bounded by the receiver's type and is exactly what was asked
 	// for. An `@` bounds it just as tightly, and is worth showing unprompted for the same reason:
-	// the attributes in scope are a short list and nothing else can follow it.
-	if (!completing_members && !completing_attribute && prefix.is_empty()) {
+	// the attributes in scope are a short list and nothing else can follow it. So are an
+	// archetype's fields and a `set` target, which are shorter still.
+	if (!completing_members && !completing_attribute && !completing_assignable && !completing_field
+			&& prefix.is_empty()) {
 		return result;
 	}
 	result["force"] = completing_attribute;
 
 	if (host_can_answer && (!completing_members || receiver_end >= 0)) {
-		// Members are asked about the receiver's last byte; a bare identifier about where it
-		// would be written, which is where the prefix started. Both sit before the substitution,
-		// so neither moves when the placeholder is a different length than what was typed.
-		const int64_t position = completing_members ? receiver_end : prefix_start;
+		// Two of the modes are asked about a receiver's last byte -- the expression before a `.`,
+		// and the class named before an archetype's `{` -- and the rest about where the name would
+		// be written, which is where the prefix started. All of them sit before the substitution,
+		// so none moves when the placeholder is a different length than what was typed.
+		int64_t position = prefix_start;
+		int32_t mode = VH_COMPLETE_SCOPE;
+		if (completing_members) {
+			position = receiver_end;
+			mode = VH_COMPLETE_MEMBERS;
+		} else if (completing_field) {
+			position = archetype_end;
+			mode = VH_COMPLETE_ARCHETYPE_FIELDS;
+		} else if (completing_attribute) {
+			mode = VH_COMPLETE_ATTRIBUTES;
+		} else if (completing_specifier) {
+			mode = VH_COMPLETE_SPECIFIERS;
+		} else if (completing_assignable) {
+			mode = VH_COMPLETE_ASSIGNABLE;
+		} else if (completing_supertype) {
+			mode = VH_COMPLETE_SUPERTYPES;
+		} else if (completing_type) {
+			mode = VH_COMPLETE_TYPES;
+		}
+
 		int64_t line = 0;
 		int64_t column = 0;
 		position_of(position, line, column);
-		const int32_t mode = completing_members ? VH_COMPLETE_MEMBERS
-				: (completing_attribute ? VH_COMPLETE_ATTRIBUTES
-										: (completing_specifier ? VH_COMPLETE_SPECIFIERS : VH_COMPLETE_SCOPE));
 
 		bool have_options = completion_cache_source == source && completion_cache_line == (int32_t)line
 				&& completion_cache_column == (int32_t)column && completion_cache_mode == mode;
@@ -1447,7 +1615,7 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 					options.push_back(completion_option_for(item));
 				}
 			}
-		} else if (!completing_members && !completing_attribute && !completing_specifier) {
+		} else if (completing_a_bare_name) {
 			// The partial answer for a bare identifier: what the enclosing class declares, which
 			// the analysis snapshot already holds and so costs nothing. LOCATION_LOCAL puts it
 			// above the class names and keywords appended below -- Godot ranks by `location` alone
@@ -1497,7 +1665,7 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 
 	// A dot, an `@` and a `<` have all answered everything they are going to; the sets below are
 	// names that could be written on their own, which is none of the three.
-	if (completing_members || completing_attribute || completing_specifier) {
+	if (answers_alone) {
 		result["options"] = options;
 		return result;
 	}
@@ -1516,7 +1684,9 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 		}
 	}
 
-	for (size_t i = 0; i < std::size(verse_keywords::reserved_words); i++) {
+	// Not in a class header: a keyword is never a superclass, and `class(` is the one appended set
+	// whose whole point is that only two kinds of name belong there.
+	for (size_t i = 0; appends_keywords && i < std::size(verse_keywords::reserved_words); i++) {
 		const String word = verse_keywords::reserved_words[i];
 		if (matches_typed_prefix(word, prefix) && !host_offered_names.has(word)) {
 			options.push_back(completion_option(word, ScriptLanguageExtension::CODE_COMPLETION_KIND_PLAIN_TEXT, ScriptLanguageExtension::LOCATION_OTHER));

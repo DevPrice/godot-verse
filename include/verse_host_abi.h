@@ -43,7 +43,7 @@ extern "C" {
  * different toolchains and nothing links them.
  */
 #define VH_ABI_VERSION_MAJOR 7
-#define VH_ABI_VERSION_MINOR 2
+#define VH_ABI_VERSION_MINOR 3
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
 typedef int32_t vh_bool;
@@ -1227,7 +1227,32 @@ typedef enum vh_complete_mode
 	 * @attribute", and a user-defined attribute carrying neither tag is accepted in both
 	 * (SemanticAnalyzer.cpp, ErrSemantic_InvalidAttributeScope). So the two modes are overlapping
 	 * sets rather than one set asked for twice. */
-	VH_COMPLETE_SPECIFIERS = 3
+	VH_COMPLETE_SPECIFIERS = 3,
+
+	/* The same scopes as VH_COMPLETE_SCOPE, narrowed to what may stand where a type is expected --
+	 * past the `:` of `Speed<public>:` or of a parameter. Classes, interfaces, enums, type aliases
+	 * and the modules that qualify one; never a function or a data definition, which is what the
+	 * unnarrowed answer offered there (730 functions and 41 members of 2774 options, so `Sp` in a
+	 * type position offered the `Speed` member). */
+	VH_COMPLETE_TYPES = 4,
+
+	/* Narrower still: what may stand in a class header's parentheses, `X := class(...)`. Only a
+	 * class or an interface can, so this drops the enums and aliases VH_COMPLETE_TYPES keeps --
+	 * two thirds of that position's answer, since the mirror carries 758 enums. */
+	VH_COMPLETE_SUPERTYPES = 5,
+
+	/* What a `set` may assign to: a `var` data definition, local or member, and nothing else. The
+	 * position is where the name would be written, past the `set `. By far the tightest of these
+	 * -- a statement position offers ~2770 names and a `set` target around 40. */
+	VH_COMPLETE_ASSIGNABLE = 6,
+
+	/* The fields an archetype body may give a value: `vector2{` offers `X` and `Y`. Data members
+	 * only -- a method cannot be written in an archetype body -- and inherited ones included,
+	 * since a subclass' archetype may set a base's field.
+	 *
+	 * Positioned like VH_COMPLETE_MEMBERS rather than like the modes above: the answer is about
+	 * the class named before the `{`, so Line/Column is that identifier's last byte. */
+	VH_COMPLETE_ARCHETYPE_FIELDS = 7
 } vh_complete_mode;
 
 /* One name completion could insert. Laid out like vh_lookup_desc's first few fields, and read the

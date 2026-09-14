@@ -1264,6 +1264,97 @@ int main(int argc, char** argv)
 				}
 			}
 
+			// The four positions Verse gives one reading, each narrowed to what the compiler would
+			// take there. Unnarrowed they all answered with the ~2770 names a statement position
+			// does, which is the same list whatever is being written.
+			struct SNarrowed
+			{
+				const char* Label;
+				const char* Find;
+				size_t Offset;
+				const char* Replace;
+				int32_t Mode;
+				const char* Offered;
+				const char* Refused;
+				const char* WhyRefused;
+			};
+			// A type after a `:` takes no function and no member; a class header takes neither of
+			// those nor an enum; a `set` takes only a var; an archetype body takes only a field,
+			// and a non-var one at that, since construction is the one moment it is written.
+			const SNarrowed Narrowed[] = {
+				{ "a type position", "var Scale<public>:float", strlen("var Scale<public>:"), "float",
+				  VH_COMPLETE_TYPES, "vector2", "Speed", "a member is not a type" },
+				{ "a class header", "exports := class(object)", strlen("exports := class("), "object",
+				  VH_COMPLETE_SUPERTYPES, "node2d", "exports_mode", "an enum is not a superclass" },
+				{ "a set target", "set Scale = Scale + Speed", strlen("set "), "Scale",
+				  VH_COMPLETE_ASSIGNABLE, "Enabled", "Speed", "a non-var member cannot be assigned" },
+				{ "an archetype body", "var Offset<public>:vector2 = vector2{X := 1.0",
+				  strlen("var Offset<public>:vector2 = vector2{"), "X",
+				  VH_COMPLETE_ARCHETYPE_FIELDS, "Y", "Length", "a method is not a field" },
+			};
+
+			for (const SNarrowed& N : Narrowed)
+			{
+				const size_t At = ExportsSource.find(N.Find);
+				CompleteOk = Step("located the fixture's anchor", At != std::string::npos) && CompleteOk;
+				if (At == std::string::npos)
+				{
+					CompleteOk = false;
+					continue;
+				}
+				const size_t NameAt = At + N.Offset;
+				std::string Typing = ExportsSource;
+				Typing.replace(NameAt, strlen(N.Replace), "VhCompletionCursor");
+
+				// An archetype's fields are asked about the class named before the brace, the way
+				// a member is asked about its receiver; the rest are asked where the name goes.
+				const size_t Ask = N.Mode == VH_COMPLETE_ARCHETYPE_FIELDS ? NameAt - 2 : NameAt;
+				int32_t Row = 0;
+				int32_t Column = 0;
+				RowColumnOf(Typing, Ask, Row, Column);
+				AnalyseCompletionBuffer(Typing);
+				if (Step(N.Label,
+						CompleteSymbolFn(ExportsPathUtf8.c_str(), Typing.c_str(), Row, Column,
+										 N.Mode, &Items, &Count) == VH_OK))
+				{
+					CompleteOk = Step("  it offers what belongs there", Offers(Items, Count, N.Offered) != nullptr) && CompleteOk;
+					CompleteOk = Step(N.WhyRefused, Offers(Items, Count, N.Refused) == nullptr) && CompleteOk;
+					CompleteOk = Step("  and nothing from the enclosing scope", Offers(Items, Count, "Print") == nullptr) && CompleteOk;
+				}
+				else
+				{
+					CompleteOk = false;
+				}
+			}
+
+			// The one place the two data filters part: a field with no `var` is writable exactly
+			// once, when the object is made, so an archetype body offers it and a `set` does not.
+			{
+				const size_t At = ExportsSource.find("var Offset<public>:vector2 = vector2{X := 1.0");
+				if (At != std::string::npos)
+				{
+					const size_t NameAt = At + strlen("var Offset<public>:vector2 = vector2{");
+					std::string Typing = ExportsSource;
+					Typing.replace(NameAt, strlen("X"), "VhCompletionCursor");
+					int32_t Row = 0;
+					int32_t Column = 0;
+					RowColumnOf(Typing, NameAt - 2, Row, Column);
+					AnalyseCompletionBuffer(Typing);
+					if (Step("an archetype body offers a field a set could not reach",
+							CompleteSymbolFn(ExportsPathUtf8.c_str(), Typing.c_str(), Row, Column,
+											 VH_COMPLETE_ARCHETYPE_FIELDS, &Items, &Count) == VH_OK))
+					{
+						CompleteOk = Step("  vector2's X carries no var and is still offered",
+										 Offers(Items, Count, "X") != nullptr)
+								  && CompleteOk;
+					}
+					else
+					{
+						CompleteOk = false;
+					}
+				}
+			}
+
 			// The same question at the top level of a file, where the cursor is inside no
 			// definition at all: an attribute above a class declaration, which is the one place
 			// `@global_class` is ever written. The scope there is the file's own -- the snippet --
