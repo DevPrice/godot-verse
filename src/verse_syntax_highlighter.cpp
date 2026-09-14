@@ -12,6 +12,7 @@
 #include <godot_cpp/variant/packed_string_array.hpp>
 #include <godot_cpp/variant/variant.hpp>
 
+#include <cctype>
 #include <iterator>
 #include <utility>
 
@@ -28,6 +29,27 @@ Color read_color(const Ref<EditorSettings> &p_settings, const String &p_name, co
 		return p_fallback;
 	}
 	return value;
+}
+
+// EditorSettings splits a marker list the same way GDScript's highlighter reads it
+// (String::split(",", false), which drops empty entries from a trailing or doubled comma).
+PackedStringArray read_marker_list(const Ref<EditorSettings> &p_settings, const String &p_name, const char *p_fallback) {
+	String value = p_fallback;
+	if (!p_settings.is_null() && p_settings->has_setting(p_name)) {
+		const Variant setting = p_settings->get_setting(p_name);
+		if (setting.get_type() == Variant::STRING) {
+			value = setting;
+		}
+	}
+	return value.split(",", false);
+}
+
+// The identifier-character rule GDScript's own marker scan uses (is_unicode_identifier_continue)
+// narrowed to the ASCII this lexer already classifies identifiers by -- a marker word is matched
+// exactly, so a wider or narrower rule here would just mean a run like "TODO2" silently fails to
+// match "TODO" instead of the two staying in agreement with the rest of this file's tokens.
+bool is_marker_word_char(char p_c) {
+	return std::isalnum(static_cast<unsigned char>(p_c)) || p_c == '_';
 }
 
 // The one type /Godot.org/Godot exports that no generated entry stands behind. It is hand-written
@@ -229,22 +251,21 @@ Dictionary VerseSyntaxHighlighter::_get_line_syntax_highlighting(int32_t p_line)
 
 	for (size_t i = 0; i < tokens.size(); i++) {
 		const VerseToken &token = tokens[i];
-		int column = token.column;
-		if (byte_offsets_differ) {
-			while (byte_cursor < token.column && byte_cursor < utf8.length()) {
-				if ((static_cast<unsigned char>(utf8[byte_cursor]) & 0xC0) != 0x80) {
-					char_cursor++;
-				}
-				byte_cursor++;
-			}
-			column = char_cursor;
-		}
+		const int token_end = (int)(i + 1 < tokens.size() ? tokens[i + 1].column : utf8.length());
+		const int column = to_char_column(utf8, byte_offsets_differ, token.column, byte_cursor, char_cursor);
 
 		Dictionary entry;
 		entry["color"] = token.kind == VerseTokenKind::Identifier
-				? color_for_identifier(utf8, token.column, (int)(i + 1 < tokens.size() ? tokens[i + 1].column : utf8.length()))
+				? color_for_identifier(utf8, token.column, token_end)
 				: color_for(token.kind);
 		result[column] = entry;
+
+		// A comment token already spans the whole run the lexer coalesced -- delimiters (#, <#,
+		// #>) included, which is harmless here since none of them is a marker word character --
+		// so the marker scan needs no separate notion of where the comment "really" starts.
+		if (token.kind == VerseTokenKind::Comment) {
+			highlight_comment_markers(utf8, token.column, token_end, byte_offsets_differ, byte_cursor, char_cursor, result);
+		}
 	}
 	return result;
 }
@@ -261,6 +282,51 @@ godot::Color VerseSyntaxHighlighter::color_for_identifier(const CharString &p_ut
 		return type_color;
 	}
 	return member_names.count(word) > 0 ? member_color : text_color;
+}
+
+int VerseSyntaxHighlighter::to_char_column(const CharString &p_utf8, bool p_byte_offsets_differ, int p_byte_column, int &r_byte_cursor, int &r_char_cursor) {
+	if (!p_byte_offsets_differ) {
+		return p_byte_column;
+	}
+	while (r_byte_cursor < p_byte_column && r_byte_cursor < p_utf8.length()) {
+		if ((static_cast<unsigned char>(p_utf8[r_byte_cursor]) & 0xC0) != 0x80) {
+			r_char_cursor++;
+		}
+		r_byte_cursor++;
+	}
+	return r_char_cursor;
+}
+
+// Same boundary GDScript's highlighter uses inside its own comment regions: a maximal run of
+// identifier characters, looked up whole rather than matched as a substring, so "TODO2" and
+// "TODOING" are not "TODO". r_byte_cursor/r_char_cursor are the caller's running conversion --
+// threaded through rather than restarted here, since marker positions still have to come out in
+// the same increasing byte order the rest of the line's tokens already rely on.
+void VerseSyntaxHighlighter::highlight_comment_markers(const CharString &p_utf8, int p_begin, int p_end, bool p_byte_offsets_differ, int &r_byte_cursor, int &r_char_cursor, Dictionary &r_result) const {
+	int word_start = -1;
+	for (int i = p_begin; i <= p_end; i++) {
+		if (i < p_end && is_marker_word_char(p_utf8[i])) {
+			if (word_start < 0) {
+				word_start = i;
+			}
+			continue;
+		}
+		if (word_start < 0) {
+			continue;
+		}
+		const std::string word(p_utf8.get_data() + word_start, (size_t)(i - word_start));
+		const std::unordered_map<std::string, CommentMarkerLevel>::const_iterator found = comment_markers.find(word);
+		if (found != comment_markers.end()) {
+			Dictionary marker_entry;
+			marker_entry["color"] = comment_marker_colors[(int)found->second];
+			r_result[to_char_column(p_utf8, p_byte_offsets_differ, word_start, r_byte_cursor, r_char_cursor)] = marker_entry;
+
+			Dictionary restore_entry;
+			restore_entry["color"] = comment_color;
+			r_result[to_char_column(p_utf8, p_byte_offsets_differ, i, r_byte_cursor, r_char_cursor)] = restore_entry;
+		}
+		word_start = -1;
+	}
 }
 
 void VerseSyntaxHighlighter::_clear_highlighting_cache() {
@@ -323,6 +389,24 @@ void VerseSyntaxHighlighter::_update_cache() {
 	member_color = read_color(settings, "text_editor/theme/highlighting/member_variable_color", member_color);
 	text_color = read_color(settings, "text_editor/theme/highlighting/text_color", text_color);
 	type_color = read_color(settings, "text_editor/theme/highlighting/base_type_color", type_color);
+
+	comment_marker_colors[(int)CommentMarkerLevel::Critical] = read_color(settings, "text_editor/theme/highlighting/comment_markers/critical_color", comment_marker_colors[(int)CommentMarkerLevel::Critical]);
+	comment_marker_colors[(int)CommentMarkerLevel::Warning] = read_color(settings, "text_editor/theme/highlighting/comment_markers/warning_color", comment_marker_colors[(int)CommentMarkerLevel::Warning]);
+	comment_marker_colors[(int)CommentMarkerLevel::Notice] = read_color(settings, "text_editor/theme/highlighting/comment_markers/notice_color", comment_marker_colors[(int)CommentMarkerLevel::Notice]);
+
+	comment_markers.clear();
+	const PackedStringArray critical_list = read_marker_list(settings, "text_editor/theme/highlighting/comment_markers/critical_list", "ALERT,ATTENTION,CAUTION,CRITICAL,DANGER,SECURITY");
+	for (int64_t i = 0; i < critical_list.size(); i++) {
+		comment_markers[critical_list[i].utf8().get_data()] = CommentMarkerLevel::Critical;
+	}
+	const PackedStringArray warning_list = read_marker_list(settings, "text_editor/theme/highlighting/comment_markers/warning_list", "BUG,DEPRECATED,FIXME,HACK,TASK,TBD,TODO,WARNING");
+	for (int64_t i = 0; i < warning_list.size(); i++) {
+		comment_markers[warning_list[i].utf8().get_data()] = CommentMarkerLevel::Warning;
+	}
+	const PackedStringArray notice_list = read_marker_list(settings, "text_editor/theme/highlighting/comment_markers/notice_list", "INFO,NOTE,NOTICE,TEST,TESTING");
+	for (int64_t i = 0; i < notice_list.size(); i++) {
+		comment_markers[notice_list[i].utf8().get_data()] = CommentMarkerLevel::Notice;
+	}
 
 	rebuild_name_caches();
 }

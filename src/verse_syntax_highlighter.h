@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -36,6 +37,27 @@ private:
 
 	// p_begin and p_end are byte offsets into p_utf8 bounding one identifier.
 	godot::Color color_for_identifier(const godot::CharString &p_utf8, int p_begin, int p_end) const;
+
+	// Godot's own three-tier comment-marker convention (critical/warning/notice), keyed the way
+	// EditorSettings' comment_marker_colors array is: index order must match CommentMarkerLevel.
+	enum class CommentMarkerLevel {
+		Critical,
+		Warning,
+		Notice,
+	};
+
+	// The running byte->char conversion _get_line_syntax_highlighting already does across a
+	// line's tokens (see the comment there on why the two counting conventions can disagree),
+	// factored out so highlight_comment_markers can extend the same monotonic walk across marker
+	// boundaries that fall inside one comment token's span.
+	static int to_char_column(const godot::CharString &p_utf8, bool p_byte_offsets_differ, int p_byte_column, int &r_byte_cursor, int &r_char_cursor);
+
+	// p_begin/p_end bound one Comment token in byte offsets. Colours each marker word GDScript's
+	// three lists recognise -- an exact, case-sensitive match of a whole run of identifier
+	// characters, the same boundary GDScript's own highlighter uses -- and restores comment_color
+	// immediately after, so a marker reads as a highlight inside the comment rather than a new
+	// colour that keeps going.
+	void highlight_comment_markers(const godot::CharString &p_utf8, int p_begin, int p_end, bool p_byte_offsets_differ, int &r_byte_cursor, int &r_char_cursor, godot::Dictionary &r_result) const;
 
 	// Bound so it can be reached by name through Callable(this, "..."), which is what a signal
 	// connection needs. Godot's own SyntaxHighlighter::_lines_edited_from (scene/resources/
@@ -79,6 +101,17 @@ private:
 	// name on record to colour, and unlike type_names they are rebuilt whenever the file changes:
 	// a field is only a field in the file that declares it.
 	mutable std::unordered_set<std::string> member_names;
+
+	// Read once per _update_cache, not per line: text_editor/theme/highlighting/comment_markers/
+	// {critical,warning,notice}_list, split and mapped to the level that colours it. Case-
+	// sensitive, matching the HashMap<String, ...> GDScript's own highlighter keys the same lists
+	// by, so the same word list behaves the same in both languages.
+	std::unordered_map<std::string, CommentMarkerLevel> comment_markers;
+	godot::Color comment_marker_colors[3] = {
+		godot::Color(0.77f, 0.35f, 0.35f),
+		godot::Color(0.72f, 0.61f, 0.48f),
+		godot::Color(0.56f, 0.67f, 0.51f),
+	};
 
 	godot::Color comment_color = godot::Color(0.4f, 0.6f, 0.4f);
 	godot::Color string_color = godot::Color(0.94f, 0.83f, 0.53f);
