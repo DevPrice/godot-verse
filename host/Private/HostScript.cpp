@@ -752,27 +752,6 @@ AUTORTFM_DISABLE void ForwardSolDiagnostic(const FSolDiagnostic& Diagnostic)
                                  static_cast<int32>(Diagnostic.Info.ReferenceCode));
 }
 
-/// Lists what the snippet package actually defines. Callers address Verse functions by decorated
-/// name, and a name that is one character off just silently fails to resolve.
-AUTORTFM_DISABLE void ReportPackageDefinitions()
-{
-    Verse::VPackage* Package = Verse::GlobalProgram ? Verse::GlobalProgram->LookupPackage(GScriptPackageName) : nullptr;
-    if (!Package)
-    {
-        GodotVerse::ReportInfo(UTF8TEXT("No script package is loaded."));
-        return;
-    }
-
-    FUtf8String Line(UTF8TEXT("Verse definitions:"));
-    const uint32 Count = Package->NumDefinitions();
-    for (uint32 Index = 0; Index < Count; ++Index)
-    {
-        Line += UTF8TEXT("\n  ");
-        Line += Package->GetDefinitionName(Index).AsStringView();
-    }
-    GodotVerse::ReportInfo(Line);
-}
-
 AUTORTFM_DISABLE bool EnsureIde()
 {
     if (GIde.IsValid())
@@ -989,8 +968,6 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FScriptSource>& So
     OutGeneration = Generation;
 
     IVerseModule::Get(); // Runs VerseModule::StartupModule; VerseCmd does the same before calling in.
-
-    ReportPackageDefinitions();
 
     // The build just done generated code, which leaves an IR package on every module and puts
     // the AST out of reach. One analysis-only pass over the same sources puts it back, so a
