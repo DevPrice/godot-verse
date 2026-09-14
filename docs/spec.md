@@ -1317,28 +1317,47 @@ indistinguishable from a GDScript one.
 external editor is secondary.
 
 - **R-TOOL-1 (MUST)** Syntax highlighting, including members, enums, strings, comments and
-  interpolation. Status: **done**.
+  interpolation. Status: **done**. The member set comes from the analysis where there is one — the
+  class's own data members plus every property and signal accessor it inherits — and from a scan of
+  the buffer's indentation only for a file that has never been built. Comment markers (the editor's
+  own critical/warning/notice word lists) colour the way GDScript's do.
 - **R-TOOL-2 (MUST)** Inline diagnostics as you type, from real semantic analysis rather than a
   local parse. Status: **done** — analysis re-runs per keystroke, off the main thread, and is not
   subject to the single-generation rule. The editor's thread does not wait for one: what `_validate`
   answers is the analysis that last landed, and the fresh one replaces it when it does. R-PERF-2 has
-  the latency.
+  the latency. A file's errors are reported under **its own path**, so a project whose build would
+  be refused by a *different* file says so in the errors panel rather than only at Play — Godot
+  partitions those into a per-file section, at the cost of the edited file reading as invalid (and
+  so losing its outline and gutter) for as long as any other file is broken.
 - **R-TOOL-3 (MUST)** Code completion: members, locals, types in scope, imported package contents,
   and keywords. Status: **part** — the popup opens at once from what the last analysis left, and
   refines in place when the analysis this buffer needs lands. At a bare identifier that first answer
   is the enclosing class's own members, the class names and the keywords; inside a class body it
   also carries the inherited members a subclass could still declare with `<override>`, which are
-  what an author reaches for there and used to arrive ~0.7 s late. After a `.` it is empty, so the
-  popup opens late rather than opening wrong.
+  what an author reaches for there and used to arrive ~0.7 s late. After a `.` the first answer is
+  whatever the receiver can be read off the text as — `Self`, a member of the class with a declared
+  type, or a mirrored class named outright — and the class chain's members from the snapshot;
+  anything else (a call's result, a local, a dotted chain) still waits, because a wrong member list
+  is worse than a late one. Inside a string literal the answer is a node path, a `res://` path, an
+  input action or a signal name, chosen by the call the literal is an argument to. Ranking is by
+  inheritance distance since ABI 8.0: the host says how many hops separate an item's owner from the
+  class asked about, so a class's own members sort above its parent's above Object's.
 - **R-TOOL-4 (MUST)** Hover and ctrl-click: type, signature, doc comment; go to definition, for
   both user code and the mirrored Godot API. Status: **part** — a known defect is that ctrl-hover
   inside a string interpolation underlines the whole string. A position resolves against the AST an
   analysis is rebuilding, which no snapshot describes, so a hover during one **declines** rather
-  than waiting; Godot treats that as "no result" and the next hover answers.
+  than waiting; Godot treats that as "no result" and the next hover answers. Every one of those
+  refusals first tries the symbol as a mirrored class name against the generated table, which needs
+  no AST and no host — so a hover on `node2d` answers during an analysis, before a first build, and
+  on a buffer the analysis has not caught up with. It never preempts a resolved answer.
 - **R-TOOL-5 (MUST)** Signature help while typing a call. Status: **part** — declines during an
   analysis for R-TOOL-4's reason, and queues that buffer so the next ask answers.
 - **R-TOOL-6 (SHOULD)** Find references and rename across the project. Status: **none**.
-- **R-TOOL-7 (SHOULD)** The script editor's outline/member list is populated. Status: **none**.
+- **R-TOOL-7 (SHOULD)** The script editor's outline/member list is populated. Status: **done** —
+  `_validate`'s `functions` key is what `ScriptTextEditor::get_functions()` builds the outline from
+  and what places the connection gutter icon, and `_get_member_line` answers from the same snapshot,
+  which is what `ScriptEditor::script_goto_method` needs for the Connections dock's "Go to method"
+  and for an animation method track.
 - **R-TOOL-8 (SHOULD)** Doc comments on a script's classes and members reach Godot's own
   documentation panel, so a Verse class is documented the way an engine class is.
   Status: **part** (`_get_documentation`, `_supports_documentation` exist).
@@ -1348,7 +1367,8 @@ external editor is secondary.
   VS Code and other editors get R-TOOL-2 through R-TOOL-5. Today this is not possible: `uLangLSP`
   in the UE checkout is a message-type library, not a Program target, and nothing links it into a
   binary. Writing our own server over `verse_host_abi.h` is the alternative. Related: **OQ-7**.
-- **R-TOOL-11 (MAY)** A formatter.
+- **R-TOOL-11 (MAY)** A formatter. Where it will plug in is decided for us: see the
+  `EditorLanguage` note below.
 - **R-TOOL-12 (MUST)** The editor maintains `using` statements; a user never types a module path.
   Status: **part**, and both halves of it work. The import materialises when analysis reports the
   unknown name — goimports-style, reacting to the *diagnostic* rather than to the keystroke,
@@ -1366,6 +1386,34 @@ external editor is secondary.
   Typing a name you already know, from another file, is the flow this covers; discovering one you
   do not is not. *Rewriting* imports when a file moves is explicitly **not** part of this either: a
   move is allowed to break its references and report them.
+
+**Godot's `EditorLanguage` split, and what it means for the two above.** Godot master has moved the
+editor-facing half of `ScriptLanguage` into a separate interface, `core/object/editor_language.h`,
+reached through `ScriptLanguage::get_editor_language()`. Five methods: `validate`, `complete_code`,
+`lookup_code`, `find_function` and a new `format_code`. The header says the design is meant to keep
+the LSP spec in mind, because the GDScript language server uses the same API, and that the goal is
+to move all editor functionality out of `ScriptLanguage` over time.
+
+A GDExtension reaches it through `ScriptLanguageExtension::EditorAdapter`, which forwards each of
+the five to the virtuals we already implement — `format_code` onto `_auto_indent_code`, the rest
+one-to-one. So nothing here has to change to keep working, and nothing here *can* change yet: our
+godot-cpp (4.6) has no `EditorLanguage` in `extension_api.json`, so the interface is not
+implementable from an extension at all, only reachable through the adapter.
+
+Two things follow, and they are why this is written down rather than acted on:
+
+- **R-TOOL-11's formatter belongs on `format_code`**, not on `_auto_indent_code`. Today the adapter
+  makes them the same call; when the split reaches extensions they stop being the same call, and a
+  formatter written into `_auto_indent_code` would be a formatter that runs on Enter.
+- **R-TOOL-12's missing half gets a hook.** `CompletionOption` carries a `TextEdit` — "optional
+  server side calculated insertion", a range plus replacement text the editor applies without
+  matching preexisting text. That is exactly the edit-on-accept hook whose absence is the reason
+  the `using` insertion reacts to the diagnostic instead of to the accepted completion. The header
+  notes the builtin editor does not support it yet; the language server does.
+
+Also worth knowing: `r_force` is documented as possibly going away, in favour of showing a signature
+hint and a completion list together. `_complete_code`'s `force` key is ours to stop relying on for
+anything but "open the popup".
 
 ---
 

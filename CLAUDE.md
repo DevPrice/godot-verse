@@ -33,7 +33,8 @@ phase and carries its measurements.
 
 **Every one of those entries is now closed, built or answered** — G13 (the math bodies) and G11 (the
 utilities) went with the rest, and the by-hand checks the phase owed have since been run
-(`docs/by-hand-findings.md`), so **the phase owes nothing**. Closing them took the ABI to v5, Phase 5 took it to v6 and the editor-performance work to **7.1**; either way both DLLs must be
+(`docs/by-hand-findings.md`), so **the phase owes nothing**. Closing them took the ABI to v5, Phase 5 took it to v6, the editor-performance work to 7.1 and the
+editor last-mile work to **8.0**; either way both DLLs must be
 rebuilt and `run_tests.py --build` is how the test binaries follow.
 
 The four ways a signal declaration could compile and not work (G1–G4) are one validation pass in
@@ -126,7 +127,8 @@ compiler's words alone.
 after the work, it is where the design turned out to be wrong. §2 was filled in the same way
 *before* the work, from twelve questions put to the Verse compiler through `tests/verse_probe`
 (eight committed fixtures), which is why so little of the rest needed correcting. Phase 5 took the
-ABI to v6; the editor-performance work below took it to **7.1**, and either way both DLLs must be
+ABI to v6; the editor-performance work below took it to 7.1 and the editor last-mile work to
+**8.0**, and either way both DLLs must be
 rebuilt and `run_tests.py --build` is how the test binaries follow.
 
 What it settled, all of which is load-bearing:
