@@ -70,6 +70,16 @@ AUTORTFM_DISABLE bool IsBackgroundCheckRunning();
 /// What no longer calls it is everything that only describes a class: see the snapshot below.
 AUTORTFM_DISABLE void WaitForBackgroundCheck();
 
+/// Whether the program can answer a position question about SourceText as Path's text: nothing is
+/// in flight, and the last analysis was of exactly this buffer.
+///
+/// Both halves are the caller's to act on rather than to wait out, which is what ABI v7 made of
+/// completion and the argument hint: neither analyses any more, so this is the test that decides
+/// between an answer and VH_ERR_STATE. Safe off the back of the atomic alone -- the worker clears
+/// bRunning with a release store after RunCheck has recorded the buffer, so an acquire-load of
+/// false is also the guarantee that the record is visible.
+AUTORTFM_DISABLE bool ProgramDescribes(const FUtf8String& Path, const FUtf8String& SourceText);
+
 /// What WaitForBackgroundCheck has cost the calling thread since this was last asked, and clears
 /// it -- vh_tick reports it as the frame's figure, so anything else reading it would take a frame's
 /// accounting away from the consumer.
@@ -427,17 +437,6 @@ struct FSignatureDesc
     TArray<FCompleteItem> Params;
 };
 
-/// Lists what could be written at Line/Column of Path, with that file's text replaced by
-/// SourceText -- the members of the expression there, or everything its scope admits.
-///
-/// Runs its own analysis rather than reading whatever the last one left, because the buffer
-/// completion is asked about is mid-edit by definition and no analysis of it exists yet. That
-/// analysis' diagnostics are discarded: they describe a half-written line. It does not have to
-/// succeed -- uLang keeps the analysed children of an expression it could not analyse, which is
-/// what lets `Position.` still name vector2 as the receiver.
-///
-/// Leaves the IDE holding SourceText as that file's text, so any analysis a caller was relying on
-/// for LookupSymbol is spent once this has run.
 /// Every member ClassName declares itself, read off the semantic program the last analysis left.
 /// Broader than GetClassExports -- methods included, `@editable` not required -- because this
 /// exists to become documentation rather than an inspector.
@@ -449,13 +448,22 @@ AUTORTFM_DISABLE bool ClassMembers(FUtf8StringView ClassName, TArray<FCompleteIt
 /// its parameters. Line/Column name the callee's last byte rather than the cursor: the argument
 /// list being typed does not analyse, so there is nothing at the cursor to resolve.
 ///
-/// Analyses the buffer and spends the caller's analysis exactly as Complete does.
+/// Reads the program the last analysis left, exactly as Complete does. Neither checks that the
+/// program describes SourceText -- ProgramDescribes is that question, and the ABI layer asks it
+/// first so that "cannot answer yet" and "nothing there" stay different answers.
 AUTORTFM_DISABLE bool SignatureAt(FUtf8StringView Path,
                                   const FUtf8String& SourceText,
                                   int32 Line,
                                   int32 Column,
                                   FSignatureDesc& OutDesc);
 
+/// Lists what could be written at Line/Column of Path -- the members of the expression there, or
+/// everything its scope admits.
+///
+/// Runs no analysis: it reads the AST the last one left behind, which is why the caller has to
+/// have had this very buffer analysed first. It does not have to have analysed *cleanly* -- uLang
+/// keeps the analysed children of an expression it could not analyse, which is what lets
+/// `Position.` still name vector2 as the receiver.
 AUTORTFM_DISABLE bool Complete(FUtf8StringView Path,
                                const FUtf8String& SourceText,
                                int32 Line,

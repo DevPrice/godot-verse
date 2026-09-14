@@ -384,7 +384,7 @@ static Dictionary complete_item_to_dict(const vh_complete_item &p_item) {
 	return entry;
 }
 
-TypedArray<Dictionary> VerseRuntime::complete_symbol(const String &p_globalized_path, const String &p_source, int32_t p_line, int32_t p_column, int32_t p_mode) const {
+TypedArray<Dictionary> VerseRuntime::complete_symbol(const String &p_globalized_path, const String &p_source, int32_t p_line, int32_t p_column, int32_t p_mode, bool *r_not_ready) const {
 	TypedArray<Dictionary> options;
 	if (!host.is_loaded()) {
 		return options;
@@ -392,7 +392,11 @@ TypedArray<Dictionary> VerseRuntime::complete_symbol(const String &p_globalized_
 
 	const vh_complete_item *items = nullptr;
 	int32_t count = 0;
-	if (host.CompleteSymbol(p_globalized_path.utf8().get_data(), p_source.utf8().get_data(), p_line, p_column, p_mode, &items, &count) != VH_OK) {
+	const int32_t status = host.CompleteSymbol(p_globalized_path.utf8().get_data(), p_source.utf8().get_data(), p_line, p_column, p_mode, &items, &count);
+	if (status != VH_OK) {
+		if (r_not_ready != nullptr && status == VH_ERR_STATE) {
+			*r_not_ready = true;
+		}
 		return options;
 	}
 
@@ -420,14 +424,18 @@ TypedArray<Dictionary> VerseRuntime::class_members(const String &p_class_name) c
 	return members;
 }
 
-Dictionary VerseRuntime::signature_at(const String &p_globalized_path, const String &p_source, int32_t p_line, int32_t p_column) const {
+Dictionary VerseRuntime::signature_at(const String &p_globalized_path, const String &p_source, int32_t p_line, int32_t p_column, bool *r_not_ready) const {
 	Dictionary result;
 	if (!host.is_loaded()) {
 		return result;
 	}
 
 	const vh_signature_desc *desc = nullptr;
-	if (host.SignatureAt(p_globalized_path.utf8().get_data(), p_source.utf8().get_data(), p_line, p_column, &desc) != VH_OK || desc == nullptr) {
+	const int32_t status = host.SignatureAt(p_globalized_path.utf8().get_data(), p_source.utf8().get_data(), p_line, p_column, &desc);
+	if (status != VH_OK || desc == nullptr) {
+		if (r_not_ready != nullptr && status == VH_ERR_STATE) {
+			*r_not_ready = true;
+		}
 		return result;
 	}
 

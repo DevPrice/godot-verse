@@ -156,6 +156,9 @@ public:
 	// every scripted node driven rather than one hand-placed one.
 	void _frame() override;
 
+	// Bound so EditorFileSystem's filesystem_changed can reach it. Nothing else calls it.
+	void on_filesystem_changed();
+
 	// Budget handed to vh_tick each frame, so a runaway Verse task costs frame rate rather than
 	// hanging the editor. Read from the verse/runtime/frame_budget_ms project setting at _init.
 	double get_frame_budget_ms() const;
@@ -220,9 +223,19 @@ public:
 
 	// The class name every .verse file under res:// defines, which is its own stem: a script's
 	// class is named after its file, and one flat scope for the whole project is what forces
-	// that. Cheap enough to answer from a directory walk, and it needs no compiled program --
-	// the syntax highlighter has to colour a script that has never been built.
-	godot::PackedStringArray script_class_names() const;
+	// that. It needs no compiled program -- the syntax highlighter has to colour a script that has
+	// never been built.
+	//
+	// Cached, because the walk underneath is a recursive DirAccess enumeration of the whole
+	// project and completion asked for it on every keystroke. invalidate_script_class_names is
+	// what puts a new, renamed or deleted file into it.
+	const godot::PackedStringArray &script_class_names() const;
+
+	// Every class name the generated Godot mirror carries, as Strings built once for the process.
+	// Shared by completion, which matches a typed prefix against all ~1026 of them per keystroke,
+	// and by the syntax highlighter, which colours them -- both used to pay to turn the same
+	// static table of `const char *` into Strings again.
+	static const godot::PackedStringArray &mirrored_class_names();
 
 	// The module a script's definitions go into: "" for the root module, otherwise a
 	// '/'-separated path. A directory is a module only if it carries a `<name>.vmodule` marker,
@@ -246,12 +259,9 @@ public:
 	};
 	BaseTypes base_types_for(const VerseClassDecl &p_decl) const;
 
-	// Blocks until every outstanding analysis has landed. Only for the questions the host answers
-	// about a buffer it must already hold -- completion and the argument hint -- where starting
-	// the ask before the previous analysis lands would attribute its loci to the wrong text.
-	// Nothing on the save path may call this: a whole-project analysis is ~100ms, and the editor
-	// spends it frozen.
-	void settle_checks() const;
+	// Drops the cached list of script class names, so the next ask re-walks res://. Called by a
+	// build and, in the editor, by EditorFileSystem's filesystem_changed.
+	void invalidate_script_class_names() const;
 
 private:
 	static VerseScriptLanguage *singleton_instance;
@@ -287,6 +297,19 @@ private:
 	mutable godot::String in_flight_path;
 	mutable godot::String in_flight_source;
 
+	// Whether that buffer is a completion buffer rather than the author's own text -- the half-typed
+	// identifier replaced by the placeholder. Its diagnostics describe a line nobody has finished
+	// writing, so poll_check drops them instead of drawing them; what it keeps is the record that
+	// the host now holds this text, which is the whole reason the analysis was asked for.
+	mutable bool pending_check_is_completion = false;
+	mutable bool in_flight_is_completion = false;
+
+	// The completion buffer whose analysis is worth re-asking completion for once it lands, and
+	// the file it belongs to. Empty when nothing is waiting on one.
+	mutable godot::String completion_refresh_path;
+	mutable godot::String completion_refresh_source;
+	mutable bool completion_refresh_pending = false;
+
 	// The completion buffer the last vh_complete_symbol answered for, with its position, mode and
 	// answer. Godot re-asks on every keystroke while the popup is open, and each ask costs a
 	// whole-project analysis; normalizing the half-typed identifier out of the buffer is what
@@ -305,9 +328,15 @@ private:
 	mutable int32_t signature_cache_column = -1;
 	mutable godot::Dictionary signature_cache;
 
-	// Queues p_path's buffer for analysis and starts it if the host is free.
-	void request_check(const godot::String &p_path, const godot::String &p_normalized_source) const;
+	// Queues p_path's buffer for analysis. p_is_completion marks it as a completion buffer: see
+	// pending_check_is_completion.
+	void request_check(const godot::String &p_path, const godot::String &p_normalized_source, bool p_is_completion = false) const;
 	void start_pending_check() const;
+
+	// Asks the open script editor to complete again, if it is still showing the file the landed
+	// completion analysis was for and the caret is still inside the same identifier. That second
+	// _complete_code finds the host describing the buffer and replaces the partial list in place.
+	void refresh_completion_if_current() const;
 
 	// Reaps a finished analysis and starts whatever came in while it ran. Called once per frame.
 	void poll_check() const;
@@ -342,6 +371,14 @@ private:
 	// Mutable because verse_class_name() is const and every lookup goes through it.
 	mutable std::map<std::string, std::string> module_by_script;
 	mutable bool module_map_built = false;
+
+	// script_class_names' answer, and whether it still describes res://.
+	mutable godot::PackedStringArray script_class_names_cache;
+	mutable bool script_class_names_built = false;
+
+	// Whether EditorFileSystem's filesystem_changed has been hooked up yet. Not at _init: the
+	// editor's singletons do not exist when a ScriptLanguage is registered.
+	bool filesystem_hook_connected = false;
 
 	// The import _frame is about to write, as the res:// path of the file and the module path to
 	// import. One at a time: the next analysis reports whatever is still unresolved.

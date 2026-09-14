@@ -42,8 +42,8 @@ extern "C" {
  * The mismatch surfaces at vh_init, not at compile time, because the two sides are compiled by
  * different toolchains and nothing links them.
  */
-#define VH_ABI_VERSION_MAJOR 6
-#define VH_ABI_VERSION_MINOR 1
+#define VH_ABI_VERSION_MAJOR 7
+#define VH_ABI_VERSION_MINOR 0
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
 typedef int32_t vh_bool;
@@ -1266,23 +1266,27 @@ typedef struct vh_complete_item
 	vh_bool IsOverridable;
 } vh_complete_item;
 
-/* Lists what could be written at Line/Column of PathUtf8, with that file's text replaced by
- * SourceUtf8 the way vh_check_project replaces it.
+/* Lists what could be written at Line/Column of PathUtf8, as the program describes that file
+ * *now*. SourceUtf8 is not analysed: it is the buffer the caller is asking about, and this
+ * checks it against the text the last analysis left the program holding.
  *
- * Unlike vh_lookup_symbol this takes the buffer, because completion is asked about text that is
- * mid-edit by definition and there is no moment at which an analysis of it already exists. It
- * runs one, so it costs a whole-project analysis (~100ms) and blocks for it -- the caller is
- * expected to ask only when the answer is about to be shown, and to cache it across the
- * keystrokes that narrow a prefix rather than re-ask per character.
+ * Runs no analysis and waits for none (ABI v7; until v6 it did both, and a first `.` cost the
+ * editor a synchronous whole-project analysis). Answers VH_ERR_STATE when it cannot describe
+ * SourceUtf8 -- either an analysis is in flight, or the program was built from different text --
+ * and the caller's recourse is vh_check_project_begin on this very buffer, then ask again once
+ * vh_check_project_poll reaps it. The position is answered against the AST, which the worker
+ * rebuilds and which no snapshot describes, so this is the same refusal vh_lookup_symbol makes
+ * and for the same reason.
  *
  * The buffer does not have to analyse cleanly, which is the point: `Position.` is a syntax error
  * and still answers, because uLang keeps the analysed sub-expressions of an expression it could
- * not analyse. Diagnostics from this analysis are discarded rather than reported -- they describe
- * a buffer the author is halfway through writing.
+ * not analyse. The caller is expected to hand the completion buffer to vh_check_project_begin and
+ * throw that analysis' diagnostics away -- they describe a line the author is halfway through
+ * writing.
  *
- * Leaves the host holding SourceUtf8 as that file's text, so a vh_lookup_symbol afterwards
- * answers for the completion buffer rather than the editor's. The caller has to treat any
- * analysis it was relying on as spent.
+ * An analysis of a completion buffer leaves the program holding it as that file's text, exactly
+ * as any other does, so a vh_lookup_symbol afterwards answers for the completion buffer rather
+ * than the editor's. That is the caller's to track; nothing here hides it.
  *
  * OutItems points into storage owned by the host, valid until the next call to this function.
  * Returns VH_ERR_NOT_FOUND when nothing at that position has members, or when the position is
@@ -1356,8 +1360,10 @@ typedef struct vh_signature_desc
  *
  * Line and Column name the *callee's* last byte -- the `t` of `GetChild(` -- for the same reason
  * vh_complete_symbol takes the receiver's: the argument list under construction does not analyse,
- * and there is nothing at the cursor to resolve. Analyses the buffer and discards its diagnostics
- * exactly as vh_complete_symbol does, and spends the caller's analysis the same way.
+ * and there is nothing at the cursor to resolve.
+ *
+ * Runs no analysis and waits for none, and answers VH_ERR_STATE when it cannot describe
+ * SourceUtf8 -- the whole of vh_complete_symbol's contract above, for the same reasons.
  *
  * OutResult points into storage owned by the host, valid until the next call to this function.
  * Returns VH_ERR_NOT_FOUND when nothing at that position is a function. */

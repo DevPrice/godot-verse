@@ -189,8 +189,21 @@ static void ReportProvenance(const fs::path& DllPath)
 	}
 }
 
+/// Set while the completion cases analyse their own buffers.
+///
+/// A completion buffer has the half-typed identifier replaced by a placeholder nothing defines, so
+/// analysing one always reports an unknown identifier. Until ABI v7 vh_complete_symbol ran that
+/// analysis internally and swallowed the diagnostics; now the caller runs it, so the caller drops
+/// them -- which is exactly what the GDExtension does with a completion-shaped check, and printing
+/// them here would say the fixture was broken when it is not.
+static bool SuppressDiagnostics = false;
+
 static void SmokeOnDiagnostic(void*, const vh_diagnostic* Diagnostic)
 {
+	if (SuppressDiagnostics)
+	{
+		return;
+	}
 	++DiagnosticCount;
 	if (Diagnostic->Severity == VH_SEVERITY_ERROR)
 	{
@@ -749,6 +762,16 @@ int main(int argc, char** argv)
 			return nullptr;
 		};
 
+		// Puts the program where vh_complete_symbol and vh_signature_at need it: describing this
+		// exact buffer. The editor does it on the host's own thread through
+		// vh_check_project_begin/_poll; a test has nothing else to be doing, so it takes the
+		// blocking one.
+		auto AnalyseCompletionBuffer = [&](const std::string& Buffer) {
+			SuppressDiagnostics = true;
+			CheckProjectFn(ExportsPathUtf8.c_str(), Buffer.c_str());
+			SuppressDiagnostics = false;
+		};
+
 		// The editor's buffer with the half-typed member standing in as the placeholder the
 		// GDExtension substitutes, which is what makes the answer survive the rest of the prefix.
 		// Every case below uses it, because it is the only buffer shape completion ever sees.
@@ -768,6 +791,17 @@ int main(int argc, char** argv)
 
 			const vh_complete_item* Items = nullptr;
 			int32_t Count = 0;
+
+			// ABI v7: completion reads the program rather than building one, so a buffer nothing
+			// has analysed is a refusal rather than a 1.4 s analysis on the caller's thread. Every
+			// case below therefore runs the analysis itself, which is what the GDExtension does --
+			// queue the completion buffer, answer with what is free, ask again when it lands.
+			CompleteOk = Step("a buffer the host has not analysed refuses rather than analysing",
+							 CompleteSymbolFn(ExportsPathUtf8.c_str(), Typing.c_str(), RecvRow, RecvColumn,
+											  VH_COMPLETE_MEMBERS, &Items, &Count) == VH_ERR_STATE)
+					  && CompleteOk;
+
+			AnalyseCompletionBuffer(Typing);
 			if (Step("vh_complete_symbol on a half-typed member",
 					CompleteSymbolFn(ExportsPathUtf8.c_str(), Typing.c_str(), RecvRow, RecvColumn,
 									 VH_COMPLETE_MEMBERS, &Items, &Count) == VH_OK))
@@ -793,6 +827,7 @@ int main(int argc, char** argv)
 			std::string SelfTyping = ExportsSource;
 			SelfTyping.replace(FieldUse, strlen("Position.X"), "Self.VhCompletionCursor");
 			RowColumnOf(SelfTyping, FieldUse + strlen("Self") - 1, RecvRow, RecvColumn);
+			AnalyseCompletionBuffer(SelfTyping);
 			if (Step("vh_complete_symbol on a node",
 					CompleteSymbolFn(ExportsPathUtf8.c_str(), SelfTyping.c_str(), RecvRow, RecvColumn,
 									 VH_COMPLETE_MEMBERS, &Items, &Count) == VH_OK))
@@ -837,6 +872,7 @@ int main(int argc, char** argv)
 				std::string ScopeTyping = ExportsSource;
 				ScopeTyping.replace(LocalUse + strlen("X := "), strlen("Shifted"), "VhCompletionCursor");
 				RowColumnOf(ScopeTyping, LocalUse + strlen("X := "), ScopeRow, ScopeColumn);
+				AnalyseCompletionBuffer(ScopeTyping);
 				if (Step("vh_complete_symbol in a function body",
 						CompleteSymbolFn(ExportsPathUtf8.c_str(), ScopeTyping.c_str(), ScopeRow, ScopeColumn,
 										 VH_COMPLETE_SCOPE, &Items, &Count) == VH_OK))
@@ -878,6 +914,7 @@ int main(int argc, char** argv)
 				int32_t DeclRow = 0;
 				int32_t DeclColumn = 0;
 				RowColumnOf(DeclTyping, MemberDecl + strlen("    "), DeclRow, DeclColumn);
+				AnalyseCompletionBuffer(DeclTyping);
 				if (Step("vh_complete_symbol at a class member declaration",
 						CompleteSymbolFn(ExportsPathUtf8.c_str(), DeclTyping.c_str(), DeclRow, DeclColumn,
 										 VH_COMPLETE_SCOPE, &Items, &Count) == VH_OK))
@@ -953,6 +990,7 @@ int main(int argc, char** argv)
 				int32_t AttributeRow = 0;
 				int32_t AttributeColumn = 0;
 				RowColumnOf(AttributeTyping, AttributeUse + strlen("    @"), AttributeRow, AttributeColumn);
+				AnalyseCompletionBuffer(AttributeTyping);
 				if (Step("vh_complete_symbol at an attribute",
 						CompleteSymbolFn(ExportsPathUtf8.c_str(), AttributeTyping.c_str(), AttributeRow, AttributeColumn,
 										 VH_COMPLETE_ATTRIBUTES, &Items, &Count) == VH_OK))
@@ -1008,6 +1046,7 @@ int main(int argc, char** argv)
 				int32_t TopRow = 0;
 				int32_t TopColumn = 0;
 				RowColumnOf(TopLevelTyping, GlobalClassUse + 1, TopRow, TopColumn);
+				AnalyseCompletionBuffer(TopLevelTyping);
 				if (Step("vh_complete_symbol at a top-level attribute",
 						CompleteSymbolFn(ExportsPathUtf8.c_str(), TopLevelTyping.c_str(), TopRow, TopColumn,
 										 VH_COMPLETE_ATTRIBUTES, &Items, &Count) == VH_OK))
@@ -1035,6 +1074,12 @@ int main(int argc, char** argv)
 					CompleteOk = false;
 				}
 			}
+
+			// Back to the file as it is on disk, which is what the two groups below ask about --
+			// and, being the real text, is the one analysis here worth reporting.
+			CompleteOk = Step("the project analyses clean again",
+							 CheckProjectFn(ExportsPathUtf8.c_str(), ExportsSource.c_str()) == VH_OK)
+					  && CompleteOk;
 
 			// Whitespace has no members, and answering anyway would put the enclosing scope behind
 			// a dot the author never typed.
@@ -1083,11 +1128,6 @@ int main(int argc, char** argv)
 						  && CompleteOk;
 			}
 
-			// Completion left the host holding a scratch buffer; everything below reads the
-			// semantic program and has to see the file as it is on disk.
-			CompleteOk = Step("the project analyses clean again",
-							 CheckProjectFn(ExportsPathUtf8.c_str(), ExportsSource.c_str()) == VH_OK)
-					  && CompleteOk;
 		}
 
 		// What a class declares itself, which is what becomes its documentation. Inherited names

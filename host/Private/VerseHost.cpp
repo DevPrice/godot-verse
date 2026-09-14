@@ -1062,6 +1062,15 @@ extern "C" int32_t vh_complete_symbol(const char* PathUtf8,
         return VH_ERR_ABI;
     }
 
+    // ABI v7: this neither analyses nor waits. A position is answered against the AST, which only
+    // an analysis of this very buffer builds, so a buffer the program does not describe is a
+    // refusal the caller acts on -- vh_check_project_begin on it, then ask again after the poll --
+    // rather than a stall it never asked for. Same code and same reasoning as vh_lookup_symbol.
+    if (!GodotVerse::ProgramDescribes(FUtf8String(Cstr(PathUtf8)), FUtf8String(Cstr(SourceUtf8))))
+    {
+        return VH_ERR_STATE;
+    }
+
     // Static for the same reason vh_lookup_symbol's descriptor is: the ABI promises the strings
     // outlive the call, and the items only point at the harvest's.
     static TArray<GodotVerse::FCompleteItem> Items;
@@ -1174,6 +1183,13 @@ extern "C" int32_t vh_signature_at(const char* PathUtf8,
     *OutResult = nullptr;
 
     if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+
+    // The same refusal vh_complete_symbol makes, for the same reason: the editor asks both about
+    // one keystroke, and neither runs an analysis of its own any more.
+    if (!GodotVerse::ProgramDescribes(FUtf8String(Cstr(PathUtf8)), FUtf8String(Cstr(SourceUtf8))))
     {
         return VH_ERR_STATE;
     }

@@ -12,16 +12,15 @@
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/file_access.hpp>
-#include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
-#include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/memory.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
 #ifdef TOOLS_ENABLED
 #include <godot_cpp/classes/code_edit.hpp>
+#include <godot_cpp/classes/editor_file_system.hpp>
 #include <godot_cpp/classes/editor_interface.hpp>
 #include <godot_cpp/classes/script_editor.hpp>
 #include <godot_cpp/classes/script_editor_base.hpp>
@@ -294,6 +293,9 @@ VerseScriptLanguage *VerseScriptLanguage::singleton() {
 }
 
 void VerseScriptLanguage::_bind_methods() {
+	// Only so EditorFileSystem's filesystem_changed has something to connect to; a signal needs a
+	// bound method, and nothing else here is reachable from Godot by name.
+	ClassDB::bind_method(D_METHOD("on_filesystem_changed"), &VerseScriptLanguage::on_filesystem_changed);
 }
 
 String VerseScriptLanguage::_get_name() const {
@@ -797,6 +799,42 @@ static bool matches_typed_prefix(const String &p_name, const String &p_prefix) {
 // answer is about the position rather than about whatever it collided with.
 static const char *completion_placeholder = "VhCompletionCursor";
 
+#ifdef TOOLS_ENABLED
+
+// The buffer _complete_code would hand the host for the caret where it is now: the identifier the
+// caret is inside replaced by the placeholder, newlines normalised.
+//
+// Rebuilt from the editor rather than remembered, because it is the test for "still the same
+// question". Two keystrokes into one identifier produce the same buffer, which is exactly right --
+// the answer that just landed is the answer for both -- while a caret moved elsewhere, or a line
+// edited, produces a different one and the refresh is dropped.
+static String completion_placeholder_buffer(CodeEdit *p_code_edit) {
+	const String text = p_code_edit->get_text();
+	const int64_t caret_line = p_code_edit->get_caret_line();
+	const int64_t caret_column = p_code_edit->get_caret_column();
+
+	// get_text joins the lines with "\n", so one separator per line ahead of the caret's.
+	int64_t offset = 0;
+	for (int64_t i = 0; i < caret_line; i++) {
+		if (i >= p_code_edit->get_line_count()) {
+			return String();
+		}
+		offset += p_code_edit->get_line(i).length() + 1;
+	}
+	offset += caret_column;
+	if (offset < 0 || offset > text.length()) {
+		return String();
+	}
+
+	int64_t prefix_start = offset;
+	while (prefix_start > 0 && is_identifier_char(text[prefix_start - 1])) {
+		prefix_start--;
+	}
+	return verse_newline_normalized(text.substr(0, prefix_start) + String(completion_placeholder) + text.substr(offset));
+}
+
+#endif
+
 // Whether the token ending at p_end is a number rather than a name, which is what tells the `.` of
 // `1.5` from the `.` of `Position.X`. An identifier may well end in a digit -- `node2d` does -- so
 // it is the whole token that has to be digits, not just the character before the dot.
@@ -1207,18 +1245,30 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 			int64_t column = 0;
 			position_of(callee_end, line, column);
 
-			if (signature_cache_source != source || signature_cache_line != (int32_t)line
-					|| signature_cache_column != (int32_t)column) {
-				settle_checks();
+			bool have_signature = signature_cache_source == source
+					&& signature_cache_line == (int32_t)line
+					&& signature_cache_column == (int32_t)column;
+			if (!have_signature) {
 				const String globalized = ProjectSettings::get_singleton()->globalize_path(p_path);
-				signature_cache = runtime->signature_at(globalized, source, (int32_t)line, (int32_t)column);
-				signature_cache_source = source;
-				signature_cache_line = (int32_t)line;
-				signature_cache_column = (int32_t)column;
-				analyzed_source_by_path.erase(p_path);
+				bool not_ready = false;
+				const Dictionary answer = runtime->signature_at(globalized, source, (int32_t)line, (int32_t)column, &not_ready);
+				if (not_ready) {
+					// The host has never analysed this buffer, and since ABI v7 it will not do it
+					// here. Queue it and draw no hint; the analysis lands in a later _frame, which
+					// asks the editor to complete again and arrives back here with an answer.
+					request_check(p_path, source, true);
+				} else {
+					signature_cache = answer;
+					signature_cache_source = source;
+					signature_cache_line = (int32_t)line;
+					signature_cache_column = (int32_t)column;
+					have_signature = true;
+				}
 			}
 
-			if (!signature_cache.is_empty()) {
+			// Only ever the hint for *this* buffer. The cache keys are left alone on a refusal, so
+			// without the guard the previous call's hint would be drawn over the new one.
+			if (have_signature && !signature_cache.is_empty()) {
 				result["call_hint"] = call_hint_for(signature_cache, argument_index_in_call(before, callee_end), call_opened_with_bracket(before, callee_end));
 			}
 		}
@@ -1244,40 +1294,60 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 		const int32_t mode = completing_members ? VH_COMPLETE_MEMBERS
 				: (completing_attribute ? VH_COMPLETE_ATTRIBUTES : VH_COMPLETE_SCOPE);
 
-		if (completion_cache_source != source || completion_cache_line != (int32_t)line
-				|| completion_cache_column != (int32_t)column || completion_cache_mode != mode) {
-			// Drain whatever validate had queued first. An analysis that finishes *after* this one
-			// would be reaped by a later poll_check, which records its buffer as the text the host
-			// holds -- and the host would by then be holding the completion buffer instead. Every
-			// locus a hover reads afterwards would be attributed to the wrong text. Settling costs
-			// the wait once per completion context rather than once per keystroke, because the
-			// cache above is what the rest of a prefix hits.
-			settle_checks();
-
+		bool have_options = completion_cache_source == source && completion_cache_line == (int32_t)line
+				&& completion_cache_column == (int32_t)column && completion_cache_mode == mode;
+		if (!have_options) {
 			const String globalized = ProjectSettings::get_singleton()->globalize_path(p_path);
-			completion_cache_options = runtime->complete_symbol(globalized, source, (int32_t)line, (int32_t)column, mode);
-			completion_cache_source = source;
-			completion_cache_line = (int32_t)line;
-			completion_cache_column = (int32_t)column;
-			completion_cache_mode = mode;
-
-			// The host now holds the completion buffer as this file's text, so the analysis every
-			// lookup and every cached validate was answering from is spent. Dropping the entry is
-			// what stops a hover from trusting loci that describe a buffer with a placeholder
-			// spliced into it; the next validate re-analyses and puts it back.
-			analyzed_source_by_path.erase(p_path);
+			bool not_ready = false;
+			const TypedArray<Dictionary> answer =
+					runtime->complete_symbol(globalized, source, (int32_t)line, (int32_t)column, mode, &not_ready);
+			if (not_ready) {
+				// Queue the completion buffer and answer now with whatever is free. This is the
+				// whole of the change ABI v7 bought: the analysis still costs ~1.3 s, but it is the
+				// host's thread that spends it rather than the keystroke.
+				request_check(p_path, source, true);
+			} else {
+				completion_cache_options = answer;
+				completion_cache_source = source;
+				completion_cache_line = (int32_t)line;
+				completion_cache_column = (int32_t)column;
+				completion_cache_mode = mode;
+				have_options = true;
+			}
 		}
 
-		for (int64_t i = 0; i < completion_cache_options.size(); i++) {
-			const Dictionary item = completion_cache_options[i];
-			const String name = item["name"];
-			if (!matches_typed_prefix(name, prefix)) {
-				continue;
+		if (have_options) {
+			for (int64_t i = 0; i < completion_cache_options.size(); i++) {
+				const Dictionary item = completion_cache_options[i];
+				const String name = item["name"];
+				if (!matches_typed_prefix(name, prefix)) {
+					continue;
+				}
+				if (!declaring_in_class.is_empty() && completes_as_override(item, declaring_in_class)) {
+					options.push_back(override_option_for(item));
+				} else {
+					options.push_back(completion_option_for(item));
+				}
 			}
-			if (!declaring_in_class.is_empty() && completes_as_override(item, declaring_in_class)) {
-				options.push_back(override_option_for(item));
-			} else {
-				options.push_back(completion_option_for(item));
+		} else if (!completing_members && !completing_attribute) {
+			// The partial answer for a bare identifier: what the enclosing class declares, which
+			// the analysis snapshot already holds and so costs nothing. LOCATION_LOCAL puts it
+			// above the class names and keywords appended below -- Godot ranks by `location` alone
+			// when nothing has been typed, and uses it as the fourth tie-break once something has.
+			//
+			// Members only, not the scope walk: everything else a scope admits lives in the AST,
+			// which is exactly what no analysis of this buffer has built yet.
+			const TypedArray<Dictionary> members = runtime->class_members(qualified_class_name(p_path));
+			for (int64_t i = 0; i < members.size(); i++) {
+				const Dictionary item = members[i];
+				if (!matches_typed_prefix(item["name"], prefix)) {
+					continue;
+				}
+				if (!declaring_in_class.is_empty() && completes_as_override(item, declaring_in_class)) {
+					options.push_back(override_option_for(item));
+				} else {
+					options.push_back(completion_option_for(item));
+				}
 			}
 		}
 	}
@@ -1289,14 +1359,14 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 		return result;
 	}
 
-	for (size_t i = 0; i < std::size(verse_api::classes); i++) {
-		const String name = verse_api::classes[i].verse_name;
-		if (matches_typed_prefix(name, prefix)) {
-			options.push_back(completion_option(name, ScriptLanguageExtension::CODE_COMPLETION_KIND_CLASS, ScriptLanguageExtension::LOCATION_OTHER));
+	const PackedStringArray &mirrored = mirrored_class_names();
+	for (int64_t i = 0; i < mirrored.size(); i++) {
+		if (matches_typed_prefix(mirrored[i], prefix)) {
+			options.push_back(completion_option(mirrored[i], ScriptLanguageExtension::CODE_COMPLETION_KIND_CLASS, ScriptLanguageExtension::LOCATION_OTHER));
 		}
 	}
 
-	const PackedStringArray class_names = script_class_names();
+	const PackedStringArray &class_names = script_class_names();
 	for (int64_t i = 0; i < class_names.size(); i++) {
 		if (matches_typed_prefix(class_names[i], prefix)) {
 			options.push_back(completion_option(class_names[i], ScriptLanguageExtension::CODE_COMPLETION_KIND_CLASS, ScriptLanguageExtension::LOCATION_OTHER_USER_CODE));
@@ -1727,12 +1797,29 @@ void VerseScriptLanguage::_frame() {
 		poll_check();
 
 #ifdef TOOLS_ENABLED
-		// Deliberately here rather than in poll_check: settle_checks reaps an analysis from the
-		// middle of a completion request, and re-entering the script editor from there would
-		// rebuild its error list while it is drawing a popup.
+		// Connected here rather than in _init: a ScriptLanguage is registered before the editor's
+		// own singletons exist, so there is nothing to connect to at that point. Once per process.
+		if (!filesystem_hook_connected) {
+			EditorInterface *editor_interface = verse_editor_interface();
+			EditorFileSystem *filesystem = editor_interface != nullptr ? editor_interface->get_resource_filesystem() : nullptr;
+			if (filesystem != nullptr) {
+				filesystem->connect("filesystem_changed", Callable(this, "on_filesystem_changed"));
+				filesystem_hook_connected = true;
+			}
+		}
+
+		// Deliberately here rather than in poll_check: re-entering the script editor from inside
+		// the poll would rebuild its error list while it is drawing a popup.
 		if (editor_refresh_pending) {
 			editor_refresh_pending = false;
 			refresh_current_script_editor();
+		}
+
+		// After the error list and before the import, for the same reason: this asks the editor to
+		// run _complete_code again, and that has to see the buffer everything else has settled on.
+		if (completion_refresh_pending) {
+			completion_refresh_pending = false;
+			refresh_completion_if_current();
 		}
 
 		// After the refresh, so the validate the refresh asks for is about the text this is
@@ -1900,12 +1987,43 @@ String VerseScriptLanguage::qualified_class_name(const String &p_res_path) const
 	return module.is_empty() ? stem : module + String("/") + stem;
 }
 
-PackedStringArray VerseScriptLanguage::script_class_names() const {
-	const PackedStringArray sources = find_verse_sources("res://");
-	PackedStringArray names;
-	for (int64_t i = 0; i < sources.size(); i++) {
-		names.push_back(sources[i].get_file().get_basename());
+const PackedStringArray &VerseScriptLanguage::script_class_names() const {
+	if (!script_class_names_built) {
+		const PackedStringArray sources = find_verse_sources("res://");
+		script_class_names_cache.clear();
+		for (int64_t i = 0; i < sources.size(); i++) {
+			script_class_names_cache.push_back(sources[i].get_file().get_basename());
+		}
+		script_class_names_built = true;
 	}
+	return script_class_names_cache;
+}
+
+void VerseScriptLanguage::invalidate_script_class_names() const {
+	script_class_names_built = false;
+}
+
+void VerseScriptLanguage::on_filesystem_changed() {
+	// EditorFileSystem emits this at the end of every scan and once per frame for a batch of
+	// update_file calls, which covers a file created, deleted, renamed or moved however it
+	// happened -- through the dock, or on disk behind the editor's back. FileSystemDock has the
+	// per-path signals, but only for what the dock itself did, so it would miss the second case.
+	//
+	// A flag rather than a rebuild: this fires during a scan, and the walk belongs to whoever
+	// next asks a question that needs it.
+	invalidate_script_class_names();
+	module_map_built = false;
+}
+
+const PackedStringArray &VerseScriptLanguage::mirrored_class_names() {
+	static PackedStringArray names = []() {
+		PackedStringArray built;
+		built.resize((int64_t)std::size(verse_api::classes));
+		for (size_t i = 0; i < std::size(verse_api::classes); i++) {
+			built.set((int64_t)i, String(verse_api::classes[i].verse_name));
+		}
+		return built;
+	}();
 	return names;
 }
 
@@ -1929,7 +2047,10 @@ Error VerseScriptLanguage::build_project() {
 	}
 
 	// Re-derived per build rather than trusted: a .vmodule added or removed since the last one
-	// moves files between modules, and a build is the moment that is allowed to take effect.
+	// moves files between modules, and a build is the moment that is allowed to take effect. The
+	// class-name list is re-enumerated with it, since a build walks res:// anyway and is the one
+	// hook a game -- where there is no EditorFileSystem to signal -- still has.
+	invalidate_script_class_names();
 	refresh_module_map();
 
 	const PackedStringArray sources = find_verse_sources("res://");
@@ -2067,35 +2188,15 @@ void VerseScriptLanguage::unregister_script(VerseScript *p_script) {
 	live_scripts.erase(std::remove(live_scripts.begin(), live_scripts.end(), p_script), live_scripts.end());
 }
 
-void VerseScriptLanguage::settle_checks() const {
-	VerseRuntime *runtime = get_runtime();
-	if (runtime == nullptr || !runtime->is_host_loaded()) {
-		return;
+void VerseScriptLanguage::request_check(const String &p_path, const String &p_normalized_source, bool p_is_completion) const {
+	// Recorded ahead of the in-flight test below, because the analysis already running may be the
+	// very one this is asking for -- the editor asks for the options and the argument hint about
+	// one keystroke, and the second ask must not lose the first's claim on the result.
+	if (p_is_completion) {
+		completion_refresh_path = p_path;
+		completion_refresh_source = p_normalized_source;
 	}
 
-	// Two passes is the whole outstanding set: one analysis in flight, and at most one queued
-	// buffer behind it, since a newer buffer replaces a waiting one rather than queueing.
-	for (int pass = 0; pass < 2; pass++) {
-		start_pending_check();
-		if (in_flight_path.is_empty()) {
-			return;
-		}
-
-		// An analysis of this project takes ~100ms. The cap is not a real duration so much as a
-		// promise that a wedged host costs a stale error list rather than an editor that never
-		// comes back.
-		const uint64_t deadline_ms = Time::get_singleton()->get_ticks_msec() + 5000;
-		while (runtime->is_check_project_busy()) {
-			if (Time::get_singleton()->get_ticks_msec() > deadline_ms) {
-				return;
-			}
-			OS::get_singleton()->delay_msec(1);
-		}
-		poll_check();
-	}
-}
-
-void VerseScriptLanguage::request_check(const String &p_path, const String &p_normalized_source) const {
 	// The analysis in flight is already for this exact text. Godot validates the same unchanged
 	// buffer several times over while one runs, and queueing behind it would buy the same answer
 	// a second time -- putting a whole extra analysis between a save and the result it settles on.
@@ -2107,6 +2208,7 @@ void VerseScriptLanguage::request_check(const String &p_path, const String &p_no
 	// state is worth less than the one the author is looking at now.
 	pending_check_path = p_path;
 	pending_check_source = p_normalized_source;
+	pending_check_is_completion = p_is_completion;
 	has_pending_check = true;
 
 	// Queued, not started. Every host entry point that reads the semantic program joins the
@@ -2136,6 +2238,7 @@ void VerseScriptLanguage::start_pending_check() const {
 	// The host has taken this text, so it is what the next result answers for.
 	in_flight_path = pending_check_path;
 	in_flight_source = pending_check_source;
+	in_flight_is_completion = pending_check_is_completion;
 	has_pending_check = false;
 }
 
@@ -2148,27 +2251,87 @@ void VerseScriptLanguage::poll_check() const {
 	Dictionary errors_by_globalized;
 	if (runtime->poll_check_project(&errors_by_globalized)) {
 		// Only now does the host hold this text, so only now may a validate answer from cache.
+		// Recorded for a completion buffer too, and that is the point: the entry says which text
+		// the host is describing, so `_validate` comparing the author's real buffer against it
+		// queues the ordinary analysis that puts the diagnostics back, and a hover declines in the
+		// meantime rather than trusting loci measured against a spliced-in placeholder.
 		analyzed_source_by_path[in_flight_path] = in_flight_source;
-		editor_refresh_pending = record_diagnostics(errors_by_globalized) || editor_refresh_pending;
 
-		// This is the authoritative moment for the file that was analysed, and the only one a
-		// validate is not guaranteed to follow, so the log is written from here.
-		const String globalized = ProjectSettings::get_singleton()->globalize_path(in_flight_path);
-		log_new_diagnostics(globalized, diagnostics_for(in_flight_path));
-		refresh_script_warnings(in_flight_path);
+		if (in_flight_is_completion) {
+			// Everything below describes the author's file to the author. This analysis was of a
+			// line they are halfway through typing -- the placeholder resolves to nothing, so its
+			// diagnostics are an unknown identifier they did not write -- and drawing that would
+			// be worse than drawing nothing. The answer it was asked for is the program it left
+			// behind, which vh_complete_symbol reads on the way back through.
+			completion_refresh_pending = completion_refresh_path == in_flight_path
+					&& completion_refresh_source == in_flight_source;
+		} else {
+			editor_refresh_pending = record_diagnostics(errors_by_globalized) || editor_refresh_pending;
+
+			// This is the authoritative moment for the file that was analysed, and the only one a
+			// validate is not guaranteed to follow, so the log is written from here.
+			const String globalized = ProjectSettings::get_singleton()->globalize_path(in_flight_path);
+			log_new_diagnostics(globalized, diagnostics_for(in_flight_path));
+			refresh_script_warnings(in_flight_path);
+
+			// Every script whose compile() declined to wait for this. Told one at a time rather
+			// than only the analysed file's script, because a save can be waiting on a result its
+			// own buffer did not start. Snapshotted: telling a script republishes its export list,
+			// and Godot is free to drop a script while that runs.
+			const std::vector<VerseScript *> scripts = live_scripts;
+			for (VerseScript *script : scripts) {
+				editor_refresh_pending = script->analysis_landed() || editor_refresh_pending;
+			}
+		}
 
 		in_flight_path = String();
 		in_flight_source = String();
-
-		// Every script whose compile() declined to wait for this. Told one at a time rather than
-		// only the analysed file's script, because a save can be waiting on a result its own
-		// buffer did not start. Snapshotted: telling a script republishes its export list, and
-		// Godot is free to drop a script while that runs.
-		const std::vector<VerseScript *> scripts = live_scripts;
-		for (VerseScript *script : scripts) {
-			editor_refresh_pending = script->analysis_landed() || editor_refresh_pending;
-		}
+		in_flight_is_completion = false;
 	}
+}
+
+// Asks the editor for completion again now that the host describes the buffer the last answer
+// declined on.
+//
+// `request_code_completion(true)` is the same call Ctrl+Space makes. Forced, so it skips both the
+// prefix test and CodeTextEditor's 0.3 s debounce and emits `code_completion_requested` straight
+// away, which lands back in _complete_code -- where the host now answers and the cache fills. An
+// open popup is refreshed in place rather than closed and reopened: CodeEdit only declines a
+// re-request while one is open when every option showing is a path or a signal, which no answer
+// here ever is, and the selected index survives unless the head of the list actually changed.
+void VerseScriptLanguage::refresh_completion_if_current() const {
+#ifdef TOOLS_ENABLED
+	if (completion_refresh_path.is_empty()) {
+		return;
+	}
+
+	EditorInterface *editor_interface = verse_editor_interface();
+	ScriptEditor *script_editor = editor_interface != nullptr ? editor_interface->get_script_editor() : nullptr;
+	if (script_editor == nullptr) {
+		return;
+	}
+
+	// Only the file the analysis was for. The author may have switched tabs while it ran, and
+	// asking some other script to complete would open a popup nobody asked for.
+	const Ref<Script> script = script_editor->get_current_script();
+	if (script.is_null() || script->get_path() != completion_refresh_path) {
+		return;
+	}
+
+	ScriptEditorBase *current = script_editor->get_current_editor();
+	CodeEdit *code_edit = current != nullptr ? Object::cast_to<CodeEdit>(current->get_base_editor()) : nullptr;
+	if (code_edit == nullptr) {
+		return;
+	}
+
+	// The caret has to still be inside the identifier the question was about. Anywhere else and
+	// the answer that just landed is not the answer to what is being typed now.
+	if (completion_placeholder_buffer(code_edit) != completion_refresh_source) {
+		return;
+	}
+
+	code_edit->request_code_completion(true);
+#endif
 }
 
 // What a rejected export has to say for itself, at the line that declared it.

@@ -1081,6 +1081,15 @@ AUTORTFM_DISABLE bool GodotVerse::CheckProject(const FUtf8String& Path, const FU
     return RunCheck(Path, SourceText, [](const FSolDiagnostic& Diagnostic) { ForwardSolDiagnostic(Diagnostic); });
 }
 
+AUTORTFM_DISABLE bool GodotVerse::ProgramDescribes(const FUtf8String& Path, const FUtf8String& SourceText)
+{
+    // The order is the whole of the thread safety: the worker writes GAnalysedPath/Source inside
+    // RunCheck and clears bRunning afterwards with a release store, so reading the atomic first and
+    // finding it false is what makes those writes visible here. Reversing these two lines would be
+    // a race with no symptom until an analysis lands mid-comparison.
+    return !GBackgroundCheck.bRunning.load(std::memory_order_acquire) && ProgramAlreadyDescribes(Path, SourceText);
+}
+
 namespace {
 
 /// Records every name Module declares against Module's own path, then recurses. Path is relative
@@ -5932,10 +5941,14 @@ AUTORTFM_DISABLE bool DescribeCompletion(const uLang::CDefinition& Definition, E
     return true;
 }
 
-/// Adds every definition a scope declares that the cursor's scope is allowed to see.
+/// Adds every definition a scope declares that the cursor's scope is allowed to see and Seen does
+/// not already hold. Seen is carried across every scope of one query, nearest first, so the copy
+/// that survives is the one that would actually resolve -- and the copies that do not are never
+/// described, which is where the work is.
 AUTORTFM_DISABLE void CollectScope(const uLang::CLogicalScope& From,
                                    const uLang::CScope* AccessFrom,
                                    ECompleteFilter Filter,
+                                   TSet<FUtf8String>& Seen,
                                    TArray<GodotVerse::FCompleteItem>& OutItems)
 {
     for (const uLang::TSRef<uLang::CDefinition>& Definition : From.GetDefinitions())
@@ -5948,31 +5961,46 @@ AUTORTFM_DISABLE void CollectScope(const uLang::CLogicalScope& From,
         {
             continue;
         }
+        if (Definition->GetName().IsNull())
+        {
+            continue;
+        }
+        // Tested before describing and recorded only after: a definition DescribeCompletion refuses
+        // -- a compiler-generated constructor, say -- must not reserve its name against a real
+        // definition of the same name further out, which is what the post-hoc deduplication this
+        // replaced could not get wrong.
+        FUtf8String Name(Definition->AsNameCString());
+        if (Seen.Contains(Name))
+        {
+            continue;
+        }
         GodotVerse::FCompleteItem Item;
         if (DescribeCompletion(*Definition, Filter, Item))
         {
+            Seen.Add(MoveTemp(Name));
             OutItems.Add(MoveTemp(Item));
         }
     }
 }
 
 /// A class and everything it inherits. An override is declared in both, so the subclass' copy
-/// wins by arriving first and the duplicate is dropped when the results are deduplicated.
+/// wins by arriving first and the duplicate is dropped by Seen.
 AUTORTFM_DISABLE void CollectClassAndSupers(const uLang::CClass& Class,
                                             const uLang::CScope* AccessFrom,
                                             ECompleteFilter Filter,
+                                            TSet<FUtf8String>& Seen,
                                             TArray<GodotVerse::FCompleteItem>& OutItems)
 {
     // An interface is a CClass too, so the same walk covers `class(a, b)` as well as a superclass
-    // chain; a diamond is dropped by the deduplication downstream rather than tracked here.
+    // chain; a diamond is dropped by Seen rather than tracked here.
     for (const uLang::CClass* Current = &Class; Current; Current = Current->GetSuperClass())
     {
-        CollectScope(*Current, AccessFrom, Filter, OutItems);
+        CollectScope(*Current, AccessFrom, Filter, Seen, OutItems);
         for (const uLang::CClass* Interface : Current->_SuperInterfaces)
         {
             if (Interface)
             {
-                CollectScope(*Interface, AccessFrom, Filter, OutItems);
+                CollectScope(*Interface, AccessFrom, Filter, Seen, OutItems);
             }
         }
     }
@@ -5994,17 +6022,7 @@ AUTORTFM_DISABLE bool GodotVerse::Complete(FUtf8StringView Path,
         return false;
     }
 
-    WaitForBackgroundCheck();
-
-    // The buffer is mid-edit, so this analysis reports what the author has not finished writing:
-    // discarding its diagnostics is the whole reason completion runs an analysis of its own rather
-    // than borrowing CheckProject's. The result is ignored for the same reason -- a buffer that
-    // does not analyse cleanly is the normal case here, and uLang keeps the sub-expressions it did
-    // analyse either way. Only a program with no AST at all is fatal, which the checks below catch.
-    if (!ProgramAlreadyDescribes(FUtf8String(Path), SourceText))
-    {
-        RunCheck(FUtf8String(Path), SourceText, [](const FSolDiagnostic&) {});
-    }
+    const double Started = FPlatformTime::Seconds();
 
     const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
     if (!BuildManager.IsValid())
@@ -6017,25 +6035,42 @@ AUTORTFM_DISABLE bool GodotVerse::Complete(FUtf8StringView Path,
         return false;
     }
 
+    const FUtf8String ProjectVersePath(ScriptVersePath);
+    double WalkSeconds = 0.0;
+
     for (const uLang::CAstCompilationUnit* CompilationUnit : Program->_AstProject->OrderedCompilationUnits())
     {
         for (const uLang::CAstPackage* Package : CompilationUnit->Packages())
         {
-            const bool bIsUserPackage = Package->_VerseScope == uLang::EVerseScope::PublicUser
-                || Package->_VerseScope == uLang::EVerseScope::InternalUser;
-            if (!bIsUserPackage || !Package->_RootModule || !Package->_RootModule->GetAstPackage())
+            // The project's package and nothing else. `InternalUser` is not the filter it reads as:
+            // the mirror and the attribute package are both set to it (AddAttributePackage,
+            // VerseHost.Build.cs' SetupVerse), so a scope test walked all 4.3 MB of generated mirror
+            // AST before reaching the two snippets that could contain the cursor -- which was the
+            // whole of the warm path's ~97 ms. The verse path is exact: every res:// file is added
+            // to the package at ScriptVersePath and a position question is only ever about one.
+            if (FUtf8String(Package->_VersePath.AsCString()) != ProjectVersePath
+                || !Package->_RootModule || !Package->_RootModule->GetAstPackage())
             {
                 continue;
             }
 
             // A file that declares nothing still sits in its package's root module, which is the
             // scope a cursor at the top level of it completes in.
+            const double WalkStarted = FPlatformTime::Seconds();
             FCompletionVisitor Visitor(FUtf8String(Path), (uint32)Line, (uint32)Column, Package->_RootModule);
             Package->_RootModule->GetAstPackage()->VisitChildren(Visitor);
+            WalkSeconds += FPlatformTime::Seconds() - WalkStarted;
             if (!Visitor.bSawPath)
             {
                 continue;
             }
+
+            // A name that is in scope twice -- an override, or a class member shadowing an imported
+            // one -- is one completion, and the walk below is ordered nearest-first, so the copy
+            // that survives is the one that would actually resolve. Carried into the collection
+            // rather than applied to its result because describing an item is the expensive part:
+            // a type spelled with AsCode, and a whole signature spelled for every function.
+            TSet<FUtf8String> Seen;
 
             if (Mode == VH_COMPLETE_MEMBERS)
             {
@@ -6050,15 +6085,15 @@ AUTORTFM_DISABLE bool GodotVerse::Complete(FUtf8StringView Path,
                 }
                 if (const uLang::CClass* Class = Type->AsNullable<uLang::CClass>())
                 {
-                    CollectClassAndSupers(*Class, Visitor.Scope, ECompleteFilter::Any, OutItems);
+                    CollectClassAndSupers(*Class, Visitor.Scope, ECompleteFilter::Any, Seen, OutItems);
                 }
                 else if (const uLang::CEnumeration* Enumeration = Type->AsNullable<uLang::CEnumeration>())
                 {
-                    CollectScope(*Enumeration, Visitor.Scope, ECompleteFilter::Any, OutItems);
+                    CollectScope(*Enumeration, Visitor.Scope, ECompleteFilter::Any, Seen, OutItems);
                 }
                 else if (const uLang::CModule* Module = Type->AsNullable<uLang::CModule>())
                 {
-                    CollectScope(*Module, Visitor.Scope, ECompleteFilter::Any, OutItems);
+                    CollectScope(*Module, Visitor.Scope, ECompleteFilter::Any, Seen, OutItems);
                 }
             }
             else
@@ -6074,8 +6109,10 @@ AUTORTFM_DISABLE bool GodotVerse::Complete(FUtf8StringView Path,
                     for (const uLang::CDataDefinition* Local : Visitor.Locals)
                     {
                         FCompleteItem Item;
-                        if (DescribeCompletion(*Local, Filter, Item))
+                        FUtf8String Name(Local->AsNameCString());
+                        if (!Seen.Contains(Name) && DescribeCompletion(*Local, Filter, Item))
                         {
+                            Seen.Add(MoveTemp(Name));
                             OutItems.Add(MoveTemp(Item));
                         }
                     }
@@ -6088,17 +6125,17 @@ AUTORTFM_DISABLE bool GodotVerse::Complete(FUtf8StringView Path,
                 {
                     if (Current->GetKind() == uLang::CScope::EKind::Class)
                     {
-                        CollectClassAndSupers(static_cast<const uLang::CClass&>(*Current), Visitor.Scope, Filter, OutItems);
+                        CollectClassAndSupers(static_cast<const uLang::CClass&>(*Current), Visitor.Scope, Filter, Seen, OutItems);
                     }
                     else
                     {
-                        CollectScope(Current->GetLogicalScope(), Visitor.Scope, Filter, OutItems);
+                        CollectScope(Current->GetLogicalScope(), Visitor.Scope, Filter, Seen, OutItems);
                     }
                     for (const uLang::CLogicalScope* Using : Current->GetUsingScopes())
                     {
                         if (Using)
                         {
-                            CollectScope(*Using, Visitor.Scope, Filter, OutItems);
+                            CollectScope(*Using, Visitor.Scope, Filter, Seen, OutItems);
                         }
                     }
                 }
@@ -6106,16 +6143,17 @@ AUTORTFM_DISABLE bool GodotVerse::Complete(FUtf8StringView Path,
 
             if (!OutItems.IsEmpty())
             {
-                // A name that is in scope twice -- an override, or a class member shadowing an
-                // imported one -- is one completion. The walk is ordered nearest-first, so the
-                // copy that survives is the one that would actually resolve.
-                TSet<FUtf8String> Seen;
-                OutItems.RemoveAll([&Seen](const FCompleteItem& Item) {
-                    bool bAlreadySeen = false;
-                    Seen.Add(Item.Name, &bAlreadySeen);
-                    return bAlreadySeen;
-                });
                 OutItems.Sort([](const FCompleteItem& Left, const FCompleteItem& Right) { return Left.Name < Right.Name; });
+                if (AnalysisTraceEnabled())
+                {
+                    fprintf(stderr,
+                            "[vh-trace] complete mode=%d: %.2f ms (%.2f ms ast walk), %d item(s)\n",
+                            (int)Mode,
+                            (FPlatformTime::Seconds() - Started) * 1000.0,
+                            WalkSeconds * 1000.0,
+                            OutItems.Num());
+                    fflush(stderr);
+                }
                 return true;
             }
         }
@@ -6154,7 +6192,8 @@ AUTORTFM_DISABLE bool ClassMembersLive(FUtf8StringView ClassName, TArray<GodotVe
 
     // The class' own scope only. What it inherits is documented by the class that declares it,
     // and for a mirrored Godot class that is Godot's own documentation rather than anything here.
-    CollectScope(*Class, nullptr, ECompleteFilter::Any, OutItems);
+    TSet<FUtf8String> Seen;
+    CollectScope(*Class, nullptr, ECompleteFilter::Any, Seen, OutItems);
     OutItems.Sort([](const FCompleteItem& Left, const FCompleteItem& Right) { return Left.Name < Right.Name; });
     return true;
 }
@@ -6343,12 +6382,7 @@ AUTORTFM_DISABLE bool GodotVerse::SignatureAt(FUtf8StringView Path,
         return false;
     }
 
-    WaitForBackgroundCheck();
-    // Shares the analysis completion just paid for: the editor asks for both about one keystroke.
-    if (!ProgramAlreadyDescribes(FUtf8String(Path), SourceText))
-    {
-        RunCheck(FUtf8String(Path), SourceText, [](const FSolDiagnostic&) {});
-    }
+    const double Started = FPlatformTime::Seconds();
 
     const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
     if (!BuildManager.IsValid())
@@ -6363,14 +6397,16 @@ AUTORTFM_DISABLE bool GodotVerse::SignatureAt(FUtf8StringView Path,
 
     // The callee resolves the way any other identifier does, so this reuses the lookup walk rather
     // than the completion one: what is wanted is the definition at a position, not a scope.
+    const FUtf8String ProjectVersePath(ScriptVersePath);
     FLookupVisitor Visitor(*Program, FUtf8String(Path), (uint32)Line, (uint32)Column);
     for (const uLang::CAstCompilationUnit* CompilationUnit : Program->_AstProject->OrderedCompilationUnits())
     {
         for (const uLang::CAstPackage* Package : CompilationUnit->Packages())
         {
-            const bool bIsUserPackage = Package->_VerseScope == uLang::EVerseScope::PublicUser
-                || Package->_VerseScope == uLang::EVerseScope::InternalUser;
-            if (!bIsUserPackage || !Package->_RootModule || !Package->_RootModule->GetAstPackage())
+            // The project's package alone, for the reason spelled out in Complete: the mirror is
+            // an InternalUser package too, and walking it was the whole of this call's ~39 ms.
+            if (FUtf8String(Package->_VersePath.AsCString()) != ProjectVersePath
+                || !Package->_RootModule || !Package->_RootModule->GetAstPackage())
             {
                 continue;
             }
@@ -6397,6 +6433,15 @@ AUTORTFM_DISABLE bool GodotVerse::SignatureAt(FUtf8StringView Path,
         {
             OutDesc.Params.Add(MoveTemp(Item));
         }
+    }
+
+    if (AnalysisTraceEnabled())
+    {
+        fprintf(stderr,
+                "[vh-trace] signature: %.2f ms, %d param(s)\n",
+                (FPlatformTime::Seconds() - Started) * 1000.0,
+                OutDesc.Params.Num());
+        fflush(stderr);
     }
     return true;
 }

@@ -289,7 +289,9 @@ void VerseSyntaxHighlighter::_update_cache() {
 		type_names.insert(native_type_names[i]);
 	}
 	if (VerseScriptLanguage *language = VerseScriptLanguage::singleton()) {
-		const PackedStringArray names = language->script_class_names();
+		// The cached list, shared with completion: this used to walk the whole of res:// with
+		// DirAccess every time the theme changed or a highlighter was reassigned.
+		const PackedStringArray &names = language->script_class_names();
 		for (int64_t i = 0; i < names.size(); i++) {
 			type_names.insert(names[i].utf8().get_data());
 		}

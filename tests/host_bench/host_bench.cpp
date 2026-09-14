@@ -376,22 +376,66 @@ int main(int argc, char** argv)
 
 			// Reap whatever the wait left queued, then tick: the wait accounting is reported by the
 			// first vh_tick after it, which is where a running editor would see it too.
+			//
+			// Polled to completion rather than once. Neither read above waits any more, so this
+			// analysis is still running when they answer -- and since ABI v7 nothing downstream
+			// joins one either, so a single poll would leave the worker unreaped and every later
+			// vh_check_project_begin refused. A running editor polls every frame; so does this.
 			vh_bool Finished = 0;
-			CheckProjectPollFn(&Finished);
 			WaitStats.StructSize = sizeof(WaitStats);
-			TickFn(0.001, &WaitStats);
+			while (Finished == 0)
+			{
+				TickFn(0.001, &WaitStats);
+				CheckProjectPollFn(&Finished);
+				Sleep(1);
+			}
 		}
 	}
 
-	// Completion, the editor's other per-keystroke cost. Twice for the member case: the first call
-	// on a buffer the program does not describe runs a whole analysis of its own, and the second on
-	// the identical text answers out of the program that analysis left (ProgramAlreadyDescribes).
-	// The gap between the two is what a cache on this path is worth.
-	std::vector<double> MemberColdSamples;
+	// Completion, the editor's other per-keystroke cost, measured as the three things it now pays
+	// for one `.` (ABI v7). The old shape -- one call that analysed and one that did not -- stopped
+	// describing anything the moment vh_complete_symbol stopped analysing: both calls would now
+	// refuse in microseconds and the analysis would be missing from the table entirely.
+	//
+	//   refused      what the editor gets back on the keystroke itself, before it has queued
+	//                anything. It is the whole of the latency the author sees, and it must be
+	//                VH_ERR_STATE rather than an answer.
+	//   analysis     the completion buffer through vh_check_project_begin/_poll, which is the
+	//                background wait before the full list can replace the partial one.
+	//   warm         the answer once that analysis has landed. This is the row the walk and the
+	//                describe-once deduplication move, and the only one that was ever the host's
+	//                own work rather than the compiler's.
+	std::vector<double> MemberRefusedSamples;
+	std::vector<double> MemberAnalysisSamples;
 	std::vector<double> MemberWarmSamples;
-	std::vector<double> ScopeSamples;
+	std::vector<double> ScopeRefusedSamples;
+	std::vector<double> ScopeAnalysisSamples;
+	std::vector<double> ScopeWarmSamples;
+	std::vector<double> SignatureRefusedSamples;
 	std::vector<double> SignatureSamples;
+	int32_t RefusalsSeen = 0;
+	int32_t RefusalsExpected = 0;
 	{
+		// The editor's own loop: hand the host the completion buffer and pump until the poll reaps
+		// it, exactly as _frame does. Returns the wall time, which is what the author waits.
+		auto AnalyseBuffer = [&](const std::string& Buffer) -> double {
+			const Clock::time_point Started = Clock::now();
+			if (CheckProjectBeginFn(ExportsPathUtf8.c_str(), Buffer.c_str()) != VH_OK)
+			{
+				return 0.0;
+			}
+			vh_bool Finished = 0;
+			while (Finished == 0)
+			{
+				vh_tick_stats Stats{};
+				Stats.StructSize = sizeof(Stats);
+				TickFn(0.001, &Stats);
+				CheckProjectPollFn(&Finished);
+				Sleep(1);
+			}
+			return MillisSince(Started);
+		};
+
 		// The placeholder the GDExtension substitutes for the member half-typed at the cursor, on a
 		// receiver of a mirrored type: `Position` is node2d's, so the answer comes out of the Godot
 		// mirror rather than out of the project.
@@ -423,10 +467,17 @@ int main(int argc, char** argv)
 				const vh_complete_item* Items = nullptr;
 				int32_t Count = 0;
 
-				const Clock::time_point ColdStart = Clock::now();
-				CompleteSymbolFn(ExportsPathUtf8.c_str(), Typing.c_str(), RecvRow, RecvColumn,
-								 VH_COMPLETE_MEMBERS, &Items, &Count);
-				MemberColdSamples.push_back(MillisSince(ColdStart));
+				// The keystroke itself: the host has never seen this buffer, so it must refuse
+				// immediately rather than analyse.
+				const Clock::time_point RefusedStart = Clock::now();
+				const int32_t MemberRefusal =
+					CompleteSymbolFn(ExportsPathUtf8.c_str(), Typing.c_str(), RecvRow, RecvColumn,
+									 VH_COMPLETE_MEMBERS, &Items, &Count);
+				MemberRefusedSamples.push_back(MillisSince(RefusedStart));
+				RefusalsExpected++;
+				RefusalsSeen += MemberRefusal == VH_ERR_STATE ? 1 : 0;
+
+				MemberAnalysisSamples.push_back(AnalyseBuffer(Typing));
 
 				const Clock::time_point WarmStart = Clock::now();
 				CompleteSymbolFn(ExportsPathUtf8.c_str(), Typing.c_str(), RecvRow, RecvColumn,
@@ -446,14 +497,24 @@ int main(int argc, char** argv)
 				int32_t ScopeColumn = 0;
 				RowColumnOf(ScopeTyping, LocalUse + strlen("X := "), ScopeRow, ScopeColumn);
 
+				const Clock::time_point ScopeRefusedStart = Clock::now();
+				const int32_t ScopeRefusal =
+					CompleteSymbolFn(ExportsPathUtf8.c_str(), ScopeTyping.c_str(), ScopeRow, ScopeColumn,
+									 VH_COMPLETE_SCOPE, &Items, &Count);
+				ScopeRefusedSamples.push_back(MillisSince(ScopeRefusedStart));
+				RefusalsExpected++;
+				RefusalsSeen += ScopeRefusal == VH_ERR_STATE ? 1 : 0;
+
+				ScopeAnalysisSamples.push_back(AnalyseBuffer(ScopeTyping));
+
 				const Clock::time_point ScopeStart = Clock::now();
 				CompleteSymbolFn(ExportsPathUtf8.c_str(), ScopeTyping.c_str(), ScopeRow, ScopeColumn,
 								 VH_COMPLETE_SCOPE, &Items, &Count);
-				ScopeSamples.push_back(MillisSince(ScopeStart));
+				ScopeWarmSamples.push_back(MillisSince(ScopeStart));
 
-				// The argument hint, asked at the callee's last byte for the same reason. Handed
-				// the buffer the scope call just left the host holding, so it is the cached-program
-				// path rather than another analysis.
+				// The argument hint, asked at the callee's last byte for the same reason. Asked
+				// about the buffer the scope analysis just landed for, which is the editor's own
+				// shape: one analysis answers the options and the hint together.
 				int32_t CalleeRow = 0;
 				int32_t CalleeColumn = 0;
 				RowColumnOf(ScopeTyping, Call + strlen("PhysicsUpdat"), CalleeRow, CalleeColumn);
@@ -461,6 +522,17 @@ int main(int argc, char** argv)
 				const Clock::time_point SignatureStart = Clock::now();
 				SignatureAtFn(ExportsPathUtf8.c_str(), ScopeTyping.c_str(), CalleeRow, CalleeColumn, &Signature);
 				SignatureSamples.push_back(MillisSince(SignatureStart));
+
+				// And the same question about a buffer nothing has analysed, which is what the
+				// editor gets on the keystroke that opens the call.
+				std::string Unseen = ScopeTyping;
+				Unseen.append("# unseen\n");
+				const Clock::time_point SignatureRefusedStart = Clock::now();
+				const int32_t SignatureRefusal =
+					SignatureAtFn(ExportsPathUtf8.c_str(), Unseen.c_str(), CalleeRow, CalleeColumn, &Signature);
+				SignatureRefusedSamples.push_back(MillisSince(SignatureRefusedStart));
+				RefusalsExpected++;
+				RefusalsSeen += SignatureRefusal == VH_ERR_STATE ? 1 : 0;
 			}
 		}
 	}
@@ -626,12 +698,18 @@ int main(int argc, char** argv)
 		   "blocked read", BlockedMembersMs, BlockedMemberCount);
 	printf("[bench] %-28s %8.1f ms  (vh_class_export_list during the same analysis, %d export(s))\n",
 		   "blocked read 2", BlockedExportsMs, BlockedExportCount);
-	printf("[bench] %-28s %d wait(s), %.1f ms  (vh_tick_stats, ABI v6.1)\n",
+	printf("[bench] %-28s %d wait(s), %.1f ms  (vh_tick_stats, ABI v6.1+)\n",
 		   "analysis wait since last tick", WaitStats.AnalysisWaits, WaitStats.AnalysisWaitSeconds * 1000.0);
-	ReportSeries("complete members (cold)", MemberColdSamples);
+	ReportSeries("complete members (refused)", MemberRefusedSamples);
+	ReportSeries("complete members (analysis)", MemberAnalysisSamples);
 	ReportSeries("complete members (warm)", MemberWarmSamples);
-	ReportSeries("complete scope", ScopeSamples);
-	ReportSeries("vh_signature_at", SignatureSamples);
+	ReportSeries("complete scope (refused)", ScopeRefusedSamples);
+	ReportSeries("complete scope (analysis)", ScopeAnalysisSamples);
+	ReportSeries("complete scope (warm)", ScopeWarmSamples);
+	ReportSeries("vh_signature_at (refused)", SignatureRefusedSamples);
+	ReportSeries("vh_signature_at (warm)", SignatureSamples);
+	printf("[bench] %-28s %d of %d refused with VH_ERR_STATE\n",
+		   "completion refusals", RefusalsSeen, RefusalsExpected);
 	ReportSeries("vh_class_members", ClassMembersSamples);
 	ReportSeries("vh_class_export_list", ExportListSamples);
 	ReportSeries("generation (5-file game)", GenerationSamples);
@@ -654,7 +732,10 @@ int main(int argc, char** argv)
 	printf("[bench] %-28s %8.1f us\n", "vh_instantiate (per node)", InstantiateUs);
 	printf("[bench] %-28s %8.2f us\n", "vh_instance_call (per call)", CallUs);
 	printf("[bench] %-28s %8.1f KB\n", "retained per instance", InstanceKb);
-	printf("[bench] diagnostics reported as errors: %d\n", ErrorCount);
+	// The completion analyses above are counted here too, and each reports the placeholder as an
+	// unknown identifier: a completion buffer never analyses clean. The editor drops those -- a
+	// completion-shaped check, dropped in poll_check -- rather than draw a line nobody wrote.
+	printf("[bench] diagnostics reported as errors: %d  (completion buffers included)\n", ErrorCount);
 
 	ShutdownFn();
 	return 0;

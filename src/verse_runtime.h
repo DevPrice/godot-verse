@@ -167,11 +167,12 @@ public:
 	// compiler's, as above, and for members they are the *receiver's* last byte rather than the
 	// cursor.
 	//
-	// Takes the buffer because it analyses it: unlike lookup_symbol there is never an existing
-	// analysis of half-typed text to answer from. That analysis costs about as much as a
-	// validate and blocks for it, and it spends whatever analysis lookup_symbol was relying on
-	// -- see note_host_program_spent.
-	godot::TypedArray<godot::Dictionary> complete_symbol(const godot::String &p_globalized_path, const godot::String &p_source, int32_t p_line, int32_t p_column, int32_t p_mode) const;
+	// Takes the buffer to say which text it is asking about, not to have it analysed: since ABI
+	// v7 the host neither analyses nor waits here. r_not_ready is set when it answered VH_ERR_STATE
+	// -- an analysis is in flight, or the program was built from other text -- which is a different
+	// thing from an empty answer and is the caller's cue to have this very buffer analysed and ask
+	// again. Left alone otherwise, so a caller that does not care may pass nullptr.
+	godot::TypedArray<godot::Dictionary> complete_symbol(const godot::String &p_globalized_path, const godot::String &p_source, int32_t p_line, int32_t p_column, int32_t p_mode, bool *r_not_ready = nullptr) const;
 
 	// Every member p_class_name declares itself, as { name, type, owner, path, line, kind,
 	// is_var } -- broader than class_exports, which answers only for the inspector. Read off the
@@ -180,8 +181,8 @@ public:
 
 	// The function called at p_line/p_column of p_source, as { name, result, params }. The
 	// position names the callee's last byte rather than the cursor, for the same reason
-	// complete_symbol's does. Analyses the buffer, and spends the analysis the same way.
-	godot::Dictionary signature_at(const godot::String &p_globalized_path, const godot::String &p_source, int32_t p_line, int32_t p_column) const;
+	// complete_symbol's does, and r_not_ready means the same thing.
+	godot::Dictionary signature_at(const godot::String &p_globalized_path, const godot::String &p_source, int32_t p_line, int32_t p_column, bool *r_not_ready = nullptr) const;
 
 	vh_instance *instantiate(const godot::String &p_class_name, int64_t p_object_id);
 	void release_instance(vh_instance *p_instance);
