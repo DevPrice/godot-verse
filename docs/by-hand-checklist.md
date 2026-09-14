@@ -11,10 +11,11 @@ way. Two others were expected to be — `_make_function`, whose ClassDB entry do
 `Script.get_language()` is not public API, and `_HasPoint` — but `_HasPoint` turned out to be
 reachable headless after all (B10) and is a case in `tests/integration` now.
 
-**Four ticked entries want a second by-hand look**, because what fixed them cannot be seen from a
-headless run: the `_make_function` stub and the connection gutter beside it (B3, B4), override
-completion in a class body (B1), the `@tool` placeholder swap (B8), and the Attach Script dialog's
-template list (B5, B6). Each says so in place.
+**Those four have since been looked at by hand.** Override completion and the connection gutter are
+confirmed working; the Attach Script dialog needed one more fix, and got it (its entry says which).
+One thing stayed broken and is documented rather than repaired: **adding `@tool` to a script that
+did not have it still needs the scene reloaded.** That is the only known-open behaviour on this
+page besides `_CanDropData`.
 
 Every automated layer in this repository drives Godot with `--headless`, and the editor is exactly
 what `--headless` does not start. Phase 4's design asked for the checklist as a written artefact
@@ -39,12 +40,14 @@ Each line is one thing to do and one thing to see. Tick nothing you have not wat
       on Play, not on save — `VerseEditorPlugin::_build`); use Project ▸ Tools ▸ Build Verse and see
       a failed build refuse the run and leave the last good generation running.
 
-      > Not intended, and now fixed for the half a headless run can see: reloading a script
-      > re-attaches it to every object holding it, so a saved edit reaches the node instead of
-      > waiting for a restart (`by-hand-findings.md` B8, and a case in `tests/integration`). The
-      > other half — adding `@tool` to a script that did not have it, which has to turn a
-      > *placeholder* into a real instance — only happens under `is_editor_hint()` and so has no
-      > headless test. **Re-check both by hand.**
+      > Not intended. Fixed and re-checked by hand for the part that matters most: **editing a
+      > live `@tool` script now takes effect on save**, because a reload re-attaches the script to
+      > every object holding it (`by-hand-findings.md` B8, and a case in `tests/integration`).
+      >
+      > **Still open, and known:** *adding* `@tool` to a script that did not have it needs the
+      > scene reloaded before the node picks it up. That transition turns a placeholder into a real
+      > instance, only happens under `is_editor_hint()`, and so has no headless test. Small enough
+      > to live with — the workaround is one scene reload — and B8 says where to look.
 
 ## Phase 4
 
@@ -191,6 +194,11 @@ replaced them, and both were re-checked against it.
       > produced "No suitable template." over a dialog that then wrote one; and the template carried
       > six lines of `<transacts>` and `spawn` caveat that no longer earn their place ahead of the
       > first line of code. `{}` is Verse's `pass`.
+      >
+      > Re-checked by hand, which turned up a third: **unchecking the Template checkbox still wrote
+      > the template.** The checkbox does not clear the content — Godot looks for a built-in named
+      > exactly "Empty" and uses that one. There is one now, and it is the class declaration and
+      > nothing else, which is the smallest thing that still attaches to a node.
 
 ## Phase 5
 

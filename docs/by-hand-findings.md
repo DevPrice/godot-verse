@@ -132,12 +132,31 @@ templates in all three locations and sets that message
 (`editor/script/script_create_dialog.cpp:691`). `_make_template` is called regardless, with an empty
 `p_template` — which the bridge ignores, building the source from scratch.
 
-**What closes it** is doing what GDScript does, which is the other way round. Return one template
-from `_get_built_in_templates`, keyed on the base class it inherits, with the content carrying
-`_BASE_` and `_CLASS_` placeholders; then have `_make_template` substitute into `p_template` when it
-is non-empty instead of ignoring it (`GDScriptLanguage::make_template`,
-`modules/gdscript/gdscript_editor.cpp:107`). `_BASE_` still goes through `verse_base_class_for`,
-since the dialog hands over a *Godot* class name and the template needs the mirrored one.
+**What closes it** is doing what GDScript does, which is the other way round. Return the templates
+from `_get_built_in_templates`, keyed on the base class they inherit, with content carrying `_BASE_`
+and `_CLASS_` placeholders; then have `_make_template` substitute into `p_template` instead of
+ignoring it (`GDScriptLanguage::make_template`, `modules/gdscript/gdscript_editor.cpp:107`).
+`_BASE_` still goes through `verse_base_class_for`, since the dialog hands over a *Godot* class name
+and the template needs the mirrored one.
+
+**And a second row, found when the first fix was checked by hand: unchecking the dialog's Template
+checkbox still produced the template.** The checkbox does not mean "pass no content".
+`ScriptCreateDialog::_get_current_template` looks through the list for a built-in named exactly
+**`"Empty"`** and uses *its* content, and falls back to a default-constructed `ScriptTemplate` —
+content `""` — when there is none. So with one row registered, unchecking the box asked for a
+template that did not exist, got `""`, and `_make_template`'s fallback answered with the full
+default. Two changes: an `"Empty"` row, and a fallback that is the empty content rather than the
+default one, so a caller with no template at all gets the smaller thing rather than the larger.
+
+Verse's "empty" is not empty. A `.verse` with no class named after the file is a library file
+(R-LANG-6) and attaches to nothing, so the minimum that is still a script is the declaration:
+
+    using { /Godot.org/Godot }
+
+    _CLASS_ := class(_BASE_):
+
+A class with an empty indented body compiles and instantiates — probed rather than assumed. This is
+the same bargain as GDScript's `empty.gd`, which is one `extends` line.
 
 ## B6. The template becomes a direct translation of GDScript's · **done**
 
@@ -213,6 +232,21 @@ The bridge cannot do that yet, because **`VerseScript` does not track its owners
 `placeholders` as opaque `void *` and knows nothing about live instances. So this is two pieces of
 work — record the owning object in `_placeholder_instance_create` and in `VerseScriptInstance`
 first, then the save / `set_script` / restore pass over them.
+
+**Checked by hand afterwards, and one half of it is still open.** Editing the body of a `@tool`
+script that is already running in the editor now takes effect on save, and so does editing an
+ordinary one. **Adding `@tool` to a script that did not have it still needs the scene reloaded** —
+the node keeps the placeholder it was given until then.
+
+That is the transition `reload_instances` was written to cover and the one no automated layer can
+reach, because a placeholder only exists under `is_editor_hint()`. What is known: the re-attach
+itself works, since the integration case proves a reload replaces a real instance and carries its
+exported values; and `_can_instantiate` is `is_compiled() && (_is_tool() || !editor_hint)`, with
+`_is_tool` read from the text, so by the time the saver calls `_reload` the answer should already
+have flipped. What is not known is whether `_reload` is reached at all on that save, or whether
+`set_script(Variant())` / `set_script(self)` declines somewhere in between. Left open deliberately;
+the workaround is one scene reload. **Where to look next:** a print in `reload_instances` and one
+windowed session says which of the two it is.
 
 ## B9. A runtime error's `ERROR:` line runs four fields together · **fixed**
 

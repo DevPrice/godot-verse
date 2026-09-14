@@ -185,8 +185,12 @@ shipped" table says what each change came to. Four of them are load-bearing outs
 - **B6** — the script template is a direct translation of GDScript's, two comments and `{}` bodies,
   and compiles as generated.
 
-**Four ticked entries want a second by-hand look**, because a headless run cannot see what fixed
-them; the checklist says which and why.
+Those were re-checked by hand afterwards. Override completion and the connection gutter are
+confirmed; the Attach Script dialog needed one more fix (unchecking its Template checkbox still
+wrote the template — Godot matches a built-in named exactly `"Empty"`, and there is one now).
+**One thing stayed broken and is documented rather than repaired**: adding `@tool` to a script that
+did not have it needs the scene reloaded. With `_CanDropData`, that is the whole of what is known
+to be open.
 
 **README predates Phase 1 and is stale on marshalling.** It still describes three hand-written
 value types, a `variant` tuple, `object` as the only `<native>` class, and packed arrays crossing as
@@ -418,7 +422,14 @@ ten element types against four key types is not a list to maintain by hand.
   `VerseEditorPlugin::_build` is the trigger (`EditorNode::call_build()` before a run, the same
   hook C# uses), plus a "Build Verse" item in Project > Tools. A failed build publishes nothing and
   refuses the run, leaving the last good generation running. Instances adopt nothing: one made
-  against generation N keeps generation N's class for life.
+  against generation N keeps generation N's class for life — which is why `VerseScript::_reload`
+  *re-attaches* the script to every object holding it, destroying each instance and building
+  another, exported values carried across by hand.
+- **Adding `@tool` to an existing script needs the scene reloaded.** Editing a live `@tool` script
+  takes effect on save; giving one `@tool` for the first time does not, because the node is holding
+  a *placeholder* and the swap to a real instance does not happen. Known, small, and not fixed —
+  `docs/by-hand-findings.md` B8 has what is ruled out and where to look. Nothing automated can see
+  it: a placeholder only exists under `is_editor_hint()`.
 - **The host module never unloads.** `vh_shutdown` tears the engine down; the DLL stays resident.
 - **Every Godot callback goes through `AutoRTFM::Open`,** and writes defer to `AutoRTFM::OnCommit`.
   The GDExtension was never instrumented by the AutoRTFM compiler, so calling into it from closed

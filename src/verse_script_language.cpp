@@ -400,6 +400,21 @@ static const char *DEFAULT_TEMPLATE =
 		"\t_Process<override>(Delta:float):void =\n"
 		"\t\t{}\n";
 
+// What the dialog's Template checkbox produces when it is unchecked. ScriptCreateDialog does not
+// pass an empty string for that: `_get_current_template` looks through the list for a built-in
+// named exactly **"Empty"** and uses its content, so a language that offers none gets whatever its
+// `_make_template` does with "" -- which for this one was the full template, ignoring the
+// checkbox entirely.
+//
+// Not actually empty, and cannot be. A `.verse` with no class named after the file is a library
+// file (R-LANG-6) and will not attach to anything, so the minimum that is still a script is the
+// declaration itself. A class with an empty indented body compiles and instantiates -- probed, not
+// assumed. This is the same bargain as GDScript's `empty.gd`, which is one `extends` line.
+static const char *EMPTY_TEMPLATE =
+		"using { /Godot.org/Godot }\n"
+		"\n"
+		"_CLASS_ := class(_BASE_):\n";
+
 // Godot hands the chosen template's content back here to be filled in, which is what GDScript's
 // make_template does with it and what this used to ignore -- building the source from scratch and
 // leaving `_get_built_in_templates` empty, so the Attach Script dialog reported "No suitable
@@ -410,7 +425,11 @@ static const char *DEFAULT_TEMPLATE =
 Ref<Script> VerseScriptLanguage::_make_template(const String &p_template, const String &p_class_name, const String &p_base_class_name) const {
 	const String class_name = p_class_name.is_empty() ? String("script") : p_class_name;
 
-	String source = p_template.is_empty() ? String(DEFAULT_TEMPLATE) : p_template;
+	// The fallback is the *empty* one, not the default one. Nothing in the Attach Script dialog
+	// reaches this with an empty template any more -- both of its choices are registered below --
+	// so an empty one is a caller with no template at all, and answering it with the full default
+	// is how unchecking the checkbox used to produce the template anyway.
+	String source = p_template.is_empty() ? String(EMPTY_TEMPLATE) : p_template;
 	source = source.replace("_CLASS_", class_name.to_snake_case());
 	source = source.replace("_BASE_", verse_base_class_for(p_base_class_name));
 
@@ -624,15 +643,20 @@ String VerseScriptLanguage::_validate_path(const String &p_path) const {
 	return String();
 }
 
-// The templates the Attach Script dialog lists, which is one.
+// The templates the Attach Script dialog lists, which is two.
 //
 // Answered against `Object` alone: ScriptCreateDialog walks the new script's base class up through
-// ClassDB and asks per ancestor, and every hierarchy ends there, so one row is offered whatever
+// ClassDB and asks per ancestor, and every hierarchy ends there, so both rows are offered whatever
 // node the script is being attached to. Returning nothing -- which this did -- is how the dialog
 // came to say "No suitable template." over a dialog that then wrote one, since `_make_template`
 // runs either way (by-hand-findings.md B5).
 //
-// Godot drops a row missing any of these six keys and prints an error for it. `origin` is
+// **"Empty" is a name Godot matches on**, not a label: unchecking the dialog's Template checkbox
+// does not clear the content, it looks through this list for a built-in called exactly that
+// (`ScriptCreateDialog::_get_current_template`). The row is what makes the checkbox mean anything.
+//
+// Godot drops a row missing any of these six keys and prints an error for it, and it assigns the
+// real `id` itself while building the menu, so the one here only has to be unique. `origin` is
 // ScriptLanguage::TEMPLATE_BUILT_IN, which godot-cpp does not expose as an enum.
 TypedArray<Dictionary> VerseScriptLanguage::_get_built_in_templates(const StringName &p_object) const {
 	TypedArray<Dictionary> templates;
@@ -640,14 +664,19 @@ TypedArray<Dictionary> VerseScriptLanguage::_get_built_in_templates(const String
 		return templates;
 	}
 
-	Dictionary entry;
-	entry["inherit"] = String("Object");
-	entry["name"] = String("Default");
-	entry["description"] = String("A class named after the file, with _Ready and _Process.");
-	entry["content"] = String(DEFAULT_TEMPLATE);
-	entry["id"] = (int64_t)0;
-	entry["origin"] = (int64_t)0;
-	templates.push_back(entry);
+	auto add = [&templates](const String &p_name, const String &p_description, const char *p_content, int64_t p_id) {
+		Dictionary entry;
+		entry["inherit"] = String("Object");
+		entry["name"] = p_name;
+		entry["description"] = p_description;
+		entry["content"] = String(p_content);
+		entry["id"] = p_id;
+		entry["origin"] = (int64_t)0;
+		templates.push_back(entry);
+	};
+
+	add("Default", "A class named after the file, with _Ready and _Process.", DEFAULT_TEMPLATE, 0);
+	add("Empty", "The class declaration and nothing else.", EMPTY_TEMPLATE, 1);
 	return templates;
 }
 
