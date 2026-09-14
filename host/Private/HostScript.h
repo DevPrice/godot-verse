@@ -5,6 +5,7 @@
 #include "AutoRTFM.h"
 #include "Containers/Array.h"
 #include "Containers/UnrealString.h"
+#include "Templates/SharedPointer.h"
 #include "VerseString.h"
 #include "verse_host_abi.h"
 
@@ -61,10 +62,33 @@ AUTORTFM_DISABLE bool IsBackgroundCheckRunning();
 
 /// Blocks until any in-flight background check finishes, then reaps it.
 ///
-/// Every entry point that runs Verse or reads the semantic program calls this first. VerseVM
-/// blocks execution for the length of a build, so touching the VM while one runs trips
-/// `ensure(!bBlockAllExecution)` in VVMExecutionContext and then kills the process.
+/// Every entry point that *runs* Verse calls this first. VerseVM blocks execution for the length
+/// of a build, so touching the VM while one runs trips `ensure(!bBlockAllExecution)` in
+/// VVMExecutionContext and then kills the process. Completion and the argument hint call it too,
+/// since both analyse a buffer of their own.
+///
+/// What no longer calls it is everything that only describes a class: see the snapshot below.
 AUTORTFM_DISABLE void WaitForBackgroundCheck();
+
+/// What WaitForBackgroundCheck has cost the calling thread since this was last asked, and clears
+/// it -- vh_tick reports it as the frame's figure, so anything else reading it would take a frame's
+/// accounting away from the consumer.
+///
+/// Only the entry points that *run* Verse reach it now. Everything that merely describes a class
+/// answers from the snapshot the last analysis left (see below), so a figure that moves is a frame
+/// in which something executed mid-analysis, which is what the monitor is for.
+AUTORTFM_DISABLE void TakeAnalysisWaitStats(int32& OutCount, double& OutSeconds);
+
+/// The class-describing reads below -- HasClass, GetClassMethods, GetClassSignals, GetClassStatics,
+/// IsClassAbstract, GetClassExports, ReadClassDefaultField, ClassMembers, ResolveUnknownName --
+/// answer out of a snapshot taken at the end of every analysis rather than by walking the semantic
+/// program the caller happens to find. None of them waits for an analysis to finish.
+///
+/// The snapshot is extracted by whichever thread built the program and made current on the game
+/// thread, so a reader never sees a half-built one and a reader is never the reason an editor
+/// stalls. What it costs is that an answer describes the last analysis that *landed*: a class only
+/// the buffer being typed declares appears when that analysis is reaped, a frame or so later, which
+/// is when the diagnostics about it appear too.
 
 /// One live Verse object: a script's `class(node2d)` bound to one Godot instance id.
 struct FInstance;
@@ -153,15 +177,16 @@ struct FStaticDesc
     int32 Column{0};
 };
 
+/// One class's statics, the three arrays running parallel: see FClassStatics below.
+struct FClassStatics;
+
 /// The members of the module that declares itself ClassName's statics. False when there is no such
 /// class; an empty list when there is no such module, which is the ordinary case.
 ///
-/// OutValues runs parallel to OutStatics and holds a wire value per *constant* -- a function's slot
-/// is left empty. The storage is the caller's because a vh_value points into it.
-AUTORTFM_DISABLE bool GetClassStatics(FUtf8StringView ClassName,
-                                      TArray<FStaticDesc>& OutStatics,
-                                      TArray<vh_value>& OutValues,
-                                      TArray<FFieldStorage>& OutStorage);
+/// Answered out of the analysis snapshot, and OutStatics is what keeps that answer alive: a
+/// vh_value in it points into the FFieldStorage beside it, so the block cannot be copied out and
+/// the caller holds a share of it instead.
+AUTORTFM_DISABLE bool GetClassStatics(FUtf8StringView ClassName, TSharedPtr<const FClassStatics>& OutStatics);
 
 /// Whether the class is `class<abstract>` (R-NODE-5).
 AUTORTFM_DISABLE bool IsClassAbstract(FUtf8StringView ClassName);
@@ -458,13 +483,39 @@ struct FFieldStorage
     TArray<FUtf8String> Strings;
 };
 
+/// The statics of one class, as GetClassStatics answers them. Values and Storage run parallel to
+/// Statics, with a wire value per *constant* and a function's slot left empty.
+///
+/// One block rather than three arrays a caller supplies, because a vh_value in Values points into
+/// the FFieldStorage beside it: the three only mean anything together, and copying any of them
+/// away from the others leaves a dangling Seq.
+struct FClassStatics
+{
+    TArray<FStaticDesc> Statics;
+    TArray<vh_value> Values;
+    TArray<FFieldStorage> Storage;
+};
+
+/// One value and the bytes it points at, for the same reason FClassStatics is one block.
+struct FFieldValue
+{
+    vh_value Value{};
+    FFieldStorage Storage;
+};
+
 /// Reads one data member off a live instance into the ABI's value shape.
 AUTORTFM_DISABLE bool ReadInstanceField(const FInstance* Instance, FUtf8StringView FieldName, vh_value& OutValue, FFieldStorage& OutStorage);
 
 /// The same read against the class default object, whose Verse constructor has already run.
 /// That is where a member's declared default has to come from: the semantic program can say only
 /// that an initializer exists (CDataDefinition::HasInitializer), not what it evaluates to.
-AUTORTFM_DISABLE bool ReadClassDefaultField(FUtf8StringView ClassName, FUtf8StringView FieldName, vh_value& OutValue, FFieldStorage& OutStorage);
+///
+/// Every `@export` of every class is read into the analysis snapshot, so this is a lookup. A member
+/// that is not an export is read on the spot, and only while no analysis is in flight -- reading it
+/// means entering the VM, which a running build forbids.
+AUTORTFM_DISABLE bool ReadClassDefaultField(FUtf8StringView ClassName,
+                                            FUtf8StringView FieldName,
+                                            TSharedPtr<const FFieldValue>& OutValue);
 
 /// Writes one data member on a live instance. Covers the same four types the read path does.
 ///

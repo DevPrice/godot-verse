@@ -258,15 +258,21 @@ extern "C" void vh_shutdown(void)
 
 extern "C" void vh_tick(double BudgetSeconds, vh_tick_stats* OutStats)
 {
-    if (OutStats && OutStats->StructSize >= (int32_t)sizeof(vh_tick_stats))
+    // Fields are appended and never reordered, so a consumer built against a lower minor reserved a
+    // *prefix* of this struct: zero and fill that much and no further, which is the fallback the
+    // header's compatibility policy asks the host for. The wait fields arrived at v6.1, and a
+    // StructSize that stops short of them is a v6.0 consumer.
+    const int32_t StatsSize = OutStats ? OutStats->StructSize : 0;
+    const bool bHasWaitFields = StatsSize >= (int32_t)sizeof(vh_tick_stats);
+    if (StatsSize >= (int32_t)offsetof(vh_tick_stats, AnalysisWaits))
     {
-        const int32_t Size = OutStats->StructSize;
-        *OutStats = vh_tick_stats{};
-        OutStats->StructSize = Size;
+        vh_tick_stats Zeroed{};
+        Zeroed.StructSize = StatsSize;
+        FMemory::Memcpy(OutStats, &Zeroed, FMath::Min<int32_t>(StatsSize, (int32_t)sizeof(vh_tick_stats)));
     }
     else
     {
-        // A consumer built against an older or a newer header. Answering nothing beats writing
+        // Smaller than anything this header has ever described. Answering nothing beats writing
         // fields it did not reserve room for.
         OutStats = nullptr;
     }
@@ -278,6 +284,17 @@ extern "C" void vh_tick(double BudgetSeconds, vh_tick_stats* OutStats)
     if (!GetHost().bInitialized)
     {
         return;
+    }
+
+    // Taken before the early return below, so a frame skipped for an analysis still hands over the
+    // accounting of the waits that happened during it rather than folding them into the next one.
+    if (bHasWaitFields)
+    {
+        int32 Waits = 0;
+        double WaitSeconds = 0.0;
+        GodotVerse::TakeAnalysisWaitStats(Waits, WaitSeconds);
+        OutStats->AnalysisWaits = Waits;
+        OutStats->AnalysisWaitSeconds = WaitSeconds;
     }
 
     // Ticking runs Verse, and VerseVM blocks execution for the length of a build. Waiting here
@@ -435,7 +452,6 @@ extern "C" vh_bool vh_has_class(const char* ClassNameUtf8)
     {
         return 0;
     }
-    GodotVerse::WaitForBackgroundCheck();
     if (!ClassNameUtf8 || !GetHost().bInitialized)
     {
         return 0;
@@ -578,7 +594,6 @@ extern "C" int32_t vh_class_method_list(const char* ClassNameUtf8, const vh_meth
     {
         return VH_ERR_THREAD;
     }
-    GodotVerse::WaitForBackgroundCheck();
     if (!ClassNameUtf8 || !OutMethods || !OutCount)
     {
         return VH_ERR_ABI;
@@ -659,7 +674,6 @@ extern "C" int32_t vh_class_signal_list(const char* ClassNameUtf8, const vh_sign
     {
         return VH_ERR_THREAD;
     }
-    GodotVerse::WaitForBackgroundCheck();
     if (!ClassNameUtf8 || !OutSignals || !OutCount)
     {
         return VH_ERR_ABI;
@@ -733,7 +747,6 @@ extern "C" int32_t vh_class_static_list(const char* ClassNameUtf8, const vh_stat
     {
         return VH_ERR_THREAD;
     }
-    GodotVerse::WaitForBackgroundCheck();
     if (!ClassNameUtf8 || !OutStatics || !OutCount)
     {
         return VH_ERR_ABI;
@@ -746,15 +759,18 @@ extern "C" int32_t vh_class_static_list(const char* ClassNameUtf8, const vh_stat
         return VH_ERR_STATE;
     }
 
-    static TArray<GodotVerse::FStaticDesc> Statics;
-    static TArray<vh_value> Values;
-    static TArray<GodotVerse::FFieldStorage> Storage;
+    // Held rather than copied: a vh_value in the block points into the FFieldStorage beside it, so
+    // the descriptors below stay valid only while the block does -- and the snapshot it came from
+    // may be replaced by the next analysis. The share is what makes "valid until the next call"
+    // true regardless.
+    static TSharedPtr<const GodotVerse::FClassStatics> Held;
     static TArray<vh_static_desc> Descs;
-    if (!GodotVerse::GetClassStatics(Cstr(ClassNameUtf8), Statics, Values, Storage))
+    if (!GodotVerse::GetClassStatics(Cstr(ClassNameUtf8), Held))
     {
         return VH_ERR_NOT_FOUND;
     }
 
+    const TArray<GodotVerse::FStaticDesc>& Statics = Held->Statics;
     Descs.Reset();
     Descs.Reserve(Statics.Num());
     for (int32 Index = 0; Index < Statics.Num(); ++Index)
@@ -763,7 +779,7 @@ extern "C" int32_t vh_class_static_list(const char* ClassNameUtf8, const vh_stat
         Out.NameUtf8 = reinterpret_cast<const char*>(*Statics[Index].Name);
         Out.NameLen = Statics[Index].Name.Len();
         Out.IsFunction = Statics[Index].bIsFunction ? 1 : 0;
-        Out.Value = Values[Index];
+        Out.Value = Held->Values[Index];
         Out.Line = Statics[Index].Line;
         Out.Column = Statics[Index].Column;
     }
@@ -779,7 +795,6 @@ extern "C" vh_bool vh_class_is_abstract(const char* ClassNameUtf8)
     {
         return 0;
     }
-    GodotVerse::WaitForBackgroundCheck();
     if (!ClassNameUtf8 || !GetHost().bInitialized)
     {
         return 0;
@@ -793,7 +808,6 @@ extern "C" int32_t vh_class_export_list(const char* ClassNameUtf8, const vh_expo
     {
         return VH_ERR_THREAD;
     }
-    GodotVerse::WaitForBackgroundCheck();
     if (!ClassNameUtf8 || !OutExports || !OutCount)
     {
         return VH_ERR_ABI;
@@ -850,8 +864,9 @@ extern "C" int32_t vh_class_export_list(const char* ClassNameUtf8, const vh_expo
 }
 
 namespace {
-/// Backing store for both field readers. The ABI promises the value -- and any string it points
-/// at -- stays valid until the next read, so neither can live on the stack.
+/// Backing store for the instance field reader. The ABI promises the value -- and any string it
+/// points at -- stays valid until the next read, so neither can live on the stack. The class
+/// default reader keeps its own, because what it hands out is a share of the analysis snapshot.
 vh_value GFieldValue{};
 GodotVerse::FFieldStorage GFieldStorage;
 } // namespace
@@ -932,7 +947,6 @@ extern "C" int32_t vh_class_default_field(const char* ClassNameUtf8, const char*
     {
         return VH_ERR_THREAD;
     }
-    GodotVerse::WaitForBackgroundCheck();
     if (!ClassNameUtf8 || !NameUtf8 || !OutValue)
     {
         return VH_ERR_ABI;
@@ -944,12 +958,16 @@ extern "C" int32_t vh_class_default_field(const char* ClassNameUtf8, const char*
         return VH_ERR_STATE;
     }
 
-    if (!GodotVerse::ReadClassDefaultField(Cstr(ClassNameUtf8), Cstr(NameUtf8), GFieldValue, GFieldStorage))
+    // Its own holder rather than GFieldValue, because a default now comes out of the analysis
+    // snapshot and is kept alive by a share of it -- see vh_class_static_list. The instance reader
+    // above keeps its own buffer, so the two no longer invalidate each other.
+    static TSharedPtr<const GodotVerse::FFieldValue> Held;
+    if (!GodotVerse::ReadClassDefaultField(Cstr(ClassNameUtf8), Cstr(NameUtf8), Held))
     {
         return VH_ERR_NOT_FOUND;
     }
 
-    *OutValue = &GFieldValue;
+    *OutValue = &Held->Value;
     return VH_OK;
 }
 
@@ -959,7 +977,6 @@ extern "C" int32_t vh_lookup_symbol(const char* PathUtf8, int32_t Line, int32_t 
     {
         return VH_ERR_THREAD;
     }
-    GodotVerse::WaitForBackgroundCheck();
     if (!PathUtf8 || !OutResult)
     {
         return VH_ERR_ABI;
@@ -967,6 +984,16 @@ extern "C" int32_t vh_lookup_symbol(const char* PathUtf8, int32_t Line, int32_t 
     *OutResult = nullptr;
 
     if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+
+    // A position is not a question a snapshot can answer -- the loci live in the AST, which the
+    // worker is rebuilding -- so this one declines rather than waits. VH_ERR_STATE is what
+    // vh_check_project_begin already answers for "an analysis is in flight", and a hover that says
+    // nothing for a frame is what the consumer does with it: the GDExtension's _lookup_code already
+    // declines on vh_check_project_busy for exactly this reason.
+    if (GodotVerse::IsBackgroundCheckRunning())
     {
         return VH_ERR_STATE;
     }

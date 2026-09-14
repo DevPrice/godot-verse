@@ -130,6 +130,23 @@ void ReportMirrorSize(const fs::path& EngineDir)
 	printf("[bench] mirror: %.0f KB (%ls)\n", static_cast<double>(Size) / 1024.0, Mirror.filename().c_str());
 }
 
+/// Row and column of a byte offset, as every position-taking entry point wants them: zero-based,
+/// counted in bytes. The same helper host_smoke drives completion with.
+void RowColumnOf(const std::string& Text, size_t Offset, int32_t& OutRow, int32_t& OutColumn)
+{
+	OutRow = 0;
+	size_t LineStart = 0;
+	for (size_t Index = 0; Index < Offset && Index < Text.size(); ++Index)
+	{
+		if (Text[Index] == '\n')
+		{
+			++OutRow;
+			LineStart = Index + 1;
+		}
+	}
+	OutColumn = static_cast<int32_t>(Offset - LineStart);
+}
+
 void ReportSeries(const char* Name, std::vector<double> Samples)
 {
 	if (Samples.empty())
@@ -143,6 +160,30 @@ void ReportSeries(const char* Name, std::vector<double> Samples)
 		Total += Sample;
 	}
 	printf("[bench] %-28s n=%zu  min %8.1f ms  median %8.1f ms  max %8.1f ms  mean %8.1f ms\n",
+		   Name,
+		   Samples.size(),
+		   Samples.front(),
+		   Samples[Samples.size() / 2],
+		   Samples.back(),
+		   Total / static_cast<double>(Samples.size()));
+}
+
+/// The same shape for something that is not a duration. Kept separate rather than given a unit
+/// parameter, because every other series here is milliseconds and a column headed "ms" that is not
+/// is worse than a second function.
+void ReportCounts(const char* Name, std::vector<double> Samples)
+{
+	if (Samples.empty())
+	{
+		return;
+	}
+	std::sort(Samples.begin(), Samples.end());
+	double Total = 0.0;
+	for (double Sample : Samples)
+	{
+		Total += Sample;
+	}
+	printf("[bench] %-28s n=%zu  min %8.0f     median %8.0f     max %8.0f     mean %8.1f\n",
 		   Name,
 		   Samples.size(),
 		   Samples.front(),
@@ -191,6 +232,13 @@ int main(int argc, char** argv)
 	auto InstantiateFn = Resolve<vh_instantiate_fn>(Module, "vh_instantiate", &Ok);
 	auto ReleaseInstanceFn = Resolve<vh_release_instance_fn>(Module, "vh_release_instance", &Ok);
 	auto InstanceCallFn = Resolve<vh_instance_call_fn>(Module, "vh_instance_call", &Ok);
+	auto TickFn = Resolve<vh_tick_fn>(Module, "vh_tick", &Ok);
+	auto CheckProjectBeginFn = Resolve<vh_check_project_begin_fn>(Module, "vh_check_project_begin", &Ok);
+	auto CheckProjectPollFn = Resolve<vh_check_project_poll_fn>(Module, "vh_check_project_poll", &Ok);
+	auto CompleteSymbolFn = Resolve<vh_complete_symbol_fn>(Module, "vh_complete_symbol", &Ok);
+	auto SignatureAtFn = Resolve<vh_signature_at_fn>(Module, "vh_signature_at", &Ok);
+	auto ClassMembersFn = Resolve<vh_class_members_fn>(Module, "vh_class_members", &Ok);
+	auto ClassExportListFn = Resolve<vh_class_export_list_fn>(Module, "vh_class_export_list", &Ok);
 	if (!Ok)
 	{
 		return 1;
@@ -260,6 +308,183 @@ int main(int argc, char** argv)
 		const Clock::time_point CheckStart = Clock::now();
 		CheckProjectFn(ExportsPathUtf8.c_str(), Edited.c_str());
 		CheckSamples.push_back(MillisSince(CheckStart));
+	}
+
+	// The same analysis on the path the editor actually takes: _validate begins it on the host's own
+	// thread and _frame reaps it, so what an author waits is wall time spread over frames rather than
+	// a blocked call. The poll count is the frame count, and is the half of the cost the millisecond
+	// figure cannot show.
+	std::vector<double> AsyncSamples;
+	std::vector<double> AsyncPolls;
+	for (int Iteration = 0; Iteration < Iterations; ++Iteration)
+	{
+		std::string Edited = Source;
+		Edited.append("\n# async ");
+		Edited.append(static_cast<size_t>(Iteration) + 1, 'y');
+		Edited.append("\n");
+
+		const Clock::time_point AsyncStart = Clock::now();
+		if (CheckProjectBeginFn(ExportsPathUtf8.c_str(), Edited.c_str()) != VH_OK)
+		{
+			printf("[bench] async check: vh_check_project_begin refused on iteration %d\n", Iteration + 1);
+			break;
+		}
+
+		double Polls = 0.0;
+		vh_bool Finished = 0;
+		while (Finished == 0)
+		{
+			// The budget the editor's _frame passes, and for the same reason: a frame that lands
+			// mid-analysis must not spend itself waiting for one.
+			vh_tick_stats Stats{};
+			Stats.StructSize = sizeof(Stats);
+			TickFn(0.001, &Stats);
+			CheckProjectPollFn(&Finished);
+			Polls += 1.0;
+			Sleep(1); // A frame, roughly. Spinning here would take a core off the analysis.
+		}
+		AsyncSamples.push_back(MillisSince(AsyncStart));
+		AsyncPolls.push_back(Polls);
+	}
+
+	// What an editor pays when it asks a question while an analysis it started is still running.
+	// Two of the reads `_validate` and the inspector make on the game thread, taken inside that
+	// window: both used to wait the analysis out first, which is the whole of the editor hang.
+	// Measured once each rather than as a series -- it is the same analysis as above, seen from
+	// the caller's side, and the window only exists once.
+	double BlockedMembersMs = 0.0;
+	double BlockedExportsMs = 0.0;
+	int32_t BlockedMemberCount = 0;
+	int32_t BlockedExportCount = 0;
+	vh_tick_stats WaitStats{};
+	{
+		std::string Edited = Source;
+		Edited.append("\n# blocking\n");
+		if (CheckProjectBeginFn(ExportsPathUtf8.c_str(), Edited.c_str()) == VH_OK)
+		{
+			const vh_complete_item* Items = nullptr;
+			const Clock::time_point MembersStart = Clock::now();
+			ClassMembersFn("exports", &Items, &BlockedMemberCount);
+			BlockedMembersMs = MillisSince(MembersStart);
+
+			// The second read is what says the first was answered rather than merely fast: a
+			// snapshot answers both out of the same window, where a wait only ever pays once.
+			const vh_export_desc* Exports = nullptr;
+			const Clock::time_point ExportsStart = Clock::now();
+			ClassExportListFn("exports", &Exports, &BlockedExportCount);
+			BlockedExportsMs = MillisSince(ExportsStart);
+
+			// Reap whatever the wait left queued, then tick: the wait accounting is reported by the
+			// first vh_tick after it, which is where a running editor would see it too.
+			vh_bool Finished = 0;
+			CheckProjectPollFn(&Finished);
+			WaitStats.StructSize = sizeof(WaitStats);
+			TickFn(0.001, &WaitStats);
+		}
+	}
+
+	// Completion, the editor's other per-keystroke cost. Twice for the member case: the first call
+	// on a buffer the program does not describe runs a whole analysis of its own, and the second on
+	// the identical text answers out of the program that analysis left (ProgramAlreadyDescribes).
+	// The gap between the two is what a cache on this path is worth.
+	std::vector<double> MemberColdSamples;
+	std::vector<double> MemberWarmSamples;
+	std::vector<double> ScopeSamples;
+	std::vector<double> SignatureSamples;
+	{
+		// The placeholder the GDExtension substitutes for the member half-typed at the cursor, on a
+		// receiver of a mirrored type: `Position` is node2d's, so the answer comes out of the Godot
+		// mirror rather than out of the project.
+		const size_t FieldUse = Source.find("Position.X");
+		const size_t Call = Source.find("PhysicsProcess<override>(");
+		const size_t LocalUse = Source.find("X := Shifted");
+		if (FieldUse == std::string::npos || Call == std::string::npos || LocalUse == std::string::npos)
+		{
+			printf("[bench] completion: skipped -- the fixture no longer has the sites it is measured on\n");
+		}
+		else
+		{
+			for (int Iteration = 0; Iteration < Iterations; ++Iteration)
+			{
+				// Appended past every site below, so the positions hold while the buffer is new
+				// text the host has not analysed.
+				std::string Typing = Source;
+				Typing.replace(FieldUse, strlen("Position.X"), "Position.VhCompletionCursor");
+				Typing.append("\n# typing ");
+				Typing.append(static_cast<size_t>(Iteration) + 1, 'z');
+				Typing.append("\n");
+
+				// The receiver's last byte, not the cursor: the member being typed does not exist
+				// yet and asking about it would resolve nothing.
+				int32_t RecvRow = 0;
+				int32_t RecvColumn = 0;
+				RowColumnOf(Typing, FieldUse + strlen("Position") - 1, RecvRow, RecvColumn);
+
+				const vh_complete_item* Items = nullptr;
+				int32_t Count = 0;
+
+				const Clock::time_point ColdStart = Clock::now();
+				CompleteSymbolFn(ExportsPathUtf8.c_str(), Typing.c_str(), RecvRow, RecvColumn,
+								 VH_COMPLETE_MEMBERS, &Items, &Count);
+				MemberColdSamples.push_back(MillisSince(ColdStart));
+
+				const Clock::time_point WarmStart = Clock::now();
+				CompleteSymbolFn(ExportsPathUtf8.c_str(), Typing.c_str(), RecvRow, RecvColumn,
+								 VH_COMPLETE_MEMBERS, &Items, &Count);
+				MemberWarmSamples.push_back(MillisSince(WarmStart));
+
+				// Scope mode walks everything the cursor can see, the whole of
+				// `using {/Godot.org/Godot}` included, so it answers with thousands of names where
+				// the member case answers with two.
+				std::string ScopeTyping = Source;
+				ScopeTyping.replace(LocalUse + strlen("X := "), strlen("Shifted"), "VhCompletionCursor");
+				ScopeTyping.append("\n# scope ");
+				ScopeTyping.append(static_cast<size_t>(Iteration) + 1, 'z');
+				ScopeTyping.append("\n");
+
+				int32_t ScopeRow = 0;
+				int32_t ScopeColumn = 0;
+				RowColumnOf(ScopeTyping, LocalUse + strlen("X := "), ScopeRow, ScopeColumn);
+
+				const Clock::time_point ScopeStart = Clock::now();
+				CompleteSymbolFn(ExportsPathUtf8.c_str(), ScopeTyping.c_str(), ScopeRow, ScopeColumn,
+								 VH_COMPLETE_SCOPE, &Items, &Count);
+				ScopeSamples.push_back(MillisSince(ScopeStart));
+
+				// The argument hint, asked at the callee's last byte for the same reason. Handed
+				// the buffer the scope call just left the host holding, so it is the cached-program
+				// path rather than another analysis.
+				int32_t CalleeRow = 0;
+				int32_t CalleeColumn = 0;
+				RowColumnOf(ScopeTyping, Call + strlen("PhysicsUpdat"), CalleeRow, CalleeColumn);
+				const vh_signature_desc* Signature = nullptr;
+				const Clock::time_point SignatureStart = Clock::now();
+				SignatureAtFn(ExportsPathUtf8.c_str(), ScopeTyping.c_str(), CalleeRow, CalleeColumn, &Signature);
+				SignatureSamples.push_back(MillisSince(SignatureStart));
+			}
+		}
+	}
+
+	// Completion left the host holding a scratch buffer. The two readers below describe the program
+	// the last analysis left behind, so the analysis has to be of the file as it is on disk -- and
+	// has to have landed, or what they would measure is the wait rather than the read.
+	CheckProjectFn(ExportsPathUtf8.c_str(), Source.c_str());
+
+	std::vector<double> ClassMembersSamples;
+	std::vector<double> ExportListSamples;
+	for (int Iteration = 0; Iteration < Iterations; ++Iteration)
+	{
+		const vh_complete_item* Members = nullptr;
+		int32_t MemberCount = 0;
+		const Clock::time_point MembersStart = Clock::now();
+		ClassMembersFn("exports", &Members, &MemberCount);
+		ClassMembersSamples.push_back(MillisSince(MembersStart));
+
+		const vh_export_desc* Exports = nullptr;
+		int32_t ExportCount = 0;
+		const Clock::time_point ExportsStart = Clock::now();
+		ClassExportListFn("exports", &Exports, &ExportCount);
+		ExportListSamples.push_back(MillisSince(ExportsStart));
 	}
 
 	// Phase 5's S-2 risk, measured rather than argued: a content scope per instance (R-ASYNC-4)
@@ -395,6 +620,20 @@ int main(int argc, char** argv)
 	printf("[bench] %-28s %8.1f ms\n", "vh_init", InitMs);
 	printf("[bench] %-28s %8.1f ms\n", "vh_compile_project", CompileMs);
 	ReportSeries("vh_check_project", CheckSamples);
+	ReportSeries("check begin+poll (wall)", AsyncSamples);
+	ReportCounts("check begin+poll (polls)", AsyncPolls);
+	printf("[bench] %-28s %8.1f ms  (vh_class_members during an analysis, %d member(s))\n",
+		   "blocked read", BlockedMembersMs, BlockedMemberCount);
+	printf("[bench] %-28s %8.1f ms  (vh_class_export_list during the same analysis, %d export(s))\n",
+		   "blocked read 2", BlockedExportsMs, BlockedExportCount);
+	printf("[bench] %-28s %d wait(s), %.1f ms  (vh_tick_stats, ABI v6.1)\n",
+		   "analysis wait since last tick", WaitStats.AnalysisWaits, WaitStats.AnalysisWaitSeconds * 1000.0);
+	ReportSeries("complete members (cold)", MemberColdSamples);
+	ReportSeries("complete members (warm)", MemberWarmSamples);
+	ReportSeries("complete scope", ScopeSamples);
+	ReportSeries("vh_signature_at", SignatureSamples);
+	ReportSeries("vh_class_members", ClassMembersSamples);
+	ReportSeries("vh_class_export_list", ExportListSamples);
 	ReportSeries("generation (5-file game)", GenerationSamples);
 	if (!RetainedKb.empty())
 	{

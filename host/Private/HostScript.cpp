@@ -7,6 +7,8 @@
 #include "GodotClasses.h"
 #include "GodotClassNames.gen.h"
 #include "GodotMathLayout.gen.h"
+#include "HAL/PlatformMisc.h"
+#include "HAL/PlatformTime.h"
 #include "HostEventLoop.h"
 #include "HostRuntime.h"
 #include "ISolarisIde.h"
@@ -51,6 +53,7 @@
 #include "VerseVM/VVMProgram.h"
 #include "VerseVM/VVMContext.h"
 #include "VerseVM/VVMUniqueString.h"
+#include "uLang/Diagnostics/Diagnostics.h"
 #include "uLang/Semantics/Attributable.h"
 #include "uLang/Semantics/DataDefinition.h"
 #include "uLang/Semantics/Expression.h"
@@ -63,6 +66,7 @@
 #include "uLang/Semantics/SemanticTypes.h"
 #include "uLang/Semantics/TypeAlias.h"
 #include "uLang/Syntax/VstNode.h"
+#include "uLang/SourceProject/PackageRole.h"
 #include "uLang/SourceProject/SourceDataProject.h"
 #include "uLang/SourceProject/VerseScope.h"
 #include "uLang/SourceProject/VerseVersion.h"
@@ -71,6 +75,7 @@
 #include "uLang/Toolchain/ProgramBuildManager.h"
 
 #include <atomic>
+#include <cstdio>
 #include <thread>
 
 namespace {
@@ -384,6 +389,127 @@ bool GProgramIsAnalysisOnly = false;
 /// simply re-analyses what the IDE already holds.
 AUTORTFM_DISABLE bool RunCheck(const FUtf8String& Path, const FUtf8String& SourceText, TFunction<void(const FSolDiagnostic&)> Sink);
 
+/// Whether VH_TRACE_ANALYSIS asked for a trace of every build. Read once: GetEnvironmentVariable
+/// allocates, and the analysis this is asked about is the per-keystroke path.
+AUTORTFM_DISABLE bool AnalysisTraceEnabled()
+{
+    static const bool bEnabled = !FPlatformMisc::GetEnvironmentVariable(TEXT("VH_TRACE_ANALYSIS")).IsEmpty();
+    return bEnabled;
+}
+
+/// Where one build's time went, accumulated from the compiler's own statistics events.
+///
+/// SBuildEventInfo carries no timings -- PhaseStarted and PhaseCompleted say only which phase, and
+/// the payload is the EBuildPhase -- so the clock is ours and the events are the boundaries. Phases
+/// do not nest (Toolchain.cpp: BuildProject brackets Parse, then CompileVst brackets each of the
+/// rest in turn), but Parse and SemanticAnalysis each run twice when identifier auto-qualification
+/// is on, so both the sum and the count are kept.
+struct FAnalysisTrace
+{
+    static constexpr int32 NumPhases = 6; // uLang::EBuildPhase, Parse .. Link.
+
+    double PhaseStart[NumPhases] = {};
+    double PhaseSeconds[NumPhases] = {};
+    int32 PhaseRuns[NumPhases] = {};
+
+    int32 Functions = 0;
+    int32 Classes = 0;
+    int32 TopLevelDefinitions = 0;
+
+    AUTORTFM_DISABLE void OnEvent(const uLang::SBuildEventInfo& Event)
+    {
+        switch (Event.Type)
+        {
+        case uLang::EBuildEvent::PhaseStarted:
+            if (Event.Int32 < static_cast<uint32>(NumPhases))
+            {
+                PhaseStart[Event.Int32] = FPlatformTime::Seconds();
+            }
+            break;
+        case uLang::EBuildEvent::PhaseCompleted:
+            if (Event.Int32 < static_cast<uint32>(NumPhases))
+            {
+                PhaseSeconds[Event.Int32] += FPlatformTime::Seconds() - PhaseStart[Event.Int32];
+                ++PhaseRuns[Event.Int32];
+            }
+            break;
+        case uLang::EBuildEvent::FunctionDefinition:
+            Functions += static_cast<int32>(Event.Int32);
+            break;
+        case uLang::EBuildEvent::ClassDefinition:
+            Classes += static_cast<int32>(Event.Int32);
+            break;
+        case uLang::EBuildEvent::TopLevelDefinition:
+            TopLevelDefinitions += static_cast<int32>(Event.Int32);
+            break;
+        default:
+            break;
+        }
+    }
+};
+
+/// Writes a finished trace out, with the packages the build read beside it.
+///
+/// To stderr rather than through ReportDiagnostic because a background analysis runs off the game
+/// thread and every callback in the ABI is the game thread's alone -- and because a trace an author
+/// did not ask for has no business in Godot's Output dock.
+///
+/// The packages are read after the build rather than during it, so the roles printed are the ones
+/// it used: IncrementalizeProjectSource marks a compiled package External on the CSourcePackage
+/// itself and the mark is sticky, which is what decides whether the next build parses that
+/// package's digest or all of its source again (Toolchain.cpp, CToolchain::FillInVst).
+AUTORTFM_DISABLE void PrintAnalysisTrace(const FAnalysisTrace& Trace, const char* What, double WallSeconds)
+{
+    static const char* const PhaseNames[FAnalysisTrace::NumPhases] = {
+        "parse", "semantic", "localization", "ir-gen", "codegen", "link"};
+
+    fprintf(stderr, "[vh-trace] %s: %.1f ms wall\n", What, WallSeconds * 1000.0);
+
+    if (GIde.IsValid())
+    {
+        const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
+        if (BuildManager.IsValid())
+        {
+            for (const uLang::CSourceProject::SPackage& Package : BuildManager->GetSourceProject()->_Packages)
+            {
+                const uLang::CSourcePackage::SSettings& Settings = Package._Package->GetSettings();
+                fprintf(stderr,
+                        "[vh-trace]   package %-20s verse=%-24s role=%-8s digest=%-3s snippets=%d\n",
+                        Package._Package->GetName().AsCString(),
+                        Settings._VersePath.AsCString(),
+                        uLang::ToString(Settings._Role),
+                        Package._Package->_Digest.IsSet() ? "yes" : "no",
+                        Package._Package->GetNumSnippets());
+            }
+        }
+    }
+
+    for (int32 Phase = 0; Phase < FAnalysisTrace::NumPhases; ++Phase)
+    {
+        if (Trace.PhaseRuns[Phase] > 0)
+        {
+            fprintf(stderr,
+                    "[vh-trace]   phase %-13s %8.1f ms  x%d\n",
+                    PhaseNames[Phase],
+                    Trace.PhaseSeconds[Phase] * 1000.0,
+                    Trace.PhaseRuns[Phase]);
+        }
+    }
+
+    fprintf(stderr,
+            "[vh-trace]   defined %d function(s), %d class(es), %d top-level\n",
+            Trace.Functions,
+            Trace.Classes,
+            Trace.TopLevelDefinitions);
+    fflush(stderr);
+}
+
+/// What the calling thread lost to WaitForBackgroundCheck since the last vh_tick took the figure
+/// away. Counted in one place because WaitForBackgroundCheck is the only place a caller can block
+/// on an analysis, and ~20 entry points reach it.
+int32 GAnalysisWaitCount = 0;
+double GAnalysisWaitSeconds = 0.0;
+
 /// The buffer the program the IDE holds was last built from -- see ProgramAlreadyDescribes.
 /// Written only from RunCheck, and read only after WaitForBackgroundCheck has joined the worker
 /// that may have written it.
@@ -490,6 +616,70 @@ struct FBackgroundCheck
 };
 
 FBackgroundCheck GBackgroundCheck;
+
+/// Everything the class-describing entry points answer, extracted once per analysis.
+///
+/// The stall this removes is the editor's. Around twenty ABI entry points used to call
+/// WaitForBackgroundCheck before touching the semantic program, and the editor asks several of them
+/// on the game thread while an analysis it started is still running -- `_validate` wants the method
+/// outline, the inspector wants the property list, a hover wants the documentation. Waiting was
+/// correct (the worker is rebuilding the very program they read, and VerseVM blocks execution for
+/// the length of a build) and it cost the rest of the analysis, which is where the ~1.7 s hang came
+/// from.
+///
+/// Two halves, because only one of them may be filled off the game thread. The *semantic* half is
+/// read out of the program the analysis just built, by whichever thread built it. The *VM* half --
+/// whether the published generation carries the class, a statics module's constant values, an
+/// `@export`'s declared default -- has to enter the VM, which is the game thread's alone, so it is
+/// filled at the moment the snapshot is made current. Neither half is read while it is being
+/// written: the pending snapshot is private to the thread building it until the swap.
+struct FAnalysisSnapshot
+{
+    struct FClass
+    {
+        bool bAbstract = false;
+        TArray<GodotVerse::FMethodDesc> Methods;
+        TArray<GodotVerse::FSignalDesc> Signals;
+        TArray<GodotVerse::FCompleteItem> Members;
+
+        /// GetClassExports answers false for a program with no export attribute in it as well as
+        /// for a class that is not there, and the two mean different things to `_validate`.
+        bool bExportsHarvested = false;
+        TArray<GodotVerse::FExportDesc> Exports;
+
+        /// Whether the *published* generation carries the class, which is a different question from
+        /// whether this analysis declares it -- a class renamed in an unsaved buffer is in one and
+        /// not the other.
+        bool bInPublishedProgram = false;
+
+        /// Shared rather than held by value: a vh_value in either points into the FFieldStorage
+        /// beside it, so what the ABI hands out has to be kept alive by the caller rather than
+        /// copied. Defaults are keyed by member name and hold one entry per `@export`.
+        TSharedPtr<const GodotVerse::FClassStatics> Statics;
+        TMap<FUtf8String, TSharedPtr<const GodotVerse::FFieldValue>> Defaults;
+    };
+
+    /// Module-qualified, exactly as every ClassNameUtf8 in the ABI is: `player`, `gameplay/player`.
+    TMap<FUtf8String, FClass> Classes;
+
+    /// ResolveUnknownName's whole answer, inverted: which modules declare each top-level name. Built
+    /// here because the walk reads the AST project, which the worker rebuilds under it -- that read
+    /// never waited and so was a race as well as a cost.
+    TMap<FUtf8String, TArray<FUtf8String>> ModulesDeclaring;
+    bool bAstAvailable = false;
+};
+
+/// What the read entry points answer from, and what the next analysis is building. Swapped on the
+/// game thread; the current one is shared rather than double-buffered by index, so a descriptor
+/// handed out over the ABI keeps its bytes alive for as long as its holder keeps its share.
+TSharedPtr<const FAnalysisSnapshot> GSnapshot;
+TSharedPtr<FAnalysisSnapshot> GPendingSnapshot;
+
+/// Fills the semantic half into GPendingSnapshot. Defined beside the readers it reuses.
+AUTORTFM_DISABLE void TakeAnalysisSnapshot();
+
+/// Fills the VM half of GPendingSnapshot and makes it current. Game thread only.
+AUTORTFM_DISABLE void PublishAnalysisSnapshot();
 
 AUTORTFM_DISABLE vh_severity ToVhSeverity(ELogVerbosity::Type Verbosity)
 {
@@ -628,6 +818,10 @@ AUTORTFM_DISABLE void GodotVerse::LeaveContentScope()
 AUTORTFM_DISABLE void GodotVerse::ResetScriptState()
 {
     LeaveContentScope();
+    // Before the IDE goes: a pending snapshot describes a program that is about to stop existing,
+    // and a worker joined at shutdown leaves one nothing will ever publish.
+    GSnapshot.Reset();
+    GPendingSnapshot.Reset();
     GScriptSnippets.Empty();
     GSourceProject.Reset();
     GIde.Reset();
@@ -695,7 +889,57 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FScriptSource>& So
         uLang::SBuildParams{._LinkType = uLang::SBuildParams::ELinkParam::RequireComplete});
 
     FSolIdeBuildSettings Settings{.LinkSettings = uLang::SBuildParams::ELinkParam::RequireComplete};
-    const bool bBuilt = GIde->BuildAll(Settings, MakeIdeDiagnostics(ForwardSolDiagnostic));
+    FAnalysisTrace Trace;
+    const double BuildStarted = FPlatformTime::Seconds();
+    const bool bBuilt = GIde->BuildAll(
+        Settings,
+        MakeIdeDiagnostics(ForwardSolDiagnostic,
+                           [&Trace](const uLang::SBuildEventInfo& Event) { Trace.OnEvent(Event); }));
+
+    // And again, now that the build has deployed what it compiled. The first call could not retire
+    // a native package: IncrementalizeProjectSource leaves a VNI package Source while
+    // `IsCompiled(Name) == None`, which is true right up until the build that registers its
+    // bindings. So the roles a session ran under used to change under it at the *second* build,
+    // where /Verse.org and /Godot.org/Godot both went External at once and an analysis went from
+    // ~1300 ms to ~750 ms. This is where that happens now: at every build, including the first.
+    //
+    // Unconditional, because a failed build is exactly the case where being selective would be
+    // wrong: what deployed is what IsCompiled reports, and a package the build never got to stays
+    // Source on its own.
+    ISolarisModule::Get().IncrementalizeProjectSource(
+        GSourceProject.GetValue(),
+        uLang::SBuildParams{._LinkType = uLang::SBuildParams::ELinkParam::RequireComplete});
+
+    // And what the pass above must not be allowed to retire, which is the other half of the change.
+    // A digest is one synthetic snippet of bodiless declarations at a path of the toolchain's own
+    // choosing, so a package read from one loses two things the editor is built on: every
+    // definition's file and line, and the `<getter>`/`<setter>` flag that keeps a class var's
+    // accessor from being offered as an override.
+    //
+    // Measured, not argued. With /Godot.org/Godot retired, three of host_smoke's goto-definition
+    // cases resolve to a .vdigest path instead of the mirror's own file and `GlobalPositionGetter`
+    // comes back overridable -- which is what the second build has silently been doing to every
+    // session since generations existed. The mirror is where a script reads every Godot name from,
+    // so it stays Source; so does the attribute package beside it, and so does the generation's own
+    // package, which phase-2-design.md 181-190 measured at 104 failing cases.
+    //
+    // The cost is the whole of the saving: /Verse.org and the packages under it are cheap, and an
+    // analysis with the mirror kept Source is ~1300-1800 ms against the ~950 ms retiring it buys.
+    // Taking that back needs the mirror's locations and accessor flags recorded while it is still
+    // Source, which is a side table and not a role.
+    for (const uLang::CSourceProject::SPackage& Kept : BuildManager->GetSourceProject()->_Packages)
+    {
+        const uLang::CUTF8String& VersePathOf = Kept._Package->GetSettings()._VersePath;
+        if (&Kept == &Package || FUtf8StringView(VersePathOf.AsCString()).Equals(FUtf8StringView(GodotVersePath)))
+        {
+            Kept._Package->SetRole(uLang::EPackageRole::Source);
+        }
+    }
+
+    if (AnalysisTraceEnabled())
+    {
+        PrintAnalysisTrace(Trace, "generation", FPlatformTime::Seconds() - BuildStarted);
+    }
     GScriptSourcePackageName = PackageName;
     GProjectBuilt = true;
     if (!bBuilt)
@@ -704,6 +948,13 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FScriptSource>& So
         // its classes keep resolving and its instances keep running, which is R-ITER-5. The
         // failed generation's source stays in the project, because it is what the next analysis
         // reports diagnostics against.
+        //
+        // The snapshot is taken anyway, off the program the failed build left. uLang recovers and
+        // carries on, so that program still describes most of what the author wrote, and this is
+        // the only description there is until the next keystroke starts an analysis -- a first
+        // build that fails would otherwise leave every class-describing read answering not-found.
+        TakeAnalysisSnapshot();
+        PublishAnalysisSnapshot();
         return false;
     }
 
@@ -756,7 +1007,21 @@ AUTORTFM_DISABLE bool RunCheck(const FUtf8String& Path, const FUtf8String& Sourc
     Settings.bGenerateCode = false;
     Settings.bGenerateAutoRTFMBytecode = false;
 
-    const bool bAnalysed = GIde->BuildAll(Settings, MakeIdeDiagnostics(MoveTemp(Sink)));
+    FAnalysisTrace Trace;
+    const double AnalysisStarted = FPlatformTime::Seconds();
+    const bool bAnalysed = GIde->BuildAll(
+        Settings,
+        MakeIdeDiagnostics(MoveTemp(Sink),
+                           [&Trace](const uLang::SBuildEventInfo& Event) { Trace.OnEvent(Event); }));
+    if (AnalysisTraceEnabled())
+    {
+        // The worker clears bRunning only once RunCheck has returned, so the flag still names which
+        // thread this analysis is on.
+        PrintAnalysisTrace(Trace,
+                           GBackgroundCheck.bRunning.load(std::memory_order_acquire) ? "analysis (background)"
+                                                                                     : "analysis (foreground)",
+                           FPlatformTime::Seconds() - AnalysisStarted);
+    }
     GProgramIsAnalysisOnly = GProgramIsAnalysisOnly || bAnalysed;
 
     // Whatever the result, the program now describes this text. Recorded so that the two
@@ -764,6 +1029,16 @@ AUTORTFM_DISABLE bool RunCheck(const FUtf8String& Path, const FUtf8String& Sourc
     // when the editor asks both about one keystroke, which it does on every call it is inside.
     GAnalysedPath = Path;
     GAnalysedSource = SourceText;
+
+    // Here rather than at the call sites, so that every road to a fresh program leaves a fresh
+    // snapshot behind it. On the worker the swap waits for the game thread; in the foreground this
+    // *is* the game thread, and publishing now is what makes CompileProject's trailing analysis
+    // the thing the editor reads until the next keystroke.
+    TakeAnalysisSnapshot();
+    if (!GBackgroundCheck.bRunning.load(std::memory_order_acquire))
+    {
+        PublishAnalysisSnapshot();
+    }
     return bAnalysed;
 }
 
@@ -808,30 +1083,29 @@ AUTORTFM_DISABLE bool GodotVerse::CheckProject(const FUtf8String& Path, const FU
 
 namespace {
 
-/// Records Module's path if it declares Name, then recurses. Path is relative to the package
-/// root, and an empty one is the root module itself -- which is skipped, because it is in scope
-/// from everywhere and so is never the answer to "what should I import".
-AUTORTFM_DISABLE void CollectModulesDeclaring(const uLang::CModule& Module,
-                                              const FUtf8String& Path,
-                                              FUtf8StringView Name,
-                                              TArray<FUtf8String>& Out)
+/// Records every name Module declares against Module's own path, then recurses. Path is relative
+/// to the package root, and an empty one is the root module itself -- which is skipped, because it
+/// is in scope from everywhere and so is never the answer to "what should I import".
+///
+/// Built once per analysis and inverted, where ResolveUnknownName used to walk the AST per query:
+/// the walk reads uLang's AST project, which the background worker rebuilds under it, so asking at
+/// query time was a race as well as a cost.
+AUTORTFM_DISABLE void CollectModuleDeclarations(const uLang::CModule& Module,
+                                                const FUtf8String& Path,
+                                                TMap<FUtf8String, TArray<FUtf8String>>& Out)
 {
     if (!Path.IsEmpty())
     {
         for (const uLang::TSRef<uLang::CDefinition>& Definition : Module.GetDefinitions())
         {
-            if (FUtf8StringView(FUtf8String(Definition->AsNameCString())).Equals(Name))
-            {
-                Out.AddUnique(Path);
-                break;
-            }
+            Out.FindOrAdd(FUtf8String(Definition->AsNameCString())).AddUnique(Path);
         }
     }
 
     for (const uLang::CModule* Submodule : Module.GetDefinitionsOfKind<uLang::CModule>())
     {
         const FUtf8String Name8 = FUtf8String(Submodule->AsNameCString());
-        CollectModulesDeclaring(*Submodule, Path.IsEmpty() ? Name8 : Path + UTF8TEXT("/") + Name8, Name, Out);
+        CollectModuleDeclarations(*Submodule, Path.IsEmpty() ? Name8 : Path + UTF8TEXT("/") + Name8, Out);
     }
 }
 
@@ -840,40 +1114,13 @@ AUTORTFM_DISABLE void CollectModulesDeclaring(const uLang::CModule& Module,
 AUTORTFM_DISABLE bool GodotVerse::ResolveUnknownName(FUtf8StringView Name, TArray<FUtf8String>& OutModules)
 {
     OutModules.Empty();
-    if (!GIde.IsValid() || Name.IsEmpty())
+    if (!GSnapshot || !GSnapshot->bAstAvailable || Name.IsEmpty())
     {
         return false;
     }
-
-    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
-    if (!BuildManager.IsValid())
+    if (const TArray<FUtf8String>* const Modules = GSnapshot->ModulesDeclaring.Find(FUtf8String(Name)))
     {
-        return false;
-    }
-    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
-    if (!Program->_AstProject)
-    {
-        return false;
-    }
-
-    for (const uLang::CAstCompilationUnit* CompilationUnit : Program->_AstProject->OrderedCompilationUnits())
-    {
-        for (const uLang::CAstPackage* Package : CompilationUnit->Packages())
-        {
-            // The project's own packages only. A name that needs an import from the Godot mirror
-            // is a different question, and the mirror is one module the whole project already
-            // imports.
-            const bool bIsUserPackage = Package->_VerseScope == uLang::EVerseScope::PublicUser
-                || Package->_VerseScope == uLang::EVerseScope::InternalUser;
-            if (!bIsUserPackage || !Package->_RootModule)
-            {
-                continue;
-            }
-            if (const uLang::CModule* Root = Package->_RootModule->GetModule())
-            {
-                CollectModulesDeclaring(*Root, FUtf8String(), Name, OutModules);
-            }
-        }
+        OutModules = *Modules;
     }
     return true;
 }
@@ -934,6 +1181,12 @@ AUTORTFM_DISABLE bool GodotVerse::PollBackgroundCheck(bool& OutFinished)
         return true;
     }
     JoinBackgroundCheck();
+
+    // Before the diagnostics, and outside the bResultPending gate, because a wait may already have
+    // joined the worker and taken the result-pending flag with it: what decides there is something
+    // to publish is the snapshot the worker left, not whether this poll is the one that reaps it.
+    PublishAnalysisSnapshot();
+
     if (!GBackgroundCheck.bResultPending)
     {
         return true;
@@ -963,7 +1216,27 @@ AUTORTFM_DISABLE bool GodotVerse::PollBackgroundCheck(bool& OutFinished)
 
 AUTORTFM_DISABLE void GodotVerse::WaitForBackgroundCheck()
 {
+    // Only a join that blocked is a stall worth reporting: a caller arriving after the worker has
+    // finished joins a dead thread in microseconds, and counting those would make the figure a call
+    // count rather than the main thread's lost time.
+    const bool bWasRunning = GBackgroundCheck.bRunning.load(std::memory_order_acquire);
+    const double WaitStarted = bWasRunning ? FPlatformTime::Seconds() : 0.0;
+
     JoinBackgroundCheck();
+
+    if (bWasRunning)
+    {
+        ++GAnalysisWaitCount;
+        GAnalysisWaitSeconds += FPlatformTime::Seconds() - WaitStarted;
+    }
+}
+
+AUTORTFM_DISABLE void GodotVerse::TakeAnalysisWaitStats(int32& OutCount, double& OutSeconds)
+{
+    OutCount = GAnalysisWaitCount;
+    OutSeconds = GAnalysisWaitSeconds;
+    GAnalysisWaitCount = 0;
+    GAnalysisWaitSeconds = 0.0;
 }
 
 namespace {
@@ -1071,7 +1344,19 @@ AUTORTFM_DISABLE UClass* FindGodotClass(FUtf8StringView ClassName)
 
 AUTORTFM_DISABLE bool GodotVerse::HasClass(FUtf8StringView ClassName)
 {
-    return FindGodotClass(ClassName) != nullptr;
+    if (GSnapshot)
+    {
+        if (const FAnalysisSnapshot::FClass* const Found = GSnapshot->Classes.Find(FUtf8String(ClassName)))
+        {
+            return Found->bInPublishedProgram;
+        }
+    }
+
+    // A name the last analysis did not declare is not the same as one the published generation does
+    // not carry: renaming a class in an unsaved buffer leaves the old name in the VM and takes it
+    // out of the program. Asking the VM is the honest answer, and it is a lookup -- but it is an
+    // entry into the VM, which a running build forbids.
+    return !IsBackgroundCheckRunning() && FindGodotClass(ClassName) != nullptr;
 }
 
 namespace {
@@ -3357,23 +3642,66 @@ AUTORTFM_DISABLE bool GodotVerse::ReadInstanceField(const FInstance* Instance, F
     return ReadFieldOf(Instance->Object.Get(), FieldName, OutValue, OutStorage);
 }
 
-AUTORTFM_DISABLE bool GodotVerse::ReadClassDefaultField(FUtf8StringView ClassName, FUtf8StringView FieldName, vh_value& OutValue, FFieldStorage& OutStorage)
+namespace {
+
+/// One class's declared defaults, read off a transient instance of the published class.
+///
+/// The instance is built once per class rather than once per member, which is what makes reading
+/// every `@export` into the snapshot cost about what reading one used to: UVerseClass runs the
+/// Verse constructor from PostInitInstance, which NewObject drives and class-default-object
+/// construction does not, so a CDO's members read back uninitialized and an instance is the only
+/// place a declared default actually exists. Handle is left unset: reading a plain data member
+/// never consults it.
+AUTORTFM_DISABLE UObject* NewDefaultsObject(FUtf8StringView ClassName)
 {
-    UClass* NativeClass = FindGodotClass(ClassName);
-    if (!NativeClass)
+    UClass* const NativeClass = FindGodotClass(ClassName);
+    return NativeClass ? NewObject<UObject>(GetTransientPackage(), NativeClass) : nullptr;
+}
+
+AUTORTFM_DISABLE TSharedPtr<const GodotVerse::FFieldValue> ReadDefaultFieldOf(UObject* Defaults, FUtf8StringView FieldName)
+{
+    if (!Defaults)
+    {
+        return nullptr;
+    }
+    TSharedRef<GodotVerse::FFieldValue> Read = MakeShared<GodotVerse::FFieldValue>();
+    if (!ReadFieldOf(Defaults, FieldName, Read->Value, Read->Storage))
+    {
+        return nullptr;
+    }
+    return Read;
+}
+
+} // namespace
+
+AUTORTFM_DISABLE bool GodotVerse::ReadClassDefaultField(FUtf8StringView ClassName,
+                                                        FUtf8StringView FieldName,
+                                                        TSharedPtr<const FFieldValue>& OutValue)
+{
+    OutValue.Reset();
+
+    if (GSnapshot)
+    {
+        if (const FAnalysisSnapshot::FClass* const Found = GSnapshot->Classes.Find(FUtf8String(ClassName)))
+        {
+            if (const TSharedPtr<const FFieldValue>* const Cached = Found->Defaults.Find(FUtf8String(FieldName)))
+            {
+                OutValue = *Cached;
+                return OutValue.IsValid();
+            }
+        }
+    }
+
+    // A member that is not an `@export`, which the snapshot does not carry: the inspector only ever
+    // asks about the ones it was given, so reading every member of every class would be work for
+    // nobody. Still answerable, but only from outside a build -- the read enters the VM.
+    if (IsBackgroundCheckRunning())
     {
         return false;
     }
-    // A transient instance, not the CDO. UVerseClass runs the Verse constructor from
-    // PostInitInstance, which NewObject drives and class-default-object construction does not, so
-    // a CDO's members read back uninitialized. An instance is the only place a declared default
-    // actually exists. Handle is left unset: reading a plain data member never consults it.
-    TStrongObjectPtr<UObject> Defaults(NewObject<UObject>(GetTransientPackage(), NativeClass));
-    if (!Defaults.IsValid())
-    {
-        return false;
-    }
-    return ReadFieldOf(Defaults.Get(), FieldName, OutValue, OutStorage);
+    TStrongObjectPtr<UObject> Defaults(NewDefaultsObject(ClassName));
+    OutValue = ReadDefaultFieldOf(Defaults.Get(), FieldName);
+    return OutValue.IsValid();
 }
 
 namespace {
@@ -3425,8 +3753,13 @@ AUTORTFM_DISABLE bool OverridesMirroredDefinition(const uLang::CFunction& Functi
 
 } // namespace
 
-AUTORTFM_DISABLE bool GodotVerse::GetClassMethods(FUtf8StringView ClassName, TArray<FMethodDesc>& OutMethods)
+namespace {
+
+AUTORTFM_DISABLE bool GetClassMethodsLive(FUtf8StringView ClassName, TArray<GodotVerse::FMethodDesc>& OutMethods)
 {
+    using GodotVerse::FMethodDesc;
+    using GodotVerse::FParamDesc;
+
     OutMethods.Reset();
 
     if (!GIde.IsValid())
@@ -3508,8 +3841,10 @@ AUTORTFM_DISABLE bool GodotVerse::GetClassMethods(FUtf8StringView ClassName, TAr
     return true;
 }
 
-AUTORTFM_DISABLE bool GodotVerse::GetClassExports(FUtf8StringView ClassName, TArray<FExportDesc>& OutExports)
+AUTORTFM_DISABLE bool GetClassExportsLive(FUtf8StringView ClassName, TArray<GodotVerse::FExportDesc>& OutExports)
 {
+    using GodotVerse::FExportDesc;
+
     OutExports.Reset();
 
     if (!GIde.IsValid())
@@ -3609,6 +3944,34 @@ AUTORTFM_DISABLE bool GodotVerse::GetClassExports(FUtf8StringView ClassName, TAr
 
         OutExports.Add(MoveTemp(Desc));
     }
+    return true;
+}
+
+} // namespace
+
+AUTORTFM_DISABLE bool GodotVerse::GetClassMethods(FUtf8StringView ClassName, TArray<FMethodDesc>& OutMethods)
+{
+    OutMethods.Reset();
+    const FAnalysisSnapshot::FClass* const Found =
+        GSnapshot ? GSnapshot->Classes.Find(FUtf8String(ClassName)) : nullptr;
+    if (!Found)
+    {
+        return false;
+    }
+    OutMethods = Found->Methods;
+    return true;
+}
+
+AUTORTFM_DISABLE bool GodotVerse::GetClassExports(FUtf8StringView ClassName, TArray<FExportDesc>& OutExports)
+{
+    OutExports.Reset();
+    const FAnalysisSnapshot::FClass* const Found =
+        GSnapshot ? GSnapshot->Classes.Find(FUtf8String(ClassName)) : nullptr;
+    if (!Found || !Found->bExportsHarvested)
+    {
+        return false;
+    }
+    OutExports = Found->Exports;
     return true;
 }
 
@@ -3867,20 +4230,9 @@ AUTORTFM_DISABLE UObject* PeekFieldObject(UObject* Object, FUtf8StringView Field
 
 AUTORTFM_DISABLE bool GodotVerse::IsClassAbstract(FUtf8StringView ClassName)
 {
-    if (!GIde.IsValid())
-    {
-        return false;
-    }
-    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
-    if (!BuildManager.IsValid())
-    {
-        return false;
-    }
-    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
-    const FUtf8String ClassPath = FUtf8String(ScriptVersePath) + UTF8TEXT("/") + FUtf8String(ClassName);
-    const uLang::CClass* const Class = Program->FindDefinitionByVersePath<uLang::CClass>(
-        FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath));
-    return Class != nullptr && Class->IsAbstract();
+    const FAnalysisSnapshot::FClass* const Found =
+        GSnapshot ? GSnapshot->Classes.Find(FUtf8String(ClassName)) : nullptr;
+    return Found != nullptr && Found->bAbstract;
 }
 
 namespace {
@@ -3961,11 +4313,19 @@ AUTORTFM_DISABLE void ReportStaticsDiagnostics()
 }
 }
 
-AUTORTFM_DISABLE bool GodotVerse::GetClassStatics(FUtf8StringView ClassName,
-                                                  TArray<FStaticDesc>& OutStatics,
-                                                  TArray<vh_value>& OutValues,
-                                                  TArray<FFieldStorage>& OutStorage)
+namespace {
+
+/// The walk GetClassStatics used to be, off the semantic program and the published package. Still
+/// the only implementation: what changed is that it runs once per analysis, on the game thread,
+/// rather than once per ask -- reading a constant's value enters the VM, which a running build
+/// forbids and which is why this used to join the worker first.
+AUTORTFM_DISABLE bool GetClassStaticsLive(FUtf8StringView ClassName,
+                                          TArray<GodotVerse::FStaticDesc>& OutStatics,
+                                          TArray<vh_value>& OutValues,
+                                          TArray<GodotVerse::FFieldStorage>& OutStorage)
 {
+    using GodotVerse::FStaticDesc;
+
     OutStatics.Reset();
     OutValues.Reset();
     OutStorage.Reset();
@@ -4068,8 +4428,11 @@ AUTORTFM_DISABLE bool GodotVerse::GetClassStatics(FUtf8StringView ClassName,
     return true;
 }
 
-AUTORTFM_DISABLE bool GodotVerse::GetClassSignals(FUtf8StringView ClassName, TArray<FSignalDesc>& OutSignals)
+AUTORTFM_DISABLE bool GetClassSignalsLive(FUtf8StringView ClassName, TArray<GodotVerse::FSignalDesc>& OutSignals)
 {
+    using GodotVerse::FParamDesc;
+    using GodotVerse::FSignalDesc;
+
     OutSignals.Reset();
 
     if (!GIde.IsValid())
@@ -4164,6 +4527,34 @@ AUTORTFM_DISABLE bool GodotVerse::GetClassSignals(FUtf8StringView ClassName, TAr
             OutSignals.Add(MoveTemp(Desc));
         }
     }
+    return true;
+}
+
+} // namespace
+
+AUTORTFM_DISABLE bool GodotVerse::GetClassStatics(FUtf8StringView ClassName, TSharedPtr<const FClassStatics>& OutStatics)
+{
+    OutStatics.Reset();
+    const FAnalysisSnapshot::FClass* const Found =
+        GSnapshot ? GSnapshot->Classes.Find(FUtf8String(ClassName)) : nullptr;
+    if (!Found || !Found->Statics)
+    {
+        return false;
+    }
+    OutStatics = Found->Statics;
+    return true;
+}
+
+AUTORTFM_DISABLE bool GodotVerse::GetClassSignals(FUtf8StringView ClassName, TArray<FSignalDesc>& OutSignals)
+{
+    OutSignals.Reset();
+    const FAnalysisSnapshot::FClass* const Found =
+        GSnapshot ? GSnapshot->Classes.Find(FUtf8String(ClassName)) : nullptr;
+    if (!Found)
+    {
+        return false;
+    }
+    OutSignals = Found->Signals;
     return true;
 }
 
@@ -5733,15 +6124,18 @@ AUTORTFM_DISABLE bool GodotVerse::Complete(FUtf8StringView Path,
     return false;
 }
 
-AUTORTFM_DISABLE bool GodotVerse::ClassMembers(FUtf8StringView ClassName, TArray<FCompleteItem>& OutItems)
+namespace {
+
+AUTORTFM_DISABLE bool ClassMembersLive(FUtf8StringView ClassName, TArray<GodotVerse::FCompleteItem>& OutItems)
 {
+    using GodotVerse::FCompleteItem;
+
     OutItems.Empty();
 
     if (!GIde.IsValid())
     {
         return false;
     }
-    WaitForBackgroundCheck();
 
     const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
     if (!BuildManager.IsValid())
@@ -5764,6 +6158,177 @@ AUTORTFM_DISABLE bool GodotVerse::ClassMembers(FUtf8StringView ClassName, TArray
     OutItems.Sort([](const FCompleteItem& Left, const FCompleteItem& Right) { return Left.Name < Right.Name; });
     return true;
 }
+
+} // namespace
+
+AUTORTFM_DISABLE bool GodotVerse::ClassMembers(FUtf8StringView ClassName, TArray<FCompleteItem>& OutItems)
+{
+    OutItems.Empty();
+    const FAnalysisSnapshot::FClass* const Found =
+        GSnapshot ? GSnapshot->Classes.Find(FUtf8String(ClassName)) : nullptr;
+    if (!Found)
+    {
+        return false;
+    }
+    OutItems = Found->Members;
+    return true;
+}
+
+namespace {
+
+/// Every class the script package declares, module-qualified the way every ClassNameUtf8 in the ABI
+/// is: `player` at the root, `gameplay/player` under a `.vmodule` marker.
+///
+/// Modules are recursed and classes are not. A class nested inside a class resolves by verse path
+/// and so used to be describable, but nothing addresses one -- only the class named after its file
+/// can go on a node -- and recursing would harvest the archetype the compiler generates per class
+/// along with it.
+AUTORTFM_DISABLE void CollectSnapshotClassNames(const uLang::CModule& Module,
+                                                const FUtf8String& Path,
+                                                TArray<FUtf8String>& Out)
+{
+    for (const uLang::TSRef<uLang::CClass>& Class : Module.GetDefinitionsOfKind<uLang::CClass>())
+    {
+        const FUtf8String Name = FUtf8String(Class->AsNameCString());
+        Out.Add(Path.IsEmpty() ? Name : Path + UTF8TEXT("/") + Name);
+    }
+
+    for (const uLang::TSRef<uLang::CModule>& Submodule : Module.GetDefinitionsOfKind<uLang::CModule>())
+    {
+        const FUtf8String Name = FUtf8String(Submodule->AsNameCString());
+        CollectSnapshotClassNames(*Submodule, Path.IsEmpty() ? Name : Path + UTF8TEXT("/") + Name, Out);
+    }
+}
+
+AUTORTFM_DISABLE void TakeAnalysisSnapshot()
+{
+    const double Started = FPlatformTime::Seconds();
+
+    TSharedRef<FAnalysisSnapshot> Snapshot = MakeShared<FAnalysisSnapshot>();
+    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager =
+        GIde.IsValid() ? GIde->GetBuildManager() : nullptr;
+    if (!BuildManager.IsValid())
+    {
+        // No program to describe. The empty snapshot still replaces whatever was current, because
+        // the alternative is answering about a program that no longer exists.
+        GPendingSnapshot = Snapshot;
+        return;
+    }
+
+    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
+
+    TArray<FUtf8String> ClassNames;
+    if (const uLang::CModule* const Root = Program->FindDefinitionByVersePath<uLang::CModule>(ScriptVersePath))
+    {
+        CollectSnapshotClassNames(*Root, FUtf8String(), ClassNames);
+    }
+
+    for (const FUtf8String& ClassName : ClassNames)
+    {
+        FAnalysisSnapshot::FClass& Entry = Snapshot->Classes.Add(ClassName);
+
+        const FUtf8String ClassPath = FUtf8String(ScriptVersePath) + UTF8TEXT("/") + ClassName;
+        const uLang::CClass* const Class = Program->FindDefinitionByVersePath<uLang::CClass>(
+            FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath));
+        Entry.bAbstract = Class != nullptr && Class->IsAbstract();
+
+        GetClassMethodsLive(ClassName, Entry.Methods);
+        GetClassSignalsLive(ClassName, Entry.Signals);
+        Entry.bExportsHarvested = GetClassExportsLive(ClassName, Entry.Exports);
+        ClassMembersLive(ClassName, Entry.Members);
+    }
+
+    if (Program->_AstProject)
+    {
+        Snapshot->bAstAvailable = true;
+        for (const uLang::CAstCompilationUnit* CompilationUnit : Program->_AstProject->OrderedCompilationUnits())
+        {
+            for (const uLang::CAstPackage* Package : CompilationUnit->Packages())
+            {
+                // The project's own packages only. A name that needs an import from the Godot
+                // mirror is a different question, and the mirror is one module the whole project
+                // already imports.
+                const bool bIsUserPackage = Package->_VerseScope == uLang::EVerseScope::PublicUser
+                    || Package->_VerseScope == uLang::EVerseScope::InternalUser;
+                if (!bIsUserPackage || !Package->_RootModule)
+                {
+                    continue;
+                }
+                if (const uLang::CModule* const Root = Package->_RootModule->GetModule())
+                {
+                    CollectModuleDeclarations(*Root, FUtf8String(), Snapshot->ModulesDeclaring);
+                }
+            }
+        }
+    }
+
+    GPendingSnapshot = Snapshot;
+
+    if (AnalysisTraceEnabled())
+    {
+        fprintf(stderr,
+                "[vh-trace]   snapshot: %d class(es), %d name(s), %.2f ms semantic\n",
+                Snapshot->Classes.Num(),
+                Snapshot->ModulesDeclaring.Num(),
+                (FPlatformTime::Seconds() - Started) * 1000.0);
+        fflush(stderr);
+    }
+}
+
+AUTORTFM_DISABLE void PublishAnalysisSnapshot()
+{
+    if (!GPendingSnapshot)
+    {
+        return;
+    }
+
+    const double Started = FPlatformTime::Seconds();
+    int32 Defaults = 0;
+    int32 Constants = 0;
+
+    for (TPair<FUtf8String, FAnalysisSnapshot::FClass>& Pair : GPendingSnapshot->Classes)
+    {
+        FAnalysisSnapshot::FClass& Entry = Pair.Value;
+
+        // The published generation's view, which is not the analysis's: a class the buffer has
+        // renamed is in one and not the other, and an inspector default is generated code and so
+        // only ever comes from a build.
+        Entry.bInPublishedProgram = FindGodotClass(Pair.Key) != nullptr;
+        if (Entry.bInPublishedProgram && !Entry.Exports.IsEmpty())
+        {
+            // One transient instance for the whole class rather than one per member, which is what
+            // makes reading every default cost about what reading one used to.
+            TStrongObjectPtr<UObject> DefaultsObject(NewDefaultsObject(Pair.Key));
+            for (const GodotVerse::FExportDesc& Export : Entry.Exports)
+            {
+                Entry.Defaults.Add(Export.Name, ReadDefaultFieldOf(DefaultsObject.Get(), Export.Name));
+                ++Defaults;
+            }
+        }
+
+        TSharedRef<GodotVerse::FClassStatics> Statics = MakeShared<GodotVerse::FClassStatics>();
+        if (GetClassStaticsLive(Pair.Key, Statics->Statics, Statics->Values, Statics->Storage))
+        {
+            Constants += Statics->Statics.Num();
+            Entry.Statics = Statics;
+        }
+    }
+
+    GSnapshot = GPendingSnapshot;
+    GPendingSnapshot.Reset();
+
+    if (AnalysisTraceEnabled())
+    {
+        fprintf(stderr,
+                "[vh-trace]   snapshot: %d default(s), %d static(s), %.2f ms vm\n",
+                Defaults,
+                Constants,
+                (FPlatformTime::Seconds() - Started) * 1000.0);
+        fflush(stderr);
+    }
+}
+
+} // namespace
 
 AUTORTFM_DISABLE bool GodotVerse::SignatureAt(FUtf8StringView Path,
                                               const FUtf8String& SourceText,

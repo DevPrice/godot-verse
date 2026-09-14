@@ -43,7 +43,7 @@ extern "C" {
  * different toolchains and nothing links them.
  */
 #define VH_ABI_VERSION_MAJOR 6
-#define VH_ABI_VERSION_MINOR 0
+#define VH_ABI_VERSION_MINOR 1
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
 typedef int32_t vh_bool;
@@ -496,6 +496,19 @@ typedef struct vh_tick_stats
 	double ElapsedSeconds;
 	/* The budget stopped the pump with work still queued. */
 	vh_bool Overran;
+
+	/* Added at ABI v6.1: a consumer whose StructSize stops above these reads neither, and the host
+	 * writes neither. */
+
+	/* How many times the calling thread blocked waiting for a background analysis to finish since
+	 * the previous vh_tick, and the seconds it spent blocked.
+	 *
+	 * This is the editor's per-keystroke stall, and it is nowhere in the pump's own numbers: the
+	 * analysis runs on a thread the host owns, but ~20 entry points must wait it out before they
+	 * may touch the VM or the semantic program, so a completion or a hover asked mid-analysis pays
+	 * the rest of it. Zero on a frame where nothing had to wait, which is the common case. */
+	int32_t AnalysisWaits;
+	double AnalysisWaitSeconds;
 } vh_tick_stats;
 
 /* Runs queued Verse work for at most BudgetSeconds. Call once per frame. OutStats may be NULL.
@@ -512,7 +525,11 @@ typedef struct vh_tick_stats
  * It is no longer where Verse is restarted after a script raises. Until ABI v6 a runtime error
  * stopped every script in the process until the next tick and this was the frame boundary that
  * cleared it; now a raise terminates only the raising instance's task scope, and that instance is
- * given a fresh one at its next call. A consumer that never ticks still never runs queued work. */
+ * given a fresh one at its next call. A consumer that never ticks still never runs queued work.
+ *
+ * OutStats is filled up to its own StructSize: a consumer built against a lower minor gets the
+ * prefix it reserved and nothing past it. One smaller than the v6.0 struct is not a prefix of
+ * anything and is left untouched. */
 VH_ATTR VH_API void vh_tick(double BudgetSeconds, vh_tick_stats* OutStats);
 
 /* One .verse file, and where in the project's module tree it belongs. */
@@ -565,11 +582,17 @@ VH_ATTR VH_API int32_t vh_check_project(const char* PathUtf8, const char* Source
  * the init callback from vh_check_project_poll, so the callback still only ever runs on the
  * vh_init thread.
  *
- * While an analysis is in flight the host will not execute Verse. vh_tick becomes a no-op and
- * returns VH_ERR_STATE, and every entry point that reads the semantic program blocks until the
- * analysis finishes. Both are enforced here rather than asked of the caller because getting it
- * wrong is not recoverable: VerseVM blocks execution for the duration of a build, and ticking
- * anyway trips `ensure(!bBlockAllExecution)` and then takes the process down. */
+ * While an analysis is in flight the host will not execute Verse: vh_tick becomes a no-op, and
+ * every entry point that runs Verse -- vh_instantiate, vh_instance_call, vh_callback_invoke,
+ * vh_run_main, the instance field accessors, vh_compile_project -- blocks until the analysis
+ * finishes. That is enforced here rather than asked of the caller because getting it wrong is not
+ * recoverable: VerseVM blocks execution for the duration of a build, and ticking anyway trips
+ * `ensure(!bBlockAllExecution)` and then takes the process down.
+ *
+ * The entry points that merely *describe* a class do not block. They answer from a snapshot taken
+ * at the end of each analysis and made current by vh_check_project_poll, so what they describe is
+ * the last analysis that landed rather than the one in flight. vh_lookup_symbol is the exception
+ * that can do neither, and answers VH_ERR_STATE while one runs. */
 VH_ATTR VH_API int32_t vh_check_project_begin(const char* PathUtf8, const char* SourceUtf8);
 
 /* Reaps a vh_check_project_begin. Call from the vh_init thread, e.g. once per frame.
@@ -1016,12 +1039,19 @@ VH_ATTR VH_API int32_t vh_class_export_list(const char* ClassNameUtf8, const vh_
  * an empty option and `logic` false with the same cell, so the value alone cannot say which the
  * author wrote.
  *
- * OutValue points into storage owned by the host, valid until the next call to either field
- * reader. Returns VH_ERR_NOT_FOUND for a field the instance's shape does not carry. */
+ * OutValue points into storage owned by the host, valid until the next call to this function.
+ * Returns VH_ERR_NOT_FOUND for a field the instance's shape does not carry. */
 VH_ATTR VH_API int32_t vh_instance_get_field(vh_instance* Instance, const char* NameUtf8, const vh_value** OutValue);
 
 /* The same read against the class default object, whose Verse constructor has already run --
- * which is the only place a member's declared default can be got. Same storage lifetime. */
+ * which is the only place a member's declared default can be got.
+ *
+ * Every `@export` of every class is read into the analysis snapshot, so this is a lookup and never
+ * waits for an analysis. A member that is not an export is read on the spot, and answers
+ * VH_ERR_NOT_FOUND rather than blocking while an analysis is in flight.
+ *
+ * OutValue points into storage owned by the host, valid until the next call to *this* function --
+ * vh_instance_get_field has its own buffer and no longer invalidates this one. */
 VH_ATTR VH_API int32_t vh_class_default_field(const char* ClassNameUtf8, const char* NameUtf8, const vh_value** OutValue);
 
 /* Writes one data member on a live instance.
@@ -1147,6 +1177,11 @@ typedef struct vh_lookup_desc
  * host tracks which kind of build produced the program it holds and answers VH_ERR_NOT_FOUND
  * rather than trusting the caller to have asked at a safe moment. vh_compile_project leaves the
  * program analysable for this reason.
+ *
+ * Answers VH_ERR_STATE while a vh_check_project_begin analysis is in flight. A position resolves
+ * against the AST, which the worker is rebuilding and which no snapshot describes, so this is the
+ * one read that can neither answer nor be made to wait cheaply -- declining costs an underline for
+ * a frame.
  *
  * OutResult points into storage owned by the host, valid until the next call to this function.
  * Returns VH_ERR_NOT_FOUND when no identifier at that position resolves to a definition, which

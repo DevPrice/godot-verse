@@ -141,6 +141,11 @@ private:
 	// Rebuilds exports from the last analysis, or -- when that analysis cannot be believed --
 	// leaves the previous list standing and turns placeholder fallback on. GDScript::_update_exports
 	// is the same shape and for the same reason: see the note on placeholder_fallback_enabled.
+	//
+	// Returns immediately once the list describes the current analysis. The inspector asks for the
+	// property list on every redraw and on every selection change, and the answer can only change
+	// when an analysis lands or a generation is published -- so the rebuild happens there and this
+	// is a no-op in between.
 	void refresh_exports() const;
 
 	// The PROPERTY_USAGE_CATEGORY entry that heads the export list, naming the registered class
@@ -186,6 +191,11 @@ private:
 	// handing it an empty list over a typo would clear the inspector *and* drop the values out
 	// of the scene on the next save.
 	mutable godot::TypedArray<godot::Dictionary> exports_cache;
+
+	// Whether exports_cache describes the analysis the host currently holds. Cleared at the three
+	// moments the answer can change -- an analysis landing, a generation being published, and
+	// Godot asking for an update -- and set by the rebuild.
+	mutable bool exports_current = false;
 
 	// The method table from the same analysis as exports_cache, and refreshed with it. Cached
 	// rather than re-asked because Godot calls _has_method on paths that run per frame, and each

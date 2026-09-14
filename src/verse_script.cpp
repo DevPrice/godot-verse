@@ -162,7 +162,17 @@ Error VerseScript::compile() {
 
 bool VerseScript::analysis_landed() {
 	VerseScriptLanguage *language = VerseScriptLanguage::singleton();
-	if (!awaiting_analysis || language == nullptr) {
+	if (language == nullptr) {
+		return false;
+	}
+
+	// Every landed analysis, not only the one this script asked for. refresh_exports believes the
+	// project's diagnostics rather than this file's, so an edit to a file this script never heard
+	// of can be the reason its list has to give way to the placeholder's. The rebuild itself waits
+	// for the next ask, which is what stops the inspector paying for it on every redraw.
+	exports_current = false;
+
+	if (!awaiting_analysis) {
 		return false;
 	}
 
@@ -194,6 +204,10 @@ void VerseScript::refresh_from_analysis() {
 	if (runtime == nullptr || language == nullptr) {
 		return;
 	}
+
+	// What lets update_placeholders below actually rebuild the list: a new generation changes the
+	// declared defaults even when the analysis behind the shape has not moved.
+	exports_current = false;
 
 	// A file is valid when the project built and this file is not one of the reasons it might not
 	// have. Attachability is the separate question below: a `.verse` holding only module-level
@@ -646,6 +660,7 @@ Variant VerseScript::_get_property_default_value(const StringName &p_property) c
 }
 
 void VerseScript::_update_exports() {
+	exports_current = false;
 	update_placeholders();
 }
 
@@ -916,6 +931,11 @@ Dictionary VerseScript::class_header() const {
 // the build instead would empty the properties for as long as the file is broken, which is exactly
 // when the author wants to see them.
 void VerseScript::refresh_exports() const {
+	if (exports_current) {
+		return;
+	}
+	exports_current = true;
+
 	VerseRuntime *runtime = get_runtime();
 	VerseScriptLanguage *language = VerseScriptLanguage::singleton();
 	if (runtime == nullptr || language == nullptr) {

@@ -35,6 +35,7 @@ void VerseRuntime::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("_monitor_queued_jobs"), &VerseRuntime::_monitor_queued_jobs);
 	ClassDB::bind_method(D_METHOD("_monitor_pump_ms"), &VerseRuntime::_monitor_pump_ms);
 	ClassDB::bind_method(D_METHOD("_monitor_sleeping_tasks"), &VerseRuntime::_monitor_sleeping_tasks);
+	ClassDB::bind_method(D_METHOD("_monitor_analysis_wait_ms"), &VerseRuntime::_monitor_analysis_wait_ms);
 	ClassDB::bind_method(D_METHOD("build_project"), &VerseRuntime::build_project);
 }
 
@@ -934,6 +935,9 @@ void VerseRuntime::register_monitors() {
 	perf->add_custom_monitor("verse/queued_jobs", Callable(this, "_monitor_queued_jobs"));
 	perf->add_custom_monitor("verse/pump_ms", Callable(this, "_monitor_pump_ms"));
 	perf->add_custom_monitor("verse/sleeping_tasks", Callable(this, "_monitor_sleeping_tasks"));
+	// The stall the other three cannot show: analysis runs on a thread the host owns, so a frame
+	// that spent 1.7 s waiting one out reports a pump that did nothing in no time at all.
+	perf->add_custom_monitor("verse/analysis_wait_ms", Callable(this, "_monitor_analysis_wait_ms"));
 }
 
 double VerseRuntime::_monitor_queued_jobs() const {
@@ -946,6 +950,10 @@ double VerseRuntime::_monitor_pump_ms() const {
 
 double VerseRuntime::_monitor_sleeping_tasks() const {
 	return (double)last_tick_stats.Sleeping;
+}
+
+double VerseRuntime::_monitor_analysis_wait_ms() const {
+	return last_tick_stats.AnalysisWaitSeconds * 1000.0;
 }
 
 void VerseRuntime::api_print(void *p_ctx, const char *p_utf8, int32_t p_len) {
