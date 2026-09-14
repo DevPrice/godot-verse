@@ -1714,9 +1714,24 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 	result["result"] = (int64_t)ERR_UNAVAILABLE;
 	result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_LOCAL_VARIABLE;
 
+	// GDScript answers a class name out of ClassDB before it parses anything; this is the same trick
+	// over the mirror's static table, needing no marker, no analysis and no host call. Every refusal
+	// below routes through it instead of returning `result` bare, so a hover on a mirrored class name
+	// survives no host, no build yet, a stale buffer, a busy analysis and a lookup that named nothing
+	// -- but never preempts an analysed answer, because it only runs where the function was about to
+	// give up: a local or member that happens to share a class's spelling still resolves to itself.
+	auto refuse_or_mirrored_class = [&]() -> Dictionary {
+		if (const char *godot_class = p_symbol.is_empty() ? nullptr : godot_doc_class_for(p_symbol)) {
+			result["result"] = (int64_t)OK;
+			result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS;
+			result["class_name"] = String(godot_class);
+		}
+		return result;
+	};
+
 	VerseRuntime *runtime = get_runtime();
 	if (!project_built || runtime == nullptr || !runtime->is_host_loaded()) {
-		return result;
+		return refuse_or_mirrored_class();
 	}
 
 	// The editor marks the cursor by splicing U+FFFF into the buffer it hands over, and that is
@@ -1726,7 +1741,7 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 	// off the end of the text, so a missing marker is ordinary rather than a fault.
 	const int64_t marker = p_code.find(String::chr(0xFFFF));
 	if (marker < 0) {
-		return result;
+		return refuse_or_mirrored_class();
 	}
 
 	const String before = p_code.substr(0, marker);
@@ -1741,20 +1756,20 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 	// line. This is the same predicate check_buffer uses to decide a re-analysis is unnecessary.
 	const String normalized = verse_newline_normalized(before + p_code.substr(marker + 1));
 	if (!analyzed_source_by_path.has(p_path) || String(analyzed_source_by_path[p_path]) != normalized) {
-		return result;
+		return refuse_or_mirrored_class();
 	}
 
 	// The host blocks on an in-flight analysis before touching the semantic program, and this
 	// runs on the editor's thread. An analysis of some other file is the one case where the
 	// buffer can be current and the host still busy; declining costs an underline for a frame.
 	if (runtime->is_check_project_busy()) {
-		return result;
+		return refuse_or_mirrored_class();
 	}
 
 	const String globalized = ProjectSettings::get_singleton()->globalize_path(p_path);
 	const Dictionary found = runtime->lookup_symbol(globalized, (int32_t)line, (int32_t)column);
 	if (found.is_empty()) {
-		return result;
+		return refuse_or_mirrored_class();
 	}
 
 	result["result"] = (int64_t)OK;
