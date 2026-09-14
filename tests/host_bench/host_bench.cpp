@@ -237,6 +237,7 @@ int main(int argc, char** argv)
 	auto CheckProjectPollFn = Resolve<vh_check_project_poll_fn>(Module, "vh_check_project_poll", &Ok);
 	auto CompleteSymbolFn = Resolve<vh_complete_symbol_fn>(Module, "vh_complete_symbol", &Ok);
 	auto SignatureAtFn = Resolve<vh_signature_at_fn>(Module, "vh_signature_at", &Ok);
+	auto LookupSymbolFn = Resolve<vh_lookup_symbol_fn>(Module, "vh_lookup_symbol", &Ok);
 	auto ClassMembersFn = Resolve<vh_class_members_fn>(Module, "vh_class_members", &Ok);
 	auto ClassExportListFn = Resolve<vh_class_export_list_fn>(Module, "vh_class_export_list", &Ok);
 	if (!Ok)
@@ -413,6 +414,7 @@ int main(int argc, char** argv)
 	std::vector<double> ScopeWarmSamples;
 	std::vector<double> SignatureRefusedSamples;
 	std::vector<double> SignatureSamples;
+	std::vector<double> LookupSamples;
 	int32_t RefusalsSeen = 0;
 	int32_t RefusalsExpected = 0;
 	{
@@ -511,6 +513,21 @@ int main(int argc, char** argv)
 				CompleteSymbolFn(ExportsPathUtf8.c_str(), ScopeTyping.c_str(), ScopeRow, ScopeColumn,
 								 VH_COMPLETE_SCOPE, &Items, &Count);
 				ScopeWarmSamples.push_back(MillisSince(ScopeStart));
+
+				// Hover and goto-definition, off the same landed analysis. Asked on `Position`,
+				// whose definition is in the mirror rather than in the project: the walk that finds
+				// the cursor is over the project's own package, and what it resolves to is not.
+				const size_t Hovered = ScopeTyping.find("Position.X");
+				if (Hovered != std::string::npos)
+				{
+					int32_t HoverRow = 0;
+					int32_t HoverColumn = 0;
+					RowColumnOf(ScopeTyping, Hovered + 1, HoverRow, HoverColumn);
+					const vh_lookup_desc* Looked = nullptr;
+					const Clock::time_point LookupStart = Clock::now();
+					LookupSymbolFn(ExportsPathUtf8.c_str(), HoverRow, HoverColumn, &Looked);
+					LookupSamples.push_back(MillisSince(LookupStart));
+				}
 
 				// The argument hint, asked at the callee's last byte for the same reason. Asked
 				// about the buffer the scope analysis just landed for, which is the editor's own
@@ -708,6 +725,7 @@ int main(int argc, char** argv)
 	ReportSeries("complete scope (warm)", ScopeWarmSamples);
 	ReportSeries("vh_signature_at (refused)", SignatureRefusedSamples);
 	ReportSeries("vh_signature_at (warm)", SignatureSamples);
+	ReportSeries("vh_lookup_symbol (warm)", LookupSamples);
 	printf("[bench] %-28s %d of %d refused with VH_ERR_STATE\n",
 		   "completion refusals", RefusalsSeen, RefusalsExpected);
 	ReportSeries("vh_class_members", ClassMembersSamples);
