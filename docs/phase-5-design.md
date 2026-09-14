@@ -66,7 +66,7 @@ design-retiring — included. It retired nothing.
 | D10 | **A rebuild cancels every suspended task and reports a count** | Both engines cancel. GDScript: `GDScriptCompiler` calls `cancel_pending_functions(true)` (`gdscript_compiler.cpp:2721`), which warns *"Canceling suspended execution of \"X\" due to a script reload."* (`gdscript.cpp:1516-1529`). C# does not even try — a pending `await` dies with the ALC. We report a **count**, not a per-method name, because reading a decorated name back off a suspended continuation may not be free |
 | D11 | **OQ-16 closes: the task is the owner.** An awaiting continuation is anchored to its task, which is anchored to its scope | R-ASYNC-5 and OQ-16 become one mechanism: free the node → the scope goes → the task cancels → the connection drops. Unbound callbacks *outside* a task stay refused, as Phase 4a decided |
 | D12 | **ABI v6, a major bump, is acceptable** | Pre-1.0, no compatibility obligation, and `run_tests.py --build` already rebuilds the test binaries. Design the right ABI and bump it |
-| D13 | **Exit is DtC wall 3 down plus `docs/by-hand-checklist.md` run** — the checklist at the *end*, covering all three phases' entries in one windowed session | Same gate shape Phase 4a used: the port is rewritten in place and the diff is the measurement |
+| D13 | **Exit is DtC wall 3 down plus the by-hand checks run** — at the *end*, covering all three phases' entries in one windowed session | Same gate shape Phase 4a used: the port is rewritten in place and the diff is the measurement. Met; [`by-hand-findings.md`](by-hand-findings.md) is what they found |
 | ~~D14~~ | ~~A void virtual may be `<suspends>`; a value-returning one may not~~ — **retired by S-0 F7** | A virtual override **cannot carry `<suspends>` at all**, and the refusal is not the effect error the decision assumed. `_Ready<override>()<suspends>:void` is glitch **3532** *"must have a distinct domain from these other functions with the same name"* plus **3523** *"has an `<override>` attribute, but could not find a parent function to override"* — the specifier makes it a **different function**, so there is nothing to override. §4.1's virtual-descriptor `Reject` machinery was built for a case the compiler refuses two steps earlier, and it is struck. What replaces it is **D19**, and a sentence in the manual rather than a diagnostic rewrite |
 | D15 | **Each resumption opens its own nested `AutoRTFM::Transact`** | Under D3 a task resumes inside `emit_signal`, usually inside a Godot callback inside another method's transaction. Without nesting, a raise in the task aborts *that* method's transaction and drops its writes — D2's blast radius back again, in miniature. Nesting makes D2's rule literally true for tasks as well as calls. **Unmeasured: this is S-4's** |
 | D16 | **Tasks run in the editor only for `@tool` scripts**, exactly as `_Process` does | Matches GDScript. It also keeps a non-tool script's task away from the scene the author is editing, which is the half of R-DIAG-3 Phase 3 could not fix |
@@ -527,11 +527,12 @@ wall table both need editing, and `hud.verse`'s own comment at its lines 22-27 i
 way `godot_signal.Subscribe` is, with a `tests/integration` case that aborts it and checks no
 connection was left.
 
-**And `docs/by-hand-checklist.md` is run** — one windowed session covering all three phases' entries:
+**And the by-hand checks are run** — one windowed session covering all three phases' entries:
 Phase 3's windowed yardstick run and editor session, Phase 4's Node panel, `_make_function`,
-`_HasPoint` and `_CanDropData` flows, and whatever Phase 5 adds. Nothing on it can run headless.
-**Ask before launching the editor** — `tools/run_tests.py`'s headless Godot is fine unprompted; a
-window is not.
+`_HasPoint` and `_CanDropData` flows, and whatever Phase 5 adds. **Done**, and
+[`by-hand-findings.md`](by-hand-findings.md) is the record — the list itself is deleted, and two of
+the entries turned out to be reachable headless after all. **Ask before launching the editor** —
+`tools/run_tests.py`'s headless Godot is fine unprompted; a window is not.
 
 ---
 

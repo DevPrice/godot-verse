@@ -1,9 +1,10 @@
 # godot-verse — Roadmap
 
-**Status:** Draft 10 · 2026-09-13 · **Phases 0–5 complete**, bar the by-hand checks three phases
-now owe — Phase 3's windowed yardstick run and editor session, Phase 4's Node-panel and
-`_make_function` flows, and Phase 5's five. [`by-hand-checklist.md`](by-hand-checklist.md) is all
-of them, and each design asks for one windowed session rather than three. Phase 3's design is
+**Status:** Draft 11 · 2026-09-13 · **Phases 0–5 complete.** The by-hand checks three phases owed
+have been run, in one windowed session as each design asked — Phase 3's yardstick run and editor
+session, Phase 4's Node-panel and `_make_function` flows, and Phase 5's five.
+[`by-hand-findings.md`](by-hand-findings.md) is what they found: nine defects, all now fixed, and
+two things that stay open because nothing can automate them. Phase 3's design is
 [`phase-3-design.md`](phase-3-design.md); what Phase 2 built, and the four places its design was
 wrong, are in [`phase-2-design.md`](phase-2-design.md) §11.
 
@@ -516,9 +517,10 @@ checklist, which needs a windowed editor and is owed.
 and the ABI went to v5 doing it: signals are refused at the member rather than at the emission, a
 struct payload crosses both ways, the thread guard covers every entry point, all sixteen math types
 carry their operators and the methods scene code reaches, and all 114 `@GlobalScope` utilities are
-classified with none unexplained. `_make_function` is written. So the by-hand checklist is now the
-*whole* of what the phase owes — and three of its entries were measured to be unreachable from a
-headless run rather than merely untested, which makes that list the only way to close them.
+classified with none unexplained. `_make_function` is written and has since been watched write a
+handler. **The phase owes nothing**: its by-hand checks are done and what they found is closed
+([`by-hand-findings.md`](by-hand-findings.md)). One `Control` virtual, `_CanDropData`, has still
+never been exercised, and B11 there is the measurement saying no headless run can reach it.
 
 ### What 4a leaves open
 
@@ -546,7 +548,8 @@ Written here rather than only in `spec.md` §14, because the next phase's shape 
   export machinery above them.
 
 **Exit for 4b:** a Verse custom Resource is created, saved to `.tres`, edited in the inspector and
-loaded back; a Verse autoload answers from every scene; and the by-hand checklist is run.
+loaded back, and a Verse autoload answers from every scene. (4a's by-hand clause is met: the checks
+were run and [`by-hand-findings.md`](by-hand-findings.md) is the record.)
 
 ---
 
@@ -606,7 +609,7 @@ change: narrowing a callee is invisible to its callers.
 
 ## Phase 5 — Concurrency
 
-**Built**, except for the by-hand checklist. [`phase-5-design.md`](phase-5-design.md) is the
+**Built**, by-hand checks included. [`phase-5-design.md`](phase-5-design.md) is the
 record, and **§14 is the section to read first** — written after the work, it is where the design
 turned out to be wrong. §2 was filled in the same way *before* the work, from twelve questions put
 to the Verse compiler through `tests/verse_probe`, which is why so little of the rest needed
@@ -646,11 +649,11 @@ resumption inside an open transaction is safe, because each resumption opens its
   scheduler whose thread affinity would have to be redesigned, because resumption is event-driven.
   OQ-6's row says so.
 
-**Exit:** met, except the last clause. `dodge-the-creeps`'s **wall 3 fell** — `hud.verse` went from
-55 lines of code to 44, the `hud_phase` enum and the extra Timer node and both phase-reading
-handlers are gone, and all 30 headless checks still pass. What is **still owed** is
-[`by-hand-checklist.md`](by-hand-checklist.md), run in one windowed session covering all three
-phases that owe it.
+**Exit: met.** `dodge-the-creeps`'s **wall 3 fell** — `hud.verse` went from 55 lines of code to 44,
+the `hud_phase` enum and the extra Timer node and both phase-reading handlers are gone, and all 30
+headless checks still pass. The by-hand session ran too, covering all three phases that owed it;
+[`by-hand-findings.md`](by-hand-findings.md) is what it found, and the game-over sequence and the
+freed-node task were two of the entries it ticked.
 
 ---
 

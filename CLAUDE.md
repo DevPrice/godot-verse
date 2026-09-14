@@ -23,7 +23,7 @@ name because `PackageRelativeVersePath` is dead under VerseVM; and asking the *s
 one must not use `EPathMode::PackageRelative`, which is fatal for a class with no package. §1.1 has
 OQ-12's answer (positive: the package name carries the generation, the verse path is pinned).
 Its two by-hand checks — a windowed run of the yardstick, and an editor session — have since been
-done; `docs/by-hand-checklist.md` carries them and `docs/by-hand-findings.md` what they found.
+done; `docs/by-hand-findings.md` is what they found.
 
 **Phase 4a is built; 4b is not.** `docs/phase-4-design.md` is the design, and unusually for this repo
 its spikes ran *before* it was written — **§2 is where they are**. **`docs/phase-4-gaps.md` is the
@@ -32,8 +32,8 @@ the design disagree, what is unbuilt, and what would close each. §13 of the des
 phase and carries its measurements.
 
 **Every one of those entries is now closed, built or answered** — G13 (the math bodies) and G11 (the
-utilities) went with the rest, so **the by-hand checklist is the whole of what Phase 4 still owes**.
-Closing them took the ABI to v5, and Phase 5 took it to **v6**; either way both DLLs must be
+utilities) went with the rest, and the by-hand checks the phase owed have since been run
+(`docs/by-hand-findings.md`), so **the phase owes nothing**. Closing them took the ABI to v5, and Phase 5 took it to **v6**; either way both DLLs must be
 rebuilt and `run_tests.py --build` is how the test binaries follow.
 
 The four ways a signal declaration could compile and not work (G1–G4) are one validation pass in
@@ -53,7 +53,7 @@ virtual with no ClassDB entry, and `Script.get_language()` is not in the public 
 reach neither — the editor's own C++ is its only caller. G19 said the same of `_HasPoint` and
 `_CanDropData`; it was right about only one of them. `_HasPoint` is a case in `tests/integration`
 now, because the engine asks it unprompted as soon as `Input.parse_input_event` supplies a click.
-`_CanDropData` is the one entry the by-hand checklist still owes.
+`_CanDropData` is the one Godot virtual that has still never been exercised.
 
 Four things it settled are load-bearing everywhere else. A virtual is spelled the way Godot spells
 it — **`_Ready`, not `Ready`**, and §7.1 counts the eight *signal* collisions that decided it.
@@ -168,10 +168,12 @@ What it settled, all of which is load-bearing:
   queue and nothing else — a task resuming inside an emission is unbudgeted, exactly as GDScript's
   resume is — and `vh_tick` now fills a `vh_tick_stats` that becomes three Godot custom monitors.
 
-**`docs/by-hand-checklist.md` has been run** — 21 of its 22 entries are ticked, only `_CanDropData`
-is still owed, and **everything it found is fixed**. **`docs/by-hand-findings.md` is the part to
-read**: B1–B9 are the defects, B10–B11 are about the list, B12 is a Verse fact, and its "What
-shipped" table says what each change came to. Four of them are load-bearing outside the editor:
+**The by-hand checks have been run, and `docs/by-hand-checklist.md` is deleted** — all twenty-two
+of its entries were watched happen, and what is worth keeping is what they found rather than the
+list. **`docs/by-hand-findings.md` is that**: B1–B9 are the defects, all fixed, B10–B11 are about
+the list itself, B12 is a Verse fact, its "What shipped" table says what each change came to, and
+its "What is still open" section is where the two remaining by-hand checks live. Four are
+load-bearing outside the editor:
 
 - **B1** — override completion had offered nothing inside a class body since Phase 4 moved the
   virtuals onto the mirrored classes. `method_mapping` carries `is_virtual` now.

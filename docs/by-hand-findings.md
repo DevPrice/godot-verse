@@ -1,8 +1,10 @@
 # What the by-hand session found
 
-**Status:** 2026-09-13 · the record of the first windowed pass over
-[`by-hand-checklist.md`](by-hand-checklist.md), which had never been run — and of the work that
-closed what it found. **Every entry below is fixed**, except the two that are not defects: B11 is a
+**Status:** 2026-09-13 · the record of the first — and, as it turned out, only — windowed pass over
+what was `docs/by-hand-checklist.md`, and of the work that closed what it found. **The checklist is
+deleted**: all twenty-two of its entries were watched happen, and what is worth keeping is what they
+found rather than the list. §"What is still open" at the bottom carries the two things that
+outlived it. **Every entry below is fixed**, except the two that are not defects: B11 is a
 measurement, and B8 is fixed for the half a headless run can reach and re-checkable by hand for the
 other. `tools/run_tests.py` is 2/2 with **316** integration cases, up from 311.
 
@@ -17,8 +19,7 @@ headless for B9, B10 and B11. §0 of [`phase-4-gaps.md`](phase-4-gaps.md) is why
 here: B4's obvious diagnosis is not its whole cause, and B11's first two plausible workarounds both
 failed.
 
-**Companion to:** [`by-hand-checklist.md`](by-hand-checklist.md) (the list, now ticked),
-[`phase-4-gaps.md`](phase-4-gaps.md) (G19, which B10 partly retires),
+**Companion to:** [`phase-4-gaps.md`](phase-4-gaps.md) (G19, which B10 partly retires),
 [`phase-4.5-design.md`](phase-4.5-design.md) §11 and [`phase-5-design.md`](phase-5-design.md) §14
 (where B6 and B7 change what those phases built).
 
@@ -350,7 +351,37 @@ for:
 | **B10** | `tests/integration/scripts/has_point_probe.verse` and two cases, both answers exercised. |
 | **B12** | `CLAUDE.md`, beside the dropped-continuation-line constraint. |
 
-**Two things are still owed by hand**, and both are named on the checklist rather than here: the
-gutter icon B4 should have restored, which only the editor draws, and the half of B8 that turns a
-placeholder into a real instance, which only happens under `is_editor_hint()`. Plus `_CanDropData`,
-which was never going to be automated.
+---
+
+## What is still open
+
+The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks
+is not worth keeping. Two things outlived it. Neither can be automated, and both are here because
+this is where they would otherwise be lost.
+
+### `_CanDropData` has never been exercised
+
+The one entry that was never ticked, and §B11 above is the measurement that says why no headless run
+can reach it. It is a `Control` virtual Godot asks only from the drag path.
+
+**To check it:** give a Control a `_CanDropData<override>(AtPosition:vector2, Data:variant):logic`
+returning `true` and a `_DropData<override>` that prints, put it in a windowed scene beside another
+Control, start a drag with `force_drag` and drop it on the first. The cursor must accept the drop
+and `_DropData` must run. A wrong default is a script that works and an engine that behaves
+differently, with nothing printed. `phase-4-gaps.md` G19 carries the same note against the gap it
+came from.
+
+### Adding `@tool` to an existing script needs the scene reloaded
+
+Editing a live `@tool` script takes effect on save; giving a script `@tool` for the first time does
+not, because the node is holding a *placeholder* and the swap to a real instance does not happen.
+§B8 has what is ruled out and where to look. Small enough to live with — the workaround is one
+scene reload — and invisible to every automated layer, because a placeholder only exists under
+`is_editor_hint()`.
+
+### And when one of these is looked at again
+
+Record what you saw the way every other correction in this repository is recorded: in
+[`phase-4-gaps.md`](phase-4-gaps.md), or in the relevant design document's "where this design was
+wrong" section, or here. Then decide whether it is worth automating — `_HasPoint` in §B10 is the
+case for asking that question rather than assuming the answer.

@@ -824,10 +824,11 @@ measurement is worth taking once the larger of the two has landed.
   is Phase 5's, and the HUD keeps its state machine with a comment saying why.
 - **The 29 headless checks still pass**, plus whatever the re-port adds.
 - **`tools/run_tests.py` is green**, with a new integration case per requirement (R-QUAL-2).
-- **The by-hand checklist has been run**: Phase 3's two owed checks first (a windowed yardstick run
-  and an editor session), then this phase's — connecting a signal through the Node panel, letting
-  `_make_function` write the handler, a `@tool` script's `_get_configuration_warnings` appearing on
-  the node, and an `_input` handler receiving a key.
+- **The by-hand checks have been run** — Phase 3's two (a windowed yardstick run and an editor
+  session) and this phase's: connecting a signal through the Node panel, letting `_make_function`
+  write the handler, a `@tool` script's `_get_configuration_warnings` appearing on the node, and an
+  `_input` handler receiving a key. [`by-hand-findings.md`](by-hand-findings.md) is the record; the
+  list they were on is deleted.
 - **The spec is edited in the same commits**: R-SIG-1/2/3/6 to `done`, R-SIG-4 to `done`,
   R-NODE-7/8 to `done`, R-INT-2/R-TYPE-2 to `done`, R-SCN-3 and OQ-11 closed, R-EXP-5 to `done`,
   R-AUD-2 carrying the random exception, and **R-NODE-10** added for the script hooks 4b inherits.
@@ -935,7 +936,8 @@ Written after building 4a. **The full list lives in [`phase-4-gaps.md`](phase-4-
 the single record of where the implementation and this document disagree and is written for someone
 picking the phase back up with no memory of it. Twenty-one entries, each with what the design said,
 what is there, why, and what closing it would take. **All of them are now closed, answered or
-deliberately narrowed**; what the phase still owes is the by-hand checklist.
+deliberately narrowed**, and the by-hand checks have since been run and what they found fixed
+([`by-hand-findings.md`](by-hand-findings.md)). The phase owes nothing.
 
 The short version, for a reader who is here rather than there:
 
@@ -980,10 +982,8 @@ cooked route is informed rather than urgent.
 
 ### 13.2 What is still owed
 
-- **The by-hand checklist**, which needs a windowed editor: connecting a signal through the Node
-  panel, `_make_function` writing the handler, a `@tool` script's `_get_configuration_warnings` on
-  the node, an `_input` handler receiving a key. Phase 3's two owed checks are still owed with them.
-  It is [`by-hand-checklist.md`](by-hand-checklist.md), which has since been run: all of it but
-  `_CanDropData` is ticked, and [`by-hand-findings.md`](by-hand-findings.md) is what it found.
+- ~~**The by-hand checks**~~ — run, with Phase 3's two and Phase 5's, in one windowed session.
+  [`by-hand-findings.md`](by-hand-findings.md) is what they found: nine defects, all fixed, and two
+  things still open because nothing can automate them.
 - **The twenty gaps in [`phase-4-gaps.md`](phase-4-gaps.md)**, §9 of which suggests an order.
 - **4b**, which this document sketches in §10 and does not design.

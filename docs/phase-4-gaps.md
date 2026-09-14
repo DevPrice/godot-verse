@@ -9,17 +9,18 @@ turned out to be false, that is noted and the document has been corrected.
 G19–G21 are built; G5 is built and provably unverifiable without a window; G9 was answered with a
 "do not build this"; G14–G18 were always working as built. The ABI is at **v5**.
 
-**What Phase 4 still owes is the by-hand checklist** — and nothing here can substitute for it: two
-of its entries (`_make_function` and `_CanDropData`) were *measured* to be unreachable from a
-headless run, rather than merely untested. A third, `_HasPoint`, was recorded here as unreachable
-and is not; G19 carries the correction. Each closed entry keeps its original diagnosis below its
+**Phase 4's by-hand checks have since been run**, and nothing here could have substituted for them:
+two (`_make_function` and `_CanDropData`) were *measured* to be unreachable from a headless run
+rather than merely untested. A third, `_HasPoint`, was recorded here as unreachable and is not; G19
+carries the correction. What they found is [`by-hand-findings.md`](by-hand-findings.md), and
+`_CanDropData` is the one thing on it still open. Each closed entry keeps its original diagnosis below its
 **Built** note, because the diagnosis is the part worth re-reading: §0 is why, and §0 earned its keep
 repeatedly — G13's stated blocker, G11's stated shape, and G9's stated fix were all wrong, and each
 took minutes to disprove and would have taken days to build wrongly.
 
 **Companion to:** [`phase-4-design.md`](phase-4-design.md) (the design, and §13's short note pointing
-here), [`spec.md`](spec.md) (per-requirement status), [`by-hand-checklist.md`](by-hand-checklist.md)
-(what no headless run can see).
+here), [`spec.md`](spec.md) (per-requirement status), [`by-hand-findings.md`](by-hand-findings.md)
+(what the windowed session found, and the two things no headless run can see).
 
 **Who this is for.** Someone picking Phase 4 back up with no memory of building it. The phase is
 green — `tools/run_tests.py` is 7/7 with 266 integration cases and the yardstick's 30 headless
@@ -124,8 +125,8 @@ The five reasons, all decidable from the declaration:
 Tests: `tests/integration/scripts/signal_rejects.verse` (the four member-level refusals, plus one
 good signal on the same class so the pass is shown to reject individually rather than wholesale) and
 `signal_no_owner.verse` (the class with no base, which needs a file of its own because the thing
-being tested *is* the base). The *editor* sentences need a window and are on
-[`by-hand-checklist.md`](by-hand-checklist.md); the runtime ones each have an emitter, because "it
+being tested *is* the base). The *editor* sentences need a window and have been watched
+([`by-hand-findings.md`](by-hand-findings.md)); the runtime ones each have an emitter, because "it
 was rejected" and "it was rejected for the right reason" are different claims and only the second
 helps an author. As of this pass they read:
 
@@ -265,8 +266,8 @@ returns — so the whole job is the text, and three things in it are load-bearin
 `_make_function` is a `ScriptLanguageExtension` virtual with no ClassDB entry, and
 `Script.get_language()` is not in the public API either, so GDScript can reach neither the language
 nor the method — calling it by name answers *"Nonexistent function '_make_function (via call)'"*,
-measured. The editor's own C++ is its only caller. `by-hand-checklist.md` carries the check with the
-exact text to expect.
+measured. The editor's own C++ is its only caller. It has since been watched write one, and the
+stub it wrote did not compile — [`by-hand-findings.md`](by-hand-findings.md) B3.
 
 **Original entry:**
 
@@ -764,13 +765,13 @@ that never ran cannot pass — and the suite asserts Godot answers that through 
 covers the mechanism all three share: the engine asks a script a question and acts on the answer, so
 a virtual silently keeping its default is a working script with wrong engine behaviour.
 
-`_HasPoint` and `_CanDropData` move to `by-hand-checklist.md`, where what cannot be automated goes.
+`_HasPoint` and `_CanDropData` move to the by-hand checklist, where what cannot be automated goes.
 
 **Correction, 2026-09-13 — half of that is wrong.** "No public caller" is true of both and settles
 nothing about `_HasPoint`, because the engine asks it *unprompted* as soon as a click exists, and
 `Input.parse_input_event` manufactures one under `--headless`. Two Controls on the same rect, the
 top one overriding `_HasPoint`: `false` sends the click through to the one underneath and `true`
-keeps it, both observed. It should be a case in `tests/integration`, not a line on the checklist.
+keeps it, both observed. It is a case in `tests/integration` now rather than a line on a list.
 `_CanDropData` really is unreachable, and for a reason this entry never established —
 `by-hand-findings.md` B10 and B11 have both, with the Godot source that decides it.
 
@@ -779,7 +780,7 @@ keeps it, both observed. It should be a case in `tests/integration`, not a line 
 Both edited. R-EXP-5 now says the editor-only virtual surface is a *declaration* that needs no code
 of its own and is **not** yet a test — `_GetConfigurationWarnings` is exercised by direct call on a
 non-tool script, which proves the method resolves and nothing about the editor consulting it — and
-points at the by-hand checklist for the real one. R-AUD-2 carries the random-family exception in its
+pointed at the by-hand checklist for the real one, which has since been done. R-AUD-2 carries the random-family exception in its
 own body now, with the argument that makes it an exception rather than an inconsistency: `seed()` and
 `randomize()` name a *stream*, so a Verse-side RNG would silently ignore both and a project that
 seeds for a replay would get a different game. That is a model difference wearing a spelling's
@@ -789,9 +790,10 @@ clothes, and R-AUD-2's own rule is that Godot's model wins.
 
 ## 7. What is owed by hand
 
-[`by-hand-checklist.md`](by-hand-checklist.md), all of it. **Nothing on it has been run.** It needs a
-windowed editor, which no automated layer in this repo starts. Phase 3's two owed checks are on it
-too. **G5** cannot be verified without it.
+**Nothing, now.** The whole list was run in one windowed session with Phase 3's two owed checks and
+Phase 5's, and [`by-hand-findings.md`](by-hand-findings.md) is what it found — nine defects, all
+fixed, and two things that stay open because nothing can automate them: `_CanDropData`, and adding
+`@tool` to a script that did not have it. **G5** was verified there, and was broken.
 
 ---
 
@@ -814,14 +816,15 @@ Items 1–4 are **done**, struck through, and their entries above say what shipp
 2. ~~**G12** — record the math skips.~~ Done.
 3. ~~**G6** — finish the thread guard.~~ Done, and it found a `GCallbacks` race on the way.
 4. ~~**G9** — decide before Phase 5.~~ Decided: **do not build it**, R-ASYNC-4 first. See the entry.
-5. ~~**G5** — `_make_function`.~~ Built. Still needs the by-hand checklist to *verify*, and now
-   provably so: it is unreachable from GDScript, so there is no automated check to write.
+5. ~~**G5** — `_make_function`.~~ Built, and since verified by hand, which is the only way: it is
+   unreachable from GDScript, so there is no automated check to write. The stub it wrote did not
+   compile (`by-hand-findings.md` B3).
 6. ~~**G7**, **G8**, **G10**, **G19**, **G20**~~ — done.
 7. ~~**G13** and **G11**.~~ Both closed. All sixteen math types carry their operators and the
    methods scene code reaches; all 114 utilities are classified with none unexplained.
 
-**Nothing on this list is open.** What remains for the phase is
-[`by-hand-checklist.md`](by-hand-checklist.md), which needs a person and a window.
+**Nothing on this list is open**, and neither is anything the by-hand session found —
+[`by-hand-findings.md`](by-hand-findings.md) closed all of it bar `_CanDropData`.
 8. ~~**G21** — needs an ABI decision before it is ordinary work.~~ The signal half needed no such
    decision and is done. What is left is **R-LANG-2**'s general case — a struct as a method
    parameter, a return value, an `@export` — and the spec has already chosen the Dictionary; it wants

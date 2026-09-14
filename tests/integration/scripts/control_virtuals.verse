@@ -10,7 +10,8 @@ using { /Godot.org/Godot }
 # `_GetMinimumSize` is the one of that family a headless run can reach, because it is the only one
 # with a *public* caller: `Control.get_minimum_size()`. Its siblings `_HasPoint` and `_CanDropData`
 # are reached only from pointer-input and drag paths, which need a window and a mouse, so they are on
-# by-hand-checklist.md rather than here. What is asserted is the mechanism all three share.
+# has_point_probe.verse (`_HasPoint`, via an injected click) and, for `_CanDropData`, on a person
+# with a window -- by-hand-findings.md B11. What is asserted here is the mechanism all three share.
 @global_class
 control_virtuals := class(control):
 

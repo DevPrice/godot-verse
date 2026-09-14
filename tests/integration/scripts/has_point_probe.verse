@@ -2,11 +2,11 @@ using { /Godot.org/Godot }
 
 # `_HasPoint`, which decides whether a click is this control's at all.
 #
-# It was on `by-hand-checklist.md` with `_CanDropData`, both recorded in `phase-4-gaps.md` G19 as
+# It was owed by hand alongside `_CanDropData`, both recorded in `phase-4-gaps.md` G19 as
 # having no public caller and so no way for a headless run to make the engine ask. The first half
 # is true and the conclusion was wrong: nothing has to *call* `_HasPoint`, because the engine asks
 # it on its own as soon as a click exists, and `Input.parse_input_event` manufactures one under
-# `--headless`. `_CanDropData` really is unreachable and stays on the checklist alone
+# `--headless`. `_CanDropData` really is unreachable and is owed by hand still
 # (`by-hand-findings.md` B10 and B11).
 #
 # What makes this a test of the virtual rather than of the plumbing is that both answers are

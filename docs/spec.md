@@ -438,6 +438,15 @@ on closing it.
   (which would mint a Godot Array on every call Godot makes to a virtual nobody overrode). That is
   R-SCN-2's machinery, so the gap says so in the editor rather than being silently absent.
 
+  **One of the 1413 has still never been exercised: `_CanDropData`.** The behavioural risk is
+  confined to the handful whose *return value* the engine acts on, and those are covered —
+  `_GetMinimumSize` through `Control.get_minimum_size()`, and `_HasPoint` by injecting a click with
+  `Input.parse_input_event`, which makes the engine's own picking path ask. `_CanDropData` is reached
+  only from the drag path, and `Viewport` gets there through `gui.target_control`, which
+  `_update_mouse_over` leaves unset for a native window because the dummy display server sends no
+  window-enter event — so no headless run can make the engine ask. `by-hand-findings.md` B10 and B11
+  measure both halves; the second says how to check it with a window.
+
   Two bugs were found on the way and are worth recording. `GodotVirtualNameOf` turned `_Ready` into
   `__ready`, because it prepended a separator before every capital and Godot's name already starts
   with one. And `InstanceHasFunction` — which decides whether Godot puts the node in the process
@@ -630,8 +639,9 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   What is still untested is the **editor-side flow**, and it is untestable here rather than merely
   untested: `_make_function` is a `ScriptLanguageExtension` virtual with no ClassDB entry and
   `Script.get_language()` is not in the public API, so GDScript can reach neither — calling it by
-  name answers "Nonexistent function", measured. The editor's own C++ is its only caller. That check
-  and the Node panel connection are on the by-hand checklist, with the exact text to expect.
+  name answers "Nonexistent function", measured. The editor's own C++ is its only caller. Both it
+  and the Node panel connection have since been watched by hand and work; the stub it wrote did not
+  compile the first time, which is `by-hand-findings.md` B3.
 - **R-SIG-5 (MUST)** A script `await`s a signal from a concurrent context: the Verse spelling of
   GDScript's `await button.pressed`. Status: **done** (Phase 5). `godot_signal(t)` holds a
   `/Verse.org/Verse` `event(t)` and `Await<public>()<suspends>:t` forwards to it, which is ordinary
@@ -709,7 +719,8 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   gizmo virtuals are among the 1413, so what would have been a feature is a *declaration* that
   needs no code of its own. What it is **not** yet is a test. `_GetConfigurationWarnings` is
   exercised only by direct call on a non-tool script, which proves the method resolves and says
-  nothing about the editor acting on it — that check needs a window and is on the by-hand checklist.
+  nothing about the editor acting on it. That check needed a window and has been done: the warning
+  triangle and its tooltip appear on the node and clear with the condition (`by-hand-findings.md`).
   A tool script runs the **last built** generation, per §10's trigger — the same bargain a C# `[Tool]`
   script makes today, and the workflow most likely to send an author looking for the Build action.
   **Stated risk:** Verse now runs against the scene the author is editing, and R-DIAG-3 does not

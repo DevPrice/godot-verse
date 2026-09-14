@@ -447,9 +447,11 @@ over the style guide that will not.
 
 ### 11.7 What is still owed
 
-- **`docs/by-hand-checklist.md` gains nothing from this phase** and still owes what it owed, plus
-  the two entries this phase added. The editor-session check would now also see the new template
-  text and the effect diagnostic in the script editor's error list, which no headless run can show.
+- ~~**The two by-hand entries this phase added**~~ — the effect diagnostic in the script editor's
+  error list, and the template text. Both were watched, and **both were then removed**: the
+  appended sentence never checked which effect had been refused and gave the opposite of correct
+  advice on a `suspends` refusal, and the template is GDScript's now.
+  [`by-hand-findings.md`](by-hand-findings.md) B6 and B7 are the argument.
 - **The 1073 are still `<transacts>` and still knowingly untrue.** The override table shrinks the
   set where Godot's source proves it safe; it does not, and cannot, compensate anything. Nothing
   short of a per-method inverse would, and `nonatomic-methods.md` says why that is not on offer.
