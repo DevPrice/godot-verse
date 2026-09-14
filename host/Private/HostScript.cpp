@@ -50,6 +50,7 @@
 #include "VerseVM/VVMVerseClass.h"
 #include "VerseVM/VVMGlobalProgram.h"
 #include "VerseVM/VVMNativeFunction.h"
+#include "VerseVM/VVMNamedType.h"
 #include "VerseVM/VVMPackage.h"
 #include "VerseVM/VVMProgram.h"
 #include "VerseVM/VVMContext.h"
@@ -7766,6 +7767,25 @@ AUTORTFM_DISABLE int32 GodotVerse::RunMain(const TArray<verse::string>& Args, in
     const FRunExit Exit = ConsumeExit();
     OutExitCode = Exit.ExitCode;
     return Exit.Reason == FRunExit::EReason::Error ? VH_ERR_RUNTIME : VH_OK;
+}
+
+AUTORTFM_DISABLE bool GodotVerse::ReadMathStruct(Verse::FRunningContext Context,
+                                                Verse::VValue Value,
+                                                FFieldStorage& OutStorage,
+                                                vh_value& OutValue)
+{
+    Verse::VValueObject* const Struct = Value.DynamicCast<Verse::VValueObject>();
+    if (!Struct)
+    {
+        return false;
+    }
+    const FStructLayout* const Layout =
+        FindStructLayout(Struct->GetClass().GetBaseName().AsStringView());
+    if (!Layout)
+    {
+        return false;
+    }
+    return ReadStructValue(Context, *Struct, *Layout, OutStorage, OutValue);
 }
 
 AUTORTFM_DISABLE void GodotVerse::NoteRuntimeErrorRaised()

@@ -150,9 +150,13 @@ AUTORTFM_DISABLE int32 FrameRelation(Verse::VFrame& Frame)
 ///
 /// The rule is what the value *alone* identifies, because a stopped frame carries no declaration
 /// to consult -- and reaching for one would mean asking the semantic program from inside the
-/// interpreter. So an int, a float, a string and a Godot object cross typed, and everything else
-/// renders: a tuple, an option, a map, a class instance and every container wrapper, none of which
-/// vh_value describes.
+/// interpreter. An int, a float, a string, a Godot object and a mirrored math struct cross typed;
+/// everything else renders -- a tuple, an option, a map, a class instance of the author's own and
+/// every container wrapper, none of which vh_value describes without being told what it is.
+///
+/// The math structs are in the first list rather than the second because they are the one shape a
+/// value *can* name itself: `vector2` says so through its class, where an empty array cannot say
+/// what it holds and a `false` cannot say whether it is a logic or an empty option.
 AUTORTFM_DISABLE void ReadDebugValue(Verse::FRunningContext Context,
                                      Verse::VValue Value,
                                      int32 MaxDepth,
@@ -213,13 +217,20 @@ AUTORTFM_DISABLE void ReadDebugValue(Verse::FRunningContext Context,
         if (ArrayType == Verse::EArrayType::Char8 || ArrayType == Verse::EArrayType::Char32)
         {
             Out.bHasValue = true;
-            Out.Text = FUtf8String(Array->AsStringView());
+            Out.Storage.Text = FUtf8String(Array->AsStringView());
             Out.Value.Type = VH_TYPE_STRING;
             Out.Value.VariantTag = VH_VARIANT_STRING;
-            Out.Value.String.Utf8 = reinterpret_cast<const char*>(*Out.Text);
-            Out.Value.String.Len = Out.Text.Len();
+            Out.Value.String.Utf8 = reinterpret_cast<const char*>(*Out.Storage.Text);
+            Out.Value.String.Len = Out.Storage.Text.Len();
             return;
         }
+    }
+    // A `vector2` in the inspector must be a Vector2 rather than the text of one, which is what
+    // this is here for: the rendering below is honest and unusable.
+    if (ReadMathStruct(Context, Value, Out.Storage, Out.Value))
+    {
+        Out.bHasValue = true;
+        return;
     }
     if (Value.IsLogic())
     {

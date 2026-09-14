@@ -1655,8 +1655,13 @@ in §14.1 with what the run also confirmed about root being implicit from a subm
   its shape, and showing them would bury the three the author wrote.
 
   A local arrives as a real Variant when the bridge carries its type — an `int`, a `float`, a
-  `string`, a `logic`, a Godot object — and as `VValue::ToString` otherwise, which covers a tuple,
-  an option, a map, a class instance and every container wrapper. A register outside its live range
+  `string`, a `logic`, a Godot object, and any of the mirrored math structs — and as
+  `VValue::ToString` otherwise, which covers a tuple, an option, a map, a class instance of the
+  author's own and every container wrapper. The math structs are in the first list rather than the
+  second because they are the one shape a value *can* name itself: a `vector2` says so through its
+  class, where an empty array cannot say what it holds and a `false` cannot say whether it is a
+  logic or an empty option. Without that a `vector2` reached the inspector as the *text* of one
+  rather than as a `Vector2` slot, which is what the editor session found. A register outside its live range
   at the stopped op is reported as `<not yet in scope>` rather than dropped: the name is in scope in
   the source the author is reading, and its absence would read as a bug.
 

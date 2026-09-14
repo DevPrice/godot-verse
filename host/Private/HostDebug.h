@@ -6,6 +6,7 @@
 #include "Containers/Array.h"
 #include "Containers/StringView.h"
 #include "Containers/Utf8String.h"
+#include "HostScript.h"
 #include "verse_host_abi.h"
 
 namespace Verse {
@@ -35,9 +36,11 @@ struct FDebugValue
     FUtf8String Name;
     bool bHasValue{false};
     vh_value Value{};
-    /// Backs Value.String when the value is a string. Held per value rather than shared, because
-    /// the descriptor array the ABI hands back points straight into these.
-    FUtf8String Text;
+    /// Backs Value's own bytes -- a string's, a math struct's components. Held per value rather
+    /// than shared, because the descriptor array the ABI hands back points straight into these,
+    /// and it survives the array around it growing: what Value names is a heap allocation, and
+    /// moving an FDebugValue moves only the headers that own one.
+    FFieldStorage Storage;
     FUtf8String Rendered;
 };
 

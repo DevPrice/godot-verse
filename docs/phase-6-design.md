@@ -20,9 +20,9 @@ the way it does), and `by-hand-findings.md` (which is where §10's by-hand recor
 Godot's and Unreal's sources — every row cites the file it rests on. Do not relitigate them; if a
 spike contradicts one, record it in §13 and raise it.
 
-**§2 ran before the work.** Six spikes, one of which (**S-1**) could have blocked the entire phase.
-Five have answers, in §13.1; the sixth (**S-6**) is the editor session, which is a windowed check
-and is what this phase still owes.
+**§2 ran before the work**, bar S-6, which ran after it because it is a check on the built thing.
+Six spikes, one of which (**S-1**) could have blocked the entire phase. All six have answers, in
+§13.1.
 
 **§3 is what the two engines actually offer**, as found rather than as remembered. It is the
 factual base under everything else, and three of its findings contradict what `spec.md` currently
@@ -660,10 +660,9 @@ proves too costly to repeat, the automated route is a known quantity rather than
 ## 11. Exit
 
 The roadmap's exit: **a breakpoint in Godot's script editor stops a Verse script and shows its
-locals.** Met against the ABI, with one item outstanding.
+locals.** Met, and watched happen.
 
-- ~~S-6's by-hand session run~~ — **the one thing still owed.** It is a windowed editor session and
-  cannot be automated; `by-hand-findings.md` carries its five steps as an open check.
+- ✅ S-6's by-hand session run, and its one finding recorded in `by-hand-findings.md` and fixed.
 - ✅ `run_tests.py` green, with the new `host_smoke` cases — a breakpoint stops once rather than
   once per op, the stack's depth, name, path and line, locals, members, stepping, attach/detach,
   and the profiler's counts, self time, signature shape and frame reset.
@@ -717,7 +716,7 @@ Written after the work, and where this and anything above it disagree, this is t
 | **S-3** | **Positive: nested entry is safe.** From inside `Notify`, a `vh_instance_call` on a *different* instance and a `vh_instance_get_field` on the stopped one both answered `VH_OK`, and the outer call ran to completion after continuing. So the remote inspector stays live while paused, and **`VH_ERR_STOPPED` is far narrower than §4.5's conservative default**: it is answered by `vh_compile_project` and `vh_check_project_begin` alone — not for re-entrancy but because publishing a generation underneath a frame of the retiring one is incoherent — and `vh_tick` is refused silently, having no status to answer with. |
 | **S-4** | **Nearly dense, with one shape that matters.** Every statement line reports a location, and so does a function's *declaration* line. What does not is a trailing bare expression that only reads a register: `Helper`'s `Inner := 21` on line 21 reports, and the `Inner` on line 22 that answers it does not, because it emits no op of its own. So a breakpoint on the last line of such a body never fires. Nearest-following-line matching would not help — there is no following line — so this is recorded as a known shape rather than worked around, and `tests/host_smoke` asserts *both* halves so a compiler change moves the answer visibly. |
 | **S-5** | **Positive, both halves.** `profile("tag"): …` compiles in a `/user@localhost` package at `Version::LatestUnstable`, nests, and answers a value (`tests/verse_probe/profile_probe.verse`). At runtime `FVerseProfilingDelegates::OnEndProfilingEvent` delivers the tag, the time and a `FProfileLocus` carrying the snippet path and the begin row, and `tests/host_smoke` asserts a `::smoke_tag` row with a call count of exactly 1. D13's second half stands. |
-| **S-6** | **Not run.** The editor half is a windowed session and is the one thing this phase owes; it is recorded in `by-hand-findings.md` as open, with its five steps. |
+| **S-6** | **Run, and it found one thing:** a `vector2` reached the inspector as the *text* of one, because D7's list of what a local crosses as had left the mirrored math structs off it (§13.2). Everything else behaved — the gutter, both arming paths, the stack and locals and members, stepping, *Skip Breakpoints*, a breakpoint toggled mid-run, and the profiler panel. `by-hand-findings.md` has it, and keeps the steps: the consumer half has no other test. |
 
 ### 13.2 Where §1 and §9 turned out wrong
 
@@ -748,10 +747,15 @@ Written after the work, and where this and anything above it disagree, this is t
   and accessors alongside data, and the smallest script class inherits ~52 of Godot's own: the
   first working stop reported 55 members for a class with three fields. `VEntry::IsMethod()` and
   `IsAccessor()` are the filter. Godot's members panel means instance state.
-- **D7 is narrower in practice than in principle.** "A container is typed and inspectable" does not
-  survive contact: a Verse container is a *wrapper class instance* holding a `godot_ref`, and
-  `VH_TYPE_REF` is declared but unimplemented on this wire, so a container renders. What crosses
-  typed is an `int`, a `float`, a `string`, a `logic` and a Godot object handle.
+- **D7 is narrower in one place than in principle and wider in another.** "A container is typed and
+  inspectable" does not survive contact: a Verse container is a *wrapper class instance* holding a
+  `godot_ref`, and `VH_TYPE_REF` is declared but unimplemented on this wire, so a container renders.
+  What D7 did not think to list, and what the editor session found missing, is the **mirrored math
+  structs** — a `vector2` reached the inspector as the text of one. They belong in the typed list
+  precisely because they are the one shape a value can name itself: `VNamedType::GetBaseName()` is
+  the key the generated layout table is keyed by, so `ReadMathStruct` can build the tuple with no
+  declaration to consult. A class of the author's that shares a name falls through to rendering on
+  its own, because the fields are read by their decorated keys and a namesake has none of them.
 - **OQ-13's answer moved the work.** §5 already suspected it, and the build confirmed it: the
   question asks what bounds a raising script, and what actually needed writing was a rate limit on
   the bridge's own stack printing. One correction to §5's sketch — the "n dropped" summary cannot

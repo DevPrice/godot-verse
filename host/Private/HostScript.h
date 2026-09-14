@@ -11,6 +11,11 @@
 
 struct FVerseValue;
 
+namespace Verse {
+struct FRunningContext;
+struct VValue;
+}
+
 namespace GodotVerse {
 
 /// Creates the placeholder outer and enters the content scope Verse allocations need.
@@ -505,6 +510,23 @@ struct FFieldStorage
     /// The bytes of each string element, for the reason Text exists.
     TArray<FUtf8String> Strings;
 };
+
+/// Builds a wire value from a Verse value that is one of the mirrored math structs -- `vector2`,
+/// `color`, `transform3d` -- identified from the value alone rather than from a declaration.
+///
+/// Every other caller knows what it is reading and passes an FMemberType; the debugger does not,
+/// because a stopped frame carries no declaration and reaching for one would mean asking the
+/// semantic program from inside the interpreter. What makes it answerable anyway is that a struct
+/// value names its own class: `VNamedType::GetBaseName()` is the key the generated layout table is
+/// keyed by.
+///
+/// False for anything that is not one of them -- including a class of the author's that happens to
+/// share a name, because the fields are read by their *decorated* keys
+/// (`(/Godot.org/Godot/vector2:)X`) and a namesake has none of them.
+AUTORTFM_DISABLE bool ReadMathStruct(Verse::FRunningContext Context,
+                                     Verse::VValue Value,
+                                     FFieldStorage& OutStorage,
+                                     vh_value& OutValue);
 
 /// The statics of one class, as GetClassStatics answers them. Values and Storage run parallel to
 /// Statics, with a wire value per *constant* and a function's slot left empty.

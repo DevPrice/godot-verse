@@ -34,3 +34,12 @@ debug_probe := class(object):
 	# Nothing calls this from Verse; the profiler case calls it a known number of times and checks
 	# the count is exactly that.
 	Tick<public>()<transacts>:int = Health
+
+	# Added last on purpose. Everything above line 22 is named by a case in host_smoke.cpp, so a
+	# member declared among them moves a breakpoint -- which is what the note at the top means and
+	# what adding this one here the first time did.
+	#
+	# A mirrored math struct, which the debugger has to marshal from the value alone: a stopped
+	# frame carries no declaration to read the shape out of, and a `vector2` has to reach the
+	# inspector as a Vector2 rather than as the text of one.
+	Where<public>:vector2 = vector2{X := 3.0, Y := 4.0}

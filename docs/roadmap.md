@@ -1,7 +1,6 @@
 # godot-verse — Roadmap
 
-**Status:** Draft 13 · 2026-09-14 · **Phases 0–6 complete**, with one by-hand check outstanding.
-Phase 6's design is [`phase-6-design.md`](phase-6-design.md), written before the work in the shape
+**Status:** Draft 13 · 2026-09-14 · **Phases 0–6 complete.** Phase 6's design is [`phase-6-design.md`](phase-6-design.md), written before the work in the shape
 Phase 4.5's and Phase 5's were, so **§13 is the part to read** — the six spikes' answers, and the
 places §1 and §9 turned out wrong. The by-hand checks three phases owed
 have been run, in one windowed session as each design asked — Phase 3's yardstick run and editor
@@ -662,7 +661,7 @@ freed-node task were two of the entries it ticked.
 
 ## Phase 6 — Debugging and profiling
 
-**Built**, bar one windowed by-hand check. [`phase-6-design.md`](phase-6-design.md) is the design,
+**Built.** [`phase-6-design.md`](phase-6-design.md) is the design,
 written *before* the work, so **§13 is the part to read**. Its five automatable spikes all came
 back and S-1 — does a snippet-compiled package carry a file path into its procedures? — was the
 cliff the phase rested on: it does, **verbatim**, so nothing had to be restructured. ABI **v8.1**,
@@ -698,12 +697,13 @@ surface.
   `verse/host/enable_debugger`, and the two debuggers are mutually exclusive because `SetDebugger`
   is one global pointer.
 
-**Exit: met against the ABI; one by-hand check owed.** All three requirements are **done**, both
-open questions are closed, `run_tests.py` is green with 24 new `host_smoke` cases, and §7's audit
-covers all 59 declared virtuals with no row found where a declaration had already been telling
-Godot something untrue. What is left is S-6 — an editor session: click the breakpoint gutter, run,
-step, and watch the Debugger panel populate. It is in
-[`by-hand-findings.md`](by-hand-findings.md) as an open check, with its five steps.
+**Exit: met.** All three requirements are **done**, both open questions are closed, `run_tests.py`
+is green with 25 new `host_smoke` cases, and §7's audit covers all 59 declared virtuals with no row
+found where a declaration had already been telling Godot something untrue. S-6's editor session was
+run and found one defect — a `vector2` reaching the inspector as the *text* of one, because D7's
+list of what a local crosses as had left the mirrored math structs off it — which is fixed and now
+has a case. [`by-hand-findings.md`](by-hand-findings.md) has it, and keeps the session's steps:
+everything from `EngineDebugger` inward has no other test.
 
 Two numbers worth carrying forward. An attached debugger costs **+1.6%** of frame time on the
 `dodge-the-creeps` yardstick (4.26 s → 4.33 s headless at `--fixed-fps 60`), which is what let the

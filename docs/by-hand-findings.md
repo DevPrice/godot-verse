@@ -387,8 +387,9 @@ for:
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks
-is not worth keeping. Three things stand open now: two that outlived the list, and one Phase 6 owes.
-None can be automated, and all three are here because this is where they would otherwise be lost.
+is not worth keeping. Two things stand open, both of them things no automated layer can reach.
+Phase 6's session has since been run and is recorded below with what it found, because the steps
+are worth keeping: its half of the debugger has no other test.
 
 ### `_CanDropData` has never been exercised
 
@@ -410,16 +411,35 @@ not, because the node is holding a *placeholder* and the swap to a real instance
 scene reload — and invisible to every automated layer, because a placeholder only exists under
 `is_editor_hint()`.
 
-### Phase 6's editor session has not been run
+### Phase 6's editor session has been run · **one defect, fixed**
 
-**Owed by Phase 6**, and the only thing between it and a finished phase. Everything from the ABI
-inward is covered end to end by `tests/host_smoke` — a breakpoint stops once rather than once per
-op, the stack's depth and name and path and line, locals and members, stepping, attach and detach,
-and the profiler's counts and self time and signature shape. Everything from `EngineDebugger`
-inward is not, and cannot be: `ScriptLanguage` exposes nothing a script can ask, and Godot's
-debugger UI is the only caller of the virtuals that half consists of.
+Run, and it found one thing: **a `vector2` reached the inspector as the *text* of one** rather than
+as a `Vector2` slot. D7 listed what a local crosses as and the mirrored math structs were not on it,
+so every one of them fell through to `VValue::ToString` — honest, and unusable. They belong in the
+typed list because they are the one shape a value can name itself: `VNamedType::GetBaseName()` is
+the key the generated layout table is keyed by, so the debugger can build the tuple with no
+declaration to consult. `GodotVerse::ReadMathStruct` is that, and `tests/host_smoke` now asserts a
+`vector2` member arrives tagged `VH_VARIANT_VECTOR2` with its two components.
 
-**To check it** — `phase-6-design.md` §2's S-6, verbatim:
+Worth keeping from the fix: **`tests/host_smoke/debug_probe.verse`'s line numbers are part of the
+test.** The new member went in at the top the first time and moved every armed breakpoint under it,
+failing six cases. It lives at the bottom of the class now, with a note saying why.
+
+Everything else in the session — the breakpoint gutter, both arming paths, the Debugger panel's
+stack and locals and members, stepping, *Skip Breakpoints*, toggling a breakpoint mid-run, and the
+profiler panel — behaved.
+
+### What the session covered, and what stays uncovered
+
+Everything from the ABI inward is covered end to end by `tests/host_smoke` — a breakpoint stops
+once rather than once per op, the stack's depth and name and path and line, locals and members
+(including the `vector2`), stepping, attach and detach, and the profiler's counts and self time and
+signature shape. Everything from `EngineDebugger` inward is not, and cannot be: `ScriptLanguage`
+exposes nothing a script can ask, and Godot's debugger UI is the only caller of the virtuals that
+half consists of. **So this session is what has to be repeated whenever that half changes**, and
+the steps are kept for that rather than as an outstanding task.
+
+**To repeat it** — `phase-6-design.md` §2's S-6, verbatim:
 
 1. Open a `.verse` script in Godot's script editor and click the breakpoint gutter.
    `ScriptTextEditor` is language-agnostic on paper — `_breakpoint_toggled` sends

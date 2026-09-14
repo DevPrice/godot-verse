@@ -224,9 +224,16 @@ What it settled, all of which is load-bearing:
   `vh_tick` — a script that raises sixty times and stops has no next occurrence to flush it.
   `verse/instance_tasks` is the custom monitor that stands in for a cap on the `spawn` runaway.
 
-**The one thing Phase 6 owes is its editor session** (S-6), which is windowed and cannot be
-automated; `docs/by-hand-findings.md` carries its steps. Everything from the ABI inward has
-`host_smoke` cases; everything from `EngineDebugger` inward has none.
+**A debug value crosses typed only when it can name itself**, which the mirrored math structs can
+and D7's original list forgot: `VNamedType::GetBaseName()` keys the generated layout table, so
+`GodotVerse::ReadMathStruct` builds a `vector2` with no declaration to consult. Without it every
+math struct reached the inspector as the *text* of one — the editor session's one finding.
+
+**Phase 6's editor session has been run**, and its steps are kept in `docs/by-hand-findings.md`
+rather than retired: everything from the ABI inward has `host_smoke` cases and everything from
+`EngineDebugger` inward has none, so that session is the only test the consumer half will ever
+have. `tests/host_smoke/debug_probe.verse`'s line numbers are part of it — a member declared above
+line 22 moves an armed breakpoint.
 
 **The by-hand checks have been run, and `docs/by-hand-checklist.md` is deleted** — all twenty-two
 of its entries were watched happen, and what is worth keeping is what they found rather than the

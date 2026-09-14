@@ -371,6 +371,20 @@ static void CollectDebugValues(vh_debug_stack_values_fn Fn,
 			case VH_TYPE_STRING:
 				snprintf(Buffer, sizeof(Buffer), "string:%.*s", (int)Value.String.Len, Value.String.Utf8);
 				break;
+			case VH_TYPE_TUPLE:
+			{
+				/* A mirrored math struct: the tag says which Godot type to rebuild, the items are
+				 * its components in declaration order. */
+				int Written = snprintf(Buffer, sizeof(Buffer), "tuple[%d]:", (int)Value.VariantTag);
+				for (int32_t Item = 0; Item < Value.Seq.Count && Written > 0 && Written < (int)sizeof(Buffer); ++Item)
+				{
+					const vh_value& Component = Value.Seq.Items[Item];
+					Written += snprintf(Buffer + Written, sizeof(Buffer) - (size_t)Written, "%s%g",
+										Item == 0 ? "" : ",",
+										Component.Type == VH_TYPE_INT ? (double)Component.Int : Component.Float);
+				}
+				break;
+			}
 			default:
 				snprintf(Buffer, sizeof(Buffer), "type:%d", (int)Value.Type);
 				break;
@@ -2884,16 +2898,22 @@ int main(int argc, char** argv)
 			bool SawSelf = false;
 			bool SawHealth = false;
 			bool SawLabel = false;
+			bool SawWhere = false;
 			for (const std::pair<std::string, std::string>& Member : Members)
 			{
 				printf("[smoke]   member %s = %s\n", Member.first.c_str(), Member.second.c_str());
 				SawSelf = SawSelf || Member.first == "Self";
 				SawHealth = SawHealth || (Member.first == "Health" && Member.second == "int:7");
 				SawLabel = SawLabel || (Member.first == "Label" && Member.second == "string:probe");
+				// VH_VARIANT_VECTOR2 is 5. A rendering rather than a tuple here is the debugger
+				// having fallen back to VValue::ToString, which is what the inspector shows as
+				// text instead of a Vector2 slot.
+				SawWhere = SawWhere || (Member.first == "Where" && Member.second == "tuple[5]:3,4");
 			}
 			DebugOk = Step("members carry Self", SawSelf) && DebugOk;
 			DebugOk = Step("an int member arrives as a typed value (D7)", SawHealth) && DebugOk;
 			DebugOk = Step("and a string member too", SawLabel) && DebugOk;
+			DebugOk = Step("and a vector2 arrives as a Vector2 rather than the text of one", SawWhere) && DebugOk;
 		}
 
 		printf("[smoke] S-3: nested vh_instance_call while stopped answered %d, vh_instance_get_field %d\n",
