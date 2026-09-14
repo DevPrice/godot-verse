@@ -16,6 +16,7 @@
 #include <godot_cpp/classes/resource_loader.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/memory.hpp>
+#include <godot_cpp/templates/hash_set.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
 #ifdef TOOLS_ENABLED
@@ -1321,6 +1322,16 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 
 	Array options;
 
+	// Every name the host's answer already offered, so the sets appended below skip a row they
+	// would otherwise duplicate. The overlap is not partial: a scope the file's `using` has
+	// brought /Godot.org/Godot into carries all 1026 mirrored class names, and 28 of the 156
+	// reserved words come back as the types they are (`int`, `float`, `logic`, ...), so without
+	// this a prefix of `node` drew 178 duplicate rows and `spr` 169. Godot deduplicates nothing.
+	//
+	// Keyed by the item's bare `name` rather than by the option text: an override completes to a
+	// whole declaration, and the appended sets are bare spellings.
+	HashSet<String> host_offered_names;
+
 	VerseRuntime *runtime = get_runtime();
 	const bool host_can_answer = project_built && runtime != nullptr && runtime->is_host_loaded();
 
@@ -1429,6 +1440,7 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 				if (!matches_typed_prefix(name, prefix)) {
 					continue;
 				}
+				host_offered_names.insert(name);
 				if (!declaring_in_class.is_empty() && completes_as_override(item, declaring_in_class)) {
 					options.push_back(override_option_for(item));
 				} else {
@@ -1450,6 +1462,7 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 				if (!matches_typed_prefix(item["name"], prefix)) {
 					continue;
 				}
+				host_offered_names.insert(item["name"]);
 				if (!declaring_in_class.is_empty() && completes_as_override(item, declaring_in_class)) {
 					options.push_back(override_option_for(item));
 				} else {
@@ -1474,6 +1487,7 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 						continue;
 					}
 					if (completes_as_override(item, declaring_in_class)) {
+						host_offered_names.insert(name);
 						options.push_back(override_option_for(item));
 					}
 				}
@@ -1490,21 +1504,21 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 
 	const PackedStringArray &mirrored = mirrored_class_names();
 	for (int64_t i = 0; i < mirrored.size(); i++) {
-		if (matches_typed_class_prefix(mirrored[i], prefix)) {
+		if (matches_typed_class_prefix(mirrored[i], prefix) && !host_offered_names.has(mirrored[i])) {
 			options.push_back(completion_option(mirrored[i], ScriptLanguageExtension::CODE_COMPLETION_KIND_CLASS, ScriptLanguageExtension::LOCATION_OTHER));
 		}
 	}
 
 	const PackedStringArray &class_names = script_class_names();
 	for (int64_t i = 0; i < class_names.size(); i++) {
-		if (matches_typed_class_prefix(class_names[i], prefix)) {
+		if (matches_typed_class_prefix(class_names[i], prefix) && !host_offered_names.has(class_names[i])) {
 			options.push_back(completion_option(class_names[i], ScriptLanguageExtension::CODE_COMPLETION_KIND_CLASS, ScriptLanguageExtension::LOCATION_OTHER_USER_CODE));
 		}
 	}
 
 	for (size_t i = 0; i < std::size(verse_keywords::reserved_words); i++) {
 		const String word = verse_keywords::reserved_words[i];
-		if (matches_typed_prefix(word, prefix)) {
+		if (matches_typed_prefix(word, prefix) && !host_offered_names.has(word)) {
 			options.push_back(completion_option(word, ScriptLanguageExtension::CODE_COMPLETION_KIND_PLAIN_TEXT, ScriptLanguageExtension::LOCATION_OTHER));
 		}
 	}
