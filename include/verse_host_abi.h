@@ -43,7 +43,7 @@ extern "C" {
  * different toolchains and nothing links them.
  */
 #define VH_ABI_VERSION_MAJOR 7
-#define VH_ABI_VERSION_MINOR 1
+#define VH_ABI_VERSION_MINOR 2
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
 typedef int32_t vh_bool;
@@ -1217,7 +1217,17 @@ typedef enum vh_complete_mode
 	 * belongs on a data member, and this offers it anywhere an attribute can be written. What the
 	 * attribute is about to be attached to is not written yet at the moment the question is
 	 * asked. */
-	VH_COMPLETE_ATTRIBUTES = 2
+	VH_COMPLETE_ATTRIBUTES = 2,
+
+	/* The same, narrowed to what may follow a `<` instead: `public`, `override`, `transacts`.
+	 *
+	 * A separate question from VH_COMPLETE_ATTRIBUTES because Verse separates the two positions
+	 * and refuses the wrong one -- an attribute class tagged `@attribscope_specifier` "can only be
+	 * used as a <specifier>", one tagged `@attribscope_attribute` "can only be used as an
+	 * @attribute", and a user-defined attribute carrying neither tag is accepted in both
+	 * (SemanticAnalyzer.cpp, ErrSemantic_InvalidAttributeScope). So the two modes are overlapping
+	 * sets rather than one set asked for twice. */
+	VH_COMPLETE_SPECIFIERS = 3
 } vh_complete_mode;
 
 /* One name completion could insert. Laid out like vh_lookup_desc's first few fields, and read the

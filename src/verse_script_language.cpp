@@ -823,6 +823,21 @@ static bool matches_typed_prefix(const String &p_name, const String &p_prefix) {
 	return true;
 }
 
+// The same test for the class-name sets, which are the two large ones, with the subsequence rule
+// withheld until there is enough typed for it to be a search.
+//
+// A one-character prefix admits 927 of the 1026 mirrored class names as a subsequence, and CodeEdit
+// rebuilds every possible subsequence match of every option it is handed, on the editor's thread,
+// on every keystroke. Nothing is gained for it: ranking by contiguity cannot make one of 927 the
+// answer either, so under the threshold the set is what the author has actually begun to spell.
+// Past it `Prcs` still reaches `Process`, which is the half of fuzzy matching worth having.
+static bool matches_typed_class_prefix(const String &p_name, const String &p_prefix) {
+	constexpr int64_t SUBSEQUENCE_FROM = 3;
+	return p_prefix.length() >= SUBSEQUENCE_FROM
+			? matches_typed_prefix(p_name, p_prefix)
+			: p_name.findn(p_prefix) == 0;
+}
+
 // Stands in for the identifier being typed while the completion buffer is analysed. A legal Verse
 // identifier, so the line parses; one no project would write, so it resolves to nothing and the
 // answer is about the position rather than about whatever it collided with.
@@ -1281,6 +1296,17 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 	// annotations for exactly this reason.
 	const bool completing_attribute = !completing_members && prefix_start > 0 && before[prefix_start - 1] == '@';
 
+	// A `<` is the other half of the same idea and a different set of names: Verse refuses an
+	// attribute in the wrong position, so `public` is spellable only as `<public>` and `editable`
+	// only as `@editable` (SemanticAnalyzer's ErrSemantic_InvalidAttributeScope). The host answers
+	// the two as separate modes rather than one list asked for twice.
+	//
+	// Unlike `@` this is not forced, and a bare `<` with nothing typed falls through to the empty
+	// prefix refusal below. `A<B` is a comparison Verse writes without spaces, and popping a
+	// specifier list over one is noise; a specifier is always reached for with letters after it.
+	const bool completing_specifier = !completing_members && !completing_attribute
+			&& prefix_start > 0 && before[prefix_start - 1] == '<';
+
 	// The class this is adding a member to, when that is what the cursor is doing: nothing but
 	// indentation ahead of the prefix on its line, and that line belonging to the class body. An
 	// inherited method offered there is being declared rather than called, and completes to the
@@ -1288,7 +1314,7 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 	const int64_t line_start = before.rfind("\n") + 1;
 	const String ahead_of_prefix = before.substr(line_start, prefix_start - line_start);
 	PackedStringArray already_declared;
-	const String declaring_in_class = !completing_members && !completing_attribute && !ahead_of_prefix.is_empty() && ahead_of_prefix.strip_edges().is_empty()
+	const String declaring_in_class = !completing_members && !completing_attribute && !completing_specifier && !ahead_of_prefix.is_empty() && ahead_of_prefix.strip_edges().is_empty()
 			? member_declaration_class(verse_newline_normalized(p_code), p_path.get_file().get_basename(),
 					  before.count("\n"), ahead_of_prefix.length(), already_declared)
 			: String();
@@ -1371,7 +1397,8 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 		int64_t column = 0;
 		position_of(position, line, column);
 		const int32_t mode = completing_members ? VH_COMPLETE_MEMBERS
-				: (completing_attribute ? VH_COMPLETE_ATTRIBUTES : VH_COMPLETE_SCOPE);
+				: (completing_attribute ? VH_COMPLETE_ATTRIBUTES
+										: (completing_specifier ? VH_COMPLETE_SPECIFIERS : VH_COMPLETE_SCOPE));
 
 		bool have_options = completion_cache_source == source && completion_cache_line == (int32_t)line
 				&& completion_cache_column == (int32_t)column && completion_cache_mode == mode;
@@ -1408,7 +1435,7 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 					options.push_back(completion_option_for(item));
 				}
 			}
-		} else if (!completing_members && !completing_attribute) {
+		} else if (!completing_members && !completing_attribute && !completing_specifier) {
 			// The partial answer for a bare identifier: what the enclosing class declares, which
 			// the analysis snapshot already holds and so costs nothing. LOCATION_LOCAL puts it
 			// above the class names and keywords appended below -- Godot ranks by `location` alone
@@ -1454,23 +1481,23 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 		}
 	}
 
-	// A dot and an `@` have both answered everything they are going to; the sets below are names
-	// that could be written on their own, which is neither a member nor an attribute.
-	if (completing_members || completing_attribute) {
+	// A dot, an `@` and a `<` have all answered everything they are going to; the sets below are
+	// names that could be written on their own, which is none of the three.
+	if (completing_members || completing_attribute || completing_specifier) {
 		result["options"] = options;
 		return result;
 	}
 
 	const PackedStringArray &mirrored = mirrored_class_names();
 	for (int64_t i = 0; i < mirrored.size(); i++) {
-		if (matches_typed_prefix(mirrored[i], prefix)) {
+		if (matches_typed_class_prefix(mirrored[i], prefix)) {
 			options.push_back(completion_option(mirrored[i], ScriptLanguageExtension::CODE_COMPLETION_KIND_CLASS, ScriptLanguageExtension::LOCATION_OTHER));
 		}
 	}
 
 	const PackedStringArray &class_names = script_class_names();
 	for (int64_t i = 0; i < class_names.size(); i++) {
-		if (matches_typed_prefix(class_names[i], prefix)) {
+		if (matches_typed_class_prefix(class_names[i], prefix)) {
 			options.push_back(completion_option(class_names[i], ScriptLanguageExtension::CODE_COMPLETION_KIND_CLASS, ScriptLanguageExtension::LOCATION_OTHER_USER_CODE));
 		}
 	}

@@ -1085,6 +1085,51 @@ int main(int argc, char** argv)
 					// compiler-generated constructors are not spellable either.
 					CompleteOk = Step("nor attribute itself", Offers(Items, Count, "attribute") == nullptr) && CompleteOk;
 					CompleteOk = Step("nor a generated constructor", Offers(Items, Count, "Constructor") == nullptr) && CompleteOk;
+					// An attribute tagged @attribscope_specifier "can only be used as a
+					// <specifier>", so offering it past an `@` offers a compile error.
+					CompleteOk = Step("nor a specifier, which cannot follow an `@` at all",
+									 Offers(Items, Count, "public") == nullptr)
+							  && CompleteOk;
+				}
+				else
+				{
+					CompleteOk = false;
+				}
+			}
+
+			// A `<`, which is the same idea and a different set. Verse keeps the two positions
+			// apart and refuses the wrong one, so the two modes have to answer differently or one
+			// of them is offering names the compiler will reject.
+			const size_t SpecifierUse = ExportsSource.find("Speed<public>");
+			CompleteOk = Step("located the fixture's specifier", SpecifierUse != std::string::npos) && CompleteOk;
+			if (SpecifierUse != std::string::npos)
+			{
+				const size_t NameAt = SpecifierUse + strlen("Speed<");
+				std::string SpecifierTyping = ExportsSource;
+				SpecifierTyping.replace(NameAt, strlen("public"), "VhCompletionCursor");
+				int32_t SpecifierRow = 0;
+				int32_t SpecifierColumn = 0;
+				RowColumnOf(SpecifierTyping, NameAt, SpecifierRow, SpecifierColumn);
+				AnalyseCompletionBuffer(SpecifierTyping);
+				if (Step("vh_complete_symbol at a specifier",
+						CompleteSymbolFn(ExportsPathUtf8.c_str(), SpecifierTyping.c_str(), SpecifierRow, SpecifierColumn,
+										 VH_COMPLETE_SPECIFIERS, &Items, &Count) == VH_OK))
+				{
+					CompleteOk = Step("it offers public", Offers(Items, Count, "public") != nullptr) && CompleteOk;
+					CompleteOk = Step("and override", Offers(Items, Count, "override") != nullptr) && CompleteOk;
+					// Not narrowed by what the specifier is about to be attached to: at the moment
+					// the question is asked the declaration is half written, exactly as for `@`.
+					CompleteOk = Step("and an effect, at a data member", Offers(Items, Count, "transacts") != nullptr) && CompleteOk;
+					CompleteOk = Step("but no name from the enclosing scope", Offers(Items, Count, "Print") == nullptr) && CompleteOk;
+					// The bridge's own attributes are in both lists, and that is not an oversight
+					// here: `@attribscope_data` says where `export` may be applied, not which of
+					// the two forms it takes, and an attribute declaring neither form is one the
+					// analyzer accepts in both ("we don't yet have a way to signal whether they
+					// are attributes or specifiers"). `Speed<export>:float` compiles today, so
+					// offering it is what the compiler would accept.
+					CompleteOk = Step("and export, which declares no form and so may take either",
+									 Offers(Items, Count, "export") != nullptr)
+							  && CompleteOk;
 				}
 				else
 				{

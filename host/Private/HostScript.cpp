@@ -6090,20 +6090,47 @@ enum class ECompleteFilter : uint8
     /// Every name the scope admits.
     Any,
     /// Only what may follow an `@`.
-    Attributes,
+    PrefixAttributes,
+    /// Only what may follow a `<`.
+    Specifiers,
 };
 
-/// Whether a definition is a name an `@` could be followed by.
+/// Whether an attribute class may be written in the position Filter names.
+///
+/// Verse keeps the two positions apart and refuses the wrong one: a class tagged
+/// `@attribscope_specifier` "can only be used as a <specifier>" and one tagged
+/// `@attribscope_attribute` "can only be used as an @attribute"
+/// (SemanticAnalyzer.cpp, ErrSemantic_InvalidAttributeScope). A user-defined attribute carries
+/// neither tag, and the analyzer's own comment says there is no way yet to signal which it is, so
+/// it is accepted in both -- which is what the fallthrough below reproduces.
+AUTORTFM_DISABLE bool AttributeClassFitsPosition(const uLang::CClass& Class,
+                                                 const uLang::CSemanticProgram& Program,
+                                                 ECompleteFilter Filter)
+{
+    if (Class.HasAttributeClass(Program._attributeScopeSpecifier, Program))
+    {
+        return Filter == ECompleteFilter::Specifiers;
+    }
+    if (Class.HasAttributeClass(Program._attributeScopeAttribute, Program))
+    {
+        return Filter == ECompleteFilter::PrefixAttributes;
+    }
+    return true;
+}
+
+/// Whether a definition is a name an `@` or a `<` could be followed by, for whichever of the two
+/// Filter names.
 ///
 /// Two shapes, because Verse spells a payload-carrying attribute as a call: `editable` is the
 /// attribute class itself, while `@clamp_min("0.0")` names the `<constructor>` function beside
 /// clamp_min_attribute, which is what makes the class out of the argument. `attribute` itself is
 /// excluded -- it is the base every attribute derives from, and applying it means nothing.
-AUTORTFM_DISABLE bool IsAttributeName(const uLang::CDefinition& Definition)
+AUTORTFM_DISABLE bool IsAttributeName(const uLang::CDefinition& Definition, ECompleteFilter Filter)
 {
     using namespace uLang;
 
-    const CClass* AttributeClass = Definition._EnclosingScope.GetProgram()._attributeClass;
+    const CSemanticProgram& Program = Definition._EnclosingScope.GetProgram();
+    const CClass* AttributeClass = Program._attributeClass;
     if (!AttributeClass)
     {
         return false;
@@ -6111,7 +6138,8 @@ AUTORTFM_DISABLE bool IsAttributeName(const uLang::CDefinition& Definition)
 
     if (const CClass* Class = Definition.AsNullable<CClass>())
     {
-        return Class != AttributeClass && Class->IsSubtypeOf(*AttributeClass);
+        return Class != AttributeClass && Class->IsSubtypeOf(*AttributeClass)
+            && AttributeClassFitsPosition(*Class, Program, Filter);
     }
     if (const CFunction* Function = Definition.AsNullable<CFunction>())
     {
@@ -6121,7 +6149,8 @@ AUTORTFM_DISABLE bool IsAttributeName(const uLang::CDefinition& Definition)
         }
         const CFunctionType* Type = Function->_Signature.GetFunctionType();
         const CClass* Result = Type ? Type->GetReturnType().GetNormalType().AsNullable<CClass>() : nullptr;
-        return Result && Result->IsSubtypeOf(*AttributeClass);
+        return Result && Result->IsSubtypeOf(*AttributeClass)
+            && AttributeClassFitsPosition(*Result, Program, Filter);
     }
     return false;
 }
@@ -6156,7 +6185,7 @@ AUTORTFM_DISABLE bool DescribeCompletion(const uLang::CDefinition& Definition, E
         // An attribute's `<constructor>` is the one the author writes -- `@clamp_min("0.0")` --
         // and IsAttributeName has already established that this is one. Everywhere else a
         // constructor is the copy the compiler generated per class, which has no spelling.
-        if (Function->IsConstructor() && Filter != ECompleteFilter::Attributes)
+        if (Function->IsConstructor() && Filter == ECompleteFilter::Any)
         {
             return false;
         }
@@ -6213,7 +6242,7 @@ AUTORTFM_DISABLE void CollectScope(const uLang::CLogicalScope& From,
         {
             continue;
         }
-        if (Filter == ECompleteFilter::Attributes && !IsAttributeName(*Definition))
+        if (Filter != ECompleteFilter::Any && !IsAttributeName(*Definition, Filter))
         {
             continue;
         }
@@ -6354,12 +6383,18 @@ AUTORTFM_DISABLE bool GodotVerse::Complete(FUtf8StringView Path,
             }
             else
             {
-                const ECompleteFilter Filter = Mode == VH_COMPLETE_ATTRIBUTES
-                    ? ECompleteFilter::Attributes
-                    : ECompleteFilter::Any;
+                ECompleteFilter Filter = ECompleteFilter::Any;
+                if (Mode == VH_COMPLETE_ATTRIBUTES)
+                {
+                    Filter = ECompleteFilter::PrefixAttributes;
+                }
+                else if (Mode == VH_COMPLETE_SPECIFIERS)
+                {
+                    Filter = ECompleteFilter::Specifiers;
+                }
 
                 // A local is a value, and an attribute is a type applied to a declaration: no
-                // local is ever what follows an `@`.
+                // local is ever what follows an `@` or a `<`.
                 if (Filter == ECompleteFilter::Any)
                 {
                     for (const uLang::CDataDefinition* Local : Visitor.Locals)
