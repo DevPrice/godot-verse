@@ -145,22 +145,12 @@ checkbox still produced the template.** The checkbox does not mean "pass no cont
 **`"Empty"`** and uses *its* content, and falls back to a default-constructed `ScriptTemplate` —
 content `""` — when there is none. So with one row registered, unchecking the box asked for a
 template that did not exist, got `""`, and `_make_template`'s fallback answered with the full
-default. Two changes: an `"Empty"` row, and a fallback that is the empty content rather than the
-default one, so a caller with no template at all gets the smaller thing rather than the larger.
+default. Two changes: an `"Empty"` row whose content is a blank file, and no fallback in
+`_make_template` — an empty template is an empty file.
 
-This template is not blank, and the reason is the dialog rather than the language. A blank `.verse`
-is perfectly good Verse — a file with no class named after itself is a **library file** (R-LANG-6),
-which is how a project's shared code is written and is a thing this bridge supports on purpose. But
-the Attach Script dialog exists to put a script *on a node*, and a library file cannot go on one:
-`_get_instance_base_type` answers nothing for it, which is how Godot refuses the attach. So the
-minimum that does the dialog's job is the declaration:
-
-    using { /Godot.org/Godot }
-
-    _CLASS_ := class(_BASE_):
-
-A class with an empty indented body compiles and instantiates — probed rather than assumed.
-GDScript's `empty.gd` is one `extends` line for exactly this reason and not for a different one.
+Blank means blank. A `.verse` with no class named after itself is a **library file** (R-LANG-6),
+which is how a project's shared code is written and is supported on purpose; and the same dialog
+opens from the FileSystem dock's right-click, where there is no node in the picture at all.
 
 ## B6. The template becomes a direct translation of GDScript's · **done**
 

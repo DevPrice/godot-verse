@@ -197,8 +197,8 @@ replaced them, and both were re-checked against it.
       >
       > Re-checked by hand, which turned up a third: **unchecking the Template checkbox still wrote
       > the template.** The checkbox does not clear the content — Godot looks for a built-in named
-      > exactly "Empty" and uses that one. There is one now, and it is the class declaration and
-      > nothing else, which is the smallest thing that still attaches to a node.
+      > exactly "Empty" and uses that one. There is one now, and it is a blank file. Check it from
+      > the FileSystem dock's right-click too, which opens the same dialog with no node involved.
 
 ## Phase 5
 

@@ -400,24 +400,6 @@ static const char *DEFAULT_TEMPLATE =
 		"\t_Process<override>(Delta:float):void =\n"
 		"\t\t{}\n";
 
-// What the dialog's Template checkbox produces when it is unchecked. ScriptCreateDialog does not
-// pass an empty string for that: `_get_current_template` looks through the list for a built-in
-// named exactly **"Empty"** and uses its content, so a language that offers none gets whatever its
-// `_make_template` does with "" -- which for this one was the full template, ignoring the
-// checkbox entirely.
-//
-// Not actually empty, and the reason is the dialog rather than the language. A blank `.verse` is
-// perfectly good Verse -- a file with no class named after itself is a library file (R-LANG-6),
-// which is how most of a project's shared code is written -- but this template exists to be
-// *attached to a node*, and a library file cannot be: `_get_instance_base_type` answers nothing
-// for one, which is how Godot refuses. So the minimum here is the declaration, and a class with an
-// empty indented body compiles and instantiates -- probed, not assumed. GDScript's `empty.gd` is
-// one `extends` line for the same reason and not for a different one.
-static const char *EMPTY_TEMPLATE =
-		"using { /Godot.org/Godot }\n"
-		"\n"
-		"_CLASS_ := class(_BASE_):\n";
-
 // Godot hands the chosen template's content back here to be filled in, which is what GDScript's
 // make_template does with it and what this used to ignore -- building the source from scratch and
 // leaving `_get_built_in_templates` empty, so the Attach Script dialog reported "No suitable
@@ -428,11 +410,10 @@ static const char *EMPTY_TEMPLATE =
 Ref<Script> VerseScriptLanguage::_make_template(const String &p_template, const String &p_class_name, const String &p_base_class_name) const {
 	const String class_name = p_class_name.is_empty() ? String("script") : p_class_name;
 
-	// The fallback is the *empty* one, not the default one. Nothing in the Attach Script dialog
-	// reaches this with an empty template any more -- both of its choices are registered below --
-	// so an empty one is a caller with no template at all, and answering it with the full default
-	// is how unchecking the checkbox used to produce the template anyway.
-	String source = p_template.is_empty() ? String(EMPTY_TEMPLATE) : p_template;
+	// No fallback: an empty template is an empty file, which is what the dialog asks for when its
+	// Template checkbox is unchecked. Substituting the default here is what made that checkbox do
+	// nothing (by-hand-findings.md B5).
+	String source = p_template;
 	source = source.replace("_CLASS_", class_name.to_snake_case());
 	source = source.replace("_BASE_", verse_base_class_for(p_base_class_name));
 
@@ -679,7 +660,7 @@ TypedArray<Dictionary> VerseScriptLanguage::_get_built_in_templates(const String
 	};
 
 	add("Default", "A class named after the file, with _Ready and _Process.", DEFAULT_TEMPLATE, 0);
-	add("Empty", "The class declaration and nothing else.", EMPTY_TEMPLATE, 1);
+	add("Empty", "A blank file.", "", 1);
 	return templates;
 }
 
