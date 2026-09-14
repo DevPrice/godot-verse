@@ -9,6 +9,7 @@
 #include "GodotMathLayout.gen.h"
 #include "HAL/PlatformMisc.h"
 #include "HAL/PlatformTime.h"
+#include "HostDebug.h"
 #include "HostEventLoop.h"
 #include "HostRuntime.h"
 #include "ISolarisIde.h"
@@ -52,6 +53,7 @@
 #include "VerseVM/VVMPackage.h"
 #include "VerseVM/VVMProgram.h"
 #include "VerseVM/VVMContext.h"
+#include "VerseVM/VVMTaskGroup.h"
 #include "VerseVM/VVMUniqueString.h"
 #include "uLang/Diagnostics/Diagnostics.h"
 #include "uLang/Semantics/Attributable.h"
@@ -7470,6 +7472,12 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
     // against the construction-time writes it still permits.
     Instance->bSealed = true;
 
+    // R-DIAG-5's boundary row. Named after the procedure the call resolved to rather than after
+    // the decorated name asked for, so an inherited body reports the file and line it is actually
+    // in. Inert, and builds no string at all, while profiling is off.
+    const GodotVerse::FProfileScope ProfileScope(
+        GodotVerse::ProfileSignature(Resolved.Function.Get(), FUtf8StringView(ClassName)));
+
     int32 Status = VH_OK;
     // Set inside the VM, read outside it. EnterVM is allowed to decline to run its functor --
     // a terminated content scope is one reason and there may be others -- and a call that did
@@ -7782,5 +7790,39 @@ AUTORTFM_DISABLE void GodotVerse::NoteRuntimeErrorRaised()
 
 AUTORTFM_DISABLE void GodotVerse::TickScripts(double BudgetSeconds, vh_tick_stats* OutStats)
 {
+    // The pump's own row (R-DIAG-5). One synthetic signature rather than a row per resumed task,
+    // because a `Sleep` resumption has no Godot event behind it to name it after -- what the
+    // profiler can honestly say about queued work is how much of the frame it took.
+    const GodotVerse::FProfileScope ProfileScope(
+        GodotVerse::IsProfilingEnabled() ? FUtf8StringView(UTF8TEXT("<verse>::0::vh_tick"))
+                                         : FUtf8StringView());
+
     PumpEventLoop(verse::FExecutionContext::GetActiveContext(), BudgetSeconds, OutStats);
+
+    // OQ-13 chose observability over a cap, and this is the observation: the largest number of
+    // live tasks any one instance's scope holds, which is what a `spawn` in `_Process` runs away
+    // with. Nothing else in these numbers separates that from many instances with one task each --
+    // a suspended task is not queued work, so JobsPending never sees it.
+    //
+    // GetNumActive is documented as an implementation detail meant for unit tests. It is used here
+    // anyway, and only as a number to *show*: nothing branches on it, so the cost of Epic changing
+    // what it counts is a monitor that reads differently, not behaviour that changes.
+    if (OutStats
+        && OutStats->StructSize >= (int32_t)(offsetof(vh_tick_stats, PeakInstanceTasks) + sizeof(int32_t)))
+    {
+        int32 Peak = 0;
+        for (const TPair<int64, GodotVerse::FInstance*>& Pair : GInstancesByHandle)
+        {
+            const GodotVerse::FInstance* const Instance = Pair.Value;
+            if (!Instance || !Instance->Scope.IsValid())
+            {
+                continue;
+            }
+            if (Verse::VTaskGroup* const Group = Instance->Scope->GetTaskGroup())
+            {
+                Peak = FMath::Max(Peak, static_cast<int32>(Group->GetNumActive()));
+            }
+        }
+        OutStats->PeakInstanceTasks = Peak;
+    }
 }

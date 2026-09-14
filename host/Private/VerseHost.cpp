@@ -8,6 +8,7 @@
 
 #include "Containers/StringConv.h"
 #include "Containers/UnrealString.h"
+#include "HostDebug.h"
 #include "HostEventLoop.h"
 #include "HostRuntime.h"
 #include "HostScript.h"
@@ -261,10 +262,12 @@ extern "C" void vh_tick(double BudgetSeconds, vh_tick_stats* OutStats)
 {
     // Fields are appended and never reordered, so a consumer built against a lower minor reserved a
     // *prefix* of this struct: zero and fill that much and no further, which is the fallback the
-    // header's compatibility policy asks the host for. The wait fields arrived at v6.1, and a
-    // StructSize that stops short of them is a v6.0 consumer.
+    // header's compatibility policy asks the host for. The wait fields arrived at v6.1 and
+    // PeakInstanceTasks at v8.1, so each group is tested against its own end -- comparing against
+    // sizeof() would have made every earlier group disappear the moment a later one was added.
     const int32_t StatsSize = OutStats ? OutStats->StructSize : 0;
-    const bool bHasWaitFields = StatsSize >= (int32_t)sizeof(vh_tick_stats);
+    const bool bHasWaitFields =
+        StatsSize >= (int32_t)(offsetof(vh_tick_stats, AnalysisWaitSeconds) + sizeof(double));
     if (StatsSize >= (int32_t)offsetof(vh_tick_stats, AnalysisWaits))
     {
         vh_tick_stats Zeroed{};
@@ -283,6 +286,15 @@ extern "C" void vh_tick(double BudgetSeconds, vh_tick_stats* OutStats)
         return;
     }
     if (!GetHost().bInitialized)
+    {
+        return;
+    }
+
+    // Reachable: Godot's debug loop keeps servicing the editor while stopped, and its flush_output
+    // reaches _frame. Resuming a slept task inside a VM stopped mid-op is not something any of
+    // this is designed for, and unlike the reads and the calls -- which S-3 measured as safe from
+    // inside a stop -- there is nothing a resumed task could sensibly do.
+    if (GodotVerse::IsDebugStopped())
     {
         return;
     }
@@ -315,6 +327,13 @@ extern "C" int32_t vh_compile_project(const vh_source_file* Files, int32_t Count
     if (WrongThread("vh_compile_project"))
     {
         return VH_ERR_THREAD;
+    }
+    if (GodotVerse::IsDebugStopped())
+    {
+        // A build while a frame of the retiring generation is on the stack is incoherent for a
+        // reason that has nothing to do with re-entrancy: it would publish a generation underneath
+        // a frame belonging to the old one.
+        return VH_ERR_STOPPED;
     }
     GodotVerse::WaitForBackgroundCheck();
     if (!Files || Count < 0 || !OutGeneration)
@@ -354,6 +373,11 @@ extern "C" int32_t vh_check_project(const char* PathUtf8, const char* SourceUtf8
     {
         return VH_ERR_THREAD;
     }
+    if (GodotVerse::IsDebugStopped())
+    {
+        // See vh_check_project_begin: an analysis is an analysis whichever thread runs it.
+        return VH_ERR_STOPPED;
+    }
     if (!PathUtf8 || !SourceUtf8)
     {
         return VH_ERR_ABI;
@@ -370,6 +394,13 @@ extern "C" int32_t vh_check_project_begin(const char* PathUtf8, const char* Sour
     if (WrongThread("vh_check_project_begin"))
     {
         return VH_ERR_THREAD;
+    }
+    if (GodotVerse::IsDebugStopped())
+    {
+        // Not re-entrancy -- S-3 found that safe. An analysis resets the semantic program and
+        // blocks execution for its whole length, and the frame on the stack is going to resume
+        // into whatever it leaves behind.
+        return VH_ERR_STOPPED;
     }
     if (!PathUtf8 || !SourceUtf8)
     {
@@ -1256,6 +1287,184 @@ extern "C" int32_t vh_signature_at(const char* PathUtf8,
         ParamDescs.Num()};
 
     *OutResult = &Desc;
+    return VH_OK;
+}
+
+/* ------------------------------------------------------ the debugger (R-DIAG-4) -- */
+
+extern "C" int32_t vh_debug_set_enabled(vh_bool Enabled)
+{
+    if (WrongThread("vh_debug_set_enabled"))
+    {
+        return VH_ERR_THREAD;
+    }
+    if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+    // VH_ERR_STATE rather than a silent no-op: Epic's socket debugger owns the VM's one debugger
+    // slot when vh_init_desc::EnableDebugger asked for it, and a consumer that thought it had
+    // attached and was never notified would be the worst of the available failures.
+    return GodotVerse::SetDebugEnabled(Enabled != 0) ? VH_OK : VH_ERR_STATE;
+}
+
+extern "C" int32_t vh_debug_stack_count(int32_t* OutCount)
+{
+    if (WrongThread("vh_debug_stack_count"))
+    {
+        return VH_ERR_THREAD;
+    }
+    if (!OutCount)
+    {
+        return VH_ERR_ABI;
+    }
+    int32 Count = 0;
+    if (!GodotVerse::DebugStackCount(Count))
+    {
+        return VH_ERR_STATE;
+    }
+    *OutCount = Count;
+    return VH_OK;
+}
+
+extern "C" int32_t vh_debug_stack_frame(int32_t Level, const vh_debug_frame** OutFrame)
+{
+    if (WrongThread("vh_debug_stack_frame"))
+    {
+        return VH_ERR_THREAD;
+    }
+    if (!OutFrame)
+    {
+        return VH_ERR_ABI;
+    }
+
+    // Static, like every other descriptor here: the frame points at bytes the host owns, and the
+    // caller is told they live until the next call to this function.
+    static FUtf8String Path;
+    static FUtf8String Name;
+    static vh_debug_frame Frame;
+
+    int32 Line = 0;
+    if (!GodotVerse::DebugStackFrame(Level, Path, Name, Line))
+    {
+        return VH_ERR_STATE;
+    }
+
+    Frame = vh_debug_frame{};
+    Frame.StructSize = static_cast<int32_t>(sizeof(vh_debug_frame));
+    Frame.PathUtf8 = reinterpret_cast<const char*>(*Path);
+    Frame.PathLen = Path.Len();
+    Frame.NameUtf8 = reinterpret_cast<const char*>(*Name);
+    Frame.NameLen = Name.Len();
+    Frame.Line = Line;
+    *OutFrame = &Frame;
+    return VH_OK;
+}
+
+extern "C" int32_t vh_debug_stack_values(int32_t Level, int32_t Kind, const vh_debug_value** OutValues, int32_t* OutCount)
+{
+    if (WrongThread("vh_debug_stack_values"))
+    {
+        return VH_ERR_THREAD;
+    }
+    if (!OutValues || !OutCount)
+    {
+        return VH_ERR_ABI;
+    }
+
+    // The stop owns the values; this only points at them, and is rebuilt from scratch every call --
+    // a descriptor left over from a longer previous answer would name a value that no longer exists.
+    //
+    // Each descriptor is zeroed by *assignment* rather than by AddDefaulted_GetRef, which
+    // default-initializes a POD and therefore leaves the two lanes this fills only one of holding
+    // whatever the previous answer left there (phase-6-design.md 13.3).
+    static TArray<vh_debug_value> Descs;
+
+    const TArray<GodotVerse::FDebugValue>* const Values =
+        GodotVerse::DebugStackValues(Level, Kind == VH_DEBUG_MEMBERS);
+    if (!Values)
+    {
+        return VH_ERR_STATE;
+    }
+
+    Descs.Reset(Values->Num());
+    for (const GodotVerse::FDebugValue& Value : *Values)
+    {
+        vh_debug_value Desc{};
+        Desc.StructSize = static_cast<int32_t>(sizeof(vh_debug_value));
+        Desc.NameUtf8 = reinterpret_cast<const char*>(*Value.Name);
+        Desc.NameLen = Value.Name.Len();
+        if (Value.bHasValue)
+        {
+            Desc.Value = &Value.Value;
+        }
+        else
+        {
+            Desc.RenderedUtf8 = reinterpret_cast<const char*>(*Value.Rendered);
+            Desc.RenderedLen = Value.Rendered.Len();
+        }
+        Descs.Add(Desc);
+    }
+
+    *OutValues = Descs.GetData();
+    *OutCount = Descs.Num();
+    return VH_OK;
+}
+
+/* ------------------------------------------------------ the profiler (R-DIAG-5) -- */
+
+extern "C" int32_t vh_profiling_set_enabled(vh_bool Enabled)
+{
+    if (WrongThread("vh_profiling_set_enabled"))
+    {
+        return VH_ERR_THREAD;
+    }
+    if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+    if (Enabled)
+    {
+        // Starting clears what a previous session accumulated. Godot's profiler panel is started
+        // and stopped by the user, and carrying the last session's totals into the next one would
+        // report times from a run that is over.
+        GodotVerse::ResetProfile();
+    }
+    GodotVerse::SetProfilingEnabled(Enabled != 0);
+    return VH_OK;
+}
+
+extern "C" int32_t vh_profiling_read(vh_bool FrameOnly, const vh_profile_row** OutRows, int32_t* OutCount)
+{
+    if (WrongThread("vh_profiling_read"))
+    {
+        return VH_ERR_THREAD;
+    }
+    if (!OutRows || !OutCount)
+    {
+        return VH_ERR_ABI;
+    }
+
+    static TArray<GodotVerse::FProfileRow> Rows;
+    static TArray<vh_profile_row> Descs;
+
+    GodotVerse::ReadProfile(FrameOnly != 0, Rows);
+
+    Descs.Reset(Rows.Num());
+    for (const GodotVerse::FProfileRow& Row : Rows)
+    {
+        vh_profile_row Desc{};
+        Desc.StructSize = static_cast<int32_t>(sizeof(vh_profile_row));
+        Desc.SignatureUtf8 = reinterpret_cast<const char*>(*Row.Signature);
+        Desc.SignatureLen = Row.Signature.Len();
+        Desc.CallCount = Row.CallCount;
+        Desc.TotalSeconds = Row.TotalSeconds;
+        Desc.SelfSeconds = Row.SelfSeconds;
+        Descs.Add(Desc);
+    }
+
+    *OutRows = Descs.GetData();
+    *OutCount = Descs.Num();
     return VH_OK;
 }
 

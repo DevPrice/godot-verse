@@ -57,6 +57,12 @@ void VerseHostLibrary::clear_function_pointers() {
 	ClassMembers = nullptr;
 	ClassOverrideCandidates = nullptr;
 	SignatureAt = nullptr;
+	DebugSetEnabled = nullptr;
+	DebugStackCount = nullptr;
+	DebugStackFrame = nullptr;
+	DebugStackValues = nullptr;
+	ProfilingSetEnabled = nullptr;
+	ProfilingRead = nullptr;
 }
 
 bool VerseHostLibrary::load(const String &p_dll_path, String &r_error) {
@@ -106,6 +112,12 @@ bool VerseHostLibrary::load(const String &p_dll_path, String &r_error) {
 	ok = ok && resolve(handle, "vh_class_members", ClassMembers, r_error);
 	ok = ok && resolve(handle, "vh_class_override_candidates", ClassOverrideCandidates, r_error);
 	ok = ok && resolve(handle, "vh_signature_at", SignatureAt, r_error);
+	ok = ok && resolve(handle, "vh_debug_set_enabled", DebugSetEnabled, r_error);
+	ok = ok && resolve(handle, "vh_debug_stack_count", DebugStackCount, r_error);
+	ok = ok && resolve(handle, "vh_debug_stack_frame", DebugStackFrame, r_error);
+	ok = ok && resolve(handle, "vh_debug_stack_values", DebugStackValues, r_error);
+	ok = ok && resolve(handle, "vh_profiling_set_enabled", ProfilingSetEnabled, r_error);
+	ok = ok && resolve(handle, "vh_profiling_read", ProfilingRead, r_error);
 
 	if (!ok) {
 		clear_function_pointers();

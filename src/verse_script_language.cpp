@@ -11,6 +11,7 @@
 
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/engine.hpp>
+#include <godot_cpp/classes/engine_debugger.hpp>
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
@@ -2401,44 +2402,173 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 	return result;
 }
 
+// The host names a script by the absolute path vh_compile_project was given, verbatim -- which on
+// Windows is a mix of separators, because that is what the consumer built the list out of. Godot's
+// breakpoint list is keyed by res:// path, so this is the whole of the translation, and it is
+// cached because the question is asked once per distinct location per frame.
+String VerseScriptLanguage::res_path_for_source(const String &p_path) const {
+	const std::string key(p_path.utf8().get_data());
+	const auto found = res_path_by_source.find(key);
+	if (found != res_path_by_source.end()) {
+		return found->second;
+	}
+	const String localized = ProjectSettings::get_singleton()->localize_path(p_path.replace("\\", "/"));
+	res_path_by_source[key] = localized;
+	return localized;
+}
+
+// gdscript_vm.cpp's order, and diverging from it is what makes stepping and breakpoints disagree
+// about which one fires: a pending step wins, then a breakpoint, then the poll runs whatever the
+// answer was.
+//
+// The one substitution is depth. GDScript keeps EngineDebugger's counter honest by pushing and
+// popping it around every call; this bridge sees no Verse call, only an op, so the counter would
+// never move and step-over would behave as step-in. p_relation is the same question asked of the
+// stack instead -- Epic's own frame-ancestry test, which is the mechanism Notify is given the
+// arguments for -- and Godot's depth stays exactly what Godot set it to.
+//
+// is_skipping_breakpoints needs no handling: RemoteDebugger::debug checks it itself and returns
+// without stopping, so asking here would only duplicate the check.
+bool VerseScriptLanguage::debug_should_break(const String &p_path, int32_t p_line, int32_t p_relation) {
+	EngineDebugger *debugger = EngineDebugger::get_singleton();
+	if (debugger == nullptr || !debugger->is_active()) {
+		return false;
+	}
+
+	const String source = res_path_for_source(p_path);
+
+	bool do_break = false;
+	const int32_t lines_left = debugger->get_lines_left();
+	if (lines_left > 0) {
+		// A step that lands where it started has not stepped. See stopped_line's declaration.
+		const bool moved = p_relation != VH_DEBUG_FRAME_SAME || p_line != stopped_line || source != stopped_source;
+		const int32_t depth = debugger->get_depth();
+		const bool eligible = moved &&
+				(depth < 0 // step in: anywhere
+						|| (depth == 0 && p_relation != VH_DEBUG_FRAME_DEEPER) // next: not inside a call from here
+						|| (depth > 0 && p_relation == VH_DEBUG_FRAME_OTHER)); // out: neither here nor deeper
+		if (eligible) {
+			debugger->set_lines_left(lines_left - 1);
+			if (lines_left - 1 <= 0) {
+				do_break = true;
+				break_reason = "Step";
+			}
+		}
+	}
+	if (debugger->is_breakpoint(p_line, source)) {
+		do_break = true;
+		break_reason = "Breakpoint";
+	}
+	debugger->line_poll();
+
+	if (do_break) {
+		stopped_source = source;
+		stopped_line = p_line;
+	}
+	return do_break;
+}
+
+// Blocks on the calling thread, which is the Verse interpreter's, and does not return until the
+// user continues. Godot's debug loop runs here and calls back through the _debug_* virtuals below
+// while it does -- which is the shape the whole design is forced into: RemoteDebugger::debug loops
+// on the thread that called it, so there is no arrangement where the host parks on a primitive of
+// its own and Godot still runs.
+void VerseScriptLanguage::debug_break() {
+	EngineDebugger *debugger = EngineDebugger::get_singleton();
+	if (debugger == nullptr) {
+		return;
+	}
+	debugger->script_debug(this, true, false);
+}
+
 String VerseScriptLanguage::_debug_get_error() const {
-	return String();
+	return break_reason;
 }
 
 int32_t VerseScriptLanguage::_debug_get_stack_level_count() const {
-	return 0;
+	VerseRuntime *runtime = get_runtime();
+	return runtime != nullptr ? runtime->debug_stack_count() : 0;
 }
 
 int32_t VerseScriptLanguage::_debug_get_stack_level_line(int32_t p_level) const {
-	return 0;
+	VerseRuntime *runtime = get_runtime();
+	if (runtime == nullptr) {
+		return 0;
+	}
+	const Dictionary frame = runtime->debug_stack_frame(p_level);
+	return frame.has("line") ? (int32_t)(int64_t)frame["line"] : 0;
 }
 
 String VerseScriptLanguage::_debug_get_stack_level_function(int32_t p_level) const {
-	return String();
+	VerseRuntime *runtime = get_runtime();
+	if (runtime == nullptr) {
+		return String();
+	}
+	const Dictionary frame = runtime->debug_stack_frame(p_level);
+	return frame.has("function") ? String(frame["function"]) : String();
 }
 
 String VerseScriptLanguage::_debug_get_stack_level_source(int32_t p_level) const {
-	return String();
+	VerseRuntime *runtime = get_runtime();
+	if (runtime == nullptr) {
+		return String();
+	}
+	const Dictionary frame = runtime->debug_stack_frame(p_level);
+	const String source = frame.has("source") ? String(frame["source"]) : String();
+	if (source.is_empty()) {
+		// A native frame. Epic's stack walk emits one with a name and no location, which is what
+		// makes a stop inside a mirrored method legible rather than a hole in the stack.
+		return String();
+	}
+	return res_path_for_source(source);
 }
 
+// The extension wrapper splits the dictionary on these two keys and no others
+// (script_language_extension.h), so the key is the contract rather than a convention.
 Dictionary VerseScriptLanguage::_debug_get_stack_level_locals(int32_t p_level, int32_t p_max_subitems, int32_t p_max_depth) {
-	return Dictionary();
+	return debug_values_at(p_level, VH_DEBUG_LOCALS, "locals");
 }
 
 Dictionary VerseScriptLanguage::_debug_get_stack_level_members(int32_t p_level, int32_t p_max_subitems, int32_t p_max_depth) {
-	return Dictionary();
+	// Self and its fields. This is the only place a script instance's state appears -- see
+	// _debug_get_stack_level_instance.
+	return debug_values_at(p_level, VH_DEBUG_MEMBERS, "members");
 }
 
+Dictionary VerseScriptLanguage::debug_values_at(int32_t p_level, int32_t p_kind, const char *p_key) const {
+	VerseRuntime *runtime = get_runtime();
+	if (runtime == nullptr) {
+		return Dictionary();
+	}
+	const Dictionary values = runtime->debug_stack_values(p_level, p_kind);
+	if (!values.has("names")) {
+		return Dictionary();
+	}
+	Dictionary result;
+	result[String(p_key)] = values["names"];
+	result["values"] = values["values"];
+	return result;
+}
+
+// Null, permanently, and this is a landmine rather than a stub.
+//
+// Godot calls `inst->get_owner()` on whatever comes back (remote_debugger.cpp) -- a C++ virtual on
+// a ScriptInstance*. This extension's instances are raw GDExtensionScriptInstanceInfo3 vtables; the
+// ScriptInstanceExtension wrapper that *is* a ScriptInstance is built by Godot core and its address
+// never reaches a GDExtension. Returning a vh_instance* or a VerseScriptInstance* here is a
+// type-confused virtual call and a crash.
+//
+// Two things follow. `self` is delivered through _debug_get_stack_level_members instead, and
+// expression evaluation is unreachable: Godot's `evaluate` command bails before it would ask us.
 void *VerseScriptLanguage::_debug_get_stack_level_instance(int32_t p_level) {
 	return nullptr;
 }
 
+// Honestly empty, not a stub. A Verse module-level definition is a constant, not a mutable global
+// a debugger would watch change, so there is nothing for this to answer with. It is bound REQUIRED,
+// so it cannot be omitted the way an unsupported EXBIND virtual can.
 Dictionary VerseScriptLanguage::_debug_get_globals(int32_t p_max_subitems, int32_t p_max_depth) {
 	return Dictionary();
-}
-
-String VerseScriptLanguage::_debug_parse_stack_level_expression(int32_t p_level, const String &p_expression, int32_t p_max_subitems, int32_t p_max_depth) {
-	return String();
 }
 
 TypedArray<Dictionary> VerseScriptLanguage::_debug_get_current_stack_info() {
@@ -2446,20 +2576,110 @@ TypedArray<Dictionary> VerseScriptLanguage::_debug_get_current_stack_info() {
 }
 
 void VerseScriptLanguage::_profiling_start() {
+	profiling_active = true;
+	VerseRuntime *runtime = get_runtime();
+	if (runtime != nullptr) {
+		runtime->profiling_set_enabled(true);
+	}
 }
 
 void VerseScriptLanguage::_profiling_stop() {
+	profiling_active = false;
+	VerseRuntime *runtime = get_runtime();
+	if (runtime != nullptr) {
+		runtime->profiling_set_enabled(false);
+	}
 }
 
+// A no-op, and it stays one. Godot's "save native calls" asks a language to attribute time spent
+// inside engine calls to the script that made them; the bridge already does that and cannot do
+// otherwise -- a mirrored method call happens inside the Verse method's boundary row, so its time
+// is in that row's total whether anyone asks for it or not.
 void VerseScriptLanguage::_profiling_set_save_native_calls(bool p_enable) {
 }
 
+// **The array is not laid out the way godot-cpp thinks it is.**
+//
+// Godot's ScriptLanguage::ProfilingInfo carries a fifth field -- `internal_time`, added in 4.3 --
+// that its GDREGISTER_NATIVE_STRUCT registration string does not mention
+// (core/register_core_types.cpp against core/object/script_language.h). godot-cpp generates its
+// struct from that string, so it is 32 bytes for an array whose real elements are 40, and indexing
+// past element zero writes into the wrong offsets and eventually past the end.
+//
+// So the stride comes from the engine's version rather than from sizeof. Element zero is at the
+// same address under either layout, which is the only reason getting this wrong would ever have
+// been survivable; every element after it would not have been.
+static size_t profiling_info_stride() {
+	const Dictionary version = Engine::get_singleton()->get_version_info();
+	const int64_t major = version.get("major", 4);
+	const int64_t minor = version.get("minor", 0);
+	const bool has_internal_time = major > 4 || (major == 4 && minor >= 3);
+	return sizeof(ScriptLanguageExtensionProfilingInfo) + (has_internal_time ? sizeof(uint64_t) : 0);
+}
+
+int32_t VerseScriptLanguage::fill_profiling_info(ScriptLanguageExtensionProfilingInfo *p_info_array, int32_t p_info_max, bool p_frame_only) {
+	VerseRuntime *runtime = get_runtime();
+	if (p_info_array == nullptr || p_info_max <= 0 || runtime == nullptr || !profiling_active) {
+		return 0;
+	}
+
+	const TypedArray<Dictionary> rows = runtime->profiling_read(p_frame_only);
+	const size_t stride = profiling_info_stride();
+	int32_t written = 0;
+	for (int64_t i = 0; i < rows.size() && written < p_info_max; i++) {
+		const Dictionary row = rows[i];
+		ScriptLanguageExtensionProfilingInfo *slot = reinterpret_cast<ScriptLanguageExtensionProfilingInfo *>(
+				reinterpret_cast<uint8_t *>(p_info_array) + stride * (size_t)written);
+		// The signature is already constructed -- Godot resized the array before handing it over --
+		// so this is assignment, not placement. internal_time is left as Godot zeroed it: the
+		// bridge has no separate "time inside engine calls" to report, because a mirrored call
+		// happens inside the Verse method's own row and is already in that row's total.
+		slot->signature = StringName(String(row["signature"]));
+		slot->call_count = (uint64_t)(int64_t)row["call_count"];
+		slot->total_time = (uint64_t)(int64_t)row["total_time"];
+		slot->self_time = (uint64_t)(int64_t)row["self_time"];
+		written++;
+	}
+	return written;
+}
+
 int32_t VerseScriptLanguage::_profiling_get_accumulated_data(ScriptLanguageExtensionProfilingInfo *p_info_array, int32_t p_info_max) {
-	return 0;
+	return fill_profiling_info(p_info_array, p_info_max, false);
 }
 
 int32_t VerseScriptLanguage::_profiling_get_frame_data(ScriptLanguageExtensionProfilingInfo *p_info_array, int32_t p_info_max) {
-	return 0;
+	return fill_profiling_info(p_info_array, p_info_max, true);
+}
+
+// Attach whenever Godot's debugger is active, which is unconditionally correct and is what D6 asks
+// for until a measurement says otherwise. The alternative -- a polled mirror that sweeps
+// is_breakpoint over the lines Verse reports and attaches only when one exists -- buys back the
+// per-op Notify at the cost of a breakpoint that arms on a delay, and S-2's number did not justify
+// it (phase-6-design.md 13.1).
+void VerseScriptLanguage::sync_debugger_attachment() {
+	VerseRuntime *runtime = get_runtime();
+	EngineDebugger *debugger = EngineDebugger::get_singleton();
+	if (runtime == nullptr || debugger == nullptr) {
+		return;
+	}
+	const bool wanted = debugger->is_active();
+	if (wanted == debugger_attached) {
+		return;
+	}
+	// A refusal means Epic's socket debugger already owns the VM's one debugger slot, which is
+	// what verse/host/enable_debugger asked for. Said once rather than every frame.
+	if (!runtime->debug_set_enabled(wanted)) {
+		if (wanted) {
+			UtilityFunctions::push_warning(
+					"Verse: Godot's debugger is active, but the Verse VM already has a debugger "
+					"attached -- verse/host/enable_debugger opened Epic's socket debugger at "
+					"startup. Breakpoints in the script editor will not fire. Turn that setting "
+					"off to debug through Godot instead.");
+		}
+		debugger_attached = wanted; // do not ask again every frame
+		return;
+	}
+	debugger_attached = wanted;
 }
 
 bool VerseScriptLanguage::_handles_global_class_type(const String &p_type) const {
@@ -2588,6 +2808,8 @@ TypedArray<Dictionary> VerseScriptLanguage::_get_public_annotations() const {
 void VerseScriptLanguage::_frame() {
 	VerseRuntime *runtime = get_runtime();
 	if (runtime != nullptr && runtime->is_host_loaded()) {
+		// First, so a breakpoint set before anything else happens this frame is already armed.
+		sync_debugger_attachment();
 		poll_check();
 
 #ifdef TOOLS_ENABLED

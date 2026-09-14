@@ -1187,6 +1187,18 @@ func _process(_delta: float) -> bool:
 			_check_eq("a mutate-and-answer call survives the raise that follows it",
 					_tx.get_signal_connection_list("Scored").size(), 1)
 
+			# R-DIAG-3: the same raise, over and over, must not print its stack over and over.
+			# Godot already drops the *errors* past max_errors_per_second and says so once; the
+			# stack the bridge prints underneath each one is ordinary output, counted against the
+			# character budget every other script shares, and before Phase 6 a script raising every
+			# frame spent that budget on its own stack. What this asserts is only that the calls
+			# still run; what the suppression actually printed is asserted in run_tests.py, because
+			# a script cannot read the output log.
+			for _i in 12:
+				_tx.call("SetThenRaise")
+			_check_eq("a script raising over and over still runs after it",
+					_tx.call("ReadObservedX"), 7.0)
+
 		# --- R-ASYNC-1/2/4/5, R-SIG-5: tasks --------------------------------------------------
 		#
 		# A frame apart on purpose. A task spawned in one call suspends; what resumes it happens in

@@ -4,7 +4,10 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <algorithm>
+#include <cstring>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -235,6 +238,153 @@ static void RowColumnOf(const std::string& Text, size_t Offset, int32_t& OutRow,
 	OutColumn = static_cast<int32_t>(Offset - LineStart);
 }
 
+/* The consumer half of the debugger (R-DIAG-4), standing in for VerseScriptLanguage.
+ *
+ * It owns the breakpoint list and the step state, which is the division the ABI is built on: the
+ * host says which frame and which location, this says whether that is a place to stop. The step
+ * fields are Godot's own encoding -- LinesLeft counts down, and Depth is -1 for step-in, 0 for
+ * step-over and 1 for step-out (remote_debugger.cpp's step/next/out commands). */
+struct SmokeDebugger
+{
+	/* Armed breakpoint: a path suffix and a 1-based line. An empty path arms nothing. */
+	std::string BreakPathSuffix;
+	int32_t BreakLine = 0;
+
+	int32_t LinesLeft = -1;
+	int32_t Depth = -1;
+
+	/* Where the last stop was. A pending step may not land on the very line it stepped from in the
+	 * very frame it stepped from -- `Total := Helper()` reports its line twice, once before the
+	 * call and once when the result lands, so without this a step-over moves nowhere. GDScript is
+	 * not exposed to this because its line opcode is per source line; Verse's locations are per
+	 * op. */
+	std::string StoppedPath;
+	int32_t StoppedLine = 0;
+
+	int Asks = 0;
+	int Stops = 0;
+	int32_t LastRelation = -1;
+	/* Every distinct (path, line) the host asked about, in order. This is spikes S-1 and S-4:
+	 * whether a snippet-compiled procedure carries a file path at all, and whether every statement
+	 * line reports one. */
+	std::vector<std::pair<std::string, int32_t>> Asked;
+
+	/* What to do while stopped. Runs inside DebugBreak, which is inside Notify, which is inside the
+	 * interpreter -- exactly where Godot's debug loop would be. */
+	std::function<void()> OnStop;
+};
+
+static SmokeDebugger Debugger;
+
+static vh_bool SmokeDebugShouldBreak(void*, const char* PathUtf8, int32_t PathLen, int32_t Line, int32_t Relation)
+{
+	++Debugger.Asks;
+	Debugger.LastRelation = Relation;
+
+	const std::string Path(PathUtf8, static_cast<size_t>(PathLen));
+	if (Debugger.Asked.empty() || Debugger.Asked.back().first != Path || Debugger.Asked.back().second != Line)
+	{
+		Debugger.Asked.emplace_back(Path, Line);
+	}
+
+	/* gdscript_vm.cpp's order, with the ancestry test standing in for the depth counter the bridge
+	 * cannot keep: a pending step wins, then a breakpoint. */
+	bool DoBreak = false;
+	if (Debugger.LinesLeft > 0)
+	{
+		const bool Moved = Relation != VH_DEBUG_FRAME_SAME || Line != Debugger.StoppedLine
+			|| Path != Debugger.StoppedPath;
+		const bool Eligible = Moved
+			&& (Debugger.Depth < 0                                            /* step in: anywhere */
+				|| (Debugger.Depth == 0 && Relation != VH_DEBUG_FRAME_DEEPER) /* next: not inside a call from here */
+				|| (Debugger.Depth > 0 && Relation == VH_DEBUG_FRAME_OTHER)); /* out: neither here nor deeper */
+		if (Eligible)
+		{
+			--Debugger.LinesLeft;
+			DoBreak = Debugger.LinesLeft <= 0;
+		}
+	}
+	if (!Debugger.BreakPathSuffix.empty() && Line == Debugger.BreakLine
+		&& Path.size() >= Debugger.BreakPathSuffix.size()
+		&& Path.compare(Path.size() - Debugger.BreakPathSuffix.size(), Debugger.BreakPathSuffix.size(),
+						Debugger.BreakPathSuffix) == 0)
+	{
+		DoBreak = true;
+	}
+	if (DoBreak)
+	{
+		Debugger.StoppedPath = Path;
+		Debugger.StoppedLine = Line;
+	}
+	return DoBreak ? 1 : 0;
+}
+
+static void SmokeDebugBreak(void*)
+{
+	++Debugger.Stops;
+	/* Godot's debug loop runs here and does not return until the user continues. Continuing is
+	 * what returning from this is. */
+	if (Debugger.OnStop)
+	{
+		Debugger.OnStop();
+	}
+}
+
+static bool EndsWith(const std::string& Text, const char* Suffix)
+{
+	const size_t Len = strlen(Suffix);
+	return Text.size() >= Len && Text.compare(Text.size() - Len, Len, Suffix) == 0;
+}
+
+/* One stopped frame's locals or members, rendered for printing. A value the bridge carries comes
+ * back typed; anything else comes back as the VM's own rendering (D7), and both are shown. */
+static void CollectDebugValues(vh_debug_stack_values_fn Fn,
+							   int32_t Level,
+							   int32_t Kind,
+							   std::vector<std::pair<std::string, std::string>>& Out)
+{
+	const vh_debug_value* Values = nullptr;
+	int32_t Count = 0;
+	if (Fn(Level, Kind, &Values, &Count) != VH_OK)
+	{
+		return;
+	}
+	for (int32_t Index = 0; Index < Count; ++Index)
+	{
+		std::string Name(Values[Index].NameUtf8, static_cast<size_t>(Values[Index].NameLen));
+		std::string Rendered;
+		if (Values[Index].Value)
+		{
+			char Buffer[256];
+			const vh_value& Value = *Values[Index].Value;
+			switch (Value.Type)
+			{
+			case VH_TYPE_INT:
+				snprintf(Buffer, sizeof(Buffer), "int:%lld", (long long)Value.Int);
+				break;
+			case VH_TYPE_FLOAT:
+				snprintf(Buffer, sizeof(Buffer), "float:%f", Value.Float);
+				break;
+			case VH_TYPE_LOGIC:
+				snprintf(Buffer, sizeof(Buffer), "logic:%d", (int)Value.Logic);
+				break;
+			case VH_TYPE_STRING:
+				snprintf(Buffer, sizeof(Buffer), "string:%.*s", (int)Value.String.Len, Value.String.Utf8);
+				break;
+			default:
+				snprintf(Buffer, sizeof(Buffer), "type:%d", (int)Value.Type);
+				break;
+			}
+			Rendered = Buffer;
+		}
+		else
+		{
+			Rendered.assign(Values[Index].RenderedUtf8, static_cast<size_t>(Values[Index].RenderedLen));
+		}
+		Out.emplace_back(std::move(Name), std::move(Rendered));
+	}
+}
+
 static bool Step(const char* Name, bool Result)
 {
 	printf("[smoke] %s: %s\n", Name, Result ? "ok" : "FAIL");
@@ -260,6 +410,10 @@ static Fn Resolve(HMODULE Module, const char* Name, bool* Ok)
 
 int main(int argc, char** argv)
 {
+	// Unbuffered, because this harness can take the process down: a crash with a 4 KB block still
+	// in the buffer loses the line that says where it got to, which is the one line that matters.
+	setvbuf(stdout, nullptr, _IONBF, 0);
+
 	wchar_t ExePathW[MAX_PATH];
 	GetModuleFileNameW(nullptr, ExePathW, MAX_PATH);
 	fs::path ExeDir = fs::path(ExePathW).parent_path();
@@ -270,6 +424,7 @@ int main(int argc, char** argv)
 	fs::path VersePath = VerseBase / "tests" / "host_smoke" / "hello.verse";
 	fs::path ExportsPath = VerseBase / "tests" / "host_smoke" / "exports.verse";
 	fs::path TasksPath = VerseBase / "tests" / "host_smoke" / "tasks.verse";
+	fs::path DebugPath = VerseBase / "tests" / "host_smoke" / "debug_probe.verse";
 
 	ReportProvenance(DllPath);
 
@@ -308,6 +463,12 @@ int main(int argc, char** argv)
 	auto CheckProjectPollFn = Resolve<vh_check_project_poll_fn>(Module, "vh_check_project_poll", &ResolveOk);
 	auto CheckBusyFn = Resolve<vh_check_project_busy_fn>(Module, "vh_check_project_busy", &ResolveOk);
 	auto RunMainFn = Resolve<vh_run_main_fn>(Module, "vh_run_main", &ResolveOk);
+	auto DebugSetEnabledFn = Resolve<vh_debug_set_enabled_fn>(Module, "vh_debug_set_enabled", &ResolveOk);
+	auto DebugStackCountFn = Resolve<vh_debug_stack_count_fn>(Module, "vh_debug_stack_count", &ResolveOk);
+	auto DebugStackFrameFn = Resolve<vh_debug_stack_frame_fn>(Module, "vh_debug_stack_frame", &ResolveOk);
+	auto DebugStackValuesFn = Resolve<vh_debug_stack_values_fn>(Module, "vh_debug_stack_values", &ResolveOk);
+	auto ProfilingSetEnabledFn = Resolve<vh_profiling_set_enabled_fn>(Module, "vh_profiling_set_enabled", &ResolveOk);
+	auto ProfilingReadFn = Resolve<vh_profiling_read_fn>(Module, "vh_profiling_read", &ResolveOk);
 	if (!Step("resolve exports", ResolveOk))
 	{
 		return 1;
@@ -331,6 +492,8 @@ int main(int argc, char** argv)
 	Desc.Godot.SetProperty = &SmokeSetProperty;
 	Desc.Godot.CallMethod = &SmokeCallMethod;
 	Desc.Godot.GetClassOf = &SmokeGetClassOf;
+	Desc.Godot.DebugShouldBreak = &SmokeDebugShouldBreak;
+	Desc.Godot.DebugBreak = &SmokeDebugBreak;
 	Desc.OnDiagnostic = &SmokeOnDiagnostic;
 	Desc.DiagnosticCtx = nullptr;
 	Desc.OnRuntimeError = &SmokeOnRuntimeError;
@@ -364,14 +527,16 @@ int main(int argc, char** argv)
 	std::string ReloadPathUtf8 = ReloadPath.string();
 	std::string ModuleProbePathUtf8 = ModuleProbePath.string();
 	std::string TasksPathUtf8 = TasksPath.string();
-	vh_source_file ProjectFiles[4] = {
+	std::string DebugPathUtf8 = DebugPath.string();
+	vh_source_file ProjectFiles[5] = {
 		{ VersePathUtf8.c_str(), nullptr },
 		{ ExportsPathUtf8.c_str(), nullptr },
 		{ ReloadPathUtf8.c_str(), nullptr },
 		{ TasksPathUtf8.c_str(), nullptr },
+		{ DebugPathUtf8.c_str(), nullptr },
 	};
 	int32_t Generation = 0;
-	if (!Step("vh_compile_project", CompileProjectFn(ProjectFiles, 4, &Generation) == VH_OK))
+	if (!Step("vh_compile_project", CompileProjectFn(ProjectFiles, 5, &Generation) == VH_OK))
 	{
 		ShutdownFn();
 		return 1;
@@ -1536,16 +1701,17 @@ int main(int argc, char** argv)
 					   WriteFileUtf8(ReloadPath, ReloadProbeSource(2))
 						   && WriteFileUtf8(ModuleProbePath, ModuleProbeSource())) && CallsOk;
 
-		vh_source_file SecondFiles[5] = {
+		vh_source_file SecondFiles[6] = {
 			{ VersePathUtf8.c_str(), nullptr },
 			{ ExportsPathUtf8.c_str(), nullptr },
 			{ ReloadPathUtf8.c_str(), nullptr },
 			{ ModuleProbePathUtf8.c_str(), "gameplay" },
 			{ TasksPathUtf8.c_str(), nullptr },
+			{ DebugPathUtf8.c_str(), nullptr },
 		};
 		int32_t SecondGeneration = 0;
 		DiagnosticErrorCount = 0;
-		const bool SecondBuilt = CompileProjectFn(SecondFiles, 5, &SecondGeneration) == VH_OK;
+		const bool SecondBuilt = CompileProjectFn(SecondFiles, 6, &SecondGeneration) == VH_OK;
 		CallsOk = Step("a second vh_compile_project in the same process builds", SecondBuilt) && CallsOk;
 		CallsOk = Step("and reports generation 2", SecondGeneration == 2) && CallsOk;
 		CallsOk = Step("a file in a module reaches a root definition with nothing imported",
@@ -2589,6 +2755,254 @@ int main(int argc, char** argv)
 		CheckProjectFn(ExportsPathUtf8.c_str(), CleanSource.c_str());
 
 		CallsOk = AsyncOk && CallsOk;
+	}
+
+	// ---------------------------------------------------------------- the debugger (R-DIAG-4) --
+	//
+	// This is also where spikes S-1 through S-4 live, which is why the first case prints what it
+	// found rather than only asserting on it: whether a snippet-compiled procedure carries a file
+	// path (S-1), what an attached debugger costs (S-2), whether re-entering the VM from inside a
+	// stop is safe (S-3), and whether every statement line reports a location (S-4).
+	{
+		bool DebugOk = true;
+		vh_instance* Probe = nullptr;
+		vh_instance* Other = nullptr;
+		DebugOk = Step("vh_instantiate debug_probe",
+					   InstantiateFn("debug_probe", 91, &Probe) == VH_OK && Probe != nullptr) && DebugOk;
+		DebugOk = Step("vh_instantiate a second debug_probe",
+					   InstantiateFn("debug_probe", 92, &Other) == VH_OK && Other != nullptr) && DebugOk;
+
+		int32_t NotStoppedCount = 0;
+		DebugOk = Step("the reads answer VH_ERR_STATE with nothing stopped",
+					   DebugStackCountFn(&NotStoppedCount) == VH_ERR_STATE) && DebugOk;
+
+		Debugger = SmokeDebugger{};
+		DebugOk = Step("vh_debug_set_enabled(true)", DebugSetEnabledFn(1) == VH_OK) && DebugOk;
+
+		// S-1 and S-4: run one method with nothing armed, and look at what the host asked about.
+		{
+			CallVoid(InstanceCallFn, Probe, "(/user@localhost/debug_probe:)Count");
+
+			DebugOk = Step("Notify reached the consumer while attached", Debugger.Asks > 0) && DebugOk;
+
+			printf("[smoke] S-1/S-4: %d distinct (path, line) pairs\n", (int)Debugger.Asked.size());
+			for (size_t Index = 0; Index < Debugger.Asked.size() && Index < 20; ++Index)
+			{
+				printf("[smoke]   %s:%d\n", Debugger.Asked[Index].first.c_str(), Debugger.Asked[Index].second);
+			}
+
+			bool SawProbe = false;
+			bool SawEmptyPath = false;
+			std::vector<int32_t> ProbeLines;
+			for (const std::pair<std::string, int32_t>& Pair : Debugger.Asked)
+			{
+				if (Pair.first.empty())
+				{
+					SawEmptyPath = true;
+				}
+				if (EndsWith(Pair.first, "debug_probe.verse"))
+				{
+					SawProbe = true;
+					ProbeLines.push_back(Pair.second);
+				}
+			}
+			DebugOk = Step("S-1: a snippet-compiled procedure carries its file path", SawProbe) && DebugOk;
+			DebugOk = Step("S-1: and never an empty one", !SawEmptyPath) && DebugOk;
+
+			// S-4: Count's four statements are lines 13-16 and Helper's two are 21-22. Sparse
+			// locations would show up as one of them never being reported.
+			auto Reported = [&ProbeLines](int32_t Line) {
+				return std::find(ProbeLines.begin(), ProbeLines.end(), Line) != ProbeLines.end();
+			};
+			DebugOk = Step("S-4: every statement line of Count reports a location",
+						   Reported(13) && Reported(14) && Reported(15) && Reported(16)) && DebugOk;
+			// Line 21 is `Inner := 21` and line 22 is the bare `Inner` that answers it. Only the
+			// first reports: a line that emits no op of its own carries no location, so a
+			// breakpoint on a trailing register read never fires. The one shape S-4 found, and
+			// worth a case rather than a footnote -- a line added there would change the answer.
+			DebugOk = Step("S-4: a line that emits an op reports it", Reported(21)) && DebugOk;
+			DebugOk = Step("S-4: and a bare trailing expression does not", !Reported(22)) && DebugOk;
+		}
+
+		// A breakpoint stops once per arrival at the line, not once per op -- which is the D4 dedup.
+		int32_t NestedCallStatus = VH_OK;
+		int32_t NestedFieldStatus = VH_OK;
+		int32_t StackDepth = 0;
+		std::string InnerName;
+		std::string InnerPath;
+		int32_t InnerLine = 0;
+		std::vector<std::pair<std::string, std::string>> Locals;
+		std::vector<std::pair<std::string, std::string>> Members;
+		{
+			Debugger.Asks = 0;
+			Debugger.Stops = 0;
+			Debugger.BreakPathSuffix = "debug_probe.verse";
+			Debugger.BreakLine = 21;
+			Debugger.OnStop = [&] {
+				// Everything a stop can be asked, read once. Godot asks the same three questions.
+				DebugStackCountFn(&StackDepth);
+
+				const vh_debug_frame* Frame = nullptr;
+				if (DebugStackFrameFn(0, &Frame) == VH_OK && Frame)
+				{
+					InnerName.assign(Frame->NameUtf8, static_cast<size_t>(Frame->NameLen));
+					InnerPath.assign(Frame->PathUtf8, static_cast<size_t>(Frame->PathLen));
+					InnerLine = Frame->Line;
+				}
+
+				CollectDebugValues(DebugStackValuesFn, 0, VH_DEBUG_LOCALS, Locals);
+				CollectDebugValues(DebugStackValuesFn, 0, VH_DEBUG_MEMBERS, Members);
+
+				// S-3: re-entering the VM from inside a stop. A different instance's method and a
+				// field read on the stopped one, which is what Godot's remote scene tree does while
+				// the debug loop runs.
+				NestedCallStatus = CallVoid(InstanceCallFn, Other, "(/user@localhost/debug_probe:)Tick");
+				const vh_value* FieldValue = nullptr;
+				NestedFieldStatus = GetFieldFn(Probe, "Health", &FieldValue);
+			};
+
+			const int32_t Status = CallVoid(InstanceCallFn, Probe, "(/user@localhost/debug_probe:)Count");
+			DebugOk = Step("a breakpoint stops the script", Debugger.Stops > 0) && DebugOk;
+			DebugOk = Step("and stops there once, not once per op", Debugger.Stops == 1) && DebugOk;
+			DebugOk = Step("the call ran to completion after continuing", Status == VH_OK) && DebugOk;
+		}
+
+		DebugOk = Step("the stack reaches past the innermost frame", StackDepth >= 2) && DebugOk;
+		DebugOk = Step("the innermost frame is Helper at line 21",
+					   InnerName == "Helper" && InnerLine == 21) && DebugOk;
+		DebugOk = Step("and names the file it is in", EndsWith(InnerPath, "debug_probe.verse")) && DebugOk;
+
+		{
+			bool SawInner = false;
+			for (const std::pair<std::string, std::string>& Local : Locals)
+			{
+				printf("[smoke]   local %s = %s\n", Local.first.c_str(), Local.second.c_str());
+				SawInner = SawInner || Local.first == "Inner";
+			}
+			DebugOk = Step("locals carry the frame's own names", SawInner) && DebugOk;
+
+			bool SawSelf = false;
+			bool SawHealth = false;
+			bool SawLabel = false;
+			for (const std::pair<std::string, std::string>& Member : Members)
+			{
+				printf("[smoke]   member %s = %s\n", Member.first.c_str(), Member.second.c_str());
+				SawSelf = SawSelf || Member.first == "Self";
+				SawHealth = SawHealth || (Member.first == "Health" && Member.second == "int:7");
+				SawLabel = SawLabel || (Member.first == "Label" && Member.second == "string:probe");
+			}
+			DebugOk = Step("members carry Self", SawSelf) && DebugOk;
+			DebugOk = Step("an int member arrives as a typed value (D7)", SawHealth) && DebugOk;
+			DebugOk = Step("and a string member too", SawLabel) && DebugOk;
+		}
+
+		printf("[smoke] S-3: nested vh_instance_call while stopped answered %d, vh_instance_get_field %d\n",
+			   NestedCallStatus, NestedFieldStatus);
+
+		// Stepping. From a stop at Count's first line, one step-over must land on Count's own next
+		// line rather than descend into Helper.
+		{
+			int32_t StepLine = 0;
+			std::string StepFunction;
+			Debugger = SmokeDebugger{};
+			Debugger.BreakPathSuffix = "debug_probe.verse";
+			Debugger.BreakLine = 13;
+			Debugger.OnStop = [&] {
+				if (Debugger.Stops == 1)
+				{
+					// "next": one line, at this frame's depth or shallower.
+					Debugger.BreakPathSuffix.clear();
+					Debugger.Depth = 0;
+					Debugger.LinesLeft = 1;
+					return;
+				}
+				const vh_debug_frame* Frame = nullptr;
+				if (DebugStackFrameFn(0, &Frame) == VH_OK && Frame)
+				{
+					StepFunction.assign(Frame->NameUtf8, static_cast<size_t>(Frame->NameLen));
+					StepLine = Frame->Line;
+				}
+				Debugger.LinesLeft = -1;
+			};
+			CallVoid(InstanceCallFn, Probe, "(/user@localhost/debug_probe:)Count");
+			printf("[smoke] step-over from Count:13 landed in %s:%d\n", StepFunction.c_str(), StepLine);
+			DebugOk = Step("step-over stays in the frame it stepped from", StepFunction == "Count") && DebugOk;
+			DebugOk = Step("and lands on the next line", StepLine == 14) && DebugOk;
+		}
+
+		DebugOk = Step("vh_debug_set_enabled(false)", DebugSetEnabledFn(0) == VH_OK) && DebugOk;
+		{
+			Debugger = SmokeDebugger{};
+			Debugger.BreakPathSuffix = "debug_probe.verse";
+			Debugger.BreakLine = 21;
+			CallVoid(InstanceCallFn, Probe, "(/user@localhost/debug_probe:)Count");
+			DebugOk = Step("Notify stops firing once detached", Debugger.Asks == 0) && DebugOk;
+		}
+
+		// ------------------------------------------------------------ the profiler (R-DIAG-5) --
+		{
+			const vh_profile_row* Rows = nullptr;
+			int32_t RowCount = -1;
+			DebugOk = Step("with the profiler off, vh_profiling_read answers no rows",
+						   ProfilingReadFn(0, &Rows, &RowCount) == VH_OK && RowCount == 0) && DebugOk;
+
+			DebugOk = Step("vh_profiling_set_enabled(true)", ProfilingSetEnabledFn(1) == VH_OK) && DebugOk;
+			for (int Index = 0; Index < 5; ++Index)
+			{
+				CallVoid(InstanceCallFn, Probe, "(/user@localhost/debug_probe:)Tick");
+			}
+			CallVoid(InstanceCallFn, Probe, "(/user@localhost/debug_probe:)Count");
+			CallVoid(InstanceCallFn, Probe, "(/user@localhost/debug_probe:)Tagged");
+
+			bool FoundTick = false;
+			bool CountSelfIsLess = false;
+			bool ShapedRight = false;
+			bool FoundTagged = false;
+			if (ProfilingReadFn(0, &Rows, &RowCount) == VH_OK)
+			{
+				for (int32_t Index = 0; Index < RowCount; ++Index)
+				{
+					const std::string Signature(Rows[Index].SignatureUtf8, static_cast<size_t>(Rows[Index].SignatureLen));
+					printf("[smoke]   row %s calls=%lld total=%.6f self=%.6f\n",
+						   Signature.c_str(), (long long)Rows[Index].CallCount,
+						   Rows[Index].TotalSeconds, Rows[Index].SelfSeconds);
+					if (Signature.find("debug_probe.Tick") != std::string::npos)
+					{
+						FoundTick = Rows[Index].CallCount == 5;
+					}
+					if (Signature.find("debug_probe.Count") != std::string::npos)
+					{
+						CountSelfIsLess = Rows[Index].SelfSeconds <= Rows[Index].TotalSeconds;
+					}
+					if (Signature.find("::smoke_tag") != std::string::npos)
+					{
+						FoundTagged = Rows[Index].CallCount == 1;
+					}
+					const size_t First = Signature.find("::");
+					const size_t Second = First == std::string::npos ? std::string::npos : Signature.find("::", First + 2);
+					ShapedRight = ShapedRight || (First != std::string::npos && Second != std::string::npos);
+				}
+			}
+			DebugOk = Step("a method called five times reports exactly five calls", FoundTick) && DebugOk;
+			DebugOk = Step("a row's self time never exceeds its total", CountSelfIsLess) && DebugOk;
+			DebugOk = Step("a row carries GDScript's three-part signature", ShapedRight) && DebugOk;
+			// S-5's other half: the compiler accepts `profile{}` in a /user@localhost package, and
+			// the VM's delegate carries the block's tag and its row out to the host.
+			DebugOk = Step("S-5: a profile{} block gets a row of its own", FoundTagged) && DebugOk;
+
+			// The frame accumulator resets as it is read, which is what makes the next frame's
+			// numbers that frame's.
+			ProfilingReadFn(1, &Rows, &RowCount);
+			int32_t AfterReset = -1;
+			ProfilingReadFn(1, &Rows, &AfterReset);
+			DebugOk = Step("reading the frame's rows resets them", AfterReset == 0) && DebugOk;
+
+			DebugOk = Step("vh_profiling_set_enabled(false)", ProfilingSetEnabledFn(0) == VH_OK) && DebugOk;
+		}
+
+		ReleaseInstanceFn(Probe);
+		ReleaseInstanceFn(Other);
+		CallsOk = DebugOk && CallsOk;
 	}
 
 	ShutdownFn();

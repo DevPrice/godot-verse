@@ -10,6 +10,7 @@
 #include <godot_cpp/classes/performance.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/classes/scene_tree.hpp>
+#include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/classes/window.hpp>
 #include <godot_cpp/classes/class_db_singleton.hpp>
 #include <godot_cpp/core/class_db.hpp>
@@ -36,6 +37,7 @@ void VerseRuntime::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("_monitor_pump_ms"), &VerseRuntime::_monitor_pump_ms);
 	ClassDB::bind_method(D_METHOD("_monitor_sleeping_tasks"), &VerseRuntime::_monitor_sleeping_tasks);
 	ClassDB::bind_method(D_METHOD("_monitor_analysis_wait_ms"), &VerseRuntime::_monitor_analysis_wait_ms);
+	ClassDB::bind_method(D_METHOD("_monitor_instance_tasks"), &VerseRuntime::_monitor_instance_tasks);
 	ClassDB::bind_method(D_METHOD("build_project"), &VerseRuntime::build_project);
 }
 
@@ -161,6 +163,8 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 	godot_api.DisconnectSignal = &VerseRuntime::api_disconnect_signal;
 	godot_api.SignalTarget = &VerseRuntime::api_signal_target;
 	godot_api.MakeSignalRef = &VerseRuntime::api_make_signal_ref;
+	godot_api.DebugShouldBreak = &VerseRuntime::api_debug_should_break;
+	godot_api.DebugBreak = &VerseRuntime::api_debug_break;
 	godot_api.ReleaseRef = &VerseRuntime::api_release_ref;
 	godot_api.RetainRef = &VerseRuntime::api_retain_ref;
 	godot_api.NewRef = &VerseRuntime::api_new_ref;
@@ -923,6 +927,10 @@ void VerseRuntime::tick(double p_budget_seconds) {
 		return;
 	}
 
+	// Before the tick rather than after: a raise that happens *in* this tick opens its window
+	// here, and flushing afterwards would close it in the same frame it opened.
+	flush_suppressed_raises();
+
 	vh_tick_stats stats = {};
 	stats.StructSize = sizeof(stats);
 	host.Tick(p_budget_seconds, &stats);
@@ -965,6 +973,10 @@ void VerseRuntime::register_monitors() {
 	// The stall the other three cannot show: analysis runs on a thread the host owns, so a frame
 	// that spent 1.7 s waiting one out reports a pump that did nothing in no time at all.
 	perf->add_custom_monitor("verse/analysis_wait_ms", Callable(this, "_monitor_analysis_wait_ms"));
+	// OQ-13's answer is that nothing is bounded, so this is what stands in for a cap: a `spawn` in
+	// _Process makes sixty tasks a second on one node, and no other number here separates that
+	// from sixty nodes with one task each.
+	perf->add_custom_monitor("verse/instance_tasks", Callable(this, "_monitor_instance_tasks"));
 }
 
 double VerseRuntime::_monitor_queued_jobs() const {
@@ -981,6 +993,10 @@ double VerseRuntime::_monitor_sleeping_tasks() const {
 
 double VerseRuntime::_monitor_analysis_wait_ms() const {
 	return last_tick_stats.AnalysisWaitSeconds * 1000.0;
+}
+
+double VerseRuntime::_monitor_instance_tasks() const {
+	return (double)last_tick_stats.PeakInstanceTasks;
 }
 
 void VerseRuntime::api_print(void *p_ctx, const char *p_utf8, int32_t p_len) {
@@ -1218,6 +1234,132 @@ int32_t VerseRuntime::api_invoke_callable(void *p_ctx, int64_t p_ref, const vh_v
 	return variant_to_vh(result, p_arena, *r_value) ? VH_CALL_OK : VH_CALL_BAD_VALUE;
 }
 
+bool VerseRuntime::debug_set_enabled(bool p_enabled) {
+	if (!host.is_loaded()) {
+		return false;
+	}
+	return host.DebugSetEnabled(p_enabled ? 1 : 0) == VH_OK;
+}
+
+int32_t VerseRuntime::debug_stack_count() const {
+	if (!host.is_loaded()) {
+		return 0;
+	}
+	int32_t count = 0;
+	return host.DebugStackCount(&count) == VH_OK ? count : 0;
+}
+
+Dictionary VerseRuntime::debug_stack_frame(int32_t p_level) const {
+	Dictionary result;
+	if (!host.is_loaded()) {
+		return result;
+	}
+	const vh_debug_frame *frame = nullptr;
+	if (host.DebugStackFrame(p_level, &frame) != VH_OK || frame == nullptr) {
+		return result;
+	}
+	result["function"] = String::utf8(frame->NameUtf8, frame->NameLen);
+	result["source"] = String::utf8(frame->PathUtf8, frame->PathLen);
+	result["line"] = frame->Line;
+	return result;
+}
+
+Dictionary VerseRuntime::debug_stack_values(int32_t p_level, int32_t p_kind) const {
+	Dictionary result;
+	if (!host.is_loaded()) {
+		return result;
+	}
+	const vh_debug_value *values = nullptr;
+	int32_t count = 0;
+	if (host.DebugStackValues(p_level, p_kind, &values, &count) != VH_OK) {
+		return result;
+	}
+
+	PackedStringArray names;
+	Array rendered;
+	for (int32_t i = 0; i < count; i++) {
+		names.push_back(String::utf8(values[i].NameUtf8, values[i].NameLen));
+		if (values[i].Value != nullptr) {
+			rendered.push_back(vh_to_variant(*values[i].Value));
+		} else {
+			rendered.push_back(String::utf8(values[i].RenderedUtf8, values[i].RenderedLen));
+		}
+	}
+	result["names"] = names;
+	result["values"] = rendered;
+	return result;
+}
+
+void VerseRuntime::profiling_set_enabled(bool p_enabled) {
+	if (host.is_loaded()) {
+		host.ProfilingSetEnabled(p_enabled ? 1 : 0);
+	}
+}
+
+TypedArray<Dictionary> VerseRuntime::profiling_read(bool p_frame_only) const {
+	TypedArray<Dictionary> result;
+	if (!host.is_loaded()) {
+		return result;
+	}
+	const vh_profile_row *rows = nullptr;
+	int32_t count = 0;
+	if (host.ProfilingRead(p_frame_only ? 1 : 0, &rows, &count) != VH_OK) {
+		return result;
+	}
+	for (int32_t i = 0; i < count; i++) {
+		Dictionary row;
+		row["signature"] = String::utf8(rows[i].SignatureUtf8, rows[i].SignatureLen);
+		row["call_count"] = (int64_t)rows[i].CallCount;
+		// Microseconds, which is what ScriptLanguage::ProfilingInfo carries and what
+		// servers_debugger.cpp divides by a million before showing.
+		row["total_time"] = (int64_t)(rows[i].TotalSeconds * 1000000.0);
+		row["self_time"] = (int64_t)(rows[i].SelfSeconds * 1000000.0);
+		result.push_back(row);
+	}
+	return result;
+}
+
+vh_bool VerseRuntime::api_debug_should_break(void *p_ctx, const char *p_path_utf8, int32_t p_path_len, int32_t p_line, int32_t p_relation) {
+	VerseScriptLanguage *language = VerseScriptLanguage::singleton();
+	if (language == nullptr) {
+		return 0;
+	}
+	return language->debug_should_break(String::utf8(p_path_utf8, p_path_len), p_line, p_relation) ? 1 : 0;
+}
+
+void VerseRuntime::api_debug_break(void *p_ctx) {
+	VerseScriptLanguage *language = VerseScriptLanguage::singleton();
+	if (language != nullptr) {
+		language->debug_break();
+	}
+}
+
+// How long one raise site's stack stays suppressed after it has printed once. A second, because
+// that is the unit Godot's own throttles are expressed in (max_errors_per_second) and because a
+// script raising on a timer rather than every frame should still be heard from.
+static constexpr double RAISE_WINDOW_SECONDS = 1.0;
+
+void VerseRuntime::flush_suppressed_raises() {
+	if (raise_sites.empty()) {
+		return;
+	}
+	const double now = Time::get_singleton()->get_ticks_msec() / 1000.0;
+	for (auto it = raise_sites.begin(); it != raise_sites.end();) {
+		if (now - it->second.window_opened < RAISE_WINDOW_SECONDS) {
+			++it;
+			continue;
+		}
+		if (it->second.suppressed > 0) {
+			// Godot's own wording for the same thing (remote_debugger.cpp's n_errors_dropped), so
+			// the two read alike in one log.
+			UtilityFunctions::print(
+					String("    (") + String::num_int64(it->second.suppressed) +
+					" more stack trace(s) from this error were dropped.)");
+		}
+		it = raise_sites.erase(it);
+	}
+}
+
 void VerseRuntime::on_runtime_error(void *p_ctx, const vh_runtime_error *p_error) {
 	if (p_error == nullptr) {
 		return;
@@ -1252,6 +1394,33 @@ void VerseRuntime::on_runtime_error(void *p_ctx, const vh_runtime_error *p_error
 
 	// The rest of the stack, innermost first, as its own lines. Printed rather than pushed so one
 	// error is one entry in the errors panel with its stack beneath it.
+	//
+	// Rate limited, and this is the whole of what OQ-13 turned out to need (R-DIAG-3). Godot drops
+	// errors past max_errors_per_second and says so once; these lines are *output*, counted
+	// against max_chars_per_second instead, and a script raising every frame used to spend that
+	// budget on its own stack and take every other script's output down with it. The first
+	// occurrence prints in full; repeats inside the window print nothing; the window closing says
+	// how many were dropped, in the wording Godot uses for its own.
+	VerseRuntime *runtime = static_cast<VerseRuntime *>(p_ctx);
+	if (runtime != nullptr) {
+		std::string key(message.utf8().get_data());
+		if (site != nullptr) {
+			key += "|";
+			key += String::utf8(site->PathUtf8, site->PathLen).utf8().get_data();
+			key += ":";
+			key += String::num_int64(site->Line).utf8().get_data();
+		}
+
+		const double now = Time::get_singleton()->get_ticks_msec() / 1000.0;
+		RaiseSite &entry = runtime->raise_sites[key];
+		if (entry.window_opened == 0.0) {
+			entry.window_opened = now;
+		} else {
+			entry.suppressed++;
+			return;
+		}
+	}
+
 	for (int32_t i = 0; i < p_error->FrameCount; i++) {
 		const vh_stack_frame &frame = p_error->Frames[i];
 		String line = String("    at ") + String::utf8(frame.FunctionUtf8, frame.FunctionLen);

@@ -11,6 +11,9 @@
 #include <godot_cpp/templates/vector.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
 
+#include <string>
+#include <unordered_map>
+
 // One method a Verse script declares, in Godot's vocabulary.
 //
 // A copy rather than a view: vh_class_method_list's descriptors live until the next call to it,
@@ -93,6 +96,7 @@ public:
 	double _monitor_pump_ms() const;
 	double _monitor_sleeping_tasks() const;
 	double _monitor_analysis_wait_ms() const;
+	double _monitor_instance_tasks() const;
 
 	// Verse's compilation unit is the package, not the file, so every .verse file in the project
 	// is built together -- a build is always of the whole project. Each successful call publishes
@@ -238,6 +242,31 @@ public:
 	// what a member typed as one of the project's own classes holds. A null p_value clears it.
 	bool set_instance_field_instance(vh_instance *p_instance, const godot::String &p_name, vh_instance *p_value);
 
+	// R-DIAG-4. Installs or removes the Verse debugger; false when Epic's own socket debugger
+	// holds the VM's single debugger slot, which is what verse/host/enable_debugger asks for.
+	bool debug_set_enabled(bool p_enabled);
+
+	// The three stopped-stack reads, all defined only while the host has a stop stashed -- which is
+	// to say only from inside VerseScriptLanguage::debug_break. Outside one, the count is 0 and the
+	// two dictionaries are empty.
+	int32_t debug_stack_count() const;
+	// { function, source, line } for one frame, innermost first. `source` is the path the host
+	// named, unlocalized: turning it into a res:// path is the caller's, because only the caller
+	// caches the answer.
+	godot::Dictionary debug_stack_frame(int32_t p_level) const;
+	// { names: PackedStringArray, values: Array } for one frame's locals or members. A value the
+	// bridge carries arrives as itself; anything else -- a tuple, an option, a map, a class
+	// instance -- arrives as the VM's own rendering, as a String.
+	godot::Dictionary debug_stack_values(int32_t p_level, int32_t p_kind) const;
+
+	// R-DIAG-5. Off until Godot's profiler asks.
+	void profiling_set_enabled(bool p_enabled);
+	// One row per boundary crossing the bridge timed and per `profile{}` block a script ran, as
+	// { signature, call_count, total_time, self_time }. Times are microseconds, which is the unit
+	// ScriptLanguage::ProfilingInfo carries. p_frame_only answers this frame's rows and resets
+	// them; otherwise the run's.
+	godot::TypedArray<godot::Dictionary> profiling_read(bool p_frame_only) const;
+
 private:
 	VerseHostLibrary host;
 	vh_init_desc init_desc = {};
@@ -252,6 +281,26 @@ private:
 
 	vh_tick_stats last_tick_stats = {};
 	bool monitors_registered = false;
+
+	// How many times one raise site has printed its stack, and when its window opened (R-DIAG-3).
+	//
+	// Godot throttles the *error* itself -- network/limits/debugger/max_errors_per_second, and it
+	// says once that it dropped some. What it does not throttle is the stack this prints
+	// underneath, which is ordinary output: a script raising at 60 Hz with a six-frame stack emits
+	// ~360 lines a second into a shared character budget and silences every other script, which is
+	// the opposite of the intent. Keyed on the raise site plus the message, so a second script
+	// raising somewhere else is not suppressed by the first.
+	struct RaiseSite {
+		double window_opened = 0.0;
+		int64_t suppressed = 0;
+	};
+	std::unordered_map<std::string, RaiseSite> raise_sites;
+
+	// Says how many stacks a closed window swallowed, and forgets the site. Called from tick, so
+	// the summary lands within a frame of the window closing rather than only when the same error
+	// happens again -- a script that raised sixty times and then stopped would otherwise never be
+	// told what was dropped.
+	void flush_suppressed_raises();
 	// Frames the pump has been over budget in a row, so the warning can be said once and then
 	// rarely rather than once per frame.
 	int64_t overrun_frames = 0;
@@ -275,6 +324,12 @@ private:
 	static int32_t api_disconnect_signal(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_target);
 	static int32_t api_signal_target(void *p_ctx, int64_t p_ref, vh_handle *r_handle, const char **r_name_utf8);
 	static int64_t api_make_signal_ref(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len);
+
+	// R-DIAG-4. Both are called from inside the Verse interpreter's handshake, with an op in
+	// flight, and both forward straight to VerseScriptLanguage -- the breakpoint list and the step
+	// state are the script language's, and the runtime only owns the wire.
+	static vh_bool api_debug_should_break(void *p_ctx, const char *p_path_utf8, int32_t p_path_len, int32_t p_line, int32_t p_relation);
+	static void api_debug_break(void *p_ctx);
 
 	// The reference table (R-TYPE-1). See src/verse_ref_table.h for what is in it and why, and the
 	// ABI header's "reference values" for the ownership rule these implement.

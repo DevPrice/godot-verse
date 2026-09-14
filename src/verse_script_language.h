@@ -124,9 +124,17 @@ public:
 	godot::Dictionary _complete_code(const godot::String &p_code, const godot::String &p_path, godot::Object *p_owner) const override;
 	godot::Dictionary _lookup_code(const godot::String &p_code, const godot::String &p_symbol, const godot::String &p_path, godot::Object *p_owner) const override;
 
-	// Verse debugs through uLangDAP against the host, not through Godot's debugger. These
-	// exist because Godot treats them as required and errors at the call site — including from
-	// inside its own error reporting — when a script language leaves one unbound.
+	// R-DIAG-4. A breakpoint in Godot's script editor stops a Verse script and shows its locals.
+	//
+	// The division with the host is: the host owns *which frame*, because only the Verse
+	// interpreter's Notify can see one; this owns *which line*, because the breakpoint list and the
+	// step state are Godot's. Everything below answers from what the host stashed at the stop, and
+	// is defined only while one is on the stack.
+	//
+	// Two of these stay empty on purpose and the audit in phase-6-design.md §7 says why:
+	// _debug_get_stack_level_instance can never be anything but null (Godot calls a C++ virtual on
+	// what it returns, and a GDExtension script instance is not a ScriptInstance), and Verse has no
+	// mutable globals for _debug_get_globals to answer with.
 	godot::String _debug_get_error() const override;
 	int32_t _debug_get_stack_level_count() const override;
 	int32_t _debug_get_stack_level_line(int32_t p_level) const override;
@@ -136,7 +144,11 @@ public:
 	godot::Dictionary _debug_get_stack_level_members(int32_t p_level, int32_t p_max_subitems, int32_t p_max_depth) override;
 	void *_debug_get_stack_level_instance(int32_t p_level) override;
 	godot::Dictionary _debug_get_globals(int32_t p_max_subitems, int32_t p_max_depth) override;
-	godot::String _debug_parse_stack_level_expression(int32_t p_level, const godot::String &p_expression, int32_t p_max_subitems, int32_t p_max_depth) override;
+	// _debug_parse_stack_level_expression is deliberately NOT declared. It is EXBIND, so leaving it
+	// unbound is how a ScriptLanguage says "unsupported" and is silent; and the remote debugger
+	// never reaches it anyway, because its guard is _debug_get_stack_level_instance, which is null
+	// forever. Evaluating would mean compiling an expression against a stopped frame's scope and
+	// running it in a VM paused mid-op, and Epic's own Verse DAP client has no `evaluate` to follow.
 	godot::TypedArray<godot::Dictionary> _debug_get_current_stack_info() override;
 
 	void _profiling_start() override;
@@ -159,9 +171,25 @@ public:
 	// Bound so EditorFileSystem's filesystem_changed can reach it. Nothing else calls it.
 	void on_filesystem_changed();
 
+	// The consumer half of R-DIAG-4's break decision, reached from VerseRuntime's ABI callbacks.
+	//
+	// Called from inside the Verse interpreter's handshake with an op in flight, so nothing here
+	// may enter the host except the vh_debug_* reads -- and those only from inside debug_break,
+	// which is where Godot's own debug loop runs.
+	//
+	// p_relation is a vh_debug_frame_relation: how the frame about to execute relates to the frame
+	// the last stop was in. It stands in for Godot's depth counter, which this bridge cannot keep
+	// because it never sees a Verse call, only an op.
+	bool debug_should_break(const godot::String &p_path, int32_t p_line, int32_t p_relation);
+	void debug_break();
+
 	// Budget handed to vh_tick each frame, so a runaway Verse task costs frame rate rather than
 	// hanging the editor. Read from the verse/runtime/frame_budget_ms project setting at _init.
 	double get_frame_budget_ms() const;
+
+	// Attaches the Verse debugger when Godot's is active and detaches it when it stops being.
+	// Called once per frame from _frame, which is also where every other per-frame decision is.
+	void sync_debugger_attachment();
 
 	// Builds every .verse file under res:// as one Verse program and publishes it as a new
 	// generation. Verse's compilation unit is the package rather than the file, so one script
@@ -398,6 +426,40 @@ private:
 	// Whether EditorFileSystem's filesystem_changed has been hooked up yet. Not at _init: the
 	// editor's singletons do not exist when a ScriptLanguage is registered.
 	bool filesystem_hook_connected = false;
+
+	// R-DIAG-4's state, all of it. Whether the Verse debugger is installed in the host, why the
+	// last stop happened, and where it happened.
+	//
+	// The last stop's position is what keeps a step a step: `Total := Helper()` reports its line
+	// twice, once before the call and once when the result lands, so a step-over with no memory of
+	// where it started stops again on the line it started on. GDScript never meets this because
+	// its line opcode is per source line; a Verse location is per op.
+	bool debugger_attached = false;
+	godot::String break_reason;
+	godot::String stopped_source;
+	int32_t stopped_line = 0;
+
+	// res:// path per absolute host path. The host asks once per distinct location per frame and
+	// hands back the path it was given at build time, separators and all; localizing it is a
+	// string walk that has no business happening inside the interpreter's handshake.
+	mutable std::unordered_map<std::string, godot::String> res_path_by_source;
+
+	// One stopped frame's locals or members, in the { <p_key>: PackedStringArray, values: Array }
+	// shape the extension wrapper splits on.
+	godot::Dictionary debug_values_at(int32_t p_level, int32_t p_kind, const char *p_key) const;
+
+	// Copies the host's rows into the array Godot allocated. Not a loop over p_info_array[i]:
+	// see the definition for why the stride is not sizeof.
+	int32_t fill_profiling_info(godot::ScriptLanguageExtensionProfilingInfo *p_info_array, int32_t p_info_max, bool p_frame_only);
+
+	// The res:// path for a path the host named. Case-insensitive and separator-insensitive,
+	// because the host hands back exactly what vh_compile_project was given -- which on Windows
+	// is a mix: `C:/project\scripts\player.verse`.
+	godot::String res_path_for_source(const godot::String &p_path) const;
+
+	// Whether Godot's profiler has asked for rows. Held here as well as in the host so that
+	// _profiling_start on a session with no host loaded is still a no-op rather than a crash.
+	bool profiling_active = false;
 
 	// The import _frame is about to write, as the res:// path of the file and the module path to
 	// import. One at a time: the next analysis reports whatever is still unresolved.

@@ -1,6 +1,9 @@
 # godot-verse — Roadmap
 
-**Status:** Draft 11 · 2026-09-13 · **Phases 0–5 complete.** The by-hand checks three phases owed
+**Status:** Draft 13 · 2026-09-14 · **Phases 0–6 complete**, with one by-hand check outstanding.
+Phase 6's design is [`phase-6-design.md`](phase-6-design.md), written before the work in the shape
+Phase 4.5's and Phase 5's were, so **§13 is the part to read** — the six spikes' answers, and the
+places §1 and §9 turned out wrong. The by-hand checks three phases owed
 have been run, in one windowed session as each design asked — Phase 3's yardstick run and editor
 session, Phase 4's Node-panel and `_make_function` flows, and Phase 5's five.
 [`by-hand-findings.md`](by-hand-findings.md) is what they found: nine defects, all now fixed, and
@@ -659,24 +662,54 @@ freed-node task were two of the entries it ticked.
 
 ## Phase 6 — Debugging and profiling
 
+**Built**, bar one windowed by-hand check. [`phase-6-design.md`](phase-6-design.md) is the design,
+written *before* the work, so **§13 is the part to read**. Its five automatable spikes all came
+back and S-1 — does a snippet-compiled package carry a file path into its procedures? — was the
+cliff the phase rested on: it does, **verbatim**, so nothing had to be restructured. ABI **v8.1**,
+a minor bump: two callbacks appended to `vh_godot_api`, six entry points, three structs, one status
+code and one `vh_tick_stats` field, all additive.
+
 **Why now.** Deferred this long deliberately: R-DIAG-2 (errors with source locations) landed in
 Phase 1 and covers most of the day-to-day need. The rest is large and benefits from a settled
 surface.
 
-- **R-DIAG-4** — Godot's own debugger: breakpoints, stepping, call stack, locals and members,
-  expression evaluation. Note that the current state is *worse than absent* — every `_debug_*`
-  virtual is declared and returns empty, so Godot believes the language supports debugging and is
-  told there are no stack frames. Implementing or removing them is part of this phase, and the
-  same audit applies to every other declared virtual.
-- **R-DIAG-5** — the profiler, with the same declared-and-empty defect.
+- **R-DIAG-4** — Godot's own debugger: breakpoints, stepping, call stack, locals and members.
+  Reachable: `Verse::FDebugger` is a public interface with a stack walk that hands back named
+  registers, and `EngineDebugger` is a fully bound Godot singleton. **Two amendments** the design
+  argues for: no expression evaluation (Epic's own Verse DAP client has none, and Godot's
+  `evaluate` bails before it would ask us), and stepping follows the interpreter rather than the
+  stopped task. The claim that the declared-and-empty `_debug_*` virtuals could be *removed* is
+  wrong for four of them — godot-cpp binds those `_REQUIRED` and Godot errors when one is unbound
+  — so the audit records *honestly empty* as a third outcome.
+- **R-DIAG-5** — the profiler. Verse has no per-call hook, so this is boundary instrumentation
+  (exact counts and times for every crossing the bridge makes) plus Verse's own `profile{}` blocks,
+  and **not** a sampler, which cannot produce a call count.
 - **R-DIAG-3** — a script error never takes down the editor or the game. **Part of this landed
   with Phase 3**, because a raise turned out to stop every script in the process rather than
   merely losing a return value; the spec has the three rules that replaced it. What is left here
   is bounding a script that raises every frame (**OQ-13**), and keeping a `@tool` script's error
-  away from the scene the author is editing.
+  away from the scene the author is editing. Both are narrower than they read: Godot already drops
+  errors past `max_errors_per_second`, and Phase 5's per-instance scopes already confine what an
+  editor-time raise costs. **OQ-13's answer is that nothing is bounded** — what needs fixing is the
+  bridge's own unthrottled stack printing, which eats the char budget and silences every other
+  script.
 - **R-DIAG-6** — the `SocketDebugger` DAP question (OQ-9), only if R-DIAG-4 turns out blocked.
+  **Closed as not needed**: S-1 came back positive. The port still opens on
+  `verse/host/enable_debugger`, and the two debuggers are mutually exclusive because `SetDebugger`
+  is one global pointer.
 
-**Exit:** a breakpoint in Godot's script editor stops a Verse script and shows its locals.
+**Exit: met against the ABI; one by-hand check owed.** All three requirements are **done**, both
+open questions are closed, `run_tests.py` is green with 24 new `host_smoke` cases, and §7's audit
+covers all 59 declared virtuals with no row found where a declaration had already been telling
+Godot something untrue. What is left is S-6 — an editor session: click the breakpoint gutter, run,
+step, and watch the Debugger panel populate. It is in
+[`by-hand-findings.md`](by-hand-findings.md) as an open check, with its five steps.
+
+Two numbers worth carrying forward. An attached debugger costs **+1.6%** of frame time on the
+`dodge-the-creeps` yardstick (4.26 s → 4.33 s headless at `--fixed-fps 60`), which is what let the
+always-attach path ship without the polled breakpoint mirror the design held in reserve; and a
+single `vh_instance_call` goes from **0.27 µs to 2.79 µs** while attached, which is the same fact
+stated where it looks worst.
 
 ---
 

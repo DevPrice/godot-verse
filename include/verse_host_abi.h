@@ -43,7 +43,7 @@ extern "C" {
  * different toolchains and nothing links them.
  */
 #define VH_ABI_VERSION_MAJOR 8
-#define VH_ABI_VERSION_MINOR 0
+#define VH_ABI_VERSION_MINOR 1
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
 typedef int32_t vh_bool;
@@ -84,7 +84,20 @@ typedef enum vh_status
 	 * on the game thread". It is an `ensure`, so proceeding is a logged callstack followed by
 	 * undefined behaviour: the worst of the available failure modes. It is thread *identity*, so
 	 * serialising entry does not satisfy it and a mutex cannot fix it. */
-	VH_ERR_THREAD
+	VH_ERR_THREAD,
+
+	/* Added at ABI v8.1. The VM is stopped at a breakpoint, and this call is one of the two that
+	 * are meaningless in that state. Nothing ran and nothing was written.
+	 *
+	 * Narrow, because spike S-3 came back positive: re-entering a stopped VM *is* safe, so the
+	 * calls the editor makes while its debug loop runs -- a property read for the remote scene
+	 * tree, a method call, the vh_debug_* reads -- all work, and the inspector stays live while
+	 * paused. What does not is building: vh_compile_project would publish a generation underneath
+	 * a frame belonging to the retiring one, and the two vh_check_project entry points reset the
+	 * semantic program and block execution for the length of an analysis the stopped frame is
+	 * about to resume into. Those three answer this. vh_tick is refused too, and silently, because
+	 * it has no status to answer with (phase-6-design.md 13.1). */
+	VH_ERR_STOPPED
 } vh_status;
 
 /* Outcome of a property read/write or a method call. The distinction is load bearing: the host
@@ -367,7 +380,51 @@ typedef struct vh_godot_api
 	 * receive a Signal but never name one, so a signal the mirror has no accessor for would be
 	 * unreachable however good the machinery behind it was. 0 for a handle Godot has freed. */
 	int64_t (*MakeSignalRef)(void* Ctx, vh_handle Handle, const char* NameUtf8, int32_t NameLen);
+
+	/* --- v8.1: the debugger (R-DIAG-4) ------------------------------------------------------ */
+
+	/* Both null in a consumer that does not debug, and the host then never breaks. Called from
+	 * inside the interpreter's handshake, on the vh_init thread, with a Verse op in flight -- so
+	 * the consumer must do nothing here that re-enters the host except the vh_debug_* reads, and
+	 * must do that only from inside DebugBreak.
+	 *
+	 * The division is: the host owns *which frame*, because that is the one thing only Notify can
+	 * see; the consumer owns *which line*, because the breakpoint list and the step state are
+	 * Godot's (phase-6-design.md D3). */
+
+	/* Is (PathUtf8, Line) a place to stop? The host asks once per distinct location, never once
+	 * per op -- per-op would cross this boundary millions of times a second, and the dedup that
+	 * makes it affordable is Epic's own (VVMSocketDebugger.cpp UpdatePrevLocation).
+	 *
+	 * FrameRelation is a vh_debug_frame_relation: how the frame about to execute relates to the
+	 * frame the last stop happened in. It is what makes step-over and step-out implementable --
+	 * the bridge sees no Verse call and so cannot keep Godot's depth counter, but it does see
+	 * frame ancestry, which is the mechanism Epic's own debugger steps with. */
+	vh_bool (*DebugShouldBreak)(void* Ctx, const char* PathUtf8, int32_t PathLen, int32_t Line, int32_t FrameRelation);
+
+	/* Stop. Returns when the user continues. The consumer is expected to block here -- Godot's
+	 * debug loop runs on this thread and calls back through the vh_debug_* reads while it does.
+	 *
+	 * No reason is passed, because the consumer is the side that decided one: DebugShouldBreak
+	 * answered from its own breakpoint list and its own step state, and _debug_get_error is its
+	 * question to answer. */
+	void (*DebugBreak)(void* Ctx);
 } vh_godot_api;
+
+/* How the frame about to execute relates to the frame the debugger last stopped in.
+ *
+ * Godot encodes a step as a depth: -1 step-in, 0 step-over, 1 step-out (remote_debugger.cpp's
+ * step/next/out commands). GDScript keeps that counter honest by pushing and popping around every
+ * call; this bridge has no such hook, so the counter would never move. These three are the
+ * equivalent question asked of the stack instead, and they are Epic's two tests spelled out:
+ * step-over stops on anything that is not DEEPER (`!IsProperAncestorOf`), step-out on OTHER alone
+ * (`!IsAncestorOf`). */
+typedef enum vh_debug_frame_relation
+{
+	VH_DEBUG_FRAME_SAME = 0,  /* the very frame the last stop was in */
+	VH_DEBUG_FRAME_DEEPER,    /* inside a call made from it */
+	VH_DEBUG_FRAME_OTHER      /* neither -- it returned, or this is unrelated work */
+} vh_debug_frame_relation;
 
 /* ----------------------------------------------------------- diagnostics -- */
 
@@ -525,6 +582,18 @@ typedef struct vh_tick_stats
 	 * the rest of it. Zero on a frame where nothing had to wait, which is the common case. */
 	int32_t AnalysisWaits;
 	double AnalysisWaitSeconds;
+
+	/* Added at ABI v8.1, and the same rule applies: a consumer whose StructSize stops above this
+	 * does not read it and the host does not write it. */
+
+	/* The largest number of live tasks any one script instance's task scope holds (R-ASYNC-4's
+	 * scopes, counted through VTaskGroup::GetNumActive).
+	 *
+	 * OQ-13 chose observability over a cap, and this is the observation: a `spawn` in `_Process`
+	 * makes sixty tasks a second on one instance, and nothing else in these numbers separates that
+	 * from sixty instances with one task each. JobsPending cannot -- a suspended task is not
+	 * queued work. */
+	int32_t PeakInstanceTasks;
 } vh_tick_stats;
 
 /* Runs queued Verse work for at most BudgetSeconds. Call once per frame. OutStats may be NULL.
@@ -1465,6 +1534,96 @@ VH_ATTR VH_API int32_t vh_signature_at(const char* PathUtf8,
 									   int32_t Column,
 									   const vh_signature_desc** OutResult);
 
+/* ------------------------------------------------- the debugger (v8.1, R-DIAG-4) -- */
+
+/* Installs or removes the Verse debugger. While installed, `Notify` fires on every bytecode op
+ * and the computation watchdog is suspended -- the latter is what makes sitting on a breakpoint
+ * for a minute legal rather than an ErrRuntime_ComputationLimitExceeded.
+ *
+ * VH_ERR_STATE when Epic's own socket debugger owns the VM's single debugger slot, which is what
+ * vh_init_desc::EnableDebugger asks for. The two cannot both be installed. */
+VH_ATTR VH_API int32_t vh_debug_set_enabled(vh_bool Enabled);
+
+/* One Verse call frame, while stopped. Native frames are included -- Epic's stack walk emits them
+ * with a name and no location -- which is what makes a stop inside a mirrored method legible. */
+typedef struct vh_debug_frame
+{
+	int32_t StructSize;
+	const char* PathUtf8;   int32_t PathLen;    /* empty for a native frame */
+	const char* NameUtf8;   int32_t NameLen;
+	int32_t Line;                               /* 0 for a native frame */
+} vh_debug_frame;
+
+/* One named value in a stopped frame. */
+typedef struct vh_debug_value
+{
+	int32_t StructSize;
+	const char* NameUtf8;   int32_t NameLen;
+	/* Exactly one is populated. Value when the bridge carries the type, Rendered otherwise --
+	 * a Verse local can be a tuple, an option, a map or a class instance and vh_value describes
+	 * none of them (phase-6-design.md D7). */
+	const vh_value* Value;
+	const char* RenderedUtf8; int32_t RenderedLen;
+} vh_debug_value;
+
+/* Which set vh_debug_stack_values answers. */
+typedef enum vh_debug_value_kind
+{
+	/* Every register the frame names except `Self`. */
+	VH_DEBUG_LOCALS = 0,
+	/* `Self` and its fields. This is the only place a script instance's state appears: Godot calls
+	 * a C++ virtual on whatever _debug_get_stack_level_instance returns, and a GDExtension script
+	 * instance is not a ScriptInstance, so that virtual must answer null forever (D8). */
+	VH_DEBUG_MEMBERS
+} vh_debug_value_kind;
+
+/* The three reads that describe the stopped stack. All answer VH_ERR_STATE when nothing is
+ * stopped. They are not the only entry points legal while it is -- S-3 found nested entry safe,
+ * so an ordinary call or property read from inside the debug loop works too.
+ *
+ * They join the "answer from what is stashed" group rather than the "wait for an analysis" group
+ * or the "execute Verse" group: Notify's four arguments are valid only for the duration of the
+ * call, so the host keeps them for exactly as long as DebugBreak is on the stack.
+ *
+ * What they hand back points into storage owned by the host, valid until the next call to the
+ * same function. */
+VH_ATTR VH_API int32_t vh_debug_stack_count(int32_t* OutCount);
+VH_ATTR VH_API int32_t vh_debug_stack_frame(int32_t Level, const vh_debug_frame** OutFrame);
+VH_ATTR VH_API int32_t vh_debug_stack_values(int32_t Level, int32_t Kind, const vh_debug_value** OutValues, int32_t* OutCount);
+
+/* ------------------------------------------------- the profiler (v8.1, R-DIAG-5) -- */
+
+/* One row of Godot's ScriptLanguageExtensionProfilingInfo, filled from what the bridge knows
+ * exactly: every crossing it makes, plus whatever the author asked for with a `profile{}` block.
+ *
+ * Verse offers no per-call hook, so a Verse function called from another Verse function has no row
+ * of its own unless it is wrapped in one of those blocks. A sampler would have produced rows with
+ * no call count, which is worse than fewer rows (phase-6-design.md D13). */
+typedef struct vh_profile_row
+{
+	int32_t StructSize;
+	/* GDScript's three-part shape, `path::start_line::Class.func`, because the editor's profiler
+	 * splits on it -- matching it is what makes a Verse row read like every other row
+	 * (gdscript_compiler.cpp builds the same string). */
+	const char* SignatureUtf8; int32_t SignatureLen;
+	int64_t CallCount;
+	double TotalSeconds;
+	/* TotalSeconds less the time spent in nested boundary crossings, which is what makes a Verse
+	 * method that emits a signal that calls another Verse method attribute correctly. */
+	double SelfSeconds;
+} vh_profile_row;
+
+/* Off until Godot turns it on. With it off a boundary crossing pays one relaxed load and a
+ * predicted branch, and a `profile{}` block costs a delegate that is not bound. */
+VH_ATTR VH_API int32_t vh_profiling_set_enabled(vh_bool Enabled);
+
+/* The accumulated rows, or this frame's alone -- Godot asks both questions and they are
+ * _profiling_get_accumulated_data and _profiling_get_frame_data. FrameOnly resets the per-frame
+ * accumulator as it reads it, which is what makes the next frame's numbers that frame's.
+ *
+ * OutRows points into storage owned by the host, valid until the next call. */
+VH_ATTR VH_API int32_t vh_profiling_read(vh_bool FrameOnly, const vh_profile_row** OutRows, int32_t* OutCount);
+
 /* Signatures for GetProcAddress on the consumer side. */
 typedef int32_t (*vh_abi_version_fn)(void);
 typedef int32_t (*vh_init_fn)(const vh_init_desc*);
@@ -1498,6 +1657,12 @@ typedef int32_t (*vh_complete_symbol_fn)(const char*, const char*, int32_t, int3
 typedef int32_t (*vh_class_members_fn)(const char*, const vh_complete_item**, int32_t*);
 typedef int32_t (*vh_class_override_candidates_fn)(const char*, const vh_complete_item**, int32_t*);
 typedef int32_t (*vh_signature_at_fn)(const char*, const char*, int32_t, int32_t, const vh_signature_desc**);
+typedef int32_t (*vh_debug_set_enabled_fn)(vh_bool);
+typedef int32_t (*vh_debug_stack_count_fn)(int32_t*);
+typedef int32_t (*vh_debug_stack_frame_fn)(int32_t, const vh_debug_frame**);
+typedef int32_t (*vh_debug_stack_values_fn)(int32_t, int32_t, const vh_debug_value**, int32_t*);
+typedef int32_t (*vh_profiling_set_enabled_fn)(vh_bool);
+typedef int32_t (*vh_profiling_read_fn)(vh_bool, const vh_profile_row**, int32_t*);
 
 #ifdef __cplusplus
 }

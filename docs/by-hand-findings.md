@@ -6,7 +6,7 @@ deleted**: all twenty-two of its entries were watched happen, and what is worth 
 found rather than the list. §"What is still open" at the bottom carries the two things that
 outlived it. **Every entry below is fixed**, except the two that are not defects: B11 is a
 measurement, and B8 is fixed for the half a headless run can reach and re-checkable by hand for the
-other. `tools/run_tests.py` is 2/2 with **316** integration cases, up from 311.
+other. `tools/run_tests.py` is 2/2 with **317** integration cases.
 
 Four kinds of entry are below. **B1–B9** are what the session saw go wrong, each traced to the code
 that causes it rather than left as a symptom. **B10–B11** are what the session learned about the
@@ -387,8 +387,8 @@ for:
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks
-is not worth keeping. Two things outlived it. Neither can be automated, and both are here because
-this is where they would otherwise be lost.
+is not worth keeping. Three things stand open now: two that outlived the list, and one Phase 6 owes.
+None can be automated, and all three are here because this is where they would otherwise be lost.
 
 ### `_CanDropData` has never been exercised
 
@@ -409,6 +409,40 @@ not, because the node is holding a *placeholder* and the swap to a real instance
 §B8 has what is ruled out and where to look. Small enough to live with — the workaround is one
 scene reload — and invisible to every automated layer, because a placeholder only exists under
 `is_editor_hint()`.
+
+### Phase 6's editor session has not been run
+
+**Owed by Phase 6**, and the only thing between it and a finished phase. Everything from the ABI
+inward is covered end to end by `tests/host_smoke` — a breakpoint stops once rather than once per
+op, the stack's depth and name and path and line, locals and members, stepping, attach and detach,
+and the profiler's counts and self time and signature shape. Everything from `EngineDebugger`
+inward is not, and cannot be: `ScriptLanguage` exposes nothing a script can ask, and Godot's
+debugger UI is the only caller of the virtuals that half consists of.
+
+**To check it** — `phase-6-design.md` §2's S-6, verbatim:
+
+1. Open a `.verse` script in Godot's script editor and click the breakpoint gutter.
+   `ScriptTextEditor` is language-agnostic on paper — `_breakpoint_toggled` sends
+   `edited_res->get_path()` and the row — and this is the confirmation that it is in fact.
+2. Run the project. The editor passes the current list as `--breakpoints` at launch *and* sends
+   each one again on connect; confirm both paths arm.
+3. Confirm the Debugger panel populates: stack frames, the locals list, the members list. `self`
+   appears under **members**, not as its own row, and that is permanent (D8).
+4. Step in, step over, step out, continue; toggle *Skip Breakpoints*.
+5. Toggle a breakpoint **while the game is running** and confirm it arms.
+
+Plus a profiler session: turn it on in the Debugger panel, run `dodge-the-creeps`, and confirm
+Verse rows appear beside Godot's own with plausible numbers. Watch that one especially — the array
+Godot hands `_profiling_get_accumulated_data` is laid out differently from what godot-cpp declares
+(`phase-6-design.md` §13.3), and the stride the bridge uses instead is reasoned from the engine's
+version rather than measured. More than one row appearing, with sane signatures, is the evidence
+that the reasoning was right.
+
+**Recorded and not taken:** Godot's `LocalDebugger` is drivable headless —
+`godot --headless --debug --breakpoints res://scripts/x.verse:N` reads `bt`, `lv`, `mv`, `c` from
+stdin and prints frames, locals and members — which `run_tests.py` could pipe and assert on in the
+same shape as `tests/coverage_diagnostic`. It is written down so that if this check proves too
+costly to repeat, the automated route is a known quantity rather than a rediscovery.
 
 ### And when one of these is looked at again
 

@@ -59,6 +59,12 @@ public:
 	vh_class_members_fn ClassMembers = nullptr;
 	vh_class_override_candidates_fn ClassOverrideCandidates = nullptr;
 	vh_signature_at_fn SignatureAt = nullptr;
+	vh_debug_set_enabled_fn DebugSetEnabled = nullptr;
+	vh_debug_stack_count_fn DebugStackCount = nullptr;
+	vh_debug_stack_frame_fn DebugStackFrame = nullptr;
+	vh_debug_stack_values_fn DebugStackValues = nullptr;
+	vh_profiling_set_enabled_fn ProfilingSetEnabled = nullptr;
+	vh_profiling_read_fn ProfilingRead = nullptr;
 
 private:
 	void clear_function_pointers();

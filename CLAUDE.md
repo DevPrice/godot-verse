@@ -34,7 +34,7 @@ phase and carries its measurements.
 **Every one of those entries is now closed, built or answered** — G13 (the math bodies) and G11 (the
 utilities) went with the rest, and the by-hand checks the phase owed have since been run
 (`docs/by-hand-findings.md`), so **the phase owes nothing**. Closing them took the ABI to v5, Phase 5 took it to v6, the editor-performance work to 7.1 and the
-editor last-mile work to **8.0**; either way both DLLs must be
+editor last-mile work to 8.0 and Phase 6 to **8.1**; either way both DLLs must be
 rebuilt and `run_tests.py --build` is how the test binaries follow.
 
 The four ways a signal declaration could compile and not work (G1–G4) are one validation pass in
@@ -127,8 +127,8 @@ compiler's words alone.
 after the work, it is where the design turned out to be wrong. §2 was filled in the same way
 *before* the work, from twelve questions put to the Verse compiler through `tests/verse_probe`
 (eight committed fixtures), which is why so little of the rest needed correcting. Phase 5 took the
-ABI to v6; the editor-performance work below took it to 7.1 and the editor last-mile work to
-**8.0**, and either way both DLLs must be
+ABI to v6; the editor-performance work below took it to 7.1, the editor last-mile work to 8.0 and
+Phase 6 to **8.1**, and either way both DLLs must be
 rebuilt and `run_tests.py --build` is how the test binaries follow.
 
 What it settled, all of which is load-bearing:
@@ -170,6 +170,63 @@ What it settled, all of which is load-bearing:
   counting in a paused game; game timing awaits a Timer instead. `vh_tick`'s budget governs the
   queue and nothing else — a task resuming inside an emission is unbudgeted, exactly as GDScript's
   resume is — and `vh_tick` now fills a `vh_tick_stats` that becomes three Godot custom monitors.
+
+**Phase 6 is built, and `docs/phase-6-design.md` §13 is the one section of it to read** — written
+after the work, it is where the design turned out to be wrong. §2's spikes ran first, and S-1 was
+the cliff the phase rested on: **a snippet-compiled procedure carries its file path verbatim**, the
+absolute path `vh_compile_project` was handed, mixed separators and all, because a data package has
+no `_DirPath` for `VVMLocationUtil.h`'s `GetPath` to relativize against. Everything else followed.
+
+What it settled, all of which is load-bearing:
+
+- **The host owns *which frame*, the consumer owns *which line*.** `EngineDebugger`'s breakpoint
+  list and step state are never duplicated in the host; what only the host can see is frame
+  ancestry, and it is needed because the bridge sees no Verse call, only a bytecode op, so Godot's
+  depth counter would never move and step-over would behave as step-in. `DebugShouldBreak` carries
+  a `vh_debug_frame_relation` — SAME, DEEPER, OTHER — and the consumer reads `get_depth()` as
+  *which kind* of step is pending (-1 in, 0 over, 1 out) rather than as a count it maintains.
+- **A step may not land where it started.** `Total := Helper()` reports its line **twice**, once
+  before the call and once when the result lands, so a step-over with no memory of where it began
+  stops on the line it began on. GDScript never meets this: its line opcode is per source line, a
+  Verse location is per op. The consumer remembers the (source, line) it stopped at.
+- **A line that emits no op carries no location.** Every statement line reports one and so does a
+  function's declaration line, but a trailing bare expression that only reads a register does not —
+  `Inner` as the last line of a body — so a breakpoint there never fires. Measured, and
+  `tests/host_smoke` asserts both halves.
+- **Re-entering a stopped VM is safe** (S-3, measured): an ordinary call or property read from
+  inside Godot's debug loop runs and the outer frame resumes, so the remote inspector stays live
+  while paused. `VH_ERR_STOPPED` is therefore narrow — the three that build or analyse, and not
+  for re-entrancy: publishing a generation under a frame of the retiring one is incoherent, and an
+  analysis resets the semantic program the stopped frame is about to resume into. `vh_tick` is
+  refused silently.
+- **The debugger attaches whenever Godot's is active, and that is affordable**: +1.6% of frame time
+  on the yardstick (4.26 s → 4.33 s headless), though a single `vh_instance_call` goes from 0.27 µs
+  to 2.79 µs. The polled breakpoint mirror the design held in reserve was never written. Attaching
+  also suspends VerseVM's computation watchdog, which is what makes sitting on a breakpoint legal.
+- **The two debuggers are mutually exclusive.** `SetDebugger` is one global pointer, so
+  `verse/host/enable_debugger` (Epic's socket debugger) and Godot's own cannot both be attached;
+  `vh_debug_set_enabled` refuses rather than overwriting and the consumer warns once.
+- **The profiler is boundary instrumentation plus `profile{}` blocks, and not a sampler** — a
+  sampler cannot produce a call count. **A Verse function called from another Verse function has no
+  row of its own** unless the author writes `profile("tag"){…}`, which the compiler accepts in a
+  `/user@localhost` package and the VM reports through `FVerseProfilingDelegates`.
+- **`ScriptLanguageExtensionProfilingInfo` is a stride trap.** Godot's real `ProfilingInfo` has had
+  five fields since 4.3; its `GDREGISTER_NATIVE_STRUCT` string still lists four, so godot-cpp's
+  struct is 32 bytes for an array whose elements are 40 and `p_info_array[i]` corrupts for any
+  `i > 0`. The stride comes from `Engine::get_version_info()`. Check the registration string
+  against the header before trusting any other generated native struct.
+- **`TArray::AddDefaulted_GetRef()` does not zero a POD** — it default-*initializes*, so a
+  descriptor built that way carries whatever the previous answer left in the lane this one does not
+  fill. That was a segfault four calls into the first working stop. Assign from a zeroed local.
+- **OQ-13 closed as "nothing is bounded"**, and the defect it pointed at was elsewhere: the
+  bridge's own unthrottled stack printing, which spent the shared character budget and silenced
+  every other script. Rate limited per raise site, with the "n dropped" summary flushed from
+  `vh_tick` — a script that raises sixty times and stops has no next occurrence to flush it.
+  `verse/instance_tasks` is the custom monitor that stands in for a cap on the `spawn` runaway.
+
+**The one thing Phase 6 owes is its editor session** (S-6), which is windowed and cannot be
+automated; `docs/by-hand-findings.md` carries its steps. Everything from the ABI inward has
+`host_smoke` cases; everything from `EngineDebugger` inward has none.
 
 **The by-hand checks have been run, and `docs/by-hand-checklist.md` is deleted** — all twenty-two
 of its entries were watched happen, and what is worth keeping is what they found rather than the
@@ -264,7 +321,7 @@ check. The design argument for v2, and the spikes that settled it, are in `docs/
 | `verse_ref_table.{h,cpp}` | the id → `Variant` table the `Ref` lane names: Array, Dictionary, Callable, Signal and the packed arrays, which cross as references rather than copies |
 | `verse_script.{h,cpp}` | a `.verse` file as a Godot `Resource`; valid only if it defines its own class |
 | `verse_script_instance.{h,cpp}` | one script bound to one node; raw `GDExtensionScriptInstanceInfo3` vtable, not a `godot::Object` |
-| `verse_script_language.{h,cpp}` | the `ScriptLanguage`: `_validate`, the analysis cache, `_complete_code`/`_lookup_code`, `_frame` (which pumps `vh_tick` and reaps `vh_check_project_poll`) |
+| `verse_script_language.{h,cpp}` | the `ScriptLanguage`: `_validate`, the analysis cache, `_complete_code`/`_lookup_code`, `_frame` (which pumps `vh_tick`, reaps `vh_check_project_poll` and attaches the debugger), and the `_debug_*`/`_profiling_*` surface |
 | `verse_resource_format.{h,cpp}` | load/save, without which a `.verse` cannot be attached to a node |
 | `verse_lexer.{h,cpp}` | resumable per-line lexer; no godot-cpp dependency, so it is unit-testable standalone |
 | `verse_class_decl.{h,cpp}` | scans the top-level class **named after the file** and its `@global_class` attribute out of the text; defers comments and strings to the lexer, and shares its lack of godot-cpp |
@@ -279,7 +336,8 @@ Adding an override you do not implement changes behaviour.
 ### `host/` — the UE Program target
 
 `Private/` is the ABI implementation (`VerseHost.cpp`, `HostRuntime`, `HostScript`, `HostEventLoop`,
-`GodotBindings`, `GodotClasses`). `Verse/*.native.verse` is the `/Godot.org/Godot` package.
+`HostDebug`, `GodotBindings`, `GodotClasses`). `HostDebug` is the `Verse::FDebugger` and the
+profiler's accumulators; nothing else in the host knows either exists. `Verse/*.native.verse` is the `/Godot.org/Godot` package.
 
 `GodotClasses.h` holds every C++ shadow a `<native>` Verse declaration needs, and there are three:
 `vh_object` (a UObject, so a script's class has one to be instantiated and called through), `variant`
@@ -486,6 +544,14 @@ ten element types against four key types is not a list to maintain by hand.
   `docs/by-hand-findings.md` B8 has what is ruled out and where to look. Nothing automated can see
   it: a placeholder only exists under `is_editor_hint()`.
 - **The host module never unloads.** `vh_shutdown` tears the engine down; the DLL stays resident.
+- **A stopped VM is re-entrant, but two entry points are still refused.** Godot's debug loop runs
+  on the interpreter's own thread and goes on servicing the editor while stopped, so an ordinary
+  call or property read from inside it works (measured). `vh_compile_project` and the two
+  `vh_check_project` entry points answer `VH_ERR_STOPPED` — publishing a generation underneath a
+  frame of the retiring one is incoherent, and an analysis resets the semantic program that frame
+  is about to resume into — and `vh_tick` is refused silently, because resuming a slept task
+  inside a VM stopped mid-op is not something any of this is designed for and `flush_output` can
+  reach `_frame` from that loop.
 - **Every Godot callback goes through `AutoRTFM::Open`,** and writes defer to `AutoRTFM::OnCommit`.
   The GDExtension was never instrumented by the AutoRTFM compiler, so calling into it from closed
   Verse code is a fatal "could not find function" at runtime, not a link error.

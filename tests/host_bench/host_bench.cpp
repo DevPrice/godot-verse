@@ -72,6 +72,21 @@ void BenchOnDiagnostic(void*, const vh_diagnostic* Diagnostic)
 	}
 }
 
+/* Phase 6 S-2: what an attached debugger costs. Answers "not a place to stop" to everything, so
+ * what the number measures is the per-op handshake, the dedup, and one ABI crossing per distinct
+ * location -- which is the whole of what a session with no breakpoints set pays. */
+int64_t DebugAsks = 0;
+
+vh_bool BenchDebugShouldBreak(void*, const char*, int32_t, int32_t, int32_t)
+{
+	++DebugAsks;
+	return 0;
+}
+
+void BenchDebugBreak(void*)
+{
+}
+
 void BenchOnRuntimeError(void*, const vh_runtime_error*)
 {
 }
@@ -241,6 +256,7 @@ int main(int argc, char** argv)
 	auto ClassMembersFn = Resolve<vh_class_members_fn>(Module, "vh_class_members", &Ok);
 	auto OverrideCandidatesFn = Resolve<vh_class_override_candidates_fn>(Module, "vh_class_override_candidates", &Ok);
 	auto ClassExportListFn = Resolve<vh_class_export_list_fn>(Module, "vh_class_export_list", &Ok);
+	auto DebugSetEnabledFn = Resolve<vh_debug_set_enabled_fn>(Module, "vh_debug_set_enabled", &Ok);
 	if (!Ok)
 	{
 		return 1;
@@ -256,6 +272,8 @@ int main(int argc, char** argv)
 	Desc.Godot.GetProperty = &BenchGetProperty;
 	Desc.Godot.SetProperty = &BenchSetProperty;
 	Desc.Godot.CallMethod = &BenchCallMethod;
+	Desc.Godot.DebugShouldBreak = &BenchDebugShouldBreak;
+	Desc.Godot.DebugBreak = &BenchDebugBreak;
 	Desc.OnDiagnostic = &BenchOnDiagnostic;
 	Desc.OnRuntimeError = &BenchOnRuntimeError;
 
@@ -653,6 +671,63 @@ int main(int argc, char** argv)
 		}
 	}
 
+	// Phase 6's S-2: what attaching the debugger costs, as the same per-call figure taken again
+	// with it attached. D6 chose "attach whenever Godot's debugger is active" -- unconditionally
+	// correct, cost unmeasured -- over a polled breakpoint mirror that arms on a delay, and said
+	// the mirror ships only if this number says so.
+	//
+	// What it pays for: CheckForHandshake stops being a relaxed load and a compare and takes the
+	// slow path into a virtual call on *every bytecode op*, and one distinct (path, line) per
+	// location crosses the ABI. The computation watchdog is also disabled while attached, which is
+	// what makes sitting on a breakpoint legal rather than an ErrRuntime_ComputationLimitExceeded.
+	double AttachedCallUs = 0.0;
+	int64_t AttachedAsks = 0;
+	if (DebugSetEnabledFn && DebugSetEnabledFn(1) == VH_OK)
+	{
+		constexpr int InstanceCount = 200;
+		constexpr int CallsPerInstance = 200;
+		std::vector<vh_instance*> Instances;
+		Instances.reserve(InstanceCount);
+		for (int Index = 0; Index < InstanceCount; ++Index)
+		{
+			vh_instance* Instance = nullptr;
+			if (InstantiateFn("exports", 6000 + Index, &Instance) == VH_OK && Instance)
+			{
+				Instances.push_back(Instance);
+			}
+		}
+
+		vh_value Args[2]{};
+		Args[0].Type = VH_TYPE_INT;
+		Args[0].Int = 2;
+		Args[1].Type = VH_TYPE_INT;
+		Args[1].Int = 3;
+		vh_value Result{};
+
+		DebugAsks = 0;
+		const Clock::time_point AttachedStart = Clock::now();
+		for (int Round = 0; Round < CallsPerInstance; ++Round)
+		{
+			for (vh_instance* Instance : Instances)
+			{
+				InstanceCallFn(Instance, "(/user@localhost/exports:)AddInts(:int,:int)", Args, 2, nullptr, &Result);
+			}
+		}
+		const double AttachedMs = MillisSince(AttachedStart);
+		AttachedAsks = DebugAsks;
+
+		for (vh_instance* Instance : Instances)
+		{
+			ReleaseInstanceFn(Instance);
+		}
+		if (!Instances.empty())
+		{
+			AttachedCallUs = (AttachedMs * 1000.0)
+				/ (static_cast<double>(Instances.size()) * static_cast<double>(CallsPerInstance));
+		}
+		DebugSetEnabledFn(0);
+	}
+
 	printf("\n");
 	// Generations, against a real project rather than the two fixtures above: R-ITER-6 asks
 	// for a figure measured on something the size of a game, and dodge-the-creeps is the one
@@ -763,6 +838,11 @@ int main(int argc, char** argv)
 	printf("[bench] %-28s %8.1f us\n", "vh_instantiate (per node)", InstantiateUs);
 	printf("[bench] %-28s %8.2f us\n", "vh_instance_call (per call)", CallUs);
 	printf("[bench] %-28s %8.1f KB\n", "retained per instance", InstanceKb);
+	printf("[bench] %-28s %8.2f us  (%+.0f%%, %lld consumer asks)\n",
+		   "vh_instance_call (debugging)",
+		   AttachedCallUs,
+		   CallUs > 0.0 ? ((AttachedCallUs - CallUs) / CallUs) * 100.0 : 0.0,
+		   (long long)AttachedAsks);
 	// The completion analyses above are counted here too, and each reports the placeholder as an
 	// unknown identifier: a completion buffer never analyses clean. The editor drops those -- a
 	// completion-shaped check, dropped in poll_check -- rather than draw a line nobody wrote.

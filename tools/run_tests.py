@@ -233,6 +233,13 @@ def run_integration(results: Results, engine: Path | None, godot: Path | None) -
         ],
         results,
         require_line="passed, ",
+        require_all=[
+            # R-DIAG-3. test_main.gd raises the same error twelve times in one frame; the bridge
+            # prints one stack and says how many it dropped, in the wording Godot uses for its own
+            # throttles. Asserted here rather than in the project because the thing being tested is
+            # what reaches the output log, and a script cannot read that.
+            "stack trace(s) from this error were dropped",
+        ],
     )
 
 
