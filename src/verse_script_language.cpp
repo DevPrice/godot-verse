@@ -1091,10 +1091,32 @@ static int64_t code_line_indent(const String &p_line) {
 	return i;
 }
 
+// The name a line of code begins with, or empty for a line that begins with anything else.
+static String leading_identifier(const String &p_line) {
+	int64_t start = 0;
+	while (start < p_line.length() && (p_line[start] == ' ' || p_line[start] == '\t')) {
+		start++;
+	}
+	int64_t end = start;
+	while (end < p_line.length() && is_identifier_char(p_line[end])) {
+		end++;
+	}
+	return p_line.substr(start, end - start);
+}
+
 // The class whose members are declared at p_line/p_indent, or empty when the cursor is somewhere
 // a name is used rather than declared. Both answers come from one scan because an override option
 // needs them together: whether to offer declarations at all, and which class' own methods are
 // already written and so must not be offered again.
+//
+// r_declared is the second: every name the class body already begins a line with at the cursor's
+// own indentation, which is where its members are. The host answers the same question off its
+// snapshot, and correctly -- but the snapshot describes the last analysed text, and the method the
+// author just finished typing is exactly what is not in it.
+//
+// The cursor's own line is left out. It carries whatever has been typed of the name being
+// completed, and a prefix that happens to spell a whole inherited name would otherwise withdraw
+// the one candidate the author is reaching for.
 //
 // Read from the text, because Godot asks for completion on every keystroke and an analysis of a
 // half-written declaration would not report the class it belongs to anyway. The test is the one
@@ -1105,7 +1127,7 @@ static int64_t code_line_indent(const String &p_line) {
 // Only the class named after the file is found, so a member being added to one of the file's
 // *other* top-level classes completes as an ordinary name. That is the conservative direction,
 // and the file's own class is the one a script is actually written in.
-static String member_declaration_class(const String &p_source, const String &p_file_stem, int64_t p_line, int64_t p_indent) {
+static String member_declaration_class(const String &p_source, const String &p_file_stem, int64_t p_line, int64_t p_indent, PackedStringArray &r_declared) {
 	const VerseClassDecl decl = verse_scan_class_decl(p_source.utf8().get_data(), p_file_stem.utf8().get_data());
 	if (decl.line < 0 || p_line <= decl.line) {
 		return String();
@@ -1120,6 +1142,21 @@ static String member_declaration_class(const String &p_source, const String &p_f
 		const int64_t indent = code_line_indent(lines[i]);
 		if (indent >= 0 && indent < p_indent) {
 			return String();
+		}
+	}
+
+	// Forward as well as back: a member declared below the cursor is as written as one above it.
+	for (int64_t i = decl.line + 1; i < lines.size(); i++) {
+		const int64_t indent = code_line_indent(lines[i]);
+		if (indent >= 0 && indent < p_indent) {
+			break;
+		}
+		if (indent != p_indent || i == p_line) {
+			continue;
+		}
+		const String name = leading_identifier(lines[i]);
+		if (!name.is_empty()) {
+			r_declared.push_back(name);
 		}
 	}
 	return String(decl.name.c_str());
@@ -1209,9 +1246,10 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 	// whole declaration.
 	const int64_t line_start = before.rfind("\n") + 1;
 	const String ahead_of_prefix = before.substr(line_start, prefix_start - line_start);
+	PackedStringArray already_declared;
 	const String declaring_in_class = !completing_members && !completing_attribute && !ahead_of_prefix.is_empty() && ahead_of_prefix.strip_edges().is_empty()
 			? member_declaration_class(verse_newline_normalized(p_code), p_path.get_file().get_basename(),
-					  before.count("\n"), ahead_of_prefix.length())
+					  before.count("\n"), ahead_of_prefix.length(), already_declared)
 			: String();
 
 	Array options;
@@ -1337,7 +1375,8 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 			//
 			// Members only, not the scope walk: everything else a scope admits lives in the AST,
 			// which is exactly what no analysis of this buffer has built yet.
-			const TypedArray<Dictionary> members = runtime->class_members(qualified_class_name(p_path));
+			const String class_name = qualified_class_name(p_path);
+			const TypedArray<Dictionary> members = runtime->class_members(class_name);
 			for (int64_t i = 0; i < members.size(); i++) {
 				const Dictionary item = members[i];
 				if (!matches_typed_prefix(item["name"], prefix)) {
@@ -1347,6 +1386,28 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 					options.push_back(override_option_for(item));
 				} else {
 					options.push_back(completion_option_for(item));
+				}
+			}
+
+			// The other half of what a member declaration is reaching for, and the half the scope
+			// walk used to be the only source of: what the class inherits and could override. Off
+			// the same snapshot, described by the same host code the refined answer will use, so
+			// the declarations offered here are the ones that replace them -- same text, same
+			// LOCATION_LOCAL, nothing to jump when the list is swapped.
+			//
+			// Nothing but overrides: an inherited name that is not one is an ordinary call, and
+			// the thousands of them belong to the scope walk that has not run yet.
+			if (!declaring_in_class.is_empty()) {
+				const TypedArray<Dictionary> candidates = runtime->class_override_candidates(class_name);
+				for (int64_t i = 0; i < candidates.size(); i++) {
+					const Dictionary item = candidates[i];
+					const String name = item["name"];
+					if (!matches_typed_prefix(name, prefix) || already_declared.has(name)) {
+						continue;
+					}
+					if (completes_as_override(item, declaring_in_class)) {
+						options.push_back(override_option_for(item));
+					}
 				}
 			}
 		}

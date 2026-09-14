@@ -444,6 +444,17 @@ struct FSignatureDesc
 /// False means the class is not in the analysed program at all.
 AUTORTFM_DISABLE bool ClassMembers(FUtf8StringView ClassName, TArray<FCompleteItem>& OutItems);
 
+/// What ClassName could still declare with <override>: every overridable member it inherits and
+/// does not already declare, described exactly as Complete describes the same names in
+/// VH_COMPLETE_SCOPE at a member declaration inside that class.
+///
+/// Same extraction, so the two cannot drift -- the walk is CollectClassAndSupers with Seen already
+/// holding the class' own names, which is what makes the superclass' copy of an override the
+/// class has written lose to it there and be absent here.
+///
+/// False means the class is not in the analysed program at all.
+AUTORTFM_DISABLE bool ClassOverrideCandidates(FUtf8StringView ClassName, TArray<FCompleteItem>& OutItems);
+
 /// The function called at Line/Column of Path, with that file's text replaced by SourceText, and
 /// its parameters. Line/Column name the callee's last byte rather than the cursor: the argument
 /// list being typed does not analyse, so there is nothing at the cursor to resolve.

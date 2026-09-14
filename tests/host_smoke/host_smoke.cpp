@@ -6,6 +6,8 @@
 #include <cstdio>
 #include <filesystem>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "verse_host_abi.h"
 
@@ -298,6 +300,7 @@ int main(int argc, char** argv)
 	auto LookupSymbolFn = Resolve<vh_lookup_symbol_fn>(Module, "vh_lookup_symbol", &ResolveOk);
 	auto CompleteSymbolFn = Resolve<vh_complete_symbol_fn>(Module, "vh_complete_symbol", &ResolveOk);
 	auto ClassMembersFn = Resolve<vh_class_members_fn>(Module, "vh_class_members", &ResolveOk);
+	auto OverrideCandidatesFn = Resolve<vh_class_override_candidates_fn>(Module, "vh_class_override_candidates", &ResolveOk);
 	auto SignatureAtFn = Resolve<vh_signature_at_fn>(Module, "vh_signature_at", &ResolveOk);
 	auto CheckProjectFn = Resolve<vh_check_project_fn>(Module, "vh_check_project", &ResolveOk);
 	auto ResolveUnknownNameFn = Resolve<vh_resolve_unknown_name_fn>(Module, "vh_resolve_unknown_name", &ResolveOk);
@@ -972,6 +975,64 @@ int main(int argc, char** argv)
 					{
 						CompleteOk = Step("the mirror's accessors reach the scope at all", false);
 					}
+
+					// What the editor offers on the keystroke itself, against the answer it is
+					// replaced by once the analysis lands. Both come out of the same walk over the
+					// same program, so they have to agree name for name and signature for
+					// signature -- if they did not, the list would visibly reshuffle under the
+					// author's selection when the refined one arrived.
+					//
+					// The scope answer's own copy of a name the class has already overridden is
+					// owned by that class, which is the editor's cue not to offer it a second
+					// time; here such a name is simply absent, so the expectation drops them too.
+					std::vector<std::pair<std::string, std::string>> Expected;
+					for (int32_t Index = 0; Index < Count; ++Index)
+					{
+						if (Items[Index].IsOverridable != 0
+							&& Text(Items[Index].OwnerUtf8, Items[Index].OwnerLen) != "exports_probe")
+						{
+							Expected.emplace_back(Text(Items[Index].NameUtf8, Items[Index].NameLen),
+												  Text(Items[Index].SignatureUtf8, Items[Index].SignatureLen));
+						}
+					}
+
+					const vh_complete_item* Candidates = nullptr;
+					int32_t CandidateCount = 0;
+					if (Step("vh_class_override_candidates on the class being declared in",
+							OverrideCandidatesFn("exports_probe", &Candidates, &CandidateCount) == VH_OK))
+					{
+						std::vector<std::pair<std::string, std::string>> Offered;
+						bool AllOverridable = true;
+						for (int32_t Index = 0; Index < CandidateCount; ++Index)
+						{
+							Offered.emplace_back(Text(Candidates[Index].NameUtf8, Candidates[Index].NameLen),
+												 Text(Candidates[Index].SignatureUtf8, Candidates[Index].SignatureLen));
+							AllOverridable = AllOverridable && Candidates[Index].IsOverridable != 0;
+						}
+						CompleteOk = Step("it is the overridable half of the scope answer, name and signature alike",
+										 Offered == Expected)
+								  && CompleteOk;
+						CompleteOk = Step("and says so of every item", AllOverridable) && CompleteOk;
+						CompleteOk = Step("node's _Ready is among them",
+										 Offers(Candidates, CandidateCount, "_Ready") != nullptr)
+								  && CompleteOk;
+						CompleteOk = Step("the override the class has already written is not",
+										 Offers(Candidates, CandidateCount, "_PhysicsProcess") == nullptr)
+								  && CompleteOk;
+						CompleteOk = Step("nor is a method the class declares itself",
+										 Offers(Candidates, CandidateCount, "Probe") == nullptr)
+								  && CompleteOk;
+					}
+					else
+					{
+						CompleteOk = false;
+					}
+
+					const vh_complete_item* Absent = nullptr;
+					int32_t AbsentCount = 0;
+					CompleteOk = Step("a class the program does not have has no candidates either",
+									 OverrideCandidatesFn("no_such_class", &Absent, &AbsentCount) == VH_ERR_NOT_FOUND)
+							  && CompleteOk;
 				}
 				else
 				{
@@ -2202,6 +2263,21 @@ int main(int argc, char** argv)
 		AsyncOk = Step("vh_check_project_busy reports the analysis in flight", CheckBusyFn() != 0) && AsyncOk;
 		AsyncOk = Step("a second begin while one is in flight is refused",
 					   CheckBeginFn(ExportsPathUtf8.c_str(), CleanSource.c_str()) != VH_OK) && AsyncOk;
+
+		// The keystroke that opens completion lands here: an analysis is in flight and the editor
+		// asks, on the game thread, what the class could still override. It answers off the
+		// snapshot, and the proof that it did not wait is that the analysis is still running
+		// afterwards -- a join would have left it finished, which is the 1.7 s the editor used to
+		// spend (dcd517e). A timing would say the same thing and would say it differently on a
+		// slower machine.
+		{
+			const vh_complete_item* Candidates = nullptr;
+			int32_t CandidateCount = 0;
+			const bool Answered =
+				OverrideCandidatesFn("exports_probe", &Candidates, &CandidateCount) == VH_OK && CandidateCount > 0;
+			AsyncOk = Step("vh_class_override_candidates answers during an analysis", Answered) && AsyncOk;
+			AsyncOk = Step("and left it running rather than waiting it out", CheckBusyFn() != 0) && AsyncOk;
+		}
 
 		vh_bool Finished = 0;
 		const uint64_t Deadline = GetTickCount64() + 30000;

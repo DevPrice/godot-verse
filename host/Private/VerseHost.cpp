@@ -1129,6 +1129,43 @@ extern "C" int32_t vh_class_members(const char* ClassNameUtf8, const vh_complete
     return VH_OK;
 }
 
+extern "C" int32_t vh_class_override_candidates(const char* ClassNameUtf8, const vh_complete_item** OutItems, int32_t* OutCount)
+{
+    if (WrongThread("vh_class_override_candidates"))
+    {
+        return VH_ERR_THREAD;
+    }
+    if (!ClassNameUtf8 || !OutItems || !OutCount)
+    {
+        return VH_ERR_ABI;
+    }
+    *OutItems = nullptr;
+    *OutCount = 0;
+
+    if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+
+    static TArray<GodotVerse::FCompleteItem> Candidates;
+    static TArray<vh_complete_item> CandidateDescs;
+
+    if (!GodotVerse::ClassOverrideCandidates(Cstr(ClassNameUtf8), Candidates))
+    {
+        return VH_ERR_NOT_FOUND;
+    }
+
+    CandidateDescs.Reset(Candidates.Num());
+    for (const GodotVerse::FCompleteItem& Candidate : Candidates)
+    {
+        CandidateDescs.Add(ToCompleteItem(Candidate));
+    }
+
+    *OutItems = CandidateDescs.GetData();
+    *OutCount = CandidateDescs.Num();
+    return VH_OK;
+}
+
 extern "C" int32_t vh_resolve_unknown_name(const char* NameUtf8, const vh_module_ref** OutModules, int32_t* OutCount)
 {
     if (WrongThread("vh_resolve_unknown_name"))

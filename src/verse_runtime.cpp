@@ -424,6 +424,24 @@ TypedArray<Dictionary> VerseRuntime::class_members(const String &p_class_name) c
 	return members;
 }
 
+TypedArray<Dictionary> VerseRuntime::class_override_candidates(const String &p_class_name) const {
+	TypedArray<Dictionary> candidates;
+	if (!host.is_loaded()) {
+		return candidates;
+	}
+
+	const vh_complete_item *items = nullptr;
+	int32_t count = 0;
+	if (host.ClassOverrideCandidates(p_class_name.utf8().get_data(), &items, &count) != VH_OK) {
+		return candidates;
+	}
+
+	for (int32_t i = 0; i < count; i++) {
+		candidates.push_back(complete_item_to_dict(items[i]));
+	}
+	return candidates;
+}
+
 Dictionary VerseRuntime::signature_at(const String &p_globalized_path, const String &p_source, int32_t p_line, int32_t p_column, bool *r_not_ready) const {
 	Dictionary result;
 	if (!host.is_loaded()) {

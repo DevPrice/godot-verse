@@ -239,6 +239,7 @@ int main(int argc, char** argv)
 	auto SignatureAtFn = Resolve<vh_signature_at_fn>(Module, "vh_signature_at", &Ok);
 	auto LookupSymbolFn = Resolve<vh_lookup_symbol_fn>(Module, "vh_lookup_symbol", &Ok);
 	auto ClassMembersFn = Resolve<vh_class_members_fn>(Module, "vh_class_members", &Ok);
+	auto OverrideCandidatesFn = Resolve<vh_class_override_candidates_fn>(Module, "vh_class_override_candidates", &Ok);
 	auto ClassExportListFn = Resolve<vh_class_export_list_fn>(Module, "vh_class_export_list", &Ok);
 	if (!Ok)
 	{
@@ -560,7 +561,9 @@ int main(int argc, char** argv)
 	CheckProjectFn(ExportsPathUtf8.c_str(), Source.c_str());
 
 	std::vector<double> ClassMembersSamples;
+	std::vector<double> OverrideCandidateSamples;
 	std::vector<double> ExportListSamples;
+	int32_t CandidateCount = 0;
 	for (int Iteration = 0; Iteration < Iterations; ++Iteration)
 	{
 		const vh_complete_item* Members = nullptr;
@@ -568,6 +571,14 @@ int main(int argc, char** argv)
 		const Clock::time_point MembersStart = Clock::now();
 		ClassMembersFn("exports", &Members, &MemberCount);
 		ClassMembersSamples.push_back(MillisSince(MembersStart));
+
+		// The same read on the other half, asked of the node2d subclass rather than of `exports`:
+		// what a class inherits is the whole of a mirrored Godot chain, and `exports` descends from
+		// `object` alone. This is the copy the editor makes on every keystroke at a declaration.
+		const vh_complete_item* Candidates = nullptr;
+		const Clock::time_point CandidatesStart = Clock::now();
+		OverrideCandidatesFn("exports_probe", &Candidates, &CandidateCount);
+		OverrideCandidateSamples.push_back(MillisSince(CandidatesStart));
 
 		const vh_export_desc* Exports = nullptr;
 		int32_t ExportCount = 0;
@@ -729,6 +740,8 @@ int main(int argc, char** argv)
 	printf("[bench] %-28s %d of %d refused with VH_ERR_STATE\n",
 		   "completion refusals", RefusalsSeen, RefusalsExpected);
 	ReportSeries("vh_class_members", ClassMembersSamples);
+	printf("[bench] %-28s %d candidate(s) copied per call\n", "override candidates (size)", CandidateCount);
+	ReportSeries("override candidates", OverrideCandidateSamples);
 	ReportSeries("vh_class_export_list", ExportListSamples);
 	ReportSeries("generation (5-file game)", GenerationSamples);
 	if (!RetainedKb.empty())

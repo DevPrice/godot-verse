@@ -55,6 +55,7 @@ void VerseHostLibrary::clear_function_pointers() {
 	LookupSymbol = nullptr;
 	CompleteSymbol = nullptr;
 	ClassMembers = nullptr;
+	ClassOverrideCandidates = nullptr;
 	SignatureAt = nullptr;
 }
 
@@ -103,6 +104,7 @@ bool VerseHostLibrary::load(const String &p_dll_path, String &r_error) {
 	ok = ok && resolve(handle, "vh_lookup_symbol", LookupSymbol, r_error);
 	ok = ok && resolve(handle, "vh_complete_symbol", CompleteSymbol, r_error);
 	ok = ok && resolve(handle, "vh_class_members", ClassMembers, r_error);
+	ok = ok && resolve(handle, "vh_class_override_candidates", ClassOverrideCandidates, r_error);
 	ok = ok && resolve(handle, "vh_signature_at", SignatureAt, r_error);
 
 	if (!ok) {

@@ -179,6 +179,12 @@ public:
 	// last analysis, so it follows the editor's buffer.
 	godot::TypedArray<godot::Dictionary> class_members(const godot::String &p_class_name) const;
 
+	// What p_class_name inherits and has not declared itself, in the same shape -- the names an
+	// `<override>` could still be written for. Read off the same snapshot, so it answers on the
+	// keystroke rather than after the analysis behind it, and describes the last analysed text:
+	// a method added since is neither in class_members nor missing from here.
+	godot::TypedArray<godot::Dictionary> class_override_candidates(const godot::String &p_class_name) const;
+
 	// The function called at p_line/p_column of p_source, as { name, result, params }. The
 	// position names the callee's last byte rather than the cursor, for the same reason
 	// complete_symbol's does, and r_not_ready means the same thing.

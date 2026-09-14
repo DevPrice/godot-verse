@@ -57,6 +57,7 @@ public:
 	vh_lookup_symbol_fn LookupSymbol = nullptr;
 	vh_complete_symbol_fn CompleteSymbol = nullptr;
 	vh_class_members_fn ClassMembers = nullptr;
+	vh_class_override_candidates_fn ClassOverrideCandidates = nullptr;
 	vh_signature_at_fn SignatureAt = nullptr;
 
 private:

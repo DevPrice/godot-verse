@@ -665,6 +665,12 @@ struct FAnalysisSnapshot
         TArray<GodotVerse::FSignalDesc> Signals;
         TArray<GodotVerse::FCompleteItem> Members;
 
+        /// What the class inherits and could still override. Held beside Members rather than
+        /// derived from it because deriving it needs the superclass chain, which is the program
+        /// the analysis just built -- and the question is asked on the keystroke that opens
+        /// completion, where nothing may touch that program.
+        TArray<GodotVerse::FCompleteItem> OverrideCandidates;
+
         /// GetClassExports answers false for a program with no export attribute in it as well as
         /// for a class that is not there, and the two mean different things to `_validate`.
         bool bExportsHarvested = false;
@@ -6437,27 +6443,34 @@ AUTORTFM_DISABLE bool GodotVerse::Complete(FUtf8StringView Path,
 
 namespace {
 
+/// One of the script package's own classes by the module-qualified name every ClassNameUtf8 in the
+/// ABI carries, or null.
+AUTORTFM_DISABLE const uLang::CClass* FindScriptClassLive(FUtf8StringView ClassName)
+{
+    if (!GIde.IsValid())
+    {
+        return nullptr;
+    }
+
+    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
+    if (!BuildManager.IsValid())
+    {
+        return nullptr;
+    }
+    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
+
+    const FUtf8String ClassPath = FUtf8String(ScriptVersePath) + UTF8TEXT("/") + FUtf8String(ClassName);
+    return Program->FindDefinitionByVersePath<uLang::CClass>(
+        FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath));
+}
+
 AUTORTFM_DISABLE bool ClassMembersLive(FUtf8StringView ClassName, TArray<GodotVerse::FCompleteItem>& OutItems)
 {
     using GodotVerse::FCompleteItem;
 
     OutItems.Empty();
 
-    if (!GIde.IsValid())
-    {
-        return false;
-    }
-
-    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
-    if (!BuildManager.IsValid())
-    {
-        return false;
-    }
-    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
-
-    const FUtf8String ClassPath = FUtf8String(ScriptVersePath) + UTF8TEXT("/") + FUtf8String(ClassName);
-    const uLang::CClass* Class = Program->FindDefinitionByVersePath<uLang::CClass>(
-        FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath));
+    const uLang::CClass* const Class = FindScriptClassLive(ClassName);
     if (!Class)
     {
         return false;
@@ -6467,6 +6480,49 @@ AUTORTFM_DISABLE bool ClassMembersLive(FUtf8StringView ClassName, TArray<GodotVe
     // and for a mirrored Godot class that is Godot's own documentation rather than anything here.
     TSet<FUtf8String> Seen;
     CollectScope(*Class, nullptr, ECompleteFilter::Any, Seen, OutItems);
+    OutItems.Sort([](const FCompleteItem& Left, const FCompleteItem& Right) { return Left.Name < Right.Name; });
+    return true;
+}
+
+/// The inherited half of what Complete answers at a member declaration inside ClassName, kept to
+/// the names an <override> could be written for.
+///
+/// Reuses Complete's own walk rather than repeating it: same CollectClassAndSupers, same
+/// DescribeCompletion, and the same access scope a cursor in the class body has -- so an item here
+/// is byte for byte the item the refined answer will replace it with, which is what lets the
+/// consumer format the two identically.
+///
+/// OwnMembers is what ClassMembersLive already described for this class, and seeding Seen with it
+/// is the whole of the "inherited" part. Complete does the same thing by walking the class first:
+/// a method the class has already overridden wins there and its superclass' copy is dropped, and
+/// the winner is not a candidate -- there is nothing left to offer for a declaration that is
+/// written. Describing those members a second time to rediscover that would cost what the seed
+/// saves.
+AUTORTFM_DISABLE bool ClassOverrideCandidatesLive(FUtf8StringView ClassName,
+                                                  const TArray<GodotVerse::FCompleteItem>& OwnMembers,
+                                                  TArray<GodotVerse::FCompleteItem>& OutItems)
+{
+    using GodotVerse::FCompleteItem;
+
+    OutItems.Empty();
+
+    const uLang::CClass* const Class = FindScriptClassLive(ClassName);
+    if (!Class)
+    {
+        return false;
+    }
+
+    TSet<FUtf8String> Seen;
+    Seen.Reserve(OwnMembers.Num());
+    for (const FCompleteItem& Member : OwnMembers)
+    {
+        Seen.Add(Member.Name);
+    }
+
+    // The class itself as the access scope, which is where the cursor is: a superclass member the
+    // class body could not name is not one it could override either.
+    CollectClassAndSupers(*Class, Class, ECompleteFilter::Any, Seen, OutItems);
+    OutItems.RemoveAll([](const FCompleteItem& Item) { return !Item.bIsOverridable; });
     OutItems.Sort([](const FCompleteItem& Left, const FCompleteItem& Right) { return Left.Name < Right.Name; });
     return true;
 }
@@ -6483,6 +6539,19 @@ AUTORTFM_DISABLE bool GodotVerse::ClassMembers(FUtf8StringView ClassName, TArray
         return false;
     }
     OutItems = Found->Members;
+    return true;
+}
+
+AUTORTFM_DISABLE bool GodotVerse::ClassOverrideCandidates(FUtf8StringView ClassName, TArray<FCompleteItem>& OutItems)
+{
+    OutItems.Empty();
+    const FAnalysisSnapshot::FClass* const Found =
+        GSnapshot ? GSnapshot->Classes.Find(FUtf8String(ClassName)) : nullptr;
+    if (!Found)
+    {
+        return false;
+    }
+    OutItems = Found->OverrideCandidates;
     return true;
 }
 
@@ -6535,19 +6604,27 @@ AUTORTFM_DISABLE void TakeAnalysisSnapshot()
         CollectSnapshotClassNames(*Root, FUtf8String(), ClassNames);
     }
 
+    int32 Candidates = 0;
+    double CandidateSeconds = 0.0;
+
     for (const FUtf8String& ClassName : ClassNames)
     {
         FAnalysisSnapshot::FClass& Entry = Snapshot->Classes.Add(ClassName);
 
-        const FUtf8String ClassPath = FUtf8String(ScriptVersePath) + UTF8TEXT("/") + ClassName;
-        const uLang::CClass* const Class = Program->FindDefinitionByVersePath<uLang::CClass>(
-            FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath));
+        const uLang::CClass* const Class = FindScriptClassLive(ClassName);
         Entry.bAbstract = Class != nullptr && Class->IsAbstract();
 
         GetClassMethodsLive(ClassName, Entry.Methods);
         GetClassSignalsLive(ClassName, Entry.Signals);
         Entry.bExportsHarvested = GetClassExportsLive(ClassName, Entry.Exports);
         ClassMembersLive(ClassName, Entry.Members);
+
+        // Timed apart from the rest: it describes the whole inherited surface of a mirrored Godot
+        // class, which is a different order of work from the handful of names beside it.
+        const double CandidatesStarted = FPlatformTime::Seconds();
+        ClassOverrideCandidatesLive(ClassName, Entry.Members, Entry.OverrideCandidates);
+        CandidateSeconds += FPlatformTime::Seconds() - CandidatesStarted;
+        Candidates += Entry.OverrideCandidates.Num();
     }
 
     if (Program->_AstProject)
@@ -6579,10 +6656,13 @@ AUTORTFM_DISABLE void TakeAnalysisSnapshot()
     if (AnalysisTraceEnabled())
     {
         fprintf(stderr,
-                "[vh-trace]   snapshot: %d class(es), %d name(s), %.2f ms semantic\n",
+                "[vh-trace]   snapshot: %d class(es), %d name(s), %.2f ms semantic"
+                " (%d override candidate(s), %.2f ms)\n",
                 Snapshot->Classes.Num(),
                 Snapshot->ModulesDeclaring.Num(),
-                (FPlatformTime::Seconds() - Started) * 1000.0);
+                (FPlatformTime::Seconds() - Started) * 1000.0,
+                Candidates,
+                CandidateSeconds * 1000.0);
         fflush(stderr);
     }
 }

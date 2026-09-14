@@ -43,7 +43,7 @@ extern "C" {
  * different toolchains and nothing links them.
  */
 #define VH_ABI_VERSION_MAJOR 7
-#define VH_ABI_VERSION_MINOR 0
+#define VH_ABI_VERSION_MINOR 1
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
 typedef int32_t vh_bool;
@@ -1337,6 +1337,27 @@ VH_ATTR VH_API int32_t vh_resolve_unknown_name(const char* NameUtf8,
  * Returns VH_ERR_NOT_FOUND when the class does not exist in the analysed program. */
 VH_ATTR VH_API int32_t vh_class_members(const char* ClassNameUtf8, const vh_complete_item** OutItems, int32_t* OutCount);
 
+/* Every member ClassNameUtf8 inherits that a subclass could still declare with <override> -- the
+ * other half of vh_class_members, and the half the class did not write.
+ *
+ * Each item is what vh_complete_symbol would hand back for the same name in VH_COMPLETE_SCOPE with
+ * the cursor at a member declaration in that class: same signature spelling, same owner, same
+ * IsOverridable. It is the same extraction, so a consumer may format an item from either call the
+ * same way and the full list replaces the partial one without anything moving.
+ *
+ * What the class already declares is absent, inherited or not. vh_complete_symbol answers such a
+ * name owned by the class that redeclared it -- the nearer scope wins -- and a declaration that is
+ * already written is not one to offer; here the name is simply not in the list.
+ *
+ * Answered from the snapshot the last analysis left, so it never waits and never analyses: this is
+ * the call an editor makes on the keystroke that opens completion, before the buffer in front of
+ * the author has been analysed at all. It therefore describes the last analysed text, which for a
+ * class the author is adding a method to is the text without that method.
+ *
+ * OutItems points into storage owned by the host, valid until the next call to this function.
+ * Returns VH_ERR_NOT_FOUND when the class does not exist in the analysed program. */
+VH_ATTR VH_API int32_t vh_class_override_candidates(const char* ClassNameUtf8, const vh_complete_item** OutItems, int32_t* OutCount);
+
 /* ---------------------------------------------------------- call signature -- */
 
 /* The parameters of the function being called at a position, for an editor's argument hint. */
@@ -1404,6 +1425,7 @@ typedef int32_t (*vh_instance_set_field_instance_fn)(vh_instance*, const char*, 
 typedef int32_t (*vh_lookup_symbol_fn)(const char*, int32_t, int32_t, const vh_lookup_desc**);
 typedef int32_t (*vh_complete_symbol_fn)(const char*, const char*, int32_t, int32_t, int32_t, const vh_complete_item**, int32_t*);
 typedef int32_t (*vh_class_members_fn)(const char*, const vh_complete_item**, int32_t*);
+typedef int32_t (*vh_class_override_candidates_fn)(const char*, const vh_complete_item**, int32_t*);
 typedef int32_t (*vh_signature_at_fn)(const char*, const char*, int32_t, int32_t, const vh_signature_desc**);
 
 #ifdef __cplusplus
