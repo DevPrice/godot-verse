@@ -161,8 +161,14 @@ What it settled, all of which is load-bearing:
   queue and nothing else — a task resuming inside an emission is unbudgeted, exactly as GDScript's
   resume is — and `vh_tick` now fills a `vh_tick_stats` that becomes three Godot custom monitors.
 
-**`docs/by-hand-checklist.md` is what no headless run can see**, and nothing on it has been run.
-**Three phases owe it now**, and each design asks for one windowed session covering all of them.
+**`docs/by-hand-checklist.md` has been run** — 21 of its 22 entries are ticked, and only
+`_CanDropData` is still owed. **`docs/by-hand-findings.md` is the part to read**: nine things the
+session found broken (B1–B9) and two about the list itself. Several matter far outside the editor —
+**B1**, override completion has offered nothing inside a class body since Phase 4 moved the virtuals
+onto the mirrored classes; **B7**, `explain_effect_errors` is being deleted, and its appended
+sentence was found giving *wrong* advice on a `suspends` refusal; **B6**, the script template becomes
+a direct translation of GDScript's and loses its `<transacts>`/`spawn` guidance, which unticks two
+entries on the checklist by design.
 
 **README predates Phase 1 and is stale on marshalling.** It still describes three hand-written
 value types, a `variant` tuple, `object` as the only `<native>` class, and packed arrays crossing as

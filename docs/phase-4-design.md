@@ -983,6 +983,7 @@ cooked route is informed rather than urgent.
 - **The by-hand checklist**, which needs a windowed editor: connecting a signal through the Node
   panel, `_make_function` writing the handler, a `@tool` script's `_get_configuration_warnings` on
   the node, an `_input` handler receiving a key. Phase 3's two owed checks are still owed with them.
-  It is [`by-hand-checklist.md`](by-hand-checklist.md) and nothing on it has been run.
+  It is [`by-hand-checklist.md`](by-hand-checklist.md), which has since been run: all of it but
+  `_CanDropData` is ticked, and [`by-hand-findings.md`](by-hand-findings.md) is what it found.
 - **The twenty gaps in [`phase-4-gaps.md`](phase-4-gaps.md)**, §9 of which suggests an order.
 - **4b**, which this document sketches in §10 and does not design.

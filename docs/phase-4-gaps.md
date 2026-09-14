@@ -9,9 +9,10 @@ turned out to be false, that is noted and the document has been corrected.
 G19–G21 are built; G5 is built and provably unverifiable without a window; G9 was answered with a
 "do not build this"; G14–G18 were always working as built. The ABI is at **v5**.
 
-**What Phase 4 still owes is the by-hand checklist** — and nothing here can substitute for it: three
-of its entries (`_make_function`, `_HasPoint`, `_CanDropData`) were *measured* to be unreachable from
-a headless run, rather than merely untested. Each closed entry keeps its original diagnosis below its
+**What Phase 4 still owes is the by-hand checklist** — and nothing here can substitute for it: two
+of its entries (`_make_function` and `_CanDropData`) were *measured* to be unreachable from a
+headless run, rather than merely untested. A third, `_HasPoint`, was recorded here as unreachable
+and is not; G19 carries the correction. Each closed entry keeps its original diagnosis below its
 **Built** note, because the diagnosis is the part worth re-reading: §0 is why, and §0 earned its keep
 repeatedly — G13's stated blocker, G11's stated shape, and G9's stated fix were all wrong, and each
 took minutes to disprove and would have taken days to build wrongly.
@@ -80,7 +81,7 @@ Sized as **S** (an afternoon), **M** (a day), **L** (more, or needs a decision f
 | **G16** | `vh_signal` is non-parametric; the payload lives in a host-side table | structural | — | as built |
 | **G17** | the callback native takes `any`, not a typed function parameter | structural | — | as built |
 | **G18** | `@statics` names its class as a string, not an identifier | structural | S | as built |
-| **G19** | no behavioural test for `_CanDropData` / `_HasPoint` | test gap | S | **closed**, via the one of that family a headless run can reach |
+| **G19** | no behavioural test for `_CanDropData` / `_HasPoint` | test gap | S | **closed**, via the one of that family a headless run can reach — and see the 2026-09-13 correction: `_HasPoint` is reachable too |
 | **G20** | R-EXP-5's body overstates; R-AUD-2 never edited | doc | S | **closed** |
 | **G21** | a user struct cannot cross the wire *inbound*, so a Verse handler cannot take one | found closing G1 | M | **closed for signals**; the rest is R-LANG-2 |
 
@@ -764,6 +765,14 @@ covers the mechanism all three share: the engine asks a script a question and ac
 a virtual silently keeping its default is a working script with wrong engine behaviour.
 
 `_HasPoint` and `_CanDropData` move to `by-hand-checklist.md`, where what cannot be automated goes.
+
+**Correction, 2026-09-13 — half of that is wrong.** "No public caller" is true of both and settles
+nothing about `_HasPoint`, because the engine asks it *unprompted* as soon as a click exists, and
+`Input.parse_input_event` manufactures one under `--headless`. Two Controls on the same rect, the
+top one overriding `_HasPoint`: `false` sends the click through to the one underneath and `true`
+keeps it, both observed. It should be a case in `tests/integration`, not a line on the checklist.
+`_CanDropData` really is unreachable, and for a reason this entry never established —
+`by-hand-findings.md` B10 and B11 have both, with the Godot source that decides it.
 
 ### G20 — two spec entries that overstate or were not edited · **closed**
 
