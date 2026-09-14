@@ -1005,7 +1005,27 @@ void VerseScript::refresh_exports() const {
 	placeholder_fallback_enabled = false;
 }
 
+// ScriptEditor::script_goto_method calls this by name for the Connections dock's "Go to method"
+// and for an animation method track; without it those jumps did nothing. class_members is the
+// same list _validate walks for the outline, converted to Godot's 1-based line the same way.
+// Not restricted to VH_LOOKUP_FUNCTION: the contract here is "a member", and a property is as
+// legitimate a jump target as a method.
 int32_t VerseScript::_get_member_line(const StringName &p_member) const {
+	VerseRuntime *runtime = get_runtime();
+	if (!is_compiled() || runtime == nullptr) {
+		return -1;
+	}
+
+	const String name = p_member;
+	const TypedArray<Dictionary> members = runtime->class_members(verse_class_name());
+	for (int64_t i = 0; i < members.size(); i++) {
+		const Dictionary member = members[i];
+		if (String(member["name"]) != name) {
+			continue;
+		}
+		const int64_t line = member["line"];
+		return line >= 0 ? (int32_t)(line + 1) : -1;
+	}
 	return -1;
 }
 
