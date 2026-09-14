@@ -386,6 +386,8 @@ void free_func(GDExtensionScriptInstanceDataPtr p_instance) {
 	if (VerseScriptLanguage *language = VerseScriptLanguage::singleton()) {
 		language->unregister_instance(self->owner_id);
 	}
+	// The script's own record of who holds it, which reload_instances walks.
+	self->script->forget_owner(self->owner_id);
 	if (self->verse_object != nullptr) {
 		self->script->free_instance(self->verse_object);
 	}
@@ -449,9 +451,13 @@ GDExtensionScriptInstancePtr VerseScriptInstance::create(VerseScript *p_script, 
 	instance->script = Ref<VerseScript>(p_script);
 	instance->owner = p_owner;
 	instance->owner_id = (int64_t)p_owner->get_instance_id();
+	p_script->note_owner(instance->owner_id);
 
 	instance->verse_object = p_script->make_instance(instance->owner_id);
 	if (instance->verse_object == nullptr) {
+		// free_func is what normally forgets the owner, and it is never reached for an instance
+		// that was abandoned before Godot took it.
+		p_script->forget_owner(instance->owner_id);
 		memdelete(instance);
 		return nullptr;
 	}

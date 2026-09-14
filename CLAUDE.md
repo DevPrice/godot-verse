@@ -22,8 +22,8 @@ matter — a generation costs **1.27 s** and retains **~1.3 MB** against a real 
 name because `PackageRelativeVersePath` is dead under VerseVM; and asking the *semantic* program for
 one must not use `EPathMode::PackageRelative`, which is fatal for a class with no package. §1.1 has
 OQ-12's answer (positive: the package name carries the generation, the verse path is pinned).
-Two by-hand checks are still owed — a windowed run of the yardstick, and an editor session — and
-they are on `docs/by-hand-checklist.md` with Phase 4's and Phase 5's.
+Its two by-hand checks — a windowed run of the yardstick, and an editor session — have since been
+done; `docs/by-hand-checklist.md` carries them and `docs/by-hand-findings.md` what they found.
 
 **Phase 4a is built; 4b is not.** `docs/phase-4-design.md` is the design, and unusually for this repo
 its spikes ran *before* it was written — **§2 is where they are**. **`docs/phase-4-gaps.md` is the
@@ -50,9 +50,10 @@ than silent (G12).
 
 **`_make_function` is built and cannot be tested from here** (G5): it is a `ScriptLanguageExtension`
 virtual with no ClassDB entry, and `Script.get_language()` is not in the public API, so GDScript can
-reach neither — the editor's own C++ is its only caller. The same is true of `_HasPoint` and
-`_CanDropData`, which Godot reaches only from pointer-input paths (G19). All three are on the by-hand
-checklist, which is the real thing Phase 4 still owes.
+reach neither — the editor's own C++ is its only caller. G19 said the same of `_HasPoint` and
+`_CanDropData`; it was right about only one of them. `_HasPoint` is a case in `tests/integration`
+now, because the engine asks it unprompted as soon as `Input.parse_input_event` supplies a click.
+`_CanDropData` is the one entry the by-hand checklist still owes.
 
 Four things it settled are load-bearing everywhere else. A virtual is spelled the way Godot spells
 it — **`_Ready`, not `Ready`**, and §7.1 counts the eight *signal* collisions that decided it.
@@ -68,7 +69,10 @@ interfaces.
 a parameter or local named `Angle`, `Length`, `Dot`, `Cross`, `Normalized`, `Rotated`, `DistanceTo`
 or `LengthSquared` is *ambiguous*, not shadowing. `gen_verse_api.py`'s `VERSE_STDLIB_NAMES` keeps the
 generated mirror clear of them; a script has to avoid them by hand, the way it already avoids `Abs`
-and `Clamp`.
+and `Clamp`. **`event` belongs on that list too** and is the one met first: the mirror spells
+`_Input`'s parameter `Event`, and an override that writes `event` collides with
+`/Verse.org/Verse`'s own `event` — glitch 3532, reported at the parameter with no hint that a
+capital letter is the fix (`docs/by-hand-findings.md` B2).
 
 **Phase 4.5 is built, and its `docs/phase-4.5-design.md` §11 is the one section of it to read** —
 the design was written *before* the work, so §11 is where the plan is corrected rather than where it
@@ -111,9 +115,12 @@ real game rather than estimated, with the requirement that gives it a spelling. 
 are down**, the seventh at the close of Phase 5; the table says which, and §"After Phase 4" and
 §"After Phase 5" say what each diff came to. The one still standing is the `<transacts>` trap, which
 Phase 4.5 and Phase 5 **narrowed twice rather than removed**: reading Godot no longer starts the
-cascade and a signal handler is no longer fixed at `<transacts>`, the diagnostic says which
-declaration to edit, and the `.verse` template says it before it happens — but a helper that
-*writes*, called from a body narrowed on purpose, still needs the word.
+cascade and a signal handler is no longer fixed at `<transacts>`. What it does *not* have any more
+is an explanation: the appended diagnostic and the template's warning were both removed after the
+by-hand session (`docs/by-hand-findings.md` B6, B7), because the sentence never checked which effect
+had been refused and gave the opposite of correct advice on a `suspends` refusal. A helper that
+*writes*, called from a body narrowed on purpose, still needs the word, and now says so in the
+compiler's words alone.
 
 **Phase 5 is built, and `docs/phase-5-design.md` §14 is the one section of it to read** — written
 after the work, it is where the design turned out to be wrong. §2 was filled in the same way
@@ -161,14 +168,25 @@ What it settled, all of which is load-bearing:
   queue and nothing else — a task resuming inside an emission is unbudgeted, exactly as GDScript's
   resume is — and `vh_tick` now fills a `vh_tick_stats` that becomes three Godot custom monitors.
 
-**`docs/by-hand-checklist.md` has been run** — 21 of its 22 entries are ticked, and only
-`_CanDropData` is still owed. **`docs/by-hand-findings.md` is the part to read**: nine things the
-session found broken (B1–B9) and two about the list itself. Several matter far outside the editor —
-**B1**, override completion has offered nothing inside a class body since Phase 4 moved the virtuals
-onto the mirrored classes; **B7**, `explain_effect_errors` is being deleted, and its appended
-sentence was found giving *wrong* advice on a `suspends` refusal; **B6**, the script template becomes
-a direct translation of GDScript's and loses its `<transacts>`/`spawn` guidance, which unticks two
-entries on the checklist by design.
+**`docs/by-hand-checklist.md` has been run** — 21 of its 22 entries are ticked, only `_CanDropData`
+is still owed, and **everything it found is fixed**. **`docs/by-hand-findings.md` is the part to
+read**: B1–B9 are the defects, B10–B11 are about the list, B12 is a Verse fact, and its "What
+shipped" table says what each change came to. Four of them are load-bearing outside the editor:
+
+- **B1** — override completion had offered nothing inside a class body since Phase 4 moved the
+  virtuals onto the mirrored classes. `method_mapping` carries `is_virtual` now.
+- **B4** — `_validate` and the two warning passes asked the host for a class by bare stem, so a
+  script under a `.vmodule` marker got no method outline, no export warnings and no signal
+  warnings. All three are module-qualified now.
+- **B7** — `explain_effect_errors` is **gone**. It never checked which effect had been refused, so
+  a `suspends` refusal took the `transacts` branch and gave the opposite of correct advice. The
+  rule that replaced it: the bridge annotates a diagnostic only where the bridge is what the author
+  is confused by.
+- **B6** — the script template is a direct translation of GDScript's, two comments and `{}` bodies,
+  and compiles as generated.
+
+**Four ticked entries want a second by-hand look**, because a headless run cannot see what fixed
+them; the checklist says which and why.
 
 **README predates Phase 1 and is stale on marshalling.** It still describes three hand-written
 value types, a `variant` tuple, `object` as the only `<native>` class, and packed arrays crossing as
@@ -457,9 +475,11 @@ ten element types against four key types is not a list to maintain by hand.
   `no_rollback`. So a `<transacts>` function may not call a specifier-less one, and anything that
   forces `<transacts>` on a method (a `Subscribe` handler; a failure context) forces it on
   everything that method calls, a file at a time. The compiler reports it at the **call** site, not
-  at the declaration that needs changing — `ErrSemantic_EffectNotAllowed`, uLang glitch **3512**,
-  which `verse_script_language.cpp` now recognises and answers with the declaration to edit. This is
-  `dodge-the-creeps.md` wall 8; Phase 4.5 narrowed it and did not remove it. **Reading Godot no
+  at the declaration that needs changing — `ErrSemantic_EffectNotAllowed`, uLang glitch **3512**.
+  The bridge used to append the fix to it and no longer does: the appender keyed on the code and the
+  callee's package and never on which effect was refused, so a `suspends` refusal took the
+  `transacts` branch (`docs/by-hand-findings.md` B7). This is `dodge-the-creeps.md` wall 8;
+  Phase 4.5 narrowed it and did not remove it. **Reading Godot no
   longer starts the cascade** — a const-and-answering method is `<reads>` — but a helper that
   writes still needs the word, and effects are *contravariant*, so a `<reads>` callee satisfies a
   `<transacts>` caller and a `<transacts>` function type alike.
@@ -480,6 +500,13 @@ ten element types against four key types is not a list to maintain by hand.
   method* is a module-level name. `(V:vector2).Length()` makes `Length` unusable as a parameter name
   in any file that imports the Godot package, which is every script. See the Phase 4 note above for
   the list.
+- **A bare `logic` in an `if` clause list is evaluated and thrown away.** `if (X)` alone is refused
+  — *"Expected an expression that can fail in the 'if' condition clause"* — but as soon as *some*
+  clause can fail, a `logic`-valued one beside it is accepted and **not tested**, so the body runs
+  either way with no diagnostic. `if (Button := input_event_mouse_button[Event], Button.IsPressed())`
+  runs on the release as well as the press; `Button.IsPressed()?` is the spelling that tests it.
+  Measured in `tests/verse_probe` (`docs/by-hand-findings.md` B12) after it produced a passing test
+  that was counting twice.
 - **Verse silently drops a continuation line that begins with an operator.** An expression written
   as `0.5 * ((A * 2.0)` then `+ B * W` on the next line compiles, runs, and answers *the first line
   only* — no diagnostic, no warning. Two of `GodotMath.native.verse`'s formulas answered 0.0 that

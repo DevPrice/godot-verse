@@ -373,40 +373,44 @@ PackedStringArray VerseScriptLanguage::_get_string_delimiters() const {
 	return delimiters;
 }
 
+// The one template, and a direct translation of GDScript's -- the same two virtuals, the same two
+// comments above them, and a body that compiles as generated, which `{}` is: Verse has no `pass`.
+//
+// It said more than this once, and deliberately: two lines about `<transacts>` on a helper of your
+// own, and four about `spawn{...}` being how a `<suspends>` method is started. Both described real
+// walls, and both were cut, because a template is the first Verse an author reads and six lines of
+// caveat before the first line of code is not an introduction. What they were for has not gone
+// away -- `docs/dodge-the-creeps.md` wall 8 is still standing.
+//
+// Tabs, not spaces. Verse's own style guide prefers spaces and this deliberately does not follow
+// it: Godot's `text_editor/behavior/indent/type` defaults to Tabs, so the first line the author
+// types into a space-indented template *mixes* the two, which Verse rejects outright. The editor
+// that will edit the file wins over the style guide that will not.
+static const char *DEFAULT_TEMPLATE =
+		"using { /Godot.org/Godot }\n"
+		"\n"
+		"# The class is named after this file, which is how the node it is attached to finds it.\n"
+		"_CLASS_ := class(_BASE_):\n"
+		"\n"
+		"\t# Called when the node enters the scene tree for the first time.\n"
+		"\t_Ready<override>():void =\n"
+		"\t\t{} # Replace with function body.\n"
+		"\n"
+		"\t# Called every frame. `Delta` is the elapsed time since the previous frame.\n"
+		"\t_Process<override>(Delta:float):void =\n"
+		"\t\t{}\n";
+
+// Godot hands the chosen template's content back here to be filled in, which is what GDScript's
+// make_template does with it and what this used to ignore -- building the source from scratch and
+// leaving `_get_built_in_templates` empty, so the Attach Script dialog reported "No suitable
+// template." over a dialog that then wrote one (by-hand-findings.md B5).
+//
+// `_BASE_` is not GDScript's substitution: the dialog names a *Godot* class and the template needs
+// the mirrored Verse one, so it goes through the same inversion the class table answers.
 Ref<Script> VerseScriptLanguage::_make_template(const String &p_template, const String &p_class_name, const String &p_base_class_name) const {
 	const String class_name = p_class_name.is_empty() ? String("script") : p_class_name;
 
-	String source =
-			"using { /Godot.org/Godot }\n"
-			"\n"
-			"# The class is named after this file, which is how the node it is attached to finds it.\n"
-			"#\n"
-			// The one thing a template can say that stops wall 8 before it happens. An override
-			// carries no specifier on purpose -- the default effect set is the widest, so an
-			// overriding body may call anything -- but a helper the author writes needs one, and
-			// the compiler reports its absence at the call rather than at the declaration.
-			"# A helper of your own wants `<transacts>` -- `Step()<transacts>:void = ...` -- or the\n"
-			"# first failable expression that calls it is refused, on the line that calls it.\n"
-			"#\n"
-			// D19. The other thing an author gets wrong the first time, and the compiler's refusal
-			// -- glitch 3532/3523, "could not find a parent function to override" -- does not
-			// suggest the fix. A sentence here rather than a diagnostic, because the sentence
-			// arrives before the mistake does.
-			"# To wait on something -- a Timer, a button, a signal of your own -- write a\n"
-			"# `<suspends>` method and start it with `spawn{...}` from a virtual or a signal\n"
-			"# handler. Neither `<suspends>` on the override itself nor any effect specifier on the\n"
-			"# waiting method will compile: awaiting is the one thing that cannot be narrowed.\n"
-			// Tabs, not spaces. Verse's own style guide prefers spaces and this deliberately does
-			// not follow it: Godot's `text_editor/behavior/indent/type` defaults to Tabs, so the
-			// first line the author types into a space-indented template *mixes* the two, which
-			// Verse rejects outright. The editor that will edit the file wins over the style guide
-			// that will not.
-			"_CLASS_ := class(_BASE_):\n"
-			"\n"
-			"\t_Ready<override>():void =\n"
-			"\t\tPrint(\"_CLASS_ is ready\")\n"
-			"\n"
-			"\t_Process<override>(Delta:float):void =\n";
+	String source = p_template.is_empty() ? String(DEFAULT_TEMPLATE) : p_template;
 	source = source.replace("_CLASS_", class_name.to_snake_case());
 	source = source.replace("_BASE_", verse_base_class_for(p_base_class_name));
 
@@ -485,12 +489,17 @@ Dictionary VerseScriptLanguage::_validate(const String &p_script, const String &
 	}
 
 	// ScriptTextEditor::get_functions() reads this key alone to build the script editor's method
-	// outline -- none of Script's own method-list virtuals are involved. Left unset when there is
-	// nothing to answer from, the same as every other optional key here.
+	// outline *and* to place the connection gutter icon beside a handler a scene connects to --
+	// none of Script's own method-list virtuals are involved. Left unset when there is nothing to
+	// answer from, the same as every other optional key here.
+	//
+	// Module-qualified, because every ClassNameUtf8 in the ABI is. Asking by bare stem answered
+	// nothing for any script under a `.vmodule` marker, which cost those scripts both the outline
+	// and the gutter (by-hand-findings.md B4).
 	VerseRuntime *runtime = get_runtime();
 	if (p_validate_functions && runtime != nullptr) {
 		PackedStringArray functions;
-		const TypedArray<Dictionary> members = runtime->class_members(p_path.get_file().get_basename());
+		const TypedArray<Dictionary> members = runtime->class_members(qualified_class_name(p_path));
 		for (int64_t i = 0; i < members.size(); i++) {
 			const Dictionary member = members[i];
 			const int64_t line = member["line"];
@@ -590,10 +599,15 @@ void VerseScriptLanguage::_reload_all_scripts() {
 	}
 }
 
+// Both of these mean "this script's source changed", which is the one thing that has to reach the
+// objects holding it: an instance is bound to the generation it was made against and adopts
+// nothing, and whether an object gets a real instance at all is decided by `@tool` at creation and
+// never revisited. `_reload_all_scripts` above deliberately does not do this -- Godot calls that
+// when the filesystem moved, which is a refresh rather than an edit.
 void VerseScriptLanguage::_reload_tool_script(const Ref<Script> &p_script, bool p_soft_reload) {
 	VerseScript *script = Object::cast_to<VerseScript>(p_script.ptr());
 	if (script != nullptr) {
-		script->compile();
+		script->_reload(p_soft_reload);
 	}
 }
 
@@ -601,7 +615,7 @@ void VerseScriptLanguage::_reload_scripts(const Array &p_scripts, bool p_soft_re
 	for (int64_t i = 0; i < p_scripts.size(); i++) {
 		VerseScript *script = Object::cast_to<VerseScript>(p_scripts[i]);
 		if (script != nullptr) {
-			script->compile();
+			script->_reload(p_soft_reload);
 		}
 	}
 }
@@ -610,8 +624,31 @@ String VerseScriptLanguage::_validate_path(const String &p_path) const {
 	return String();
 }
 
+// The templates the Attach Script dialog lists, which is one.
+//
+// Answered against `Object` alone: ScriptCreateDialog walks the new script's base class up through
+// ClassDB and asks per ancestor, and every hierarchy ends there, so one row is offered whatever
+// node the script is being attached to. Returning nothing -- which this did -- is how the dialog
+// came to say "No suitable template." over a dialog that then wrote one, since `_make_template`
+// runs either way (by-hand-findings.md B5).
+//
+// Godot drops a row missing any of these six keys and prints an error for it. `origin` is
+// ScriptLanguage::TEMPLATE_BUILT_IN, which godot-cpp does not expose as an enum.
 TypedArray<Dictionary> VerseScriptLanguage::_get_built_in_templates(const StringName &p_object) const {
-	return TypedArray<Dictionary>();
+	TypedArray<Dictionary> templates;
+	if (String(p_object) != String("Object")) {
+		return templates;
+	}
+
+	Dictionary entry;
+	entry["inherit"] = String("Object");
+	entry["name"] = String("Default");
+	entry["description"] = String("A class named after the file, with _Ready and _Process.");
+	entry["content"] = String(DEFAULT_TEMPLATE);
+	entry["id"] = (int64_t)0;
+	entry["origin"] = (int64_t)0;
+	templates.push_back(entry);
+	return templates;
 }
 
 // The Verse spelling of a Godot type as the connect dialog names it (R-SIG-4).
@@ -678,7 +715,12 @@ String VerseScriptLanguage::_make_function(const String &p_class_name, const Str
 		// author has something to edit rather than a stub they have to re-derive from the dialog.
 		out += name + (verse_type.is_empty() ? String(":?") : String(":") + verse_type);
 	}
-	out += String(")<transacts>:void =\n\t\t# TODO\n");
+	// `{}` is Verse's `pass`, and the stub does not compile without it: a comment is not an
+	// expression, so `= \n\t\t# TODO` is "Dangling `=` assignment with no expressions or empty
+	// braced block `{}` on its right hand side" -- on a line the author did not write, in a file
+	// the editor wrote for them (by-hand-findings.md B3). The wording is GDScript's own, because
+	// the rest of what this language shows an author now is too.
+	out += String(")<transacts>:void =\n\t\t{} # Replace with function body.\n");
 	return out;
 }
 
@@ -955,18 +997,21 @@ static Dictionary override_option_for(const Dictionary &p_item) {
 // would take the override of *and* something would dispatch to.
 //
 // `is_overridable` answers only the first half, and on its own it offers the whole mirrored Godot
-// API: every one of those methods is a class member the compiler would accept an override of. But
-// gen_verse_api.py skips Godot's virtuals, so a generated method is never the Verse spelling of
-// one -- it is a concrete shim that forwards into Godot through the handle. Overriding GetName
-// compiles and changes nothing about what Godot calls. So the mirror is excluded wholesale, which
-// is what the class table already answers.
+// API: every one of those 9597 methods is a class member the compiler would accept an override of,
+// and overriding `GetName` compiles and changes nothing, because the body forwards through the
+// handle either way. The second half is `is_virtual` on the method table, which is generated from
+// the same `is_virtual` in extension_api.json that decided how to emit the member in the first
+// place -- so the two cannot disagree.
 //
-// That leaves the two sets that mean something. Every one of Godot's virtuals is generated onto the
-// class that declares it, so `_Ready` is `node`'s and `_Draw` is `canvas_item`'s -- and the method
-// table names each one against its own class, which is what the table lookup below is for. The one
-// exception is `_Notification`, which is hand-written on the native root because it is in no part
-// of extension_api.json. Anything else is a class the author wrote, and the mirror never contains
-// one of those.
+// This used to exclude the mirror wholesale, and that was right until it wasn't: when the guard
+// was written Godot's virtuals were hand-written on the native root, so "not a mirrored class" and
+// "a virtual" named the same set. Phase 4 generated all 1413 of them onto the classes that declare
+// them -- `_Ready` onto `node`, `_Draw` onto `canvas_item` -- and the guard silently began
+// rejecting every override this exists to offer. Ask the table what the member *is* rather than
+// where it lives (by-hand-findings.md B1).
+//
+// A name the table does not carry at all is a class the author wrote, which is worth offering, or
+// a member of the native root that is not `_Notification`, which is not.
 //
 // A method the class already declares comes back owned by that class -- the host lets a subclass'
 // copy win over the superclass' and drops the duplicate -- so comparing the owner is what stops an
@@ -976,10 +1021,10 @@ static bool completes_as_override(const Dictionary &p_item, const String &p_encl
 	if (!(bool)p_item["is_overridable"] || String(p_item["signature"]).is_empty() || owner == p_enclosing_class) {
 		return false;
 	}
-	if (verse_godot_class_for(owner) != nullptr) {
-		return false;
+	if (const verse_api::method_mapping *mirrored = godot_method_for(owner, p_item["name"])) {
+		return mirrored->is_virtual;
 	}
-	return owner != String("vh_object") || godot_method_for(owner, p_item["name"]) != nullptr;
+	return verse_godot_class_for(owner) == nullptr && owner != String("vh_object");
 }
 
 // A line's indentation width, or -1 for one carrying no code -- blank, or a comment, which sits
@@ -2209,7 +2254,7 @@ void VerseScriptLanguage::refresh_script_warnings(const String &p_path) const {
 
 	TypedArray<Dictionary> warnings;
 	bool found = false;
-	const TypedArray<Dictionary> exports = runtime->class_exports(p_path.get_file().get_basename(), &found);
+	const TypedArray<Dictionary> exports = runtime->class_exports(qualified_class_name(p_path), &found);
 	for (int64_t i = 0; found && i < exports.size(); i++) {
 		const Dictionary entry = exports[i];
 		const int64_t reject = entry["reject"];
@@ -2238,7 +2283,7 @@ void VerseScriptLanguage::refresh_script_warnings(const String &p_path) const {
 	// The same pass over the signal list, which the host rejects for its own five reasons. Reported
 	// here rather than at the emission that used to discover them, which is R-SIG-1's half of
 	// "refused at the member" and the reason vh_signal_desc carries a Reject at all.
-	const Vector<VerseSignalInfo> signals = runtime->class_signals(p_path.get_file().get_basename());
+	const Vector<VerseSignalInfo> signals = runtime->class_signals(qualified_class_name(p_path));
 	for (int64_t i = 0; i < signals.size(); i++) {
 		const VerseSignalInfo &signal = signals[i];
 		if (signal.reject == VH_SIGNAL_OK || signal.line < 0) {
@@ -2455,61 +2500,6 @@ void VerseScriptLanguage::explain_skipped_members(const TypedArray<Dictionary> &
 	}
 }
 
-// uLang's ErrSemantic_EffectNotAllowed, from Glitch.h. The message reads
-//
-//   This invocation calls a function (`(/user@localhost/player:)Helper`) that has the
-//   'no_rollback' effect, which is not allowed by its context.
-//
-// and it is reported at the **call**, which for the common shape is not where the fix goes.
-static constexpr int64_t EFFECT_NOT_ALLOWED_CODE = 3512;
-
-// The package-qualified callee out of that message: uLang writes `(/package/class:)Member`, and it
-// is the only backticked thing in it. Answers the qualified path and the bare member name.
-static bool parse_effect_callee(const String &p_message, String &r_qualified, String &r_member) {
-	const int64_t open = p_message.find("`");
-	const int64_t close = open < 0 ? -1 : p_message.find("`", open + 1);
-	if (close <= open + 1) {
-		return false;
-	}
-	r_qualified = p_message.substr(open + 1, close - open - 1);
-	const int64_t split = r_qualified.rfind(":)");
-	r_member = split < 0 ? r_qualified : r_qualified.substr(split + 2);
-	return !r_member.is_empty();
-}
-
-void VerseScriptLanguage::explain_effect_errors(const TypedArray<Dictionary> &p_errors) {
-	for (int64_t i = 0; i < p_errors.size(); i++) {
-		Dictionary error = p_errors[i];
-		if (!error.has("code") || (int64_t)error["code"] != EFFECT_NOT_ALLOWED_CODE) {
-			continue;
-		}
-		String qualified;
-		String member;
-		if (!parse_effect_callee(String(error["message"]), qualified, member)) {
-			continue;
-		}
-
-		// Two shapes with the fix in two different places, and the callee's package is what tells
-		// them apart. A mirrored Godot method that says `<transacts>` means it: the caller is what
-		// has to widen. Anything else is the author's own, and the usual cause is a declaration
-		// written with no specifier at all -- which carries Verse's *default* effect set, wider
-		// than `<transacts>` because it contains `no_rollback`.
-		String added;
-		if (qualified.begins_with("(/Godot.org/Godot")) {
-			added = " `" + member + "` is one of Godot's own and does change the scene, so it is"
-					" this function that has to widen rather than that one: write `<transacts>` on"
-					" the function containing this line. A Godot method that only reads carries"
-					" `<reads>` and needs no widening.";
-		} else {
-			added = " Write `<transacts>` on `" + member + "`'s own declaration, which is where the"
-					" fix goes even though the error is reported here: a function with no effect"
-					" specifier carries Verse's default effect set, which contains `no_rollback` and"
-					" is wider than `<transacts>`.";
-		}
-		error["message"] = String(error["message"]) + added;
-	}
-}
-
 // The Verse compiler's code for "Unknown identifier %s." -- uLang's ErrSemantic_UnknownIdentifier,
 // from Glitch.h. Matched on the code rather than on the message, which is English and is not ours.
 static constexpr int64_t UNKNOWN_IDENTIFIER_CODE = 3506;
@@ -2655,7 +2645,6 @@ bool VerseScriptLanguage::record_diagnostics(const Dictionary &p_errors_by_globa
 			error["path"] = path;
 		}
 		explain_skipped_members(errors);
-		explain_effect_errors(errors);
 		note_missing_imports(path, errors);
 		diagnostics_by_path[path] = errors;
 	}

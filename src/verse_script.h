@@ -117,6 +117,26 @@ public:
 	// a placeholder shows nothing at all until it is told what to show.
 	void update_placeholders();
 
+	// Remembers, and forgets, an object this script is attached to. A placeholder registers itself
+	// in _placeholder_instance_create; a real instance is registered by VerseScriptInstance, which
+	// is where its lifetime is known. Both kinds are wanted, because reload_instances has to be
+	// able to turn either into the other.
+	void note_owner(int64_t p_object_id) const;
+	void forget_owner(int64_t p_object_id) const;
+
+	// Re-attaches this script to every object holding it, which is the only way a source change
+	// reaches one.
+	//
+	// Two things need it and neither happens on its own. A `@tool` script's instance is bound to
+	// the *generation* it was made against and adopts nothing -- the constraint in CLAUDE.md, and
+	// deliberate -- so the editor keeps running the old code until something replaces the
+	// instance. And adding `@tool` to a script that did not have it flips _can_instantiate, which
+	// decides between a real instance and a placeholder *at creation* and is never revisited. Both
+	// showed as "only takes effect on editor restart" (by-hand-findings.md B8).
+	//
+	// Exported values are carried across, because the instance holds them and this destroys it.
+	void reload_instances();
+
 private:
 	// Rebuilds exports from the last analysis, or -- when that analysis cannot be believed --
 	// leaves the previous list standing and turns placeholder fallback on. GDScript::_update_exports
@@ -137,8 +157,18 @@ private:
 	bool awaiting_analysis = false;
 
 	// Borrowed: Godot owns each placeholder and tells us through _placeholder_erased when one
-	// goes away.
-	mutable std::vector<void *> placeholders;
+	// goes away. The owner is carried beside it because _placeholder_erased is handed the
+	// placeholder and nothing else, and forgetting the owner needs its id.
+	struct PlaceholderRef {
+		void *placeholder = nullptr;
+		int64_t owner_id = 0;
+	};
+	mutable std::vector<PlaceholderRef> placeholders;
+
+	// Every object holding this script, placeholder or real instance. Ids rather than pointers:
+	// an object can be freed between one reload and the next, and an id that no longer resolves
+	// is how that is found out safely.
+	mutable std::vector<int64_t> owner_ids;
 
 	godot::String source_code;
 	// The project built and this file contributed no errors to it. True for a library file, which

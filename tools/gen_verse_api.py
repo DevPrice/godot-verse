@@ -2183,7 +2183,7 @@ def generate(api: dict, requested: list, coverage: Coverage, enums: dict):
 
     inherited_names = {}  # godot class name -> set of Verse names visible to its subclasses
     class_blocks = []
-    method_map = []  # (godot class, verse class, godot method, verse method) per emitted method
+    method_map = []  # (godot class, verse class, godot method, verse method, is virtual) per member
     # Every name any emitted class carries, across all of them. A module-level definition may not
     # share one: see singleton_accessor_name. (member_names below is one class' own set.)
     all_member_names = set()
@@ -2244,7 +2244,7 @@ def generate(api: dict, requested: list, coverage: Coverage, enums: dict):
             used |= names
             all_member_names |= names
             emitted_lines.extend(emit_property(cp, locals_for_accessors))
-            method_map.append((name, verse_class_name(name), cp.godot_name, cp.verse_name))
+            method_map.append((name, verse_class_name(name), cp.godot_name, cp.verse_name, False))
             coverage.properties_emitted += 1
 
         for cm in candidates:
@@ -2255,7 +2255,8 @@ def generate(api: dict, requested: list, coverage: Coverage, enums: dict):
             used.add(cm.verse_name)
             all_member_names.add(cm.verse_name)
             emitted_lines.append(emit_method(cm))
-            method_map.append((name, verse_class_name(name), cm.godot_name, cm.verse_name))
+            method_map.append((name, verse_class_name(name), cm.godot_name, cm.verse_name,
+                               cm.default_body is not None))
             coverage.methods_emitted += 1
             # Recorded as it is emitted rather than recomputed afterwards, so the list cannot
             # disagree with the mirror -- the same reason verse_api_skipped.h is generated.
@@ -2596,11 +2597,16 @@ inline constexpr class_mapping classes[] = {{
 // Keyed by the class the method is *declared* on, which is what the compiler reports as a
 // resolved definition's enclosing scope -- an inherited call resolves to the declaring class,
 // not the one it was called through.
+// `is_virtual` is what tells the two halves of this table apart, and the editor needs it: every
+// mirrored method is a class member the compiler would accept an `<override>` of, but overriding a
+// concrete one -- `GetName` -- compiles and changes nothing, because the body forwards through the
+// handle either way. Only a virtual is a method Godot itself will dispatch to.
 struct method_mapping {{
 	const char *verse_class;
 	const char *verse_method;
 	const char *godot_class;
 	const char *godot_method;
+	bool is_virtual;
 }};
 
 inline constexpr method_mapping methods[] = {{
@@ -2763,7 +2769,7 @@ VALUE_TYPE_CLASSES = {"Vector2": "vector2", "Vector3": "vector3", "Color": "colo
 # documentation. Everything else Godot calls on a script is in extension_api.json and is generated
 # onto the class that declares it; `_notification` is in no part of it (docs/phase-4-design.md 7.3).
 LIFECYCLE_METHODS = [
-    (NATIVE_ROOT, "_Notification", "Object", "_notification"),
+    (NATIVE_ROOT, "_Notification", "Object", "_notification", True),
 ]
 
 # The fields of those hand-written value types, in the same shape. Listed rather than read out of
@@ -2772,15 +2778,15 @@ LIFECYCLE_METHODS = [
 # these a click on the `X` of `Position.X` reaches a definition in the engine tree, which has no
 # res:// file to jump to and no Godot doc page to fall back on, so it does nothing at all.
 VALUE_TYPE_MEMBERS = [
-    ("vector2", "X", "Vector2", "x"),
-    ("vector2", "Y", "Vector2", "y"),
-    ("vector3", "X", "Vector3", "x"),
-    ("vector3", "Y", "Vector3", "y"),
-    ("vector3", "Z", "Vector3", "z"),
-    ("color", "R", "Color", "r"),
-    ("color", "G", "Color", "g"),
-    ("color", "B", "Color", "b"),
-    ("color", "A", "Color", "a"),
+    ("vector2", "X", "Vector2", "x", False),
+    ("vector2", "Y", "Vector2", "y", False),
+    ("vector3", "X", "Vector3", "x", False),
+    ("vector3", "Y", "Vector3", "y", False),
+    ("vector3", "Z", "Vector3", "z", False),
+    ("color", "R", "Color", "r", False),
+    ("color", "G", "Color", "g", False),
+    ("color", "B", "Color", "b", False),
+    ("color", "A", "Color", "a", False),
 ]
 
 
@@ -2969,10 +2975,11 @@ def render_classes_header(api: dict, emit_order: list, method_map: list) -> str:
         [(name, verse_class_name(name)) for name in emit_order] + list(VALUE_TYPE_CLASSES.items())
     )
     entries = "\n".join(f'\t{{ "{godot_name}", "{verse_name}" }},' for godot_name, verse_name in pairs)
-    rows = [(m[1], m[3], m[0], m[2]) for m in method_map] + LIFECYCLE_METHODS + VALUE_TYPE_MEMBERS
+    rows = [(m[1], m[3], m[0], m[2], m[4]) for m in method_map] + LIFECYCLE_METHODS + VALUE_TYPE_MEMBERS
     method_entries = "\n".join(
-        f'\t{{ "{verse_class}", "{verse_method}", "{godot_class}", "{godot_method}" }},'
-        for verse_class, verse_method, godot_class, godot_method in sorted(rows)
+        f'\t{{ "{verse_class}", "{verse_method}", "{godot_class}", "{godot_method}", '
+        f'{"true" if is_virtual else "false"} }},'
+        for verse_class, verse_method, godot_class, godot_method, is_virtual in sorted(rows)
     )
     return CLASSES_HEADER_TEMPLATE.format(
         version=version, entries=entries, method_entries=method_entries

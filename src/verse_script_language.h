@@ -331,12 +331,6 @@ private:
 	// deliberately does not carry. R-SCN-2: the reason has to reach the author, not a report file.
 	static void explain_skipped_members(const godot::TypedArray<godot::Dictionary> &p_errors);
 
-	// Says where to write `<transacts>` when the effect lattice refuses a call. The compiler
-	// reports this at the *call*, and for the common shape the declaration that needs changing is
-	// somewhere else entirely -- `dodge-the-creeps.md` wall 8, which fired again four declarations
-	// deep during Phase 4's re-port.
-	static void explain_effect_errors(const godot::TypedArray<godot::Dictionary> &p_errors);
-
 	// Set by an analysis that moved something the editor has already drawn -- diagnostics that
 	// differ from the last one's, or a script that settled its validity on this result -- and
 	// cleared by the _frame that asks the script editor to draw it again. Godot has no reason of

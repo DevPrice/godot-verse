@@ -704,17 +704,24 @@ def test_property_skips_have_reasons():
 def test_method_map_names_the_godot_original():
     api = {"header": {"version_full_name": "Godot Engine v4.6.stable.official"}}
     method_map = [
-        ("Node2D", "node2d", "set_position", "SetPosition"),
-        ("Node2D", "node2d", "get_position", "GetPosition"),
+        ("Node2D", "node2d", "set_position", "SetPosition", False),
+        ("Node2D", "node2d", "get_position", "GetPosition", False),
+        ("Node2D", "node2d", "_draw", "_Draw", True),
     ]
     text = g.render_classes_header(api, ["Node2D"], method_map)
     check_true(
         "method map carries the Godot spelling the Verse name cannot be inverted to",
-        '{ "node2d", "GetPosition", "Node2D", "get_position" },' in text,
+        '{ "node2d", "GetPosition", "Node2D", "get_position", false },' in text,
     )
     check_true(
         "method map sorts by Verse class then Verse method",
         text.index('"GetPosition"') < text.index('"SetPosition"'),
+    )
+    # The column the editor's override completion reads. A concrete method is a member the
+    # compiler would take an <override> of and Godot would never dispatch to.
+    check_true(
+        "method map marks a virtual as one",
+        '{ "node2d", "_Draw", "Node2D", "_draw", true },' in text,
     )
 
 
@@ -724,23 +731,23 @@ def test_generated_method_map_covers_a_known_method():
     # and neither Verse name can be inverted back to the Godot one.
     check_true(
         "the checked-in header maps node2d.Position to Node2D.position",
-        '{ "node2d", "Position", "Node2D", "position" },' in header,
+        '{ "node2d", "Position", "Node2D", "position", false },' in header,
     )
     check_true(
         "the checked-in header still maps a surviving method",
-        '{ "node", "GetChild", "Node", "get_child" },' in header,
+        '{ "node", "GetChild", "Node", "get_child", false },' in header,
     )
     # A virtual is generated onto the class Godot declares it on, so its documentation is found the
     # same way every other member's is.
     check_true(
         "the checked-in header maps node._Ready to Node._ready",
-        '{ "node", "_Ready", "Node", "_ready" },' in header,
+        '{ "node", "_Ready", "Node", "_ready", true },' in header,
     )
     # `_notification` is in no part of extension_api.json, so it is hand-written on the native root
     # -- and a script overriding it still wants Godot's documentation for it.
     check_true(
         "and vh_object._Notification to Object._notification",
-        '{ "vh_object", "_Notification", "Object", "_notification" },' in header,
+        '{ "vh_object", "_Notification", "Object", "_notification", true },' in header,
     )
 
 

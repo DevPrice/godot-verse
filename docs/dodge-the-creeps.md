@@ -337,11 +337,16 @@ their first library file, and it is invisible in the file they have to change.
 **Phase 4.5 did the two things the paragraph above asked for, and a third the paragraph did not
 know to ask for.** The trap still exists — a helper that writes still needs `<transacts>` — but:
 
-- the **diagnostic says where the fix goes**. It now ends *"Write `<transacts>` on `V2Length`'s own
-  declaration, which is where the fix goes even though the error is reported here"*, and it tells
-  the other shape apart: a Godot method that is honestly `<transacts>` gets the opposite advice,
-  because there the caller is what has to widen. `tests/coverage_diagnostic` asserts both sentences;
-- the **`.verse` template says it before it happens**, in two lines above the class;
+- ~~the **diagnostic says where the fix goes**~~ and ~~the **`.verse` template says it before it
+  happens**~~. **Both were removed after the by-hand session** (`by-hand-findings.md` B6 and B7),
+  and the second reason is the one worth keeping: the appended sentence keyed on glitch 3512 and
+  the callee's package alone and never on *which* effect had been refused, so a `suspends` refusal
+  from a Godot signal took the `transacts` branch and told the author to write the one word an
+  awaiting body may not carry. It was confident, wrong, and had survived a phase. The rule now is
+  that the bridge annotates a diagnostic only where the bridge is what the author is confused by —
+  a skipped Godot member, a module that is not imported — and the compiler's own text stands
+  everywhere else. The template is GDScript's, two comments long, for the same reason: six lines of
+  caveat is not an introduction;
 - and the cascade is **much shorter**, because reading Godot no longer starts it. `V2Length`'s
   problem was never Godot — it is pure arithmetic — but a helper that reads `Position` or calls
   `GetChildCount()` used to be forced to `<transacts>` by the read alone, and is now spellable as

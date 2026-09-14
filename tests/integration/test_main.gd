@@ -20,6 +20,7 @@ var _tx_step := 0
 var _conc: Node2D = null
 var _conc2: Node2D = null
 var _foreign: Object = null
+var _hit: Control = null
 
 
 func _on_verse_touched(body: Node2D) -> void:
@@ -55,6 +56,60 @@ func _call_verse_off_thread(target: Node) -> void:
 
 func _double(n: int) -> int:
 	return n * 2
+
+
+# Rewrites a script on disk, rebuilds, reloads, and checks the attached node answers the new code.
+#
+# Restores the file whatever happens: it is a checked-in fixture, and a test that leaves the tree
+# dirty when it fails is worse than the failure.
+func _check_reload_replaces_the_instance() -> void:
+	const PATH := "res://scripts/reload_probe.verse"
+	var original := FileAccess.get_file_as_string(PATH)
+	if original.is_empty():
+		_check("reload_probe.verse is readable", false)
+		return
+
+	var script: Script = load(PATH)
+	var node := Node2D.new()
+	node.set_script(script)
+	root.add_child(node)
+	_check_eq("the attached node answers the code it was built against", node.call("Answer"), 1)
+	node.set("Tag", 5)
+
+	var edited := original.replace("Answer<public>()<transacts>:int = 1",
+			"Answer<public>()<transacts>:int = 2")
+	var out := FileAccess.open(PATH, FileAccess.WRITE)
+	out.store_string(edited)
+	out.close()
+
+	# The edit is only *code* after a build: a generation is what carries a body, and reload alone
+	# refreshes analysis. Both are needed, in this order.
+	var runtime := Engine.get_singleton("VerseRuntime")
+	_check_eq("the edited project builds", runtime.call("build_project"), OK)
+	script.reload()
+
+	_check_eq("the attached node answers the reloaded code", node.call("Answer"), 2)
+	_check_eq("and its exported value survived the instance being replaced", node.get("Tag"), 5)
+
+	var restore := FileAccess.open(PATH, FileAccess.WRITE)
+	restore.store_string(original)
+	restore.close()
+	runtime.call("build_project")
+	script.reload()
+
+	root.remove_child(node)
+	node.free()
+
+
+# A left click at a viewport position, pressed and released. Godot's own picking runs off this the
+# same way it runs off a real mouse -- the dummy display server is not in the path.
+func _click_at(at: Vector2) -> void:
+	for pressed in [true, false]:
+		var ev := InputEventMouseButton.new()
+		ev.button_index = MOUSE_BUTTON_LEFT
+		ev.pressed = pressed
+		ev.position = at
+		Input.parse_input_event(ev)
 
 
 # Sprite2D is a Node2D, but `call` needs the argument typed as what the Verse parameter declares;
@@ -1287,6 +1342,36 @@ func _process(_delta: float) -> bool:
 
 			_foreign.free()
 			_foreign = null
+
+			# R-NODE-7 for the virtual the engine asks *before* deciding a click is yours.
+			# Nothing calls `_HasPoint`; the engine asks it during picking, and an injected
+			# InputEventMouseButton is enough to make it (by-hand-findings.md B10).
+			_hit = Control.new()
+			_hit.set_script(load("res://scripts/has_point_probe.verse"))
+			_hit.offset_right = 200
+			_hit.offset_bottom = 200
+			root.add_child(_hit)
+			_click_at(Vector2(50, 50))
+		7:
+			# `_HasPoint` answered false, so picking walked past a control that covers the point.
+			_check_eq("a control whose _HasPoint says no is not picked", _hit.get("Clicks"), 0)
+			_hit.set("Solid", true)
+			_click_at(Vector2(50, 50))
+		9:
+			# The same click, the same rect, the other answer. This half is what says the first
+			# was the virtual and not a control the engine failed to find for some other reason.
+			_check_eq("and one whose _HasPoint says yes is", _hit.get("Clicks"), 1)
+			root.remove_child(_hit)
+			_hit.free()
+			_hit = null
+
+			# A source change reaching an attached node, which needs the instance replaced: it
+			# holds a vh_instance made against the retiring generation and adopts nothing. Before
+			# B8 the edit compiled and the node kept answering the old code until a restart.
+			_check_reload_replaces_the_instance()
+		6, 8:
+			# One frame for the injected event to be delivered.
+			pass
 		_:
 			print("[integration] %d passed, %d failed" % [_passed, _failed])
 			quit(1 if _failed > 0 else 0)

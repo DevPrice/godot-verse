@@ -263,12 +263,15 @@ COVERAGE_EXPLANATIONS = [
     "ClassDB is one flat namespace and a module is deliberately not part of it",
     "derives from `widget`, and more than one script answers to that name",
     "it offers Node as this script's base type",
-    # Phase 4.5 stage 3: the `no_rollback` trap, in both shapes. The compiler reports it at the
-    # call; what is asserted here is the half that says where the fix goes.
-    "Write `<transacts>` on `Helper`'s own declaration, which is where the fix goes even though "
-    "the error is reported here",
-    "`QueueFree` is one of Godot's own and does change the scene, so it is this function that has "
-    "to widen rather than that one",
+    # The `no_rollback` trap, which the bridge no longer annotates: the appended sentence was
+    # keyed on glitch 3512 and the callee's package alone, never on which effect had been refused,
+    # so a `suspends` refusal from a Godot signal took the `transacts` branch and told the author
+    # to write the one word an awaiting body may not carry (by-hand-findings.md B7). What is
+    # asserted now is the compiler's own text, which is the whole of what the editor shows.
+    "`(/user@localhost/effects:)Helper`) that has the 'no_rollback' effect, which is not allowed "
+    "by its context",
+    "`(/Godot.org/Godot/node:)QueueFree`) that has the 'transacts' effect, which is not allowed "
+    "by its context",
     # R-TOOL-12's sentence, in both shapes: the one module that would fix it, and the two that
     # leave the choice to the author.
     "It is declared in a module this file does not import; add "

@@ -1,20 +1,25 @@
 # The by-hand checklist
 
 **Status:** 2026-09-13 · **run, once, and all but one entry is ticked.** What the session found is
-[`by-hand-findings.md`](by-hand-findings.md) — nine things that were wrong, numbered B1–B9, plus
-B10 and B11 on the list itself. Read that before acting on anything here; several of the ticks
-below are "watched happen, and it was broken", not "watched happen and it was fine".
+[`by-hand-findings.md`](by-hand-findings.md) — nine things that were wrong (B1–B9), two about this
+list (B10, B11), and one Verse fact (B12). **All of them are closed.** Read that document before
+acting on anything here: most of the ticks below are "watched happen, and it was broken", and the
+entries have been rewritten to describe the behaviour that replaced what was watched.
 
-The one entry still open is **`_CanDropData`**, and it is the only one measured to be unreachable
-any other way. Two others were expected to be — `_make_function`, whose ClassDB entry does not
-exist and whose `Script.get_language()` is not public API, and `_HasPoint` — but `_HasPoint` turned
-out to be reachable headless after all (B10), and belongs in `tools/run_tests.py` rather than here.
+The one entry still open is **`_CanDropData`**, the only one measured to be unreachable any other
+way. Two others were expected to be — `_make_function`, whose ClassDB entry does not exist and whose
+`Script.get_language()` is not public API, and `_HasPoint` — but `_HasPoint` turned out to be
+reachable headless after all (B10) and is a case in `tests/integration` now.
+
+**Four ticked entries want a second by-hand look**, because what fixed them cannot be seen from a
+headless run: the `_make_function` stub and the connection gutter beside it (B3, B4), override
+completion in a class body (B1), the `@tool` placeholder swap (B8), and the Attach Script dialog's
+template list (B5, B6). Each says so in place.
 
 Every automated layer in this repository drives Godot with `--headless`, and the editor is exactly
-what `--headless` does not start. So the flows below have never been exercised by anything: they
-need a person, a window, and about twenty minutes. Phase 4's design asked for the checklist as a
-written artefact now and for automation only if one of these regresses twice — "the checklist
-becomes the manual's raw material".
+what `--headless` does not start. Phase 4's design asked for the checklist as a written artefact
+first and for automation only if one of these regresses twice — "the checklist becomes the manual's
+raw material".
 
 Each line is one thing to do and one thing to see. Tick nothing you have not watched happen.
 
@@ -34,7 +39,12 @@ Each line is one thing to do and one thing to see. Tick nothing you have not wat
       on Play, not on save — `VerseEditorPlugin::_build`); use Project ▸ Tools ▸ Build Verse and see
       a failed build refuse the run and leave the last good generation running.
 
-      > adding/updating @tool scripts only seems to take affect on editor restart. not sure if that is intended or not
+      > Not intended, and now fixed for the half a headless run can see: reloading a script
+      > re-attaches it to every object holding it, so a saved edit reaches the node instead of
+      > waiting for a restart (`by-hand-findings.md` B8, and a case in `tests/integration`). The
+      > other half — adding `@tool` to a script that did not have it, which has to turn a
+      > *placeholder* into a real instance — only happens under `is_editor_hint()` and so has no
+      > headless test. **Re-check both by hand.**
 
 ## Phase 4
 
@@ -56,7 +66,7 @@ Each line is one thing to do and one thing to see. Tick nothing you have not wat
 
       ```
       	OnHit<public>()<transacts>:void =
-      		# TODO
+      		{} # Replace with function body.
       ```
 
       The `<transacts>` is load-bearing, not decoration: `Subscribe` fixes its callback at that
@@ -66,11 +76,10 @@ Each line is one thing to do and one thing to see. Tick nothing you have not wat
       type — `Damage:int`, `By:string`, `Body:node2d` — and a struct payload gives them the field's
       own names rather than `Arg0`.
 
-      > This works, but when the editor inserts the function in the script for you, it looks like below, which doesn't compile in Verse (Dangling `=` assignment with no expressions or empty braced block `{}` on its right hand side.) Also, connected signal methods don't have an icon in the gutter indicating they have connection(s) like those in GDScript.
-```
-OnPlayerHit<public>()<transacts>:void =
-	# TODO
-```
+      > The stub it wrote did not compile — a `# TODO` comment is not an expression, so the body was
+      > empty. Fixed: it ends `{} # Replace with function body.` now, which is the text above.
+      > **Re-check by hand, and check the gutter with it**: a connected handler got no Slot icon,
+      > which had two causes and one of them was this (`by-hand-findings.md` B3, B4).
 
 - [x] **A signal with arguments names them.** Do the same for the HUD's `StartGame`, and for a
       signal declared `godot_signal(tuple(int, string))` — the connect dialog must show two
@@ -93,15 +102,19 @@ OnPlayerHit<public>()<transacts>:void =
       the warning triangle in the Scene dock with that text in its tooltip, and it must clear when
       the condition does.
 
-      > while testing this, I notice that function autocomplete no longer works in class bodies (autocompleting full override function signatures). this is a regression from something.
+      > While testing this: override completion inside a class body offered nothing. It was a
+      > regression, from Phase 4 rather than from anything nearby — the guard that skipped the
+      > mirror was written when Godot's virtuals lived on the native root, and Phase 4 moved all
+      > 1413 of them onto the mirrored classes. Fixed (`by-hand-findings.md` B1); **re-check by
+      > hand**, since nothing automated draws a completion popup.
 - [x] **An `_Input` handler receives a key.** Override `_Input<override>(Event:input_event):void` on
       a node in `demo`, print the event, and press a key with the game window focused. Nothing
       headless can press a key.
 
-      > this doesn't work:
-      Error at (13, 22): The data (/user@localhost/spinner/_Input:)event in package GodotScripts_2 is ambiguous with these definitions:
-          function (/Verse.org/Verse:)event(:t) in package Verse/Verse
-          function (/Verse.org/Verse:)event() in package Verse/Verse
+      > Reported as broken; it is not. The parameter was written `event`, which collides with
+      > `/Verse.org/Verse`'s own `event`. `Event` — the mirror's spelling — compiles and binds to
+      > Godot's `_input`, both confirmed with `tests/verse_probe` (`by-hand-findings.md` B2). The
+      > reason it was typed by hand at all is B1 above.
 - [x] **`_HasPoint` gates what the engine picks.** Give a Control a `_HasPoint<override>` returning
       `false` over its whole rect and confirm clicks fall through to what is behind it.
 
@@ -145,43 +158,39 @@ OnPlayerHit<public>()<transacts>:void =
 
 ## Phase 4.5
 
-Both of these are *sentences in the editor*, and the automated layers can only see them in the
-output log — `tests/coverage_diagnostic` asserts the text, never where it is drawn.
+Both of these were *sentences in the editor* that no longer exist. They were watched, disliked, and
+removed — `by-hand-findings.md` B6 and B7 — so what is written here now is the behaviour that
+replaced them, and both were re-checked against it.
 
-- [x] **The `<transacts>` trap says where the fix goes.** In `demo`, write a helper with no effect
-      specifier and call it from a failure context:
+- [x] **The `<transacts>` trap says nothing but what the compiler says.** In `demo`, write a helper
+      with no effect specifier and call it from a failure context:
 
           Helper():int = 7
           Uses()<transacts>:int = Helper()
 
-      The script editor's error list must show the compiler's own sentence *followed by* "Write
-      `<transacts>` on `Helper`'s own declaration, which is where the fix goes even though the error
-      is reported here". Then write `QueueFree()` inside a `()<reads>:void` function: the same
-      diagnostic must take the *other* sentence, the one that says this function is what has to
-      widen. Both must appear per keystroke, and both must clear when the fix is typed.
+      The script editor's error list must show the compiler's sentence and **only** that sentence:
+      *"This invocation calls a function (`…Helper`) that has the 'no_rollback' effect, which is not
+      allowed by its context."* No appended advice about where the fix goes. Then write
+      `QueueFree()` inside a `()<reads>:void` function and confirm the same — the compiler naming
+      the `transacts` effect, and nothing after it. Both must appear per keystroke and clear when
+      the fix is typed.
 
-      > I don't like the additional error message context; the built-in message is enough on its own
+      > The appended sentences are gone. What decided it beyond taste: the appender keyed on glitch
+      > 3512 and the callee's package alone and never on *which* effect had been refused, so a
+      > `suspends` refusal from a Godot signal took the `transacts` branch and told the author to
+      > write the one word an awaiting body may not carry. `tests/coverage_diagnostic` now asserts
+      > the compiler's own text.
 
-- [x] **A new script's template carries the warning.** Attach a new Verse script to a node through
-      the editor's Attach Script dialog. The generated file must carry the two comment lines above
-      the class saying a helper of your own wants `<transacts>`. The template is never read by any
-      automated layer, so this is the only thing that sees it. (It does not compile as generated and
-      is not meant to: `_Process`'s body is left empty for the author's cursor.)
+- [x] **A new script's template is GDScript's, and compiles.** Attach a new Verse script to a node
+      through the editor's Attach Script dialog. The dialog must offer **"Object: Default"** rather
+      than reporting "No suitable template.", and the generated file must be a direct translation of
+      GDScript's — the two comments, `_Ready` and `_Process`, `{}` bodies — and must compile as
+      generated with no edit.
 
-      > this mostly works, but the attach node dialog shows "No suitable template." even though it does render a template on creation. like the above I don't like the extra context. let's just directly translate GDScripts template and comments, e.g.:
-
-```
-extends Node2D
-
-# Called when the node enters the scene tree for the first time.
-func _ready() -> void:
-	pass # Replace with function body.
-
-# Called every frame. 'delta' is the elapsed time since the previous frame.
-func _process(delta: float) -> void:
-	pass
-
-```
+      > Both halves were wrong before. `_get_built_in_templates` returned nothing, which is what
+      > produced "No suitable template." over a dialog that then wrote one; and the template carried
+      > six lines of `<transacts>` and `spawn` caveat that no longer earn their place ahead of the
+      > first line of code. `{}` is Verse's `pass`.
 
 ## Phase 5
 

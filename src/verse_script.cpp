@@ -296,8 +296,10 @@ bool VerseScript::_editor_can_reload_from_file() {
 
 void VerseScript::_placeholder_erased(void *p_placeholder) {
 	for (size_t i = 0; i < placeholders.size(); i++) {
-		if (placeholders[i] == p_placeholder) {
+		if (placeholders[i].placeholder == p_placeholder) {
+			const int64_t owner_id = placeholders[i].owner_id;
 			placeholders.erase(placeholders.begin() + i);
+			forget_owner(owner_id);
 			return;
 		}
 	}
@@ -451,10 +453,68 @@ void *VerseScript::_placeholder_instance_create(Object *p_for_object) const {
 
 	void *placeholder = create_placeholder(language->_owner, _owner, p_for_object->_owner);
 	if (placeholder != nullptr) {
-		placeholders.push_back(placeholder);
+		const int64_t owner_id = (int64_t)p_for_object->get_instance_id();
+		placeholders.push_back(PlaceholderRef{ placeholder, owner_id });
+		note_owner(owner_id);
 		const_cast<VerseScript *>(this)->update_placeholders();
 	}
 	return placeholder;
+}
+
+void VerseScript::note_owner(int64_t p_object_id) const {
+	for (int64_t id : owner_ids) {
+		if (id == p_object_id) {
+			return;
+		}
+	}
+	owner_ids.push_back(p_object_id);
+}
+
+void VerseScript::forget_owner(int64_t p_object_id) const {
+	for (size_t i = 0; i < owner_ids.size(); i++) {
+		if (owner_ids[i] == p_object_id) {
+			owner_ids.erase(owner_ids.begin() + i);
+			return;
+		}
+	}
+}
+
+void VerseScript::reload_instances() {
+	// Snapshotted: set_script below destroys an instance and creates another, and both ends of
+	// that run through note_owner/forget_owner and mutate the vector being walked.
+	const std::vector<int64_t> ids = owner_ids;
+	const Ref<Script> self(this);
+
+	for (int64_t id : ids) {
+		Object *owner = UtilityFunctions::instance_from_id(id);
+		if (owner == nullptr || Object::cast_to<Script>(owner->get_script()) != this) {
+			continue;
+		}
+
+		// The values live in the instance this is about to destroy, so they are read off the
+		// object first and written back onto whatever kind of instance replaces it. Only the
+		// script's own: a Node's `position` belongs to Godot and survives untouched.
+		Dictionary saved;
+		const TypedArray<Dictionary> properties = owner->get_property_list();
+		for (int64_t i = 0; i < properties.size(); i++) {
+			const Dictionary property = properties[i];
+			if (((int64_t)property["usage"] & PROPERTY_USAGE_SCRIPT_VARIABLE) != 0) {
+				const StringName name = property["name"];
+				saved[name] = owner->get(name);
+			}
+		}
+
+		// Object::set_script returns early when handed the script the object already has, so the
+		// swap has to go through nothing and back. Nothing else destroys the old instance: it is
+		// what holds the vh_instance made against the retiring generation.
+		owner->set_script(Variant());
+		owner->set_script(self);
+
+		const Array names = saved.keys();
+		for (int64_t i = 0; i < names.size(); i++) {
+			owner->set(names[i], saved[names[i]]);
+		}
+	}
 }
 
 bool VerseScript::_instance_has(Object *p_object) const {
@@ -473,8 +533,16 @@ void VerseScript::_set_source_code(const String &p_code) {
 	source_code = p_code;
 }
 
+// Called when the source changed and not when it was merely loaded -- the resource loader calls
+// compile() directly, and this is the saver's path and Script.reload()'s.
+//
+// Re-attaching is the second half and is not optional. An instance holds a vh_instance made
+// against one generation and adopts nothing, so without this a saved edit is compiled, analysed,
+// reported on, and still not running (by-hand-findings.md B8).
 Error VerseScript::_reload(bool p_keep_state) {
-	return compile();
+	const Error status = compile();
+	reload_instances();
+	return status;
 }
 
 bool VerseScript::_has_method(const StringName &p_method) const {
@@ -619,8 +687,8 @@ void VerseScript::update_placeholders() {
 		}
 	}
 
-	for (void *placeholder : placeholders) {
-		update(placeholder, (GDExtensionConstTypePtr)&properties, (GDExtensionConstTypePtr)&values);
+	for (const PlaceholderRef &entry : placeholders) {
+		update(entry.placeholder, (GDExtensionConstTypePtr)&properties, (GDExtensionConstTypePtr)&values);
 	}
 }
 

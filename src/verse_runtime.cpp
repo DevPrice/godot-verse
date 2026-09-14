@@ -13,6 +13,7 @@
 #include <godot_cpp/classes/window.hpp>
 #include <godot_cpp/classes/class_db_singleton.hpp>
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/core/error_macros.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/char_string.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
@@ -1201,9 +1202,15 @@ void VerseRuntime::on_runtime_error(void *p_ctx, const vh_runtime_error *p_error
 	}
 
 	if (site != nullptr) {
-		const String path = String::utf8(site->PathUtf8, site->PathLen);
-		const String function = String::utf8(site->FunctionUtf8, site->FunctionLen);
-		UtilityFunctions::push_error(message, function, path, site->Line);
+		// `_err_print_error`, not `UtilityFunctions::push_error`. They are not two spellings of one
+		// thing: godot-cpp's push_error is GDScript's global, which is variadic and *concatenates*
+		// its arguments, so passing (message, function, path, line) to it printed one run-together
+		// string -- `...dropped.)(/Godot.org/Godot/node:)GetNameGodotClasses.native.verse28893`
+		// (by-hand-findings.md B9). This one takes the four as what they are, and Godot's errors
+		// panel makes the file and line clickable.
+		const CharString path = String::utf8(site->PathUtf8, site->PathLen).utf8();
+		const CharString function = String::utf8(site->FunctionUtf8, site->FunctionLen).utf8();
+		_err_print_error(function.get_data(), path.get_data(), site->Line, message);
 	} else {
 		UtilityFunctions::push_error(message);
 	}

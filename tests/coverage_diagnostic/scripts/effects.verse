@@ -10,8 +10,9 @@ effects := class(node2d):
     # because it contains `no_rollback`.
     Helper():int = 7
 
-    # Refused, and reported on this line rather than on Helper's. The added sentence says to write
-    # `<transacts>` on Helper.
+    # Refused, and reported on this line rather than on Helper's, which is where the fix goes. The
+    # bridge used to append a sentence saying so and no longer does (by-hand-findings.md B7); what
+    # run_tests.py asserts on is the compiler's own text, so this file's job is to produce it.
     CallsHelper()<transacts>:int = Helper()
 
     # The other direction, where the callee is honest and the caller is what must widen: `QueueFree`
