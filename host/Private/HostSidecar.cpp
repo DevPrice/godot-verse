@@ -17,7 +17,7 @@ namespace {
 /// Bumped when the shape below changes in a way a reader of the old shape would misread. The
 /// cooker and the runtime host are built together and shipped together, so this is a tripwire
 /// against a stale cook in a game directory rather than a compatibility mechanism.
-constexpr int32 SidecarVersion = 3;
+constexpr int32 SidecarVersion = 4;
 
 FString Utf8ToFString(const FUtf8String& Value)
 {
@@ -458,11 +458,11 @@ AUTORTFM_DISABLE bool GodotVerse::WriteClassSidecar(const FString& Path,
     Root->SetNumberField(TEXT("version"), SidecarVersion);
 
     // The stamp (D6). The ABI version is the one that governs compatibility and is the one a
-    // mismatch is most likely to be about; the two commits are here because "a different build of
-    // godot-verse" is what an author actually did, and naming it is the difference between a
-    // refusal they can act on and one they cannot.
+    // mismatch is most likely to be about; the host id is a digest of the host sources the cooker
+    // was built from, so it moves when the cook's meaning could have moved and stays put across a
+    // commit that touched only docs. The engine commit is recorded and never compared.
     Root->SetNumberField(TEXT("abi"), VH_ABI_VERSION);
-    Root->SetStringField(TEXT("cookerCommit"), TEXT(VH_BUILD_GODOT_VERSE_COMMIT));
+    Root->SetStringField(TEXT("hostId"), TEXT(VH_BUILD_HOST_ID));
     Root->SetStringField(TEXT("engineCommit"), TEXT(VH_BUILD_ENGINE_COMMIT));
     Root->SetNumberField(TEXT("generation"), Generation);
 
@@ -600,14 +600,14 @@ AUTORTFM_DISABLE bool GodotVerse::ReadCookedManifest(const FString& Path, TArray
     }
 
     const int32 CookedAbi = (int32)Root->GetNumberField(TEXT("abi"));
-    const FString CookerCommit = Root->GetStringField(TEXT("cookerCommit"));
-    if (CookedAbi != VH_ABI_VERSION || CookerCommit != TEXT(VH_BUILD_GODOT_VERSE_COMMIT))
+    const FString CookedHostId = Root->GetStringField(TEXT("hostId"));
+    if (CookedAbi != VH_ABI_VERSION || CookedHostId != TEXT(VH_BUILD_HOST_ID))
     {
         OutError = FUtf8String(FString::Printf(
             TEXT("This game's Verse data was cooked by a different build of godot-verse ")
             TEXT("(cooked %d/%s, host %d/%s). Export the project again."),
-            CookedAbi, *CookerCommit.Left(7), VH_ABI_VERSION,
-            *FString(TEXT(VH_BUILD_GODOT_VERSE_COMMIT)).Left(7)));
+            CookedAbi, *CookedHostId.Left(7), VH_ABI_VERSION,
+            *FString(TEXT(VH_BUILD_HOST_ID)).Left(7)));
         return false;
     }
 

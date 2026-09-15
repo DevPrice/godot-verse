@@ -307,7 +307,7 @@ the editor and `export_check.gd` as an autoload in an export.
 | `host/Private/GodotClassNames.gen.h` | `tools/gen_verse_api.py` | same — every Godot class and the mirrored Verse class an object of it crosses as, which is what R-SCN-6's cast is built on. Every class, not only the emitted ones: a `--classes-file` build still has to make a handle cross as *something*, so each row names its nearest emitted ancestor |
 | `docs/nonatomic-methods.md` | `tools/gen_verse_api.py` | same — R-AUD-3's list. Written by the pass that writes the mirror, so it cannot drift |
 | `src/verse_keywords.h` | `tools/gen_verse_keywords.py` | the UE compiler's `ReservedSymbols.inl` |
-| `bin/host_build_id.gen.h` | `tools/build_host.py` | git — the godot-verse and engine commits, staged into the host's `Private/` and baked into every host binary, so a cooked sidecar and the host reading it can be told apart. Not committed |
+| `bin/host_build_id.gen.h` | `tools/build_host.py` | the staged host sources themselves — a digest of `host/` plus the ABI header, and the engine commit beside it — staged into the host's `Private/` and baked into every host binary, so a cooked sidecar and the host reading it can be told apart. A digest rather than `HEAD` so a doc commit does not invalidate three binaries. Not committed |
 
 **What the mirror is**, since no single file shows it: all 1036 Godot classes as a Verse class
 hierarchy, Godot's own `Object` among them; its 793 enums as real Verse enums; all 1413 of
@@ -384,8 +384,12 @@ it is not in `run_tests.py`.
   answers it without re-entering — without which a stamp mismatch, which is meant to be a sentence,
   took the game down on the second script. `vh_shutdown` tears the engine down; the DLL stays
   resident.
-- **The host's build stamp keys on `HEAD`, so every commit invalidates all three host binaries.**
-  Rebuild all three after committing. `build_host.py` and `scons` stage different halves of
+- **The host's build stamp is a digest of the staged host sources**, so a change under `host/` or
+  to `include/verse_host_abi.h` invalidates all three host binaries and a commit that touched
+  neither — a doc commit — invalidates nothing. It used to key on `HEAD`, which both over- and
+  under-reported: every doc commit relinked three targets and refused every cook taken before it,
+  while an uncommitted edit to `host/` left a stale cook loadable. Rebuild all three after touching
+  the host. `build_host.py` and `scons` stage different halves of
   `addons/godot-verse` — the host and the library — so both have to run before an export is
   trustworthy. `build_host.py` refreshes every copy of the addon, not just `demo/`'s.
 - **Loading the host moves the process working directory, and the bridge moves it back.** The
@@ -626,7 +630,7 @@ it is not in `run_tests.py`.
   `PackageRelativeVersePath` is dead under VerseVM — and asking the *semantic* program for one must
   not use `EPathMode::PackageRelative`, which is fatal for a class with no package.
 - **A runtime host has no semantic program and can never build one**, so everything the analysis
-  alone could describe is recorded and carried in the sidecar (version **3**): the declared types of
+  alone could describe is recorded and carried in the sidecar (version **4**): the declared types of
   every member, method and signal, **whether a member is `var`** (without which every write an
   exported game made to its own state was silently dropped), the payload of all 503 mirrored
   engine-signal accessors (without which `Timer.Timeout().Await()` connects and never resumes), and

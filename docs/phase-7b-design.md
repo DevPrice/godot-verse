@@ -536,6 +536,17 @@ All three refusals are reachable and were run by hand:
 - mismatched — *"This game's Verse data was cooked by a different build of godot-verse (cooked
   8002/deadbee, host 8002/2b171df). Export the project again."*
 
+**Later: the godot-verse commit was the wrong identity, and is now a digest of the host sources.**
+"Rewritten only when it changes" was true and useless — the commit changed on *every* commit, so a
+doc-only commit relinked all three host targets and invalidated every cook taken before it, while
+the case the stamp exists for, an edited-but-uncommitted `host/`, moved nothing and left a stale
+cook loadable. `VH_BUILD_GODOT_VERSE_COMMIT` is now `VH_BUILD_HOST_ID`, a SHA-256 over the file set
+`build_host.py` stages — `host/` plus `include/verse_host_abi.h`, which is everything the three
+targets compile from this repo — and the sidecar's `cookerCommit` is `hostId` (sidecar version
+**4**). The engine commit is still recorded and still never compared. The refusal's wording is
+unchanged; the two seven-character strings in it are digest prefixes rather than commits, and
+`verse_host.build.txt` beside the binary is where a commit is still written.
+
 ### 13.6 Three defects that only an exported game could show
 
 None of these is about the container. All three had been shipping since 7a, behind a wall that

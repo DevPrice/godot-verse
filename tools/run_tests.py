@@ -177,7 +177,7 @@ COOK_EXPECTED_CLASSES = ["debug_probe", "exports", "tasks"]
 
 # What HostSidecar.cpp is writing. Asserted rather than ignored because the sidecar is the one
 # cooked artifact a human reads, and a version nobody bumped is how a reader-writer pair drifts.
-SIDECAR_VERSION = 3
+SIDECAR_VERSION = 4
 
 
 def run_cook(results: Results, engine: Path) -> None:
@@ -268,7 +268,7 @@ def _check_sidecar(path: Path, expected_classes: list[str], name: str) -> bool:
         return False
 
     ok = True
-    for field in ("abi", "cookerCommit", "engineCommit", "generation"):
+    for field in ("abi", "hostId", "engineCommit", "generation"):
         if sidecar.get(field) in (None, "", "unknown"):
             ok = False
             print(f"[{name}] verse_classes.json carries a {field}: FAIL")
