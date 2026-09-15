@@ -22,6 +22,7 @@ void VerseEditorPlugin::_enter_tree() {
 	// to declare them from -- reading them works without it, but they would not appear in the
 	// Editor Settings dialog for anyone to set (R-DIST-12).
 	verse_host_paths::register_editor_settings();
+	verse_host_paths::sync_environment_for_play();
 
 	highlighter.instantiate();
 	EditorInterface::get_singleton()->get_script_editor()->register_syntax_highlighter(highlighter);
@@ -52,6 +53,10 @@ void VerseEditorPlugin::_exit_tree() {
 }
 
 bool VerseEditorPlugin::_build() {
+	// EditorNode::call_build() runs this right before Play spawns its own process, which is the
+	// last point in the editor's process that a Play session's environment can still be changed.
+	verse_host_paths::sync_environment_for_play();
+
 	VerseScriptLanguage *language = VerseScriptLanguage::singleton();
 	if (language == nullptr) {
 		return true; // Nothing registered the language, so there is nothing of ours to build.

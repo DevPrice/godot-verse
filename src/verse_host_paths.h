@@ -36,4 +36,12 @@ godot::String unconfigured_message();
 // name simply fails has_setting and falls through to the next store.
 void register_editor_settings();
 
+// Copies any of the three EditorSettings entries that resolve() would otherwise find into this
+// process's own environment, when the environment does not already name one. A Play session loads
+// this same library in a *child* process with is_editor_hint() false (verse_script_language.h), so
+// EditorSettings is invisible to it -- the environment, which a child inherits, is the only store
+// that crosses. Call before anything spawns a child process expected to load the host; `_build()`
+// is that point for Play, since EditorNode::call_build() runs it first.
+void sync_environment_for_play();
+
 } // namespace verse_host_paths

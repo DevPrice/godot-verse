@@ -157,6 +157,31 @@ String verse_host_paths::unconfigured_message() {
 			String(", or set Editor Settings > Verse > Host > Engine Dir to the same directory.");
 }
 
+void verse_host_paths::sync_environment_for_play() {
+	OS *os = OS::get_singleton();
+	if (os == nullptr) {
+		return;
+	}
+	struct Pair {
+		const char *env_name;
+		const char *setting_name;
+	};
+	const Pair pairs[] = {
+		{ "UE_ROOT", ENGINE_SETTING },
+		{ "VERSE_HOST_DLL", DLL_SETTING },
+		{ "VERSE_COOKER", COOKER_SETTING },
+	};
+	for (const Pair &pair : pairs) {
+		if (!from_environment(pair.env_name).is_empty()) {
+			continue;
+		}
+		const String value = from_editor_settings(pair.setting_name);
+		if (!value.is_empty()) {
+			os->set_environment(pair.env_name, value);
+		}
+	}
+}
+
 void verse_host_paths::register_editor_settings() {
 	Ref<EditorSettings> settings = editor_settings();
 	if (settings.is_null()) {
