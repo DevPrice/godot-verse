@@ -232,7 +232,10 @@ def run_cook(results: Results, engine: Path) -> None:
                 ok = False
                 print(f"[verse_cook] did not write {expected}: FAIL")
 
-        for unwanted in ("_loose", "Cooked/global.utoc", "Engine/Content"):
+        # `sources.txt` is here because everything in this directory ships: the plugin stopped
+        # writing the manifest inside it, but a cache directory from before that fix kept one, and
+        # kept shipping the author's absolute paths with it.
+        for unwanted in ("_loose", "Cooked/global.utoc", "Engine/Content", "sources.txt"):
             if (out_dir / unwanted).exists():
                 ok = False
                 print(f"[verse_cook] shipped {unwanted}, which is an intermediate: FAIL")
@@ -537,6 +540,9 @@ EXPORT_DATA_FILES = [
     "Engine/Binaries",
     "verse_classes.json",
 ]
+# Everything the shipped data directory is allowed to hold at its top level. The export copies the
+# cooker's cache directory whole, so anything else in it is shipped too.
+EXPORT_DATA_DIR_ENTRIES = {"Cooked", "Engine", "verse_classes.json"}
 # Three of the project's own classes, one of them in a module -- the module prefix is half of a
 # class's name, and it is what the kept `.vmodule` markers decide.
 EXPORT_EXPECTED_CLASSES = ["marshal", "signals", "left/widget"]
@@ -645,6 +651,16 @@ def run_export(results: Results, engine: Path | None, godot: Path | None) -> Non
             else:
                 ok = False
                 print(f"[export] the data directory holds {name}: FAIL")
+
+        # And nothing else, because everything in this directory ships. Asserting only what is
+        # *present* let a manifest with the author's absolute paths ride along in every export for
+        # as long as one cache directory had a copy (7b §13.6, and again in §13.12).
+        strays = sorted(p.name for p in data.iterdir() if p.name not in EXPORT_DATA_DIR_ENTRIES)
+        if strays:
+            ok = False
+            print(f"[export] the data directory ships nothing but the cook's output: FAIL -- {strays}")
+        else:
+            print("[export] the data directory ships nothing but the cook's output: ok")
 
         if (data / "verse_classes.json").is_file():
             ok = _check_sidecar(data / "verse_classes.json", EXPORT_EXPECTED_CLASSES, "export") and ok

@@ -272,13 +272,22 @@ AUTORTFM_DISABLE INT32_MAIN_INT32_ARGC_TCHAR_ARGV()
 	// Bounded to what this program writes rather than a wipe of OutDir: the argument is a path
 	// handed in from outside, and "delete the directory you were pointed at" is not something a
 	// tool should do on a typo.
+	//
+	// `sources.txt` is on the list because it is a name this program's *caller* used to write here
+	// and no longer does. The plugin writes the manifest as a sibling now (§13.6), but a machine
+	// that exported before that fix still has the old one sitting in its cache directory -- and
+	// **everything in this directory ships**, so it went on leaking the author's absolute paths
+	// into every export for as long as the file existed. Found by hand, in an export made after
+	// §13.6 was written and believed closed.
 	for (const TCHAR* Owned : {TEXT("Cooked"), TEXT("Engine"), TEXT("_loose")})
 	{
 		IFileManager::Get().DeleteDirectory(*FPaths::Combine(OutDir, Owned),
 		                                    /*RequireExists*/ false, /*Tree*/ true);
 	}
-	IFileManager::Get().Delete(*FPaths::Combine(OutDir, TEXT("verse_classes.json")),
-	                           /*RequireExists*/ false);
+	for (const TCHAR* Owned : {TEXT("verse_classes.json"), TEXT("sources.txt")})
+	{
+		IFileManager::Get().Delete(*FPaths::Combine(OutDir, Owned), /*RequireExists*/ false);
+	}
 
 	Say(FString::Printf(TEXT("verse_cook: compiled generation %d; cooking"), Generation));
 	FUtf8String CookError;
