@@ -1,6 +1,6 @@
 # godot-verse — Roadmap
 
-**Status:** Draft 14 · 2026-09-14 · **Phases 0–6 complete; Phase 7 is designed.**
+**Status:** Draft 15 · 2026-09-14 · **Phases 0–6 complete; Phase 7a built, 7b blocked.**
 [`phase-7-design.md`](phase-7-design.md) is the plan, written before the work from an interview
 and three delegated reads of the engine sources: §1 is the decisions, §2 the spikes (S-1, OQ-10,
 ran during the planning), §4–§10 the stages in build order, §13 the section the implementing agent
@@ -717,50 +717,89 @@ stated where it looks worst.
 
 ---
 
-## Phase 7 — Export, and the platforms it reaches — **designed**
+## Phase 7a — Export, and what it can produce — **built**
 
 **Why now.** Before 1.0, as decided — and **before 4b**, by the decision recorded in
 [`phase-7-design.md`](phase-7-design.md) D1: export is the next thing worth having and shares
 nothing with the editor's data model. 4b stays where it is above, unbuilt and owed before 1.0.
 
-The design is the whole plan and this section is its summary; where they disagree, the design is
-the record. What it fixes:
+**The phase was split while it was being built, and this is the half that closed.** The design is
+one document for both halves; **§13 is the part to read**, because it is where the design turned
+out to be wrong, and **§13.7 is why there is a 7b at all**. Where the summary below and the design
+disagree, the design is the record.
 
-- **R-DIST-11 and the host split** — precompiled Verse, per the S-1 answer (spec §14.1). `host/`
-  becomes three targets over one set of sources: today's **editor host**, a **cooker** that is an
+What 7a fixes:
+
+- **The host split, and R-DIST-11 in full** — precompiled Verse, per the S-1 answer (spec §14.1).
+  `host/` is three targets over one set of sources: the **editor host**, a **cooker** that is an
   editor-class *executable* the export plugin runs as a subprocess, and a **runtime host** with
-  `WITH_VERSE_COMPILER=0` that ships with the game (Development for the debug template, Shipping
-  for release). One ABI header serves all three: the runtime host answers `VH_ERR_UNSUPPORTED` for
-  the eleven compiler-side entry points and `vh_host_kind()` says which host was loaded, so a
-  wrong DLL is one sentence rather than a crash. ABI **8.2**.
-- **OQ-10, run during planning** — an editor-class Program target does build, *provided it also
-  compiles against Engine*: with Engine merely dragged in by Solaris's own rules and `WITH_ENGINE=0`,
-  UHT cannot resolve `UWorld` for the three headers that say `Within=`. Design §2 S-1 has the four
-  builds; the link result is the implementing agent's first line in §13.
-- **R-DIST-9, R-DIST-10** — Godot's ordinary export dialog. Cooked packages and a serialised
-  class-shape sidecar go in a `verse_<app>_<platform>_<arch>` directory beside the executable,
-  which is .NET's layout and doubles as the host's engine directory; the runtime host DLL rides as
-  a `.gdextension` `[dependencies]` row; `.verse` sources are stripped to one-byte stubs the way C#
-  strips `.cs`. `verse/host/dll_path` and `engine_dir` become editor-only.
-- **R-PLAT-1, R-PLAT-5, narrowed to this machine** — Windows exports and runs; Linux is built with
-  UBT's cross-toolchain and *attempted* under WSL2; macOS is written as blocked on hardware, with
-  its layout decided. R-PLAT-1 stays MUST at status *part*.
-- **R-PLAT-4** — an export to Android, iOS or web fails at export with a sentence.
-- **Godot 4.7 official** is the editor and the templates from stage 0 on; godot-cpp's 4.6 API dump
-  and the mirror are regenerated first.
-- **An `export` layer in `run_tests.py`** exports *both* `tests/integration` and `dodge-the-creeps`
-  headless and runs the results — the first is the coverage, the second is the exit.
+  `WITH_VERSE_COMPILER=0` that ships with the game. One ABI header serves all three: the runtime
+  host answers `VH_ERR_UNSUPPORTED` for the eleven compiler-side entry points and `vh_host_kind()`
+  says which host was loaded, so a wrong DLL is one sentence rather than a crash. ABI **8.2**.
+  The runtime host links **no Verse compiler at all** — the modules are behind
+  `Target.bBuildWithEditorOnlyData` and `HostScript.cpp`'s compiler-side bodies behind the matching
+  `#if`, so "no compiler ships" is a fact about the bytes rather than about the data directory.
+- **OQ-10, closed** — an editor-class Program target builds, links and boots, *provided it also
+  compiles against Engine*, is an executable rather than a DLL, and carries developer tools. Design
+  §2 S-1 has the seventeen builds; §13.5 has what the body cost after that.
+- **R-DIST-9** — Godot's ordinary export dialog produces the whole tree. Cooked packages and the
+  class sidecar go in a `verse_<app>_<platform>_<arch>` directory beside the executable, which is
+  .NET's layout and doubles as the host's engine directory; the runtime host rides as a
+  `.gdextension` `[dependencies]` row; `.verse` sources are stripped to one-byte stubs the way C#
+  strips `.cs`, and `.vmodule` markers are kept by hand because a module is half of a class's name.
+  `verse/host/dll_path` and `engine_dir` are editor-only.
+- **R-PLAT-4** — an export to Android, iOS or web fails at export with a sentence. §13.4 records
+  why the plugin also withholds the data directory: `add_message(EXPORT_MESSAGE_ERROR)` reports but
+  does not abort.
+- **Godot 4.7 official** is the editor and the templates. godot-cpp is on the commit that carries
+  `extension_api-4-7.json`, `SConstruct` exports `api_version` to pick it, and the mirror is
+  regenerated: 1036 classes, 793 enums, 1437 virtuals, 503 signal accessors, 3312 properties.
+- **An `export` layer in `run_tests.py`** exports `tests/integration` headless and asserts the tree
+  it produced. It does not launch the result — that is 7b's — and it does not export
+  `dodge-the-creeps`, which stays the by-hand yardstick it was always meant to be.
 
-**Not in this phase, by decision:** R-PLAT-2 (mobile, deferred with no design; OQ-3 stays open),
-R-PLAT-3 (web — Phase 7.5 below), R-DIST-3, R-DIST-4 and R-DIST-5 (Phase 8 as before; the kind
-check closes the "wrong host" half of R-DIST-5 as a side effect), in-PCK cooked data with
-extraction (held in reserve for single-file exports), and 4b.
+**Exit:** `run_tests.py` reports four layers; the fourth exports `tests/integration` from the 4.7
+editor and asserts the data directory, the staged runtime host, the stubbed sources, the kept
+`.vmodule` markers and the sidecar's contents; the abi layer drives `verse_cook.exe` over
+`tests/host_smoke`'s fixtures and asserts what it wrote; an Android export fails with one sentence;
+design §13 is written.
 
-**Exit:** `run_tests.py` reports four layers and the fourth exports both projects from the 4.7
-editor and runs them under the runtime host, green, in the release template; the exported
-`dodge-the-creeps` plays on a machine with nothing installed and ships no `.verse` and no compiler;
-an Android export fails at export time with one sentence; Linux artefacts build and the attempt is
-recorded; macOS is recorded blocked; design §13 is written.
+---
+
+## Phase 7b — Loading what the cooker wrote — **designed only as far as §13.7**
+
+**The wall, in one line:** `FLinkerLoad` has no `Verse::VCell` support, so a Verse package can be
+cooked to a loose `.uasset` and cannot be *loaded* from one. Only the IoStore loader's
+`FExportArchive` reads a cell (`AsyncLoading2.cpp:3185`), which is why the save writes its four
+bytes (`LinkerSave.cpp:399`) and the load consumes none. An exported game therefore boots, loads
+the runtime host, registers its mount points, starts loading `/GodotAttributes/_Verse` and dies on
+*"Missing VClass for VerseClass … This class should have been created in-memory from a VClass, not
+loaded from a cooked package."*
+
+**There is no design document yet, and `phase-7-design.md` §13.7 is the brief** — it has the
+evidence, the three candidate routes and what is unknown about each. The loose files the cooker
+already writes are the *input* to the most likely one: a legacy cooked header does carry the cells,
+and `FPackageStoreOptimizer::CreatePackageFromCookedHeader` builds a zen package from one.
+
+What 7b owes, beyond the wall itself:
+
+- **R-DIST-10** — the exported `dodge-the-creeps` plays on a machine with nothing installed.
+- **The export layer's second half** — launching what it exported, which needs `test_main.gd`'s
+  1391 lines split into a library the way `dodge-the-creeps/checks.gd` already is, so the same
+  lines run in-editor and exported.
+- **Two VNI packages that cannot be cooked** — `/Solaris/_Verse/VNI/VerseNative` and `VersePredicts`
+  hold `UVerseClass` objects whose `Verse::VClass` is null, and the cook skips them with a warning
+  (§13.5). Whether a runtime host needs them is unknown, because loading never got that far. It may
+  be a second wall of the same kind behind the first.
+- **R-PLAT-1 and R-PLAT-5, Linux** — deferred here rather than in 7a, and not only for the
+  toolchain: `src/verse_host.cpp` is `LoadLibraryExW` with no `dlopen` path at all, and exporting
+  to a platform that cannot load what it ships is not worth verifying. macOS stays blocked on
+  hardware with its layout decided (design §10).
+
+**When it is picked up**, the phase's own rule applies and 7a is the argument for it: run the spike
+that could reshape everything — can a container be built in-process and mounted by the runtime host
+— *during* the planning, the way Phase 6's S-1 and Phase 7's S-1 were. 7a built a working cooker
+behind a wall precisely because S-5 ran after stage 1 instead of before it.
 
 ---
 

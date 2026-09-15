@@ -424,9 +424,12 @@ Ref<Script> VerseScriptLanguage::_make_template(const String &p_template, const 
 	source = source.replace("_CLASS_", class_name.to_snake_case());
 	source = source.replace("_BASE_", verse_base_class_for(p_base_class_name));
 
-	VerseScript *script = memnew(VerseScript);
+	// memnew of a RefCounted answers a Ref<T> from Godot 4.7 on (godot-cpp's memnew_result
+	// specialisation in ref.hpp, gated on GODOT_VERSION_MINOR >= 7), and the reference is already
+	// counted -- so this hands the Ref straight back rather than taking a raw pointer.
+	Ref<VerseScript> script = memnew(VerseScript);
 	script->set_source_code(source);
-	return Ref<Script>(script);
+	return script;
 }
 
 bool VerseScriptLanguage::_is_using_templates() {
@@ -434,7 +437,14 @@ bool VerseScriptLanguage::_is_using_templates() {
 }
 
 Object *VerseScriptLanguage::_create_script() const {
-	return memnew(VerseScript);
+	Ref<VerseScript> script = memnew(VerseScript);
+
+	// The caller takes ownership of a raw pointer, and since 4.7 the Ref above already holds the
+	// one reference memnew counted -- so without this the script is freed the moment this returns.
+	// One more reference leaves the count at one when the Ref goes out of scope, which is the state
+	// Godot's own ScriptLanguage::create_script() hands back.
+	script->reference();
+	return script.ptr();
 }
 
 // Every error moved onto a position that exists in p_source.

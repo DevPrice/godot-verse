@@ -175,9 +175,18 @@ TARGET_BINARIES = {
 }
 
 
+def binary_for(target: str, config: str) -> str:
+    """What UBT names the target's binary. Only Development goes unsuffixed."""
+    name = TARGET_BINARIES[target]
+    if config == "Development":
+        return name
+    stem, _, suffix = name.rpartition(".")
+    return f"{stem}-Win64-{config}.{suffix}"
+
+
 def collect_outputs(engine: Path, repo: Path, config: str, target: str) -> None:
     bin_dir = engine / "Engine" / "Binaries" / "Win64"
-    binary_name = TARGET_BINARIES[target]
+    binary_name = binary_for(target, config)
     dll_path = bin_dir / binary_name
 
     if not dll_path.exists():
@@ -216,13 +225,20 @@ def collect_outputs(engine: Path, repo: Path, config: str, target: str) -> None:
     if target == "VerseHostRuntime":
         # demo/, not the repo-root addons/: demo is what SConstruct builds into and copies from,
         # so anything that has to reach the other projects' addons has to be there first.
+        #
+        # Staged under the unsuffixed name whatever the configuration, because the .gdextension's
+        # [dependencies] rows name one file and VerseRuntime looks for one file. Which
+        # configuration a game ships is therefore whichever was built last, and D12's "Development
+        # for the debug template, Shipping for release" needs two names before it is true.
+        # Shipping is 72.7 MB against Development's 112.4, so the choice is not academic.
         addon_bin = repo / "demo" / "addons" / "godot-verse" / "bin" / "windows-x86_64"
         addon_bin.mkdir(parents=True, exist_ok=True)
-        for name in (binary_name, "tbbmalloc.dll"):
-            source = bin_dir / name
-            if source.exists():
-                shutil.copy2(source, addon_bin / name)
-                print(f"[build_host] staged {source} -> {addon_bin / name}")
+        shutil.copy2(dll_path, addon_bin / TARGET_BINARIES[target])
+        print(f"[build_host] staged {dll_path} -> {addon_bin / TARGET_BINARIES[target]}")
+        tbb = bin_dir / "tbbmalloc.dll"
+        if tbb.exists():
+            shutil.copy2(tbb, addon_bin / tbb.name)
+            print(f"[build_host] staged {tbb} -> {addon_bin / tbb.name}")
 
     write_provenance(engine, repo, config, [bin_dir / PROVENANCE_NAME, out_dir / PROVENANCE_NAME])
 

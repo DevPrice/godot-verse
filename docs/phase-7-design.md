@@ -638,12 +638,19 @@ and it is what stops an exported game from loading what the cooker writes.
 (it looks for `extension_api.json` or `extension_api-<api_version>.json` and `api_version` is not
 passed).
 
-The fallback — "dump the API from the installed binary into the submodule's `gdextension/`" — is
-what was taken, but **not into the submodule**. A modified submodule is reverted, silently and to a
-*different Godot version*, by the `git submodule update --init --recursive` that `SConstruct`'s own
-error message tells people to run. The dump is a tracked `gdextension/` at the repo root, and
-`SConstruct` points godot-cpp at it with `gdextension_dir`; `tools/gen_verse_api.py` and
-`tools/audit_const_overrides.py` read it from there.
+**The submodule moved to master instead**, which is where 4.7 landed. The dump there is
+byte-identical to the one the installed 4.7 editor produces, so the mirror does not move: only the
+provenance comment at the top of each generated file changed. `SConstruct` exports
+`api_version = "4.7"` into godot-cpp's SConscript, which is how master picks between the five dumps
+it carries; `tools/gen_verse_api.py` and `tools/audit_const_overrides.py` name
+`godot-cpp/gdextension/extension_api-4-7.json` directly.
+
+**135 commits of godot-cpp churn cost two lines.** Since 4.7, `memnew` of a `RefCounted` answers a
+`Ref<T>` rather than a raw pointer (`ref.hpp`'s `memnew_result` specialisation, gated on
+`GODOT_VERSION_MINOR >= 7`), with the reference already counted. `VerseScriptLanguage::_make_template`
+hands the `Ref` straight back now; `_create_script` has to `reference()` before returning
+`.ptr()`, because the caller takes ownership of a raw pointer and the `Ref` would otherwise free
+the script on the way out.
 
 4.7 is additive against 4.6: 1036 classes (13 new, none removed), 793 enums, 1437 virtuals, 503
 signal accessors, 3312 properties, 1132 non-atomic methods, 411 math skips. The math layouts are
@@ -665,14 +672,39 @@ all one thing: `ISolarisModule` loses `CreateProjectSource`, `MakeDevEnvironment
 `IncrementalizeProjectSource`. The rest of `HostScript.cpp`'s 7848 lines compiles unchanged, and so
 does everything else in `host/`.
 
-**The modules did not drop out of the graph.** §2 expected `VerseCompiler`, `uLangUE`'s IDE half,
-`SolarisTestUtils`, `ScriptDisassembler` and `VerseSimulationMetadata` to "either drop out of the
-graph or refuse to build"; `VerseHost.Build.cs` lists them unconditionally, so they compile and
-link. The runtime host is **112.3 MB** against the editor host's 115.9 — a Verse compiler that
-nothing can reach, because no `ISolarisIde` can be constructed, but present. Trimming it means
-putting every uLang include and every IDE-side body in `HostScript.cpp` behind
-`#if WITH_VERSE_COMPILER`, which is a large mechanical change and is **not done**. R-DIST-11's
-claim about the *data directory* is unaffected; its spirit is not.
+**The modules did not drop out of the graph, and they cannot be made to.** §2 expected
+`VerseCompiler`, `uLangUE`'s IDE half, `SolarisTestUtils`, `ScriptDisassembler` and
+`VerseSimulationMetadata` to "either drop out of the graph or refuse to build". They do neither,
+and removing them from `VerseHost.Build.cs` changes nothing: **`Solaris` lists `VerseCompiler` and
+`VerseVMCodeGen` in its own *public* dependencies unconditionally** (`Solaris.Build.cs:14-29`) and
+`uLangUE` in its private ones (`:30-40`), with `VerseNative`, `SolarisBridge` and `VerseSpatialMath`
+each pulling one or more of the same set. Solaris is the module that runs Verse; there is no host
+that links one and not the other.
+
+Measured rather than argued: with all five dropped from this host's list the target still compiles
+and links with **zero errors**, `Build.bat VerseHostRuntime Win64 Development -Mode=JsonExport`
+still shows all five in the graph, and the binary stays at **112.4 MB**. The list stays trimmed
+because it is what this host actually depends on, and the comment beside it says why that buys
+nothing — so the next person to ask why a game ships a Verse compiler finds the answer rather than
+repeating the experiment.
+
+**What does help is the configuration, and it had never been built.** `ScriptDisassembler` is
+Solaris's one conditional dependency, added for any configuration that is not Shipping
+(`Solaris.Build.cs:113-115`) — and D12 already says the release template ships Shipping. Built for
+the first time here:
+
+| | Development | Shipping |
+| --- | --- | --- |
+| `verse_host_runtime.dll` | 112.4 MB | **72.7 MB** |
+
+A 35% cut, and `bUseLoggingInShipping = true` is set on the base target so it keeps its logging.
+**D12 is not satisfied yet**, though: the `.gdextension`'s `[dependencies]` rows name one file and
+`VerseRuntime::RUNTIME_HOST_FILENAME` looks for one file, so which configuration a game ships is
+whichever was built last. Two names — and a consumer that picks by feature tag — are what "Development
+for the debug template, Shipping for release" needs before it is true.
+
+So **R-DIST-11 is satisfied as written and cannot be satisfied in spirit** without changes inside
+Solaris. That is worth saying in the spec rather than leaving as an aspiration.
 
 `AllowDebugging` (D11) was never reached: nothing has run against the runtime host yet (§13.7).
 
@@ -807,6 +839,30 @@ What this does not change: the compile, the save, the sidecar, the mount points,
 directory beside the executable, the `.gdextension` dependency, the stubs, and the export plugin.
 What it changes is the two lines in the middle — what the cooker writes the package *into*, and
 what the runtime host loads it *out of*.
+
+**This was put to a reading of the UE sources, and the answer came back "container mandatory" with
+five independent confirmations.** Three are worth carrying here because they change what 7b has to
+do:
+
+- **It is a byte-stream desync, not a missing field.** `FLinkerSave::operator<<(Verse::VCell*&)`
+  writes an `FPackageIndex` *unconditionally*, four bytes even for a null cell
+  (`LinkerSave.cpp:399-411`); `FLinkerLoad` has no override, so the call lands on the base
+  `FArchive::operator<<(Verse::VCell*&)`, whose whole body is `return *this;`
+  (`Core/Public/Serialization/Archive.h:1283-1286` — verified by hand). Every export that references
+  a cell mis-parses everything after it. There is no graceful degradation to lean on.
+- **Nothing in the engine warns about it.** The Solaris plugin tree has no mention of IoStore, zen
+  or containers at all; `LooseCookedPackageWriter.cpp` has no mention of cells. The only code that
+  notices the combination is `AssetHeaderPatcher.cpp:1563-1567`, which *refuses* a package with
+  `"Asset %ls contains unexpected VCells"`. It fails silently everywhere else.
+- **The legacy header's cell tables exist for the converter.** Their only readers are the asset
+  registry's `PackageReader.cpp:511-558`, `FPackageStoreOptimizer` and that patcher — no runtime
+  loader is among them. The summary carries cells *so the optimizer can find them*.
+
+A fourth is a lead rather than a finding, and is where 7b should start: `WITH_IOSTORE_IN_EDITOR=1`
+is defined for `bCompileAgainstEditor && (Editor || Program)` (`UEBuildTarget.cs:7103-7106`,
+verified), which is what lets `-UseIoStore` bring the package-store backend up without a global
+container. **That covers the cooker and not the runtime host**, which is not `bCompileAgainstEditor`
+— so the mounting half has a different gate to satisfy and it has not been traced.
 
 **The loose files this cooker writes are not wasted, and that is the shape of the way out.** The
 *legacy* cooked header does carry the cells — `FLinkerSave::Summary` has `CellImportCount` and

@@ -24,11 +24,11 @@ Run the following command to download godot-cpp:
     git submodule update --init --recursive""")
     sys.exit(1)
 
-# The API dump lives here, not in the submodule: godot-cpp's pinned commit carries 4.6 and
-# a modified submodule is reverted by the `git submodule update` the message above asks for.
-env["gdextension_dir"] = os.path.abspath("gdextension")
-
-env = SConscript("godot-cpp/SConstruct", {"env": env, "customs": customs})
+# godot-cpp carries a dump per Godot version and will not pick one for you: `api_version` is
+# exported into its SConscript, which turns it into gdextension/extension_api-4-7.json. Bumping
+# Godot means bumping this, the submodule if the dump is not in it yet, and compatibility_minimum
+# in godot-verse.gdextension.in, and then regenerating the mirror.
+env = SConscript("godot-cpp/SConstruct", {"env": env, "customs": customs, "api_version": "4.7"})
 
 if env.get("is_msvc", False):
     env["CXXFLAGS"].remove("/std:c++17")
