@@ -486,8 +486,10 @@ No test framework anywhere. Each test is a `main` (or a plain script) that print
 and exits non-zero on failure; keep new tests that shape. The integration layer is the same shape
 in GDScript — `tests/integration/test_main.gd`, one line per case, `quit(1)` on failure.
 
-`tests/integration` is a real Godot project, and two things in it are not committed but generated:
-`run_tests.py` copies the built GDExtension into its `addons/`, writes `.godot/extension_list.cfg`
+`tests/integration` is a real Godot project, and three things in it are not committed but generated:
+`run_tests.py` copies the built GDExtension into its `addons/` and generates its `.gdextension`
+from what is actually on disk — so the integration layer runs against an editor build alone and the
+export layer skips itself when the release library is absent — writes `.godot/extension_list.cfg`
 (outside the editor Godot loads extensions from that list rather than by scanning, and the editor is
 what normally writes it), and rewrites the two `verse/host/*` settings from `UE_ROOT` — those name
 one machine's engine checkout, so nothing portable can be committed. Adding a `.verse` fixture there
