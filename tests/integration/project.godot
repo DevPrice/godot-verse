@@ -1,14 +1,3 @@
-; Engine configuration file.
-;
-; The integration test project (R-QUAL-1). Driven headless by tools/run_tests.py, which copies the
-; built GDExtension into addons/ and generates the .gdextension from what is on disk. Nothing
-; machine-specific is written here: the extension reads UE_ROOT, which run_tests.py exports into
-; every Godot it launches (R-DIST-12).
-;
-; main_scene and the autoload are the exported run's alone. `--script res://test_main.gd` replaces
-; the main loop, so the editor-side run loads neither -- and the autoload does nothing at all
-; without `-- --verse-check` after it.
-
 config_version=5
 
 [application]

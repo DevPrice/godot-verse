@@ -582,7 +582,27 @@ export layer skips itself when the release library is absent — writes `.godot/
 what normally writes it). It no longer rewrites any `verse/host/*` setting: `run_tests.py` exports
 `UE_ROOT` into every Godot it launches and the extension reads that first (R-DIST-12), so nothing
 machine-specific is written into a committed file. Adding a `.verse` fixture there means adding it
-under `scripts/`; the host compiles every `.verse` under `res://` together.
+under `scripts/`; the host compiles every `.verse` under `res://` together. Its `main.tscn` and its
+`VerseExportCheck` autoload are the *exported* run's alone — `--script res://test_main.gd` replaces
+the main loop, so the editor-side run loads neither, and an export with no main scene refuses to
+start.
+
+**Never put a comment in a `project.godot` or in a `dodge-the-creeps/export_presets.cfg`.** The
+editor parses and rewrites both, and it does not preserve comments — anything explanatory there is
+deleted the next time the project is opened, which for the yardstick is often. Those two files are
+**editor-owned**: read the diff before committing them, and blank `export_path` in the preset, which
+the editor fills in with whatever directory you last exported to.
+
+**A Godot export path is stored relative to the project and resolved against the process's working
+directory**, which is a trap worth knowing before it costs an hour. `EditorExportPreset::set_export_path`
+turns an absolute path into a project-relative one (`editor_export_preset.cpp:380-383`), the dialog
+hands that relative string straight to `export_project` (`project_export.cpp:1540`), and
+`prepare_template` tests it with `DirAccess::exists`, which for a bare relative path is **CWD**-relative
+(`editor_export_platform_pc.cpp:156`). Export to a directory outside the project and the stored path
+becomes `../../../Desktop/...`; from an editor whose working directory is not the project, that
+resolves to nothing and the export dies with *"Prepare Template: The given export path doesn't
+exist"* — after the Verse cook has already run and printed its lines, which makes it read like a
+Verse failure and it is not. **Godot also never creates the destination directory**; it must exist.
 
 `dodge-the-creeps/` is the third Godot project and the yardstick: the whole game in Verse, with no
 GDScript in it but `headless_check.gd`, which is how to see it work without a window —
