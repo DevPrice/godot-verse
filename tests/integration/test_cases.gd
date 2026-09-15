@@ -1117,6 +1117,43 @@ func begin() -> void:
 		_check_eq("while a node with no script declines that cast",
 				caster.call("DescribeGiven", sprite2d_as_node2d(sprite)), "no")
 
+	# --- R-NODE-3: an object that is not a node --------------------------------------------------
+	#
+	# host_smoke counts the peers; what only a real Godot can say is that what `helper{}` produced
+	# is a real Godot object -- valid, of the class the mirror walked up to, and the *same* object
+	# on the way back rather than a fresh wrapper around its handle.
+	var objects_script: Script = load("res://scripts/plain_objects.verse")
+	_check("plain_objects.verse compiles", objects_script != null and objects_script.can_instantiate())
+	if objects_script != null:
+		var maker := Node2D.new()
+		maker.set_script(objects_script)
+		tree.root.add_child(maker)
+
+		_check_eq("a Verse class instantiates with no node anywhere in it",
+				maker.call("MakeAndUse"), 3)
+
+		var minted: Object = maker.call("MakeAndKeep")
+		_check("and what comes back is a Godot object", minted != null)
+		_check_eq("of the Godot class the mirror walked up to",
+				minted.get_class() if minted != null else "", "RefCounted")
+		_check("which Godot considers valid", is_instance_valid(minted))
+
+		# Identity. A fresh mirror wrapper of the same handle would be a `ref_counted` and the
+		# script's own downcast would decline, which is what -1 means here.
+		_check_eq("handing it back reaches the very object Verse minted",
+				maker.call("BumpThrough", minted), 42)
+		_check_eq("and the script's own reference saw that write",
+				maker.call("ReadHeld"), 42)
+
+		maker.call("DropHeld")
+		minted = null
+		_check("dropping it is not an error", true)
+
+		# The other lifetime: a node, which the tree owns from the moment it is parented.
+		maker.call("MakeChild", "VerseMade")
+		_check("a node a Verse script made can be added to the tree",
+				maker.get_node_or_null("VerseMade") != null)
+
 	# --- R-AUD-1: what a failure undoes ---------------------------------------------------------
 	#
 	# Phase 4.5's spikes S-3 and S-4, kept as behavioural cases because the rule written next to

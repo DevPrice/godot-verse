@@ -156,7 +156,12 @@ concurrency := class(node2d):
 	# the whole point of a scope per instance, and the case host_smoke and this file both make.
 
 	Raise<public>()<transacts>:void =
-		# Reaching through a handle Godot has freed is a runtime error rather than a failure, which
-		# is the cheapest raise a script can spell on purpose.
-		Dead := node2d{}
-		Dead.QueueFree()
+		# The cheapest raise a script can spell on purpose: an archetype of a mirrored class Godot
+		# will not instantiate. Since R-NODE-3 an archetype asks Godot for the object, and an
+		# abstract class has none to give -- which is a runtime error rather than a failure, because
+		# the script asked for an object rather than asked whether there could be one.
+		#
+		# It used to be `node2d{}` and a call on it, back when that was a handle of 0 and every call
+		# on it found a freed object. `node2d{}` is a live Node2D now.
+		Refused := viewport{}
+		Refused.QueueFree()

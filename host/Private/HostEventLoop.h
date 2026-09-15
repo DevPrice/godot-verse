@@ -67,4 +67,9 @@ AUTORTFM_DISABLE void PumpEventLoop(const verse::FExecutionContext& ExecContext,
 /// Drops queued work while the allocator is still alive. Nothing here may outlive AppExit.
 AUTORTFM_DISABLE void ResetEventLoop();
 
+/// A whole collection, rather than the incremental slice PumpEventLoop takes when the object array
+/// runs short. What vh_collect_garbage is: the only way to make "Verse has dropped this" happen,
+/// which a reference table entry and a Verse-minted Godot object both wait on.
+AUTORTFM_DISABLE void CollectGarbageNow();
+
 } // namespace GodotVerse

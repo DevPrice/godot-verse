@@ -1,6 +1,8 @@
 # Phase 4b — The editor's data model: objects that are not nodes
 
-**Status:** Designed 2026-09-15, not built. §2's six spikes ran **before** this document rather than
+**Status:** Designed 2026-09-15; **§3 and §4 built 2026-09-15, §5–§9 not.** §15 is what the work
+corrected, and it corrects more of this document than usual — including the fact that §3 describes
+something that already existed. Read it before trusting §3 or §4.2. §2's six spikes ran **before** this document rather than
 after it, which is the repo's habit and not 4.5's exception. All six are in `tests/verse_probe/`,
 with a seventh (`default_cdo_probe.verse`) filed under §4.5 rather than §2 because it settles a
 *rejected* option. Three of them changed what §4 and §8 say, and **S-6 needed a real host build**
@@ -679,5 +681,120 @@ a node and the object is collected when it should be; `print(node)` in GDScript 
 
 ## 15. What building this corrected
 
-*Written after the work. Every phase document in this repo has this section and several of them
-contradict their own §1; leave this heading in place until there is something true under it.*
+*Written after the work.*
+
+**§3 was already built, and the document did not check.** Stage 1 — "a public `variant` façade" —
+describes work that shipped in Phase 2, commit `1c3441a`, three days before this document was
+written. `gen_verse_api.py`'s `emit_variant_readers` emits a public `As<GodotType>` per lane and a
+public `VariantFrom<GodotType>` beside it, plus a `VariantKind` the design did not think to ask for,
+and `tests/integration/test_cases.gd` has had a section headed "R-TYPE-7 amended: a script can name
+a Variant and read it" for as long. §3's §"Done when" was met before §3 was written.
+
+Two of its sentences are worth correcting rather than deleting, because both are wrong in a way a
+reader would act on:
+
+- **The overloaded `MakeVariant` it proposes cannot exist.** §3 spells `MakeVariant(Value:int)`,
+  `MakeVariant(Value:string)` and so on, on S-3's authority that Verse accepts same-named overloads
+  in four forms. The compiler refused exactly this arrangement in Phase 2 — two array-typed
+  overloads are ambiguous whatever their element types, because `array{}` is a call site that
+  cannot resolve them, and `string` *is* `[]char`; and `VariantFrom(:logic)` is ambiguous with
+  `VariantFrom(:[]char)` for no reason any reading of "overloads on parameter type" predicts. The
+  name per lane is not a stylistic choice, it is the only arrangement that compiles, and the
+  reasoning is already in `gen_verse_api.py` above `VariantLane`. **S-3 was not wrong**; it asked
+  about a class's methods, where overloading does work, and a module-level function is a different
+  question. The lesson is the narrow one: a spike answers the question it was given.
+- **"The lanes stay non-public" is not true and the spec already says so.** §3 says a script "never
+  sees `Tag` or `F0`". R-TYPE-7's own status paragraph records that Verse **forbids** a non-public
+  field on a struct — `Verse::Version::StructFieldsMustBePublic` — so a public struct has public
+  fields, `V.I0` compiles, and this was verified rather than assumed. The guarantee §3 restates is
+  one the spec had already withdrawn.
+
+**What §4 cost that §4.2's list did not have.** The `var Handle` change was four lines, as S-6
+measured. The block clause was not, because of where else it fires:
+
+- **Four host construction paths run it, not one.** §4.3 names `vh_instantiate`; the other three are
+  the mirror wrapper every handle crossing from Godot builds, the bare `vh_object` the fallback
+  answers when Godot will not say what a handle is, and — the one that matters —
+  `NewDefaultsObject`, the throwaway instance the export defaults are read off. Each has an
+  `FAdoptPeerScope` now. The record carries the **class** as well as the handle, so that a *member*
+  of the class being built still mints its own, whichever order the VM runs the base's block and the
+  derived class's initializers in; a bare take-once flag would have been wrong under one of the two
+  orders and there was no need to find out which.
+- **The defaults instance needed more than adopting: it needs suppressing.** Its members'
+  initializers run in full, so a class whose member is `var Held:node2d = node2d{}` — which
+  `tests/host_smoke/exports.verse` has had since Phase 4 — minted a real Node2D **per exporting
+  class, per analysis**, and a Verse-minted node is deliberately never freed. That is a leak on the
+  per-keystroke path, and it was found by the smoke harness's peer counter reporting 30 mints where
+  the test made five. `FSuppressMintScope` is the answer: nothing constructed under a reading device
+  reaches Godot, however deep.
+- **§4.3's ordering question has an answer and no assertion, on purpose.** The block runs
+  **before** the host's own write: `NewObject` drives `UVerseClass::PostInitInstance`, which runs
+  the constructor, and the host writes `Handle` after it returns. The adopt record therefore has to
+  *carry* the handle rather than read it off the object, which it does. There is nothing left to
+  assert — both writes put the same value in the same field, so the two orders are
+  indistinguishable from outside, and what a `host_smoke` case can see is the peer count, which is
+  asserted.
+- **A class-default object runs the block too.** `NewDefaultsObject`'s own comment says a CDO's
+  members read back uninitialized, so this may never fire in practice — but `UVerseClass::NeedsInit`
+  plainly returns true for one, and a guard on `RF_ClassDefaultObject | RF_ArchetypeObject` is two
+  lines against a mint for every mirrored class the process ever names.
+
+**The release hook was written twice, and the first version was silently a no-op.** `BeginDestroy`
+identified its row by comparing a `TWeakObjectPtr` against the object being collected. By the time
+`BeginDestroy` runs the object is already unreachable and **every weak pointer to it reads as
+null**, so the comparison matched nothing, the row was never removed and nothing was ever released.
+It looked exactly like the mechanism not working, and it cost the detour below. The row now carries
+both pointers and says which question each answers: the weak one for "is it still alive", which
+handing the object back to Godot needs, and a raw one for "is this the object that made this row",
+which is compared and never dereferenced.
+
+**`vh_collect_garbage` is new, and it exists because the lifetime half was otherwise untestable.**
+Nothing else can make a collection happen: `vh_tick` collects on object-array pressure and a Godot
+project has no hook into UE's GC at all, so "the peer is released when Verse drops it" could only
+ever have been a claim. It is a minor ABI addition (8.3), the GDExtension does not call it, and
+`host_smoke` does.
+
+Getting it to collect anything took two wrong answers first, both worth recording:
+
+- **Waiting on the VM's collector from the game thread deadlocks**, which is
+  `docs/abi-v2-design.md` §1a's finding arriving from a second direction:
+  `FHeap::RequestFreshCollectionCycle().Wait(Context)` hangs, because the thread that would wait is
+  the one holding heap access the collector needs. §1a says "from inside running Verse code"; the
+  truth is wider than that.
+- **A UE collection on its own frees no Verse object.** Every cell the VM still holds is a root to
+  UE's collector, so a plain `CollectGarbage` destroys nothing a script let go of. The pass that
+  can is UE's *coupled* to the VM's — "FrankenGC" — and `CollectGarbage` only takes that shape while
+  the VM's collector is signalling that it wants to start. So the sequence is: request a fresh
+  cycle, do **not** wait, give the collector the moment it needs to raise the signal, then collect.
+
+And a third thing that is a property of the mechanism rather than a mistake: **release is "within a
+cycle or two", not "on the next one"**. The VM's registers still name what the last frame held, so
+`host_smoke` asserts inside a bounded loop with an unrelated call between collections. §1a's "up to
+one collection cycle" is optimistic; "up to" was doing the work.
+
+**The `node2d{}` footgun did not only close, it took an idiom with it.** §4.2 says the archetype
+that used to produce a dead object now produces a live one, and treats that as pure gain. It is
+also a *breaking* change to four fixtures, because "construct a mirrored class and call a method on
+it" was how `transactions.verse`, `concurrency.verse` and `tasks.verse` spelled a deliberate raise —
+the handle was 0 and every call on it found a freed object. That now succeeds. The replacement is
+better than what it replaced: `viewport{}` is an archetype of a class Godot will not instantiate,
+which raises with a sentence naming the class, and it exercises R-NODE-3's own error path while it
+is at it. Anything outside this repo that leaned on the old behaviour has no such warning, which is
+what a MAJOR would have been for — except that nothing about the *ABI* changed meaning, only what a
+Verse expression does, and the ABI has no version for that.
+
+**What it cost, measured.** §13's open number: `vh_instantiate` is **5.2 µs per node**, which is
+what `docs/spec.md` R-PERF-2 recorded before the block clause existed. A native call per
+construction, on the path every scripted node takes, did not move it. `vh_instance_call` is 0.24 µs
+against a recorded 0.27, which is noise in the other direction.
+
+**What the identity half bought, which §4 did not ask for.** `ObjectForHandle` consults the minted
+table before building a mirror wrapper, so an object a script made crosses back out to Godot and in
+again as *the same Verse object* — which is what lets a script's own downcast succeed on it, and
+what makes "holds, and passes around" in R-NODE-3's own wording true rather than nearly true. The
+table had to exist anyway for the release hook; the identity is what it costs nothing extra to also
+answer. The other half of R-SCN-6's identity question, arriving three phases later.
+
+**Still true, and worth saying because §4 rests on all of it:** the block clause fires for a user
+class across the package boundary, at two levels of derivation, with `Self` already at the derived
+type; `helper{}` needs no new syntax; and R-TYPE-7 is not amended by any of it.

@@ -2949,6 +2949,27 @@ inline constexpr class_name class_names[] = {{
 {entries}
 }};
 
+// The other direction, for R-NODE-3: a Verse class the host is about to instantiate, and the Godot
+// class whose object is its peer. `helper{{}}` on a `class(ref_counted)` walks up to `ref_counted`
+// and this is what turns that into the `RefCounted` that ClassDB::instantiate is given.
+//
+// **The emitted classes only**, which is what makes it the inverse of the table above rather than
+// a second copy of it. That one maps every Godot class onto its nearest *emitted* ancestor, so
+// several rows share a Verse name in a --classes-file build and reversing it would be ambiguous;
+// here each Verse class appears once, naming the Godot class it was generated from.
+//
+// Sorted by Verse name, for binary search.
+
+struct mirrored_class
+{{
+	const char *verse_name;
+	const char *godot_name;
+}};
+
+inline constexpr mirrored_class mirrored_classes[] = {{
+{mirrored_entries}
+}};
+
 }} // namespace verse_classes
 """
 
@@ -2963,9 +2984,11 @@ def render_class_names_header(api: dict, emit_order: list) -> str:
             cur = parents.get(cur)
         rows.append((c["name"], verse_class_name(cur) if cur else "object"))
     rows.sort()
+    mirrored = sorted((verse_class_name(name), name) for name in emitted)
     return CLASS_NAMES_HEADER_TEMPLATE.format(
         version=api["header"]["version_full_name"],
         entries="\n".join(f'\t{{ "{godot}", "{verse}" }},' for godot, verse in rows),
+        mirrored_entries="\n".join(f'\t{{ "{verse}", "{godot}" }},' for verse, godot in mirrored),
     )
 
 

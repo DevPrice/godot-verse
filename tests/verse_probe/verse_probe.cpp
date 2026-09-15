@@ -57,6 +57,23 @@ static int32_t ProbeCallMethod(void*, vh_handle, const char*, int32_t, const vh_
 	return VH_CALL_DEAD_OBJECT;
 }
 
+/* R-NODE-3: `helper{}` asks Godot for an object, and there is no Godot here. A fresh fake id per
+ * ask, and the class printed, is enough to make the question "what class did the mirror walk up
+ * to?" one the probe can answer -- and without these a probe fixture that constructs anything at
+ * all raises instead of running. */
+static int64_t NextProbeHandle = 5000;
+
+static vh_handle ProbeInstantiateClass(void*, const char* ClassUtf8, int32_t ClassLen)
+{
+	printf("[probe]   instantiate %.*s -> %lld\n", ClassLen, ClassUtf8, (long long)NextProbeHandle);
+	return NextProbeHandle++;
+}
+
+static void ProbeReleaseObject(void*, vh_handle Handle, vh_bool Discard)
+{
+	printf("[probe]   release %lld%s\n", (long long)Handle, Discard != 0 ? " (discarded)" : "");
+}
+
 static int ErrorCount = 0;
 
 static const char* SeverityName(int32_t Severity)
@@ -208,6 +225,8 @@ int main(int argc, char** argv)
 	Desc.Godot.GetProperty = &ProbeGetProperty;
 	Desc.Godot.SetProperty = &ProbeSetProperty;
 	Desc.Godot.CallMethod = &ProbeCallMethod;
+	Desc.Godot.InstantiateClass = &ProbeInstantiateClass;
+	Desc.Godot.ReleaseObject = &ProbeReleaseObject;
 	Desc.OnDiagnostic = &ProbeOnDiagnostic;
 	Desc.OnRuntimeError = &ProbeOnRuntimeError;
 

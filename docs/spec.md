@@ -228,7 +228,7 @@ from it. The spec commits to both states rather than waiting.
   class sidecar in a `verse_data` directory beside the executable, carries the
   runtime host as a `.gdextension` `[dependencies]` row and strips every `.verse` to a stub, with no
   manual copying of anything. `run_tests.py`'s `export` layer exports `tests/integration`, asserts
-  the whole tree, **launches it and asserts its counts** — 308 passed, 0 failed, 9 skipped — and
+  the whole tree, **launches it and asserts its counts** — 317 passed, 0 failed, 9 skipped — and
   `dodge-the-creeps` exported and run outside the repo passes all 30 of its checks
   (`by-hand-findings.md` B14). Windows only: no Linux or macOS export has ever been attempted
   (R-PLAT-1).
@@ -413,7 +413,34 @@ thinking about it.
   `_get_global_class_name` answer from the source text so the name survives without compilation.
 - **R-NODE-3 (MUST)** A Verse class can be instantiated without being attached to a node — a plain
   object a script creates, holds, and passes around, including one that extends
-  `RefCounted`/`Object` rather than `Node`. Status: **none**.
+  `RefCounted`/`Object` rather than `Node`. Status: **done** (Phase 4b stage 2).
+
+  The spelling is Verse's own archetype and there is nothing to learn: `H := helper{}` where
+  `helper := class(ref_counted)`. The whole of it is one `block:` clause on the native root, which
+  runs per instance, runs for every class derived from it, and sees `Self` already at the derived
+  type — so the host resolves the concrete Verse class, walks up to its nearest mirrored ancestor,
+  and asks Godot for an object of that Godot class. `docs/phase-4b-design.md` §2 is the seven
+  spikes behind that sentence and §4.5 is why the obvious alternative cannot work.
+
+  **Lifetime is Godot's, not this bridge's.** A `ref_counted` and below dies with its last holder;
+  an `object` is freed by hand; a `node` is owned by the tree once it is parented, and one that
+  never enters the tree **leaks deliberately**, exactly as GDScript's `Node.new()` does — Godot's
+  orphan report at exit names both the same way. Release rides on the collection that finds the
+  Verse value unreachable, so a peer outlives its value by a cycle or two; `vh_object::BeginDestroy`
+  is the hook, and it releases only what the host recorded as minted, because every object crossing
+  *from* Godot is a `vh_object` too.
+
+  **Two things a mirrored archetype now does that it did not.** `node2d{}` is a live Node2D rather
+  than the handle of 0 it used to be, which closes that footgun by construction and takes with it
+  the "reach through a handle of 0" idiom three fixtures used to spell a deliberate raise; the
+  replacement is an archetype of a class Godot will not instantiate — `viewport{}` — which raises
+  with a sentence naming the class. And an archetype of an abstract or singleton-only class is that
+  raise rather than a silent dead object.
+
+  Not reachable the other way: `MyVerseClass.new()` from GDScript. `new()` is bound on `GDScript`
+  and `CSharpScript` and **not on `Script`** (`gdscript.cpp:1093`), so a GDExtension language has
+  none; the Godot spelling is `RefCounted.new()` followed by `set_script(...)`. That is R-INT-1's
+  business and a Godot limitation with a citation rather than a gap here.
 - **R-NODE-4 (MUST)** A script's own static functions and constants are callable and readable.
   Status: **done** (Phase 4 stage 6).
 

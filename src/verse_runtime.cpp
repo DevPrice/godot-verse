@@ -14,6 +14,7 @@
 #include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/classes/performance.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
+#include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/classes/scene_tree.hpp>
 #include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/classes/window.hpp>
@@ -27,10 +28,30 @@
 #include <godot_cpp/variant/signal.hpp>
 #include <godot_cpp/variant/string_name.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
+#include <godot_cpp/templates/hash_map.hpp>
 
 #include <vector>
 
 using namespace godot;
+
+namespace {
+
+// The peers a Verse script minted that are this side's to keep alive (R-NODE-3).
+//
+// Only the RefCounted ones are in here, and that is the whole ownership rule: ClassDB::instantiate
+// hands back a Variant holding one reference, and letting that Variant go would free the object
+// before its instance id reached Verse. A plain Object has no reference to hold -- it is owned by
+// nobody until somebody frees it, exactly as `Object.new()` is in GDScript -- so it gets no row and
+// there is nothing for a release to drop.
+//
+// Keyed by instance id, which is what crosses the ABI. Godot does not reuse one within a run, so a
+// row can never come to name a different object than the one it was made for.
+HashMap<int64_t, Variant> &verse_minted_peers() {
+	static HashMap<int64_t, Variant> peers;
+	return peers;
+}
+
+} // namespace
 
 void VerseRuntime::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("load_host"), static_cast<Error (VerseRuntime::*)()>(&VerseRuntime::load_host));
@@ -267,6 +288,8 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 	godot_api.RefSize = &VerseRuntime::api_ref_size;
 	godot_api.RefContents = &VerseRuntime::api_ref_contents;
 	godot_api.InvokeCallable = &VerseRuntime::api_invoke_callable;
+	godot_api.InstantiateClass = &VerseRuntime::api_instantiate_class;
+	godot_api.ReleaseObject = &VerseRuntime::api_release_object;
 
 	// Both only need to stay alive for the duration of host.Init below.
 	const CharString engine_dir_utf8 = p_engine_dir.is_empty() ? CharString() : p_engine_dir.utf8();
@@ -308,6 +331,10 @@ void VerseRuntime::unload_host() {
 	// a use-after-free at exit rather than a leak. Releases arriving from the host afterwards name
 	// nothing and are no-ops, which is exactly what a cleared table answers.
 	verse_ref_table().clear();
+
+	// The same moment and the same reason for the peers a Verse script minted: dropping a
+	// RefCounted after Godot's own teardown frees it into a Godot that is no longer there.
+	verse_minted_peers().clear();
 
 	if (host.Shutdown != nullptr) {
 		host.Shutdown();
@@ -1176,6 +1203,55 @@ int32_t VerseRuntime::api_call_method(void *p_ctx, vh_handle p_handle, const cha
 	return variant_to_vh(result, p_arena, *r_value) ? VH_CALL_OK : VH_CALL_BAD_VALUE;
 }
 
+
+vh_handle VerseRuntime::api_instantiate_class(void *p_ctx, const char *p_class_utf8, int32_t p_class_len) {
+	const StringName class_name(String::utf8(p_class_utf8, p_class_len));
+
+	// Asked rather than attempted: ClassDB::instantiate on an abstract class or on one of the
+	// engine's singleton services pushes an error of its own and answers nil, and the sentence the
+	// script's author needs ("that class has no object to be") is the host's to raise.
+	ClassDBSingleton *class_db = ClassDBSingleton::get_singleton();
+	if (class_db == nullptr || !class_db->class_exists(class_name) || !class_db->can_instantiate(class_name)) {
+		return 0;
+	}
+
+	const Variant made = class_db->instantiate(class_name);
+	Object *obj = Object::cast_to<Object>(made);
+	if (obj == nullptr) {
+		return 0;
+	}
+
+	const int64_t handle = (int64_t)obj->get_instance_id();
+	// A RefCounted arrives with one reference and `made` is what holds it; keeping the Variant is
+	// what keeps the object alive while only its id crosses. Object::cast_to<RefCounted> rather
+	// than the Variant's type, because that is the question being asked.
+	if (Object::cast_to<RefCounted>(obj) != nullptr) {
+		verse_minted_peers().insert(handle, made);
+	}
+	return handle;
+}
+
+void VerseRuntime::api_release_object(void *p_ctx, vh_handle p_handle, vh_bool p_discard) {
+	HashMap<int64_t, Variant> &peers = verse_minted_peers();
+	if (HashMap<int64_t, Variant>::Iterator held = peers.find(p_handle)) {
+		// Dropping the Variant is the release. The object dies here if nothing else holds it, and
+		// survives if Godot does -- which is Godot's own rule for a RefCounted and not this
+		// bridge's.
+		peers.remove(held);
+		return;
+	}
+
+	// No row, so it is an Object-derived peer nobody owns. Ordinarily that is left alone: a
+	// Verse-minted Object that is never freed leaks exactly as GDScript's does, and Godot's orphan
+	// report at exit names both the same way. A *discarded* one is different -- the transaction
+	// that made it aborted, so nothing outside it can ever have seen the object, and there is
+	// nobody left to free it by hand.
+	if (p_discard) {
+		if (Object *obj = UtilityFunctions::instance_from_id(p_handle)) {
+			memdelete(obj);
+		}
+	}
+}
 
 void VerseRuntime::api_release_ref(void *p_ctx, int64_t p_ref) {
 	verse_ref_table().release(p_ref);

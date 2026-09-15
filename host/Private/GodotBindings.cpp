@@ -595,6 +595,32 @@ TNonNullPtr<verse::vh_object> VhObjectOf(int64 Handle)
     });
 }
 
+/// R-NODE-3. The peer for an object under construction: the one the host already holds where the
+/// host is the side constructing it, and a fresh Godot object otherwise.
+///
+/// Open for VhObjectOf's two reasons at once -- minting reaches a Godot callback in a DLL the
+/// AutoRTFM compiler never saw, and the class walk is not instrumented either. The raise is outside
+/// the Open, as every other raise in this file is: raising from closed code trips
+/// AutoRTFM::UnreachableIfClosed, and raising from *inside* an Open is nothing the rest of this
+/// bridge does either.
+int64 VhAdoptOrMint(TNonNullPtr<verse::vh_object> Object)
+{
+    const char* Refused = nullptr;
+    const int64 Handle =
+        AutoRTFM::Open([&] { return GodotVerse::AdoptOrMintPeer(Object.Get(), Refused); });
+    if (Refused)
+    {
+        RAISE_VERSE_RUNTIME_ERROR_FORMAT(
+            Verse::ERuntimeDiagnostic::ErrRuntime_NativeInternal,
+            TEXT("Godot would not make a `%hs`, so this class has no object to be. A Godot class "
+                 "that is abstract, or that the engine only ever hands out as a singleton, cannot "
+                 "be constructed -- derive from one that can, or reach the singleton through its "
+                 "accessor."),
+            Refused);
+    }
+    return Handle;
+}
+
 int64 VhCallableFrom(FVerseValue const& Callback)
 {
     // Open: the lookup walks the semantic program and asks Godot to mint the Callable, and neither

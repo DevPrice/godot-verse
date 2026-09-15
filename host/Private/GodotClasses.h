@@ -58,7 +58,16 @@ class vh_object : public UObject
 	// Verse API
 
 public:
-	TVal<int64> Handle;
+	/// TPtr rather than TVal because the Verse declaration says `var`, which R-NODE-3's block
+	/// clause needs in order to write it. A TPtr has no Init: the host writes it with
+	/// `Handle.Set(Handle, this)`, which is a store through the reference rather than over it.
+	TPtr<int64> Handle;
+
+	/// Releases the Godot object this Verse value minted, if it minted one. The same shape of
+	/// problem godot_ref::BeginDestroy solves, with one addition: **most vh_objects are not ours**
+	/// -- everything crossing from Godot through VhObjectOf is one too -- so this releases only a
+	/// peer the host recorded as minted, and a node the scene owns is left alone.
+	void BeginDestroy() override;
 };
 
 /// The C++ shadow for Verse's `godot_ref`: an Array, a Dictionary, a Callable, a Signal or a

@@ -38,6 +38,7 @@ not a description of what exists.
 | `phase-2-design.md` | §11 | the whole mirror: 1036 classes, 793 enums, `vh_object` as the native root |
 | `phase-3-design.md` | §11 | generations; §1.1 has OQ-12's answer |
 | `phase-4-design.md` | §13, and **`phase-4-gaps.md`** (21 entries, all closed) | virtuals, signals, `@GlobalScope`, the math types |
+| `phase-4b-design.md` | §15, which corrects §3 outright (it describes work Phase 2 had already shipped) and half of §4.2 | R-NODE-3: `helper{}` is a live Godot object. §5–§9 are still unbuilt |
 | `phase-4.5-design.md` | §11 | `<reads>` from Godot's `is_const`; what a failure undoes |
 | `phase-5-design.md` | §14 (and §2, twelve compiler answers from `tests/verse_probe`) | task scopes, `Await`, `Sleep`, `spawn` |
 | `phase-6-design.md` | §13 | the step debugger and the profiler |
@@ -69,10 +70,14 @@ Two documents are not phase records and are the ones to read before adding a fea
 `include/verse_host_abi.h` is the only thing that crosses. Plain C — the two sides cannot share a
 C++ ABI. It is staged into the host's `Public/` by `build_host.py`, so both compile the same file.
 
-**`VH_ABI_VERSION` is 8.2.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
+**`VH_ABI_VERSION` is 8.3.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
 a major bump is a layout or meaning change and both sides must be rebuilt; a minor bump adds
 something an older consumer can ignore behind a `StructSize` check. A change to the header means
 bumping it and rebuilding **both** sides — the mismatch surfaces at `vh_init`, not at compile time.
+**A callback added at a minor must be cleared past the consumer's own `StructSize`**: `vh_init`
+copies the whole `vh_godot_api` out of the descriptor, so everything past what a consumer built at a
+lower minor actually wrote is that consumer's stack, not a null pointer, and "check the pointer
+before calling" would pass. `InitHost` zeroes the tail; nothing before 8.3 needed it.
 
 `vh_host_kind()` is readable before `vh_init` and answers editor, runtime or cooker; the eleven
 compiler-side entry points answer `VH_ERR_UNSUPPORTED` in a runtime host.
@@ -203,7 +208,7 @@ because `ScriptLanguage` exposes nothing a script can ask — the only way to re
 would see is to read what the editor prints.
 
 **export** — exports `tests/integration` headless, asserts the *tree* it produced, then **launches
-it** and asserts what its cases reported: 308 passed, 0 failed, 9 skipped, with the counts named in
+it** and asserts what its cases reported: 317 passed, 0 failed, 9 skipped, with the counts named in
 `run_tests.py` so a case that stops running in an export reads as a failure rather than as a shorter
 log. It is the only layer that exercises the cooked path end to end; everything else compiles at
 startup. It needs more staged than the other layers do, because what it is exporting *is* them —
@@ -559,6 +564,37 @@ it is not in `run_tests.py`.
 - Verse's own `signalable`/`subscribable` cannot be implemented here — their domains are
   `no_rollback` and every Godot callback runs in a transaction — so `signal` has their *vocabulary*
   and not their interfaces.
+
+### Objects that are not nodes
+
+- **Every `vh_object` runs a block clause that asks the host for a Godot object** (R-NODE-3), and
+  the host is much the commoner constructor: a script instance for a node Godot already made, a
+  mirror wrapper for a handle crossing in, the transient instance the export defaults are read off,
+  the bare `vh_object` the fallback answers. Every host-side `NewObject` of one is wrapped in an
+  `FAdoptPeerScope`, which carries the **class** as well as the handle so a *member* of the class
+  being built still mints its own. **Add a fifth construction path and it leaks a Godot object per
+  construction**, silently, while a working scene looks entirely normal.
+- **A reading device suppresses minting outright**, which is `FSuppressMintScope` and one caller:
+  `NewDefaultsObject`. Its members' initializers run in full, so a class with `var Held:node2d =
+  node2d{}` minted a real node per exporting class *per analysis* — a leak on the per-keystroke
+  path, since a Verse-minted node is deliberately never freed.
+- **`node2d{}` is a live Node2D**, not the handle of 0 it was before 4b. The "reach through a handle
+  of 0" trick three fixtures used to spell a deliberate raise is gone; the replacement is
+  `viewport{}` — an archetype of a class Godot will not instantiate, which raises naming the class.
+- **`BeginDestroy` releases only what the host recorded as minted.** Every object crossing *from*
+  Godot is a `vh_object` too, and an unconditional release would free a node the scene owns. The
+  row that records it carries two pointers to one object and they answer different questions: a
+  weak one for "is it still alive" (which is also what makes a minted object cross back out and in
+  as the *same* Verse object), and a raw one for "is this the object that made this row" — because
+  **by the time `BeginDestroy` runs every weak pointer to the object already reads as null**, so a
+  release keyed on the weak one matches nothing and silently never fires.
+- **Only `vh_collect_garbage` can make a release observable**, and it needs both collectors in the
+  right order. Waiting on the VM's collector from the game thread deadlocks (which is
+  `abi-v2-design.md` §1a's warning, wider than it was written); a plain UE `CollectGarbage` frees no
+  Verse object at all, because every cell the VM holds is a root to it. Request a fresh VM cycle
+  without waiting, let the collector raise its start signal, then collect — which is the coupled
+  pass `TickGC` takes opportunistically. Release is still "within a cycle or two", never "the next
+  one": the VM's registers still name what the last frame held.
 
 ### The debugger and the profiler
 

@@ -43,11 +43,16 @@ tasks := class(object):
 
     ReadNapped<public>()<transacts>:int = Napped
 
-    # Reaching through a handle the harness reports dead, which is the cheapest raise a script can
-    # spell on purpose. It terminates this instance's scope and nothing else's.
+    # An archetype of a mirrored class Godot will not instantiate, which since R-NODE-3 is the
+    # cheapest raise a script can spell on purpose: the archetype asks Godot for the object and an
+    # abstract class has none to give. It terminates this instance's scope and nothing else's.
+    #
+    # `node2d{}` was the old spelling, back when it was a handle of 0 that every call found freed.
+    # Here it would still raise -- this harness reports every handle dead -- but it would also mint
+    # a peer, and the peer arithmetic in objects.verse is worth keeping honest.
     Raise<public>()<transacts>:void =
-        Dead := node2d{}
-        Dead.QueueFree()
+        Refused := viewport{}
+        Refused.QueueFree()
 
     # The same, from inside a task rather than from a call. The raise unwinds the task; what is
     # asked afterwards is whether the instance can still be called and can still start another.

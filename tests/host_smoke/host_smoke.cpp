@@ -50,6 +50,48 @@ static int32_t SmokeGetClassOf(void*, vh_handle, vh_arena*, vh_value*)
 	return VH_CALL_DEAD_OBJECT;
 }
 
+/* R-NODE-3's harness: a Godot object counter standing in for Godot.
+ *
+ * The one thing no Godot project can assert is a *count* -- a peer minted and never released is a
+ * leak nothing reports, and one released twice is a crash somewhere else entirely. Here every mint
+ * answers a fresh fake id and every release gives one back, so "how many objects does this project
+ * hold" is a number, and the two failures are a mismatch rather than a symptom.
+ *
+ * MintedClass is the last class asked for, which is what says the walk up to the nearest mirrored
+ * ancestor found the right one: a `class(ref_counted)` two scripts deep must still ask for
+ * RefCounted. */
+static int PeersMinted = 0;
+static int PeersReleased = 0;
+static int PeersDiscarded = 0;
+static int PeersLive = 0;
+static std::string MintedClass;
+static vh_handle NextPeerHandle = 5000;
+
+static vh_handle SmokeInstantiateClass(void*, const char* ClassUtf8, int32_t ClassLen)
+{
+	MintedClass.assign(ClassUtf8, static_cast<size_t>(ClassLen));
+	/* Two classes Godot itself refuses, so the raise the host is supposed to produce has something
+	 * to be produced by. Both are real: Godot has no concrete `Viewport` and hands `Input` out only
+	 * as a singleton. */
+	if (MintedClass == "Viewport" || MintedClass == "Input")
+	{
+		return 0;
+	}
+	++PeersMinted;
+	++PeersLive;
+	return NextPeerHandle++;
+}
+
+static void SmokeReleaseObject(void*, vh_handle, vh_bool Discard)
+{
+	++PeersReleased;
+	if (Discard != 0)
+	{
+		++PeersDiscarded;
+	}
+	--PeersLive;
+}
+
 static const char* SeverityName(int32_t Severity)
 {
 	switch (Severity)
@@ -439,6 +481,7 @@ int main(int argc, char** argv)
 	fs::path ExportsPath = VerseBase / "tests" / "host_smoke" / "exports.verse";
 	fs::path TasksPath = VerseBase / "tests" / "host_smoke" / "tasks.verse";
 	fs::path DebugPath = VerseBase / "tests" / "host_smoke" / "debug_probe.verse";
+	fs::path ObjectsPath = VerseBase / "tests" / "host_smoke" / "objects.verse";
 
 	ReportProvenance(DllPath);
 
@@ -455,6 +498,7 @@ int main(int argc, char** argv)
 	auto InitFn = Resolve<vh_init_fn>(Module, "vh_init", &ResolveOk);
 	auto ShutdownFn = Resolve<vh_shutdown_fn>(Module, "vh_shutdown", &ResolveOk);
 	auto TickFn = Resolve<vh_tick_fn>(Module, "vh_tick", &ResolveOk);
+	auto CollectGarbageFn = Resolve<vh_collect_garbage_fn>(Module, "vh_collect_garbage", &ResolveOk);
 	auto CompileProjectFn = Resolve<vh_compile_project_fn>(Module, "vh_compile_project", &ResolveOk);
 	auto HasClassFn = Resolve<vh_has_class_fn>(Module, "vh_has_class", &ResolveOk);
 	auto ClassExportListFn = Resolve<vh_class_export_list_fn>(Module, "vh_class_export_list", &ResolveOk);
@@ -506,6 +550,8 @@ int main(int argc, char** argv)
 	Desc.Godot.SetProperty = &SmokeSetProperty;
 	Desc.Godot.CallMethod = &SmokeCallMethod;
 	Desc.Godot.GetClassOf = &SmokeGetClassOf;
+	Desc.Godot.InstantiateClass = &SmokeInstantiateClass;
+	Desc.Godot.ReleaseObject = &SmokeReleaseObject;
 	Desc.Godot.DebugShouldBreak = &SmokeDebugShouldBreak;
 	Desc.Godot.DebugBreak = &SmokeDebugBreak;
 	Desc.OnDiagnostic = &SmokeOnDiagnostic;
@@ -541,16 +587,18 @@ int main(int argc, char** argv)
 	std::string ReloadPathUtf8 = ReloadPath.string();
 	std::string ModuleProbePathUtf8 = ModuleProbePath.string();
 	std::string TasksPathUtf8 = TasksPath.string();
+	std::string ObjectsPathUtf8 = ObjectsPath.string();
 	std::string DebugPathUtf8 = DebugPath.string();
-	vh_source_file ProjectFiles[5] = {
+	vh_source_file ProjectFiles[6] = {
 		{ VersePathUtf8.c_str(), nullptr },
 		{ ExportsPathUtf8.c_str(), nullptr },
 		{ ReloadPathUtf8.c_str(), nullptr },
 		{ TasksPathUtf8.c_str(), nullptr },
 		{ DebugPathUtf8.c_str(), nullptr },
+		{ ObjectsPathUtf8.c_str(), nullptr },
 	};
 	int32_t Generation = 0;
-	if (!Step("vh_compile_project", CompileProjectFn(ProjectFiles, 5, &Generation) == VH_OK))
+	if (!Step("vh_compile_project", CompileProjectFn(ProjectFiles, 6, &Generation) == VH_OK))
 	{
 		ShutdownFn();
 		return 1;
@@ -1715,17 +1763,18 @@ int main(int argc, char** argv)
 					   WriteFileUtf8(ReloadPath, ReloadProbeSource(2))
 						   && WriteFileUtf8(ModuleProbePath, ModuleProbeSource())) && CallsOk;
 
-		vh_source_file SecondFiles[6] = {
+		vh_source_file SecondFiles[7] = {
 			{ VersePathUtf8.c_str(), nullptr },
 			{ ExportsPathUtf8.c_str(), nullptr },
 			{ ReloadPathUtf8.c_str(), nullptr },
 			{ ModuleProbePathUtf8.c_str(), "gameplay" },
 			{ TasksPathUtf8.c_str(), nullptr },
 			{ DebugPathUtf8.c_str(), nullptr },
+			{ ObjectsPathUtf8.c_str(), nullptr },
 		};
 		int32_t SecondGeneration = 0;
 		DiagnosticErrorCount = 0;
-		const bool SecondBuilt = CompileProjectFn(SecondFiles, 6, &SecondGeneration) == VH_OK;
+		const bool SecondBuilt = CompileProjectFn(SecondFiles, 7, &SecondGeneration) == VH_OK;
 		CallsOk = Step("a second vh_compile_project in the same process builds", SecondBuilt) && CallsOk;
 		CallsOk = Step("and reports generation 2", SecondGeneration == 2) && CallsOk;
 		CallsOk = Step("a file in a module reaches a root definition with nothing imported",
@@ -2622,6 +2671,112 @@ int main(int argc, char** argv)
 			TickFn(0.004, nullptr);
 			Step("releasing an instance with a suspended task is not an error", true);
 			ReleaseInstanceFn(One);
+		}
+	}
+
+	// --- R-NODE-3: an object that is not a node -----------------------------------------------
+	//
+	// The counter above is the whole reason this belongs here rather than in a Godot project.
+	// Nothing an author can see distinguishes "one peer per `helper{}`" from "one per `helper{}`
+	// plus one per scripted node in the project"; a number does.
+	{
+		auto ObjCall = [&](vh_instance* Target, const char* Decorated) {
+			vh_value Result{};
+			if (InstanceCallFn(Target, Decorated, nullptr, 0, nullptr, &Result) != VH_OK
+				|| Result.Type != VH_TYPE_INT)
+			{
+				return (int64_t)-1;
+			}
+			return Result.Int;
+		};
+
+		const int MintedBeforeInstance = PeersMinted;
+		vh_instance* Objects = nullptr;
+		const bool Made = InstantiateFn("objects", 201, &Objects) == VH_OK && Objects != nullptr;
+		Step("the R-NODE-3 fixture instantiates", Made);
+
+		// The failure docs/phase-4b-design.md 13 calls "the one that would not announce itself":
+		// vh_object's block clause runs on the host's own construction path too, so a mint that
+		// did not check would give every scripted node in the project a second, leaked peer.
+		Step("instantiating a scripted node mints no peer", PeersMinted == MintedBeforeInstance);
+
+		if (Made)
+		{
+			const int MintedBeforeArchetype = PeersMinted;
+			Step("a Verse archetype answers, so its peer was made and its own fields are its own",
+				 ObjCall(Objects, "(/user@localhost/objects:)MakeOne") == 42);
+			Step("and it minted exactly one peer", PeersMinted == MintedBeforeArchetype + 1);
+			Step("of the nearest mirrored ancestor's Godot class", MintedClass == "RefCounted");
+
+			// A script may extend another script, so the class the block resolves is two steps
+			// below the mirrored one rather than one.
+			MintedClass.clear();
+			Step("a class two deep answers too",
+				 ObjCall(Objects, "(/user@localhost/objects:)MakeTwoDeep") == 10);
+			Step("and still resolves to the mirrored ancestor", MintedClass == "RefCounted");
+
+			// The lifetime half, and the one thing here that is not a single call's worth of
+			// arithmetic. Release rides on the collection that finds the Verse value unreachable,
+			// and "unreachable" is not decided the moment a call returns: the VM's registers still
+			// name what the last frame held, so the object drops out on a later cycle rather than
+			// on the next one. docs/abi-v2-design.md 1a measured the same lag for a reference id
+			// and called it "deferred by up to one collection cycle" -- up to, not exactly.
+			//
+			// So the assertion is "within a bounded number of cycles", which is what the mechanism
+			// actually promises. A peer that is never released fails it; one released a cycle later
+			// than hoped does not.
+			auto CollectUntil = [&](const std::function<bool()>& Reached) {
+				for (int Attempt = 0; Attempt < 8; ++Attempt)
+				{
+					if (Reached())
+					{
+						return true;
+					}
+					// A call of its own, to give the registers that still name the dropped object
+					// something else to hold.
+					ObjCall(Objects, "(/user@localhost/objects:)Churn");
+					CollectGarbageFn();
+				}
+				return Reached();
+			};
+
+			const int ReleasedBeforeCollect = PeersReleased;
+			Step("collecting releases the peers nothing holds any more",
+				 CollectUntil([&] { return PeersReleased >= ReleasedBeforeCollect + 2; }));
+			Step("and never releases one twice", PeersLive >= 0 && PeersReleased <= PeersMinted);
+
+			// The other half of the same rule, and the one a leak-hunting bug would break: a peer
+			// the script is still holding must survive every collection, not just the next one.
+			InstanceCallFn(Objects, "(/user@localhost/objects:)KeepOne", nullptr, 0, nullptr, nullptr);
+			const int LiveWithKept = PeersLive;
+			for (int Attempt = 0; Attempt < 4; ++Attempt)
+			{
+				ObjCall(Objects, "(/user@localhost/objects:)Churn");
+				CollectGarbageFn();
+			}
+			Step("a peer the script still holds survives a collection", PeersLive == LiveWithKept);
+			Step("and the value behind it is still readable",
+				 ObjCall(Objects, "(/user@localhost/objects:)ReadKept") == 7);
+
+			InstanceCallFn(Objects, "(/user@localhost/objects:)DropKept", nullptr, 0, nullptr, nullptr);
+			Step("and is released once the script drops it",
+				 CollectUntil([&] { return PeersLive < LiveWithKept; }));
+
+			// The abort path (docs/phase-4b-design.md 4.4). A <decides> body that mints and then
+			// fails has to give the peer back: the failure drops every deferred write, and a peer
+			// is the one thing that was not deferred.
+			const int DiscardedBefore = PeersDiscarded;
+			vh_value Ignored{};
+			Step("a computation that mints and then fails, fails",
+				 InstanceCallFn(Objects, "(/user@localhost/objects:)MintThenFail", nullptr, 0, nullptr, &Ignored)
+					 == VH_ERR_FAILED);
+			Step("and the peer it made is given back as a discard, without waiting for a collection",
+				 PeersDiscarded == DiscardedBefore + 1);
+
+			ReleaseInstanceFn(Objects);
+			CollectGarbageFn();
+			Step("releasing the instance releases no peer, because the node was never ours",
+				 PeersReleased <= PeersMinted);
 		}
 	}
 

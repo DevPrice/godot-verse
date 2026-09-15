@@ -16,6 +16,10 @@ struct FRunningContext;
 struct VValue;
 }
 
+namespace verse {
+class vh_object;
+}
+
 class FJsonObject;
 
 namespace GodotVerse {
@@ -131,6 +135,22 @@ AUTORTFM_DISABLE void ReleaseInstance(FInstance* Instance);
 /// already has a declared type to hold the value passes it, so a dead handle still produces
 /// something the declaration accepts. The generated cast path passes null on purpose.
 AUTORTFM_DISABLE UObject* ObjectForHandle(int64 Handle, UClass* Fallback = nullptr);
+
+/// R-NODE-3's half of a construction: the Godot peer for an object whose Verse constructor is
+/// running. The handle the host is already holding for it where the host is the side doing the
+/// constructing, and a fresh Godot object of the nearest mirrored ancestor of Self's class
+/// otherwise. 0 for a class that has no peer to mint.
+///
+/// OutRefusedClass is set to the Godot class Godot declined to instantiate, and is the caller's
+/// cue to raise. It is an out-parameter rather than a raise here because this runs inside an
+/// AutoRTFM::Open and every other native in this bridge raises from outside one.
+AUTORTFM_DISABLE int64 AdoptOrMintPeer(verse::vh_object* Self, const char*& OutRefusedClass);
+
+/// Releases a peer AdoptOrMintPeer minted, if this object is the one that minted it. Called from
+/// vh_object::BeginDestroy, so it runs on the collector's thread of control and must not touch the
+/// VM -- and from the abort compensation, where nothing outside the transaction ever saw the
+/// object, which is what bDiscard tells the consumer.
+AUTORTFM_DISABLE void ReleaseMintedPeer(const UObject* Owner, int64 Handle, bool bDiscard = false);
 
 /// A Verse function value as a Godot Callable (R-TYPE-3's other direction, R-INT-4, and what
 /// signals subscribe with). Answers the reference id of a Callable the GDExtension minted, or 0

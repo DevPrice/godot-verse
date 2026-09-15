@@ -189,6 +189,19 @@ VH_ATTR int32_t InitHost(const vh_init_desc* Desc, bool bEngineAlreadyBooted)
     GVerseThreadId = FPlatformTLS::GetCurrentThreadId();
 
     Host.Godot = Desc->Godot;
+
+    // Everything past the consumer's own StructSize is memory it never wrote, and the copy above
+    // read it anyway. Harmless while every field predated 8.0; from the first callback added at a
+    // minor -- InstantiateClass, at 8.3 -- a consumer built against a lower minor would hand this
+    // host a stack-shaped bit pattern where a function pointer goes, and the null check every
+    // caller makes would pass. Clearing is what makes "check the pointer" mean "the consumer
+    // supplied it".
+    if (Host.Godot.StructSize > 0 && Host.Godot.StructSize < static_cast<int32_t>(sizeof(vh_godot_api)))
+    {
+        FMemory::Memzero(reinterpret_cast<uint8*>(&Host.Godot) + Host.Godot.StructSize,
+                         sizeof(vh_godot_api) - static_cast<size_t>(Host.Godot.StructSize));
+    }
+
     Host.OnDiagnostic = Desc->OnDiagnostic;
     Host.DiagnosticCtx = Desc->DiagnosticCtx;
     Host.OnRuntimeError = Desc->OnRuntimeError;
@@ -416,6 +429,15 @@ extern "C" void vh_tick(double BudgetSeconds, vh_tick_stats* OutStats)
     }
 
     GodotVerse::TickScripts(BudgetSeconds, OutStats);
+}
+
+extern "C" void vh_collect_garbage(void)
+{
+    if (WrongThread("vh_collect_garbage") || !GetHost().bInitialized)
+    {
+        return;
+    }
+    GodotVerse::CollectGarbageNow();
 }
 
 extern "C" int32_t vh_compile_project(const vh_source_file* Files, int32_t Count, int32_t* OutGeneration)

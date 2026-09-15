@@ -3134,6 +3134,72 @@ AUTORTFM_DISABLE UClass* FindMirroredClass(FUtf8StringView ClassName)
     return Found;
 }
 
+/// The Godot object a vh_object under construction should adopt instead of minting one.
+///
+/// Since R-NODE-3 every vh_object runs a block clause that asks the host for a peer, and the host
+/// itself is much the commoner constructor: a script instance for a node Godot already made, a
+/// mirror wrapper for a handle crossing in, the transient instance the export defaults are read
+/// off. Every one of those already has its object -- or deliberately has none -- so an
+/// unconditional mint would leak a Godot object per construction while a working scene looked
+/// entirely normal (docs/phase-4b-design.md 4.3).
+///
+/// Every host-side NewObject of a vh_object is wrapped in one of these. The class is carried as
+/// well as the handle so that a *member* of the class being built -- `Helper := helper{}` in a
+/// script -- still mints its own: the record answers the construction it was opened for and
+/// nothing else, whichever of the two the VM runs first.
+///
+/// thread_local because a class's declared defaults are read off an instance built by whichever
+/// thread ran the analysis, which is not the game thread.
+struct FAdoptRecord
+{
+    const UClass* Class = nullptr;
+    int64 Handle = 0;
+    bool bActive = false;
+};
+thread_local FAdoptRecord GAdopt;
+
+/// Scoped, and restoring rather than clearing: NewObject of a script class runs member
+/// initializers that can construct more objects, and one of those can be another script class.
+class FAdoptPeerScope
+{
+public:
+    AUTORTFM_DISABLE FAdoptPeerScope(const UClass* Class, int64 Handle)
+        : Saved(GAdopt)
+    {
+        GAdopt = FAdoptRecord{Class, Handle, true};
+    }
+    AUTORTFM_DISABLE ~FAdoptPeerScope() { GAdopt = Saved; }
+
+    FAdoptPeerScope(const FAdoptPeerScope&) = delete;
+    FAdoptPeerScope& operator=(const FAdoptPeerScope&) = delete;
+
+private:
+    FAdoptRecord Saved;
+};
+
+/// Nothing constructed while this stands gets a Godot object, however deep.
+///
+/// One caller, and it is the case FAdoptPeerScope cannot answer: the throwaway instance the export
+/// defaults are read off. That instance is a *reading device*, not something an author asked for,
+/// and its members' initializers run in full -- so a class whose member is `var Held:node2d =
+/// node2d{}` would mint a real node on every analysis, once per exporting class, per keystroke.
+/// Nodes are deliberately not freed when Verse drops them (Godot's rule, docs/phase-4b-design.md
+/// 4.4), so each of those would be a leak nothing reports.
+///
+/// The peers read back as handle 0, which is what a declared default meant before any of this and
+/// what the export list already refuses for an object-typed member (VH_EXPORT_OBJECT_NOT_OPTIONAL).
+thread_local int32 GSuppressMintDepth = 0;
+
+class FSuppressMintScope
+{
+public:
+    AUTORTFM_DISABLE FSuppressMintScope() { ++GSuppressMintDepth; }
+    AUTORTFM_DISABLE ~FSuppressMintScope() { --GSuppressMintDepth; }
+
+    FSuppressMintScope(const FSuppressMintScope&) = delete;
+    FSuppressMintScope& operator=(const FSuppressMintScope&) = delete;
+};
+
 /// A fresh Verse wrapper around a Godot handle, which is what a mirrored-class member holds.
 ///
 /// Built the way Instantiate builds a script's own object, and buildable that way for the same
@@ -3143,13 +3209,19 @@ AUTORTFM_DISABLE UClass* FindMirroredClass(FUtf8StringView ClassName)
 /// returns, which leaves only the field C++ owns to fill in.
 AUTORTFM_DISABLE UObject* NewMirroredWrapper(UClass* NativeClass, int64 Handle)
 {
-    UObject* Wrapper = NativeClass ? NewObject<UObject>(GetTransientPackage(), NativeClass) : nullptr;
+    UObject* Wrapper = nullptr;
+    {
+        // The handle this wrapper is *for*: the block clause runs inside NewObject and writes it,
+        // and the assignment below then writes the same value a second time.
+        FAdoptPeerScope Adopting(NativeClass, Handle);
+        Wrapper = NativeClass ? NewObject<UObject>(GetTransientPackage(), NativeClass) : nullptr;
+    }
     verse::vh_object* Shadow = Cast<verse::vh_object>(Wrapper);
     if (!Shadow)
     {
         return nullptr;
     }
-    Shadow->Handle.Init(Handle, Shadow);
+    Shadow->Handle.Set(Handle, Shadow);
     return Wrapper;
 }
 
@@ -3158,6 +3230,25 @@ AUTORTFM_DISABLE UObject* NewMirroredWrapper(UClass* NativeClass, int64 Handle)
 /// fails on exactly the case the cast exists for -- a fresh mirror wrapper's class is `node`, and
 /// no downcast to a script class can succeed against one.
 TMap<int64, GodotVerse::FInstance*> GInstancesByHandle;
+
+/// Handle -> the Verse object that minted it (R-NODE-3). Two jobs at once: it is what
+/// `BeginDestroy` consults to know that this peer is the host's to release -- every object crossing
+/// *from* Godot is a vh_object too, and freeing one would take a node the scene owns -- and it is
+/// what keeps `H` the same Verse object after a round trip through Godot, the way a scripted node's
+/// own instance does. Neither keeps anything alive: the row exists to be asked about.
+///
+/// Two pointers to one object, answering different questions. The weak one answers "is it still
+/// alive", which is what handing the object back to Godot needs. The raw one answers "is this the
+/// object that made this row", which the weak one **cannot**: by the time BeginDestroy runs the
+/// object is already unreachable and every weak pointer to it reads as null, so a release keyed on
+/// the weak pointer matched nothing and released nothing -- a leak that looked exactly like the
+/// mechanism not working. It is compared and never dereferenced.
+struct FMintedPeer
+{
+    TWeakObjectPtr<UObject> Object;
+    const UObject* Owner = nullptr;
+};
+TMap<int64, FMintedPeer> GMintedByHandle;
 
 /// Handle -> the mirrored UClass an object of it crosses as, asked of Godot once per Godot object
 /// rather than once per crossing.
@@ -3284,6 +3375,74 @@ TMap<FUtf8String, FSignalBinding> GEngineSignalShapes;
 /// instead of a semantic program to walk.
 TSharedPtr<GodotVerse::FEngineSignalTypes> GRecordedEngineSignals;
 
+/// The Godot class a mirrored Verse class stands for, out of the generated table's other half.
+///
+/// The emitted classes only, so this is an inverse rather than a second lookup: the table above
+/// folds every Godot class onto its nearest *emitted* ancestor, and several rows of it can share a
+/// Verse name. Binary search, because that half is sorted by Verse name.
+const char* GodotNameForMirroredClass(FUtf8StringView VerseName)
+{
+    int32 Low = 0;
+    int32 High = UE_ARRAY_COUNT(verse_classes::mirrored_classes) - 1;
+    while (Low <= High)
+    {
+        const int32 Mid = Low + ((High - Low) / 2);
+        const FUtf8StringView Candidate(
+            reinterpret_cast<const UTF8CHAR*>(verse_classes::mirrored_classes[Mid].verse_name));
+        const int32 Order = Candidate.Compare(VerseName);
+        if (Order == 0)
+        {
+            return verse_classes::mirrored_classes[Mid].godot_name;
+        }
+        if (Order < 0)
+        {
+            Low = Mid + 1;
+        }
+        else
+        {
+            High = Mid - 1;
+        }
+    }
+    return nullptr;
+}
+
+/// The Godot class to mint a peer of for an object of this Verse class: the nearest ancestor that
+/// is one of the mirror's own, which for a script's `class(ref_counted)` is `RefCounted`.
+///
+/// The walk tests the *package* rather than the name, because the mirror's names are ordinary
+/// identifiers a project could in principle reuse, and a script class that happened to be called
+/// `node2d` would otherwise be minted as a Node2D. A VClass knows which package declared it; a
+/// UClass's name does not.
+///
+/// Cached per UClass, so the walk happens once per script class rather than once per `helper{}`.
+/// Safe to keep: a UClass is never reused for another Verse class, and a hot-reload generation
+/// publishes new ones.
+TMap<const UClass*, const char*> GPeerClassCache;
+
+AUTORTFM_DISABLE const char* GodotPeerClassFor(const UClass* Class)
+{
+    if (const char** Cached = GPeerClassCache.Find(Class))
+    {
+        return *Cached;
+    }
+
+    const char* Found = nullptr;
+    for (const UClass* Cursor = Class; Cursor && !Found; Cursor = Cursor->GetSuperClass())
+    {
+        const UVerseClass* const VerseClass = Cast<UVerseClass>(Cursor);
+        const Verse::VClass* const VClass = VerseClass ? VerseClass->Class.Get() : nullptr;
+        if (!VClass
+            || !VClass->GetPackage().GetRootPath().AsStringView().Equals(FUtf8StringView(GodotVersePath)))
+        {
+            continue;
+        }
+        Found = GodotNameForMirroredClass(VClass->GetBaseName().AsStringView());
+    }
+
+    GPeerClassCache.Add(Class, Found);
+    return Found;
+}
+
 /// The mirrored Verse class name for a Godot class name, out of the generated table.
 ///
 /// Every Godot class is in that table, not only the emitted ones: with --classes-file a subset is
@@ -3367,6 +3526,17 @@ AUTORTFM_DISABLE UObject* GodotVerse::ObjectForHandle(int64 Handle, UClass* Fall
         }
     }
 
+    // An object Verse minted crosses back as the very object that minted it, which is what makes
+    // `H` the same value after a round trip through a Godot Array. The same rule the scripted-node
+    // row above states, for the other half of R-SCN-6's identity question.
+    if (FMintedPeer* Minted = GMintedByHandle.Find(Handle))
+    {
+        if (UObject* Live = Minted->Object.Get())
+        {
+            return Live;
+        }
+    }
+
     UClass* Resolved = MirroredClassForHandle(Handle);
     if (!Resolved)
     {
@@ -3376,7 +3546,105 @@ AUTORTFM_DISABLE UObject* GodotVerse::ObjectForHandle(int64 Handle, UClass* Fall
     {
         return Wrapper;
     }
+
+    // A bare vh_object, which every cast then declines. It has no peer and must not mint one:
+    // this is the answer to "Godot would not say what that handle is", not a request for an object.
+    FAdoptPeerScope Adopting(verse::vh_object::StaticClass(), 0);
     return NewObject<verse::vh_object>(GetTransientPackage());
+}
+
+AUTORTFM_DISABLE int64 GodotVerse::AdoptOrMintPeer(verse::vh_object* Self, const char*& OutRefusedClass)
+{
+    OutRefusedClass = nullptr;
+    if (!Self)
+    {
+        return 0;
+    }
+
+    // A class default object is not a live object and has nothing to be the peer of. It is guarded
+    // rather than assumed: UVerseClass::NeedsInit runs the init functions for one, and this bridge
+    // creates a CDO for every mirrored class it ever names.
+    if (Self->HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject))
+    {
+        return 0;
+    }
+
+    // The host is the side doing the constructing, and the peer -- or the deliberate absence of one
+    // -- is already decided. Consumed, so that a member of the class being built still mints its
+    // own; the class test is what makes that true whichever order the VM runs the two in.
+    if (GAdopt.bActive && GAdopt.Class == Self->GetClass())
+    {
+        GAdopt.bActive = false;
+        return GAdopt.Handle;
+    }
+
+    if (GSuppressMintDepth > 0)
+    {
+        return 0;
+    }
+
+    const char* const GodotClass = GodotPeerClassFor(Self->GetClass());
+    if (!GodotClass)
+    {
+        // `vh_object` itself, which is the one class below the mirror and which nothing a script
+        // writes should name. Not an error: ObjectForHandle builds one deliberately when Godot will
+        // not say what a handle is, and that is a value for a cast to decline rather than a request
+        // for an object.
+        return 0;
+    }
+
+    FHostState& Host = GetHost();
+    const FUtf8StringView ClassView(reinterpret_cast<const UTF8CHAR*>(GodotClass));
+    const int64 Handle = Host.Godot.InstantiateClass
+        ? Host.Godot.InstantiateClass(Host.Godot.Ctx, GodotClass, ClassView.Len())
+        : 0;
+    if (Handle == 0)
+    {
+        OutRefusedClass = GodotClass;
+        return 0;
+    }
+
+    GMintedByHandle.Add(Handle, FMintedPeer{TWeakObjectPtr<UObject>(Self), Self});
+
+    // Compensated rather than deferred, exactly as SubscribeSignal is and for the same reason: this
+    // mutates Godot and answers a value. `SameAsClosed` is the load-bearing half -- the mint above
+    // ran inside an AutoRTFM::Open, and a plain OnAbort from open code is ignored.
+    //
+    // bDiscard, because an aborted transaction's object is one nothing outside it can ever have
+    // seen: even the Object-derived peer this bridge otherwise leaks on purpose (GDScript's own
+    // rule) is freed here, where there is nobody left to free it by hand.
+    AutoRTFM::OnAbort<AutoRTFM::EOpenBehavior::SameAsClosed>(
+        [Handle] { GodotVerse::ReleaseMintedPeer(nullptr, Handle, /*bDiscard*/ true); });
+    return Handle;
+}
+
+AUTORTFM_DISABLE void GodotVerse::ReleaseMintedPeer(const UObject* Owner, int64 Handle, bool bDiscard)
+{
+    if (Handle == 0)
+    {
+        return;
+    }
+    const FMintedPeer* const Minted = GMintedByHandle.Find(Handle);
+    if (!Minted)
+    {
+        // Not ours. Every object crossing *from* Godot is a vh_object too, and this is the path its
+        // collection takes -- releasing here would free a node the scene owns.
+        return;
+    }
+    // Owner is null from the abort compensation, which has no object left to name: the transaction
+    // that built it is being undone. From BeginDestroy it is the object being collected, and the
+    // row has to be the one it made.
+    if (Owner && Minted->Owner != Owner)
+    {
+        return;
+    }
+    GMintedByHandle.Remove(Handle);
+
+    FHostState& Host = GetHost();
+    if (Host.Godot.ReleaseObject)
+    {
+        Host.Godot.ReleaseObject(Host.Godot.Ctx, Handle, bDiscard ? 1 : 0);
+    }
 }
 
 namespace {
@@ -4008,6 +4276,9 @@ namespace {
 AUTORTFM_DISABLE UObject* NewDefaultsObject(FUtf8StringView ClassName)
 {
     UClass* const NativeClass = FindGodotClass(ClassName);
+    // Nothing under here gets a Godot object -- not this instance, and not whatever its member
+    // initializers construct, which is the half that matters. See FSuppressMintScope.
+    FSuppressMintScope Reading;
     return NativeClass ? NewObject<UObject>(GetTransientPackage(), NativeClass) : nullptr;
 }
 
@@ -7816,6 +8087,10 @@ AUTORTFM_DISABLE GodotVerse::FInstance* GodotVerse::Instantiate(FUtf8StringView 
     UObject* Instance = nullptr;
     {
         verse::FContentScopeGuard Guard(Scope);
+        // The node Godot already made is this instance's peer, and the block clause on vh_object
+        // adopts it rather than minting a second one -- which is the whole of docs/phase-4b-
+        // design.md 4.3, and the failure that would not have announced itself.
+        FAdoptPeerScope Adopting(NativeClass, Handle);
         // UVerseClass::PostInitInstance runs the Verse constructor from inside NewObject, so fields
         // are initialised by the time this returns.
         Instance = NewObject<UObject>(GetTransientPackage(), NativeClass);
@@ -7826,7 +8101,7 @@ AUTORTFM_DISABLE GodotVerse::FInstance* GodotVerse::Instantiate(FUtf8StringView 
     }
 
     verse::vh_object* Shadow = CastChecked<verse::vh_object>(Instance);
-    Shadow->Handle.Init(Handle, Shadow);
+    Shadow->Handle.Set(Handle, Shadow);
 
     // Before the instance is handed back, so a Ready() that emits already has a bound signal.
     BindSignals(Instance, ClassName, Handle);

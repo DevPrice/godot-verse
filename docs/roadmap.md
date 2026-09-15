@@ -1,6 +1,7 @@
 # godot-verse — Roadmap
 
-**Status:** Draft 16 · 2026-09-14 · **Phases 0–6 complete; Phase 7a built; 7b designed, not built.**
+**Status:** Draft 17 · 2026-09-15 · **Phases 0–6 complete; Phase 7a built; 7b designed, not built;
+Phase 4b's R-NODE-3 built** ([`phase-4b-design.md`](phase-4b-design.md) §15 is what that corrected).
 [`phase-7-design.md`](phase-7-design.md) is 7a's plan, written before the work from an interview
 and three delegated reads of the engine sources: §1 is the decisions, §2 the spikes (S-1, OQ-10,
 ran during the planning), §4–§10 the stages in build order, and **§13 is where it was corrected —
@@ -547,15 +548,17 @@ Written here rather than only in `spec.md` §14, because the next phase's shape 
 
 ### Phase 4b — the editor's data model
 
-**Designed, not built.** [`phase-4b-design.md`](phase-4b-design.md) is what this list turns into,
-written after its spikes rather than before them — `construct_probe`, `ctor_delegate_probe`,
-`overload_probe`, `class_block_probe`, `class_block_self_probe`, `native_block_probe` and
-`default_cdo_probe` in `tests/verse_probe/`.
+**Stage 2 built; §5–§9 still open.** [`phase-4b-design.md`](phase-4b-design.md) is what this list
+turns into, written after its spikes rather than before them — `construct_probe`,
+`ctor_delegate_probe`, `overload_probe`, `class_block_probe`, `class_block_self_probe`,
+`native_block_probe` and `default_cdo_probe` in `tests/verse_probe/`. **§15 is the part to read**:
+it is where the plan is corrected, and one of its two stages turned out to have been built already.
 R-NODE-3's answer is a class **`block:`** clause on the native root, which means a Verse script
-writes `helper{}` and gets a live Godot object, with R-TYPE-7 left intact. **The first pass is §3
-and §4 only**; §5–§9 are reassessed after.
+writes `helper{}` and gets a live Godot object, with R-TYPE-7 left intact. **The first pass was §3
+and §4 only**; §5–§9 are reassessed now.
 
-- **R-NODE-3** — instantiation without a node, `RefCounted` and `Object` both.
+- **R-NODE-3** — instantiation without a node, `RefCounted` and `Object` both. **Done**: ABI 8.3,
+  `VhAdoptOrMint` on the block clause, and Godot's three lifetimes rather than one.
 - **R-EXP-6, R-EXP-7, R-EXP-8, R-EXP-9** — custom Resources, autoloads, icons, RPC config.
 - **R-EXP-1** — the remaining `@export` surface, type-driven where the Verse type can say it and
   attributes only where it cannot.
@@ -802,7 +805,7 @@ committed projects.
 ## Phase 7b — Loading what the cooker wrote — **built; exit met 2026-09-15**
 
 **Done.** An exported game runs its Verse: `run_tests.py` reports four green layers, the fourth of
-which launches what it exported (308 passed, 0 failed, 9 skipped), and `dodge-the-creeps` exported
+which launches what it exported (317 passed, 0 failed, 9 skipped), and `dodge-the-creeps` exported
 outside the repo and run with `UE_ROOT` unset passes all 30 of its checks. It reaches its first Verse
 `_Ready` in **0.54 s** against **4.08 s** compiled at startup, and ships **5.0 MB** of Verse against
 7a's 68. **`phase-7b-design.md` §13 is what the work corrected**, and §13.8–§13.9 are the two walls

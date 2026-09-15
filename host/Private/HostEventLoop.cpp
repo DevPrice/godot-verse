@@ -8,9 +8,12 @@
 #include "Containers/Array.h"
 #include "Misc/Optional.h"
 #include "Templates/UnrealTemplate.h"
+#include "HAL/PlatformProcess.h"
 #include "UObject/GarbageCollection.h"
 #include "UObject/ReachabilityAnalysis.h"
 #include "UObject/UObjectArray.h"
+#include "VerseVM/VVMCollectionCycleRequest.h"
+#include "VerseVM/VVMHeap.h"
 
 namespace {
 TQueue<TFunction<void(const verse::FExecutionContext&)>> GEnqueuedAsyncJobs;
@@ -124,6 +127,39 @@ AUTORTFM_DISABLE static void TickGC()
     {
         CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS, /*bPerformFullPurge*/ false);
     }
+}
+
+AUTORTFM_DISABLE void GodotVerse::CollectGarbageNow()
+{
+    // There are two collectors and only one of them can free a Verse object's UObject shadow.
+    // UE's own pass treats every cell the VM still holds as a root, so on its own it destroys
+    // nothing a script let go of -- which is what made "a peer is released when Verse drops it"
+    // read as false when it was only unasked. The pass that can is UE's *coupled* to the VM's
+    // ("FrankenGC"), and `CollectGarbage` takes that shape only while the VM's collector is
+    // signalling that it wants to start.
+    //
+    // So: ask the VM for a fresh cycle -- the documented basis of a synchronous "GC now", and
+    // deliberately **not waited on**, because waiting for the VM's collector from a thread holding
+    // heap access is the deadlock docs/abi-v2-design.md 1a found -- then give its collector the
+    // moment it needs to raise the signal, and collect while it is up.
+    Verse::FHeap::RequestFreshCollectionCycle();
+    for (int32 Spin = 0; Spin < 1000 && !UE::GC::ShouldFrankenGCRun(); ++Spin)
+    {
+        FPlatformProcess::Sleep(0.001f);
+    }
+
+    // A full purge, unlike TickGC's: an incremental one leaves BeginDestroy for a later slice, and
+    // the whole point of asking is to make the releases that hang off it happen now. An incremental
+    // pass already in flight is finished first, because CollectGarbage asserts on one otherwise.
+    if (IsIncrementalReachabilityAnalysisPending())
+    {
+        PerformIncrementalReachabilityAnalysis(0.0);
+    }
+    if (IsIncrementalPurgePending())
+    {
+        IncrementalPurgeGarbage(false);
+    }
+    CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS, /*bPerformFullPurge*/ true);
 }
 
 AUTORTFM_DISABLE void GodotVerse::PumpEventLoop(const verse::FExecutionContext& ExecContext,

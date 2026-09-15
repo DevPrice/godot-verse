@@ -300,6 +300,24 @@ VhRefFromFloats<native>(Tag:int, Values:[]float)<reads>:int
 VhRefFromStrings<native>(Tag:int, Values:[]string)<reads>:int
 VhRefFromValues<native>(Tag:int, Values:[]variant)<reads>:int
 
+# --- making an object that is not a node -------------------------------------
+
+# The peer for an object under construction (R-NODE-3): the handle the host is already holding for
+# it, or a fresh Godot object of the nearest mirrored ancestor of Self's actual class.
+#
+# Called from `vh_object`'s block clause and from nowhere else. `Self` rather than a class name
+# because there is nothing else to pass: the clause is declared once on the root and the class it
+# is running for is only knowable from the object.
+#
+# 0 for a class with no Godot peer to mint -- `vh_object` itself, and a class-default object, which
+# is not a live object at all. A mirrored class Godot refuses to instantiate, an abstract one or a
+# singleton, raises instead: the script asked for an object and there is none to give it.
+#
+# `<transacts>` for the reason VhSignalSubscribe is: this mutates Godot *and* answers a value, so it
+# can be neither deferred to commit nor ignored, and the host compensates an abort by releasing the
+# peer it minted.
+VhAdoptOrMint<native>(Object:vh_object)<transacts>:int
+
 # The one native class in the API, and the root of every mirrored one. Everything above it is
 # ordinary Verse, which is what keeps a thousand mirrored classes from needing a thousand C++
 # shadows: the VM dispatches through the object's own shape, not through anything native.
@@ -320,7 +338,34 @@ vh_object<public><native> := class:
     #
     # Not public, for that same reason: a handle is the one thing that outlives what it names, so
     # a script holding one instead of the object holds a number no guard can check.
-    Handle<native>:int = 0
+    #
+    # A `var` since Phase 4b, so the block below can write it. Still no access specifier, so it is
+    # still module-scoped and writing it from user scope is still glitch 3593 -- R-TYPE-7 is not
+    # amended by this, which is the part worth noticing: the access rule was never what stood in
+    # the way of `helper{}`, only the absence of a per-instance hook.
+    var Handle<native>:int = 0
+
+    # R-NODE-3, and the whole of it. A `block:` clause runs once per instance and may have side
+    # effects, which is the sanctioned way around the ban on a data-member default that calls
+    # something (SemanticAnalyzer.cpp:15266 says so in as many words); it runs for every class
+    # derived from this one, and `Self` inside it is already the *derived* type. So a user writing
+    #
+    #     helper := class(ref_counted):
+    #         ...
+    #     H := helper{}
+    #
+    # gets a live Godot RefCounted, minted by the host from the nearest mirrored ancestor of
+    # whatever class Self actually is. docs/phase-4b-design.md 2 is the seven spikes behind that
+    # sentence, and 4.5 is why the obvious alternative -- a `<converges><native>` default -- cannot
+    # work: a data-member default may not read the instance at all, so it could never learn which
+    # Godot class to mint.
+    #
+    # `AdoptOrMint`, not `Mint`: this clause also runs on the host's own vh_instantiate path, where
+    # the Godot object already exists and is what the script is attached to. An unconditional mint
+    # would give every scripted node in the project a second, leaked peer while the scene looked
+    # entirely normal.
+    block:
+        set Handle = VhAdoptOrMint(Self)
 
     # Godot's _notification, which is the one script-level hook the generator cannot reach:
     # `_notification` is in no part of extension_api.json -- Object declares zero virtuals there,

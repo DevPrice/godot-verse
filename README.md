@@ -22,7 +22,7 @@ disagree, believe the spec.
 
 | Feature | Status |
 | --- | --- |
-| Scripting | A `.verse` file attaches to a node like GDScript; every Godot virtual runs, spelled the way Godot spells it (`_Ready`, `_Process`, ...); `@export` properties show in the inspector |
+| Scripting | A `.verse` file attaches to a node like GDScript; every Godot virtual runs, spelled the way Godot spells it (`_Ready`, `_Process`, ...); `@export` properties show in the inspector; `helper{}` makes an object that is not a node, with Godot's own three lifetimes |
 | Interop | Every `Variant` type crosses in both directions, containers by reference; GDScript can call any method a script defines; a runtime error names a file, a line and a Verse call stack |
 | Signals & concurrency | Signals are typed members; `Await` works on any Godot signal; `spawn`, `Sleep` and `race` each get a task scope tied to the script instance |
 | Engine surface | All 1036 Godot classes and their enums are mirrored |

@@ -5,7 +5,7 @@ work; **§13 is what building it corrected and is the section to read first.** T
 phase exists to remove is gone, and so is the second wall behind it, which was in no spike: a cooked
 `VNativeProcedure`'s C++ thunk is a function pointer, so it does not serialise, and nothing rebinds
 the module-scoped ones after a cooked load (§13.8). `run_tests.py` reports **four green layers**, the
-fourth of which **launches** what it exported — 308 passed, 0 failed, 9 skipped — and
+fourth of which **launches** what it exported — 317 passed, 0 failed, 9 skipped — and
 `dodge-the-creeps`, exported and run sandboxed outside the repo, passes all **30** of its checks.
 §13.9 is the five further defects that only launching an export could find.
 

@@ -43,7 +43,7 @@ extern "C" {
  * different toolchains and nothing links them.
  */
 #define VH_ABI_VERSION_MAJOR 8
-#define VH_ABI_VERSION_MINOR 2
+#define VH_ABI_VERSION_MINOR 3
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
 typedef int32_t vh_bool;
@@ -422,6 +422,36 @@ typedef struct vh_godot_api
 	 * answered from its own breakpoint list and its own step state, and _debug_get_error is its
 	 * question to answer. */
 	void (*DebugBreak)(void* Ctx);
+
+	/* --- v8.3: an object that is not a node (R-NODE-3) -------------------------------------- */
+
+	/* ClassDB::instantiate, by Godot class name: the peer a Verse `helper{}` gets. Answers the new
+	 * object's instance id, or 0 for a class Godot will not instantiate -- an abstract one, a
+	 * singleton, or a name this build of Godot does not have.
+	 *
+	 * Ownership is split the way Godot splits it, and the consumer is the side that knows which
+	 * half applies. A RefCounted-derived peer is born with one reference and the consumer holds
+	 * it *for the host*, so the object survives being handed back as a bare instance id; an
+	 * Object-derived peer is owned by nobody, exactly as `Object.new()` is in GDScript. The host
+	 * never has to ask which it got: it calls ReleaseObject for every peer it minted and the
+	 * consumer does the right thing for each.
+	 *
+	 * Reached from Verse's own construction path, so it must not re-enter the host. */
+	vh_handle (*InstantiateClass)(void* Ctx, const char* ClassUtf8, int32_t ClassLen);
+
+	/* The host is done with a peer it minted with InstantiateClass -- the Verse value holding it
+	 * was collected, or the transaction that made it aborted.
+	 *
+	 * Drops the reference the consumer took for the host. A RefCounted peer nothing else holds
+	 * dies here; one Godot still holds does not. An Object-derived peer is left alone, because
+	 * Godot's rule for it is that the author frees it -- a Verse-minted Object that is never freed
+	 * leaks exactly as GDScript's does, and Godot's orphan-object report at exit names both the
+	 * same way.
+	 *
+	 * bDiscard says the mint is being *undone* rather than dropped: the transaction that created
+	 * the peer aborted, so nothing outside it can ever have seen the object and an Object-derived
+	 * one is freed rather than leaked. The rollback is not a place to leak on. */
+	void (*ReleaseObject)(void* Ctx, vh_handle Handle, vh_bool bDiscard);
 } vh_godot_api;
 
 /* How the frame about to execute relates to the frame the debugger last stopped in.
@@ -671,6 +701,21 @@ typedef struct vh_tick_stats
  * prefix it reserved and nothing past it. One smaller than the v6.0 struct is not a prefix of
  * anything and is left untouched. */
 VH_ATTR VH_API void vh_tick(double BudgetSeconds, vh_tick_stats* OutStats);
+
+/* Added at ABI v8.3. Runs a collection to completion, rather than the incremental slice vh_tick
+ * takes when the object array is running short.
+ *
+ * It exists because collection is the only moment at which "Verse has dropped this" becomes
+ * knowable, and nothing else can make that moment happen: a reference table entry and a Godot
+ * object a script minted are both released from a UObject's BeginDestroy, so until a cycle runs
+ * neither release is observable and neither can be asserted. The GDExtension does not call it --
+ * vh_tick's incremental collection is what a running game wants -- and host_smoke does, which is
+ * the only place the lifetime half of R-NODE-3 can be a test rather than a claim.
+ *
+ * Call from the vh_init thread and never from inside running Verse: requesting a cycle from Verse
+ * code deadlocks the process (docs/abi-v2-design.md 1a), which is why vh_tick is where the
+ * incremental half lives. Does nothing before vh_init. */
+VH_ATTR VH_API void vh_collect_garbage(void);
 
 /* One .verse file, and where in the project's module tree it belongs. */
 typedef struct vh_source_file
@@ -1685,6 +1730,7 @@ typedef int32_t (*vh_host_kind_fn)(void);
 typedef int32_t (*vh_init_fn)(const vh_init_desc*);
 typedef void (*vh_shutdown_fn)(void);
 typedef void (*vh_tick_fn)(double, vh_tick_stats*);
+typedef void (*vh_collect_garbage_fn)(void);
 typedef int32_t (*vh_compile_project_fn)(const vh_source_file*, int32_t, int32_t*);
 typedef int32_t (*vh_resolve_unknown_name_fn)(const char*, const vh_module_ref**, int32_t*);
 typedef int32_t (*vh_check_project_fn)(const char*, const char*);

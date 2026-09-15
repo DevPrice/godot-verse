@@ -67,10 +67,15 @@ transactions := class(node2d):
 		1 > 2
 
 	# The same write followed by a raise, which is the case the deferral was built for.
+	#
+	# The raise is an archetype of a mirrored class Godot will not instantiate, which is the
+	# cheapest one a script can spell on purpose: since R-NODE-3 an archetype asks Godot for the
+	# object, and an abstract class has none to give. It used to be `node2d{}` and a call on it,
+	# back when that was a handle of 0 and every call on it found a freed object.
 	SetThenRaise<public>()<transacts>:void =
 		set Position = vector2{X := 33.0, Y := 33.0}
-		Dead := node2d{}
-		Dead.QueueFree()
+		Refused := viewport{}
+		Refused.QueueFree()
 
 	# --- what a read sees while a write is pending -------------------------------------------
 
@@ -98,8 +103,8 @@ transactions := class(node2d):
 	# and so has no inverse to register. A raise after it must therefore leave the connection behind.
 	ConnectThenRaise<public>()<transacts>:void =
 		Connect("Scored", MakeCallable(int, OnScored))
-		Dead := node2d{}
-		Dead.QueueFree()
+		Refused := viewport{}
+		Refused.QueueFree()
 
 	# --- S-3: does a rollback compensation reach this call path? -------------------------------
 
@@ -125,8 +130,8 @@ transactions := class(node2d):
 	# is how S-3 found that Phase 4's `Verse::Stm::OnRollback` had never run.
 	SubscribeThenRaise<public>()<transacts>:void =
 		Hit.Subscribe(OnHit)
-		Dead := node2d{}
-		Dead.QueueFree()
+		Refused := viewport{}
+		Refused.QueueFree()
 
 	SubscribeThenDecline<public>()<decides><transacts>:int =
 		Hit.Subscribe(OnHit)

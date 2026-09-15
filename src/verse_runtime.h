@@ -369,6 +369,11 @@ private:
 	static int32_t api_ref_contents(void *p_ctx, int64_t p_ref, vh_arena *p_arena, vh_value *r_value);
 	static int32_t api_invoke_callable(void *p_ctx, int64_t p_ref, const vh_value *p_args, int32_t p_arg_count, vh_arena *p_arena, vh_value *r_value);
 
+	// R-NODE-3: an object a Verse script made, which is not a node and has no script attached. See
+	// the ABI header's v8.3 block for the ownership split these two implement.
+	static vh_handle api_instantiate_class(void *p_ctx, const char *p_class_utf8, int32_t p_class_len);
+	static void api_release_object(void *p_ctx, vh_handle p_handle, vh_bool p_discard);
+
 	// R-DIAG-2: a Verse runtime error, with the file, line and Verse call stack it was raised at.
 	// Separate from on_diagnostic because the two go to different places -- a compile error
 	// annotates the script editor's gutter, this goes to the output and errors panel.

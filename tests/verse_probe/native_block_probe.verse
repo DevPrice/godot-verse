@@ -43,6 +43,13 @@ using { /Godot.org/Godot }
 # is unknown because the spike edits were reverted. Re-apply the two marked SPIKE edits and rebuild
 # to re-run it. The `error 3506: Unknown identifier VhProbeBlock` it reports otherwise is the
 # post-revert state, not a regression.
+#
+# **Half of that is now permanent rather than a spike edit.** R-NODE-3 shipped: `var Handle` and a
+# `block:` clause are on `vh_object` in the committed host, and the four C++ lines above are in it
+# too. What is still spike-only is `VhProbeBlock` itself, the public reader this fixture calls --
+# the shipped clause writes the *real* handle, so what a fixture wanting to see the number needs is
+# a reader, not the clause. `tests/host_smoke/objects.verse` is where the shipped behaviour is
+# asserted; this file stays as the record of what was asked before it was built.
 
 helper<public> := class(ref_counted):
 	Tag<public>:int = 0

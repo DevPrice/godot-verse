@@ -50,8 +50,14 @@ exports := class(object):
     @export
     var Target<public>:?node2d = false
 
-    # The same reference without one. It compiles -- `node2d{}` is a handle of 0 -- which is
-    # exactly why it has to be refused rather than exported as a node that was never alive.
+    # The same reference without one. It compiles, and the refusal is about the *type*: an
+    # inspector slot for an object can always be left empty, and only an option can hold that.
+    #
+    # Since R-NODE-3 `node2d{}` is a live node rather than the handle of 0 it used to be, so the
+    # old reason for this row -- "a node that was never alive" -- is gone and the rule it tested is
+    # not. What it now also covers is the class-defaults instance: the host builds one per exporting
+    # class per analysis to read these values off, and *that* one mints nothing, or every keystroke
+    # would leak a Node2D (HostScript.cpp, FSuppressMintScope).
     @export
     var Held<public>:node2d = node2d{}
 
