@@ -225,7 +225,7 @@ from it. The spec commits to both states rather than waiting.
   Godot's ordinary export dialog, with no manual copying of DLLs or engine directories. The
   export plugin collects everything the game needs. Status: **done, on Windows** — 7a built the
   export and 7b made the result run. An export runs the cooker, puts an IoStore container and a
-  class sidecar in a `verse_<app>_<platform>_<arch>` directory beside the executable, carries the
+  class sidecar in a `verse_data` directory beside the executable, carries the
   runtime host as a `.gdextension` `[dependencies]` row and strips every `.verse` to a stub, with no
   manual copying of anything. `run_tests.py`'s `export` layer exports `tests/integration`, asserts
   the whole tree, **launches it and asserts its counts** — 308 passed, 0 failed, 9 skipped — and

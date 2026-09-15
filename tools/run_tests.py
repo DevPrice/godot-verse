@@ -532,7 +532,7 @@ def read_pck(path: Path) -> dict[str, int]:
 # IoStore container ships (7b D9), so there is no `<data>/Engine/Content` any more. `Engine/Binaries`
 # stays, and is the only thing in `<data>/Engine`: GForeignEngineDir wants a directory with a
 # `Binaries/` child and nothing else (GenericPlatformMisc.cpp:1408-1415), which is 7b's S-9 answered.
-EXPORT_DATA_DIR = "verse_godot-verse integration tests_windows_x86_64"
+EXPORT_DATA_DIR = "verse_data"
 EXPORT_BESIDE_EXE = ["godot-verse.dll", "verse_host_runtime.dll", "tbbmalloc.dll"]
 EXPORT_DATA_FILES = [
     "Cooked/verse_scripts.utoc",

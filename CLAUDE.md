@@ -261,7 +261,7 @@ Every answer S-2, S-4, S-5 and S-7 produced is in §13.
 The shape: three UBT targets over `host/` (the editor host, a cooker *executable* the export plugin
 runs, a runtime host with `WITH_VERSE_COMPILER=0` that ships), one ABI header for all three with
 `vh_host_kind()` and `VH_ERR_UNSUPPORTED` (ABI 8.2), cooked packages plus a serialised snapshot in
-a `verse_<app>_<platform>_<arch>` directory beside the exe, `.verse` stripped to stubs, Godot 4.7
+a `verse_data` directory beside the exe, `.verse` stripped to stubs, Godot 4.7
 official as the editor, and a fourth `run_tests.py` layer that exports both projects. **S-1 (OQ-10)
 ran during planning and is closed: yes.** `host/VerseHostCooker.Target.cs` and
 `host/Private/CookMain.cpp` exist, `build_host.py --target VerseHostCooker` builds

@@ -745,7 +745,7 @@ What 7a fixes:
   compiles against Engine*, is an executable rather than a DLL, and carries developer tools. Design
   §2 S-1 has the seventeen builds; §13.5 has what the body cost after that.
 - **R-DIST-9** — Godot's ordinary export dialog produces the whole tree. Cooked packages and the
-  class sidecar go in a `verse_<app>_<platform>_<arch>` directory beside the executable, which is
+  class sidecar go in a `verse_data` directory beside the executable, which is
   .NET's layout and doubles as the host's engine directory; the runtime host rides as a
   `.gdextension` `[dependencies]` row; `.verse` sources are stripped to one-byte stubs the way C#
   strips `.cs`, and `.vmodule` markers are kept by hand because a module is half of a class's name.

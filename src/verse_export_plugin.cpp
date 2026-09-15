@@ -93,9 +93,14 @@ void VerseExportPlugin::_export_begin(const PackedStringArray &p_features, bool 
 	}
 
 	const String app = ProjectSettings::get_singleton()->get_setting("application/config/name", String("godot"));
-	const String data_dir_name = verse_paths::data_dir_name(app, platform_tag, verse_paths::arch_tag(p_features));
+	const String cache_name = verse_paths::cache_dir_name(app, platform_tag, verse_paths::arch_tag(p_features));
 
-	const String work = OS::get_singleton()->get_cache_dir().path_join("verse_cook").path_join(data_dir_name);
+	// The qualified name is the *parent* and `verse_data` the leaf, because add_shared_object ships
+	// a directory under its own name and takes no rename (editor_export_platform_pc.cpp:244). That
+	// keeps one cook per project per platform in the cache and a plain `verse_data` in the game.
+	const String work = OS::get_singleton()->get_cache_dir().path_join("verse_cook")
+								.path_join(cache_name)
+								.path_join(verse_paths::DATA_DIR_NAME);
 	DirAccess::make_dir_recursive_absolute(work);
 	temp_dir = work;
 

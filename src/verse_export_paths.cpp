@@ -62,7 +62,9 @@ String verse_paths::arch_tag(const PackedStringArray &p_features) {
 	return first_tag_present(p_features, ARCH_TAGS, (int)(sizeof(ARCH_TAGS) / sizeof(ARCH_TAGS[0])));
 }
 
-String verse_paths::data_dir_name(const String &p_app, const String &p_platform, const String &p_arch) {
+const char *verse_paths::DATA_DIR_NAME = "verse_data";
+
+String verse_paths::cache_dir_name(const String &p_app, const String &p_platform, const String &p_arch) {
 	String name = String("verse_") + safe_dir_name(p_app) + String("_") + p_platform;
 	if (!p_arch.is_empty()) {
 		name += String("_") + p_arch;
@@ -70,22 +72,15 @@ String verse_paths::data_dir_name(const String &p_app, const String &p_platform,
 	return name;
 }
 
-String verse_paths::data_dir_name_for_this_build() {
-	if (!OS::get_singleton()->has_feature("template")) {
-		return String();
-	}
-	const PackedStringArray features = tags_of_this_build();
-	const String app = ProjectSettings::get_singleton()->get_setting("application/config/name", String("godot"));
-	return data_dir_name(app, platform_tag(features), arch_tag(features));
-}
-
 String verse_paths::data_dir_for_this_build() {
-	const String name = data_dir_name_for_this_build();
-	if (name.is_empty()) {
+	// `template` is the tag every export template carries and no editor build does, which is what
+	// separates an exported game -- where the data directory is the only place Verse comes from --
+	// from the editor, where nothing here applies.
+	if (!OS::get_singleton()->has_feature("template")) {
 		return String();
 	}
 	// On macOS the executable is inside Contents/MacOS and the directory is exported into
 	// Contents/Resources, so this is not the answer there -- but OS::get_bundle_resource_dir is
 	// not bound for extensions, and macOS is blocked on hardware anyway (phase-7-design.md §10).
-	return OS::get_singleton()->get_executable_path().get_base_dir().path_join(name);
+	return OS::get_singleton()->get_executable_path().get_base_dir().path_join(DATA_DIR_NAME);
 }

@@ -462,6 +462,37 @@ an export (7b §13.9) is unrelated, despite both surfacing in the same session.
 
 ---
 
+## B16. The Shipping runtime host works, and D12's remaining half is only a name · **measured, not adopted**
+
+7a's D12 said "Development for the debug template, Shipping for release", and that it was "not true
+yet" because the `.gdextension` names one file per platform, so whichever configuration was built
+last is the one that ships. Nobody had ever *run* a game on the Shipping host; the 72.7 MiB came
+from a link, not from a boot. Run by hand, both configurations end to end:
+
+| | Development | Shipping |
+| --- | --- | --- |
+| `verse_host_runtime.dll` | 112.5 MiB | **72.7 MiB** |
+| a whole `dodge-the-creeps` export | 226 MB | **187 MB** |
+| `run_tests.py`'s export layer | 308 / 0 / 9 | **308 / 0 / 9** |
+| dtc exported and run sandboxed | 30 / 30 | **30 / 30** |
+| startup to the first Verse `_Ready` | 0.54 s | **0.45 s** |
+
+**Shipping is strictly better and nothing behaves differently.** 39 MB smaller, a little faster, and
+not one case moves. So the remaining half of D12 is a naming problem and not a real one: what it
+needs is for the `.gdextension` to name two files and `tools/build_host.py` to stage under two names.
+
+**Not adopted here**, because which configuration a game ships is a decision rather than a
+measurement, and the tree is left on Development — which is what `spec.md` R-DIST-11 and
+`phase-7b-design.md` §13.11 describe. The measurement is the point of this entry: whoever builds the
+split can start from "it works" instead of from "nobody knows".
+
+One thing the session kept tripping over and is worth saying out loud: **the build stamp keys on
+`HEAD`, so every commit invalidates all three host binaries.** That is D6 working, and a cook from
+before a commit is refused by a host from after it. Rebuild all three after committing, or the next
+export refuses to start with a sentence naming both commits.
+
+---
+
 ## What shipped
 
 Every entry is closed. In the order they were done, which is the order the entry above them argued

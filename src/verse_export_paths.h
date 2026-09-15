@@ -8,10 +8,16 @@
 // directory, and VerseRuntime, which finds it again at runtime -- one rule, so the two cannot
 // name different places.
 //
-// The layout is .NET's, exactly: `data_<app>_<platform>_<arch>` beside the executable
-// (ExportPlugin.cs:250-262, godotsharp_dirs.cpp:224-231), with `verse_` in place of `data_`.
-// Godot resolves it from the executable path at startup, which is why nothing has to be
-// configured in an exported build (D8).
+// The shipped directory is plainly `verse_data`, beside the executable: it is already inside one
+// game's own directory, so the app, platform and architecture that .NET's `data_<app>_<platform>_<arch>`
+// carries (godotsharp_dirs.cpp:224-231) would say nothing there. Godot resolves it from the
+// executable path at startup, which is why nothing has to be configured in an exported build (D8).
+//
+// The *cache* directory the cooker writes into still carries all three, because every project and
+// platform on the machine lands beside every other one there. The shipped name is the cache
+// directory's leaf for a reason that is not cosmetic: `add_shared_object` copies a directory under
+// its own name and takes no rename (`editor_export_platform_pc.cpp:244`), so the only way to ship
+// `verse_data` is for the qualified name to be its parent.
 //
 // Both halves read *feature tags*, not OS calls, because the editor knows an export's platform
 // only as a tag and godot-cpp binds neither `OS::get_identifier` nor `OS::get_safe_dir_name`.
@@ -26,13 +32,13 @@ godot::String platform_tag(const godot::PackedStringArray &p_features);
 // universal build looks like.
 godot::String arch_tag(const godot::PackedStringArray &p_features);
 
-// `verse_<app>_<platform>_<arch>`. p_app is the project name; it is sanitised here the way
-// OS::get_safe_dir_name would, since that is not bound for extensions.
-godot::String data_dir_name(const godot::String &p_app, const godot::String &p_platform, const godot::String &p_arch);
+// What the shipped directory is called, and so also the leaf the cooker writes into.
+extern const char *DATA_DIR_NAME;
 
-// The same name, for the running game: the feature tags are this build's own. Empty outside an
-// exported build (`template` is the tag every export template carries and no editor does).
-godot::String data_dir_name_for_this_build();
+// `verse_<app>_<platform>_<arch>` -- the per-project, per-platform directory under the user's
+// cache that holds one cook. p_app is the project name; it is sanitised here the way
+// OS::get_safe_dir_name would, since that is not bound for extensions.
+godot::String cache_dir_name(const godot::String &p_app, const godot::String &p_platform, const godot::String &p_arch);
 
 // Absolute path to that directory beside the running executable, or "" outside an exported
 // build. Nothing here checks that it exists -- a missing one is a diagnostic vh_init owes.

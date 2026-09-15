@@ -49,7 +49,7 @@ phase; [`phase-7b-design.md`](phase-7b-design.md) is the other half.
 | D3 | **The cooker is an executable the export plugin runs as a subprocess**, not a DLL the editor loads. | Two `FEngineLoop`s in one process has never been tried and has no reason to be; a subprocess's stdout is the export log. `UnrealAssetStringify.Target.cs` is the model: a console Program with `bCompileAgainstEditor`. |
 | D4 | **The cooker compiles against Engine as well** (`bCompileAgainstEngine = true`). | S-1 (§2): with Engine merely dragged in and `WITH_ENGINE=0`, UHT cannot resolve `UWorld`/`APlayerController` for the three `Within=` headers; with `WITH_ENGINE=1` it parses. Weight is not an objection for a binary that never ships and never loads in the editor. `ChaosVisualDebugger.Target.cs:22-24` sets exactly these three flags. |
 | D5 | **One ABI header, one loader, a required/optional split, and a host *kind* readable before init.** `vh_host_kind()` answers `VH_HOST_EDITOR`/`RUNTIME`/`COOKER`; the compiler-side entry points answer `VH_ERR_UNSUPPORTED` in a runtime host; the loader tolerates their absence; a wrong-kind host is refused with one sentence naming the kind and the fix. ABI **8.2**, minor. | Delegated proposal, accepted. ~1200 of the header's 1672 lines are shared vocabulary the runtime host needs *more* than the editor host (`vh_value`, the callback table, `vh_tick_stats`, the debug structs); a second header duplicates them and drift is a silent miscompile (header:42-43). All 37 ABI calls live in `src/verse_runtime.cpp` and none is under an `#ifdef`, so two loaders buy nothing. |
-| D6 | **Cooked packages and the sidecar live in a data directory beside the executable**, `verse_<app>_<platform>_<arch>/` (`Contents/Resources/…` on macOS), emitted with `add_shared_object`. **The runtime host DLL is a `.gdextension` `[dependencies]` entry** per template, so the existing GDExtension export copies it. | Delegated proposal, accepted. This is .NET's layout exactly: `ExportPlugin.cs:250-262, 419-423` (`data_<csproj>_<platform>_<arch>`), `godotsharp_dirs.cpp:224-231` (resolved from the executable path, bundle fallback on macOS). `add_shared_object` copies a directory recursively, after the PCK, embedded or not (`editor_export_platform_pc.cpp:230-256`). A `.gdextension` dependency is per feature tag and becomes the same `SharedObject` (`gdextension_library_loader.cpp:42-66`). |
+| D6 | **Cooked packages and the sidecar live in a data directory beside the executable**, `verse_data/` (`Contents/Resources/…` on macOS), emitted with `add_shared_object`. *(7b: the name was `verse_<app>_<platform>_<arch>/`, copying .NET's, until it was pointed out that all three qualifiers say nothing inside one game's own directory. The **cache** directory the cooker writes into still carries them, and `verse_data` is its leaf, because `add_shared_object` ships a directory under its own name and takes no rename.)* **The runtime host DLL is a `.gdextension` `[dependencies]` entry** per template, so the existing GDExtension export copies it. | Delegated proposal, accepted. This is .NET's layout exactly: `ExportPlugin.cs:250-262, 419-423` (`data_<csproj>_<platform>_<arch>`), `godotsharp_dirs.cpp:224-231` (resolved from the executable path, bundle fallback on macOS). `add_shared_object` copies a directory recursively, after the PCK, embedded or not (`editor_export_platform_pc.cpp:230-256`). A `.gdextension` dependency is per feature tag and becomes the same `SharedObject` (`gdextension_library_loader.cpp:42-66`). |
 | D7 | **The data directory is also the host's engine directory.** `vh_init` receives `<data>/Engine`; UE accepts any directory with a `Binaries/` child as `GForeignEngineDir` (`GenericPlatformMisc.cpp:1408-1415`). What else `PreInit` needs under it is S-3's to find. | The editor host already boots against a foreign engine dir (`VerseHost.cpp:189-192`); a shipped game cannot point at a checkout, so it points at itself. |
 | D8 | **`verse/host/dll_path` and `verse/host/engine_dir` are editor-only.** An exported build derives both from the executable path and never reads the settings. | They hold one machine's absolute paths (`dodge-the-creeps/project.godot` ships them today). `OS::has_feature("template")` is the test. |
 | D9 | **The class shape ships as a sidecar the cooker writes; it carries no export defaults.** The sidecar is the analysis *snapshot*, serialised — the same struct every class-describing read already answers from — so the runtime host loads it and the seven snapshot-fed entry points keep their bodies. | Prior art, delegated read: at scene load Godot asks a script only `can_instantiate` and `instance_create`, then applies stored values by name through `set` (`object.cpp:1049-1076`, `packed_scene.cpp:477-508, 572`); the property list is asked lazily. Neither shipping language precomputes a shape into its export, and both answer "no default" outside `TOOLS_ENABLED` (`gdscript.cpp:395-409`, `csharp_script.cpp:2629-2644`) — defaults come from the initializer, which a cooked class still runs. The snapshot already exists (`TakeAnalysisSnapshot`, `HostScript.cpp`), so serialising it is the smallest sidecar there is. |
@@ -513,7 +513,7 @@ fill, and a `[dependencies]` section: per template tag, `verse_host_runtime.dll`
   `OS::get_cache_dir()/verse_cook/`; run `verse_cook.exe` (path: `verse/host/cooker_path`, a new
   editor-only setting defaulting to `verse_cook.exe` beside `verse/host/dll_path`) with
   `OS::execute`, relaying its stdout lines as `add_message` warnings and errors; on exit 0,
-  `add_shared_object(<tmp>/verse_<app>_<platform>_<arch>, [], "")` (or `"Contents/Resources"`
+  `add_shared_object(<cache>/verse_cook/<app>_<platform>_<arch>/verse_data, [], "")` (or `"Contents/Resources"`
   under `macos`). On failure, per S-7's answer, either the export aborts or the data directory is
   withheld and the game refuses to load with the same sentence.
 - `_export_file(path, type, features)`: for `*.verse`, `add_file(path, "\n", false)` then `skip()`
@@ -578,7 +578,7 @@ Everything that does not work is written into §13 with the message it produced.
 ## 10. macOS — blocked, and what it needs
 
 A Mac with Xcode and a UE source checkout built there (UE's macOS toolchain does not cross-compile
-from Windows). Layout is decided (D6): `Contents/Resources/verse_<app>_macos_<arch>/` for the data
+from Windows). Layout is decided (D6): `Contents/Resources/verse_data/` for the data
 directory, `Contents/Frameworks/libverse_host_runtime.dylib` signed as code, and ad-hoc signing
 requires the "Disable Library Validation" entitlement (`platform/macos/export/export_plugin.cpp:
 2107-2115`). `rcodesign` refuses apps with dylibs, so the plan is Apple's `codesign`. R-PLAT-1's
@@ -913,7 +913,7 @@ An export of `dodge-the-creeps` produces exactly what D6 describes:
 
 ```
 dtc.exe  dtc.pck  godot-verse.dll  tbbmalloc.dll  verse_host_runtime.dll
-verse_Dodge the Creeps (Verse)_windows_x86_64/
+verse_data/
     Cooked/GodotScripts_1/_Verse.uasset + .uexp
     Cooked/GodotAttributes/_Verse.uasset + .uexp
     Cooked/Verse/_Verse/VNI/Verse.uasset + .uexp          (and three more)
@@ -974,7 +974,7 @@ design document and takes §13.7 as its brief (`roadmap.md`).
   the R-SCN-2 diagnostics), and **export**.
 - The **export** layer exports `tests/integration` from the Godot 4.7 editor, headless, and
   asserts the tree: the game, `godot-verse.dll`, `verse_host_runtime.dll` and `tbbmalloc.dll`
-  beside the executable; the `verse_<app>_<platform>_<arch>` directory with the cooked script
+  beside the executable; the `verse_data` directory with the cooked script
   package, the attribute package, the mirror under `Engine/Content`, the `Engine/Binaries` marker
   and `verse_classes.json`; the sidecar naming the project's classes, module prefixes and all; and
   — read out of the `.pck` rather than out of the log — **all twenty `.verse` files at exactly one
