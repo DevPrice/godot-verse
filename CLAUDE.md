@@ -593,16 +593,9 @@ deleted the next time the project is opened, which for the yardstick is often. T
 **editor-owned**: read the diff before committing them, and blank `export_path` in the preset, which
 the editor fills in with whatever directory you last exported to.
 
-**A Godot export path is stored relative to the project and resolved against the process's working
-directory**, which is a trap worth knowing before it costs an hour. `EditorExportPreset::set_export_path`
-turns an absolute path into a project-relative one (`editor_export_preset.cpp:380-383`), the dialog
-hands that relative string straight to `export_project` (`project_export.cpp:1540`), and
-`prepare_template` tests it with `DirAccess::exists`, which for a bare relative path is **CWD**-relative
-(`editor_export_platform_pc.cpp:156`). Export to a directory outside the project and the stored path
-becomes `../../../Desktop/...`; from an editor whose working directory is not the project, that
-resolves to nothing and the export dies with *"Prepare Template: The given export path doesn't
-exist"* — after the Verse cook has already run and printed its lines, which makes it read like a
-Verse failure and it is not. **Godot also never creates the destination directory**; it must exist.
+**Godot never creates the destination directory of an export**; it must already exist, or
+`prepare_template` answers *"The given export path doesn't exist"* (`editor_export_platform_pc.cpp:156`).
+That message also used to mean something else entirely — see the working-directory constraint below.
 
 `dodge-the-creeps/` is the third Godot project and the yardstick: the whole game in Verse, with no
 GDScript in it but `headless_check.gd`, which is how to see it work without a window —
@@ -720,6 +713,18 @@ ten element types against four key types is not a list to maintain by hand.
   a *placeholder* and the swap to a real instance does not happen. Known, small, and not fixed —
   `docs/by-hand-findings.md` B8 has what is ruled out and where to look. Nothing automated can see
   it: a placeholder only exists under `is_editor_hint()`.
+- **Loading the host moves the process working directory, and the bridge moves it back.** The
+  monolithic host points it at `<engine>/Engine/Binaries/Win64` twice — once from a static
+  initializer when the DLL loads, and again inside `vh_init`, where UE's `PreInit` does it
+  deliberately. Godot resolves relative paths against the working directory, so from the first Verse
+  build onwards every one of them landed inside the Unreal checkout. `load_host_internal` restores it
+  around both (`FScopedWorkingDirectory`), and that is load-bearing rather than tidy: Godot stores an
+  export path **relative to the project** (`editor_export_preset.cpp:380-383`) and `prepare_template`
+  resolves it with `DirAccess::exists`, so exporting anywhere outside the project died with *"The
+  given export path doesn't exist"* — after the Verse cook had printed its own lines, which made it
+  read like a Verse failure. Restoring is safe because UE derives its paths from
+  `FPlatformProcess::BaseDir()` and everything this bridge hands the host is absolute. Anything else
+  that loads the host in-process has to do the same.
 - **The host module never unloads.** `vh_shutdown` tears the engine down; the DLL stays resident.
 - **A stopped VM is re-entrant, but two entry points are still refused.** Godot's debug loop runs
   on the interpreter's own thread and goes on servicing the editor while stopped, so an ordinary

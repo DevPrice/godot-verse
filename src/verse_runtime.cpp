@@ -1,5 +1,7 @@
 #include "verse_runtime.h"
 
+#include <windows.h>
+
 #include "verse_callable.h"
 #include "verse_export_paths.h"
 #include "verse_host_paths.h"
@@ -141,7 +143,41 @@ Error VerseRuntime::load_host() {
 	return load_host_internal(dll_path, verse_host_paths::engine_dir(), enable_debugger, String());
 }
 
+namespace {
+
+// **Loading and initialising the host moves the process working directory, and Godot resolves
+// relative paths against it.** The monolithic host points it at <engine>/Engine/Binaries/Win64 --
+// once when the DLL loads, and again inside vh_init, where UE's PreInit does it deliberately. From
+// the first Verse build onwards, every relative path the editor resolved afterwards landed inside
+// the Unreal checkout.
+//
+// What that broke: Godot stores an export path *relative to the project*
+// (`EditorExportPreset::set_export_path`, editor_export_preset.cpp:380-383), and `prepare_template`
+// tests it with `DirAccess::exists`, which resolves against the working directory. Exporting
+// anywhere outside the project therefore died with "The given export path doesn't exist" -- after
+// the Verse cook had printed its own lines, so it read like a Verse failure and was not one.
+//
+// Restoring it is safe: UE derives its own paths from FPlatformProcess::BaseDir(), not from the
+// working directory, and everything this bridge hands the host is an absolute path.
+struct FScopedWorkingDirectory {
+	FScopedWorkingDirectory() {
+		length = GetCurrentDirectoryW(MAX_PATH, saved);
+	}
+	~FScopedWorkingDirectory() {
+		if (length > 0 && length < MAX_PATH) {
+			SetCurrentDirectoryW(saved);
+		}
+	}
+
+	wchar_t saved[MAX_PATH] = {};
+	DWORD length = 0;
+};
+
+} // namespace
+
 Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p_engine_dir, bool p_enable_debugger, const String &p_cooked_dir) {
+	const FScopedWorkingDirectory restore_working_directory;
+
 	// vh_init gets one attempt per process, whatever it answers. It boots FEngineLoop, and the
 	// host module never unloads -- so FreeLibrary after a failure leaves a fully initialised
 	// engine resident, and a second vh_init runs PreInit again: "Delayed Startup phase

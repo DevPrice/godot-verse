@@ -84,6 +84,9 @@ bool VerseHostLibrary::load(const String &p_dll_path, String &r_error) {
 
 	// LOAD_WITH_ALTERED_SEARCH_PATH puts the host's own directory (which holds tbbmalloc.dll)
 	// on the search path, but only for a fully qualified native path - forward slashes are not.
+	//
+	// This moves the process working directory, and so does vh_init; VerseRuntime::load_host_internal
+	// puts it back around both.
 	const String native_path = p_dll_path.replace("/", "\\");
 	HMODULE handle = LoadLibraryExW((LPCWSTR)native_path.utf16().get_data(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
 	if (handle == nullptr) {

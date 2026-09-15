@@ -408,6 +408,60 @@ variables unset and `PATH` cut. The flag is `-- --verse-check`; without it the g
 
 ---
 
+## B15. Exporting anywhere but inside the project fails, and the host's working directory is why · **fixed**
+
+Reported from a by-hand export of `dodge-the-creeps` to the Desktop. What it looked like:
+
+```
+Verse: verse_cook: compiling
+...
+Verse: verse_cook: generation 1, 9 package(s), 4 source(s) -> ...
+  ERROR: Prepare Template: The given export path doesn't exist.
+```
+
+The cook succeeded and the export died straight after it, which reads like a Verse failure. It was
+one, but not that one.
+
+**Godot stores an export path relative to the project.** `EditorExportPreset::set_export_path`
+converts any absolute path the file dialog returns into a project-relative one
+(`editor_export_preset.cpp:380-383`), the dialog hands that relative string straight to
+`export_project` (`project_export.cpp:1540`), and `EditorExportPlatformPC::prepare_template` tests it
+with `DirAccess::exists` (`editor_export_platform_pc.cpp:156`), which resolves against the **process
+working directory**. Exporting to the Desktop therefore stores `../../../Desktop/dtc/...` and the
+check is only correct while the editor's working directory is the project.
+
+**And loading the Verse host moves it.** Measured with `tests/cooked_probe`, which prints the
+directory around each step: it moves at `LoadLibraryExW` — a static initializer in the monolithic
+host — and again inside `vh_init`, where UE's `PreInit` sets it deliberately. Both land on
+`<engine>/Engine/Binaries/Win64`. The export plugin builds the project in `_export_begin`, which
+Godot calls *before* `prepare_template`, so by the time the check ran the working directory was
+inside the Unreal checkout and `../../../Desktop/dtc` resolved to nothing.
+
+Traced in place rather than reasoned about, which is what settled it — the first fix covered only
+the `LoadLibraryExW` half and the export still failed:
+
+```
+[TRACE] cwd at _export_begin = C:\...\godot-verse\dodge-the-creeps
+[TRACE] cwd at end           = C:\...\UnrealEngine\Engine\Binaries\Win64
+[TRACE] dir_exists           = false
+```
+
+`VerseRuntime::load_host_internal` now restores the directory around the whole load
+(`FScopedWorkingDirectory`), which covers both moves. Restoring is safe: UE derives its own paths
+from `FPlatformProcess::BaseDir()`, not from the working directory, and every path this bridge hands
+the host is absolute. After the fix the same trace reads `dir_exists = true`, the export lands on the
+Desktop with its data directory, and the game passes all 30 checks run sandboxed.
+
+**What else this was silently breaking:** every relative path the editor resolved after the first
+Verse build, not just the export check. Nothing else in the suite noticed, because `run_tests.py`
+always passes absolute paths.
+
+**Two things it is not.** Godot will not create the destination directory either — that is the same
+error message for a different reason, and it is Godot's. And `is_tool()` reading a stripped source in
+an export (7b §13.9) is unrelated, despite both surfacing in the same session.
+
+---
+
 ## What shipped
 
 Every entry is closed. In the order they were done, which is the order the entry above them argued
