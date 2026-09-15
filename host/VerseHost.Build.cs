@@ -42,6 +42,10 @@ public class VerseHost : ModuleRules
 			// fails outright rather than ignoring the attribute. Every module this plugin depends
 			// on is already listed here.
 			"VerseSimulationMetadata",
+
+			// The class sidecar an exported game ships is JSON (HostSidecar.cpp): the cooker
+			// writes it and the runtime host reads it back, so both need this.
+			"Json",
 		});
 
 		// The cooker (VerseHostCooker.Target.cs) compiles against the editor and Engine, and
@@ -73,7 +77,17 @@ public class VerseHost : ModuleRules
 				"DeveloperToolSettings",
 				"DesktopPlatform",
 				"DerivedDataCache",
+
+				// The cook itself: FDefaultCookedFilePackageWriter is UnrealEd's, and
+				// UPackage::Save needs a Windows ITargetPlatform to cook against.
+				"TargetPlatform",
+				"WindowsTargetPlatform",
 			});
+
+			// TPackageWriterToSharedBuffer, which HostCookWriter.h derives the cooker's package
+			// writer from, is in CoreUObject's Internal folder -- and an Internal folder is not on
+			// a Program's include path however the dependency is declared.
+			PrivateIncludePaths.Add(System.IO.Path.Combine(EngineDirectory, "Source", "Runtime", "CoreUObject", "Internal"));
 			PrivateIncludePathModuleNames.AddRange(new string[]{
 				"AutomationWorker",
 				"AutomationController",

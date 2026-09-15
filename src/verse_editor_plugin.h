@@ -1,5 +1,6 @@
 #pragma once
 
+#include "verse_export_plugin.h"
 #include "verse_module_menu.h"
 #include "verse_syntax_highlighter.h"
 
@@ -32,4 +33,5 @@ private:
 
 	godot::Ref<VerseSyntaxHighlighter> highlighter;
 	godot::Ref<VerseModuleMenu> module_menu;
+	godot::Ref<VerseExportPlugin> export_plugin;
 };

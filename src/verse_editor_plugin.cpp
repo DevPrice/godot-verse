@@ -28,9 +28,16 @@ void VerseEditorPlugin::_enter_tree() {
 	// without this a `.vmodule` marker could not be made from inside the editor at all.
 	module_menu.instantiate();
 	add_context_menu_plugin(EditorContextMenuPlugin::CONTEXT_SLOT_FILESYSTEM, module_menu);
+
+	// An export cooks the project and strips the sources; without this one an exported game ships
+	// .verse files it has no compiler to read (R-DIST-9 .. R-DIST-11).
+	export_plugin.instantiate();
+	add_export_plugin(export_plugin);
 }
 
 void VerseEditorPlugin::_exit_tree() {
+	remove_export_plugin(export_plugin);
+	export_plugin.unref();
 	remove_context_menu_plugin(module_menu);
 	module_menu.unref();
 	remove_tool_menu_item(BUILD_MENU_ITEM);

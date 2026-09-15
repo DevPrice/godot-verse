@@ -291,6 +291,11 @@ public:
 	// module. This is what every ClassNameUtf8 in the host ABI carries.
 	godot::String qualified_class_name(const godot::String &p_res_path) const;
 
+	// Every `.verse` under p_dir, recursively. Public because the export plugin enumerates the
+	// same set a build does, and a project that means one thing to the build and another to the
+	// cook is the one way an export can be wrong and look right.
+	static godot::PackedStringArray find_verse_sources(const godot::String &p_dir);
+
 	// The Godot class a script attaches at, and the base_type its global-class registration
 	// records. One walk up the Verse superclass chain answers both, which is why they come back
 	// together: they differ only in where they stop.
@@ -490,7 +495,6 @@ private:
 	// by hand is a different and worse promise.
 	void insert_pending_import() const;
 
-	static godot::PackedStringArray find_verse_sources(const godot::String &p_dir);
 	// Every file under p_dir whose extension is p_extension, lowercased. The `.verse` walk and the
 	// `.vmodule` walk are the same walk with a different answer.
 	static godot::PackedStringArray find_project_files(const godot::String &p_dir, const godot::String &p_extension);

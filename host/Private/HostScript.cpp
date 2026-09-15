@@ -650,63 +650,10 @@ struct FBackgroundCheck
 
 FBackgroundCheck GBackgroundCheck;
 
-/// Everything the class-describing entry points answer, extracted once per analysis.
-///
-/// The stall this removes is the editor's. Around twenty ABI entry points used to call
-/// WaitForBackgroundCheck before touching the semantic program, and the editor asks several of them
-/// on the game thread while an analysis it started is still running -- `_validate` wants the method
-/// outline, the inspector wants the property list, a hover wants the documentation. Waiting was
-/// correct (the worker is rebuilding the very program they read, and VerseVM blocks execution for
-/// the length of a build) and it cost the rest of the analysis, which is where the ~1.7 s hang came
-/// from.
-///
-/// Two halves, because only one of them may be filled off the game thread. The *semantic* half is
-/// read out of the program the analysis just built, by whichever thread built it. The *VM* half --
-/// whether the published generation carries the class, a statics module's constant values, an
-/// `@export`'s declared default -- has to enter the VM, which is the game thread's alone, so it is
-/// filled at the moment the snapshot is made current. Neither half is read while it is being
-/// written: the pending snapshot is private to the thread building it until the swap.
-struct FAnalysisSnapshot
-{
-    struct FClass
-    {
-        bool bAbstract = false;
-        TArray<GodotVerse::FMethodDesc> Methods;
-        TArray<GodotVerse::FSignalDesc> Signals;
-        TArray<GodotVerse::FCompleteItem> Members;
 
-        /// What the class inherits and could still override. Held beside Members rather than
-        /// derived from it because deriving it needs the superclass chain, which is the program
-        /// the analysis just built -- and the question is asked on the keystroke that opens
-        /// completion, where nothing may touch that program.
-        TArray<GodotVerse::FCompleteItem> OverrideCandidates;
-
-        /// GetClassExports answers false for a program with no export attribute in it as well as
-        /// for a class that is not there, and the two mean different things to `_validate`.
-        bool bExportsHarvested = false;
-        TArray<GodotVerse::FExportDesc> Exports;
-
-        /// Whether the *published* generation carries the class, which is a different question from
-        /// whether this analysis declares it -- a class renamed in an unsaved buffer is in one and
-        /// not the other.
-        bool bInPublishedProgram = false;
-
-        /// Shared rather than held by value: a vh_value in either points into the FFieldStorage
-        /// beside it, so what the ABI hands out has to be kept alive by the caller rather than
-        /// copied. Defaults are keyed by member name and hold one entry per `@export`.
-        TSharedPtr<const GodotVerse::FClassStatics> Statics;
-        TMap<FUtf8String, TSharedPtr<const GodotVerse::FFieldValue>> Defaults;
-    };
-
-    /// Module-qualified, exactly as every ClassNameUtf8 in the ABI is: `player`, `gameplay/player`.
-    TMap<FUtf8String, FClass> Classes;
-
-    /// ResolveUnknownName's whole answer, inverted: which modules declare each top-level name. Built
-    /// here because the walk reads the AST project, which the worker rebuilds under it -- that read
-    /// never waited and so was a race as well as a cost.
-    TMap<FUtf8String, TArray<FUtf8String>> ModulesDeclaring;
-    bool bAstAvailable = false;
-};
+/// Declared in HostScript.h since the sidecar has to name it too (HostSidecar.cpp). Everything
+/// below was written when it was a file-local type, and still reads that way.
+using GodotVerse::FAnalysisSnapshot;
 
 /// What the read entry points answer from, and what the next analysis is building. Swapped on the
 /// game thread; the current one is shared rather than double-buffered by index, so a descriptor
@@ -4541,6 +4488,24 @@ AUTORTFM_DISABLE UObject* PeekFieldObject(UObject* Object, FUtf8StringView Field
 }
 
 } // namespace
+
+AUTORTFM_DISABLE void GodotVerse::AdoptCookedGeneration(FUtf8StringView PackageName, int32 Generation)
+{
+    GScriptPackageName = FUtf8String(PackageName);
+    GScriptSourcePackageName = GScriptPackageName;
+    GScriptGeneration = Generation;
+    GProjectBuilt = true;
+}
+
+AUTORTFM_DISABLE const TSharedPtr<const GodotVerse::FAnalysisSnapshot>& GodotVerse::GetAnalysisSnapshot()
+{
+    return GSnapshot;
+}
+
+AUTORTFM_DISABLE void GodotVerse::SetAnalysisSnapshot(TSharedRef<const GodotVerse::FAnalysisSnapshot> Snapshot)
+{
+    GSnapshot = Snapshot;
+}
 
 AUTORTFM_DISABLE bool GodotVerse::IsClassAbstract(FUtf8StringView ClassName)
 {

@@ -8,6 +8,7 @@
 
 #include "Containers/StringConv.h"
 #include "Containers/UnrealString.h"
+#include "HostCooked.h"
 #include "HostDebug.h"
 #include "HostEventLoop.h"
 #include "HostRuntime.h"
@@ -134,7 +135,32 @@ bool WrongThread(const char* What)
 }
 }
 
+namespace {
+
+/// vh_init's body, with a switch for the one caller that has already booted the engine.
+///
+/// The cooker is an executable, so it owns its own PreInit: an editor-class Program needs the
+/// EDITOR token, -nullrhi and -NoShaderCompile on the command line, which a DLL host never does
+/// (CookMain.cpp). Everything else vh_init does, it still needs.
+VH_ATTR int32_t InitHost(const vh_init_desc* Desc, bool bEngineAlreadyBooted);
+
+} // namespace
+
 extern "C" int32_t vh_init(const vh_init_desc* Desc)
+{
+    return InitHost(Desc, /*bEngineAlreadyBooted*/ false);
+}
+
+#if VH_HOST_KIND == VH_HOST_KIND_COOKER
+VH_ATTR int32_t GodotVerse::InitCookerAfterEngineBoot(const vh_init_desc& Desc)
+{
+    return InitHost(&Desc, /*bEngineAlreadyBooted*/ true);
+}
+#endif
+
+namespace {
+
+VH_ATTR int32_t InitHost(const vh_init_desc* Desc, bool bEngineAlreadyBooted)
 {
     // Majors must match exactly and minors need not, which is the policy written at the top of
     // verse_host_abi.h -- until the first minor bump this compared the whole version and so refused
@@ -224,13 +250,40 @@ extern "C" int32_t vh_init(const vh_init_desc* Desc)
     GIsEditor = true;
 #endif
 
-    if (GEngineLoop.PreInit(TEXT("-NOCONSOLE -AssetGatherAll=0 -LogCmds=\"global Warning\"")) != 0)
+    if (!bEngineAlreadyBooted
+        && GEngineLoop.PreInit(TEXT("-NOCONSOLE -AssetGatherAll=0 -LogCmds=\"global Warning\"")) != 0)
     {
         GodotVerse::ReportError(UTF8TEXT("Failed to initialize the engine (PreInit failed)."));
         return VH_ERR_INIT;
     }
 
     FGCObject::StaticInit();
+
+    // Before Solaris, not after. Loading Solaris is what loads the VNI packages -- the mirror and
+    // the standard library -- and JitVniPackages looks each one up by package path, so the mount
+    // points the cook wrote have to be down already.
+    const char* const CookedDir =
+        Desc->StructSize >= static_cast<int32_t>(offsetof(vh_init_desc, CookedDirUtf8) + sizeof(const char*))
+            ? Desc->CookedDirUtf8
+            : nullptr;
+    const FString CookedDirPath =
+        CookedDir ? FString(StringCast<TCHAR>(reinterpret_cast<const UTF8CHAR*>(CookedDir)).Get()) : FString();
+    if (CookedDir)
+    {
+        FUtf8String Error;
+        if (!GodotVerse::RegisterCookedMountPoints(CookedDirPath, Error))
+        {
+            GodotVerse::ReportError(FUtf8StringView(Error));
+            return VH_ERR_INIT;
+        }
+    }
+    else if (VH_HOST_KIND == VH_HOST_KIND_RUNTIME)
+    {
+        // With no compiler, a project this host was not handed is a project it can never have.
+        GodotVerse::ReportError(UTF8TEXT(
+            "This build of the Verse host has no compiler and was given no cooked project."));
+        return VH_ERR_INIT;
+    }
 
     // Loading Solaris initializes the uLang system params for UE integration.
     ISolarisModule::Get();
@@ -245,9 +298,23 @@ extern "C" int32_t vh_init(const vh_init_desc* Desc)
         return VH_ERR_INIT;
     }
 
+    // The other half: the project's own packages, and the class shape it ships in place of a
+    // semantic program. After the content scope, because loading one allocates Verse cells.
+    if (CookedDir)
+    {
+        FUtf8String Error;
+        if (!GodotVerse::LoadCookedProject(CookedDirPath, Error))
+        {
+            GodotVerse::ReportError(FUtf8StringView(Error));
+            return VH_ERR_INIT;
+        }
+    }
+
     Host.bInitialized = true;
     return VH_OK;
 }
+
+} // namespace
 
 extern "C" void vh_shutdown(void)
 {

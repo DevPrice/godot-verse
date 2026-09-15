@@ -73,6 +73,46 @@ def verify_shlib_affixes(env):
         )
 
 
+# What an exported game needs beside its executable, taken from the same bin/ directory the
+# libraries come from. Godot turns a [dependencies] entry into a SharedObject per matching feature
+# tag (gdextension_library_loader.cpp:42-66), which is how the runtime host and its one non-system
+# import get there without the export plugin placing them.
+#
+# Template tags only. In the editor the host is named by `verse/host/dll_path` and loaded out of
+# the engine's own Binaries/Win64, because VNI reads each package's .verse sources relative to the
+# loaded module -- a copy anywhere else compiles against an empty package set.
+RUNTIME_HOST_FILES = ["verse_host_runtime.dll", "tbbmalloc.dll"]
+DEPENDENCY_TARGETS = ["template_debug", "template_release"]
+
+
+def scan_dependencies(bindir):
+    """Returns `(feature key, "{path: target, ...}")` pairs for the runtime host, where present."""
+    groups = []
+    if not os.path.isdir(bindir):
+        return groups
+
+    for dirname in sorted(os.listdir(bindir)):
+        if not os.path.isdir(os.path.join(bindir, dirname)):
+            continue
+        platform, _, arch = dirname.partition("-")
+        if platform not in SHLIB_AFFIXES:
+            continue
+        arch = arch or "universal"
+
+        present = [f for f in RUNTIME_HOST_FILES
+                   if os.path.isfile(os.path.join(bindir, dirname, f))]
+        if not present:
+            continue
+
+        # An empty target puts each file beside the executable, which is where VerseRuntime looks
+        # for the host in an exported build.
+        entries = ", ".join(f'"./bin/{dirname}/{name}": ""' for name in present)
+        groups.append([(feature_key(platform, arch, target), "{" + entries + "}")
+                       for target in DEPENDENCY_TARGETS])
+
+    return groups
+
+
 def scan(bindir):
     """Returns the libraries present in `bindir`, grouped by platform directory.
 
@@ -124,6 +164,14 @@ def generate(addon_dir, template_path):
         if lines:
             lines.append("")
         lines += [f'{key} = "{path}"' for key, path in group]
+
+    dependency_groups = scan_dependencies(os.path.join(addon_dir, "bin"))
+    if dependency_groups:
+        lines.append("")
+        lines.append("[dependencies]")
+        lines.append("")
+        for group in dependency_groups:
+            lines += [f"{key} = {value}" for key, value in group]
 
     contents = "".join([template.rstrip("\n"), "\n", "\n".join(lines), "\n" if lines else ""])
 

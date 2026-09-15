@@ -17,6 +17,7 @@
 
 #ifdef TOOLS_ENABLED
 #include "verse_editor_plugin.h"
+#include "verse_export_plugin.h"
 #include "verse_syntax_highlighter.h"
 
 #include <godot_cpp/classes/editor_plugin_registration.hpp>
@@ -55,6 +56,7 @@ void initialize_gdextension_types(const ModuleInitializationLevel p_level) {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_EDITOR) {
 		GDREGISTER_CLASS(VerseSyntaxHighlighter);
 		GDREGISTER_CLASS(VerseModuleMenu);
+		GDREGISTER_CLASS(VerseExportPlugin);
 		GDREGISTER_CLASS(VerseEditorPlugin);
 		EditorPlugins::add_by_type<VerseEditorPlugin>();
 	}
