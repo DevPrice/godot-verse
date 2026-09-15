@@ -43,5 +43,47 @@ public class VerseHost : ModuleRules
 			// on is already listed here.
 			"VerseSimulationMetadata",
 		});
+
+		// The cooker (VerseHostCooker.Target.cs) compiles against the editor and Engine, and
+		// RequiredProgramMainCPPInclude.h textually compiles LaunchEngineLoop.cpp into
+		// VerseHost.cpp -- which under WITH_EDITOR && WITH_ENGINE includes UnrealEd's headers. An
+		// editor Launch gets these from Launch.Build.cs's own bBuildEditor block; a Program has to
+		// list them itself, which is what ChaosVisualDebugger.Build.cs does. The editor host and
+		// the runtime host never enter this branch.
+		if (Target.bCompileAgainstEditor)
+		{
+			PrivateDependencyModuleNames.AddRange(new string[]{
+				"Engine",
+				"InputCore",
+				"InstallBundleManager",
+				"MediaUtils",
+				"Messaging",
+				"MoviePlayer",
+				"MoviePlayerProxy",
+				"PreLoadScreen",
+				"RenderCore",
+				"RHI",
+				"Slate",
+				"SlateCore",
+				"TraceLog",
+				"ProfileVisualizer",
+				"SourceControl",
+				"EditorFramework",
+				"UnrealEd",
+				"DeveloperToolSettings",
+				"DesktopPlatform",
+				"DerivedDataCache",
+			});
+			PrivateIncludePathModuleNames.AddRange(new string[]{
+				"AutomationWorker",
+				"AutomationController",
+				"AutomationTest",
+				"HeadMountedDisplay",
+				"MRMesh",
+				"SlateRHIRenderer",
+				"SlateNullRenderer",
+				"MessagingCommon",
+			});
+		}
 	}
 }

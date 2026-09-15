@@ -150,13 +150,13 @@ def write_provenance(engine: Path, repo: Path, config: str, destinations: list[P
     return written
 
 
-def run_ubt(engine: Path, config: str, clean: bool) -> None:
+def run_ubt(engine: Path, target: str, config: str, clean: bool) -> None:
     build_bat = engine / "Engine" / "Build" / "BatchFiles" / "Build.bat"
     if not build_bat.exists():
         print(f"error: Build.bat not found at {build_bat}", file=sys.stderr)
         sys.exit(1)
 
-    cmd = [str(build_bat), "VerseHost", "Win64", config]
+    cmd = [str(build_bat), target, "Win64", config]
     if clean:
         cmd.append("-Clean")
 
@@ -209,6 +209,9 @@ def main() -> None:
     parser.add_argument("--engine", default=os.environ.get("UE_ROOT"),
                         help="UE source checkout with the Verse toolchain; defaults to $UE_ROOT")
     parser.add_argument("--config", default="Development", choices=["Debug", "DebugGame", "Development", "Shipping"])
+    parser.add_argument("--target", default="VerseHost",
+                        help="the UBT target under host/ to build: VerseHost (the editor host, "
+                             "collected into bin/) or VerseHostCooker (the OQ-10 spike)")
     parser.add_argument("--clean", action="store_true")
     parser.add_argument("--stage-only", action="store_true")
     args = parser.parse_args()
@@ -246,8 +249,12 @@ def main() -> None:
         print(f"[build_host] stage-only, done in {elapsed:.1f}s")
         return
 
-    run_ubt(engine, args.config, args.clean)
-    collect_outputs(engine, repo, args.config)
+    run_ubt(engine, args.target, args.config, args.clean)
+    if args.target == "VerseHost":
+        collect_outputs(engine, repo, args.config)
+    else:
+        print(f"[build_host] {args.target} built; its binaries are under "
+              f"{engine / 'Engine' / 'Binaries' / 'Win64'} and are not collected into bin/")
 
     elapsed = time.time() - start
     print(f"[build_host] done in {elapsed:.1f}s")
