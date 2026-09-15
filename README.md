@@ -11,9 +11,11 @@ language than GDScript and does not already know Verse.
 
 ## Status: experimental. Do not build a game on this.
 
-This is a research build, and it is early — Phase 3 of 8 on [the roadmap](docs/roadmap.md).
+This is a research build. Phases 0–6 are complete and Phase 7a (export) is built; Phase 7b —
+actually loading an exported game — is blocked on an engine limitation. See
+[the roadmap](docs/roadmap.md).
 
-- **Windows only.** No macOS, no Linux, no export to anything.
+- **Windows only.** No macOS, no Linux.
 - **There is no addon to install.** Verse's compiler ships only inside Unreal, so building
   requires *your own Unreal Engine source checkout* plus Visual Studio, and the resulting host DLL
   cannot be redistributed. A download-and-unzip install waits on Epic licensing the toolchain
@@ -22,19 +24,22 @@ This is a research build, and it is early — Phase 3 of 8 on [the roadmap](docs
   the edited code; saving refreshes diagnostics and completion but not what runs. There is a
   `Project > Tools > Build Verse` for when there is no run to hang it on.
 
-What works today: a `.verse` file is a script you attach to a node; `Ready`, `Process` and
-`PhysicsProcess` run; properties export to the inspector; every Godot `Variant` type crosses in
-both directions, containers by reference; GDScript can call any method a script defines and a
-runtime error names a file, a line and a Verse call stack. The editor gets syntax highlighting,
-live diagnostics, completion and symbol lookup.
+What works today: a `.verse` file is a script you attach to a node; every one of Godot's virtuals
+runs, spelled the way Godot spells it (`_Ready`, `_Process`, ...); properties export to the
+inspector; every Godot `Variant` type crosses in both directions, containers by reference; a
+script declares signals as typed members and can `Await` any Godot signal; GDScript can call any
+method a script defines and a runtime error names a file, a line and a Verse call stack. The
+editor gets syntax highlighting, live diagnostics, completion, symbol lookup and a step debugger.
 
-Since then: all 1023 Godot classes are mirrored with their enums (Phase 2), and a project is a
-real source set — hot reload on Play, modules marked with a `.vmodule` file, `@tool` scripts,
-and imports the editor writes for you (Phase 3).
+All 1036 Godot classes are mirrored with their enums, and a project is a real source set — hot
+reload on Play, modules marked with a `.vmodule` file, `@tool` scripts, and imports the editor
+writes for you. Concurrency works: `spawn`, `Await`, `Sleep` and `race`, each with a task scope
+tied to the script instance.
 
-Not yet: signals, the rest of Godot's virtuals, `@GlobalScope` utility functions, concurrency,
-a debugger, and export to anything. [`docs/spec.md`](docs/spec.md) carries the per-requirement
-status, and the rest of this file predates most of it — where the two disagree, believe the spec.
+Not yet: an exported project builds the right tree, but the exported game cannot load it —
+Phase 7b's blocker — and there is no macOS or Linux support. [`docs/spec.md`](docs/spec.md)
+carries the per-requirement status, and the rest of this file predates most of it — where the two
+disagree, believe the spec.
 
 ## What a script looks like
 
@@ -55,10 +60,10 @@ mover := class(node2d):
     @export_group("Movement")
     var Speed<public>:type{_X:float where 0.0 <= _X, _X <= 500.0} = 60.0
 
-    Ready<override>():void =
+    _Ready<override>():void =
         Print(Greeting)
 
-    Process<override>(Delta:float):void =
+    _Process<override>(Delta:float):void =
         set Position = vector2{X := Position.X + Delta * Speed, Y := Position.Y}
 ```
 
@@ -83,7 +88,7 @@ Prerequisites:
 - An **Unreal Engine source checkout** with the Verse toolchain, which requires a GitHub account
   linked to an Epic account. Developed against Epic's main branch (reports version 6.0).
 - **Visual Studio 2022** with the C++ workload.
-- **Godot 4.5** or newer (developed against 4.7).
+- **Godot 4.7** or newer.
 - **Python 3** with **SCons**.
 
 Point `UE_ROOT` at the engine checkout, then:
@@ -105,7 +110,7 @@ and set those two settings there.
 
 Tests:
 
-    python tools/run_tests.py      # units, the C ABI, and a headless Godot with scripts attached
+    python tools/run_tests.py      # units, the C ABI, two headless Godot projects, and an export check
 
 ## Licensing
 
