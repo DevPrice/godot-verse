@@ -547,6 +547,14 @@ Written here rather than only in `spec.md` §14, because the next phase's shape 
 
 ### Phase 4b — the editor's data model
 
+**Designed, not built.** [`phase-4b-design.md`](phase-4b-design.md) is what this list turns into,
+written after its spikes rather than before them — `construct_probe`, `ctor_delegate_probe`,
+`overload_probe`, `class_block_probe`, `class_block_self_probe`, `native_block_probe` and
+`default_cdo_probe` in `tests/verse_probe/`.
+R-NODE-3's answer is a class **`block:`** clause on the native root, which means a Verse script
+writes `helper{}` and gets a live Godot object, with R-TYPE-7 left intact. **The first pass is §3
+and §4 only**; §5–§9 are reassessed after.
+
 - **R-NODE-3** — instantiation without a node, `RefCounted` and `Object` both.
 - **R-EXP-6, R-EXP-7, R-EXP-8, R-EXP-9** — custom Resources, autoloads, icons, RPC config.
 - **R-EXP-1** — the remaining `@export` surface, type-driven where the Verse type can say it and
