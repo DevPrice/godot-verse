@@ -1,6 +1,10 @@
 # godot-verse — Roadmap
 
-**Status:** Draft 13 · 2026-09-14 · **Phases 0–6 complete.** Phase 6's design is [`phase-6-design.md`](phase-6-design.md), written before the work in the shape
+**Status:** Draft 14 · 2026-09-14 · **Phases 0–6 complete; Phase 7 is designed.**
+[`phase-7-design.md`](phase-7-design.md) is the plan, written before the work from an interview
+and three delegated reads of the engine sources: §1 is the decisions, §2 the spikes (S-1, OQ-10,
+ran during the planning), §4–§10 the stages in build order, §13 the section the implementing agent
+writes. Phase 6's design is [`phase-6-design.md`](phase-6-design.md), written before the work in the shape
 Phase 4.5's and Phase 5's were, so **§13 is the part to read** — the six spikes' answers, and the
 places §1 and §9 turned out wrong. The by-hand checks three phases owed
 have been run, in one windowed session as each design asked — Phase 3's yardstick run and editor
@@ -713,34 +717,63 @@ stated where it looks worst.
 
 ---
 
-## Phase 7 — Platforms and export
+## Phase 7 — Export, and the platforms it reaches — **designed**
 
-**Why now.** After parity, before 1.0, as decided. Export and cross-platform are the same work
-done once: R-DIST-9 builds the pipeline, and it should be built for every desktop platform
-simultaneously rather than Windows-first and ported.
+**Why now.** Before 1.0, as decided — and **before 4b**, by the decision recorded in
+[`phase-7-design.md`](phase-7-design.md) D1: export is the next thing worth having and shares
+nothing with the editor's data model. 4b stays where it is above, unbuilt and owed before 1.0.
 
-- **R-PLAT-1, R-PLAT-5** — Linux and macOS, editor and exported game, at the same feature level.
-  Expect this to surface Windows assumptions; the codebase is portable in shape but has never been
-  built elsewhere.
-- **R-DIST-9, R-DIST-10** — exporting through Godot's ordinary dialog produces a game that runs on
-  a machine with nothing installed.
-- **R-DIST-11 and the host split** — precompiled Verse in exported games, per the S-1 answer
-  (spec §14.1). `host/` becomes three targets over one set of sources: today's **editor host**, a
-  **cooker** that is editor-class and runs only at export, and a **runtime host** with
-  `WITH_VERSE_COMPILER=0`, which is what ships. Export cooks each Verse package to `.uasset` and the
-  runtime host loads it. This is the largest single item in the phase and the reason R-DIST-9 and
-  R-DIST-10 cannot be built before it.
-- **R-PLAT-4** — an unsupported platform fails at export time, not on a player's device.
-- **OQ-10, first** — whether an editor-class UBT Program target can be built at all. The cooker
-  depends on it, and so therefore do R-DIST-9, R-DIST-10 and R-DIST-11. If the answer is no, the
-  fallback is cooking through a real UE editor or commandlet process, and the phase is shaped around
-  that instead. Nothing else in this phase should start before this is known.
-- **R-PLAT-2, R-PLAT-3** — mobile and web, per Phase 0. These may land here, land later, or become
-  written-down non-goals with a reason. They do not gate 1.0.
-- **R-DIST-4, R-DIST-5** — the build and the version-mismatch message become things a stranger can
-  survive.
+The design is the whole plan and this section is its summary; where they disagree, the design is
+the record. What it fixes:
 
-**Exit:** Dodge the Creeps exports and runs on Windows, Linux and macOS.
+- **R-DIST-11 and the host split** — precompiled Verse, per the S-1 answer (spec §14.1). `host/`
+  becomes three targets over one set of sources: today's **editor host**, a **cooker** that is an
+  editor-class *executable* the export plugin runs as a subprocess, and a **runtime host** with
+  `WITH_VERSE_COMPILER=0` that ships with the game (Development for the debug template, Shipping
+  for release). One ABI header serves all three: the runtime host answers `VH_ERR_UNSUPPORTED` for
+  the eleven compiler-side entry points and `vh_host_kind()` says which host was loaded, so a
+  wrong DLL is one sentence rather than a crash. ABI **8.2**.
+- **OQ-10, run during planning** — an editor-class Program target does build, *provided it also
+  compiles against Engine*: with Engine merely dragged in by Solaris's own rules and `WITH_ENGINE=0`,
+  UHT cannot resolve `UWorld` for the three headers that say `Within=`. Design §2 S-1 has the four
+  builds; the link result is the implementing agent's first line in §13.
+- **R-DIST-9, R-DIST-10** — Godot's ordinary export dialog. Cooked packages and a serialised
+  class-shape sidecar go in a `verse_<app>_<platform>_<arch>` directory beside the executable,
+  which is .NET's layout and doubles as the host's engine directory; the runtime host DLL rides as
+  a `.gdextension` `[dependencies]` row; `.verse` sources are stripped to one-byte stubs the way C#
+  strips `.cs`. `verse/host/dll_path` and `engine_dir` become editor-only.
+- **R-PLAT-1, R-PLAT-5, narrowed to this machine** — Windows exports and runs; Linux is built with
+  UBT's cross-toolchain and *attempted* under WSL2; macOS is written as blocked on hardware, with
+  its layout decided. R-PLAT-1 stays MUST at status *part*.
+- **R-PLAT-4** — an export to Android, iOS or web fails at export with a sentence.
+- **Godot 4.7 official** is the editor and the templates from stage 0 on; godot-cpp's 4.6 API dump
+  and the mirror are regenerated first.
+- **An `export` layer in `run_tests.py`** exports *both* `tests/integration` and `dodge-the-creeps`
+  headless and runs the results — the first is the coverage, the second is the exit.
+
+**Not in this phase, by decision:** R-PLAT-2 (mobile, deferred with no design; OQ-3 stays open),
+R-PLAT-3 (web — Phase 7.5 below), R-DIST-3, R-DIST-4 and R-DIST-5 (Phase 8 as before; the kind
+check closes the "wrong host" half of R-DIST-5 as a side effect), in-PCK cooked data with
+extraction (held in reserve for single-file exports), and 4b.
+
+**Exit:** `run_tests.py` reports four layers and the fourth exports both projects from the 4.7
+editor and runs them under the runtime host, green, in the release template; the exported
+`dodge-the-creeps` plays on a machine with nothing installed and ships no `.verse` and no compiler;
+an Android export fails at export time with one sentence; Linux artefacts build and the attempt is
+recorded; macOS is recorded blocked; design §13 is written.
+
+---
+
+## Phase 7.5 — Web
+
+**Why a phase of its own.** R-PLAT-3 is SHOULD and blocked on **OQ-4**: UBT has no wasm Program
+target, and Godot's web export is a constrained, single-threaded-by-default wasm environment.
+Phase 7 removes nothing from that list and adds one thing to it — the runtime host now exists as a
+target whose module set is the smallest Verse can run in, which is the only binary a web build would
+ever need to reach. No design yet, by decision; when it is written it starts from OQ-4's row in
+`spec.md` §14 and Phase 7's §2 S-2 (the runtime host's measured module set and size).
+
+**Exit:** OQ-4 answered in `spec.md`, either way.
 
 ---
 

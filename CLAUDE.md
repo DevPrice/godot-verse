@@ -235,6 +235,27 @@ rather than retired: everything from the ABI inward has `host_smoke` cases and e
 have. `tests/host_smoke/debug_probe.verse`'s line numbers are part of it — a member declared above
 line 22 moves an armed breakpoint.
 
+**Phase 7 is designed and not built, and `docs/phase-7-design.md` is the whole plan** — written
+before the work from an interview, so §1 (twenty-two decisions) and §2 (seven spikes) are the
+record until §13 is written, and §13 is where the implementing agent says what turned out wrong.
+The shape: three UBT targets over `host/` (the editor host, a cooker *executable* the export plugin
+runs, a runtime host with `WITH_VERSE_COMPILER=0` that ships), one ABI header for all three with
+`vh_host_kind()` and `VH_ERR_UNSUPPORTED` (ABI 8.2), cooked packages plus a serialised snapshot in
+a `verse_<app>_<platform>_<arch>` directory beside the exe, `.verse` stripped to stubs, Godot 4.7
+official as the editor, and a fourth `run_tests.py` layer that exports both projects. **S-1 (OQ-10)
+ran during planning and is closed: yes.** `host/VerseHostCooker.Target.cs` and
+`host/Private/CookMain.cpp` exist, `build_host.py --target VerseHostCooker` builds
+`verse_cook.exe` (768 MB, no PDB, ~9 min from clean) and it boots in 2.4 s — but **its teardown
+segfaults**, past where a cook would have written, so no exit code it produces means anything
+yet; that is stage 1's first job and §2 S-1 lists what was already ruled out. The facts that
+matter: an editor-class Program passes UHT only when it *also* compiles against Engine, because
+`Solaris.Build.cs` drags Engine in under `bBuildEditor` whatever the host lists and `WITH_ENGINE=0`
+with Engine's headers in the manifest loses `UWorld`; it must be an executable, because a
+monolithic editor-class DLL exports 143,570 symbols against lld-link's 65,535; it needs developer
+tools, because `PreInit` constructs the shader compiling manager unconditionally; and it boots
+only with the `EDITOR` token, `-nullrhi` and `-NoShaderCompile`, from an entry point marked
+`AUTORTFM_DISABLE`. Seventeen builds, all in §2 S-1; read it before touching that target. Stage 0 is the move to 4.7; nothing else starts before it.
+
 **The by-hand checks have been run, and `docs/by-hand-checklist.md` is deleted** — all twenty-two
 of its entries were watched happen, and what is worth keeping is what they found rather than the
 list. **`docs/by-hand-findings.md` is that**: B1–B9 are the defects, all fixed, B10–B11 are about
@@ -361,6 +382,7 @@ and the `VerseSimulationMetadata` dependency each exist for a reason spelled out
 ## Commands
 
     python tools/build_host.py            # stages host/ into the UE tree, runs UBT
+    python tools/build_host.py --target VerseHostCooker   # the cooker (Phase 7); not collected into bin/
     scons target=editor                   # the GDExtension (also: target=template_debug)
     python tools/gen_verse_api.py         # regenerates the Verse mirror of Godot's API
     python tools/build_smoke.py           # ABI test binary
