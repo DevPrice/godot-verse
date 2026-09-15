@@ -175,6 +175,30 @@ struct FScopedWorkingDirectory {
 
 } // namespace
 
+// A game that cannot load its Verse stops, having said why (7b D6). Every script in it is dead --
+// nothing moves, nothing responds -- and a window that opens and does nothing is a worse answer than
+// no window. In the editor this only logs: an editor with a broken host is still an editor, and the
+// author is the person who can fix it.
+//
+// `template` is the tag every export template carries and no editor build does. `OS::alert` is a
+// blocking dialog on a desktop build and a printed line when there is no display, so a headless run
+// still says it and still leaves.
+void VerseRuntime::refuse_to_start(const String &p_why) {
+	if (!OS::get_singleton()->has_feature("template")) {
+		return;
+	}
+	const String message = p_why + String("\n\nThe game cannot run without it and will close.");
+	UtilityFunctions::push_error(message);
+	OS::get_singleton()->alert(message, String("Verse"));
+
+	// Quitting rather than aborting: the host is loaded lazily, from the first script's build, so
+	// there is a SceneTree by now and it ends the frame cleanly. A non-zero code because this is a
+	// failure -- tools/run_tests.py's export layer reads it.
+	if (SceneTree *tree = Object::cast_to<SceneTree>(Engine::get_singleton()->get_main_loop())) {
+		tree->quit(1);
+	}
+}
+
 Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p_engine_dir, bool p_enable_debugger, const String &p_cooked_dir) {
 	const FScopedWorkingDirectory restore_working_directory;
 
@@ -194,6 +218,7 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 	String error_message;
 	if (!host.load(p_dll_path, error_message)) {
 		UtilityFunctions::push_error(String("VerseRuntime: failed to load host library: ") + error_message);
+		refuse_to_start(String("Verse could not load ") + p_dll_path + String(": ") + error_message);
 		return ERR_CANT_OPEN;
 	}
 
@@ -210,6 +235,7 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 	if (kind != wanted) {
 		UtilityFunctions::push_error(String("VerseRuntime: ") + p_dll_path + String(" is ") + host_kind_name(kind) + String("; ") + (wanted == (int32_t)VH_HOST_EDITOR ? String("the Godot editor needs the editor host. Build it with `python tools/build_host.py`.") : String("an exported game needs the runtime host. Build it with `python tools/build_host.py --target VerseHostRuntime`.")));
 		host.unload();
+		refuse_to_start(String("Verse shipped the wrong host: ") + p_dll_path + String(" is ") + host_kind_name(kind) + String("."));
 		return ERR_INVALID_DATA;
 	}
 
@@ -263,6 +289,9 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 		UtilityFunctions::push_error(String("VerseRuntime: vh_init failed with status ") + String::num_int64(status));
 		host_init_refused = true;
 		host.unload();
+		refuse_to_start(last_error_message.is_empty()
+						? String("Verse could not start (vh_init returned ") + String::num_int64(status) + String(").")
+						: last_error_message);
 		return FAILED;
 	}
 
@@ -1573,6 +1602,12 @@ void VerseRuntime::on_diagnostic(void *p_ctx, const vh_diagnostic *p_diagnostic)
 	const String formatted = file + String(":") + String::num_int64(p_diagnostic->Line) + String(":") + String::num_int64(p_diagnostic->Column) + String(": ") + message;
 
 	if (p_diagnostic->Severity == VH_SEVERITY_ERROR) {
+		// Kept so a refusal can be shown to whoever is *playing* the game rather than only logged.
+		// The sentence that says why -- a stale cook, a missing data directory -- arrives here and
+		// nowhere else; vh_init itself answers only a status code.
+		if (runtime != nullptr) {
+			runtime->last_error_message = message;
+		}
 		UtilityFunctions::push_error(formatted);
 	} else if (p_diagnostic->Severity == VH_SEVERITY_WARNING) {
 		UtilityFunctions::push_warning(formatted);

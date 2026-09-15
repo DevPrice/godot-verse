@@ -335,6 +335,15 @@ unloads, so a second call runs `PreInit` again and asserts. `VerseRuntime` remem
 answers it without re-entering — without which a stamp mismatch, which is meant to be a sentence,
 took the game down on the second script.
 
+**And when it fails, an exported game says so and closes** (`refuse_to_start`, D6): `OS::alert` with
+the host's own sentence, then `SceneTree::quit(1)`. Every script in such a game is dead, so a window
+that opens and does not respond is a worse answer than no window. Editor builds only log it — an
+editor with a broken host is still an editor. **The stamp keys on `HEAD`, so every commit invalidates
+all three host binaries**; rebuild all three after committing, and note that `build_host.py` and
+`scons` stage different halves of `addons/godot-verse` (the host and the library), so both have to
+run before an export is trustworthy. `build_host.py` refreshes every copy of the addon now, not just
+`demo/`'s (`by-hand-findings.md` B17).
+
 Three defects that had been shipping since 7a behind the first wall are also fixed (§13.6): the cook
 directory was reused and never cleared, `sources.txt` shipped with the author's absolute paths in it,
 and `host_has_compiler()` tested for a symbol the runtime host also exports.

@@ -493,6 +493,46 @@ export refuses to start with a sentence naming both commits.
 
 ---
 
+## B17. A stale host shipped, and the game that got it launched anyway · **both fixed**
+
+Reported from an ordinary export-and-play: the game started, nothing responded, and the log said
+
+```
+This game's Verse data was cooked by a different build of godot-verse
+(cooked 8002/d909c14, host 8002/eb57bf4). Export the project again.
+```
+
+Two defects, one behind the other.
+
+**The host was stale because two tools stage the same directory and neither knew it.** `scons`
+copies `demo/addons/godot-verse` into the repo root and into `dodge-the-creeps`;
+`tools/build_host.py` writes the runtime host into `demo/`'s copy alone. Run `scons` last and the
+host is current everywhere; run `build_host.py` last -- which is what a host rebuild after a commit
+looks like -- and `dodge-the-creeps` keeps yesterday's host and exports it. `build_host.py` now
+refreshes every copy that exists, and says so per destination.
+
+That is also the session's most repeated friction, and it is worth stating plainly: **the build
+stamp keys on `HEAD`, so every commit invalidates all three host binaries.** The stamp is D6 doing
+its job -- a cook and a host from different commits is exactly what it exists to catch -- but it
+caught a packaging mistake rather than an author's, four times in one session.
+
+**And the refusal was only half-built.** D6 says a game that cannot load its Verse "refuses to start,
+with one sentence"; what it did was report and carry on, so every script in the game was dead and the
+window opened anyway. Nothing in it responds, because nothing in it is running -- which is a worse
+answer than no window. `VerseRuntime::refuse_to_start` now shows the sentence with `OS::alert` and
+calls `SceneTree::quit(1)`, in an exported build only (`template`, the tag no editor carries): an
+editor with a broken host is still an editor, and the author is the person who can fix it. It covers
+all three ways the host can fail to come up -- the library missing, the wrong host kind, and vh_init
+refusing -- and the sentence it shows is the host's own, captured from `OnDiagnostic`, because
+`vh_init` answers only a status code.
+
+Measured, on an export with its `verse_data/Cooked` removed: the game prints *"the cooked Verse
+directory ... is not there. Export the project again."*, adds *"The game cannot run without it and
+will close."*, and exits **1** instead of opening. A sound export is unaffected -- `dodge-the-creeps`
+still passes 30/30 and the export layer 308/0/9.
+
+---
+
 ## What shipped
 
 Every entry is closed. In the order they were done, which is the order the entry above them argued

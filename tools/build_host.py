@@ -255,22 +255,34 @@ def collect_outputs(engine: Path, repo: Path, config: str, target: str) -> None:
     # beside the GDExtension in the addon's bin/ for Godot's export to copy it (R-DIST-2). That
     # directory is git-ignored; scons copies the addon into each project from there.
     if target == "VerseHostRuntime":
-        # demo/, not the repo-root addons/: demo is what SConstruct builds into and copies from,
-        # so anything that has to reach the other projects' addons has to be there first.
+        # Into demo/ *and* into every copy of the addon SConstruct keeps in step with it, because
+        # the two tools stage different halves of the same directory and whichever runs last used
+        # to win: `scons` copies demo/addons into the repo root and into dodge-the-creeps, and this
+        # wrote only demo's. Running them in the other order left dodge-the-creeps exporting a host
+        # from the previous commit, which the build stamp then refused at startup -- correctly, and
+        # for a reason no one could see from the game.
         #
         # Staged under the unsuffixed name whatever the configuration, because the .gdextension's
         # [dependencies] rows name one file and VerseRuntime looks for one file. Which
         # configuration a game ships is therefore whichever was built last, and D12's "Development
         # for the debug template, Shipping for release" needs two names before it is true.
-        # Shipping is 72.7 MB against Development's 112.4, so the choice is not academic.
-        addon_bin = repo / "demo" / "addons" / "godot-verse" / "bin" / "windows-x86_64"
-        addon_bin.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(dll_path, addon_bin / TARGET_BINARIES[target])
-        print(f"[build_host] staged {dll_path} -> {addon_bin / TARGET_BINARIES[target]}")
+        # Shipping is 72.7 MiB against Development's 112.5 and measurably works (by-hand-findings
+        # B16), so the choice is not academic.
+        staged = [repo / "demo" / "addons" / "godot-verse" / "bin" / "windows-x86_64"]
+        # The copies, refreshed only where they already exist: SConstruct is what creates them, and
+        # inventing one here would leave a directory no project reads.
+        for mirror in (repo / "addons", repo / "dodge-the-creeps" / "addons"):
+            candidate = mirror / "godot-verse" / "bin" / "windows-x86_64"
+            if candidate.is_dir():
+                staged.append(candidate)
+
         tbb = bin_dir / "tbbmalloc.dll"
-        if tbb.exists():
-            shutil.copy2(tbb, addon_bin / tbb.name)
-            print(f"[build_host] staged {tbb} -> {addon_bin / tbb.name}")
+        for addon_bin in staged:
+            addon_bin.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(dll_path, addon_bin / TARGET_BINARIES[target])
+            print(f"[build_host] staged {dll_path} -> {addon_bin / TARGET_BINARIES[target]}")
+            if tbb.exists():
+                shutil.copy2(tbb, addon_bin / tbb.name)
 
     write_provenance(engine, repo, config, [bin_dir / PROVENANCE_NAME, out_dir / PROVENANCE_NAME])
 

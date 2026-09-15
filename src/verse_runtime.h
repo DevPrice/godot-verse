@@ -289,6 +289,10 @@ private:
 	// never unloads, so re-entering it runs FEngineLoop's PreInit twice and asserts.
 	bool host_init_refused = false;
 
+	// The last error the host reported through OnDiagnostic. An exported game shows it and stops
+	// (D6): vh_init answers a status code, and the sentence an author can act on is this.
+	godot::String last_error_message;
+
 	vh_init_desc init_desc = {};
 	vh_godot_api godot_api = {};
 	godot::Dictionary *diagnostic_sink = nullptr;
@@ -326,6 +330,9 @@ private:
 	int64_t overrun_frames = 0;
 
 	godot::Error load_host_internal(const godot::String &p_dll_path, const godot::String &p_engine_dir, bool p_enable_debugger, const godot::String &p_cooked_dir);
+
+	// Says why and closes the game, in an exported build only (D6). A no-op in the editor.
+	void refuse_to_start(const godot::String &p_why);
 
 	static void api_print(void *p_ctx, const char *p_utf8, int32_t p_len);
 	static vh_bool api_is_valid(void *p_ctx, vh_handle p_handle);
