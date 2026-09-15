@@ -82,10 +82,23 @@ public:
 
 	// Reads verse/host/dll_path, verse/host/engine_dir and verse/host/enable_debugger from
 	// ProjectSettings (creating them with defaults if absent) and loads the host from there.
+	//
+	// In an exported game the two path settings are ignored and all three paths come from where
+	// the executable is running (D8): they name one machine's Unreal checkout, which is not on
+	// the machine that plays the game.
 	godot::Error load_host();
 	godot::Error load_host(const godot::String &p_dll_path);
 	void unload_host();
 	bool is_host_loaded() const;
+
+	// False for the runtime host an exported game ships. Everything that compiles, analyses,
+	// completes or looks a symbol up answers ERR_UNAVAILABLE there, so the caller's question
+	// is whether to ask at all rather than what the answer was.
+	bool host_has_compiler() const;
+
+	// The runtime host's filename, which is both what the .gdextension declares as a
+	// dependency and what an exported game looks for beside its own executable.
+	static const char *RUNTIME_HOST_FILENAME;
 
 	void tick(double p_budget_seconds);
 
@@ -305,7 +318,7 @@ private:
 	// rarely rather than once per frame.
 	int64_t overrun_frames = 0;
 
-	godot::Error load_host_internal(const godot::String &p_dll_path, const godot::String &p_engine_dir, bool p_enable_debugger);
+	godot::Error load_host_internal(const godot::String &p_dll_path, const godot::String &p_engine_dir, bool p_enable_debugger, const godot::String &p_cooked_dir);
 
 	static void api_print(void *p_ctx, const char *p_utf8, int32_t p_len);
 	static vh_bool api_is_valid(void *p_ctx, vh_handle p_handle);

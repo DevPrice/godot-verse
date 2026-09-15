@@ -4,6 +4,9 @@ using UnrealBuildTool;
 
 public class VerseHostTarget : TargetRules
 {
+	// Removed by VerseHostRuntime and VerseHostCooker, which add their own.
+	protected const string EditorHostKindDefinition = "VH_HOST_KIND=1";
+
 	public VerseHostTarget(TargetInfo Target) : base(Target)
 	{
 		Name = "verse_host";
@@ -30,6 +33,12 @@ public class VerseHostTarget : TargetRules
 
 		GlobalDefinitions.Add("ALLOW_LOG_FILE=0");
 		GlobalDefinitions.Add("NOINITCRASHREPORTER=1");
+
+		// VH_HOST_KIND_EDITOR. -Wundef is an error in this tree, so every target must state a
+		// kind rather than let a header default one; the two derived targets drop this line
+		// and add their own, because a GlobalDefinitions list cannot hold two spellings of
+		// one macro.
+		GlobalDefinitions.Add(EditorHostKindDefinition);
 
 		bUseLoggingInShipping = true;
 		bUseAutoRTFMCompiler = true;

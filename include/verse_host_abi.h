@@ -43,7 +43,7 @@ extern "C" {
  * different toolchains and nothing links them.
  */
 #define VH_ABI_VERSION_MAJOR 8
-#define VH_ABI_VERSION_MINOR 1
+#define VH_ABI_VERSION_MINOR 2
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
 typedef int32_t vh_bool;
@@ -97,7 +97,20 @@ typedef enum vh_status
 	 * semantic program and block execution for the length of an analysis the stopped frame is
 	 * about to resume into. Those three answer this. vh_tick is refused too, and silently, because
 	 * it has no status to answer with (phase-6-design.md 13.1). */
-	VH_ERR_STOPPED
+	VH_ERR_STOPPED,
+
+	/* Added at ABI v8.2. This build of the host has no Verse compiler, so there was nothing
+	 * that could have run this call. Nothing ran and nothing was written.
+	 *
+	 * The runtime host an exported game ships is built with bBuildWithEditorOnlyData off,
+	 * which is what gives Solaris WITH_VERSE_COMPILER=0: it loads Verse out of cooked packages
+	 * and cannot compile, analyse, complete or look anything up. Those entry points are still
+	 * exported -- one header, one loader -- and answer this.
+	 *
+	 * Distinct from VH_ERR_STATE, which means the host could have done it and the moment was
+	 * wrong. This one never becomes possible, so the consumer's recourse is to stop asking --
+	 * which is why vh_host_kind() is readable before vh_init. */
+	VH_ERR_UNSUPPORTED
 } vh_status;
 
 /* Outcome of a property read/write or a method call. The distinction is load bearing: the host
@@ -525,6 +538,14 @@ typedef struct vh_init_desc
 	void* RuntimeErrorCtx;
 
 	vh_bool EnableDebugger;
+
+	/* Added at ABI v8.2, read only when StructSize covers it.
+	 *
+	 * Absolute utf8 path to the directory holding the cooked Verse packages and the class
+	 * sidecar that an exported game ships in place of its sources. NULL means there is no
+	 * cooked project: an editor host expects that, and a runtime host answers VH_ERR_INIT,
+	 * because with no compiler a project it was not handed is one it can never have. */
+	const char* CookedDirUtf8;
 } vh_init_desc;
 
 #if defined(_WIN32)
@@ -546,6 +567,40 @@ typedef struct vh_init_desc
 #endif
 
 VH_API int32_t vh_abi_version(void);
+
+/* Which of the three hosts this is. Answerable before vh_init, like vh_abi_version, and for
+ * the same reason: the consumer has to be able to refuse the wrong one with a sentence rather
+ * than fail inside a boot.
+ *
+ * There is no RequiredHostKind in vh_init_desc. The consumer already knows which kind it
+ * wants -- editor while Engine::is_editor_hint(), runtime otherwise -- and writes the better
+ * message itself, which is not worth a StructSize dance to earn a worse one. */
+/* The same three values as macros. A target selects its kind with a -D and the preprocessor
+ * cannot see an enum, so host/ needs these to compile CookMain.cpp into the cooker alone.
+ * The enumerators below are defined in terms of them, so the two cannot drift. */
+#define VH_HOST_KIND_EDITOR 1
+#define VH_HOST_KIND_RUNTIME 2
+#define VH_HOST_KIND_COOKER 3
+
+/* Unnamed, unlike every other enum here: a typedef named vh_host_kind and a function named
+ * vh_host_kind are the same identifier in C++, and nothing in the ABI takes one of these as a
+ * parameter -- vh_host_kind() answers int32_t, as every entry point does. */
+enum
+{
+	/* verse_host.dll: compiles, analyses and runs. What the Godot editor loads. */
+	VH_HOST_EDITOR = VH_HOST_KIND_EDITOR,
+	/* verse_host_runtime.dll: runs cooked packages, and only those. WITH_VERSE_COMPILER=0, so
+	 * the eleven compiler-side entry points answer VH_ERR_UNSUPPORTED. Ships with the game. */
+	VH_HOST_RUNTIME = VH_HOST_KIND_RUNTIME,
+	/* verse_cook.exe: compiles a project and saves it as cooked packages. Never loaded as a
+	 * library -- it is an executable the export plugin runs -- so nothing calls this through
+	 * the ABI; it is here so that the three kinds are one enum. */
+	VH_HOST_COOKER = VH_HOST_KIND_COOKER
+};
+
+/* A host older than 8.2 does not export this at all, and its absence means VH_HOST_EDITOR,
+ * which is what every host before 8.2 was. */
+VH_API int32_t vh_host_kind(void);
 
 VH_ATTR VH_API int32_t vh_init(const vh_init_desc* Desc);
 VH_ATTR VH_API void vh_shutdown(void);
@@ -1626,6 +1681,7 @@ VH_ATTR VH_API int32_t vh_profiling_read(vh_bool FrameOnly, const vh_profile_row
 
 /* Signatures for GetProcAddress on the consumer side. */
 typedef int32_t (*vh_abi_version_fn)(void);
+typedef int32_t (*vh_host_kind_fn)(void);
 typedef int32_t (*vh_init_fn)(const vh_init_desc*);
 typedef void (*vh_shutdown_fn)(void);
 typedef void (*vh_tick_fn)(double, vh_tick_stats*);

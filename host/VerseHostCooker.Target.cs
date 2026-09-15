@@ -50,5 +50,8 @@ public class VerseHostCookerTarget : VerseHostTarget
 		// AutoRTFMTestsWithEditor gets away with 0 because it links neither module.
 		GlobalDefinitions.Add("ALLOW_OTHER_PLATFORM_CONFIG=1");
 		GlobalDefinitions.Add("UE_CONFIG_ALLOW_ASYNC_LOADING=0");
+
+		GlobalDefinitions.Remove(EditorHostKindDefinition);
+		GlobalDefinitions.Add("VH_HOST_KIND=3");
 	}
 }

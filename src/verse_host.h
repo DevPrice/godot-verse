@@ -22,13 +22,20 @@ public:
 	VerseHostLibrary &operator=(const VerseHostLibrary &) = delete;
 
 	// Loads dll_path and resolves every vh_* entry point. On failure, out_error names the
-	// first missing symbol (or the reason the library itself could not be loaded) and the
-	// library is left unloaded.
+	// first missing *required* symbol (or the reason the library itself could not be loaded)
+	// and the library is left unloaded. The compiler-side entries are optional: the runtime
+	// host has no compiler and does not export them, so they stay null and their callers
+	// answer ERR_UNAVAILABLE.
 	bool load(const godot::String &dll_path, godot::String &out_error);
 	void unload();
 	bool is_loaded() const;
 
+	// VH_HOST_EDITOR / _RUNTIME / _COOKER. Safe before vh_init, and safe against a host older
+	// than ABI 8.2, which exports nothing to ask and was always the editor host.
+	int32_t host_kind() const;
+
 	vh_abi_version_fn AbiVersion = nullptr;
+	vh_host_kind_fn HostKind = nullptr;
 	vh_init_fn Init = nullptr;
 	vh_shutdown_fn Shutdown = nullptr;
 	vh_tick_fn Tick = nullptr;

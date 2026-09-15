@@ -167,31 +167,40 @@ def run_ubt(engine: Path, target: str, config: str, clean: bool) -> None:
         sys.exit(result.returncode)
 
 
-def collect_outputs(engine: Path, repo: Path, config: str) -> None:
+# UBT target -> the binary it leaves in Engine/Binaries/Win64. The cooker is not here: it is an
+# executable the export plugin runs out of the engine tree, and nothing collects it.
+TARGET_BINARIES = {
+    "VerseHost": "verse_host.dll",
+    "VerseHostRuntime": "verse_host_runtime.dll",
+}
+
+
+def collect_outputs(engine: Path, repo: Path, config: str, target: str) -> None:
     bin_dir = engine / "Engine" / "Binaries" / "Win64"
-    dll_path = bin_dir / "verse_host.dll"
+    binary_name = TARGET_BINARIES[target]
+    dll_path = bin_dir / binary_name
 
     if not dll_path.exists():
         print(f"error: {dll_path} not found after build", file=sys.stderr)
-        matches = sorted(bin_dir.rglob("verse_host*.dll")) if bin_dir.exists() else []
+        matches = sorted(bin_dir.rglob("verse_host*.*")) if bin_dir.exists() else []
         if matches:
             print("found these instead:", file=sys.stderr)
             for m in matches:
                 print(f"  {m}", file=sys.stderr)
         else:
-            print(f"no verse_host*.dll found anywhere under {bin_dir}", file=sys.stderr)
+            print(f"no verse_host* binary found anywhere under {bin_dir}", file=sys.stderr)
         sys.exit(1)
 
     out_dir = repo / "bin"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    shutil.copy2(dll_path, out_dir / "verse_host.dll")
-    print(f"[build_host] copied {dll_path} -> {out_dir / 'verse_host.dll'}")
+    shutil.copy2(dll_path, out_dir / binary_name)
+    print(f"[build_host] copied {dll_path} -> {out_dir / binary_name}")
 
     pdb_path = dll_path.with_suffix(".pdb")
     if pdb_path.exists():
-        shutil.copy2(pdb_path, out_dir / "verse_host.pdb")
-        print(f"[build_host] copied {pdb_path} -> {out_dir / 'verse_host.pdb'}")
+        shutil.copy2(pdb_path, out_dir / pdb_path.name)
+        print(f"[build_host] copied {pdb_path} -> {out_dir / pdb_path.name}")
 
     # The only non-system dependency the monolithic host imports.
     tbb = bin_dir / "tbbmalloc.dll"
@@ -200,6 +209,18 @@ def collect_outputs(engine: Path, repo: Path, config: str) -> None:
         print(f"[build_host] copied {tbb} -> {out_dir / tbb.name}")
     else:
         print(f"warning: {tbb} not found; verse_host.dll will fail to load", file=sys.stderr)
+
+    # The runtime host also ships: it is a .gdextension [dependencies] entry, so it has to sit
+    # beside the GDExtension in the addon's bin/ for Godot's export to copy it (R-DIST-2). That
+    # directory is git-ignored; scons copies the addon into each project from there.
+    if target == "VerseHostRuntime":
+        addon_bin = repo / "addons" / "godot-verse" / "bin" / "windows-x86_64"
+        addon_bin.mkdir(parents=True, exist_ok=True)
+        for name in (binary_name, "tbbmalloc.dll"):
+            source = bin_dir / name
+            if source.exists():
+                shutil.copy2(source, addon_bin / name)
+                print(f"[build_host] staged {source} -> {addon_bin / name}")
 
     write_provenance(engine, repo, config, [bin_dir / PROVENANCE_NAME, out_dir / PROVENANCE_NAME])
 
@@ -210,8 +231,11 @@ def main() -> None:
                         help="UE source checkout with the Verse toolchain; defaults to $UE_ROOT")
     parser.add_argument("--config", default="Development", choices=["Debug", "DebugGame", "Development", "Shipping"])
     parser.add_argument("--target", default="VerseHost",
-                        help="the UBT target under host/ to build: VerseHost (the editor host, "
-                             "collected into bin/) or VerseHostCooker (the OQ-10 spike)")
+                        choices=["VerseHost", "VerseHostRuntime", "VerseHostCooker"],
+                        help="the UBT target under host/ to build: VerseHost (the editor host), "
+                             "VerseHostRuntime (the one an exported game ships) -- both collected "
+                             "into bin/ -- or VerseHostCooker, which is an executable the export "
+                             "plugin runs and is left in the engine tree")
     parser.add_argument("--clean", action="store_true")
     parser.add_argument("--stage-only", action="store_true")
     args = parser.parse_args()
@@ -250,8 +274,8 @@ def main() -> None:
         return
 
     run_ubt(engine, args.target, args.config, args.clean)
-    if args.target == "VerseHost":
-        collect_outputs(engine, repo, args.config)
+    if args.target in TARGET_BINARIES:
+        collect_outputs(engine, repo, args.config, args.target)
     else:
         print(f"[build_host] {args.target} built; its binaries are under "
               f"{engine / 'Engine' / 'Binaries' / 'Win64'} and are not collected into bin/")

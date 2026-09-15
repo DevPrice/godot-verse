@@ -1,12 +1,14 @@
 #include "verse_runtime.h"
 
 #include "verse_callable.h"
+#include "verse_export_paths.h"
 #include "verse_ref_table.h"
 #include "verse_script_language.h"
 #include "verse_value.h"
 
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/node.hpp>
+#include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/classes/performance.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/classes/scene_tree.hpp>
@@ -47,7 +49,7 @@ VerseRuntime::~VerseRuntime() {
 
 PackedStringArray VerseRuntime::modules_declaring(const String &p_name) const {
 	PackedStringArray modules;
-	if (!host.is_loaded()) {
+	if (!host.is_loaded() || host.ResolveUnknownName == nullptr) {
 		return modules;
 	}
 
@@ -72,9 +74,31 @@ Error VerseRuntime::build_project() {
 	return language != nullptr ? language->build_project() : ERR_UNAVAILABLE;
 }
 
-Error VerseRuntime::load_host(const String &p_dll_path) {
-	return load_host_internal(p_dll_path, String(), false);
+namespace {
+
+const char *host_kind_name(int32_t p_kind) {
+	switch (p_kind) {
+		case VH_HOST_EDITOR:
+			return "the editor host";
+		case VH_HOST_RUNTIME:
+			return "a runtime host, which has no compiler";
+		case VH_HOST_COOKER:
+			return "the cooker, which is not a library";
+		default:
+			return "a host of an unknown kind";
+	}
 }
+
+} // namespace
+
+Error VerseRuntime::load_host(const String &p_dll_path) {
+	return load_host_internal(p_dll_path, String(), false, String());
+}
+
+// What the .gdextension names the runtime host in its [dependencies] section, and so what Godot's
+// export copies beside the game executable. One spelling, here, because the export plugin writes
+// the dependency row and this finds the result.
+const char *VerseRuntime::RUNTIME_HOST_FILENAME = "verse_host_runtime.dll";
 
 Error VerseRuntime::load_host() {
 	ProjectSettings *settings = ProjectSettings::get_singleton();
@@ -121,6 +145,18 @@ Error VerseRuntime::load_host() {
 	debugger_property_info["hint_string"] = String();
 	settings->add_property_info(debugger_property_info);
 
+	const bool enable_debugger = settings->get_setting(debugger_setting_name);
+
+	// An exported game derives all three paths from where it is running and reads neither path
+	// setting (D8): they hold one machine's absolute paths, which are meaningless anywhere else.
+	// The data directory is beside the executable and is its own engine directory (D7) -- UE takes
+	// any directory with a Binaries/ child as GForeignEngineDir.
+	const String data_dir = verse_paths::data_dir_for_this_build();
+	if (!data_dir.is_empty()) {
+		const String dll_path = OS::get_singleton()->get_executable_path().get_base_dir().path_join(RUNTIME_HOST_FILENAME);
+		return load_host_internal(dll_path, data_dir.path_join("Engine"), enable_debugger, data_dir.path_join("Cooked"));
+	}
+
 	const String dll_setting = settings->get_setting(dll_setting_name);
 	if (dll_setting.is_empty()) {
 		UtilityFunctions::push_error("VerseRuntime: " + dll_setting_name + " is unset; point it at <engine>/Engine/Binaries/Win64/verse_host.dll");
@@ -129,12 +165,11 @@ Error VerseRuntime::load_host() {
 
 	const String dll_path = settings->globalize_path(dll_setting);
 	const String engine_dir = settings->globalize_path(settings->get_setting(engine_setting_name));
-	const bool enable_debugger = settings->get_setting(debugger_setting_name);
 
-	return load_host_internal(dll_path, engine_dir, enable_debugger);
+	return load_host_internal(dll_path, engine_dir, enable_debugger, String());
 }
 
-Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p_engine_dir, bool p_enable_debugger) {
+Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p_engine_dir, bool p_enable_debugger, const String &p_cooked_dir) {
 	if (host.is_loaded()) {
 		unload_host();
 	}
@@ -143,6 +178,22 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 	if (!host.load(p_dll_path, error_message)) {
 		UtilityFunctions::push_error(String("VerseRuntime: failed to load host library: ") + error_message);
 		return ERR_CANT_OPEN;
+	}
+
+	// Before vh_init, because a host of the wrong kind can be refused with a sentence and a boot
+	// cannot. An exported game gets the one with no compiler, which knows how to load what the
+	// cooker wrote; everything else gets the one that compiles.
+	//
+	// The test is `template`, not Engine::is_editor_hint(): the integration suite runs the editor
+	// binary headless with -s, where the editor hint is false and the editor host is still the
+	// only host that can do anything. `template` is the tag every export template carries and no
+	// editor build does, and it is what decides the paths above too.
+	const int32_t wanted = OS::get_singleton()->has_feature("template") ? (int32_t)VH_HOST_RUNTIME : (int32_t)VH_HOST_EDITOR;
+	const int32_t kind = host.host_kind();
+	if (kind != wanted) {
+		UtilityFunctions::push_error(String("VerseRuntime: ") + p_dll_path + String(" is ") + host_kind_name(kind) + String("; ") + (wanted == (int32_t)VH_HOST_EDITOR ? String("the Godot editor needs the editor host. Build it with `python tools/build_host.py`.") : String("an exported game needs the runtime host. Build it with `python tools/build_host.py --target VerseHostRuntime`.")));
+		host.unload();
+		return ERR_INVALID_DATA;
 	}
 
 	godot_api = vh_godot_api{};
@@ -174,8 +225,9 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 	godot_api.RefContents = &VerseRuntime::api_ref_contents;
 	godot_api.InvokeCallable = &VerseRuntime::api_invoke_callable;
 
-	// EngineDirUtf8 only needs to stay alive for the duration of host.Init below.
+	// Both only need to stay alive for the duration of host.Init below.
 	const CharString engine_dir_utf8 = p_engine_dir.is_empty() ? CharString() : p_engine_dir.utf8();
+	const CharString cooked_dir_utf8 = p_cooked_dir.is_empty() ? CharString() : p_cooked_dir.utf8();
 
 	init_desc = vh_init_desc{};
 	init_desc.StructSize = sizeof(vh_init_desc);
@@ -187,6 +239,7 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 	init_desc.OnRuntimeError = &VerseRuntime::on_runtime_error;
 	init_desc.RuntimeErrorCtx = this;
 	init_desc.EnableDebugger = p_enable_debugger ? 1 : 0;
+	init_desc.CookedDirUtf8 = p_cooked_dir.is_empty() ? nullptr : cooked_dir_utf8.get_data();
 
 	const int32_t status = host.Init(&init_desc);
 	if (status != VH_OK) {
@@ -219,8 +272,12 @@ bool VerseRuntime::is_host_loaded() const {
 	return host.is_loaded();
 }
 
+bool VerseRuntime::host_has_compiler() const {
+	return host.is_loaded() && host.CompileProject != nullptr;
+}
+
 Error VerseRuntime::compile_project(const PackedStringArray &p_globalized_paths, const PackedStringArray &p_module_paths, Dictionary *r_diagnostics_by_path) {
-	if (!host.is_loaded()) {
+	if (!host.is_loaded() || host.CompileProject == nullptr) {
 		return ERR_UNAVAILABLE;
 	}
 	ERR_FAIL_COND_V(p_module_paths.size() != p_globalized_paths.size(), ERR_INVALID_PARAMETER);
@@ -252,7 +309,7 @@ Error VerseRuntime::compile_project(const PackedStringArray &p_globalized_paths,
 }
 
 Error VerseRuntime::check_project(const String &p_globalized_path, const String &p_source, Dictionary *r_diagnostics_by_path) {
-	if (!host.is_loaded()) {
+	if (!host.is_loaded() || host.CheckProject == nullptr) {
 		return ERR_UNAVAILABLE;
 	}
 
@@ -267,7 +324,7 @@ Error VerseRuntime::check_project(const String &p_globalized_path, const String 
 }
 
 Error VerseRuntime::begin_check_project(const String &p_globalized_path, const String &p_source) {
-	if (!host.is_loaded()) {
+	if (!host.is_loaded() || host.CheckProjectBegin == nullptr) {
 		return ERR_UNAVAILABLE;
 	}
 
@@ -279,7 +336,7 @@ Error VerseRuntime::begin_check_project(const String &p_globalized_path, const S
 }
 
 bool VerseRuntime::poll_check_project(Dictionary *r_diagnostics_by_path) {
-	if (!host.is_loaded()) {
+	if (!host.is_loaded() || host.CheckProjectPoll == nullptr) {
 		return false;
 	}
 
@@ -292,7 +349,7 @@ bool VerseRuntime::poll_check_project(Dictionary *r_diagnostics_by_path) {
 }
 
 bool VerseRuntime::is_check_project_busy() const {
-	return host.is_loaded() && host.CheckProjectBusy() != 0;
+	return host.is_loaded() && host.CheckProjectBusy != nullptr && host.CheckProjectBusy() != 0;
 }
 
 bool VerseRuntime::has_class(const String &p_class_name) const {
@@ -346,7 +403,7 @@ TypedArray<Dictionary> VerseRuntime::class_exports(const String &p_class_name, b
 
 Dictionary VerseRuntime::lookup_symbol(const String &p_globalized_path, int32_t p_line, int32_t p_column) const {
 	Dictionary result;
-	if (!host.is_loaded()) {
+	if (!host.is_loaded() || host.LookupSymbol == nullptr) {
 		return result;
 	}
 
@@ -391,7 +448,7 @@ static Dictionary complete_item_to_dict(const vh_complete_item &p_item) {
 
 TypedArray<Dictionary> VerseRuntime::complete_symbol(const String &p_globalized_path, const String &p_source, int32_t p_line, int32_t p_column, int32_t p_mode, bool *r_not_ready) const {
 	TypedArray<Dictionary> options;
-	if (!host.is_loaded()) {
+	if (!host.is_loaded() || host.CompleteSymbol == nullptr) {
 		return options;
 	}
 
@@ -413,7 +470,7 @@ TypedArray<Dictionary> VerseRuntime::complete_symbol(const String &p_globalized_
 
 TypedArray<Dictionary> VerseRuntime::class_members(const String &p_class_name) const {
 	TypedArray<Dictionary> members;
-	if (!host.is_loaded()) {
+	if (!host.is_loaded() || host.ClassMembers == nullptr) {
 		return members;
 	}
 
@@ -431,7 +488,7 @@ TypedArray<Dictionary> VerseRuntime::class_members(const String &p_class_name) c
 
 TypedArray<Dictionary> VerseRuntime::class_override_candidates(const String &p_class_name) const {
 	TypedArray<Dictionary> candidates;
-	if (!host.is_loaded()) {
+	if (!host.is_loaded() || host.ClassOverrideCandidates == nullptr) {
 		return candidates;
 	}
 
@@ -449,7 +506,7 @@ TypedArray<Dictionary> VerseRuntime::class_override_candidates(const String &p_c
 
 Dictionary VerseRuntime::signature_at(const String &p_globalized_path, const String &p_source, int32_t p_line, int32_t p_column, bool *r_not_ready) const {
 	Dictionary result;
-	if (!host.is_loaded()) {
+	if (!host.is_loaded() || host.SignatureAt == nullptr) {
 		return result;
 	}
 

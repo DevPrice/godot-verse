@@ -1,12 +1,14 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
-// The cooker's entry point. Only the cooker target compiles against the editor, so WITH_EDITOR
-// is what tells it apart from the two DLL hosts, which have no main and are entered through
-// the ABI. Phase 7 stage 1 (phase-7-design.md §5) gives this a body; the S-1 spike needed only
-// an executable that links and boots, because a monolithic editor-class DLL exports every
-// module's API symbols and lld-link stops at 65535 of them.
+// The cooker's entry point. Each target sets VH_HOST_KIND, and this file is the cooker's alone:
+// the two DLL hosts have no main and are entered through the ABI. Phase 7 stage 1
+// (phase-7-design.md §5) gives this a body; the S-1 spike needed only an executable that links
+// and boots, because a monolithic editor-class DLL exports every module's API symbols and
+// lld-link stops at 65535 of them.
 
-#if WITH_EDITOR
+#include "verse_host_abi.h"
+
+#if VH_HOST_KIND == VH_HOST_KIND_COOKER
 
 #include "CoreMinimal.h"
 #include "LaunchEngineLoop.h"
@@ -54,4 +56,4 @@ AUTORTFM_DISABLE INT32_MAIN_INT32_ARGC_TCHAR_ARGV()
 	return 0;
 }
 
-#endif // WITH_EDITOR
+#endif // VH_HOST_KIND == VH_HOST_KIND_COOKER

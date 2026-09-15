@@ -3069,6 +3069,17 @@ Error VerseScriptLanguage::build_project() {
 	invalidate_script_class_names();
 	refresh_module_map();
 
+	// An exported game has nothing to build. vh_init loaded the generation the cooker published,
+	// and every .verse under res:// is a one-byte stub (D10) -- compiling those would replace a
+	// working project with an empty one, if there were a compiler to do it with. The two lines
+	// above are the part that still has to happen, because which module a script is in and which
+	// class names are declared are read off res:// rather than out of the host.
+	if (!runtime->host_has_compiler()) {
+		project_built = true;
+		project_build_status = OK;
+		return OK;
+	}
+
 	const PackedStringArray sources = find_verse_sources("res://");
 	PackedStringArray globalized;
 	PackedStringArray modules;

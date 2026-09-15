@@ -783,6 +783,17 @@ AUTORTFM_DISABLE void ForwardSolDiagnostic(const FSolDiagnostic& Diagnostic)
     ForwardCapturedDiagnostic(CaptureSolDiagnostic(Diagnostic));
 }
 
+/// The IDE *is* the compiler: CreateProjectSource and MakeDevEnvironment are two of the four
+/// ISolarisModule members that WITH_VERSE_COMPILER=0 takes away. A runtime host never gets one,
+/// and everything that would have used it is refused at the ABI (VH_ERR_UNSUPPORTED) long before
+/// reaching here -- this returns false so that a path that somehow did cannot proceed on a null.
+#if !WITH_VERSE_COMPILER
+AUTORTFM_DISABLE bool EnsureIde()
+{
+    GodotVerse::ReportError(UTF8TEXT("This build of the Verse host has no compiler."));
+    return false;
+}
+#else
 AUTORTFM_DISABLE bool EnsureIde()
 {
     if (GIde.IsValid())
@@ -825,6 +836,18 @@ AUTORTFM_DISABLE bool EnsureIde()
     GSourceProject = MaybeSourceProject;
     GIde = Ide;
     return true;
+}
+#endif // WITH_VERSE_COMPILER
+
+/// The fourth, and the one with two call sites. A no-op without a compiler, which is correct
+/// rather than merely compilable: there is no source project to incrementalize.
+AUTORTFM_DISABLE void IncrementalizeProjectSource()
+{
+#if WITH_VERSE_COMPILER
+    ISolarisModule::Get().IncrementalizeProjectSource(
+        GSourceProject.GetValue(),
+        uLang::SBuildParams{._LinkType = uLang::SBuildParams::ELinkParam::RequireComplete});
+#endif
 }
 
 } // namespace
@@ -924,9 +947,7 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FScriptSource>& So
     // Without this the build republishes the native VNI packages -- which are already loaded --
     // and aborts inside the async loader. It marks everything already compiled External so that
     // only the new generation's package is built.
-    ISolarisModule::Get().IncrementalizeProjectSource(
-        GSourceProject.GetValue(),
-        uLang::SBuildParams{._LinkType = uLang::SBuildParams::ELinkParam::RequireComplete});
+    IncrementalizeProjectSource();
 
     FSolIdeBuildSettings Settings{.LinkSettings = uLang::SBuildParams::ELinkParam::RequireComplete};
     FAnalysisTrace Trace;
@@ -960,9 +981,7 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FScriptSource>& So
     // Unconditional, because a failed build is exactly the case where being selective would be
     // wrong: what deployed is what IsCompiled reports, and a package the build never got to stays
     // Source on its own.
-    ISolarisModule::Get().IncrementalizeProjectSource(
-        GSourceProject.GetValue(),
-        uLang::SBuildParams{._LinkType = uLang::SBuildParams::ELinkParam::RequireComplete});
+    IncrementalizeProjectSource();
 
     // And what the pass above must not be allowed to retire. The generation's own package is one:
     // phase-2-design.md 181-190 measured 104 failing cases with it retired. The attribute package

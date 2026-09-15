@@ -70,6 +70,14 @@ extern "C" int32_t vh_abi_version(void)
     return VH_ABI_VERSION;
 }
 
+/// Unguarded for the same reason vh_abi_version is, and asked in the same breath: the consumer
+/// reads it before vh_init so it can refuse the wrong host with a sentence rather than fail inside
+/// a boot. Also a compile-time constant.
+extern "C" int32_t vh_host_kind(void)
+{
+    return VH_HOST_KIND;
+}
+
 namespace {
 /// The thread vh_init ran on, which is the only one that may enter the VM (R-ASYNC-8).
 ///
@@ -99,6 +107,15 @@ uint32 GVerseThreadId = 0;
 /// value, so they answer 0 -- which reads as "no such class" rather than "refused", and is the one
 /// place this mechanism cannot say what happened. The diagnostic is what carries the difference, and
 /// widening those four to int32_t is a major ABI change nobody has needed yet.
+/// The eleven entry points that need a Verse compiler, in a host that has none (ABI 8.2).
+///
+/// A clause in the prologue rather than eleven bodies under an #if, and *before* the thread guard
+/// rather than after: "this host cannot ever do that" is a better answer than "not from here", and
+/// it costs nothing to give on the wrong thread too. They stay exported -- the surface is the same
+/// three ways -- so a consumer gets a status it can print instead of a null it has to guess at.
+#define VH_REFUSE_WITHOUT_COMPILER(Failed) \
+    do { if (!WITH_VERSE_COMPILER) { return (Failed); } } while (0)
+
 bool WrongThread(const char* What)
 {
     if (GVerseThreadId == 0 || FPlatformTLS::GetCurrentThreadId() == GVerseThreadId)
@@ -124,7 +141,14 @@ extern "C" int32_t vh_init(const vh_init_desc* Desc)
     // a consumer the policy says to accept. A consumer built against a lower minor simply never
     // asks about what was added; one built against a higher minor is refused here, because it would
     // expect fields this host does not write.
-    if (!Desc || Desc->StructSize != static_cast<int32_t>(sizeof(vh_init_desc))
+    // StructSize is a floor, not an equality: a consumer built against a lower minor sends a
+    // shorter descriptor, and refusing it would make every minor bump a major one. Everything up
+    // to EnableDebugger has been there since 8.0, so that is the floor; CookedDirUtf8 and anything
+    // after it is read only when StructSize reaches it. A *longer* descriptor is fine too -- the
+    // AbiVersion test below is what refuses a consumer newer than this host.
+    constexpr int32_t MinInitDescSize =
+        static_cast<int32_t>(offsetof(vh_init_desc, EnableDebugger) + sizeof(vh_bool));
+    if (!Desc || Desc->StructSize < MinInitDescSize
         || Desc->AbiVersion / 1000 != VH_ABI_VERSION_MAJOR || Desc->AbiVersion > VH_ABI_VERSION)
     {
         return VH_ERR_ABI;
@@ -194,7 +218,11 @@ extern "C" int32_t vh_init(const vh_init_desc* Desc)
 
     // FApp::IsUnattended() - keeps the crash reporter from putting a dialog in front of the editor.
     GIsAutomationTesting = true;
+#if WITH_EDITOR
+    // Only a variable under WITH_EDITOR; without editor-only data GIsEditor is the literal false,
+    // and the runtime host is not an editor in any case.
     GIsEditor = true;
+#endif
 
     if (GEngineLoop.PreInit(TEXT("-NOCONSOLE -AssetGatherAll=0 -LogCmds=\"global Warning\"")) != 0)
     {
@@ -324,6 +352,7 @@ extern "C" void vh_tick(double BudgetSeconds, vh_tick_stats* OutStats)
 
 extern "C" int32_t vh_compile_project(const vh_source_file* Files, int32_t Count, int32_t* OutGeneration)
 {
+    VH_REFUSE_WITHOUT_COMPILER(VH_ERR_UNSUPPORTED);
     if (WrongThread("vh_compile_project"))
     {
         return VH_ERR_THREAD;
@@ -369,6 +398,7 @@ extern "C" int32_t vh_compile_project(const vh_source_file* Files, int32_t Count
 
 extern "C" int32_t vh_check_project(const char* PathUtf8, const char* SourceUtf8)
 {
+    VH_REFUSE_WITHOUT_COMPILER(VH_ERR_UNSUPPORTED);
     if (WrongThread("vh_check_project"))
     {
         return VH_ERR_THREAD;
@@ -391,6 +421,7 @@ extern "C" int32_t vh_check_project(const char* PathUtf8, const char* SourceUtf8
 
 extern "C" int32_t vh_check_project_begin(const char* PathUtf8, const char* SourceUtf8)
 {
+    VH_REFUSE_WITHOUT_COMPILER(VH_ERR_UNSUPPORTED);
     if (WrongThread("vh_check_project_begin"))
     {
         return VH_ERR_THREAD;
@@ -417,6 +448,7 @@ extern "C" int32_t vh_check_project_begin(const char* PathUtf8, const char* Sour
 
 extern "C" int32_t vh_check_project_poll(vh_bool* OutFinished)
 {
+    VH_REFUSE_WITHOUT_COMPILER(VH_ERR_UNSUPPORTED);
     if (WrongThread("vh_check_project_poll"))
     {
         return VH_ERR_THREAD;
@@ -439,6 +471,7 @@ extern "C" int32_t vh_check_project_poll(vh_bool* OutFinished)
 
 extern "C" vh_bool vh_check_project_busy(void)
 {
+    VH_REFUSE_WITHOUT_COMPILER(0);
     if (WrongThread("vh_check_project_busy"))
     {
         return 0;
@@ -1005,6 +1038,7 @@ extern "C" int32_t vh_class_default_field(const char* ClassNameUtf8, const char*
 
 extern "C" int32_t vh_lookup_symbol(const char* PathUtf8, int32_t Line, int32_t Column, const vh_lookup_desc** OutResult)
 {
+    VH_REFUSE_WITHOUT_COMPILER(VH_ERR_UNSUPPORTED);
     if (WrongThread("vh_lookup_symbol"))
     {
         return VH_ERR_THREAD;
@@ -1074,6 +1108,7 @@ extern "C" int32_t vh_complete_symbol(const char* PathUtf8,
                                       const vh_complete_item** OutItems,
                                       int32_t* OutCount)
 {
+    VH_REFUSE_WITHOUT_COMPILER(VH_ERR_UNSUPPORTED);
     if (WrongThread("vh_complete_symbol"))
     {
         return VH_ERR_THREAD;
@@ -1126,6 +1161,7 @@ extern "C" int32_t vh_complete_symbol(const char* PathUtf8,
 
 extern "C" int32_t vh_class_members(const char* ClassNameUtf8, const vh_complete_item** OutItems, int32_t* OutCount)
 {
+    VH_REFUSE_WITHOUT_COMPILER(VH_ERR_UNSUPPORTED);
     if (WrongThread("vh_class_members"))
     {
         return VH_ERR_THREAD;
@@ -1163,6 +1199,7 @@ extern "C" int32_t vh_class_members(const char* ClassNameUtf8, const vh_complete
 
 extern "C" int32_t vh_class_override_candidates(const char* ClassNameUtf8, const vh_complete_item** OutItems, int32_t* OutCount)
 {
+    VH_REFUSE_WITHOUT_COMPILER(VH_ERR_UNSUPPORTED);
     if (WrongThread("vh_class_override_candidates"))
     {
         return VH_ERR_THREAD;
@@ -1200,6 +1237,7 @@ extern "C" int32_t vh_class_override_candidates(const char* ClassNameUtf8, const
 
 extern "C" int32_t vh_resolve_unknown_name(const char* NameUtf8, const vh_module_ref** OutModules, int32_t* OutCount)
 {
+    VH_REFUSE_WITHOUT_COMPILER(VH_ERR_UNSUPPORTED);
     if (WrongThread("vh_resolve_unknown_name"))
     {
         return VH_ERR_THREAD;
@@ -1241,6 +1279,7 @@ extern "C" int32_t vh_signature_at(const char* PathUtf8,
                                    int32_t Column,
                                    const vh_signature_desc** OutResult)
 {
+    VH_REFUSE_WITHOUT_COMPILER(VH_ERR_UNSUPPORTED);
     if (WrongThread("vh_signature_at"))
     {
         return VH_ERR_THREAD;
