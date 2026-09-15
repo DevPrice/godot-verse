@@ -20,7 +20,7 @@ disagree, believe the spec.
 
 **Works today**
 
-| | |
+| Feature | Status |
 | --- | --- |
 | Scripting | A `.verse` file attaches to a node like GDScript; every Godot virtual runs, spelled the way Godot spells it (`_Ready`, `_Process`, ...); `@export` properties show in the inspector |
 | Interop | Every `Variant` type crosses in both directions, containers by reference; GDScript can call any method a script defines; a runtime error names a file, a line and a Verse call stack |
