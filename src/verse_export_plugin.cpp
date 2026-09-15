@@ -1,6 +1,7 @@
 #include "verse_export_plugin.h"
 
 #include "verse_export_paths.h"
+#include "verse_host_paths.h"
 #include "verse_script_language.h"
 
 #include <godot_cpp/classes/dir_access.hpp>
@@ -19,35 +20,6 @@ namespace {
 // The platforms this bridge does not reach. Mobile is deferred with no design and web is Phase
 // 7.5; both fail here rather than producing a game that cannot load its own scripts (R-PLAT-4).
 const char *UNREACHABLE_PLATFORMS[] = { "android", "ios", "web" };
-
-const char *COOKER_SETTING = "verse/host/cooker_path";
-
-String cooker_path() {
-	ProjectSettings *settings = ProjectSettings::get_singleton();
-	if (!settings->has_setting(COOKER_SETTING)) {
-		settings->set_setting(COOKER_SETTING, String());
-	}
-	settings->set_initial_value(COOKER_SETTING, String());
-	Dictionary info;
-	info["name"] = String(COOKER_SETTING);
-	info["type"] = (int64_t)Variant::STRING;
-	info["hint"] = (int64_t)PROPERTY_HINT_GLOBAL_FILE;
-	info["hint_string"] = String("*.exe");
-	settings->add_property_info(info);
-
-	const String configured = settings->get_setting(COOKER_SETTING);
-	if (!configured.is_empty()) {
-		return settings->globalize_path(configured);
-	}
-
-	// Unset, so guess: the cooker is built into the same Engine/Binaries/Win64 the editor host is
-	// loaded from, which is the one directory this project already names.
-	const String dll = settings->get_setting("verse/host/dll_path");
-	if (dll.is_empty()) {
-		return String();
-	}
-	return settings->globalize_path(dll).get_base_dir().path_join("verse_cook.exe");
-}
 
 } // namespace
 
@@ -110,13 +82,13 @@ void VerseExportPlugin::_export_begin(const PackedStringArray &p_features, bool 
 		return;
 	}
 
-	const String cooker = cooker_path();
+	const String cooker = verse_host_paths::cooker_exe();
 	if (cooker.is_empty() || !FileAccess::file_exists(cooker)) {
 		refused = true;
 		say(EditorExportPlatform::EXPORT_MESSAGE_ERROR,
 				String("The Verse cooker is not at ") + (cooker.is_empty() ? String("<unset>") : cooker) +
 						String(". Build it with `python tools/build_host.py --target VerseHostCooker`, "
-							   "or point ") + String(COOKER_SETTING) + String(" at it."));
+							   "or set Editor Settings > Verse > Host > Cooker Path to it."));
 		return;
 	}
 

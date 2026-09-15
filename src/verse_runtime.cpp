@@ -2,6 +2,7 @@
 
 #include "verse_callable.h"
 #include "verse_export_paths.h"
+#include "verse_host_paths.h"
 #include "verse_ref_table.h"
 #include "verse_script_language.h"
 #include "verse_value.h"
@@ -103,35 +104,9 @@ const char *VerseRuntime::RUNTIME_HOST_FILENAME = "verse_host_runtime.dll";
 Error VerseRuntime::load_host() {
 	ProjectSettings *settings = ProjectSettings::get_singleton();
 
-	const String dll_setting_name = "verse/host/dll_path";
-	// The host must be loaded from the engine's own Binaries/Win64: VNI records each Verse
-	// package's source directory relative to the loaded module, and the compiler reads those
-	// .verse files at runtime. A copy anywhere else compiles against an empty package set.
-	const String dll_default = String();
-	if (!settings->has_setting(dll_setting_name)) {
-		settings->set_setting(dll_setting_name, dll_default);
-	}
-	settings->set_initial_value(dll_setting_name, dll_default);
-	Dictionary dll_property_info;
-	dll_property_info["name"] = dll_setting_name;
-	dll_property_info["type"] = (int64_t)Variant::STRING;
-	dll_property_info["hint"] = (int64_t)PROPERTY_HINT_NONE;
-	dll_property_info["hint_string"] = String();
-	settings->add_property_info(dll_property_info);
-
-	const String engine_setting_name = "verse/host/engine_dir";
-	const String engine_default = String();
-	if (!settings->has_setting(engine_setting_name)) {
-		settings->set_setting(engine_setting_name, engine_default);
-	}
-	settings->set_initial_value(engine_setting_name, engine_default);
-	Dictionary engine_property_info;
-	engine_property_info["name"] = engine_setting_name;
-	engine_property_info["type"] = (int64_t)Variant::STRING;
-	engine_property_info["hint"] = (int64_t)PROPERTY_HINT_NONE;
-	engine_property_info["hint_string"] = String();
-	settings->add_property_info(engine_property_info);
-
+	// The one setting in this family that is genuinely about the project rather than about the
+	// machine, so it is the only one still declared here. The two paths moved to EditorSettings
+	// and an environment variable (R-DIST-12, verse_host_paths.h).
 	const String debugger_setting_name = "verse/host/enable_debugger";
 	const bool debugger_default = false;
 	if (!settings->has_setting(debugger_setting_name)) {
@@ -147,26 +122,23 @@ Error VerseRuntime::load_host() {
 
 	const bool enable_debugger = settings->get_setting(debugger_setting_name);
 
-	// An exported game derives all three paths from where it is running and reads neither path
-	// setting (D8): they hold one machine's absolute paths, which are meaningless anywhere else.
-	// The data directory is beside the executable and is its own engine directory (D7) -- UE takes
-	// any directory with a Binaries/ child as GForeignEngineDir.
+	// An exported game derives all three paths from where it is running and reads no setting at
+	// all (D8): they name one machine, which is meaningless anywhere else. The data directory is
+	// beside the executable and is its own engine directory (D7) -- UE takes any directory with a
+	// Binaries/ child as GForeignEngineDir.
 	const String data_dir = verse_paths::data_dir_for_this_build();
 	if (!data_dir.is_empty()) {
 		const String dll_path = OS::get_singleton()->get_executable_path().get_base_dir().path_join(RUNTIME_HOST_FILENAME);
 		return load_host_internal(dll_path, data_dir.path_join("Engine"), enable_debugger, data_dir.path_join("Cooked"));
 	}
 
-	const String dll_setting = settings->get_setting(dll_setting_name);
-	if (dll_setting.is_empty()) {
-		UtilityFunctions::push_error("VerseRuntime: " + dll_setting_name + " is unset; point it at <engine>/Engine/Binaries/Win64/verse_host.dll");
+	const String dll_path = verse_host_paths::host_dll();
+	if (dll_path.is_empty()) {
+		UtilityFunctions::push_error(String("VerseRuntime: ") + verse_host_paths::unconfigured_message());
 		return ERR_UNCONFIGURED;
 	}
 
-	const String dll_path = settings->globalize_path(dll_setting);
-	const String engine_dir = settings->globalize_path(settings->get_setting(engine_setting_name));
-
-	return load_host_internal(dll_path, engine_dir, enable_debugger, String());
+	return load_host_internal(dll_path, verse_host_paths::engine_dir(), enable_debugger, String());
 }
 
 Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p_engine_dir, bool p_enable_debugger, const String &p_cooked_dir) {

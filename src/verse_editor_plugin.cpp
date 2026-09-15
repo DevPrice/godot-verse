@@ -1,5 +1,6 @@
 #include "verse_editor_plugin.h"
 
+#include "verse_host_paths.h"
 #include "verse_script_language.h"
 
 #include <godot_cpp/classes/editor_interface.hpp>
@@ -17,6 +18,11 @@ void VerseEditorPlugin::_bind_methods() {
 }
 
 void VerseEditorPlugin::_enter_tree() {
+	// The host paths live in EditorSettings now, and a GDExtension has no hook earlier than this
+	// to declare them from -- reading them works without it, but they would not appear in the
+	// Editor Settings dialog for anyone to set (R-DIST-12).
+	verse_host_paths::register_editor_settings();
+
 	highlighter.instantiate();
 	EditorInterface::get_singleton()->get_script_editor()->register_syntax_highlighter(highlighter);
 

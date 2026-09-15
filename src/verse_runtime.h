@@ -80,12 +80,14 @@ public:
 	VerseRuntime() = default;
 	~VerseRuntime() override;
 
-	// Reads verse/host/dll_path, verse/host/engine_dir and verse/host/enable_debugger from
-	// ProjectSettings (creating them with defaults if absent) and loads the host from there.
+	// Loads the host from wherever verse_host_paths resolves it -- the environment, then the
+	// user's EditorSettings, then the legacy project settings (R-DIST-12) -- with
+	// verse/host/enable_debugger, which is the one of the four that is genuinely per project,
+	// read from ProjectSettings here.
 	//
-	// In an exported game the two path settings are ignored and all three paths come from where
-	// the executable is running (D8): they name one machine's Unreal checkout, which is not on
-	// the machine that plays the game.
+	// In an exported game none of them is read and all three paths come from where the executable
+	// is running (D8): they name one machine's Unreal checkout, which is not on the machine that
+	// plays the game.
 	godot::Error load_host();
 	godot::Error load_host(const godot::String &p_dll_path);
 	void unload_host();

@@ -98,15 +98,19 @@ Point `UE_ROOT` at the engine checkout, then:
 
 The host must be loaded from the engine tree's `Engine/Binaries/Win64` — the Verse compiler reads
 each package's sources at runtime, relative to the loaded module, so a copy elsewhere compiles
-against nothing. Godot is pointed at it by two project settings, which you set per project under
-**Project → Project Settings → Verse → Host** (they name one machine's checkout, so nothing
-portable can be committed):
+against nothing. Tell Godot where your checkout is, once per machine, under **Editor Settings →
+Verse → Host**:
 
-    verse/host/dll_path      …/Engine/Binaries/Win64/verse_host.dll
     verse/host/engine_dir    …/UnrealEngine
 
-Then run the demo — `godot --path demo` — or copy `demo/addons/godot-verse/` into your own project
-and set those two settings there.
+That is all that is normally set: `verse/host/dll_path` and `verse/host/cooker_path` are derived
+from it and are there for a build that put them somewhere else. The setting lives in Editor
+Settings rather than in the project because it names one machine, and a project.godot carrying it
+is your local state in everybody else's clone. `UE_ROOT` in the environment wins over both, which
+is how the test harness points a headless Godot at a checkout without writing to anything.
+
+Then run the demo — `godot --path demo` — or copy `demo/addons/godot-verse/` into your own
+project; there is nothing per-project to set.
 
 Tests:
 

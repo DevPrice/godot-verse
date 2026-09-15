@@ -16,13 +16,14 @@ checkout still gets the unit layer -- and a skip is reported as a skip, never as
   python tools/run_tests.py --build         # rebuild the test binaries first
 
 Environment: UE_ROOT names the Unreal checkout (or --engine), GODOT names the Godot binary (or
---godot). Both are also guessed from the usual places.
+--godot). Both are also guessed from the usual places. UE_ROOT is exported into every Godot this
+script launches, which is how the extension finds the host and the cooker -- nothing is written
+into a project.godot any more (R-DIST-12).
 """
 
 import argparse
 import json
 import os
-import re
 import shutil
 import struct
 import subprocess
@@ -307,23 +308,6 @@ def stage_extension(project: Path, for_export: bool = False) -> str | None:
     return None
 
 
-def point_at_engine(project: Path, engine: Path) -> None:
-    """Rewrites the project's verse/host settings to this machine's engine checkout.
-
-    They name an absolute path on one machine, so nothing portable can be committed; rewriting
-    them here is what keeps the checked-in project.godot from being somebody's local state.
-    """
-    settings = project / "project.godot"
-    text = settings.read_text(encoding="utf-8")
-    dll = (engine / "Engine" / "Binaries" / "Win64" / "verse_host.dll").as_posix().replace("/", "\\\\")
-    root = engine.as_posix().replace("/", "\\\\")
-    # Lambda replacements: a backslash in a re.sub replacement string is an escape, and Godot's
-    # config format wants the doubled ones through verbatim.
-    text = re.sub(r'host/dll_path=".*"', lambda _: f'host/dll_path="{dll}"', text)
-    text = re.sub(r'host/engine_dir=".*"', lambda _: f'host/engine_dir="{root}"', text)
-    settings.write_text(text, encoding="utf-8")
-
-
 def run_integration(results: Results, engine: Path | None, godot: Path | None) -> None:
     project = REPO / "tests" / "integration"
     if not (project / "project.godot").is_file():
@@ -340,7 +324,6 @@ def run_integration(results: Results, engine: Path | None, godot: Path | None) -
     if why is not None:
         results.skip("integration", why)
         return
-    point_at_engine(project, engine)
 
     # --headless opens no window. --quit-after bounds a hang: the script quits on its own, and a
     # run that has not is a failure worth seeing rather than one to wait out.
@@ -431,7 +414,6 @@ def run_coverage_diagnostic(results: Results, engine: Path | None, godot: Path |
     if why is not None:
         results.skip("coverage_diagnostic", why)
         return
-    point_at_engine(project, engine)
 
     run(
         "coverage_diagnostic",
@@ -568,7 +550,6 @@ def run_export(results: Results, engine: Path | None, godot: Path | None) -> Non
     if why is not None:
         results.skip("export", why)
         return
-    point_at_engine(project, engine)
 
     print("[run_tests] --- export ---")
     with tempfile.TemporaryDirectory(prefix="verse_export_") as work_str:
@@ -713,6 +694,13 @@ def main() -> None:
     engine = find_engine(args.engine)
     godot = find_godot(args.godot)
     results = Results()
+
+    # How every Godot this script launches finds the host, the cooker and the engine directory:
+    # the settings used to be rewritten into each project.godot before every run, which committed
+    # one machine's absolute paths to a checked-in file (R-DIST-12). The extension reads UE_ROOT
+    # first, ahead of EditorSettings, and an editor started with `-s` has no EditorSettings at all.
+    if engine is not None:
+        os.environ["UE_ROOT"] = str(engine)
 
     if args.only in (None, "units"):
         run_units(results, args.build)

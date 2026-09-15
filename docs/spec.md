@@ -202,6 +202,22 @@ from it. The spec commits to both states rather than waiting.
   not `.verse`, so it carries nothing from the engine tree. The editor host still does, and it is
   the one an addon user would install — so this requirement is unchanged for the case it was
   written about.
+- **R-DIST-12 (MUST)** Nothing a project commits names one machine. Where this developer's Unreal
+  checkout is, and which host and cooker binaries to run out of it, are properties of the machine,
+  not of the project — a `project.godot` carrying them is one contributor's local state in every
+  other contributor's clone, and it is rewritten under them the first time they open the editor.
+  Status: **done**. `src/verse_host_paths.{h,cpp}` resolves each of the three in one order:
+  the environment (`UE_ROOT`, `VERSE_HOST_DLL`, `VERSE_COOKER`), then the user's EditorSettings
+  (`verse/host/engine_dir`, `dll_path`, `cooker_path`), then the project settings of the same
+  names — which are read for projects that predate this, with a warning naming the move, and never
+  written. Only the checkout is normally set; the two binaries are derived from it. The environment
+  comes first because it is the only store a headless run has: `EditorInterface` does not exist in
+  an editor binary running `-s`, which is how the integration layer runs, so `tools/run_tests.py`
+  exports `UE_ROOT` into every Godot it launches instead of editing three `project.godot` files.
+
+  `verse/host/enable_debugger` stays a project setting, because which debugger a project wants is
+  a property of the project. An exported game reads none of the four: it derives everything from
+  its own executable (`phase-7-design.md` D8).
 
 **Exporting a game.**
 

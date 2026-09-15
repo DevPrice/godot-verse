@@ -11,8 +11,3 @@ config_version=5
 config/name="godot-verse integration tests"
 run/main_scene=""
 config/features=PackedStringArray("4.7")
-
-[verse]
-
-host/dll_path="C:\\Users\\Devin\\projects\\UnrealEngine\\Engine\\Binaries\\Win64\\verse_host.dll"
-host/engine_dir="C:\\Users\\Devin\\projects\\UnrealEngine"

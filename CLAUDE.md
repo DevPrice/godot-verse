@@ -384,7 +384,8 @@ check. The design argument for v2, and the spikes that settled it, are in `docs/
 | --- | --- |
 | `register_types.cpp` | registration order: language before resource loader |
 | `verse_host.{h,cpp}` | `GetProcAddress` loader over the ABI; no Verse logic |
-| `verse_runtime.{h,cpp}` | the `VerseRuntime` singleton — `vh_init_desc`, the Godot callback table, `verse/host/*` project settings |
+| `verse_host_paths.{h,cpp}` | where this machine's Unreal checkout, host DLL and cooker are: environment, then EditorSettings, then the legacy project settings (R-DIST-12) |
+| `verse_runtime.{h,cpp}` | the `VerseRuntime` singleton — `vh_init_desc`, the Godot callback table, `verse/host/enable_debugger` |
 | `verse_value.{h,cpp}` | `Variant` ⇄ `vh_value`, arena-allocated |
 | `verse_ref_table.{h,cpp}` | the id → `Variant` table the `Ref` lane names: Array, Dictionary, Callable, Signal and the packed arrays, which cross as references rather than copies |
 | `verse_script.{h,cpp}` | a `.verse` file as a Godot `Resource`; valid only if it defines its own class |
@@ -511,9 +512,10 @@ in GDScript — `tests/integration/test_main.gd`, one line per case, `quit(1)` o
 from what is actually on disk — so the integration layer runs against an editor build alone and the
 export layer skips itself when the release library is absent — writes `.godot/extension_list.cfg`
 (outside the editor Godot loads extensions from that list rather than by scanning, and the editor is
-what normally writes it), and rewrites the two `verse/host/*` settings from `UE_ROOT` — those name
-one machine's engine checkout, so nothing portable can be committed. Adding a `.verse` fixture there
-means adding it under `scripts/`; the host compiles every `.verse` under `res://` together.
+what normally writes it). It no longer rewrites any `verse/host/*` setting: `run_tests.py` exports
+`UE_ROOT` into every Godot it launches and the extension reads that first (R-DIST-12), so nothing
+machine-specific is written into a committed file. Adding a `.verse` fixture there means adding it
+under `scripts/`; the host compiles every `.verse` under `res://` together.
 
 `dodge-the-creeps/` is the third Godot project and the yardstick: the whole game in Verse, with no
 GDScript in it but `headless_check.gd`, which is how to see it work without a window —
@@ -578,8 +580,11 @@ ten element types against four key types is not a list to maintain by hand.
 - **The host must load from `Engine/Binaries/Win64`.** VNI records each Verse package's source
   directory relative to the loaded module and the compiler reads those `.verse` files at runtime.
   A copy elsewhere compiles against an empty package set and every identifier is unknown.
-  `bin/verse_host.dll` exists for the smoke test only; Godot points at the engine tree through the
-  `verse/host/dll_path` project setting.
+  `bin/verse_host.dll` exists for the smoke test only. Godot finds the engine tree through
+  `verse_host_paths` — `UE_ROOT`, then Editor Settings `verse/host/engine_dir`, then the legacy
+  project setting of that name, which is read with a warning and never written (R-DIST-12). The
+  host DLL and `verse_cook.exe` are derived from it unless `VERSE_HOST_DLL`/`VERSE_COOKER` or the
+  matching Editor Settings entries name one directly.
 - **A build is the whole project, and it happens on Play — not on save.** `vh_compile_project`
   publishes a *generation*: a package name no publish has used, with the verse path pinned at
   `/user@localhost` and the retiring generation removed from the source project first. Every build

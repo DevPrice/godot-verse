@@ -768,6 +768,29 @@ design §13 is written.
 
 ---
 
+## Where the host lives is a machine's business, not a project's — **done**
+
+Not a phase, and it was in no plan: it came out of the 7b interview, because 7a had quietly made it
+worse by adding a third machine-specific path (`verse/host/cooker_path`) beside the two that were
+already committed into three `project.godot` files.
+
+**R-DIST-12** is what it answers: nothing a project commits names one machine. `verse_host_paths`
+resolves the checkout, the host DLL and the cooker in one order — the environment (`UE_ROOT`,
+`VERSE_HOST_DLL`, `VERSE_COOKER`), then the user's **EditorSettings**, then the legacy project
+settings of the same names, which are read for projects that predate this, warned about once, and
+never written. Only the checkout is normally set; the other two are derived from it, through a
+per-platform table rather than a Windows path built at three call sites. `verse/host/enable_debugger`
+stays a project setting, because which debugger a project wants *is* the project's business.
+
+The environment comes first for a reason worth remembering: **`EditorInterface` does not exist in
+an editor binary running `-s`**, which is how the integration layer runs — and `Engine::has_singleton`
+is no guard, because Godot registers the *name* whatever the binary is doing and refuses the object,
+so the check that works is `is_editor_hint()`. `tools/run_tests.py` exports `UE_ROOT` into every
+Godot it launches and `point_at_engine` is deleted; the `[verse]` section is gone from all three
+committed projects.
+
+---
+
 ## Phase 7b — Loading what the cooker wrote — **designed, not built**
 
 **The wall, in one line:** `FLinkerLoad` has no `Verse::VCell` support, so a Verse package can be

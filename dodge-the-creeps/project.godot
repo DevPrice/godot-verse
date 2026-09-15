@@ -77,11 +77,3 @@ start_game={
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
-
-[verse]
-
-; These name one machine's Unreal checkout, so nothing portable can be committed: point them at
-; your own before running. The integration test project has the same two settings and
-; tools/run_tests.py rewrites them from UE_ROOT, which this project is not run by.
-host/dll_path="C:\\Users\\Devin\\projects\\UnrealEngine\\Engine\\Binaries\\Win64\\verse_host.dll"
-host/engine_dir="C:\\Users\\Devin\\projects\\UnrealEngine"
