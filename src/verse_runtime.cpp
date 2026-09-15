@@ -142,6 +142,15 @@ Error VerseRuntime::load_host() {
 }
 
 Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p_engine_dir, bool p_enable_debugger, const String &p_cooked_dir) {
+	// vh_init gets one attempt per process, whatever it answers. It boots FEngineLoop, and the
+	// host module never unloads -- so FreeLibrary after a failure leaves a fully initialised
+	// engine resident, and a second vh_init runs PreInit again: "Delayed Startup phase
+	// StartOfEnginePreInit has already run", an appError that takes the game down with it.
+	// build_project() asks per script, so without this a refusal an exported game is meant to
+	// survive -- a stamp mismatch, say -- became a crash on the second script.
+	if (host_init_refused) {
+		return FAILED;
+	}
 	if (host.is_loaded()) {
 		unload_host();
 	}
@@ -216,6 +225,7 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 	const int32_t status = host.Init(&init_desc);
 	if (status != VH_OK) {
 		UtilityFunctions::push_error(String("VerseRuntime: vh_init failed with status ") + String::num_int64(status));
+		host_init_refused = true;
 		host.unload();
 		return FAILED;
 	}

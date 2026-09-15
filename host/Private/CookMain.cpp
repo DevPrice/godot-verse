@@ -199,6 +199,18 @@ AUTORTFM_DISABLE INT32_MAIN_INT32_ARGC_TCHAR_ARGV()
 	// -nullrhi: there is nothing to draw. -stdout -FullStdOutLogOutput because ALLOW_LOG_FILE=0
 	// leaves no log to read afterwards, and what this program has to say when it fails is the
 	// engine's own message rather than its exit code.
+	// This program *is* a cook, and one piece of the engine only behaves that way when told so by
+	// this global. `VIntrinsics::Initialize` gives the `$BuiltIn` package an associated UPackage
+	// -- /Script/CoreUObject -- only under IsRunningCookCommandlet (VVMIntrinsics.cpp:41-45), and
+	// without one the harvester's import branch writes a **null** package for every reference to
+	// an intrinsic: `VersePackage->GetUPackage()` is what it names the import by
+	// (PackageHarvester.cpp:1065-1082). The cooked package then loads with a null cell where
+	// `Abs`, `Floor`, `BitOr` and the rest should be, and calling one is a jump to address 0 --
+	// the same shape of fault as an unbound native thunk, and found the same way.
+	//
+	// Set before PreInit because the VM is initialised inside it and the flag is read there.
+	PRIVATE_GIsRunningCookCommandlet = true;
+
 	if (const int32 Result = GEngineLoop.PreInit(ArgC, ArgV, *BootArgs))
 	{
 		return Result;

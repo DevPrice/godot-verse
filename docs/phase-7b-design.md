@@ -1,11 +1,13 @@
 # Phase 7b — Loading what the cooker wrote
 
-**Status:** 2026-09-14 · **stages 1–3 built, both walls down.** §1 and §3 were written *before* the
+**Status:** 2026-09-15 · **built, and the exit in §15 is met.** §1 and §3 were written *before* the
 work; **§13 is what building it corrected and is the section to read first.** The VCell wall this
-phase exists to remove is gone — a cooked Verse package loads with its cells intact — and so is the
-second wall behind it, which was not in any spike: a cooked `VNativeProcedure`'s C++ thunk is a
-function pointer, so it does not serialise, and nothing rebinds the module-scoped ones after a
-cooked load (§13.8). An exported game now calls the Godot mirror and the Verse standard library.
+phase exists to remove is gone, and so is the second wall behind it, which was in no spike: a cooked
+`VNativeProcedure`'s C++ thunk is a function pointer, so it does not serialise, and nothing rebinds
+the module-scoped ones after a cooked load (§13.8). `run_tests.py` reports **four green layers**, the
+fourth of which **launches** what it exported — 308 passed, 0 failed, 9 skipped — and
+`dodge-the-creeps`, exported and run sandboxed outside the repo, passes all **30** of its checks.
+§13.9 is the five further defects that only launching an export could find.
 
 **Prerequisite: Phase 7a is complete** — built 2026-09-14, ABI **8.2**. `verse_cook.exe` cooks a
 project to loose `.uasset` files, the export plugin ships them in a data directory beside the
@@ -686,13 +688,84 @@ Measured after the fix, through `tests/cooked_probe` against a cooked `dodge-the
 `gameplay/mob`'s `_Ready` runs its `GetNode` and answers 0, and `OnScreenExited` runs its
 `QueueFree` and answers 0.
 
-### 13.9 What is not built
+### 13.9 What launching the export found: five more, and none of them in any spike
 
-Stages 4, 5 and 6 — the `test_main.gd` split, the export layer launching what it exports, and
-R-DIST-10 by hand — were blocked on §13.8 and are unblocked rather than done. Nothing has yet
-*launched* an exported game: the export layer still asserts only the tree it produced, and
-`tests/cooked_probe` answers every Godot call with a stub. `spec.md`'s R-DIST-9/10/11 stay where
-they are until one runs.
+Stage 5 runs the exported game and asserts its counts, and the first time it did, **fifteen of the
+317 cases failed**. Every one was a real defect in the cooked path, and none of them was reachable
+by loading a package or calling one method -- which is what §13.8's spikes had proved. A suite is
+what found them, and that is the argument for stage 5 rather than for a bigger spike.
+
+- **Every VM intrinsic was a null cell.** `Abs`, `Floor`, `Ceil`, `BitAnd`, `BitOr` and the rest live
+  in the `$BuiltIn` package, and `VIntrinsics::Initialize` gives that package an associated UPackage
+  -- `/Script/CoreUObject` -- **only under `IsRunningCookCommandlet()`** (`VVMIntrinsics.cpp:41-45`).
+  Without one, the harvester takes the import branch and writes a null package for the import,
+  because `VersePackage->GetUPackage()` is what it names an import by
+  (`PackageHarvester.cpp:1065-1082`). The cooker sets `PRIVATE_GIsRunningCookCommandlet` before
+  `PreInit` now, which it is entitled to: it *is* a cook. The engine's own comment on the line says
+  "This only affects the cooker".
+- **FName does not preserve case outside an editor build, and a script class lost its members to it.**
+  `WITH_CASE_PRESERVING_NAME` is 1 for the editor and 0 for the runtime host, so `UClass::GetName()`
+  answers the casing of whichever name was interned *first*. `concurrency.verse` came back as
+  `Concurrency`, because `/Verse.org/Concurrency` is a module in the standard library -- one that
+  only began shipping when §13.8 stopped skipping `VerseNative`. The shape key built from that name
+  matched nothing, so every member of that class read as absent: no signal bound, no field readable,
+  and not one diagnostic anywhere. `QualifiedClassName` reads the name off the Verse type now
+  (`VNamedType::AppendMangledName`), where it is a UTF-8 array and its case is its own.
+- **`var` was a uLang pointer, so an exported game silently dropped every write to its own state.**
+  `IsVarMember` asked `CDataDefinition::IsVar()`, and a runtime host has no definition to ask, so
+  every member read as read-only and every `set` went nowhere. `FMemberType` carries the flag now and
+  the sidecar carries it across, which is §13.7's rule applied to the one field that had been missed.
+- **Awaiting one of Godot's own signals connected and never resumed.** `BindEngineSignal` describes
+  an accessor's `signal(t)` off the semantic program; without one the payload defaulted to `Bare`
+  with no arguments, which is not the same as `tuple()`, and the delivery could not rebuild `t`.
+  The cook records all 503 accessors' payloads once and the sidecar carries them
+  (`engineSignals`), deduplicated by the JSON of the shape -- about eighty distinct payloads between
+  them, which is 250 KB of sidecar rather than a third of a megabyte.
+- **A refused `vh_init` took the game down instead of refusing it.** The stamp check (§13.5) does its
+  job and answers an error; `build_project` then asked again per script, and because the host module
+  never unloads, the second `vh_init` ran `FEngineLoop::PreInit` a second time --
+  *"Delayed Startup phase StartOfEnginePreInit has already run"*, an appError. `VerseRuntime`
+  remembers a refusal now and answers it without re-entering. Stage 3's "refuses rather than starting
+  without Verse" was true of the first script and false of the second.
+
+**Two cases are not defects and are skipped, and the second is why §7's rule needed a third clause.**
+`is_tool()` is read off the *source*, which an export ships as a one-byte stub (7a D10) -- and
+nothing is lost, because what the flag decides is whether the editor hands out a placeholder. And
+the thread-refusal case asserted the shape of a *debug build's* error handling: an invalid call
+aborts the statement in the editor and answers null in an export template. The claim it exists to
+make -- that the VM was not entered -- is the same in both, and it asks it that way now.
+
+**The yardstick found a sixth, in the check rather than in the bridge.** `dodge-the-creeps` asserted
+"the node references are gone from the inspector" by reading `main.get("Player")`, and an instance
+answers a read of any member it declares, exported or not. It asks the property list now, which is
+what the sentence always meant.
+
+### 13.10 Measurements (§10)
+
+Taken on the machine `spec.md` R-PERF-2 names, against `dodge-the-creeps` exported release.
+
+| what | measured |
+| --- | --- |
+| the container step | **0.40 s** (0.45-0.70 s across runs), against 7a's 4.3 s compile and 1.3 s cook |
+| total export, end to end | **14.2 s** headless, including the cook |
+| the shipped Verse payload | **5.0 MB** -- a 4.9 MB container and a 248 KB sidecar |
+| the whole export | 226 MB, of which **117.9 MB is the runtime host** (Development; Shipping is 72.7) |
+| exported startup to the first Verse `_Ready` | **0.54 s**, against **4.08 s** for the same game compiled at startup in the editor |
+
+The last row is what the phase is for. A cooked project is **7.6x** faster to first frame than the
+same project compiled at play, and the difference is the whole-project compile the export no longer
+does.
+
+### 13.11 What is not built
+
+Everything §15 names is built. What is deliberately not built is §14's list, unchanged: the engine
+patch, `FZenStoreWriter`, trimming the mirror, caching its container, Linux and `dlopen`, macOS, the
+Shipping-per-template split, and the debugger in an exported game.
+
+One thing is worth naming here because it is *nearly* built and is not: **the exported game ships the
+Development runtime host, 117.9 MB against Shipping's 72.7.** 7a's D12 has the reason — the
+`.gdextension` names one file per platform, so whichever configuration was built last is the one that
+ships — and it is still true.
 
 ---
 
@@ -714,6 +787,9 @@ they are until one runs.
 ---
 
 ## 15. Exit
+
+**Met, 2026-09-15.** Every row below is done; §13.9 and §13.10 are where the work that met them is
+recorded.
 
 - **`run_tests.py` reports four layers, all green**, and the fourth **launches** what it exported:
   `tests/integration` exported headless from the 4.7 editor, run, every untagged case passing and

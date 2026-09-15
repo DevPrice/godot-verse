@@ -24,6 +24,7 @@ into a project.godot any more (R-DIST-12).
 import argparse
 import json
 import os
+import re
 import shutil
 import struct
 import subprocess
@@ -174,6 +175,10 @@ def run_abi(results: Results, engine: Path | None, do_build: bool) -> None:
 # at all, which is R-LANG-6's library file and is exactly what should *not* appear.
 COOK_EXPECTED_CLASSES = ["debug_probe", "exports", "tasks"]
 
+# What HostSidecar.cpp is writing. Asserted rather than ignored because the sidecar is the one
+# cooked artifact a human reads, and a version nobody bumped is how a reader-writer pair drifts.
+SIDECAR_VERSION = 3
+
 
 def run_cook(results: Results, engine: Path) -> None:
     """Drives verse_cook.exe over the ABI fixtures and asserts what it wrote.
@@ -273,11 +278,12 @@ def _check_sidecar(path: Path, expected_classes: list[str], name: str) -> bool:
         ok = False
         print(f"[{name}] verse_classes.json names the cooked packages: FAIL")
 
-    if sidecar.get("version") == 2:
-        print(f"[{name}] verse_classes.json is version 2: ok")
+    if sidecar.get("version") == SIDECAR_VERSION:
+        print(f"[{name}] verse_classes.json is version {SIDECAR_VERSION}: ok")
     else:
         ok = False
-        print(f"[{name}] verse_classes.json is version {sidecar.get('version')!r}, not 2: FAIL")
+        print(f"[{name}] verse_classes.json is version {sidecar.get('version')!r}, "
+              f"not {SIDECAR_VERSION}: FAIL")
 
     classes = sidecar.get("classes", {})
     for expected in expected_classes:
@@ -535,14 +541,21 @@ EXPORT_DATA_FILES = [
 # class's name, and it is what the kept `.vmodule` markers decide.
 EXPORT_EXPECTED_CLASSES = ["marshal", "signals", "left/widget"]
 
+# What the exported run must report, named rather than inferred (7b D5): a case that stops running
+# in an export has to read as a failure and not as a shorter log. The nine skips are test_cases.gd's
+# three `editor` blocks -- the second generation, the reload, and `is_tool` off a stripped source --
+# and 308 + 9 is the 317 the in-editor run prints. Adding a case means changing this line, which is
+# the point of it.
+EXPORT_EXPECTED_PASSES = 308
+EXPORT_EXPECTED_SKIPS = 9
+
 
 def run_export(results: Results, engine: Path | None, godot: Path | None) -> None:
-    """Exports tests/integration headless and asserts the tree it produced.
+    """Exports tests/integration headless, asserts the tree it produced, and runs it.
 
-    It does not launch the result. That is Phase 7b's, and until 7b there is nothing to launch: a
-    cooked Verse package cannot be loaded from a loose `.uasset` (phase-7-design.md §13.7). What
-    this layer covers is everything 7a actually controls -- the cook ran, its output is where D6
-    says, the runtime host rode along, the sources did not.
+    The tree half is 7a's: the cook ran, its output is where D6 says, the runtime host rode along,
+    the sources did not. Running it is 7b's, and is the only place anything asserts that a cooked
+    Verse package loads and answers -- everything else in this suite compiles at startup.
     """
     project = REPO / "tests" / "integration"
     if godot is None:
@@ -639,7 +652,67 @@ def run_export(results: Results, engine: Path | None, godot: Path | None) -> Non
         # R-DIST-11's other half, asserted rather than assumed.
         ok = _check_pck(out.with_suffix(".pck"), project) and ok
 
+        ok = _launch_export(out) and ok
+
         results.record("export", ok)
+
+
+def _launch_export(exe: Path) -> bool:
+    """Runs the exported game and asserts what its cases reported.
+
+    This is the only thing in the suite that exercises the cooked path end to end: the same
+    `test_cases.gd` the integration layer runs in the editor, run again inside an export, where the
+    project was cooked rather than compiled and the host has no compiler in it at all.
+
+    `--fixed-fps` is not optional. Headless, the main loop runs as fast as it can and a Timer counts
+    real seconds, so a case that waits on one never advances. `--verse-check` goes after `--`, where
+    OS.get_cmdline_user_args() reads it and Godot's own parser cannot collide with it.
+    """
+    print(f"[export] launching {exe.name}")
+    try:
+        completed = subprocess.run(
+            [str(exe), "--headless", "--fixed-fps", "60", "--", "--verse-check"],
+            capture_output=True, text=True, errors="replace", timeout=600)
+    except subprocess.TimeoutExpired:
+        print("[export] the exported game ran for 600 s without finishing: FAIL")
+        return False
+
+    output = (completed.stdout or "") + (completed.stderr or "")
+    summary = [line for line in output.splitlines() if "[integration]" in line and "passed, " in line]
+    if not summary:
+        sys.stdout.write(output)
+        print("[export] the exported game reported no summary line: FAIL")
+        return False
+
+    print(f"[export] the exported game said: {summary[-1].strip()}")
+    match = re.search(r"(\d+) passed, (\d+) failed, (\d+) skipped", summary[-1])
+    if match is None:
+        print("[export] the summary line does not parse: FAIL")
+        return False
+    passed, failed, skipped = (int(group) for group in match.groups())
+
+    ok = True
+    if completed.returncode != 0:
+        # Worth printing whole: an exported game that dies has no other log.
+        sys.stdout.write(output)
+        print(f"[export] the exported game exited {completed.returncode}, not 0: FAIL")
+        ok = False
+    else:
+        print("[export] the exported game exited 0: ok")
+
+    for name, got, want in (("passed", passed, EXPORT_EXPECTED_PASSES),
+                            ("failed", failed, 0),
+                            ("skipped", skipped, EXPORT_EXPECTED_SKIPS)):
+        if got == want:
+            print(f"[export] the exported run {name} {got}: ok")
+        else:
+            print(f"[export] the exported run {name} {got}, expected {want}: FAIL")
+            ok = False
+    if not ok and failed:
+        for line in output.splitlines():
+            if ": FAIL" in line:
+                print(f"[export]   {line.strip()}")
+    return ok
 
 
 def _check_pck(pck: Path, project: Path) -> bool:

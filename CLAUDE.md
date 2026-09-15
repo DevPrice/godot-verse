@@ -276,23 +276,33 @@ tools, because `PreInit` constructs the shader compiling manager unconditionally
 only with the `EDITOR` token, `-nullrhi` and `-NoShaderCompile`, from an entry point marked
 `AUTORTFM_DISABLE`. Seventeen builds, all in §2 S-1; read it before touching that target. Stage 0 is the move to 4.7; nothing else starts before it.
 
-**Phase 7b's stages 1-3 are built and both of its walls are down, and `docs/phase-7b-design.md` §13
-is the one section of it to read** — written after the work, it is where the design turned out to be
-wrong. The cooker converts its loose cook to an IoStore container with `CreateIoStoreContainerFiles`,
-the runtime host mounts it the way `FPakPlatformFile` mounts a pak's, and a cooked Verse package
-loads **with its cells intact**. An exported `dodge-the-creeps` boots, attaches its scripts, runs
-their Verse and **calls the Godot mirror and the Verse standard library**.
+**Phase 7b is built and its exit is met, and `docs/phase-7b-design.md` §13 is the one section of it
+to read** — written after the work, it is where the design turned out to be wrong. An exported game
+runs: the cooker converts its loose cook to an IoStore container, the runtime host mounts it the way
+`FPakPlatformFile` mounts a pak's, and a cooked Verse package loads with its cells intact. Both walls
+are down. `run_tests.py`'s fourth layer **launches what it exported** and asserts its counts, and
+`dodge-the-creeps` exported outside the repo and run with `UE_ROOT` unset passes all 30 of its checks
+(`by-hand-findings.md` B14). **An exported game reaches its first Verse `_Ready` in 0.54 s against
+4.08 s compiled at startup**, and ships 5.0 MB of Verse rather than 68.
 
-Five things §13 settled that are load-bearing elsewhere:
+Seven things §13 settled that are load-bearing elsewhere:
 
 - **A cooked `VNativeProcedure` comes back with a null C++ thunk, and calling it is a jump to
   address 0** — no crash report, no diagnostic, because `RIP` is zero and there is no unwind info.
-  `SerializeLayout` passes `/*InThunk*/ nullptr` and `VVMInterpreter.cpp:2666` calls it unchecked.
   The engine rebinds *class*-scoped natives at load and *module*-scoped ones only from the
   assembler, so a host that loads VNI packages instead of compiling them has to do that walk itself
   — `GodotVerse::RebindVniModuleNatives`, over the same public `TryBindVniModule` the assembler
-  uses, with the module list read off the loaded package. `VhCallValue`, `Print` and `Sqrt` are all
-  module-level, which is why a script's own Verse ran and its first mirrored call was fatal. §13.8.
+  uses. `VhCallValue`, `Print` and `Sqrt` are all module-level. §13.8.
+- **Every VM intrinsic was a null *cell* for the same shape of reason.** `$BuiltIn` gets an
+  associated UPackage only under `IsRunningCookCommandlet()`, and without one the harvester writes a
+  null package for every import of `Abs`, `Floor` or `BitOr`. The cooker sets
+  `PRIVATE_GIsRunningCookCommandlet` before `PreInit`, which it is entitled to: it is a cook. §13.9.
+- **FName does not preserve case outside an editor build.** `WITH_CASE_PRESERVING_NAME` is 0 in the
+  runtime host, so `UClass::GetName()` answers the casing of whichever name was interned first — a
+  script class named `concurrency` came back as `Concurrency`, colliding with `/Verse.org/Concurrency`,
+  and every member of it read as absent with no diagnostic anywhere. **Never build a shape key or any
+  other identity from `UClass::GetName()`**; `QualifiedClassName` reads it off the Verse type
+  (`VNamedType::AppendMangledName`), where the name is a UTF-8 array. §13.9.
 - **`CreateIoStoreContainerFiles` parses `FCommandLine::Get()`, not the command line it is handed**,
   and needs three files a cook of this shape does not produce — a script-objects buffer, a commands
   list with a response file, and a compact-binary oplog manifest of which exactly one field is read
@@ -304,27 +314,35 @@ Five things §13 settled that are load-bearing elsewhere:
   queued forever. §13.2.
 - **The payload is 7.3 MB, not 68.** Uncompressed the container is *larger* than the loose cook;
   `-compressionformats=Oodle` plus `-compress` per response-file entry makes it a tenth of 7a's, and
-  the container step still costs 0.5–0.7 s. The global container is not needed and is not shipped.
-- **A runtime host has no semantic program and can never build one**, so the *declared* types every
-  call, field read and signal needs are recorded by the analysis and carried in the sidecar
-  (`FAnalysisSnapshot::FClass::Types`). The sidecar is version **2** and also carries the cooked
-  package list — a container holds package *ids*, which are hashes, and mount points are still
-  registered by name. §13.7.
+  the container step still costs 0.4–0.7 s. The global container is not needed and is not shipped.
+- **A runtime host has no semantic program and can never build one**, so everything the analysis
+  alone could describe is recorded and carried in the sidecar (version **3**): the declared types of
+  every member, method and signal, **whether a member is `var`** (without which every write an
+  exported game made to its own state was silently dropped), the payload of all 503 mirrored
+  engine-signal accessors (without which `Timer.Timeout().Await()` connects and never resumes), and
+  the cooked package list — a container holds package *ids*, which are hashes, and mount points are
+  still registered by name. §13.7 and §13.9.
 
 **Every package the program has must reach the container.** A VNI package the runtime host cannot
 find is only a warning from `JitVniPackages`, and then every import into it in every other package
 silently resolves to null — which is how `/Solaris/_Verse/VNI/VerseNative` went missing for a
 session. `SavePackage2.cpp:2076` asserts on a `UVerseClass` with no `Verse::VClass`, and a
 `UVerseClass` standing for a Verse *module* has none, so the cooker suppresses that one export for
-the length of one save rather than dropping the package. Three defects that had been shipping since
-7a behind the first wall are also fixed (§13.6): the cook directory was reused and never cleared,
-`sources.txt` shipped with the author's absolute paths in it, and `host_has_compiler()` tested for a
-symbol the runtime host also exports.
+the length of one save rather than dropping the package.
+
+**`vh_init` gets one attempt per process.** It boots `FEngineLoop` and the host module never
+unloads, so a second call runs `PreInit` again and asserts. `VerseRuntime` remembers a refusal and
+answers it without re-entering — without which a stamp mismatch, which is meant to be a sentence,
+took the game down on the second script.
+
+Three defects that had been shipping since 7a behind the first wall are also fixed (§13.6): the cook
+directory was reused and never cleared, `sources.txt` shipped with the author's absolute paths in it,
+and `host_has_compiler()` tested for a symbol the runtime host also exports.
 
 `tests/cooked_probe` (`tools/build_cooked_probe.py`) is how the cooked path is worked on: it mounts
 a cooked directory and calls a class's methods in ten seconds, with no export and no Godot. Linux,
-`dlopen`, macOS, the Shipping-per-template split and the debugger in an exported game are all
-**out**, by decision.
+`dlopen`, macOS, the Shipping-per-template split (an export still ships the 117.9 MB Development
+host, not Shipping's 72.7) and the debugger in an exported game are all **out**, by decision.
 
 **The by-hand checks have been run, and `docs/by-hand-checklist.md` is deleted** — all twenty-two
 of its entries were watched happen, and what is worth keeping is what they found rather than the
@@ -483,9 +501,11 @@ assertions live in `run_tests.py` rather than in the project, because `ScriptLan
 nothing a script can ask — so the only way to read what an author would see is to read what the
 editor prints.
 
-The fourth is **export**: it exports `tests/integration` headless and asserts the *tree* the
-export produced, without launching it — launching one is Phase 7b's stage 5, unblocked by §13.8 and
-not yet built. Its assertions
+The fourth is **export**: it exports `tests/integration` headless, asserts the *tree* the export
+produced, then **launches it** and asserts what its cases reported — 308 passed, 0 failed, 9 skipped,
+with the counts named in `run_tests.py` so a case that stops running in an export reads as a failure
+rather than as a shorter log (7b D5). It is the only layer that exercises the cooked path end to end;
+everything else in the suite compiles at startup. Its assertions
 are in `run_tests.py` for the reason the coverage layer's are, and one of them reads the `.pck`
 directly (`read_pck`, the format is Godot's `core/io/file_access_pack.cpp:288-370`): the one thing
 that has to be asserted about a shipped `.verse` is its *size*, and a one-byte stub and the whole
@@ -493,7 +513,10 @@ file both read as "Storing File" in an export log. **A pack stores paths with `r
 (`editor_export_platform.cpp:449`); `read_pck` puts it back. `dodge-the-creeps` is deliberately not
 in this layer either — it stays the by-hand yardstick, and `dodge-the-creeps/checks.gd` is the
 library its two drivers share, `headless_check.gd` in the editor and `export_check.gd` as an
-autoload for when 7b can run one.
+autoload in an export. **An autoload is the only way to drive an exported game**: `--script` is
+inside `TOOLS_ENABLED`, so an export template has none. Both autoloads must `set_process(false)`
+first — declaring `_process` is what enables it, so without that they run against a null library in
+every ordinary play of the game.
 
 `tests/host_bench`, built by `tools/build_bench.py`, is not part of `run_tests.py`: it reports
 timings rather than pass/fail, because R-PERF-2 asks for a recorded number and a threshold would
@@ -544,7 +567,12 @@ The binaries still run standalone, which is what to reach for when bisecting one
 
 No test framework anywhere. Each test is a `main` (or a plain script) that prints one line per case
 and exits non-zero on failure; keep new tests that shape. The integration layer is the same shape
-in GDScript — `tests/integration/test_main.gd`, one line per case, `quit(1)` on failure.
+in GDScript, and split the way `dodge-the-creeps` is: **`tests/integration/test_cases.gd` is the
+library** — one line per case, a `tree`, `begin()` and `step()` — and the two drivers are
+`test_main.gd` (a `SceneTree`, in the editor) and `export_check.gd` (an autoload, in an export). One
+set of lines, so the two runs cannot disagree about what passing means. A case that cannot run in an
+export sets `editor` false and is **printed as a skip and counted**, never dropped; there are nine,
+and `run_tests.py` asserts the number.
 
 `tests/integration` is a real Godot project, and three things in it are not committed but generated:
 `run_tests.py` copies the built GDExtension into its `addons/` and generates its `.gdextension`

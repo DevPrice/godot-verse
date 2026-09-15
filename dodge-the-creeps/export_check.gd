@@ -18,6 +18,9 @@ var checks: Checks
 
 
 func _ready() -> void:
+	# Declaring _process is what enables it, so without this it is already running against a null
+	# `checks` in every ordinary play of the game.
+	set_process(false)
 	if not OS.get_cmdline_user_args().has("--verse-check"):
 		return
 	# Deferred, because an autoload's _ready runs while the root is still adding the main scene:

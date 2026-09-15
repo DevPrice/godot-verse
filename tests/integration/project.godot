@@ -1,13 +1,22 @@
 ; Engine configuration file.
 ;
 ; The integration test project (R-QUAL-1). Driven headless by tools/run_tests.py, which copies the
-; built GDExtension into addons/ and rewrites the two verse/host settings below from UE_ROOT before
-; each run -- they name a machine's own engine checkout and nothing portable can be committed here.
+; built GDExtension into addons/ and generates the .gdextension from what is on disk. Nothing
+; machine-specific is written here: the extension reads UE_ROOT, which run_tests.py exports into
+; every Godot it launches (R-DIST-12).
+;
+; main_scene and the autoload are the exported run's alone. `--script res://test_main.gd` replaces
+; the main loop, so the editor-side run loads neither -- and the autoload does nothing at all
+; without `-- --verse-check` after it.
 
 config_version=5
 
 [application]
 
 config/name="godot-verse integration tests"
-run/main_scene=""
+run/main_scene="res://main.tscn"
 config/features=PackedStringArray("4.7")
+
+[autoload]
+
+VerseExportCheck="*res://export_check.gd"

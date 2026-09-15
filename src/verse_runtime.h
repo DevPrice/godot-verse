@@ -284,6 +284,11 @@ public:
 
 private:
 	VerseHostLibrary host;
+
+	// vh_init answered something other than VH_OK, and there is no second attempt: the host module
+	// never unloads, so re-entering it runs FEngineLoop's PreInit twice and asserts.
+	bool host_init_refused = false;
+
 	vh_init_desc init_desc = {};
 	vh_godot_api godot_api = {};
 	godot::Dictionary *diagnostic_sink = nullptr;

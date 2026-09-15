@@ -16,6 +16,8 @@
 #include "ISolarisModule.h"
 #include "IVerseModule.h"
 #include "Dom/JsonObject.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
 #include "HostSidecar.h"
 #include "Dom/JsonValue.h"
 #include "Misc/FileHelper.h"
@@ -2149,6 +2151,10 @@ namespace {
 struct FMemberType
 {
     const uLang::CDataDefinition* Member = nullptr;
+    /// Whether the member was declared `var`. The *pointer* above answered this until a runtime
+    /// host had to: `Member->IsVar()` is null there, which read as "every member is read-only" and
+    /// silently dropped every write an exported game made to its own state.
+    bool bIsVar = false;
     /// The class a reference member or parameter holds, and which package declares it. Null and
     /// Other for one of any other type.
     ///
@@ -2277,6 +2283,13 @@ struct GodotVerse::FDeclaredTypes
     TMap<FUtf8String, FMethodSignatureTypes> Methods;
     /// Signal member name -> what its payload decomposes into.
     TMap<FUtf8String, FPayloadShape> Signals;
+};
+
+/// The same thing for the *mirror's* signals, which belong to no script class: `timer.Timeout` ->
+/// what a `Timer.Timeout().Await()` has to rebuild.
+struct GodotVerse::FEngineSignalTypes
+{
+    TMap<FUtf8String, FPayloadShape> Shapes;
 };
 
 namespace {
@@ -2447,6 +2460,7 @@ AUTORTFM_DISABLE FMemberType DescribeMemberType(FUtf8StringView ClassName, FUtf8
             }
             Result = DescribeType(Member->GetType(), *Program);
             Result.Member = &*Member;
+            Result.bIsVar = Member->IsVar();
             return Result;
         }
     }
@@ -2737,11 +2751,30 @@ AUTORTFM_DISABLE int64 HandleOf(Verse::VValue Value)
 ///
 /// UVerseClass::PackageRelativeVersePath would be the direct answer and is not usable: the line
 /// that sets it from the AST is commented out in VVMClass.cpp, so under VerseVM it is empty.
+/// `concurrency`, or `left/widget` for a class in a module -- the name a shape key is built from.
+///
+/// Read off the Verse type rather than off the UClass, because **FName does not preserve case
+/// outside an editor build**. `WITH_CASE_PRESERVING_NAME` is 1 for the editor and 0 for the runtime
+/// host, so there `GetName()` answers the casing of whichever name was interned *first*: a script
+/// class called `concurrency` comes back as `Concurrency`, because `/Verse.org/Concurrency` is a
+/// module in the standard library and was loaded before it. The key then matches nothing, every
+/// field on that class reads as absent, and an exported game silently loses its members -- while the
+/// same code in the editor is correct. `AppendMangledName` builds the same string from the Verse
+/// side, where the name is a UTF-8 array and its case is its own.
 AUTORTFM_DISABLE FUtf8String QualifiedClassName(const UClass* Class)
 {
     if (!Class)
     {
         return FUtf8String();
+    }
+    if (const UVerseClass* const VerseClass = Cast<UVerseClass>(Class))
+    {
+        if (const Verse::VClass* const VClass = VerseClass->Class.Get())
+        {
+            TUtf8StringBuilder<256> Builder;
+            VClass->AppendMangledName(Builder, UTF8CHAR('/'));
+            return FUtf8String(Builder.ToView());
+        }
     }
     FString Name = Class->GetName();
     Name.ReplaceCharInline(TEXT('-'), TEXT('/'));
@@ -2995,8 +3028,7 @@ namespace {
 /// Verse permits -- so the question goes back to the definition that declared it.
 AUTORTFM_DISABLE bool IsVarMember(FUtf8StringView ClassName, FUtf8StringView FieldName)
 {
-    const uLang::CDataDefinition* Member = DescribeMemberType(ClassName, FieldName).Member;
-    return Member != nullptr && Member->IsVar();
+    return DescribeMemberType(ClassName, FieldName).bIsVar;
 }
 
 /// Assigning writes *through* a var's reference, the way `set X = ...` does. Initializing writes
@@ -3247,6 +3279,10 @@ TMap<FUtf8String, int64> GEngineSignalIds;
 /// "<class>.<accessor>" -> a binding holding only the payload shape, which is the expensive half:
 /// every Timer's `timeout` carries the same nothing, and the lookup walks the semantic program.
 TMap<FUtf8String, FSignalBinding> GEngineSignalShapes;
+
+/// The same table, recorded by the cook and read back out of the sidecar. What a runtime host has
+/// instead of a semantic program to walk.
+TSharedPtr<GodotVerse::FEngineSignalTypes> GRecordedEngineSignals;
 
 /// The mirrored Verse class name for a Godot class name, out of the generated table.
 ///
@@ -5008,6 +5044,14 @@ AUTORTFM_DISABLE int64 GodotVerse::BindEngineSignal(int64 Handle,
                     break;
                 }
             }
+        }
+        GEngineSignalShapes.Add(Shape, Binding);
+    }
+    else if (GRecordedEngineSignals)
+    {
+        if (const FPayloadShape* const Recorded = GRecordedEngineSignals->Shapes.Find(Shape))
+        {
+            Binding.Payload = *Recorded;
         }
         GEngineSignalShapes.Add(Shape, Binding);
     }
@@ -7083,6 +7127,10 @@ AUTORTFM_DISABLE TSharedPtr<FJsonObject> WriteMemberType(const FMemberType& Type
 {
     TSharedPtr<FJsonObject> Object = MakeShared<FJsonObject>();
     Object->SetObjectField(TEXT("described"), GodotVerse::WriteExportDesc(Type.Described));
+    if (Type.bIsVar)
+    {
+        Object->SetBoolField(TEXT("var"), true);
+    }
     if (!Type.ReferenceName.IsEmpty())
     {
         Object->SetStringField(TEXT("ref"), FString(Type.ReferenceName));
@@ -7139,6 +7187,7 @@ AUTORTFM_DISABLE FMemberType ReadMemberType(const TSharedPtr<FJsonObject>& Objec
     {
         Type.Described = GodotVerse::ReadExportDesc(*Described);
     }
+    Object->TryGetBoolField(TEXT("var"), Type.bIsVar);
 
     FString Text;
     if (Object->TryGetStringField(TEXT("ref"), Text))
@@ -7284,6 +7333,112 @@ AUTORTFM_DISABLE TSharedPtr<FJsonObject> GodotVerse::WriteDeclaredTypes(const FD
     return Root;
 }
 
+AUTORTFM_DISABLE TSharedPtr<GodotVerse::FEngineSignalTypes> GodotVerse::CollectEngineSignalTypes()
+{
+    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager =
+        GIde.IsValid() ? GIde->GetBuildManager() : nullptr;
+    if (!BuildManager.IsValid())
+    {
+        return nullptr;
+    }
+    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
+    const uLang::CModule* const Mirror = Program->FindDefinitionByVersePath<uLang::CModule>(GodotVersePath);
+    if (!Mirror)
+    {
+        return nullptr;
+    }
+
+    TSharedPtr<FEngineSignalTypes> Types = MakeShared<FEngineSignalTypes>();
+    for (const uLang::TSRef<uLang::CClass>& Class : Mirror->GetDefinitionsOfKind<uLang::CClass>())
+    {
+        const FUtf8String ClassName(Class->AsNameCString());
+        for (const uLang::TSRef<uLang::CFunction>& Function : Class->GetDefinitionsOfKind<uLang::CFunction>())
+        {
+            const uLang::CFunctionType* const Type = Function->_Signature.GetFunctionType();
+            bool bIsOption = false;
+            const uLang::CNormalType* const Returned =
+                Type ? &UnwrapDeclaredType(Type->GetReturnType(), bIsOption) : nullptr;
+            const uLang::CClass* const Signal = Returned ? Returned->AsNullable<uLang::CClass>() : nullptr;
+            if (!Signal || !IsSignalClass(*Signal))
+            {
+                continue;
+            }
+            FPayloadShape Shape;
+            DescribePayload(SignalPayloadType(*Signal), *Program, Shape);
+            Types->Shapes.Add(ClassName + UTF8TEXT(".") + FUtf8String(Function->AsNameCString()),
+                              MoveTemp(Shape));
+        }
+    }
+    return Types;
+}
+
+AUTORTFM_DISABLE TSharedPtr<FJsonObject> GodotVerse::WriteEngineSignalTypes(const FEngineSignalTypes& Types)
+{
+    // Deduplicated, because 503 accessors carry about eighty distinct payloads between them --
+    // half of Godot's signals are `signal(tuple())` -- and the identity that separates them is the
+    // JSON itself. Writing one entry per accessor instead costs a third of a megabyte of sidecar
+    // for the same information.
+    TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+    TArray<TSharedPtr<FJsonValue>> Shapes;
+    TMap<FString, int32> IndexByText;
+    TSharedRef<FJsonObject> Keys = MakeShared<FJsonObject>();
+
+    for (const TPair<FUtf8String, FPayloadShape>& Pair : Types.Shapes)
+    {
+        const TSharedPtr<FJsonObject> Shape = WritePayloadShape(Pair.Value);
+        FString Text;
+        const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Text);
+        FJsonSerializer::Serialize(Shape.ToSharedRef(), Writer);
+
+        int32* Existing = IndexByText.Find(Text);
+        if (!Existing)
+        {
+            Existing = &IndexByText.Add(Text, Shapes.Num());
+            Shapes.Add(MakeShared<FJsonValueObject>(Shape));
+        }
+        Keys->SetNumberField(FString(Pair.Key), *Existing);
+    }
+
+    Root->SetArrayField(TEXT("shapes"), Shapes);
+    Root->SetObjectField(TEXT("keys"), Keys);
+    return Root;
+}
+
+AUTORTFM_DISABLE TSharedPtr<GodotVerse::FEngineSignalTypes> GodotVerse::ReadEngineSignalTypes(
+    const TSharedPtr<FJsonObject>& Object)
+{
+    const TArray<TSharedPtr<FJsonValue>>* ShapeArray = nullptr;
+    const TSharedPtr<FJsonObject>* Keys = nullptr;
+    if (!Object.IsValid() || !Object->TryGetArrayField(TEXT("shapes"), ShapeArray)
+        || !Object->TryGetObjectField(TEXT("keys"), Keys))
+    {
+        return nullptr;
+    }
+
+    TArray<FPayloadShape> Shapes;
+    Shapes.Reserve(ShapeArray->Num());
+    for (const TSharedPtr<FJsonValue>& Item : *ShapeArray)
+    {
+        Shapes.Add(ReadPayloadShape(Item->AsObject()));
+    }
+
+    TSharedPtr<FEngineSignalTypes> Types = MakeShared<FEngineSignalTypes>();
+    for (const auto& Pair : (*Keys)->Values)
+    {
+        const int32 Index = (int32)Pair.Value->AsNumber();
+        if (Shapes.IsValidIndex(Index))
+        {
+            Types->Shapes.Add(FUtf8String(Pair.Key), Shapes[Index]);
+        }
+    }
+    return Types;
+}
+
+AUTORTFM_DISABLE void GodotVerse::SetRecordedEngineSignalTypes(TSharedPtr<FEngineSignalTypes> Types)
+{
+    GRecordedEngineSignals = MoveTemp(Types);
+}
+
 AUTORTFM_DISABLE TSharedPtr<GodotVerse::FDeclaredTypes> GodotVerse::ReadDeclaredTypes(
     const TSharedPtr<FJsonObject>& Object)
 {
@@ -7379,6 +7534,7 @@ AUTORTFM_DISABLE void CollectDeclaredTypes(FUtf8StringView ClassName, GodotVerse
                 continue;
             }
             FMemberType Described = DescribeType(Member->GetType(), *Program);
+            Described.bIsVar = Member->IsVar();
             if (Described.ReferenceClass && IsSignalClass(*Described.ReferenceClass))
             {
                 FPayloadShape Shape;

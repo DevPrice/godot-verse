@@ -17,7 +17,7 @@ namespace {
 /// Bumped when the shape below changes in a way a reader of the old shape would misread. The
 /// cooker and the runtime host are built together and shipped together, so this is a tripwire
 /// against a stale cook in a game directory rather than a compatibility mechanism.
-constexpr int32 SidecarVersion = 2;
+constexpr int32 SidecarVersion = 3;
 
 FString Utf8ToFString(const FUtf8String& Value)
 {
@@ -473,6 +473,14 @@ AUTORTFM_DISABLE bool GodotVerse::WriteClassSidecar(const FString& Path,
     }
     Root->SetArrayField(TEXT("packages"), PackageList);
 
+    // Collected here rather than in the snapshot: it describes the *mirror*, which does not change
+    // between analyses, and walking 1036 classes is not something an editor's per-keystroke
+    // analysis should pay for. The cook takes one of these, once.
+    if (const TSharedPtr<GodotVerse::FEngineSignalTypes> EngineSignals = GodotVerse::CollectEngineSignalTypes())
+    {
+        Root->SetObjectField(TEXT("engineSignals"), GodotVerse::WriteEngineSignalTypes(*EngineSignals));
+    }
+
     TSharedRef<FJsonObject> Classes = MakeShared<FJsonObject>();
     for (const TPair<FUtf8String, FAnalysisSnapshot::FClass>& Pair : Snapshot->Classes)
     {
@@ -624,6 +632,12 @@ AUTORTFM_DISABLE bool GodotVerse::LoadClassSidecar(const FString& Path, FUtf8Str
     if (!ParseSidecar(Path, Root, OutError))
     {
         return false;
+    }
+
+    const TSharedPtr<FJsonObject>* EngineSignals = nullptr;
+    if (Root->TryGetObjectField(TEXT("engineSignals"), EngineSignals))
+    {
+        GodotVerse::SetRecordedEngineSignalTypes(GodotVerse::ReadEngineSignalTypes(*EngineSignals));
     }
 
     TSharedRef<FAnalysisSnapshot> Snapshot = MakeShared<FAnalysisSnapshot>();

@@ -35,7 +35,12 @@ func begin() -> void:
 	# The nine node references main used to expose as inspector slots are lookups again: `GetNode`
 	# and a cast (R-SCN-6). What is left as an export is the one thing that should be -- a
 	# PackedScene is a resource the designer chooses, not a child the script can look up.
-	check("the node references are gone from the inspector", main.get("Player") == null)
+	#
+	# The property *list* is the question, and asking `get("Player")` instead was only ever a proxy
+	# for it: an instance answers a read of any member it declares, exported or not, and whether
+	# that particular read succeeds turned out to differ between a compiled host and a cooked one.
+	var slots: Array = main.get_property_list().map(func(p: Dictionary) -> String: return p.name)
+	check("the node references are gone from the inspector", not slots.has("Player"), str(slots))
 	check("an export slot typed as a Resource still resolves", main.get("MobScene") != null)
 	check("a script-declared signal is visible to Godot",
 		player.has_signal("Hit") and hud.has_signal("StartGame"))

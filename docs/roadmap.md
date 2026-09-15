@@ -791,7 +791,15 @@ committed projects.
 
 ---
 
-## Phase 7b — Loading what the cooker wrote — **designed, not built**
+## Phase 7b — Loading what the cooker wrote — **built; exit met 2026-09-15**
+
+**Done.** An exported game runs its Verse: `run_tests.py` reports four green layers, the fourth of
+which launches what it exported (308 passed, 0 failed, 9 skipped), and `dodge-the-creeps` exported
+outside the repo and run with `UE_ROOT` unset passes all 30 of its checks. It reaches its first Verse
+`_Ready` in **0.54 s** against **4.08 s** compiled at startup, and ships **5.0 MB** of Verse against
+7a's 68. **`phase-7b-design.md` §13 is what the work corrected**, and §13.8–§13.9 are the two walls
+and the five further defects that no spike would have found — the rest of this entry is the plan as
+it was written, kept because the route it chose is the one that worked.
 
 **The wall, in one line:** `FLinkerLoad` has no `Verse::VCell` support, so a Verse package can be
 cooked to a loose `.uasset` and cannot be *loaded* from one. Only the IoStore loader's
@@ -838,9 +846,16 @@ hand-rolled loader are each a separate decision.
 template; the debugger and profiler in an exported game, which stay untested and are said to be;
 trimming the mirror, which is 67 of the cook's 68 MB and is recorded rather than fixed.
 
-**Exit:** four layers green with the fourth launching what it exported; dtc exported, run sandboxed
-and green; R-DIST-9, R-DIST-10 and R-DIST-11 all **done** with the Windows-only caveat written into
-each line; OQ-18 closed; design §13 written with the measurements §10 owes.
+**Exit — met.** Four layers green with the fourth launching what it exported; dtc exported, run
+sandboxed and green (`by-hand-findings.md` B14); R-DIST-9, R-DIST-10 and R-DIST-11 all **done** with
+the Windows-only caveat written into each line; OQ-18 closed; design §13 written with §10's
+measurements in §13.10.
+
+**What the plan above did not anticipate, and what it cost:** both spikes passed and the phase was
+stopped anyway, twice — first by a cooked native's C++ thunk, which is a function pointer and does
+not serialise, and then by five more defects that only *launching* an export could show. The lesson
+is narrower than "run the spikes first", which this phase did: **a spike that loads a cooked package
+proves the loading, and only one that calls something proves the calling.**
 
 ---
 

@@ -223,20 +223,24 @@ from it. The spec commits to both states rather than waiting.
 
 - **R-DIST-9 (MUST)** Exporting a Godot project that uses Verse produces a runnable game through
   Godot's ordinary export dialog, with no manual copying of DLLs or engine directories. The
-  export plugin collects everything the game needs. Status: **part** — Phase 7a built it. An
-  export runs the cooker, puts its output in a `verse_<app>_<platform>_<arch>` directory beside
-  the executable, carries the runtime host as a `.gdextension` `[dependencies]` row and strips
-  every `.verse` to a stub, with no manual copying of anything; `run_tests.py`'s `export` layer
-  asserts the whole tree. What is not done is the other side of the dialog: the game **cannot load
-  what it was given** (`phase-7-design.md` §13.7), which is Phase 7b's and is designed in
-  [`phase-7b-design.md`](phase-7b-design.md) — the container route, its two spikes, and the exit
-  that flips this line to **done** with a Windows-only caveat.
+  export plugin collects everything the game needs. Status: **done, on Windows** — 7a built the
+  export and 7b made the result run. An export runs the cooker, puts an IoStore container and a
+  class sidecar in a `verse_<app>_<platform>_<arch>` directory beside the executable, carries the
+  runtime host as a `.gdextension` `[dependencies]` row and strips every `.verse` to a stub, with no
+  manual copying of anything. `run_tests.py`'s `export` layer exports `tests/integration`, asserts
+  the whole tree, **launches it and asserts its counts** — 308 passed, 0 failed, 9 skipped — and
+  `dodge-the-creeps` exported and run outside the repo passes all 30 of its checks
+  (`by-hand-findings.md` B14). Windows only: no Linux or macOS export has ever been attempted
+  (R-PLAT-1).
 - **R-DIST-10 (MUST)** An exported game does not require the user who *runs* it to have anything
-  installed. Status: **none** — everything the game needs is beside it, and it does not yet run
-  (`phase-7-design.md` §13.7). **Phase 7b** ([`phase-7b-design.md`](phase-7b-design.md)), which
-  also says what checking it will and will not prove: a sandboxed run on the build machine, with
-  `UE_ROOT` unset and the engine checkout off PATH, cannot rule out a machine-wide dependency such
-  as a VC redistributable, and the finding it produces says so (§9 there).
+  installed. Status: **done, on Windows, with the limit named.** `dodge-the-creeps` was exported to
+  a directory outside the repository and run with `UE_ROOT`, `VERSE_HOST_DLL` and `VERSE_COOKER`
+  unset and `PATH` cut to `C:\Windows\system32;C:\Windows`: 30 checks, 0 failures, exit 0
+  (`by-hand-findings.md` B14). The game finds its host, its engine directory and its container by
+  where it is running and reads no setting and no environment variable. **What that cannot prove**,
+  and the finding says so in its own words: a sandboxed run on the build machine cannot rule out a
+  machine-wide dependency such as a VC redistributable. That needs a machine that has never built
+  anything.
 - **R-DIST-11 (SHOULD)** An exported game ships compiled Verse rather than `.verse` source plus a
   compiler. This is the difference between a game that ships a language toolchain in its data
   directory and one that ships a program; it also removes compilation from startup time and is a
@@ -256,7 +260,11 @@ from it. The spec commits to both states rather than waiting.
   it is not yet decided by anything — the `.gdextension` names one file — which is D12's remaining
   half, and is **out of Phase 7b by decision** (`phase-7b-design.md` D2). What 7b does flip is the
   first half from "nothing loads it" to "a game runs on it": the cooked Verse a game ships is only
-  worth the name once it can be read back.
+  worth the name once it can be read back, and it is read back now.
+
+  Measured on `dodge-the-creeps` (the machine R-PERF-2 names): the shipped Verse payload is
+  **5.0 MB** — a 4.9 MB container and a 248 KB sidecar — against 7a's 68 MB of loose cook, and the
+  container step costs **0.40 s** inside a **14.2 s** headless export.
 
 ---
 
@@ -1880,6 +1888,19 @@ performance claim. What is measured is recorded in R-PERF-2 and carries no thres
   The generation figure is the one the build-on-Play trigger rests on: a second and a half an author
   pays on Play, and would have been a second and a half on every Ctrl+S. If it has to come down,
   off-thread building becomes a requirement rather than a guess.
+
+  **An exported game does not pay any of the figures above**, which is what Phase 7 and 7b are for.
+  Measured on the same machine, `dodge-the-creeps` headless, from process start to the first Verse
+  `_Ready` having run:
+
+  | what | figure |
+  | --- | --- |
+  | exported, cooked Verse loaded from its container | **0.54 s** |
+  | the same game in the editor, compiled at startup | **4.08 s** |
+
+  **7.6x**, and the difference is the whole-project compile the export no longer does: the cooker did
+  it once, at export time, inside a 14.2 s headless export whose container step is 0.40 s. What the
+  game loads instead is a 4.9 MB container and a 248 KB sidecar (R-DIST-11).
 - **R-PERF-3 (SHOULD)** Nothing in the design makes a future optimisation structurally impossible —
   specifically, marshalling and dispatch must not bake in per-call allocation (R-TYPE-6).
 
@@ -1913,7 +1934,7 @@ A closed question keeps its row so that the reason it is closed is not lost.
 | **OQ-15** ✅ | What should the bridge say about Verse's effect semantics? A function with no effect specifier carries a default set wider than `<transacts>` — it includes `no_rollback` — so an explicit specifier *narrows*, and a **failure context** (an `if (X := F[])`, an option unwrap, a cast) refuses a `no_rollback` callee because failure has to unwind. One failable helper therefore pulls `<transacts>` onto everything it calls, which is what `dodge-the-creeps.md` wall 8 hit. (Wall 8 first recorded the cause as the host's AutoRTFM transaction; that was wrong, and Phase 4's probes corrected it.) | R-AUD-1, R-AUD-3, and the manual | **Closed by Phase 4.5: it says three things, and R-AUD-1 and R-AUD-3 carry them.** (1) Godot's **const and answering** methods are `<reads>`, so a read-only helper stops infecting its callers — 6728 in Godot plus 127 Godot forgot to mark, 3996 in the mirror. The test is const *and* answering: Godot's `const` means "does not mutate the C++ object", and the 38 const-and-void methods are `OS.set_environment` and 37 others that plainly do something. (2) A failure undoes every deferred Godot write at any depth, which is measured rather than assumed; what it does not undo is a method that mutates *and* answers, and those are enumerated in the generated `docs/nonatomic-methods.md` — **1073**, not the 1354 this row once estimated, which counted statics, methods the mirror does not emit, and 54 whose Godot source proves they do not mutate. (3) The trap was answered with an appended diagnostic and a template that warned about it, and **both were removed after the by-hand session**: the appended sentence never checked *which* effect had been refused, so a `suspends` refusal took the `transacts` branch and gave advice that was the opposite of correct (`by-hand-findings.md` B7). The compiler's own text stands, and what the trap still costs is recorded in `dodge-the-creeps.md` wall 8 rather than papered over. The property surface needed nothing: a `<reads>` getter is refused by the accessor protocol (S-1), and a property *read* from `<reads>` code is accepted anyway, because the read site is not checked against the getter's effect. See `phase-4.5-design.md` §11. |
 | **OQ-16** | What anchors a Verse callback that is not a bound method? Godot answers this twice: a `self`-capturing lambda reports the captured object and dies with it, while a plain lambda is anchored to the script resource, overrides `is_valid` to ignore ObjectDB, and is Godot's own documented leak (the `GDScriptLambdaCallables` TODO, GH-102327). | R-SIG-3, R-INT-4, and library-level handlers | Phase 4a accepts only a bound method — the half of Godot's design that does not leak — and refuses an unbound function with a diagnostic. Answering means choosing an owner: a runtime-owned anchor with an explicit `Cancel`, or an explicit-owner spelling (`SubscribeAs(Owner, F)`) that keeps lifetime visible. **Phase 5 closes it for the case it creates and leaves the rest**: an awaiting continuation is owned by its task, which is owned by its instance's scope, so freeing the node cancels the task and drops the connection with no new spelling — one mechanism serving this and R-ASYNC-5 together. An unbound callback *outside* a task stays refused, exactly as Phase 4a decided, so the original question is narrowed rather than answered. |
 | **OQ-17** | Does any of the C# interop work? R-SIG-6, R-INT-1, R-INT-2 and R-INT-5 name C# as a MUST, and **no test in this repository has ever run C#** — every fixture is GDScript, and exercising C# needs a .NET Godot build that `tools/run_tests.py` does not have. | R-SIG-6, R-INT-1, R-INT-2, R-INT-5 | Get a .NET Godot into the harness and run the existing interop cases from C# before 1.0. Until then those four statuses describe GDScript only, and say so. Phase 4 enlarges the claim rather than testing it, which is why this is recorded now. |
-| **OQ-18** | Can a Verse package be loaded from an IoStore container by a host that is not a cooked game? `FLinkerLoad` has no `Verse::VCell` support at all, so a loose cooked `.uasset` is unreadable (`phase-7-design.md` §13.7); the zen loader's `FExportArchive` is the only thing in the engine that reads a cell (`AsyncLoading2.cpp:3184`). The question has two halves: can `verse_cook.exe` convert its loose cook into a container with `CreateIoStoreContainerFiles`, cells intact, and can `verse_host_runtime.dll` — a Program target that is neither `bCompileAgainstEditor` nor a cooked monolithic game — mount one and `LoadPackage` through it? | R-DIST-9, R-DIST-10, R-DIST-11 | **Phase 7b's two spikes, S-8a and S-8b** (`phase-7b-design.md` §2), run before any stage is written. Three engine facts already narrow it: a legacy cooked header carries the cell tables (`PackageFileSummary.h:153-168`), `FPackageStoreOptimizer` is the code that carries them into a zen package, and the mount is the ordinary DLC-pak path rather than an editor-only one — `FPackageStore::Mount` is public and `FFilePackageStore` is a `PakFile` class. If both spikes fail the phase stops and reports; the engine patch, `FZenStoreWriter` and a hand-rolled loader are each a separate decision. |
+| **OQ-18** ✅ | Can a Verse package be loaded from an IoStore container by a host that is not a cooked game? `FLinkerLoad` has no `Verse::VCell` support at all, so a loose cooked `.uasset` is unreadable (`phase-7-design.md` §13.7); the zen loader's `FExportArchive` is the only thing in the engine that reads a cell (`AsyncLoading2.cpp:3184`). | R-DIST-9, R-DIST-10, R-DIST-11 | **Closed: yes, to both halves.** `verse_cook.exe` converts its loose cook with `CreateIoStoreContainerFiles` — which parses `FCommandLine::Get()` rather than the line it is handed, and needs a script-objects buffer, a commands list and a compact-binary oplog manifest that a cook of this shape does not otherwise produce — and `verse_host_runtime.dll` mounts the result the way `FPakPlatformFile` mounts a pak's. The mount needed one line nothing in this host was calling: `USE_IO_DISPATCHER` is false for a Program with no Engine, so `FIoDispatcher::InitializePostSettings()` never ran, `IsInitialized()` answered true anyway and every read was issued and never completed. **What the question did not ask, and what actually cost the phase, is whether a package loaded that way can be *called***: a cooked `VNativeProcedure`'s thunk is a C++ function pointer and does not serialise, and the engine rebinds the module-scoped ones only from the assembler, which a compiler-less host never runs. `phase-7b-design.md` §13.8 and §13.9 are the whole of it; the cooked payload is 5.0 MB and an exported game reaches its first Verse `_Ready` in 0.54 s against 4.08 s compiled at startup. |
 | **RISK-1** | UE's licensing applies to games shipped with the host, including royalties. This is a permanent property of the current distribution model and may deter adoption regardless of anything built here. | adoption | Disclose prominently (R-DIST-3). No mitigation available. |
 | **RISK-2** | Tracking Godot `master` and UE `main` simultaneously means two moving dependencies with no compatibility window. | R-QUAL-7 | Accepted deliberately while pre-1.0; revisit at the first release. |
 

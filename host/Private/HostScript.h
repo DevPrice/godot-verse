@@ -637,6 +637,21 @@ AUTORTFM_DISABLE void SetAnalysisSnapshot(TSharedRef<const FAnalysisSnapshot> Sn
 AUTORTFM_DISABLE TSharedPtr<FJsonObject> WriteDeclaredTypes(const FDeclaredTypes& Types);
 AUTORTFM_DISABLE TSharedPtr<FDeclaredTypes> ReadDeclaredTypes(const TSharedPtr<FJsonObject>& Object);
 
+/// What every mirrored engine-signal accessor's `signal(t)` carries, keyed `timer.Timeout`.
+///
+/// The same problem as FDeclaredTypes and the same answer, for the other half of the signal
+/// surface: `Await`ing one of Godot's own signals has to rebuild `t` from the arguments the
+/// emission delivered, and only the accessor's declared return type says what `t` is. An editor
+/// host reads it off the semantic program per accessor and caches it; a runtime host has no program
+/// to read, so the cook records all of them once and the sidecar carries them. Without it every
+/// `Timer.Timeout().Await()` in an exported game connects and then never resumes.
+AUTORTFM_DISABLE TSharedPtr<struct FEngineSignalTypes> CollectEngineSignalTypes();
+AUTORTFM_DISABLE TSharedPtr<FJsonObject> WriteEngineSignalTypes(const FEngineSignalTypes& Types);
+AUTORTFM_DISABLE TSharedPtr<FEngineSignalTypes> ReadEngineSignalTypes(const TSharedPtr<FJsonObject>& Object);
+
+/// Makes a table read back from a sidecar the one BindEngineSignal consults. Game thread only.
+AUTORTFM_DISABLE void SetRecordedEngineSignalTypes(TSharedPtr<FEngineSignalTypes> Types);
+
 /// Reads one data member off a live instance into the ABI's value shape.
 AUTORTFM_DISABLE bool ReadInstanceField(const FInstance* Instance, FUtf8StringView FieldName, vh_value& OutValue, FFieldStorage& OutStorage);
 

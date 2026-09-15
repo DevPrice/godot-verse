@@ -364,6 +364,50 @@ in the *first* popup rather than appearing in it a second later.
 
 ---
 
+## B14. R-DIST-10: `dodge-the-creeps` exported, run outside the repo, 30 checks green · **done**
+
+Phase 7b §9, and the one check that cannot be automated from inside the build machine: an exported
+game has to be run somewhere the toolchain that built it is not.
+
+**What was done.** `dodge-the-creeps` exported release, headless, from Godot 4.7 to
+`C:\Temp\dtc-export\` — outside the repository — and run from a shell with:
+
+- `UE_ROOT`, `VERSE_HOST_DLL` and `VERSE_COOKER` **unset**;
+- `PATH` cut to `C:\Windows\system32;C:\Windows`, so no entry points at the Unreal checkout, at
+  Godot, or at the repo's `bin/`;
+- the working directory the export's own, not the repo's.
+
+`dodge-the-creeps.exe --headless --fixed-fps 60 -- --verse-check` printed **30 ok, 0 FAIL** and
+exited **0**. The autoload that drives it is `export_check.gd`, which does nothing at all without
+the flag.
+
+**What that proves, and what it cannot.** It proves the exported game finds its host, its engine
+directory and its cooked container by *where it is running* and reads no setting and no environment
+variable — which is D8, and is the whole of R-DIST-10. **It is not a clean machine**, and the finding
+says so rather than implying otherwise: this box has the Visual C++ runtime, a UE checkout on another
+drive letter, and whatever else a development machine accumulates. A machine-wide dependency such as
+a VC redistributable would not be caught by any amount of scrubbing here, and catching it needs a
+machine that has never built anything — which is Phase 8's to arrange, not this one's.
+
+**Two defects it found**, both fixed before the green run:
+
+- **The autoload was processing in every ordinary play of the game.** Declaring `_process` is what
+  enables it in Godot, so `set_process(true)` at the end of `_begin` was redundant and the absent
+  `set_process(false)` meant `_process` ran from the first frame against a null `checks` — a script
+  error per frame in any run without `--verse-check`, which is every run a player makes. The same
+  bug was in `tests/integration/export_check.gd`, where it was what made the editor-side run stop
+  early.
+- **A check was asking the wrong question.** "The node references are gone from the inspector" read
+  `main.get("Player")` and expected null. An instance answers a read of *any* member it declares,
+  exported or not, so what that read actually tested was an incidental difference between a compiled
+  host and a cooked one — it passed in the editor and failed in the export. It asks
+  `get_property_list()` now, which is what the sentence always meant, and the two agree.
+
+**To run it again:** export release to a directory outside the repo, then run it with those three
+variables unset and `PATH` cut. The flag is `-- --verse-check`; without it the game just plays.
+
+---
+
 ## What shipped
 
 Every entry is closed. In the order they were done, which is the order the entry above them argued
