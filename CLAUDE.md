@@ -96,7 +96,7 @@ is summarised. What it settled, all of which is load-bearing:
   `AutoRTFM::OnAbort<AutoRTFM::EOpenBehavior::SameAsClosed>` — `SameAsClosed` is load-bearing,
   because every Godot callback reaches C++ inside `AutoRTFM::Open` and a plain `OnAbort` from open
   code is ignored.
-- **`docs/nonatomic-methods.md` is generated** and is R-AUD-3's list: the **1073** emitted methods
+- **`docs/nonatomic-methods.md` is generated** and is R-AUD-3's list: the **1132** emitted methods
   whose `<transacts>` promises a rollback the bridge cannot perform. Not 1354 — that count included statics
   and methods the mirror does not emit.
 - **`CONST_OVERRIDES` is where Godot's flag is missing rather than too broad**, and nothing in it was
@@ -142,7 +142,7 @@ What it settled, all of which is load-bearing:
   has no hook to hang on, and the guard has to be already active at that moment. It costs ~2.6 KB
   per scripted node and ~0.06 µs per call, both measured with `tools/build_bench.py`.
 - **`Await` is ordinary Verse over `/Verse.org/Verse`'s `event(t)`.** `signal(t)` holds one
-  and `Await<public>()<suspends>:t` forwards to it, which covers a script's own signals and all 489
+  and `Await<public>()<suspends>:t` forwards to it, which covers a script's own signals and all 503
   mirrored engine-signal accessors alike. The *host* half is smaller than the design budgeted for:
   **`verse::event` is a UObject with a public C++ `Signal`**, so the host reads the event off the
   signal object and signals it directly — Epic's code then does FIFO resumption, per-task scopes and
@@ -296,13 +296,13 @@ editor's thread waits for either** — reads that used to cost 1.7 s during an a
 value types, a `variant` tuple, `object` as the only `<native>` class, and packed arrays crossing as
 copies — all four now wrong — and it says nothing about general dispatch, the method list, or
 runtime errors with stacks. It is awaiting a rewrite rather than a patch. Phase 4 made it staler still: all
-1413 of Godot's virtuals are carried now and are spelled `_Ready`, not `Ready`; `@GlobalScope`'s
+1437 of Godot's virtuals are carried now and are spelled `_Ready`, not `Ready`; `@GlobalScope`'s
 constants and statics are reachable through per-class `...Statics` modules; the math types have
 methods and operators; and a script declares signals as typed members. Its editor-tooling, export and constraints sections are
 unaffected. Where the two disagree, `docs/spec.md` and `docs/abi-v2-design.md` are the record.
 
-Phase 2 makes it staler still, in ways worth knowing before reading it: every one of Godot's 1023
-classes is mirrored now rather than a curated ~60, Godot's `Object` among them; its 758 enums are
+Phase 2 makes it staler still, in ways worth knowing before reading it: every one of Godot's 1036
+classes is mirrored now rather than a curated ~60, Godot's `Object` among them; its 793 enums are
 real Verse enums; `typedarray::Node` is a `typed_array(node)` whose elements are objects a script
 calls methods on; and the hand-written native root is `vh_object`, because `object` is now the
 *mirror* of Godot's Object.
@@ -493,7 +493,7 @@ setting. It costs per-keystroke analysis latency, which is measured and recorded
 `src/verse_api_skipped.h` also carries what the **math** file does not define, and that row source is
 unusual: `gen_verse_api.py` *reads* `host/Verse/GodotMath.native.verse` to find out what is written
 and records every other `builtin_classes` method and operator as a skip. So adding a method there
-deletes its own skip row on the next generation, and the record cannot drift from the code. 410 rows
+deletes its own skip row on the next generation, and the record cannot drift from the code. 411 rows
 today, from 585 before the math was written.
 
 `gen_verse_api.py`'s type table is the other half, and it no longer skips anything for a type it
@@ -654,7 +654,7 @@ ten element types against four key types is not a list to maintain by hand.
 - **A class member may not shadow an inherited mirrored one, and Godot's signals are members too.**
   `Hidden:signal(int)` on a `node2d` is *"Instance data member `Hidden` is already defined in
   `canvas_item`, did you mean to add the `<override>` specifier?"* — because `canvas_item` mirrors
-  Godot's `hidden` signal as a `Hidden` accessor. Every one of the 489 signal accessors and 3232
+  Godot's `hidden` signal as a `Hidden` accessor. Every one of the 503 signal accessors and 3312
   properties is a name a script cannot reuse, and the compiler reports it at the *declaration* with
   no hint that the collision is with generated code. Rename the member; there is nothing to override.
 - **A module-level name and a local of that name are ambiguous, not shadowing** — and an *extension

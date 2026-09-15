@@ -1,7 +1,7 @@
 [configuration]
 
 entry_symbol = "godot_verse_init"
-compatibility_minimum = "4.5"
+compatibility_minimum = "4.7"
 
 [libraries]
 windows.x86_64.single.editor = "./bin/windows-x86_64/godot-verse.editor.dll"

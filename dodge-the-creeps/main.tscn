@@ -1,11 +1,11 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://dkxk1v5rwf1aa"]
 
-[ext_resource type="Script" path="res://scripts/main.verse" id="1"]
+[ext_resource type="Script" uid="uid://i1y4wukyewm" path="res://scripts/main.verse" id="1"]
 [ext_resource type="PackedScene" path="res://mob.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://player.tscn" id="3"]
 [ext_resource type="PackedScene" path="res://hud.tscn" id="4"]
-[ext_resource type="AudioStream" path="res://art/House In a Forest Loop.ogg" id="5"]
-[ext_resource type="AudioStream" path="res://art/gameover.wav" id="6"]
+[ext_resource type="AudioStream" uid="uid://c1s7kywrcj6wb" path="res://art/House In a Forest Loop.ogg" id="5"]
+[ext_resource type="AudioStream" uid="uid://bspyuniglg0mp" path="res://art/gameover.wav" id="6"]
 
 [sub_resource type="Curve2D" id="1"]
 _data = {
@@ -13,11 +13,11 @@ _data = {
 }
 point_count = 5
 
-[node name="Main" type="Node"]
+[node name="Main" type="Node" unique_id=1016811241]
 script = ExtResource("1")
 MobScene = ExtResource("2")
 
-[node name="ColorRect" type="ColorRect" parent="."]
+[node name="ColorRect" type="ColorRect" parent="." unique_id=1491070773]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -25,31 +25,31 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.219608, 0.372549, 0.380392, 1)
 
-[node name="Player" parent="." instance=ExtResource("3")]
+[node name="Player" parent="." unique_id=923771577 instance=ExtResource("3")]
 
-[node name="MobTimer" type="Timer" parent="."]
+[node name="MobTimer" type="Timer" parent="." unique_id=659551513]
 wait_time = 0.5
 
-[node name="ScoreTimer" type="Timer" parent="."]
+[node name="ScoreTimer" type="Timer" parent="." unique_id=1318458695]
 
-[node name="StartTimer" type="Timer" parent="."]
+[node name="StartTimer" type="Timer" parent="." unique_id=1042847640]
 wait_time = 2.0
 one_shot = true
 
-[node name="StartPosition" type="Marker2D" parent="."]
+[node name="StartPosition" type="Marker2D" parent="." unique_id=312900726]
 position = Vector2(240, 450)
 
-[node name="MobPath" type="Path2D" parent="."]
+[node name="MobPath" type="Path2D" parent="." unique_id=149028824]
 curve = SubResource("1")
 
-[node name="MobSpawnLocation" type="PathFollow2D" parent="MobPath"]
+[node name="MobSpawnLocation" type="PathFollow2D" parent="MobPath" unique_id=1305642816]
 
-[node name="HUD" parent="." instance=ExtResource("4")]
+[node name="HUD" parent="." unique_id=1786712812 instance=ExtResource("4")]
 
-[node name="Music" type="AudioStreamPlayer" parent="."]
+[node name="Music" type="AudioStreamPlayer" parent="." unique_id=1428162397]
 stream = ExtResource("5")
 
-[node name="DeathSound" type="AudioStreamPlayer" parent="."]
+[node name="DeathSound" type="AudioStreamPlayer" parent="." unique_id=1573537350]
 stream = ExtResource("6")
 
 [connection signal="timeout" from="MobTimer" to="." method="OnMobTimerTimeout"]

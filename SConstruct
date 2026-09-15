@@ -24,6 +24,10 @@ Run the following command to download godot-cpp:
     git submodule update --init --recursive""")
     sys.exit(1)
 
+# The API dump lives here, not in the submodule: godot-cpp's pinned commit carries 4.6 and
+# a modified submodule is reverted by the `git submodule update` the message above asks for.
+env["gdextension_dir"] = os.path.abspath("gdextension")
+
 env = SConscript("godot-cpp/SConstruct", {"env": env, "customs": customs})
 
 if env.get("is_msvc", False):

@@ -1,6 +1,6 @@
 [configuration]
 
 entry_symbol = "godot_verse_init"
-compatibility_minimum = "4.5"
+compatibility_minimum = "4.7"
 
 [libraries]

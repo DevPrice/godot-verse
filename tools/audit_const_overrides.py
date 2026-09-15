@@ -34,7 +34,7 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-EXTENSION_API = REPO / "godot-cpp" / "gdextension" / "extension_api.json"
+EXTENSION_API = REPO / "gdextension" / "extension_api.json"
 
 # `bool Tween::is_running() {\n\treturn running;\n}` -- a definition taking no arguments whose whole
 # body is one return of a name. Tab-indented, which is Godot's own style throughout.
