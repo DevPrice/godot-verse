@@ -956,15 +956,28 @@ nothing else. S-5 ran as far as §13.7. S-6 is still blocked on §9.
 
 ## 15. Exit
 
-- `python tools/run_tests.py` reports **four** layers on this machine, and the fourth exports
-  `tests/integration` and `dodge-the-creeps` from the Godot 4.7 editor, headless, and runs both
-  under `verse_host_runtime.dll` with every case green, in the release template.
-- The exported `dodge-the-creeps` plays windowed, by hand, from a directory copied to a machine
-  with no Unreal checkout and no Godot installed (R-DIST-10), and its data directory contains no
-  `.verse` file and no compiler (R-DIST-11).
-- An Android export fails at export time with one sentence (R-PLAT-4).
-- Linux artefacts build; whether the game runs under WSL2 is recorded either way.
-- macOS is recorded as blocked with §10 as the reason.
-- `spec.md`: R-DIST-9, R-DIST-10, R-DIST-11 → **done**; R-PLAT-1 → **part** (Windows); R-PLAT-4 →
-  **done**; R-PLAT-5 → **part** (Linux built); OQ-10 closed; R-PERF-2 gains the cooked-load time.
-- §13 of this document is written.
+**Rewritten after the split** (§13.7, and the interview that followed it). The exit below is 7a's;
+everything the original asked for that needs an exported game to *run* moved to 7b, which has no
+design document and takes §13.7 as its brief (`roadmap.md`).
+
+- `python tools/run_tests.py` reports **four layers**, all green on this machine:
+  **units**, **abi** (`host_smoke`, plus a `verse_cook` case that cooks `tests/host_smoke`'s
+  fixtures and asserts the packages, the sidecar and the exit code), **integration** (317 cases and
+  the R-SCN-2 diagnostics), and **export**.
+- The **export** layer exports `tests/integration` from the Godot 4.7 editor, headless, and
+  asserts the tree: the game, `godot-verse.dll`, `verse_host_runtime.dll` and `tbbmalloc.dll`
+  beside the executable; the `verse_<app>_<platform>_<arch>` directory with the cooked script
+  package, the attribute package, the mirror under `Engine/Content`, the `Engine/Binaries` marker
+  and `verse_classes.json`; the sidecar naming the project's classes, module prefixes and all; and
+  — read out of the `.pck` rather than out of the log — **all twenty `.verse` files at exactly one
+  byte** and both `.vmodule` markers whole. It does not launch the result.
+- An **Android export fails at export time with one sentence** (R-PLAT-4).
+- `dodge-the-creeps` exports and stays a **by-hand** yardstick, in-editor and green.
+- `spec.md`: R-DIST-9 → **part**, R-DIST-11 → **part** (with the half that cannot be satisfied
+  said plainly), R-PLAT-4 → **done**, R-PLAT-5 → **part** and honest about the missing `dlopen`;
+  OQ-10 **closed**.
+- §13 is written, and **§13.7 is the reason there is a 7b**.
+
+**What 7a does not claim.** An exported game does not run. R-DIST-10 is untouched, Linux is
+untouched, and the cooker is 732 MB and needs a UE source checkout — the same wall the editor host
+already is, and Phase 8's to remove.

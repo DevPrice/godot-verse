@@ -1,8 +1,14 @@
 [configuration]
 
 entry_symbol = "godot_verse_init"
-compatibility_minimum = "4.5"
+compatibility_minimum = "4.7"
 
 [libraries]
 windows.x86_64.single.editor = "./bin/windows-x86_64/godot-verse.editor.dll"
 windows.x86_64.single.debug = "./bin/windows-x86_64/godot-verse.debug.dll"
+windows.x86_64.single.release = "./bin/windows-x86_64/godot-verse.dll"
+
+[dependencies]
+
+windows.x86_64.single.debug = {"./bin/windows-x86_64/verse_host_runtime.dll": "", "./bin/windows-x86_64/tbbmalloc.dll": ""}
+windows.x86_64.single.release = {"./bin/windows-x86_64/verse_host_runtime.dll": "", "./bin/windows-x86_64/tbbmalloc.dll": ""}

@@ -208,14 +208,11 @@ void VerseExportPlugin::_export_file(const String &p_path, const String &p_type,
 		return;
 	}
 
-	if (p_path.ends_with(".vmodule")) {
-		// Kept deliberately: the module map is read off these markers at load, and which module a
-		// class is in is half of its name. An export filter that only takes resources would drop
-		// them, so this puts each one back by hand.
-		const PackedByteArray bytes = FileAccess::get_file_as_bytes(p_path);
-		add_file(p_path, bytes, false);
-		skip();
-	}
+	// A `.vmodule` is deliberately *not* touched here. The markers decide which module each script
+	// is in and so half of every class's name, so they have to ship -- but what ships them is the
+	// preset's `include_filter="*.vmodule"`, which carries them as plain files. Re-adding one with
+	// add_file and then skip() takes it back out again: measured, and it cost the export layer two
+	// missing markers.
 }
 
 void VerseExportPlugin::_export_end() {

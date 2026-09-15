@@ -245,9 +245,19 @@ D6's directory is right and what goes in it is not; §13.7 lists the three ways 
 Stages 0 (Godot 4.7) and 1 (the cooker) are **done**, stage 2 (the runtime host) is written and
 blocked on the above, stages 3 (the export plugin) and 4 (the export test layer) are partly built.
 An export of `dodge-the-creeps` produces the whole tree D6 describes and the game refuses to load
-it. `run_tests.py` is green on all seven of its existing layers, and the fourth layer §8 asks for
-is not written. §1 (twenty-two decisions) and §2 (seven spikes) are still the plan for what is
-left; every answer S-2, S-4, S-5 and S-7 produced is in §13.
+it. **7a is closed** and §15 is its exit: `run_tests.py` reports **four** layers now — the abi layer
+gained a `verse_cook` case, and the new **export** layer exports `tests/integration` headless and
+asserts the tree it produced, including that all twenty `.verse` files ship at exactly one byte,
+read out of the `.pck` rather than out of the log. It does not launch the result; there is nothing
+to launch until 7b. `dodge-the-creeps` stays a by-hand yardstick.
+
+Two things worth knowing before touching the runtime host. **It cannot be made smaller by dropping
+modules** — Solaris lists `VerseCompiler` and `VerseVMCodeGen` in its own public dependencies
+unconditionally, so a game ships a Verse compiler it can never reach (§13.2 has the measurement).
+What does help is **Shipping: 72.7 MB against Development's 112.4**, and D12's "Development for the
+debug template, Shipping for release" is not true yet, because the `.gdextension` names one file.
+
+Every answer S-2, S-4, S-5 and S-7 produced is in §13.
 The shape: three UBT targets over `host/` (the editor host, a cooker *executable* the export plugin
 runs, a runtime host with `WITH_VERSE_COMPILER=0` that ships), one ABI header for all three with
 `vh_host_kind()` and `VH_ERR_UNSUPPORTED` (ABI 8.2), cooked packages plus a serialised snapshot in
@@ -392,7 +402,8 @@ and the `VerseSimulationMetadata` dependency each exist for a reason spelled out
 ## Commands
 
     python tools/build_host.py            # stages host/ into the UE tree, runs UBT
-    python tools/build_host.py --target VerseHostCooker   # the cooker (Phase 7); not collected into bin/
+    python tools/build_host.py --target VerseHostRuntime  # the host an exported game ships
+    python tools/build_host.py --target VerseHostCooker   # verse_cook.exe; not collected into bin/
     scons target=editor                   # the GDExtension (also: target=template_debug)
     python tools/gen_verse_api.py         # regenerates the Verse mirror of Godot's API
     python tools/build_smoke.py           # ABI test binary
@@ -406,18 +417,30 @@ and the `VerseSimulationMetadata` dependency each exist for a reason spelled out
 Run the tests:
 
     python tools/run_tests.py                    # all three layers; the one command (R-QUAL-3)
-    python tools/run_tests.py --only units       # or one of units / abi / integration
+    python tools/run_tests.py --only units       # or units / abi / integration / export
     python tools/run_tests.py --build            # rebuild the test binaries first
 
-It runs three layers and reports each: **units** (lexer, class-declaration scanner, module map,
-generator — no Godot, no UE), **abi** (`host_smoke`, the whole C ABI with no Godot), and
-**integration** — which
+It runs four layers and reports each: **units** (lexer, class-declaration scanner, module map,
+generator — no Godot, no UE), **abi** (`host_smoke`, the whole C ABI with no Godot, plus a
+`verse_cook` case that cooks `tests/host_smoke`'s fixtures and asserts the packages and the
+sidecar), **integration** — which
 is two headless Godot projects, `tests/integration` for behaviour and `tests/coverage_diagnostic`
 for the R-SCN-2 diagnostics. The second is its own project because its one script deliberately does
 not compile, and one unresolvable name in the first would take every other case down with it. Its
 assertions live in `run_tests.py` rather than in the project, because `ScriptLanguage` exposes
 nothing a script can ask — so the only way to read what an author would see is to read what the
 editor prints.
+
+The fourth is **export**: it exports `tests/integration` headless and asserts the *tree* the
+export produced, without launching it — there is nothing to launch until Phase 7b. Its assertions
+are in `run_tests.py` for the reason the coverage layer's are, and one of them reads the `.pck`
+directly (`read_pck`, the format is Godot's `core/io/file_access_pack.cpp:288-370`): the one thing
+that has to be asserted about a shipped `.verse` is its *size*, and a one-byte stub and the whole
+file both read as "Storing File" in an export log. **A pack stores paths with `res://` trimmed off**
+(`editor_export_platform.cpp:449`); `read_pck` puts it back. `dodge-the-creeps` is deliberately not
+in this layer either — it stays the by-hand yardstick, and `dodge-the-creeps/checks.gd` is the
+library its two drivers share, `headless_check.gd` in the editor and `export_check.gd` as an
+autoload for when 7b can run one.
 
 `tests/host_bench`, built by `tools/build_bench.py`, is not part of `run_tests.py`: it reports
 timings rather than pass/fail, because R-PERF-2 asks for a recorded number and a threshold would

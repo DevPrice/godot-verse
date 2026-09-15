@@ -207,16 +207,33 @@ from it. The spec commits to both states rather than waiting.
 
 - **R-DIST-9 (MUST)** Exporting a Godot project that uses Verse produces a runnable game through
   Godot's ordinary export dialog, with no manual copying of DLLs or engine directories. The
-  export plugin collects everything the game needs. Status: **none** — nothing is exported today,
-  and the `.gdextension` declares only `editor` and `debug` Windows libraries.
+  export plugin collects everything the game needs. Status: **part** — Phase 7a built it. An
+  export runs the cooker, puts its output in a `verse_<app>_<platform>_<arch>` directory beside
+  the executable, carries the runtime host as a `.gdextension` `[dependencies]` row and strips
+  every `.verse` to a stub, with no manual copying of anything; `run_tests.py`'s `export` layer
+  asserts the whole tree. What is not done is the other side of the dialog: the game **cannot load
+  what it was given** (`phase-7-design.md` §13.7), which is Phase 7b's.
 - **R-DIST-10 (MUST)** An exported game does not require the user who *runs* it to have anything
-  installed. Status: **none**.
+  installed. Status: **none** — everything the game needs is beside it, and it does not yet run
+  (`phase-7-design.md` §13.7). Phase 7b.
 - **R-DIST-11 (SHOULD)** An exported game ships compiled Verse rather than `.verse` source plus a
   compiler. This is the difference between a game that ships a language toolchain in its data
   directory and one that ships a program; it also removes compilation from startup time and is a
   precondition for §3's mobile and web targets, where shipping a compiler is not viable.
-  Status: **none**, but no longer uncertain — **OQ-2** is closed in favour of it (§14.1), so this
-  reads as MUST in everything but its numbering.
+  Status: **part**, and the two halves of it now have different answers.
+
+  *No `.verse` source ships*, and the `export` layer asserts it by reading the `.pck`: every one of
+  `tests/integration`'s twenty scripts is in the pack at exactly one byte. *No compiler ships* is
+  true of the data directory and **false of the bytes beside it**, and cannot be made true from
+  this side: `Solaris` lists `VerseCompiler` and `VerseVMCodeGen` in its own public dependencies
+  unconditionally (`Solaris.Build.cs:14-29`) and `uLangUE` in its private ones, and Solaris is the
+  module that runs Verse. Dropping all five from the runtime host's own list compiles, links, and
+  leaves every one of them in the graph and the binary at 112.4 MB (`phase-7-design.md` §13.2).
+
+  What the configuration buys instead: Shipping drops `ScriptDisassembler`, Solaris's one
+  conditional dependency, and weighs **72.7 MB** against Development's 112.4. Whether a game gets
+  it is not yet decided by anything — the `.gdextension` names one file — which is D12's remaining
+  half.
 
 ---
 
@@ -249,11 +266,16 @@ analysis pipeline, the game may need only the VM (R-DIST-11).
   but the first two stand. Blocked on **OQ-4**, and deferred to **Phase 7.5** by decision
   (`phase-7-design.md` D16).
 - **R-PLAT-4 (MUST)** A platform that is not supported fails at export time with a clear message,
-  not at game startup on a user's device. Status: **none**; Phase 7 builds it in the export plugin
-  (`phase-7-design.md` §7).
-- **R-PLAT-5 (MUST)** Nothing in the GDExtension assumes Windows. Status: **part** — the code is
-  portable in shape, `verse_host.cpp` is a `GetProcAddress` loader, and the build has never been
-  attempted elsewhere.
+  not at game startup on a user's device. Status: **done** (Phase 7a) — `VerseExportPlugin::
+  _export_begin` refuses `android`, `ios` and `web` with one sentence naming the platform. It also
+  withholds the data directory, because `add_message(EXPORT_MESSAGE_ERROR)` reports without
+  aborting the export (measured, `phase-7-design.md` §13.4), so the sentence at export time is
+  what the author reads and a game that will not load is what they get if they ignore it.
+- **R-PLAT-5 (MUST)** Nothing in the GDExtension assumes Windows. Status: **part**, and weaker
+  than it reads — `verse_host.cpp` is a `GetProcAddress` loader with `#else return "unsupported
+  platform"` and no `dlopen` path at all, so the portability is in the shape rather than in the
+  code. Deferred to Phase 7b with the rest of Linux, on the grounds that exporting to a platform
+  that cannot load what it ships is not worth verifying (`roadmap.md` "Phase 7b").
 
 ---
 
@@ -1859,7 +1881,7 @@ A closed question keeps its row so that the reason it is closed is not lost.
 | **OQ-7** | Build our own LSP over `verse_host_abi.h`, or get `uLangLSP` into a linkable target? | R-TOOL-10 | Low priority — Godot's editor is primary (§9). |
 | **OQ-8** ✅ | Which hot-reload mechanism: fresh package name per generation, out-of-process compilation, or an engine change? | all of §10, and R-EXP-5 | **Closed: fresh package name per generation**, with `IncrementalizeProjectSource` before each build. See §14.1. |
 | **OQ-9** | Can any DAP client speak `Verse::SocketDebugger`'s framing? | R-DIAG-6 | **Closed as not needed** (Phase 6). It was only worth answering if R-DIAG-4 turned out blocked, and it did not: a snippet-compiled procedure carries its file path into `VProcedure::FilePath` verbatim, which is the one fact the whole of R-DIAG-4 rested on. The port still opens on `verse/host/enable_debugger` and the framing question is still unanswered; nothing depends on the answer. |
-| **OQ-10** ✅ | Can an editor-class UBT Program target be built — `bCompileAgainstEditor`, and therefore `bCompileAgainstEngine`? Cooking Verse needs `WITH_EDITOR=1` (§14.1), and nothing else this project builds does. | R-DIST-9, R-DIST-10, R-DIST-11 | **Closed: yes, as `verse_cook.exe`** — Phase 7's planning ran it (`phase-7-design.md` §2 S-1, thirteen builds). The "and therefore" was the wrong half: the flag alone is legal for a Program and drives only `WITH_EDITOR`, but Solaris's rules drag Engine in under `bBuildEditor` whatever the host lists, and with `WITH_ENGINE=0` UHT loses `UWorld` — so the cooker compiles against Engine on purpose, is an executable (a monolithic editor-class DLL exports 143,570 symbols against lld-link's 65,535), carries developer tools, and boots with the `EDITOR` token, `-nullrhi` and `-NoShaderCompile`. 768 MB, no PDB, boots in 2.4 s. The commandlet fallback is not needed. What the spike does **not** claim is a working program: the process segfaults during teardown, past where a cook would have written, so no exit code it produces is trustworthy yet — that is stage 1's to settle and `phase-7-design.md` §2 S-1 says what was already tried. |
+| **OQ-10** ✅ | Can an editor-class UBT Program target be built — `bCompileAgainstEditor`, and therefore `bCompileAgainstEngine`? Cooking Verse needs `WITH_EDITOR=1` (§14.1), and nothing else this project builds does. | R-DIST-9, R-DIST-10, R-DIST-11 | **Closed: yes, as `verse_cook.exe`** — Phase 7's planning ran it (`phase-7-design.md` §2 S-1, thirteen builds). The "and therefore" was the wrong half: the flag alone is legal for a Program and drives only `WITH_EDITOR`, but Solaris's rules drag Engine in under `bBuildEditor` whatever the host lists, and with `WITH_ENGINE=0` UHT loses `UWorld` — so the cooker compiles against Engine on purpose, is an executable (a monolithic editor-class DLL exports 143,570 symbols against lld-link's 65,535), carries developer tools, and boots with the `EDITOR` token, `-nullrhi` and `-NoShaderCompile`. 768 MB, no PDB, boots in 2.4 s. The commandlet fallback is not needed. Stage 1 then settled the exit code by not needing one from teardown: the cook flushes and hard-exits with the status it chose, and `GEngineLoop.Exit()` is never called. `verse_cook.exe` cooks a project, writes the class sidecar and exits 0; `run_tests.py`'s abi layer drives it over `tests/host_smoke`'s fixtures and asserts what it wrote. 732 MB. |
 | **OQ-11** ✅ | How do free functions and value-type methods cross, given that every mirrored call rides `VhCallValue(Handle, …)` and neither a `@GlobalScope` function nor a `vector2` has a handle? Named by Phase 2 §8 and never recorded here until Phase 4's spikes answered it. | R-SCN-3, and the 16 math types' methods | **Closed: Verse can carry the value types itself.** Type-based extension methods (`(V:vector2).Length<public>()<computes>:float`) and definable operators (`operator'+'(:vector2, :vector2)`) both compile against the mirror's own structs, so the math is ordinary Verse with no handle and no ABI — which is also what Godot's C# does. What genuinely has no handle is Godot's 114 statics and the ~28 utility functions with no `/Verse.org` counterpart, and those get one by-name dispatch callback apiece. See `docs/phase-4-design.md` §1.3 and §7. |
 | **OQ-12** ✅ | Does a generation change the package *name* only, or the *verse path* too? S-2 varied the name; whether `/user@localhost` held across generations was not recorded. Module paths are user-visible text that R-TOOL-12 writes into the author's file, and `ScriptVersePath` is compiled into eight lookup sites in `HostScript.cpp`. | R-LANG-6, R-TOOL-12, and the shape of Phase 3 | **Closed: the name only.** The verse path is pinned at `/user@localhost` across generations and nothing in `HostScript.cpp` learns which generation it is asking about. See §14.1. |
 | **OQ-13** | What bounds a script that raises every frame? A raise now stops script code for the rest of the frame and the next tick resumes it, so a `Process` that raises raises again next frame, forever — the error is reported each time, which is what Godot does for GDScript, and no progress is ever made. Options: report it once and stop calling that method, disable the instance, disable the script, or leave it and rely on the author reading the log. | R-DIAG-3 | Phase 6, with the rest of R-DIAG-3. Opened by Phase 3's fix: before it, the first raise silenced everything and the question could not arise, which is not the same as it having an answer. Whatever is chosen has to be per instance rather than per process, so it wants R-ASYNC-4 first. **Phase 5 changes its shape twice.** A raise stops only the raising call and the instance gets a fresh scope at its next call, so "stops script code for the rest of the frame" stops being true and the every-frame raise costs that instance's suspended work each time rather than the project's. And Phase 5 adds a **second** runaway of the same shape, deliberately: `spawn` is the taught way to start a task, so a `spawn` in a `_Process` makes sixty tasks a second on one instance and nothing bounds them. Whatever answers this has to answer both, and per-instance scopes are what make either countable. **Closed (Phase 6): nothing is bounded, and the defect it was pointing at was somewhere else.** Three reasons for the decision — Godot does not bound GDScript either; Phase 5's per-instance scopes already confine the cost to the raising node; and disabling an instance is a policy an author cannot see coming and cannot undo without a reload. What actually needed fixing was the bridge's own unthrottled stack printing, which ate the shared character budget and silenced every other script's output — R-DIAG-3 rule 4. The second runaway Phase 5 opened gets a number rather than a limit: `verse/instance_tasks`, a custom monitor carrying the largest live task count any one instance's scope holds, so a `spawn` in `_Process` is visible in the profiler where the author is already looking. |
