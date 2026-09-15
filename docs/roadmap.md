@@ -1,10 +1,12 @@
 # godot-verse — Roadmap
 
-**Status:** Draft 15 · 2026-09-14 · **Phases 0–6 complete; Phase 7a built, 7b blocked.**
-[`phase-7-design.md`](phase-7-design.md) is the plan, written before the work from an interview
+**Status:** Draft 16 · 2026-09-14 · **Phases 0–6 complete; Phase 7a built; 7b designed, not built.**
+[`phase-7-design.md`](phase-7-design.md) is 7a's plan, written before the work from an interview
 and three delegated reads of the engine sources: §1 is the decisions, §2 the spikes (S-1, OQ-10,
-ran during the planning), §4–§10 the stages in build order, §13 the section the implementing agent
-writes. Phase 6's design is [`phase-6-design.md`](phase-6-design.md), written before the work in the shape
+ran during the planning), §4–§10 the stages in build order, and **§13 is where it was corrected —
+§13.7 is the wall that split the phase**. [`phase-7b-design.md`](phase-7b-design.md) is the other
+half, and it is what a fresh agent picks up: §1 the decisions, §2 two spikes that run *before* any
+stage is written, §3 the engine facts re-verified, §13 the section the implementing agent writes. Phase 6's design is [`phase-6-design.md`](phase-6-design.md), written before the work in the shape
 Phase 4.5's and Phase 5's were, so **§13 is the part to read** — the six spikes' answers, and the
 places §1 and §9 turned out wrong. The by-hand checks three phases owed
 have been run, in one windowed session as each design asked — Phase 3's yardstick run and editor
@@ -766,40 +768,56 @@ design §13 is written.
 
 ---
 
-## Phase 7b — Loading what the cooker wrote — **designed only as far as §13.7**
+## Phase 7b — Loading what the cooker wrote — **designed, not built**
 
 **The wall, in one line:** `FLinkerLoad` has no `Verse::VCell` support, so a Verse package can be
 cooked to a loose `.uasset` and cannot be *loaded* from one. Only the IoStore loader's
-`FExportArchive` reads a cell (`AsyncLoading2.cpp:3185`), which is why the save writes its four
-bytes (`LinkerSave.cpp:399`) and the load consumes none. An exported game therefore boots, loads
-the runtime host, registers its mount points, starts loading `/GodotAttributes/_Verse` and dies on
-*"Missing VClass for VerseClass … This class should have been created in-memory from a VClass, not
-loaded from a cooked package."*
+`FExportArchive` reads a cell (`AsyncLoading2.cpp:3184`), which is why the save writes its four
+bytes (`LinkerSave.cpp:398`) and the load consumes none — the base `FArchive` operator's whole body
+is `return *this;` (`Archive.h:1283`). An exported game therefore boots, loads the runtime host,
+registers its mount points, starts loading `/GodotAttributes/_Verse` and dies on *"Missing VClass
+for VerseClass … This class should have been created in-memory from a VClass, not loaded from a
+cooked package."*
 
-**There is no design document yet, and `phase-7-design.md` §13.7 is the brief** — it has the
-evidence, the three candidate routes and what is unknown about each. The loose files the cooker
-already writes are the *input* to the most likely one: a legacy cooked header does carry the cells,
-and `FPackageStoreOptimizer::CreatePackageFromCookedHeader` builds a zen package from one.
+**[`phase-7b-design.md`](phase-7b-design.md) is the design**, written before the work from an
+interview held against the Unreal sources. `phase-7-design.md` §13.7 is still the record of *how the
+wall was found*; §3 of the new document is the same ground re-verified, and it corrects §13.7 in two
+places.
 
-What 7b owes, beyond the wall itself:
+**The route: the IoStore container, with the two spikes run first.** The cooker keeps writing loose
+files — a legacy cooked header *does* carry the cells (`PackageFileSummary.h:153-168`,
+`Linker.h:71-74`), which is what makes it the right input — and converts them with
+`CreateIoStoreContainerFiles` (`IoStoreUtilities.h:19`), whose `FPackageStoreOptimizer` is the code
+that already knows how to carry a cell across. The runtime host mounts the result. Both halves have
+precedent, and the mounting half is more ordinary than the wall's discoverer feared:
+`FPackageStore::Mount` is public `COREUOBJECT_API`, `FFilePackageStore` is a `PakFile` module
+class rather than an editor one, and script imports resolve from **in-memory registration**
+(`FGlobalImportStore::AddScriptObject`, called unconditionally) rather than out of a global
+container's script-objects chunk. **S-8a and S-8b run before any stage is written**, which is 7a's
+own lesson — its S-5 ran after stage 1 and a working cooker was built behind an unchecked wall.
+**If both spikes fail, the phase stops and asks.** The engine patch, `FZenStoreWriter` and a
+hand-rolled loader are each a separate decision.
 
-- **R-DIST-10** — the exported `dodge-the-creeps` plays on a machine with nothing installed.
-- **The export layer's second half** — launching what it exported, which needs `test_main.gd`'s
-  1391 lines split into a library the way `dodge-the-creeps/checks.gd` already is, so the same
-  lines run in-editor and exported.
-- **Two VNI packages that cannot be cooked** — `/Solaris/_Verse/VNI/VerseNative` and `VersePredicts`
-  hold `UVerseClass` objects whose `Verse::VClass` is null, and the cook skips them with a warning
-  (§13.5). Whether a runtime host needs them is unknown, because loading never got that far. It may
-  be a second wall of the same kind behind the first.
-- **R-PLAT-1 and R-PLAT-5, Linux** — deferred here rather than in 7a, and not only for the
-  toolchain: `src/verse_host.cpp` is `LoadLibraryExW` with no `dlopen` path at all, and exporting
-  to a platform that cannot load what it ships is not worth verifying. macOS stays blocked on
-  hardware with its layout decided (design §10).
+**What 7b covers, and nothing else:**
 
-**When it is picked up**, the phase's own rule applies and 7a is the argument for it: run the spike
-that could reshape everything — can a container be built in-process and mounted by the runtime host
-— *during* the planning, the way Phase 6's S-1 and Phase 7's S-1 were. 7a built a working cooker
-behind a wall precisely because S-5 ran after stage 1 instead of before it.
+- **The wall** — a cooked Verse package that loads in an exported game.
+- **R-DIST-10** — the exported `dodge-the-creeps` runs sandboxed, outside the repo, with `UE_ROOT`
+  unset and the UE checkout off PATH, recorded in `by-hand-findings.md` with what that cannot prove.
+- **The export layer's second half** — `tests/integration`'s 1391-line `test_main.gd` split into a
+  library two drivers share, the way `dodge-the-creeps/checks.gd` already is, so `run_tests.py`
+  **launches** what it exported. A case that cannot run in an export is tagged `editor_only` and
+  printed as skipped, and the layer asserts the skip count so none can quietly vanish.
+- **A stamp and a refusal** — the sidecar carries the ABI version, the cooker's commit and the
+  engine's, and a game whose Verse data is missing, unreadable or foreign refuses to start with one
+  sentence rather than starting silently without scripts.
+
+**Out, by decision:** Linux and the missing `dlopen` path; macOS; Shipping-versus-Development per
+template; the debugger and profiler in an exported game, which stay untested and are said to be;
+trimming the mirror, which is 67 of the cook's 68 MB and is recorded rather than fixed.
+
+**Exit:** four layers green with the fourth launching what it exported; dtc exported, run sandboxed
+and green; R-DIST-9, R-DIST-10 and R-DIST-11 all **done** with the Windows-only caveat written into
+each line; OQ-18 closed; design §13 written with the measurements §10 owes.
 
 ---
 

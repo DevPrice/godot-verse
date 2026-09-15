@@ -276,6 +276,26 @@ tools, because `PreInit` constructs the shader compiling manager unconditionally
 only with the `EDITOR` token, `-nullrhi` and `-NoShaderCompile`, from an entry point marked
 `AUTORTFM_DISABLE`. Seventeen builds, all in §2 S-1; read it before touching that target. Stage 0 is the move to 4.7; nothing else starts before it.
 
+**Phase 7b is designed and not built, and `docs/phase-7b-design.md` is the whole of it** — written
+before the work, so unusually for this repo **§1 (the decisions) and §3 (the engine facts) are what
+to trust**, and §13 is empty until the phase is built. It takes §13.7 as its brief and answers it
+with one route: the cooker keeps writing loose files and **converts them to an IoStore container**
+(`CreateIoStoreContainerFiles`, the function `UnrealPak -CreateGlobalContainer` calls), because
+`FPackageStoreOptimizer` is the only code in the engine that carries a `Verse::VCell` from a legacy
+cooked header into something a loader can read. **§2's two spikes run before any stage is written** —
+S-8a that the cooker can build such a container, S-8b that the runtime host can mount one — which is
+7a's own lesson, its S-5 having run *after* stage 1. **If both fail the phase stops and asks**; the
+engine patch, `FZenStoreWriter` and a hand-rolled loader are each a separate decision. §3 corrects
+§13.7 in two places worth knowing: mounting a container is the ordinary DLC-pak path
+(`FPackageStore::Mount` is public, `FFilePackageStore` is a `PakFile` class, neither editor-only),
+and script imports resolve from **in-memory registration** rather than from a global container's
+script-objects chunk — so the runtime host may need no global container at all. Besides the wall the
+phase owes two things and no more: the export layer **launching** what it exports, which needs
+`test_main.gd`'s 1391 lines split into a library the way `dodge-the-creeps/checks.gd` already is
+with the cases that cannot run in an export tagged and *printed as skipped*; and R-DIST-10 checked by
+hand, sandboxed. Linux, `dlopen`, macOS, the Shipping-per-template split and the debugger in an
+exported game are all **out**, by decision.
+
 **The by-hand checks have been run, and `docs/by-hand-checklist.md` is deleted** — all twenty-two
 of its entries were watched happen, and what is worth keeping is what they found rather than the
 list. **`docs/by-hand-findings.md` is that**: B1–B9 are the defects, all fixed, B10–B11 are about

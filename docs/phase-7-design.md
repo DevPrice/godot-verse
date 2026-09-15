@@ -4,9 +4,8 @@
 written and blocked, stages 3 and 4 are partly built. **§13 is where the design turned out to be
 wrong, and §13.7 is the blocker** -- read that before trusting §5 step 2, §6, or D6. Written *before* the work, the way
 Phase 4.5's, 5's and 6's were, from an interview and three delegated investigations held against
-the Godot and Unreal sources directly. **§13 is empty and is where the implementing agent writes
-what turned out wrong**; until then §1 and §2 are the record. One spike (S-1, OQ-10) ran during the
-planning and its answer is in §2.
+the Godot and Unreal sources directly. **§13 is now written**, and is where §1 and §2 are corrected.
+One spike (S-1, OQ-10) ran during the planning and its answer is in §2.
 
 **Prerequisite: Phase 6 is complete** — built 2026-09-14, ABI **8.1**. Phase 4b (custom
 Resources, autoloads, `RefCounted` instantiation, `_Get`/`_Set`) is **not** built and is not in
@@ -36,7 +35,8 @@ and line each fact was read from. It is the factual base under every stage.
 **§11 is the ABI delta**, **§12 the tests**, **§14 what is deliberately not built**, and **§15
 the exit**.
 
-**§13 is not written.** When the phase is built, it is where the design is corrected.
+**§13 is written.** It is where the design is corrected, and §13.7 is the wall that split the
+phase; [`phase-7b-design.md`](phase-7b-design.md) is the other half.
 
 ---
 
@@ -871,6 +871,14 @@ container. **That covers the cooker and not the runtime host**, which is not `bC
 zen package from it, cells included (`PackageStoreOptimizer.cpp:76-86, 198-200` — the file mentions
 `Cell` 92 times). That is the standard pipeline: cook loose, then convert to a container.
 
+**Phase 7b takes route 1 and is designed in [`phase-7b-design.md`](phase-7b-design.md)**, whose §3
+re-verified everything below and corrects it in two places: mounting a container is the ordinary
+DLC-pak path rather than anything gated on `bCompileAgainstEditor` (`FPackageStore::Mount` is public
+`COREUOBJECT_API`; `FFilePackageStore` is a `PakFile` class), and script imports resolve from
+in-memory registration rather than out of a global container's script-objects chunk — so the fourth
+lead below, the `WITH_IOSTORE_IN_EDITOR` gate, may cover the half that needs it and not bind the
+half that does not.
+
 Three ways out, in the order they look worth trying, none of them tried:
 
 1. **Convert the cook to an IoStore container in the same process.**
@@ -978,6 +986,7 @@ design document and takes §13.7 as its brief (`roadmap.md`).
   OQ-10 **closed**.
 - §13 is written, and **§13.7 is the reason there is a 7b**.
 
-**What 7a does not claim.** An exported game does not run. R-DIST-10 is untouched, Linux is
+**What 7a does not claim.** An exported game does not run — that is
+[`phase-7b-design.md`](phase-7b-design.md)'s. R-DIST-10 is untouched, Linux is
 untouched, and the cooker is 732 MB and needs a UE source checkout — the same wall the editor host
 already is, and Phase 8's to remove.
