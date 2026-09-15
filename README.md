@@ -11,35 +11,40 @@ language than GDScript and does not already know Verse.
 
 ## Status: experimental. Do not build a game on this.
 
-This is a research build. Phases 0–6 are complete and Phase 7a (export) is built; Phase 7b —
-actually loading an exported game — is blocked on an engine limitation. See
-[the roadmap](docs/roadmap.md).
-
-- **Windows only.** No macOS, no Linux.
-- **There is no addon to install.** Verse's compiler ships only inside Unreal, so building
-  requires *your own Unreal Engine source checkout* plus Visual Studio, and the resulting host DLL
-  cannot be redistributed. A download-and-unzip install waits on Epic licensing the toolchain
-  separately.
-- **A build happens on Play, not on save.** Pressing Play compiles the whole project and runs
-  the edited code; saving refreshes diagnostics and completion but not what runs. There is a
-  `Project > Tools > Build Verse` for when there is no run to hang it on.
-
-What works today: a `.verse` file is a script you attach to a node; every one of Godot's virtuals
-runs, spelled the way Godot spells it (`_Ready`, `_Process`, ...); properties export to the
-inspector; every Godot `Variant` type crosses in both directions, containers by reference; a
-script declares signals as typed members and can `Await` any Godot signal; GDScript can call any
-method a script defines and a runtime error names a file, a line and a Verse call stack. The
-editor gets syntax highlighting, live diagnostics, completion, symbol lookup and a step debugger.
-
-All 1036 Godot classes are mirrored with their enums, and a project is a real source set — hot
-reload on Play, modules marked with a `.vmodule` file, `@tool` scripts, and imports the editor
-writes for you. Concurrency works: `spawn`, `Await`, `Sleep` and `race`, each with a task scope
-tied to the script instance.
-
-Not yet: an exported project builds the right tree, but the exported game cannot load it —
-Phase 7b's blocker — and there is no macOS or Linux support. [`docs/spec.md`](docs/spec.md)
-carries the per-requirement status, and the rest of this file predates most of it — where the two
+This is a research build: expect a compiler crash, a rough diagnostic, or an untested corner of
+the ABI. A build happens on Play, not on save — pressing Play compiles the whole project and runs
+the edited code; saving only refreshes diagnostics and completion. There is a
+`Project > Tools > Build Verse` for when there is no run to hang it on.
+[`docs/spec.md`](docs/spec.md) carries the per-requirement status; where this file and the spec
 disagree, believe the spec.
+
+**Works today**
+
+| | |
+| --- | --- |
+| Scripting | A `.verse` file attaches to a node like GDScript; every Godot virtual runs, spelled the way Godot spells it (`_Ready`, `_Process`, ...); `@export` properties show in the inspector |
+| Interop | Every `Variant` type crosses in both directions, containers by reference; GDScript can call any method a script defines; a runtime error names a file, a line and a Verse call stack |
+| Signals & concurrency | Signals are typed members; `Await` works on any Godot signal; `spawn`, `Sleep` and `race` each get a task scope tied to the script instance |
+| Engine surface | All 1036 Godot classes and their enums are mirrored |
+| Project & editor | Hot reload on Play; modules via `.vmodule`; `@tool` scripts; imports the editor writes for you; syntax highlighting, live diagnostics, completion, symbol lookup and a step debugger |
+| Export | Windows: the export dialog produces a runnable game with no manual copying, and the exported game runs its Verse |
+
+**Coming next**
+
+- Linux and macOS, for both the editor and exported games
+- Android and iOS exported games
+- The editor's data model: custom Resources, autoloads, the remaining `@export` surface
+
+**Blocked on Epic licensing the Verse toolchain for redistribution**
+
+- A download-and-unzip addon install — building requires your own Unreal Engine source checkout
+  plus Visual Studio, and the resulting host DLL cannot be redistributed
+- Prebuilt host binaries for any platform
+- CI (a hosted runner cannot hold a licensed UE checkout)
+
+**Blocked on Unreal's own tooling**
+
+- Web export — UBT has no wasm build target to build a runtime host against
 
 ## What a script looks like
 
