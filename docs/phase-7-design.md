@@ -808,19 +808,34 @@ directory beside the executable, the `.gdextension` dependency, the stubs, and t
 What it changes is the two lines in the middle — what the cooker writes the package *into*, and
 what the runtime host loads it *out of*.
 
-Three ways out, unranked because none has been tried:
+**The loose files this cooker writes are not wasted, and that is the shape of the way out.** The
+*legacy* cooked header does carry the cells — `FLinkerSave::Summary` has `CellImportCount` and
+`CellExportCount`, and the save wrote them; it is only the legacy *loader* that cannot read one.
+`FPackageStoreOptimizer::CreatePackageFromCookedHeader` reads a legacy cooked header and builds a
+zen package from it, cells included (`PackageStoreOptimizer.cpp:76-86, 198-200` — the file mentions
+`Cell` 92 times). That is the standard pipeline: cook loose, then convert to a container.
 
-- **Write an IoStore container from the cooker.** `FIoStoreWriter` and the `IoStoreUtilities`
-  module are in `Developer/`, and the cooker already compiles against the editor. The runtime host
-  would mount the container with `FIoDispatcher`/`FPakPlatformFile` before Solaris starts, in place
-  of the mount points it registers now.
-- **Use `FZenStoreWriter`** instead of the writer in `HostCookWriter.h`, which is the package writer
-  a real cook uses and produces a store the zen loader reads directly. It wants a Zen server, which
-  is a dependency an export plugin cannot assume.
-- **Reconstitute the package without `LoadPackage`.** `ISolarisRuntime` has
-  `GetDigestCodeForPackage` and `AddCompiledUPackage`, and the digest is how the editor host already
-  reads the mirror cheaply — but the digest half of that interface is `WITH_VERSE_COMPILER` only,
-  so this needs a reader on the runtime side that does not exist yet.
+Three ways out, in the order they look worth trying, none of them tried:
+
+1. **Convert the cook to an IoStore container in the same process.**
+   `Developer/IoStoreUtilities` has exactly one public entry point,
+   `int32 CreateIoStoreContainerFiles(const TCHAR* CmdLine)` (`IoStoreUtilities.h:19`), which is
+   what `UnrealPak -CreateGlobalContainer` calls; it is `FPackageStoreOptimizer`'s only caller and
+   the thing that already knows how to carry cells. The cooker would add `IoStoreUtilities` to its
+   editor-only module block, write its loose files as it does now, and then call this to produce a
+   `.utoc`/`.ucas` pair beside them. The runtime host mounts the container with `FIoDispatcher`
+   before `ISolarisModule::Get()`, in place of the mount points `RegisterCookedMountPoints`
+   registers now, and `LoadPackage` then resolves through the zen loader — which is the loader that
+   reads cells. **The unknown is what a container needs beyond the packages** (a global container,
+   a script-objects chunk) for `LoadPackage` on a bare name to find one.
+2. **Use `FZenStoreWriter`** (`IoStoreUtilities/Public/ZenStoreWriter.h`) in place of the writer in
+   `HostCookWriter.h`. It is the package writer a real cook uses and produces a store the zen loader
+   reads directly, which skips the conversion — but it wants a Zen server, and an export plugin that
+   starts one is a dependency this bridge should not take on lightly.
+3. **Reconstitute the package without `LoadPackage`.** `ISolarisRuntime` has
+   `GetDigestCodeForPackage` beside `AddCompiledUPackage`, and a digest is how the editor host
+   already reads the mirror cheaply — but the digest half of that interface is
+   `WITH_VERSE_COMPILER` only, so this needs a reader on the runtime side that does not exist.
 
 ### 13.8 What stages 3 and 4 have, and what they are missing
 
