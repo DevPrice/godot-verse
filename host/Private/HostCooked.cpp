@@ -13,12 +13,19 @@
 #include "IoDispatcherFileBackend.h"
 #include "ISolarisModule.h"
 #include "ISolarisRuntime.h"
+#include "IVerseNativeModule.h"
 #include "Misc/AES.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 #include "Serialization/PackageStore.h"
 #include "UObject/Package.h"
+#include "UObject/TopLevelAssetPath.h"
 #include "UObject/UObjectGlobals.h"
+#include "VerseVM/VVMGlobalProgram.h"
+#include "VerseVM/VVMPackage.h"
+#include "VerseVM/VVMPackageName.h"
+#include "VerseVM/VVMProgram.h"
+#include "VerseVM/VVMVerseModuleClass.h"
 
 namespace {
 
@@ -132,6 +139,109 @@ bool MountCookedContainers(const FString& CookedDir, FUtf8String& OutError)
         GPackageStoreBackend->Mount(Header.Get(), /*Order*/ 0);
     }
     return true;
+}
+
+/// Every module a loaded package holds a definition in, as the asset name the VNI registrations are
+/// keyed by.
+///
+/// A definition's key is its decorated path -- `(/Verse.org/Verse:)Print`, and for the native half
+/// of one `(/Verse.org/Verse/(/Verse.org/Verse:)Print:)Native` -- so the module is the leading scope
+/// with anything from its first `(` onwards cut off. Relative to the package's root path, with `/`
+/// spelled `_` and the root module spelled `_Root`, that is exactly the `MangledVerseName` the VNI
+/// generator writes into each registration's FVniTypeDesc
+/// (VerseNativeInterfaceGen/Private/DefinitionInfo.cpp:214-222) -- and the package's own definitions
+/// are the only place a host with no semantic program can read the list from. `/Verse.org` is a
+/// package whose root module holds nothing: `Print` is in the *submodule* `Verse`, so `_Root` alone
+/// finds nothing there.
+AUTORTFM_DISABLE TSet<FString> ModuleAssetNamesOf(const Verse::VPackage& VersePackage)
+{
+    const FString RootPath(FUtf8String(VersePackage.GetRootPath().AsStringView()));
+    TSet<FString> Names;
+    Names.Add(ANSI_TO_TCHAR(Verse::FPackageName::RootModuleClassName));
+
+    const uint32 DefinitionCount = VersePackage.NumDefinitions();
+    for (uint32 Index = 0; Index < DefinitionCount; ++Index)
+    {
+        const FString Decorated(FUtf8String(VersePackage.GetDefinitionName(Index).AsStringView()));
+        int32 ScopeEnd = INDEX_NONE;
+        if (!Decorated.EndsWith(TEXT(":)Native"), ESearchCase::CaseSensitive)
+            || !Decorated.StartsWith(TEXT("(")) || !Decorated.FindChar(TEXT(':'), ScopeEnd))
+        {
+            continue;
+        }
+        FString Scope = Decorated.Mid(1, ScopeEnd - 1);
+        int32 NestedScope = INDEX_NONE;
+        if (Scope.FindChar(TEXT('('), NestedScope))
+        {
+            Scope = Scope.Left(NestedScope);
+        }
+        while (Scope.EndsWith(TEXT("/")))
+        {
+            Scope.LeftChopInline(1);
+        }
+        if (!Scope.StartsWith(RootPath))
+        {
+            continue;
+        }
+        FString Relative = Scope.Mid(RootPath.Len());
+        Relative.RemoveFromStart(TEXT("/"));
+        Names.Add(Relative.IsEmpty() ? FString(ANSI_TO_TCHAR(Verse::FPackageName::RootModuleClassName))
+                                     : Relative.Replace(TEXT("/"), TEXT("_")));
+    }
+    return Names;
+}
+
+/// Puts the C++ thunks back on the module-level `<native>` functions of every loaded VNI package.
+///
+/// A VNativeProcedure's Thunk is a C++ function pointer, so it is not serialised: a cooked package
+/// comes back with `Thunk = nullptr` on every one of them (VVMNativeProcedure.cpp:37-42), and the
+/// interpreter calls it without checking -- `(*NativeProcedure->Thunk)(...)`,
+/// VVMInterpreter.cpp:2666 -- which is a jump to address 0 and no diagnostic of any kind.
+///
+/// The engine rebinds the *class*-scoped half at load, and the module-scoped half only at build
+/// time, from the assembler walking the semantic program's module parts
+/// (VerseVMCodeGen/Private/VVMAssembler.cpp:296-322). `FVerseNativeModule::TryBindVniModule` carries
+/// the TODO that says so in as many words -- "Call at load time when we start using VerseVM cooked
+/// framework packages" (VerseNativeModule.cpp:340-341) -- so a host that loads cooked VNI packages
+/// has to do the walk itself. That is this: same public entry point, with the module list read off
+/// the loaded package instead of off an AST there is no compiler to build.
+///
+/// Until this ran, every mirrored Godot call and every stdlib call from an exported game was a raw
+/// access violation inside VFunction::Invoke (phase-7b-design.md 13.8): `VhCallValue`, `Print` and
+/// `Sqrt` are all module-level natives.
+AUTORTFM_DISABLE void RebindVniModuleNatives()
+{
+    if (!Verse::GlobalProgram)
+    {
+        return;
+    }
+
+    const uint32 PackageCount = Verse::GlobalProgram->NumPackages();
+    for (uint32 Index = 0; Index < PackageCount; ++Index)
+    {
+        Verse::VPackage& VersePackage = Verse::GlobalProgram->GetPackage(Index);
+        UPackage* UPackageForVerse = VersePackage.GetUPackage();
+        if (!UPackageForVerse || !IsVniPackage(UPackageForVerse->GetName()))
+        {
+            continue;
+        }
+        for (const FString& ModuleName : ModuleAssetNamesOf(VersePackage))
+        {
+            // A parametric class writes its scope plainly, with no `(...)` decoration, so cutting at
+            // the first one leaves the *class* rather than the module it is in -- and asking
+            // TryBindVniModule for a type's key trips its own ensure that the scope name is empty
+            // (VerseNativeModule.cpp:349). The UObject beside the name is what tells them apart:
+            // a module's is a UVerseModuleClass, a class's a UVerseClass. A module with no UObject
+            // at all is still a module and is still asked.
+            const UObject* Beside = StaticFindObject(UStruct::StaticClass(), UPackageForVerse, *ModuleName);
+            if (Beside && !Beside->IsA<UVerseModuleClass>())
+            {
+                continue;
+            }
+            IVerseNativeModule::Get().TryBindVniModule(
+                VersePackage, FTopLevelAssetPath(UPackageForVerse->GetFName(), FName(*ModuleName)));
+        }
+    }
 }
 
 } // namespace
@@ -256,6 +366,8 @@ AUTORTFM_DISABLE bool GodotVerse::LoadCookedProject(const FString& CookedDir, FU
     }
 
     AdoptCookedGeneration(FUtf8String(ScriptPackageName), Generation);
+
+    RebindVniModuleNatives();
 
     FUtf8String SidecarError;
     if (!LoadClassSidecar(SidecarPathFor(CookedDir), SidecarError))

@@ -276,22 +276,23 @@ tools, because `PreInit` constructs the shader compiling manager unconditionally
 only with the `EDITOR` token, `-nullrhi` and `-NoShaderCompile`, from an entry point marked
 `AUTORTFM_DISABLE`. Seventeen builds, all in §2 S-1; read it before touching that target. Stage 0 is the move to 4.7; nothing else starts before it.
 
-**Phase 7b is partly built and stopped at a second wall, and `docs/phase-7b-design.md` §13 is the
-one section of it to read** — written after the work, it is where the design turned out to be wrong,
-and §13.8 is the wall. Both blocking spikes passed and **the wall 7b was written to remove is down**:
-the cooker converts its loose cook to an IoStore container with `CreateIoStoreContainerFiles`, the
-runtime host mounts it the way `FPakPlatformFile` mounts a pak's, and a cooked Verse package loads
-**with its cells intact** — no `Missing VClass for VerseClass`. An exported `dodge-the-creeps` boots,
-attaches its scripts and runs their own Verse.
+**Phase 7b's stages 1-3 are built and both of its walls are down, and `docs/phase-7b-design.md` §13
+is the one section of it to read** — written after the work, it is where the design turned out to be
+wrong. The cooker converts its loose cook to an IoStore container with `CreateIoStoreContainerFiles`,
+the runtime host mounts it the way `FPakPlatformFile` mounts a pak's, and a cooked Verse package
+loads **with its cells intact**. An exported `dodge-the-creeps` boots, attaches its scripts, runs
+their Verse and **calls the Godot mirror and the Verse standard library**.
 
-**What it cannot do is call Godot.** The first mirrored call a script makes is a raw access violation
-inside `Verse::VFunction::Invoke`, with no crash report and the Godot callback never reached; the VNI
-packages load out of the container with **null package imports**. §13.8 has what is known and the
-three things to try next. `tests/cooked_probe` (`tools/build_cooked_probe.py`) is how to work on it:
-it mounts a cooked directory and calls a class's methods in ten seconds, with no export and no Godot.
+Five things §13 settled that are load-bearing elsewhere:
 
-Four things §13 settled that are load-bearing elsewhere:
-
+- **A cooked `VNativeProcedure` comes back with a null C++ thunk, and calling it is a jump to
+  address 0** — no crash report, no diagnostic, because `RIP` is zero and there is no unwind info.
+  `SerializeLayout` passes `/*InThunk*/ nullptr` and `VVMInterpreter.cpp:2666` calls it unchecked.
+  The engine rebinds *class*-scoped natives at load and *module*-scoped ones only from the
+  assembler, so a host that loads VNI packages instead of compiling them has to do that walk itself
+  — `GodotVerse::RebindVniModuleNatives`, over the same public `TryBindVniModule` the assembler
+  uses, with the module list read off the loaded package. `VhCallValue`, `Print` and `Sqrt` are all
+  module-level, which is why a script's own Verse ran and its first mirrored call was fatal. §13.8.
 - **`CreateIoStoreContainerFiles` parses `FCommandLine::Get()`, not the command line it is handed**,
   and needs three files a cook of this shape does not produce — a script-objects buffer, a commands
   list with a response file, and a compact-binary oplog manifest of which exactly one field is read
@@ -310,15 +311,20 @@ Four things §13 settled that are load-bearing elsewhere:
   package list — a container holds package *ids*, which are hashes, and mount points are still
   registered by name. §13.7.
 
-Three defects that had been shipping since 7a behind that wall are fixed: the cook directory was
-reused and never cleared (so a 7a loose `.uasset` shipped beside the container and was found first),
+**Every package the program has must reach the container.** A VNI package the runtime host cannot
+find is only a warning from `JitVniPackages`, and then every import into it in every other package
+silently resolves to null — which is how `/Solaris/_Verse/VNI/VerseNative` went missing for a
+session. `SavePackage2.cpp:2076` asserts on a `UVerseClass` with no `Verse::VClass`, and a
+`UVerseClass` standing for a Verse *module* has none, so the cooker suppresses that one export for
+the length of one save rather than dropping the package. Three defects that had been shipping since
+7a behind the first wall are also fixed (§13.6): the cook directory was reused and never cleared,
 `sources.txt` shipped with the author's absolute paths in it, and `host_has_compiler()` tested for a
-symbol the runtime host also exports — so an exported game compiled its own one-byte `.verse` stubs
-and every script came up with no class. §13.6.
+symbol the runtime host also exports.
 
-Stages 4–6 — the `test_main.gd` split, the export layer **launching** what it exports, and R-DIST-10
-by hand — are not built and wait on §13.8. Linux, `dlopen`, macOS, the Shipping-per-template split
-and the debugger in an exported game are all **out**, by decision.
+`tests/cooked_probe` (`tools/build_cooked_probe.py`) is how the cooked path is worked on: it mounts
+a cooked directory and calls a class's methods in ten seconds, with no export and no Godot. Linux,
+`dlopen`, macOS, the Shipping-per-template split and the debugger in an exported game are all
+**out**, by decision.
 
 **The by-hand checks have been run, and `docs/by-hand-checklist.md` is deleted** — all twenty-two
 of its entries were watched happen, and what is worth keeping is what they found rather than the
@@ -478,8 +484,8 @@ nothing a script can ask — so the only way to read what an author would see is
 editor prints.
 
 The fourth is **export**: it exports `tests/integration` headless and asserts the *tree* the
-export produced, without launching it — a launched export still dies on its first Godot call
-(`phase-7b-design.md` §13.8), so there is nothing worth asserting about one yet. Its assertions
+export produced, without launching it — launching one is Phase 7b's stage 5, unblocked by §13.8 and
+not yet built. Its assertions
 are in `run_tests.py` for the reason the coverage layer's are, and one of them reads the `.pck`
 directly (`read_pck`, the format is Godot's `core/io/file_access_pack.cpp:288-370`): the one thing
 that has to be asserted about a shipped `.verse` is its *size*, and a one-byte stub and the whole
@@ -509,7 +515,9 @@ Unreal checkout and `GODOT` the Godot binary; both are guessed when unset.
 `tests/cooked_probe`, built by `tools/build_cooked_probe.py`, is the same kind of thing for the
 *cooked* path: it mounts a cooked data directory in a runtime host and calls a class's zero-argument
 methods, so what an exported game sees is ten seconds away rather than a two-minute export and a game
-that dies with no output. It is what Phase 7b's remaining wall (§13.8) is worked on with.
+that dies with no output. It is what Phase 7b's second wall was found with (§13.8), and what any
+later one should be. Its `CallMethod` is a stub that prints and answers void, so it proves a call
+*reaches* Godot and nothing about what Godot does with it.
 
 `tests/verse_probe`, built by `tools/build_verse_probe.py`, is not in `run_tests.py` either, and for
 a different reason: it asserts nothing. It compiles whatever `.verse` files it is handed as one

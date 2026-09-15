@@ -1,11 +1,11 @@
 # Phase 7b — Loading what the cooker wrote
 
-**Status:** 2026-09-14 · **partly built, and stopped at a second wall.** §1 and §3 were written
-*before* the work; **§13 is what building it corrected and is the section to read first.** Stages 1–3
-are built and the VCell wall is down — a cooked Verse package loads, its cells intact, and a script's
-own code runs in an exported game. Stages 4–6 are not built: the first call a script makes into the
-*mirror* is fatal (§13.8), and there is nothing worth asserting about an exported run until it is
-not.
+**Status:** 2026-09-14 · **stages 1–3 built, both walls down.** §1 and §3 were written *before* the
+work; **§13 is what building it corrected and is the section to read first.** The VCell wall this
+phase exists to remove is gone — a cooked Verse package loads with its cells intact — and so is the
+second wall behind it, which was not in any spike: a cooked `VNativeProcedure`'s C++ thunk is a
+function pointer, so it does not serialise, and nothing rebinds the module-scoped ones after a
+cooked load (§13.8). An exported game now calls the Godot mirror and the Verse standard library.
 
 **Prerequisite: Phase 7a is complete** — built 2026-09-14, ABI **8.2**. `verse_cook.exe` cooks a
 project to loose `.uasset` files, the export plugin ships them in a data directory beside the
@@ -29,8 +29,9 @@ relitigate them; if a spike contradicts one, record it in §13 and raise it.
 
 **§2 is the spikes, and they ran before any stage was written.** Both passed; §13.1 and §13.2 are
 what they answered. Putting them first was right and did not go far enough: the wall that stopped the
-phase is *behind* both of them, at the first mirrored call, and no spike this design named would have
-found it.
+phase for a session sat *behind* both of them, at the first mirrored call, and no spike this design
+named would have found it. A spike that loads a cooked package proves the loading; only one that
+*calls* something proves the calling.
 
 **§3 is what the engine actually offers**, as read rather than as remembered, with the file and line
 each fact came from. It is the factual base under every stage and it corrects §13.7 in two places.
@@ -40,8 +41,8 @@ each fact came from. It is the factual base under every stage and it corrects §
 **§14 what is deliberately not built**, and **§15 the exit**.
 
 **§13 is where the design is corrected, and is written.** Read it before §1 or §3: two of §1's
-rows did not survive contact, §3 was short of one fact that cost two hours, and the phase stopped at
-a wall §13.8 describes.
+rows did not survive contact, §3 was short of one fact that cost two hours, and §13.8 is a wall no
+part of this design anticipated.
 
 ---
 
@@ -217,9 +218,13 @@ verify-only under `DO_CHECK` (`:7192-7204`); the cooked script-objects chunk
 (`:7037-7073`), which is debug naming and nothing more.
 
 The cell half has its own registration: `FAsyncLoadingThread2::NotifyScriptVersePackage(Verse::
-VPackage*)` → `AddScriptCellPackage` (`:12119-12125`). **Whether Solaris calls it for the mirror in
-a compiler-less host, and whether that happens before the project's package loads, is S-8b's third
-unknown** — it is the most likely place for a second wall of the same family as the first.
+VPackage*)` → `AddScriptCellPackage` (`:12119-12125`). This section left as S-8b's third unknown
+whether Solaris calls it for the mirror in a compiler-less host; **it is answered, and the answer is
+that nothing here was ever at risk.** `$BuiltIn` registers itself unconditionally from
+`VIntrinsics::Initialize` (`VVMIntrinsics.cpp:52`, whose comment says why in one line: *"This
+VPackage enables cooked data to import intrinsics by Verse path"*), so the intrinsics — `Abs`,
+`Floor`, `Ceil` and the rest — were never affected. The second wall was of a different family
+entirely: not a missing registration but a **missing function pointer**, §13.8.
 
 ---
 
@@ -587,42 +592,107 @@ Measured: `tests/host_smoke`'s `exports` class, cooked and mounted in a runtime 
 eighteen of its methods — ints, floats, strings, arrays, enums and a `@export` read — exactly as the
 editor host does.
 
-### 13.8 The wall that is still standing: a cooked mirror cannot be called
+### 13.8 The wall behind the wall: a cooked native's C++ thunk is not serialisable
 
-**A script's own Verse runs. The first call into the mirror takes the process down** — a raw access
-violation inside `Verse::VFunction::Invoke`, with no UE crash report, no diagnostic, and the Godot
-callback never reached. Every `_Ready` in `dodge-the-creeps` dies on its first `GetNode`;
-`tests/host_smoke`'s classes, which call no mirrored function, run to completion.
+**Found and removed after the rest of this section was written**, by a session that did nothing but
+chase it. What it had looked like: a script's own Verse ran and the first call it made into the
+mirror was a raw access violation inside `Verse::VFunction::Invoke`, with no UE crash report, no
+diagnostic, and the Godot callback never reached. Every `_Ready` in `dodge-the-creeps` died on its
+first `GetNode`; `tests/host_smoke`'s classes, which call no mirrored function, ran to completion.
 
-What is known:
+**`Verse::VNativeProcedure` holds its C++ entry point as a raw function pointer**, `FThunkFn Thunk`
+(`VVMNativeProcedure.h:38`). `SerializeImpl` writes the parameter count, the name and the path
+registry payload and **not** the thunk; `SerializeLayout` constructs the loaded cell with
+`/*InThunk*/ nullptr` (`VVMNativeProcedure.cpp:37-50`). The interpreter then calls it with no check
+at all — `(*NativeProcedure->Thunk)(Context, Self, Args)`, `VVMInterpreter.cpp:2666`. That is a jump
+to address 0, which is why there was no crash report and no handler: `RIP` is zero, so there is no
+unwind info for anything to find.
 
-- It is not marshalling and not the host. `tests/cooked_probe` traces `InstanceCall` to
-  `Resolved.Function->Invoke` and the fault is inside it.
-- The VNI packages *are* loaded — `/Verse/_Verse/VNI/Verse`, `/Engine/_Verse/VNI/VerseHost` and the
-  rest come out of the container, and `JitVniPackages` logs no "was not found".
-- They load with **null imports**. `LogStreaming: FExportArchive: … Import index N is null
-  (0x1000008XX)` — package-import references, `ImportedPackageIndex` 1, resolved against the
-  exporting package's public export hashes — for the mirror, for the standard library and for the
-  project's own package.
-- `IVerseModule::Get()` during init, before or after Solaris, changes nothing but adds four
-  *"Missing script class binding for `Verse_localizable_string` (did any script fail to compile?)"*
-  ensures, which is the same family of symptom: bindings that are not there.
+Thunks go back on through `Verse::VNativeProcedure::SetThunk`, and the engine has two callers.
+**Class- and struct-scoped natives are rebound at load**, by `UVerseClass::BindVerseCallableFunctions`
+(`VVMVerseClass.cpp:2237-2243`). **Module-scoped ones are rebound only at build time**, by
+`FVerseNativeModule::TryBindVniModule`, whose one caller is the assembler —
+`Engine->TryBindVniModule(CurrentPackage, AssetPath)`, `VVMAssembler.cpp:322`. The engine says so
+itself, two lines above the function:
 
-Where to look next, in the order they are worth trying: whether the mirror's exports are *public*
-in the container at all (`GetPublicExportHash` vs what the runtime looks up); whether
-`FAsyncLoadingThread2::NotifyScriptVersePackage` is ever called for `$BuiltIn` in a compiler-less
-host (§3.5's third unknown, still unanswered); and whether the `-ScriptObjects` file has to come
-from the *runtime* host's registration set rather than the cooker's, which has Engine and UnrealEd
-in it and the runtime host does not.
+```cpp
+// Called at build time (via FVerseVmAssembler) for modules.
+// TODO: Call at load time when we start using VerseVM cooked framework packages.
+bool FVerseNativeModule::TryBindVniModule(...)
+```
+`VerseNativeModule.cpp:340-341`
 
-**`tests/cooked_probe` is how to work on this.** It reproduces the fault in ten seconds against a
-cooked directory, with no export and no Godot.
+A compiler-less host **loads** its VNI packages instead of compiling them, so that call never
+happens and every module-level `<native>` in every VNI package comes up with a null thunk.
+`VhCallValue` (the whole of `/Godot.org/Godot`), `Print` and `Sqrt` are all module-level — which is
+exactly "a script's own Verse runs, and the first mirrored call dies". Bisected with a four-method
+fixture cooked as one class: a local `set`, and constructing a `vector2` and reading its `.X`, both
+ran; `vector2.Length()` — ordinary Verse, no Godot in it — `Print(...)` and `QueueFree()` all
+faulted. Cross-package *data* was always fine; cross-package *native call* was always fatal. It was
+never the Godot boundary and never marshalling.
+
+**`GodotVerse::RebindVniModuleNatives`** (`HostCooked.cpp`, called from `LoadCookedProject` after
+`AdoptCookedGeneration`) does the assembler's walk with no assembler: for every loaded VNI
+`VPackage` it derives the module asset names and calls the same public `TryBindVniModule`. Three
+things that cost that session time and are the reason it is written the way it is:
+
+- **The module list is derivable from the loaded package alone.** A definition's key is its
+  decorated path — `(/Verse.org/Verse/(/Verse.org/Verse:)Print:)Native` — so the module is the
+  leading scope with everything from its first `(` cut off. Taken relative to
+  `VPackage::GetRootPath()`, with `/` spelled `_` and the empty one spelled `_Root`, that is exactly
+  the `MangledVerseName` the VNI generator writes into each registration
+  (`DefinitionInfo.cpp:214-222`). Only `:)Native` definitions are considered, so the candidates are
+  the modules that actually have thunks.
+- **`_Root` is not enough.** `/Verse.org` is a package whose root module holds nothing — `Print` is
+  in the *submodule* `Verse`. The mirror binds at `/Engine/_Verse/VNI/VerseHost._Root`; the standard
+  library at `/Verse/_Verse/VNI/Verse.Verse`, `.Verse_Easing` and `.Random`.
+- **Do not dedupe by `UPackage`.** `GlobalProgram` holds several `VPackage` objects that share one,
+  and `SetThunk` looks the procedure up in the specific `VPackage` it is handed. Binding only the
+  first reproduces the crash exactly.
+- A parametric class writes its scope undecorated, so the cut can yield a *class* rather than a
+  module, and asking `TryBindVniModule` for a type's key trips its own ensure. The UObject beside the
+  name separates them: a module's is a `UVerseModuleClass`, a class's a `UVerseClass`.
+
+**A second, real defect was found on the way, and it is what the null-import evidence above was.**
+`WouldAssertOnSave` was skipping whole packages, and one of them was
+`/Solaris/_Verse/VNI/VerseNative` — where `/Verse.org/Concurrency`'s `task` and `awaitable` and the
+`/Verse.org/Native` attributes live. The cook shipped **7** packages where the program had **9**
+savable ones, and `LogStreaming: ImportPackages: SkipPackage: … Skipping non mounted imported
+package None (0x3ABF75E5CFC7C097)` is `FPackageId::FromName("/Solaris/_Verse/VNI/VerseNative")`. All
+41 `FExportArchive: … Import index N is null` lines resolved into that one absent package. It was
+skipped because exactly one object in it, `VerseNative.Persona`, is a `UVerseClass` standing for a
+Verse **module** — and a module has no `Verse::VClass`, which `SavePackage2.cpp:2076` asserts on
+unconditionally even though every use of `Class` below it is already null-guarded.
+`FScopedModuleExportSuppression` takes that one export out of the export set for the length of one
+save rather than dropping the package: `RF_Transient` alone does not do it, because
+`FSaveContext::GetSaveableStatusNoOuter` reads the flag only for a non-native object
+(`SaveContext.cpp:233-243`) and a VNI-generated `UVerseClass` carries
+`EInternalObjectFlags::Native`, which is what `UObject::IsNative()` answers from. Both flags come
+off and both go back on. Null imports: **41 → 3**, the three being references to the suppressed
+`Persona`, which nothing on this bridge can name.
+
+**Neither half needs an engine change**, and both are in `host/`. If Epic ever acts on the TODO at
+`VerseNativeModule.cpp:340`, `RebindVniModuleNatives` becomes redundant and harmless — `SetThunk` is
+idempotent.
+
+Two of the three leads this section originally named were wrong, and are recorded so nobody runs
+them again. **Public export hashes were never the problem**: the hashes were correct and the imports
+were null because the *package* was absent. **The `-ScriptObjects` buffer was never the problem**
+either — script imports resolve from `FGlobalImportStore::AddScriptObject` registrations made in
+memory, 1668 of them, with no unresolved script import in the log. The third lead is **answered**:
+see §3.5.
+
+Measured after the fix, through `tests/cooked_probe` against a cooked `dodge-the-creeps`:
+`gameplay/mob`'s `_Ready` runs its `GetNode` and answers 0, and `OnScreenExited` runs its
+`QueueFree` and answers 0.
 
 ### 13.9 What is not built
 
 Stages 4, 5 and 6 — the `test_main.gd` split, the export layer launching what it exports, and
-R-DIST-10 by hand — all wait on §13.8: there is no point asserting an exported run's pass count
-while the first Godot call in it is fatal. `spec.md`'s R-DIST-9/10/11 stay where they are.
+R-DIST-10 by hand — were blocked on §13.8 and are unblocked rather than done. Nothing has yet
+*launched* an exported game: the export layer still asserts only the tree it produced, and
+`tests/cooked_probe` answers every Godot call with a stub. `spec.md`'s R-DIST-9/10/11 stay where
+they are until one runs.
 
 ---
 

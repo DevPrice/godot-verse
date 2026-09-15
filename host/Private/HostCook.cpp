@@ -90,30 +90,81 @@ public:
     }
 };
 
-/// Whether saving this package would take the process down.
+/// Takes the one kind of export SavePackage cannot write out of the export set, for the length of
+/// one save.
 ///
 /// SavePackage2.cpp:2076 does `check(Class != nullptr)` on every UVerseClass export's VM class, and
-/// Epic's own native VNI packages -- /Solaris/_Verse/VNI/VerseNative and its siblings -- have
-/// UVerseClass objects whose Verse::VClass is null in this process. There is no way to catch an
-/// appError, so the only thing to do with a package like that is not to hand it over.
+/// a UVerseClass that stands for a Verse *module* has none -- a module is not a class. There are
+/// exactly two in this program, `/Solaris/_Verse/VNI/VerseNative.Persona` and
+/// `/Solaris/_Verse/VNI/VersePredicts.Predicts`, both epic_internal modules nothing on this bridge
+/// can name, and `IsVerseModule()` is what tells them from a class whose VClass is genuinely
+/// missing -- which would be a defect and is still refused.
 ///
-/// The three packages this cook actually has to produce all pass: the project's own, the attribute
-/// package, and the mirror at /Engine/_Verse/VNI/VerseHost. What is skipped is the standard
-/// library, whose native bindings are compiled into the runtime host anyway; a VNI package the
-/// runtime host cannot find is a warning from JitVniPackages rather than a failure
-/// (SolarisModule.cpp:3415-3430), which is what makes finding out affordable.
+/// This used to skip the whole package, and that was the wall of 7b 13.8: VerseNative is where
+/// `/Verse.org/Concurrency`'s `task` and `awaitable` and the `/Verse.org/Native` attributes live, so
+/// leaving it out of the container left every import into it null in three other packages -- the
+/// standard library, the mirror and the project's own -- and the first call that landed on one was
+/// an access violation inside VFunction::Invoke.
+class FScopedModuleExportSuppression
+{
+public:
+    explicit FScopedModuleExportSuppression(UPackage* Package)
+    {
+        TArray<UObject*> Objects;
+        GetObjectsWithPackage(Package, Objects);
+        for (UObject* Object : Objects)
+        {
+            UVerseClass* VerseClass = Cast<UVerseClass>(Object);
+            if (VerseClass && VerseClass->IsVerseModule() && !VerseClass->Class.Get())
+            {
+                Suppress(VerseClass);
+                if (UObject* DefaultObject = VerseClass->GetDefaultObject(/*bCreateIfNeeded*/ false))
+                {
+                    Suppress(DefaultObject);
+                }
+            }
+        }
+    }
+
+    ~FScopedModuleExportSuppression()
+    {
+        for (UObject* Object : Suppressed)
+        {
+            Object->ClearFlags(RF_Transient);
+            Object->SetInternalFlags(EInternalObjectFlags::Native);
+        }
+    }
+
+private:
+    /// RF_Transient alone is not enough: FSaveContext::GetSaveableStatusNoOuter reads it only for a
+    /// non-native object (SaveContext.cpp:232-243), and a VNI-generated UVerseClass carries
+    /// EInternalObjectFlags::Native -- which is what UObject::IsNative() answers from, not
+    /// RF_MarkAsNative. Both go back on in the destructor; the class is live in this process.
+    void Suppress(UObject* Object)
+    {
+        Object->SetFlags(RF_Transient);
+        Object->ClearInternalFlags(EInternalObjectFlags::Native);
+        Suppressed.Add(Object);
+    }
+
+    TArray<UObject*> Suppressed;
+};
+
+/// Whether saving this package would take the process down anyway, once the modules above are out
+/// of the way. There is no way to catch an appError, so the only thing to do with a package like
+/// that is not to hand it over -- and to say which class it was, because unlike a module this is a
+/// defect rather than a shape the engine cannot serialise.
 bool WouldAssertOnSave(UPackage* Package)
 {
     TArray<UObject*> Objects;
     GetObjectsWithPackage(Package, Objects);
     for (UObject* Object : Objects)
     {
-        if (const UVerseClass* VerseClass = Cast<UVerseClass>(Object))
+        const UVerseClass* VerseClass = Cast<UVerseClass>(Object);
+        if (VerseClass && !VerseClass->Class.Get() && !VerseClass->IsVerseModule())
         {
-            if (!VerseClass->Class.Get())
-            {
-                return true;
-            }
+            UE_LOG(LogTemp, Warning, TEXT("verse_cook: %s has no VM class"), *VerseClass->GetPathName());
+            return true;
         }
     }
     return false;
@@ -137,6 +188,8 @@ bool SaveCookedPackage(UPackage* Package, const FString& Filename, FUtf8String& 
     }
 
     IFileManager::Get().MakeDirectory(*FPaths::GetPath(Filename), /*Tree*/ true);
+
+    const FScopedModuleExportSuppression ModuleSuppression(Package);
 
     FVerseCookerInterface CookerInterface;
     // Naked new, and not owned here: ~FSavePackageContext deletes the writer it was given.
@@ -214,7 +267,9 @@ AUTORTFM_DISABLE bool GodotVerse::CookProjectPackages(const FString& OutDir, TAr
     // Ordered with the project's own packages first, and the VNI packages after: a VNI package is
     // the risky half of this (their UVerseClass objects are the ones SavePackage2.cpp:2076 asserts
     // on), and a run that dies part way through has at least written the half that is this
-    // project's.
+    // project's. Every one of them has to reach the container: a VNI package the runtime host
+    // cannot find is only a warning from JitVniPackages (SolarisModule.cpp:3415-3430), and then
+    // every import into it in every other package silently resolves to null.
     TArray<UPackage*> ToSave;
     const uint32 Count = Verse::GlobalProgram->NumPackages();
     for (uint32 Index = 0; Index < Count; ++Index)
@@ -232,8 +287,8 @@ AUTORTFM_DISABLE bool GodotVerse::CookProjectPackages(const FString& OutDir, TAr
     }
     // The project's own packages first, then the mirror, then the rest of the VNI packages -- the
     // standard library and Epic's own. A VNI package is the risky half (SavePackage2.cpp:2076
-    // asserts on a UVerseClass whose Verse::VClass is null, which VerseNative's are), so a run
-    // that dies part way through has written the half this project cannot do without.
+    // asserts on a UVerseClass whose Verse::VClass is null, which a module's is), so a run that
+    // dies part way through has written the half this project cannot do without.
     Algo::StableSortBy(ToSave, [](UPackage* Package)
         {
             const FString Name = Package->GetName();
