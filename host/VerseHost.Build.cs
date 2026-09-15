@@ -34,6 +34,21 @@ public class VerseHost : ModuleRules
 			// The class sidecar an exported game ships is JSON (HostSidecar.cpp): the cooker
 			// writes it and the runtime host reads it back, so both need this.
 			"Json",
+
+			// The cooked project is an IoStore container and HostCooked.cpp mounts it, which is
+			// the iostore half of FPakPlatformFile::Mount with the pak half taken out: the two
+			// backends that mount live in PakFile's Private folder and nowhere else.
+			"PakFile",
+		});
+
+		// FFilePackageStoreBackend and the file I/O dispatcher backends are PakFile's own, and
+		// UE::FPlatformIoDispatcher -- which decides which of the two to make -- is in Core's
+		// Internal folder. Neither is on a Program's include path however the dependency is
+		// declared, and a monolithic link is what makes reaching them legal at all.
+		PrivateIncludePaths.AddRange(new string[]{
+			System.IO.Path.Combine(EngineDirectory, "Source", "Runtime", "PakFile", "Private"),
+			System.IO.Path.Combine(EngineDirectory, "Source", "Runtime", "PakFile", "Internal"),
+			System.IO.Path.Combine(EngineDirectory, "Source", "Runtime", "Core", "Internal"),
 		});
 
 		// The compiler, and everything that only exists to serve it. A runtime host gets
@@ -105,12 +120,22 @@ public class VerseHost : ModuleRules
 				// UPackage::Save needs a Windows ITargetPlatform to cook against.
 				"TargetPlatform",
 				"WindowsTargetPlatform",
+
+				// The container step (phase-7b-design.md D1): CreateIoStoreContainerFiles is the
+				// only code in the engine that carries a Verse::VCell from a legacy cooked header
+				// into something a loader can read.
+				"IoStoreUtilities",
 			});
 
 			// TPackageWriterToSharedBuffer, which HostCookWriter.h derives the cooker's package
 			// writer from, is in CoreUObject's Internal folder -- and an Internal folder is not on
 			// a Program's include path however the dependency is declared.
 			PrivateIncludePaths.Add(System.IO.Path.Combine(EngineDirectory, "Source", "Runtime", "CoreUObject", "Internal"));
+
+			// FPackageStoreOptimizer, whose CreateScriptObjectsBuffer is what feeds the container
+			// step its -ScriptObjects file, is in IoStoreUtilities' Internal folder for the same
+			// reason and needs the same line.
+			PrivateIncludePaths.Add(System.IO.Path.Combine(EngineDirectory, "Source", "Developer", "IoStoreUtilities", "Internal"));
 			PrivateIncludePathModuleNames.AddRange(new string[]{
 				"AutomationWorker",
 				"AutomationController",

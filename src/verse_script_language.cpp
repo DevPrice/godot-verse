@@ -3193,6 +3193,14 @@ bool VerseScriptLanguage::analysis_is_current(const String &p_path, const String
 		return true;
 	}
 
+	// An exported game has no analysis and never will: the snapshot came out of the sidecar and is
+	// the only one there is. Answering false here left every script waiting for a check that
+	// nothing could run, so `valid` stayed false and not one scene came up with its script
+	// attached -- with no error anywhere, because waiting is not failing.
+	if (!runtime->host_has_compiler()) {
+		return true;
+	}
+
 	// The common case by far: opening a file, switching to its tab and saving it all ask about a
 	// buffer nothing has touched since the last analysis.
 	return analyzed_source_by_path.has(p_path)

@@ -16,6 +16,8 @@ struct FRunningContext;
 struct VValue;
 }
 
+class FJsonObject;
+
 namespace GodotVerse {
 
 /// Creates the placeholder outer and enters the content scope Verse allocations need.
@@ -594,6 +596,19 @@ struct FAnalysisSnapshot
         /// copied. Defaults are keyed by member name and hold one entry per `@export`.
         TSharedPtr<const GodotVerse::FClassStatics> Statics;
         TMap<FUtf8String, TSharedPtr<const GodotVerse::FFieldValue>> Defaults;
+
+        /// Every declared type the class's members, methods and signals carry.
+        ///
+        /// **This is what makes an exported game able to run Verse at all.** Reading a field,
+        /// calling a method and emitting a signal each need the *declared* type -- the bytecode has
+        /// erased it by the time a VValue exists, so the semantic program was the only view that
+        /// had one. A runtime host has no semantic program and can never build one
+        /// (`MakeDevEnvironment` is one of the four ISolarisModule members WITH_VERSE_COMPILER=0
+        /// takes away), so the analysis records them here and the sidecar carries them across.
+        ///
+        /// Opaque, because the descriptions hold uLang types HostScript.cpp owns; the sidecar moves
+        /// them through WriteDeclaredTypes/ReadDeclaredTypes below rather than reaching inside.
+        TSharedPtr<struct FDeclaredTypes> Types;
     };
 
     /// Module-qualified, exactly as every ClassNameUtf8 in the ABI is: `player`, `gameplay/player`.
@@ -615,6 +630,12 @@ AUTORTFM_DISABLE const TSharedPtr<const FAnalysisSnapshot>& GetAnalysisSnapshot(
 /// Makes one current, for a host with no compiler to publish what it loaded from disk. Game thread
 /// only, like the swap TakeAnalysisSnapshot's publish does.
 AUTORTFM_DISABLE void SetAnalysisSnapshot(TSharedRef<const FAnalysisSnapshot> Snapshot);
+
+/// The declared-type table of one class, as JSON, and back. Null in, null out: a class the analysis
+/// could not describe carries no table rather than an empty one, and the two mean different things
+/// -- an empty table says "this class declares nothing", which would be a lie.
+AUTORTFM_DISABLE TSharedPtr<FJsonObject> WriteDeclaredTypes(const FDeclaredTypes& Types);
+AUTORTFM_DISABLE TSharedPtr<FDeclaredTypes> ReadDeclaredTypes(const TSharedPtr<FJsonObject>& Object);
 
 /// Reads one data member off a live instance into the ABI's value shape.
 AUTORTFM_DISABLE bool ReadInstanceField(const FInstance* Instance, FUtf8StringView FieldName, vh_value& OutValue, FFieldStorage& OutStorage);

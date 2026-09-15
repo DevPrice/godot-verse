@@ -3,6 +3,8 @@
 #include "HostSidecar.h"
 
 #include "Dom/JsonObject.h"
+#include "HAL/FileManager.h"
+#include "host_build_id.gen.h"
 #include "Dom/JsonValue.h"
 #include "HostScript.h"
 #include "Misc/FileHelper.h"
@@ -15,7 +17,7 @@ namespace {
 /// Bumped when the shape below changes in a way a reader of the old shape would misread. The
 /// cooker and the runtime host are built together and shipped together, so this is a tripwire
 /// against a stale cook in a game directory rather than a compatibility mechanism.
-constexpr int32 SidecarVersion = 1;
+constexpr int32 SidecarVersion = 2;
 
 FString Utf8ToFString(const FUtf8String& Value)
 {
@@ -321,7 +323,7 @@ GodotVerse::FSignalDesc ReadSignal(const TSharedPtr<FJsonObject>& Object)
     return Signal;
 }
 
-TSharedPtr<FJsonObject> WriteExport(const GodotVerse::FExportDesc& Export)
+TSharedPtr<FJsonObject> WriteExportImpl(const GodotVerse::FExportDesc& Export)
 {
     TSharedPtr<FJsonObject> Object = MakeShared<FJsonObject>();
     Object->SetStringField(TEXT("name"), Utf8ToFString(Export.Name));
@@ -344,7 +346,7 @@ TSharedPtr<FJsonObject> WriteExport(const GodotVerse::FExportDesc& Export)
     return Object;
 }
 
-GodotVerse::FExportDesc ReadExport(const TSharedPtr<FJsonObject>& Object)
+GodotVerse::FExportDesc ReadExportImpl(const TSharedPtr<FJsonObject>& Object)
 {
     GodotVerse::FExportDesc Export;
     Export.Name = FStringToUtf8(Object->GetStringField(TEXT("name")));
@@ -429,7 +431,21 @@ TSharedRef<GodotVerse::FClassStatics> ReadStatics(const TSharedPtr<FJsonObject>&
 
 } // namespace
 
-AUTORTFM_DISABLE bool GodotVerse::WriteClassSidecar(const FString& Path, FUtf8String& OutError)
+// An `@export`'s description is also what every *declared type* carries (HostScript.cpp's
+// FMemberType::Described), and the two have to agree field for field -- so there is one writer and
+// one reader, here, where the rest of the sidecar's JSON lives.
+AUTORTFM_DISABLE TSharedPtr<FJsonObject> GodotVerse::WriteExportDesc(const FExportDesc& Export)
+{
+    return WriteExportImpl(Export);
+}
+
+AUTORTFM_DISABLE GodotVerse::FExportDesc GodotVerse::ReadExportDesc(const TSharedPtr<FJsonObject>& Object)
+{
+    return ReadExportImpl(Object);
+}
+
+AUTORTFM_DISABLE bool GodotVerse::WriteClassSidecar(const FString& Path,
+    const TArray<FString>& CookedPackages, int32 Generation, FUtf8String& OutError)
 {
     const TSharedPtr<const FAnalysisSnapshot>& Snapshot = GetAnalysisSnapshot();
     if (!Snapshot.IsValid())
@@ -440,6 +456,22 @@ AUTORTFM_DISABLE bool GodotVerse::WriteClassSidecar(const FString& Path, FUtf8St
 
     TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
     Root->SetNumberField(TEXT("version"), SidecarVersion);
+
+    // The stamp (D6). The ABI version is the one that governs compatibility and is the one a
+    // mismatch is most likely to be about; the two commits are here because "a different build of
+    // godot-verse" is what an author actually did, and naming it is the difference between a
+    // refusal they can act on and one they cannot.
+    Root->SetNumberField(TEXT("abi"), VH_ABI_VERSION);
+    Root->SetStringField(TEXT("cookerCommit"), TEXT(VH_BUILD_GODOT_VERSE_COMMIT));
+    Root->SetStringField(TEXT("engineCommit"), TEXT(VH_BUILD_ENGINE_COMMIT));
+    Root->SetNumberField(TEXT("generation"), Generation);
+
+    TArray<TSharedPtr<FJsonValue>> PackageList;
+    for (const FString& PackagePath : CookedPackages)
+    {
+        PackageList.Add(MakeShared<FJsonValueString>(PackagePath));
+    }
+    Root->SetArrayField(TEXT("packages"), PackageList);
 
     TSharedRef<FJsonObject> Classes = MakeShared<FJsonObject>();
     for (const TPair<FUtf8String, FAnalysisSnapshot::FClass>& Pair : Snapshot->Classes)
@@ -469,13 +501,20 @@ AUTORTFM_DISABLE bool GodotVerse::WriteClassSidecar(const FString& Path, FUtf8St
         TArray<TSharedPtr<FJsonValue>> Exports;
         for (const FExportDesc& Export : Class.Exports)
         {
-            Exports.Add(MakeShared<FJsonValueObject>(WriteExport(Export)));
+            Exports.Add(MakeShared<FJsonValueObject>(WriteExportImpl(Export)));
         }
         Entry->SetArrayField(TEXT("exports"), Exports);
 
         if (Class.Statics.IsValid())
         {
             Entry->SetObjectField(TEXT("statics"), WriteStatics(*Class.Statics));
+        }
+
+        // The declared types, which are the one thing in here a runtime host cannot re-derive from
+        // anything it loads: the VM erases them and there is no semantic program to ask.
+        if (Class.Types.IsValid())
+        {
+            Entry->SetObjectField(TEXT("types"), GodotVerse::WriteDeclaredTypes(*Class.Types));
         }
 
         Classes->SetObjectField(Utf8ToFString(Pair.Key), Entry);
@@ -499,8 +538,23 @@ AUTORTFM_DISABLE bool GodotVerse::WriteClassSidecar(const FString& Path, FUtf8St
     return true;
 }
 
-AUTORTFM_DISABLE bool GodotVerse::LoadClassSidecar(const FString& Path, FUtf8String& OutError)
+namespace {
+
+/// Reads the sidecar and checks its version, which is the half both readers share.
+///
+/// Two of D6's three refusals are here: a file that is not there names the export as incomplete,
+/// and one this host cannot read names both versions. The third -- the stamp -- is in
+/// ReadCookedManifest, because only the reader that runs before anything is loaded can act on it.
+AUTORTFM_DISABLE bool ParseSidecar(const FString& Path, TSharedPtr<FJsonObject>& OutRoot, FUtf8String& OutError)
 {
+    if (!IFileManager::Get().FileExists(*Path))
+    {
+        OutError = FUtf8String(FString::Printf(
+            TEXT("Verse data not found at %s. The export is incomplete; export the project again."),
+            *Path));
+        return false;
+    }
+
     FString Text;
     if (!FFileHelper::LoadFileToString(Text, *Path))
     {
@@ -508,20 +562,67 @@ AUTORTFM_DISABLE bool GodotVerse::LoadClassSidecar(const FString& Path, FUtf8Str
         return false;
     }
 
-    TSharedPtr<FJsonObject> Root;
     TSharedRef<TJsonReader<TCHAR>> Reader = TJsonReaderFactory<TCHAR>::Create(Text);
-    if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+    if (!FJsonSerializer::Deserialize(Reader, OutRoot) || !OutRoot.IsValid())
     {
         OutError = FUtf8String(FString::Printf(TEXT("%s is not valid JSON"), *Path));
         return false;
     }
 
-    const int32 Version = (int32)Root->GetNumberField(TEXT("version"));
+    const int32 Version = (int32)OutRoot->GetNumberField(TEXT("version"));
     if (Version != SidecarVersion)
     {
         OutError = FUtf8String(FString::Printf(
             TEXT("%s was written by sidecar version %d; this host reads version %d. Re-export the project."),
             *Path, Version, SidecarVersion));
+        return false;
+    }
+    return true;
+}
+
+} // namespace
+
+AUTORTFM_DISABLE bool GodotVerse::ReadCookedManifest(const FString& Path, TArray<FString>& OutPackages,
+    int32& OutGeneration, FUtf8String& OutError)
+{
+    TSharedPtr<FJsonObject> Root;
+    if (!ParseSidecar(Path, Root, OutError))
+    {
+        return false;
+    }
+
+    const int32 CookedAbi = (int32)Root->GetNumberField(TEXT("abi"));
+    const FString CookerCommit = Root->GetStringField(TEXT("cookerCommit"));
+    if (CookedAbi != VH_ABI_VERSION || CookerCommit != TEXT(VH_BUILD_GODOT_VERSE_COMMIT))
+    {
+        OutError = FUtf8String(FString::Printf(
+            TEXT("This game's Verse data was cooked by a different build of godot-verse ")
+            TEXT("(cooked %d/%s, host %d/%s). Export the project again."),
+            CookedAbi, *CookerCommit.Left(7), VH_ABI_VERSION,
+            *FString(TEXT(VH_BUILD_GODOT_VERSE_COMMIT)).Left(7)));
+        return false;
+    }
+
+    OutGeneration = (int32)Root->GetNumberField(TEXT("generation"));
+
+    const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
+    if (!Root->TryGetArrayField(TEXT("packages"), Items))
+    {
+        OutError = FUtf8String(FString::Printf(TEXT("%s names no cooked packages"), *Path));
+        return false;
+    }
+    for (const TSharedPtr<FJsonValue>& Item : *Items)
+    {
+        OutPackages.Add(Item->AsString());
+    }
+    return true;
+}
+
+AUTORTFM_DISABLE bool GodotVerse::LoadClassSidecar(const FString& Path, FUtf8String& OutError)
+{
+    TSharedPtr<FJsonObject> Root;
+    if (!ParseSidecar(Path, Root, OutError))
+    {
         return false;
     }
 
@@ -540,6 +641,12 @@ AUTORTFM_DISABLE bool GodotVerse::LoadClassSidecar(const FString& Path, FUtf8Str
             Class.bAbstract = Entry->GetBoolField(TEXT("abstract"));
             Class.bInPublishedProgram = Entry->GetBoolField(TEXT("published"));
             Class.bExportsHarvested = Entry->GetBoolField(TEXT("exportsHarvested"));
+
+            const TSharedPtr<FJsonObject>* Types = nullptr;
+            if (Entry->TryGetObjectField(TEXT("types"), Types))
+            {
+                Class.Types = GodotVerse::ReadDeclaredTypes(*Types);
+            }
 
             const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
             if (Entry->TryGetArrayField(TEXT("methods"), Items))
@@ -560,7 +667,7 @@ AUTORTFM_DISABLE bool GodotVerse::LoadClassSidecar(const FString& Path, FUtf8Str
             {
                 for (const TSharedPtr<FJsonValue>& Item : *Items)
                 {
-                    Class.Exports.Add(ReadExport(Item->AsObject()));
+                    Class.Exports.Add(ReadExportImpl(Item->AsObject()));
                 }
             }
             const TSharedPtr<FJsonObject>* Statics = nullptr;

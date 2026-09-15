@@ -20,7 +20,14 @@ var checks: Checks
 func _ready() -> void:
 	if not OS.get_cmdline_user_args().has("--verse-check"):
 		return
+	# Deferred, because an autoload's _ready runs while the root is still adding the main scene:
+	# remove_child() there is "Parent node is busy adding/removing children" and add_child() is
+	# "Parent node is busy setting up children", so begin() silently got no scene and every check
+	# after the first failed. Measured on the first exported run of this game.
+	_begin.call_deferred()
 
+
+func _begin() -> void:
 	# The main scene is already loading; these checks build their own copy of it, so the one the
 	# game opened has to go first or two rounds run at once.
 	for child in get_tree().root.get_children():

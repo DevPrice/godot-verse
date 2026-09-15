@@ -108,7 +108,9 @@ void VerseExportPlugin::_export_begin(const PackedStringArray &p_features, bool 
 		lines.push_back(settings->globalize_path(sources[i]) + String("\t") +
 				language->module_for_script(sources[i]) + String("\t") + sources[i]);
 	}
-	const String manifest = work.path_join("sources.txt");
+	// Beside the work directory and not in it: the plugin ships that directory whole, and this
+	// file is a list of absolute paths on the author's machine (R-DIST-11).
+	const String manifest = work + String(".sources.txt");
 	{
 		Ref<FileAccess> file = FileAccess::open(manifest, FileAccess::WRITE);
 		if (file.is_null()) {

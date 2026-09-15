@@ -245,7 +245,14 @@ bool VerseRuntime::is_host_loaded() const {
 }
 
 bool VerseRuntime::host_has_compiler() const {
-	return host.is_loaded() && host.CompileProject != nullptr;
+	// vh_host_kind, not "is vh_compile_project resolvable". The runtime host *exports* all eleven
+	// compiler entry points -- the ABI header declares them unconditionally and VerseHost.cpp
+	// defines them for every host kind -- and answers VH_ERR_UNSUPPORTED when one is called, so
+	// the symbol is there in every build and the old test was true in an exported game. What that
+	// cost: build_project took the compiling branch, compiled the twenty one-byte `.verse` stubs
+	// an export ships, published nothing, and every script in the game came up with no class.
+	// Found by running an exported dodge-the-creeps; nothing in the suite had ever launched one.
+	return host.is_loaded() && host.host_kind() == VH_HOST_KIND_EDITOR;
 }
 
 Error VerseRuntime::compile_project(const PackedStringArray &p_globalized_paths, const PackedStringArray &p_module_paths, Dictionary *r_diagnostics_by_path) {

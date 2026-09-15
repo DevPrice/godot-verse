@@ -337,6 +337,7 @@ extern "C" void vh_shutdown(void)
 
     GodotVerse::ResetScriptState();
     GodotVerse::ResetEventLoop();
+    GodotVerse::ReleaseCookedContainers();
     GDebuggerScope = Verse::SocketDebugger::FDebuggerScope{};
 
     FCoreDelegates::OnEnginePreExit.Broadcast();

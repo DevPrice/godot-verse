@@ -172,11 +172,16 @@ AUTORTFM_DISABLE INT32_MAIN_INT32_ARGC_TCHAR_ARGV()
 	// relays six hundred lines of engine boot into the export dialog; with it, a failed cook can
 	// be re-run by hand and made to say why.
 	FString BootArgs(TEXT(" EDITOR -unattended -nullrhi -NoShaderCompile -AssetGatherAll=0 -NoPreviewPlatforms"));
+	bool bKeepLoose = false;
 	for (int32 Index = 1; Index < ArgC; ++Index)
 	{
 		if (FCString::Stricmp(ArgV[Index], TEXT("--verbose")) == 0)
 		{
 			BootArgs += TEXT(" -stdout -FullStdOutLogOutput");
+		}
+		if (FCString::Stricmp(ArgV[Index], TEXT("--keep-loose")) == 0)
+		{
+			bKeepLoose = true;
 		}
 	}
 	if (!BootArgs.Contains(TEXT("-stdout")))
@@ -206,7 +211,7 @@ AUTORTFM_DISABLE INT32_MAIN_INT32_ARGC_TCHAR_ARGV()
 	FCommandLine::Parse(FCommandLine::Get(), Tokens, Switches);
 	if (Tokens.Num() < 2)
 	{
-		Say(TEXT("usage: verse_cook <manifest> <out_dir> [--verbose]"));
+		Say(TEXT("usage: verse_cook <manifest> <out_dir> [--keep-loose] [--verbose]"));
 		Leave(2);
 	}
 
@@ -238,19 +243,64 @@ AUTORTFM_DISABLE INT32_MAIN_INT32_ARGC_TCHAR_ARGV()
 		Leave(2);
 	}
 
+	// The loose cook is the *input* to the container step and is not what ships (D9): a `.uasset`
+	// holding a Verse cell cannot be loaded at all, so shipping both would double a 68 MB payload
+	// with a copy nothing can read. The container step's own scratch files go inside it, so
+	// deleting it takes them too.
+	const FString LooseDir = FPaths::Combine(OutDir, TEXT("_loose"));
+	const FString ContainerDir = FPaths::Combine(OutDir, TEXT("Cooked"));
+
+	// What a previous cook left, removed before this one writes: the export plugin reuses one
+	// directory under the user's cache across every export of a project, and the plugin ships that
+	// directory whole. A 7a cook's loose `Cooked/GodotAttributes/_Verse.uasset` sitting beside this
+	// cook's container is not a leftover -- it is the file the runtime host finds *first*, and the
+	// exported game dies on the VCell wall this phase exists to get past. Found by hand, on the
+	// first export of dodge-the-creeps that should have worked.
+	//
+	// Bounded to what this program writes rather than a wipe of OutDir: the argument is a path
+	// handed in from outside, and "delete the directory you were pointed at" is not something a
+	// tool should do on a typo.
+	for (const TCHAR* Owned : {TEXT("Cooked"), TEXT("Engine"), TEXT("_loose")})
+	{
+		IFileManager::Get().DeleteDirectory(*FPaths::Combine(OutDir, Owned),
+		                                    /*RequireExists*/ false, /*Tree*/ true);
+	}
+	IFileManager::Get().Delete(*FPaths::Combine(OutDir, TEXT("verse_classes.json")),
+	                           /*RequireExists*/ false);
+
 	Say(FString::Printf(TEXT("verse_cook: compiled generation %d; cooking"), Generation));
 	FUtf8String CookError;
-	TArray<FString> Written;
-	if (!GodotVerse::CookProjectPackages(OutDir, Written, CookError))
+	TArray<GodotVerse::FCookedPackageFile> Written;
+	if (!GodotVerse::CookProjectPackages(LooseDir, Written, CookError))
 	{
 		Say(FString::Printf(TEXT("error: %s"), *FString(CookError)));
 		Leave(2);
 	}
 
-	Say(FString::Printf(TEXT("verse_cook: cooked %d package(s); writing the class sidecar"), Written.Num()));
+	Say(FString::Printf(TEXT("verse_cook: cooked %d package(s); building the container"), Written.Num()));
+	const double ContainerStart = FPlatformTime::Seconds();
+	if (!GodotVerse::BuildCookedContainer(LooseDir, ContainerDir, Written, CookError))
+	{
+		Say(FString::Printf(TEXT("error: %s"), *FString(CookError)));
+		Leave(2);
+	}
+	Say(FString::Printf(TEXT("verse_cook: container built in %.2f s"), FPlatformTime::Seconds() - ContainerStart));
+
+	if (!bKeepLoose)
+	{
+		IFileManager::Get().DeleteDirectory(*LooseDir, /*RequireExists*/ false, /*Tree*/ true);
+	}
+
+	Say(TEXT("verse_cook: writing the class sidecar"));
+	TArray<FString> CookedPackages;
+	CookedPackages.Reserve(Written.Num());
+	for (const GodotVerse::FCookedPackageFile& Package : Written)
+	{
+		CookedPackages.Add(Package.PackageName);
+	}
 	const FString SidecarPath = FPaths::Combine(OutDir, TEXT("verse_classes.json"));
 	FUtf8String SidecarError;
-	if (!GodotVerse::WriteClassSidecar(SidecarPath, SidecarError))
+	if (!GodotVerse::WriteClassSidecar(SidecarPath, CookedPackages, Generation, SidecarError))
 	{
 		Say(FString::Printf(TEXT("error: %s"), *FString(SidecarError)));
 		Leave(2);

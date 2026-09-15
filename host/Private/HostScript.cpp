@@ -15,6 +15,9 @@
 #include "ISolarisIde.h"
 #include "ISolarisModule.h"
 #include "IVerseModule.h"
+#include "Dom/JsonObject.h"
+#include "HostSidecar.h"
+#include "Dom/JsonValue.h"
 #include "Misc/FileHelper.h"
 #include "Modules/ModuleManager.h"
 #include "SolBuildDiagnostic.h"
@@ -2148,7 +2151,16 @@ struct FMemberType
     const uLang::CDataDefinition* Member = nullptr;
     /// The class a reference member or parameter holds, and which package declares it. Null and
     /// Other for one of any other type.
+    ///
+    /// The *pointer* is the analysis's, and a runtime host has no semantic program to hold one in:
+    /// everything but GetClassSignals reads only the two names, so those are carried beside it and
+    /// are what a description read back out of the sidecar has.
     const uLang::CClass* ReferenceClass = nullptr;
+    /// `node2d` -- what FindMirroredClass takes. Empty for a type that is not a reference, and the
+    /// test for "is this a reference" everywhere the pointer is not available.
+    FUtf8String ReferenceName;
+    /// `/Godot.org/Godot/node2d` -- what FindGodotClass takes for a script class.
+    FUtf8String ReferenceQualifiedName;
     EClassOrigin ReferenceOrigin = EClassOrigin::Other;
     /// Whether it was declared `?node2d` rather than `node2d`. An *exported member* must be optional
     /// -- the inspector can leave a slot empty, and VH_EXPORT_OBJECT_NOT_OPTIONAL says so -- but a
@@ -2156,8 +2168,10 @@ struct FMemberType
     /// difference is only whether the value handed over is wrapped.
     bool bReferenceIsOption = false;
     /// The mirrored struct a member is declared as, which is where its field names come from --
-    /// there is nothing in a value to read them off.
+    /// there is nothing in a value to read them off. The layout is a generated table every host
+    /// links, so the name beside it is enough to find it again after a round trip through JSON.
     const FStructLayout* Struct = nullptr;
+    FUtf8String StructName;
     /// How many enumerators the declared enum has, or 0 for a member that is not one. The ordinal
     /// that crosses has to be checked against this, and the value in the slot cannot say: an enum
     /// over a native UEnum property is stored as the number itself.
@@ -2175,6 +2189,14 @@ struct FMemberType
     /// above and a generated layout behind it. Held behind a pointer because the layout holds
     /// FMemberTypes of its own, which a struct with a struct field makes recursive.
     TSharedPtr<struct FUserStructLayout> UserStruct;
+};
+
+/// One method's declared parameter and result types, which is what a call needs and what
+/// FMethodDesc -- which carries only what crosses the ABI -- does not have.
+struct FMethodSignatureTypes
+{
+    TArray<FMemberType> Params;
+    FMemberType Result;
 };
 
 /// A project's own struct, as much of it as building one back from the wire needs.
@@ -2242,6 +2264,27 @@ struct FPayloadShape
     FMemberType Whole;
 };
 
+} // namespace
+
+/// The three tables one class's analysis recorded. Defined here rather than in the header because
+/// every value in them is a uLang-shaped description this file owns; the sidecar moves them through
+/// the two converters below and never reaches inside.
+struct GodotVerse::FDeclaredTypes
+{
+    /// Member name -> declared type, derived class first and up the script chain.
+    TMap<FUtf8String, FMemberType> Members;
+    /// Decorated method name -> what it takes and answers.
+    TMap<FUtf8String, FMethodSignatureTypes> Methods;
+    /// Signal member name -> what its payload decomposes into.
+    TMap<FUtf8String, FPayloadShape> Signals;
+};
+
+namespace {
+
+/// The class's recorded tables, or null. What every runtime lookup falls back to, and the whole of
+/// what a host with no semantic program has.
+AUTORTFM_DISABLE const GodotVerse::FDeclaredTypes* RecordedTypes(FUtf8StringView ClassName);
+
 /// `(<enclosing scope path>:)<name>` -- what the VM knows a definition as. Defined below, beside the
 /// lookup that consumes it.
 AUTORTFM_DISABLE FUtf8String DecoratedNameOf(const uLang::CDefinition& Definition);
@@ -2286,6 +2329,7 @@ AUTORTFM_DISABLE FMemberType DescribeType(const uLang::CTypeBase* Type, const uL
         if (Layout)
         {
             Result.Struct = Layout;
+            Result.StructName = FUtf8String(Name);
         }
         else if (UserStruct)
         {
@@ -2298,6 +2342,8 @@ AUTORTFM_DISABLE FMemberType DescribeType(const uLang::CTypeBase* Type, const uL
         else if (bIsOption || !bIsContainer)
         {
             Result.ReferenceClass = Declared;
+            Result.ReferenceName = FUtf8String(Name);
+            Result.ReferenceQualifiedName = QualifiedNameOf(*Declared);
             Result.ReferenceOrigin = ClassOriginOf(*Declared, Program);
             Result.bReferenceIsOption = bIsOption;
         }
@@ -2359,6 +2405,16 @@ AUTORTFM_DISABLE FMemberType DescribeMemberType(FUtf8StringView ClassName, FUtf8
     FMemberType Result;
     if (!GIde.IsValid())
     {
+        // A runtime host's whole answer. The table was recorded by the cook's own analysis and read
+        // back out of the sidecar; without it every field read and write in an exported game is a
+        // description of nothing, which reads as "wrong type" rather than as "no compiler".
+        if (const GodotVerse::FDeclaredTypes* const Recorded = RecordedTypes(ClassName))
+        {
+            if (const FMemberType* const Found = Recorded->Members.Find(FUtf8String(FieldName)))
+            {
+                return *Found;
+            }
+        }
         return Result;
     }
     const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
@@ -2754,7 +2810,7 @@ AUTORTFM_DISABLE bool ValueToWire(Verse::FRunningContext Context,
     }
     else if (Value.IsFalse())
     {
-        bIsReference = Declared.ReferenceClass != nullptr;
+        bIsReference = !Declared.ReferenceName.IsEmpty();
     }
     else if (Declared.Described.VariantTag == VH_VARIANT_OBJECT)
     {
@@ -3434,7 +3490,7 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
     // here -- and only a mirrored class can be built from a handle alone. A parameter typed as one
     // of the project's own classes has no spelling on this wire: the object it should receive
     // already exists as some node's instance, and there is nothing in a handle to find it by.
-    if (Declared.ReferenceClass != nullptr)
+    if (!Declared.ReferenceName.IsEmpty())
     {
         // A parameter typed as one of the project's own classes still has no spelling on this
         // wire: the object it should receive is some node's own instance, and a handle alone does
@@ -3462,7 +3518,7 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
         // script's own object, which is what makes `if (M := mob[Body])` inside the handler work --
         // the whole point of the cast. The declared class is then the *lower* bound, and a handle
         // whose object does not meet it is VH_ERR_ARGUMENT rather than a raise.
-        UClass* const DeclaredClass = FindMirroredClass(FUtf8StringView(Declared.ReferenceClass->AsNameCString()));
+        UClass* const DeclaredClass = FindMirroredClass(FUtf8StringView(Declared.ReferenceName));
         UObject* const Referenced = GodotVerse::ObjectForHandle(Handle, DeclaredClass);
         if (!Referenced || !DeclaredClass || !Referenced->IsA(DeclaredClass))
         {
@@ -3745,7 +3801,7 @@ AUTORTFM_DISABLE bool WriteFieldOf(UObject* Object, FUtf8StringView FieldName, c
         // Built before the VM scope is entered, because constructing it runs the class's Verse
         // constructor through UVerseClass::PostInitInstance, which takes a context of its own.
         const int64 Handle = Value.Type == VH_TYPE_INT ? Value.Int : 0;
-        UClass* const DeclaredClass = FindMirroredClass(FUtf8StringView(Declared.ReferenceClass->AsNameCString()));
+        UClass* const DeclaredClass = FindMirroredClass(FUtf8StringView(Declared.ReferenceName));
         UObject* Referenced = Handle != 0 ? GodotVerse::ObjectForHandle(Handle, DeclaredClass) : nullptr;
         if (Handle != 0 && (!Referenced || !Referenced->IsA(DeclaredClass)))
         {
@@ -3871,7 +3927,7 @@ AUTORTFM_DISABLE bool GodotVerse::WriteInstanceFieldInstance(FInstance* Instance
 
     UObject* Referenced = Value && Value->Object.IsValid() ? Value->Object.Get() : nullptr;
     const FMemberType Declared = DescribeMemberType(QualifiedClassName(Instance->Object->GetClass()), FieldName);
-    if (!Declared.ReferenceClass)
+    if (Declared.ReferenceName.IsEmpty())
     {
         return false;
     }
@@ -3882,8 +3938,8 @@ AUTORTFM_DISABLE bool GodotVerse::WriteInstanceFieldInstance(FInstance* Instance
     if (Referenced)
     {
         UClass* MemberClass = Declared.ReferenceOrigin == EClassOrigin::Script
-            ? FindGodotClass(FUtf8StringView(QualifiedNameOf(*Declared.ReferenceClass)))
-            : FindMirroredClass(FUtf8StringView(Declared.ReferenceClass->AsNameCString()));
+            ? FindGodotClass(FUtf8StringView(Declared.ReferenceQualifiedName))
+            : FindMirroredClass(FUtf8StringView(Declared.ReferenceName));
         if (!MemberClass || !Referenced->GetClass()->IsChildOf(MemberClass))
         {
             return false;
@@ -4855,11 +4911,13 @@ AUTORTFM_DISABLE void BindSignals(UObject* Instance, FUtf8StringView ClassName, 
     }
 
     const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde.IsValid() ? GIde->GetBuildManager() : nullptr;
-    if (!BuildManager.IsValid())
+    const uLang::CSemanticProgram* const Program =
+        BuildManager.IsValid() ? &*BuildManager->GetProgramContext()._Program : nullptr;
+    const GodotVerse::FDeclaredTypes* const Recorded = Program ? nullptr : RecordedTypes(ClassName);
+    if (!Program && !Recorded)
     {
         return;
     }
-    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
 
     for (const GodotVerse::FSignalDesc& Signal : Signals)
     {
@@ -4880,9 +4938,16 @@ AUTORTFM_DISABLE void BindSignals(UObject* Instance, FUtf8StringView ClassName, 
         Binding.Name = Signal.Name;
         Binding.Reject = Signal.Reject;
         Binding.RejectDetail = Signal.RejectDetail;
-        if (Declared.ReferenceClass)
+        if (Program && Declared.ReferenceClass)
         {
             DescribePayload(SignalPayloadType(*Declared.ReferenceClass), *Program, Binding.Payload);
+        }
+        else if (Recorded)
+        {
+            if (const FPayloadShape* const Shape = Recorded->Signals.Find(Signal.Name))
+            {
+                Binding.Payload = *Shape;
+            }
         }
 
         const int64 Id = GNextSignalId++;
@@ -6999,6 +7064,360 @@ AUTORTFM_DISABLE void CollectSnapshotClassNames(const uLang::CModule& Module,
     }
 }
 
+
+} // namespace
+
+namespace {
+
+// --- the JSON round trip ----------------------------------------------------------------------
+//
+// One shape, written and read by two functions that have to be changed together. Every field that
+// survives is one a *runtime* lookup reads: the uLang pointers (FMemberType::ReferenceClass and
+// ::Member, FPayloadShape::StructClass) are the analysis's own and are deliberately dropped --
+// nothing outside an analysis reads them, which is what made carrying the rest possible at all.
+
+AUTORTFM_DISABLE TSharedPtr<FJsonObject> WriteMemberType(const FMemberType& Type);
+AUTORTFM_DISABLE FMemberType ReadMemberType(const TSharedPtr<FJsonObject>& Object);
+
+AUTORTFM_DISABLE TSharedPtr<FJsonObject> WriteMemberType(const FMemberType& Type)
+{
+    TSharedPtr<FJsonObject> Object = MakeShared<FJsonObject>();
+    Object->SetObjectField(TEXT("described"), GodotVerse::WriteExportDesc(Type.Described));
+    if (!Type.ReferenceName.IsEmpty())
+    {
+        Object->SetStringField(TEXT("ref"), FString(Type.ReferenceName));
+        Object->SetStringField(TEXT("refPath"), FString(Type.ReferenceQualifiedName));
+        Object->SetNumberField(TEXT("refOrigin"), (int32)Type.ReferenceOrigin);
+        Object->SetBoolField(TEXT("refOption"), Type.bReferenceIsOption);
+    }
+    if (!Type.StructName.IsEmpty())
+    {
+        Object->SetStringField(TEXT("struct"), FString(Type.StructName));
+    }
+    if (Type.EnumeratorCount > 0)
+    {
+        Object->SetNumberField(TEXT("enumerators"), Type.EnumeratorCount);
+        Object->SetStringField(TEXT("enum"), FString(Type.EnumerationName));
+    }
+    if (Type.UserStruct.IsValid())
+    {
+        TSharedPtr<FJsonObject> Layout = MakeShared<FJsonObject>();
+        Layout->SetStringField(TEXT("name"), FString(Type.UserStruct->DecoratedName));
+        TArray<TSharedPtr<FJsonValue>> Names;
+        TArray<TSharedPtr<FJsonValue>> Keys;
+        TArray<TSharedPtr<FJsonValue>> Types;
+        for (const FUtf8String& Name : Type.UserStruct->FieldNames)
+        {
+            Names.Add(MakeShared<FJsonValueString>(FString(Name)));
+        }
+        for (const FUtf8String& Key : Type.UserStruct->FieldKeys)
+        {
+            Keys.Add(MakeShared<FJsonValueString>(FString(Key)));
+        }
+        for (const FMemberType& Field : Type.UserStruct->FieldTypes)
+        {
+            Types.Add(MakeShared<FJsonValueObject>(WriteMemberType(Field)));
+        }
+        Layout->SetArrayField(TEXT("fieldNames"), Names);
+        Layout->SetArrayField(TEXT("fieldKeys"), Keys);
+        Layout->SetArrayField(TEXT("fieldTypes"), Types);
+        Object->SetObjectField(TEXT("userStruct"), Layout);
+    }
+    return Object;
+}
+
+AUTORTFM_DISABLE FMemberType ReadMemberType(const TSharedPtr<FJsonObject>& Object)
+{
+    FMemberType Type;
+    if (!Object.IsValid())
+    {
+        return Type;
+    }
+
+    const TSharedPtr<FJsonObject>* Described = nullptr;
+    if (Object->TryGetObjectField(TEXT("described"), Described))
+    {
+        Type.Described = GodotVerse::ReadExportDesc(*Described);
+    }
+
+    FString Text;
+    if (Object->TryGetStringField(TEXT("ref"), Text))
+    {
+        Type.ReferenceName = FUtf8String(Text);
+        Type.ReferenceQualifiedName = FUtf8String(Object->GetStringField(TEXT("refPath")));
+        Type.ReferenceOrigin = (EClassOrigin)(int32)Object->GetNumberField(TEXT("refOrigin"));
+        Type.bReferenceIsOption = Object->GetBoolField(TEXT("refOption"));
+    }
+    if (Object->TryGetStringField(TEXT("struct"), Text))
+    {
+        Type.StructName = FUtf8String(Text);
+        // The layout itself is a generated table every host links, so it is found again rather
+        // than carried: what the sidecar has to remember is only which one.
+        Type.Struct = FindStructLayout(FUtf8StringView(Type.StructName));
+    }
+    if (Object->TryGetStringField(TEXT("enum"), Text))
+    {
+        Type.EnumerationName = FUtf8String(Text);
+        Type.EnumeratorCount = (int32)Object->GetNumberField(TEXT("enumerators"));
+    }
+
+    const TSharedPtr<FJsonObject>* Layout = nullptr;
+    if (Object->TryGetObjectField(TEXT("userStruct"), Layout))
+    {
+        Type.UserStruct = MakeShared<FUserStructLayout>();
+        Type.UserStruct->DecoratedName = FUtf8String((*Layout)->GetStringField(TEXT("name")));
+        const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
+        if ((*Layout)->TryGetArrayField(TEXT("fieldNames"), Items))
+        {
+            for (const TSharedPtr<FJsonValue>& Item : *Items)
+            {
+                Type.UserStruct->FieldNames.Add(FUtf8String(Item->AsString()));
+            }
+        }
+        if ((*Layout)->TryGetArrayField(TEXT("fieldKeys"), Items))
+        {
+            for (const TSharedPtr<FJsonValue>& Item : *Items)
+            {
+                Type.UserStruct->FieldKeys.Add(FUtf8String(Item->AsString()));
+            }
+        }
+        if ((*Layout)->TryGetArrayField(TEXT("fieldTypes"), Items))
+        {
+            for (const TSharedPtr<FJsonValue>& Item : *Items)
+            {
+                Type.UserStruct->FieldTypes.Add(ReadMemberType(Item->AsObject()));
+            }
+        }
+    }
+    return Type;
+}
+
+AUTORTFM_DISABLE TSharedPtr<FJsonObject> WritePayloadShape(const FPayloadShape& Shape)
+{
+    TSharedPtr<FJsonObject> Object = MakeShared<FJsonObject>();
+    Object->SetNumberField(TEXT("kind"), (int32)Shape.Kind);
+    Object->SetNumberField(TEXT("reject"), Shape.Reject);
+    Object->SetStringField(TEXT("rejectDetail"), FString(Shape.RejectDetail));
+    Object->SetObjectField(TEXT("whole"), WriteMemberType(Shape.Whole));
+    TArray<TSharedPtr<FJsonValue>> Args;
+    for (const FPayloadArg& Arg : Shape.Args)
+    {
+        TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+        Entry->SetStringField(TEXT("name"), FString(Arg.Name));
+        Entry->SetStringField(TEXT("key"), FString(Arg.FieldKey));
+        Entry->SetObjectField(TEXT("type"), WriteMemberType(Arg.Type));
+        Args.Add(MakeShared<FJsonValueObject>(Entry));
+    }
+    Object->SetArrayField(TEXT("args"), Args);
+    return Object;
+}
+
+AUTORTFM_DISABLE FPayloadShape ReadPayloadShape(const TSharedPtr<FJsonObject>& Object)
+{
+    FPayloadShape Shape;
+    if (!Object.IsValid())
+    {
+        return Shape;
+    }
+    Shape.Kind = (EPayloadShape)(uint8)(int32)Object->GetNumberField(TEXT("kind"));
+    Shape.Reject = (int32)Object->GetNumberField(TEXT("reject"));
+    Shape.RejectDetail = FUtf8String(Object->GetStringField(TEXT("rejectDetail")));
+    const TSharedPtr<FJsonObject>* Whole = nullptr;
+    if (Object->TryGetObjectField(TEXT("whole"), Whole))
+    {
+        Shape.Whole = ReadMemberType(*Whole);
+    }
+    const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
+    if (Object->TryGetArrayField(TEXT("args"), Items))
+    {
+        for (const TSharedPtr<FJsonValue>& Item : *Items)
+        {
+            const TSharedPtr<FJsonObject> Entry = Item->AsObject();
+            FPayloadArg& Arg = Shape.Args.AddDefaulted_GetRef();
+            Arg.Name = FUtf8String(Entry->GetStringField(TEXT("name")));
+            Arg.FieldKey = FUtf8String(Entry->GetStringField(TEXT("key")));
+            const TSharedPtr<FJsonObject>* Type = nullptr;
+            if (Entry->TryGetObjectField(TEXT("type"), Type))
+            {
+                Arg.Type = ReadMemberType(*Type);
+            }
+        }
+    }
+    return Shape;
+}
+
+} // namespace
+
+AUTORTFM_DISABLE TSharedPtr<FJsonObject> GodotVerse::WriteDeclaredTypes(const FDeclaredTypes& Types)
+{
+    TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+
+    TSharedRef<FJsonObject> Members = MakeShared<FJsonObject>();
+    for (const TPair<FUtf8String, FMemberType>& Pair : Types.Members)
+    {
+        Members->SetObjectField(FString(Pair.Key), WriteMemberType(Pair.Value));
+    }
+    Root->SetObjectField(TEXT("members"), Members);
+
+    TSharedRef<FJsonObject> Methods = MakeShared<FJsonObject>();
+    for (const TPair<FUtf8String, FMethodSignatureTypes>& Pair : Types.Methods)
+    {
+        TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+        TArray<TSharedPtr<FJsonValue>> Params;
+        for (const FMemberType& Param : Pair.Value.Params)
+        {
+            Params.Add(MakeShared<FJsonValueObject>(WriteMemberType(Param)));
+        }
+        Entry->SetArrayField(TEXT("params"), Params);
+        Entry->SetObjectField(TEXT("result"), WriteMemberType(Pair.Value.Result));
+        Methods->SetObjectField(FString(Pair.Key), Entry);
+    }
+    Root->SetObjectField(TEXT("methods"), Methods);
+
+    TSharedRef<FJsonObject> Signals = MakeShared<FJsonObject>();
+    for (const TPair<FUtf8String, FPayloadShape>& Pair : Types.Signals)
+    {
+        Signals->SetObjectField(FString(Pair.Key), WritePayloadShape(Pair.Value));
+    }
+    Root->SetObjectField(TEXT("signals"), Signals);
+
+    return Root;
+}
+
+AUTORTFM_DISABLE TSharedPtr<GodotVerse::FDeclaredTypes> GodotVerse::ReadDeclaredTypes(
+    const TSharedPtr<FJsonObject>& Object)
+{
+    if (!Object.IsValid())
+    {
+        return nullptr;
+    }
+    TSharedPtr<FDeclaredTypes> Types = MakeShared<FDeclaredTypes>();
+
+    const TSharedPtr<FJsonObject>* Section = nullptr;
+    if (Object->TryGetObjectField(TEXT("members"), Section))
+    {
+        for (const auto& Pair : (*Section)->Values)
+        {
+            Types->Members.Add(FUtf8String(Pair.Key), ReadMemberType(Pair.Value->AsObject()));
+        }
+    }
+    if (Object->TryGetObjectField(TEXT("methods"), Section))
+    {
+        for (const auto& Pair : (*Section)->Values)
+        {
+            const TSharedPtr<FJsonObject> Entry = Pair.Value->AsObject();
+            FMethodSignatureTypes Signature;
+            const TArray<TSharedPtr<FJsonValue>>* Params = nullptr;
+            if (Entry->TryGetArrayField(TEXT("params"), Params))
+            {
+                for (const TSharedPtr<FJsonValue>& Param : *Params)
+                {
+                    Signature.Params.Add(ReadMemberType(Param->AsObject()));
+                }
+            }
+            const TSharedPtr<FJsonObject>* Result = nullptr;
+            if (Entry->TryGetObjectField(TEXT("result"), Result))
+            {
+                Signature.Result = ReadMemberType(*Result);
+            }
+            Types->Methods.Add(FUtf8String(Pair.Key), MoveTemp(Signature));
+        }
+    }
+    if (Object->TryGetObjectField(TEXT("signals"), Section))
+    {
+        for (const auto& Pair : (*Section)->Values)
+        {
+            Types->Signals.Add(FUtf8String(Pair.Key), ReadPayloadShape(Pair.Value->AsObject()));
+        }
+    }
+    return Types;
+}
+
+namespace {
+
+/// The declared types of one class, recorded while a semantic program still exists.
+///
+/// Everything here is re-derived per call in an editor host, off the program the last analysis
+/// built. A runtime host has no program and no way to make one, so this runs once per analysis and
+/// the sidecar carries the answer into the exported game. The three tables are the three questions
+/// the VM cannot answer for itself: what type is this member, what does this method take and
+/// answer, and what does this signal's payload decompose into.
+AUTORTFM_DISABLE void CollectDeclaredTypes(FUtf8StringView ClassName, GodotVerse::FDeclaredTypes& Out)
+{
+    if (!GIde.IsValid())
+    {
+        return;
+    }
+    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
+    if (!BuildManager.IsValid())
+    {
+        return;
+    }
+    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
+
+    const FUtf8String ClassPath = FUtf8String(ScriptVersePath) + UTF8TEXT("/") + FUtf8String(ClassName);
+    const uLang::CClass* const Class = Program->FindDefinitionByVersePath<uLang::CClass>(
+        FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath));
+    if (!Class)
+    {
+        return;
+    }
+
+    // The same chain DescribeMemberType walks, and stopping where it stops: above the script
+    // package the members are Godot's own properties, which the mirror describes and this does not.
+    // Derived class first, so a member a subclass redeclares wins the way a lookup from the
+    // subclass would have found it.
+    for (const uLang::CClass* Cursor = Class;
+         Cursor != nullptr && ClassOriginOf(*Cursor, *Program) == EClassOrigin::Script;
+         Cursor = Cursor->GetSuperClass())
+    {
+        for (const uLang::TSRef<uLang::CDataDefinition>& Member : Cursor->GetDefinitionsOfKind<uLang::CDataDefinition>())
+        {
+            const FUtf8String Name(Member->AsNameCString());
+            if (Out.Members.Contains(Name))
+            {
+                continue;
+            }
+            FMemberType Described = DescribeType(Member->GetType(), *Program);
+            if (Described.ReferenceClass && IsSignalClass(*Described.ReferenceClass))
+            {
+                FPayloadShape Shape;
+                DescribePayload(SignalPayloadType(*Described.ReferenceClass), *Program, Shape);
+                Out.Signals.Add(Name, MoveTemp(Shape));
+            }
+            Out.Members.Add(Name, MoveTemp(Described));
+        }
+    }
+
+    // The class's own functions, which is the set InstanceCall looks a method up in.
+    for (const uLang::TSRef<uLang::CFunction>& Function : Class->GetDefinitionsOfKind<uLang::CFunction>())
+    {
+        const uLang::CFunctionType* const Type = Function->_Signature.GetFunctionType();
+        if (!Type)
+        {
+            continue;
+        }
+        FMethodSignatureTypes Signature;
+        for (const uLang::CDataDefinition* Param : Function->_Signature.GetParams())
+        {
+            Signature.Params.Add(Param ? DescribeType(Param->GetType(), *Program) : FMemberType{});
+        }
+        Signature.Result = DescribeType(&Type->GetReturnType(), *Program);
+        Out.Methods.Add(FULangConversionUtils::ULangStrToFUtf8String(Function->GetDecoratedName()),
+                        MoveTemp(Signature));
+    }
+}
+
+AUTORTFM_DISABLE const GodotVerse::FDeclaredTypes* RecordedTypes(FUtf8StringView ClassName)
+{
+    if (!GSnapshot)
+    {
+        return nullptr;
+    }
+    const GodotVerse::FAnalysisSnapshot::FClass* const Entry = GSnapshot->Classes.Find(FUtf8String(ClassName));
+    return Entry ? Entry->Types.Get() : nullptr;
+}
+
 AUTORTFM_DISABLE void TakeAnalysisSnapshot()
 {
     const double Started = FPlatformTime::Seconds();
@@ -7034,6 +7453,10 @@ AUTORTFM_DISABLE void TakeAnalysisSnapshot()
 
         GetClassMethodsLive(ClassName, Entry.Methods);
         GetClassSignalsLive(ClassName, Entry.Signals);
+
+        // The declared types, which are the analysis's to record and nothing else's to re-derive.
+        Entry.Types = MakeShared<GodotVerse::FDeclaredTypes>();
+        CollectDeclaredTypes(FUtf8StringView(ClassName), *Entry.Types);
         Entry.bExportsHarvested = GetClassExportsLive(ClassName, Entry.Exports);
         ClassMembersLive(ClassName, Entry.Members);
 
@@ -7384,33 +7807,45 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
         return VH_ERR_NOT_FOUND;
     }
 
-    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
-    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
-    const uLang::CClass* const Class = Program->FindDefinitionByVersePath<uLang::CClass>(
-        FULangConversionUtils::FUtf8StringViewToULangStringView(FUtf8String(ScriptVersePath) + UTF8TEXT("/") + ClassName));
-
     // Parameter descriptions are rebuilt here rather than carried on FMethodDesc, which holds only
     // what crosses the ABI. A description carries uLang pointers, and those are owned by a semantic
-    // program the next analysis replaces.
+    // program the next analysis replaces -- so an editor host reads the program it has, and a
+    // runtime host, which has none and can never have one, reads the table the cook recorded.
     TArray<FMemberType> ParamTypes;
     FMemberType ResultTypeDesc;
-    if (Class)
+    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager =
+        GIde.IsValid() ? GIde->GetBuildManager() : nullptr;
+    if (BuildManager.IsValid())
     {
-        for (const uLang::TSRef<uLang::CFunction>& Function : Class->GetDefinitionsOfKind<uLang::CFunction>())
+        const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
+        const uLang::CClass* const Class = Program->FindDefinitionByVersePath<uLang::CClass>(
+            FULangConversionUtils::FUtf8StringViewToULangStringView(FUtf8String(ScriptVersePath) + UTF8TEXT("/") + ClassName));
+        if (Class)
         {
-            if (!FULangConversionUtils::ULangStrToFUtf8String(Function->GetDecoratedName()).Equals(FUtf8String(DecoratedName)))
+            for (const uLang::TSRef<uLang::CFunction>& Function : Class->GetDefinitionsOfKind<uLang::CFunction>())
             {
-                continue;
+                if (!FULangConversionUtils::ULangStrToFUtf8String(Function->GetDecoratedName()).Equals(FUtf8String(DecoratedName)))
+                {
+                    continue;
+                }
+                for (const uLang::CDataDefinition* Param : Function->_Signature.GetParams())
+                {
+                    ParamTypes.Add(Param ? DescribeType(Param->GetType(), *Program) : FMemberType{});
+                }
+                if (const uLang::CFunctionType* const Type = Function->_Signature.GetFunctionType())
+                {
+                    ResultTypeDesc = DescribeType(&Type->GetReturnType(), *Program);
+                }
+                break;
             }
-            for (const uLang::CDataDefinition* Param : Function->_Signature.GetParams())
-            {
-                ParamTypes.Add(Param ? DescribeType(Param->GetType(), *Program) : FMemberType{});
-            }
-            if (const uLang::CFunctionType* const Type = Function->_Signature.GetFunctionType())
-            {
-                ResultTypeDesc = DescribeType(&Type->GetReturnType(), *Program);
-            }
-            break;
+        }
+    }
+    else if (const GodotVerse::FDeclaredTypes* const Recorded = RecordedTypes(ClassName))
+    {
+        if (const FMethodSignatureTypes* const Signature = Recorded->Methods.Find(FUtf8String(DecoratedName)))
+        {
+            ParamTypes = Signature->Params;
+            ResultTypeDesc = Signature->Result;
         }
     }
     if (ParamTypes.Num() != Method->Params.Num())

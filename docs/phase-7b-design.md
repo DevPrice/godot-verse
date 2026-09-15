@@ -1,8 +1,11 @@
 # Phase 7b — Loading what the cooker wrote
 
-**Status:** Draft 1 · 2026-09-14 · **not built.** Written *before* the work, from an interview held
-against the Unreal sources directly. **§13 is empty and is where the implementing agent writes what
-turned out wrong**; until then §1 and §3 are the record.
+**Status:** 2026-09-14 · **partly built, and stopped at a second wall.** §1 and §3 were written
+*before* the work; **§13 is what building it corrected and is the section to read first.** Stages 1–3
+are built and the VCell wall is down — a cooked Verse package loads, its cells intact, and a script's
+own code runs in an exported game. Stages 4–6 are not built: the first call a script makes into the
+*mirror* is fatal (§13.8), and there is nothing worth asserting about an exported run until it is
+not.
 
 **Prerequisite: Phase 7a is complete** — built 2026-09-14, ABI **8.2**. `verse_cook.exe` cooks a
 project to loose `.uasset` files, the export plugin ships them in a data directory beside the
@@ -24,11 +27,10 @@ R-PLAT-5), §14's **OQ-18** (opened by this phase); `roadmap.md` "Phase 7b".
 **§1 is the decisions.** D1–D12 came out of one interview. Every row says what it rests on. Do not
 relitigate them; if a spike contradicts one, record it in §13 and raise it.
 
-**§2 is the spikes, and they run before any stage is written.** S-8a and S-8b decide whether this
-phase is buildable at all. 7a is the argument for putting them first: its S-5 ran *after* stage 1,
-so a working cooker was built behind a wall nobody had checked for. **If both spikes fail, stop and
-go back to Devin** (D1) — do not escalate to an engine patch, a Zen server or a hand-rolled loader
-inside this phase.
+**§2 is the spikes, and they ran before any stage was written.** Both passed; §13.1 and §13.2 are
+what they answered. Putting them first was right and did not go far enough: the wall that stopped the
+phase is *behind* both of them, at the first mirrored call, and no spike this design named would have
+found it.
 
 **§3 is what the engine actually offers**, as read rather than as remembered, with the file and line
 each fact came from. It is the factual base under every stage and it corrects §13.7 in two places.
@@ -37,7 +39,9 @@ each fact came from. It is the factual base under every stage and it corrects §
 **§10 is the measurements owed**, **§11 the ABI delta** (expected: none), **§12 the tests**,
 **§14 what is deliberately not built**, and **§15 the exit**.
 
-**§13 is not written.** When the phase is built, it is where the design is corrected.
+**§13 is where the design is corrected, and is written.** Read it before §1 or §3: two of §1's
+rows did not survive contact, §3 was short of one fact that cost two hours, and the phase stopped at
+a wall §13.8 describes.
 
 ---
 
@@ -411,8 +415,214 @@ DLLs rebuild, and `run_tests.py --build` follows.
 
 ## 13. What building this corrected
 
-*Not written. When the phase is built, this is where the design is corrected — what the spikes
-answered, what the stages cost, and which rows of §1 did not survive.*
+**Status: the wall this phase was written to get past is down, and a second one of the same family
+is standing behind it.** Both spikes passed, stages 1–3 are built, `run_tests.py` reports four green
+layers, and an exported `dodge-the-creeps` boots, loads its cooked Verse, attaches its scripts and
+runs their own code. What it cannot do is call *Godot* — the first mirrored call takes the process
+down. §13.8 is that wall; everything before it is what is settled.
+
+### 13.1 S-8a — yes, and not through the entry point D1 named
+
+`CreateIoStoreContainerFiles` builds the container and carries the cells, as §3.3 said it would. What
+D1 did not know is how much has to be *manufactured* to call it, and that it does not read the
+command line it is handed:
+
+- **It parses `FCommandLine::Get()`, not its own argument** (`IoStoreUtilities.cpp:10338-10360` reads
+  exactly one switch from `CmdLine` and every other one from the process's line). So the cooker
+  appends its switches to its own command line, calls, and puts the original back. One call, at the
+  end, with nothing after it but the exit.
+- **Three files have to exist that a cook of this shape does not produce.** A `-ScriptObjects` file,
+  which `FPackageStoreOptimizer::Initialize()` + `CreateScriptObjectsBuffer()` produce from the
+  process's own registered `/Script/` objects. A `-Commands` list and the `-ResponseFile` it names,
+  which are UnrealPak's plain-text formats. And a `-PackageStoreManifest`, which is a **compact
+  binary oplog** — but only one field of it is read on this path: a legacy cooked `.uasset` carries
+  no package name, so `FindOrAddLegacyPackage` asks the package store for one by filename
+  (`IoStoreUtilities.cpp:1742`) and silently drops any file it cannot name. Everything else an oplog
+  entry can hold — imports, shader maps, chunk hashes — is rebuilt from the cooked header. So the
+  manifest this cooker writes is a package name and a chunk id per package, and nothing else.
+- **`FPackageStoreOptimizer::Initialize(ScriptObjectsBuffer)` leaves `ScriptCellsMap` empty**, because
+  `CreateScriptObjectsBuffer` does not serialise it — the cell half is built only by the no-argument
+  `Initialize()`, out of `$BuiltIn`. It costs one "referencing missing script import" warning per
+  built-in cell and nothing else: `ProcessImports` writes the `FPackageObjectIndex` from the verse
+  path either way (`PackageStoreOptimizer.cpp:470-481`).
+- **`IoStoreUtilities` is a `Developer` module and `FPackageStoreOptimizer` is in its `Internal`
+  folder**, so the cooker takes one more `PrivateIncludePaths` line, exactly as it already did for
+  CoreUObject's.
+
+**Cost:** the container step is **0.5–0.7 s** over a 68 MB loose cook, every time it has been run.
+
+**And the payload is 7.3 MB, not 68.** Uncompressed the container is *larger* than the loose cook it
+came from — 76 MB — because the zen header replaces the legacy one and nothing is packed. With
+`-compressionformats=Oodle` on the command line and `-compress` per response-file entry it is
+**7.3 MB**, a tenth of 7a's, and the container step does not get measurably slower. D3's "the
+mirror's 67 MB ships as it is" is still true of what is *cooked* and no longer true of what ships.
+
+**The global container is not needed and is not shipped** (§3.5, measured: the game loads with
+`global.utoc`/`.ucas` deleted). `CreateIoStoreContainerFiles` will not run without producing one, so
+it is written beside the loose cook and thrown away with it. D9's directory therefore holds two files
+and not four.
+
+### 13.2 S-8b — yes, and the mount needed one line nothing in this host was calling
+
+The mount is the iostore half of `FPakPlatformFile::Mount` with the pak half taken out: make the
+file backend, `FIoDispatcher::Mount` it, make an `FFilePackageStoreBackend`, `FPackageStore::Mount`
+it, then `IFileIoDispatcherBackend::Mount` each `.utoc`. Twenty lines, and both backends live in
+PakFile's `Private`/`Internal` folders, which a monolithic link makes reachable and two
+`PrivateIncludePaths` lines make includable. §3.4 was right that this is not an editor-only path.
+
+**What §3.4 did not have is that the I/O dispatcher is never brought up in this host.**
+`FIoDispatcher::Initialize()` only *constructs* it; `InitializePostSettings()` is what initialises
+the backends and starts the dispatcher thread, and LaunchEngineLoop calls that only under
+`USE_IO_DISPATCHER`, which is `WITH_ENGINE || WITH_IOSTORE_IN_EDITOR || !(IS_PROGRAM || WITH_EDITOR)`
+(`LaunchEngineLoop.cpp:98-99`) — all three false for a Program with no Engine. The only thing that
+had ever touched the dispatcher was the async loader's own `Initialize()`
+(`AsyncPackageLoader.cpp:195-200`), which allocates it and stops.
+
+So `FIoDispatcher::IsInitialized()` answered **true** and the dispatcher was not running. `Mount`
+took the backend, skipped `Backend->Initialize` and skipped `StartThread`
+(`IoDispatcher.cpp:643-659`), and every read was issued and never completed: **no error, no timeout,
+a `LoadPackage` that stays queued forever.** Two hours went into that, most of it into the async
+loading thread, which was not it. `FIoDispatcher::InitializePostSettings()` before the mount is the
+whole fix, and it is idempotent.
+
+**Pass criteria, in the design's order:** `DoesChunkExist` true; `FPackageStore` resolves
+`/GodotAttributes/_Verse`; `LoadPackage` returns a package with **no `Missing VClass for VerseClass`
+fatal** — which is the line that says the cells arrived, and the sentence this phase existed to
+delete; `AddCompiledUPackage` accepts it and a class from the project's own package instantiates.
+
+**The backends must be released before `AppExit`.** They are allocated through GMalloc and a
+file-static `TSharedPtr` holding one into static destruction is a segfault after everything has
+worked — which is what the first clean run did. `ReleaseCookedContainers()` is called from
+`vh_shutdown`, and the comment already in `vh_shutdown` said why before it existed.
+
+### 13.3 S-9 — yes, and the assertion list is four rows shorter
+
+`GForeignEngineDir` wants a directory with a `Binaries/` child and nothing else
+(`GenericPlatformMisc.cpp:1408-1415`), so `<data>/Engine/Binaries` still does its job with
+`<data>/Engine/Content` gone. `EXPORT_DATA_FILES` is two container files, the marker and the sidecar.
+
+### 13.4 A container carries package *ids*, so the names come from the sidecar
+
+Nothing in the design anticipated this and it is load-bearing. `FPackageName::DoesPackageExistEx`
+answers None for a path outside a registered mount point before it ever asks the I/O dispatcher
+(`PackageName.cpp:2474-2477`), so mount points still have to be registered by name — and with the
+loose tree gone there are no directories left to read the names off. An `FIoContainerHeader` carries
+`FPackageId`s, which are hashes.
+
+So the sidecar carries the list: `verse_classes.json` gains `packages`, and
+`RegisterCookedMountPoints` reads it before it has loaded anything. That is also where D6's stamp
+went, and the sidecar version is **2**.
+
+### 13.5 D6's stamp is baked into the binaries, not read from a file beside them
+
+The design had the cooker read its provenance out of `verse_host.build.txt`. A game directory is
+exactly where such a file goes missing, and a stamp that can be absent is not a stamp — so
+`tools/build_host.py` generates `host_build_id.gen.h` (the godot-verse commit and the engine commit)
+into `bin/` and stages it into the host's `Private/` the way it already stages the ABI header. It is
+rewritten only when it changes, so it costs no relink.
+
+All three refusals are reachable and were run by hand:
+
+- missing — *"Verse data not found at `<path>`. The export is incomplete; export the project again."*
+- truncated — *"… is not valid JSON"*; foreign — *"… was written by sidecar version 99; this host
+  reads version 2. Re-export the project."*
+- mismatched — *"This game's Verse data was cooked by a different build of godot-verse (cooked
+  8002/deadbee, host 8002/2b171df). Export the project again."*
+
+### 13.6 Three defects that only an exported game could show
+
+None of these is about the container. All three had been shipping since 7a, behind a wall that
+stopped anything from reaching them — which is the argument for D2's "the export layer launching what
+it exported", made by the thing itself.
+
+- **The cook directory is reused and was never cleared.** The export plugin cooks into one directory
+  under the user's cache, per project, and ships it whole. A 7a loose `Cooked/GodotAttributes/_Verse.uasset`
+  sitting beside this phase's container is not a leftover — it is the file the runtime host finds
+  *first*, and the game dies on the VCell wall this phase exists to get past. The cooker now deletes
+  what it owns (`Cooked`, `Engine`, `_loose`, the sidecar) before it writes, bounded rather than a
+  wipe of a path handed in from outside.
+- **`sources.txt` shipped.** The plugin wrote the cook manifest *into* the directory it ships, so
+  every exported game carried a list of absolute paths on the author's machine. It is written beside
+  that directory now (R-DIST-11).
+- **`host_has_compiler()` tested for a symbol that is always there.** It asked whether
+  `vh_compile_project` resolves; the ABI header declares all eleven compiler entry points
+  unconditionally and `VerseHost.cpp` defines them for every host kind, answering
+  `VH_ERR_UNSUPPORTED` when called. So in an exported game `build_project` took the *compiling*
+  branch, compiled the twenty one-byte `.verse` stubs an export ships, published nothing, and every
+  script came up with no class. `vh_host_kind()` — which ABI 8.2 added for exactly this — is the
+  test now.
+- **`analysis_is_current` said false forever.** With `project_built` true and nothing analysed, every
+  script queued a check that no compiler could run and waited; `valid` stayed false and not one
+  scene came up with its script attached, with no error anywhere, because waiting is not failing.
+- **`dodge-the-creeps/export_check.gd` had never been run.** An autoload's `_ready` runs while the
+  root is still adding the main scene, so its `remove_child` was "Parent node is busy" and its
+  `add_child` was "Parent node is busy setting up children". Deferred now.
+
+### 13.7 A runtime host has no semantic program, and declared types come from the sidecar
+
+**This is the largest thing the design did not know, and it is why an exported game can run Verse at
+all.** Reading a field, calling a method and emitting a signal each need the *declared* type: the
+bytecode has erased it by the time a `VValue` exists, so the semantic program was the only view that
+had one (the comment at `InstanceCall` said so already). A runtime host has no semantic program and
+can never build one — `MakeDevEnvironment` is one of the four `ISolarisModule` members
+`WITH_VERSE_COMPILER=0` takes away.
+
+Unfixed, `InstanceCall` dereferenced an invalid `TSPtr` on its first call; guarded, every call in an
+exported game answered `VH_ERR_NOT_FOUND`, `DescribeMemberType` described nothing and `BindSignals`
+returned before binding one.
+
+So the analysis records them and the sidecar carries them across. `FAnalysisSnapshot::FClass` gains
+an opaque `FDeclaredTypes` — member name → declared type, decorated method name → parameters and
+result, signal name → payload shape — filled once per class per analysis by `CollectDeclaredTypes`
+and read back by `RecordedTypes` wherever `GIde` is invalid. Two things made it possible:
+
+- **`FMemberType` needed a uLang pointer only for two strings.** `ReferenceClass` was read for
+  `AsNameCString()` and `QualifiedNameOf()` and for a null test; it carries both names beside the
+  pointer now, and the pointer stays for the one analysis-only caller that needs the class itself
+  (`GetClassSignals`' payload walk).
+- **`FStructLayout` is a generated table every host links**, so a mirrored struct is found again by
+  name rather than carried.
+
+Measured: `tests/host_smoke`'s `exports` class, cooked and mounted in a runtime host, answers all
+eighteen of its methods — ints, floats, strings, arrays, enums and a `@export` read — exactly as the
+editor host does.
+
+### 13.8 The wall that is still standing: a cooked mirror cannot be called
+
+**A script's own Verse runs. The first call into the mirror takes the process down** — a raw access
+violation inside `Verse::VFunction::Invoke`, with no UE crash report, no diagnostic, and the Godot
+callback never reached. Every `_Ready` in `dodge-the-creeps` dies on its first `GetNode`;
+`tests/host_smoke`'s classes, which call no mirrored function, run to completion.
+
+What is known:
+
+- It is not marshalling and not the host. `tests/cooked_probe` traces `InstanceCall` to
+  `Resolved.Function->Invoke` and the fault is inside it.
+- The VNI packages *are* loaded — `/Verse/_Verse/VNI/Verse`, `/Engine/_Verse/VNI/VerseHost` and the
+  rest come out of the container, and `JitVniPackages` logs no "was not found".
+- They load with **null imports**. `LogStreaming: FExportArchive: … Import index N is null
+  (0x1000008XX)` — package-import references, `ImportedPackageIndex` 1, resolved against the
+  exporting package's public export hashes — for the mirror, for the standard library and for the
+  project's own package.
+- `IVerseModule::Get()` during init, before or after Solaris, changes nothing but adds four
+  *"Missing script class binding for `Verse_localizable_string` (did any script fail to compile?)"*
+  ensures, which is the same family of symptom: bindings that are not there.
+
+Where to look next, in the order they are worth trying: whether the mirror's exports are *public*
+in the container at all (`GetPublicExportHash` vs what the runtime looks up); whether
+`FAsyncLoadingThread2::NotifyScriptVersePackage` is ever called for `$BuiltIn` in a compiler-less
+host (§3.5's third unknown, still unanswered); and whether the `-ScriptObjects` file has to come
+from the *runtime* host's registration set rather than the cooker's, which has Engine and UnrealEd
+in it and the runtime host does not.
+
+**`tests/cooked_probe` is how to work on this.** It reproduces the fault in ten seconds against a
+cooked directory, with no export and no Godot.
+
+### 13.9 What is not built
+
+Stages 4, 5 and 6 — the `test_main.gd` split, the export layer launching what it exports, and
+R-DIST-10 by hand — all wait on §13.8: there is no point asserting an exported run's pass count
+while the first Godot call in it is fatal. `spec.md`'s R-DIST-9/10/11 stay where they are.
 
 ---
 

@@ -5,6 +5,12 @@
 #if VH_HOST_KIND == VH_HOST_KIND_COOKER
 
 #include "Algo/StableSort.h"
+#include "IO/IoChunkId.h"
+#include "IoStoreUtilities.h"
+#include "Misc/CommandLine.h"
+#include "Misc/FileHelper.h"
+#include "PackageStoreOptimizer.h"
+#include "Serialization/CompactBinaryWriter.h"
 #include "VerseVM/VVMVerseClass.h"
 #include "HAL/FileManager.h"
 #include "HostScript.h"
@@ -192,7 +198,7 @@ bool SaveCookedPackage(UPackage* Package, const FString& Filename, FUtf8String& 
 
 } // namespace
 
-AUTORTFM_DISABLE bool GodotVerse::CookProjectPackages(const FString& OutDir, TArray<FString>& OutWritten, FUtf8String& OutError)
+AUTORTFM_DISABLE bool GodotVerse::CookProjectPackages(const FString& OutDir, TArray<FCookedPackageFile>& OutWritten, FUtf8String& OutError)
 {
     if (!Verse::GlobalProgram)
     {
@@ -259,7 +265,7 @@ AUTORTFM_DISABLE bool GodotVerse::CookProjectPackages(const FString& OutDir, TAr
         {
             return false;
         }
-        OutWritten.Add(Filename);
+        OutWritten.Add(FCookedPackageFile{PackagePath, Filename});
     }
 
     if (OutWritten.IsEmpty())
@@ -269,5 +275,179 @@ AUTORTFM_DISABLE bool GodotVerse::CookProjectPackages(const FString& OutDir, TAr
     }
     return true;
 }
+
+
+// --- the container step (phase-7b-design.md 4) -------------------------------------------------
+
+namespace {
+
+/// The script-objects chunk IoStoreUtilities refuses to run without.
+///
+/// A real cook writes this file out of the same sweep of loaded /Script/ packages; here the sweep
+/// is FPackageStoreOptimizer::Initialize() against this process, which is the same set. The cell
+/// half of that sweep (ScriptCellsMap, from $BuiltIn) is *not* serialised by
+/// CreateScriptObjectsBuffer, so the conversion re-reads this file and finds no script cells --
+/// which costs one "referencing missing script import" warning per built-in cell and nothing else:
+/// ProcessImports assigns the FPackageObjectIndex from the verse path either way
+/// (PackageStoreOptimizer.cpp:470-481), and the runtime resolves it against the registrations
+/// FAsyncLoadingThread2::NotifyScriptVersePackage makes in memory.
+bool WriteScriptObjects(const FString& Path, FUtf8String& OutError)
+{
+    FPackageStoreOptimizer Optimizer;
+    Optimizer.Initialize();
+    const FIoBuffer Buffer = Optimizer.CreateScriptObjectsBuffer();
+    const TArrayView<const uint8> Bytes(Buffer.GetData(), static_cast<int32>(Buffer.DataSize()));
+    if (!FFileHelper::SaveArrayToFile(Bytes, *Path))
+    {
+        OutError = FUtf8String(FString::Printf(TEXT("could not write the script objects to %s"), *Path));
+        return false;
+    }
+    return true;
+}
+
+/// The oplog manifest, which is the one thing the conversion cannot derive from the files.
+///
+/// A legacy cooked `.uasset` carries no package name, so FindOrAddLegacyPackage asks the package
+/// store for one by filename (IoStoreUtilities.cpp:1742) and drops any file it cannot name. Every
+/// other field an oplog entry can hold is unused on this path -- imports, shader maps and chunk
+/// hashes are all rebuilt from the cooked header by FPackageStoreOptimizer -- so the entry is the
+/// package's name and the chunk id its export-bundle data will be written under.
+bool WriteManifest(const FString& Path, const FString& LooseDir,
+                   const TArray<GodotVerse::FCookedPackageFile>& Packages, FUtf8String& OutError)
+{
+    FCbWriter Writer;
+    Writer.BeginObject();
+    Writer.BeginObject(UTF8TEXT("oplog"));
+    Writer.BeginArray(UTF8TEXT("entries"));
+    for (const GodotVerse::FCookedPackageFile& Package : Packages)
+    {
+        const FName PackageName(*Package.PackageName);
+        const FPackageId PackageId = FPackageId::FromName(PackageName);
+        const FIoChunkId ChunkId = CreateIoChunkId(PackageId.Value(), 0, EIoChunkType::ExportBundleData);
+
+        FString Relative = Package.Filename;
+        Relative.RemoveFromStart(LooseDir);
+        Relative.RemoveFromStart(TEXT("/"));
+
+        Writer.BeginObject();
+        Writer.BeginObject(UTF8TEXT("packagestoreentry"));
+        Writer.AddString(UTF8TEXT("packagename"), Package.PackageName);
+        Writer.EndObject();
+        Writer.BeginArray(UTF8TEXT("packagedata"));
+        Writer.BeginObject();
+        Writer.AddObjectId(UTF8TEXT("id"), FCbObjectId(MakeMemoryView(ChunkId.GetData(), ChunkId.GetSize())));
+        Writer.AddString(UTF8TEXT("filename"), Relative);
+        Writer.EndObject();
+        Writer.EndArray();
+        Writer.EndObject();
+    }
+    Writer.EndArray();
+    Writer.EndObject();
+    Writer.EndObject();
+
+    TUniquePtr<FArchive> Ar(IFileManager::Get().CreateFileWriter(*Path));
+    if (!Ar)
+    {
+        OutError = FUtf8String(FString::Printf(TEXT("could not write the package store manifest to %s"), *Path));
+        return false;
+    }
+    Writer.Save(*Ar);
+    return Ar->Close();
+}
+
+/// `"<source>" "<destination>" -compress` per line, the shape UnrealPak's response files have.
+///
+/// Only the `.uasset` is listed: CreateTargetFileFromCookedFile reads a PackageHeader's `.uexp`
+/// itself (IoStoreUtilities.cpp:1973-1987), and listing it separately would name the same chunk
+/// twice. `-compress` is per file and is what the `-compressionformats=` on the command line
+/// applies to; without it the container is larger than the loose cook it came from (§13).
+bool WriteResponseFile(const FString& Path, const FString& LooseDir,
+                       const TArray<GodotVerse::FCookedPackageFile>& Packages, FUtf8String& OutError)
+{
+    FString Text;
+    for (const GodotVerse::FCookedPackageFile& Package : Packages)
+    {
+        FString Relative = Package.Filename;
+        Relative.RemoveFromStart(LooseDir);
+        Relative.RemoveFromStart(TEXT("/"));
+        Text += FString::Printf(TEXT("\"%s\" \"../../../%s\" -compress\n"), *Package.Filename, *Relative);
+    }
+    if (!FFileHelper::SaveStringToFile(Text, *Path))
+    {
+        OutError = FUtf8String(FString::Printf(TEXT("could not write the response file to %s"), *Path));
+        return false;
+    }
+    return true;
+}
+
+} // namespace
+
+AUTORTFM_DISABLE bool GodotVerse::BuildCookedContainer(const FString& LooseDir, const FString& OutDir,
+    const TArray<FCookedPackageFile>& Packages, FUtf8String& OutError)
+{
+    FString NormalizedLooseDir = FPaths::ConvertRelativePathToFull(LooseDir);
+    FPaths::NormalizeDirectoryName(NormalizedLooseDir);
+
+    const FString WorkDir = FPaths::Combine(NormalizedLooseDir, TEXT("_container_work"));
+    IFileManager::Get().MakeDirectory(*OutDir, /*Tree*/ true);
+    IFileManager::Get().MakeDirectory(*WorkDir, /*Tree*/ true);
+
+    const FString ScriptObjectsPath = FPaths::Combine(WorkDir, TEXT("scriptobjects.bin"));
+    const FString ManifestPath = FPaths::Combine(WorkDir, TEXT("packagestore.manifest"));
+    const FString ResponsePath = FPaths::Combine(WorkDir, TEXT("response.txt"));
+
+    TArray<FCookedPackageFile> Normalized;
+    Normalized.Reserve(Packages.Num());
+    for (const FCookedPackageFile& Package : Packages)
+    {
+        FString Filename = FPaths::ConvertRelativePathToFull(Package.Filename);
+        FPaths::NormalizeFilename(Filename);
+        Normalized.Add(FCookedPackageFile{Package.PackageName, MoveTemp(Filename)});
+    }
+
+    if (!WriteScriptObjects(ScriptObjectsPath, OutError)
+        || !WriteManifest(ManifestPath, NormalizedLooseDir, Normalized, OutError)
+        || !WriteResponseFile(ResponsePath, NormalizedLooseDir, Normalized, OutError))
+    {
+        return false;
+    }
+
+    const FString CommandsPath = FPaths::Combine(WorkDir, TEXT("commands.txt"));
+    const FString Command = FString::Printf(
+        TEXT("-Output=\"%s\" -ContainerName=verse_scripts -ResponseFile=\"%s\""),
+        *FPaths::Combine(OutDir, TEXT("verse_scripts")), *ResponsePath);
+    if (!FFileHelper::SaveStringToFile(Command + TEXT("\n"), *CommandsPath))
+    {
+        OutError = FUtf8String(FString::Printf(TEXT("could not write the container command list to %s"), *CommandsPath));
+        return false;
+    }
+
+    // CreateIoStoreContainerFiles takes a command line and then reads FCommandLine::Get() for all
+    // but the first two switches (IoStoreUtilities.cpp:10338-10360), so the process's own line is
+    // what it actually parses. Appended rather than replaced: the engine's boot switches are still
+    // live underneath, and this runs once, at the end, with nothing after it but the exit.
+    const FString OriginalCommandLine = FCommandLine::Get();
+    const FString Arguments = FString::Printf(
+        TEXT("%s -CreateGlobalContainer=\"%s\" -CookedDirectory=\"%s\" -PackageStoreManifest=\"%s\"")
+        TEXT(" -ScriptObjects=\"%s\" -Commands=\"%s\" -compressionformats=Oodle"),
+        *OriginalCommandLine,
+        *FPaths::Combine(WorkDir, TEXT("global")),
+        *NormalizedLooseDir,
+        *ManifestPath,
+        *ScriptObjectsPath,
+        *CommandsPath);
+    FCommandLine::Set(*Arguments);
+    const int32 Result = CreateIoStoreContainerFiles(*Arguments);
+    FCommandLine::Set(*OriginalCommandLine);
+
+    if (Result != 0)
+    {
+        OutError = FUtf8String(FString::Printf(
+            TEXT("building the IoStore container failed (CreateIoStoreContainerFiles returned %d)"), Result));
+        return false;
+    }
+    return true;
+}
+
 
 #endif // VH_HOST_KIND == VH_HOST_KIND_COOKER

@@ -276,25 +276,49 @@ tools, because `PreInit` constructs the shader compiling manager unconditionally
 only with the `EDITOR` token, `-nullrhi` and `-NoShaderCompile`, from an entry point marked
 `AUTORTFM_DISABLE`. Seventeen builds, all in §2 S-1; read it before touching that target. Stage 0 is the move to 4.7; nothing else starts before it.
 
-**Phase 7b is designed and not built, and `docs/phase-7b-design.md` is the whole of it** — written
-before the work, so unusually for this repo **§1 (the decisions) and §3 (the engine facts) are what
-to trust**, and §13 is empty until the phase is built. It takes §13.7 as its brief and answers it
-with one route: the cooker keeps writing loose files and **converts them to an IoStore container**
-(`CreateIoStoreContainerFiles`, the function `UnrealPak -CreateGlobalContainer` calls), because
-`FPackageStoreOptimizer` is the only code in the engine that carries a `Verse::VCell` from a legacy
-cooked header into something a loader can read. **§2's two spikes run before any stage is written** —
-S-8a that the cooker can build such a container, S-8b that the runtime host can mount one — which is
-7a's own lesson, its S-5 having run *after* stage 1. **If both fail the phase stops and asks**; the
-engine patch, `FZenStoreWriter` and a hand-rolled loader are each a separate decision. §3 corrects
-§13.7 in two places worth knowing: mounting a container is the ordinary DLC-pak path
-(`FPackageStore::Mount` is public, `FFilePackageStore` is a `PakFile` class, neither editor-only),
-and script imports resolve from **in-memory registration** rather than from a global container's
-script-objects chunk — so the runtime host may need no global container at all. Besides the wall the
-phase owes two things and no more: the export layer **launching** what it exports, which needs
-`test_main.gd`'s 1391 lines split into a library the way `dodge-the-creeps/checks.gd` already is
-with the cases that cannot run in an export tagged and *printed as skipped*; and R-DIST-10 checked by
-hand, sandboxed. Linux, `dlopen`, macOS, the Shipping-per-template split and the debugger in an
-exported game are all **out**, by decision.
+**Phase 7b is partly built and stopped at a second wall, and `docs/phase-7b-design.md` §13 is the
+one section of it to read** — written after the work, it is where the design turned out to be wrong,
+and §13.8 is the wall. Both blocking spikes passed and **the wall 7b was written to remove is down**:
+the cooker converts its loose cook to an IoStore container with `CreateIoStoreContainerFiles`, the
+runtime host mounts it the way `FPakPlatformFile` mounts a pak's, and a cooked Verse package loads
+**with its cells intact** — no `Missing VClass for VerseClass`. An exported `dodge-the-creeps` boots,
+attaches its scripts and runs their own Verse.
+
+**What it cannot do is call Godot.** The first mirrored call a script makes is a raw access violation
+inside `Verse::VFunction::Invoke`, with no crash report and the Godot callback never reached; the VNI
+packages load out of the container with **null package imports**. §13.8 has what is known and the
+three things to try next. `tests/cooked_probe` (`tools/build_cooked_probe.py`) is how to work on it:
+it mounts a cooked directory and calls a class's methods in ten seconds, with no export and no Godot.
+
+Four things §13 settled that are load-bearing elsewhere:
+
+- **`CreateIoStoreContainerFiles` parses `FCommandLine::Get()`, not the command line it is handed**,
+  and needs three files a cook of this shape does not produce — a script-objects buffer, a commands
+  list with a response file, and a compact-binary oplog manifest of which exactly one field is read
+  (the package name, because a legacy `.uasset` carries none). §13.1.
+- **The I/O dispatcher is constructed but never brought up in this host.** `USE_IO_DISPATCHER` is
+  false for a Program with no Engine, so `FIoDispatcher::InitializePostSettings()` — which
+  initialises the backends and starts the thread — is called by nothing. `IsInitialized()` answers
+  true anyway, and every read is issued and never completes: no error, no timeout, a `LoadPackage`
+  queued forever. §13.2.
+- **The payload is 7.3 MB, not 68.** Uncompressed the container is *larger* than the loose cook;
+  `-compressionformats=Oodle` plus `-compress` per response-file entry makes it a tenth of 7a's, and
+  the container step still costs 0.5–0.7 s. The global container is not needed and is not shipped.
+- **A runtime host has no semantic program and can never build one**, so the *declared* types every
+  call, field read and signal needs are recorded by the analysis and carried in the sidecar
+  (`FAnalysisSnapshot::FClass::Types`). The sidecar is version **2** and also carries the cooked
+  package list — a container holds package *ids*, which are hashes, and mount points are still
+  registered by name. §13.7.
+
+Three defects that had been shipping since 7a behind that wall are fixed: the cook directory was
+reused and never cleared (so a 7a loose `.uasset` shipped beside the container and was found first),
+`sources.txt` shipped with the author's absolute paths in it, and `host_has_compiler()` tested for a
+symbol the runtime host also exports — so an exported game compiled its own one-byte `.verse` stubs
+and every script came up with no class. §13.6.
+
+Stages 4–6 — the `test_main.gd` split, the export layer **launching** what it exports, and R-DIST-10
+by hand — are not built and wait on §13.8. Linux, `dlopen`, macOS, the Shipping-per-template split
+and the debugger in an exported game are all **out**, by decision.
 
 **The by-hand checks have been run, and `docs/by-hand-checklist.md` is deleted** — all twenty-two
 of its entries were watched happen, and what is worth keeping is what they found rather than the
@@ -433,6 +457,7 @@ and the `VerseSimulationMetadata` dependency each exist for a reason spelled out
     python tools/build_module_map_test.py # module-map test binary
     python tools/build_bench.py           # host benchmark (timings, not pass/fail)
     python tools/build_verse_probe.py     # the Verse probe (asks the compiler a question)
+    python tools/build_cooked_probe.py    # the cooked probe (asks a runtime host what an export sees)
     python tools/audit_const_overrides.py # CONST_OVERRIDES, read out of a Godot source checkout
 
 Run the tests:
@@ -453,7 +478,8 @@ nothing a script can ask — so the only way to read what an author would see is
 editor prints.
 
 The fourth is **export**: it exports `tests/integration` headless and asserts the *tree* the
-export produced, without launching it — there is nothing to launch until Phase 7b. Its assertions
+export produced, without launching it — a launched export still dies on its first Godot call
+(`phase-7b-design.md` §13.8), so there is nothing worth asserting about one yet. Its assertions
 are in `run_tests.py` for the reason the coverage layer's are, and one of them reads the `.pck`
 directly (`read_pck`, the format is Godot's `core/io/file_access_pack.cpp:288-370`): the one thing
 that has to be asserted about a shipped `.verse` is its *size*, and a one-byte stub and the whole
@@ -479,6 +505,11 @@ the diagnostic callback because a background analysis runs off the game thread a
 callback is the game thread's alone. A layer whose prerequisites
 are absent is **skipped and said to be skipped**, never counted as a pass. `UE_ROOT` names the
 Unreal checkout and `GODOT` the Godot binary; both are guessed when unset.
+
+`tests/cooked_probe`, built by `tools/build_cooked_probe.py`, is the same kind of thing for the
+*cooked* path: it mounts a cooked data directory in a runtime host and calls a class's zero-argument
+methods, so what an exported game sees is ten seconds away rather than a two-minute export and a game
+that dies with no output. It is what Phase 7b's remaining wall (§13.8) is worked on with.
 
 `tests/verse_probe`, built by `tools/build_verse_probe.py`, is not in `run_tests.py` either, and for
 a different reason: it asserts nothing. It compiles whatever `.verse` files it is handed as one
@@ -540,6 +571,7 @@ launching the editor** (`godot --path demo` with no `--headless`), which does.
 | `host/Private/GodotClassNames.gen.h` | `tools/gen_verse_api.py` | same — every Godot class and the mirrored Verse class an object of it crosses as, which is what R-SCN-6's cast is built on. Every class, not only the emitted ones: a `--classes-file` build still has to make a handle cross as *something*, so each row names its nearest emitted ancestor |
 | `docs/nonatomic-methods.md` | `tools/gen_verse_api.py` | same — R-AUD-3's list: every emitted method that mutates Godot *and* answers a value, so its `<transacts>` promises a rollback the bridge cannot perform. Written by the pass that writes the mirror, so it cannot drift |
 | `src/verse_keywords.h` | `tools/gen_verse_keywords.py` | the UE compiler's `ReservedSymbols.inl` |
+| `bin/host_build_id.gen.h` | `tools/build_host.py` | git — the godot-verse and engine commits, staged into the host's `Private/` and baked into every host binary, so a cooked sidecar and the host reading it can be told apart (7b D6). Not committed |
 
 **Every Godot class is mirrored by default.** `tools/verse_api_classes.txt` is a smaller curated
 list kept for anyone who wants a smaller build, selected with `--classes-file`; there is no `--all`,

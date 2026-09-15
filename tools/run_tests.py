@@ -215,18 +215,31 @@ def run_cook(results: Results, engine: Path) -> None:
             return
         print("[verse_cook] exited 0: ok")
 
-        # A cooked package is two files, and the mirror goes under Engine/Content because the data
-        # directory is also the host's engine directory (D7).
-        for expected in ("Cooked/GodotScripts_1/_Verse.uasset",
-                         "Cooked/GodotScripts_1/_Verse.uexp",
-                         "Cooked/GodotAttributes/_Verse.uasset",
-                         "Engine/Content/_Verse/VNI/VerseHost.uasset",
+        # One container, and the Engine/ directory reduced to the marker GForeignEngineDir needs
+        # (7b D9): the loose cook is an intermediate the cooker deletes, because a `.uasset` holding
+        # a Verse cell is a file nothing can load.
+        for expected in ("Cooked/verse_scripts.utoc",
+                         "Cooked/verse_scripts.ucas",
                          "Engine/Binaries"):
             if (out_dir / expected).exists():
                 print(f"[verse_cook] wrote {expected}: ok")
             else:
                 ok = False
                 print(f"[verse_cook] did not write {expected}: FAIL")
+
+        for unwanted in ("_loose", "Cooked/global.utoc", "Engine/Content"):
+            if (out_dir / unwanted).exists():
+                ok = False
+                print(f"[verse_cook] shipped {unwanted}, which is an intermediate: FAIL")
+            else:
+                print(f"[verse_cook] did not ship {unwanted}: ok")
+
+        container = out_dir / "Cooked" / "verse_scripts.ucas"
+        if container.stat().st_size > 1024:
+            print(f"[verse_cook] the container holds {container.stat().st_size} bytes: ok")
+        else:
+            ok = False
+            print(f"[verse_cook] the container holds {container.stat().st_size} bytes: FAIL")
 
         sidecar = out_dir / "verse_classes.json"
         if not sidecar.is_file():
@@ -247,11 +260,24 @@ def _check_sidecar(path: Path, expected_classes: list[str], name: str) -> bool:
         return False
 
     ok = True
-    if sidecar.get("version") == 1:
-        print(f"[{name}] verse_classes.json is version 1: ok")
+    for field in ("abi", "cookerCommit", "engineCommit", "generation"):
+        if sidecar.get(field) in (None, "", "unknown"):
+            ok = False
+            print(f"[{name}] verse_classes.json carries a {field}: FAIL")
+    if ok:
+        print(f"[{name}] verse_classes.json carries the build stamp: ok")
+
+    if sidecar.get("packages"):
+        print(f"[{name}] verse_classes.json names {len(sidecar['packages'])} cooked package(s): ok")
     else:
         ok = False
-        print(f"[{name}] verse_classes.json is version {sidecar.get('version')!r}, not 1: FAIL")
+        print(f"[{name}] verse_classes.json names the cooked packages: FAIL")
+
+    if sidecar.get("version") == 2:
+        print(f"[{name}] verse_classes.json is version 2: ok")
+    else:
+        ok = False
+        print(f"[{name}] verse_classes.json is version {sidecar.get('version')!r}, not 2: FAIL")
 
     classes = sidecar.get("classes", {})
     for expected in expected_classes:
@@ -491,14 +517,17 @@ def read_pck(path: Path) -> dict[str, int]:
 
 
 # What tests/integration's export must carry, and what the data directory beside the executable
-# must hold. Both halves are 7a's whole subject: 7b is what happens when the game tries to load it.
+# must hold.
+#
+# Four rows shorter than 7a's: the cook's loose `.uasset` files are an intermediate now and only the
+# IoStore container ships (7b D9), so there is no `<data>/Engine/Content` any more. `Engine/Binaries`
+# stays, and is the only thing in `<data>/Engine`: GForeignEngineDir wants a directory with a
+# `Binaries/` child and nothing else (GenericPlatformMisc.cpp:1408-1415), which is 7b's S-9 answered.
 EXPORT_DATA_DIR = "verse_godot-verse integration tests_windows_x86_64"
 EXPORT_BESIDE_EXE = ["godot-verse.dll", "verse_host_runtime.dll", "tbbmalloc.dll"]
 EXPORT_DATA_FILES = [
-    "Cooked/GodotScripts_1/_Verse.uasset",
-    "Cooked/GodotScripts_1/_Verse.uexp",
-    "Cooked/GodotAttributes/_Verse.uasset",
-    "Engine/Content/_Verse/VNI/VerseHost.uasset",
+    "Cooked/verse_scripts.utoc",
+    "Cooked/verse_scripts.ucas",
     "Engine/Binaries",
     "verse_classes.json",
 ]

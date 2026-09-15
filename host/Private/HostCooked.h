@@ -28,4 +28,9 @@ AUTORTFM_DISABLE bool RegisterCookedMountPoints(const FString& CookedDir, FUtf8S
 /// False with OutError set, and the caller turns that into VH_ERR_INIT with the path named.
 AUTORTFM_DISABLE bool LoadCookedProject(const FString& CookedDir, FUtf8String& OutError);
 
+/// Unmounts the containers and drops every reference this file holds, which vh_shutdown must do
+/// *before* AppExit: the backends and the container headers are allocated through GMalloc, and
+/// nothing allocated through GMalloc may survive into static destruction.
+AUTORTFM_DISABLE void ReleaseCookedContainers();
+
 } // namespace GodotVerse
