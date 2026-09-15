@@ -168,6 +168,22 @@ AUTORTFM_DISABLE INT32_MAIN_INT32_ARGC_TCHAR_ARGV()
 {
 	FTaskTagScope Scope(ETaskTag::EGameThread);
 
+	// The engine's own log goes to stdout only when asked for. Without this the export plugin
+	// relays six hundred lines of engine boot into the export dialog; with it, a failed cook can
+	// be re-run by hand and made to say why.
+	FString BootArgs(TEXT(" EDITOR -unattended -nullrhi -NoShaderCompile -AssetGatherAll=0 -NoPreviewPlatforms"));
+	for (int32 Index = 1; Index < ArgC; ++Index)
+	{
+		if (FCString::Stricmp(ArgV[Index], TEXT("--verbose")) == 0)
+		{
+			BootArgs += TEXT(" -stdout -FullStdOutLogOutput");
+		}
+	}
+	if (!BootArgs.Contains(TEXT("-stdout")))
+	{
+		BootArgs += TEXT(" -NOCONSOLE");
+	}
+
 	// The editor host's own boot line (VerseHost.cpp), plus four things an engine-class boot
 	// needs that a DLL host never met. -NoPreviewPlatforms: WITH_EDITOR would otherwise load
 	// every platform's config (UnrealAssetStringify). The EDITOR token: under WITH_EDITOR &&
@@ -178,7 +194,7 @@ AUTORTFM_DISABLE INT32_MAIN_INT32_ARGC_TCHAR_ARGV()
 	// -nullrhi: there is nothing to draw. -stdout -FullStdOutLogOutput because ALLOW_LOG_FILE=0
 	// leaves no log to read afterwards, and what this program has to say when it fails is the
 	// engine's own message rather than its exit code.
-	if (const int32 Result = GEngineLoop.PreInit(ArgC, ArgV, TEXT(" EDITOR -stdout -FullStdOutLogOutput -unattended -nullrhi -NoShaderCompile -AssetGatherAll=0 -NoPreviewPlatforms")))
+	if (const int32 Result = GEngineLoop.PreInit(ArgC, ArgV, *BootArgs))
 	{
 		return Result;
 	}
@@ -190,7 +206,7 @@ AUTORTFM_DISABLE INT32_MAIN_INT32_ARGC_TCHAR_ARGV()
 	FCommandLine::Parse(FCommandLine::Get(), Tokens, Switches);
 	if (Tokens.Num() < 2)
 	{
-		Say(TEXT("usage: verse_cook <manifest> <out_dir>"));
+		Say(TEXT("usage: verse_cook <manifest> <out_dir> [--verbose]"));
 		Leave(2);
 	}
 

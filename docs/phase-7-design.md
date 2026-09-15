@@ -1,6 +1,8 @@
 # Phase 7 — Export, and the platforms it reaches
 
-**Status:** Draft 1 · 2026-09-14 · **designed, not built.** Written *before* the work, the way
+**Status:** Draft 1 · 2026-09-14 · **partly built.** Stages 0 and 1 are done, stage 2 is
+written and blocked, stages 3 and 4 are partly built. **§13 is where the design turned out to be
+wrong, and §13.7 is the blocker** -- read that before trusting §5 step 2, §6, or D6. Written *before* the work, the way
 Phase 4.5's, 5's and 6's were, from an interview and three delegated investigations held against
 the Godot and Unreal sources directly. **§13 is empty and is where the implementing agent writes
 what turned out wrong**; until then §1 and §2 are the record. One spike (S-1, OQ-10) ran during the
@@ -623,8 +625,244 @@ follows.
 
 ## 13. What building this corrected
 
-*Empty until built. Write here: S-1's link result, S-2 … S-7's answers, and every row of §1 that
-turned out wrong, with the file and line that proved it.*
+**Stages 0 and 1 are built; stage 2 is written and blocked; stages 3 and 4 are partly built.**
+§13.7 is the blocker and is the section to read first if you are picking this up: a loose cooked
+`.uasset` cannot carry a Verse package, which is a fact about the engine and not about this code,
+and it is what stops an exported game from loading what the cooker writes.
+
+### 13.1 Stage 0 — godot-cpp has no 4.7 tag, and the dump lives outside the submodule
+
+§4 step 1 offered two routes and the first does not exist: godot-cpp's remote carries no
+`godot-4.7-stable` tag, and 4.7's dump landed on its **master** under the newer
+`extension_api-4-7.json` name, which the pinned submodule commit's `_get_api_file` cannot resolve
+(it looks for `extension_api.json` or `extension_api-<api_version>.json` and `api_version` is not
+passed).
+
+The fallback — "dump the API from the installed binary into the submodule's `gdextension/`" — is
+what was taken, but **not into the submodule**. A modified submodule is reverted, silently and to a
+*different Godot version*, by the `git submodule update --init --recursive` that `SConstruct`'s own
+error message tells people to run. The dump is a tracked `gdextension/` at the repo root, and
+`SConstruct` points godot-cpp at it with `gdextension_dir`; `tools/gen_verse_api.py` and
+`tools/audit_const_overrides.py` read it from there.
+
+4.7 is additive against 4.6: 1036 classes (13 new, none removed), 793 enums, 1437 virtuals, 503
+signal accessors, 3312 properties, 1132 non-atomic methods, 411 math skips. The math layouts are
+byte-identical and `unsupported_type` is still zero. `gdextension_interface.json` gains three
+interface functions and two types, none of which the pinned godot-cpp uses.
+
+**One of the thirteen new classes found a bug that was always there.** `gen_verse_api.py` builds a
+second `TypeResolver` for statics and utilities, and its `typed_arrays` were never merged into the
+set `render()` drains. A typed array reached *only* through a static method or a utility function
+therefore named a `VhFrom<T>Array` that nothing defined — an unknown identifier at the first compile
+of the mirror and nothing earlier. 4.6 had no such member; 4.7's `ImporterMesh.merge_importer_meshes`
+is the first. The converters are module-level, so the two resolvers' demands are one set.
+
+### 13.2 S-2 — the runtime host builds, and costs four errors, not a module list
+
+Much narrower than §2 predicted. `bBuildWithEditorOnlyData = false` gives `WITH_VERSE_COMPILER=0`
+(`CoreUObject.Build.cs:46-53`, not `Solaris.Build.cs`) and costs exactly **four** compile errors,
+all one thing: `ISolarisModule` loses `CreateProjectSource`, `MakeDevEnvironment` and
+`IncrementalizeProjectSource`. The rest of `HostScript.cpp`'s 7848 lines compiles unchanged, and so
+does everything else in `host/`.
+
+**The modules did not drop out of the graph.** §2 expected `VerseCompiler`, `uLangUE`'s IDE half,
+`SolarisTestUtils`, `ScriptDisassembler` and `VerseSimulationMetadata` to "either drop out of the
+graph or refuse to build"; `VerseHost.Build.cs` lists them unconditionally, so they compile and
+link. The runtime host is **112.3 MB** against the editor host's 115.9 — a Verse compiler that
+nothing can reach, because no `ISolarisIde` can be constructed, but present. Trimming it means
+putting every uLang include and every IDE-side body in `HostScript.cpp` behind
+`#if WITH_VERSE_COMPILER`, which is a large mechanical change and is **not done**. R-DIST-11's
+claim about the *data directory* is unaffected; its spirit is not.
+
+`AllowDebugging` (D11) was never reached: nothing has run against the runtime host yet (§13.7).
+
+### 13.3 ABI 8.2 — two things the design spelled wrong
+
+- **`typedef enum vh_host_kind` and `int32_t vh_host_kind(void)` are the same identifier in C++.**
+  The enum is unnamed now, and the three values are *also* `#define`s (`VH_HOST_KIND_EDITOR` and
+  friends) because a target selects its kind with a `-D` and the preprocessor cannot see an enum —
+  `CookMain.cpp` is compiled into the cooker alone and needs the macro form. The enumerators are
+  defined in terms of the macros so the two cannot drift.
+- **An early `return` for the refusal trips `-Wunreachable-code`, which is an error in this tree.**
+  `VH_REFUSE_WITHOUT_COMPILER` is `do { if (!WITH_VERSE_COMPILER) { return X; } } while (0)`, not an
+  `#if`: a condition that is a configuration macro suppresses the warning on both sides, and the
+  body still has to compile for a host with no compiler — which it does, and is worth keeping true.
+
+`vh_init` also had to stop testing `StructSize` for equality. Everything up to `EnableDebugger` has
+been there since 8.0, so that is the floor and `CookedDirUtf8` is read only when `StructSize`
+reaches it; refusing a shorter descriptor would have made every minor bump a major one, which is
+the opposite of the policy at the top of the header.
+
+**D8's test is `OS::has_feature("template")`, not `Engine::is_editor_hint()`.** The integration
+suite runs the editor binary headless with `-s`, where the editor hint is false and the editor host
+is still the only host that can do anything. The first version of the host-kind check refused it.
+
+### 13.4 S-7 — `add_message(EXPORT_MESSAGE_ERROR)` does not abort an export
+
+Measured, and the answer is no: the export runs to completion, writes the game, exits **0** and
+logs `Project export for preset "…" completed with warnings`. So §7's second branch is what the
+plugin does — a refused export withholds the data directory, and the game says so at load rather
+than running wrong.
+
+It also made the `.verse` stripping unconditional. Skipping the stub on a refused export leaked
+every source file into a `.pck` the author had been told was broken, which is the worse of the two
+outcomes.
+
+The plugin's other correction is smaller: the cooker's engine log is **not** on stdout by default.
+`-stdout -FullStdOutLogOutput` put six hundred lines of engine boot into the export dialog, so it
+is behind `--verbose`, and a failed cook prints the exact command line to re-run.
+
+### 13.5 Stage 1 — how the cooker reports success, and S-4 in the order the asserts arrived
+
+**The teardown segfault is not fixed and does not need to be.** Of §5's three options this takes
+the second: the cook flushes and hard-exits with the status it chose
+(`FPlatformMisc::RequestExitWithStatus(true, Code)`), and `GEngineLoop.Exit()` is never called.
+Everything the program writes is closed inside the call that wrote it. That made the exit code
+trustworthy on the first try rather than after an engine-shutdown investigation this program does
+not need. **D3 stands**; the export plugin reads the exit code.
+
+Two things about the cooker's own output are worth knowing before changing it.
+`FPlatformMisc::LocalPrint` is `OutputDebugString` on Windows and reaches a debugger and nothing
+else — the first cook printed not one line anywhere `OS::execute` could see it. And a cook's
+arguments come out of `FCommandLine::Parse` *after* `PreInit`, which is what sorts the engine's own
+switches out of the token list.
+
+**S-4's answer.** A cooked package is two files, `.uasset` and `.uexp`. Getting there cost five
+asserts, each of which is a fact about the engine:
+
+1. **`FDefaultCookedFilePackageWriter` is not an `ICookedPackageWriter`.** UnrealEd's public header
+   is named as though it were and is a plain `TPackageWriterToSharedBuffer<FBasePackageWriter>`;
+   `SavePackage2.cpp:3619` does `AsCookedPackageWriter()` and `check`s the result, so the first cook
+   died three lines into its first package. `host/Private/HostCookWriter.h` is that class again over
+   `FBaseCookedPackageWriter`, plus the thirteen pure virtuals `ICookedPackageWriter` adds — all of
+   which are about a cook *session* (an oplog, incremental invalidation, multiprocess messaging,
+   hashes) that a one-shot cooker does not have.
+2. **`BeginCacheForCookedPlatformData` is not pure but its default body is `unimplemented()`.**
+3. **A one-off cook brackets the save itself.** `BeginPackage` before and `CommitPackage` after: in
+   a real cook that is the cook server's job and `UPackage::Save` does neither.
+   `UnrealEd/Private/Cooker/CookFunctionLibrary.cpp:150-250` is the worked example and is the thing
+   to read; it also supplies the `ICookerInterface`, whose `WriteFileOnCookDirector` is what
+   actually puts bytes on disk.
+4. **`~FSavePackageContext` deletes the writer it was given.** A stack-allocated one segfaults the
+   process the instant the first package finishes — *after* both its files are on disk, which is the
+   worst possible place to look for it.
+5. **Epic's own native VNI packages cannot be cooked from this process.**
+   `/Solaris/_Verse/VNI/VerseNative` and `/Solaris/_Verse/VNI/VersePredicts` hold `UVerseClass`
+   objects whose `Verse::VClass` is null, and `SavePackage2.cpp:2076` `check`s that it is not. There
+   is no catching an `appError`, so the cook tests a package for one before handing it over and
+   skips it with a line saying so. **Everything this bridge needs cooks**: the project's own package,
+   the attribute package, the mirror at `/Engine/_Verse/VNI/VerseHost`, and `/Verse.org/Verse`
+   itself.
+
+On `dodge-the-creeps` that is seven packages, four classes and a 7.9 KB sidecar in **1.3 s** of
+cook after a 4.3 s compile, into 68 MB — of which the mirror is 67.
+
+**The package list is read off the VM, not written down.** `Verse::GlobalProgram->NumPackages()`
+and `GetPackage(i)->GetUPackage()`, ordered so the project's own packages are saved first and the
+VNI packages after, so a run that dies part way through has written the half that matters. Where a
+package lands is derived from its UPackage path: `/Engine/…` goes under `<data>/Engine/Content/`
+because the data directory *is* the engine directory (D7), and every other mount point goes under
+`<data>/Cooked/<mount point>/`.
+
+**Stage 1 needs one thing §5 did not budget for**: a seam into `vh_init`. The cooker is an
+executable and owns its own `PreInit` — an editor-class Program needs the `EDITOR` token, `-nullrhi`
+and `-NoShaderCompile` on the command line, which a DLL host never does — so `vh_init`'s body is
+`InitHost(Desc, bEngineAlreadyBooted)` and the cooker calls it through
+`GodotVerse::InitCookerAfterEngineBoot`.
+
+### 13.6 Stage 2 — the mount points go down before Solaris, not after
+
+§6's `LoadCookedProject` is two functions. `FSolarisModule::JitVniPackages` runs during module
+*startup* and asks `FPackageName::DoesPackageExist` for each VNI package
+(`SolarisModule.cpp:3372-3404`), so a mount point registered after `ISolarisModule::Get()` has
+nothing left to answer. `RegisterCookedMountPoints` runs before it and does nothing else; the load
+and the sidecar come after the content scope, because loading a package allocates Verse cells.
+
+A VNI package a compiler-less Solaris cannot find is a **warning**, not a failure
+(`SolarisModule.cpp:3415-3430). That is what makes §13.5's skip affordable to find out about.
+
+### 13.7 The blocker: a loose cooked `.uasset` cannot carry a Verse package
+
+The exported game boots, loads the runtime host, finds the cooked directory, registers the mount
+points and begins loading `/GodotAttributes/_Verse`. Then:
+
+```
+LogClass: Error: Failed loading tagged VCellProperty /Script/CoreUObject.VerseClass:Class.
+          Read 0B, expected 4B. Package: /GodotAttributes/_Verse
+Fatal error: VVMVerseClass.cpp:231
+Missing VClass for VerseClass /GodotAttributes/_Verse.export. This class should have been
+created in-memory from a VClass, not loaded from a cooked package.
+```
+
+**`FLinkerLoad` has no `Verse::VCell` support.** `LinkerLoad.cpp` and `LinkerLoad.h` do not mention
+`VCell` once. The only loader that can read a cell is the IoStore loader's `FExportArchive`
+(`AsyncLoading2.cpp:3185`), which is why the save wrote its four bytes and the load consumed none:
+`FLinkerSave::operator<<(Verse::VCell*&)` exists (`LinkerSave.cpp:399`) and has no counterpart.
+
+So a Verse package can be cooked to loose files and cannot be *loaded* from them. It has to be in
+an IoStore container — `.utoc`/`.ucas` — which is what a real UE cook produces and what UEFN ships.
+**D6's layout, §5 step 2 and §6's `LoadPackage` all assume loose files, and all three are wrong.**
+
+What this does not change: the compile, the save, the sidecar, the mount points, the data
+directory beside the executable, the `.gdextension` dependency, the stubs, and the export plugin.
+What it changes is the two lines in the middle — what the cooker writes the package *into*, and
+what the runtime host loads it *out of*.
+
+Three ways out, unranked because none has been tried:
+
+- **Write an IoStore container from the cooker.** `FIoStoreWriter` and the `IoStoreUtilities`
+  module are in `Developer/`, and the cooker already compiles against the editor. The runtime host
+  would mount the container with `FIoDispatcher`/`FPakPlatformFile` before Solaris starts, in place
+  of the mount points it registers now.
+- **Use `FZenStoreWriter`** instead of the writer in `HostCookWriter.h`, which is the package writer
+  a real cook uses and produces a store the zen loader reads directly. It wants a Zen server, which
+  is a dependency an export plugin cannot assume.
+- **Reconstitute the package without `LoadPackage`.** `ISolarisRuntime` has
+  `GetDigestCodeForPackage` and `AddCompiledUPackage`, and the digest is how the editor host already
+  reads the mirror cheaply — but the digest half of that interface is `WITH_VERSE_COMPILER` only,
+  so this needs a reader on the runtime side that does not exist yet.
+
+### 13.8 What stages 3 and 4 have, and what they are missing
+
+Stage 3 is built and works up to §13.7: `VerseExportPlugin` refuses `android`/`ios`/`web` with a
+sentence (R-PLAT-4), builds the project in the editor first, runs the cooker, relays its lines,
+adds the data directory with `add_shared_object`, stubs every `.verse` and keeps every `.vmodule`.
+The `.gdextension` grows a generated `[dependencies]` section, one row per template tag, naming
+`verse_host_runtime.dll` and `tbbmalloc.dll` — which is how they arrive beside the executable.
+
+An export of `dodge-the-creeps` produces exactly what D6 describes:
+
+```
+dtc.exe  dtc.pck  godot-verse.dll  tbbmalloc.dll  verse_host_runtime.dll
+verse_Dodge the Creeps (Verse)_windows_x86_64/
+    Cooked/GodotScripts_1/_Verse.uasset + .uexp
+    Cooked/GodotAttributes/_Verse.uasset + .uexp
+    Cooked/Verse/_Verse/VNI/Verse.uasset + .uexp          (and three more)
+    Engine/Binaries/                                       (empty; the GForeignEngineDir marker)
+    Engine/Content/_Verse/VNI/VerseHost.uasset + .uexp
+    verse_classes.json
+```
+
+**`build_host.py --target VerseHostRuntime` stages into `demo/addons/`, not the repo-root
+`addons/`.** `demo/` is what `SConstruct` builds into and copies from, so anything that has to
+reach the other projects' addons has to be there first.
+
+Stage 4 is half done. `dodge-the-creeps/checks.gd` is the library `headless_check.gd` and the new
+`export_check.gd` autoload both run — same lines, two drivers, and the yardstick still passes
+in-editor. Both projects have a committed `export_presets.cfg`. **`tests/integration`'s half is not
+written**, and neither is `run_export` in `run_tests.py`: there is no point in a layer that can only
+report the same blocker, and `test_main.gd`'s 1391 lines are a bigger refactor than
+`headless_check.gd`'s 146 were.
+
+### 13.9 Rows of §1 that stand, and the one that does not
+
+D1–D5, D7–D22 stand as written, with the spellings corrected in §13.3 and the test corrected in
+§13.4. **D6 is half wrong**: the *directory* is right and is on disk exactly as described; what
+lives inside it cannot be loose `.uasset` files (§13.7).
+
+S-3 was never run as written and did not need to be: the engine directory an exported game boots
+against needs only `Engine/Binaries/` to exist for `GForeignEngineDir`, and `PreInit` asked for
+nothing else. S-5 ran as far as §13.7. S-6 is still blocked on §9.
 
 ---
 

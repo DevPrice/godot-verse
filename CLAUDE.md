@@ -235,9 +235,19 @@ rather than retired: everything from the ABI inward has `host_smoke` cases and e
 have. `tests/host_smoke/debug_probe.verse`'s line numbers are part of it — a member declared above
 line 22 moves an armed breakpoint.
 
-**Phase 7 is designed and not built, and `docs/phase-7-design.md` is the whole plan** — written
-before the work from an interview, so §1 (twenty-two decisions) and §2 (seven spikes) are the
-record until §13 is written, and §13 is where the implementing agent says what turned out wrong.
+**Phase 7 is partly built, and `docs/phase-7-design.md` §13 is the one section of it to read** —
+written during the work, it is where the design turned out to be wrong, and **§13.7 is the blocker**:
+`FLinkerLoad` has no `Verse::VCell` support at all, so a Verse package can be cooked to a loose
+`.uasset` and cannot be *loaded* from one. Only the IoStore loader's `FExportArchive` reads a cell
+(`AsyncLoading2.cpp:3185`), which is why the save writes four bytes and the load consumes none.
+D6's directory is right and what goes in it is not; §13.7 lists the three ways out, none tried.
+
+Stages 0 (Godot 4.7) and 1 (the cooker) are **done**, stage 2 (the runtime host) is written and
+blocked on the above, stages 3 (the export plugin) and 4 (the export test layer) are partly built.
+An export of `dodge-the-creeps` produces the whole tree D6 describes and the game refuses to load
+it. `run_tests.py` is green on all seven of its existing layers, and the fourth layer §8 asks for
+is not written. §1 (twenty-two decisions) and §2 (seven spikes) are still the plan for what is
+left; every answer S-2, S-4, S-5 and S-7 produced is in §13.
 The shape: three UBT targets over `host/` (the editor host, a cooker *executable* the export plugin
 runs, a runtime host with `WITH_VERSE_COMPILER=0` that ships), one ABI header for all three with
 `vh_host_kind()` and `VH_ERR_UNSUPPORTED` (ABI 8.2), cooked packages plus a serialised snapshot in

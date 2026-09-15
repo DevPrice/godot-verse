@@ -165,8 +165,13 @@ void VerseExportPlugin::_export_begin(const PackedStringArray &p_features, bool 
 			if (line.is_empty()) {
 				continue;
 			}
-			const bool is_error = line.contains("error:");
-			say(is_error ? EditorExportPlatform::EXPORT_MESSAGE_ERROR : EditorExportPlatform::EXPORT_MESSAGE_WARNING, line);
+			int type = EditorExportPlatform::EXPORT_MESSAGE_INFO;
+			if (line.contains("error:")) {
+				type = EditorExportPlatform::EXPORT_MESSAGE_ERROR;
+			} else if (line.contains("warning:")) {
+				type = EditorExportPlatform::EXPORT_MESSAGE_WARNING;
+			}
+			say(type, line);
 		}
 	}
 
@@ -174,7 +179,9 @@ void VerseExportPlugin::_export_begin(const PackedStringArray &p_features, bool 
 		refused = true;
 		temp_dir = String();
 		say(EditorExportPlatform::EXPORT_MESSAGE_ERROR,
-				String("verse_cook exited ") + String::num_int64(status) + String("; the export carries no Verse."));
+				String("verse_cook exited ") + String::num_int64(status) +
+						String("; the export carries no Verse. To see the engine's own log, run it by hand: \"") +
+						cooker + String("\" \"") + manifest + String("\" \"") + work + String("\" --verbose"));
 		return;
 	}
 

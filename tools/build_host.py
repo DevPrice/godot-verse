@@ -214,7 +214,9 @@ def collect_outputs(engine: Path, repo: Path, config: str, target: str) -> None:
     # beside the GDExtension in the addon's bin/ for Godot's export to copy it (R-DIST-2). That
     # directory is git-ignored; scons copies the addon into each project from there.
     if target == "VerseHostRuntime":
-        addon_bin = repo / "addons" / "godot-verse" / "bin" / "windows-x86_64"
+        # demo/, not the repo-root addons/: demo is what SConstruct builds into and copies from,
+        # so anything that has to reach the other projects' addons has to be there first.
+        addon_bin = repo / "demo" / "addons" / "godot-verse" / "bin" / "windows-x86_64"
         addon_bin.mkdir(parents=True, exist_ok=True)
         for name in (binary_name, "tbbmalloc.dll"):
             source = bin_dir / name

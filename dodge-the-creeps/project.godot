@@ -17,6 +17,13 @@ run/main_scene="res://main.tscn"
 config/features=PackedStringArray("4.7")
 config/icon="res://icon.webp"
 
+[autoload]
+
+; Runs res://checks.gd when the game is started with `-- --verse-check`, and nothing at all
+; otherwise. An export template has no --script (main.cpp:4116-4120, TOOLS_ENABLED), so an
+; autoload is the only way to drive the checks from inside an exported game.
+ExportCheck="*res://export_check.gd"
+
 [display]
 
 window/size/viewport_width=480
