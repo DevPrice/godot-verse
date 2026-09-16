@@ -838,11 +838,15 @@ project within minutes of stage 3 landing, and `by-hand-findings.md` B18 is the 
 `filter_class_from_hint`: take the **leaf** of the qualified name before PascalCasing it, because
 ClassDB is one flat namespace and `@global_class` registers the file stem and nothing else.
 
-B19 is the same report's second half and is **not** closed: `@global_class` on a class that is not
-named after its file registers nothing either, so the slot named a class ClassDB had never heard of
-by a second route. That one turned into research rather than a patch, because what GDScript does in
-the same position had to be measured before anything could be called parity --
-`property-export.md` §"A second class in one file" carries it, and the staged plan.
+B19 is the same report's second half, and it turned into research rather than a patch: `@global_class`
+on a class that is not named after its file registers nothing either, so the slot named a class
+ClassDB had never heard of by a second route. What GDScript does in the same position had to be
+measured before anything could be called parity. **Now closed, in three stages** --
+`property-export.md` §"A second class in one file" carries the measurements and the plan. The hint
+falls back to the nearest mirrored Godot class (A1), the write is refused by class on both ABI paths
+(A2), an inert `@global_class` is a warning rather than silence (B), and serialisation is answered as
+C1: a class to be authored as a `.tres` lives in its own `.verse`, because what carries a value
+across a save is *being a script* and only the file-named class can be one.
 
 Nothing had caught it because no fixture was both things at once — module fixtures existed, resource
 exports existed, and the combination did not. That is the general shape of what this phase kept
