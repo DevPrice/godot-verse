@@ -6578,7 +6578,9 @@ AUTORTFM_DISABLE bool IsDefinitionNode(uLang::EAstNodeType NodeType)
     using namespace uLang;
     return NodeType == EAstNodeType::Definition_Function
         || NodeType == EAstNodeType::Definition_Data
-        || NodeType == EAstNodeType::Definition_TypeAlias;
+        || NodeType == EAstNodeType::Definition_TypeAlias
+        || NodeType == EAstNodeType::Definition_Class
+        || NodeType == EAstNodeType::Definition_Enum;
 }
 
 /// The Vst node carrying just the *name* of a definition, given the node carrying the whole thing.
@@ -6617,10 +6619,38 @@ AUTORTFM_DISABLE const Verse::Vst::Node* DefinitionNameNode(const Verse::Vst::No
 /// name is tight enough to mean the author pointed at it.
 AUTORTFM_DISABLE const Verse::Vst::Node* NarrowedLocus(const uLang::CAstNode& AstNode, const Verse::Vst::Node& Vst)
 {
+    using namespace uLang;
     if (!IsDefinitionNode(AstNode.GetNodeType()))
     {
         return &Vst;
     }
+
+    // A class and an enum are the two whose name is not inside their node at all. A function or a
+    // data member maps to the whole `Name := ...`, so the name is down its first children; a
+    // class maps to the `class(area2d):` macro on the *right* of the `:=`, whose first child is
+    // the word `class`. Narrowing to that made `class` the hoverable thing on the line and left
+    // the name that was actually being declared resolving to nothing.
+    //
+    // The name is the enclosing Vst::Definition's left operand. The walk up is bounded rather
+    // than a single step because the macro is wrapped: the shape is Definition -> Clause ->
+    // Macro, and a `where` clause or a parenthesised form could add another.
+    if (AstNode.GetNodeType() == EAstNodeType::Definition_Class
+        || AstNode.GetNodeType() == EAstNodeType::Definition_Enum)
+    {
+        for (const Verse::Vst::Node* Parent = Vst.GetParent(); Parent != nullptr; Parent = Parent->GetParent())
+        {
+            if (Parent->IsA<Verse::Vst::Definition>())
+            {
+                return DefinitionNameNode(*static_cast<const Verse::Vst::Definition*>(Parent)->GetOperandLeft());
+            }
+            if (Parent->IsA<Verse::Vst::Snippet>())
+            {
+                break;
+            }
+        }
+        return nullptr;
+    }
+
     return Vst.GetChildCount() > 0 ? DefinitionNameNode(*Vst.GetChildren()[0]) : nullptr;
 }
 
@@ -6646,6 +6676,29 @@ AUTORTFM_DISABLE const uLang::CDefinition* ReferencedDefinition(const uLang::CAs
     case EAstNodeType::Definition_TypeAlias:
         OutKind = VH_LOOKUP_TYPE_ALIAS;
         return &*static_cast<const CExprTypeAliasDefinition&>(AstNode)._TypeAlias;
+
+    // `player := class(area2d)` is the first line of every script, and hovering its name resolved
+    // nothing at all until this was here -- the class was reachable from every *other* file and
+    // silent in its own. _Generalized is what Identifier_Class answers with too, so a reference
+    // and the declaration report the same definition.
+    case EAstNodeType::Definition_Class:
+        OutKind = VH_LOOKUP_CLASS;
+        return static_cast<const CExprClassDefinition&>(AstNode)._Class._Generalized;
+
+    case EAstNodeType::Definition_Enum:
+        OutKind = VH_LOOKUP_ENUM;
+        return &static_cast<const CExprEnumDefinition&>(AstNode)._Enum;
+
+    // An enumerator, which is a definition of its own rather than a member of the enumeration's
+    // scope reached by name: `packed_scene_gen_edit_state.Disabled` resolved the enumeration and
+    // then nothing for the half the author was actually pointing at.
+    case EAstNodeType::Literal_Enum:
+        if (const CEnumerator* Enumerator = static_cast<const CExprEnumLiteral&>(AstNode)._Enumerator)
+        {
+            OutKind = VH_LOOKUP_DATA;
+            return Enumerator;
+        }
+        return nullptr;
 
     case EAstNodeType::Identifier_Data:
         OutKind = VH_LOOKUP_DATA;
@@ -6861,6 +6914,16 @@ AUTORTFM_DISABLE bool GodotVerse::LookupSymbol(FUtf8StringView Path, int32 Line,
         if (const uLang::CFunctionType* Type = Function->_Signature.GetFunctionType())
         {
             OutDesc.Type = FULangConversionUtils::ULangStrToFUtf8String(Type->AsCode());
+        }
+    }
+    else if (const uLang::CEnumerator* Enumerator = Definition.AsNullable<uLang::CEnumerator>())
+    {
+        // An enumerator is neither of the two above, so it would carry no type at all -- and the
+        // consumer draws the type and nothing else for anything it cannot name a Godot page for.
+        // The enumeration it belongs to is the only thing worth saying about one.
+        if (Enumerator->_Enumeration)
+        {
+            OutDesc.Type = FULangConversionUtils::ULangStrToFUtf8String(Enumerator->_Enumeration->AsCode());
         }
     }
 
