@@ -260,6 +260,9 @@ public:
 	// Writes a reference member with another script's instance rather than with a handle, which is
 	// what a member typed as one of the project's own classes holds. A null p_value clears it.
 	bool set_instance_field_instance(vh_instance *p_instance, const godot::String &p_name, vh_instance *p_value);
+	// What a Verse `ToString` extension method answers for this instance, or false when the
+	// class declares none -- which is Godot's cue to keep its own representation.
+	bool instance_to_string(vh_instance *p_instance, godot::String &r_text) const;
 
 	// R-DIAG-4. Installs or removes the Verse debugger; false when Epic's own socket debugger
 	// holds the VM's single debugger slot, which is what verse/host/enable_debugger asks for.

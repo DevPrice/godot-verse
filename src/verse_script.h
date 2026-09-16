@@ -111,6 +111,9 @@ public:
 	godot::Variant instance_field(vh_instance *p_instance, const godot::StringName &p_name) const;
 	bool set_instance_field(vh_instance *p_instance, const godot::StringName &p_name, const godot::Variant &p_value) const;
 	bool set_instance_field_instance(vh_instance *p_instance, const godot::StringName &p_name, vh_instance *p_value) const;
+	// What a Verse `ToString` extension method answers for this instance; false when the class
+	// declares none, which leaves Godot its own representation.
+	bool instance_to_string(vh_instance *p_instance, godot::String &r_text) const;
 
 	// Pushes the export list and its default values into every placeholder instance this script
 	// has out. A non-tool script gets placeholders rather than real instances in the editor, and

@@ -78,7 +78,7 @@ Two documents are not phase records and are the ones to read before adding a fea
 `include/verse_host_abi.h` is the only thing that crosses. Plain C — the two sides cannot share a
 C++ ABI. It is staged into the host's `Public/` by `build_host.py`, so both compile the same file.
 
-**`VH_ABI_VERSION` is 8.4.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
+**`VH_ABI_VERSION` is 8.5.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
 a major bump is a layout or meaning change and both sides must be rebuilt; a minor bump adds
 something an older consumer can ignore behind a `StructSize` check. A change to the header means
 bumping it and rebuilding **both** sides — the mismatch surfaces at `vh_init`, not at compile time.
@@ -228,7 +228,7 @@ has only built has never called `_validate` and the map is empty. **The gutter i
 by-hand** — the build copy proves the sentence and the line, not that the editor draws either.
 
 **export** — exports `tests/integration` headless, asserts the *tree* it produced, then **launches
-it** and asserts what its cases reported: 360 passed, 0 failed, 10 skipped, with the counts named in
+it** and asserts what its cases reported: 364 passed, 0 failed, 10 skipped, with the counts named in
 `run_tests.py` so a case that stops running in an export reads as a failure rather than as a shorter
 log. It is the only layer that exercises the cooked path end to end; everything else compiles at
 startup. It needs more staged than the other layers do, because what it is exporting *is* them —
@@ -686,12 +686,13 @@ it is not in `run_tests.py`.
   `PackageRelativeVersePath` is dead under VerseVM — and asking the *semantic* program for one must
   not use `EPathMode::PackageRelative`, which is fatal for a class with no package.
 - **A runtime host has no semantic program and can never build one**, so everything the analysis
-  alone could describe is recorded and carried in the sidecar (version **4**): the declared types of
+  alone could describe is recorded and carried in the sidecar (version **5**): the declared types of
   every member, method and signal, **whether a member is `var`** (without which every write an
   exported game made to its own state was silently dropped), the payload of all 503 mirrored
-  engine-signal accessors (without which `Timer.Timeout().Await()` connects and never resumes), and
-  the cooked package list — a container holds package *ids*, which are hashes, and mount points are
-  still registered by name.
+  engine-signal accessors (without which `Timer.Timeout().Await()` connects and never resumes), the
+  **decorated name of a class's `ToString` extension method** (R-NODE-10: it is a module-level
+  definition, so there is nothing on the class to find it from), and the cooked package list — a
+  container holds package *ids*, which are hashes, and mount points are still registered by name.
 - **Every package the program has must reach the container.** A VNI package the runtime host cannot
   find is only a warning from `JitVniPackages`, and then every import into it in every other package
   silently resolves to null — which is how `/Solaris/_Verse/VNI/VerseNative` went missing for a

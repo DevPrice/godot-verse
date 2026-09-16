@@ -659,6 +659,24 @@ bool VerseRuntime::set_instance_field_instance(vh_instance *p_instance, const St
 	return host.InstanceSetFieldInstance(p_instance, p_name.utf8().get_data(), p_value) == VH_OK;
 }
 
+bool VerseRuntime::instance_to_string(vh_instance *p_instance, String &r_text) const {
+	if (!host.is_loaded() || host.InstanceToString == nullptr || p_instance == nullptr) {
+		return false;
+	}
+	const vh_value *value = nullptr;
+	if (host.InstanceToString(p_instance, &value) != VH_OK || value == nullptr) {
+		return false;
+	}
+	// VH_ERR_NOT_FOUND above is the common case -- most classes write no ToString -- and is a
+	// false rather than an empty string, because Godot's own `<Node2D#27>` is a better answer than
+	// nothing at all.
+	if (value->Type != VH_TYPE_STRING) {
+		return false;
+	}
+	r_text = String::utf8(value->String.Utf8, value->String.Len);
+	return true;
+}
+
 vh_instance *VerseRuntime::instantiate(const String &p_class_name, int64_t p_object_id) {
 	if (!host.is_loaded()) {
 		return nullptr;

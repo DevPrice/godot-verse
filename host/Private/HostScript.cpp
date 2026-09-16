@@ -3138,6 +3138,26 @@ AUTORTFM_DISABLE Verse::VClass* FindVClassByDecoratedName(FUtf8StringView Decora
     return nullptr;
 }
 
+/// The same lookup for a free function, which is what an extension method is: `operator'.ToString'`
+/// lives in the module beside the class rather than in the class, so no amount of asking the object
+/// for a member finds it.
+AUTORTFM_DISABLE Verse::VFunction* FindVFunctionByDecoratedName(FUtf8StringView DecoratedName)
+{
+    if (!Verse::GlobalProgram || DecoratedName.IsEmpty())
+    {
+        return nullptr;
+    }
+    for (uint32 Index = 0; Index < Verse::GlobalProgram->NumPackages(); ++Index)
+    {
+        if (Verse::VFunction* Function =
+                Verse::GlobalProgram->GetPackage(Index).LookupDefinition<Verse::VFunction>(DecoratedName))
+        {
+            return Function;
+        }
+    }
+    return nullptr;
+}
+
 /// The decorated name of a semantic definition: `(<enclosing scope path>:)<name>`.
 ///
 /// The one spelling three readers had each built inline -- the enum reader, the statics reader and
@@ -7323,6 +7343,78 @@ AUTORTFM_DISABLE const uLang::CClass* FindScriptClassLive(FUtf8StringView ClassN
         FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath));
 }
 
+/// The `ToString` extension method the project wrote for this class, as a decorated name.
+///
+/// R-NODE-10's first hook, and it is looked for in the class's *enclosing scope* rather than among
+/// the class's own definitions because that is where Verse puts it. `(X:my_class).ToString()` is an
+/// **extension method**: a module-level `operator'.ToString'(:my_class, :tuple())`, the receiver
+/// first and the call's own arguments as a tuple second. A class member of that name cannot be
+/// written at all -- glitch 3532 against /Verse.org/Verse's own ToString, which is reachable as an
+/// extension method itself -- so no class method list will ever carry one and GetClassMethodsLive
+/// is the wrong place to look. `tests/verse_probe/tostring_probe.verse` is the record.
+///
+/// The receiver is matched against the class *and its bases*, so a ToString written once for a base
+/// class serves every script deriving from it, which is what anything method-shaped should do.
+///
+/// Empty when the project declares none, which is the common case: Godot then keeps `<Node2D#27>`.
+AUTORTFM_DISABLE FUtf8String FindToStringExtensionLive(FUtf8StringView ClassName)
+{
+    const uLang::CClass* const Class = FindScriptClassLive(ClassName);
+    if (!Class)
+    {
+        return FUtf8String();
+    }
+
+    const uLang::CLogicalScope& Scope = Class->_EnclosingScope.GetLogicalScope();
+    for (const uLang::TSRef<uLang::CFunction>& Function : Scope.GetDefinitionsOfKind<uLang::CFunction>())
+    {
+        if (!FUtf8StringView(Function->AsNameCString()).Equals(UTF8TEXTVIEW("operator'.ToString'")))
+        {
+            continue;
+        }
+
+        // The receiver is parameter 0; the call's own arguments are the tuple in parameter 1.
+        const uLang::SSignature::ParamDefinitions& Params = Function->_Signature.GetParams();
+        if (Params.IsEmpty() || !Params[0])
+        {
+            continue;
+        }
+        const uLang::CDataDefinition* const Receiver = Params[0];
+        const uLang::CTypeBase* const ParamType = Receiver->GetType();
+        if (!ParamType)
+        {
+            continue;
+        }
+        const uLang::CClass* const ReceiverClass = ParamType->GetNormalType().AsNullable<uLang::CClass>();
+        if (!ReceiverClass)
+        {
+            continue;
+        }
+        for (const uLang::CClass* Cursor = Class; Cursor != nullptr; Cursor = Cursor->GetSuperClass())
+        {
+            if (Cursor == ReceiverClass)
+            {
+                // The key a VPackage actually holds, which is not DecoratedNameOf's shape and was
+                // measured rather than assumed: the enclosing scope again, wrapped around the
+                // function's *whole* decorated name -- which already carries its own scope prefix
+                // and its signature. So the scope appears twice and the parameters are part of the
+                // key, which is what tells two `operator'.ToString'` overloads apart.
+                //
+                //   (/user@localhost:)(/user@localhost:)operator'.ToString'(:(...:)game_state,:tuple())
+                //
+                // A class is keyed by DecoratedNameOf alone, so reusing that here found nothing and
+                // to_string silently kept Godot's own text.
+                return FUtf8String(UTF8TEXT("("))
+                    + FULangConversionUtils::ULangStrToFUtf8String(
+                          Function->_EnclosingScope.GetScopePath('/', uLang::CScope::EPathMode::PrefixSeparator))
+                    + UTF8TEXT(":)")
+                    + FULangConversionUtils::ULangStrToFUtf8String(Function->GetDecoratedName());
+            }
+        }
+    }
+    return FUtf8String();
+}
+
 AUTORTFM_DISABLE bool ClassMembersLive(FUtf8StringView ClassName, TArray<GodotVerse::FCompleteItem>& OutItems)
 {
     using GodotVerse::FCompleteItem;
@@ -7941,6 +8033,7 @@ AUTORTFM_DISABLE void TakeAnalysisSnapshot()
 
         GetClassMethodsLive(ClassName, Entry.Methods);
         GetClassSignalsLive(ClassName, Entry.Signals);
+        Entry.ToStringDecorated = FindToStringExtensionLive(ClassName);
 
         // The declared types, which are the analysis's to record and nothing else's to re-derive.
         Entry.Types = MakeShared<GodotVerse::FDeclaredTypes>();
@@ -8461,6 +8554,95 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
         return VH_ERR_RUNTIME;
     }
     return bBodyRan ? Status : VH_ERR_HALTED;
+}
+
+AUTORTFM_DISABLE int32 GodotVerse::InstanceToString(FInstance* Instance,
+                                                    vh_value& OutResult,
+                                                    FFieldStorage& OutStorage)
+{
+    OutResult = vh_value{};
+    OutStorage.Text.Reset();
+    OutStorage.Blocks.Reset();
+    OutStorage.Strings.Reset();
+
+    if (!Instance || !Instance->Object.IsValid())
+    {
+        return VH_ERR_STATE;
+    }
+
+    // From the snapshot, so this costs no analysis and never waits -- Godot asks for an object's
+    // text from the remote inspector and from `print`, neither of which is a moment to block on.
+    const FUtf8String ClassName = QualifiedClassName(Instance->Object->GetClass());
+    const FAnalysisSnapshot::FClass* const Found =
+        GSnapshot ? GSnapshot->Classes.Find(ClassName) : nullptr;
+    if (!Found || Found->ToStringDecorated.IsEmpty())
+    {
+        return VH_ERR_NOT_FOUND;
+    }
+
+    Verse::VFunction* const Function = FindVFunctionByDecoratedName(FUtf8StringView(Found->ToStringDecorated));
+    if (!Function)
+    {
+        return VH_ERR_NOT_FOUND;
+    }
+
+    // The result is read as a `string`, which is the only thing Godot has anywhere to put it. The
+    // match above was on the name and the receiver, not the result type, so a project that declares
+    // `(X:c).ToString():int` reaches here -- and ValueToWire declines it, which the consumer turns
+    // back into Godot's own representation. Wrong rather than refused at the declaration, and
+    // harmless, which is why it is not worth a diagnostic of its own.
+    FMemberType StringType;
+    StringType.Described.Type = VH_TYPE_STRING;
+
+    int32 Status = VH_OK;
+    bool bBodyRan = false;
+    Verse::FRunningContext Context = Verse::FRunningContextPromise{};
+
+    const AutoRTFM::ETransactionResult TransactionResult = AutoRTFM::Transact([&] {
+        // Open inside the transaction, for the reason InstanceCall states: a Verse runtime error
+        // raised from closed code trips AutoRTFM::UnreachableIfClosed instead of unwinding.
+        AutoRTFM::Open([&] {
+        EnterVerseOn(Context, *Instance, [&] {
+            bBodyRan = true;
+            // The two parameters an extension method actually has. The receiver is not `Self` here
+            // -- it is an ordinary first argument -- and the second is the call's own argument
+            // list, which for a no-argument ToString is the empty tuple.
+            Verse::VFunction::Args Converted;
+            Converted.Reserve(2);
+            Converted.Add(Verse::VValue(Instance->Object.Get()));
+            Converted.Add(Verse::VValue(Verse::GlobalFalse()));
+
+            const Verse::FOpResult OpResult = Function->Invoke(Context, MoveTemp(Converted));
+            switch (OpResult.Kind)
+            {
+            case Verse::FOpResult::Return:
+                if (!ValueToWire(Context, OpResult.Value, StringType, OutStorage, OutResult))
+                {
+                    Status = VH_ERR_ARGUMENT;
+                }
+                break;
+
+            case Verse::FOpResult::Fail:
+                Status = VH_ERR_FAILED;
+                break;
+
+            default:
+                Status = VH_ERR_RUNTIME;
+                break;
+            }
+        });
+        });
+    });
+
+    if (TransactionResult != AutoRTFM::ETransactionResult::Committed)
+    {
+        return VH_ERR_RUNTIME;
+    }
+    if (!bBodyRan)
+    {
+        return VH_ERR_HALTED;
+    }
+    return Status;
 }
 
 /// The decorated name of a bound Verse method, found by asking the object for each method its

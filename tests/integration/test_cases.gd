@@ -1338,6 +1338,38 @@ func begin() -> void:
 		_check("and a `class(resource)` reports one that test refuses",
 				not ClassDB.is_parent_class(res_script.get_instance_base_type(), "Node"))
 
+	# --- R-NODE-10: what the object calls itself ------------------------------------------------
+	#
+	# The Verse spelling is an extension method, not a `_ToString` override -- there is no such
+	# virtual and deliberately so, because a class member of that name cannot be declared at all.
+	# game_state.verse writes one; every other fixture writes none, which is the control.
+	#
+	# Asserted on a plain instance rather than on the autoload, so it runs in both runs: nothing
+	# about this needs a singleton.
+	if autoload_script != null:
+		var printable := Node.new()
+		printable.set_script(autoload_script)
+		tree.root.add_child(printable)
+		_check_eq("a Verse ToString extension method is what str() shows",
+				str(printable), "game_state(fresh 0)")
+		printable.call("Rename", "named")
+		_check_eq("and it is re-read rather than cached",
+				str(printable), "game_state(named 0)")
+		# The round trip that makes one implementation serve both languages: Verse's own "{Obj}"
+		# desugars to the free ToString(Obj), which is the mirror's ToString(:object), which calls
+		# Godot's to_string() -- which lands back on the extension method above.
+		_check_eq("and Verse's own interpolation arrives at it through Godot",
+				printable.call("DescribeSelf"), "game_state(named 0)")
+		printable.queue_free()
+
+	# A script that writes no ToString must keep Godot's own representation rather than gain an
+	# empty one -- `r_is_valid = false` is the difference, and it is the common case.
+	if res_script != null:
+		var plain := Resource.new()
+		plain.set_script(res_script)
+		_check("a script with no ToString keeps Godot's own text",
+				str(plain).contains("Resource"))
+
 	# The singleton itself is the *exported* run's alone, and not because of anything about Verse:
 	# `--script` replaces the main loop before Godot sets any autoload up. Measured rather than
 	# assumed -- under the editor-side driver `/root` has no children at all, not even this suite's

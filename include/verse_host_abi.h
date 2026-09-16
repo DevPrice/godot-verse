@@ -43,7 +43,7 @@ extern "C" {
  * different toolchains and nothing links them.
  */
 #define VH_ABI_VERSION_MAJOR 8
-#define VH_ABI_VERSION_MINOR 4
+#define VH_ABI_VERSION_MINOR 5
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
 typedef int32_t vh_bool;
@@ -1295,6 +1295,26 @@ VH_ATTR VH_API int32_t vh_instance_set_field(vh_instance* Instance, const char* 
  * does not notice until compiled code reads it, so it is refused here rather than written. */
 VH_ATTR VH_API int32_t vh_instance_set_field_instance(vh_instance* Instance, const char* NameUtf8, vh_instance* Value);
 
+/* What the script chose to call itself, for Godot's `to_string` -- R-NODE-10's first hook.
+ *
+ * Its own entry point rather than a vh_instance_call, because what it calls is not a method and
+ * never can be. Verse spells this as an **extension method**:
+ *
+ *     (X:my_class).ToString<public>()<transacts>:string = "..."
+ *
+ * which is a module-level `operator'.ToString'(:my_class, :tuple())` -- the receiver is an ordinary
+ * first argument and the call's own arguments are a tuple in the second. A class *member* named
+ * ToString cannot be written at all: it is ambiguous with /Verse.org/Verse's own ToString, which is
+ * itself reachable as an extension method. So vh_class_method_list never carries one and
+ * vh_instance_call has nothing to resolve.
+ *
+ * A receiver written for a *base* class serves every script deriving from it.
+ *
+ * OutValue points into storage owned by the host, valid until the next call to this function.
+ * Answers VH_ERR_NOT_FOUND when the class declares no such method, which is the common case and
+ * means the consumer should leave Godot its own representation rather than show an empty string. */
+VH_ATTR VH_API int32_t vh_instance_to_string(vh_instance* Instance, const vh_value** OutValue);
+
 /* ---------------------------------------------------------- symbol lookup -- */
 
 /* What an identifier resolved to. The consumer needs the var/non-var split to say which of
@@ -1773,6 +1793,7 @@ typedef int32_t (*vh_instance_get_field_fn)(vh_instance*, const char*, const vh_
 typedef int32_t (*vh_class_default_field_fn)(const char*, const char*, const vh_value**);
 typedef int32_t (*vh_instance_set_field_fn)(vh_instance*, const char*, const vh_value*);
 typedef int32_t (*vh_instance_set_field_instance_fn)(vh_instance*, const char*, vh_instance*);
+typedef int32_t (*vh_instance_to_string_fn)(vh_instance*, const vh_value**);
 typedef int32_t (*vh_lookup_symbol_fn)(const char*, int32_t, int32_t, const vh_lookup_desc**);
 typedef int32_t (*vh_complete_symbol_fn)(const char*, const char*, int32_t, int32_t, int32_t, const vh_complete_item**, int32_t*);
 typedef int32_t (*vh_class_members_fn)(const char*, const vh_complete_item**, int32_t*);

@@ -17,7 +17,7 @@ namespace {
 /// Bumped when the shape below changes in a way a reader of the old shape would misread. The
 /// cooker and the runtime host are built together and shipped together, so this is a tripwire
 /// against a stale cook in a game directory rather than a compatibility mechanism.
-constexpr int32 SidecarVersion = 4;
+constexpr int32 SidecarVersion = 5;
 
 FString Utf8ToFString(const FUtf8String& Value)
 {
@@ -491,6 +491,14 @@ AUTORTFM_DISABLE bool GodotVerse::WriteClassSidecar(const FString& Path,
         // analysed but did not publish must not claim to be there.
         Entry->SetBoolField(TEXT("published"), Class.bInPublishedProgram);
         Entry->SetBoolField(TEXT("exportsHarvested"), Class.bExportsHarvested);
+        // R-NODE-10's ToString. Written even when empty is wasteful, so it is written only when
+        // there is one -- but it has to be *carried*, because an exported game has no semantic
+        // program to find an extension method in and this name is the whole of what the lookup
+        // needs. Version 5 is this field.
+        if (!Class.ToStringDecorated.IsEmpty())
+        {
+            Entry->SetStringField(TEXT("toString"), FString(Class.ToStringDecorated));
+        }
 
         TArray<TSharedPtr<FJsonValue>> Methods;
         for (const FMethodDesc& Method : Class.Methods)
@@ -655,6 +663,12 @@ AUTORTFM_DISABLE bool GodotVerse::LoadClassSidecar(const FString& Path, FUtf8Str
             Class.bAbstract = Entry->GetBoolField(TEXT("abstract"));
             Class.bInPublishedProgram = Entry->GetBoolField(TEXT("published"));
             Class.bExportsHarvested = Entry->GetBoolField(TEXT("exportsHarvested"));
+
+            FString ToStringName;
+            if (Entry->TryGetStringField(TEXT("toString"), ToStringName))
+            {
+                Class.ToStringDecorated = FUtf8String(ToStringName);
+            }
 
             const TSharedPtr<FJsonObject>* Types = nullptr;
             if (Entry->TryGetObjectField(TEXT("types"), Types))

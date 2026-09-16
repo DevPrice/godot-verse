@@ -326,6 +326,23 @@ struct FMethodDesc
 /// is true with an empty array.
 AUTORTFM_DISABLE bool GetClassMethods(FUtf8StringView ClassName, TArray<FMethodDesc>& OutMethods);
 
+/// What a Verse `ToString` extension method answers for this instance -- R-NODE-10's first hook.
+///
+/// Godot asks a script for its own text through `to_string_func`, and Verse's spelling for that is
+/// not a virtual on the native root but an extension method:
+///
+///     (X:my_class).ToString<public>()<transacts>:string = "..."
+///
+/// which is a module-level `operator'.ToString'(:my_class, :tuple())` -- receiver first, the call's
+/// own arguments as a tuple second. A class *member* of that name cannot be written at all (glitch
+/// 3532 against /Verse.org/Verse's own ToString), so InstanceCall can never reach one and this has
+/// its own entry point. `tests/verse_probe/tostring_probe.verse` carries the five rounds that
+/// settled it.
+///
+/// VH_ERR_NOT_FOUND when the class has no such method, which is the common case and means Godot
+/// should keep its own representation rather than show an empty string.
+AUTORTFM_DISABLE int32 InstanceToString(FInstance* Instance, vh_value& OutResult, FFieldStorage& OutStorage);
+
 /// Calls any method the script declares and answers its result.
 ///
 /// Arguments are converted against the parameter types GetClassMethods reported, so this needs no
@@ -609,6 +626,14 @@ struct FAnalysisSnapshot
         /// the analysis just built -- and the question is asked on the keystroke that opens
         /// completion, where nothing may touch that program.
         TArray<GodotVerse::FCompleteItem> OverrideCandidates;
+
+        /// The decorated name of the `ToString` extension method the project wrote for this class,
+        /// or empty when it wrote none -- in which case Godot keeps its own `<Node2D#27>`.
+        ///
+        /// Recorded here rather than looked up on demand for the reason everything else in this
+        /// struct is: a runtime host has no semantic program to ask, and the editor may not wait
+        /// on one. It is a *module-level* name, not a member -- see FindToStringExtensionLive.
+        FUtf8String ToStringDecorated;
 
         /// GetClassExports answers false for a program with no export attribute in it as well as
         /// for a class that is not there, and the two mean different things to `_validate`.

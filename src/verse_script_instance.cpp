@@ -354,8 +354,33 @@ void notification_func(GDExtensionScriptInstanceDataPtr p_instance, int32_t p_wh
 	self->script->call_instance(self->verse_object, method->decorated.get_data(), args, 1, result);
 }
 
+// What the object calls itself -- Godot's `_to_string`, R-NODE-10's first hook.
+//
+// The Verse spelling is not a virtual on the native root but an **extension method**, because that
+// is what Verse already has for this and a class member named `ToString` cannot be written at all
+// (it is ambiguous with /Verse.org/Verse's own). So this does not go through `resolve`, which asks
+// the class for a member: `vh_instance_to_string` exists precisely because there is no member to
+// find. See docs/spec.md R-NODE-10 and tests/verse_probe/tostring_probe.verse.
+//
+// `r_is_valid = false` is Godot's own spelling for "I have nothing", and it is the answer whenever
+// the script wrote no ToString -- which leaves `<Node2D#27>` rather than replacing it with an
+// empty string.
+//
+// This also serves Verse's own `"{Obj}"`, which does not reach the extension method directly:
+// interpolation desugars to the free `ToString(Obj)`, which is the mirror's `ToString(:object)`,
+// which calls Godot's to_string() -- and arrives back here.
 void to_string_func(GDExtensionScriptInstanceDataPtr p_instance, GDExtensionBool *r_is_valid, GDExtensionStringPtr r_out) {
 	*r_is_valid = false;
+	VerseScriptInstance *self = static_cast<VerseScriptInstance *>(p_instance);
+	if (self == nullptr || self->verse_object == nullptr) {
+		return;
+	}
+	String text;
+	if (self->script.is_null() || !self->script->instance_to_string(self->verse_object, text)) {
+		return;
+	}
+	*reinterpret_cast<String *>(r_out) = text;
+	*r_is_valid = true;
 }
 
 void refcount_incremented_func(GDExtensionScriptInstanceDataPtr p_instance) {

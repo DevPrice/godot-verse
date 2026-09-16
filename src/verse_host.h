@@ -62,6 +62,7 @@ public:
 	vh_class_default_field_fn ClassDefaultField = nullptr;
 	vh_instance_set_field_fn InstanceSetField = nullptr;
 	vh_instance_set_field_instance_fn InstanceSetFieldInstance = nullptr;
+	vh_instance_to_string_fn InstanceToString = nullptr;
 	vh_lookup_symbol_fn LookupSymbol = nullptr;
 	vh_complete_symbol_fn CompleteSymbol = nullptr;
 	vh_class_members_fn ClassMembers = nullptr;

@@ -540,8 +540,9 @@ no gain, and would make an `@export` and a `_Get` of the same name a silent race
 **One signature each, no overloads.** S-3's second finding is why: Godot resolves a script method by
 name out of a name-keyed list, and two `_Get`s would be indistinguishable in it.
 
-**Done when** `print(node)` in GDScript shows what a Verse `ToString` extension method chose, and a
-Verse script serves a property that no `@export` declares.
+**Done when** `print(node)` in GDScript shows what a Verse `ToString` extension method chose — **done,
+and §15 has what it cost** — and a Verse script serves a property that no `@export` declares, which
+is the other four and is not started.
 
 ---
 
@@ -825,6 +826,40 @@ again as *the same Verse object* — which is what lets a script's own downcast 
 what makes "holds, and passes around" in R-NODE-3's own wording true rather than nearly true. The
 table had to exist anyway for the release hook; the identity is what it costs nothing extra to also
 answer. The other half of R-SCN-6's identity question, arriving three phases later.
+
+### Stage 5's first hook, which cost the most of any of them
+
+**`_ToString` does not exist, and §7's first line is the thing this stage corrected.** The design is
+in §7 now and in `spec.md` R-NODE-10; what belongs here is what building it cost, because it is the
+one stage in this phase that cost more than its document expected rather than less.
+
+Three facts had to be measured, and each was wrong on the first attempt with no symptom but silence:
+
+1. **Where the extension method lives.** Not among the class's own definitions — in the class's
+   *enclosing* scope, which is the module, so every file in the module sees it.
+2. **What key the VM holds it under.** Not `DecoratedNameOf`'s shape, which is what every class
+   lookup in this file uses. It is the scope prefix wrapped around the function's *whole* decorated
+   name, which already repeats that scope and carries the signature:
+   `(/user@localhost:)(/user@localhost:)operator'.ToString'(:(...)game_state,:tuple())`. Reusing a
+   class's key returned null and `to_string` quietly kept Godot's own text.
+3. **How accessible it may be.** No more than the type it extends, so `<public>` on a method
+   extending an ordinary internal script class is glitch 3593 — which talks about subpaths and never
+   says `<public>`.
+
+None of the three announces itself. A wrong answer to any of them is a script that compiles, an
+editor that behaves, and an object that prints `<Node2D#27>` — which is also exactly what a script
+with no ToString at all should print. That is the shape of defect this phase kept finding, and it is
+why the fixture asserts the *negative* control too: a class with no ToString must keep Godot's text.
+
+It also needed an ABI entry point of its own (8.5) and a sidecar field (version 5), because the
+thing being called is not a method and an exported game has no semantic program to find it in.
+
+**What it did not need is any new Verse surface**, and that is the part worth keeping: `"{Obj}"` in
+Verse reaches the same override as `print(node)` in GDScript, by going out through the mirror's
+`ToString(:object)` to Godot's `to_string()` and back in. One implementation, both languages, and a
+re-entrant Verse → Godot → Verse call that the bridge had never made before and which works.
+
+---
 
 ### Stage 4, which cost nothing either
 

@@ -1119,6 +1119,38 @@ extern "C" int32_t vh_instance_set_field_instance(vh_instance* Instance, const c
         : VH_ERR_NOT_FOUND;
 }
 
+extern "C" int32_t vh_instance_to_string(vh_instance* Instance, const vh_value** OutValue)
+{
+    if (WrongThread("vh_instance_to_string"))
+    {
+        return VH_ERR_THREAD;
+    }
+    GodotVerse::WaitForBackgroundCheck();
+    if (!Instance || !OutValue)
+    {
+        return VH_ERR_ABI;
+    }
+    if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+
+    /* Its own buffer, like vh_class_default_field's: a consumer reads an object's text while it is
+     * also reading fields, and the two must not invalidate each other. */
+    static vh_value GToStringValue;
+    static GodotVerse::FFieldStorage GToStringStorage;
+    GToStringValue = vh_value{};
+
+    const int32_t Status = GodotVerse::InstanceToString(
+        reinterpret_cast<GodotVerse::FInstance*>(Instance), GToStringValue, GToStringStorage);
+    if (Status != VH_OK)
+    {
+        return Status;
+    }
+    *OutValue = &GToStringValue;
+    return VH_OK;
+}
+
 extern "C" int32_t vh_class_default_field(const char* ClassNameUtf8, const char* NameUtf8, const vh_value** OutValue)
 {
     if (WrongThread("vh_class_default_field"))

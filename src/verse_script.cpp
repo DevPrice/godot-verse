@@ -257,6 +257,11 @@ bool VerseScript::set_instance_field_instance(vh_instance *p_instance, const Str
 	return runtime != nullptr && runtime->set_instance_field_instance(p_instance, String(p_name), p_value);
 }
 
+bool VerseScript::instance_to_string(vh_instance *p_instance, String &r_text) const {
+	VerseRuntime *runtime = get_runtime();
+	return runtime != nullptr && runtime->instance_to_string(p_instance, r_text);
+}
+
 void VerseScript::free_instance(vh_instance *p_instance) const {
 	VerseRuntime *runtime = get_runtime();
 	if (runtime != nullptr) {

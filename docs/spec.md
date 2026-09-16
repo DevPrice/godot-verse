@@ -556,7 +556,8 @@ on closing it.
   `get_method_argument_count` from it.
 - **R-NODE-10 (SHOULD)** The script-level hooks Godot offers a script rather than registering in
   ClassDB are reachable: `_to_string`, `_get`, `_set`, `_get_property_list`, `_validate_property`.
-  Status: **none**. Named by Phase 4 once `_notification` proved that none of this family is in
+  Status: **part** -- `_to_string` is done (Phase 4b stage 5); the other four are not started. Named
+  by Phase 4 once `_notification` proved that none of this family is in
   `extension_api.json` and so none of it can be generated. `_to_string` is what makes `print(node)`
   in GDScript show something a Verse author chose; `_get`/`_set` overlap §5.4's export machinery,
   which is why the set is scheduled with it (roadmap, Phase 4b) rather than with R-NODE-7.
@@ -583,7 +584,21 @@ on closing it.
   What the host has to look up is **module-level, not a class member** — which is why
   `vh_class_method_list` does not carry it and `vh_instance_call` cannot reach it unaided:
   `operator'.ToString'(:my_class, :tuple())`, receiver first and the call's own arguments as a tuple
-  second.
+  second. So it has its own entry point, `vh_instance_to_string` (ABI **8.5**), and the analysis
+  records the name per class because an exported game has no semantic program to search in
+  (sidecar **5**).
+
+  Two things about that lookup were measured rather than derived, and both were wrong first time.
+  The extension method is found in the class's **enclosing scope** rather than among its own
+  definitions — a module's scope, so every file in the module sees it. And the key a `VPackage`
+  holds it under is *not* a class's shape: it is the scope prefix wrapped around the function's
+  **whole decorated name**, which already repeats that scope and carries the signature, so the
+  parameters are part of the key and two overloads are told apart by them. Reusing a class's key
+  found nothing, and the only symptom was `to_string` quietly keeping Godot's own text.
+
+  **An extension method may be no more accessible than the type it extends.** A script class written
+  the ordinary way is internal, so `(X:my_class).ToString<public>()` is uLang glitch 3593 — whose
+  message talks about subpaths of `/user@localhost` and never says `<public>`. Omit the specifier.
 
 ### 5.3 Signals
 
