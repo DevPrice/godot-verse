@@ -392,6 +392,8 @@ def run_integration(results: Results, engine: Path | None, godot: Path | None) -
             "is a `var`, and a signal is an identity rather than a value",
             # R-EXP-9, an `@rpc` whose words Godot does not know:
             "is not an @rpc word",
+            # R-EXP-1, an inspector hint on a type it cannot describe:
+            "which describes an `int` -- and this member is not one",
         ],
     )
 
@@ -574,9 +576,9 @@ EXPORT_EXPECTED_CLASSES = ["marshal", "signals", "left/widget"]
 # `get_global_name`, which is read off the same stripped source. The five R-EXP-7 cases run the
 # other way round -- only an exported game has autoloads at all, because `--script` replaces the
 # main loop before Godot sets one up -- so they are skips in the editor run and passes here, which
-# is why 414 + 10 is the 419 + 5 the in-editor run prints rather than a plain sum. Adding a case
+# is why 426 + 10 is the 431 + 5 the in-editor run prints rather than a plain sum. Adding a case
 # means changing this line, which is the point of it.
-EXPORT_EXPECTED_PASSES = 414
+EXPORT_EXPECTED_PASSES = 426
 EXPORT_EXPECTED_SKIPS = 10
 
 

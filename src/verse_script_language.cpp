@@ -3469,6 +3469,26 @@ void VerseScriptLanguage::refresh_completion_if_current() const {
 // The two rules read as instructions because they have a fix the author can apply. The third does
 // not: it is the bridge's own coverage, and saying so plainly is better than a suggestion that
 // would not work.
+// The attribute an author wrote, named back to them. R-EXP-1's five are told apart by the hint
+// alone, because vh_export_desc has no room to carry the spelling and adding one would be a layout
+// change -- so this is the one place the mapping is written down on the consumer's side.
+static String export_hint_attribute_name(const Dictionary &p_entry) {
+	switch ((int64_t)p_entry["hint"]) {
+		case VH_EXPORT_HINT_FILE:
+			return String("`@export_file`");
+		case VH_EXPORT_HINT_DIR:
+			return String("`@export_dir`");
+		case VH_EXPORT_HINT_MULTILINE:
+			return String("`@export_multiline`");
+		case VH_EXPORT_HINT_FLAGS:
+			return String("`@export_flags`");
+		case VH_EXPORT_HINT_NODE_PATH:
+			return String("`@export_node_path`");
+		default:
+			return String("an inspector hint");
+	}
+}
+
 static String export_rejection_message(const Dictionary &p_entry) {
 	const String name = p_entry["name"];
 	const String class_name = p_entry["hint_string"];
@@ -3480,6 +3500,17 @@ static String export_rejection_message(const Dictionary &p_entry) {
 		case VH_EXPORT_OPTION_NOT_OBJECT:
 			return name + String(" is an option around a value the inspector has no empty slot for. ")
 					+ String("Only a node or a resource can be left unassigned.");
+		case VH_EXPORT_HINT_WRONG_TYPE: {
+			// R-EXP-1's five exist *because* the type says nothing, so the author is the only one
+			// who can pair them -- and a mispairing is silent otherwise: the attribute compiles and
+			// Godot draws a plain field, which is also what no attribute at all draws.
+			const char *wants = (int64_t)p_entry["hint"] == VH_EXPORT_HINT_FLAGS ? "an `int`" : "a `string`";
+			return name + String(" carries ") + export_hint_attribute_name(p_entry)
+					+ String(", which describes ") + String(wants)
+					+ String(" -- and this member is not one. The attribute exists because the ")
+					+ String("declared type cannot say what a value is for, so the two have to be ")
+					+ String("written to agree.");
+		}
 		case VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL:
 			// Narrow since B19: a class with no registered Godot name is exported anyway, filtered
 			// by its nearest mirrored ancestor. What is left here is the case with no such ancestor
@@ -3502,6 +3533,8 @@ static String export_rejection_code(int64_t p_reject) {
 			return String("OPTION_EXPORT_NOT_OBJECT");
 		case VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL:
 			return String("SCRIPT_CLASS_EXPORT_NOT_GLOBAL");
+		case VH_EXPORT_HINT_WRONG_TYPE:
+			return String("EXPORT_HINT_WRONG_TYPE");
 		default:
 			return String("EXPORT_TYPE_UNSUPPORTED");
 	}

@@ -864,6 +864,50 @@ re-entrant Verse → Godot → Verse call that the bridge had never made before 
 
 ---
 
+### Stage 7, which §9 got right, and the one thing it put in the wrong place
+
+**§9's table is the design and it survived.** Five attributes, five new `vh_export_hint` values in
+`vh_export_desc`'s existing `Hint`/`HintString`, an ABI **minor** under the header's own policy
+because an older consumer that does not know a hint draws the plain field it drew before the
+attribute existed. Each hint string turned out to need no translation at all: the flags names are
+comma separated because that is what `PROPERTY_HINT_FLAGS` wants, and the file filter is `*.png`
+because that is what `PROPERTY_HINT_FILE` wants, so the string passes from the attribute to Godot
+untouched.
+
+**What §9 does not mention is the check, and it is the half worth having.** These five exist
+*because* the declared type says nothing — so `@export_flags` on a `string` has no other detector.
+The attribute compiles. Godot draws a plain field. And a plain field is also what *no* attribute at
+all draws, so the author sees exactly what they would have seen if they had never written it. It is
+`VH_EXPORT_HINT_WRONG_TYPE`, refused at the member with a sentence naming the attribute; the
+existing `Reject` machinery carried it with no new field, and the `Hint` the author asked for is
+what the message reads back, because `vh_export_desc` has no room for a reject detail and adding one
+would be a layout change.
+
+**And stage 6's constraint reached this stage before it was written.** §9 spells
+`@export_flags("Fire", "Water", "Earth")` — three arguments, which an attribute may not take. One
+comma-separated string is what Godot's own hint wanted anyway, so this is the one place the
+toolchain's limit costs nothing; `@export_file`'s `*.png,*.jpg` is the same shape for the same
+reason. Worth noticing, because it is the general answer for the next multi-argument attribute: when
+Godot's own hint string is already a list, the list *is* the argument.
+
+**`@icon` is in the wrong half of §9.** It is grouped with the five as "riding along", and it rides
+nothing: the five are read from the semantic program by the export harvester, and `@icon` cannot be,
+because Godot asks `get_class_icon_path` of a script it has merely **scanned** — from the filesystem
+thread, before any host has built anything. It belongs with `@global_class` and `@tool`, in
+`verse_scan_class_decl`, and that is where it is.
+
+**Which also means the thing it is easiest to want to test is the thing that cannot be.**
+`Script::get_class_icon_path` is a pure virtual with no ClassDB entry, its one caller
+`EditorData::get_script_icon_path` — so GDScript can no more call it than it can call
+`_make_function`, and the integration case written for it had to be deleted. What is asserted
+instead is the scanner, in the **units** layer, which is where the logic actually is: the path, an
+`@icon` on another class in the same file, a bare one, and one whose argument is not a literal. That
+last is worth its own line: an attribute's argument is evaluated by the compiler and this is a text
+scan, so a path built from an expression is unreadable here — and is not a case Godot could be told
+about anyway, since it asks before anything is compiled.
+
+---
+
 ### Stage 6's `@rpc`, and an attribute that may not be overloaded
 
 **§8's spelling of the attribute cannot exist, and the compiler says so in a sentence worth

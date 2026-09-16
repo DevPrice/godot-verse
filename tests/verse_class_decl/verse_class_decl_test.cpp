@@ -246,6 +246,47 @@ bool TestToolAndGlobalTogether()
 	return Step("both attributes bind to the same class", Decl.is_tool && Decl.is_global);
 }
 
+// R-EXP-8's `@icon`, which is read here for the reason `@tool` is: Godot asks get_class_icon_path of
+// a script it has merely scanned, from the filesystem thread, before anything has been built.
+
+bool TestIconAttribute()
+{
+	const VerseClassDecl Decl =
+		verse_scan_class_decl("@icon(\"res://art/player.svg\")\nplayer := class(node2d):\n");
+	return Step("@icon carries its path", Decl.icon_path == "res://art/player.svg")
+		&& Step("and a class without one carries none",
+				verse_scan_class_decl("player := class(node2d):\n").icon_path.empty());
+}
+
+bool TestIconBindsToItsOwnClass()
+{
+	// The same rule every other attribute follows: it binds to the class below it, and a class that
+	// is not the file's takes its own attributes with it.
+	const char* Source =
+		"@icon(\"res://art/helper.svg\")\n"
+		"helper := class(node2d):\n"
+		"\n"
+		"@icon(\"res://art/player.svg\")\n"
+		"player := class(node2d):\n";
+	const VerseClassDecl Decl = verse_scan_class_decl(Source, "player");
+	return Step("an @icon on another class does not leak onto the file's",
+			Decl.icon_path == "res://art/player.svg");
+}
+
+bool TestIconWithoutAPathIsEmpty()
+{
+	// An attribute's argument is evaluated by the compiler, and this is a text scan -- so a path
+	// that is not a plain literal is one this cannot honestly read. Empty rather than a guess, and
+	// Godot draws the base class's icon, which is what no `@icon` means too.
+	return Step("a bare @icon carries nothing",
+				verse_scan_class_decl("@icon\nplayer := class(node2d):\n").icon_path.empty())
+		&& Step("and so does one whose path is not a literal",
+				verse_scan_class_decl("@icon(IconPath)\nplayer := class(node2d):\n").icon_path.empty())
+		&& Step("while a commented-out one is not seen at all",
+				verse_scan_class_decl("# @icon(\"res://a.svg\")\nplayer := class(node2d):\n")
+						.icon_path.empty());
+}
+
 // Godot collects one global class per script *path*, so `@global_class` on any class but the file's
 // own is a request with nowhere to go. Each is reported so `_validate` can say so at the attribute
 // instead of ignoring it silently. docs/property-export.md §"A second class in one file".
@@ -374,6 +415,9 @@ int main()
 	Ok = TestAttributeOnTheNamedClassStillBinds() && Ok;
 	Ok = TestToolAttribute() && Ok;
 	Ok = TestToolAndGlobalTogether() && Ok;
+	Ok = TestIconAttribute() && Ok;
+	Ok = TestIconBindsToItsOwnClass() && Ok;
+	Ok = TestIconWithoutAPathIsEmpty() && Ok;
 	Ok = TestInertGlobalClassRecorded() && Ok;
 	Ok = TestInertGlobalClassAboveTheScript() && Ok;
 	Ok = TestPlainSecondClassIsNotReported() && Ok;

@@ -8,6 +8,7 @@ namespace {
 
 constexpr const char *GlobalClassAttribute = "global_class";
 constexpr const char *ToolAttribute = "tool";
+constexpr const char *IconAttribute = "icon";
 constexpr const char *AbstractSpecifier = "abstract";
 
 bool is_ident_start(char p_c) {
@@ -60,6 +61,36 @@ bool take_literal(const std::string &p_line, size_t &r_pos, const char *p_text) 
 	}
 	r_pos = pos;
 	return true;
+}
+
+// The one string inside an attribute's parentheses -- `@icon("res://a.svg")` gives `res://a.svg`.
+//
+// Empty for an attribute written without one, and for anything that is not a plain quoted literal:
+// an attribute's argument is evaluated by the compiler and this is a text scan, so the only thing
+// it can honestly read is a literal. A path built from an expression is not a case Godot can be
+// told about anyway -- it asks for the icon before anything has been compiled.
+//
+// No escape handling, deliberately: a `res://` path containing a quote is not reachable from
+// Godot's filesystem, so treating a backslash as ordinary keeps Windows paths readable instead.
+std::string take_quoted_argument(const std::string &p_line, size_t p_pos) {
+	skip_spaces(p_line, p_pos);
+	if (p_pos >= p_line.size() || p_line[p_pos] != '(') {
+		return std::string();
+	}
+	p_pos++;
+	skip_spaces(p_line, p_pos);
+	if (p_pos >= p_line.size() || p_line[p_pos] != '"') {
+		return std::string();
+	}
+	p_pos++;
+	const size_t start = p_pos;
+	while (p_pos < p_line.size() && p_line[p_pos] != '"') {
+		p_pos++;
+	}
+	if (p_pos >= p_line.size()) {
+		return std::string();
+	}
+	return p_line.substr(start, p_pos - start);
 }
 
 // `<abstract>` and friends. Reports whether the run contained `abstract`; a specifier list this
@@ -176,6 +207,7 @@ VerseClassDecl verse_scan_class_decl(const std::string &p_source, const std::str
 	VerseClassDecl decl;
 	bool pending_global = false;
 	bool pending_tool = false;
+	std::string pending_icon;
 	// Where the pending `@global_class` was written, so a warning about an inert one lands on the
 	// attribute rather than on the class it failed to register.
 	int pending_global_line = -1;
@@ -211,6 +243,8 @@ VerseClassDecl verse_scan_class_decl(const std::string &p_source, const std::str
 				pending_global_line = row;
 			} else if (attribute == ToolAttribute) {
 				pending_tool = true;
+			} else if (attribute == IconAttribute) {
+				pending_icon = take_quoted_argument(line, pos);
 			}
 			continue;
 		}
@@ -226,6 +260,7 @@ VerseClassDecl verse_scan_class_decl(const std::string &p_source, const std::str
 		if (!take_literal(line, pos, ":=")) {
 			pending_global = false;
 			pending_tool = false;
+			pending_icon.clear();
 			continue;
 		}
 		skip_spaces(line, pos);
@@ -233,6 +268,7 @@ VerseClassDecl verse_scan_class_decl(const std::string &p_source, const std::str
 		if (take_identifier(line, after_class) != "class") {
 			pending_global = false;
 			pending_tool = false;
+			pending_icon.clear();
 			continue;
 		}
 		pos = after_class;
@@ -252,6 +288,7 @@ VerseClassDecl verse_scan_class_decl(const std::string &p_source, const std::str
 			}
 			pending_global = false;
 			pending_tool = false;
+			pending_icon.clear();
 			pending_global_line = -1;
 			continue;
 		}
@@ -262,9 +299,11 @@ VerseClassDecl verse_scan_class_decl(const std::string &p_source, const std::str
 		decl.base = take_first_super(line, pos);
 		decl.is_global = pending_global;
 		decl.is_tool = pending_tool;
+		decl.icon_path = pending_icon;
 		found_the_class = true;
 		pending_global = false;
 		pending_tool = false;
+		pending_icon.clear();
 		pending_global_line = -1;
 	}
 

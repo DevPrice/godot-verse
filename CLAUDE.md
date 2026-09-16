@@ -78,7 +78,7 @@ Two documents are not phase records and are the ones to read before adding a fea
 `include/verse_host_abi.h` is the only thing that crosses. Plain C — the two sides cannot share a
 C++ ABI. It is staged into the host's `Public/` by `build_host.py`, so both compile the same file.
 
-**`VH_ABI_VERSION` is 8.7.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
+**`VH_ABI_VERSION` is 8.8.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
 a major bump is a layout or meaning change and both sides must be rebuilt; a minor bump adds
 something an older consumer can ignore behind a `StructSize` check. A change to the header means
 bumping it and rebuilding **both** sides — the mismatch surfaces at `vh_init`, not at compile time.
@@ -857,6 +857,10 @@ it is not in `run_tests.py`.
 - **`_make_function`** is a `ScriptLanguageExtension` virtual with no ClassDB entry, and
   `Script.get_language()` is not in the public API, so GDScript can reach neither — the editor's own
   C++ is its only caller.
+- **`_get_class_icon_path`** is the same shape: `Script::get_class_icon_path` is a pure virtual with
+  no ClassDB entry and one caller, `EditorData::get_script_icon_path`. R-EXP-8's `@icon` is
+  therefore asserted in the **units** layer, against `verse_scan_class_decl`, which is where the
+  reading actually happens — and whether Godot *draws* it is a by-hand check.
 - **`_CanDropData`** is the one Godot virtual that has never been exercised. (`_HasPoint` was in the
   same category and is now a case in `tests/integration`, because the engine asks it unprompted as
   soon as `Input.parse_input_event` supplies a click.)

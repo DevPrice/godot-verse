@@ -19,6 +19,14 @@ struct VerseClassDecl {
 	// `@tool`: Ready and Process run in the editor too. C#'s [Tool], and Godot asks the same
 	// question of every language through Script::is_tool.
 	bool is_tool = false;
+	// `@icon("res://art/player.svg")`: what the scene tree and the create-node dialog draw for this
+	// class (R-EXP-8). Empty when the class carries none, which leaves Godot its own icon for the
+	// base class. Read here rather than from the host for the reason `is_tool` is: Godot asks
+	// `get_class_icon_path` of a script it has merely scanned.
+	//
+	// The path is taken verbatim, quotes stripped and nothing else -- whether it names a file that
+	// exists is Godot's question, and it answers it by drawing nothing.
+	std::string icon_path;
 	// Zero-based row the declaration is on, or -1 when there is none. The comment block above it
 	// is the class' documentation, and finding that block needs the row.
 	int line = -1;

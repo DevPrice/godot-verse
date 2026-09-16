@@ -398,8 +398,15 @@ TypedArray<Dictionary> VerseScript::_get_documentation() const {
 	return docs;
 }
 
+// R-EXP-8's `@icon`, read out of the source text rather than from the host.
+//
+// Godot asks this of scripts it has only *scanned* -- the same filesystem-thread question
+// `_get_global_class_name` answers, and before anything has been built -- so there is no analysis to
+// ask and the host ABI could not answer it. verse_scan_class_decl reads both for that reason.
 String VerseScript::_get_class_icon_path() const {
-	return String();
+	return String::utf8(verse_scan_class_decl(source_code.utf8().get_data(),
+			get_path().get_file().get_basename().utf8().get_data())
+								.icon_path.c_str());
 }
 
 Variant VerseScript::_get_script_method_argument_count(const StringName &p_method) const {
@@ -896,6 +903,31 @@ Dictionary property_for(const Dictionary &p_entry, Variant::Type p_type) {
 			}
 			break;
 		}
+		// R-EXP-1's five, which say what a `string` or an `int` is *for*. Each maps to one of
+		// Godot's own hints and each hint string is already in Godot's own spelling, so nothing is
+		// translated here -- the flags names are comma separated because that is what
+		// PROPERTY_HINT_FLAGS wants, and the file filter is `*.png` because that is what
+		// PROPERTY_HINT_FILE wants.
+		case VH_EXPORT_HINT_FILE:
+			property["hint"] = (int64_t)PROPERTY_HINT_FILE;
+			property["hint_string"] = p_entry["hint_string"];
+			break;
+		case VH_EXPORT_HINT_DIR:
+			property["hint"] = (int64_t)PROPERTY_HINT_DIR;
+			property["hint_string"] = String();
+			break;
+		case VH_EXPORT_HINT_MULTILINE:
+			property["hint"] = (int64_t)PROPERTY_HINT_MULTILINE_TEXT;
+			property["hint_string"] = String();
+			break;
+		case VH_EXPORT_HINT_FLAGS:
+			property["hint"] = (int64_t)PROPERTY_HINT_FLAGS;
+			property["hint_string"] = p_entry["hint_string"];
+			break;
+		case VH_EXPORT_HINT_NODE_PATH:
+			property["hint"] = (int64_t)PROPERTY_HINT_NODE_PATH_VALID_TYPES;
+			property["hint_string"] = p_entry["hint_string"];
+			break;
 		case VH_EXPORT_HINT_ENUM:
 			// The enumerators, comma separated in declaration order, which is what Godot's enum hint
 			// wants and what the stored ordinal indexes into. Spelled as the author wrote them: the

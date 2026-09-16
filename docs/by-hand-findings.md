@@ -630,7 +630,7 @@ for:
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks
-is not worth keeping. Seven things stand open, all of them things no automated layer can reach.
+is not worth keeping. Eight things stand open, all of them things no automated layer can reach.
 Phase 6's session has since been run and is recorded below with what it found, because the steps
 are worth keeping: its half of the debugger has no other test.
 
@@ -688,6 +688,47 @@ committed, editor-owned `project.godot`, and the session is for clicking around 
 reaching the placeholder (`VerseScript::update_placeholders`). Values that revert on save are
 `_get_property_default_value` answering the edited value rather than the declared one. A class the
 dialog cannot find is `_get_global_class_name`'s `base_type`, which comes from `base_types_for`.
+
+### R-EXP-8's `@icon`, and the five inspector hints · **owed**
+
+Stage 7 built both and neither is fully visible from a headless run, for two different reasons.
+
+**The five hints** (`@export_file`, `@export_dir`, `@export_multiline`, `@export_flags`,
+`@export_node_path`) are asserted as far as they can be: `get_script_property_list()` reports each
+one's `hint` and `hint_string`, and twelve cases check that every one is Godot's own constant with
+Godot's own spelling beside it. What that does *not* say is that the editor draws the right
+control -- a `PROPERTY_HINT_FILE` on a member Godot will not draw looks identical from a script.
+
+**`@icon` is worse**: `Script::get_class_icon_path` is a pure virtual with no ClassDB entry, so
+GDScript cannot call it at all. The units layer asserts `verse_scan_class_decl`, which is where
+the attribute is read, and nothing above that is reachable.
+
+`tests/integration/scripts/hints.verse` is the fixture -- six exports, five hinted, one
+deliberately mispaired -- and it carries `@icon("res://icon.svg")`.
+
+**To check it**, in a *copy* of `tests/integration`, with an `icon.svg` beside `project.godot`:
+
+1. **Select a node carrying `hints.verse`.** `Portrait` must be a file field with a browse button,
+   and the dialog it opens must filter to `.png` and `.jpg`.
+2. **`SaveFolder`** must browse to a directory rather than a file.
+3. **`Notes`** must be a multi-line box that grows, not a one-line field.
+4. **`Elements`** must be three checkboxes named Fire, Water and Earth, and ticking Fire then
+   Earth must store 5.
+5. **`Target`** must offer a node picker that refuses anything that is not a Node2D.
+6. **`Mismatched` must be absent**, with the bridge's sentence in the warnings panel and on its
+   line in the gutter -- the one case here whose *text* the integration layer already asserts, so
+   what is being checked is that the gutter draws it.
+7. **The scene tree and the create-node dialog must show `icon.svg`** for the class, rather than
+   Node2D's own icon. Then delete the file and reopen: Godot must fall back rather than draw
+   nothing, because an `@icon` naming a file that is not there is an author's typo and not a
+   thing this bridge validates.
+
+**What a failure would look like, and where to look.** A plain field where a picker belongs is the
+hint not arriving -- print `get_script_property_list()` first, because that separates the host's
+half from the editor's. A picker with the wrong filter is `hint_string`, which passes through
+untranslated and so is exactly what the attribute said. No icon at all is `verse_scan_class_decl`,
+which the units layer already covers, or `_get_class_icon_path` not being asked -- Godot asks it of
+the *base* script when a scene node has none of its own.
 
 ### R-EXP-9's other half: an RPC that arrives at a second peer · **owed**
 

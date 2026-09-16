@@ -209,7 +209,65 @@ constexpr const char* AttributePackageSource =
     "    Config<public>:string\n"
     "\n"
     "rpc<public><constructor>(Config:string)<computes> := rpc_attribute:\n"
-    "    Config := Config\n";
+    "    Config := Config\n"
+    "\n"
+    "# The five inspector hints a declared type cannot imply (R-EXP-1). Everything a bounded\n"
+    "# number, an enum or a mirrored class can say is read off the type and needs no attribute;\n"
+    "# these are the set where the type is `string` or `int` and says nothing about what the\n"
+    "# value is for. Each takes one string, or none -- see the note on @rpc above for why an\n"
+    "# attribute may not take several, and why that is worth re-checking on an engine drop.\n"
+    "\n"
+    "# A file path. The filter is Godot's own spelling -- `@export_file(\"*.png\")`, or\n"
+    "# `@export_file(\"*.png,*.jpg\")`, and `@export_file(\"*\")` for any file. There is no\n"
+    "# argumentless spelling, because that would have to be the attribute class itself.\n"
+    "@attribscope_data\n"
+    "export_file_attribute<public> := class<computes>(attribute):\n"
+    "    Filter<public>:string\n"
+    "\n"
+    "export_file<public><constructor>(Filter:string)<computes> := export_file_attribute:\n"
+    "    Filter := Filter\n"
+    "\n"
+    "# A directory path rather than a file. A marker, like @tool.\n"
+    "@attribscope_data\n"
+    "export_dir<public> := class<computes>(attribute) {}\n"
+    "\n"
+    "# A paragraph rather than a line: Godot draws a multi-line text box instead of a field.\n"
+    "@attribscope_data\n"
+    "export_multiline<public> := class<computes>(attribute) {}\n"
+    "\n"
+    "# A bitmask over named bits -- `@export_flags(\"Fire,Water,Earth\")` is bit 1, 2 and 4.\n"
+    "# Verse has no flag enum, so the names cannot come from the type. Comma separated, which\n"
+    "# is Godot's own spelling for this hint and passes straight through.\n"
+    "@attribscope_data\n"
+    "export_flags_attribute<public> := class<computes>(attribute):\n"
+    "    Names<public>:string\n"
+    "\n"
+    "export_flags<public><constructor>(Names:string)<computes> := export_flags_attribute:\n"
+    "    Names := Names\n"
+    "\n"
+    "# A NodePath, which is a `string` on this wire. The argument is the Godot class a picked\n"
+    "# node must be -- `@export_node_path(\"Node2D\")`, or `@export_node_path(\"Node\")` for any.\n"
+    "@attribscope_data\n"
+    "export_node_path_attribute<public> := class<computes>(attribute):\n"
+    "    TypeName<public>:string\n"
+    "\n"
+    "export_node_path<public><constructor>(TypeName:string)<computes>"
+    " := export_node_path_attribute:\n"
+    "    TypeName := TypeName\n"
+    "\n"
+    "# The icon the scene tree and the create-node dialog show for this class, the way C#'s\n"
+    "# [Icon] does: `@icon(\"res://art/player.svg\")`.\n"
+    "#\n"
+    "# Declared here so a script carrying it compiles, and read *out of the source text* by\n"
+    "# verse_scan_class_decl rather than from here -- Godot asks get_class_icon_path of scripts\n"
+    "# it has only scanned, from the filesystem thread, before any host has been asked to build\n"
+    "# anything. That is the same reason @global_class is read twice, and the two must agree.\n"
+    "@attribscope_class\n"
+    "icon_attribute<public> := class<computes>(attribute):\n"
+    "    Path<public>:string\n"
+    "\n"
+    "icon<public><constructor>(Path:string)<computes> := icon_attribute:\n"
+    "    Path := Path\n";
 
 /// One .verse file, as the toolchain wants it: a path, its text, and somewhere to cache the
 /// parse.
@@ -1435,6 +1493,11 @@ namespace {
 constexpr const char* ExportAttributePath = "/Godot.org/Godot/export";
 constexpr const char* StaticsAttributePath = "/Godot.org/Godot/statics_attribute";
 constexpr const char* RpcAttributePath = "/Godot.org/Godot/rpc_attribute";
+constexpr const char* ExportFileAttributePath = "/Godot.org/Godot/export_file_attribute";
+constexpr const char* ExportDirAttributePath = "/Godot.org/Godot/export_dir";
+constexpr const char* ExportMultilineAttributePath = "/Godot.org/Godot/export_multiline";
+constexpr const char* ExportFlagsAttributePath = "/Godot.org/Godot/export_flags_attribute";
+constexpr const char* ExportNodePathAttributePath = "/Godot.org/Godot/export_node_path_attribute";
 constexpr const char* ExportCategoryAttributePath = "/Godot.org/Godot/export_category_attribute";
 constexpr const char* ExportGroupAttributePath = "/Godot.org/Godot/export_group_attribute";
 constexpr const char* ExportSubgroupAttributePath = "/Godot.org/Godot/export_subgroup_attribute";
@@ -4690,6 +4753,26 @@ AUTORTFM_DISABLE bool GetClassExportsLive(FUtf8StringView ClassName, TArray<Godo
         return false;
     }
 
+    // R-EXP-1's five, which say what a `string` or an `int` is *for* -- the one thing a declared
+    // type cannot. Looked up once for the whole class rather than per member.
+    struct FHintAttribute
+    {
+        const char* Path;
+        int32 Hint;
+        /// The vh_type the member must be declared as. An attribute that describes a path on an
+        /// int describes nothing, and this is the only place that pairing can be checked.
+        int32 RequiredType;
+        /// Whether the attribute carries a hint string, or is a marker like `@tool`.
+        bool bHasText;
+    };
+    const FHintAttribute HintAttributes[] = {
+        {ExportFileAttributePath, VH_EXPORT_HINT_FILE, VH_TYPE_STRING, true},
+        {ExportDirAttributePath, VH_EXPORT_HINT_DIR, VH_TYPE_STRING, false},
+        {ExportMultilineAttributePath, VH_EXPORT_HINT_MULTILINE, VH_TYPE_STRING, false},
+        {ExportFlagsAttributePath, VH_EXPORT_HINT_FLAGS, VH_TYPE_INT, true},
+        {ExportNodePathAttributePath, VH_EXPORT_HINT_NODE_PATH, VH_TYPE_STRING, true},
+    };
+
     const uLang::CClass* CategoryAttribute = Program->FindDefinitionByVersePath<uLang::CClass>(ExportCategoryAttributePath);
     const uLang::CClass* GroupAttribute = Program->FindDefinitionByVersePath<uLang::CClass>(ExportGroupAttributePath);
     const uLang::CClass* SubgroupAttribute = Program->FindDefinitionByVersePath<uLang::CClass>(ExportSubgroupAttributePath);
@@ -4750,6 +4833,33 @@ AUTORTFM_DISABLE bool GetClassExportsLive(FUtf8StringView ClassName, TArray<Godo
         {
             Desc.GroupKind = VH_EXPORT_GROUP_SUBGROUP;
             Desc.GroupName = Subgroup;
+        }
+
+        // One of R-EXP-1's five, which *replaces* whatever the type implied: the whole reason to
+        // write one is that the type said nothing useful. Applied after the type description rather
+        // than before it, so that the range a bounded int would have got is the thing overridden
+        // and not the other way round.
+        //
+        // Only the first is taken. Two of these on one member is two descriptions of one field and
+        // Godot draws one, so the alternative is choosing silently between them.
+        for (const FHintAttribute& Attribute : HintAttributes)
+        {
+            const uLang::CClass* const HintClass =
+                Program->FindDefinitionByVersePath<uLang::CClass>(Attribute.Path);
+            if (!HintClass || !Member->HasAttributeSubclass(HintClass, *Program))
+            {
+                continue;
+            }
+
+            // Recorded even when the type is wrong, because the consumer's message names the
+            // attribute the author wrote and there is nowhere else to carry it.
+            Desc.Hint = Attribute.Hint;
+            Desc.HintString = Attribute.bHasText ? AttributeText(*Member, HintClass, *Program) : FUtf8String();
+            if (Desc.Reject == VH_EXPORT_OK && Desc.Type != Attribute.RequiredType)
+            {
+                Desc.Reject = VH_EXPORT_HINT_WRONG_TYPE;
+            }
+            break;
         }
 
         FUtf8String DeclaredIn;

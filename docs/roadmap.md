@@ -569,7 +569,10 @@ and §4 only**; §5 was reassessed after it and cost no code at all.
   a reference (ABI 8.7's `VhRefCall`); the 12 utilities are a fixed table of C++ calls and are
   recorded as skips with the Verse spelling that answers each.
 - **R-EXP-1** — the remaining `@export` surface, type-driven where the Verse type can say it and
-  attributes only where it cannot.
+  attributes only where it cannot. **Done**: the five where it cannot —
+  `@export_file`, `@export_dir`, `@export_multiline`, `@export_flags`, `@export_node_path`,
+  each one string or none, each checked against the type it describes, with five named
+  omissions recorded in the requirement rather than left looking like oversights.
 - **R-NODE-10** — the script-level hooks that are in no JSON. **Done.** `_ToString` is not one of
   them and never was: Verse already spells it, as an extension method. The other four are ordinary
   methods with empty bodies on the native root, which cost a script that overrides none of them

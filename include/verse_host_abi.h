@@ -43,7 +43,7 @@ extern "C" {
  * different toolchains and nothing links them.
  */
 #define VH_ABI_VERSION_MAJOR 8
-#define VH_ABI_VERSION_MINOR 7
+#define VH_ABI_VERSION_MINOR 8
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
 typedef int32_t vh_bool;
@@ -1204,7 +1204,32 @@ typedef enum vh_export_hint
 	 * from VH_EXPORT_HINT_CLASS because the two resolve through different tables: a mirrored name
 	 * is looked up in the generated API, while this one is a script's class, whose Godot name is
 	 * the PascalCase spelling of the name given here -- the same one the script registered. */
-	VH_EXPORT_HINT_SCRIPT_CLASS
+	VH_EXPORT_HINT_SCRIPT_CLASS,
+
+	/* --- v8.8: the hints a declared type cannot imply (R-EXP-1) -----------------------------
+	 *
+	 * Everything above is read off the member's *type*, which is the rule R-EXP-1 states:
+	 * type-driven where the Verse type can say it, an attribute only where it cannot. These five
+	 * are the set where it cannot -- the declared type is `string` or `int` and says nothing
+	 * about what the value is for -- so each is an attribute the author writes.
+	 *
+	 * An older consumer that does not know one of these draws a plain field, which is exactly
+	 * what it drew before the attribute existed. */
+
+	/* A file path. HintString is the filter, as Godot spells it: `*.png` or `*.png,*.jpg`, and
+	 * `*` for any file. There is no "no filter" spelling, because an attribute with no argument
+	 * would have to be the attribute class itself and the class is what the constructor builds. */
+	VH_EXPORT_HINT_FILE,
+	/* A directory path. No hint string. */
+	VH_EXPORT_HINT_DIR,
+	/* A paragraph rather than a line: Godot's multi-line text editor. No hint string. */
+	VH_EXPORT_HINT_MULTILINE,
+	/* A bitmask over named bits, which Verse has no flag enum for. HintString is the names,
+	 * comma separated, which is Godot's own spelling for this hint and passes straight through. */
+	VH_EXPORT_HINT_FLAGS,
+	/* A NodePath, which is a `string` on this wire. HintString is the Godot class a picked node
+	 * must be -- `Node2D`, or `Node` for any. */
+	VH_EXPORT_HINT_NODE_PATH
 } vh_export_hint;
 
 /* The inspector section a member opens. Godot's three nesting depths, and Verse's three
@@ -1244,7 +1269,16 @@ typedef enum vh_export_reject
 	 * slot by a *Godot* class name, and an unregistered class has none -- so there is nothing to
 	 * filter by and nothing to put in the scene. `@global_class` on the class being referred to is
 	 * the whole of the fix. */
-	VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL
+	VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL,
+
+	/* v8.8: one of the five hint attributes on a member whose declared type it cannot describe --
+	 * `@export_file` on an int, `@export_flags` on a string. The attribute exists precisely because
+	 * the type does not say what the value is for, so the pairing is the author's to get right and
+	 * this is the only place it can be checked.
+	 *
+	 * Hint still carries the attribute the author wrote, which is what the consumer's message
+	 * names -- vh_export_desc has no reject detail and adding one would be a layout change. */
+	VH_EXPORT_HINT_WRONG_TYPE
 } vh_export_reject;
 
 /* One data member of a script's class carrying `@export`. */

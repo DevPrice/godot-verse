@@ -1622,6 +1622,59 @@ func begin() -> void:
 		_check("Node.rpc leaves Verse and comes back as a Godot Error", typeof(sent) == TYPE_INT)
 		sender.queue_free()
 
+
+	# --- R-EXP-1's remaining five, and R-EXP-8's @icon -------------------------------------------
+	#
+	# The rule is type-driven where the Verse type can say it and an attribute only where it cannot,
+	# and these are the set where it cannot: a path, a directory, a paragraph, a bitmask and a node
+	# are all `string` or `int`. Each maps to one of Godot's own hints, and each hint string is
+	# already in Godot's own spelling -- so what these cases check is that nothing translated it.
+	var hints_script: Script = load("res://scripts/hints.verse")
+	_check("hints.verse compiles", hints_script != null and hints_script.can_instantiate())
+	if hints_script == null:
+		_check("@export_file reaches the inspector as a file picker", false)
+	else:
+		var hinted := {}
+		for entry in hints_script.get_script_property_list():
+			hinted[entry["name"]] = entry
+
+		_check_eq("@export_file reaches the inspector as a file picker",
+				hinted.get("Portrait", {}).get("hint"), PROPERTY_HINT_FILE)
+		_check_eq("with Godot's own filter spelling, untranslated",
+				hinted.get("Portrait", {}).get("hint_string"), "*.png,*.jpg")
+		_check_eq("@export_dir is a directory picker",
+				hinted.get("SaveFolder", {}).get("hint"), PROPERTY_HINT_DIR)
+		_check_eq("@export_multiline is a text box",
+				hinted.get("Notes", {}).get("hint"), PROPERTY_HINT_MULTILINE_TEXT)
+		_check_eq("@export_flags is a bitmask",
+				hinted.get("Elements", {}).get("hint"), PROPERTY_HINT_FLAGS)
+		_check_eq("with the names comma separated, which is what Godot's own hint wants",
+				hinted.get("Elements", {}).get("hint_string"), "Fire,Water,Earth")
+		_check_eq("and it is still an int, because the attribute says what an int is for",
+				hinted.get("Elements", {}).get("type"), TYPE_INT)
+		_check_eq("@export_node_path filters by class",
+				hinted.get("Target", {}).get("hint"), PROPERTY_HINT_NODE_PATH_VALID_TYPES)
+		_check_eq("by the class named", hinted.get("Target", {}).get("hint_string"), "Node2D")
+
+		# The five are additive: an export that needed no attribute still gets what its type
+		# implied, which is the half of R-EXP-1 that was already done.
+		_check("an export with no hint attribute is untouched", hinted.has("Plain"))
+
+		# A hint on a type it cannot describe is refused rather than drawn as a plain field --
+		# which is what it would otherwise be, and what no attribute at all draws, so the mistake
+		# would be invisible. The sentence is asserted through the build's own warning log.
+		_check("a hint on the wrong type is not drawn", not hinted.has("Mismatched"))
+
+		# R-EXP-8's `@icon` is **not** asserted here, and cannot be: `get_class_icon_path` is a pure
+		# virtual on Script with no ClassDB binding, so GDScript can no more call it than it can
+		# call `_make_function`. Its one caller is EditorData::get_script_icon_path, in the editor.
+		#
+		# What is testable is where the logic actually lives: `verse_scan_class_decl` reads the
+		# attribute out of the source text, and the units layer has four cases on it -- the path,
+		# an @icon on another class in the same file, a bare one, and one whose argument is not a
+		# literal. What is left for the editor session is whether Godot draws it, which no headless
+		# run could have seen anyway.
+
 	# --- R-AUD-1: what a failure undoes ---------------------------------------------------------
 	#
 	# Phase 4.5's spikes S-3 and S-4, kept as behavioural cases because the rule written next to

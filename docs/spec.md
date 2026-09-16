@@ -856,9 +856,45 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
 
 - **R-EXP-1 (MUST)** `@export` covers the surface GDScript's `@export` covers: every exportable
   type, ranges, enums, flags, file/dir pickers, multiline text, node paths, resource types,
-  groups, subgroups and categories. Status: **part** and well advanced — `@export_group`,
-  refusal of types the inspector cannot draw, and range constraints derived from the Verse type's
-  own `where` clause so the slider and the type cannot disagree (README).
+  groups, subgroups and categories. Status: **done for the set an author reaches**, with the
+  deliberate omissions named below — `@export_group`, refusal of types the inspector cannot draw,
+  and range constraints derived from the Verse type's own `where` clause so the slider and the type
+  cannot disagree (README).
+
+  **The rule is type-driven where the Verse type can say it, and an attribute only where it
+  cannot.** Everything a bounded number, an enum or a mirrored class implies is read off the
+  declaration and needs nothing written. Phase 4b stage 6 added the five where the declared type is
+  `string` or `int` and says nothing about what the value is for — the only place an attribute earns
+  its keep:
+
+  | attribute | the hint it becomes | the type it describes |
+  | --- | --- | --- |
+  | `@export_file("*.png,*.jpg")` | `PROPERTY_HINT_FILE` | `string` |
+  | `@export_dir` | `PROPERTY_HINT_DIR` | `string` |
+  | `@export_multiline` | `PROPERTY_HINT_MULTILINE_TEXT` | `string` |
+  | `@export_flags("Fire,Water,Earth")` | `PROPERTY_HINT_FLAGS` | `int` |
+  | `@export_node_path("Node2D")` | `PROPERTY_HINT_NODE_PATH_VALID_TYPES` | `string` |
+
+  Each hint string is already in Godot's own spelling and passes through untranslated — the flags
+  names are comma separated because that is what `PROPERTY_HINT_FLAGS` wants, and the file filter is
+  `*.png` because that is what `PROPERTY_HINT_FILE` wants. Each takes **one string or none**, for
+  the reason `@rpc` does: the toolchain refuses a several-argument attribute today and says so in
+  words that read as unfinished (R-EXP-9 carries both refusals and what to move to when either
+  lifts). `@export_flags` is the one that would most obviously want several, and one comma-separated
+  string is what Godot wanted anyway.
+
+  **The pairing is checked, because nothing else could check it.** The attribute exists precisely
+  because the type says nothing, so `@export_flags` on a `string` is a mistake with no other
+  detector: the attribute compiles, and Godot draws a plain field — which is also what no attribute
+  at all draws. It is `VH_EXPORT_HINT_WRONG_TYPE`, refused at the member with a sentence naming the
+  attribute the author wrote, and the export carries a new `vh_export_hint` value per attribute
+  (ABI **8.8**, a minor: an older consumer that does not know one draws the plain field it drew
+  before the attribute existed).
+
+  **Deliberately not in the set**, and recorded so the omission is visible rather than looking like
+  an oversight: `color_no_alpha`, `exp_easing`, `global_file`/`global_dir`, `placeholder_text`, and
+  enum-on-`string`. They are real parts of GDScript's surface and none is reached by a first
+  project.
 
   **Enums** landed in Phase 2, pulled forward with R-SCN-5, and for Godot's own as much as for a
   script's: an exported `node_process_mode` is a dropdown of the enumerators, and what is stored is
@@ -980,8 +1016,22 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   non-Node class with Godot's sentence rather than crashing, and that a **`@tool`** autoload is
   instantiated in the editor too -- `in_editor` is `scr->is_tool()` (`editor_autoload_settings.cpp:390`),
   and `is_editor_hint()` is false in every headless run, so nothing automated can reach either.
-- **R-EXP-8 (SHOULD)** A script declares an editor icon. Status: **part**
-  (`_get_class_icon_path` exists).
+- **R-EXP-8 (SHOULD)** A script declares an editor icon. Status: **done** (Phase 4b stage 7):
+  `@icon("res://art/player.svg")` over the class, and `_get_class_icon_path` answers it.
+
+  **Read out of the source text rather than from the host**, which is the whole of what this cost:
+  Godot asks `get_class_icon_path` of a script it has merely *scanned*, from the filesystem thread,
+  before anything has been built — the same question `_get_global_class_name` answers and for the
+  same reason, so `verse_scan_class_decl` reads both. The attribute is still declared in the runtime
+  attribute package, because a script carrying one has to compile.
+
+  **Its editor half is a by-hand check and always was**, and its *testable* half is not where a
+  reader expects. `Script::get_class_icon_path` is a pure virtual with no ClassDB entry — its one
+  caller is `EditorData::get_script_icon_path` — so GDScript can no more call it than it can call
+  `_make_function`, and no integration case can assert it. What the units layer asserts instead is
+  the scanner, which is where the logic is: the path, an `@icon` on another class in the same file,
+  a bare one, and one whose argument is not a literal. Whether Godot *draws* it is the editor
+  session's, which no headless run could have seen anyway.
 - **R-EXP-9 (SHOULD)** `_get_rpc_config` reports RPC annotations so a Verse script participates in
   Godot's high-level multiplayer. Status: **done** (Phase 4b stage 6), except for the half that
   needs two processes — see below.
