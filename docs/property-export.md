@@ -566,3 +566,156 @@ compares the member against its own enumerator — the assertion a round-trip ca
 Properties are published `PROPERTY_USAGE_DEFAULT | SCRIPT_VARIABLE`: exported and stored, var or
 not. Verified in a running Godot 4.7 as well as the harness — `demo/main.tscn` stores a `var
 Speed` and a non-var `Greeting`, and both reach the script.
+
+---
+
+## A second class in one file: what GDScript does, measured
+
+**Status:** the parity half is written and unbuilt — see "Where this stands" at the end. Written
+after a by-hand report (`by-hand-findings.md` B19), and every claim here was **run** against Godot
+4.7 rather than read out of the source alone. The citations say *why*; the measurements say *what*.
+
+The question: a Verse file may declare any number of top-level classes, and only the one named after
+the file is a script. What happens when a **second** class in a file is used as an `@export` type,
+and what is the closest thing GDScript does?
+
+### GDScript's equivalent is the inner class, and it lives on three planes
+
+`class Inner extends Resource:` inside another script. The naming is ordinary and supported;
+`class_name` is a *different* request, which the parser refuses in a class body (`Unexpected
+"class_name" in class body.`). What matters is which planes the class reaches.
+
+**Script plane — fully real.** An inner class is a `GDScript` object held as a subclass of the outer
+script, reachable as `Outer.Inner`. It type-checks at compile time, and `GDScriptInstance::set`
+checks the member's declared type on assignment. Measured: assigning a `ProbeInner` into a slot
+declared `Inner` is **refused and the old value kept**, while the same assignment into a slot
+declared `Resource` is accepted. This is the "it acts strongly typed" that makes an inner class feel
+like a registered one.
+
+**Engine plane — anonymous.** It reaches Godot as a `GDScript` with **no path and no global name**.
+`ClassNode::get_global_name()` answers a name only when `outer == nullptr`
+(`modules/gdscript/gdscript_parser.h:798`), so an inner class structurally cannot have one.
+Everything keyed on a class *name* falls back to the native base through
+`_find_narrowest_native_or_global_class` (`gdscript_parser.cpp:4592-4647`), whose `CLASS` branch
+recurses to `base_type` when there is no global name. Measured, one script declaring all five:
+
+    thing     : Inner             -> type=24 class_name='Resource'   hint=17 hint_string='Resource'
+    named     : ProbeInner        -> type=24 class_name='ProbeInner' hint=17 hint_string='ProbeInner'
+    plain     : Resource          -> type=24 class_name='Resource'   hint=17 hint_string='Resource'
+    arr_inner : Array[Inner]      -> type=28                         hint=23 hint_string='24/17:Resource'
+    arr_named : Array[ProbeInner] -> type=28                         hint=23 hint_string='24/17:ProbeInner'
+
+`class_name` *and* `hint_string` both collapse, in the instance list and in
+`get_script_property_list()` — which is what the inspector builds from — and typed arrays collapse
+too. The label is genuinely lost; only the behaviour is typed.
+
+**Disk plane — lost entirely.** The plane that neither the parser nor the property list reveals.
+Packing a node whose member holds an inner-class instance and saving it writes an **empty GDScript
+sub-resource**:
+
+    [sub_resource type="GDScript" id="GDScript_4sv2c"]
+
+    [sub_resource type="Resource" id="Resource_grgq0"]
+    script = SubResource("GDScript_4sv2c")
+    v = 42
+
+No path, no source. The exported values survive as raw properties; the class does not. The same
+member typed as a file-level `class_name` writes `ExtResource("res://probe_inner.gd")` and round
+trips.
+
+**So an inner class is a script-world construct Godot's resource world never learns about.** It
+cannot be authored as a `.tres` and cannot be persisted. That is not worth copying, and it is the
+one point where the plan below diverges from GDScript on purpose.
+
+### Why the registration cannot simply be granted
+
+Godot collects global classes **one per script path**, at two levels:
+
+- `_get_global_class_name` is a per-path virtual answering a single Dictionary
+  (`core/object/script_language_extension.h:754`), and
+  `EditorFileSystem::_get_global_script_class(type, path)` takes one `info.name` from it
+  (`editor/file_system/editor_file_system.cpp:2092`).
+- `ScriptServer::add_global_class(name, base, language, path)` maps the name **back to the path**
+  (`core/object/script_language.cpp:408`), so resolving a global class means loading that path and
+  taking its one script class.
+
+Two names for one path would both resolve to the same script. GDScript has the same ceiling (one
+`class_name` per file) and so does C#. It is Godot's constraint, not this bridge's preference.
+
+### Where Verse stands against that
+
+| plane | GDScript inner class | Verse second class, before B19 | after |
+| --- | --- | --- | --- |
+| named, type-checked | yes | yes | yes |
+| global registration | impossible | impossible | impossible |
+| export hint | native base | **dangling name, ClassDB error** | native base |
+| assignment type-checked | yes, measured | ABI says yes, **unverified** | needs a test |
+| serialises | no — class lost, values kept | no — bare `Resource`, values lost too | unchanged |
+
+### The plan
+
+**Stage A — parity.**
+
+- **A1.** The export hint falls back to the nearest mirrored Godot class when the referenced script
+  class has no registered name, rather than naming it and being refused. This is
+  `_find_narrowest_native_or_global_class`'s *or*, which the bridge had been skipping.
+- **A2.** Verify and test the write-time class check on **both** paths.
+  `vh_instance_set_field_instance` is documented to refuse a value whose declared class does not
+  match; the plain handle path, `vh_instance_set_field`, is what a `.tres` assignment takes when the
+  resource carries no Verse script instance, and it is **unverified**. If it does not check, the
+  wide picker is a real hole rather than a cosmetic one. **Do this part first.**
+- **A3.** No diagnostic for merely naming a second class in a file. That is ordinary in both
+  languages.
+
+*Done when* an integration case shows a second-class export drawing a `Resource` picker and refusing
+a wrong-class assignment, in the editor run and the exported run both.
+
+**Stage B — stop accepting a request that cannot be served.** GDScript gives no syntax for asking an
+inner class to register; this bridge lets `@global_class` be written on a non-file-named class and
+silently ignores it. A `_validate` warning at the attribute's line: that it registers nothing, that
+Godot collects one global class per script path, and that the member still exports filtered by its
+native base. **Consumer-side only** — `src/verse_class_decl.{h,cpp}` reports the other top-level
+classes carrying the attribute (name and line), `_validate` turns each into a warning. No ABI
+change, no host rebuild, and `verse_class_decl` is godot-cpp-free with its own unit-test binary, so
+the scan change is testable with no Godot in the loop.
+
+*Done when* `tests/coverage_diagnostic` asserts the sentence, the way it asserts the module ones.
+
+**Stage C — serialisation, and the one deliberate divergence.** Losing the class on save is a defect
+of GDScript's, not a behaviour to mirror. Two alternatives, not two steps:
+
+- **C1 — state the rule and stop.** A resource class that is to be *authored* or *persisted* lives
+  in its own `.verse`. Zero cost, and what GDScript effectively forces anyway, since an inner class
+  cannot be authored as a `.tres` either. Stage B's warning already points here.
+- **C2 — sub-resource scripts, which would beat GDScript.** Address a second class as
+  `res://player.verse::my_resource` so a `.tres` or `.tscn` can reference it. Plausible *because*
+  these classes have stable names the host already instantiates by — `vh_instantiate` takes a
+  module-qualified name — unlike GDScript's anonymous subclasses. **Spike it before designing it:**
+  `ResourceLoader` picks a format loader by extension, and `player.verse::my_resource` has extension
+  `verse::my_resource`, so it may never route to `VerseResourceFormatLoader` at all. Godot builds
+  such paths from the container side (`scene/resources/packed_scene.cpp:2358` is `get_path() +
+  "::"`), which is not the same as serving one. If the spike says no, C2 is dead and C1 is the
+  answer.
+
+**Recommended order:** A2, A1, B, then C1 as documentation. C2 only if authoring parity *beyond*
+GDScript is wanted and the spike comes back positive — it is a feature with real surface, not a
+gap-closer.
+
+### Where this stands
+
+Committed: `9b6a7d0` fixed the module-qualified half of B19 — the hint carried `Gameplay/myResouce`
+and now carries the leaf.
+
+**Written and not built**, in the working tree: A1's fallback in `HostScript.cpp`
+(`IsClassNamedAfterItsFile`, and the branch setting `VH_EXPORT_HINT_CLASS` with the native class
+when a script class does not register), the narrowed `VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL` message in
+`verse_script_language.cpp`, and fixtures in `tests/integration` — `settings_resource.verse`'s
+`stowaway` class and its `Stowaway` member, with the assertions in `test_cases.gd`. The GDExtension
+half is built; **the host is not**, because a running editor held `verse_host.dll` and the link
+failed with `permission denied`. Close the editor, build all three host targets, then
+`python tools/run_tests.py --build`; `EXPORT_EXPECTED_PASSES` and `EXPORT_EXPECTED_SKIPS` in
+`tools/run_tests.py` need whatever the editor run then prints.
+
+The GDScript probe that produced every measurement above is four files — an outer script with an
+inner class, a `class_name` script beside it, and a `SceneTree` driver — and is worth rebuilding
+rather than trusting this section if a claim is load-bearing.

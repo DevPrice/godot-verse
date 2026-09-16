@@ -845,6 +845,12 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   `by-hand-findings.md` B18. The consumer now takes the leaf of the qualified name, and the case is
   asserted against `Script.get_global_name()` rather than against a constant, because the invariant
   is that the two agree.
+
+  **A class that is not named after its file cannot register at all** -- Godot collects one global
+  class per script *path* -- so a member typed as one has no name to filter its slot by. What
+  GDScript does in that position is measured in `property-export.md` §"A second class in one file",
+  along with the staged plan; the short version is that its inner classes lose the class entirely on
+  save, so parity is the export hint and the write check, not the serialisation.
 - **R-EXP-7 (MUST)** A Verse script can be registered as an autoload singleton. Status: **none**.
 - **R-EXP-8 (SHOULD)** A script declares an editor icon. Status: **part**
   (`_get_class_icon_path` exists).

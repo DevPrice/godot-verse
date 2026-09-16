@@ -1201,6 +1201,25 @@ func begin() -> void:
 		settings.set_script(res_script)
 		_check("a Verse script attaches to a Resource", settings.get_script() == res_script)
 		_check_eq("its exported defaults are readable", settings.get("Rounds"), 3)
+
+		# B19. `stowaway` carries `@global_class` and registers nothing, because Godot collects one
+		# global class per script *path* and this is a second class in the file. The member is
+		# exported anyway, filtered by its nearest mirrored ancestor -- a Resource picker that
+		# accepts a .tres of that class, rather than no slot at all or a slot naming a class ClassDB
+		# has never heard of, which is the error that started this.
+		var stowaway := {}
+		for p in settings.get_property_list():
+			if p["name"] == "Stowaway":
+				stowaway = p
+		_check("a member typed as an unregisterable class is still exported", not stowaway.is_empty())
+		if not stowaway.is_empty():
+			_check_eq("filtered by its nearest mirrored Godot class",
+					stowaway.get("hint_string", ""), "Resource")
+			_check_eq("and drawn as a resource picker", stowaway.get("hint", -1),
+					PROPERTY_HINT_RESOURCE_TYPE)
+			_check("which ClassDB can resolve, unlike the name the class failed to register",
+					ClassDB.class_exists(String(stowaway.get("hint_string", ""))))
+
 		_check_eq("and a method runs on an owner that is not a node",
 				settings.call("Describe"), "untitled x3")
 

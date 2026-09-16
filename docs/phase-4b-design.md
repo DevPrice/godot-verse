@@ -838,6 +838,12 @@ project within minutes of stage 3 landing, and `by-hand-findings.md` B18 is the 
 `filter_class_from_hint`: take the **leaf** of the qualified name before PascalCasing it, because
 ClassDB is one flat namespace and `@global_class` registers the file stem and nothing else.
 
+B19 is the same report's second half and is **not** closed: `@global_class` on a class that is not
+named after its file registers nothing either, so the slot named a class ClassDB had never heard of
+by a second route. That one turned into research rather than a patch, because what GDScript does in
+the same position had to be measured before anything could be called parity --
+`property-export.md` §"A second class in one file" carries it, and the staged plan.
+
 Nothing had caught it because no fixture was both things at once — module fixtures existed, resource
 exports existed, and the combination did not. That is the general shape of what this phase kept
 finding, and it is worth saying once: **every defect in stages 2 and 3 was at a junction of two

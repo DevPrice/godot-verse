@@ -24,7 +24,11 @@ wherever they disagree with it:
 you belongs to. `docs/phase-0-spikes.md` is why three of the spec's answers read the way they do —
 read it before re-deriving anything about hot reload, the export pipeline, or the flat scope.
 `docs/property-export.md` and `docs/editor-tooling.md` hold the research behind `@export` and behind
-the debugger/LSP story.
+the debugger/LSP story. **`property-export.md`'s last section is the one to read before touching a
+class-typed export**: what GDScript's inner classes do, measured on all three planes they live on
+(typed in script, anonymous to the engine, *lost on save*), why a second class in a file can never
+register a Godot class name, and the staged plan that follows from it. Part of it is written and
+unbuilt, and the section says which part.
 
 ### The phase documents, and the one section of each to read
 

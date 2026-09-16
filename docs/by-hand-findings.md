@@ -572,6 +572,15 @@ the registry an export uses was baked into `project.godot` when the export was m
 runtime asks the script. Recorded rather than fixed, and the one integration case that compares
 against it is skipped in an export with that reason printed.
 
+**The second half of B19 is not fixed and has a plan rather than a patch.** `@global_class` on a
+class that is *not* the one named after its file registers nothing at all — Godot collects one
+global class per script path — so a member typed as one had no name to filter its slot by, which is
+the same error arriving by a second route (`Cannot get class 'MyResource'`). What GDScript does in
+that position was then measured rather than assumed, and it turns out to lose the class on save
+entirely. **`property-export.md` §"A second class in one file" is the whole of it**: the three
+planes an inner class lives on, why the registration cannot be granted, and Stages A/B/C. The
+export-hint half of Stage A is written and unbuilt; that section says where it stands.
+
 It is also the case `phase-4b-design.md` §5 put out of scope — "a resource that holds another
 resource as an exported member … worth a case but not worth blocking the stage". It was worth
 blocking the stage.

@@ -29,3 +29,18 @@ settings_resource := class(resource):
     Bump<public>()<transacts>:int =
         set Rounds = Rounds + 1
         Rounds
+
+    # B19. `stowaway` below carries `@global_class` and registers **nothing**, because only the
+    # class named after its file is ever offered to Godot -- so a slot filtered by `Stowaway` would
+    # name a class ClassDB has never heard of, which is what the editor says out loud. The member is
+    # refused instead, and `_validate` says why at this line.
+    @export
+    var Stowaway<public>:?stowaway = false
+
+# A second `@global_class` in one file, which is the shape that broke. The attribute is accepted by
+# the compiler -- it is an ordinary Verse attribute and nothing about it is per-file -- and the
+# consumer's scanner takes the file-stem class and no other, dropping the attributes above every
+# other top-level class with it. So this registers no Godot class name at all.
+@global_class
+stowaway := class(resource):
+    Value<public>:int = 0

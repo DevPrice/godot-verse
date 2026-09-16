@@ -9,6 +9,7 @@
 #include "GodotMathLayout.gen.h"
 #include "HAL/PlatformMisc.h"
 #include "HAL/PlatformTime.h"
+#include "Misc/Paths.h"
 #include "HostDebug.h"
 #include "HostEventLoop.h"
 #include "HostRuntime.h"
@@ -1652,6 +1653,28 @@ AUTORTFM_DISABLE void FillLocation(const uLang::CDefinition& Definition, FUtf8St
     FillLocation(Definition, FindMirrorDefinition(Definition), OutPath, OutLine, OutColumn);
 }
 
+/// Whether this is the class **named after the file it is written in**, which is the bridge's rule
+/// for which of a file's top-level classes Godot ever hears about: only that one can go on a node,
+/// and only that one's `@global_class` registers a Godot class name (R-LANG-6, R-NODE-2).
+///
+/// Asked of the class's own source path rather than of the module map, because the question is
+/// about the *file* and a module says nothing about which class in it is the file's. A class with
+/// no recorded location -- one out of a digest, or out of a package the project does not own --
+/// answers false, which is the safe direction: the consumer would not have registered it either.
+AUTORTFM_DISABLE bool IsClassNamedAfterItsFile(const uLang::CDefinition& Definition)
+{
+    FUtf8String Path;
+    int32 Line = 0;
+    int32 Column = 0;
+    FillLocation(Definition, Path, Line, Column);
+    if (Path.IsEmpty())
+    {
+        return false;
+    }
+    const FString Stem = FPaths::GetBaseFilename(FString(Path));
+    return FUtf8String(Stem) == FUtf8String(Definition.AsNameCString());
+}
+
 /// The name an answer carries as a definition's owner: the class for a member, and for a top-level
 /// definition the file it was written in, since a snippet scope carries its path as its name. That
 /// makes it a location as much as a name -- the Godot side tests the two against each other to
@@ -2028,12 +2051,37 @@ AUTORTFM_DISABLE void DescribeExportType(const uLang::CTypeBase* Type, const uLa
 
         if (Origin == EClassOrigin::Script)
         {
-            // Verse will let a member be typed as any class in the project, but the inspector
-            // filters a slot by a Godot class name, and only `@global_class` gives the class one.
+            // The inspector filters a slot by a Godot class name, and only a class Godot has
+            // *registered* has one. Two things are needed for that and testing one of them was a
+            // defect an author met within minutes: `@global_class`, and being the class **named
+            // after its own file**.
+            //
+            // The second is Godot's constraint rather than this bridge's preference, which is worth
+            // knowing before trying to lift it. A global class is collected per *path* --
+            // `_get_global_class_name` is a per-path virtual answering one name
+            // (`script_language_extension.h:754`), and `EditorFileSystem::_get_global_script_class`
+            // takes one `info.name` from it -- and `ScriptServer` maps that name back to the path,
+            // so `load(path)` has to yield that one class. A second global class in one file has
+            // nowhere to live.
+            //
+            // **So the member is exported anyway, filtered by the nearest mirrored Godot class.**
+            // Refusing it would be the bridge deciding an author may not export a Resource because
+            // of where they put the class, which is not its decision to make; a `Resource` picker
+            // that accepts a `.tres` of that class is worth far more than no slot at all. This is
+            // GDScript's own rule -- `_find_narrowest_native_or_global_class`, the *or* being the
+            // half this used to skip. `by-hand-findings.md` B19.
             const CClass* GlobalClassAttribute = Program.FindDefinitionByVersePath<CClass>(GlobalClassAttributePath);
-            OutDesc.Reject = Class->HasAttributeSubclass(GlobalClassAttribute, Program)
-                ? VH_EXPORT_OK
-                : VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL;
+            const bool bRegisters = Class->HasAttributeSubclass(GlobalClassAttribute, Program)
+                && IsClassNamedAfterItsFile(*Class);
+            if (!bRegisters)
+            {
+                OutDesc.Hint = VH_EXPORT_HINT_CLASS;
+                OutDesc.HintString = OutDesc.NativeClass;
+                OutDesc.Reject = OutDesc.NativeClass.IsEmpty() ? VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL
+                                                              : VH_EXPORT_OK;
+                return;
+            }
+            OutDesc.Reject = VH_EXPORT_OK;
             return;
         }
 

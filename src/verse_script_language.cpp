@@ -3389,9 +3389,14 @@ static String export_rejection_message(const Dictionary &p_entry) {
 			return name + String(" is an option around a value the inspector has no empty slot for. ")
 					+ String("Only a node or a resource can be left unassigned.");
 		case VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL:
+			// Narrow since B19: a class with no registered Godot name is exported anyway, filtered
+			// by its nearest mirrored ancestor. What is left here is the case with no such ancestor
+			// either -- a class whose chain reaches `object` without passing a mirrored one -- so
+			// there is nothing to filter a slot by at all.
 			return name + String(" refers to ") + class_name
-					+ String(", which is not registered with Godot. The inspector filters the slot by a ")
-					+ String("Godot class name, so add `@global_class` to ") + class_name + String(".");
+					+ String(", which is neither a node nor a resource, so the inspector has nothing ")
+					+ String("to draw for it. Derive ") + class_name
+					+ String(" from a Godot class the inspector can pick one of.");
 		default:
 			return name + String(" has a type godot-verse cannot carry to the inspector yet, so it is not exported.");
 	}
