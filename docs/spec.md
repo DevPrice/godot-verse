@@ -1731,6 +1731,21 @@ external editor is secondary.
   input action or a signal name, chosen by the call the literal is an argument to. Ranking is by
   inheritance distance since ABI 8.0: the host says how many hops separate an item's owner from the
   class asked about, so a class's own members sort above its parent's above Object's.
+  **A `?` at the head of an argument answers the callee's named parameters and nothing else** —
+  `Input.IsActionPressed("jump", ?ExactMatch := true)` — off the same signature the argument hint
+  is drawn from, so it is answerable on exactly the keystrokes the hint is and costs no second
+  question. It is the `@` case again: every name in the enclosing scope is *refused* at that
+  position rather than merely unlikely, so the whole scope is the wrong answer there. The `?` the
+  author typed is left alone and the option inserts `Name := `, because a bare `?Name` is an option
+  *type* and not an argument. Telling the three spellings of `?` apart is done from the buffer: a
+  named argument's `?` follows the call's own bracket or a comma, where the postfix unwrap of
+  `Target?` follows an expression and the `?node2d` of an option type follows a `:`.
+  **Whether a parameter is named crosses the ABI as a flag** (`vh_complete_item::IsNamed`, ABI
+  **9.0**, a major because the items are an array and a field at the end moves the stride). It has
+  to: the compiler records the `?` on the function *type*, not on the parameter's definition —
+  `AnalyzeParam` types the definition with the value type and wraps it in a `CNamedType` afterwards
+  — so `?ExactMatch:logic` reaches a consumer as `ExactMatch:logic`, which is a call Verse refuses.
+  The argument hint spells the `?` for the same reason.
   **The buffer the host is asked about is repaired before it is sent.** A half-written line is a
   *parse* error and uLang keeps no partial snippet, so nothing maps a VST node to the file and
   `vh_complete_symbol` answers `VH_ERR_NOT_FOUND` — the author was left with the class names and

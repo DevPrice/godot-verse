@@ -83,7 +83,7 @@ Two documents are not phase records and are the ones to read before adding a fea
 `include/verse_host_abi.h` is the only thing that crosses. Plain C — the two sides cannot share a
 C++ ABI. It is staged into the host's `Public/` by `build_host.py`, so both compile the same file.
 
-**`VH_ABI_VERSION` is 8.8.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
+**`VH_ABI_VERSION` is 9.0.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
 a major bump is a layout or meaning change and both sides must be rebuilt; a minor bump adds
 something an older consumer can ignore behind a `StructSize` check. A change to the header means
 bumping it and rebuilding **both** sides — the mismatch surfaces at `vh_init`, not at compile time.
@@ -91,6 +91,9 @@ bumping it and rebuilding **both** sides — the mismatch surfaces at `vh_init`,
 copies the whole `vh_godot_api` out of the descriptor, so everything past what a consumer built at a
 lower minor actually wrote is that consumer's stack, not a null pointer, and "check the pointer
 before calling" would pass. `InitHost` zeroes the tail; nothing before 8.3 needed it.
+**`vh_complete_item` is the struct a minor can never grow**: the items are handed back as an array,
+so a field at the end changes the stride an older consumer indexes by, and the mismatch would read
+as corruption rather than as a refusal. 9.0 added `IsNamed` there for that reason alone.
 
 `vh_host_kind()` is readable before `vh_init` and answers editor, runtime or cooker; the eleven
 compiler-side entry points answer `VH_ERR_UNSUPPORTED` in a runtime host.

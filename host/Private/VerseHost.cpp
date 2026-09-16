@@ -58,7 +58,8 @@ vh_complete_item ToCompleteItem(const GodotVerse::FCompleteItem& Item)
         reinterpret_cast<const char*>(*Item.Signature),
         Item.Signature.Len(),
         Item.bIsOverridable ? 1 : 0,
-        Item.OwnerDistance};
+        Item.OwnerDistance,
+        Item.bIsNamed ? 1 : 0};
 }
 
 } // namespace

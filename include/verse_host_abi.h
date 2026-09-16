@@ -42,8 +42,8 @@ extern "C" {
  * The mismatch surfaces at vh_init, not at compile time, because the two sides are compiled by
  * different toolchains and nothing links them.
  */
-#define VH_ABI_VERSION_MAJOR 8
-#define VH_ABI_VERSION_MINOR 8
+#define VH_ABI_VERSION_MAJOR 9
+#define VH_ABI_VERSION_MINOR 0
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
 typedef int32_t vh_bool;
@@ -1665,6 +1665,21 @@ typedef struct vh_complete_item
 	 * Here so an editor can rank a class's own members above its parent's above Object's, which
 	 * Godot's own LOCATION_PARENT_MASK is exactly the shape of. */
 	int32_t OwnerDistance;
+
+	/* Whether this is a *named* parameter -- declared `?ExactMatch:logic = false` -- which decides
+	 * how a call site may pass it: `?ExactMatch := true`, never positionally. False for every name
+	 * that is not a parameter.
+	 *
+	 * The compiler does not carry this on the parameter's definition. AnalyzeParam gives the
+	 * definition the *value* type and only then wraps that in a CNamedType for the signature, so
+	 * `?ExactMatch:logic` arrives as a definition named ExactMatch of type logic and the `?` is
+	 * recoverable from the function type's parallel parameter list alone -- which the consumer
+	 * does not have. Hence a flag rather than a spelling the consumer could parse.
+	 *
+	 * Added at ABI v9.0, and it is a major bump for the reason every addition to this struct is:
+	 * the items are handed back as an array, so a field at the end changes the stride an older
+	 * consumer indexes by and would be read as silent corruption rather than as a refusal. */
+	vh_bool IsNamed;
 } vh_complete_item;
 
 /* Lists what could be written at Line/Column of PathUtf8, as the program describes that file
@@ -1772,7 +1787,10 @@ typedef struct vh_signature_desc
 	int32_t ResultLen;
 
 	/* One per declared parameter, in order, each carrying the parameter's own name and type.
-	 * Points into storage owned by the host with the same lifetime as this descriptor. */
+	 * Points into storage owned by the host with the same lifetime as this descriptor.
+	 *
+	 * This is the one place vh_complete_item::IsNamed answers anything: a hint that spells a
+	 * named parameter as `ExactMatch:logic` names a call no author can write. */
 	const vh_complete_item* Params;
 	int32_t ParamCount;
 } vh_signature_desc;

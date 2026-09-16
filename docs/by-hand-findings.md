@@ -721,7 +721,7 @@ for:
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks
-is not worth keeping. Eight things stand open, all of them things no automated layer can reach.
+is not worth keeping. Nine things stand open, all of them things no automated layer can reach.
 Phase 6's session has since been run and is recorded below with what it found, because the steps
 are worth keeping: its half of the debugger has no other test.
 
@@ -988,6 +988,30 @@ autoload answers from a `@tool` script in the editor. The bargain it makes is th
 already documents -- it runs the **last built** generation -- so an editor session that has never
 built runs an autoload with no class behind it, and the honest behaviour there is a script that
 reports and carries on rather than a silent no-op. That is the thing to watch for.
+
+### The named-argument popup, and when it opens · **owed**
+
+A `?` at the head of an argument completes to the callee's named parameters —
+`Input.IsActionPressed("jump", ?ExactMatch := true)`. The half that can be asserted is asserted:
+`host_smoke` proves `vh_signature_at` recovers the `?` off the function type, and that the buffer
+the editor sends the instant a `?` is typed — the argument replaced by the placeholder, which past a
+`?` reads as an option *type* — does not cost the call its signature. What no headless run can read
+is the popup itself, for the reason every completion case here cannot: `ScriptLanguage` exposes
+nothing a script can ask.
+
+**To check it:** in the script editor, type `Input.IsActionPressed("ui_accept", ?E`. The popup must
+offer `ExactMatch:logic`, accepting it must leave `?ExactMatch := ` with the `?` the author typed
+still there, and the hint above the caret must read `IsActionPressed(Action:string,
+?ExactMatch:logic):logic` with the `?`. Then check the two spellings of `?` that must **not** open
+it: `if (Target?` and a member declared `:?node2d`, both of which are ordinary code and neither of
+which has a set of names to offer.
+
+**The popup does not open on the bare `?`**, and that is not a defect of this feature. Nothing here
+registers code-completion prefixes, so `CodeEdit` requests completion only on an identifier
+character — the same reason `@` and `.` open nothing until the next keystroke. Ctrl+Space on a bare
+`?` does answer, with every named parameter. Whether to register `?`, `@` and `.` as prefixes is one
+override (`_get_code_completion_prefixes`) and a decision about all three at once, which is why it
+was not taken along the way.
 
 ### And when one of these is looked at again
 

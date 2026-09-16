@@ -1355,6 +1355,21 @@ static int64_t argument_index_in_call(const String &p_before, int64_t p_callee_e
 	return index;
 }
 
+// Whether the `?` immediately before p_prefix_start opens a *named argument* rather than being one
+// of the two other things a `?` spells in Verse.
+//
+// The three are told apart by what stands before the `?`. A named argument begins an argument, so
+// the nearest non-blank character is the call's own bracket or the comma ahead of it; the postfix
+// unwrap of `if (Target?)` always follows an expression; and the `?node2d` of an option *type*
+// follows a `:`. Only the first has a fixed set of names that may follow it.
+static bool opens_a_named_argument(const String &p_before, int64_t p_prefix_start) {
+	int64_t i = p_prefix_start - 2;
+	while (i >= 0 && (p_before[i] == ' ' || p_before[i] == '\t')) {
+		i--;
+	}
+	return i >= 0 && (p_before[i] == '(' || p_before[i] == '[' || p_before[i] == ',');
+}
+
 // Which bracket the call the cursor is inside was opened with. vh_signature_desc reports a
 // function's parameters but not its effects, so the hint takes the author's own answer: a call
 // already written with `[` is the fallible one, and spelling its hint with parentheses contradicts
@@ -1385,7 +1400,10 @@ static String call_hint_for(const Dictionary &p_signature, int64_t p_argument, b
 			hint += String::chr(0xFFFF);
 		}
 		const Dictionary param = params[i];
-		hint += String(param["name"]) + String(":") + String(param["type"]);
+		// A named parameter keeps its `?`, because that is half of how it is written: the call
+		// passes it `?ExactMatch := true` and cannot pass it positionally at all, so a hint
+		// spelling it `ExactMatch:logic` describes an argument list the compiler would refuse.
+		hint += ((bool)param["is_named"] ? String("?") : String()) + String(param["name"]) + String(":") + String(param["type"]);
 		if (i == p_argument) {
 			hint += String::chr(0xFFFF);
 		}
@@ -1481,6 +1499,21 @@ static Dictionary completion_option_for(const Dictionary &p_item) {
 		option["insert_text"] = name + (takes_arguments ? open : open + close);
 		option["display"] = name + open + (takes_arguments ? String::utf8("…") : String()) + close;
 	}
+	return option;
+}
+
+// One named parameter as an option for the `?` the author has just typed.
+//
+// The `?` is left where it is, exactly as an attribute's `@` is: Godot matches and replaces the run
+// of identifier characters past the symbol, so both the text it filters on and the text it
+// overwrites are the name alone. The `:=` comes with the name because there is nothing else a
+// named argument can be followed by -- a bare `?ExactMatch` is an option type, not an argument.
+static Dictionary named_argument_option_for(const Dictionary &p_param) {
+	const String name = p_param["name"];
+	Dictionary option = completion_option(name, ScriptLanguageExtension::CODE_COMPLETION_KIND_VARIABLE,
+			ScriptLanguageExtension::LOCATION_LOCAL);
+	option["insert_text"] = name + String(" := ");
+	option["display"] = name + String(":") + String(p_param["type"]);
 	return option;
 }
 
@@ -2057,6 +2090,14 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 	const bool completing_specifier = !completing_members && !completing_attribute
 			&& prefix_start > 0 && before[prefix_start - 1] == '<';
 
+	// A `?` at the head of an argument is Verse's named-argument spelling -- `?ExactMatch := true`
+	// -- and the only names that can stand there are the callee's own named parameters. The scope
+	// is as wrong an answer here as it is after an `@`, and wrong in a worse way: every name in it
+	// is refused at that position rather than merely unlikely.
+	const bool completing_named_argument = !completing_members && !completing_attribute && !completing_specifier
+			&& prefix_start > 0 && before[prefix_start - 1] == '?'
+			&& opens_a_named_argument(before, prefix_start);
+
 	const int64_t line_start = before.rfind("\n") + 1;
 	const String ahead_of_prefix = before.substr(line_start, prefix_start - line_start);
 
@@ -2065,9 +2106,10 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 	// reading -- which is the whole reason to narrow on them and not on, say, an argument, where
 	// any expression is legal and a narrowed list would hide the right name.
 	//
-	// Tested in this order: a `.`, an `@` and a `<` above have already claimed the cursor, and a
-	// `set` target and a type position cannot both be true of one caret.
-	const bool bounded = !completing_members && !completing_attribute && !completing_specifier;
+	// Tested in this order: a `.`, an `@`, a `<` and a `?` above have already claimed the cursor,
+	// and a `set` target and a type position cannot both be true of one caret.
+	const bool bounded = !completing_members && !completing_attribute && !completing_specifier
+			&& !completing_named_argument;
 	const bool completing_assignable = bounded && ahead_of_prefix.strip_edges() == String("set");
 	const bool completing_type = bounded && !completing_assignable && completing_a_type(before, prefix_start);
 	const bool completing_supertype = bounded && !completing_assignable && !completing_type
@@ -2135,6 +2177,11 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 		r_column = up_to.substr(line_start).utf8().length();
 	};
 
+	// Whether signature_cache describes the call this buffer's cursor is inside, which the named
+	// argument options below need as well as the hint does: the names that may stand past a `?`
+	// are the callee's parameters, and the cache is where they already are.
+	bool signature_is_current = false;
+
 	// The argument hint, which is what Godot draws above the caret while a call is open. Asked
 	// before the options because it is the answer for a cursor with nothing typed at all -- the
 	// moment right after the `(` -- which is exactly where the options below decline.
@@ -2166,6 +2213,8 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 				}
 			}
 
+			signature_is_current = have_signature;
+
 			// Only ever the hint for *this* buffer. The cache keys are left alone on a refusal, so
 			// without the guard the previous call's hint would be drawn over the new one.
 			if (have_signature && !signature_cache.is_empty()) {
@@ -2180,10 +2229,31 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 	// the attributes in scope are a short list and nothing else can follow it. So are an
 	// archetype's fields and a `set` target, which are shorter still.
 	if (!completing_members && !completing_attribute && !completing_assignable && !completing_field
-			&& prefix.is_empty()) {
+			&& !completing_named_argument && prefix.is_empty()) {
 		return result;
 	}
-	result["force"] = completing_attribute;
+	result["force"] = completing_attribute || completing_named_argument;
+
+	// A named argument is the one position whose answer comes off the signature rather than off
+	// vh_complete_symbol: what may be written past the `?` is a parameter of the call the cursor is
+	// inside, which no scope at the cursor knows anything about. The hint above has already
+	// resolved it, so this costs nothing and is answerable on exactly the keystrokes the hint is.
+	//
+	// A parameter already passed by name is offered again. Godot's own completion does no better,
+	// and repeating one is a compile error the author reads at the line they are writing.
+	if (completing_named_argument) {
+		if (signature_is_current && !signature_cache.is_empty()) {
+			const TypedArray<Dictionary> params = signature_cache["params"];
+			for (int64_t i = 0; i < params.size(); i++) {
+				const Dictionary param = params[i];
+				if ((bool)param["is_named"] && matches_typed_prefix(param["name"], prefix)) {
+					options.push_back(named_argument_option_for(param));
+				}
+			}
+		}
+		result["options"] = options;
+		return result;
+	}
 
 	if (host_can_answer && (!completing_members || receiver_end >= 0)) {
 		// Two of the modes are asked about a receiver's last byte -- the expression before a `.`,

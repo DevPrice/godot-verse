@@ -8775,16 +8775,32 @@ AUTORTFM_DISABLE bool GodotVerse::SignatureAt(FUtf8StringView Path,
     }
 
     OutDesc.Name = FUtf8String(Function->AsNameCString());
+
+    // The parameter *types*, which is the only place a named parameter's `?` survives: AnalyzeParam
+    // sets the definition's type to the value type and wraps it in a CNamedType afterwards, for the
+    // signature alone (SemanticAnalyzer.cpp, `if (ParamAst->IsNamed())`). So `?ExactMatch:logic`
+    // reaches the loop below as a definition named ExactMatch of type logic, and without this the
+    // hint spells a call no author can write -- a named parameter is passed `?ExactMatch := true`
+    // and never positionally.
+    TArray<const uLang::CTypeBase*> ParamTypes;
     if (const uLang::CFunctionType* Type = Function->_Signature.GetFunctionType())
     {
         OutDesc.Result = FULangConversionUtils::ULangStrToFUtf8String(Type->GetReturnType().AsCode());
+        for (const uLang::CTypeBase* ParamType : Type->GetParamTypes())
+        {
+            ParamTypes.Add(ParamType);
+        }
     }
 
+    int32 ParamIndex = 0;
     for (const uLang::CDataDefinition* Param : Function->_Signature.GetParams())
     {
+        const int32 ThisParam = ParamIndex++;
         FCompleteItem Item;
         if (Param && DescribeCompletion(*Param, ECompleteFilter::Any, Item))
         {
+            Item.bIsNamed = ParamTypes.IsValidIndex(ThisParam) && ParamTypes[ThisParam] != nullptr
+                && ParamTypes[ThisParam]->GetNormalType().AsNamedType() != nullptr;
             OutDesc.Params.Add(MoveTemp(Item));
         }
     }

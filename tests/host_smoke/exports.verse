@@ -158,6 +158,26 @@ exports := class(object):
         N >= Least
         N
 
+    # A named parameter, which the compiler records on the function *type* and not on the
+    # parameter's own definition: `Loudly` reaches vh_signature_at as an ordinary definition of type
+    # `logic`, and the `?` is recoverable from the signature alone. Asserted there, because a hint
+    # that spells this parameter positionally describes a call the compiler refuses.
+    Shout<public>(Text:string, ?Loudly:logic = false):void =
+        if (Loudly?):
+            set Label = Text
+
+    # The call host_smoke builds a completion buffer out of: it replaces the named argument with the
+    # editor's placeholder, so a `?` followed by a name nothing declares -- which parses as an
+    # option *type* and not as an argument at all -- is proved not to cost the call its signature.
+    # That is what the editor asks for the instant a `?` is typed, and the whole named-argument
+    # answer rests on it.
+    #
+    # The placeholder may not be spelled here, in this file, in prose or otherwise: the case that
+    # erases the `:` off `Probe`'s `if` finds it with a plain search over the whole buffer and takes
+    # the first hit.
+    ShoutTwice<public>():void =
+        Shout("twice", ?Loudly := true)
+
     # R-DIAG-2: raises, so the error carries this file and this line. `Raise` itself cannot be the
     # name -- it is already taken in this scope, and Verse reports the collision against whichever
     # definition it analyses second rather than against the new one.

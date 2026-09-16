@@ -515,6 +515,10 @@ struct FCompleteItem
     /// it was reached through a `using`. See vh_complete_item::OwnerDistance for why an import is
     /// not a number of hops.
     int32 OwnerDistance{-1};
+    /// Whether this is a named parameter -- `?ExactMatch:logic = false` -- which a call site writes
+    /// as `?ExactMatch := true` and may not pass positionally. Only SignatureAt fills it; the
+    /// parameter's own definition does not carry it (see vh_complete_item::IsNamed).
+    bool bIsNamed{false};
 };
 
 /// The parameters of one function, for an editor's argument hint.

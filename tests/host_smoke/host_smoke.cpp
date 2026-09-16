@@ -1311,6 +1311,9 @@ int main(int argc, char** argv)
 				// The same caret one character short of a header. Asserted as a refusal rather
 				// than left untested: if a later engine drop's parser learns to recover, this is
 				// the case that says the repair has become unnecessary.
+				// The `:` is found by searching for the placeholder, which takes the first hit in
+				// the whole buffer -- so the fixture must not spell the placeholder anywhere,
+				// comments included. It did once, and this is the step that said so.
 				std::string Unrepaired = IfTyping;
 				Unrepaired.erase(Unrepaired.find("VhCompletionCursor") + strlen("VhCompletionCursor") + 1, 1);
 				CompleteOk = Step("without the `:` the whole file is lost to the parser",
@@ -1749,6 +1752,85 @@ int main(int argc, char** argv)
 				CompleteOk = Step("a data member has no signature",
 								 SignatureAtFn(ExportsPathUtf8.c_str(), ExportsSource.c_str(), DataRow, DataColumn, &NoSignature) == VH_ERR_NOT_FOUND)
 						  && CompleteOk;
+			}
+
+			// A named parameter -- `?Loudly:logic = false` -- which a call site writes
+			// `?Loudly := true` and may not pass positionally. The `?` is the one thing about a
+			// signature an editor cannot work out for itself: AnalyzeParam gives the parameter's
+			// definition the value type and wraps it in a CNamedType for the function type
+			// afterwards, so the definition alone says `Loudly:logic` and names a call Verse
+			// refuses.
+			const size_t Named = ExportsSource.find("Shout<public>(");
+			if (Step("located the fixture's named-parameter method", Named != std::string::npos))
+			{
+				int32_t NamedRow = 0;
+				int32_t NamedColumn = 0;
+				RowColumnOf(ExportsSource, Named + strlen("Shou"), NamedRow, NamedColumn);
+				const vh_signature_desc* Shout = nullptr;
+				if (Step("vh_signature_at on a method taking one",
+						SignatureAtFn(ExportsPathUtf8.c_str(), ExportsSource.c_str(), NamedRow, NamedColumn, &Shout) == VH_OK)
+					&& Shout
+					&& Step("it reports both parameters", Shout->ParamCount == 2))
+				{
+					CompleteOk = Step("the positional one is not named", Shout->Params[0].IsNamed == 0) && CompleteOk;
+					CompleteOk = Step("and the other one is", Shout->Params[1].IsNamed != 0) && CompleteOk;
+					CompleteOk = Step("which still reports its bare name",
+									 Text(Shout->Params[1].NameUtf8, Shout->Params[1].NameLen) == "Loudly")
+							  && CompleteOk;
+					CompleteOk = Step("and its value type rather than the named wrapper",
+									 Text(Shout->Params[1].TypeUtf8, Shout->Params[1].TypeLen) == "logic")
+							  && CompleteOk;
+				}
+				else
+				{
+					CompleteOk = false;
+				}
+
+				// The buffer the editor actually asks about the moment a `?` is typed: the argument
+				// replaced by the placeholder, which past a `?` is `?VhCompletionCursor` -- an
+				// option *type* rather than an argument, and an unknown identifier either way. The
+				// whole named-argument answer is the signature of the call this sits inside, so if
+				// the buffer costs the call its signature there is nothing to offer and the feature
+				// is a silent no-op.
+				std::string NamedTyping = ExportsSource;
+				const size_t Argument = NamedTyping.find("?Loudly := true");
+				if (Step("located the fixture's named argument", Argument != std::string::npos))
+				{
+					NamedTyping.replace(Argument, strlen("?Loudly := true"), "?VhCompletionCursor");
+					const size_t Callee = NamedTyping.find("Shout(\"twice\"");
+					int32_t TypingRow = 0;
+					int32_t TypingColumn = 0;
+					RowColumnOf(NamedTyping, Callee + strlen("Shou"), TypingRow, TypingColumn);
+					AnalyseCompletionBuffer(NamedTyping);
+					const vh_signature_desc* Typed = nullptr;
+					if (Step("vh_signature_at still resolves the call a half-typed `?` sits in",
+							SignatureAtFn(ExportsPathUtf8.c_str(), NamedTyping.c_str(), TypingRow, TypingColumn, &Typed) == VH_OK)
+						&& Typed)
+					{
+						CompleteOk = Step("and still says which parameter is named",
+										 Typed->ParamCount == 2 && Typed->Params[1].IsNamed != 0
+												 && Text(Typed->Params[1].NameUtf8, Typed->Params[1].NameLen) == "Loudly")
+								  && CompleteOk;
+					}
+					else
+					{
+						CompleteOk = false;
+					}
+
+					// Back to the file on disk, so the class reads below describe it rather than
+					// the buffer.
+					CompleteOk = Step("the project analyses clean after the named-argument buffer",
+									 CheckProjectFn(ExportsPathUtf8.c_str(), ExportsSource.c_str()) == VH_OK)
+							  && CompleteOk;
+				}
+				else
+				{
+					CompleteOk = false;
+				}
+			}
+			else
+			{
+				CompleteOk = false;
 			}
 
 		}

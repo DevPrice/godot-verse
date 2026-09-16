@@ -525,6 +525,7 @@ static Dictionary complete_item_to_dict(const vh_complete_item &p_item) {
 	entry["signature"] = String::utf8(p_item.SignatureUtf8, p_item.SignatureLen);
 	entry["is_overridable"] = p_item.IsOverridable != 0;
 	entry["owner_distance"] = (int64_t)p_item.OwnerDistance;
+	entry["is_named"] = p_item.IsNamed != 0;
 	return entry;
 }
 
