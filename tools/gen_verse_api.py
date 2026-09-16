@@ -1205,11 +1205,12 @@ def emit_math_packers() -> list:
 ClassifiedMethod = namedtuple(
     "ClassifiedMethod",
     ["godot_name", "verse_name", "params", "return_type", "is_void", "default_body", "is_const",
-     "godot_return"],
+     "godot_return", "is_vararg"],
     # A virtual is the only method with a default body, and it is what makes the declaration a
     # declaration rather than a call: everything else dispatches through the handle. `is_const` is
     # Godot's own flag, and it decides `<reads>` against `<transacts>` (docs/phase-4.5-design.md 3).
-    defaults=(None, False, ""),
+    # `is_vararg` makes emit_method answer two lines instead of one -- see there.
+    defaults=(None, False, "", False),
 )
 ClassifiedProperty = namedtuple(
     "ClassifiedProperty", ["godot_name", "verse_name", "type_info", "getter", "setter", "index"]
@@ -1528,8 +1529,15 @@ def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members
     if m.get("is_static"):
         coverage.skip("static", record("static"))
         return None
-    if m.get("is_vararg"):
-        coverage.skip("vararg", record("vararg"))
+    # A vararg is emitted rather than skipped since Phase 4b stage 6: its *fixed* prefix is an
+    # ordinary parameter list, and the tail is one `[]variant` -- which a script could not name
+    # until stage 5 put `variant` on the wire. Godot's own element type is `Variant...`, so there is
+    # no narrower truth to tell about the tail.
+    #
+    # A static vararg would have nowhere to dispatch -- emit_static_methods builds its own call --
+    # so it is still skipped, and there are none in 4.7.
+    if m.get("is_vararg") and m.get("is_static"):
+        coverage.skip("vararg", record("vararg", "static"))
         return None
     if (godot_class, m["name"]) in FREE_FUNCTION_REPLACEMENTS:
         coverage.skip("superseded_by_free_function", record(
@@ -1603,6 +1611,7 @@ def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members
         # Godot's own spelling of the return type, kept only so the R-AUD-3 appendix can say what
         # shape a non-atomic method is -- an Error, the receiver, an object, or a plain value.
         godot_return=return_value["type"] if return_value else "",
+        is_vararg=bool(m.get("is_vararg")),
     )
 
 
@@ -1955,7 +1964,24 @@ def emit_call_args(params) -> str:
     )
 
 
+# The name a vararg's tail takes. Not `Args` alone because six of the 33 already have a parameter
+# called that; `verse_param_name` is given this as a taken name so a collision renames Godot's.
+VARARG_TAIL = "Args"
+
+
 def emit_method(cm: ClassifiedMethod) -> str:
+    """One Verse line, or two for a vararg.
+
+    A vararg is two *arities* of one name rather than one method taking an optional array, because
+    an optional parameter would make `EmitSignal("hit")` pass an empty array that the call still
+    has to build, and because `?Args:[]variant = array{}` is a default Verse has to evaluate at
+    every call site. Two arities are what the compiler was asked about
+    (`tests/verse_probe/vararg_probe.verse`) and they resolve by parameter count alone.
+
+    The tail is joined with `+`, which is Verse's array concatenation and was measured in the same
+    probe -- the fixed prefix is packed one argument at a time, the tail arrives already packed,
+    and `VhCallValue` wants one array.
+    """
     param_decl = ", ".join(
         f"{p.verse_name}:{p.type_info.verse_type}" if p.default is None
         else f"?{p.verse_name}:{p.type_info.verse_type} = {p.default}"
@@ -1976,25 +2002,53 @@ def emit_method(cm: ClassifiedMethod) -> str:
     # agree: a `<reads>` body may not call `VhCallValue`, which is `<transacts>`.
     effect = "<reads>" if cm.is_const else "<transacts>"
     dispatch = "VhCallValueConst" if cm.is_const else "VhCallValue"
-    call = f'{dispatch}(Handle, "{cm.godot_name}", array{{{args}}})' if not cm.is_void else None
 
-    if cm.is_void:
-        body = f'VhCallVoid(Handle, "{cm.godot_name}", array{{{args}}})'
-        return f"    {cm.verse_name}<public>({param_decl})<transacts>:void = {body}"
-
-    ti = cm.return_type
-    if ti.pack_fn == "VhFromObject":
-        # The cast, not a construction: the host builds the object at the class Godot says it is,
-        # and this narrows it to what the signature promised (R-SCN-6). It can decline -- Godot
-        # answering a class outside the mirror -- and the method was already <decides> for null.
-        body = f"{ti.verse_type}[VhObjectFrom[{call}]]"
-    elif ti.unpack_decides:
-        body = f"{ti.unpack_fn}[{call}]"
+    # The argument array, in the two shapes a vararg needs and the one shape everything else does.
+    tail = VARARG_TAIL
+    if cm.is_vararg:
+        used = {p.verse_name for p in cm.params}
+        while tail in used:
+            tail = "Vararg" + tail
+        arg_lists = [f"array{{{args}}} + {tail}"]
+        decls = [f"{param_decl}, {tail}:[]variant" if param_decl else f"{tail}:[]variant"]
+        # The no-tail arity, but **only** when there is a fixed prefix to tell it apart by.
+        # `New()` beside `New(:[]variant)` is uLang glitch 3532, "ambiguous with this definition",
+        # because a Verse function's parameters *are* its tuple and the empty tuple is the empty
+        # array -- so the two have the same argument type rather than two arities of one name. With
+        # any fixed parameter at all the pair is fine, which is what the probe measured.
+        # `GDScript.new` is the only entry point in 4.7 that hits this, and the spelling it leaves
+        # an author is `Script.New(array{})`.
+        if param_decl:
+            arg_lists.insert(0, f"array{{{args}}}")
+            decls.insert(0, param_decl)
     else:
-        body = f"{ti.unpack_fn}({call})"
+        arg_lists = [f"array{{{args}}}"]
+        decls = [param_decl]
 
-    effects = f"<decides>{effect}" if ti.unpack_decides else effect
-    return f"    {cm.verse_name}<public>({param_decl}){effects}:{ti.verse_type} = {body}"
+    lines = []
+    for decl, arg_list in zip(decls, arg_lists):
+        if cm.is_void:
+            body = f'VhCallVoid(Handle, "{cm.godot_name}", {arg_list})'
+            lines.append(f"    {cm.verse_name}<public>({decl})<transacts>:void = {body}")
+            continue
+
+        call = f'{dispatch}(Handle, "{cm.godot_name}", {arg_list})'
+        ti = cm.return_type
+        if ti.pack_fn == "VhFromObject":
+            # The cast, not a construction: the host builds the object at the class Godot says it
+            # is, and this narrows it to what the signature promised (R-SCN-6). It can decline --
+            # Godot answering a class outside the mirror -- and the method was already <decides>
+            # for null.
+            body = f"{ti.verse_type}[VhObjectFrom[{call}]]"
+        elif ti.unpack_decides:
+            body = f"{ti.unpack_fn}[{call}]"
+        else:
+            body = f"{ti.unpack_fn}({call})"
+
+        effects = f"<decides>{effect}" if ti.unpack_decides else effect
+        lines.append(f"    {cm.verse_name}<public>({decl}){effects}:{ti.verse_type} = {body}")
+
+    return "\n".join(lines)
 
 
 # `string` is []char, so the compiler asks a string-typed property for (:accessor, :int):char and

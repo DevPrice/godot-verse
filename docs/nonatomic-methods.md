@@ -24,7 +24,7 @@ them. `docs/phase-4-design.md` 6.4 is the argument.
 
 **Why none of these is compensated.** Compensation needs an inverse, and Godot publishes none: there
 is no `un-load`, no `un-create_shape_owner`, no way to take back a `Tween.tween_property`. A
-per-method inverse table would be 1132 rows of invented semantics, each of which would be wrong
+per-method inverse table would be 1142 rows of invented semantics, each of which would be wrong
 for some caller, and a compensation that half works is worse than a documented sharp edge --
 GDScript offers exactly this and says nothing at all.
 
@@ -39,14 +39,14 @@ stays what it is, and a script that cares reaches for one of the two above inste
 
 | shape | count | what the mutation is |
 | --- | --- | --- |
-| answers a **value** | 719 | a method Godot did not mark `const`. Some of these do not visibly mutate anything -- `Tween.is_running` is not `const` and reads like a query -- but `is_const` is Godot's own annotation and the mirror believes it rather than second-guessing 708 of them |
-| answers an **Error** | 202 | an operation that reports whether it worked: `load`, `save`, `send`, `connect_node`. Undoing one would mean undoing I/O |
+| answers a **value** | 726 | a method Godot did not mark `const`. Some of these do not visibly mutate anything -- `Tween.is_running` is not `const` and reads like a query -- but `is_const` is Godot's own annotation and the mirror believes it rather than second-guessing 708 of them |
+| answers an **Error** | 205 | an operation that reports whether it worked: `load`, `save`, `send`, `connect_node`. Undoing one would mean undoing I/O |
 | answers an **object** | 173 | an allocation the caller now owns -- `create_shape_owner`, `Tween.tween_property`. Undoing it means freeing something the caller may still hold |
 | answers its **receiver** | 38 | a builder chaining, where the mutation is the point: `PropertyTweener.SetDelay(...).SetEase(...)` |
 
 ## The list
 
-1132 methods, by Godot class.
+1142 methods, by Godot class.
 
 ### AESContext (aes_context)
 
@@ -315,6 +315,7 @@ stays what it is, and a script that cares reaches for one of the two above inste
 
 | Verse | Godot | shape |
 | --- | --- | --- |
+| `ClassCallStatic` | `class_call_static` | value |
 | `ClassGetPropertyGetter` | `class_get_property_getter` | value |
 | `ClassGetPropertySetter` | `class_get_property_setter` | value |
 
@@ -672,6 +673,12 @@ stays what it is, and a script that cares reaches for one of the two above inste
 | `LoadExtension` | `load_extension` | value |
 | `ReloadExtension` | `reload_extension` | value |
 | `UnloadExtension` | `unload_extension` | value |
+
+### GDScript (gd_script)
+
+| Verse | Godot | shape |
+| --- | --- | --- |
+| `New` | `new` | value |
 
 ### GDScriptLanguageProtocol (gd_script_language_protocol)
 
@@ -1040,6 +1047,7 @@ stays what it is, and a script that cares reaches for one of the two above inste
 | Verse | Godot | shape |
 | --- | --- | --- |
 | `CreateCallback` | `create_callback` | object |
+| `CreateObject` | `create_object` | value |
 | `Eval` | `eval` | value |
 | `GetInterface` | `get_interface` | object |
 | `IsJsBuffer` | `is_js_buffer` | value |
@@ -1203,10 +1211,14 @@ stays what it is, and a script that cares reaches for one of the two above inste
 
 | Verse | Godot | shape |
 | --- | --- | --- |
+| `CallDeferredThreadGroup` | `call_deferred_thread_group` | value |
+| `CallThreadSafe` | `call_thread_safe` | value |
 | `CreateTween` | `create_tween` | object |
 | `GetNodeAndResource` | `get_node_and_resource` | value |
 | `GetTreeString` | `get_tree_string` | value |
 | `GetTreeStringPretty` | `get_tree_string_pretty` | value |
+| `Rpc` | `rpc` | error |
+| `RpcId` | `rpc_id` | error |
 
 ### Node3D (node3d)
 
@@ -1241,8 +1253,11 @@ stays what it is, and a script that cares reaches for one of the two above inste
 
 | Verse | Godot | shape |
 | --- | --- | --- |
+| `Call` | `call` | value |
+| `CallDeferred` | `call_deferred` | value |
 | `Callv` | `callv` | value |
 | `Connect` | `connect` | error |
+| `EmitSignal` | `emit_signal` | error |
 
 ### OpenXRAPIExtension (open_xrapi_extension)
 

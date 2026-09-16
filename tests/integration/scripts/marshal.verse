@@ -394,3 +394,28 @@ marshal := class(node2d):
             _ => "other"
 
     NilVariant<public>():variant = variant{}
+
+    # --- R-SCN-2: Godot's vararg entry points --------------------------------
+    #
+    # 33 of Godot's methods are `Variant...` and the mirror carried none of them until Phase 4b
+    # stage 6. Each is emitted as two *arities* of one name: the fixed prefix alone, and the prefix
+    # plus one `[]variant` tail. Both are exercised here, because the pair is the thing that could
+    # be wrong -- a call resolving to the other arity would still compile.
+    CallOther<public>(Target:object, Method:string, Value:int)<transacts>:int =
+        if (N := AsInt[Target.Call(Method, array{VariantFromInt(Value)})]) then N else -1
+
+    # The no-tail arity of the same name.
+    CallOtherNoArgs<public>(Target:object, Method:string)<transacts>:string =
+        if (S := AsString[Target.Call(Method)]) then S else "?"
+
+    # Two arguments, so the tail is more than a single value dressed as an array.
+    CallOtherTwo<public>(Target:object, Method:string, A:int, B:int)<transacts>:int =
+        Args := array{VariantFromInt(A), VariantFromInt(B)}
+        if (N := AsInt[Target.Call(Method, Args)]) then N else -1
+
+    # Object.emit_signal, which is the other half of what stage 6's "done when" names.
+    EmitOn<public>(Target:object, Signal:string, Value:int)<transacts>:int =
+        ToInt(Target.EmitSignal(Signal, array{VariantFromInt(Value)}))
+
+    EmitOnNoArgs<public>(Target:object, Signal:string)<transacts>:int =
+        ToInt(Target.EmitSignal(Signal))

@@ -36,6 +36,8 @@ var _conc: Node2D = null
 var _conc2: Node2D = null
 var _foreign: Object = null
 var _hit: Control = null
+var _vararg_ping := -1
+var _vararg_pokes := 0
 
 
 func _on_verse_touched(body: Node2D) -> void:
@@ -71,6 +73,23 @@ func _call_verse_off_thread(target: Node) -> void:
 
 func _double(n: int) -> int:
 	return n * 2
+
+
+# Zero-argument, so the *no-tail* arity of the generated vararg pair has something to reach.
+func _say() -> String:
+	return "said"
+
+
+func _add_two(a: int, b: int) -> int:
+	return a + b
+
+
+func _on_verse_pinged(n: int) -> void:
+	_vararg_ping = n
+
+
+func _on_verse_poked() -> void:
+	_vararg_pokes += 1
 
 
 # Rewrites a script on disk, rebuilds, reloads, and checks the attached node answers the new code.
@@ -339,6 +358,33 @@ func begin() -> void:
 	_check_eq("and Godot's own null", node.call("VariantKindName", null), "nil")
 	_check_eq("a variant return comes back as what it holds", node.call("EchoVariant", 42), 42)
 	_check_eq("a nil variant comes back as null", node.call("NilVariant"), null)
+
+	# --- R-SCN-2: Godot's 33 vararg entry points ------------------------------------------------
+	#
+	# The mirror carried none of them until Phase 4b stage 6, because `Variant...` had no Verse
+	# spelling. Each is emitted as two *arities* of one name -- the fixed prefix alone, and the
+	# prefix plus one `[]variant` tail -- so what has to be checked is that a call reaches the arity
+	# it named. Resolving to the other one would still compile and would still return something.
+	_check_eq("Object.call carries a vararg tail into another object",
+			node.call("CallOther", self, "_double", 21), 42)
+	_check_eq("and the no-tail arity of the same name reaches a zero-argument method",
+			node.call("CallOtherNoArgs", self, "_say"), "said")
+	_check_eq("and a tail of more than one", node.call("CallOtherTwo", self, "_add_two", 40, 2), 42)
+
+	# Object.emit_signal, which is the other entry point stage 6's done-when names. A user signal
+	# rather than one of Godot's own, so the payload is this suite's to choose.
+	var pinger := Node.new()
+	pinger.add_user_signal("pinged", [{"name": "n", "type": TYPE_INT}])
+	pinger.add_user_signal("poked")
+	pinger.connect("pinged", _on_verse_pinged)
+	pinger.connect("poked", _on_verse_poked)
+	tree.root.add_child(pinger)
+	_check_eq("Object.emit_signal answers OK", node.call("EmitOn", pinger, "pinged", 99), OK)
+	_check_eq("and the payload arrived", _vararg_ping, 99)
+	_check_eq("a payloadless emit takes the no-tail arity",
+			node.call("EmitOnNoArgs", pinger, "poked"), OK)
+	_check_eq("and it fired once", _vararg_pokes, 1)
+	pinger.queue_free()
 
 	# --- R-TYPE-1: PackedVector2Array ----------------------------------------------------------
 	var points := PackedVector2Array([Vector2(1.0, 0.0), Vector2(2.0, 0.0), Vector2(4.0, 0.0)])

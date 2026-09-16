@@ -864,6 +864,38 @@ re-entrant Verse → Godot → Verse call that the bridge had never made before 
 
 ---
 
+### Stage 6's varargs, and the one arity that cannot exist
+
+**§8's two-line sketch is right about the shape and silent about the edge.** A vararg is emitted as
+two *arities* of one name — the fixed prefix, and the prefix plus one `[]variant` tail — and
+`tests/verse_probe/vararg_probe.verse` is where that was asked rather than assumed, because §15 had
+just finished recording that a spike answers the question it was given and S-3 had been asked about
+*types* rather than arities. Two arities of one class method resolve by parameter count; `+` is
+Verse's array concatenation and is how the packed prefix and the already-packed tail become the one
+array `VhCallValue` wants. Both measured in one probe run.
+
+**What the probe did not cover is a vararg with no fixed prefix, and that pair cannot exist.**
+`New()` beside `New(:[]variant)` is uLang glitch 3532, *"ambiguous with this definition"* — because
+a Verse function's parameters **are** its tuple, so the empty tuple and the empty array are one
+argument type rather than two arities. With any fixed parameter at all the pair is fine, which is
+why the probe's `Fire(:string)` / `Fire(:string, :[]variant)` compiled and said nothing about this.
+`GDScript.new` is the only entry point in 4.7 in that position, and what it leaves an author is
+`Script.New(array{})`.
+
+**The 15 class methods are what stage 6 emits, and the other 18 are not a to-do list.** §8 counts 33
+and treats them as one set; they are three, and only one was ever blocked by the same thing:
+
+- the **12 utilities** are not dispatchable by name at all. `variant_get_ptr_utility_function` hands
+  back a *ptrcall* wanting a signature hash, so `api_call_utility` is a fixed table of C++ calls and
+  a utility costs a line there whether it is vararg or not. Nine of the twelve already have a Verse
+  spelling recorded against them — `Max`, `Min`, `Print` and the print family — and Verse's own
+  string interpolation says the multi-argument case better than a tail would: `Print("{A} {B}")`.
+- the **6 builtin methods** — `Callable.call`, `Signal.emit` and four more — are methods on a
+  *reference*, not on an object handle, so `VhCallValue` cannot reach them however they are spelled.
+  They are stage 6's other half and need a primitive of their own.
+
+---
+
 ### Stage 5's other four, and the one thing they had to build first
 
 **§7 got all three specifiers wrong on all four lines, and each is wrong in a way an author would

@@ -572,9 +572,9 @@ EXPORT_EXPECTED_CLASSES = ["marshal", "signals", "left/widget"]
 # `get_global_name`, which is read off the same stripped source. The five R-EXP-7 cases run the
 # other way round -- only an exported game has autoloads at all, because `--script` replaces the
 # main loop before Godot sets one up -- so they are skips in the editor run and passes here, which
-# is why 387 + 10 is the 392 + 5 the in-editor run prints rather than a plain sum. Adding a case
+# is why 394 + 10 is the 399 + 5 the in-editor run prints rather than a plain sum. Adding a case
 # means changing this line, which is the point of it.
-EXPORT_EXPECTED_PASSES = 387
+EXPORT_EXPECTED_PASSES = 394
 EXPORT_EXPECTED_SKIPS = 10
 
 

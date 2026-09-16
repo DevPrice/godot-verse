@@ -28695,11 +28695,17 @@ MakeIntStringDict<public>()<reads>:typed_dictionary(int, string) = VhToIntString
 object<public> := class(vh_object):
 
     AddUserSignal<public>(Signal:string, Arguments:godot_array)<transacts>:void = VhCallVoid(Handle, "add_user_signal", array{VhFromString(Signal), VhFromArray(Arguments)})
+    Call<public>(Method:string)<transacts>:variant = VhToVariant(VhCallValue(Handle, "call", array{VhFromStringName(Method)}))
+    Call<public>(Method:string, Args:[]variant)<transacts>:variant = VhToVariant(VhCallValue(Handle, "call", array{VhFromStringName(Method)} + Args))
+    CallDeferred<public>(Method:string)<transacts>:variant = VhToVariant(VhCallValue(Handle, "call_deferred", array{VhFromStringName(Method)}))
+    CallDeferred<public>(Method:string, Args:[]variant)<transacts>:variant = VhToVariant(VhCallValue(Handle, "call_deferred", array{VhFromStringName(Method)} + Args))
     Callv<public>(Method:string, ArgArray:godot_array)<transacts>:variant = VhToVariant(VhCallValue(Handle, "callv", array{VhFromStringName(Method), VhFromArray(ArgArray)}))
     CanTranslateMessages<public>()<reads>:logic = VhToLogic(VhCallValueConst(Handle, "can_translate_messages", array{}))
     CancelFree<public>()<transacts>:void = VhCallVoid(Handle, "cancel_free", array{})
     Connect<public>(Signal:string, Callable:callable, ?Flags:int = 0)<transacts>:error = VhToError(VhCallValue(Handle, "connect", array{VhFromStringName(Signal), VhFromCallable(Callable), VhFromInt(Flags)}))
     Disconnect<public>(Signal:string, Callable:callable)<transacts>:void = VhCallVoid(Handle, "disconnect", array{VhFromStringName(Signal), VhFromCallable(Callable)})
+    EmitSignal<public>(Signal:string)<transacts>:error = VhToError(VhCallValue(Handle, "emit_signal", array{VhFromStringName(Signal)}))
+    EmitSignal<public>(Signal:string, Args:[]variant)<transacts>:error = VhToError(VhCallValue(Handle, "emit_signal", array{VhFromStringName(Signal)} + Args))
     Get<public>(Property:string)<reads>:variant = VhToVariant(VhCallValueConst(Handle, "get", array{VhFromStringName(Property)}))
     GetClass<public>()<reads>:string = VhToString(VhCallValueConst(Handle, "get_class", array{}))
     GetIncomingConnections<public>()<reads>:typed_array(dictionary) = VhToDictionaryArray(VhCallValueConst(Handle, "get_incoming_connections", array{}))
@@ -28901,6 +28907,8 @@ camera_server<public> := class(object):
 class_db<public> := class(object):
 
     CanInstantiate<public>(Class:string)<reads>:logic = VhToLogic(VhCallValueConst(Handle, "can_instantiate", array{VhFromStringName(Class)}))
+    ClassCallStatic<public>(Class:string, Method:string)<transacts>:variant = VhToVariant(VhCallValue(Handle, "class_call_static", array{VhFromStringName(Class), VhFromStringName(Method)}))
+    ClassCallStatic<public>(Class:string, Method:string, Args:[]variant)<transacts>:variant = VhToVariant(VhCallValue(Handle, "class_call_static", array{VhFromStringName(Class), VhFromStringName(Method)} + Args))
     ClassExists<public>(Class:string)<reads>:logic = VhToLogic(VhCallValueConst(Handle, "class_exists", array{VhFromStringName(Class)}))
     ClassGetApiType<public>(Class:string)<reads>:class_db_api_type = VhToClassDbApiType(VhCallValueConst(Handle, "class_get_api_type", array{VhFromStringName(Class)}))
     ClassGetEnumConstants<public>(Class:string, Enum:string, ?NoInheritance:logic = false)<reads>:[]string = VhToStrings(VhCallValueConst(Handle, "class_get_enum_constants", array{VhFromStringName(Class), VhFromStringName(Enum), VhFromLogic(NoInheritance)}))
@@ -29335,8 +29343,12 @@ editor_selection<public> := class(object):
 
 editor_undo_redo_manager<public> := class(object):
 
+    AddDoMethod<public>(Object:object, Method:string)<transacts>:void = VhCallVoid(Handle, "add_do_method", array{VhFromObject(Object), VhFromStringName(Method)})
+    AddDoMethod<public>(Object:object, Method:string, Args:[]variant)<transacts>:void = VhCallVoid(Handle, "add_do_method", array{VhFromObject(Object), VhFromStringName(Method)} + Args)
     AddDoProperty<public>(Object:object, Property:string, Value:variant)<transacts>:void = VhCallVoid(Handle, "add_do_property", array{VhFromObject(Object), VhFromStringName(Property), VhFromVariant(Value)})
     AddDoReference<public>(Object:object)<transacts>:void = VhCallVoid(Handle, "add_do_reference", array{VhFromObject(Object)})
+    AddUndoMethod<public>(Object:object, Method:string)<transacts>:void = VhCallVoid(Handle, "add_undo_method", array{VhFromObject(Object), VhFromStringName(Method)})
+    AddUndoMethod<public>(Object:object, Method:string, Args:[]variant)<transacts>:void = VhCallVoid(Handle, "add_undo_method", array{VhFromObject(Object), VhFromStringName(Method)} + Args)
     AddUndoProperty<public>(Object:object, Property:string, Value:variant)<transacts>:void = VhCallVoid(Handle, "add_undo_property", array{VhFromObject(Object), VhFromStringName(Property), VhFromVariant(Value)})
     AddUndoReference<public>(Object:object)<transacts>:void = VhCallVoid(Handle, "add_undo_reference", array{VhFromObject(Object)})
     ClearHistory<public>(?Id:int = -99, ?IncreaseVersion:logic = true)<transacts>:void = VhCallVoid(Handle, "clear_history", array{VhFromInt(Id), VhFromLogic(IncreaseVersion)})
@@ -29651,6 +29663,8 @@ java_class_wrapper<public> := class(object):
 java_script_bridge<public> := class(object):
 
     CreateCallback<public>(Callable:callable)<decides><transacts>:java_script_object = java_script_object[VhObjectFrom[VhCallValue(Handle, "create_callback", array{VhFromCallable(Callable)})]]
+    CreateObject<public>(Object:string)<transacts>:variant = VhToVariant(VhCallValue(Handle, "create_object", array{VhFromString(Object)}))
+    CreateObject<public>(Object:string, Args:[]variant)<transacts>:variant = VhToVariant(VhCallValue(Handle, "create_object", array{VhFromString(Object)} + Args))
     DownloadBuffer<public>(Buffer:[]int, Name:string, ?Mime:string = "application/octet-stream")<transacts>:void = VhCallVoid(Handle, "download_buffer", array{VhFromByteArray(Buffer), VhFromString(Name), VhFromString(Mime)})
     Eval<public>(Code:string, ?UseGlobalExecutionContext:logic = false)<transacts>:variant = VhToVariant(VhCallValue(Handle, "eval", array{VhFromString(Code), VhFromLogic(UseGlobalExecutionContext)}))
     ForceFsSync<public>()<transacts>:void = VhCallVoid(Handle, "force_fs_sync", array{})
@@ -30127,6 +30141,10 @@ node<public> := class(object):
     AddToGroup<public>(Group:string, ?Persistent:logic = false)<transacts>:void = VhCallVoid(Handle, "add_to_group", array{VhFromStringName(Group), VhFromLogic(Persistent)})
     Atr<public>(Message:string, ?Context:string = "")<reads>:string = VhToString(VhCallValueConst(Handle, "atr", array{VhFromString(Message), VhFromStringName(Context)}))
     AtrN<public>(Message:string, PluralMessage:string, N:int, ?Context:string = "")<reads>:string = VhToString(VhCallValueConst(Handle, "atr_n", array{VhFromString(Message), VhFromStringName(PluralMessage), VhFromInt(N), VhFromStringName(Context)}))
+    CallDeferredThreadGroup<public>(Method:string)<transacts>:variant = VhToVariant(VhCallValue(Handle, "call_deferred_thread_group", array{VhFromStringName(Method)}))
+    CallDeferredThreadGroup<public>(Method:string, Args:[]variant)<transacts>:variant = VhToVariant(VhCallValue(Handle, "call_deferred_thread_group", array{VhFromStringName(Method)} + Args))
+    CallThreadSafe<public>(Method:string)<transacts>:variant = VhToVariant(VhCallValue(Handle, "call_thread_safe", array{VhFromStringName(Method)}))
+    CallThreadSafe<public>(Method:string, Args:[]variant)<transacts>:variant = VhToVariant(VhCallValue(Handle, "call_thread_safe", array{VhFromStringName(Method)} + Args))
     CanAutoTranslate<public>()<reads>:logic = VhToLogic(VhCallValueConst(Handle, "can_auto_translate", array{}))
     CanProcess<public>()<reads>:logic = VhToLogic(VhCallValueConst(Handle, "can_process", array{}))
     CreateTween<public>()<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "create_tween", array{})]]
@@ -30198,7 +30216,11 @@ node<public> := class(object):
     ReplaceBy<public>(Node:node, ?KeepGroups:logic = false)<transacts>:void = VhCallVoid(Handle, "replace_by", array{VhFromObject(Node), VhFromLogic(KeepGroups)})
     RequestReady<public>()<transacts>:void = VhCallVoid(Handle, "request_ready", array{})
     ResetPhysicsInterpolation<public>()<transacts>:void = VhCallVoid(Handle, "reset_physics_interpolation", array{})
+    Rpc<public>(Method:string)<transacts>:error = VhToError(VhCallValue(Handle, "rpc", array{VhFromStringName(Method)}))
+    Rpc<public>(Method:string, Args:[]variant)<transacts>:error = VhToError(VhCallValue(Handle, "rpc", array{VhFromStringName(Method)} + Args))
     RpcConfig<public>(Method:string, Config:variant)<transacts>:void = VhCallVoid(Handle, "rpc_config", array{VhFromStringName(Method), VhFromVariant(Config)})
+    RpcId<public>(PeerId:int, Method:string)<transacts>:error = VhToError(VhCallValue(Handle, "rpc_id", array{VhFromInt(PeerId), VhFromStringName(Method)}))
+    RpcId<public>(PeerId:int, Method:string, Args:[]variant)<transacts>:error = VhToError(VhCallValue(Handle, "rpc_id", array{VhFromInt(PeerId), VhFromStringName(Method)} + Args))
     SetDeferredThreadGroup<public>(Property:string, Value:variant)<transacts>:void = VhCallVoid(Handle, "set_deferred_thread_group", array{VhFromStringName(Property), VhFromVariant(Value)})
     SetDisplayFolded<public>(Fold:logic)<transacts>:void = VhCallVoid(Handle, "set_display_folded", array{VhFromLogic(Fold)})
     SetEditableInstance<public>(Node:node, IsEditable:logic)<transacts>:void = VhCallVoid(Handle, "set_editable_instance", array{VhFromObject(Node), VhFromLogic(IsEditable)})
@@ -31834,6 +31856,8 @@ tree_item<public> := class(object):
     VisibleSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_visible", array{VhFromLogic(Value)})
     AddButton<public>(Column:int, Button:texture2d, ?Id:int = -1, ?Disabled:logic = false, ?TooltipText:string = "", ?Description:string = "")<transacts>:void = VhCallVoid(Handle, "add_button", array{VhFromInt(Column), VhFromObject(Button), VhFromInt(Id), VhFromLogic(Disabled), VhFromString(TooltipText), VhFromString(Description)})
     AddChild<public>(Child:tree_item)<transacts>:void = VhCallVoid(Handle, "add_child", array{VhFromObject(Child)})
+    CallRecursive<public>(Method:string)<transacts>:void = VhCallVoid(Handle, "call_recursive", array{VhFromStringName(Method)})
+    CallRecursive<public>(Method:string, Args:[]variant)<transacts>:void = VhCallVoid(Handle, "call_recursive", array{VhFromStringName(Method)} + Args)
     ClearButtons<public>()<transacts>:void = VhCallVoid(Handle, "clear_buttons", array{})
     ClearCustomBgColor<public>(Column:int)<transacts>:void = VhCallVoid(Handle, "clear_custom_bg_color", array{VhFromInt(Column)})
     ClearCustomColor<public>(Column:int)<transacts>:void = VhCallVoid(Handle, "clear_custom_color", array{VhFromInt(Column)})
@@ -31901,7 +31925,7 @@ tree_item<public> := class(object):
     IsVisibleInTree<public>()<reads>:logic = VhToLogic(VhCallValueConst(Handle, "is_visible_in_tree", array{}))
     MoveAfter<public>(Item:tree_item)<transacts>:void = VhCallVoid(Handle, "move_after", array{VhFromObject(Item)})
     MoveBefore<public>(Item:tree_item)<transacts>:void = VhCallVoid(Handle, "move_before", array{VhFromObject(Item)})
-    PropagateCheck<public>(Column:int, ?EmitSignal:logic = true)<transacts>:void = VhCallVoid(Handle, "propagate_check", array{VhFromInt(Column), VhFromLogic(EmitSignal)})
+    PropagateCheck<public>(Column:int, ?Arg1:logic = true)<transacts>:void = VhCallVoid(Handle, "propagate_check", array{VhFromInt(Column), VhFromLogic(Arg1)})
     RemoveChild<public>(Child:tree_item)<transacts>:void = VhCallVoid(Handle, "remove_child", array{VhFromObject(Child)})
     Select<public>(Column:int, ?SetAsCursor:logic = true)<transacts>:void = VhCallVoid(Handle, "select", array{VhFromInt(Column), VhFromLogic(SetAsCursor)})
     SetAcceptChildren<public>(Allowed:logic)<transacts>:void = VhCallVoid(Handle, "set_accept_children", array{VhFromLogic(Allowed)})
@@ -35774,6 +35798,10 @@ scene_tree<public> := class(main_loop):
     var QuitOnGoBack<public><getter(QuitOnGoBackGetter)><setter(QuitOnGoBackSetter)>:logic = external {}
     QuitOnGoBackGetter<epic_internal>(Accessor:accessor)<transacts>:logic = VhToLogic(VhCallValue(Handle, "is_quit_on_go_back", array{}))
     QuitOnGoBackSetter<epic_internal>(Accessor:accessor, Value:logic)<transacts>:void = VhCallVoid(Handle, "set_quit_on_go_back", array{VhFromLogic(Value)})
+    CallGroup<public>(Group:string, Method:string)<transacts>:void = VhCallVoid(Handle, "call_group", array{VhFromStringName(Group), VhFromStringName(Method)})
+    CallGroup<public>(Group:string, Method:string, Args:[]variant)<transacts>:void = VhCallVoid(Handle, "call_group", array{VhFromStringName(Group), VhFromStringName(Method)} + Args)
+    CallGroupFlags<public>(Flags:int, Group:string, Method:string)<transacts>:void = VhCallVoid(Handle, "call_group_flags", array{VhFromInt(Flags), VhFromStringName(Group), VhFromStringName(Method)})
+    CallGroupFlags<public>(Flags:int, Group:string, Method:string, Args:[]variant)<transacts>:void = VhCallVoid(Handle, "call_group_flags", array{VhFromInt(Flags), VhFromStringName(Group), VhFromStringName(Method)} + Args)
     ChangeSceneToFile<public>(Path:string)<transacts>:error = VhToError(VhCallValue(Handle, "change_scene_to_file", array{VhFromString(Path)}))
     ChangeSceneToNode<public>(Node:node)<transacts>:error = VhToError(VhCallValue(Handle, "change_scene_to_node", array{VhFromObject(Node)}))
     ChangeSceneToPacked<public>(PackedScene:packed_scene)<transacts>:error = VhToError(VhCallValue(Handle, "change_scene_to_packed", array{VhFromObject(PackedScene)}))
@@ -45252,6 +45280,8 @@ font_variation<public> := class(font):
     SetVariationTransform<public>(Transform:transform2d)<transacts>:void = VhCallVoid(Handle, "set_variation_transform", array{VhFromTransform2D(Transform)})
 
 gd_script<public> := class(script):
+
+    New<public>(Args:[]variant)<transacts>:variant = VhToVariant(VhCallValue(Handle, "new", array{} + Args))
 
 generic6dof_joint3d<public> := class(joint3d):
 
