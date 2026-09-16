@@ -8,7 +8,15 @@ exports_mode := enum{Idle, Walking, Running}
 # class up at /user@localhost/exports.
 exports := class(object):
 
-    # Not a var, so it is exported read-only and writes to it must be refused.
+    # Not a var, and exported anyway: the attribute has never required one. What `var` decides is
+    # *when* a write is allowed, not whether the member is exported. An instance is unsealed from
+    # vh_instantiate until the first call into it -- the window a scene's or a .tres's stored values
+    # arrive in -- and any exported member may be written then; once sealed, only a `var` may. Both
+    # halves are asserted in host_smoke.cpp: "a non-var member can be initialized before the
+    # instance seals" and "writing a non-var member is refused once the instance is sealed".
+    #
+    # Nothing below this line may spell the attribute in prose: the lookup case finds the *first*
+    # one in the file and expects it to be the declaration's own.
     @export
     @export_group("Movement")
     Speed<public>:float = 60.0
