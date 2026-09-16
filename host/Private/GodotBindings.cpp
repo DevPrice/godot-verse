@@ -562,6 +562,41 @@ FGodotValue FromWire(const vh_value& Value)
 
 } // namespace
 
+// The variant conversion, for the one caller outside this file.
+//
+// HostScript describes a script method's `variant` parameter and result, and marshalling one there
+// has to mean exactly what marshalling one here means -- a second implementation of the lane rules
+// is two chances to disagree about which lane a Rect2 puts its height in. So the wire half is
+// these two, and the VM half is FNativeConverter's, which is what VNI's own generated glue calls.
+AUTORTFM_DISABLE verse::variant GodotVerse::VariantFromWire(const vh_value& Value)
+{
+    return FromWire(Value);
+}
+
+AUTORTFM_DISABLE vh_value GodotVerse::VariantToWire(const verse::variant& Value,
+                                                    FUtf8String& OutText,
+                                                    TArray<vh_value>& OutComponents)
+{
+    const FOwnedValue Owned = Own(Value);
+    OutText = Owned.Text;
+
+    vh_value Out = WireOf(Owned);
+    if (Out.Type == VH_TYPE_STRING)
+    {
+        // WireOf pointed at the FOwnedValue's copy, which dies with this frame. The caller's is
+        // the one that outlives the call.
+        Out.String.Utf8 = reinterpret_cast<const char*>(*OutText);
+        Out.String.Len = OutText.Len();
+    }
+    else if (Out.Type == VH_TYPE_TUPLE)
+    {
+        WireComponents(Owned.Lanes, OutComponents);
+        Out.Seq.Items = OutComponents.GetData();
+        Out.Seq.Count = OutComponents.Num();
+    }
+    return Out;
+}
+
 namespace verse { namespace Godot {
 
 void Print(verse::string const& Message)

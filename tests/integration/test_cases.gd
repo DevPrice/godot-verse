@@ -332,6 +332,14 @@ func begin() -> void:
 	node.call("PutInt", mixed, 0, 99)
 	_check_eq("VariantFromInt writes through the reference", mixed[0], 99)
 
+	# And a `variant` as a script method's own parameter and return type, which is what R-NODE-10's
+	# _Get and _Set are declared in terms of.
+	_check_eq("a variant parameter carries an int", node.call("VariantKindName", 7), "int")
+	_check_eq("and a string", node.call("VariantKindName", "hi"), "string")
+	_check_eq("and Godot's own null", node.call("VariantKindName", null), "nil")
+	_check_eq("a variant return comes back as what it holds", node.call("EchoVariant", 42), 42)
+	_check_eq("a nil variant comes back as null", node.call("NilVariant"), null)
+
 	# --- R-TYPE-1: PackedVector2Array ----------------------------------------------------------
 	var points := PackedVector2Array([Vector2(1.0, 0.0), Vector2(2.0, 0.0), Vector2(4.0, 0.0)])
 	_check_eq("a packed array of structs crosses element by element",
@@ -1405,6 +1413,79 @@ func begin() -> void:
 			# beside the current scene rather than inside it, so a scene change does not touch it.
 			_check("and it hangs off the root rather than the scene",
 					game_state.get_parent() == tree.root and game_state != tree.current_scene)
+
+	# --- R-NODE-10: the four property hooks -----------------------------------------------------
+	#
+	# The half of R-NODE-10 that lets a class serve a property nothing declares. None of the four is
+	# in extension_api.json -- Godot offers them to scripts rather than registering them in ClassDB
+	# -- so they are hand-written on the native root with empty bodies, and `resolve` finding only
+	# what a class *declares* is what keeps a script that overrides none of them out of the VM.
+	var hooks_script: Script = load("res://scripts/hooks.verse")
+	_check("hooks.verse compiles", hooks_script != null and hooks_script.can_instantiate())
+	if hooks_script == null:
+		_check("a property no member declares is served by _Get", false)
+	else:
+		var hooked := Node2D.new()
+		hooked.set_script(hooks_script)
+		tree.root.add_child(hooked)
+
+		# _Get, for a name Godot's own lookup missed. `get()` is the same path the inspector, the
+		# scene packer and any reflective tool take.
+		_check_eq("a property no member declares is served by _Get", hooked.get("Virtual"), 7)
+		_check_eq("and one of another type", hooked.get("Label"), "from _Get")
+		# A `variant` holding nothing is what the hook answers for "not mine", and it arrives as the
+		# same nil a missing member does -- which is the right answer either way.
+		_check_eq("while a name it does not serve stays absent", hooked.get("NoSuchThing"), null)
+
+		# _Set, and the write reaching the member the hook chose rather than a property of its own.
+		hooked.set("Virtual", 21)
+		_check_eq("_Set takes a write no member took", hooked.call("ReadVirtual"), 21)
+		_check_eq("and the read that follows is the value it stored", hooked.get("Virtual"), 21)
+		hooked.set("Label", "written")
+		_check_eq("and a string through the same hook", hooked.call("ReadLabel"), "written")
+
+		# The composition rule, which is the design question inside this stage: an @export and a
+		# hook that both claim one name. Godot consults `_get`/`_set` only for a name the property
+		# list did not carry, so the export wins and the hook is never asked -- which is what stops
+		# the two from being a silent race.
+		var set_calls_before: int = hooked.call("ReadSetCalls")
+		hooked.set("Declared", 33)
+		_check_eq("an @export is written by the export machinery", hooked.call("ReadDeclared"), 33)
+		_check_eq("and read back by it", hooked.get("Declared"), 33)
+		_check_eq("so _Set never sees an exported name",
+				hooked.call("ReadSetCalls"), set_calls_before)
+
+		# _GetPropertyList, appended after the declared members. This is the list a running game
+		# walks -- what PackedScene::pack and Object::get_property_list ask -- rather than the
+		# inspector's, which a non-tool script answers with a placeholder.
+		var hook_names: Array = []
+		var hook_types := {}
+		for entry in hooked.get_property_list():
+			hook_names.append(entry["name"])
+			hook_types[entry["name"]] = entry["type"]
+		_check("_GetPropertyList adds a property the class does not declare", hook_names.has("Virtual"))
+		_check("and a second one", hook_names.has("Label"))
+		_check_eq("with the Variant type the script chose", hook_types.get("Virtual"), TYPE_INT)
+		_check_eq("and for the other", hook_types.get("Label"), TYPE_STRING)
+		_check("while the exported member is still listed", hook_names.has("Declared"))
+
+		# _ValidateProperty, which Godot asks of every ClassDB property of the object, one at a
+		# time. The dictionary is a reference, so what Verse writes is what Godot reads back -- and
+		# hiding Node2D's own `rotation` is a change no other part of this suite could make.
+		_check("_ValidateProperty ran", hooked.call("ReadValidated") > 0)
+		var rotation_usage := -1
+		for entry in hooked.get_property_list():
+			if entry["name"] == "rotation":
+				rotation_usage = entry["usage"]
+		_check_eq("and the usage it wrote is what Godot read back", rotation_usage, 0)
+
+		hooked.queue_free()
+
+	# A script that overrides none of the four is never asked about any of them, which is what makes
+	# them free: `marshal.verse` declares no hook, so a name nothing declares stays absent rather
+	# than reaching a VM entry that would answer nothing.
+	_check_eq("a script with no hooks answers nothing for an unknown property",
+			node.get("NoSuchThingAtAll"), null)
 
 	# --- R-AUD-1: what a failure undoes ---------------------------------------------------------
 	#

@@ -710,6 +710,11 @@ Variant::Type variant_type_for(int32_t p_type, int32_t p_variant_tag) {
 		// build from any of them, where the reverse is not true.
 		case VH_TYPE_ARRAY:
 			return Variant::ARRAY;
+		// `variant` is a declared type saying "any Godot value", and Godot spells that NIL -- which
+		// the argument and property descriptions pair with PROPERTY_USAGE_NIL_IS_VARIANT, without
+		// which NIL means "must be null" and Godot refuses every call before it reaches the VM.
+		case VH_TYPE_VARIANT:
+			return Variant::NIL;
 		default:
 			return Variant::NIL;
 	}

@@ -33,10 +33,41 @@ std::map<const GDExtensionPropertyInfo *, PropertyListStorage *> &property_list_
 	return table;
 }
 
+// Calls one of R-NODE-10's script-level hooks, or answers false when the script overrode none.
+//
+// `resolve` is the whole of the "did the author write one" test: a class's method list carries only
+// what it **declares**, and the empty bodies on the native root are inherited rather than declared.
+// So a script that overrides none of the four never enters the VM for any of them, which is what
+// makes a hook Godot asks about on every property miss free for every script that wants no part of
+// it. The same mechanism keeps an unoverridden `_Notification` out of the notification path.
+bool call_hook(VerseScriptInstance *p_self, const StringName &p_name,
+		const Variant **p_args, int32_t p_argc, Variant &r_result) {
+	if (p_self == nullptr || p_self->verse_object == nullptr || p_self->script.is_null()) {
+		return false;
+	}
+	const VerseMethodInfo *method = p_self->resolve(p_name);
+	if (method == nullptr) {
+		return false;
+	}
+	return p_self->script->call_instance(p_self->verse_object, method->decorated.get_data(),
+				   p_args, p_argc, r_result) == VH_OK;
+}
+
 GDExtensionBool set_func(GDExtensionScriptInstanceDataPtr p_instance, GDExtensionConstStringNamePtr p_name, GDExtensionConstVariantPtr p_value) {
 	VerseScriptInstance *self = static_cast<VerseScriptInstance *>(p_instance);
-	return self->set_field(*reinterpret_cast<const StringName *>(p_name),
-			*reinterpret_cast<const Variant *>(p_value));
+	const StringName &name = *reinterpret_cast<const StringName *>(p_name);
+	const Variant &value = *reinterpret_cast<const Variant *>(p_value);
+	if (self->set_field(name, value)) {
+		return true;
+	}
+
+	// R-NODE-10's `_Set`, for a write no member took -- which is GDScript's own order, and is what
+	// stops an `@export` and a `_Set` of the same name from being a silent race: the member wins
+	// and the hook is never asked about it.
+	const Variant name_arg = String(name);
+	const Variant *args[2] = { &name_arg, &value };
+	Variant taken;
+	return call_hook(self, StringName("_Set"), args, 2, taken) && (bool)taken;
 }
 
 GDExtensionBool get_func(GDExtensionScriptInstanceDataPtr p_instance, GDExtensionConstStringNamePtr p_name, GDExtensionVariantPtr r_ret) {
@@ -47,12 +78,23 @@ GDExtensionBool get_func(GDExtensionScriptInstanceDataPtr p_instance, GDExtensio
 
 	// Only logic, int, float and string cross the ABI, so a nil result is always a failure to
 	// read rather than a member that genuinely holds nil -- Verse has no nil to hold.
-	const Variant value = self->script->instance_field(self->verse_object, *reinterpret_cast<const StringName *>(p_name));
-	if (value.get_type() == Variant::NIL) {
-		return false;
+	const StringName &name = *reinterpret_cast<const StringName *>(p_name);
+	const Variant value = self->script->instance_field(self->verse_object, name);
+	if (value.get_type() != Variant::NIL) {
+		*reinterpret_cast<Variant *>(r_ret) = value;
+		return true;
 	}
 
-	*reinterpret_cast<Variant *>(r_ret) = value;
+	// R-NODE-10's `_Get`, for a name no member answered. A `variant` holding nothing is what the
+	// hook returns for "not mine", and that arrives here as the same nil a missing member does --
+	// which is the answer either way, so the two cases need not be told apart.
+	const Variant name_arg = String(name);
+	const Variant *args[1] = { &name_arg };
+	Variant served;
+	if (!call_hook(self, StringName("_Get"), args, 1, served) || served.get_type() == Variant::NIL) {
+		return false;
+	}
+	*reinterpret_cast<Variant *>(r_ret) = served;
 	return true;
 }
 
@@ -81,27 +123,52 @@ const GDExtensionPropertyInfo *get_property_list_func(GDExtensionScriptInstanceD
 	// The same list the script hands the inspector, entry for entry: one description of a member,
 	// whichever kind of instance is asking.
 	const TypedArray<Dictionary> exports = self->script->_get_script_property_list();
-	if (exports.is_empty()) {
+
+	// R-NODE-10's `_GetPropertyList`, appended after the declared members -- Godot's own order, and
+	// the order that matters: `_get`/`_set` are consulted for a name the list did not already
+	// carry, so a hook entry shadowing an `@export` would describe a property the export machinery
+	// still answers. Godot's own property dictionaries, so there is nothing to translate.
+	Array served;
+	{
+		Variant answered;
+		if (call_hook(self, StringName("_GetPropertyList"), nullptr, 0, answered)
+				&& answered.get_type() == Variant::ARRAY) {
+			served = answered;
+		}
+	}
+
+	if (exports.is_empty() && served.is_empty()) {
 		return nullptr;
 	}
 
 	PropertyListStorage *storage = memnew(PropertyListStorage);
-	storage->infos.reserve((size_t)exports.size());
+	storage->infos.reserve((size_t)(exports.size() + served.size()));
 
-	for (int64_t i = 0; i < exports.size(); i++) {
-		const Dictionary entry = exports[i];
-		storage->names.push_back(StringName(entry.get("name", String())));
-		storage->names.push_back(StringName(entry.get("class_name", StringName())));
-		storage->hint_strings.push_back(String(entry.get("hint_string", String())));
+	const auto append = [&storage](const Dictionary &p_entry) {
+		storage->names.push_back(StringName(p_entry.get("name", String())));
+		storage->names.push_back(StringName(p_entry.get("class_name", StringName())));
+		storage->hint_strings.push_back(String(p_entry.get("hint_string", String())));
 
 		GDExtensionPropertyInfo info = {};
-		info.type = (GDExtensionVariantType)(int64_t)entry.get("type", (int64_t)Variant::NIL);
+		info.type = (GDExtensionVariantType)(int64_t)p_entry.get("type", (int64_t)Variant::NIL);
 		info.name = (GDExtensionStringNamePtr)&storage->names[storage->names.size() - 2];
 		info.class_name = (GDExtensionStringNamePtr)&storage->names.back();
-		info.hint = (uint32_t)(int64_t)entry.get("hint", (int64_t)PROPERTY_HINT_NONE);
+		info.hint = (uint32_t)(int64_t)p_entry.get("hint", (int64_t)PROPERTY_HINT_NONE);
 		info.hint_string = (GDExtensionStringPtr)&storage->hint_strings.back();
-		info.usage = (uint32_t)(int64_t)entry.get("usage", (int64_t)PROPERTY_USAGE_DEFAULT);
+		info.usage = (uint32_t)(int64_t)p_entry.get("usage", (int64_t)PROPERTY_USAGE_DEFAULT);
 		storage->infos.push_back(info);
+	};
+
+	for (int64_t i = 0; i < exports.size(); i++) {
+		append(exports[i]);
+	}
+	for (int64_t i = 0; i < served.size(); i++) {
+		// An element that is not a Dictionary is an author's mistake with nowhere to report it --
+		// this runs in a shipped game as well as in the editor -- so it is dropped rather than
+		// turned into a property with an empty name that the inspector would draw.
+		if (served[i].get_type() == Variant::DICTIONARY) {
+			append(served[i]);
+		}
 	}
 
 	property_list_storage()[storage->infos.data()] = storage;
@@ -233,8 +300,43 @@ GDExtensionVariantType get_property_type_func(GDExtensionScriptInstanceDataPtr p
 	return GDEXTENSION_VARIANT_TYPE_NIL;
 }
 
+// R-NODE-10's `_ValidateProperty`: a last look at one property before the inspector draws it.
+//
+// Godot's shape exactly -- the property as a Dictionary, mutated in place -- which is why the hook
+// returns nothing. A Dictionary crosses as a reference id rather than as a copy, so what Verse
+// writes is what is read back here.
+//
+// The three string fields are written *through* the pointers Godot handed over rather than into
+// the struct: ScriptInstanceExtension::validate_property reads them back from there, and assigning
+// the struct's own members would point it at storage that dies with this call.
 GDExtensionBool validate_property_func(GDExtensionScriptInstanceDataPtr p_instance, GDExtensionPropertyInfo *p_property) {
-	return false;
+	VerseScriptInstance *self = static_cast<VerseScriptInstance *>(p_instance);
+	if (p_property == nullptr) {
+		return false;
+	}
+
+	Dictionary entry;
+	entry["name"] = *reinterpret_cast<StringName *>(p_property->name);
+	entry["class_name"] = *reinterpret_cast<StringName *>(p_property->class_name);
+	entry["type"] = (int64_t)p_property->type;
+	entry["hint"] = (int64_t)p_property->hint;
+	entry["hint_string"] = *reinterpret_cast<String *>(p_property->hint_string);
+	entry["usage"] = (int64_t)p_property->usage;
+
+	const Variant entry_arg = entry;
+	const Variant *args[1] = { &entry_arg };
+	Variant ignored;
+	if (!call_hook(self, StringName("_ValidateProperty"), args, 1, ignored)) {
+		return false;
+	}
+
+	*reinterpret_cast<StringName *>(p_property->name) = StringName(entry.get("name", String()));
+	*reinterpret_cast<StringName *>(p_property->class_name) = StringName(entry.get("class_name", StringName()));
+	*reinterpret_cast<String *>(p_property->hint_string) = String(entry.get("hint_string", String()));
+	p_property->type = (GDExtensionVariantType)(int64_t)entry.get("type", (int64_t)p_property->type);
+	p_property->hint = (uint32_t)(int64_t)entry.get("hint", (int64_t)p_property->hint);
+	p_property->usage = (uint32_t)(int64_t)entry.get("usage", (int64_t)p_property->usage);
+	return true;
 }
 
 GDExtensionBool has_method_func(GDExtensionScriptInstanceDataPtr p_instance, GDExtensionConstStringNamePtr p_name) {

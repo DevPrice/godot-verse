@@ -373,13 +373,56 @@ vh_object<public><native> := class:
     # hooks Godot offers to *scripts* rather than methods it registers in ClassDB, so no amount of
     # generator work produces them and R-NODE-8 does not ride R-NODE-7 after all.
     #
-    # The rest of that set -- _ToString, _Get, _Set, _GetPropertyList, _ValidateProperty -- is
-    # R-NODE-10 and sits in 4b, where _Get and _Set can be designed beside the export machinery
-    # they overlap with.
+    # _ToString is not in that set and never will be: Verse already spells "what this prints as"
+    # as an extension method, and a class *member* of that name cannot be written at all. See
+    # docs/spec.md R-NODE-10. The other four are below.
     #
     # What is *not* here any more is Ready, Process and PhysicsProcess. Since Phase 4 every one of
     # Godot's 1413 virtuals is generated onto the class that declares it, so `_Ready` is a member
     # of `node` -- which is where Godot declares it, and which is what stops a Resource-derived
     # script from having a `_Process` it could never receive.
     _Notification<public>(What:int):void = {}
+
+    # The other four script-level hooks (R-NODE-10), and the same story as `_Notification`: Godot
+    # offers them to *scripts* rather than registering them in ClassDB, so no amount of generator
+    # work produces them and they are hand-written here.
+    #
+    # Each has a default body that does nothing, which is what makes `<override>` the spelling. The
+    # consumer asks for a hook by name and the method list carries only what a class **declares**,
+    # so a script that overrides none of these is never called for any of them -- the cost of having
+    # them is zero rather than a VM entry per property miss.
+    #
+    # No effect specifier, for the reason `_Notification` has none: the default set is the widest
+    # one, and writing `<transacts>` here would force it on every helper an override calls, a file
+    # at a time (docs/spec.md R-AUD-2). An override may narrow if it wants to.
+
+    # What this object answers for a property Godot could not find on its own. A `variant` holding
+    # nothing -- which is what `variant{}` is -- means "not mine" and leaves Godot to say the
+    # property does not exist, exactly as GDScript's `_get` returning nil does.
+    #
+    # An `@export`ed member never arrives here. Godot consults `_get` only for a name its own
+    # lookup missed, and the exports *are* that lookup, so an export and a `_Get` of the same name
+    # cannot race: the export wins and this is never asked.
+    _Get<public>(Property:string):variant = variant{}
+
+    # Takes a write Godot could not place. `true` means it was taken; `false` leaves Godot to report
+    # a property that does not exist. The value's Godot type is not known until it arrives, which is
+    # the whole reason `variant` is in this signature -- read it with `AsInt[Value]` and friends,
+    # each of which fails rather than raising when the answer is no.
+    _Set<public>(Property:string, Value:variant):logic = false
+
+    # The properties this object serves beyond the ones `@export` declares: an array of Godot's own
+    # property dictionaries, keyed "name", "type", "hint", "hint_string" and "usage". Godot's own
+    # shape, so there is nothing to translate -- `MakeDictionary()` builds one and `MakeArray()`
+    # holds them.
+    #
+    # The default reaches up into GodotApi.native.verse, which is the one place in this file that
+    # does. An empty `godot_array` is the honest answer and the alternative -- a `Ref` of 0 -- is
+    # the dead-reference footgun Phase 4b spent its first stage removing.
+    _GetPropertyList<public>():godot_array = MakeArray()
+
+    # A last look at one property's dictionary before the inspector draws it, mutated in place --
+    # Godot's own shape again, and the one of the four that is purely additive, since a property
+    # that does not exist cannot be validated.
+    _ValidateProperty<public>(Property:dictionary):void = {}
 

@@ -43,7 +43,7 @@ extern "C" {
  * different toolchains and nothing links them.
  */
 #define VH_ABI_VERSION_MAJOR 8
-#define VH_ABI_VERSION_MINOR 5
+#define VH_ABI_VERSION_MINOR 6
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
 typedef int32_t vh_bool;
@@ -151,7 +151,17 @@ typedef enum vh_type
 	VH_TYPE_OPTION, /* Option == NULL is Verse's false */
 
 	/* An id in the consumer's reference table rather than a value. See "reference values". */
-	VH_TYPE_REF
+	VH_TYPE_REF,
+
+	/* Any Godot value, whatever its type -- Verse's `variant`, which is the only thing in this
+	 * bridge that can hold one.
+	 *
+	 * A *declaration* type and never a payload: it appears in vh_param_desc::Type and in
+	 * vh_method_desc::ResultType, and never in a vh_value. The host converts to and from the lanes,
+	 * so the value itself arrives as whatever the variant holds -- VH_TYPE_INT, VH_TYPE_STRING,
+	 * VH_TYPE_REF. What this says to the consumer is "describe this argument to Godot as accepting
+	 * anything", which Godot spells as Variant::NIL with PROPERTY_USAGE_NIL_IS_VARIANT. */
+	VH_TYPE_VARIANT
 } vh_type;
 
 typedef struct vh_value vh_value;

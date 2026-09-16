@@ -55,7 +55,9 @@
 #include "VerseVM/VVMOpResult.h"
 #include "VerseVM/VVMVerseClass.h"
 #include "VerseVM/VVMGlobalProgram.h"
+#include "VerseVM/VVMNativeConverter.h"
 #include "VerseVM/VVMNativeFunction.h"
+#include "VerseVM/VVMNativeStruct.h"
 #include "VerseVM/VVMNamedType.h"
 #include "VerseVM/VVMPackage.h"
 #include "VerseVM/VVMProgram.h"
@@ -1795,6 +1797,23 @@ AUTORTFM_DISABLE FUtf8String QualifiedNameOf(const uLang::CClass& Class)
     return Path.StartsWith(Prefix) ? Path.RightChop(Prefix.Len()) : FUtf8String(Class.AsNameCString());
 }
 
+/// Verse's own `variant` -- the fixed-width lanes one Godot value of unknown type crosses as.
+///
+/// Matched on the whole verse path rather than on the name, because a project may declare a struct
+/// called `variant` in a module of its own and that one is an ordinary user struct. Asked without
+/// the program, unlike ClassOriginOf, so that the two places that need it -- the description and
+/// the "is this a struct the project wrote" test -- can both reach it.
+AUTORTFM_DISABLE bool IsVariantClass(const uLang::CClass& Class)
+{
+    if (!Class.IsStruct())
+    {
+        return false;
+    }
+    const FUtf8String Path = FULangConversionUtils::ULangStrToFUtf8String(
+        Class.GetScopePath(UTF8CHAR('/'), uLang::EPathMode::PrefixSeparator));
+    return Path.Equals(FUtf8String(GodotVersePath) + UTF8TEXT("/variant"));
+}
+
 AUTORTFM_DISABLE EClassOrigin ClassOriginOf(const uLang::CClass& Class, const uLang::CSemanticProgram& Program)
 {
     const FUtf8String Name = QualifiedNameOf(Class);
@@ -1993,6 +2012,18 @@ AUTORTFM_DISABLE void DescribeExportType(const uLang::CTypeBase* Type, const uLa
             if (bIsOption)
             {
                 OutDesc.Reject = VH_EXPORT_OPTION_NOT_OBJECT;
+                return;
+            }
+
+            // `variant` is any Godot value at all, which is a thing to *declare* rather than a
+            // shape: what crosses is whatever the variant holds, so the wire type says "anything"
+            // and the consumer turns that into Godot's NIL_IS_VARIANT. Not exportable for the
+            // reason an Array is not -- the inspector has no editor for a value with no type.
+            if (IsVariantClass(*Class))
+            {
+                OutDesc.Type = VH_TYPE_VARIANT;
+                OutDesc.VariantTag = VH_VARIANT_NIL;
+                OutDesc.Reject = VH_EXPORT_UNSUPPORTED_TYPE;
                 return;
             }
 
@@ -2387,7 +2418,14 @@ AUTORTFM_DISABLE FMemberType DescribeType(const uLang::CTypeBase* Type, const uL
             || Name.StartsWith(UTF8TEXT("typed_dictionary"));
         const FStructLayout* const Layout = bIsOption ? nullptr : FindStructLayout(Name);
         const uLang::CClass* const UserStruct = bIsOption ? nullptr : UserStructClass(*Normal);
-        if (Layout)
+        if (IsVariantClass(*Declared))
+        {
+            // Nothing beyond what DescribeExportType already said. `variant` is neither a shape to
+            // read fields off nor a handle to build a wrapper from, and leaving it to fall through
+            // to the reference arm below -- which is where a struct nothing else claims lands --
+            // had every `variant` parameter refused as a handle to a class Godot has never heard of.
+        }
+        else if (Layout)
         {
             Result.Struct = Layout;
             Result.StructName = FUtf8String(Name);
@@ -2428,6 +2466,13 @@ AUTORTFM_DISABLE const uLang::CClass* UserStructClass(const uLang::CNormalType& 
 {
     const uLang::CClass* const Class = Normal.AsNullable<uLang::CClass>();
     if (!Class || !Class->IsStruct())
+    {
+        return nullptr;
+    }
+    // `variant` is a struct too, and the one struct in the mirror that is not a *shape*: it has 22
+    // lanes and a script never fills them positionally. Left to DescribeExportType, which types it
+    // as VH_TYPE_VARIANT; treated as a user struct it asked Godot for 22 arguments per parameter.
+    if (IsVariantClass(*Class))
     {
         return nullptr;
     }
@@ -2877,6 +2922,30 @@ AUTORTFM_DISABLE bool ValueToWire(Verse::FRunningContext Context,
                                   GodotVerse::FFieldStorage& OutStorage,
                                   vh_value& OutValue)
 {
+    // `variant` first, because none of the tests below would recognise one: it is a VNativeStruct
+    // boxing the 22 lanes, which is neither an option, nor a logic, nor a VValueObject. The
+    // declaration is the only thing that says so, which is the general rule this function is built
+    // on arriving at its widest case.
+    if (Declared.Described.Type == VH_TYPE_VARIANT)
+    {
+        // DynamicCast before FNativeConverter, whose own FromVValue is a StaticCast: the declared
+        // type says what this should be and a value that is not one must decline rather than
+        // reinterpret whatever cell it found.
+        if (!Value.DynamicCast<Verse::VNativeStruct>())
+        {
+            return false;
+        }
+        Verse::TFromVValue<verse::variant> Boxed{};
+        if (!Verse::FNativeConverter::FromVValue(Context, Value, Boxed).IsReturn())
+        {
+            return false;
+        }
+        OutStorage.Blocks.Reserve(OutStorage.Blocks.Num() + 1);
+        OutValue = GodotVerse::VariantToWire(Boxed.GetValue(), OutStorage.Text,
+                                             OutStorage.Blocks.AddDefaulted_GetRef());
+        return true;
+    }
+
     // A reference, before the logic test rather than after it, because Verse's two spellings
     // collide: `true` is an option around `false`, and an empty option *is* `false`. A set
     // option wrapping a wrapper object is the one of the three the value alone identifies; an
@@ -3914,6 +3983,15 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
         // where it had written a node, and the first `.GetName()` died inside the interpreter rather
         // than failing to compile.
         OutValue = Declared.bReferenceIsOption ? ReferenceOption(Context, Referenced) : Verse::VValue(Referenced);
+        return true;
+    }
+
+    // `variant`: any Godot value at all, so nothing about the wire value has to be checked -- the
+    // lanes take whatever arrived, including Godot's own null, which is the nil tag. Boxed by
+    // FNativeConverter, which is what VNI's generated glue calls for a native struct parameter.
+    if (Desc.Type == VH_TYPE_VARIANT)
+    {
+        OutValue = Verse::FNativeConverter::ToVValue(Context, GodotVerse::VariantFromWire(Value));
         return true;
     }
 

@@ -565,9 +565,13 @@ and §4 only**; §5 was reassessed after it and cost no code at all.
 - **R-EXP-7, R-EXP-8, R-EXP-9** — autoloads, icons, RPC config.
 - **R-EXP-1** — the remaining `@export` surface, type-driven where the Verse type can say it and
   attributes only where it cannot.
-- **R-NODE-10** — the script-level hooks that are in no JSON: `_ToString`, `_Get`, `_Set`,
-  `_GetPropertyList`, `_ValidateProperty`. Here rather than in 4a because `_Get`/`_Set` overlap the
-  export machinery above them.
+- **R-NODE-10** — the script-level hooks that are in no JSON. **Done.** `_ToString` is not one of
+  them and never was: Verse already spells it, as an extension method. The other four are ordinary
+  methods with empty bodies on the native root, which cost a script that overrides none of them
+  nothing — and what they had to build first was `variant` on the script-call wire (ABI 8.6), which
+  no script method could name before. Here rather than in 4a because `_Get`/`_Set` overlap the
+  export machinery above them, and the overlap turned out to need no decision: Godot's own order
+  answers it.
 
 **Exit for 4b:** a Verse custom Resource is created, saved to `.tres`, edited in the inspector and
 loaded back, and a Verse autoload answers from every scene. (4a's by-hand clause is met: the checks

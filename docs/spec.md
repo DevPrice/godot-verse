@@ -545,9 +545,9 @@ on closing it.
   native root, and the constants it takes are R-SCN-3's (`NodeStatics.NotificationReady`) until
   Phase 4 stage 6 lands them. See `docs/phase-4-design.md` §7.3.
 
-  The rest of that set — `_ToString`, `_Get`, `_Set`, `_GetPropertyList`, `_ValidateProperty` — is
-  **R-NODE-10**, and sits in 4b where `_Get` and `_Set` can be designed beside the export machinery
-  they overlap with.
+  The rest of that set is **R-NODE-10**, and `_Get`, `_Set`, `_GetPropertyList` and
+  `_ValidateProperty` are hand-declared on the native root beside it, for the same reason and
+  reached the same way. `_ToString` is not among them and never was: see R-NODE-10.
 - **R-NODE-9 (MUST)** A script method list (`_get_script_method_list`, `_get_method_info`,
   `_has_method`) reports what the script actually defines. Status: **done**. `vh_class_method_list`
   reads the class's own declarations out of the semantic program — names, parameters with their own
@@ -556,7 +556,7 @@ on closing it.
   `get_method_argument_count` from it.
 - **R-NODE-10 (SHOULD)** The script-level hooks Godot offers a script rather than registering in
   ClassDB are reachable: `_to_string`, `_get`, `_set`, `_get_property_list`, `_validate_property`.
-  Status: **part** -- `_to_string` is done (Phase 4b stage 5); the other four are not started. Named
+  Status: **done** (Phase 4b stage 5). Named
   by Phase 4 once `_notification` proved that none of this family is in
   `extension_api.json` and so none of it can be generated. `_to_string` is what makes `print(node)`
   in GDScript show something a Verse author chose; `_get`/`_set` overlap §5.4's export machinery,
@@ -599,6 +599,53 @@ on closing it.
   **An extension method may be no more accessible than the type it extends.** A script class written
   the ordinary way is internal, so `(X:my_class).ToString<public>()` is uLang glitch 3593 — whose
   message talks about subpaths of `/user@localhost` and never says `<public>`. Omit the specifier.
+
+  **The other four are ordinary Verse methods on the native root, with empty bodies and no new ABI
+  entry point of their own.** They are `_Notification`'s shape exactly — Godot offers them to
+  *scripts* rather than registering them in ClassDB, so nothing generates them — and they are
+  reached through the same call path every other method takes:
+
+      _Get<public>(Property:string):variant = variant{}
+      _Set<public>(Property:string, Value:variant):logic = false
+      _GetPropertyList<public>():godot_array = MakeArray()
+      _ValidateProperty<public>(Property:dictionary):void = {}
+
+  **None of the four costs a script that overrides none of them anything**, which is the reason they
+  can be declared on the root at all: `vh_class_method_list` reports a class's **own** declarations,
+  an `<override>` is one and an inherited empty body is not, so the consumer's `resolve` finds
+  nothing and never enters the VM. Without that, `_Get` would be a VM call on every property miss of
+  every scripted node in the project.
+
+  **None of the four carries an effect specifier**, for the reason `_Notification` carries none: the
+  default set is the widest one, and narrowing here would narrow every helper an override calls, a
+  file at a time (R-AUD-2). The consequence to know is the other direction — the hooks carry
+  `no_rollback`, so a script's own `<transacts>` code may not call its own `_Get`. Godot is the
+  caller, which is what the declaration is for.
+
+  **How they compose with `@export` is Godot's rule, not a new one**: `_get` and `_set` are consulted
+  only for a name the property list did not already carry, so an exported member is never routed
+  through them and an `@export` and a `_Get` of the same name cannot race. `_GetPropertyList`'s
+  entries are appended *after* the exports for the same reason.
+
+  **What this stage had to build is `variant` on the script-call wire** (ABI **8.6**, a new
+  `VH_TYPE_VARIANT` enumerator, which the policy at the top of the header makes a minor). `_Get` and
+  `_Set` carry a value whose Godot type is not known until it arrives, and `variant` is the only
+  thing in this bridge that can hold one — but before this it could be named only in a *native*
+  declaration. Described as a user struct it asked Godot for 22 arguments per parameter; described
+  as nothing it was refused before the call reached the VM. `VH_TYPE_VARIANT` is a **declaration**
+  type and never a payload: the value crosses as whatever the variant holds, and what the type says
+  to the consumer is "describe this to Godot as accepting anything", which Godot spells `Variant::NIL`
+  with `PROPERTY_USAGE_NIL_IS_VARIANT`. No sidecar change — a declared type's number is already
+  carried. The reward is general rather than local: **any** script method may now take or answer a
+  `variant`.
+
+  Two things a script writing these hooks has to know, both measured in
+  `tests/verse_probe/hooks_probe.verse`. A class that does not derive from `object` has none of the
+  four, and the diagnostic for that is glitch 3523 blaming the *access specifiers*. And Godot's
+  `Variant::Type` numbers — which is what a property dictionary's `"type"` key wants — are not a
+  script's to write: the mirror's `TagInt` and its 38 siblings carry no access specifier, so naming
+  one is glitch 3593. The public spelling is the generated `ToInt(:variant_type)`, which is also the
+  closer analogue of the `TYPE_INT` a GDScript author writes.
 
 ### 5.3 Signals
 

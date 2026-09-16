@@ -378,3 +378,19 @@ marshal := class(node2d):
     CallHelper<public>(Value:int):int = HelperDouble(Value)
     ReadHelperConstant<public>():int = HelperAnswer
     CallHelperString<public>(Name:string):string = HelperGreeting(Name)
+
+    # --- a variant as a script method's own parameter and return type ---------
+    #
+    # Everything that names a `variant` today is a *native* declaration, marshalled by
+    # GodotBindings; whether the ordinary script-call wire carries one is a different question,
+    # and R-NODE-10's _Get and _Set are what need the answer.
+    EchoVariant<public>(V:variant):variant = V
+
+    VariantKindName<public>(V:variant):string =
+        case (VariantKind(V)):
+            variant_type.TypeInt => "int"
+            variant_type.TypeString => "string"
+            variant_type.TypeNil => "nil"
+            _ => "other"
+
+    NilVariant<public>():variant = variant{}

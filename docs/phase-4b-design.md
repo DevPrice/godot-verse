@@ -516,7 +516,10 @@ What the host must find is module-level rather than a class member, which is why
 The receiver is parameter 0; the call's own arguments are a tuple in parameter 1.
 
 The remaining four are in no part of `extension_api.json`, which is why none of them can be
-generated, and they are hand-written on the native root beside `_Notification`:
+generated, and they are hand-written on the native root beside `_Notification`. **The three
+specifiers on each line below are all wrong and §15 has the corrections** — they are neither
+`<native>` nor `<transacts>`, and `_Get` answers a bare `variant` rather than an option:
+
     _Get<public><native>(Property:string)<transacts>:?variant
     _Set<public><native>(Property:string, Value:variant)<transacts>:logic
     _GetPropertyList<public><native>()<transacts>:godot_array
@@ -542,7 +545,7 @@ name out of a name-keyed list, and two `_Get`s would be indistinguishable in it.
 
 **Done when** `print(node)` in GDScript shows what a Verse `ToString` extension method chose — **done,
 and §15 has what it cost** — and a Verse script serves a property that no `@export` declares, which
-is the other four and is not started.
+is the other four and is **also done**; §15's "Stage 5's other four" is what they cost.
 
 ---
 
@@ -858,6 +861,89 @@ thing being called is not a method and an exported game has no semantic program 
 Verse reaches the same override as `print(node)` in GDScript, by going out through the mirror's
 `ToString(:object)` to Godot's `to_string()` and back in. One implementation, both languages, and a
 re-entrant Verse → Godot → Verse call that the bridge had never made before and which works.
+
+---
+
+### Stage 5's other four, and the one thing they had to build first
+
+**§7 got all three specifiers wrong on all four lines, and each is wrong in a way an author would
+act on.** The listing there reads `_Get<public><native>(Property:string)<transacts>:?variant`. What
+is written is:
+
+    _Get<public>(Property:string):variant = variant{}
+    _Set<public>(Property:string, Value:variant):logic = false
+    _GetPropertyList<public>():godot_array = MakeArray()
+    _ValidateProperty<public>(Property:dictionary):void = {}
+
+- **Not `<native>`.** A `<native>` declaration is one the *host* implements, which is backwards for
+  a hook the *script* implements and Godot calls. The shape is `_Notification`'s: an ordinary Verse
+  method with an empty body, so that `<override>` has something to override.
+- **Not `<transacts>`.** `_Notification` carries no specifier and these must not either, for the
+  reason written next to R-AUD-2: an explicit effect narrows, and narrowing is contagious downward,
+  so `<transacts>` on the root would force it on every helper an override calls, a file at a time.
+  The measurement is in `tests/verse_probe/hooks_probe.verse` — a specifier-less helper called from
+  `_Set` compiles, and would have been glitch 3512 at the call site under the §7 spelling.
+- **Not `?variant`.** An option around a non-object has no representation on this wire and
+  `HostScript.cpp` says so in as many words — `ValueToWire` reads a cleared option as a null
+  reference, so `?int` arrives as nothing. `variant{}` is a *better* spelling anyway: a variant
+  holding nothing is precisely what GDScript's `_get` returning nil means, so the Verse and the
+  Godot conventions are the same one rather than two that have to agree.
+
+**The premise under all four of them was untrue, and nothing had noticed because nothing had
+asked.** §7 assumes a script can declare a `variant` parameter. It could not. Every `variant` in the
+project was in a **native** declaration, marshalled by VNI's generated glue and by
+`GodotBindings.cpp`; the ordinary script-call wire had never carried one, and the two ways it failed
+were both silent about the cause. `DescribeType` classified it as a *user struct* — it is a struct
+the layout table does not know — so a one-parameter method asked Godot for 22 arguments, one per
+lane. Excluding it from that test without saying what it was instead dropped it into the *reference*
+arm, where a `variant` argument was refused as a handle to a class Godot has never heard of. The
+symptom of both was one line: *"Cannot convert argument 2 from int to Nil"*, which is also what an
+unrepresentable type says.
+
+**So the stage's real work is `variant` on the script-call wire, and the reward is general.** ABI
+**8.6** adds `VH_TYPE_VARIANT` — a new enumerator, which the header's own policy makes a minor. It
+is a **declaration** type and never a payload: a `vh_value` still carries whatever the variant
+holds, and what the type tells the consumer is "describe this to Godot as accepting anything", which
+Godot spells `Variant::NIL` with `PROPERTY_USAGE_NIL_IS_VARIANT`. The conversion itself is not new
+and deliberately not rewritten: `GodotBindings.cpp` already had the lane rules for every native
+call, and a second implementation of them is a second chance to disagree about which lane a Rect2
+puts its height in — so the two directions are exported from there, and the VM half is
+`FNativeConverter`'s, which is what VNI's own glue calls. **No sidecar change**, because a declared
+type's number was already carried, and that is the one thing about this that went the easy way.
+
+What it buys beyond the two hooks is that **any** script method may now take or answer a `variant`,
+which is §3's façade finally reaching the wire §3 never checked it against.
+
+**The cost of having the four hooks at all is zero, and that is the fact that made the shape
+possible.** Declaring them on the native root means every script *inherits* them, which looked like
+a VM entry on every property miss of every scripted node. It is not, because
+`GetClassMethodsLive` reports a class's **own** declarations — an `<override>` is one and an
+inherited empty body is not — so the consumer's `resolve` answers null and nothing is called. That
+is the same mechanism keeping an unoverridden `_Notification` out of the notification path, and it
+was already written down; what is new is depending on it.
+
+**How they compose with `@export` needed no decision after all.** §7 calls it "the design question
+inside this stage" and answers it with Godot's rule, and Godot's rule is what falls out of putting
+the member lookup first in `set_func` and `get_func` — which is where it already was. The case that
+asserts it is a hook and an export that both claim one name, with the hook counting its own calls:
+the export wins both directions and the counter does not move.
+
+Two things an author has to know, and neither is guessable from reading the native root. **A class
+that does not derive from `object` has none of the four**, and the compiler says glitch 3523,
+"could not find a parent function to override (perhaps the parent function's access specifiers are
+too restrictive?)" — which blames the wrong thing entirely. And **Godot's `Variant::Type` numbers
+are not a script's to write**: `TagInt` and its 38 siblings carry no access specifier, so a property
+dictionary written the obvious way is glitch 3593 talking about control scopes. The public spelling
+is the generated `ToInt(:variant_type)`, which is also the closer analogue of the `TYPE_INT` a
+GDScript author writes. Both cost a probe round and nothing else, which is the argument for the
+probe: `hooks_probe.verse` found four errors in one run, and three of them were mine rather than the
+design's.
+
+**`_ValidateProperty` reaches further than the name suggests.** Godot asks it of every **ClassDB**
+property of the object, one at a time, from `ClassDB::get_property_list` with the object as the
+validator — not only of the properties the script serves. So a Verse script can hide or re-hint
+`Node2D`'s own `rotation`, which is what the case asserts, and which is also the only part of this
+stage a headless run could observe changing something that was not the script's own.
 
 ---
 

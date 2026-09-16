@@ -78,7 +78,7 @@ Two documents are not phase records and are the ones to read before adding a fea
 `include/verse_host_abi.h` is the only thing that crosses. Plain C — the two sides cannot share a
 C++ ABI. It is staged into the host's `Public/` by `build_host.py`, so both compile the same file.
 
-**`VH_ABI_VERSION` is 8.5.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
+**`VH_ABI_VERSION` is 8.6.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
 a major bump is a layout or meaning change and both sides must be rebuilt; a minor bump adds
 something an older consumer can ignore behind a `StructSize` check. A change to the header means
 bumping it and rebuilding **both** sides — the mismatch surfaces at `vh_init`, not at compile time.
@@ -98,7 +98,7 @@ compiler-side entry points answer `VH_ERR_UNSUPPORTED` in a runtime host.
 | `verse_host.{h,cpp}` | `GetProcAddress` loader over the ABI; no Verse logic |
 | `verse_host_paths.{h,cpp}` | where this machine's Unreal checkout, host DLL and cooker are: environment, then EditorSettings, then the legacy project settings (R-DIST-12) |
 | `verse_runtime.{h,cpp}` | the `VerseRuntime` singleton — `vh_init_desc`, the Godot callback table, `verse/host/enable_debugger`, and finding `verse_data` in an export |
-| `verse_value.{h,cpp}` | `Variant` ⇄ `vh_value`, arena-allocated |
+| `verse_value.{h,cpp}` | `Variant` ⇄ `vh_value`, arena-allocated. `variant_type_for` is where a declared type becomes a Godot one, and `VH_TYPE_VARIANT` → `Variant::NIL` is only half an answer: the descriptions pair it with `PROPERTY_USAGE_NIL_IS_VARIANT`, without which NIL means "must be null" and Godot refuses the call before the VM sees it |
 | `verse_ref_table.{h,cpp}` | the id → `Variant` table the `Ref` lane names: Array, Dictionary, Callable, Signal and the packed arrays, which cross as references rather than copies |
 | `verse_callable.{h,cpp}` | the mirror image: a Godot `Callable` that calls a Verse function. Only a function **bound to a script instance** is accepted, which is the half of Godot's own design that does not leak (GH-102327) |
 | `verse_script.{h,cpp}` | a `.verse` file as a Godot `Resource`; valid only if it defines its own class |
@@ -138,6 +138,17 @@ instead of sources). `Verse/*.native.verse` is the `/Godot.org/Godot` package.
 `vh_object` (a UObject, so a script's class has one to be instantiated and called through), `variant`
 (a struct, the fixed-width lanes one Godot value crosses as) and `godot_ref` (a UObject whose
 `BeginDestroy` is what releases a reference id when Verse drops the value holding it).
+
+**A `variant` crosses the script-call wire as `VH_TYPE_VARIANT` (ABI 8.6), which is a *declaration*
+type and never a payload.** A `vh_value` still carries whatever the variant holds; the type only
+tells the consumer "this argument or result accepts anything". Two traps sit under it. The
+conversion belongs to `GodotBindings.cpp` and is exported from there (`VariantFromWire`,
+`VariantToWire`) — never write a second one, because the lane rules for the 16 math types have to
+agree exactly in both directions. And `variant` is a **struct**, so leaving it out of one
+classification in `HostScript.cpp`'s `DescribeType` silently drops it into another: as a user struct
+it asks Godot for 22 arguments, one per lane, and as neither that nor a variant it becomes a
+*reference* and is refused as a handle to a class Godot has never heard of. Both say the same
+useless sentence, *"Cannot convert argument 2 from int to Nil"*.
 
 `vh_object`, not `object`: `object` is the generated mirror of Godot's own `Object` class and derives
 from `vh_object`. Verse cannot reopen a class, so Object's methods could not be added to the
@@ -741,8 +752,15 @@ it is not in `run_tests.py`.
   and no warnings (`by-hand-findings.md` B4).
 - **A virtual is spelled the way Godot spells it — `_Ready`, not `Ready`.** `phase-4-design.md` §7.1
   counts the eight *signal* collisions that decided it. `_notification` is in no part of
-  `extension_api.json`, so `_Notification` is hand-written on the native root and the rest of that
-  family is R-NODE-10, unbuilt.
+  `extension_api.json`, and neither are `_get`, `_set`, `_get_property_list` or
+  `_validate_property` — Godot offers that family to *scripts* rather than registering it in
+  ClassDB — so all five are hand-written on the native root with **empty bodies and no specifier**,
+  and an `<override>` is the spelling. Two things follow that are easy to get wrong. **They cost a
+  script that overrides none of them nothing**, because `vh_class_method_list` reports a class's
+  *own* declarations and an inherited empty body is not one, so `resolve` finds nothing and the VM
+  is never entered — do not "optimise" that by adding an inherited-methods pass. And **they carry
+  `no_rollback`**, so a script's own `<transacts>` code may not call its own `_Get`; Godot is the
+  caller. R-NODE-10 is done; `_ToString` is not among them and never will be (see "Verse itself").
 - **A class member may not shadow an inherited mirrored one, and Godot's signals are members too.**
   `Hidden:signal(int)` on a `node2d` is *"Instance data member `Hidden` is already defined in
   `canvas_item`, did you mean to add the `<override>` specifier?"* — because `canvas_item` mirrors
@@ -779,6 +797,11 @@ it is not in `run_tests.py`.
   `operator'.ToString'(:my_class, :tuple())` at **module** scope, receiver first and the call's own
   arguments as a tuple second, which is why no class method list carries one and why `InstanceCall`
   cannot reach it unaided.
+- **The mirror's `Tag...` constants are not a script's to write.** `TagInt` and its 38 siblings
+  carry no access specifier, so they are the mirror's own; a script naming one is glitch 3593,
+  whose message is about control scopes. What a Godot property dictionary's `"type"` key wants is
+  the generated `ToInt(:variant_type)`, which is `<public>` and is the closer analogue of the
+  `TYPE_INT` a GDScript author writes.
 - **`operator'()'` is a reserved intrinsic.** Verse rewrites `Data[Key]` on a non-function callee
   into a call to it, but refuses to let anything *define* one — as a class member or as a free
   function — so the bracket syntax cannot be given a meaning. Container lookup is

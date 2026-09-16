@@ -18,6 +18,7 @@ struct VValue;
 
 namespace verse {
 class vh_object;
+struct variant;
 }
 
 class FJsonObject;
@@ -558,6 +559,17 @@ struct FFieldStorage
     /// The bytes of each string element, for the reason Text exists.
     TArray<FUtf8String> Strings;
 };
+
+/// Verse's `variant` from a wire value, and back. Defined in GodotBindings.cpp, where the lane
+/// rules are, because a second implementation of them is a second chance to disagree about which
+/// lane a Rect2 puts its height in.
+///
+/// VariantToWire's result points into OutText and OutComponents, which the caller owns and must
+/// keep alive for as long as the vh_value is read -- the same contract FFieldStorage has.
+AUTORTFM_DISABLE verse::variant VariantFromWire(const vh_value& Value);
+AUTORTFM_DISABLE vh_value VariantToWire(const verse::variant& Value,
+                                        FUtf8String& OutText,
+                                        TArray<vh_value>& OutComponents);
 
 /// Builds a wire value from a Verse value that is one of the mirrored math structs -- `vector2`,
 /// `color`, `transform3d` -- identified from the value alone rather than from a declaration.
