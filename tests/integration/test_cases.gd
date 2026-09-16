@@ -1745,6 +1745,80 @@ func begin() -> void:
 	#
 	# `_process` is still where the frames are, because the concurrency section after it needs
 	# them: a task suspended on a signal resumes when Godot emits, and that takes a frame.
+	# --- the script editor's hover tooltip ------------------------------------------------------
+	#
+	# The one surface the editor draws that a test can reach at all. Everything about it lives in
+	# the editor's own C++ -- CodeEdit decides the word and the column from the mouse, and
+	# ScriptTextEditor turns a lookup result into a tooltip -- and `_lookup_code` is a virtual,
+	# which ClassDB stores as metadata rather than as a callable MethodBind, so no script can call
+	# it however it reaches the language. `probe_hover` is the seam, and tools/probe_hover.py is
+	# the instrument that walks a whole project through it.
+	#
+	# These are the few shapes worth failing a build over. What each of them *was* is in the
+	# commits; what matters here is that the label and the documentation page are the ones GDScript
+	# would give for the same code.
+	if editor:
+		var hovers: Array = _verse_language().call("probe_hover", "res://scripts/hover_probe.verse")
+		_check("hover_probe.verse answers hovers", not hovers.is_empty())
+
+		# A class the project declares, at its own declaration -- which resolved to nothing at all
+		# until the host's walk learned that a class's name is not inside the node it maps to.
+		_check_eq("a script's own class hovers as a class",
+				_hover_type(hovers, "hover_probe"), ScriptLanguageExtension.LOOKUP_RESULT_CLASS)
+		_check_eq("named as the class the script registers a doc for",
+				_hover(hovers, "hover_probe").get("class_name"), "hover_probe")
+
+		# A parameter. GDScript's walk of SuiteNode::Local takes the LOCAL_CONSTANT arm for a
+		# `const` alone; PARAMETER shares the VARIABLE one.
+		_check_eq("a parameter is a Local Variable, not a Local Constant",
+				_hover_type(hovers, "Factor"), ScriptLanguageExtension.LOOKUP_RESULT_LOCAL_VARIABLE)
+		_check_eq("and carries its declared type", _hover(hovers, "Factor").get("doc_type"), "float")
+
+		# Verse's primitives are what they cross as, and GDScript sends `int` to the same page.
+		_check_eq("`int` hovers as Godot's int",
+				_hover(hovers, "int").get("class_name"), "int")
+
+		# A signal accessor is a Verse function and a Godot *signal*: asking Godot for a method
+		# named `timeout` is an empty tooltip rather than a slightly wrong label.
+		_check_eq("a mirrored engine signal hovers as a signal",
+				_hover_type(hovers, "Timeout"), ScriptLanguageExtension.LOOKUP_RESULT_CLASS_SIGNAL)
+		_check_eq("named as Timer.timeout",
+				_hover(hovers, "Timeout").get("class_member"), "timeout")
+
+		# A `...Statics` module and its constant, both of which are Godot's Vector2.
+		_check_eq("a statics module hovers as the class it stands for",
+				_hover(hovers, "Vector2Statics").get("class_name"), "Vector2")
+		_check_eq("and its constant as a constant of that class",
+				_hover_type(hovers, "Zero"), ScriptLanguageExtension.LOOKUP_RESULT_CLASS_CONSTANT)
+
+		# An @GlobalScope utility, reached through the module holding what belongs to no class.
+		_check_eq("a global utility hovers as an @GlobalScope method",
+				_hover(hovers, "RandfRange").get("class_name"), "@GlobalScope")
+
+		# A mirrored enum, whose Verse spelling cannot be inverted without the generated table.
+		_check_eq("a mirrored enum hovers as a Godot enum",
+				_hover_type(hovers, "node_internal_mode"),
+				ScriptLanguageExtension.LOOKUP_RESULT_CLASS_ENUM)
+		_check_eq("named as Node.InternalMode",
+				_hover(hovers, "node_internal_mode").get("class_member"), "InternalMode")
+
+		# `void` has no Godot page and GDScript answers nothing for it either. A box with the
+		# label and the symbol and nothing else in it is worse than no box.
+		_check_eq("`void` draws no tooltip rather than an empty one",
+				_hover(hovers, "void").get("result"), ERR_UNAVAILABLE)
+
+		# A comment is prose. The mirror spells Godot's classes in lowercase, so this is the
+		# difference between hovering a sentence and hovering code.
+		_check_eq("a Godot class name in a comment draws nothing",
+				_comment_hover(hovers, "node").get("result"), ERR_UNAVAILABLE)
+
+		# The column one past a word's last character is still that word (TextEdit::get_word), and
+		# it is where the pointer is over the right half of the last glyph. Every hover row for one
+		# occurrence has to agree, which is what the whole-word check is.
+		_check("every column of a word answers alike", _hover_columns_agree(hovers, "Timeout"))
+	else:
+		_skip("the script editor's hover tooltip", "no analysis in an exported game")
+
 	var tx_script: Script = load("res://scripts/transactions.verse")
 	_check("transactions.verse compiles", tx_script != null and tx_script.can_instantiate())
 	if tx_script == null:
@@ -1753,6 +1827,53 @@ func begin() -> void:
 	_tx = Node2D.new()
 	_tx.set_script(tx_script)
 	tree.root.add_child(_tx)
+
+
+# The Verse language object. ScriptLanguage exposes no `get_name` to ClassDB -- `get_class()` is
+# the only question a bare one answers about itself.
+func _verse_language() -> Object:
+	for i in Engine.get_script_language_count():
+		var lang := Engine.get_script_language(i)
+		if lang != null and lang.get_class() == "VerseScriptLanguage":
+			return lang
+	return null
+
+
+# The first row for a name that is code rather than prose. probe_hover answers one row per word
+# and per run of columns that agree, so a name written once is one row.
+func _hover(rows: Array, symbol: String) -> Dictionary:
+	for row in rows:
+		if row["symbol"] == symbol and row["token"] != "comment" and row["token"] != "string":
+			return row
+	return {}
+
+
+func _hover_type(rows: Array, symbol: String) -> int:
+	return _hover(rows, symbol).get("type", -1)
+
+
+func _comment_hover(rows: Array, symbol: String) -> Dictionary:
+	for row in rows:
+		if row["symbol"] == symbol and row["token"] == "comment":
+			return row
+	return {}
+
+
+# Whether every column of every occurrence of a word draws the same tooltip. probe_hover splits a
+# word into one row per distinct *answer*, and the answer carries what the host resolved beside
+# what the editor would draw -- so this compares only the half the author sees.
+func _hover_columns_agree(rows: Array, symbol: String) -> bool:
+	var seen := {}
+	for row in rows:
+		if row["symbol"] != symbol or row["token"] == "comment":
+			continue
+		var key := "%d:%d" % [row["line"], row["word"]]
+		var drawn := "%s|%s|%s|%s|%s" % [row["result"], row["type"], row["class_name"],
+				row["class_member"], row["doc_type"]]
+		if seen.get(key, drawn) != drawn:
+			return false
+		seen[key] = drawn
+	return not seen.is_empty()
 
 
 # True when the last frame-stepped case has run. The driver is what quits.

@@ -305,6 +305,14 @@ def main() -> None:
                 print(f"{where(row)}  {row['token']:<20} {described(row):<50} [{host_of(row)}]")
         return
 
+    # A project that did not build answers nothing for everything, and every rule below is about
+    # what an answer *said* -- so a failed build reads as a clean corpus. It cost one false
+    # all-clear to learn that: the fixture had a member colliding with a mirrored property, the
+    # whole project refused to compile, and 17433 hover positions reported no findings.
+    if not any(row.get("host_kind", -1) > 0 for row in rows):
+        raise SystemExit("probe_hover: the host resolved nothing anywhere -- the project did not "
+                         "build. Run it in Godot and read the compile errors first.")
+
     findings = rules(rows)
     by_rule: dict[str, int] = {}
     for finding in findings:
