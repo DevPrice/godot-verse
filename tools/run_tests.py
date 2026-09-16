@@ -815,11 +815,13 @@ def _export_template(godot: Path) -> Path | None:
     printed = (completed.stdout or "").strip().splitlines()
     if not printed:
         return None
-    # "4.7.stable.official.5b4e0cb0f" -> "4.7.stable"
+    # "4.7.stable.official.5b4e0cb0f" -> "4.7.stable", and with a patch number
+    # "4.7.2.stable.official.ed1daf0bf" -> "4.7.2.stable". The directory is named for the status as
+    # well as the number, so a patch release needs the fourth component and a .0 release does not.
     parts = printed[-1].split(".")
     if len(parts) < 3:
         return None
-    version = ".".join(parts[:3]) if parts[2].isdigit() else ".".join(parts[:2] + [parts[2]])
+    version = ".".join(parts[:4]) if parts[2].isdigit() else ".".join(parts[:3])
     appdata = os.environ.get("APPDATA")
     if not appdata:
         return None
