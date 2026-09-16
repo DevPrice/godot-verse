@@ -1261,6 +1261,14 @@ extern "C" int32_t vh_lookup_symbol(const char* PathUtf8, int32_t Line, int32_t 
         return VH_ERR_STATE;
     }
 
+    // And the same answer for the same reason after a build: generating code puts the AST every
+    // locus lives in out of reach, and what the consumer should do about it is ask again once an
+    // analysis has run. Answering VH_ERR_NOT_FOUND would say the symbol is not there.
+    if (!GodotVerse::ProgramIsAnalysisOnly())
+    {
+        return VH_ERR_STATE;
+    }
+
     // The ABI promises the strings outlive the call, and the descriptor only points at the
     // harvest's -- so both are static rather than stack.
     static GodotVerse::FLookupDesc Lookup;

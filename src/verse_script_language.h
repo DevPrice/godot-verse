@@ -403,6 +403,14 @@ private:
 	void request_check(const godot::String &p_path, const godot::String &p_normalized_source, bool p_is_completion = false) const;
 	void start_pending_check() const;
 
+	// Runs the queued analysis here and now instead of leaving it for _frame.
+	//
+	// For a caller with no frames to wait for. A build generates code, which leaves the host's
+	// program with no AST, so a position -- a hover, a jump, an argument hint -- resolves against
+	// nothing until the analysis queued after that build has run. The editor never notices: frames
+	// go by between pressing Play and the author's next hover. `probe_hover` has none.
+	void flush_pending_check() const;
+
 	// Asks the open script editor to complete again, if it is still showing the file the landed
 	// completion analysis was for and the caret is still inside the same identifier. That second
 	// _complete_code finds the host describing the buffer and replaces the partial list in place.

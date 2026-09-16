@@ -494,8 +494,12 @@ AUTORTFM_DISABLE bool RunCheck(const FUtf8String& Path, const FUtf8String& Sourc
 AUTORTFM_DISABLE FUtf8String SubjectTypeOfDiagnostic(FUtf8StringView Path, int32 Row, int32 Column);
 
 /// Records where /Godot.org/Godot's definitions were written, off a program that still read them
-/// from their own files, and retires the package to its digest once it has. Defined beside
-/// FillLocation, which is what the recording is for.
+/// from their own files. Defined beside FillLocation, which is what the recording is for.
+AUTORTFM_DISABLE void RecordMirrorDefinitions();
+
+/// That, and then retires the package to its digest. Split because the two want different moments:
+/// the recording wants the program mid-build, where the AST is whole, and the role change wants to
+/// be the last thing a build does to the source project.
 AUTORTFM_DISABLE void RecordAndRetireMirror();
 
 /// Whether that has happened, which is what decides whether the mirror may be retired to its
@@ -762,6 +766,55 @@ AUTORTFM_DISABLE void TakeAnalysisSnapshot();
 /// Fills the VM half of GPendingSnapshot and makes it current. Game thread only.
 AUTORTFM_DISABLE void PublishAnalysisSnapshot();
 
+/// Whether the injection below took a snapshot off the build that just ran. Cleared by every
+/// caller of BuildAll before it calls one, so "still false" means the toolchain never reached the
+/// hook -- which is what a semantic error does: Compile_SemanticError is in CompileMask_Aborted,
+/// and SemanticAnalyzeVst skips its post-analysis injections for an aborted compile.
+bool GSnapshotTakenDuringBuild = false;
+
+/// Takes the snapshot from inside the build that produced the program, rather than from a second
+/// build run afterwards to produce another one.
+///
+/// This is where a *code-generating* build is still describable. IR generation hangs an IR package
+/// off every module and puts the AST out of reach, so CompileProject used to follow every
+/// successful build with a whole analysis-only pass -- ~770 ms of the ~1.6 s an author waits on
+/// Play -- whose only purpose was to rebuild a program equal to the one the build had already
+/// thrown away. CToolchain::SemanticAnalyzeVst invokes this hook after the last semantic pass and
+/// before localization, IR generation and code generation, which is exactly that program.
+///
+/// Both halves of what the trailing pass was for are taken here: the snapshot, and the mirror's
+/// definition table, which wants the first build's program for the same reason.
+///
+/// The VM half of the snapshot is *not*, and cannot be: an inspector default is read off a
+/// transient instance of a generated class, and this runs three phases before there is one.
+/// PublishAnalysisSnapshot stays where it is, on the game thread, after the link.
+class FGodotSnapshotInjection : public uLang::IPostSemAnalysisInjection
+{
+public:
+    AUTORTFM_DISABLE virtual bool Ingest(
+        const uLang::TSRef<uLang::CSemanticProgram>& Program,
+        const uLang::SProgramContext&,
+        const uLang::SBuildContext&) override
+    {
+        // The auto-qualify pre-pass builds a whole program of its own and routes it through this
+        // same hook (Toolchain.cpp, BuildProject), and that program is discarded. Everything the
+        // snapshot reads goes through the build manager, so describing anything else would be
+        // describing a program no later question can reach. Off by default -- the CVar is
+        // Verse.AutoQualifyBeforeCompile -- and this is what keeps it off-by-accident too.
+        const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager =
+            GIde.IsValid() ? GIde->GetBuildManager() : nullptr;
+        if (!BuildManager.IsValid() || BuildManager->GetProgramContext()._Program.Get() != Program.Get())
+        {
+            return false;
+        }
+
+        TakeAnalysisSnapshot();
+        RecordMirrorDefinitions();
+        GSnapshotTakenDuringBuild = true;
+        return false; // Do not halt the toolchain.
+    }
+};
+
 AUTORTFM_DISABLE vh_severity ToVhSeverity(ELogVerbosity::Type Verbosity)
 {
     switch (Verbosity)
@@ -855,6 +908,10 @@ AUTORTFM_DISABLE bool EnsureIde()
     // Registered for the life of the process, which is the life of the host: the handle
     // unregisters the feature when it is destroyed, and every build after that loses authorship.
     static uLang::TModularFeatureRegHandle<FGodotAuthorshipInjection> GodotAuthorship;
+
+    // And for the life of the process for the same reason: an injection is discovered once per
+    // build, out of GetModularFeaturesOfType, so one that unregisters stops being found.
+    static uLang::TModularFeatureRegHandle<FGodotSnapshotInjection> GodotSnapshot;
 
     ISolarisModule& SolarisModule = ISolarisModule::Get();
 
@@ -995,11 +1052,12 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FScriptSource>& So
     FAnalysisTrace Trace;
     const double BuildStarted = FPlatformTime::Seconds();
     // Held rather than forwarded as they arrive, for the reason CheckProject holds its own: the
-    // subject type each one may carry is read off the AST. A build that succeeds generates code and
-    // puts the AST out of reach, so these are forwarded after the analysis-only pass below has put
-    // it back; a build that fails never reached codegen, and its AST is still whole where it
-    // returns.
+    // subject type each one may carry is read off the AST, and a build that succeeds generates code
+    // and puts the AST out of reach. That costs nothing here: the one diagnostic with a subject to
+    // find is ErrSemantic_UnknownIdentifier, which is an error, and a build with an error is a
+    // build that failed -- where the AST is still whole, because it never reached codegen.
     TArray<FCapturedDiagnostic> BuildDiagnostics;
+    GSnapshotTakenDuringBuild = false;
     const bool bBuilt = GIde->BuildAll(
         Settings,
         MakeIdeDiagnostics([&BuildDiagnostics](const FSolDiagnostic& Diagnostic) { BuildDiagnostics.Add(CaptureSolDiagnostic(Diagnostic)); },
@@ -1031,9 +1089,10 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FScriptSource>& So
     // process compiled out of a string, so an External one contributes no definitions at all and
     // `@export` stops resolving.
     //
-    // The mirror is the interesting one, and it is held Source only until RecordAndRetireMirror
-    // has taken what a digest does not carry. From the build after that the pass above is left to
-    // do its work and an analysis costs ~750 ms rather than ~1450 ms.
+    // The mirror is the interesting one, and it is held Source only until the definition table has
+    // taken what a digest does not carry. That is the first build's own semantic analysis now, so
+    // this loop no longer keeps it for a second pass: from the first build on, the pass above is
+    // left to do its work and an analysis costs ~750 ms rather than ~1450 ms.
     for (const uLang::CSourceProject::SPackage& Kept : BuildManager->GetSourceProject()->_Packages)
     {
         const uLang::CUTF8String& VersePathOf = Kept._Package->GetSettings()._VersePath;
@@ -1064,7 +1123,13 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FScriptSource>& So
         // carries on, so that program still describes most of what the author wrote, and this is
         // the only description there is until the next keystroke starts an analysis -- a first
         // build that fails would otherwise leave every class-describing read answering not-found.
-        TakeAnalysisSnapshot();
+        //
+        // The injection is what usually took it, and it is exactly a *semantic* failure that it
+        // did not: an error aborts the compile before the hook. So this stays, for that case.
+        if (!GSnapshotTakenDuringBuild)
+        {
+            TakeAnalysisSnapshot();
+        }
         PublishAnalysisSnapshot();
         ForwardBuildDiagnostics();
         return false;
@@ -1076,18 +1141,40 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FScriptSource>& So
 
     IVerseModule::Get(); // Runs VerseModule::StartupModule; VerseCmd does the same before calling in.
 
-    // The build just done generated code, which leaves an IR package on every module and puts
-    // the AST out of reach. One analysis-only pass over the same sources puts it back, so a
-    // symbol resolves on the first hover rather than only after the author's first edit. Its
-    // diagnostics are dropped: the build above already reported every one of them.
-    RunCheck(FUtf8String(), FUtf8String(), [](const FSolDiagnostic&) {});
+    // The build just done generated code, which leaves an IR package on every module and puts the
+    // AST out of reach -- so what the editor reads about this project is the snapshot the build's
+    // own semantic analysis left, and the three entry points that resolve a *position* have
+    // nothing to resolve against until the next analysis. Both halves of that are said here: the
+    // program is no longer analysis-only, and it no longer describes any buffer.
+    //
+    // This used to be a whole analysis-only pass over the same sources, run for no other reason
+    // than to rebuild a program equal to the one the build had just discarded -- ~770 ms of the
+    // ~1.6 s between Play and the game, every time. The consumer asks for a fresh analysis after a
+    // build instead, which costs the same work off the critical path and only when there is an
+    // editor to want it.
+    GProgramIsAnalysisOnly = false;
+    GAnalysedPath.Empty();
+    GAnalysedSource.Empty();
+
+    if (GSnapshotTakenDuringBuild)
+    {
+        // All that is left of the snapshot: an inspector default is read off a transient instance
+        // of a generated class, so this half could not run until the link above made one.
+        PublishAnalysisSnapshot();
+    }
+    else
+    {
+        // The fallback, for a build that somehow reached code generation without the hook -- uLang
+        // would have had to skip the injections rather than abort, which nothing here does. Cheap
+        // to keep, and what it avoids is a session describing a program nothing ever walked.
+        RunCheck(FUtf8String(), FUtf8String(), [](const FSolDiagnostic&) {});
+    }
 
     ForwardBuildDiagnostics();
 
-    // And this is the program to read the mirror's own files out of -- the last one that has them.
-    // Only reached by a build that succeeded: a project that does not compile is not where the
-    // analysis budget is being spent, and the program a failed build leaves is a worse thing to
-    // record a file and a line from than the one before it.
+    // The injection recorded the table; this is the role change that follows it, and it is a
+    // build's last word on the source project. Only reached by a build that succeeded, which is
+    // also the only kind that leaves a package the compiler will accept a digest of.
     RecordAndRetireMirror();
 
     return true;
@@ -1127,6 +1214,7 @@ AUTORTFM_DISABLE bool RunCheck(const FUtf8String& Path, const FUtf8String& Sourc
 
     FAnalysisTrace Trace;
     const double AnalysisStarted = FPlatformTime::Seconds();
+    GSnapshotTakenDuringBuild = false;
     const bool bAnalysed = GIde->BuildAll(
         Settings,
         MakeIdeDiagnostics(MoveTemp(Sink),
@@ -1150,9 +1238,16 @@ AUTORTFM_DISABLE bool RunCheck(const FUtf8String& Path, const FUtf8String& Sourc
 
     // Here rather than at the call sites, so that every road to a fresh program leaves a fresh
     // snapshot behind it. On the worker the swap waits for the game thread; in the foreground this
-    // *is* the game thread, and publishing now is what makes CompileProject's trailing analysis
-    // the thing the editor reads until the next keystroke.
-    TakeAnalysisSnapshot();
+    // *is* the game thread, and publishing now is what the editor reads until the next keystroke.
+    //
+    // Usually already done: FGodotSnapshotInjection takes it mid-analysis, off the same program.
+    // What lands here instead is the analysis that stopped at a semantic error, which is most of
+    // them while an author is typing -- and that program is still the one to describe, because it
+    // is the only one there is.
+    if (!GSnapshotTakenDuringBuild)
+    {
+        TakeAnalysisSnapshot();
+    }
     if (!GBackgroundCheck.bRunning.load(std::memory_order_acquire))
     {
         PublishAnalysisSnapshot();
@@ -1212,6 +1307,11 @@ AUTORTFM_DISABLE bool GodotVerse::ProgramDescribes(const FUtf8String& Path, cons
     // finding it false is what makes those writes visible here. Reversing these two lines would be
     // a race with no symptom until an analysis lands mid-comparison.
     return !GBackgroundCheck.bRunning.load(std::memory_order_acquire) && ProgramAlreadyDescribes(Path, SourceText);
+}
+
+AUTORTFM_DISABLE bool GodotVerse::ProgramIsAnalysisOnly()
+{
+    return GProgramIsAnalysisOnly;
 }
 
 namespace {
@@ -1666,13 +1766,10 @@ AUTORTFM_DISABLE void ForgetMirrorDefinitions()
 ///     re-emits the var and not the attributes, so every one of the mirror's property accessors
 ///     comes back offerable as an override.
 ///
-/// Both are answered from here instead. Taken from the analysis-only pass at the end of the first
-/// build, which is the last program that reads the mirror's own files -- and a pass that has to run
-/// anyway, so the table costs a walk rather than an analysis.
-///
-/// The package is retired here too rather than at the next build, so that the analyses an author
-/// gets between the two are already the cheap ones.
-AUTORTFM_DISABLE void RecordAndRetireMirror()
+/// Both are answered from here instead. Taken from the first build's own semantic analysis, which
+/// is the last program that reads the mirror's own files, through the post-analysis injection --
+/// so the table costs a walk of a program that exists anyway rather than an analysis of its own.
+AUTORTFM_DISABLE void RecordMirrorDefinitions()
 {
     if (GMirrorRecorded || !GIde.IsValid())
     {
@@ -1694,17 +1791,6 @@ AUTORTFM_DISABLE void RecordAndRetireMirror()
     RecordMirrorScope(*Mirror);
     GMirrorRecorded = true;
 
-    for (const uLang::CSourceProject::SPackage& Retired : BuildManager->GetSourceProject()->_Packages)
-    {
-        const uLang::CUTF8String& VersePathOf = Retired._Package->GetSettings()._VersePath;
-        const bool bIsAttributePackage =
-            FUtf8StringView(Retired._Package->GetName().AsCString()).Equals(FUtf8StringView(AttributePackageName));
-        if (!bIsAttributePackage && FUtf8StringView(VersePathOf.AsCString()).Equals(FUtf8StringView(GodotVersePath)))
-        {
-            Retired._Package->SetRole(uLang::EPackageRole::External);
-        }
-    }
-
     if (AnalysisTraceEnabled())
     {
         SIZE_T Bytes = GMirrorDefinitions.GetAllocatedSize();
@@ -1720,6 +1806,40 @@ AUTORTFM_DISABLE void RecordAndRetireMirror()
                 (int32)(Bytes / 1024),
                 (FPlatformTime::Seconds() - Started) * 1000.0);
         fflush(stderr);
+    }
+}
+
+/// The recording, and then the role change that lets the next build read the mirror from its
+/// digest.
+///
+/// Retiring is a build's last word on the source project rather than the injection's, because a
+/// role is read at the *next* FillInVst and a package flipped mid-build would have the build that
+/// is still running disagree with itself about what it is compiling. The recording has to come
+/// first all the same: IncrementalizeProjectSource is what actually marks the package External,
+/// and CompileProject asks MirrorDefinitionsRecorded() before deciding whether to force it back.
+AUTORTFM_DISABLE void RecordAndRetireMirror()
+{
+    RecordMirrorDefinitions();
+
+    if (!GMirrorRecorded || !GIde.IsValid())
+    {
+        return;
+    }
+    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
+    if (!BuildManager.IsValid())
+    {
+        return;
+    }
+
+    for (const uLang::CSourceProject::SPackage& Retired : BuildManager->GetSourceProject()->_Packages)
+    {
+        const uLang::CUTF8String& VersePathOf = Retired._Package->GetSettings()._VersePath;
+        const bool bIsAttributePackage =
+            FUtf8StringView(Retired._Package->GetName().AsCString()).Equals(FUtf8StringView(AttributePackageName));
+        if (!bIsAttributePackage && FUtf8StringView(VersePathOf.AsCString()).Equals(FUtf8StringView(GodotVersePath)))
+        {
+            Retired._Package->SetRole(uLang::EPackageRole::External);
+        }
     }
 }
 
@@ -8987,40 +9107,23 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
         return VH_ERR_NOT_FOUND;
     }
 
-    // Parameter descriptions are rebuilt here rather than carried on FMethodDesc, which holds only
-    // what crosses the ABI. A description carries uLang pointers, and those are owned by a semantic
-    // program the next analysis replaces -- so an editor host reads the program it has, and a
-    // runtime host, which has none and can never have one, reads the table the cook recorded.
+    // Parameter descriptions are not carried on FMethodDesc, which holds only what crosses the ABI,
+    // so they come from the same recorded table the method itself came from -- the analysis
+    // snapshot in an editor host, the cook's table in a runtime host, which has no semantic program
+    // and can never have one.
+    //
+    // **Not from the live semantic program, which is a different program by the time this runs.**
+    // IR generation rewrites the one the build was holding: a method answering a struct gets a
+    // *coerced* override generated beside it (IRGenerator.cpp, MaybeCreateCoercedFunctionDefinition),
+    // and that generated function decorates to the same name with one synthetic `Argument`
+    // parameter added. Walking the class live therefore found a one-parameter signature for a
+    // no-parameter method, the arity check below refused the call as VH_ERR_NOT_FOUND, and
+    // `Control.get_minimum_size()` on a script overriding `_GetMinimumSize` quietly answered
+    // Godot's default (0, 0) -- with nothing said anywhere. The snapshot is taken before IR
+    // generation runs, which is the only description of what the author actually declared.
     TArray<FMemberType> ParamTypes;
     FMemberType ResultTypeDesc;
-    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager =
-        GIde.IsValid() ? GIde->GetBuildManager() : nullptr;
-    if (BuildManager.IsValid())
-    {
-        const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
-        const uLang::CClass* const Class = Program->FindDefinitionByVersePath<uLang::CClass>(
-            FULangConversionUtils::FUtf8StringViewToULangStringView(FUtf8String(ScriptVersePath) + UTF8TEXT("/") + ClassName));
-        if (Class)
-        {
-            for (const uLang::TSRef<uLang::CFunction>& Function : Class->GetDefinitionsOfKind<uLang::CFunction>())
-            {
-                if (!FULangConversionUtils::ULangStrToFUtf8String(Function->GetDecoratedName()).Equals(FUtf8String(DecoratedName)))
-                {
-                    continue;
-                }
-                for (const uLang::CDataDefinition* Param : Function->_Signature.GetParams())
-                {
-                    ParamTypes.Add(Param ? DescribeType(Param->GetType(), *Program) : FMemberType{});
-                }
-                if (const uLang::CFunctionType* const Type = Function->_Signature.GetFunctionType())
-                {
-                    ResultTypeDesc = DescribeType(&Type->GetReturnType(), *Program);
-                }
-                break;
-            }
-        }
-    }
-    else if (const GodotVerse::FDeclaredTypes* const Recorded = RecordedTypes(ClassName))
+    if (const GodotVerse::FDeclaredTypes* const Recorded = RecordedTypes(ClassName))
     {
         if (const FMethodSignatureTypes* const Signature = Recorded->Methods.Find(FUtf8String(DecoratedName)))
         {

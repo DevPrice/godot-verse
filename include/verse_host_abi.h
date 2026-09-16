@@ -42,7 +42,7 @@ extern "C" {
  * The mismatch surfaces at vh_init, not at compile time, because the two sides are compiled by
  * different toolchains and nothing links them.
  */
-#define VH_ABI_VERSION_MAJOR 9
+#define VH_ABI_VERSION_MAJOR 10
 #define VH_ABI_VERSION_MINOR 0
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
@@ -769,6 +769,12 @@ typedef struct vh_source_file
  *
  * A failed build publishes nothing: the previous generation keeps running and OutGeneration is
  * left alone. Diagnostics are reported through the init callback.
+ *
+ * Everything that *describes* a class answers about this build the moment it returns: the snapshot
+ * is taken from the build's own semantic analysis. What a build does not leave is an AST, because
+ * generating code puts it out of reach -- so the three entry points that resolve a position answer
+ * VH_ERR_STATE until the consumer asks for an analysis. A consumer with an editor in it should ask
+ * for one after a successful build; one without an editor has nothing to ask for.
  *
  * Class names in this ABI are qualified by module from here on: `player` for a file in the root
  * module, `gameplay/player` for one in the `gameplay` module. */
@@ -1526,9 +1532,11 @@ typedef struct vh_lookup_desc
  *
  * Only an analysis-only program can answer this. Code generation hangs an IR package off every
  * module and the accessors this walks assert rather than degrade when they find one -- so the
- * host tracks which kind of build produced the program it holds and answers VH_ERR_NOT_FOUND
- * rather than trusting the caller to have asked at a safe moment. vh_compile_project leaves the
- * program analysable for this reason.
+ * host tracks which kind of build produced the program it holds and answers VH_ERR_STATE rather
+ * than trusting the caller to have asked at a safe moment. That is the same "ask again once an
+ * analysis has landed" this answers while one is in flight, and it is what vh_compile_project
+ * leaves behind: a build no longer runs an analysis of its own to put an AST back, so a caller
+ * that wants one after a build asks for it.
  *
  * Answers VH_ERR_STATE while a vh_check_project_begin analysis is in flight. A position resolves
  * against the AST, which the worker is rebuilding and which no snapshot describes, so this is the

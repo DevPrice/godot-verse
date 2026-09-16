@@ -83,7 +83,7 @@ Two documents are not phase records and are the ones to read before adding a fea
 `include/verse_host_abi.h` is the only thing that crosses. Plain C — the two sides cannot share a
 C++ ABI. It is staged into the host's `Public/` by `build_host.py`, so both compile the same file.
 
-**`VH_ABI_VERSION` is 9.0.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
+**`VH_ABI_VERSION` is 10.0.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
 a major bump is a layout or meaning change and both sides must be rebuilt; a minor bump adds
 something an older consumer can ignore behind a `StructSize` check. A change to the header means
 bumping it and rebuilding **both** sides — the mismatch surfaces at `vh_init`, not at compile time.
@@ -94,6 +94,10 @@ before calling" would pass. `InitHost` zeroes the tail; nothing before 8.3 neede
 **`vh_complete_item` is the struct a minor can never grow**: the items are handed back as an array,
 so a field at the end changes the stride an older consumer indexes by, and the mismatch would read
 as corruption rather than as a refusal. 9.0 added `IsNamed` there for that reason alone.
+**10.0 changed no layout**: it is a major because `vh_compile_project` stopped leaving an
+analysis-only program behind it, so the three position entry points answer `VH_ERR_STATE` after
+a build until a consumer asks for an analysis. An older consumer would have read that as "no
+such symbol" and drawn nothing, silently.
 
 `vh_host_kind()` is readable before `vh_init` and answers editor, runtime or cooker; the eleven
 compiler-side entry points answer `VH_ERR_UNSUPPORTED` in a runtime host.
@@ -491,6 +495,23 @@ it is not in `run_tests.py`.
   runs, and the consumer's recourse is to queue that buffer and ask again. **Only the entry points
   that *execute* Verse still wait**, because Solaris blocks the VM for the length of any build. If
   you add an entry point, it belongs in one of those three groups and never in a fourth.
+- **A build describes itself, and leaves no AST.** The snapshot is taken from inside the build, at
+  `FGodotSnapshotInjection` — uLang's `IPostSemAnalysisInjection`, which runs after the last
+  semantic pass and before IR generation — so every class-describing read answers about the
+  generation the moment `vh_compile_project` returns. What a build does *not* leave is a program a
+  *position* can be resolved against: IR generation hangs an IR package off every module. A build
+  used to end with a whole analysis-only pass to put one back, which was ~770 ms of the ~1.6 s
+  between Play and the game; the consumer queues one from `_frame` instead
+  (`VerseScriptLanguage::build_project`), and `probe_hover`, which has no frames, flushes it itself.
+  **A hook of uLang's own is the only place a code-generating build is still describable** — add
+  anything that needs the build's AST there, not after `BuildAll`.
+- **Nothing may read declared types off the live semantic program.** IR generation *rewrites* the
+  program the build was holding: a method answering a struct gets a coerced override generated
+  beside it, decorating to the same name with one synthetic `Argument` parameter. `InstanceCall`
+  walked the class live, found a one-parameter signature for `_GetMinimumSize()`, refused the call
+  as `VH_ERR_NOT_FOUND`, and `Control.get_minimum_size()` answered Godot's own default with nothing
+  said anywhere. Declared types come from the snapshot (`RecordedTypes`), which is the same table a
+  runtime host reads out of the cook.
 - **A consumer that begins an analysis must poll it to completion.** Nothing else reaps one: until
   `vh_check_project_poll` says finished, the next `vh_check_project_begin` is refused and `vh_tick`
   stays a no-op. The bench relied on a later wait to do the reaping and refused forever once the
@@ -499,8 +520,9 @@ it is not in `run_tests.py`.
   per-keystroke cost, and a digest drops exactly two things: every definition's **file and line**
   (a digest is one synthetic snippet at a path no file is ever written to) and
   `CFunction::_bIsAccessorOfSomeClassVar` (DigestGenerator re-emits a class var without the
-  `<getter>`/`<setter>` attributes the analyzer reads it off). A side table recorded at the first
-  build's trailing analysis — the last program that reads the mirror's own files — restores both,
+  `<getter>`/`<setter>` attributes the analyzer reads it off). A side table recorded during the
+  first build's own semantic analysis — the last program that reads the mirror's own files, reached
+  through `FGodotSnapshotInjection` — restores both,
   keyed by qualified name plus the function type's code, because `GodotMath.native.verse` declares
   eight two-parameter `operator'+'` and a verse path alone is ambiguous. **Anything new that reads a
   mirror definition's location or accessor flag must go through that table**, `GetScopeName()`

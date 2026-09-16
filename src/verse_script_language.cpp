@@ -2829,6 +2829,11 @@ TypedArray<Dictionary> VerseScriptLanguage::probe_hover(const String &p_path) {
 
 	ensure_project_built();
 
+	// Every row below is a position question, and a build leaves the host with no AST to resolve
+	// one against. In the editor the analysis that puts it back starts from _frame; this runs
+	// inside one call and has no frames, so it runs the analysis itself.
+	flush_pending_check();
+
 	const String file = FileAccess::get_file_as_string(p_path);
 	if (FileAccess::get_open_error() != OK) {
 		return rows;
@@ -3764,6 +3769,24 @@ Error VerseScriptLanguage::build_project() {
 	// program may be able to now.
 	docs_refresh_attempted = false;
 
+	// A build generates code, and generating code puts the AST out of reach -- so a hover, a
+	// completion or an argument hint has nothing to resolve a position against until an analysis
+	// has run. This is the ask for one. Queued rather than run: request_check leaves it for
+	// _frame, so it costs the author nothing between pressing Play and the game starting, and a
+	// keystroke that arrives first supersedes it.
+	//
+	// The host used to do this itself, inside vh_compile_project, and it cost ~770 ms of every
+	// build to have the answer ready for a question nobody had asked yet.
+	//
+	// Any file will do -- an analysis is of the whole project, and the path only says which file's
+	// buffer overrides what is on disk. The text is the one just read for it.
+	for (int64_t i = 0; i < sources.size(); i++) {
+		if (analyzed_source_by_path.has(sources[i])) {
+			request_check(sources[i], String(analyzed_source_by_path[sources[i]]));
+			break;
+		}
+	}
+
 	return status;
 }
 
@@ -3890,6 +3913,30 @@ void VerseScriptLanguage::start_pending_check() const {
 	in_flight_source = pending_check_source;
 	in_flight_is_completion = pending_check_is_completion;
 	has_pending_check = false;
+}
+
+void VerseScriptLanguage::flush_pending_check() const {
+	if (!has_pending_check) {
+		return;
+	}
+
+	VerseRuntime *runtime = get_runtime();
+	if (runtime == nullptr || !runtime->is_host_loaded() || !runtime->host_has_compiler()) {
+		has_pending_check = false;
+		return;
+	}
+
+	const String path = pending_check_path;
+	const String source = pending_check_source;
+	has_pending_check = false;
+
+	// The synchronous entry point, which is what makes this a flush rather than a second queue: it
+	// blocks on whatever the background thread is doing and then analyses.
+	Dictionary errors_by_globalized;
+	runtime->check_project(ProjectSettings::get_singleton()->globalize_path(path), source, &errors_by_globalized);
+
+	analyzed_source_by_path[path] = source;
+	record_diagnostics(errors_by_globalized);
 }
 
 void VerseScriptLanguage::poll_check() const {

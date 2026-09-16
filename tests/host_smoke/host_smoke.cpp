@@ -627,9 +627,10 @@ int main(int argc, char** argv)
 
 	// Symbol lookup, asked before anything has edited a buffer. That is the state the editor is
 	// in at startup, and it is the interesting one: the build just done generated code, which
-	// hangs an IR package off every module and puts the AST the lookup walks out of reach. The
-	// host is supposed to put the program back into an analysable shape on its own rather than
-	// leave the first hover of a session unanswerable.
+	// hangs an IR package off every module and puts the AST the lookup walks out of reach. So the
+	// first thing asserted here is the refusal, and the second is that one analysis is the whole
+	// of what it takes to lift it -- which is what a consumer with an editor in it does after a
+	// build, and what the host itself used to do at a cost of ~770 ms on every build.
 	bool LookupOk = true;
 	{
 		const std::string ExportsSource = ReadFileUtf8(ExportsPath);
@@ -657,6 +658,18 @@ int main(int argc, char** argv)
 			RowColumnOf(ExportsSource, DeclOffset, DeclRow, DeclColumn);
 
 			auto Text = [](const char* Utf8, int32_t Len) { return std::string(Utf8 ? Utf8 : "", Len); };
+
+			// VH_ERR_STATE rather than VH_ERR_NOT_FOUND: the symbol is there, the program that
+			// could point at it is not. It is the same answer the host gives while a background
+			// analysis is in flight, and the same thing to do about it.
+			const vh_lookup_desc* TooEarly = nullptr;
+			LookupOk = Step("a position does not resolve straight after a build",
+						   LookupSymbolFn(ExportsPathUtf8.c_str(), UseRow, UseColumn, &TooEarly) == VH_ERR_STATE)
+					&& LookupOk;
+
+			LookupOk = Step("one analysis puts the AST back",
+						   CheckProjectFn(ExportsPathUtf8.c_str(), ExportsSource.c_str()) == VH_OK)
+					&& LookupOk;
 
 			const vh_lookup_desc* Lookup = nullptr;
 			LookupOk = Step("vh_lookup_symbol", LookupSymbolFn(ExportsPathUtf8.c_str(), UseRow, UseColumn, &Lookup) == VH_OK) && LookupOk;

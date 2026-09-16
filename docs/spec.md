@@ -2202,30 +2202,38 @@ performance claim. What is measured is recorded in R-PERF-2 and carries no thres
   they live — reported rather than asserted, because a threshold would fail on a slower machine.
 
   The numbers below are `tools/build_bench.py` on the machine this document is written on, n=10,
-  against the full 1023-class mirror (4360 KB of Verse) with `tests/host_smoke`'s two fixtures as
+  against the full 1038-class mirror (4537 KB of Verse) with `tests/host_smoke`'s two fixtures as
   the project and `dodge-the-creeps`' five scripts as the generation. Medians; the mean is quoted
   only where the bench reports no median.
 
   | what | figure |
   | --- | --- |
-  | `vh_init` | **75 ms** |
-  | **first** `vh_compile_project` | **3.70 s** — the mirror is still source here, and this is where the location/accessor side table is recorded |
-  | a **generation** after it | **1.54 s** (min 1.53, max 1.57) |
-  | `vh_check_project` — one whole-project analysis | **721 ms** (min 717, max 753) |
-  | the same through `_begin`/`_poll`, wall clock | **777 ms**, 49 polls |
+  | `vh_init` | **77 ms** |
+  | **first** `vh_compile_project` | **2.36 s** — the mirror is still source here, and this is where the location/accessor side table is recorded |
+  | a **generation** after it | **895 ms** (min 849, max 952) |
+  | `vh_check_project` — one whole-project analysis | **787 ms** (min 754, max 823) |
+  | the same through `_begin`/`_poll`, wall clock | **860 ms**, 427 polls |
   | a read taken **during** an analysis (`vh_class_members`, then `vh_class_export_list`) | **0.0 ms** each, wait counter 0 — it was 1735 ms |
-  | completion, members: refused / behind the analysis / warm | **0.0 / 718 / 0.5 ms** |
-  | completion, scope: refused / behind the analysis / warm | **0.0 / 716 / 6.4 ms** |
+  | completion, members: refused / behind the analysis / warm | **0.0 / 819 / 0.7 ms** |
+  | completion, scope: refused / behind the analysis / warm | **0.0 / 772 / 6.4 ms** |
   | `vh_signature_at`: refused / warm | **0.0 / 0.0 ms** |
   | `vh_lookup_symbol`, warm | **0.1 ms** |
   | `vh_class_members`, `vh_class_export_list`, with an analysis landed | **0.0 ms** each |
-  | `vh_class_override_candidates` | **0.0 ms**, 248 candidates for a `node2d` |
-  | `vh_instantiate` | **5.2 µs** per node |
-  | `vh_instance_call` | **0.27 µs** per call |
-  | retained per instance | **7.4 KB** |
+  | `vh_class_override_candidates` | **0.0 ms**, 259 candidates for a `node2d` |
+  | `vh_instantiate` | **7.8 µs** per node |
+  | `vh_instance_call` | **0.24 µs** per call |
+  | retained per instance | **7.5 KB** |
   | retained per generation | **1.0 MB** |
 
-  **The per-keystroke editor lag is the analysis figure, 721 ms**, and it is that rather than the
+  **A build costs one analysis, not two.** The first `vh_compile_project` was 3.70 s and a
+  generation 1.54 s when each ended with a whole analysis-only pass over the same sources, run only
+  to rebuild a program equal to the one code generation had just discarded. The snapshot is taken
+  from inside the build now — uLang's `IPostSemAnalysisInjection`, after the last semantic pass and
+  before IR generation — and the pass is gone: **2.36 s and 895 ms**, against a mirror that has
+  grown by 15 classes since those figures were taken. The analysis figure did not move and was not
+  meant to; what moved is the wait between pressing Play and the game.
+
+  **The per-keystroke editor lag is the analysis figure, 787 ms**, and it is that rather than the
   1.4–1.8 s it was because every analysis after the project's first successful build reads
   `/Godot.org/Godot` as an External package from its digest rather than from 4.4 MB of source. A
   project that has never compiled keeps the mirror as source and pays the larger figure, which is
@@ -2242,9 +2250,11 @@ performance claim. What is measured is recorded in R-PERF-2 and carries no thres
   around a build, and the "10 MB mean" an earlier pass recorded reads −10 MB now while the median
   has never moved from ~1 MB.
 
-  The generation figure is the one the build-on-Play trigger rests on: a second and a half an author
-  pays on Play, and would have been a second and a half on every Ctrl+S. If it has to come down,
-  off-thread building becomes a requirement rather than a guess.
+  The generation figure is the one the build-on-Play trigger rests on: nine-tenths of a second an
+  author pays on Play, and would have been nine-tenths of a second on every Ctrl+S. If it has to
+  come down further, what is left is the ~700 ms of parse and semantic analysis that re-reads
+  `/Godot.org/Godot`'s digest, which no amount of scheduling removes — off-thread building, or a
+  compiler that can keep a semantic program across builds.
 
   **An exported game does not pay any of the figures above**, which is what Phase 7 and 7b are for.
   Measured on the same machine, `dodge-the-creeps` headless, from process start to the first Verse
@@ -2254,6 +2264,9 @@ performance claim. What is measured is recorded in R-PERF-2 and carries no thres
   | --- | --- |
   | exported, cooked Verse loaded from its container | **0.54 s** |
   | the same game in the editor, compiled at startup | **4.08 s** |
+
+  That pair predates the removal of the build's trailing analysis; the editor side carries one whole
+  analysis less than it did, and has not been re-measured.
 
   **7.6x**, and the difference is the whole-project compile the export no longer does: the cooker did
   it once, at export time, inside a 14.2 s headless export whose container step is 0.40 s. What the
