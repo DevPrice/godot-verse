@@ -561,6 +561,30 @@ on closing it.
   in GDScript show something a Verse author chose; `_get`/`_set` overlap §5.4's export machinery,
   which is why the set is scheduled with it (roadmap, Phase 4b) rather than with R-NODE-7.
 
+  **`_to_string` is the one of the five that is not a Verse method at all, and that is decided.**
+  Verse already has a spelling for "what this value prints as", so the bridge adds no `_ToString`
+  virtual to the native root; an author writes the **extension method**, which is the idiomatic form
+  and — measured — the only form the compiler accepts:
+
+      (X:my_class).ToString<public>()<transacts>:string = "..."
+
+  Both alternatives are refused, each by a different definition. A class *member* named `ToString`
+  is glitch 3532 against `/Verse.org/Verse`'s own `ToString`; a module-level *overload* for the
+  script's class is 3532 against **the mirror's** `ToString(:object)`, since every script class
+  derives from `object` and Verse does not prefer the more specific overload. That second one is the
+  bridge's own doing — `FREE_FUNCTION_REPLACEMENTS` maps Godot's `Object.to_string` onto it.
+
+  The mechanism that makes this cover both directions is that **`X.ToString()` and `"{X}"` are not
+  the same lookup**: interpolation desugars to the free `ToString(X)`, which reaches
+  `ToString(:object)` and so Godot's `to_string()`. Implementing `to_string_func` therefore serves
+  `print(node)` from GDScript *and* Verse's own interpolation, which arrives at the same override by
+  going out to Godot and back. `tests/verse_probe/tostring_probe.verse` carries all five rounds.
+
+  What the host has to look up is **module-level, not a class member** — which is why
+  `vh_class_method_list` does not carry it and `vh_instance_call` cannot reach it unaided:
+  `operator'.ToString'(:my_class, :tuple())`, receiver first and the call's own arguments as a tuple
+  second.
+
 ### 5.3 Signals
 
 No script *declares* a signal today: `_has_script_signal` returns false and

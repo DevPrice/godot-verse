@@ -485,10 +485,38 @@ sentence rather than a crash.
 
 ## 7. Stage 5 — the script-level hooks (R-NODE-10)
 
-Five virtuals that are in no part of `extension_api.json`, which is why none of them can be
-generated and all five are hand-written on the native root beside `_Notification`:
+**§7's first line is wrong about `_ToString`, and the correction is the design.** A Verse class does
+not get a `_ToString` hook, because Verse already has a spelling for this and it is not a Godot
+virtual: an **extension method**.
 
-    _ToString<public><native>()<reads>:string
+    (X:my_class).ToString<public>()<transacts>:string = "..."
+
+That is what an author writes, and `tests/verse_probe/tostring_probe.verse` is why it is the only
+thing they *can* write. Both of the alternatives are refused by the compiler, each for its own
+reason:
+
+- a class **member** named `ToString` is glitch 3532 against `/Verse.org/Verse`'s own `ToString`,
+  which is reachable as an extension method — the rule that already catches `Angle` and `event`;
+- a module-level **overload** `ToString(X:my_class)` is glitch 3532 against **the mirror's own**
+  `ToString(:object)`. Every script class derives from `object`, and Verse does not prefer the more
+  specific overload. That one is worth pausing on: it is `FREE_FUNCTION_REPLACEMENTS` mapping Godot's
+  `Object.to_string`, so the bridge's own decision is what closes that door.
+
+**The two call syntaxes do not resolve to the same definition**, which is the finding the design
+rests on. `Self.ToString()` reaches the extension method; `"{Self}"` desugars to `ToString(Self)` and
+reaches `ToString(:object)`, which calls Godot's `to_string()`. So interpolation does not see the
+override directly — **and arrives at it anyway**, by going out to Godot and back in through
+`to_string_func`. One implementation, both paths, and nothing new in the Verse surface.
+
+What the host must find is module-level rather than a class member, which is why
+`vh_class_method_list` does not carry it and `InstanceCall` cannot reach it unaided:
+
+    (/user@localhost:)operator'.ToString'(:my_class, :tuple())
+
+The receiver is parameter 0; the call's own arguments are a tuple in parameter 1.
+
+The remaining four are in no part of `extension_api.json`, which is why none of them can be
+generated, and they are hand-written on the native root beside `_Notification`:
     _Get<public><native>(Property:string)<transacts>:?variant
     _Set<public><native>(Property:string, Value:variant)<transacts>:logic
     _GetPropertyList<public><native>()<transacts>:godot_array
@@ -512,8 +540,8 @@ no gain, and would make an `@export` and a `_Get` of the same name a silent race
 **One signature each, no overloads.** S-3's second finding is why: Godot resolves a script method by
 name out of a name-keyed list, and two `_Get`s would be indistinguishable in it.
 
-**Done when** `print(node)` in GDScript shows what a Verse `_ToString` chose, and a Verse script
-serves a property that no `@export` declares.
+**Done when** `print(node)` in GDScript shows what a Verse `ToString` extension method chose, and a
+Verse script serves a property that no `@export` declares.
 
 ---
 
@@ -636,7 +664,8 @@ the inspector and loaded back, and a Verse autoload answers from every scene.**
 
 Plus, for the requirements this document adds to that: a Verse script creates an object that is not
 a node and the object is collected when it should be; `print(node)` in GDScript shows what a Verse
-`_ToString` chose; and R-EXP-4 is restated with its reason.
+`ToString` extension method chose (§7, corrected — not the `_ToString` this document first proposed);
+and R-EXP-4 is restated with its reason.
 
 ---
 

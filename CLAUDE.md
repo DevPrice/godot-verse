@@ -752,7 +752,9 @@ it is not in `run_tests.py`.
   method* is a module-level name. `(V:vector2).Angle()` declares `operator'.Angle'` and Verse
   resolves a bare `Angle` against it, so a parameter or local named `Angle`, `Length`, `Dot`,
   `Cross`, `Normalized`, `Rotated`, `DistanceTo` or `LengthSquared` is *ambiguous* in any file that
-  imports the Godot package, which is every script. **`event` belongs on that list too** and is the
+  imports the Godot package, which is every script. **`ToString` belongs on that list and is the
+  one a class is most likely to want as a member of its own** — see "Verse itself" below for what
+  to write instead. **`event` belongs on it too** and is the
   one met first: the mirror spells `_Input`'s parameter `Event`, and an override that writes `event`
   collides with `/Verse.org/Verse`'s own `event` — glitch 3532, reported at the parameter with no
   hint that a capital letter is the fix (`by-hand-findings.md` B2). `gen_verse_api.py`'s
@@ -761,6 +763,21 @@ it is not in `run_tests.py`.
 
 ## Verse itself: what the compiler does that surprises
 
+- **A class cannot name a method `ToString`, and neither can a module.** `/Verse.org/Verse`'s own
+  `ToString` is reachable as an extension method, so a *member* of that name is glitch 3532 at its
+  declaration; and a module-level *overload* for a script's own class is 3532 against **the mirror's
+  own** `ToString(:object)`, because every script class derives from `object` and Verse does not
+  prefer the more specific overload. The spelling that works is the **extension method** —
+  `(X:my_class).ToString<public>()<transacts>:string` — which is what a Verse author reaches for
+  anyway, and what R-NODE-10 uses instead of the `_ToString` virtual `phase-4b-design.md` §7 first
+  proposed. Measured in `tests/verse_probe/tostring_probe.verse`, which carries all five rounds.
+- **`X.ToString()` and `"{X}"` are not the same lookup.** The first reaches an extension method; the
+  second desugars to the free `ToString(X)` and reaches `ToString(:object)` — Godot's own
+  `to_string()`. So a Verse override is invisible to interpolation *directly* and reached by it
+  anyway, out through Godot and back. An extension method is
+  `operator'.ToString'(:my_class, :tuple())` at **module** scope, receiver first and the call's own
+  arguments as a tuple second, which is why no class method list carries one and why `InstanceCall`
+  cannot reach it unaided.
 - **`operator'()'` is a reserved intrinsic.** Verse rewrites `Data[Key]` on a non-function callee
   into a call to it, but refuses to let anything *define* one — as a class member or as a free
   function — so the bracket syntax cannot be given a meaning. Container lookup is
