@@ -1968,19 +1968,41 @@ def emit_call_args(params) -> str:
 # called that; `verse_param_name` is given this as a taken name so a collision renames Godot's.
 VARARG_TAIL = "Args"
 
+# How many loose `variant` arguments a vararg accepts before an author has to write `array{...}`.
+#
+# Four, and the number is a judgement rather than a limit: Godot's own signals, `call`s and `rpc`s
+# almost never carry more, and the array arity is still there for the ones that do. Each costs one
+# generated line per vararg entry point and nothing at a call site that does not use it.
+#
+# **Four only where the entry point has a fixed prefix.** With none -- `GDScript.new`, and the six
+# on a reference in GodotApi.native.verse -- exactly one is legal, because two or more loose
+# `variant`s are a tuple and a tuple of variants is `[]variant`. See emit_method.
+#
+# Zero was the first answer and it was wrong. `Call("test", VariantFromInt(1))` is what an author
+# reaches for, because it is what `call("test", 1)` looks like in GDScript -- and with only the
+# array arity it is "No overload of the function `Call` matches the provided arguments
+# (:[]char,:variant)", which names both overloads and neither is the one they wanted.
+VARARG_VALUE_ARITIES = 4
+
 
 def emit_method(cm: ClassifiedMethod) -> str:
-    """One Verse line, or two for a vararg.
+    """One Verse line, or several for a vararg.
 
-    A vararg is two *arities* of one name rather than one method taking an optional array, because
-    an optional parameter would make `EmitSignal("hit")` pass an empty array that the call still
-    has to build, and because `?Args:[]variant = array{}` is a default Verse has to evaluate at
-    every call site. Two arities are what the compiler was asked about
-    (`tests/verse_probe/vararg_probe.verse`) and they resolve by parameter count alone.
+    A vararg is emitted as *arities* of one name rather than as one method taking an optional
+    array, because an optional parameter would make `EmitSignal("hit")` pass an empty array that
+    the call still has to build, and because `?Args:[]variant = array{}` is a default Verse has to
+    evaluate at every call site.
 
-    The tail is joined with `+`, which is Verse's array concatenation and was measured in the same
-    probe -- the fixed prefix is packed one argument at a time, the tail arrives already packed,
-    and `VhCallValue` wants one array.
+    Three shapes, and `tests/verse_probe/vararg_arity_probe.verse` is where the compiler was asked
+    whether they can share a name: the fixed prefix alone, the prefix plus up to
+    VARARG_VALUE_ARITIES loose `variant`s, and the prefix plus one `[]variant`. They coexist and
+    every call resolves to the exact body -- a `variant` parameter and a `[]variant` parameter are
+    told apart, which `phase-4b-design.md` 15 had a warning about from *module* scope and which
+    does not reach a class's methods.
+
+    The tail is joined with `+`, which is Verse's array concatenation and was measured in
+    `vararg_probe.verse` -- the fixed prefix is packed one argument at a time, the tail arrives
+    already packed, and `VhCallValue` wants one array.
     """
     param_decl = ", ".join(
         f"{p.verse_name}:{p.type_info.verse_type}" if p.default is None
@@ -2011,13 +2033,43 @@ def emit_method(cm: ClassifiedMethod) -> str:
             tail = "Vararg" + tail
         arg_lists = [f"array{{{args}}} + {tail}"]
         decls = [f"{param_decl}, {tail}:[]variant" if param_decl else f"{tail}:[]variant"]
+
+        # The loose-value arities, which are what a call written the GDScript way resolves to.
+        # Named Arg1..ArgN rather than A..D because these show in completion and in the editor's
+        # argument hint, where a letter says nothing about which position it is.
+        #
+        # **One of them, not four, when there is no fixed prefix** -- and this is the `GDScript.new`
+        # finding a second time rather than a new one. A Verse function's parameters *are* its
+        # tuple, so `New(:variant,:variant)` takes `tuple(variant, variant)`, which **is**
+        # `[]variant`: the two are one type and the compiler says "ambiguous with this definition".
+        # A single `variant` is not a tuple, so it stays distinguishable, and with any fixed
+        # parameter at all the tuples differ in their first element and every arity is fine.
+        #
+        # Measured rather than reasoned: the prefixed arities were checked in
+        # `tests/verse_probe/vararg_arity_probe.verse` and the *unprefixed* ones were not, so this
+        # cost a mirror that compiled under VNI at build time and failed in the runtime compiler
+        # with 44 errors -- which is exactly what CLAUDE.md's "a host build passing is not enough"
+        # is about.
+        for count in range(1, (VARARG_VALUE_ARITIES if param_decl else 1) + 1):
+            names = []
+            for index in range(1, count + 1):
+                name = f"Arg{index}"
+                while name in used:
+                    name = "Vararg" + name
+                names.append(name)
+            loose = ", ".join(f"{name}:variant" for name in names)
+            packed = ", ".join(names)
+            arg_lists.insert(0, f"array{{{args}, {packed}}}" if args else f"array{{{packed}}}")
+            decls.insert(0, f"{param_decl}, {loose}" if param_decl else loose)
+
         # The no-tail arity, but **only** when there is a fixed prefix to tell it apart by.
         # `New()` beside `New(:[]variant)` is uLang glitch 3532, "ambiguous with this definition",
         # because a Verse function's parameters *are* its tuple and the empty tuple is the empty
         # array -- so the two have the same argument type rather than two arities of one name. With
-        # any fixed parameter at all the pair is fine, which is what the probe measured.
+        # any fixed parameter at all the pair is fine, which is what the probe measured. The value
+        # arities are unaffected: a `variant` is a struct and is told apart from both.
         # `GDScript.new` is the only entry point in 4.7 that hits this, and the spelling it leaves
-        # an author is `Script.New(array{})`.
+        # an author for a call with no arguments is `Script.New(array{})`.
         if param_decl:
             arg_lists.insert(0, f"array{{{args}}}")
             decls.insert(0, param_decl)

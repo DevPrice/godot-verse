@@ -405,6 +405,23 @@ func begin() -> void:
 	node.call("EmitForeignNoArgs", pinger, "poked")
 	_check_eq("and a payloadless one", _vararg_pokes, 1)
 
+	# The *loose* arities, which exist because an author reached for `Call("test",
+	# VariantFromInt(1))` -- what `call("test", 1)` looks like in GDScript -- and got "No overload
+	# of the function `Call` matches the provided arguments (:[]char,:variant)". What these assert
+	# is that the loose spelling and the array spelling reach the same call; a loose one resolving
+	# to some other overload would still compile and still answer something.
+	_check_eq("a vararg takes loose values, not only an array",
+			node.call("CallOtherLoose", self, "_double", 21), 42)
+	_check_eq("and more than one of them",
+			node.call("CallOtherLooseTwo", self, "_add_two", 40, 2), 42)
+	_vararg_ping = -1
+	node.call("EmitOnLoose", pinger, "pinged", 55)
+	_check_eq("emit_signal takes them too", _vararg_ping, 55)
+	# A reference vararg has no fixed prefix, so one loose value is all it can have -- two would be
+	# a tuple, and a tuple of variants is the same type as the array arity.
+	_check_eq("and a reference vararg takes its one",
+			node.call("CallCallableLoose", _double, 4), 8)
+
 	pinger.queue_free()
 
 	# --- R-TYPE-1: PackedVector2Array ----------------------------------------------------------

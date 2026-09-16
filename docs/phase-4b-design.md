@@ -999,6 +999,53 @@ argument list is written as, and a case says so.
 
 ---
 
+### The loose arities, and the rule that turned out to govern all of them
+
+*Written after an author tried the obvious thing and it did not work.*
+
+Stage 6 emitted a vararg as two arities — the fixed prefix, and the prefix plus one `[]variant` —
+and §8 had asked for a third that was dropped without comment:
+
+    Rpc<public>(Method:string, Args:[]variant)<transacts>:void
+    Rpc<public>(Method:string, A:variant)<transacts>:void
+
+The second is the one an author reaches for, because `Call("test", VariantFromInt(1))` is what
+`call("test", 1)` looks like in GDScript. Without it the answer is *"No overload of the function
+`Call` matches the provided arguments (:[]char,:variant)"*, which helpfully names both overloads and
+unhelpfully names neither of the ones that were wanted. Varargs now carry **four** loose arities
+beside the array one; four because Godot's own signals, calls and RPCs almost never carry more, and
+the array form is still there for the ones that do.
+
+**And the rule behind it is one this phase had already found twice without recognising it.** A Verse
+function's parameters **are** its tuple, so:
+
+- `New()` beside `New(:[]variant)` is ambiguous — the empty tuple *is* the empty array. That was
+  stage 6's finding, recorded below as being about `GDScript.new`.
+- `Call(:variant, :variant)` beside `Call(:[]variant)` is ambiguous too — a tuple of two variants
+  *is* an array of variants. Same rule, and the first one was a special case of it all along.
+- `Call(:variant)` beside `Call(:[]variant)` is **fine**. One parameter is not a tuple.
+- With any fixed parameter in front, every arity is fine: `(string, variant, variant)` and
+  `(string, []variant)` differ in shape and in their first element.
+
+So the number of loose arities an entry point may have is decided by whether it has a prefix: four
+where it does, exactly one where it does not. `GDScript.new` and the six reference varargs in
+`GodotApi.native.verse` are the ones that do not.
+
+**The cost of not knowing this was a mirror that compiled and did not work.**
+`tests/verse_probe/vararg_arity_probe.verse` was written first and asked only about the *prefixed*
+shape, because that is the shape §8 spells — so it answered yes, four arities went out on all 21
+entry points, **VNI accepted the whole mirror at build time**, and the runtime compiler then refused
+it with 44 ambiguity errors. That is CLAUDE.md's "a host build passing is not enough to know a
+`.verse` file compiles", arriving from the direction it warns about, and it cost a build cycle to
+find because the probe reports a package-level refusal as `status 4, 0 error(s)` — silently, like
+the `@rpc` overload before it. The integration layer printed the real message at once, again.
+
+The probe now carries the unprefixed pair as a live case, and the illegal one as a comment beside
+it: a refused declaration takes the whole file with it, so the legal half is what has to stay
+runnable.
+
+---
+
 ### Stage 6's varargs, and the one arity that cannot exist
 
 **§8's two-line sketch is right about the shape and silent about the edge.** A vararg is emitted as

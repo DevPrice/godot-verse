@@ -420,6 +420,25 @@ marshal := class(node2d):
     EmitOnNoArgs<public>(Target:object, Signal:string)<transacts>:int =
         ToInt(Target.EmitSignal(Signal))
 
+    # And the *loose* arities, which are what a call written the GDScript way resolves to --
+    # `Call("test", VariantFromInt(1))` rather than `Call("test", array{VariantFromInt(1)})`. Same
+    # call as the array form beside them, which is exactly what the cases assert: the two spellings
+    # have to reach the same body, or one of them is resolving to an overload nobody meant.
+    CallOtherLoose<public>(Target:object, Method:string, Value:int)<transacts>:int =
+        if (N := AsInt[Target.Call(Method, VariantFromInt(Value))]) then N else -1
+
+    CallOtherLooseTwo<public>(Target:object, Method:string, A:int, B:int)<transacts>:int =
+        if (N := AsInt[Target.Call(Method, VariantFromInt(A), VariantFromInt(B))]) then N else -1
+
+    EmitOnLoose<public>(Target:object, Signal:string, Value:int)<transacts>:int =
+        ToInt(Target.EmitSignal(Signal, VariantFromInt(Value)))
+
+    # A vararg on a *reference* has no fixed parameter in front of its tail, so it takes exactly
+    # one loose value and the array form for anything more. Two would be a tuple, and a tuple of
+    # variants is `[]variant` -- one type rather than two overloads.
+    CallCallableLoose<public>(C:callable, Value:int)<transacts>:int =
+        if (N := AsInt[C.Call(VariantFromInt(Value))]) then N else -1
+
     # --- the six vararg methods that live on a *reference* -------------------
     #
     # `Callable.call`, `Callable.bind`, `Signal.emit` and three more are methods of a Godot

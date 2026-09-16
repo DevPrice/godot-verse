@@ -167,20 +167,49 @@ callable<public> := class<computes>(godot_ref):
     CallVoid<public>(Args:[]int)<transacts>:void =
         VhRefInvokeVoid(Ref, for (A : Args) { VhFromInt(A) })
 
-    # Godot's own `Callable.call` and the four beside it, which are vararg there and one
-    # `[]variant` here. There is deliberately **no** zero-argument arity of any of these: a Verse
-    # function's parameters are its tuple, so `Call()` beside `Call(:[]variant)` is glitch 3532
-    # rather than two arities of one name. `C.Call(array{})` is what a call with no arguments is.
+    # Godot's own `Callable.call` and the four beside it, which are vararg there.
+    #
+    # Each carries one loose `variant` and one `[]variant`, which is **all** an entry point with
+    # no fixed prefix may have. The loose one is what a call written the GDScript way resolves to,
+    # `C.Call(VariantFromInt(1))` rather than `C.Call(array{VariantFromInt(1)})`.
+    #
+    # The generated varargs carry four loose arities; these carry one, and the difference is not a
+    # choice. A Verse function's parameters *are* its tuple, so `Call(:variant, :variant)` takes
+    # `tuple(variant, variant)` -- which **is** `[]variant`, so the two are one type and the
+    # compiler refuses them as ambiguous. A single `variant` is not a tuple and stays apart; with a
+    # fixed parameter in front, as every generated one has, the tuples differ and all four are fine.
+    #
+    # Same reason there is no zero-argument arity: the empty tuple is the empty array, so `Call()`
+    # beside `Call(:[]variant)` is glitch 3532. `C.Call(array{})` is a call with no arguments, and
+    # `C.Call(array{A, B})` is one with two.
     Call<public>(Args:[]variant)<transacts>:variant = VhRefCall(Ref, "call", Args)
+    Call<public>(Arg1:variant)<transacts>:variant = VhRefCall(Ref, "call", array{Arg1})
+
     CallDeferred<public>(Args:[]variant)<transacts>:void = VhRefCallVoid(Ref, "call_deferred", Args)
+    CallDeferred<public>(Arg1:variant)<transacts>:void = VhRefCallVoid(Ref, "call_deferred", array{Arg1})
 
     # Answers a *new* Callable with the arguments already attached, which is Godot's own currying
     # and the reason a bound Callable can satisfy a signal whose payload it does not match.
     Bind<public>(Args:[]variant)<transacts>:callable = VhToCallable(VhRefCall(Ref, "bind", Args))
+    Bind<public>(Arg1:variant)<transacts>:callable = VhToCallable(VhRefCall(Ref, "bind", array{Arg1}))
 
     Rpc<public>(Args:[]variant)<transacts>:void = VhRefCallVoid(Ref, "rpc", Args)
+    Rpc<public>(Arg1:variant)<transacts>:void = VhRefCallVoid(Ref, "rpc", array{Arg1})
+
+    # RpcId is the one of the six with a fixed parameter in front of its tail, so it takes all four
+    # loose arities where its siblings take one. The rule is the same for both -- as many as the
+    # prefix can tell apart -- and it is the rule the generator applies to every vararg in the
+    # mirror, rather than a count chosen per method.
     RpcId<public>(PeerId:int, Args:[]variant)<transacts>:void =
         VhRefCallVoid(Ref, "rpc_id", array{VhFromInt(PeerId)} + Args)
+    RpcId<public>(PeerId:int, Arg1:variant)<transacts>:void =
+        VhRefCallVoid(Ref, "rpc_id", array{VhFromInt(PeerId), Arg1})
+    RpcId<public>(PeerId:int, Arg1:variant, Arg2:variant)<transacts>:void =
+        VhRefCallVoid(Ref, "rpc_id", array{VhFromInt(PeerId), Arg1, Arg2})
+    RpcId<public>(PeerId:int, Arg1:variant, Arg2:variant, Arg3:variant)<transacts>:void =
+        VhRefCallVoid(Ref, "rpc_id", array{VhFromInt(PeerId), Arg1, Arg2, Arg3})
+    RpcId<public>(PeerId:int, Arg1:variant, Arg2:variant, Arg3:variant, Arg4:variant)<transacts>:void =
+        VhRefCallVoid(Ref, "rpc_id", array{VhFromInt(PeerId), Arg1, Arg2, Arg3, Arg4})
 
 # Godot's Signal, as a value a script holds: what a `signal` -typed property or return hands over,
 # and the only spelling a signal the mirror has no accessor for has -- one a GDScript or C# script
@@ -222,6 +251,7 @@ signal_ref<public> := class<computes>(godot_ref):
     # with `add_user_signal`. A signal the script itself declares is a `signal(t)` with a typed
     # `Signal` of its own, and that one keeps its payload's type.
     Emit<public>(Args:[]variant)<transacts>:void = VhRefCallVoid(Ref, "emit", Args)
+    Emit<public>(Arg1:variant)<transacts>:void = VhRefCallVoid(Ref, "emit", array{Arg1})
 
 # --- reference packing -------------------------------------------------------
 

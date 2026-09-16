@@ -797,6 +797,13 @@ it is not in `run_tests.py`.
   `operator'.ToString'(:my_class, :tuple())` at **module** scope, receiver first and the call's own
   arguments as a tuple second, which is why no class method list carries one and why `InstanceCall`
   cannot reach it unaided.
+- **A function's parameters are its tuple, and a tuple of one repeated type *is* an array of it.**
+  This is one rule wearing three faces, and each was found separately: `f()` is ambiguous with
+  `f(:[]variant)` because the empty tuple is the empty array; `f(:variant,:variant)` is ambiguous
+  with it because a two-tuple of variants is one too; and `f(:variant)` is *not*, because one
+  parameter is not a tuple. Any fixed parameter in front makes all of them distinguishable again.
+  It decides how many loose arities a generated vararg may have — four with a prefix, one without —
+  and it will decide the same for anything else overloading a value form against an array form.
 - **The mirror's `Tag...` constants are not a script's to write.** `TagInt` and its 38 siblings
   carry no access specifier, so they are the mirror's own; a script naming one is glitch 3593,
   whose message is about control scopes. What a Godot property dictionary's `"type"` key wants is
