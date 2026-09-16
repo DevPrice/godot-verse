@@ -442,12 +442,30 @@ StringName VerseScript::_get_instance_base_type() const {
 	const VerseClassDecl decl =
 			verse_scan_class_decl(source_code.utf8().get_data(), get_path().get_file().get_basename().utf8().get_data());
 
-	// A library file -- no top-level class of its own -- has nothing to attach to, and saying so is
-	// how Godot refuses and explains: the attach dialog and the drag-a-script-onto-a-node path both
-	// test the base type against the node's own class. Answering "Node" would let it be attached and
-	// then do nothing at all. Text rather than has_own_class because this is asked of files the
-	// editor has merely scanned.
-	return decl.name.empty() ? StringName() : language->base_types_for(decl).instance_base;
+	if (!decl.name.empty()) {
+		return language->base_types_for(decl).instance_base;
+	}
+
+	// No class in the text, which is two different things. In the editor it is a library file -- no
+	// top-level class of its own, nothing to attach to -- and saying so is how Godot refuses and
+	// explains: the attach dialog and the drag-a-script-onto-a-node path both test the base type
+	// against the node's own class, and answering "Node" would let it be attached and then do
+	// nothing at all.
+	//
+	// In an exported game it means the text is *gone*: every `.verse` ships as a one-byte stub, so
+	// there has never been a superclass to read and this answered nothing for every script in the
+	// game. Nothing in a running game had noticed, because the callers that matter there are narrow
+	// -- a typed array of a script class in a serialised resource, and a custom ResourceFormatLoader
+	// or Saver written in Verse -- but nothing had asked either. The host has the compiled class and
+	// is the only side that does.
+	//
+	// Asked here and nowhere else, so the editor's per-keystroke path never reaches it: resolving a
+	// class is a VM entry, and this is called from EditorFileSystem's scan thread.
+	VerseRuntime *runtime = get_runtime();
+	if (runtime != nullptr && !runtime->host_has_compiler()) {
+		return StringName(runtime->class_base_type(verse_class_name()));
+	}
+	return StringName();
 }
 
 void *VerseScript::_instance_create(Object *p_for_object) const {

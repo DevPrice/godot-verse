@@ -3618,6 +3618,19 @@ AUTORTFM_DISABLE int64 GodotVerse::AdoptOrMintPeer(verse::vh_object* Self, const
     return Handle;
 }
 
+AUTORTFM_DISABLE FUtf8String GodotVerse::ClassBaseType(FUtf8StringView ClassName)
+{
+    // Resolving the class is a VM entry, and a running analysis has the VM blocked. The consumer
+    // only asks where the source text is gone, which is a runtime host, which never analyses --
+    // but the rule is the file's and not the caller's, so it is checked here.
+    if (IsBackgroundCheckRunning())
+    {
+        return FUtf8String();
+    }
+    const char* const GodotClass = GodotPeerClassFor(FindGodotClass(ClassName));
+    return GodotClass ? FUtf8String(GodotClass) : FUtf8String();
+}
+
 AUTORTFM_DISABLE void GodotVerse::ReleaseMintedPeer(const UObject* Owner, int64 Handle, bool bDiscard)
 {
     if (Handle == 0)

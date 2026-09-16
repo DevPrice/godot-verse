@@ -1,8 +1,10 @@
 # Phase 4b — The editor's data model: objects that are not nodes
 
-**Status:** Designed 2026-09-15; **§3 and §4 built 2026-09-15, §5–§9 not.** §15 is what the work
+**Status:** Designed 2026-09-15; **§3, §4 and §5 built 2026-09-15, §6–§9 not.** §15 is what the work
 corrected, and it corrects more of this document than usual — including the fact that §3 describes
-something that already existed. Read it before trusting §3 or §4.2. §2's six spikes ran **before** this document rather than
+something that already existed. Read it before trusting §3 or §4.2.
+
+§2's six spikes ran **before** this document rather than
 after it, which is the repo's habit and not 4.5's exception. All six are in `tests/verse_probe/`,
 with a seventh (`default_cdo_probe.verse`) filed under §4.5 rather than §2 because it settles a
 *rejected* option. Three of them changed what §4 and §8 say, and **S-6 needed a real host build**
@@ -794,6 +796,41 @@ again as *the same Verse object* — which is what lets a script's own downcast 
 what makes "holds, and passes around" in R-NODE-3's own wording true rather than nearly true. The
 table had to exist anyway for the release hook; the identity is what it costs nothing extra to also
 answer. The other half of R-SCN-6's identity question, arriving three phases later.
+
+### Stage 3, and the one defect it found that it did not own
+
+**§5 cost nothing it predicted and found something it did not.** The stage §13 calls "most likely to
+cost more than it looks" needed **no code**: a `Resource` with a Verse script attached reads and
+writes its exported values, saves to `.tres`, loads back and answers its methods, in the editor run
+and in an exported game both, against the bridge exactly as R-NODE-3 left it. Seventeen test cases
+and no source change. §5's premise — "what has never been exercised is any of it against a
+non-`Node` owner" — was right that nobody had looked and wrong that anything would break.
+
+**Its named risk is parity, not a defect.** §5 worries that `_can_instantiate`'s `is_editor_hint()`
+gate makes a non-`@tool` Verse resource "a placeholder in the only place it is ever used". GDScript
+does exactly the same thing: `can_instantiate()` tests `ScriptServer::is_scripting_enabled()`, and
+the editor sets that false (`editor_node.cpp:8476`). A placeholder is what the inspector edits for
+every GDScript resource in every Godot project, `ResourceSaver` writes its stored values, and the
+editor is not "the only place" a resource is used — a running game is. Nothing to change.
+
+**What it did find is `get_instance_base_type()` answering *empty* in an exported game**, for every
+Verse script and not only for a resource. The consumer reads the declared superclass out of the
+source text, and an export ships every `.verse` as a one-byte stub, so there has never been a
+superclass to read. Nothing in a shipped game had noticed, because the runtime callers are narrow —
+a typed array of a script class in a serialised resource (`variant_parser.cpp`, `marshalls.cpp`,
+`json.cpp`) and a custom `ResourceFormatLoader`/`Saver` written in a script (`resource_loader.cpp`,
+`resource_saver.cpp`) — but nothing had asked either, in three phases of having an export.
+
+It is pre-existing and it is not R-EXP-6's, and it was fixed anyway because the fix turned out to be
+cheap: **ABI 8.4's `vh_class_base_type`**, which is the walk R-NODE-3 already mints a peer from,
+asked of a class name rather than of an object. No sidecar change and no snapshot field, because a
+runtime host has the class's `UClass` chain loaded — which is the same fact the R-NODE-3 cases
+passing in the export run had already proved. The consumer asks it only where the text scan found no
+class *and* the host has no compiler, so the editor's per-keystroke path never reaches a VM entry it
+did not have before.
+
+The lesson is the export layer's, again: it is the only layer that runs what it built, and what it
+catches is never the thing the stage was about.
 
 **Still true, and worth saying because §4 rests on all of it:** the block clause fires for a user
 class across the package boundary, at two levels of derivation, with `Self` already at the derived

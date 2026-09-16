@@ -70,7 +70,7 @@ Two documents are not phase records and are the ones to read before adding a fea
 `include/verse_host_abi.h` is the only thing that crosses. Plain C — the two sides cannot share a
 C++ ABI. It is staged into the host's `Public/` by `build_host.py`, so both compile the same file.
 
-**`VH_ABI_VERSION` is 8.3.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
+**`VH_ABI_VERSION` is 8.4.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
 a major bump is a layout or meaning change and both sides must be rebuilt; a minor bump adds
 something an older consumer can ignore behind a `StructSize` check. A change to the header means
 bumping it and rebuilding **both** sides — the mismatch surfaces at `vh_init`, not at compile time.

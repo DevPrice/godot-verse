@@ -826,6 +826,17 @@ bool VerseRuntime::class_is_abstract(const String &p_class_name) const {
 			&& host.ClassIsAbstract(p_class_name.utf8().get_data()) != 0;
 }
 
+String VerseRuntime::class_base_type(const String &p_class_name) const {
+	if (!host.is_loaded() || host.ClassBaseType == nullptr) {
+		return String();
+	}
+	const char *base = nullptr;
+	if (host.ClassBaseType(p_class_name.utf8().get_data(), &base) != VH_OK || base == nullptr) {
+		return String();
+	}
+	return String::utf8(base);
+}
+
 Vector<VerseSignalInfo> VerseRuntime::class_signals(const String &p_class_name) const {
 	Vector<VerseSignalInfo> signals;
 	if (!host.is_loaded() || host.ClassSignalList == nullptr) {

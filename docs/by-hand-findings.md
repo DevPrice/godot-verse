@@ -556,7 +556,7 @@ for:
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks
-is not worth keeping. Two things stand open, both of them things no automated layer can reach.
+is not worth keeping. Three things stand open, all of them things no automated layer can reach.
 Phase 6's session has since been run and is recorded below with what it found, because the steps
 are worth keeping: its half of the debugger has no other test.
 
@@ -579,6 +579,40 @@ not, because the node is holding a *placeholder* and the swap to a real instance
 §B8 has what is ruled out and where to look. Small enough to live with — the workaround is one
 scene reload — and invisible to every automated layer, because a placeholder only exists under
 `is_editor_hint()`.
+
+### R-EXP-6's editor half: the custom Resource round-trip · **owed**
+
+Phase 4b's stage 3 built and tested the *runtime* half — a `Resource` with a Verse script attached,
+its exported values written and read, saved to `.tres`, loaded back with its values and its methods
+intact, in the editor run and in an exported game both. What that cannot reach is the editor's own
+UI, which is where the roadmap's exit clause for 4b actually lives, so these five steps stay here
+rather than being claimed.
+
+`tests/integration/scripts/settings_resource.verse` is the fixture — a `@global_class` on a
+`class(resource)` with three `@export` members — and
+`tests/integration/resources/shipped_settings.tres` is one saved from it.
+
+**To check it**, in the editor with `tests/integration` open:
+
+1. **FileSystem dock → Create New → Resource.** The dialog lists the global class registry; typing
+   `SettingsResource` must find it and must file it under `Resource`. This is what
+   `_get_global_class_name` and its `base_type` are for, and the one step that says the registry
+   half works.
+2. **Save it as a `.tres`.** The three exported members must be in the inspector with their declared
+   defaults — `untitled`, `3`, `1.5`.
+3. **Edit all three and save again.** A non-`@tool` script is a **placeholder** in the editor, and
+   deliberately: GDScript does exactly the same (`ScriptServer::is_scripting_enabled()` is false
+   under the editor, which is what `_can_instantiate`'s `is_editor_hint()` stands in for). The
+   values must survive the save, which is the placeholder's own storage being written out.
+4. **Reopen the file.** The edited values must come back, and the `.tres` on disk must carry
+   `script_class="SettingsResource"` beside them.
+5. **Play the scene with it loaded.** Outside the editor it is a real instance, so `Describe()` must
+   answer the edited values rather than the declared ones.
+
+**What a failure would look like, and where to look.** An empty inspector is the export list not
+reaching the placeholder (`VerseScript::update_placeholders`). Values that revert on save are
+`_get_property_default_value` answering the edited value rather than the declared one. A class the
+dialog cannot find is `_get_global_class_name`'s `base_type`, which comes from `base_types_for`.
 
 ### Phase 6's editor session has been run · **one defect, fixed**
 

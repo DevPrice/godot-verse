@@ -56,6 +56,7 @@ public:
 	vh_class_signal_list_fn ClassSignalList = nullptr;
 	vh_class_static_list_fn ClassStaticList = nullptr;
 	vh_class_is_abstract_fn ClassIsAbstract = nullptr;
+	vh_class_base_type_fn ClassBaseType = nullptr;
 	vh_class_export_list_fn ClassExportList = nullptr;
 	vh_instance_get_field_fn InstanceGetField = nullptr;
 	vh_class_default_field_fn ClassDefaultField = nullptr;

@@ -499,6 +499,7 @@ int main(int argc, char** argv)
 	auto ShutdownFn = Resolve<vh_shutdown_fn>(Module, "vh_shutdown", &ResolveOk);
 	auto TickFn = Resolve<vh_tick_fn>(Module, "vh_tick", &ResolveOk);
 	auto CollectGarbageFn = Resolve<vh_collect_garbage_fn>(Module, "vh_collect_garbage", &ResolveOk);
+	auto ClassBaseTypeFn = Resolve<vh_class_base_type_fn>(Module, "vh_class_base_type", &ResolveOk);
 	auto CompileProjectFn = Resolve<vh_compile_project_fn>(Module, "vh_compile_project", &ResolveOk);
 	auto HasClassFn = Resolve<vh_has_class_fn>(Module, "vh_has_class", &ResolveOk);
 	auto ClassExportListFn = Resolve<vh_class_export_list_fn>(Module, "vh_class_export_list", &ResolveOk);
@@ -2778,6 +2779,23 @@ int main(int argc, char** argv)
 			Step("releasing the instance releases no peer, because the node was never ours",
 				 PeersReleased <= PeersMinted);
 		}
+	}
+
+	// --- v8.4: the Godot class a script attaches to ------------------------------------------
+	//
+	// The consumer answers this from the source text and cannot where there is none, which is every
+	// script in an exported game -- a `.verse` ships as a one-byte stub. This is the other side.
+	{
+		const char* Base = nullptr;
+		Step("vh_class_base_type on a class(object)",
+			 ClassBaseTypeFn("exports", &Base) == VH_OK && Base && std::string(Base) == "Object");
+		Base = nullptr;
+		Step("and on a class(node2d), which is two mirrored classes deeper",
+			 ClassBaseTypeFn("exports_unregistered", &Base) == VH_OK && Base
+				 && std::string(Base) == "Node2D");
+		Base = nullptr;
+		Step("a class the program does not carry answers not found",
+			 ClassBaseTypeFn("no_such_class", &Base) == VH_ERR_NOT_FOUND && Base == nullptr);
 	}
 
 	// --- ABI v2: the method list (R-NODE-9) --------------------------------------------------

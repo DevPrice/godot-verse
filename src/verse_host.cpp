@@ -58,6 +58,7 @@ void VerseHostLibrary::clear_function_pointers() {
 	ClassSignalList = nullptr;
 	ClassStaticList = nullptr;
 	ClassIsAbstract = nullptr;
+	ClassBaseType = nullptr;
 	ClassExportList = nullptr;
 	InstanceGetField = nullptr;
 	ClassDefaultField = nullptr;
@@ -110,6 +111,9 @@ bool VerseHostLibrary::load(const String &p_dll_path, String &r_error) {
 	ok = ok && resolve_required(handle, "vh_class_signal_list", ClassSignalList, r_error);
 	ok = ok && resolve_required(handle, "vh_class_static_list", ClassStaticList, r_error);
 	ok = ok && resolve_required(handle, "vh_class_is_abstract", ClassIsAbstract, r_error);
+	// Optional: a host older than ABI 8.4 has not got it, and the consumer only asks where the
+	// source text is gone -- which is a host this bridge shipped, so never one of those.
+	resolve_optional(handle, "vh_class_base_type", ClassBaseType);
 	ok = ok && resolve_required(handle, "vh_class_export_list", ClassExportList, r_error);
 	ok = ok && resolve_required(handle, "vh_instance_get_field", InstanceGetField, r_error);
 	ok = ok && resolve_required(handle, "vh_class_default_field", ClassDefaultField, r_error);

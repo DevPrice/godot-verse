@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="SettingsResource" format=3]
+
+[ext_resource type="Script" path="res://scripts/settings_resource.verse" id="1_tg2mb"]
+
+[resource]
+script = ExtResource("1_tg2mb")
+Title = "shipped"
+Rounds = 11
+Speed = 0.25

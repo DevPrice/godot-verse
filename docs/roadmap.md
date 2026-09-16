@@ -1,7 +1,7 @@
 # godot-verse — Roadmap
 
 **Status:** Draft 17 · 2026-09-15 · **Phases 0–6 complete; Phase 7a built; 7b designed, not built;
-Phase 4b's R-NODE-3 built** ([`phase-4b-design.md`](phase-4b-design.md) §15 is what that corrected).
+Phase 4b's R-NODE-3 and R-EXP-6 built** ([`phase-4b-design.md`](phase-4b-design.md) §15 is what that corrected).
 [`phase-7-design.md`](phase-7-design.md) is 7a's plan, written before the work from an interview
 and three delegated reads of the engine sources: §1 is the decisions, §2 the spikes (S-1, OQ-10,
 ran during the planning), §4–§10 the stages in build order, and **§13 is where it was corrected —
@@ -548,18 +548,21 @@ Written here rather than only in `spec.md` §14, because the next phase's shape 
 
 ### Phase 4b — the editor's data model
 
-**Stage 2 built; §5–§9 still open.** [`phase-4b-design.md`](phase-4b-design.md) is what this list
+**Stages 2 and 3 built; §6–§9 still open.** [`phase-4b-design.md`](phase-4b-design.md) is what this list
 turns into, written after its spikes rather than before them — `construct_probe`,
 `ctor_delegate_probe`, `overload_probe`, `class_block_probe`, `class_block_self_probe`,
 `native_block_probe` and `default_cdo_probe` in `tests/verse_probe/`. **§15 is the part to read**:
 it is where the plan is corrected, and one of its two stages turned out to have been built already.
 R-NODE-3's answer is a class **`block:`** clause on the native root, which means a Verse script
 writes `helper{}` and gets a live Godot object, with R-TYPE-7 left intact. **The first pass was §3
-and §4 only**; §5–§9 are reassessed now.
+and §4 only**; §5 was reassessed after it and cost no code at all.
 
 - **R-NODE-3** — instantiation without a node, `RefCounted` and `Object` both. **Done**: ABI 8.3,
   `VhAdoptOrMint` on the block clause, and Godot's three lifetimes rather than one.
-- **R-EXP-6, R-EXP-7, R-EXP-8, R-EXP-9** — custom Resources, autoloads, icons, RPC config.
+- **R-EXP-6** — custom Resources. **Done**: it needed no code, and what it found instead was
+  `get_instance_base_type()` answering empty in an export, fixed with ABI 8.4's
+  `vh_class_base_type`. The editor half is a by-hand check.
+- **R-EXP-7, R-EXP-8, R-EXP-9** — autoloads, icons, RPC config.
 - **R-EXP-1** — the remaining `@export` surface, type-driven where the Verse type can say it and
   attributes only where it cannot.
 - **R-NODE-10** — the script-level hooks that are in no JSON: `_ToString`, `_Get`, `_Set`,

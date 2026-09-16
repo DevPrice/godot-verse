@@ -43,7 +43,7 @@ extern "C" {
  * different toolchains and nothing links them.
  */
 #define VH_ABI_VERSION_MAJOR 8
-#define VH_ABI_VERSION_MINOR 3
+#define VH_ABI_VERSION_MINOR 4
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
 typedef int32_t vh_bool;
@@ -996,6 +996,24 @@ VH_ATTR VH_API int32_t vh_class_static_list(const char* ClassNameUtf8, const vh_
  * instantiate a base script that was never meant to be attached. */
 VH_ATTR VH_API vh_bool vh_class_is_abstract(const char* ClassNameUtf8);
 
+/* Added at ABI v8.4. The Godot class a script of this class attaches to -- `Node2D` for a
+ * `class(node2d)`, `Resource` for a `class(resource)`, and the nearest *mirrored* ancestor for a
+ * script that extends another script. Written into *OutUtf8 as a NUL-terminated string the host
+ * owns until the next call to this entry point.
+ *
+ * The consumer normally answers this from the source text, which is both faster and available long
+ * before anything is built. What it cannot answer from is a source that is not there: an exported
+ * game ships every `.verse` as a one-byte stub, so an export had no superclass to read and answered
+ * nothing. This is the other side of the same question, and the only side an export has.
+ *
+ * It resolves the class in the VM, so it is subject to the usual two rules -- call it from the
+ * vh_init thread, and not while an analysis is running, which answers VH_ERR_STATE. Neither binds
+ * in practice: the consumer reaches this only where the text is gone, and a host with no text is a
+ * runtime host, which never analyses.
+ *
+ * VH_ERR_NOT_FOUND for a class this program does not carry. */
+VH_ATTR VH_API int32_t vh_class_base_type(const char* ClassNameUtf8, const char** OutUtf8);
+
 /* Every signal ClassNameUtf8 declares, its base script classes' included -- signals inherit.
  *
  * Read out of the semantic program the last analysis left behind, like vh_class_method_list and
@@ -1745,6 +1763,7 @@ typedef int32_t (*vh_class_method_list_fn)(const char*, const vh_method_desc**, 
 typedef int32_t (*vh_class_signal_list_fn)(const char*, const vh_signal_desc**, int32_t*);
 typedef int32_t (*vh_class_static_list_fn)(const char*, const vh_static_desc**, int32_t*);
 typedef vh_bool (*vh_class_is_abstract_fn)(const char*);
+typedef int32_t (*vh_class_base_type_fn)(const char*, const char**);
 typedef vh_bool (*vh_instance_has_function_fn)(vh_instance*, const char*);
 typedef int32_t (*vh_instance_call_fn)(vh_instance*, const char*, const vh_value*, int32_t, vh_arena*, vh_value*);
 typedef int32_t (*vh_callback_invoke_fn)(int64_t, const vh_value*, int32_t, vh_arena*, vh_value*);

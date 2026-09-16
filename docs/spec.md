@@ -810,7 +810,32 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   land until Phase 6 — the defect recorded there, where a raised runtime error empties every later
   method result, is one a tool script can now reach without running the game.
 - **R-EXP-6 (MUST)** A Verse class can be a custom `Resource`, saved to and loaded from `.tres`,
-  with its exported properties serialised. Status: **none**.
+  with its exported properties serialised. Status: **done at runtime; the editor half is a by-hand
+  check** (Phase 4b stage 3).
+
+  It needed no code. `_get_instance_base_type` already answered `Resource` for a `class(resource)`,
+  `_instance_create` already took any `Object *`, and the export list, the property path and
+  `get_property_list` were already keyed on the class rather than on nodehood — so the stage that
+  `phase-4b-design.md` §13 called "most likely to cost more than it looks" cost seventeen test cases
+  and nothing else. What it did need was R-NODE-3 underneath it: a Resource is a `RefCounted`, and
+  the block clause on the native root adopts the object Godot made rather than minting a second.
+
+  Asserted in `tests/integration`, in the editor run and in an exported game both: a `Resource`
+  with a Verse script attached, its exported defaults read, written, saved to `.tres`, loaded back
+  with its values and its methods intact, plus a `.tres` the project **ships** — which is the only
+  shape that says anything about an export, where the `.verse` it names is a one-byte stub and
+  `ext_resource path=` resolving at all is the claim.
+
+  **A non-`@tool` Verse resource is a placeholder in the editor, and that is parity rather than a
+  gap.** `_can_instantiate` gates on `is_editor_hint()`, which stands in for GDScript's own
+  `ScriptServer::is_scripting_enabled()` — the editor sets it false (`editor_node.cpp:8476`), so a
+  non-`@tool` GDScript resource is a placeholder there too. The inspector edits the placeholder's
+  stored values and `ResourceSaver` writes them, which is what placeholders are for.
+
+  The five editor steps — the New Resource dialog, the inspector, and a save from it — are in
+  `by-hand-findings.md` under "R-EXP-6's editor half", because nothing a script can ask reaches any
+  of them. Out of scope, as §5 scoped them: binary `.res`, and a Verse resource held as an exported
+  member of another.
 - **R-EXP-7 (MUST)** A Verse script can be registered as an autoload singleton. Status: **none**.
 - **R-EXP-8 (SHOULD)** A script declares an editor icon. Status: **part**
   (`_get_class_icon_path` exists).

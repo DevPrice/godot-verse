@@ -239,6 +239,10 @@ public:
 	// base script that was never meant to be attached.
 	bool class_is_abstract(const godot::String &p_class_name) const;
 
+	// The Godot class a script of this class attaches to, or empty. Asked only where the source
+	// text cannot answer, which is an exported game: every `.verse` ships as a one-byte stub.
+	godot::String class_base_type(const godot::String &p_class_name) const;
+
 	// The signals a class declares, its base script classes' included. Read out of the last
 	// analysis rather than the running program, so a signal added in the editor shows up without
 	// a build -- the same bargain the export list makes.

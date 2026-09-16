@@ -957,6 +957,29 @@ extern "C" vh_bool vh_class_is_abstract(const char* ClassNameUtf8)
     return GodotVerse::IsClassAbstract(Cstr(ClassNameUtf8)) ? 1 : 0;
 }
 
+extern "C" int32_t vh_class_base_type(const char* ClassNameUtf8, const char** OutUtf8)
+{
+    if (WrongThread("vh_class_base_type"))
+    {
+        return VH_ERR_THREAD;
+    }
+    if (!ClassNameUtf8 || !OutUtf8 || !GetHost().bInitialized)
+    {
+        return VH_ERR_ARGUMENT;
+    }
+    // Held, not returned by value: the answer is a NUL-terminated string the caller reads before
+    // its next ask, which is the bargain every other string this header hands back makes.
+    static FUtf8String Held;
+    Held = GodotVerse::ClassBaseType(Cstr(ClassNameUtf8));
+    if (Held.IsEmpty())
+    {
+        *OutUtf8 = nullptr;
+        return VH_ERR_NOT_FOUND;
+    }
+    *OutUtf8 = reinterpret_cast<const char*>(*Held);
+    return VH_OK;
+}
+
 extern "C" int32_t vh_class_export_list(const char* ClassNameUtf8, const vh_export_desc** OutExports, int32_t* OutCount)
 {
     if (WrongThread("vh_class_export_list"))

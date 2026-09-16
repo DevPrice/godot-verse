@@ -118,6 +118,15 @@ struct FInstance;
 /// which is what makes a .verse file usable as a script at all. Cheap enough to ask per script.
 AUTORTFM_DISABLE bool HasClass(FUtf8StringView ClassName);
 
+/// The Godot class a script of this class attaches to: the nearest mirrored ancestor's own Godot
+/// name, which is `Node2D` for a `class(node2d)` and `Resource` for a `class(resource)`. Empty for
+/// a class the program does not carry.
+///
+/// The same walk R-NODE-3 mints a peer from, asked of a class name rather than of an object -- so
+/// the two answers cannot drift apart, which they would if a script's declared base and its peer's
+/// Godot class were computed separately.
+AUTORTFM_DISABLE FUtf8String ClassBaseType(FUtf8StringView ClassName);
+
 /// Instantiates the class ClassName defines at the top level of the compiled project and binds
 /// it to a Godot object. ClassName is undecorated -- `player`, not `(/user@localhost:)player`.
 ///

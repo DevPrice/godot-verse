@@ -1154,6 +1154,57 @@ func begin() -> void:
 		_check("a node a Verse script made can be added to the tree",
 				maker.get_node_or_null("VerseMade") != null)
 
+	# --- R-EXP-6: a Verse class as a custom Resource ---------------------------------------------
+	#
+	# The runtime half of the round-trip, which is the half that can be automated: a Resource with a
+	# Verse script, its exported values written and read, saved to `.tres` and loaded back with its
+	# values and its methods intact. The editor half -- the New Resource dialog and the inspector --
+	# is a by-hand check, because nothing a script can ask reaches either.
+	var res_script: Script = load("res://scripts/settings_resource.verse")
+	_check("settings_resource.verse compiles", res_script != null and res_script.can_instantiate())
+	if res_script != null:
+		_check_eq("a Verse resource class reports Resource as its base",
+				res_script.get_instance_base_type(), &"Resource")
+
+		var settings := Resource.new()
+		settings.set_script(res_script)
+		_check("a Verse script attaches to a Resource", settings.get_script() == res_script)
+		_check_eq("its exported defaults are readable", settings.get("Rounds"), 3)
+		_check_eq("and a method runs on an owner that is not a node",
+				settings.call("Describe"), "untitled x3")
+
+		settings.set("Title", "campaign")
+		settings.set("Rounds", 7)
+		settings.set("Speed", 2.5)
+		_check_eq("a write through the inspector's own path lands",
+				settings.call("Describe"), "campaign x7")
+
+		const SAVED := "user://settings_probe.tres"
+		_check_eq("saving it to .tres succeeds", ResourceSaver.save(settings, SAVED), OK)
+
+		# take_over_path is off and the cache is bypassed, or `load` would hand back the very
+		# object just saved and the round trip would assert nothing.
+		var loaded: Resource = ResourceLoader.load(SAVED, "", ResourceLoader.CACHE_MODE_IGNORE)
+		_check("it loads back", loaded != null)
+		if loaded != null:
+			_check("and carries the script it was saved with", loaded.get_script() == res_script)
+			_check_eq("with its exported values", loaded.get("Title"), "campaign")
+			_check_eq("every one of them", loaded.get("Rounds"), 7)
+			_check_eq("floats included", loaded.get("Speed"), 2.5)
+			_check_eq("and its methods run against the loaded values",
+					loaded.call("Describe"), "campaign x7")
+			_check_eq("a method that writes a member still writes it", loaded.call("Bump"), 8)
+
+		# A `.tres` the project *ships* rather than one this run just wrote, which is the shape a
+		# real project has and the only one that says anything about an export: there the `.verse`
+		# it names is stripped to a one-byte stub, so `ext_resource path=` resolving at all is the
+		# claim. The class behind it comes from the cooked Verse, not from the file on disk.
+		var shipped: Resource = load("res://resources/shipped_settings.tres")
+		_check("a .tres the project ships loads", shipped != null)
+		if shipped != null:
+			_check_eq("with the values it was saved with", shipped.get("Title"), "shipped")
+			_check_eq("and its script bound to it", shipped.call("Describe"), "shipped x11")
+
 	# --- R-AUD-1: what a failure undoes ---------------------------------------------------------
 	#
 	# Phase 4.5's spikes S-3 and S-4, kept as behavioural cases because the rule written next to
