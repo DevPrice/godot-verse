@@ -766,28 +766,47 @@ So the rule is not a preference, and C1 is not a shrug:
 Stage B's warning already says exactly this at the attribute, which is where an author is standing
 when they need it — *"Move `stowaway` into a file of its own to register it"*.
 
-### C2 is possible, and it is a feature rather than a gap-closer
+### C2 is dead, and the reason is one sentence
 
-The spike's other job was to kill C2 cheaply, and it did not. The plan expected
-`res://player.verse::my_resource` never to reach `VerseResourceFormatLoader`, because its extension
-is `verse::my_resource`. Half right:
+**`::` already means "inside a file", so it cannot also mean "pointing at a file".** A path carrying
+it can be *loaded* but never *referenced*, which is the half C2 needed.
 
-- Godot's default `recognize_path` compares the path's *suffix* against each recognized extension
-  (`core/io/resource_loader.cpp:75-80`), so `.verse::my_resource` is declined — as predicted.
-- But `recognize_path` tries the **`_recognize_path` virtual first** (`:62-66`), and
-  `VerseResourceFormatLoader` simply does not override it. An extension may claim any path it likes.
-- The *"Resource file not found"* the spike saw is the fallback after the loader loop (`:325`), not
-  a gate before it.
+It took two rounds to get there, because the first round killed the wrong thing and the plan's
+predicted cause was only half right.
 
-And the connection the plan did not draw: **C2 is the serialisation fix, not merely an addressing
-convenience.** A sub-resource script is exactly what the peer is missing — make `stowaway` loadable
-as a `Script` and the ordinary property bridge applies, values and all.
+**Round one — routing, which works.** The plan expected `res://player.verse::my_resource` never to
+reach `VerseResourceFormatLoader`, because its extension is `verse::my_resource`. Godot's default
+`recognize_path` does compare the path's *suffix* against each recognized extension
+(`core/io/resource_loader.cpp:75-80`) and does decline it — but it tries the **`_recognize_path`
+virtual first** (`:62-66`), and this loader simply does not override it. An extension may claim any
+path it likes. The *"Resource file not found"* seen here is the fallback after the loader loop
+(`:325`), not a gate before it. So routing was never the obstacle.
 
-It is still a feature with real surface, which is why it is not being built on the strength of
-"possible": `_recognize_path`, `_get_resource_type`, a path the saver will write from
-`resource->get_path()`, EditorFileSystem's scan, dependency tracking and `.verse.uid`. **Take it up
-only if authoring parity beyond GDScript is actually wanted**; C1 is what a project needs to not lose
-data, and C1 costs nothing.
+**Round two — referencing, which cannot work.** `Resource::is_built_in()` is true for any path
+containing `::` (`core/io/resource.h:147`), and the text saver registers a resource as *external*
+only `if (!res->is_built_in())` (`resource_format_text.cpp:1625`). Measured with a dummy
+`ResourceFormatLoader` in plain GDScript — the mechanism under test is Godot's, not the bridge's, so
+no C++ and no host were needed:
+
+    [1] loaded        -> (res://scripts/settings_resource.verse::probe_x):<Resource#...>
+    [2] is_built_in   -> true
+    [3] [sub_resource type="Resource" id="Resource_objay"]
+        [resource]
+        metadata/held = SubResource("Resource_objay")
+    [4] reloaded held -> (user://c2_holder.tres::Resource_objay)
+
+The loader served the path and the saver **inlined** it anyway, as a `[sub_resource]` rather than an
+`[ext_resource]`. Step `[4]` is the one that settles it: the reloaded resource has been *re-homed*
+into the container, and the path naming the class it came from is gone from the file entirely.
+
+So C2 would reproduce GDScript's failure rather than beat it — the same anonymous inline
+sub-resource, arrived at by a different route. **An earlier draft of this section claimed C2 was
+"the serialisation fix". That was wrong**, and round two is why: a sub-resource script cannot be
+referenced, so the peer can never be given one at load time.
+
+What would actually be needed is a class identity carried in the *container's* file, which is a
+different feature from addressing — and it already has a spelling that works: put the class in its
+own `.verse` and let `ext_resource` do what it is for. That is C1.
 
 ### What is measured where
 
@@ -805,9 +824,8 @@ That last one asserts a limitation on purpose, the way `get_global_name`'s does.
 passing a value back, C2 was built and this section is what to correct.**
 
 **Recommended order:** A2, A1, B, then C1 as documentation. **All of it is done: A1, A2, B, and C
-settled as C1.** C2's spike came back positive on routing, so it is possible rather than dead — but
-it stays unbuilt unless authoring parity *beyond* GDScript is actually wanted, because it is a
-feature with real surface and C1 is what stops data being lost.
+settled as C1** — with C2 spiked twice and killed, because a path containing `::` is one Godot
+treats as internal by definition, so it can be loaded but never referenced.
 
 ### Where this stands
 
@@ -839,10 +857,11 @@ and next to R-EXP-6 in `spec.md`, and it has a reason rather than a preference b
 a value persist is the script, and only the class named after the file can be one. Stage B's warning
 already says it at the attribute.
 
-The spike did **not** kill C2, which is the one thing here worth knowing before anyone reopens it:
-routing is a `_recognize_path` override away, and a sub-resource script would fix serialisation
-properly rather than work around it. It is unbuilt because it is a feature, not because it is
-impossible — the decision it waits on is whether authoring parity beyond GDScript is wanted at all.
+**C2 is dead**, on a second spike rather than on an argument. Routing a `::` path is a
+`_recognize_path` override away, which is what the first round found — but the saver inlines any
+resource whose path contains `::`, because that is Godot's own definition of "built-in", and the
+reload re-homes it into the container with the original path gone. C2 would reproduce GDScript's
+anonymous sub-resource rather than beat it. Nothing is waiting on a decision.
 
 **One thing C1 does not do is make the loss loud.** A script that writes a second-class member,
 saves, and reloads gets an empty option back with no diagnostic anywhere. Stage B's principle would

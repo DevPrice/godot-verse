@@ -30,8 +30,9 @@ class-typed export**: what GDScript's inner classes do, measured on all three pl
 register a Godot class name, and the staged plan that follows from it. **All of it is settled**:
 A and B are built and green, and C is answered as C1 — a class to be authored as a `.tres` or
 persisted in one lives in its own `.verse`, because what carries a value across a save is the
-script and only the file-named class can be one. C2 (`res://x.verse::second`) is possible and
-unbuilt; the section says what it would cost.
+script and only the file-named class can be one. C2 (`res://x.verse::second`) was spiked and is
+**dead**: `::` is how Godot spells "internal to a file", so such a path loads and can never be
+referenced.
 
 ### The phase documents, and the one section of each to read
 

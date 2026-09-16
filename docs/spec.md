@@ -861,9 +861,10 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   makes the rule non-negotiable rather than stylistic: a Verse object's members live in the VM and
   its Godot peer carries none of them, so what bridges the two is *being a script* -- and by
   R-LANG-6 only the class named after the file can be one. A second class's peer is a bare
-  `Resource` with nothing on it to write. Stage B's warning says this at the attribute; addressing
-  a second class as `res://x.verse::second` so it could carry a script is possible and unbuilt
-  (`property-export.md` §"Stage C").
+  `Resource` with nothing on it to write. Stage B's warning says this at the attribute, and the one
+  alternative -- addressing a second class as `res://x.verse::second` so it could carry a script --
+  was spiked and is dead: `::` is how Godot spells "internal to a file", so such a path can be
+  loaded and never referenced (`property-export.md` §"Stage C").
 - **R-EXP-7 (MUST)** A Verse script can be registered as an autoload singleton. Status: **none**.
 - **R-EXP-8 (SHOULD)** A script declares an editor icon. Status: **part**
   (`_get_class_icon_path` exists).

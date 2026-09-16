@@ -596,8 +596,10 @@ class's member saves as an *empty* sub-resource and reads back empty, while a mi
 it round-trips intact; the reason is that a Verse object's members live in the VM and only a
 *script* bridges them to Godot, which by R-LANG-6 only the file-named class can be. So the rule --
 a class to be authored or persisted lives in its own `.verse` -- has a mechanism behind it, and
-Stage B's warning already says it at the attribute. C2 was not killed by its spike: routing is a
-`_recognize_path` override away, and it stays unbuilt as a feature rather than as an impossibility.
+Stage B's warning already says it at the attribute. C2 -- addressing a second class as
+`res://x.verse::second` -- was spiked twice and **killed**: routing it is a `_recognize_path`
+override away, but `::` is Godot's own marker for "internal to a file", so the saver inlines such a
+resource and the reload re-homes it into the container. It can be loaded and never referenced.
 
 It is also the case `phase-4b-design.md` §5 put out of scope — "a resource that holds another
 resource as an exported member … worth a case but not worth blocking the stage". It was worth
