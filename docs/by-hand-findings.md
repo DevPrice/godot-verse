@@ -623,7 +623,7 @@ for:
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks
-is not worth keeping. Three things stand open, all of them things no automated layer can reach.
+is not worth keeping. Four things stand open, all of them things no automated layer can reach.
 Phase 6's session has since been run and is recorded below with what it found, because the steps
 are worth keeping: its half of the debugger has no other test.
 
@@ -734,6 +734,26 @@ that the reasoning was right.
 stdin and prints frames, locals and members — which `run_tests.py` could pipe and assert on in the
 same shape as `tests/coverage_diagnostic`. It is written down so that if this check proves too
 costly to repeat, the automated route is a known quantity rather than a rediscovery.
+
+### Stage B's warning in the script editor, as opposed to in the log · **owed**
+
+B19's Stage B writes one sentence through two reporters, and only one of them is testable.
+`report_name_collisions` prints it once per build, which is what `tests/coverage_diagnostic`
+asserts; `_validate` returns it to the editor's own C++ for the gutter and the warnings panel, and
+**a `_validate` warning reaches no log**, so nothing headless can see it. That half is the half an
+author actually meets.
+
+**To check it:** open a `.verse` file declaring a class named after the file plus a second
+top-level class, and write `@global_class` above the second one.
+`tests/coverage_diagnostic/scripts/inert_global.verse` is exactly that file, and
+`tests/integration/scripts/settings_resource.verse` is the same shape with the member to go with it.
+The warning must appear in the warnings panel **on the attribute's row, not the class's**, and it
+must clear as the attribute is deleted and come back as it is retyped — that liveness is the whole
+reason it is read from the buffer rather than from the last analysis. Check it on a file whose own
+class carries `@global_class` too, where exactly one of the two attributes should be flagged.
+
+A wrong answer here is quiet in the usual way: the sentence still reaches the log once per build, so
+the request is not silently ignored, and only the line the editor points at is wrong.
 
 ### And when one of these is looked at again
 

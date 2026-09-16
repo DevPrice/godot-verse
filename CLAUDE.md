@@ -27,8 +27,9 @@ read it before re-deriving anything about hot reload, the export pipeline, or th
 the debugger/LSP story. **`property-export.md`'s last section is the one to read before touching a
 class-typed export**: what GDScript's inner classes do, measured on all three planes they live on
 (typed in script, anonymous to the engine, *lost on save*), why a second class in a file can never
-register a Godot class name, and the staged plan that follows from it. Part of it is written and
-unbuilt, and the section says which part.
+register a Godot class name, and the staged plan that follows from it. Stages A and B are built and
+green; **C — serialisation — is the only one open**, and the section says what each of its two
+alternatives would cost.
 
 ### The phase documents, and the one section of each to read
 
@@ -59,7 +60,7 @@ Two documents are not phase records and are the ones to read before adding a fea
 - **`docs/by-hand-findings.md`** — what the by-hand editor sessions found, because everything from
   `EngineDebugger` and the editor UI inward has no automated test and never will. B1–B9 and B15–B18
   are defects, all fixed; B12 is a Verse fact; B13 a latency finding; B14 the sandboxed export run.
-  Its "What is still open" section is where the two remaining by-hand checks live.
+  Its "What is still open" section is where the four remaining by-hand checks live.
 
 `docs/nonatomic-methods.md` is generated — R-AUD-3's list of the 1132 emitted methods whose
 `<transacts>` promises a rollback the bridge cannot perform.
