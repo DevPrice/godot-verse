@@ -742,30 +742,32 @@ stdin and prints frames, locals and members — which `run_tests.py` could pipe 
 same shape as `tests/coverage_diagnostic`. It is written down so that if this check proves too
 costly to repeat, the automated route is a known quantity rather than a rediscovery.
 
-### Everything `refresh_script_warnings` produces · **owed**
+### `refresh_script_warnings` reaches the log now · **taken**
 
-Wider than it looks, and worth stating once rather than per entry: **nothing in
-`refresh_script_warnings` is asserted anywhere.** It is the pass that turns the host's export and
-signal *Reject* codes into the warnings an author reads — seven sentences today, plus B19 Stage C's
-"can be assigned in the inspector but not saved" — and every one of them reaches the editor only,
-through `_validate`, which returns to Godot's own C++ for the gutter and the warnings panel and
-reaches no log. Nothing headless can see any of it.
+Left here as the record, because the gap was real and the fix is a pattern worth reusing. **Nothing
+`refresh_script_warnings` produced was asserted anywhere** — the export rejections (R-EXP-2), the
+signal rejections (R-SIG-1) and B19 Stage C's "cannot be saved" all reached the editor alone,
+through `_validate`, which hands a warning to Godot's own C++ for the gutter and the warnings panel
+and reaches no log.
 
-Two of its properties were measured during Stage C and are the ones a check should re-confirm,
-because both were wrong on the first writing:
+`VerseScriptLanguage::log_script_warnings` is the second reporter, called once per build beside
+`report_name_collisions`, and `run_tests.py`'s integration layer now asserts one sentence per
+category. **The pass refreshes the map before reading it** rather than reading it as it stands: in a
+session that has only ever built, nothing has called `_validate` and the map is empty.
+
+Two properties measured on the way, both of which were wrong on first writing and neither of which
+announces itself:
 
 - the pass runs from the **analysis-completion path**, which the editor drives per keystroke. It
-  does not run in a headless `--script` session at all, so "it did not print" there means nothing.
+  does not run in a headless `--script` session at all, so "it did not print" there proves nothing
+  about the logic — which is why the build-time copy is what a test reads.
 - a member's declared type arrives from `vh_class_members` spelled as Verse source, and a `var`
-  member's is **`^?stowaway`** — a reference around an option. Stage C's test missed the `^` and the
-  warning was silent with no other symptom.
+  member's is **`^?stowaway`** — a reference around an option. Stage C's test stripped the `?` and
+  not the `^`, and the warning was silent with no other symptom.
 
-**Recorded and not taken**, because it is one line and would make the whole surface assertable:
-calling `refresh_script_warnings(path)` from `report_name_collisions` gives every one of these
-sentences a once-per-build copy in the log, exactly the way Stage B's second reporter works, and
-`tests/coverage_diagnostic` could then assert them the way it asserts the module ones. Not done
-here because it changes the behaviour of seven existing diagnostics that deliberately appear only
-in the gutter, which is a wider decision than the one warning that prompted it.
+**What is still owed is the gutter**, which no automated layer can reach: that each of these appears
+at its own member's line, in the warnings panel, and clears as the author fixes it. The build copy
+proves the sentence and the line number; it cannot prove the editor draws either.
 
 ### Stage B's warning in the script editor, as opposed to in the log · **owed**
 

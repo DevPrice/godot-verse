@@ -64,6 +64,16 @@ settings_resource := class(resource):
     PaletteIsSet<public>()<transacts>:logic =
         if (Palette?) then true else false
 
+    # The fixture for R-EXP-2's second refusal, which had none at all: an option around something
+    # that is not an object. Godot's inspector has an empty slot for a node and for a resource and
+    # for nothing else, so there is no editor to draw and the member is refused at its declaration.
+    #
+    # Here rather than on a node script because an option around a *float* mints nothing -- the
+    # other refusal, a bare `node2d`, needs a live node as its initializer and would perturb the
+    # R-NODE-3 cases that count peers.
+    @export
+    var Maybe<public>:?float = false
+
 # A second `@global_class` in one file, which is the shape that broke. The attribute is accepted by
 # the compiler -- it is an ordinary Verse attribute and nothing about it is per-file -- and the
 # consumer's scanner takes the file-stem class and no other, dropping the attributes above every

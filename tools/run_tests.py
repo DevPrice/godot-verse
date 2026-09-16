@@ -379,6 +379,17 @@ def run_integration(results: Results, engine: Path | None, godot: Path | None) -
             # throttles. Asserted here rather than in the project because the thing being tested is
             # what reaches the output log, and a script cannot read that.
             "stack trace(s) from this error were dropped",
+            # Everything refresh_script_warnings produces, which reached no log until it got a
+            # second reporter and so was asserted nowhere -- a `_validate` warning goes to the
+            # editor's gutter and stops there. One line per category rather than per sentence, and
+            # the reason rather than the whole sentence, the way the coverage_diagnostic ones are.
+            #
+            # R-EXP-2, an export the inspector cannot draw:
+            "is an option around a value the inspector has no empty slot for",
+            # B19 Stage C, an export it draws and cannot save:
+            "can be assigned in the inspector but not saved",
+            # R-SIG-1, a signal declaration Godot is never told about:
+            "is a `var`, and a signal is an identity rather than a value",
         ],
     )
 

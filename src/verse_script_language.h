@@ -515,6 +515,9 @@ private:
 	// @global_class classes claiming one Godot name. Both are project-wide questions that only a
 	// pass over every source can answer, so they ride along with the build, which reads them all
 	// anyway. p_sources and p_texts run parallel.
+	// Every script warning once per build, in the log. `_validate`'s copy reaches the gutter and
+	// nothing else, so this is the half a test can read.
+	void log_script_warnings(const godot::PackedStringArray &p_sources) const;
 	void report_name_collisions(const godot::PackedStringArray &p_sources,
 			const std::vector<std::string> &p_texts) const;
 };

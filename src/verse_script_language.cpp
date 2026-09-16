@@ -2987,6 +2987,36 @@ String VerseScriptLanguage::module_for_script(const String &p_res_path) const {
 	return found == module_by_script.end() ? String() : String(found->second.c_str());
 }
 
+// Every warning `_validate` would draw in the gutter, once per build in the log.
+//
+// The second reporter, and the same pattern and the same reason as Stage B's: a `_validate` warning
+// is handed to Godot's own C++ for the gutter and the warnings panel and **reaches no log**, so
+// without this copy nothing outside a running editor can see one -- and nothing can assert one.
+// Everything refresh_script_warnings produces was untested until this existed: the export rejections
+// (R-EXP-2), the signal rejections (R-SIG-1) and B19 Stage C's "cannot be saved".
+//
+// The map is refreshed first rather than read as it stands, because the lists it is built from are
+// the ones the build has just published -- and in a session that has only ever built, nothing has
+// called `_validate` and the map is empty.
+void VerseScriptLanguage::log_script_warnings(const PackedStringArray &p_sources) const {
+	for (int64_t i = 0; i < p_sources.size(); i++) {
+		const String path = p_sources[i];
+		refresh_script_warnings(path);
+		if (!script_warnings_by_path.has(path)) {
+			continue;
+		}
+		const TypedArray<Dictionary> drawn(script_warnings_by_path[path]);
+		for (int64_t w = 0; w < drawn.size(); w++) {
+			const Dictionary warning = drawn[w];
+			// The editor's own shape for a located diagnostic, which is what Stage B's copy uses and
+			// what run_tests.py matches against.
+			UtilityFunctions::push_warning(path + String(":")
+					+ String::num_int64((int64_t)warning["start_line"]) + String(": ")
+					+ String(warning["message"]));
+		}
+	}
+}
+
 void VerseScriptLanguage::report_name_collisions(const PackedStringArray &p_sources,
 		const std::vector<std::string> &p_texts) const {
 	// res:// path of the file that claimed each (module, class) pair and each Godot global name.
@@ -3190,6 +3220,7 @@ Error VerseScriptLanguage::build_project() {
 	// Every source is in hand exactly once per build, which is the only affordable moment to ask
 	// the three questions that are about the project rather than about a file.
 	report_name_collisions(sources, texts);
+	log_script_warnings(sources);
 
 	const Array reported = errors_by_globalized.keys();
 	for (int64_t i = 0; i < reported.size(); i++) {

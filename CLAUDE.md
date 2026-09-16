@@ -216,11 +216,16 @@ because `ScriptLanguage` exposes nothing a script can ask — the only way to re
 would see is to read what the editor prints.
 
 **A `_validate` warning is not something the editor prints**, which is the trap in that sentence: it
-is returned to the editor's own C++ for the gutter and the warnings panel, and reaches no log, so
-`coverage_diagnostic` cannot assert one. The diagnostics it *does* assert are compile errors and
-`report_name_collisions`' `push_warning`/`push_error`. A diagnostic that has to be both seen at a
-line and asserted needs two reporters over one message function — `inert_global_class_message` is
-the worked example.
+is returned to the editor's own C++ for the gutter and the warnings panel, and reaches no log, so no
+headless run can assert one. What a test *can* read is a compile error and a `push_warning`. So a
+diagnostic that has to be both seen at a line and asserted needs **two reporters over one message**,
+and there are two worked examples: `inert_global_class_message`, which is one sentence written
+twice, and `log_script_warnings`, which is the general form — it re-runs
+`refresh_script_warnings` once per build and pushes everything the gutter would have drawn, so the
+export rejections (R-EXP-2), the signal rejections (R-SIG-1) and B19 Stage C's "cannot be saved" are
+assertable in the integration layer. It refreshes the map before reading it, because a session that
+has only built has never called `_validate` and the map is empty. **The gutter itself is still
+by-hand** — the build copy proves the sentence and the line, not that the editor draws either.
 
 **export** — exports `tests/integration` headless, asserts the *tree* it produced, then **launches
 it** and asserts what its cases reported: 351 passed, 0 failed, 10 skipped, with the counts named in
