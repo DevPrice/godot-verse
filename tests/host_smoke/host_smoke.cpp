@@ -441,9 +441,22 @@ static void CollectDebugValues(vh_debug_stack_values_fn Fn,
 	}
 }
 
+// Every case printed, and every failure counted here rather than only in the caller's own flag.
+//
+// The flags are real -- a block that cannot go on once a step has failed reads its result and
+// stops -- but they are *control flow*, not the verdict, and 132 of these calls keep no result at
+// all because there is nothing local to skip. One of them printing FAIL used to leave the binary
+// exiting 0, so `vh_class_export_list`'s two script-class hints failed for a whole session with
+// run_tests reporting the layer green: ExportsOk accumulated them and was then never read.
+static int GFailedSteps = 0;
+
 static bool Step(const char* Name, bool Result)
 {
 	printf("[smoke] %s: %s\n", Name, Result ? "ok" : "FAIL");
+	if (!Result)
+	{
+		++GFailedSteps;
+	}
 	return Result;
 }
 
@@ -579,7 +592,7 @@ int main(int argc, char** argv)
 	const fs::path ModuleProbePath = ScratchDir / "module_probe.verse";
 	if (!Step("write the reload fixture", WriteFileUtf8(ReloadPath, ReloadProbeSource(1))))
 	{
-		ShutdownFn();
+	ShutdownFn();
 		return 1;
 	}
 
@@ -1907,9 +1920,14 @@ int main(int argc, char** argv)
 	bool ExportsOk = Step("vh_class_export_list", ClassExportListFn("exports", &Exports, &ExportCount) == VH_OK);
 	for (int32_t Index = 0; Index < ExportCount; ++Index)
 	{
-		printf("[smoke]   export %.*s type=%d is_var=%d\n",
+		// The hint and the rejection as well as the type: what an assertion below compares is
+		// mostly those two, and a line that omits them says nothing about why one failed.
+		printf("[smoke]   export %.*s type=%d is_var=%d tag=%d hint=%d hint_string=\"%.*s\" native=%.*s reject=%d\n",
 			   static_cast<int>(Exports[Index].NameLen), Exports[Index].NameUtf8,
-			   Exports[Index].Type, Exports[Index].IsVar);
+			   Exports[Index].Type, Exports[Index].IsVar, Exports[Index].VariantTag, Exports[Index].Hint,
+			   static_cast<int>(Exports[Index].HintStringLen), Exports[Index].HintStringUtf8,
+			   static_cast<int>(Exports[Index].NativeClassLen), Exports[Index].NativeClassUtf8,
+			   Exports[Index].Reject);
 	}
 
 	auto FindExport = [&](const char* Name) -> const vh_export_desc* {
@@ -2014,18 +2032,26 @@ int main(int argc, char** argv)
 			 && ExportsOk;
 	ExportsOk = Step("a member that exports says so", SpeedExport && SpeedExport->Reject == VH_EXPORT_OK) && ExportsOk;
 
-	// A reference to one of the project's own classes is a different hint, because the two names
-	// resolve through different tables: a mirrored name is in the generated API and this one is not.
+	// A reference to one of the project's own classes. Neither class in this file registers with
+	// Godot -- a global class is collected per *path*, so only the class named after its file can
+	// be one -- so both are exported filtered by the nearest mirrored Godot class rather than
+	// refused, which is GDScript's own fallback (`by-hand-findings.md` B19, Stage A1).
+	//
+	// `exports_probe` carries `@global_class` and `exports_unregistered` does not, and the pair
+	// below is here to say that makes no difference: being the file's class is the half neither
+	// of them has. The *registered* case is `tests/integration`'s, where the assertion can be the
+	// hint string the inspector actually filters by -- widgets/left/palette.verse is
+	// `@global_class` and named after its file, and `Skin` exports a reference to one.
 	const vh_export_desc* FriendExport = FindExport("Friend");
-	ExportsOk = Step("a reference to a registered script class carries its own hint",
-					FriendExport && FriendExport->Hint == VH_EXPORT_HINT_SCRIPT_CLASS
-						&& TextOf(FriendExport->HintStringUtf8, FriendExport->HintStringLen) == "exports_probe"
+	ExportsOk = Step("a reference to a script class Godot has no name for still exports",
+					FriendExport && FriendExport->Hint == VH_EXPORT_HINT_CLASS
+						&& TextOf(FriendExport->HintStringUtf8, FriendExport->HintStringLen) == "node2d"
 						&& FriendExport->VariantTag == VH_VARIANT_OBJECT
 						&& FriendExport->Reject == VH_EXPORT_OK)
 			 && ExportsOk;
-	// Without this the slot cannot be drawn: ClassDB has never heard of the name exports_probe
-	// registered, so only the mirrored class it derives from says it is a node and not a resource.
-	ExportsOk = Step("and the mirrored class that says whether it is a node",
+	// Which is also what says whether the slot wants a node or a resource, and is the field the
+	// consumer filters the picker by once the hint has fallen back to it.
+	ExportsOk = Step("and the mirrored class it fell back to is the one it derives from",
 					FriendExport && TextOf(FriendExport->NativeClassUtf8, FriendExport->NativeClassLen) == "node2d")
 			 && ExportsOk;
 	// A struct crosses as the numbers it is made of, tagged with which Godot type to rebuild from
@@ -2074,16 +2100,25 @@ int main(int argc, char** argv)
 						&& TextOf(ModeExport->HintStringUtf8, ModeExport->HintStringLen) == "Idle,Walking,Running")
 			 && ExportsOk;
 
+	// The other half of the pair above: no `@global_class` at all, and the same answer. The
+	// attribute is not what was missing, and a descriptor that differed here would mean the
+	// bridge had started deciding where an author may put a class.
 	const vh_export_desc* StrangerExport = FindExport("Stranger");
-	ExportsOk = Step("a reference to an unregistered one is refused, and says which it was",
-					StrangerExport && StrangerExport->Reject == VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL
-						&& TextOf(StrangerExport->HintStringUtf8, StrangerExport->HintStringLen) == "exports_unregistered")
+	ExportsOk = Step("and one carrying no @global_class is described identically",
+					StrangerExport && FriendExport
+						&& StrangerExport->Hint == FriendExport->Hint
+						&& TextOf(StrangerExport->HintStringUtf8, StrangerExport->HintStringLen) == "node2d"
+						&& StrangerExport->Reject == VH_EXPORT_OK)
 			 && ExportsOk;
 
 	// The location is what a consumer needs to put a rejection where the author can see it.
 	ExportsOk = Step("a harvested member carries where it was declared",
 					HeldExport && HeldExport->Line >= 0 && HeldExport->Column >= 0)
 			 && ExportsOk;
+
+	// Folded the way AsyncOk and DebugOk are. The counter in Step would catch these anyway; a flag
+	// accumulated through thirty steps and then dropped is what let two of them fail for a session.
+	CallsOk = ExportsOk && CallsOk;
 
 	// Defaults come off the CDO, whose Verse constructor has already run -- the semantic program
 	// can only say that an initializer exists, not what it evaluates to.
@@ -3259,5 +3294,7 @@ int main(int argc, char** argv)
 	ShutdownFn();
 	Step("vh_shutdown", true);
 
-	return RunOk && CallsOk && LookupOk ? 0 : 1;
+	const bool Ok = RunOk && CallsOk && LookupOk && GFailedSteps == 0;
+	printf("[smoke] %d step(s) failed\n", GFailedSteps);
+	return Ok ? 0 : 1;
 }

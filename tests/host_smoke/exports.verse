@@ -73,14 +73,14 @@ exports := class(object):
     @export
     var Maybe<public>:?float = false
 
-    # A reference to one of the project's own classes, which Godot knows only because that class
-    # registered itself. The value a member like this holds is the referenced node's own Verse
-    # object, handed over rather than rebuilt.
+    # A reference to one of the project's own classes. The value a member like this holds is the
+    # referenced node's own Verse object, handed over rather than rebuilt. `@global_class` is on
+    # the class below and registers nothing, because it is not the one named after this file.
     @export
     var Friend<public>:?exports_probe = false
 
-    # The same without the registration. Verse is happy to let a member be typed as any class in
-    # the project; the inspector has no way to filter a slot by a class Godot has never heard of.
+    # The same without the attribute, which changes nothing: neither class is the one named after
+    # this file, and that is the half that decides whether Godot registers a name at all.
     @export
     var Stranger<public>:?exports_unregistered = false
 
@@ -254,6 +254,8 @@ exports_probe := class(node2d):
     _PhysicsProcess<override>(Delta:float):void =
         Probe()
 
-# A class the project declares and does not register. It exists to be referred to: a reference to it
-# has to be refused, because the inspector filters a slot by a Godot class name and this has none.
+# A class the project declares and does not register. Since B19 a reference to one is exported
+# anyway, filtered by the nearest mirrored class it derives from -- so what this is here to say is
+# that `@global_class` is not the half `exports_probe` is missing.
 exports_unregistered := class(node2d) {}
+
