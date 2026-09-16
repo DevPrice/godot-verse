@@ -1321,6 +1321,59 @@ func begin() -> void:
 			_check_eq("with the values it was saved with", shipped.get("Title"), "shipped")
 			_check_eq("and its script bound to it", shipped.call("Describe"), "shipped x11")
 
+	# --- R-EXP-7: a Verse script as an autoload singleton ----------------------------------------
+	#
+	# Godot's own rules decide this and the bridge follows them. `_create_autoload` refuses a script
+	# whose `get_instance_base_type()` is not a Node (`editor_autoload_settings.cpp:354-355`), and
+	# that answer is the bridge's to give -- so the gate itself is testable in both runs, on both
+	# sides of it, without naming a bad autoload in `project.godot` and stopping the project.
+	var autoload_script: Script = load("res://scripts/game_state.verse")
+	_check("game_state.verse compiles", autoload_script != null and autoload_script.can_instantiate())
+	if autoload_script != null:
+		_check_eq("a `class(node)` reports the base type an autoload needs",
+				autoload_script.get_instance_base_type(), &"Node")
+		_check("which is the exact test _create_autoload applies",
+				ClassDB.is_parent_class(autoload_script.get_instance_base_type(), "Node"))
+	if res_script != null:
+		_check("and a `class(resource)` reports one that test refuses",
+				not ClassDB.is_parent_class(res_script.get_instance_base_type(), "Node"))
+
+	# The singleton itself is the *exported* run's alone, and not because of anything about Verse:
+	# `--script` replaces the main loop before Godot sets any autoload up. Measured rather than
+	# assumed -- under the editor-side driver `/root` has no children at all, not even this suite's
+	# own `VerseExportCheck`. Skipped with that reason rather than dropped.
+	if editor:
+		const AUTOLOAD_WHY := "--script replaces the main loop, so no autoload is set up"
+		_skip("the Verse autoload is in the tree", AUTOLOAD_WHY)
+		_skip("it carries its Verse script", AUTOLOAD_WHY)
+		_skip("its methods answer through the singleton", AUTOLOAD_WHY)
+		_skip("and a write through it is what the next read sees", AUTOLOAD_WHY)
+		_skip("and it hangs off the root rather than the scene", AUTOLOAD_WHY)
+	else:
+		var game_state: Node = tree.root.get_node_or_null("GameState")
+		_check("the Verse autoload is in the tree", game_state != null)
+		if game_state == null:
+			_skip("it carries its Verse script", "no autoload node")
+			_skip("its methods answer through the singleton", "no autoload node")
+			_skip("and a write through it is what the next read sees", "no autoload node")
+			_skip("and it hangs off the root rather than the scene", "no autoload node")
+		else:
+			_check("it carries its Verse script", game_state.get_script() != null)
+			_check_eq("its methods answer through the singleton",
+					game_state.call("Describe"), "fresh 0")
+			game_state.call("Rename", "run")
+			game_state.call("AddScore", 7)
+			# Fetched again rather than reusing the handle, because what a singleton is for is that
+			# the next lookup finds the same object rather than a fresh one.
+			var looked_up_again: Node = tree.root.get_node_or_null("GameState")
+			_check_eq("and a write through it is what the next read sees",
+					looked_up_again.call("Describe"), "run 7")
+			# What makes it *every* scene's rather than this one's, and the only part of "answers
+			# from every scene" a single-scene run can honestly assert: it is a child of the root,
+			# beside the current scene rather than inside it, so a scene change does not touch it.
+			_check("and it hangs off the root rather than the scene",
+					game_state.get_parent() == tree.root and game_state != tree.current_scene)
+
 	# --- R-AUD-1: what a failure undoes ---------------------------------------------------------
 	#
 	# Phase 4.5's spikes S-3 and S-4, kept as behavioural cases because the rule written next to

@@ -63,7 +63,7 @@ Two documents are not phase records and are the ones to read before adding a fea
 - **`docs/by-hand-findings.md`** — what the by-hand editor sessions found, because everything from
   `EngineDebugger` and the editor UI inward has no automated test and never will. B1–B9 and B15–B18
   are defects, all fixed; B12 is a Verse fact; B13 a latency finding; B14 the sandboxed export run.
-  Its "What is still open" section is where the four remaining by-hand checks live.
+  Its "What is still open" section is where the six remaining by-hand checks live.
 
 `docs/nonatomic-methods.md` is generated — R-AUD-3's list of the 1132 emitted methods whose
 `<transacts>` promises a rollback the bridge cannot perform.
@@ -228,7 +228,7 @@ has only built has never called `_validate` and the map is empty. **The gutter i
 by-hand** — the build copy proves the sentence and the line, not that the editor draws either.
 
 **export** — exports `tests/integration` headless, asserts the *tree* it produced, then **launches
-it** and asserts what its cases reported: 351 passed, 0 failed, 10 skipped, with the counts named in
+it** and asserts what its cases reported: 360 passed, 0 failed, 10 skipped, with the counts named in
 `run_tests.py` so a case that stops running in an export reads as a failure rather than as a shorter
 log. It is the only layer that exercises the cooked path end to end; everything else compiles at
 startup. It needs more staged than the other layers do, because what it is exporting *is* them —

@@ -8,4 +8,5 @@ config/features=PackedStringArray("4.7")
 
 [autoload]
 
+GameState="*res://scripts/game_state.verse"
 VerseExportCheck="*res://export_check.gd"

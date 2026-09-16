@@ -630,7 +630,7 @@ for:
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks
-is not worth keeping. Five things stand open, all of them things no automated layer can reach.
+is not worth keeping. Six things stand open, all of them things no automated layer can reach.
 Phase 6's session has since been run and is recorded below with what it found, because the steps
 are worth keeping: its half of the debugger has no other test.
 
@@ -788,6 +788,32 @@ class carries `@global_class` too, where exactly one of the two attributes shoul
 
 A wrong answer here is quiet in the usual way: the sentence still reaches the log once per build, so
 the request is not silently ignored, and only the line the editor points at is wrong.
+
+### R-EXP-7's two editor-side halves · **owed**
+
+Stage 4 is done in a running game and asserted there. Neither of these can be:
+
+**The autoload dialog refusing a non-Node class.** `_create_autoload` tests
+`ClassDB::is_parent_class(get_instance_base_type(), "Node")`
+(`editor_autoload_settings.cpp:354-355`) and refuses with its own message. The integration suite
+asserts the *predicate* -- `settings_resource` reports `Resource`, which the test rejects -- because
+naming a bad autoload in `project.godot` would stop the project rather than test it. What is owed is
+the dialog itself.
+
+**To check it:** Project > Project Settings > Globals, add `res://scripts/settings_resource.verse`.
+Godot must refuse it with its own sentence and no crash. Then add
+`res://scripts/game_state.verse`, which must be accepted.
+
+**A `@tool` autoload in the editor.** `in_editor` is `scr.is_valid() && scr->is_tool()`
+(`:390`, and again at `:527` and `:590`), so a `@tool` Verse autoload is instantiated in the editor
+too and a plain one is not. `is_editor_hint()` is false in every headless run, so no automated layer
+can see either case.
+
+**To check it:** give `game_state.verse` `@tool`, reopen the project, and confirm a `@tool`
+autoload answers from a `@tool` script in the editor. The bargain it makes is the one `@tool`
+already documents -- it runs the **last built** generation -- so an editor session that has never
+built runs an autoload with no class behind it, and the honest behaviour there is a script that
+reports and carries on rather than a silent no-op. That is the thing to watch for.
 
 ### And when one of these is looked at again
 

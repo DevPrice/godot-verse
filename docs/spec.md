@@ -865,7 +865,35 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   alternative -- addressing a second class as `res://x.verse::second` so it could carry a script --
   was spiked and is dead: `::` is how Godot spells "internal to a file", so such a path can be
   loaded and never referenced (`property-export.md` §"Stage C").
-- **R-EXP-7 (MUST)** A Verse script can be registered as an autoload singleton. Status: **none**.
+- **R-EXP-7 (MUST)** A Verse script can be registered as an autoload singleton. Status: **done in a
+  running game; the two editor-side halves are by-hand checks** (Phase 4b stage 4).
+
+  It needed no code, for the second time in this phase. Godot's rules decide the whole of it and the
+  bridge already satisfied them: `_create_autoload` refuses a script whose `get_instance_base_type()`
+  is not a Node (`editor_autoload_settings.cpp:354-355`), and `VerseScript` has answered `Node` for a
+  `class(node)` since Phase 2 -- including in an export, where reading it off the stripped source
+  would fail and `vh_class_base_type` answers instead (ABI 8.4, added by stage 3).
+
+  `tests/integration` registers `scripts/game_state.verse` as `GameState` and asserts it in the
+  exported run: the singleton is in the tree, carries its script, answers its methods, and a write
+  through it is what the next lookup reads. Plus the structural half of "from every scene" -- it is a
+  child of the *root*, beside the current scene rather than inside it, which is what a scene change
+  does not touch.
+
+  **The editor-side run cannot test any of that, and not for a Verse reason**: `--script` replaces
+  the main loop before Godot sets up any autoload, so under the test driver `/root` has no children
+  at all -- measured, and not even this suite's own `VerseExportCheck` is there. Those five cases are
+  skipped with that reason and counted, which is the same discipline the export-side skips follow,
+  pointing the other way.
+
+  What the gate refuses is asserted through the predicate itself rather than by naming a bad autoload
+  in `project.godot`, which would stop the project rather than test it: a `class(resource)` reports a
+  base type `ClassDB::is_parent_class(..., "Node")` rejects.
+
+  Two halves are by-hand and are in `by-hand-findings.md`: that the **editor's own dialog** refuses a
+  non-Node class with Godot's sentence rather than crashing, and that a **`@tool`** autoload is
+  instantiated in the editor too -- `in_editor` is `scr->is_tool()` (`editor_autoload_settings.cpp:390`),
+  and `is_editor_hint()` is false in every headless run, so nothing automated can reach either.
 - **R-EXP-8 (SHOULD)** A script declares an editor icon. Status: **part**
   (`_get_class_icon_path` exists).
 - **R-EXP-9 (SHOULD)** `_get_rpc_config` reports RPC annotations so a Verse script participates in

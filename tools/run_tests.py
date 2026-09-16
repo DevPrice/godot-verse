@@ -569,10 +569,12 @@ EXPORT_EXPECTED_CLASSES = ["marshal", "signals", "left/widget"]
 # What the exported run must report, named rather than inferred (7b D5): a case that stops running
 # in an export has to read as a failure and not as a shorter log. The ten skips are test_cases.gd's
 # `editor` blocks -- the second generation, the reload, `is_tool` off a stripped source, and
-# `get_global_name`, which is read off the same stripped source -- and 351 + 10 is the 361 the
-# in-editor run prints. Adding a case means changing this line, which is
-# the point of it.
-EXPORT_EXPECTED_PASSES = 351
+# `get_global_name`, which is read off the same stripped source. The five R-EXP-7 cases run the
+# other way round -- only an exported game has autoloads at all, because `--script` replaces the
+# main loop before Godot sets one up -- so they are skips in the editor run and passes here, which
+# is why 360 + 10 is the 365 + 5 the in-editor run prints rather than a plain sum. Adding a case
+# means changing this line, which is the point of it.
+EXPORT_EXPECTED_PASSES = 360
 EXPORT_EXPECTED_SKIPS = 10
 
 

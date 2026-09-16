@@ -797,6 +797,33 @@ what makes "holds, and passes around" in R-NODE-3's own wording true rather than
 table had to exist anyway for the release hook; the identity is what it costs nothing extra to also
 answer. The other half of R-SCN-6's identity question, arriving three phases later.
 
+### Stage 4, which cost nothing either
+
+**§6 predicted this and was right: "Godot's rules decide this stage almost entirely."** They decide
+all of it. `_create_autoload` gates on `get_instance_base_type()` being a Node, `VerseScript` has
+answered `Node` for a `class(node)` since Phase 2, and stage 3's own `vh_class_base_type` had
+already fixed the one place that answer went missing — an export, where the source it used to be
+read from is a one-byte stub. So a Verse autoload worked in an exported game the first time it was
+asked to, with **no source change at all**: a fixture, six cases and this paragraph.
+
+**What §6 did not anticipate is where the cases could run.** It says "done when a Verse autoload
+answers from every scene in a running game", and the editor-side test driver is not a running game:
+`--script` replaces the main loop *before* Godot sets up any autoload, so `/root` has no children at
+all there — measured, and not even the suite's own `VerseExportCheck` is present. The five singleton
+cases are therefore the exported run's alone and are skips in the editor run, which is the
+export-side skip discipline pointing the other way for the first time. The one thing that *is*
+testable in both is the predicate the gate applies, on both sides of it.
+
+**And "from every scene" is not something a single-scene run can assert**, so what is asserted
+instead is the structural fact underneath it: the node is a child of the root, beside the current
+scene rather than inside it, which is exactly what a scene change leaves alone.
+
+Two halves stay by-hand and are in `by-hand-findings.md`: the editor's autoload dialog refusing a
+non-Node class with its own sentence, and a `@tool` autoload being instantiated in the editor.
+`is_editor_hint()` is false in every headless run, so neither is reachable from here.
+
+---
+
 ### Stage 3, and the one defect it found that it did not own
 
 **§5 cost nothing it predicted and found something it did not.** The stage §13 calls "most likely to
