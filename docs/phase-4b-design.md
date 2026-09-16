@@ -1045,6 +1045,33 @@ accepts it, the host builds and links, and the **runtime** compiler then refuses
 path. `MakeVariant` also happens to be the name the API already uses for this shape: `MakeArray`,
 `MakeDictionary`, `MakeCallable`, `MakeSignal`.
 
+**The mechanism was then read out of the engine rather than left as a rule.** Verse's own naming is
+case-*sensitive*: `CSymbolTable::FindOrAddInternal` compares bytes (`Symbol.cpp:88-122`), and so does
+the native-thunk lookup `VNativeProcedure::SetThunk`, over a `VNameValueMap` defaulting to
+`ESearchCase::CaseSensitive` (`VVMNativeProcedure.cpp:53-72`, `VVMNameValueMap.h:74-90`) — which is
+exactly why function-versus-function is fine. What folds case is **`FName`, unconditionally**
+("case-insensitive, but case-preserving", `NameTypes.h:629`; every `operator==` compares only
+`ComparisonIndex`), and a Verse *type* in a VNI package becomes a UObject keyed by one —
+`NewObject<UVerseStruct>(UEPackage, FName(UEName), ...)` (`VVMClass.cpp:1016-1047`). The type's
+identity folds where the function's does not, and the two meet.
+
+Two things follow that are worth more than the rule itself. **Epic hit this and used to report it**:
+the legacy BPVM assembler's `FUObjectGenerator::FindOrCreateUObject`
+(`VerseUObjectGenerator.inl:44-116`) does a case-insensitive package-scoped `FindObject` and raises
+*"Found existing type '%s' that is already being created this compile. Please rename the %s to be
+case insensitive unique."* through `AppendGlitch`. **And the silence is a regression rather than a
+decision**: the VerseVM path has no equivalent check, and the adjacent bind failure is reported by
+`UE_LOGF(..., Error, ...)` out of a `void` `TryBindVniType`/`TryBindVniModule` whose callers wrap it
+in `ensure()` and discard the result (`VerseVMEngineEnvironment.cpp:111-125`), so nothing reaches
+`uLang::Diagnostics` — the only thing the ABI's diagnostic callback listens to. That is why three
+builds were needed to find a one-word problem, and it is worth reporting upstream.
+
+One link is unclosed and is recorded as such: what the *function's* colliding registration is in the
+current pipeline was not found, only that the collision happens. There is no escape hatch — the
+`cpp_name` attribute overrides a **type**'s C++ identity (`DefinitionInfo.cpp:195-205`) and has no
+function equivalent — so renaming is the fix rather than a workaround for a restriction one could
+otherwise keep.
+
 *A receiver spelling was measured and not built.* `(X:any).ToVariant<public>()<decides><reads>` works
 as a one-line forward and reads as the exact mirror of `V.AsInt[]`. It is out because two names for
 one operation costs a module-level name, and a module-level name makes every local of that spelling

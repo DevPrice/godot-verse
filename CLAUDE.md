@@ -747,6 +747,31 @@ it is not in `run_tests.py`.
   a live constraint on any new mirror function: check the name against the 1036 mirrored class
   names and the four native types first. Measured in `tests/verse_probe/variant_any_probe.verse`'s
   header; three builds to find, because only the runtime compiler objects.
+
+  **The mechanism, read out of the engine.** Verse's own naming is case-*sensitive* —
+  `CSymbolTable::FindOrAddInternal` compares bytes (`uLangCore/Private/uLang/Common/Text/Symbol.cpp`
+  :88-122) — and so is the native-thunk lookup, `VNativeProcedure::SetThunk` over a `VNameValueMap`
+  that defaults to `ESearchCase::CaseSensitive` (`VVMNativeProcedure.cpp:53-72`,
+  `VVMNameValueMap.h:74-90`). That is why function-versus-function is fine. What is *not*
+  case-sensitive is **`FName`, unconditionally** — "case-insensitive, but case-preserving"
+  (`NameTypes.h:629`), every `operator==` comparing only `ComparisonIndex` — and a Verse **type** in
+  a VNI package is promoted to a real UObject keyed by one: `NewObject<UVerseStruct>(UEPackage,
+  FName(UEName), ...)` (`VVMClass.cpp:1016-1047`). So the type's identity folds case where the
+  function's does not, and they meet.
+  **Epic knows this hazard and used to diagnose it.** The legacy BPVM assembler's
+  `FUObjectGenerator::FindOrCreateUObject` (`VerseUObjectGenerator.inl:44-116`) does a
+  case-insensitive package-scoped `FindObject` and reports *"Found existing type '%s' that is
+  already being created this compile. Please rename the %s to be case insensitive unique."* through
+  `AppendGlitch`. The VerseVM path has **no** equivalent check, and the adjacent bind failure is
+  reported by `UE_LOGF(..., Error, ...)` from a `void` `TryBindVniType`/`TryBindVniModule` whose
+  callers wrap it in `ensure()` and drop the result (`VerseVMEngineEnvironment.cpp:111-125`) — so
+  nothing reaches `uLang::Diagnostics`, which is what the ABI's diagnostic callback listens to.
+  **That is the whole reason it is silent**, and it makes this a diagnostic regression carried over
+  from the BPVM→VerseVM migration rather than a rule anyone chose.
+  Verified against the engine sources except one link: what the *function's* colliding registration
+  is in the current pipeline was not found, only that the collision happens. There is no escape
+  hatch — `cpp_name` overrides a **type**'s C++ identity (`DefinitionInfo.cpp:195-205`) and has no
+  function equivalent — so renaming is the fix, not a workaround.
 - **Every top-level name must be unique within its module.** A directory is a module only if it
   carries a `<name>.vmodule` marker, and the **marker names the module**, not the directory —
   `res://my-stuff/gameplay.vmodule` is module `gameplay`. Unmarked directories are organisational:
