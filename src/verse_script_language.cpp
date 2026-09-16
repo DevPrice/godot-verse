@@ -2375,8 +2375,21 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 		return refuse_or_mirrored_class();
 	}
 
+	// A parameter of the function that declares it, rather than a member or a local. It has no
+	// documentation of its own and its source line is the line its whole function is declared on,
+	// so the comment "above" it is the function's -- which is why the two places below that read
+	// a comment skip it.
+	const bool is_parameter = bool(found["is_parameter"]);
+
 	result["result"] = (int64_t)OK;
-	result["type"] = (int64_t)(bool(found["is_var"])
+	// Godot's two local results are its only ones that carry prose, so everything with no class
+	// to name lands on one of them, and which one is the whole of the label: "Local Constant" or
+	// "Local Variable" (editor_help.cpp). A parameter is neither `var` nor a constant, and
+	// GDScript settles it -- gdscript_editor.cpp's walk of SuiteNode::Local takes the
+	// LOCAL_CONSTANT arm for CONSTANT alone, and PARAMETER, FOR_VARIABLE and PATTERN_BIND all
+	// share the VARIABLE one. "Local Constant" for `Delta:float` was this bridge reading `var`
+	// off the declaration and asking no further question.
+	result["type"] = (int64_t)(bool(found["is_var"]) || is_parameter
 					? ScriptLanguageExtension::LOOKUP_RESULT_LOCAL_VARIABLE
 					: ScriptLanguageExtension::LOOKUP_RESULT_LOCAL_CONSTANT);
 	result["doc_type"] = found["type"];
@@ -2406,10 +2419,10 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 	const bool is_definition = bool(found["is_definition"]);
 	const bool overrides_something = is_definition && !overridden_owner.is_empty();
 
-	// A parameter where it is declared describes nothing the line does not already say, and it is
-	// the one place a jump has nowhere to go -- the declaration is the line the cursor is on. So
-	// the answer is a refusal, which is a hover with no tooltip at all, the way GDScript leaves it.
-	const bool is_parameter = bool(found["is_parameter"]);
+	// A parameter where it is declared has nothing left to add: its name and its type are both on
+	// the line the pointer is over, there is no comment of its own to read, and a jump has
+	// nowhere to go, because the declaration is that line. The type is still worth drawing -- the
+	// tooltip says "Local Variable Delta: float" and stops there.
 	if (is_parameter && is_definition) {
 		return result;
 	}
