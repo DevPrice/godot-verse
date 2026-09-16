@@ -733,9 +733,9 @@ of GDScript's, not a behaviour to mirror. Two alternatives, not two steps:
   "::"`), which is not the same as serving one. If the spike says no, C2 is dead and C1 is the
   answer.
 
-**Recommended order:** A2, A1, B, then C1 as documentation. A1, A2 and B are done; C is open. C2 only if authoring parity *beyond*
-GDScript is wanted and the spike comes back positive — it is a feature with real surface, not a
-gap-closer.
+**Recommended order:** A2, A1, B, then C1 as documentation. **A1, A2 and B are done; C is the only
+stage open.** C2 only if authoring parity *beyond* GDScript is wanted and the spike comes back
+positive — it is a feature with real surface, not a gap-closer.
 
 ### Where this stands
 
