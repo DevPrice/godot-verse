@@ -671,6 +671,12 @@ a node and the object is collected when it should be; `print(node)` in GDScript 
 `ToString` extension method chose (§7, corrected — not the `_ToString` this document first proposed);
 and R-EXP-4 is restated with its reason.
 
+**All seven stages are built.** The clause above is met except for its editor half — a custom
+Resource edited in the *inspector* — which no automated layer can reach and which
+[`by-hand-findings.md`](by-hand-findings.md) carries with steps, beside the three the later stages
+added: an RPC that arrives at a second peer, the five inspector hints drawn as controls, and the
+icon in the scene tree.
+
 ---
 
 ## 13. Risks

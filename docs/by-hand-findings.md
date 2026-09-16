@@ -6,7 +6,7 @@ deleted**: all twenty-two of its entries were watched happen, and what is worth 
 found rather than the list. §"What is still open" at the bottom carries the three things that
 outlived it. **Every entry below is fixed**, except the two that are not defects: B11 is a
 measurement, and B8 is fixed for the half a headless run can reach and re-checkable by hand for the
-other. `tools/run_tests.py` is 9/9 with **347** integration cases.
+other. `tools/run_tests.py` is 9/9 with **431** integration cases.
 
 Four kinds of entry are below. **B1–B9** are what the session saw go wrong, each traced to the code
 that causes it rather than left as a symptom. **B10–B11** are what the session learned about the

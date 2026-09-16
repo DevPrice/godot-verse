@@ -912,8 +912,17 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
 - **R-EXP-3 (MUST)** A member that cannot be exported is reported with a reason, at the member,
   not silently dropped. Status: **done**.
 - **R-EXP-4 (MUST)** The inspector reflects a change to a script's exports without restarting the
-  editor — including a changed *default value*, which today requires code generation and therefore
-  a restart. Depends on §10.
+  editor; a changed *default value* lands at the next build, per §10's trigger. Status: **done**,
+  and the clause above is a restatement rather than the original — which said a changed default
+  "requires code generation and therefore a restart".
+
+  **The restart was already gone and the clause was what had gone stale.** The export *shape* — the
+  member list, the hints, the Reject reasons — refreshes per keystroke, because
+  `vh_class_export_list` answers from the snapshot the last analysis left. What waits is a changed
+  default, and it waits for a **build** rather than a restart, because a default is generated code
+  and §10's trigger is build-on-Play-or-Build-action. That is the same bargain C# makes, and it is
+  a decision rather than a limitation — which is why this is recorded as a restatement with a reason
+  rather than as a quiet edit to a MUST.
 - **R-EXP-5 (MUST)** `@tool` scripts run in the editor: gizmo drawing, procedural generation,
   scene validation, `_get_configuration_warnings`. Status: **part**. `@tool` exists — a bridge
   attribute beside `@global_class` and `@export`, read out of the text the same way because Godot
