@@ -550,10 +550,10 @@ EXPORT_EXPECTED_CLASSES = ["marshal", "signals", "left/widget"]
 # What the exported run must report, named rather than inferred (7b D5): a case that stops running
 # in an export has to read as a failure and not as a shorter log. The ten skips are test_cases.gd's
 # `editor` blocks -- the second generation, the reload, `is_tool` off a stripped source, and
-# `get_global_name`, which is read off the same stripped source -- and 337 + 10 is the 347 the
+# `get_global_name`, which is read off the same stripped source -- and 341 + 10 is the 351 the
 # in-editor run prints. Adding a case means changing this line, which is
 # the point of it.
-EXPORT_EXPECTED_PASSES = 337
+EXPORT_EXPECTED_PASSES = 341
 EXPORT_EXPECTED_SKIPS = 10
 
 

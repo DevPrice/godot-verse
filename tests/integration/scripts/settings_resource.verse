@@ -33,7 +33,8 @@ settings_resource := class(resource):
     # B19. `stowaway` below carries `@global_class` and registers **nothing**, because only the
     # class named after its file is ever offered to Godot -- so a slot filtered by `Stowaway` would
     # name a class ClassDB has never heard of, which is what the editor says out loud. The member is
-    # refused instead, and `_validate` says why at this line.
+    # exported anyway, filtered by `stowaway`'s nearest mirrored ancestor -- a `Resource` picker,
+    # which is what GDScript draws for an inner class, for the same reason.
     @export
     var Stowaway<public>:?stowaway = false
 

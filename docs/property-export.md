@@ -706,15 +706,14 @@ gap-closer.
 Committed: `9b6a7d0` fixed the module-qualified half of B19 — the hint carried `Gameplay/myResouce`
 and now carries the leaf.
 
-**Written and not built**, in the working tree: A1's fallback in `HostScript.cpp`
-(`IsClassNamedAfterItsFile`, and the branch setting `VH_EXPORT_HINT_CLASS` with the native class
-when a script class does not register), the narrowed `VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL` message in
-`verse_script_language.cpp`, and fixtures in `tests/integration` — `settings_resource.verse`'s
-`stowaway` class and its `Stowaway` member, with the assertions in `test_cases.gd`. The GDExtension
-half is built; **the host is not**, because a running editor held `verse_host.dll` and the link
-failed with `permission denied`. Close the editor, build all three host targets, then
-`python tools/run_tests.py --build`; `EXPORT_EXPECTED_PASSES` and `EXPORT_EXPECTED_SKIPS` in
-`tools/run_tests.py` need whatever the editor run then prints.
+**A1 is built and green.** All three host targets, both GDExtension targets and
+`python tools/run_tests.py --build` were run against `cf75bc9`'s code and everything passed with no
+change to it: the editor run reports **351 passed, 0 failed, 0 skipped** and the exported run **341,
+0, 10**, which is `EXPORT_EXPECTED_PASSES` and `EXPORT_EXPECTED_SKIPS` as they now read. The four
+new cases are the ones that grew the count, so `IsClassNamedAfterItsFile` and the
+`VH_EXPORT_HINT_CLASS` fallback in `HostScript.cpp` do what the section above says, in an export as
+well as in the editor: `Stowaway` is exported, drawn as a `PROPERTY_HINT_RESOURCE_TYPE` picker with
+`hint_string` `Resource`, and ClassDB resolves that name.
 
 The GDScript probe that produced every measurement above is four files — an outer script with an
 inner class, a `class_name` script beside it, and a `SceneTree` driver — and is worth rebuilding
