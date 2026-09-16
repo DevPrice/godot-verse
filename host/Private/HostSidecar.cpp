@@ -17,7 +17,7 @@ namespace {
 /// Bumped when the shape below changes in a way a reader of the old shape would misread. The
 /// cooker and the runtime host are built together and shipped together, so this is a tripwire
 /// against a stale cook in a game directory rather than a compatibility mechanism.
-constexpr int32 SidecarVersion = 5;
+constexpr int32 SidecarVersion = 6;
 
 FString Utf8ToFString(const FUtf8String& Value)
 {
@@ -323,6 +323,40 @@ GodotVerse::FSignalDesc ReadSignal(const TSharedPtr<FJsonObject>& Object)
     return Signal;
 }
 
+// R-EXP-9's `@rpc`, which is version 6. An exported game reads its rpc config out of the
+// snapshot like everything else, and a runtime host has no semantic program to have built one from
+// -- so without this every `@rpc` in a shipped game was silently absent and Godot refused the call
+// with "not marked for RPCs in the local script", naming a method the author had marked.
+TSharedPtr<FJsonObject> WriteRpc(const GodotVerse::FRpcDesc& Rpc)
+{
+    TSharedPtr<FJsonObject> Object = MakeShared<FJsonObject>();
+    Object->SetStringField(TEXT("name"), Utf8ToFString(Rpc.Name));
+    Object->SetNumberField(TEXT("mode"), Rpc.RpcMode);
+    Object->SetBoolField(TEXT("callLocal"), Rpc.bCallLocal);
+    Object->SetNumberField(TEXT("transfer"), Rpc.TransferMode);
+    Object->SetNumberField(TEXT("channel"), Rpc.Channel);
+    Object->SetNumberField(TEXT("line"), Rpc.Line);
+    Object->SetNumberField(TEXT("column"), Rpc.Column);
+    Object->SetNumberField(TEXT("reject"), Rpc.Reject);
+    Object->SetStringField(TEXT("rejectDetail"), Utf8ToFString(Rpc.RejectDetail));
+    return Object;
+}
+
+GodotVerse::FRpcDesc ReadRpc(const TSharedPtr<FJsonObject>& Object)
+{
+    GodotVerse::FRpcDesc Rpc;
+    Rpc.Name = FStringToUtf8(Object->GetStringField(TEXT("name")));
+    Rpc.RpcMode = (int32)Object->GetNumberField(TEXT("mode"));
+    Rpc.bCallLocal = Object->GetBoolField(TEXT("callLocal"));
+    Rpc.TransferMode = (int32)Object->GetNumberField(TEXT("transfer"));
+    Rpc.Channel = (int32)Object->GetNumberField(TEXT("channel"));
+    Rpc.Line = (int32)Object->GetNumberField(TEXT("line"));
+    Rpc.Column = (int32)Object->GetNumberField(TEXT("column"));
+    Rpc.Reject = (int32)Object->GetNumberField(TEXT("reject"));
+    Rpc.RejectDetail = FStringToUtf8(Object->GetStringField(TEXT("rejectDetail")));
+    return Rpc;
+}
+
 TSharedPtr<FJsonObject> WriteExportImpl(const GodotVerse::FExportDesc& Export)
 {
     TSharedPtr<FJsonObject> Object = MakeShared<FJsonObject>();
@@ -514,6 +548,13 @@ AUTORTFM_DISABLE bool GodotVerse::WriteClassSidecar(const FString& Path,
         }
         Entry->SetArrayField(TEXT("signals"), Signals);
 
+        TArray<TSharedPtr<FJsonValue>> Rpcs;
+        for (const FRpcDesc& Rpc : Class.Rpcs)
+        {
+            Rpcs.Add(MakeShared<FJsonValueObject>(WriteRpc(Rpc)));
+        }
+        Entry->SetArrayField(TEXT("rpcs"), Rpcs);
+
         TArray<TSharedPtr<FJsonValue>> Exports;
         for (const FExportDesc& Export : Class.Exports)
         {
@@ -689,6 +730,13 @@ AUTORTFM_DISABLE bool GodotVerse::LoadClassSidecar(const FString& Path, FUtf8Str
                 for (const TSharedPtr<FJsonValue>& Item : *Items)
                 {
                     Class.Signals.Add(ReadSignal(Item->AsObject()));
+                }
+            }
+            if (Entry->TryGetArrayField(TEXT("rpcs"), Items))
+            {
+                for (const TSharedPtr<FJsonValue>& Item : *Items)
+                {
+                    Class.Rpcs.Add(ReadRpc(Item->AsObject()));
                 }
             }
             if (Entry->TryGetArrayField(TEXT("exports"), Items))

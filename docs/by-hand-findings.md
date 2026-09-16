@@ -630,7 +630,7 @@ for:
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks
-is not worth keeping. Six things stand open, all of them things no automated layer can reach.
+is not worth keeping. Seven things stand open, all of them things no automated layer can reach.
 Phase 6's session has since been run and is recorded below with what it found, because the steps
 are worth keeping: its half of the debugger has no other test.
 
@@ -688,6 +688,48 @@ committed, editor-owned `project.godot`, and the session is for clicking around 
 reaching the placeholder (`VerseScript::update_placeholders`). Values that revert on save are
 `_get_property_default_value` answering the edited value rather than the declared one. A class the
 dialog cannot find is `_get_global_class_name`'s `base_type`, which comes from `base_types_for`.
+
+### R-EXP-9's other half: an RPC that arrives at a second peer · **owed**
+
+Phase 4b's stage 6 built and tested everything a single process can see. `Script.get_rpc_config()`
+is bound in ClassDB, so the whole *receiving* configuration is assertable from GDScript: which
+methods are keys, what each one's `rpc_mode`, `call_local`, `transfer_mode` and `channel` are, that
+Godot's defaults are applied to a partial `@rpc`, and that a refused one is absent rather than
+half-registered. `tests/integration/scripts/rpcs.verse` is the fixture and there are fifteen cases
+on it, in the editor run and in an exported game both.
+
+**What no single-process run can see is the call arriving.** The sending half leaves Verse and comes
+back as one of Godot's Error ordinals -- which is asserted -- but *which* ordinal differs between the
+two runs for reasons that are Godot's rather than this bridge's: the editor-side driver's SceneTree
+has no MultiplayerAPI at all and stops at `Node::rpcp`, while an exported game has one whose default
+offline peer reports itself connected, so the call reaches `SceneRPCInterface`, finds the method in
+the config, and sends it to nobody. Neither says anything about whether a peer would have run it.
+
+**To check it**, two processes against a copy of `tests/integration`:
+
+1. **Host.** A scene with a `rpcs.verse` node, a GDScript autoload that makes an
+   `ENetMultiplayerPeer`, calls `create_server(port)`, and assigns it to
+   `get_tree().get_multiplayer().multiplayer_peer`.
+2. **Client.** The same scene, `create_client("127.0.0.1", port)`, and the *same node path* -- the
+   RPC is addressed by path, so a node at a different path is the commonest way for this to look
+   broken when it is not.
+3. **From the client, call `SendTakeDamage(5)`.** `TakeDamage` is `@rpc("authority")`, so this must
+   be *refused*: only the node's authority may call it, and the client is not. That refusal is the
+   permission field doing its job and is worth seeing before the success.
+4. **From the host, call it.** `ReadDamage()` on the *client* must answer 5, and on the host 0 --
+   `authority` does not imply `call_local`.
+5. **From either, call `Nudge(5)`**, which is `@rpc("unreliable_ordered any_peer call_local 3")`.
+   Both sides' `ReadDamage()` must move, because `call_local` is what makes the caller run it too.
+6. **Check `Ordinary()` is not callable remotely at all** -- it carries no `@rpc`, so it must be
+   absent from the config and refused with Godot's own "not marked for RPCs in the local script".
+
+**What a failure would look like, and where to look.** A method Godot says is not marked is
+`_get_rpc_config` answering without it: check `vh_class_rpc_list` first in the editor, where
+`Script.get_rpc_config()` can be printed, and then in an export, where the config comes from the
+**sidecar** rather than from an analysis -- that half was absent for a version and every `@rpc` in a
+shipped game was silently not one. A call that arrives but runs on the wrong side is `call_local`.
+A call refused for permission when it should not be is the mode, which is the one field whose
+default is not zero.
 
 ### Phase 6's editor session has been run · **one defect, fixed**
 

@@ -419,3 +419,30 @@ marshal := class(node2d):
 
     EmitOnNoArgs<public>(Target:object, Signal:string)<transacts>:int =
         ToInt(Target.EmitSignal(Signal))
+
+    # --- the six vararg methods that live on a *reference* -------------------
+    #
+    # `Callable.call`, `Callable.bind`, `Signal.emit` and three more are methods of a Godot
+    # *builtin type* rather than of an Object, so `VhCallValue` -- which takes an object handle --
+    # could never have reached them however they were spelled. ABI 8.7's `VhRefCall` is the route.
+    #
+    # None of them has a zero-argument arity, and that is the same finding as `GDScript.new`: a
+    # Verse function's parameters are its tuple, so `Call()` beside `Call(:[]variant)` is not two
+    # arities of one name. `array{}` is what an empty argument list is written as.
+    CallCallable<public>(C:callable, Value:int)<transacts>:int =
+        if (N := AsInt[C.Call(array{VariantFromInt(Value)})]) then N else -1
+
+    # Godot's own currying: `bind` appends its arguments *after* the call's own.
+    CallBound<public>(C:callable, Bound:int, Value:int)<transacts>:int =
+        Curried := C.Bind(array{VariantFromInt(Bound)})
+        if (N := AsInt[Curried.Call(array{VariantFromInt(Value)})]) then N else -1
+
+    CallCallableNoArgs<public>(C:callable)<transacts>:string =
+        if (S := AsString[C.Call(array{})]) then S else "?"
+
+    # A foreign signal -- one a GDScript declared or `add_user_signal` made -- emitted from Verse.
+    EmitForeign<public>(Owner:object, Name:string, Value:int)<transacts>:void =
+        MakeSignal(Owner, Name).Emit(array{VariantFromInt(Value)})
+
+    EmitForeignNoArgs<public>(Owner:object, Name:string)<transacts>:void =
+        MakeSignal(Owner, Name).Emit(array{})

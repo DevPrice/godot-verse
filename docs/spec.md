@@ -983,7 +983,55 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
 - **R-EXP-8 (SHOULD)** A script declares an editor icon. Status: **part**
   (`_get_class_icon_path` exists).
 - **R-EXP-9 (SHOULD)** `_get_rpc_config` reports RPC annotations so a Verse script participates in
-  Godot's high-level multiplayer. Status: **none** (returns an empty `Variant`).
+  Godot's high-level multiplayer. Status: **done** (Phase 4b stage 6), except for the half that
+  needs two processes — see below.
+
+  **Receiving** is `@rpc` on a method, and the config it builds is Godot's own shape exactly:
+  `Script.get_rpc_config()` answers a Dictionary keyed by method name, each value carrying
+  `rpc_mode`, `call_local`, `transfer_mode` and `channel` with Godot's own numbering. That shape is
+  written down nowhere but in the code that reads it — `SceneRPCInterface::_parse_rpc_config` — and
+  it is bound in ClassDB, which is what makes the whole receiving half assertable from a test
+  without a second peer.
+
+      @rpc("any_peer call_local unreliable_ordered 2")
+      TakeDamage<public>(Amount:int)<transacts>:void = ...
+
+  **All four of Godot's arguments are one string, and that is a compiler constraint rather than a
+  preference.** An attribute site *references* its constructor before calling it, and Verse refuses
+  to reference an overloaded function at all — *"Referencing an overloaded function without
+  immediately calling it is not yet implemented"*, naming every candidate — so four arities of `rpc`
+  cannot exist. One string is also what makes the value readable at all: `GetAttributeTextValue`
+  refuses any attribute whose argument is a `MakeTuple`, which is every attribute of more than one
+  argument, and SOL-972 is the note on that function saying the area waits on compile-time
+  evaluation of attributes. Words separate on spaces *or* commas, so a GDScript author writing
+  Godot's own `"any_peer", "call_local"` inside the quotes still gets what they meant.
+
+  **There is no bare `@rpc`** either, for the sibling reason: an attribute with no argument has to be
+  the attribute *class*, and the class is what the constructor builds; the two cannot share a name.
+  GDScript's default is spelled out instead, as `@rpc("authority")`.
+
+  The words are matched rather than positional and a number among them is the channel. Godot's
+  defaults — authority, not call-local, reliable, channel 0 — are applied in the **host**, so that
+  there is one statement of what a partial `@rpc` means rather than two that can drift. A
+  configuration the bridge refuses is **dropped** rather than registered with whatever survived
+  parsing, and `_validate` says why at the method's line: an `@rpc` with a misspelled word is a
+  method the author believes is remote-callable, and half-applying it would make that belief nearly
+  true, which is worse than not at all.
+
+  It rides a new entry point, `vh_class_rpc_list` (ABI **8.7**), rather than fields on
+  `vh_method_desc` — a new entry point is a minor under the header's own policy where a struct's
+  layout is not — and a sidecar field (version **6**), because an exported game has no semantic
+  program to read an attribute out of.
+
+  **Sending** needed nothing of its own: `Node.Rpc` and `Node.RpcId` are two of the 15 vararg
+  methods the same stage generated, and `Callable.Rpc`/`Callable.RpcId` two of the six that ride
+  `VhRefCall`.
+
+  **What is not asserted is the call that arrives at a second peer**, which needs two processes.
+  A single-process run can see that the config is what Godot reads and that a send leaves Verse and
+  comes back as one of Godot's Error ordinals, and it cannot honestly see more: with no peer
+  connected the editor-side driver and an exported game stop at different guards inside Godot, for
+  reasons that are Godot's rather than this bridge's. That last half is a by-hand check.
 
 ### 5.5 The scene
 

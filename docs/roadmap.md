@@ -562,7 +562,12 @@ and §4 only**; §5 was reassessed after it and cost no code at all.
 - **R-EXP-6** — custom Resources. **Done**: it needed no code, and what it found instead was
   `get_instance_base_type()` answering empty in an export, fixed with ABI 8.4's
   `vh_class_base_type`. The editor half is a by-hand check.
-- **R-EXP-7, R-EXP-8, R-EXP-9** — autoloads, icons, RPC config.
+- **R-EXP-7, R-EXP-8, R-EXP-9** — autoloads, icons, RPC config. R-EXP-7 and R-EXP-9 are
+  **done**; R-EXP-8 is stage 7's.
+- **R-SCN-2's varargs** — the 33 entry points typed `Variant...`, which had no Verse spelling
+  until `variant` reached the script-call wire. **Done** for the 15 class methods and the 6 on
+  a reference (ABI 8.7's `VhRefCall`); the 12 utilities are a fixed table of C++ calls and are
+  recorded as skips with the Verse spelling that answers each.
 - **R-EXP-1** — the remaining `@export` surface, type-driven where the Verse type can say it and
   attributes only where it cannot.
 - **R-NODE-10** — the script-level hooks that are in no JSON. **Done.** `_ToString` is not one of

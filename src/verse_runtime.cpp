@@ -288,6 +288,7 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 	godot_api.RefSize = &VerseRuntime::api_ref_size;
 	godot_api.RefContents = &VerseRuntime::api_ref_contents;
 	godot_api.InvokeCallable = &VerseRuntime::api_invoke_callable;
+	godot_api.RefCall = &VerseRuntime::api_ref_call;
 	godot_api.InstantiateClass = &VerseRuntime::api_instantiate_class;
 	godot_api.ReleaseObject = &VerseRuntime::api_release_object;
 
@@ -887,6 +888,38 @@ Vector<VerseSignalInfo> VerseRuntime::class_signals(const String &p_class_name) 
 	return signals;
 }
 
+// R-EXP-9's receiving half: what each `@rpc` method asked for, which VerseScript turns into the
+// Dictionary Godot's SceneRPCInterface walks. Read from the analysis snapshot like the method and
+// signal lists, so an `@rpc` added to a method is live before the next build.
+Vector<VerseRpcInfo> VerseRuntime::class_rpcs(const String &p_class_name) const {
+	Vector<VerseRpcInfo> rpcs;
+	if (!host.is_loaded() || host.ClassRpcList == nullptr) {
+		return rpcs;
+	}
+
+	const vh_rpc_desc *descs = nullptr;
+	int32_t count = 0;
+	if (host.ClassRpcList(p_class_name.utf8().get_data(), &descs, &count) != VH_OK) {
+		return rpcs;
+	}
+
+	rpcs.resize(count);
+	for (int32_t i = 0; i < count; ++i) {
+		const vh_rpc_desc &desc = descs[i];
+		VerseRpcInfo &info = rpcs.write[i];
+		info.name = StringName(String::utf8(desc.NameUtf8, desc.NameLen));
+		info.rpc_mode = desc.RpcMode;
+		info.call_local = desc.CallLocal != 0;
+		info.transfer_mode = desc.TransferMode;
+		info.channel = desc.Channel;
+		info.reject = desc.Reject;
+		info.reject_detail = String::utf8(desc.RejectDetailUtf8, desc.RejectDetailLen);
+		info.line = desc.Line;
+		info.column = desc.Column;
+	}
+	return rpcs;
+}
+
 // Emission is immediate on the Verse side too, which is the stated exception to "a write defers to
 // commit": a handler runs before emit_signal returns, so "emit, then read what the handler changed"
 // behaves the way a Godot author expects.
@@ -1447,6 +1480,49 @@ int32_t VerseRuntime::api_invoke_callable(void *p_ctx, int64_t p_ref, const vh_v
 	// deinitialises an extension, and ScriptLanguage::finish is never delivered to one -- so this
 	// is deliberately not worked around.
 	const Variant result = callable.callv(args);
+	return variant_to_vh(result, p_arena, *r_value) ? VH_CALL_OK : VH_CALL_BAD_VALUE;
+}
+
+// A method of the *builtin type* a reference id names -- `Signal.emit`, `Callable.bind` and every
+// other method of an Array, a Dictionary, a Callable or a Signal the mirror does not wrap.
+//
+// `CallValue` cannot reach these: it takes a vh_handle, which names a Godot Object, and none of the
+// builtin types is one. What answers instead is Godot's own `Variant::callp`, which is also what
+// makes an unknown name an ordinary error rather than a crash -- the alternative, a per-type table
+// of bindings, would have to be rewritten for every Godot release.
+int32_t VerseRuntime::api_ref_call(void *p_ctx, int64_t p_ref, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count, vh_arena *p_arena, vh_value *r_value) {
+	const Variant *found = verse_ref_table().find(p_ref);
+	if (found == nullptr) {
+		return VH_CALL_DEAD_OBJECT;
+	}
+
+	// A copy rather than the table's own, because `callp` is non-const and a method that mutates
+	// the value must reach the *referenced* thing rather than a duplicate of it. Godot's reference
+	// types share their storage, so a copy of a Callable, an Array, a Dictionary or a Signal names
+	// the same thing the table does -- which is the whole reason these cross as references.
+	Variant receiver = *found;
+
+	std::vector<Variant> values((size_t)p_arg_count);
+	std::vector<const Variant *> args((size_t)p_arg_count);
+	for (int32_t i = 0; i < p_arg_count; i++) {
+		values[(size_t)i] = vh_to_variant(p_args[i]);
+		args[(size_t)i] = &values[(size_t)i];
+	}
+
+	const StringName name(String::utf8(p_name_utf8, p_name_len));
+	Variant result;
+	GDExtensionCallError error = {};
+	receiver.callp(name, args.empty() ? nullptr : args.data(), (GDExtensionInt)p_arg_count, result, error);
+	if (error.error == GDEXTENSION_CALL_ERROR_INVALID_METHOD) {
+		return VH_CALL_NO_SUCH_MEMBER;
+	}
+	if (error.error != GDEXTENSION_CALL_OK) {
+		return VH_CALL_BAD_VALUE;
+	}
+	if (result.get_type() == Variant::NIL) {
+		*r_value = vh_value{};
+		return VH_CALL_OK;
+	}
 	return variant_to_vh(result, p_arena, *r_value) ? VH_CALL_OK : VH_CALL_BAD_VALUE;
 }
 

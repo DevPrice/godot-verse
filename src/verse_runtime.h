@@ -67,6 +67,25 @@ struct VerseSignalInfo {
 	int32_t column = -1;
 };
 
+// One method's `@rpc` (R-EXP-9), in Godot's own vocabulary and with Godot's own numbering, so
+// _get_rpc_config copies rather than translates. A method with no `@rpc` is absent from the list
+// rather than present and disabled, because absence is what Godot's empty config means.
+struct VerseRpcInfo {
+	// The name Godot dispatches by: the Verse method's, or Godot's own name for the virtual it
+	// overrides.
+	godot::StringName name;
+	int32_t rpc_mode = 2;      // MultiplayerAPI::RPC_MODE_AUTHORITY
+	bool call_local = false;
+	int32_t transfer_mode = 2; // MultiplayerPeer::TRANSFER_MODE_RELIABLE
+	int32_t channel = 0;
+	// vh_rpc_reject. Anything but VH_RPC_OK and the method is not registered as an RPC at all --
+	// carried this far only so a diagnostic can say why, at the line below.
+	int32_t reject = 0;
+	godot::String reject_detail;
+	int32_t line = -1;
+	int32_t column = -1;
+};
+
 // The "VerseRuntime" engine singleton. Owns the verse_host.dll loader and the vh_init_desc handed
 // to it. Every method degrades to ERR_UNAVAILABLE plus a warning when no host is loaded; nothing
 // here may crash for that reason.
@@ -247,6 +266,7 @@ public:
 	// analysis rather than the running program, so a signal added in the editor shows up without
 	// a build -- the same bargain the export list makes.
 	godot::Vector<VerseSignalInfo> class_signals(const godot::String &p_class_name) const;
+	godot::Vector<VerseRpcInfo> class_rpcs(const godot::String &p_class_name) const;
 
 	// One data member read off a live instance, and off the class default object respectively.
 	// Unlike class_exports these go through the VM, because a value exists nowhere else. A nil
@@ -351,6 +371,7 @@ private:
 	static int64_t api_make_callable(void *p_ctx, int64_t p_callback_id, vh_handle p_owner_handle);
 	static int32_t api_call_static(void *p_ctx, const char *p_class_utf8, int32_t p_class_len, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count, vh_arena *p_arena, vh_value *r_value);
 	static int32_t api_call_utility(void *p_ctx, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count, vh_arena *p_arena, vh_value *r_value);
+	static int32_t api_ref_call(void *p_ctx, int64_t p_ref, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count, vh_arena *p_arena, vh_value *r_value);
 
 	// Signals (R-SIG-1..4). Declared in the v2 header and left unsupplied until now.
 	static int32_t api_emit_signal(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count);

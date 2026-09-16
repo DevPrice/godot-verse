@@ -896,6 +896,57 @@ extern "C" int32_t vh_class_signal_list(const char* ClassNameUtf8, const vh_sign
     return VH_OK;
 }
 
+extern "C" int32_t vh_class_rpc_list(const char* ClassNameUtf8, const vh_rpc_desc** OutRpcs, int32_t* OutCount)
+{
+    if (WrongThread("vh_class_rpc_list"))
+    {
+        return VH_ERR_THREAD;
+    }
+    if (!ClassNameUtf8 || !OutRpcs || !OutCount)
+    {
+        return VH_ERR_ABI;
+    }
+    *OutRpcs = nullptr;
+    *OutCount = 0;
+
+    if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+
+    // Static and rebuilt per call, the same discipline the method and signal lists follow: the
+    // descriptors hold bare pointers into the FRpcDesc strings, so the two have to live exactly as
+    // long as each other and the header promises only until the next call.
+    static TArray<GodotVerse::FRpcDesc> Rpcs;
+    static TArray<vh_rpc_desc> Descs;
+    if (!GodotVerse::GetClassRpcs(Cstr(ClassNameUtf8), Rpcs))
+    {
+        return VH_ERR_NOT_FOUND;
+    }
+
+    Descs.Reset();
+    Descs.Reserve(Rpcs.Num());
+    for (const GodotVerse::FRpcDesc& Rpc : Rpcs)
+    {
+        vh_rpc_desc& Out = Descs.AddDefaulted_GetRef();
+        Out.NameUtf8 = reinterpret_cast<const char*>(*Rpc.Name);
+        Out.NameLen = Rpc.Name.Len();
+        Out.RpcMode = Rpc.RpcMode;
+        Out.CallLocal = Rpc.bCallLocal ? 1 : 0;
+        Out.TransferMode = Rpc.TransferMode;
+        Out.Channel = Rpc.Channel;
+        Out.Line = Rpc.Line;
+        Out.Column = Rpc.Column;
+        Out.Reject = Rpc.Reject;
+        Out.RejectDetailUtf8 = reinterpret_cast<const char*>(*Rpc.RejectDetail);
+        Out.RejectDetailLen = Rpc.RejectDetail.Len();
+    }
+
+    *OutRpcs = Descs.GetData();
+    *OutCount = Descs.Num();
+    return VH_OK;
+}
+
 extern "C" int32_t vh_class_static_list(const char* ClassNameUtf8, const vh_static_desc** OutStatics, int32_t* OutCount)
 {
     if (WrongThread("vh_class_static_list"))

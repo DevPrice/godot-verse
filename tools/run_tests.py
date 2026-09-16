@@ -177,7 +177,7 @@ COOK_EXPECTED_CLASSES = ["debug_probe", "exports", "tasks"]
 
 # What HostSidecar.cpp is writing. Asserted rather than ignored because the sidecar is the one
 # cooked artifact a human reads, and a version nobody bumped is how a reader-writer pair drifts.
-SIDECAR_VERSION = 5
+SIDECAR_VERSION = 6
 
 
 def run_cook(results: Results, engine: Path) -> None:
@@ -390,6 +390,8 @@ def run_integration(results: Results, engine: Path | None, godot: Path | None) -
             "can be assigned in the inspector but not saved",
             # R-SIG-1, a signal declaration Godot is never told about:
             "is a `var`, and a signal is an identity rather than a value",
+            # R-EXP-9, an `@rpc` whose words Godot does not know:
+            "is not an @rpc word",
         ],
     )
 
@@ -572,9 +574,9 @@ EXPORT_EXPECTED_CLASSES = ["marshal", "signals", "left/widget"]
 # `get_global_name`, which is read off the same stripped source. The five R-EXP-7 cases run the
 # other way round -- only an exported game has autoloads at all, because `--script` replaces the
 # main loop before Godot sets one up -- so they are skips in the editor run and passes here, which
-# is why 394 + 10 is the 399 + 5 the in-editor run prints rather than a plain sum. Adding a case
+# is why 414 + 10 is the 419 + 5 the in-editor run prints rather than a plain sum. Adding a case
 # means changing this line, which is the point of it.
-EXPORT_EXPECTED_PASSES = 394
+EXPORT_EXPECTED_PASSES = 414
 EXPORT_EXPECTED_SKIPS = 10
 
 

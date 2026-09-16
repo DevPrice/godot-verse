@@ -205,6 +205,7 @@ private:
 	// ask walks the semantic program.
 	mutable godot::Vector<VerseMethodInfo> methods_cache;
 	mutable godot::Vector<VerseSignalInfo> signals_cache;
+	mutable godot::Vector<VerseRpcInfo> rpcs_cache;
 
 	// Set while exports_cache describes a program older than the file. Godot reads this through
 	// _is_placeholder_fallback_enabled and switches every placeholder to serving its own stored

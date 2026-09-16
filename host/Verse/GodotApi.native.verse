@@ -167,6 +167,21 @@ callable<public> := class<computes>(godot_ref):
     CallVoid<public>(Args:[]int)<transacts>:void =
         VhRefInvokeVoid(Ref, for (A : Args) { VhFromInt(A) })
 
+    # Godot's own `Callable.call` and the four beside it, which are vararg there and one
+    # `[]variant` here. There is deliberately **no** zero-argument arity of any of these: a Verse
+    # function's parameters are its tuple, so `Call()` beside `Call(:[]variant)` is glitch 3532
+    # rather than two arities of one name. `C.Call(array{})` is what a call with no arguments is.
+    Call<public>(Args:[]variant)<transacts>:variant = VhRefCall(Ref, "call", Args)
+    CallDeferred<public>(Args:[]variant)<transacts>:void = VhRefCallVoid(Ref, "call_deferred", Args)
+
+    # Answers a *new* Callable with the arguments already attached, which is Godot's own currying
+    # and the reason a bound Callable can satisfy a signal whose payload it does not match.
+    Bind<public>(Args:[]variant)<transacts>:callable = VhToCallable(VhRefCall(Ref, "bind", Args))
+
+    Rpc<public>(Args:[]variant)<transacts>:void = VhRefCallVoid(Ref, "rpc", Args)
+    RpcId<public>(PeerId:int, Args:[]variant)<transacts>:void =
+        VhRefCallVoid(Ref, "rpc_id", array{VhFromInt(PeerId)} + Args)
+
 # Godot's Signal, as a value a script holds: what a `signal` -typed property or return hands over,
 # and the only spelling a signal the mirror has no accessor for has -- one a GDScript or C# script
 # declared, or one made with `add_user_signal` (R-INT-1, R-SIG-6).
@@ -199,6 +214,14 @@ signal_ref<public> := class<computes>(godot_ref):
     # call into Godot and is in docs/nonatomic-methods.md with the rest.
     Subscribe<public>(Callback(:godot_array):void)<transacts>:cancelable =
         connection{Subscription := VhSignalRefSubscribe(Ref, Callback)}
+
+    # Godot's own `Signal.emit`, which is vararg there and one `[]variant` here. `Emit(array{})`
+    # is the payloadless emission, for the reason `callable.Call` has no zero-argument arity.
+    #
+    # This is the *foreign* signal's emitter -- one a GDScript or C# script declared, or one made
+    # with `add_user_signal`. A signal the script itself declares is a `signal(t)` with a typed
+    # `Signal` of its own, and that one keeps its payload's type.
+    Emit<public>(Args:[]variant)<transacts>:void = VhRefCallVoid(Ref, "emit", Args)
 
 # --- reference packing -------------------------------------------------------
 

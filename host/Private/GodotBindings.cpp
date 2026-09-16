@@ -1092,6 +1092,60 @@ void VhRefInvokeVoid(int64 Ref, TArray<FGodotValue> const& Args)
     VhRefInvoke(Ref, Args, Ignored);
 }
 
+/// A method of the *builtin type* a reference names -- `Signal.emit`, `Callable.bind` and the rest
+/// of what the mirror does not wrap.
+///
+/// `VhCallValue` cannot reach these and no spelling would have made it: it takes a vh_handle, which
+/// names a Godot Object, and none of Godot's builtin types is one.
+///
+/// A name this build of Godot does not have raises, unlike a *container* read, where a miss is an
+/// ordinary Verse failure: an absent key is data and a misspelled method is a bug.
+void VhRefCall(int64 Ref, verse::string const& Method, TArray<FGodotValue> const& Args, FGodotValue& OutValue)
+{
+    OutValue = FGodotValue{};
+    FHostState& Host = GetHost();
+    if (!Host.Godot.RefCall)
+    {
+        return;
+    }
+
+    FWireStore Store;
+    TArray<vh_value> Wire;
+    Wire.Reserve(Args.Num());
+    for (const FGodotValue& Arg : Args)
+    {
+        Wire.Add(Store.Wire(Own(Arg)));
+    }
+
+    const FUtf8StringView Name = ToView(Method);
+    FCallArena Arena;
+    vh_value Result{};
+    const int32 Status = CallGodot([&] {
+        return Host.Godot.RefCall(Host.Godot.Ctx, Ref, Bytes(Name), Name.Len(),
+                                  Wire.GetData(), Wire.Num(), &Arena, &Result);
+    });
+    if (Status == VH_CALL_NO_SUCH_MEMBER)
+    {
+        RAISE_VERSE_RUNTIME_ERROR_FORMAT(
+            Verse::ERuntimeDiagnostic::ErrRuntime_NativeInternal,
+            TEXT("Godot has no method `%s` on the value reference %lld names."),
+            *FString(Name), (long long)Ref);
+        return;
+    }
+    if (Status != VH_CALL_OK)
+    {
+        RaiseRefStatus(Status, Ref, TEXT("Called a method on"));
+        return;
+    }
+    OutValue = FromWire(Result);
+}
+
+void VhRefCallVoid(int64 Ref, verse::string const& Method, TArray<FGodotValue> const& Args)
+{
+    FGodotValue Ignored;
+    VhRefCall(Ref, Method, Args, Ignored);
+}
+
 /// The whole container, as the vh_value sequence the bulk converters read.
 ///
 /// Returns false when the host is not wired up or the id names nothing; the converters above turn

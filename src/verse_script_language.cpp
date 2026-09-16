@@ -3542,6 +3542,40 @@ static String signal_rejection_message(const VerseSignalInfo &p_signal) {
 	}
 }
 
+// What a refused `@rpc` has to say for itself, at the line that declared the method.
+//
+// Every one of these is silent otherwise: the attribute compiles -- its constructor only has to
+// typecheck -- and the method is simply not in the config Godot reads, so the author finds out at
+// the first call that goes nowhere, or never. GDScript's own messages are the model, and the first
+// of them lists the seven words because guessing which one was meant is not this bridge's job.
+static String rpc_rejection_message(const VerseRpcInfo &p_rpc) {
+	const String name = String(p_rpc.name);
+	switch (p_rpc.reject) {
+		case VH_RPC_UNKNOWN_ARGUMENT:
+			return name + String(": `") + p_rpc.reject_detail
+					+ String("` is not an @rpc word. It must be one of \"call_local\"/\"call_remote\" ")
+					+ String("(local calls), \"any_peer\"/\"authority\" (permission), or ")
+					+ String("\"reliable\"/\"unreliable\"/\"unreliable_ordered\" (transfer mode).");
+		case VH_RPC_DUPLICATE_CATEGORY:
+			return name + String(": ") + p_rpc.reject_detail
+					+ String(" is given twice. Each of the three may be said no more than once.");
+		default:
+			return name + String(": @rpc wants ") + p_rpc.reject_detail
+					+ String(" in this position.");
+	}
+}
+
+static String rpc_rejection_code(int32_t p_reject) {
+	switch (p_reject) {
+		case VH_RPC_UNKNOWN_ARGUMENT:
+			return String("RPC_UNKNOWN_ARGUMENT");
+		case VH_RPC_DUPLICATE_CATEGORY:
+			return String("RPC_DUPLICATE_CATEGORY");
+		default:
+			return String("RPC_BAD_ARGUMENT_TYPE");
+	}
+}
+
 static String signal_rejection_code(int32_t p_reject) {
 	switch (p_reject) {
 		case VH_SIGNAL_IS_VAR:
@@ -3697,6 +3731,26 @@ void VerseScriptLanguage::refresh_script_warnings(const String &p_path) const {
 		warning["code"] = (int64_t)signal.reject;
 		warning["string_code"] = signal_rejection_code(signal.reject);
 		warning["message"] = signal_rejection_message(signal);
+		warnings.push_back(warning);
+	}
+
+	// And the same pass over the `@rpc` list, for the same reason: a configuration the bridge
+	// refused is a method the author believes is remote-callable and Godot has never heard of.
+	const Vector<VerseRpcInfo> rpcs = runtime->class_rpcs(qualified_class_name(p_path));
+	for (int64_t i = 0; i < rpcs.size(); i++) {
+		const VerseRpcInfo &rpc = rpcs[i];
+		if (rpc.reject == VH_RPC_OK || rpc.line < 0) {
+			continue;
+		}
+
+		Dictionary warning;
+		warning["start_line"] = (int64_t)rpc.line + 1;
+		warning["end_line"] = (int64_t)rpc.line + 1;
+		warning["leftmost_column"] = (int64_t)rpc.column + 1;
+		warning["rightmost_column"] = (int64_t)rpc.column + 1;
+		warning["code"] = (int64_t)rpc.reject;
+		warning["string_code"] = rpc_rejection_code(rpc.reject);
+		warning["message"] = rpc_rejection_message(rpc);
 		warnings.push_back(warning);
 	}
 

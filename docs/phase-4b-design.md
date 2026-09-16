@@ -864,6 +864,79 @@ re-entrant Verse → Godot → Verse call that the bridge had never made before 
 
 ---
 
+### Stage 6's `@rpc`, and an attribute that may not be overloaded
+
+**§8's spelling of the attribute cannot exist, and the compiler says so in a sentence worth
+keeping.** §8 proposes `@rpc("any_peer", "call_local", "reliable", 0)`, Godot's own four arguments.
+Four constructor arities of one attribute name compile — and every *use* of one is:
+
+    Referencing an overloaded function without immediately calling it is not yet implemented;
+    (/Godot.org/Godot:)rpc, (/Godot.org/Godot:)rpc, (/Godot.org/Godot:)rpc, or (/Godot.org/Godot:)rpc
+
+An attribute site **references** its constructor before calling it. So the words travel together, in
+one string, and one constructor:
+
+    @rpc("any_peer call_local unreliable_ordered 2")
+
+That turns out to be the better shape for a second reason the design had already half-recorded.
+`GetAttributeTextValue` refuses any attribute whose argument is a `MakeTuple` — it is written that
+way, with SOL-972 above it saying the area waits on compile-time evaluation of attributes — so a
+four-argument attribute is unreadable through the only accessor there is. The first implementation
+of this stage walked the argument expression itself to get around that; one string deleted it.
+
+**And it was silent.** The refusal is reported against the *script*, but the probe prints nothing
+for it and `vh_compile_project` answers status 4 with zero diagnostics — which is what a whole
+morning of this stage looked like before the same fixture was put through the integration layer,
+where Godot's own diagnostic path printed it at once. `tests/verse_probe` cannot see this class of
+error, and that is worth knowing about the probe rather than about `@rpc`: a *user* package may not
+declare `class(attribute)` at all, so the probe cannot even be handed the attribute package to check
+in isolation.
+
+Two smaller things the stage settled:
+
+- **The defaults belong in the host.** `@rpc("any_peer")` means three other things as well, and
+  writing them in one place rather than in both halves of the bridge is the only way the two cannot
+  drift. They are GDScript's own and `SceneRPCInterface::_parse_rpc_config`'s both.
+- **A refused config is dropped, not half-applied.** An `@rpc` with a misspelled word is a method the
+  author believes is remote-callable; registering what survived parsing would make that belief
+  *nearly* true, which is worse than not at all. `_validate` says why at the method's line, which is
+  the same bargain `vh_signal_desc`'s Reject makes.
+
+**It needed a sidecar field, and the export layer is what said so.** Everything was green in the
+editor and every `@rpc` case failed in an exported game, because `vh_class_rpc_list` reads the
+analysis snapshot and a runtime host has no semantic program to have built one from. Version **6**.
+That is the export layer catching a junction of two features that each had tests, for the fifth time
+in this phase, and it is the same sentence §15 already wrote about stages 2 and 3.
+
+**What the sending half can be asserted to do is less than it looks.** With no peer connected, the
+editor-side driver and an exported game stop at *different* guards inside Godot — the driver's
+SceneTree has no MultiplayerAPI, while a game's has one whose default offline peer reports itself
+connected, so the call gets as far as being sent to nobody and answers OK. Asserting either number
+would be asserting which of Godot's guards fired. What the case says instead is that the call left
+Verse and came back as an Error ordinal, and R-EXP-9's cross-peer half is owed as a by-hand check.
+
+---
+
+### Stage 6's other six, which are not on an object at all
+
+**§8 counts `Callable.call` and `Signal.emit` among the varargs and does not notice that they are a
+different problem.** The other 27 are methods of a Godot *Object* and ride `VhCallValue`, which
+takes a `vh_handle`. These six are methods of a builtin *type* — a Callable, a Signal — and none of
+Godot's builtin types is an Object, so no spelling of a vararg would have reached them. They needed
+a primitive: `VhRefCall` over a new `RefCall` callback (ABI **8.7**), which is `Variant::callp` on
+whatever the reference table holds.
+
+The reward is wider than the six: **every** method of an Array, a Dictionary, a Callable or a Signal
+that the mirror does not wrap is now reachable, and an unknown name is Godot's own
+`INVALID_METHOD` rather than a table of bindings to rewrite each release.
+
+**None of the six has a zero-argument arity**, and that is the `GDScript.new` finding again rather
+than a second one: a Verse function's parameters are its tuple, so `Call()` beside
+`Call(:[]variant)` is one argument type rather than two arities. `C.Call(array{})` is what an empty
+argument list is written as, and a case says so.
+
+---
+
 ### Stage 6's varargs, and the one arity that cannot exist
 
 **§8's two-line sketch is right about the shape and silent about the edge.** A vararg is emitted as

@@ -78,7 +78,7 @@ Two documents are not phase records and are the ones to read before adding a fea
 `include/verse_host_abi.h` is the only thing that crosses. Plain C — the two sides cannot share a
 C++ ABI. It is staged into the host's `Public/` by `build_host.py`, so both compile the same file.
 
-**`VH_ABI_VERSION` is 8.6.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
+**`VH_ABI_VERSION` is 8.7.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
 a major bump is a layout or meaning change and both sides must be rebuilt; a minor bump adds
 something an older consumer can ignore behind a `StructSize` check. A change to the header means
 bumping it and rebuilding **both** sides — the mismatch surfaces at `vh_init`, not at compile time.
@@ -697,7 +697,7 @@ it is not in `run_tests.py`.
   `PackageRelativeVersePath` is dead under VerseVM — and asking the *semantic* program for one must
   not use `EPathMode::PackageRelative`, which is fatal for a class with no package.
 - **A runtime host has no semantic program and can never build one**, so everything the analysis
-  alone could describe is recorded and carried in the sidecar (version **5**): the declared types of
+  alone could describe is recorded and carried in the sidecar (version **6**): the declared types of
   every member, method and signal, **whether a member is `var`** (without which every write an
   exported game made to its own state was silently dropped), the payload of all 503 mirrored
   engine-signal accessors (without which `Timer.Timeout().Await()` connects and never resumes), the
@@ -802,6 +802,17 @@ it is not in `run_tests.py`.
   whose message is about control scopes. What a Godot property dictionary's `"type"` key wants is
   the generated `ToInt(:variant_type)`, which is `<public>` and is the closer analogue of the
   `TYPE_INT` a GDScript author writes.
+- **An attribute's constructor may not be overloaded, and the message does not say so.**
+  An attribute site *references* its constructor before calling it, and Verse refuses to
+  reference an overloaded function at all -- *"Referencing an overloaded function without
+  immediately calling it is not yet implemented"*, naming every candidate. So an attribute
+  that wants several arguments takes one string and splits it (`@rpc("any_peer call_local")`),
+  which is also the only shape `GetAttributeTextValue` can read: it refuses any attribute
+  whose argument is a `MakeTuple`, which is every attribute of more than one argument.
+  **And `tests/verse_probe` cannot see any of this** -- a refused attribute comes back as
+  status 4 with zero diagnostics, and a *user* package may not declare `class(attribute)` at
+  all, so the attribute package cannot be checked in isolation either. The integration layer
+  is where Godot's own diagnostic path prints it.
 - **`operator'()'` is a reserved intrinsic.** Verse rewrites `Data[Key]` on a non-function callee
   into a call to it, but refuses to let anything *define* one — as a class member or as a free
   function — so the bracket syntax cannot be given a meaning. Container lookup is

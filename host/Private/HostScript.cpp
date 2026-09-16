@@ -180,7 +180,32 @@ constexpr const char* AttributePackageSource =
     "    ClassName<public>:string\n"
     "\n"
     "statics<public><constructor>(ClassName:string)<computes> := statics_attribute:\n"
-    "    ClassName := ClassName\n";
+    "    ClassName := ClassName\n"
+    "\n"
+    "# Makes the method a remote procedure call, the way GDScript's @rpc and C#'s [Rpc] do.\n"
+    "#\n"
+    "#     @rpc(\"any_peer call_local unreliable_ordered 2\")\n"
+    "#\n"
+    "# The words are Godot's own and may be written in any order, separated by spaces or\n"
+    "# commas: any_peer/authority is who may call it, call_local/call_remote whether the\n"
+    "# caller runs it too, and reliable/unreliable/unreliable_ordered how it travels. A\n"
+    "# number among them is the channel. Anything else is a diagnostic at the method.\n"
+    "#\n"
+    "# **One string rather than GDScript's four arguments, and one constructor rather than\n"
+    "# four arities.** An attribute site *references* its constructor before calling it, and\n"
+    "# Verse refuses to reference an overloaded function at all -- \"not yet implemented\",\n"
+    "# naming every candidate. So the words travel together, which is also what makes them\n"
+    "# readable through GetAttributeTextValue rather than off the argument expression.\n"
+    "#\n"
+    "# There is no bare `@rpc` either: an attribute with no argument has to be the attribute\n"
+    "# *class*, and the class is what this constructor builds. GDScript's default is spelled\n"
+    "# out instead, as `@rpc(\"authority\")`.\n"
+    "@attribscope_function\n"
+    "rpc_attribute<public> := class<computes>(attribute):\n"
+    "    Config<public>:string\n"
+    "\n"
+    "rpc<public><constructor>(Config:string)<computes> := rpc_attribute:\n"
+    "    Config := Config\n";
 
 /// One .verse file, as the toolchain wants it: a path, its text, and somewhere to cache the
 /// parse.
@@ -1405,6 +1430,7 @@ namespace {
 /// type, and a single string argument is the one attribute payload SOL-972 leaves readable.
 constexpr const char* ExportAttributePath = "/Godot.org/Godot/export";
 constexpr const char* StaticsAttributePath = "/Godot.org/Godot/statics_attribute";
+constexpr const char* RpcAttributePath = "/Godot.org/Godot/rpc_attribute";
 constexpr const char* ExportCategoryAttributePath = "/Godot.org/Godot/export_category_attribute";
 constexpr const char* ExportGroupAttributePath = "/Godot.org/Godot/export_group_attribute";
 constexpr const char* ExportSubgroupAttributePath = "/Godot.org/Godot/export_subgroup_attribute";
@@ -5346,6 +5372,216 @@ AUTORTFM_DISABLE bool GodotVerse::GetClassStatics(FUtf8StringView ClassName, TSh
     return true;
 }
 
+namespace {
+
+/// One `@rpc` word, and which of the three categories it settles.
+///
+/// Godot's own seven and nothing else, matched exactly as GDScript matches them: the words are the
+/// API here, and a near miss has to be a diagnostic rather than a default quietly applied.
+struct FRpcWord
+{
+    const char* Word;
+    /// 0 permission, 1 locality, 2 transfer mode. Two words of one category is an error, which is
+    /// the only reason the category is carried rather than just the value.
+    int32 Category;
+    int32 Value;
+};
+
+constexpr FRpcWord RpcWords[] = {
+    {"any_peer", 0, 1},   // MultiplayerAPI::RPC_MODE_ANY_PEER
+    {"authority", 0, 2},  // MultiplayerAPI::RPC_MODE_AUTHORITY
+    {"call_local", 1, 1},
+    {"call_remote", 1, 0},
+    {"unreliable", 2, 0}, // MultiplayerPeer::TRANSFER_MODE_UNRELIABLE
+    {"unreliable_ordered", 2, 1},
+    {"reliable", 2, 2},
+};
+
+constexpr const char* RpcCategoryNames[] = {
+    "the permission (any_peer/authority)",
+    "the locality (call_local/call_remote)",
+    "the transfer mode (reliable/unreliable/unreliable_ordered)",
+};
+
+/// Splits an `@rpc` config string into its words. Spaces and commas both separate, so a GDScript
+/// author who writes Godot's own `"any_peer", "call_local"` inside one string still gets what they
+/// meant rather than an unknown word with quotes in it.
+AUTORTFM_DISABLE void SplitRpcWords(const FUtf8String& Config, ::TArray<FUtf8String>& OutWords)
+{
+    FUtf8String Current;
+    const auto Flush = [&Current, &OutWords] {
+        if (!Current.IsEmpty())
+        {
+            OutWords.Add(Current);
+            Current.Reset();
+        }
+    };
+    for (int32 Index = 0; Index < Config.Len(); ++Index)
+    {
+        const UTF8CHAR Ch = Config[Index];
+        if (Ch == UTF8CHAR(' ') || Ch == UTF8CHAR(',') || Ch == UTF8CHAR('\t')
+            || Ch == UTF8CHAR('"') || Ch == UTF8CHAR('\n') || Ch == UTF8CHAR('\r'))
+        {
+            Flush();
+            continue;
+        }
+        Current.AppendChar(Ch);
+    }
+    Flush();
+}
+
+/// Reads one `@rpc`'s config string into a description.
+///
+/// The words are matched rather than positional, which is GDScript's rule too, and a number is the
+/// channel wherever it appears -- GDScript reads position 3 as the channel, but position means
+/// nothing once the four arguments are one string, and "a number is the channel" is the only rule
+/// left that a reader can state in one line.
+AUTORTFM_DISABLE void ReadRpcConfig(const FUtf8String& Config, GodotVerse::FRpcDesc& OutDesc)
+{
+    ::TArray<FUtf8String> Words;
+    SplitRpcWords(Config, Words);
+
+    bool bCategorySeen[3] = {false, false, false};
+    bool bChannelSeen = false;
+    for (const FUtf8String& Word : Words)
+    {
+        // A number is the channel. Tested before the word table so that a Godot release adding a
+        // numeric-looking word would be a compile failure here rather than a silent reinterpretation.
+        bool bAllDigits = !Word.IsEmpty();
+        for (int32 Index = 0; Index < Word.Len(); ++Index)
+        {
+            if (Word[Index] < UTF8CHAR('0') || Word[Index] > UTF8CHAR('9'))
+            {
+                bAllDigits = false;
+                break;
+            }
+        }
+        if (bAllDigits)
+        {
+            if (bChannelSeen)
+            {
+                OutDesc.Reject = VH_RPC_DUPLICATE_CATEGORY;
+                OutDesc.RejectDetail = UTF8TEXT("the channel");
+                return;
+            }
+            bChannelSeen = true;
+            OutDesc.Channel = FCStringUtf8::Atoi(*Word);
+            continue;
+        }
+
+        const FRpcWord* Matched = nullptr;
+        for (const FRpcWord& Candidate : RpcWords)
+        {
+            if (Word.Equals(FUtf8String(Candidate.Word)))
+            {
+                Matched = &Candidate;
+                break;
+            }
+        }
+        if (!Matched)
+        {
+            OutDesc.Reject = VH_RPC_UNKNOWN_ARGUMENT;
+            OutDesc.RejectDetail = Word;
+            return;
+        }
+        if (bCategorySeen[Matched->Category])
+        {
+            OutDesc.Reject = VH_RPC_DUPLICATE_CATEGORY;
+            OutDesc.RejectDetail = FUtf8String(RpcCategoryNames[Matched->Category]);
+            return;
+        }
+        bCategorySeen[Matched->Category] = true;
+
+        switch (Matched->Category)
+        {
+        case 0: OutDesc.RpcMode = Matched->Value; break;
+        case 1: OutDesc.bCallLocal = Matched->Value != 0; break;
+        default: OutDesc.TransferMode = Matched->Value; break;
+        }
+    }
+}
+
+
+/// Every method of ClassName carrying an `@rpc`, out of the program the analysis just built.
+AUTORTFM_DISABLE bool GetClassRpcsLive(FUtf8StringView ClassName, TArray<GodotVerse::FRpcDesc>& OutRpcs)
+{
+    using namespace uLang;
+
+    OutRpcs.Reset();
+    if (!GIde.IsValid())
+    {
+        return false;
+    }
+    const TSPtr<CProgramBuildManager> BuildManager = GIde->GetBuildManager();
+    if (!BuildManager.IsValid())
+    {
+        return false;
+    }
+    const TSRef<CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
+    const CClass* const RpcAttribute = Program->FindDefinitionByVersePath<CClass>(RpcAttributePath);
+    if (!RpcAttribute)
+    {
+        // No attribute package in this program, which is the state before the first analysis --
+        // not "this class has no RPCs", so it is false rather than an empty list.
+        return false;
+    }
+
+    const FUtf8String ClassPath = FUtf8String(ScriptVersePath) + UTF8TEXT("/") + FUtf8String(ClassName);
+    const CClass* const Class = Program->FindDefinitionByVersePath<CClass>(
+        FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath));
+    if (!Class)
+    {
+        return false;
+    }
+
+    for (const TSRef<CFunction>& Function : Class->GetDefinitionsOfKind<CFunction>())
+    {
+        if (!Function->GetAttributes().HasAttributeClass(RpcAttribute, *Program))
+        {
+            continue;
+        }
+
+        GodotVerse::FRpcDesc Desc;
+        Desc.Name = FUtf8String(Function->AsNameCString());
+        if (OverridesMirroredDefinition(*Function))
+        {
+            // The name Godot dispatches by, for the reason the method list reports one: an author
+            // who writes `@rpc` over `_Process` means Godot's `_process`, and a config keyed by the
+            // Verse spelling would name a method Godot never looks for.
+            Desc.Name = GodotVirtualNameOf(FUtf8StringView(Desc.Name));
+        }
+        FUtf8String DeclaredIn;
+        FillLocation(*Function, DeclaredIn, Desc.Line, Desc.Column);
+
+        // One string, so GetAttributeTextValue reads it -- that function refuses anything whose
+        // argument is a MakeTuple, which is every attribute of more than one argument, and is
+        // the whole reason the words travel together rather than as GDScript's four.
+        const uLang::TOptional<uLang::CUTF8String> Config =
+            Function->GetAttributes().GetAttributeTextValue(RpcAttribute, *Program);
+        if (Config.IsSet())
+        {
+            ReadRpcConfig(FULangConversionUtils::ULangStrToFUtf8String(*Config), Desc);
+        }
+        OutRpcs.Add(MoveTemp(Desc));
+    }
+    return true;
+}
+
+} // namespace
+
+AUTORTFM_DISABLE bool GodotVerse::GetClassRpcs(FUtf8StringView ClassName, TArray<FRpcDesc>& OutRpcs)
+{
+    OutRpcs.Reset();
+    const FAnalysisSnapshot::FClass* const Found =
+        GSnapshot ? GSnapshot->Classes.Find(FUtf8String(ClassName)) : nullptr;
+    if (!Found)
+    {
+        return false;
+    }
+    OutRpcs = Found->Rpcs;
+    return true;
+}
+
 AUTORTFM_DISABLE bool GodotVerse::GetClassSignals(FUtf8StringView ClassName, TArray<FSignalDesc>& OutSignals)
 {
     OutSignals.Reset();
@@ -8111,6 +8347,7 @@ AUTORTFM_DISABLE void TakeAnalysisSnapshot()
 
         GetClassMethodsLive(ClassName, Entry.Methods);
         GetClassSignalsLive(ClassName, Entry.Signals);
+        GetClassRpcsLive(ClassName, Entry.Rpcs);
         Entry.ToStringDecorated = FindToStringExtensionLive(ClassName);
 
         // The declared types, which are the analysis's to record and nothing else's to re-derive.

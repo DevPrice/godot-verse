@@ -215,6 +215,32 @@ struct FSignalDesc
 /// refreshes per keystroke the way the method and export lists do.
 AUTORTFM_DISABLE bool GetClassSignals(FUtf8StringView ClassName, TArray<FSignalDesc>& OutSignals);
 
+/// One method's `@rpc` (R-EXP-9), as Godot's `rpc_config` Dictionary wants it.
+///
+/// The four values carry Godot's own numbering, so the consumer copies rather than translates,
+/// and the defaults are filled in here -- authority, not call-local, reliable, channel 0 -- so
+/// that the two sides cannot drift about what `@rpc("any_peer")` alone means. Those are
+/// GDScript's defaults and SceneRPCInterface::_parse_rpc_config's both.
+struct FRpcDesc
+{
+    /// The name Godot dispatches by: the Verse method's, or Godot's own name for the virtual it
+    /// overrides, for the reason FMethodDesc carries one.
+    FUtf8String Name;
+    int32 RpcMode{2};
+    bool bCallLocal{false};
+    int32 TransferMode{2};
+    int32 Channel{0};
+    int32 Line{0};
+    int32 Column{0};
+    /// vh_rpc_reject. Anything but VH_RPC_OK means the method must not be registered as an RPC.
+    int32 Reject{0};
+    FUtf8String RejectDetail;
+};
+
+/// The methods of ClassName that carry an `@rpc`. A method with none is absent rather than
+/// listed disabled, because absence is what Godot's own empty config means.
+AUTORTFM_DISABLE bool GetClassRpcs(FUtf8StringView ClassName, TArray<FRpcDesc>& OutRpcs);
+
 /// One member of a class's `@statics` module (R-NODE-4).
 struct FStaticDesc
 {
@@ -631,6 +657,7 @@ struct FAnalysisSnapshot
         bool bAbstract = false;
         TArray<GodotVerse::FMethodDesc> Methods;
         TArray<GodotVerse::FSignalDesc> Signals;
+        TArray<GodotVerse::FRpcDesc> Rpcs;
         TArray<GodotVerse::FCompleteItem> Members;
 
         /// What the class inherits and could still override. Held beside Members rather than

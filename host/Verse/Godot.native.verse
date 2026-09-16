@@ -287,6 +287,13 @@ VhRefNew<native>(Tag:int)<reads>:int
 VhRefInvoke<native>(Ref:int, Args:[]variant)<transacts>:variant
 VhRefInvokeVoid<native>(Ref:int, Args:[]variant)<transacts>:void
 
+# A method of the *builtin type* behind a reference -- `Signal.emit`, `Callable.bind`,
+# `Callable.call_deferred`. VhCallValue cannot reach these and no spelling would have made it: that
+# one takes an object handle, and none of Godot's builtin types is an Object. Six of Godot's 33
+# vararg entry points live here and had no route at all before ABI 8.7.
+VhRefCall<native>(Ref:int, Method:string, Args:[]variant)<transacts>:variant
+VhRefCallVoid<native>(Ref:int, Method:string, Args:[]variant)<transacts>:void
+
 # The whole container at once, for the bulk converters. One native function per element shape
 # rather than one per Godot type: eleven packed and unpacked types share four payloads.
 VhRefInts<native>(Ref:int)<reads>:[]int

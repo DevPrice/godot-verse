@@ -384,6 +384,27 @@ func begin() -> void:
 	_check_eq("a payloadless emit takes the no-tail arity",
 			node.call("EmitOnNoArgs", pinger, "poked"), OK)
 	_check_eq("and it fired once", _vararg_pokes, 1)
+
+	# The other six, which live on a *reference* rather than on an object handle -- Callable.call,
+	# Callable.bind, Signal.emit and three more. VhCallValue takes a Godot Object's handle and none
+	# of the builtin types is one, so these had no route at all before ABI 8.7's VhRefCall.
+	_check_eq("Callable.call reaches through a reference",
+			node.call("CallCallable", _double, 21), 42)
+	# Godot's own currying, and the order is its own too: bind appends after the call's arguments.
+	_check_eq("Callable.bind curries, with its arguments last",
+			node.call("CallBound", _add_two, 10, 5), 15)
+	# No zero-argument arity exists for any of these, for the GDScript.new reason -- `array{}` is
+	# how an empty argument list is written, and this is the case that says so.
+	_check_eq("and an empty argument list is array{}",
+			node.call("CallCallableNoArgs", _say), "said")
+
+	_vararg_ping = -1
+	node.call("EmitForeign", pinger, "pinged", 7)
+	_check_eq("Signal.emit reaches a signal the mirror has no accessor for", _vararg_ping, 7)
+	_vararg_pokes = 0
+	node.call("EmitForeignNoArgs", pinger, "poked")
+	_check_eq("and a payloadless one", _vararg_pokes, 1)
+
 	pinger.queue_free()
 
 	# --- R-TYPE-1: PackedVector2Array ----------------------------------------------------------
@@ -1532,6 +1553,74 @@ func begin() -> void:
 	# than reaching a VM entry that would answer nothing.
 	_check_eq("a script with no hooks answers nothing for an unknown property",
 			node.get("NoSuchThingAtAll"), null)
+
+
+	# --- R-EXP-9: @rpc, and the config Godot reads it out of ------------------------------------
+	#
+	# The receiving half. `Script.get_rpc_config()` is bound in ClassDB, so what Godot's own
+	# SceneRPCInterface walks is exactly what a test can read -- which is the whole of what makes
+	# this assertable without a second peer. The Dictionary's keys are method names and each value
+	# carries Godot's own four fields with Godot's own numbering.
+	var rpc_script: Script = load("res://scripts/rpcs.verse")
+	_check("rpcs.verse compiles", rpc_script != null and rpc_script.can_instantiate())
+	if rpc_script == null:
+		_check("a method with @rpc reaches the rpc config", false)
+	else:
+		var rpc_config: Dictionary = rpc_script.get_rpc_config()
+		_check("a method with @rpc reaches the rpc config", rpc_config.has("TakeDamage"))
+		# Absence is how "not remote-callable" is spelled: Godot reads the keys it is given and
+		# nothing else, so a method with no attribute must not be a key at all.
+		_check("and a method without one is absent", not rpc_config.has("Ordinary"))
+
+		# The defaults, which the *host* applies rather than the consumer, so that there is one
+		# statement of what a partial @rpc means. These are GDScript's own and
+		# SceneRPCInterface::_parse_rpc_config's both.
+		var authority: Dictionary = rpc_config.get("TakeDamage", {})
+		_check_eq("@rpc(\"authority\") is Godot's default mode",
+				authority.get("rpc_mode"), MultiplayerAPI.RPC_MODE_AUTHORITY)
+		_check_eq("and does not run on the caller", authority.get("call_local"), false)
+		_check_eq("and travels reliably",
+				authority.get("transfer_mode"), MultiplayerPeer.TRANSFER_MODE_RELIABLE)
+		_check_eq("on channel zero", authority.get("channel"), 0)
+
+		# Every field at once, written in an order that is not Godot's, because the words are
+		# matched rather than positional -- and the number among them is the channel.
+		var nudge: Dictionary = rpc_config.get("Nudge", {})
+		_check_eq("a word out of order still lands", nudge.get("rpc_mode"), MultiplayerAPI.RPC_MODE_ANY_PEER)
+		_check_eq("and the locality with it", nudge.get("call_local"), true)
+		_check_eq("and the transfer mode",
+				nudge.get("transfer_mode"), MultiplayerPeer.TRANSFER_MODE_UNRELIABLE_ORDERED)
+		_check_eq("and a number among the words is the channel", nudge.get("channel"), 3)
+
+		# One word from one category leaves the other three at their defaults.
+		var ping: Dictionary = rpc_config.get("Ping", {})
+		_check_eq("one word sets its own category", ping.get("rpc_mode"), MultiplayerAPI.RPC_MODE_ANY_PEER)
+		_check_eq("and leaves the others alone",
+				ping.get("transfer_mode"), MultiplayerPeer.TRANSFER_MODE_RELIABLE)
+
+		# A refused config is dropped rather than half-applied: registering what survived parsing
+		# would make the author's belief about the method nearly true, which is worse than not.
+		_check("a refused @rpc is not registered at all", not rpc_config.has("Misspelled"))
+
+		# The sending half needs no attribute -- `Node.rpc` is one of stage 6's vararg methods.
+		#
+		# **Which answer comes back is deliberately not asserted**, and the difference is Godot's
+		# rather than Verse's. The editor-side driver's SceneTree has no MultiplayerAPI at all, so
+		# the call stops at Node::rpcp with ERR_UNCONFIGURED; an exported game has one, whose
+		# default offline peer reports itself connected, so the call reaches SceneRPCInterface,
+		# finds the method in the very config this suite just read, and sends it to nobody --
+		# which is OK. Asserting either number would be asserting which of Godot's guards fired
+		# in which run.
+		#
+		# What a single-process run *can* say is that the call left Verse and came back as one of
+		# Godot's Error ordinals rather than as a bridge failure. R-EXP-9's other half -- the call
+		# that arrives at a second peer -- needs two processes, and is owed as a by-hand check.
+		var sender := Node2D.new()
+		sender.set_script(rpc_script)
+		tree.root.add_child(sender)
+		var sent: Variant = sender.call("SendTakeDamage", 5)
+		_check("Node.rpc leaves Verse and comes back as a Godot Error", typeof(sent) == TYPE_INT)
+		sender.queue_free()
 
 	# --- R-AUD-1: what a failure undoes ---------------------------------------------------------
 	#

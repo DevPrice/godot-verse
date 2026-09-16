@@ -221,6 +221,7 @@ void VerseScript::refresh_from_analysis() {
 	// reason: Godot asks _has_method on per-frame paths, and every ask walks the semantic program.
 	methods_cache = has_own_class ? runtime->class_methods(verse_class_name()) : Vector<VerseMethodInfo>();
 	signals_cache = has_own_class ? runtime->class_signals(verse_class_name()) : Vector<VerseSignalInfo>();
+	rpcs_cache = has_own_class ? runtime->class_rpcs(verse_class_name()) : Vector<VerseRpcInfo>();
 
 	// The export list only exists once the project has been analysed, and a placeholder created
 	// before that got an empty one.
@@ -1075,6 +1076,31 @@ bool VerseScript::_is_placeholder_fallback_enabled() const {
 	return placeholder_fallback_enabled;
 }
 
+// R-EXP-9's receiving half: what Godot's multiplayer asks a script for.
+//
+// The shape is Godot's own and is not documented anywhere but in the code that reads it --
+// SceneRPCInterface::_parse_rpc_config walks the *keys* as method names and each value as a
+// Dictionary of "rpc_mode", "call_local", "transfer_mode" and "channel". All four are written,
+// not just the ones the author named: the host has already applied Godot's defaults, and writing
+// them out is what keeps the two sides from disagreeing about what `@rpc("any_peer")` alone means.
+//
+// A rejected config is dropped rather than registered with whatever survived parsing. An `@rpc`
+// with a misspelled word is a method the author believes is remote-callable, and half-applying it
+// would make that belief nearly true, which is worse than not at all -- `_validate` says why at
+// the method's line.
 Variant VerseScript::_get_rpc_config() const {
-	return Variant();
+	Dictionary config;
+	for (int64_t i = 0; i < rpcs_cache.size(); i++) {
+		const VerseRpcInfo &rpc = rpcs_cache[i];
+		if (rpc.reject != VH_RPC_OK) {
+			continue;
+		}
+		Dictionary entry;
+		entry["rpc_mode"] = (int64_t)rpc.rpc_mode;
+		entry["call_local"] = rpc.call_local;
+		entry["transfer_mode"] = (int64_t)rpc.transfer_mode;
+		entry["channel"] = (int64_t)rpc.channel;
+		config[rpc.name] = entry;
+	}
+	return config;
 }

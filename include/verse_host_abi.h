@@ -43,7 +43,7 @@ extern "C" {
  * different toolchains and nothing links them.
  */
 #define VH_ABI_VERSION_MAJOR 8
-#define VH_ABI_VERSION_MINOR 6
+#define VH_ABI_VERSION_MINOR 7
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
 typedef int32_t vh_bool;
@@ -462,6 +462,19 @@ typedef struct vh_godot_api
 	 * the peer aborted, so nothing outside it can ever have seen the object and an Object-derived
 	 * one is freed rather than leaked. The rollback is not a place to leak on. */
 	void (*ReleaseObject)(void* Ctx, vh_handle Handle, vh_bool bDiscard);
+
+	/* --- v8.7: a method on a reference rather than on an object ----------------------------- */
+
+	/* Calls a method of the *builtin type* a reference id names -- `Signal.emit`, `Callable.bind`,
+	 * `Callable.call_deferred`, and every other method of an Array, a Dictionary, a Callable or a
+	 * Signal that the mirror does not carry as a wrapper method.
+	 *
+	 * CallValue cannot reach these: it takes a vh_handle, which names a Godot *Object*, and none
+	 * of the builtin types is one. The dispatch is Godot's own `Variant::callp`, so a method this
+	 * build of Godot does not have answers VH_CALL_NO_SUCH_MEMBER rather than crashing.
+	 *
+	 * OutValue may be left VH_TYPE_VOID for a method that answers nothing. */
+	int32_t (*RefCall)(void* Ctx, int64_t Ref, const char* NameUtf8, int32_t NameLen, const vh_value* Args, int32_t ArgCount, vh_arena* Arena, vh_value* OutValue);
 } vh_godot_api;
 
 /* How the frame about to execute relates to the frame the debugger last stopped in.
@@ -968,6 +981,57 @@ typedef struct vh_signal_desc
 	int32_t RejectDetailLen;
 } vh_signal_desc;
 
+/* Why a method's `@rpc` cannot reach Godot. Same bargain vh_signal_reject makes: a rejected config
+ * is still listed, because the consumer needs somewhere to say why. */
+typedef enum vh_rpc_reject
+{
+	VH_RPC_OK = 0,
+
+	/* An argument that is not one of Godot's seven words. GDScript's own message lists them, and
+	 * RejectDetail carries the word that was written. */
+	VH_RPC_UNKNOWN_ARGUMENT,
+
+	/* Two arguments from one category -- two of "call_local"/"call_remote", two of
+	 * "any_peer"/"authority", or two transfer modes. RejectDetail names the category. */
+	VH_RPC_DUPLICATE_CATEGORY,
+
+	/* An argument in a position that wants a different kind of value: the channel is the fourth and
+	 * must be an integer, and the first three must be strings. */
+	VH_RPC_BAD_ARGUMENT_TYPE
+} vh_rpc_reject;
+
+/* One method's `@rpc` configuration (R-EXP-9), as Godot's own `rpc_config` Dictionary wants it.
+ *
+ * The four fields are Godot's four and carry its own numbering, so the consumer copies rather than
+ * translates: RpcMode is MultiplayerAPI::RPCMode, TransferMode is MultiplayerPeer::TransferMode.
+ * A method with no `@rpc` is not listed at all -- absence is how "not an RPC" is spelled, and it is
+ * what Godot's own empty config means.
+ *
+ * The defaults are GDScript's, which are also SceneRPCInterface::_parse_rpc_config's: authority,
+ * not call-local, reliable, channel 0. They are filled in here rather than left to the consumer so
+ * that the two sides cannot drift about what `@rpc("any_peer")` alone means. */
+typedef struct vh_rpc_desc
+{
+	/* The Verse method name, which is the name Godot dispatches by -- or Godot's own name for the
+	 * virtual it overrides, for the same reason vh_method_desc carries one. */
+	const char* NameUtf8;
+	int32_t NameLen;
+
+	int32_t RpcMode;      /* MultiplayerAPI::RPCMode: 0 disabled, 1 any peer, 2 authority */
+	vh_bool CallLocal;
+	int32_t TransferMode; /* MultiplayerPeer::TransferMode: 0 unreliable, 1 ordered, 2 reliable */
+	int32_t Channel;
+
+	int32_t Line;
+	int32_t Column;
+
+	/* vh_rpc_reject. Anything but VH_RPC_OK means the method must not be registered as an RPC and
+	 * the consumer reports RejectDetail at Line/Column. */
+	int32_t Reject;
+	const char* RejectDetailUtf8;
+	int32_t RejectDetailLen;
+} vh_rpc_desc;
+
 /* One member of a class's statics module (R-NODE-4).
  *
  * Verse has no `static` keyword, and an inline module is what it has instead -- a script can
@@ -1037,6 +1101,21 @@ VH_ATTR VH_API int32_t vh_class_base_type(const char* ClassNameUtf8, const char*
  * The descriptors are the host's and live until the next call to this function.
  * Returns VH_ERR_NOT_FOUND when the class does not exist in the analysed program. */
 VH_ATTR VH_API int32_t vh_class_signal_list(const char* ClassNameUtf8, const vh_signal_desc** OutSignals, int32_t* OutCount);
+
+/* v8.7: every method of ClassNameUtf8 that carries an `@rpc` attribute (R-EXP-9).
+ *
+ * A method with no `@rpc` is absent rather than listed with a disabled mode, because that is what
+ * Godot's own config means -- SceneRPCInterface walks the keys it is given and nothing else.
+ *
+ * Read from the same snapshot the method and export lists are, so it refreshes per keystroke; an
+ * `@rpc` added to a method is live before the next Build, the way a signal declaration is.
+ *
+ * A configuration the bridge cannot carry is listed with a Reject rather than dropped, for the
+ * reason vh_signal_reject gives, so a consumer building Godot's Dictionary must filter on Reject.
+ *
+ * The descriptors are the host's and live until the next call to this function.
+ * Returns VH_ERR_NOT_FOUND when the class does not exist in the analysed program. */
+VH_ATTR VH_API int32_t vh_class_rpc_list(const char* ClassNameUtf8, const vh_rpc_desc** OutRpcs, int32_t* OutCount);
 
 /* Every method ClassNameUtf8 declares, including the ones that override a Godot virtual.
  *
@@ -1791,6 +1870,7 @@ typedef int32_t (*vh_instantiate_fn)(const char*, vh_handle, vh_instance**);
 typedef void (*vh_release_instance_fn)(vh_instance*);
 typedef int32_t (*vh_class_method_list_fn)(const char*, const vh_method_desc**, int32_t*);
 typedef int32_t (*vh_class_signal_list_fn)(const char*, const vh_signal_desc**, int32_t*);
+typedef int32_t (*vh_class_rpc_list_fn)(const char*, const vh_rpc_desc**, int32_t*);
 typedef int32_t (*vh_class_static_list_fn)(const char*, const vh_static_desc**, int32_t*);
 typedef vh_bool (*vh_class_is_abstract_fn)(const char*);
 typedef int32_t (*vh_class_base_type_fn)(const char*, const char**);
