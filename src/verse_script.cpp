@@ -14,6 +14,7 @@
 #include <godot_cpp/classes/editor_settings.hpp>
 #endif
 #include <godot_cpp/classes/object.hpp>
+#include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/godot.hpp>
 #include <godot_cpp/variant/packed_string_array.hpp>
@@ -340,22 +341,41 @@ StringName VerseScript::_get_doc_class_name() const {
 // `is_script_doc` is the other half -- it is what keeps ctrl+click jumping to the declaration
 // rather than diverting into the help viewer the way a name from Godot's own API does.
 //
-// Safe to answer from here even during the editor's first file scan: loading a .verse resource
-// compiles the project on the way in, so by the time Godot asks there is an analysis to read.
-// With no host there is simply nothing to say, and Godot re-asks when the script is saved.
+// Godot builds a project's script documentation once per session and does it on a **loader thread**
+// (EditorHelp::_regen_script_doc_thread), where every ABI entry point is refused: the host pins
+// Verse to the game thread. So the ask that matters most arrives where it cannot be answered, and
+// answering it with an empty member list registered a class whose every hover drew an empty box.
+//
+// Declining and asking to be asked again is the answer. republish_script_docs is what asks, on the
+// editor's own thread. A `.verse` that declares no class of its own is the other way to have
+// nothing to say and is never worth re-asking about, so it is separated out first (R-LANG-6).
 TypedArray<Dictionary> VerseScript::_get_documentation() const {
 	TypedArray<Dictionary> docs;
 
+	const String source = verse_newline_normalized(source_code);
+	const VerseClassDecl decl =
+			verse_scan_class_decl(source.utf8().get_data(), get_path().get_file().get_basename().utf8().get_data());
+	if (decl.name.empty()) {
+		return docs;
+	}
+
 	VerseRuntime *runtime = get_runtime();
+	VerseScriptLanguage *language = VerseScriptLanguage::singleton();
+	OS *os = OS::get_singleton();
+	const bool on_verse_thread = os != nullptr && os->get_thread_caller_id() == os->get_main_thread_id();
 	const String class_name = verse_class_name();
-	if (class_name.is_empty() || runtime == nullptr || !runtime->is_host_loaded()) {
+
+	// has_class separates "not described yet" from "described, and has no members": both answer
+	// an empty list, and only the first is worth asking again about.
+	if (!on_verse_thread || class_name.is_empty() || runtime == nullptr || !runtime->is_host_loaded()
+			|| !runtime->has_class(class_name)) {
+		if (language != nullptr) {
+			language->note_script_docs_deferred();
+		}
 		return docs;
 	}
 
 	const TypedArray<Dictionary> members = runtime->class_members(class_name);
-	const String source = verse_newline_normalized(source_code);
-	const VerseClassDecl decl =
-			verse_scan_class_decl(source.utf8().get_data(), get_path().get_file().get_basename().utf8().get_data());
 
 	Array properties;
 	Array methods;

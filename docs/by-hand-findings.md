@@ -607,6 +607,60 @@ blocking the stage.
 
 ---
 
+## B20. The comment above a member stopped reaching its hover · **fixed, two causes**
+
+Reported as "hovering a Verse member that has a comment on it doesn't show the comment — I feel
+like this used to work". It did, and the two reasons are unrelated to each other.
+
+**The one that was a regression is a thread, not a line.** A hover on a member of the project's own
+class answers `LOOKUP_RESULT_CLASS_PROPERTY` naming that class — which is exactly what GDScript
+does (`gdscript_editor.cpp`'s `DataType::SCRIPT` arm) — and Godot then reads the description out of
+the script's *registered documentation* rather than off the lookup result, because `description` is
+read for the two local results alone. So the tooltip is only ever as good as what
+`_get_documentation` answered. **Godot asks for that once per session, on a loader thread of its
+own** (`EditorHelp::_regen_script_doc_thread`, which loads every script and asks each to describe
+itself), and **every ABI entry point is refused off the game thread** — so `vh_class_members`
+answered nothing, every Verse class registered with no members at all, and after that nothing asks
+again except a *save*. Saving the file fixed it, which is why it read as intermittent.
+
+It used to work because the read **waited**: before `dcd517e` some twenty-two ABI reads began with
+a join on the analysis thread, and that commit's own message names this caller — "the doc pass for
+the members". Taking the waits out was right; this pass was the one consumer that had been relying
+on one, from a thread that could not have it.
+
+The fix is to decline rather than to answer badly. `_get_documentation` now says *nothing* when it
+is off the Verse thread, has no host, or the snapshot cannot yet describe the class — registering
+no documentation is better than registering a class with no members — and sets a flag;
+`VerseScriptLanguage::_frame` spends it by re-registering **every** loaded script's documentation
+through `ScriptEditor::clear_docs_from_script`/`update_docs_from_script`. Every script rather than
+the open one, because a class' documentation is read by a hover in any file. The retry is armed
+once and re-armed by a landed analysis and by a published generation, which are the two things that
+change the answer: waiting for an analysis alone is not enough, because an editor opened and left
+alone starts none, and retrying per frame is too much.
+
+A `.verse` that declares no class of its own is separated out first and never re-asked about
+(R-LANG-6) — it has nothing to document, which is a different thing from not being able to say so.
+
+**The second cause was never a regression and had been wrong since the feature shipped: an
+attribute between the comment and the declaration ended the walk.** `verse_doc_comment_above` reads
+upward from a definition's line until it stops finding comment delimiters, and `@global_class`
+is not one. Which line it starts from decides whether that matters, and the two callers differ —
+the host reports a *member* at its first attribute line, so `@export` members were unaffected, but
+`verse_scan_class_decl` reports a *class* at the `:= class` row itself. So `mover`'s whole comment
+was dropped where `spinner`'s, carrying no attribute, survived. An attribute line is now stepped
+over rather than ending the walk, which makes the answer independent of which line the caller had.
+
+**What it was found with.** `EditorHelp` writes the registered script documentation to
+`.godot/editor/editor_script_doc_cache.res` at editor exit, and that file can be read back headless
+— `ResourceLoader.load(..., CACHE_MODE_IGNORE)` and `get_meta("classes")`. Before: every Verse class
+`props=0 methods=0` with the GDScript beside them intact. After: `mover props=6 methods=2`, each
+carrying the comment above its declaration. **A headless editor cannot be used for this** —
+`cmdline_mode` is set from `DisplayServer::get_name() == "headless"`, and both the doc-cache
+regeneration and `EditorFileSystem::_update_script_documentation` are skipped under it — so the run
+that produces the cache has to be a windowed one. Nothing else here can see any of it.
+
+---
+
 ## What shipped
 
 Every entry is closed. In the order they were done, which is the order the entry above them argued

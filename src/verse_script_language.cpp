@@ -55,12 +55,22 @@ String verse_newline_normalized(const String &p_source) {
 //
 // A `<# #>` block contributes only the lines that open with its delimiter; a continuation line
 // reads as ordinary text and stops the walk, which is the conservative direction to be wrong in.
+//
+// An attribute line is stepped over rather than ending the walk: the prose an author writes for
+// `@global_class mover` or for an `@export` member sits above the attribute clause, not between it
+// and the declaration. Which line p_line is decides whether that matters -- the host reports a
+// member at its first attribute, and verse_scan_class_decl reports a class at the `:= class` row
+// itself -- so `mover`'s whole comment was dropped where `spinner`'s, carrying no attribute,
+// survived.
 String verse_doc_comment_above(const String &p_source, int64_t p_line) {
 	const PackedStringArray lines = p_source.split("\n");
 	PackedStringArray collected;
 
 	for (int64_t i = p_line - 1; i >= 0 && i < lines.size(); i--) {
 		String line = lines[i].strip_edges();
+		if (line.begins_with("@")) {
+			continue;
+		}
 		if (line.begins_with("<#>")) {
 			line = line.substr(3);
 		} else if (line.begins_with("<#")) {
@@ -3298,6 +3308,21 @@ void VerseScriptLanguage::_frame() {
 			}
 		}
 
+		// The first ask, and every one a change to the program has re-armed. The poll above is
+		// what clears docs_refresh_attempted, so this costs one republish per analysis rather
+		// than one per frame for a class that still cannot be described.
+		if (project_built && !docs_refresh_attempted && script_docs_deferred.exchange(false)) {
+			docs_refresh_attempted = true;
+			docs_refresh_pending = true;
+		}
+
+		// Before the error list, because republishing a doc is what the list's own script needs
+		// to have happened already. Same reason as below for not doing it inside the poll.
+		if (docs_refresh_pending) {
+			docs_refresh_pending = false;
+			republish_script_docs();
+		}
+
 		// Deliberately here rather than in poll_check: re-entering the script editor from inside
 		// the poll would rebuild its error list while it is drawing a popup.
 		if (editor_refresh_pending) {
@@ -3665,6 +3690,10 @@ Error VerseScriptLanguage::build_project() {
 		script->generation_published();
 	}
 
+	// Same reason as the poll's: a class that could not describe itself against the retiring
+	// program may be able to now.
+	docs_refresh_attempted = false;
+
 	return status;
 }
 
@@ -3820,6 +3849,10 @@ void VerseScriptLanguage::poll_check() const {
 			editor_refresh_pending = record_diagnostics(errors_by_globalized) || editor_refresh_pending;
 			refresh_script_warnings(in_flight_path);
 
+			// The program the last attempt was made against is gone, so the answer may have
+			// changed. _frame is what acts on it, for the reason the refresh below is deferred.
+			docs_refresh_attempted = false;
+
 			// Every script whose compile() declined to wait for this. Told one at a time rather
 			// than only the analysed file's script, because a save can be waiting on a result its
 			// own buffer did not start. Snapshotted: telling a script republishes its export list,
@@ -3877,6 +3910,47 @@ void VerseScriptLanguage::refresh_completion_if_current() const {
 	}
 
 	code_edit->request_code_completion(true);
+#endif
+}
+
+void VerseScriptLanguage::note_script_docs_deferred() const {
+	script_docs_deferred.store(true);
+}
+
+// Every loaded script's documentation, re-registered now that the host can describe a class.
+//
+// Godot builds a project's script documentation exactly once per session and does it on a loader
+// thread of its own -- EditorHelp::_regen_script_doc_thread, which loads every script and asks it
+// to describe itself -- and after that republishes a script's only when it is *saved*. That one
+// pass runs before the first analysis has published a snapshot, so every class described itself as
+// having no members at all, and a hover on `Speed` found the class' documentation with no row for
+// it: the label, the name, and an empty box where the comment above the declaration should be.
+//
+// It used to work because vh_class_members waited: ~22 ABI reads began with a join on the analysis
+// thread, and this pass was one of the callers that paid the 1.7 s and got real members back
+// (commit dcd517e, which took the waits out and is what this replaces them with).
+//
+// Not limited to the open script the way refresh_current_script_editor is. The documentation of a
+// class is read by a hover in *any* file, and nothing else will ask for it again.
+void VerseScriptLanguage::republish_script_docs() const {
+#ifdef TOOLS_ENABLED
+	EditorInterface *editor_interface = verse_editor_interface();
+	ScriptEditor *script_editor = editor_interface != nullptr ? editor_interface->get_script_editor() : nullptr;
+	if (script_editor == nullptr) {
+		return;
+	}
+
+	// Snapshotted: describing a script reaches _get_documentation, and Godot is free to drop one
+	// while that runs.
+	const std::vector<VerseScript *> scripts = live_scripts;
+	for (VerseScript *script : scripts) {
+		const Ref<Script> ref = Ref<Script>(script);
+		if (ref.is_null() || ref->get_path().is_empty()) {
+			continue;
+		}
+		script_editor->clear_docs_from_script(ref);
+		script_editor->update_docs_from_script(ref);
+	}
 #endif
 }
 

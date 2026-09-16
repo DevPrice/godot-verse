@@ -10,6 +10,7 @@
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
 
+#include <atomic>
 #include <map>
 #include <string>
 #include <unordered_map>
@@ -263,6 +264,13 @@ public:
 	void register_script(VerseScript *p_script);
 	void unregister_script(VerseScript *p_script);
 
+	// Said by a script Godot asked to describe itself before the analysis that describes it had
+	// landed, so the next one that does can re-answer the question. Godot asks once, on a thread
+	// of its own, and never asks again on its own account -- see republish_script_docs.
+	//
+	// Atomic because that thread is not the editor's: the flag is set off it and read in _frame.
+	void note_script_docs_deferred() const;
+
 	// Live script instances, by the instance id of the object each is attached to. Borrowed, the
 	// way live_scripts is: an instance adds itself in create() and removes itself in free_func,
 	// which are the only two places one is born and dies.
@@ -400,6 +408,11 @@ private:
 	// _complete_code finds the host describing the buffer and replaces the partial list in place.
 	void refresh_completion_if_current() const;
 
+	// Re-registers every loaded script's documentation, which is the only way a class described
+	// too early gets described again: Godot builds its script docs once per session, on a loader
+	// thread of its own, and otherwise republishes a script's only when it is saved.
+	void republish_script_docs() const;
+
 	// Reaps a finished analysis and starts whatever came in while it ran. Called once per frame.
 	void poll_check() const;
 
@@ -426,6 +439,19 @@ private:
 	// its own to re-ask once the author stops typing, so without this an error survives its own
 	// fix on screen and the documentation stays a save behind.
 	mutable bool editor_refresh_pending = false;
+
+	// The same arrangement for the *documentation*, which is a separate question because Godot
+	// asks for it once per session and off the editor's thread. Set by note_script_docs_deferred,
+	// taken by the _frame that re-registers every script's documentation.
+	mutable std::atomic<bool> script_docs_deferred{ false };
+	mutable bool docs_refresh_pending = false;
+
+	// Whether the republish has already been tried against the program as it now stands. Godot's
+	// one pass can be the last thing that ever asks -- an editor opened and left alone starts no
+	// analysis of its own -- so waiting for one to land is not enough, and retrying every frame
+	// until a class can be described is too much. Cleared by a landed analysis and by a published
+	// generation, which are the two things that change the answer.
+	mutable bool docs_refresh_attempted = false;
 
 	// Module path per res:// script path, and whether it has been derived at all this session.
 	// Mutable because verse_class_name() is const and every lookup goes through it.

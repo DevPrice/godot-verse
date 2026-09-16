@@ -61,8 +61,10 @@ Two documents are not phase records and are the ones to read before adding a fea
   each diff came to. The one standing is the `<transacts>` trap (wall 8), narrowed twice and not
   removed.
 - **`docs/by-hand-findings.md`** — what the by-hand editor sessions found, because everything from
-  `EngineDebugger` and the editor UI inward has no automated test and never will. B1–B9 and B15–B18
-  are defects, all fixed; B12 is a Verse fact; B13 a latency finding; B14 the sandboxed export run.
+  `EngineDebugger` and the editor UI inward has no automated test and never will. B1–B9, B15–B18
+  and B20 are defects, all fixed; B12 is a Verse fact; B13 a latency finding; B14 the sandboxed
+  export run. **B20 is the one to read before touching `_get_documentation`**: Godot asks for a
+  script's documentation once per session and off the game thread, where every ABI read is refused.
   Its "What is still open" section is where the six remaining by-hand checks live.
 
 `docs/nonatomic-methods.md` is generated — R-AUD-3's list of the 1132 emitted methods whose
