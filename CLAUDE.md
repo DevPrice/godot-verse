@@ -649,6 +649,22 @@ it is not in `run_tests.py`.
   without waiting, let the collector raise its start signal, then collect — which is the coupled
   pass `TickGC` takes opportunistically. Release is still "within a cycle or two", never "the next
   one": the VM's registers still name what the last frame held.
+- **Every object-returning method in the mirror is `<decides>`, and for all but the singletons that
+  is correct.** `GetParent[]`, `GetTree[]`, `GetViewport[]` are failable because Godot really
+  answers null there — R-TYPE-4's rule that nullability belongs to the *type*, so an object return
+  is the only failable one. The 41 singleton accessors look like the same thing and are not: 39 of
+  them cannot fail in any run that executes Verse at all, and the word stays only because V3564
+  forbids the alternative. So "why does this need an `if`" has two answers, and only one of them is
+  a tax worth apologising for.
+- **`Object::get_class()` can answer a class `extension_api.json` has never heard of**, and
+  `GodotClassNames.gen.h` is keyed by exact name off that dump. `GDCLASS` registers a class in
+  ClassDB the first time one is constructed, so a driver class is in ClassDB and *not* in the dump —
+  `IP` answers `IPWindows`, `NavigationServer2D` answers `GodotNavigationServer2D` — and the lookup
+  misses, which costs the handle its class and every cast over it. `GDSOFTCLASS` is the one that
+  does not, because it leaves `get_class()` to the nearest `GDCLASS` ancestor, which is why
+  `DisplayServerWindows` crosses as `display_server` and needs nothing. Godot moves classes between
+  the two macros between releases, so a caller that knows the class before it has a handle should
+  say so (`MirroredClassFor`, and what the singleton accessors pass).
 
 ### The debugger and the profiler
 
