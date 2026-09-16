@@ -796,6 +796,33 @@ func begin() -> void:
 		_check("a class<abstract> reports itself abstract", (abstract_script as Script).is_abstract())
 		_check("while an ordinary one does not", not (statics_script as Script).is_abstract())
 
+	# --- R-SCN-6: a singleton crosses as the class its name says --------------------------------
+	#
+	# Two of the 41 accessors could never succeed, and for a reason `<decides>` hid: the object Godot
+	# hands back is of a *driver* class -- IPWindows, GodotNavigationServer2D -- which is in ClassDB
+	# because GDCLASS puts it there on first construction, and in no extension_api.json because it is
+	# not exposed. The mirror has a row only for what the dump carries, so the handle resolved to
+	# nothing and every cast declined. Asserted against Godot's own answer rather than against the
+	# literal "IPWindows", which is a driver name and not a promise.
+	var singleton_script: Script = load("res://scripts/singletons.verse")
+	_check("singletons.verse compiles", singleton_script != null and singleton_script.can_instantiate())
+	if singleton_script != null:
+		var singles := Node2D.new()
+		singles.set_script(singleton_script)
+		tree.root.add_child(singles)
+		_check("Godot reports the NavigationServer2D singleton as a class of its own",
+				Engine.get_singleton("NavigationServer2D").get_class() != "NavigationServer2D")
+		_check_eq("and the accessor answers that object anyway",
+				singles.call("NavigationServer2dClass"),
+				Engine.get_singleton("NavigationServer2D").get_class())
+		# IP is the other one of the two, and the accessor is deliberately not called: asking Godot
+		# for that singleton segfaults the process at exit, on master as well (B21). The premise is
+		# still worth asserting, because it is what makes IP the second case.
+		_check("IP is the same shape, which is why it is the other one",
+				Engine.get_singleton("IP").get_class() != "IP")
+		_check_eq("while a singleton registered under its own class is unchanged",
+				singles.call("EngineClass"), "Engine")
+
 	# --- R-NODE-7 / R-NODE-8: the full virtual set ----------------------------------------------
 	#
 	# Before Phase 4 exactly three of Godot's 1413 virtuals were carried, hand-written on the native

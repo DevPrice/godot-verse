@@ -3795,6 +3795,14 @@ AUTORTFM_DISABLE UClass* MirroredClassForHandle(int64 Handle)
 
 } // namespace
 
+AUTORTFM_DISABLE UClass* GodotVerse::MirroredClassFor(FUtf8StringView GodotClassName)
+{
+    const char* const VerseName = MirroredNameForGodotClass(GodotClassName);
+    return VerseName
+        ? FindMirroredClass(FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(VerseName)))
+        : nullptr;
+}
+
 /// The Verse object a Godot handle crosses as: the script's own instance where the node carries
 /// one, and a fresh mirror wrapper of the handle's actual Godot class otherwise (R-SCN-6).
 ///

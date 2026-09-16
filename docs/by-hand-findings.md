@@ -661,6 +661,43 @@ that produces the cache has to be a windowed one. Nothing else here can see any 
 
 ---
 
+## B21. Asking Godot for the `IP` singleton segfaults the process at exit · **open**
+
+Found while writing the fixture for the singleton-class fix, and it is **not** that fix's doing: it
+reproduces on master, where `GetIP[]` merely *fails*. The accessor still calls `vh_singleton`, and
+that is enough.
+
+**The repro is ten seconds.** A `.verse` in `tests/integration/scripts` whose only body is
+`if (Ip := GetIP[]) then "ok" else "no"`, a `SceneTree` script that calls it and quits, and:
+
+    godot --headless --path tests/integration --script res://<driver>.gd
+
+The cases all print, the suite's own summary prints, `vh_shutdown` returns, the extension's
+terminator runs to its last line — and *then* the process dies with `0xC0000005`. Exit 139 through
+Git Bash. Godot's crash handler prints nothing because `Main::cleanup` has already disabled it, and
+lldb does not stop on it either.
+
+**What was ruled out, each by its own run.** The mirrored class is not it: building the wrapper as
+`object` instead of `ip` still crashes, and realising `ip`'s `UClass` while wrapping the *OS*
+handle does not. The wrapper is not it either: passing no fallback class, so the handle crosses as
+a bare `vh_object` exactly as it did before the fix, still crashes. `OS`, `DisplayServer`,
+`NavigationServer2D` and `Engine` are all fine, so it is neither "a singleton" nor "a late-deleted
+one" — `OS` is deleted later than `IP` is. And GDScript's own `Engine.get_singleton("IP")` in the
+same process, with the host loaded, exits 0.
+
+What is left is the one thing that only the bridge does: `api_get_singleton` reaches `IP` through
+**godot-cpp**, which mints an instance binding on the engine object and registers a free callback
+that lives in `godot-verse.dll`. Godot deletes `IP` in `unregister_driver_types()`, after
+`deinitialize_extensions()` has already torn our side down. That is a theory with the shape of the
+evidence and not a diagnosis; the next session should confirm it before fixing it, and the fix it
+implies is dropping the bindings we made at the terminator rather than leaving them for Godot.
+
+**Why it matters more than an exit code:** every layer of `run_tests.py` reads a process's exit
+status, so one case touching `IP` turns a green suite red with nothing in the log to say why. That
+is how this was found.
+
+---
+
 ## What shipped
 
 Every entry is closed. In the order they were done, which is the order the entry above them argued

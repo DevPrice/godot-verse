@@ -1384,21 +1384,22 @@ int64 VhRefFromValues(int64 Tag, TArray<FGodotValue> const& Values)
     return NewRefFrom(Tag, Items);
 }
 
-TOptional<int64> VhSingleton(verse::string const& Name)
+TNonNullPtr<verse::vh_object> VhSingletonObject(verse::string const& Name)
 {
     FHostState& Host = GetHost();
-    if (!Host.Godot.GetSingleton)
-    {
-        return {};
-    }
-
     const FUtf8StringView View = ToView(Name);
-    const vh_handle Handle = CallGodot([&] { return Host.Godot.GetSingleton(Host.Godot.Ctx, Bytes(View), View.Len()); });
-    if (Handle == 0)
-    {
-        return {};
-    }
-    return Handle;
+    const vh_handle Handle = Host.Godot.GetSingleton
+        ? CallGodot([&] { return Host.Godot.GetSingleton(Host.Godot.Ctx, Bytes(View), View.Len()); })
+        : 0;
+
+    // Open for VhObjectOf's two reasons, and the class lookup is a third.
+    return AutoRTFM::Open([&] {
+        // Only for a handle Godot answered. A fallback over 0 would hand back a live-looking
+        // reference to nothing, where a bare vh_object is a value the cast declines.
+        UClass* const Named = Handle != 0 ? GodotVerse::MirroredClassFor(View) : nullptr;
+        return TNonNullPtr<verse::vh_object>(
+            CastChecked<verse::vh_object>(GodotVerse::ObjectForHandle(Handle, Named)));
+    });
 }
 
 }} // namespace verse::Godot

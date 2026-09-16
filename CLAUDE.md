@@ -63,7 +63,10 @@ Two documents are not phase records and are the ones to read before adding a fea
 - **`docs/by-hand-findings.md`** — what the by-hand editor sessions found, because everything from
   `EngineDebugger` and the editor UI inward has no automated test and never will. B1–B9, B15–B18
   and B20 are defects, all fixed; B12 is a Verse fact; B13 a latency finding; B14 the sandboxed
-  export run. **B20 is the one to read before touching `_get_documentation`**: Godot asks for a
+  export run. **B21 is the one open defect**: asking Godot for the `IP` singleton — which the
+  generated accessor does whether or not it then succeeds — segfaults the process *after* everything
+  has shut down, so it reads as a whole suite failing with nothing in the log. **B20 is the one to
+  read before touching `_get_documentation`**: Godot asks for a
   script's documentation once per session and off the game thread, where every ABI read is refused.
   Its "What is still open" section is where the six remaining by-hand checks live.
 
@@ -560,7 +563,7 @@ it is not in `run_tests.py`.
   every container wrapper do; a **mirrored Godot class cannot**, because it descends from the native
   `vh_object`, so anything a narrowed body needs must be reached by a *cast* over what the host
   built rather than by construction — which is what the singleton accessors do
-  (`GetInput()` is `input[VhObjectOf(VhSingleton["Input"])]`), and what R-SCN-6 says they should
+  (`GetInput()` is `input[VhSingletonObject("Input")]`), and what R-SCN-6 says they should
   always have done.
 
 ### Signals, tasks and awaiting

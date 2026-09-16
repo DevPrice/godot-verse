@@ -2709,9 +2709,14 @@ def emit_singleton_accessors(api: dict, emit_order: list, member_names: set) -> 
         # mirrored class descends from the native `vh_object` and so is `<transacts>` to construct,
         # and that made a `<reads>` accessor impossible. Casting has no such effect and was the more
         # correct spelling anyway.
+        #
+        # The cast is what the `<decides>` is for, and it is the *only* failure left: the host builds
+        # a handle Godot answered at the singleton's own class, so the two whose concrete class is in
+        # no extension_api.json -- IP's IPWindows, NavigationServer2D's GodotNavigationServer2D --
+        # cross as `ip` and `navigation_server2d` rather than as a bare vh_object every cast refuses.
         f'{singleton_accessor_name(name, member_names)}<public>()<decides><reads>'
         f':{verse_class_name(name)}'
-        f' = {verse_class_name(name)}[VhObjectOf(VhSingleton["{name}"])]'
+        f' = {verse_class_name(name)}[VhSingletonObject("{name}")]'
         for name in sorted(n for n in emit_order if n in singletons)
     ]
 

@@ -146,6 +146,10 @@ AUTORTFM_DISABLE void ReleaseInstance(FInstance* Instance);
 /// something the declaration accepts. The generated cast path passes null on purpose.
 AUTORTFM_DISABLE UObject* ObjectForHandle(int64 Handle, UClass* Fallback = nullptr);
 
+/// The mirrored class an object of Godot's GodotClassName crosses as, for a caller that knows the
+/// class before it has a handle. Null for a Godot class this mirror does not carry.
+AUTORTFM_DISABLE UClass* MirroredClassFor(FUtf8StringView GodotClassName);
+
 /// R-NODE-3's half of a construction: the Godot peer for an object whose Verse constructor is
 /// running. The handle the host is already holding for it where the host is the side doing the
 /// constructing, and a fresh Godot object of the nearest mirrored ancestor of Self's class

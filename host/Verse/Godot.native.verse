@@ -126,9 +126,16 @@ VhCallValueConst<native>(Handle:int, Method:string, Args:[]variant)<reads>:varia
 VhCallVoid<native>(Handle:int, Method:string, Args:[]variant)<transacts>:void
 VhSetValue<native>(Handle:int, Property:string, Value:variant)<transacts>:void
 
-# Engine::get_singleton. Fails for a name Godot does not register, which is what the generated
-# accessors in GodotClasses.native.verse are `<decides>` for.
-VhSingleton<native>(Name:string)<decides><reads>:int
+# Engine::get_singleton, as the object it names. A name Godot does not register in this build
+# answers a bare `vh_object`, which every cast then declines -- VhObjectOf's rule, for the same
+# reason, and what the generated accessors in GodotClasses.native.verse are `<decides>` for.
+#
+# The object is built at the *singleton's own* class where Godot will not name a mirrored one.
+# `Engine.get_singleton("IP")` answers an IPWindows and NavigationServer2D a GodotNavigationServer2D
+# -- driver and module classes that are in no extension_api.json, so the handle's own class resolves
+# to nothing and `ip[...]` could never succeed. A singleton's *name* is a mirrored class by
+# construction, which is the one thing about the handle that is known before Godot is asked.
+VhSingletonObject<native>(Name:string)<reads>:vh_object
 
 # The Verse object a Godot handle names, built by the host as the most derived mirrored class the
 # object actually is -- or, for a node carrying a Verse script, that script's own object.

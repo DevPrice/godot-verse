@@ -291,7 +291,7 @@ def test_singleton_accessors_cover_only_emitted_classes():
     check(
         "an accessor for the emitted singleton and nothing else",
         lines,
-        ['GetInput<public>()<decides><reads>:input = input[VhObjectOf(VhSingleton["Input"])]'],
+        ['GetInput<public>()<decides><reads>:input = input[VhSingletonObject("Input")]'],
     )
 
 
@@ -871,12 +871,13 @@ def test_generated_file_matches_hand_written_slice():
     )
 
     # At module scope there are three kinds of failable definition, and each fails for a reason a
-    # caller has to handle: a singleton not registered in this build, a variant that is not the type
-    # being asked for, and a null object.
+    # caller has to handle: a singleton this build does not register -- the accessor's cast over the
+    # bare vh_object the host answers for one -- a variant that is not the type being asked for, and
+    # a null object.
     free = [line for line in failable if not line.startswith("    ")]
     unexplained = [
         line for line in free
-        if "VhSingleton[" not in line
+        if "VhSingletonObject(" not in line
         and not line.startswith("(Value:variant).As")
         and not line.startswith("VhUnpack")
         and not line.startswith("VhToObject(")
@@ -887,7 +888,7 @@ def test_generated_file_matches_hand_written_slice():
     check("no failable free function fails for an unexplained reason", unexplained, [])
     check_true(
         "a mirrored singleton gets an accessor",
-        'GetInput' in text and 'VhSingleton["Input"]' in text,
+        'GetInput' in text and 'VhSingletonObject("Input")' in text,
     )
     check_true(
         "an accessor a mirrored method already names is the one that moves",
