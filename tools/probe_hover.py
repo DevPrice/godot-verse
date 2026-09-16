@@ -208,12 +208,13 @@ def rules(rows: list[dict]) -> list[Finding]:
                 "H4", row, "a tooltip with neither a type nor a description in it",
                 "a type, the way GDScript fills doc_type for every local"))
 
-        # H5. The host resolved the identifier and the editor still draws nothing. Whatever the
-        # right tooltip is, no tooltip is not it.
-        if not answered and host_resolved:
+        # H5. The host resolved the identifier, knows its type, and the editor draws nothing.
+        # Silence is a legitimate answer where there is nothing to say -- `void` has no Godot page
+        # and GDScript answers nothing for it either -- so the test is that something was in hand.
+        if not answered and host_resolved and row.get("host_type"):
             findings.append(Finding(
                 "H5", row, "no tooltip",
-                f"a tooltip: the host resolved this to a {host_kind}"))
+                f"a tooltip: the host resolved this to a {host_kind} of type {row['host_type']}"))
 
     # H6. A word in prose. `# the script looks up a node` is not code, and a hover over it that
     # answers Godot's Script or Node documentation is the mirror's lowercase class names colliding
@@ -224,6 +225,25 @@ def rules(rows: list[dict]) -> list[Finding]:
             findings.append(Finding(
                 "H6", row, described(row),
                 "no tooltip: the pointer is over a comment or a string, not over code"))
+
+    # H8. One name, answered in one place and silent in another. Neither half is wrong on its own
+    # -- which is why this is a rule about the corpus rather than about a row -- but a name the
+    # editor can describe where it is used and cannot describe where it is declared is a hole in
+    # the walk rather than a decision. This is what found `player := class(area2d)` resolving from
+    # every file except its own.
+    answers: dict[str, set] = {}
+    for row in code_rows(rows):
+        answers.setdefault(row["symbol"], set()).add(row["result"] == OK)
+    for symbol, outcomes in sorted(answers.items()):
+        if outcomes != {True, False}:
+            continue
+        silent = [r for r in code_rows(rows) if r["symbol"] == symbol and r["result"] != OK]
+        spoke = next(r for r in code_rows(rows) if r["symbol"] == symbol and r["result"] == OK)
+        findings.append(Finding(
+            "H8", silent[0],
+            f"no tooltip here, and {described(spoke)} at {where(spoke)}"
+            + (f" (and {len(silent) - 1} more silent)" if len(silent) > 1 else ""),
+            "the same answer wherever the name is written"))
 
     # H7. One word, two answers, decided by where in it the pointer happened to land. An author
     # hovers a word; which of its columns the mouse is over is not something they choose.

@@ -157,13 +157,72 @@ String godot_singleton_class_for(const String &p_verse_name) {
 	if (!p_verse_name.begins_with("Get")) {
 		return String();
 	}
-	const String godot_class = p_verse_name.substr(3);
+	String godot_class = p_verse_name.substr(3);
+	// `GetInputSingleton`, not `GetInput`: gen_verse_api.py moves the accessor out of the way when
+	// a mirrored class already carries a member of the plain name (singleton_accessor_name), and
+	// a module-level function ambiguous with a class member is a compile error rather than a
+	// preference. So the suffix has to come off before the name can be inverted -- and it is tried
+	// second, because a Godot class could in principle end in "Singleton".
+	for (int attempt = 0; attempt < 2; attempt++) {
+		for (size_t i = 0; i < std::size(verse_api::classes); i++) {
+			if (godot_class == verse_api::classes[i].godot_name) {
+				return godot_class;
+			}
+		}
+		if (!godot_class.ends_with("Singleton")) {
+			break;
+		}
+		godot_class = godot_class.substr(0, godot_class.length() - 9);
+	}
+	return String();
+}
+
+// The Godot documentation page a `...Statics` module stands for. The mirror reaches Godot's
+// constants and static methods through one module per class, named the Godot class plus the
+// suffix -- `Vector2Statics.Zero` is Vector2.ZERO -- so inverting it is a lookup in the class
+// table, the same shape as the singleton accessor above.
+//
+// `GodotStatics` is the one that is not a class. It holds what belongs to no class, which is
+// exactly what Godot documents on @GlobalScope -- a page its documentation has and ClassDB does
+// not, and the one GDScript sends a click on `randf_range` to.
+String godot_statics_class_for(const String &p_verse_name) {
+	if (p_verse_name == String("GodotStatics")) {
+		return String("@GlobalScope");
+	}
+	if (!p_verse_name.ends_with("Statics")) {
+		return String();
+	}
+	const String godot_class = p_verse_name.substr(0, p_verse_name.length() - 7);
 	for (size_t i = 0; i < std::size(verse_api::classes); i++) {
 		if (godot_class == verse_api::classes[i].godot_name) {
 			return godot_class;
 		}
 	}
 	return String();
+}
+
+// Verse's own primitive types, and the Godot page that documents the values each one crosses as.
+// A Verse `int` *is* the Godot int -- that is what it becomes at the boundary -- so sending a
+// hover on one to Godot's page is the same answer GDScript gives, and by the same reasoning:
+// `Variant::get_type_by_name(p_symbol)` is the second thing its lookup_code tries.
+//
+// `void` is deliberately absent, along with `any` and the rest. Godot documents no page for them,
+// GDScript answers nothing for `void` either, and the alternative -- a box reading "Local
+// Constant void" with nothing in it -- is what this table exists to stop.
+const char *godot_doc_class_for_primitive(const String &p_verse_type) {
+	if (p_verse_type == String("int")) {
+		return "int";
+	}
+	if (p_verse_type == String("float")) {
+		return "float";
+	}
+	if (p_verse_type == String("logic")) {
+		return "bool";
+	}
+	if (p_verse_type == String("string")) {
+		return "String";
+	}
+	return nullptr;
 }
 
 // Whether a definition is one of the Godot package's globals, rather than a member of one of its
@@ -2476,6 +2535,19 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 			result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS;
 			result["class_name"] = found_name;
 		}
+	} else if (kind == VH_LOOKUP_TYPE_ALIAS) {
+		if (const char *godot_class = godot_doc_class_for_primitive(found_name)) {
+			result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS;
+			result["class_name"] = String(godot_class);
+			return result;
+		}
+	} else if (kind == VH_LOOKUP_MODULE) {
+		const String statics_class = godot_statics_class_for(found_name);
+		if (!statics_class.is_empty()) {
+			result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS;
+			result["class_name"] = statics_class;
+			return result;
+		}
 	} else if (kind == VH_LOOKUP_FUNCTION || kind == VH_LOOKUP_DATA) {
 		// A global is a member of nothing, so the method table has no owner to answer it by, and
 		// the file it is declared in is in the engine tree rather than in the project -- leaving
@@ -2543,12 +2615,27 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 		result["description"] = description;
 	}
 
+	// A local result that carries no type, no description and no class is a tooltip with nothing
+	// in it: Godot draws the label and the symbol and stops (editor_help.cpp). Where there is also
+	// nowhere to click through to, the honest answer is no tooltip -- which is what GDScript
+	// leaves for the same shape of symbol, and is the difference between a hover that says nothing
+	// and a hover that does not interrupt.
+	auto hide_if_empty = [&]() -> Dictionary {
+		const bool draws_nothing = String(result["doc_type"]).is_empty()
+				&& String(result.get("description", String())).is_empty()
+				&& String(result.get("class_name", String())).is_empty();
+		if (draws_nothing) {
+			result["result"] = (int64_t)ERR_UNAVAILABLE;
+		}
+		return result;
+	};
+
 	// At a declaration that overrides, the parent is the only useful destination: this
 	// definition's own line is the one the cursor is already on.
 	const int64_t target_line = overrides_something ? overridden_line : own_line;
 	const String target_path = overrides_something ? overridden_path : own_path;
 	if (target_line < 0 || target_path.is_empty()) {
-		return result;
+		return hide_if_empty();
 	}
 
 	// A location with no script beside it is read as a line in the file being edited, so a
@@ -2557,7 +2644,7 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 	const bool same_file = target_path == globalized;
 	const String target_res_path = same_file ? p_path : String(path_by_globalized.get(target_path, String()));
 	if (target_res_path.is_empty()) {
-		return result;
+		return hide_if_empty();
 	}
 
 	result["location"] = target_line + 1;
