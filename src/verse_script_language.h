@@ -208,6 +208,14 @@ public:
 	// program to exist but have no business deciding when a new one is published.
 	godot::Error ensure_project_built();
 
+	// Every hover the editor could produce over one script, as one row per word and run of
+	// columns that answer alike. The editor's own hover path is unreachable from a test --
+	// CodeEdit decides the word and the column from the mouse, and ScriptTextEditor turns the
+	// result into a tooltip in the editor's own C++ -- so this reproduces both halves over a
+	// file on disk and reports what _lookup_code answered beside what the host resolved, which
+	// is the pair a mislabelled tooltip has to be read out of. tools/probe_hover.py consumes it.
+	godot::TypedArray<godot::Dictionary> probe_hover(const godot::String &p_path);
+
 	// Errors the project build reported against one script, in the shape _validate returns.
 	// The build is the only thing that ever produces them: asking the compiler again for a
 	// single file would report every other script's definitions as duplicates.

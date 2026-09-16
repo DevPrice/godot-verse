@@ -301,6 +301,13 @@ void VerseScriptLanguage::_bind_methods() {
 	// Only so EditorFileSystem's filesystem_changed has something to connect to; a signal needs a
 	// bound method, and nothing else here is reachable from Godot by name.
 	ClassDB::bind_method(D_METHOD("on_filesystem_changed"), &VerseScriptLanguage::on_filesystem_changed);
+
+	// The hover harness' one seam. `_lookup_code` is a virtual, and a virtual is metadata in
+	// ClassDB rather than a MethodBind (class_db.cpp's add_virtual_method fills virtual_methods
+	// and nothing else), so no script can call it however it reaches the language object. This is
+	// the method that can be called, and it exists because every tooltip the script editor draws
+	// is otherwise testable only by hand.
+	ClassDB::bind_method(D_METHOD("probe_hover", "path"), &VerseScriptLanguage::probe_hover);
 }
 
 String VerseScriptLanguage::_get_name() const {
@@ -2489,6 +2496,183 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 		result["script_path"] = target_res_path;
 	}
 	return result;
+}
+
+// The lexer's kind at a byte column, so a probe row can say whether the word it hovered was code
+// at all. Tokens arrive in increasing column order and each runs until the next one begins.
+static const char *verse_token_kind_name(VerseTokenKind p_kind) {
+	switch (p_kind) {
+		case VerseTokenKind::Identifier:
+			return "identifier";
+		case VerseTokenKind::Comment:
+			return "comment";
+		case VerseTokenKind::String:
+			return "string";
+		case VerseTokenKind::Escape:
+			return "escape";
+		case VerseTokenKind::Interpolation:
+			return "interpolation";
+		case VerseTokenKind::Number:
+			return "number";
+		case VerseTokenKind::Keyword:
+			return "keyword";
+		case VerseTokenKind::ControlKeyword:
+			return "control_keyword";
+		case VerseTokenKind::Attribute:
+			return "attribute";
+		case VerseTokenKind::Symbol:
+			return "symbol";
+		case VerseTokenKind::Function:
+			return "function";
+		case VerseTokenKind::FunctionDefinition:
+			return "function_definition";
+		case VerseTokenKind::Member:
+			return "member";
+		default:
+			return "text";
+	}
+}
+
+// Every hover the editor could produce over one file. Three things the editor does have to be
+// reproduced exactly, or the rows describe a hover nobody can perform:
+//
+//   - the word comes from TextEdit::get_word, whose test is `start <= column && end >= column`,
+//     so the column one *past* a word's last character still hovers that word. That off-by-one
+//     is a real mouse position -- the right half of the last glyph -- and it is the likeliest
+//     place for one column of a word to answer differently from the rest.
+//   - the marker is spliced at the hovered column rather than at the word's start, which is what
+//     CodeEdit's get_text_with_cursor_char does, so a hover in the middle of an identifier asks
+//     about a position inside it.
+//   - the symbol handed over is the whole word wherever in it the pointer was.
+//
+// Columns that answer alike collapse into one row, so a word every column agrees about is one
+// row and a word they do not is as many rows as it has distinct answers -- which is the finding.
+TypedArray<Dictionary> VerseScriptLanguage::probe_hover(const String &p_path) {
+	TypedArray<Dictionary> rows;
+
+	ensure_project_built();
+
+	const String file = FileAccess::get_file_as_string(p_path);
+	if (FileAccess::get_open_error() != OK) {
+		return rows;
+	}
+	const String source = verse_newline_normalized(file);
+	const CharString source_utf8 = source.utf8();
+	const std::string all(source_utf8.get_data(), (size_t)source_utf8.length());
+
+	VerseRuntime *runtime = get_runtime();
+	const bool host_can_answer = runtime != nullptr && runtime->is_host_loaded();
+	const String globalized = ProjectSettings::get_singleton()->globalize_path(p_path);
+
+	const auto is_word = [](char p_char) {
+		const unsigned char c = (unsigned char)p_char;
+		return std::isalnum(c) != 0 || c == '_';
+	};
+
+	VerseLexState state;
+	int64_t line = 0;
+	for (size_t line_start = 0; line_start <= all.size();) {
+		size_t newline = all.find('\n', line_start);
+		const size_t line_end = newline == std::string::npos ? all.size() : newline;
+		const std::string text = all.substr(line_start, line_end - line_start);
+
+		std::vector<VerseToken> tokens;
+		verse_lex_line(text, state, tokens);
+		auto kind_at = [&tokens](size_t p_column) {
+			const char *name = "text";
+			for (const VerseToken &token : tokens) {
+				if ((size_t)token.column > p_column) {
+					break;
+				}
+				name = verse_token_kind_name(token.kind);
+			}
+			return String(name);
+		};
+
+		for (size_t at = 0; at < text.size();) {
+			if (!is_word(text[at])) {
+				at++;
+				continue;
+			}
+			size_t end = at;
+			while (end < text.size() && is_word(text[end])) {
+				end++;
+			}
+			const String symbol = String::utf8(text.data() + at, (int64_t)(end - at));
+
+			Dictionary previous;
+			String previous_key;
+			int64_t run_start = -1;
+			// `<= end` because the column one past the word is still inside get_word's range.
+			for (size_t column = at; column <= end; column++) {
+				const std::string buffer = all.substr(0, line_start + column) + "\xEF\xBF\xBF" +
+						all.substr(line_start + column);
+				const Dictionary answer = _lookup_code(
+						String::utf8(buffer.data(), (int64_t)buffer.length()), symbol, p_path, nullptr);
+
+				Dictionary row;
+				row["line"] = line;
+				row["symbol"] = symbol;
+				row["token"] = kind_at(column);
+				row["result"] = answer.get("result", (int64_t)ERR_UNAVAILABLE);
+				row["type"] = answer.get("type", (int64_t)-1);
+				row["class_name"] = answer.get("class_name", String());
+				row["class_member"] = answer.get("class_member", String());
+				row["doc_type"] = answer.get("doc_type", String());
+				row["description"] = answer.get("description", String());
+				row["location"] = answer.get("location", (int64_t)-1);
+				row["script_path"] = answer.get("script_path", String());
+
+				// What the host resolved, which is what says whether the label above is the right
+				// one for it. The consumer cannot ask separately -- only this side knows which
+				// position produced the row.
+				if (host_can_answer) {
+					const Dictionary found = runtime->lookup_symbol(globalized, (int32_t)line, (int32_t)column);
+					row["host_kind"] = found.get("kind", (int64_t)-1);
+					row["host_name"] = found.get("name", String());
+					row["host_owner"] = found.get("owner", String());
+					row["host_type"] = found.get("type", String());
+					row["host_is_var"] = found.get("is_var", false);
+					row["host_is_parameter"] = found.get("is_parameter", false);
+					row["host_is_definition"] = found.get("is_definition", false);
+				}
+
+				// Dictionary equality is by reference, so the run is keyed on the text of the
+				// answer instead.
+				const String key = UtilityFunctions::var_to_str(row);
+				if (run_start < 0) {
+					previous = row;
+					previous_key = key;
+					run_start = (int64_t)column;
+					continue;
+				}
+				if (key == previous_key) {
+					continue;
+				}
+				previous["column"] = run_start;
+				previous["column_end"] = (int64_t)column - 1;
+				rows.push_back(previous);
+				previous = row;
+				previous_key = key;
+				run_start = (int64_t)column;
+			}
+			if (run_start >= 0) {
+				previous["column"] = run_start;
+				previous["column_end"] = (int64_t)end;
+				rows.push_back(previous);
+			}
+
+			at = end;
+		}
+
+		if (newline == std::string::npos) {
+			break;
+		}
+		line_start = line_end + 1;
+		line++;
+	}
+
+	return rows;
 }
 
 // The host names a script by the absolute path vh_compile_project was given, verbatim -- which on
