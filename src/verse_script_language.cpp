@@ -3526,6 +3526,62 @@ static String signal_rejection_code(int32_t p_reject) {
 	}
 }
 
+// Whether an `@export` that Godot *will* draw is one whose value cannot survive a save.
+//
+// B19 Stage C. The class a second-class member holds has no script -- only the class named after
+// the file can be one -- so its Godot peer is a bare `Resource` carrying none of the Verse object's
+// members, and `ResourceSaver` writes an empty sub-resource. The member reads back as the empty
+// option. C1's rule is to keep the class in its own file; this is the rule said at the member
+// rather than only in a document.
+//
+// The host cannot be asked directly: A1 overwrites HintString with the fallback class, so on the
+// wire an unregistered script class and an ordinary mirrored member are the same three fields. What
+// separates them is the member's *declared* type, which the member list spells as Verse source --
+// `^?stowaway` -- and which `vh_has_class` then answers for, because it is true only of a class the
+// project itself declares. Both reads come from the analysis snapshot, so this costs no build and
+// never waits (see CLAUDE.md, "The editor's thread").
+static bool export_value_cannot_persist(const VerseRuntime &p_runtime, const String &p_class_name,
+		const Dictionary &p_entry, const TypedArray<Dictionary> &p_members) {
+	// A registered script class keeps VH_EXPORT_HINT_SCRIPT_CLASS and is not this case; only the
+	// fallback to a mirrored name is.
+	if ((int64_t)p_entry["hint"] != VH_EXPORT_HINT_CLASS) {
+		return false;
+	}
+
+	const String member_name = p_entry["name"];
+	String declared;
+	for (int64_t i = 0; i < p_members.size(); i++) {
+		const Dictionary member = p_members[i];
+		if (String(member["name"]) == member_name) {
+			declared = member["type"];
+			break;
+		}
+	}
+	// `^?stowaway`, and both decorations are load-bearing to strip in that order: the member list
+	// spells a type as Verse source, where a `var` member's type is a reference -- `^` -- around the
+	// option that every exported class-typed member is. Measured rather than assumed; the `^` is
+	// what this test missed on its first writing, and it silenced the warning entirely.
+	declared = declared.strip_edges();
+	if (declared.begins_with("^")) {
+		declared = declared.substr(1).strip_edges();
+	}
+	if (declared.begins_with("?")) {
+		declared = declared.substr(1).strip_edges();
+	}
+	if (declared.is_empty()) {
+		return false;
+	}
+
+	// The member list spells a type the way the source does, so a class in the script's own module
+	// arrives bare and has to be re-qualified before the host will recognise it (R-LANG-6; every
+	// ClassNameUtf8 in the ABI is module-qualified).
+	const int module_end = p_class_name.rfind("/");
+	if (module_end >= 0 && p_runtime.has_class(p_class_name.substr(0, module_end + 1) + declared)) {
+		return true;
+	}
+	return p_runtime.has_class(declared);
+}
+
 void VerseScriptLanguage::refresh_script_warnings(const String &p_path) const {
 	VerseRuntime *runtime = get_runtime();
 	if (runtime == nullptr || !runtime->is_host_loaded()) {
@@ -3557,6 +3613,38 @@ void VerseScriptLanguage::refresh_script_warnings(const String &p_path) const {
 		warning["code"] = reject;
 		warning["string_code"] = export_rejection_code(reject);
 		warning["message"] = export_rejection_message(entry);
+		warnings.push_back(warning);
+	}
+
+	// The exports Godot draws happily but cannot persist. Separate from the loop above because the
+	// reject code is VH_EXPORT_OK -- the slot is real, the picker is real, and it is only the *save*
+	// that loses the value, which is why this reads as its own sentence rather than as a rejection.
+	const TypedArray<Dictionary> members = found
+			? runtime->class_members(qualified_class_name(p_path))
+			: TypedArray<Dictionary>();
+	for (int64_t i = 0; found && i < exports.size(); i++) {
+		const Dictionary entry = exports[i];
+		const int64_t line = entry["line"];
+		if ((int64_t)entry["reject"] != VH_EXPORT_OK || line < 0) {
+			continue;
+		}
+		if (!export_value_cannot_persist(*runtime, qualified_class_name(p_path), entry, members)) {
+			continue;
+		}
+
+		const String name = entry["name"];
+		Dictionary warning;
+		warning["start_line"] = line + 1;
+		warning["end_line"] = line + 1;
+		warning["leftmost_column"] = (int64_t)entry["column"] + 1;
+		warning["rightmost_column"] = (int64_t)entry["column"] + 1;
+		warning["code"] = 0;
+		warning["string_code"] = String("VERSE_EXPORT_NOT_PERSISTED");
+		warning["message"] = name
+				+ String(" can be assigned in the inspector but not saved. Its class is not the one ")
+				+ String("named after its file, so it has no script -- and a value survives a save ")
+				+ String("only through one. Saving writes an empty sub-resource and the member ")
+				+ String("reloads empty. Move the class into a file of its own.");
 		warnings.push_back(warning);
 	}
 

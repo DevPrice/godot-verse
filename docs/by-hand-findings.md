@@ -630,7 +630,7 @@ for:
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks
-is not worth keeping. Four things stand open, all of them things no automated layer can reach.
+is not worth keeping. Five things stand open, all of them things no automated layer can reach.
 Phase 6's session has since been run and is recorded below with what it found, because the steps
 are worth keeping: its half of the debugger has no other test.
 
@@ -741,6 +741,31 @@ that the reasoning was right.
 stdin and prints frames, locals and members — which `run_tests.py` could pipe and assert on in the
 same shape as `tests/coverage_diagnostic`. It is written down so that if this check proves too
 costly to repeat, the automated route is a known quantity rather than a rediscovery.
+
+### Everything `refresh_script_warnings` produces · **owed**
+
+Wider than it looks, and worth stating once rather than per entry: **nothing in
+`refresh_script_warnings` is asserted anywhere.** It is the pass that turns the host's export and
+signal *Reject* codes into the warnings an author reads — seven sentences today, plus B19 Stage C's
+"can be assigned in the inspector but not saved" — and every one of them reaches the editor only,
+through `_validate`, which returns to Godot's own C++ for the gutter and the warnings panel and
+reaches no log. Nothing headless can see any of it.
+
+Two of its properties were measured during Stage C and are the ones a check should re-confirm,
+because both were wrong on the first writing:
+
+- the pass runs from the **analysis-completion path**, which the editor drives per keystroke. It
+  does not run in a headless `--script` session at all, so "it did not print" there means nothing.
+- a member's declared type arrives from `vh_class_members` spelled as Verse source, and a `var`
+  member's is **`^?stowaway`** — a reference around an option. Stage C's test missed the `^` and the
+  warning was silent with no other symptom.
+
+**Recorded and not taken**, because it is one line and would make the whole surface assertable:
+calling `refresh_script_warnings(path)` from `report_name_collisions` gives every one of these
+sentences a once-per-build copy in the log, exactly the way Stage B's second reporter works, and
+`tests/coverage_diagnostic` could then assert them the way it asserts the module ones. Not done
+here because it changes the behaviour of seven existing diagnostics that deliberately appear only
+in the gutter, which is a wider decision than the one warning that prompted it.
 
 ### Stage B's warning in the script editor, as opposed to in the log · **owed**
 

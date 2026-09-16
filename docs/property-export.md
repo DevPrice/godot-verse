@@ -863,11 +863,27 @@ resource whose path contains `::`, because that is Godot's own definition of "bu
 reload re-homes it into the container with the original path gone. C2 would reproduce GDScript's
 anonymous sub-resource rather than beat it. Nothing is waiting on a decision.
 
-**One thing C1 does not do is make the loss loud.** A script that writes a second-class member,
-saves, and reloads gets an empty option back with no diagnostic anywhere. Stage B's principle would
-say that is a request the bridge accepts and cannot serve; C1 as scoped is documentation only, so
-this is recorded as a candidate rather than done. The cheap form is a warning from the save path
-when an exported member holds a peer with no script.
+**The loss is no longer silent.** Stage B's principle — a request the bridge accepts and cannot
+serve owes the author a sentence — applies here too, so an `@export` whose value cannot survive a
+save says so at the member's declaration:
+
+> `Stowaway` can be assigned in the inspector but not saved. Its class is not the one named after
+> its file, so it has no script — and a value survives a save only through one. Saving writes an
+> empty sub-resource and the member reloads empty. Move the class into a file of its own.
+
+Consumer-side, no ABI change and no host rebuild, but **not** by the route that looks obvious. A1
+overwrites `HintString` with the fallback class, so on the wire an unregistered script class and an
+ordinary mirrored member carry the same three fields and cannot be told apart. What separates them
+is the member's *declared* type, which `vh_class_members` spells as Verse source and `vh_has_class`
+then answers for — true only of a class the project itself declares. Both reads come from the
+analysis snapshot, so the warning is live per keystroke and costs no build.
+
+Two things about that were wrong on first writing and are worth carrying forward: a `var` member's
+declared type is **`^?stowaway`**, a reference around an option, and missing the `^` silenced the
+warning with no other symptom; and `refresh_script_warnings` runs only from the analysis-completion
+path, so it never fires in a headless run and "it did not print" there proves nothing. Both are in
+`by-hand-findings.md`, along with the one-line change that would make this whole surface
+assertable.
 
 The GDScript probe that produced every measurement above is four files — an outer script with an
 inner class, a `class_name` script beside it, and a `SceneTree` driver — and is worth rebuilding
