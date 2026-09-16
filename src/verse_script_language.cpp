@@ -2312,7 +2312,29 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 	const int64_t line_start = before.rfind("\n") + 1;
 	// Godot counts the column in characters and the compiler counts it in utf8 bytes; one
 	// non-ASCII character earlier on the line is enough to make them disagree.
-	const int64_t column = before.substr(line_start).utf8().length();
+	int64_t column = before.substr(line_start).utf8().length();
+
+	// A word is hovered for one column more than it has characters. TextEdit::get_word answers
+	// for `words[i] <= column && words[i + 1] >= column`, so the caret position *after* the last
+	// character belongs to the word -- and that is where the pointer is whenever it is over the
+	// right half of the last glyph, which is half the pixels of every identifier's last letter.
+	// The compiler resolves nothing there, because the position is past the definition's source
+	// range, so a hover arriving with a perfectly good symbol answered nothing at all. Stepping
+	// back onto the last character is what makes a word answer alike wherever in it the pointer
+	// is. The same column decides a ctrl+click, which missed for the same reason.
+	//
+	// Only where the character behind the cursor is part of a word and the one ahead is not:
+	// mid-word is already inside the range, and a cursor with a space behind it is not hovering
+	// anything. A word character is ASCII, so the step is one byte as well as one character.
+	const auto word_char = [](char32_t p_char) {
+		return (p_char >= 'a' && p_char <= 'z') || (p_char >= 'A' && p_char <= 'Z') ||
+				(p_char >= '0' && p_char <= '9') || p_char == '_';
+	};
+	const char32_t ahead = marker + 1 < p_code.length() ? p_code[marker + 1] : U'\0';
+	const char32_t behind = before.length() > line_start ? before[before.length() - 1] : U'\0';
+	if (column > 0 && !word_char(ahead) && word_char(behind)) {
+		column--;
+	}
 
 	// Answering from an analysis that predates the edit would be worse than not answering: the
 	// loci below an inserted row are all shifted, so the jump lands confidently on the wrong
@@ -2613,6 +2635,10 @@ TypedArray<Dictionary> VerseScriptLanguage::probe_hover(const String &p_path) {
 				Dictionary row;
 				row["line"] = line;
 				row["symbol"] = symbol;
+				// Which occurrence of the word this is, so a consumer can tell the columns of
+				// one word from two words of the same name on one line -- `Hero.Start(Start...`
+				// is a method and a local, and they are meant to answer differently.
+				row["word"] = (int64_t)at;
 				row["token"] = kind_at(column);
 				row["result"] = answer.get("result", (int64_t)ERR_UNAVAILABLE);
 				row["type"] = answer.get("type", (int64_t)-1);

@@ -229,24 +229,19 @@ def rules(rows: list[dict]) -> list[Finding]:
     # hovers a word; which of its columns the mouse is over is not something they choose.
     seen: dict[tuple, list[dict]] = {}
     for row in code_rows(rows):
-        seen.setdefault((row["path"], row["line"], row["symbol"]), []).append(row)
+        seen.setdefault((row["path"], row["line"], row["word"]), []).append(row)
     for _, group in sorted(seen.items()):
-        runs: list[list[dict]] = []
+        run: list[dict] = []
         for row in sorted(group, key=lambda r: r["column"]):
-            # Columns of one word are contiguous; two words of one name on a line are not.
-            if runs and runs[-1][-1]["column_end"] + 1 >= row["column"]:
-                if visible(runs[-1][-1]) == visible(row):
-                    runs[-1][-1] = dict(row, column=runs[-1][-1]["column"])
-                    continue
-                runs[-1].append(row)
-            else:
-                runs.append([row])
-        for run in runs:
-            if len(run) > 1:
-                findings.append(Finding(
-                    "H7", run[0],
-                    " / ".join(f"cols {r['column']}-{r['column_end']}: {described(r)}" for r in run),
-                    "one answer for the whole word, whichever column the pointer is over"))
+            if run and visible(run[-1]) == visible(row):
+                run[-1] = dict(row, column=run[-1]["column"])
+                continue
+            run.append(row)
+        if len(run) > 1:
+            findings.append(Finding(
+                "H7", run[0],
+                " / ".join(f"cols {r['column']}-{r['column_end']}: {described(r)}" for r in run),
+                "one answer for the whole word, whichever column the pointer is over"))
 
     return findings
 
