@@ -1721,6 +1721,17 @@ external editor is secondary.
   input action or a signal name, chosen by the call the literal is an argument to. Ranking is by
   inheritance distance since ABI 8.0: the host says how many hops separate an item's owner from the
   class asked about, so a class's own members sort above its parent's above Object's.
+  **The buffer the host is asked about is repaired before it is sent.** A half-written line is a
+  *parse* error and uLang keeps no partial snippet, so nothing maps a VST node to the file and
+  `vh_complete_symbol` answers `VH_ERR_NOT_FOUND` — the author was left with the class names and
+  keywords this side appends and nothing else: no local, no member, no `Print`. Two shapes do it,
+  and one of them is every keystroke of every condition, because Godot's auto-brace completion
+  supplies the `)` and never the `:`: `if (X)` short of its `:` is *"Expected block, got end of line
+  following `if`"*, and an unclosed bracket is *"Block starting in `(` never ends"*. So
+  `verse_repair_completion_buffer` closes what the buffer leaves open and gives a bare `if` its `:`,
+  appending only past the caret so no position anything was measured against moves. `if` alone:
+  `for` and `case` recover from the missing `:` on their own, measured, and a balanced buffer is
+  never touched, so nothing that parses today can be broken by it.
 - **R-TOOL-4 (MUST)** Hover and ctrl-click: type, signature, doc comment; go to definition, for
   both user code and the mirrored Godot API. Status: **part** — a known defect is that ctrl-hover
   inside a string interpolation underlines the whole string. A position resolves against the AST an
@@ -1730,7 +1741,11 @@ external editor is secondary.
   no AST and no host — so a hover on `node2d` answers during an analysis, before a first build, and
   on a buffer the analysis has not caught up with. It never preempts a resolved answer.
 - **R-TOOL-5 (MUST)** Signature help while typing a call. Status: **part** — declines during an
-  analysis for R-TOOL-4's reason, and queues that buffer so the next ask answers.
+  analysis for R-TOOL-4's reason, and queues that buffer so the next ask answers. It is asked about
+  the same repaired buffer R-TOOL-3 describes, off the same analysis, so an unclosed call has a hint
+  again. It no longer asks about a block macro's head at all: `if (` looks like a call to the
+  backward scan that finds a callee, and there is no signature for one, so every keystroke inside a
+  condition used to spend a `vh_signature_at` that could only answer `VH_ERR_NOT_FOUND`.
 - **R-TOOL-6 (SHOULD)** Find references and rename across the project. Status: **none**.
 - **R-TOOL-7 (SHOULD)** The script editor's outline/member list is populated. Status: **done** —
   `_validate`'s `functions` key is what `ScriptTextEditor::get_functions()` builds the outline from

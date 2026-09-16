@@ -422,6 +422,81 @@ bool TestPositionInString()
 	return Ok;
 }
 
+// The completion buffer the GDExtension hands the host, repaired so uLang keeps the snippet.
+//
+// Every case is a real caret: the half-typed identifier has already been replaced by the
+// placeholder, and the column is where that placeholder starts. What is asserted is the whole
+// buffer, because the contract is that nothing at or before the caret moves.
+bool TestRepairCompletionBuffer()
+{
+	// The four lines above the caret, so a case only has to spell its own line.
+	const std::string Head =
+			"using { /Godot.org/Godot }\n"
+			"\n"
+			"probe := class(node2d):\n"
+			"\t_Ready<override>():void =\n";
+
+	struct Case
+	{
+		const char* What;
+		const char* Line;   // the caret's line, with $ standing for the placeholder's first byte
+		const char* Repaired; // what that line must become
+	};
+	const Case Cases[] = {
+		// The everyday one: auto-brace completion supplies the `)`, never the `:`.
+		{ "`if (X)` gains the `:` the parser is waiting for", "\t\tif ($Vh)", "\t\tif (Vh):" },
+		{ "an unclosed condition gains both", "\t\tif ($Vh", "\t\tif (Vh):" },
+		{ "an unclosed call gains its bracket", "\t\tPrint($Vh", "\t\tPrint(Vh)" },
+		{ "an unclosed index gains its bracket", "\t\tFoo[$Vh", "\t\tFoo[Vh]" },
+		{ "an unclosed archetype gains its brace", "\t\tX := vector2{$Vh", "\t\tX := vector2{Vh}" },
+		{ "`else if` is an `if`", "\t\telse if ($Vh)", "\t\telse if (Vh):" },
+		{ "the repair lands ahead of a trailing comment", "\t\tif ($Vh) # note", "\t\tif (Vh): # note" },
+
+		// Nothing that parses today may be touched.
+		{ "a finished `if` is left alone", "\t\tif ($Vh):", "\t\tif (Vh):" },
+		{ "a single-line `if ... then` is a whole statement", "\t\tif ($Vh) then 1 else 2", "\t\tif (Vh) then 1 else 2" },
+		{ "a plain statement is left alone", "\t\tX := $Vh", "\t\tX := Vh" },
+		{ "a balanced call is left alone", "\t\tPrint($Vh)", "\t\tPrint(Vh)" },
+		{ "an `if` that is not the line's first word is left alone", "\t\tX := Foo(if ($Vh) then 1 else 2)", "\t\tX := Foo(if (Vh) then 1 else 2)" },
+		{ "a bracket inside a string is not a bracket", "\t\tPrint(\"($Vh\")", "\t\tPrint(\"(Vh\")" },
+		{ "a bracket inside a comment is not a bracket", "\t\tX := $Vh # (", "\t\tX := Vh # (" },
+	};
+
+	bool Ok = true;
+	for (const Case& C : Cases)
+	{
+		std::string Line(C.Line);
+		const size_t Caret = Line.find('$');
+		Line.erase(Caret, 1);
+
+		const std::string Source = Head + Line + "\n";
+		const std::string Want = Head + C.Repaired + "\n";
+
+		const std::string Got = verse_repair_completion_buffer(Source, 4, (int)Caret);
+		Ok = Step(C.What, Got == Want) && Ok;
+		if (Got != Want)
+		{
+			printf("[verse_lexer_test]   want: %s\n", Want.c_str());
+			printf("[verse_lexer_test]   got:  %s\n", Got.c_str());
+		}
+	}
+
+	// A wrapped call is balanced across its two lines, so the caret's line -- unbalanced on its
+	// own -- must be left exactly as it is.
+	{
+		const std::string Source = Head + "\t\tPrint(\n\t\t\tVh\n\t\t)\n";
+		Ok = Step("a wrapped call is left alone", verse_repair_completion_buffer(Source, 5, 3) == Source) && Ok;
+	}
+
+	// A caret that is not in code is nothing this can help.
+	{
+		const std::string Source = Head + "\t\t# if (Vh\n";
+		Ok = Step("a caret inside a comment is left alone", verse_repair_completion_buffer(Source, 4, 9) == Source) && Ok;
+	}
+
+	return Ok;
+}
+
 } // namespace
 
 int main()
@@ -448,6 +523,7 @@ int main()
 	Ok = TestBracketedAssignmentIsNotDefinition() && Ok;
 	Ok = TestVersePathIsNotMemberAccess() && Ok;
 	Ok = TestPositionInString() && Ok;
+	Ok = TestRepairCompletionBuffer() && Ok;
 
 	printf("[verse_lexer_test] %s\n", Ok ? "ALL PASS" : "FAILURES");
 	return Ok ? 0 : 1;

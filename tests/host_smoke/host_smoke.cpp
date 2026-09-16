@@ -1259,6 +1259,64 @@ int main(int argc, char** argv)
 				}
 			}
 
+			// A caret inside an `if` condition, which is where the editor's buffer spends most of
+			// the time an author is writing one -- and the shape that made completion answer
+			// nothing at all until the GDExtension started repairing the line it sends.
+			//
+			// The two cases are the same caret in the same condition, differing only by the `:`
+			// that ends the header. This is the host half of the contract
+			// verse_repair_completion_buffer exists to satisfy, so it is asserted here rather than
+			// assumed: a `:` short of a block macro's header is a *parse* error, uLang keeps no
+			// partial snippet, and nothing then maps a VST node to the file.
+			const size_t Condition = ExportsSource.find("if (IsInstanceValid[Self]):");
+			CompleteOk = Step("located the fixture's `if`", Condition != std::string::npos) && CompleteOk;
+			if (Condition != std::string::npos)
+			{
+				const size_t NameAt = Condition + strlen("if (");
+				int32_t IfRow = 0;
+				int32_t IfColumn = 0;
+
+				std::string IfTyping = ExportsSource;
+				IfTyping.replace(NameAt, strlen("IsInstanceValid[Self]"), "VhCompletionCursor");
+				RowColumnOf(IfTyping, NameAt, IfRow, IfColumn);
+				AnalyseCompletionBuffer(IfTyping);
+				if (Step("vh_complete_symbol inside an `if` condition",
+						CompleteSymbolFn(ExportsPathUtf8.c_str(), IfTyping.c_str(), IfRow, IfColumn,
+										 VH_COMPLETE_SCOPE, &Items, &Count) == VH_OK))
+				{
+					CompleteOk = Step("it offers the enclosing class' own method", Offers(Items, Count, "Probe") != nullptr) && CompleteOk;
+					CompleteOk = Step("an inherited property", Offers(Items, Count, "Position") != nullptr) && CompleteOk;
+					CompleteOk = Step("and Print, the same as anywhere else",
+									 Offers(Items, Count, "Print") != nullptr)
+							  && CompleteOk;
+				}
+				else
+				{
+					CompleteOk = false;
+				}
+
+				// The same caret one character short of a header. Asserted as a refusal rather
+				// than left untested: if a later engine drop's parser learns to recover, this is
+				// the case that says the repair has become unnecessary.
+				std::string Unrepaired = IfTyping;
+				Unrepaired.erase(Unrepaired.find("VhCompletionCursor") + strlen("VhCompletionCursor") + 1, 1);
+				CompleteOk = Step("without the `:` the whole file is lost to the parser",
+								 CompleteSymbolFn(ExportsPathUtf8.c_str(), Unrepaired.c_str(), IfRow, IfColumn,
+												  VH_COMPLETE_SCOPE, &Items, &Count) == VH_ERR_STATE)
+						  && CompleteOk;
+				AnalyseCompletionBuffer(Unrepaired);
+				CompleteOk = Step("and analysing it does not bring the position back",
+								 CompleteSymbolFn(ExportsPathUtf8.c_str(), Unrepaired.c_str(), IfRow, IfColumn,
+												  VH_COMPLETE_SCOPE, &Items, &Count) == VH_ERR_NOT_FOUND)
+						  && CompleteOk;
+
+				// Put the fixture's real text back. This is the only case in the file that
+				// analyses text which does not parse, and what it leaves behind is a snapshot with
+				// no shape for this file at all -- which every read keyed by a class name answers
+				// from. Nothing below depends on it today; a case added here would.
+				AnalyseCompletionBuffer(ExportsSource);
+			}
+
 			// A member being declared rather than a name being used. The editor completes an
 			// inherited method there to the declaration that overrides it, which needs the base's
 			// signature spelled with its parameters' own names -- and needs to know which methods

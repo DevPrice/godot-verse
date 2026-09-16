@@ -105,7 +105,7 @@ compiler-side entry points answer `VH_ERR_UNSUPPORTED` in a runtime host.
 | `verse_script_instance.{h,cpp}` | one script bound to one node; raw `GDExtensionScriptInstanceInfo3` vtable, not a `godot::Object` |
 | `verse_script_language.{h,cpp}` | the `ScriptLanguage`: `_validate`, the analysis cache, `_complete_code`/`_lookup_code`, `_frame` (which pumps `vh_tick`, reaps `vh_check_project_poll` and attaches the debugger), and the `_debug_*`/`_profiling_*` surface |
 | `verse_resource_format.{h,cpp}` | load/save, without which a `.verse` cannot be attached to a node |
-| `verse_lexer.{h,cpp}` | resumable per-line lexer; no godot-cpp dependency, so it is unit-testable standalone |
+| `verse_lexer.{h,cpp}` | resumable per-line lexer, and `verse_repair_completion_buffer` — which finishes off the caret's line so a half-written `if` does not cost the whole file its AST. No godot-cpp dependency, so both are unit-testable standalone |
 | `verse_class_decl.{h,cpp}` | scans the top-level class **named after the file** and its `@global_class` attribute out of the text; defers comments and strings to the lexer, and shares its lack of godot-cpp |
 | `verse_module_map.{h,cpp}` | which module each `.verse` is in, from the `.vmodule` markers; pure, and the third godot-cpp-free unit |
 | `verse_export_plugin.{h,cpp}` | editor-only: runs `verse_cook.exe` over the project, strips every `.verse` to a one-byte stub so `ext_resource path=` still resolves, and refuses a platform this bridge does not reach |

@@ -989,6 +989,24 @@ static bool matches_typed_class_prefix(const String &p_name, const String &p_pre
 // answer is about the position rather than about whatever it collided with.
 static const char *completion_placeholder = "VhCompletionCursor";
 
+// The completion buffer as the host must see it: the placeholder already spliced in at
+// p_placeholder_start, and the caret's line finished off so uLang keeps the file.
+//
+// One function because two callers have to agree byte for byte -- _complete_code builds this to
+// ask, and completion_placeholder_buffer rebuilds it to decide whether an answer that has just
+// landed is still the answer to what is being typed. A repair in one of them alone would make
+// every late answer look like a question about some other caret and be dropped.
+//
+// verse_repair_completion_buffer appends only past the caret, so p_placeholder_start and every
+// position the caller measured before it still mean what they meant.
+static String completion_buffer_repaired(const String &p_spliced, int64_t p_placeholder_start) {
+	const String head = p_spliced.substr(0, p_placeholder_start);
+	const int64_t line_start = head.rfind("\n") + 1;
+	const std::string repaired = verse_repair_completion_buffer(p_spliced.utf8().get_data(),
+			(int)head.count("\n"), (int)head.substr(line_start).utf8().length());
+	return String::utf8(repaired.c_str());
+}
+
 #ifdef TOOLS_ENABLED
 
 // The buffer _complete_code would hand the host for the caret where it is now: the identifier the
@@ -1020,7 +1038,9 @@ static String completion_placeholder_buffer(CodeEdit *p_code_edit) {
 	while (prefix_start > 0 && is_identifier_char(text[prefix_start - 1])) {
 		prefix_start--;
 	}
-	return verse_newline_normalized(text.substr(0, prefix_start) + String(completion_placeholder) + text.substr(offset));
+	return completion_buffer_repaired(
+			verse_newline_normalized(text.substr(0, prefix_start) + String(completion_placeholder) + text.substr(offset)),
+			prefix_start);
 }
 
 #endif
@@ -1042,6 +1062,26 @@ static bool ends_a_number_literal(const String &p_text, int64_t p_end) {
 		}
 	}
 	return start <= p_end;
+}
+
+static String word_ending_at(const String &p_text, int64_t p_end) {
+	if (p_end < 0 || p_end >= p_text.length() || !is_identifier_char(p_text[p_end])) {
+		return String();
+	}
+	int64_t start = p_end;
+	while (start > 0 && is_identifier_char(p_text[start - 1])) {
+		start--;
+	}
+	return p_text.substr(start, p_end - start + 1);
+}
+
+static bool is_reserved_word(const String &p_word) {
+	for (size_t i = 0; i < std::size(verse_keywords::reserved_words); i++) {
+		if (p_word == verse_keywords::reserved_words[i]) {
+			return true;
+		}
+	}
+	return false;
 }
 
 // The offset of the last character of the callee of the innermost call the cursor is inside, or
@@ -1073,7 +1113,13 @@ static int64_t enclosing_call_callee_end(const String &p_before) {
 			while (end >= 0 && (p_before[end] == ' ' || p_before[end] == '\t')) {
 				end--;
 			}
-			return end >= 0 && is_identifier_char(p_before[end]) ? end : -1;
+			if (end < 0 || !is_identifier_char(p_before[end])) {
+				return -1;
+			}
+			// `if (`, `for (`, `case (`: a block macro's head is not a call, and there is no
+			// signature for one -- so without this, every keystroke inside a condition spent a
+			// vh_signature_at that could only ever answer VH_ERR_NOT_FOUND.
+			return is_reserved_word(word_ending_at(p_before, end)) ? -1 : end;
 		} else if (c == '{') {
 			return -1;
 		} else if (c == '\n' && depth == 0) {
@@ -1108,17 +1154,6 @@ static int64_t enclosing_open_bracket(const String &p_before, int64_t p_from, ch
 		}
 	}
 	return -1;
-}
-
-static String word_ending_at(const String &p_text, int64_t p_end) {
-	if (p_end < 0 || p_end >= p_text.length() || !is_identifier_char(p_text[p_end])) {
-		return String();
-	}
-	int64_t start = p_end;
-	while (start > 0 && is_identifier_char(p_text[start - 1])) {
-		start--;
-	}
-	return p_text.substr(start, p_end - start + 1);
 }
 
 // Whether the identifier being typed stands where a type is expected.
@@ -1164,15 +1199,6 @@ static bool completing_a_supertype(const String &p_before, int64_t p_prefix_star
 	}
 	const String word = word_ending_at(p_before, end);
 	return word == "class" || word == "struct" || word == "interface";
-}
-
-static bool is_reserved_word(const String &p_word) {
-	for (size_t i = 0; i < std::size(verse_keywords::reserved_words); i++) {
-		if (p_word == verse_keywords::reserved_words[i]) {
-			return true;
-		}
-	}
-	return false;
 }
 
 // The last byte of the class named before the `{` the cursor is inside, or -1 when the cursor is
@@ -1986,7 +2012,12 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 	// and one no script can collide with -- a name Verse code could define would make the
 	// substitution resolve to it. Shared by the options below and the argument hint, which is what
 	// lets the host answer both off one analysis.
-	const String source = verse_newline_normalized(before.substr(0, prefix_start) + String(completion_placeholder) + p_code.substr(marker + 1));
+	//
+	// Repaired, because a half-written line is a *parse* error and uLang keeps no partial snippet:
+	// without it a caret anywhere inside `if (...)` answered nothing at all.
+	const String source = completion_buffer_repaired(
+			verse_newline_normalized(before.substr(0, prefix_start) + String(completion_placeholder) + p_code.substr(marker + 1)),
+			prefix_start);
 
 	// The zero-based row and utf8 byte column of a character offset into that buffer, which is how
 	// the compiler counts and is not how Godot counts.

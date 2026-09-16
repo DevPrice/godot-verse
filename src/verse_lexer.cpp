@@ -542,3 +542,201 @@ bool verse_position_in_string(const std::string &p_source, int p_line, int p_col
 	});
 	return result;
 }
+
+namespace {
+
+// One entry per byte of the line: whether that byte is code rather than a comment or a string's
+// contents. Tokens run in increasing column order and each holds until the next starts.
+//
+// Interpolation counts as code, and so does everything lexed inside a `{...}` -- a bracket there
+// is a real bracket, and is exactly the one `Print("{Foo(}")` leaves open.
+std::vector<bool> code_mask(const std::string &p_line, const std::vector<VerseToken> &p_tokens) {
+	std::vector<bool> mask(p_line.size(), false);
+	for (size_t t = 0; t < p_tokens.size(); t++) {
+		const size_t from = (size_t)p_tokens[t].column;
+		const size_t to = t + 1 < p_tokens.size() ? (size_t)p_tokens[t + 1].column : p_line.size();
+		const bool code = p_tokens[t].kind != VerseTokenKind::Comment &&
+				p_tokens[t].kind != VerseTokenKind::String &&
+				p_tokens[t].kind != VerseTokenKind::Escape;
+		for (size_t i = from; i < to && i < mask.size(); i++) {
+			mask[i] = code;
+		}
+	}
+	return mask;
+}
+
+char closer_for(char p_opener) {
+	switch (p_opener) {
+		case '(':
+			return ')';
+		case '[':
+			return ']';
+		case '{':
+			return '}';
+		default:
+			return '\0';
+	}
+}
+
+bool is_horizontal_space(char p_c) {
+	return p_c == ' ' || p_c == '\t';
+}
+
+// The identifier the code starting at p_from runs into, or "" when what comes first is not one.
+// Leading indentation is skipped; r_end lands one past whatever was read either way.
+std::string leading_code_word(const std::string &p_line, const std::vector<bool> &p_code, size_t p_from, size_t &r_end) {
+	size_t at = p_from;
+	while (at < p_line.size() && is_horizontal_space(p_line[at])) {
+		at++;
+	}
+	r_end = at;
+	if (at >= p_line.size() || !p_code[at] || !is_ident_start(p_line[at])) {
+		return std::string();
+	}
+	size_t end = at + 1;
+	while (end < p_line.size() && p_code[end] && is_ident_continue(p_line[end])) {
+		end++;
+	}
+	r_end = end;
+	return p_line.substr(at, end - at);
+}
+
+// Whether p_head is an `if` still waiting for the `:` that introduces its block. p_state is the
+// lexer state the line starts in, so a block comment or a string opened above it still counts.
+bool wants_if_colon(const std::string &p_head, VerseLexState p_state) {
+	std::vector<VerseToken> tokens;
+	verse_lex_line(p_head, p_state, tokens);
+	const std::vector<bool> code = code_mask(p_head, tokens);
+
+	size_t at = 0;
+	std::string word = leading_code_word(p_head, code, 0, at);
+	if (word == "else") {
+		word = leading_code_word(p_head, code, at, at);
+	}
+	if (word != "if") {
+		return false;
+	}
+
+	while (at < p_head.size() && is_horizontal_space(p_head[at])) {
+		at++;
+	}
+	if (at >= p_head.size() || !code[at] || p_head[at] != '(') {
+		return false;
+	}
+
+	int depth = 0;
+	for (; at < p_head.size(); at++) {
+		if (!code[at]) {
+			continue;
+		}
+		if (p_head[at] == '(') {
+			depth++;
+		} else if (p_head[at] == ')' && --depth == 0) {
+			at++;
+			break;
+		}
+	}
+	if (depth != 0) {
+		return false;
+	}
+
+	// `if (X):` has its block and `if (X) then Y` is a whole statement; only a condition with
+	// nothing after it is a line the author is still in the middle of.
+	for (; at < p_head.size(); at++) {
+		if (!is_horizontal_space(p_head[at])) {
+			return false;
+		}
+	}
+	return true;
+}
+
+} // namespace
+
+std::string verse_repair_completion_buffer(const std::string &p_source, int p_line, int p_column) {
+	VerseLexState state;
+	std::vector<VerseToken> tokens;
+	std::vector<char> open;
+
+	std::string caret_line;
+	std::vector<bool> caret_code;
+	VerseLexState caret_state;
+	size_t caret_line_start = std::string::npos;
+
+	size_t start = 0;
+	for (int row = 0;; row++) {
+		const size_t newline = p_source.find('\n', start);
+		const size_t end = newline == std::string::npos ? p_source.size() : newline;
+		std::string line = p_source.substr(start, end - start);
+		if (!line.empty() && line.back() == '\r') {
+			line.pop_back();
+		}
+
+		const VerseLexState state_before = state;
+		tokens.clear();
+		verse_lex_line(line, state, tokens);
+		const std::vector<bool> code = code_mask(line, tokens);
+
+		for (size_t i = 0; i < line.size(); i++) {
+			if (!code[i]) {
+				continue;
+			}
+			if (closer_for(line[i]) != '\0') {
+				open.push_back(line[i]);
+			} else if (!open.empty() && closer_for(open.back()) == line[i]) {
+				open.pop_back();
+			}
+		}
+
+		if (row == p_line) {
+			caret_line = line;
+			caret_code = code;
+			caret_state = state_before;
+			caret_line_start = start;
+		}
+
+		if (newline == std::string::npos) {
+			break;
+		}
+		start = newline + 1;
+	}
+
+	if (caret_line_start == std::string::npos) {
+		return p_source;
+	}
+
+	size_t caret = p_column < 0 ? 0 : (size_t)p_column;
+	if (caret > caret_line.size()) {
+		caret = caret_line.size();
+	}
+	if (caret > 0 && !caret_code[caret - 1]) {
+		return p_source;
+	}
+
+	// Past any trailing comment and trailing whitespace, so `if (X) # note` is repaired at the
+	// `)` rather than inside the note.
+	size_t insert_at = caret_line.size();
+	while (insert_at > 0 && (!caret_code[insert_at - 1] || is_horizontal_space(caret_line[insert_at - 1]))) {
+		insert_at--;
+	}
+	if (insert_at == 0) {
+		return p_source;
+	}
+	if (insert_at < caret) {
+		insert_at = caret;
+	}
+
+	std::string repair;
+	for (size_t i = open.size(); i-- > 0;) {
+		repair.push_back(closer_for(open[i]));
+	}
+	if (wants_if_colon(caret_line.substr(0, insert_at) + repair, caret_state)) {
+		repair.push_back(':');
+	}
+	if (repair.empty()) {
+		return p_source;
+	}
+
+	std::string repaired = p_source;
+	repaired.insert(caret_line_start + insert_at, repair);
+	return repaired;
+}
