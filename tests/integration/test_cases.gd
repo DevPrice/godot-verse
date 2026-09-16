@@ -1220,6 +1220,49 @@ func begin() -> void:
 			_check("which ClassDB can resolve, unlike the name the class failed to register",
 					ClassDB.class_exists(String(stowaway.get("hint_string", ""))))
 
+		# B19 A2. A1 widened the picker to every `Resource`, so whether that is parity or a hole
+		# turns entirely on the *write* being narrow. Both refusals live in `vh_instance_set_field`
+		# and this reaches both, on its own instance so that nothing below inherits what it wrote.
+		#
+		# Read back through Verse rather than through `get()`: a bad write and a matching bad read
+		# agree with each other, and only the interpreter reading the slot says the value is really
+		# of the class the compiled code expects.
+		var writes := Resource.new()
+		writes.set_script(res_script)
+
+		# The script-class member first. Only Verse can put a legal value in this slot -- `stowaway`
+		# is not the class named after its file, so no Godot object ever carries it as a script --
+		# which is exactly what gives the refusal something to preserve.
+		writes.call("Stow")
+		_check_eq("Verse can fill a slot no Godot object could", writes.call("StowedValue"), 5)
+
+		# A plain resource takes the handle path, because it carries no Verse script instance for
+		# the other one. The host builds a wrapper for a handle only when the declared class is a
+		# mirrored one, and `stowaway` is the project's own, so this is refused before any class
+		# comparison happens at all.
+		writes.set("Stowaway", Resource.new())
+		_check_eq("a bare resource offered to a script-class slot is refused, old value kept",
+				writes.call("StowedValue"), 5)
+
+		# The same slot through the other entry point. A resource that *does* carry a Verse script
+		# takes `vh_instance_set_field_instance`, where the check is the declared class against the
+		# instance's own -- and `settings_resource` is not a `stowaway`.
+		var wrong_class := Resource.new()
+		wrong_class.set_script(res_script)
+		writes.set("Stowaway", wrong_class)
+		_check_eq("and so is an instance of a different Verse class",
+				writes.call("StowedValue"), 5)
+
+		# The second refusal: a *mirrored* member, where the declared class is one ClassDB knows and
+		# the test is `IsA` rather than "is it mirrored at all". `host_smoke` cannot reach this one
+		# -- its harness answers no class for any handle, so the declared class is used as the
+		# fallback and every handle matches it. Only a Godot that knows what a handle is can fail it.
+		writes.set("Palette", Curve.new())
+		_check("a mirrored slot refuses a handle naming the wrong class",
+				writes.call("PaletteIsSet") == false)
+		writes.set("Palette", Gradient.new())
+		_check("and takes one naming the right class", writes.call("PaletteIsSet") == true)
+
 		_check_eq("and a method runs on an owner that is not a node",
 				settings.call("Describe"), "untitled x3")
 

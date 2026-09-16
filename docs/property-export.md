@@ -649,7 +649,7 @@ Two names for one path would both resolve to the same script. GDScript has the s
 | named, type-checked | yes | yes | yes |
 | global registration | impossible | impossible | impossible |
 | export hint | native base | **dangling name, ClassDB error** | native base |
-| assignment type-checked | yes, measured | ABI says yes, **unverified** | needs a test |
+| assignment type-checked | yes, measured | ABI says yes, **unverified** | yes, measured — A2 |
 | serialises | no — class lost, values kept | no — bare `Resource`, values lost too | unchanged |
 
 ### The plan
@@ -659,11 +659,29 @@ Two names for one path would both resolve to the same script. GDScript has the s
 - **A1.** The export hint falls back to the nearest mirrored Godot class when the referenced script
   class has no registered name, rather than naming it and being refused. This is
   `_find_narrowest_native_or_global_class`'s *or*, which the bridge had been skipping.
-- **A2.** Verify and test the write-time class check on **both** paths.
-  `vh_instance_set_field_instance` is documented to refuse a value whose declared class does not
-  match; the plain handle path, `vh_instance_set_field`, is what a `.tres` assignment takes when the
-  resource carries no Verse script instance, and it is **unverified**. If it does not check, the
-  wide picker is a real hole rather than a cosmetic one. **Do this part first.**
+- **A2. Done — it checks, and the plain handle path refuses in two different ways.** The wide
+  picker is cosmetic, not a hole.
+
+  `WriteFieldOf`'s `VH_VARIANT_OBJECT` branch refuses *before comparing anything* when the member's
+  declared class is not a **mirrored** one (`HostScript.cpp:4162`): the host can build a Verse
+  wrapper from a bare handle only for a class the mirror has, so a member typed as one of the
+  project's own classes cannot be written by handle at all — and a plain `Resource` dropped into the
+  widened picker is exactly that. Where the declared class *is* mirrored, the test is
+  `Referenced->IsA(DeclaredClass)` (`:4171`), so a handle naming an object of the wrong class is
+  refused there instead. The instance path checks the declared class against the value's own class
+  (`:4308`), which is the case that was already documented.
+
+  The second refusal is the one **`host_smoke` structurally cannot reach**, which is why A2 is an
+  integration case rather than an ABI one: `SmokeGetClassOf` answers `VH_CALL_DEAD_OBJECT` for every
+  handle, so `MirroredClassForHandle` finds nothing, `ObjectForHandle` falls back to the *declared*
+  class, and every handle matches it by construction. Only a Godot that knows what a handle names
+  can fail that test.
+
+  `?stowaway` has a second property worth stating, because it is what makes the refusal safe rather
+  than merely correct: **no Godot object can ever be a legal value for it.** `stowaway` is not the
+  class named after its file, so nothing on the Godot side carries it as a script and neither path
+  has a value to accept. Verse can fill the slot; the inspector cannot. The picker is a drawn
+  affordance over a slot only script code can write.
 - **A3.** No diagnostic for merely naming a second class in a file. That is ordinary in both
   languages.
 
@@ -697,7 +715,7 @@ of GDScript's, not a behaviour to mirror. Two alternatives, not two steps:
   "::"`), which is not the same as serving one. If the spike says no, C2 is dead and C1 is the
   answer.
 
-**Recommended order:** A2, A1, B, then C1 as documentation. C2 only if authoring parity *beyond*
+**Recommended order:** A2, A1, B, then C1 as documentation. A1 and A2 are done; B is next. C2 only if authoring parity *beyond*
 GDScript is wanted and the spike comes back positive — it is a feature with real surface, not a
 gap-closer.
 
@@ -706,14 +724,23 @@ gap-closer.
 Committed: `9b6a7d0` fixed the module-qualified half of B19 — the hint carried `Gameplay/myResouce`
 and now carries the leaf.
 
-**A1 is built and green.** All three host targets, both GDExtension targets and
-`python tools/run_tests.py --build` were run against `cf75bc9`'s code and everything passed with no
-change to it: the editor run reports **351 passed, 0 failed, 0 skipped** and the exported run **341,
-0, 10**, which is `EXPORT_EXPECTED_PASSES` and `EXPORT_EXPECTED_SKIPS` as they now read. The four
-new cases are the ones that grew the count, so `IsClassNamedAfterItsFile` and the
+**A1 and A2 are built, tested and green.** All three host targets, both GDExtension targets and
+`python tools/run_tests.py` pass; the editor run reports **356 passed, 0 failed, 0 skipped** and the
+exported run **346, 0, 10**, which is `EXPORT_EXPECTED_PASSES` and `EXPORT_EXPECTED_SKIPS` as they
+now read.
+
+A1 needed no change to `cf75bc9`'s code — it was only unbuilt. `IsClassNamedAfterItsFile` and the
 `VH_EXPORT_HINT_CLASS` fallback in `HostScript.cpp` do what the section above says, in an export as
 well as in the editor: `Stowaway` is exported, drawn as a `PROPERTY_HINT_RESOURCE_TYPE` picker with
 `hint_string` `Resource`, and ClassDB resolves that name.
+
+A2 needed no host change either — the check was already there, on both paths and in two forms; what
+was missing was a test saying so. Five cases in `test_cases.gd`, on their own `Resource` so nothing
+below inherits what they wrote, and every one of them reads the slot back **through Verse**
+(`StowedValue`, `PaletteIsSet`) rather than through `get()`, because a bad write and a matching bad
+read agree with each other. They run in the export too.
+
+**B is next**, and it is consumer-side only: no ABI change and no host rebuild.
 
 The GDScript probe that produced every measurement above is four files — an outer script with an
 inner class, a `class_name` script beside it, and a `SceneTree` driver — and is worth rebuilding

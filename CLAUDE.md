@@ -212,7 +212,7 @@ because `ScriptLanguage` exposes nothing a script can ask — the only way to re
 would see is to read what the editor prints.
 
 **export** — exports `tests/integration` headless, asserts the *tree* it produced, then **launches
-it** and asserts what its cases reported: 341 passed, 0 failed, 10 skipped, with the counts named in
+it** and asserts what its cases reported: 346 passed, 0 failed, 10 skipped, with the counts named in
 `run_tests.py` so a case that stops running in an export reads as a failure rather than as a shorter
 log. It is the only layer that exercises the cooked path end to end; everything else compiles at
 startup. It needs more staged than the other layers do, because what it is exporting *is* them —

@@ -38,6 +38,32 @@ settings_resource := class(resource):
     @export
     var Stowaway<public>:?stowaway = false
 
+    # A2. The picker A1 widened accepts any `Resource`, so what has to be narrow is the *write*, and
+    # only Verse can put a legal value in this slot -- `stowaway` is not the class named after the
+    # file, so no Godot object ever carries it as a script and nothing on that side can make one.
+    # That is what gives the refusal something to preserve: Stow first, then offer the slot a wrong
+    # value, then read back through Verse rather than through the ABI, which would agree with a bad
+    # write.
+    Stow<public>()<transacts>:void =
+        set Stowaway = option{stowaway{Value := 5}}
+
+    StowedValue<public>()<transacts>:int =
+        if (S := Stowaway?) then S.Value else -1
+
+    # The other refusal inside the same entry point, and the one host_smoke structurally cannot
+    # reach: a *mirrored* member whose handle names an object of the wrong class. There the declared
+    # class is real, so the check is `IsA` rather than "not mirrored at all" -- and host_smoke's
+    # harness answers no class for any handle, which makes the declared class the fallback and every
+    # handle match it. Only a Godot that knows what a handle is can fail this.
+    #
+    # `gradient` rather than a node: this is a Resource, and a `.tres` assignment is the path A2 is
+    # about.
+    @export
+    var Palette<public>:?gradient = false
+
+    PaletteIsSet<public>()<transacts>:logic =
+        if (Palette?) then true else false
+
 # A second `@global_class` in one file, which is the shape that broke. The attribute is accepted by
 # the compiler -- it is an ordinary Verse attribute and nothing about it is per-file -- and the
 # consumer's scanner takes the file-stem class and no other, dropping the attributes above every
