@@ -997,14 +997,26 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
       TakeDamage<public>(Amount:int)<transacts>:void = ...
 
   **All four of Godot's arguments are one string, and that is a compiler constraint rather than a
-  preference.** An attribute site *references* its constructor before calling it, and Verse refuses
-  to reference an overloaded function at all — *"Referencing an overloaded function without
-  immediately calling it is not yet implemented"*, naming every candidate — so four arities of `rpc`
-  cannot exist. One string is also what makes the value readable at all: `GetAttributeTextValue`
-  refuses any attribute whose argument is a `MakeTuple`, which is every attribute of more than one
-  argument, and SOL-972 is the note on that function saying the area waits on compile-time
-  evaluation of attributes. Words separate on spaces *or* commas, so a GDScript author writing
-  Godot's own `"any_peer", "call_local"` inside the quotes still gets what they meant.
+  preference — a *temporary* one, by both of the compiler's own accounts.** Two separate things in
+  the toolchain refuse the four-argument spelling today, and each says in its own words that it is
+  unfinished rather than decided:
+
+  - an attribute site *references* its constructor before calling it, and Verse refuses to reference
+    an overloaded function at all — *"Referencing an overloaded function without immediately calling
+    it is **not yet implemented**"*, naming every candidate — so four arities of `rpc` cannot exist;
+  - `GetAttributeTextValue` refuses any attribute whose argument is a `MakeTuple`, which is every
+    attribute of more than one argument. The comment above it is `@HACK: SOL-972, We need full
+    proper support for **compile-time evaluation of attribute types**`.
+
+  **So this is a thing to come back to.** When a future engine drop lands either fix — overloaded
+  function references, or compile-time attribute evaluation — `@rpc("any_peer", "call_local",
+  "reliable", 2)` becomes writable and is the spelling to move to, because it is GDScript's and
+  because the compiler would then check the argument *count* and the channel's *type* where the
+  bridge checks them by hand today. The change is additive on the authoring side: the words already
+  separate on spaces *or* commas, so a GDScript author writing Godot's own `"any_peer",
+  "call_local"` inside one pair of quotes already gets what they meant, and the parser that reads
+  them would keep working unchanged beside a tuple-reading one. The same constraint governs every
+  multi-argument attribute this bridge might add, `@export_flags` included — see R-EXP-1.
 
   **There is no bare `@rpc`** either, for the sibling reason: an attribute with no argument has to be
   the attribute *class*, and the class is what the constructor builds; the two cannot share a name.

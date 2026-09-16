@@ -802,13 +802,17 @@ it is not in `run_tests.py`.
   whose message is about control scopes. What a Godot property dictionary's `"type"` key wants is
   the generated `ToInt(:variant_type)`, which is `<public>` and is the closer analogue of the
   `TYPE_INT` a GDScript author writes.
-- **An attribute's constructor may not be overloaded, and the message does not say so.**
-  An attribute site *references* its constructor before calling it, and Verse refuses to
-  reference an overloaded function at all -- *"Referencing an overloaded function without
-  immediately calling it is not yet implemented"*, naming every candidate. So an attribute
-  that wants several arguments takes one string and splits it (`@rpc("any_peer call_local")`),
-  which is also the only shape `GetAttributeTextValue` can read: it refuses any attribute
-  whose argument is a `MakeTuple`, which is every attribute of more than one argument.
+- **An attribute may take only one argument, and both reasons are the toolchain's unfinished
+  work rather than a rule.** An attribute site *references* its constructor before calling it, and
+  Verse refuses to reference an overloaded function at all -- *"Referencing an overloaded function
+  without immediately calling it is **not yet implemented**"*, naming every candidate. And
+  `GetAttributeTextValue`, the only accessor there is, refuses any attribute whose argument is a
+  `MakeTuple` -- every attribute of more than one argument -- under a comment reading `@HACK:
+  SOL-972, We need full proper support for compile-time evaluation of attribute types`. So a
+  multi-argument attribute takes **one string and splits it**: `@rpc("any_peer call_local")`,
+  `@export_flags("Fire,Water,Earth")`. **Re-check this on every engine drop** -- when either fix
+  lands, the several-argument spelling is the one to move to, and moving is additive because the
+  one-string form keeps working beside it.
   **And `tests/verse_probe` cannot see any of this** -- a refused attribute comes back as
   status 4 with zero diagnostics, and a *user* package may not declare `class(attribute)` at
   all, so the attribute package cannot be checked in isolation either. The integration layer

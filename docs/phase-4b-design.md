@@ -884,6 +884,18 @@ way, with SOL-972 above it saying the area waits on compile-time evaluation of a
 four-argument attribute is unreadable through the only accessor there is. The first implementation
 of this stage walked the argument expression itself to get around that; one string deleted it.
 
+**Both refusals describe themselves as unfinished, and this is a thing to come back to.** One says
+*"not yet implemented"* and the other is a `@HACK` with a ticket number on it. Neither is a decision
+about what attributes should be; both are work the Verse toolchain has not done. When a future
+engine drop lands either one, `@rpc("any_peer", "call_local", "reliable", 2)` becomes writable, and
+it is the spelling to move to — it is GDScript's, and it would put the argument *count* and the
+channel's *type* in the compiler's hands where the bridge checks them by hand today. Moving is
+additive rather than breaking: the words already split on spaces or commas, so the one-string form
+keeps working beside a tuple-reading one, and what changes is which shapes are *also* accepted. The
+constraint is not `@rpc`'s — it governs every multi-argument attribute the bridge might want, which
+is why stage 7's `@export_flags` takes its names as one comma-separated string for the same reason
+rather than by coincidence.
+
 **And it was silent.** The refusal is reported against the *script*, but the probe prints nothing
 for it and `vh_compile_project` answers status 4 with zero diagnostics — which is what a whole
 morning of this stage looked like before the same fixture was put through the integration layer,

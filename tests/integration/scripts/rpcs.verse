@@ -8,10 +8,13 @@ using { /Godot.org/Godot }
 # it too, and `reliable`/`unreliable`/`unreliable_ordered` how it travels. A number among them is
 # the channel.
 #
-# **All of it is one string, and that is not a style choice.** An attribute site *references* its
-# constructor before calling it, and Verse refuses to reference an overloaded function at all --
-# "Referencing an overloaded function without immediately calling it is not yet implemented",
-# naming every candidate. So four arities of `rpc` cannot exist and the words travel together.
+# **All of it is one string, and that is not a style choice -- it is the toolchain's, and it says
+# so.** An attribute site *references* its constructor before calling it, and Verse refuses to
+# reference an overloaded function at all -- "Referencing an overloaded function without immediately
+# calling it is **not yet implemented**", naming every candidate. So four arities of `rpc` cannot
+# exist and the words travel together. Worth re-checking whenever the engine moves: when that lands,
+# or when SOL-972's compile-time evaluation of attributes does, GDScript's own
+# `@rpc("any_peer", "call_local")` becomes writable and is the spelling to move to.
 #
 # **There is no bare `@rpc` either.** An attribute with no argument has to be the attribute
 # *class*, and the class is what the constructor builds; the two cannot share a name. GDScript's
