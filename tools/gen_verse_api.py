@@ -1354,6 +1354,12 @@ class Coverage:
         self.constants_emitted = 0
         self.statics_emitted = 0
         self.utilities_emitted = 0
+        # (verse owner, verse name, godot class, godot member, kind) for every mirrored name
+        # that is *not* a class method or property -- a signal accessor, a static, a constant
+        # or a utility. Appended where each is emitted, for the reason `nonatomic` is: a list
+        # recomputed afterwards can disagree with the mirror, and this one decides which of
+        # Godot's documentation pages a hover opens.
+        self.doc_map = []
         self.skip_reasons = Counter()
         self.unsupported_types = Counter()
         # Every skip that costs a *name*, for the editor diagnostic. A skip that costs nothing --
@@ -1845,6 +1851,9 @@ def emit_utility_functions(api: dict, resolver: TypeResolver, coverage: Coverage
             coverage.skip("utility_renamed", SkippedMember(
                 "", verse_method_name(name), "@GlobalScope", name, "utility_renamed",
                 f"`{UTILITY_RENAMES[name]}`"))
+        # @GlobalScope is where Godot documents a function belonging to no class, and is where
+        # GDScript sends a click on `randf_range`. The module is the owner the compiler reports.
+        coverage.doc_map.append(("GodotStatics", verse_name, "@GlobalScope", name, "method"))
         coverage.utilities_emitted += 1
     return blocks
 
@@ -1904,6 +1913,8 @@ def emit_static_methods(api: dict, emit_order: list, resolver: TypeResolver,
             else:
                 lines.append(f"    {verse_name}<public>({decl})<transacts>:{info.verse_type}"
                              f" = {info.unpack_fn}({call})")
+            coverage.doc_map.append((statics_module_name(godot_class), verse_name,
+                                     godot_class, method["name"], "method"))
             coverage.statics_emitted += 1
         if lines:
             blocks.append((godot_class, lines))
@@ -1954,6 +1965,8 @@ def emit_statics_module(godot_class: str, constants: list, resolver: TypeResolve
             # A class constant, which is always an int -- extension_api.json gives these a value
             # and no type at all.
             lines.append(f"    {name}<public>:int = {constant['value']}")
+            coverage.doc_map.append((statics_module_name(godot_class), name,
+                                     godot_class, constant["name"], "constant"))
             continue
         info = resolver.classify(godot_type)
         literal = verse_default_literal(info.verse_type, constant.get("value")) if info else None
@@ -1965,6 +1978,8 @@ def emit_statics_module(godot_class: str, constants: list, resolver: TypeResolve
                 "constant_no_literal", f"`{constant.get('value')}`"))
             continue
         lines.append(f"    {name}<public>:{info.verse_type} = {literal}")
+        coverage.doc_map.append((statics_module_name(godot_class), name,
+                                 godot_class, constant["name"], "constant"))
 
     if not lines:
         return ""
@@ -2382,7 +2397,8 @@ def generate(api: dict, requested: list, coverage: Coverage, enums: dict):
 
     inherited_names = {}  # godot class name -> set of Verse names visible to its subclasses
     class_blocks = []
-    method_map = []  # (godot class, verse class, godot method, verse method, is virtual) per member
+    # (godot class, verse class, godot member, verse member, is virtual, kind) per member.
+    method_map = []
     # Every name any emitted class carries, across all of them. A module-level definition may not
     # share one: see singleton_accessor_name. (member_names below is one class' own set.)
     all_member_names = set()
@@ -2443,7 +2459,8 @@ def generate(api: dict, requested: list, coverage: Coverage, enums: dict):
             used |= names
             all_member_names |= names
             emitted_lines.extend(emit_property(cp, locals_for_accessors))
-            method_map.append((name, verse_class_name(name), cp.godot_name, cp.verse_name, False))
+            method_map.append((name, verse_class_name(name), cp.godot_name, cp.verse_name,
+                               False, "property"))
             coverage.properties_emitted += 1
 
         for cm in candidates:
@@ -2455,7 +2472,7 @@ def generate(api: dict, requested: list, coverage: Coverage, enums: dict):
             all_member_names.add(cm.verse_name)
             emitted_lines.append(emit_method(cm))
             method_map.append((name, verse_class_name(name), cm.godot_name, cm.verse_name,
-                               cm.default_body is not None))
+                               cm.default_body is not None, "method"))
             coverage.methods_emitted += 1
             # Recorded as it is emitted rather than recomputed afterwards, so the list cannot
             # disagree with the mirror -- the same reason verse_api_skipped.h is generated.
@@ -2479,6 +2496,10 @@ def generate(api: dict, requested: list, coverage: Coverage, enums: dict):
             used.add(signal_name)
             all_member_names.add(signal_name)
             emitted_lines.append(line)
+            # A signal accessor is a Verse *function*, so nothing about the Verse side says the
+            # thing it names is a signal -- and Godot documents a signal on a page of its own.
+            # Without this row `Timeout()` hovered as a local with its function type in it.
+            coverage.doc_map.append((verse_class_name(name), signal_name, name, sig["name"], "signal"))
             coverage.signals_emitted += 1
 
         inherited_names[name] = used
@@ -2814,16 +2835,43 @@ inline constexpr class_mapping classes[] = {{
 // mirrored method is a class member the compiler would accept an `<override>` of, but overriding a
 // concrete one -- `GetName` -- compiles and changes nothing, because the body forwards through the
 // handle either way. Only a virtual is a method Godot itself will dispatch to.
+//
+// `kind` is which of Godot's documentation pages the name has, and it cannot be read off the
+// Verse side: a signal accessor and a static method are both Verse functions, and a constant and
+// a property are both Verse data. A consumer picking by the Verse spelling asks Godot for a
+// *method* named `timeout` and is handed an empty tooltip, because what Godot has is a signal.
+enum class member_kind {{
+	method,
+	property,
+	signal,
+	constant,
+}};
+
 struct method_mapping {{
 	const char *verse_class;
 	const char *verse_method;
 	const char *godot_class;
 	const char *godot_method;
 	bool is_virtual;
+	member_kind kind;
 }};
 
 inline constexpr method_mapping methods[] = {{
 {method_entries}
+}};
+
+// Each mirrored enum and the Godot enum it stands for. `Node.InternalMode` is spelled
+// `node_internal_mode`, and that transform drops the word boundaries, so this is the only way
+// back. @GlobalScope carries the enums that belong to no class, which is where Godot documents
+// them and where GDScript sends a click on one.
+struct enum_mapping {{
+	const char *verse_enum;
+	const char *godot_class;
+	const char *godot_enum;
+}};
+
+inline constexpr enum_mapping enums[] = {{
+{enum_entries}
 }};
 
 }} // namespace verse_api
@@ -3205,20 +3253,37 @@ def render_class_names_header(api: dict, emit_order: list) -> str:
     )
 
 
-def render_classes_header(api: dict, emit_order: list, method_map: list) -> str:
+def render_classes_header(api: dict, emit_order: list, method_map: list, doc_map: list,
+                         enums: dict) -> str:
     version = api["header"]["version_full_name"]
     pairs = sorted(
         [(name, verse_class_name(name)) for name in emit_order] + list(VALUE_TYPE_CLASSES.items())
     )
     entries = "\n".join(f'\t{{ "{godot_name}", "{verse_name}" }},' for godot_name, verse_name in pairs)
-    rows = [(m[1], m[3], m[0], m[2], m[4]) for m in method_map] + LIFECYCLE_METHODS + VALUE_TYPE_MEMBERS
+    rows = [(m[1], m[3], m[0], m[2], m[4], m[5]) for m in method_map]
+    # Everything that is not a member of a mirrored class: a signal accessor, a static, a
+    # constant, a utility. Recorded where each was emitted rather than re-derived here.
+    rows += [(owner, name, godot_class, godot_name, False, kind)
+             for owner, name, godot_class, godot_name, kind in doc_map]
+    rows += [row + ("method",) for row in LIFECYCLE_METHODS]
+    rows += [row + ("property",) for row in VALUE_TYPE_MEMBERS]
     method_entries = "\n".join(
         f'\t{{ "{verse_class}", "{verse_method}", "{godot_class}", "{godot_method}", '
-        f'{"true" if is_virtual else "false"} }},'
-        for verse_class, verse_method, godot_class, godot_method, is_virtual in sorted(rows)
+        f'{"true" if is_virtual else "false"}, member_kind::{kind} }},'
+        for verse_class, verse_method, godot_class, godot_method, is_virtual, kind
+        in sorted(dict.fromkeys(rows))
+    )
+    # A global enum's key is its bare name; a class's is `Owner.Name`.
+    enum_rows = sorted(
+        (info.verse_name,) + (tuple(key.split(".", 1)) if "." in key else ("@GlobalScope", key))
+        for key, info in enums.items()
+    )
+    enum_entries = "\n".join(
+        f'\t{{ "{verse_enum}", "{godot_class}", "{godot_enum}" }},'
+        for verse_enum, godot_class, godot_enum in enum_rows
     )
     return CLASSES_HEADER_TEMPLATE.format(
-        version=version, entries=entries, method_entries=method_entries
+        version=version, entries=entries, method_entries=method_entries, enum_entries=enum_entries
     )
 
 
@@ -3311,7 +3376,8 @@ def main() -> int:
     typed_dictionaries.update(resolver_for_statics.typed_dictionaries)
     text = render(api, class_blocks, emit_singleton_accessors(api, emit_order, member_names),
                   typed_arrays, typed_dictionaries, enums, statics_modules, utilities)
-    classes_header_text = render_classes_header(api, emit_order, method_map)
+    classes_header_text = render_classes_header(api, emit_order, method_map,
+                                                coverage.doc_map, enums)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(text, encoding="utf-8", newline="\n")

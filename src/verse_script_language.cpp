@@ -177,6 +177,37 @@ String godot_singleton_class_for(const String &p_verse_name) {
 	return String();
 }
 
+// Godot's lookup result for each kind of member the generated table knows. Every one of them
+// routes the tooltip and the click into a different corner of the class documentation, and
+// `_show_symbol_tooltip` asks a different question of ClassDB for each -- has_method against
+// has_signal against has_integer_constant -- so a wrong kind is an empty box rather than a
+// slightly-off label.
+int64_t lookup_result_for(verse_api::member_kind p_kind) {
+	switch (p_kind) {
+		case verse_api::member_kind::signal:
+			return (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS_SIGNAL;
+		case verse_api::member_kind::constant:
+			return (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS_CONSTANT;
+		case verse_api::member_kind::property:
+			return (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS_PROPERTY;
+		case verse_api::member_kind::method:
+			break;
+	}
+	return (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS_METHOD;
+}
+
+// The Godot enum a mirrored Verse enum stands for, or nullptr for a name that is not one of
+// them. The transform to `node_internal_mode` drops the word boundaries `Node.InternalMode` had,
+// so the generated table is the only way back.
+const verse_api::enum_mapping *godot_enum_for(const String &p_verse_enum) {
+	for (size_t i = 0; i < std::size(verse_api::enums); i++) {
+		if (p_verse_enum == verse_api::enums[i].verse_enum) {
+			return &verse_api::enums[i];
+		}
+	}
+	return nullptr;
+}
+
 // The Godot documentation page a `...Statics` module stands for. The mirror reaches Godot's
 // constants and static methods through one module per class, named the Godot class plus the
 // suffix -- `Vector2Statics.Zero` is Vector2.ZERO -- so inverting it is a lookup in the class
@@ -2535,6 +2566,13 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 			result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS;
 			result["class_name"] = found_name;
 		}
+	} else if (kind == VH_LOOKUP_ENUM) {
+		if (const verse_api::enum_mapping *mirrored = godot_enum_for(found_name)) {
+			result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS_ENUM;
+			result["class_name"] = String(mirrored->godot_class);
+			result["class_member"] = String(mirrored->godot_enum);
+			return result;
+		}
 	} else if (kind == VH_LOOKUP_TYPE_ALIAS) {
 		if (const char *godot_class = godot_doc_class_for_primitive(found_name)) {
 			result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS;
@@ -2579,9 +2617,11 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 			method = godot_method_for(overridden_owner, found_name);
 		}
 		if (method != nullptr) {
-			result["type"] = (int64_t)(kind == VH_LOOKUP_FUNCTION
-							? ScriptLanguageExtension::LOOKUP_RESULT_CLASS_METHOD
-							: ScriptLanguageExtension::LOOKUP_RESULT_CLASS_PROPERTY);
+			// The generated table's kind rather than the Verse one. A signal accessor and a
+			// static are both Verse functions and a constant and a property are both Verse data,
+			// so asking by the Verse spelling looked up a *method* named `timeout` -- which Godot
+			// does not have, because what it has is a signal, and the tooltip came back empty.
+			result["type"] = (int64_t)lookup_result_for(method->kind);
 			result["class_name"] = String(method->godot_class);
 			result["class_member"] = String(method->godot_method);
 			return result;

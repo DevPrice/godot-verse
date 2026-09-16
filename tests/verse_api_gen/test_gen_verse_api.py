@@ -536,12 +536,40 @@ def test_class_type_falls_back_to_nearest_emitted_ancestor():
 
 def test_render_classes_header():
     api = {"header": {"version_full_name": "Godot Engine v4.6.stable.official"}}
-    text = g.render_classes_header(api, ["Node2D", "Node"], [])
+    method_map = [("Timer", "timer", "start", "Start", False, "method")]
+    doc_map = [("timer", "Timeout", "Timer", "timeout", "signal"),
+               ("Vector2Statics", "Zero", "Vector2", "ZERO", "constant")]
+    enums = {"Node.InternalMode": g.GodotEnum(
+        key="Node.InternalMode", verse_name="node_internal_mode", is_bitfield=False,
+        values=[("Disabled", 0)], stripped="INTERNAL_MODE_")}
+    text = g.render_classes_header(api, ["Node2D", "Node"], method_map, doc_map, enums)
     check_true("classes header has a #pragma once", text.startswith("#pragma once"))
     check_true("classes header opens verse_api namespace", "namespace verse_api {" in text)
     check_true(
         "classes header sorts entries by Godot class name (Node before Node2D)",
         text.index('{ "Node", "node" }') < text.index('{ "Node2D", "node2d" }'),
+    )
+    # The kind is the whole point of the table for the editor: a signal accessor and a static are
+    # both Verse functions, so nothing on the Verse side could tell a consumer which page to open.
+    check_true(
+        "a class method carries member_kind::method",
+        '{ "timer", "Start", "Timer", "start", false, member_kind::method },' in text,
+        text,
+    )
+    check_true(
+        "a signal accessor carries member_kind::signal",
+        '{ "timer", "Timeout", "Timer", "timeout", false, member_kind::signal },' in text,
+        text,
+    )
+    check_true(
+        "a statics module's constant carries member_kind::constant",
+        '{ "Vector2Statics", "Zero", "Vector2", "ZERO", false, member_kind::constant },' in text,
+        text,
+    )
+    check_true(
+        "an enum maps back to the Godot class and enum it was spelled from",
+        '{ "node_internal_mode", "Node", "InternalMode" },' in text,
+        text,
     )
 
 
@@ -704,14 +732,14 @@ def test_property_skips_have_reasons():
 def test_method_map_names_the_godot_original():
     api = {"header": {"version_full_name": "Godot Engine v4.6.stable.official"}}
     method_map = [
-        ("Node2D", "node2d", "set_position", "SetPosition", False),
-        ("Node2D", "node2d", "get_position", "GetPosition", False),
-        ("Node2D", "node2d", "_draw", "_Draw", True),
+        ("Node2D", "node2d", "set_position", "SetPosition", False, "method"),
+        ("Node2D", "node2d", "get_position", "GetPosition", False, "method"),
+        ("Node2D", "node2d", "_draw", "_Draw", True, "method"),
     ]
-    text = g.render_classes_header(api, ["Node2D"], method_map)
+    text = g.render_classes_header(api, ["Node2D"], method_map, [], {})
     check_true(
         "method map carries the Godot spelling the Verse name cannot be inverted to",
-        '{ "node2d", "GetPosition", "Node2D", "get_position", false },' in text,
+        '{ "node2d", "GetPosition", "Node2D", "get_position", false, member_kind::method },' in text,
     )
     check_true(
         "method map sorts by Verse class then Verse method",
@@ -721,7 +749,7 @@ def test_method_map_names_the_godot_original():
     # compiler would take an <override> of and Godot would never dispatch to.
     check_true(
         "method map marks a virtual as one",
-        '{ "node2d", "_Draw", "Node2D", "_draw", true },' in text,
+        '{ "node2d", "_Draw", "Node2D", "_draw", true, member_kind::method },' in text,
     )
 
 
@@ -731,23 +759,23 @@ def test_generated_method_map_covers_a_known_method():
     # and neither Verse name can be inverted back to the Godot one.
     check_true(
         "the checked-in header maps node2d.Position to Node2D.position",
-        '{ "node2d", "Position", "Node2D", "position", false },' in header,
+        '{ "node2d", "Position", "Node2D", "position", false, member_kind::property },' in header,
     )
     check_true(
         "the checked-in header still maps a surviving method",
-        '{ "node", "GetChild", "Node", "get_child", false },' in header,
+        '{ "node", "GetChild", "Node", "get_child", false, member_kind::method },' in header,
     )
     # A virtual is generated onto the class Godot declares it on, so its documentation is found the
     # same way every other member's is.
     check_true(
         "the checked-in header maps node._Ready to Node._ready",
-        '{ "node", "_Ready", "Node", "_ready", true },' in header,
+        '{ "node", "_Ready", "Node", "_ready", true, member_kind::method },' in header,
     )
     # `_notification` is in no part of extension_api.json, so it is hand-written on the native root
     # -- and a script overriding it still wants Godot's documentation for it.
     check_true(
         "and vh_object._Notification to Object._notification",
-        '{ "vh_object", "_Notification", "Object", "_notification", true },' in header,
+        '{ "vh_object", "_Notification", "Object", "_notification", true, member_kind::method },' in header,
     )
 
 
