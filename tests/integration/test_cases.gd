@@ -1263,6 +1263,29 @@ func begin() -> void:
 		writes.set("Palette", Gradient.new())
 		_check("and takes one naming the right class", writes.call("PaletteIsSet") == true)
 
+		# B19 Stage C. What survives a save, which is the measurement C1's rule rests on -- and the
+		# half worth guarding is the *positive* one: a mirrored reference member round-trips, so the
+		# loss below is specific to a second class in the file rather than general to references.
+		#
+		# The reason is structural. A Verse object's members live in the VM and its Godot peer
+		# carries none of them; what bridges the two is being a *script*, and by R-LANG-6 only the
+		# class named after the file can be one. `stowaway`'s peer is therefore a bare `Resource`
+		# with nothing on it, and an empty sub-resource is all ResourceSaver has to write.
+		const C_SAVED := "user://stage_c_probe.tres"
+		_check_eq("a resource holding both kinds of reference saves",
+				ResourceSaver.save(writes, C_SAVED), OK)
+		var reread: Resource = ResourceLoader.load(C_SAVED, "", ResourceLoader.CACHE_MODE_IGNORE)
+		_check("and loads back", reread != null)
+		if reread != null:
+			_check("a mirrored reference member survives the round trip",
+					reread.call("PaletteIsSet") == true)
+			_check("and comes back as a real Gradient", reread.get("Palette") is Gradient)
+			# Recorded, not desired: C1 is the rule that keeps a project out of this, and Stage B's
+			# warning is what says so at the attribute. If this ever starts passing a value back,
+			# C2 was built and property-export.md §"Stage C" is the section to correct.
+			_check_eq("a second-class member does not, which is why C1 is the rule",
+					reread.call("StowedValue"), -1)
+
 		_check_eq("and a method runs on an owner that is not a node",
 				settings.call("Describe"), "untitled x3")
 

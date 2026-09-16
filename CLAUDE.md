@@ -27,9 +27,11 @@ read it before re-deriving anything about hot reload, the export pipeline, or th
 the debugger/LSP story. **`property-export.md`'s last section is the one to read before touching a
 class-typed export**: what GDScript's inner classes do, measured on all three planes they live on
 (typed in script, anonymous to the engine, *lost on save*), why a second class in a file can never
-register a Godot class name, and the staged plan that follows from it. Stages A and B are built and
-green; **C — serialisation — is the only one open**, and the section says what each of its two
-alternatives would cost.
+register a Godot class name, and the staged plan that follows from it. **All of it is settled**:
+A and B are built and green, and C is answered as C1 — a class to be authored as a `.tres` or
+persisted in one lives in its own `.verse`, because what carries a value across a save is the
+script and only the file-named class can be one. C2 (`res://x.verse::second`) is possible and
+unbuilt; the section says what it would cost.
 
 ### The phase documents, and the one section of each to read
 
@@ -220,7 +222,7 @@ line and asserted needs two reporters over one message function — `inert_globa
 the worked example.
 
 **export** — exports `tests/integration` headless, asserts the *tree* it produced, then **launches
-it** and asserts what its cases reported: 346 passed, 0 failed, 10 skipped, with the counts named in
+it** and asserts what its cases reported: 351 passed, 0 failed, 10 skipped, with the counts named in
 `run_tests.py` so a case that stops running in an export reads as a failure rather than as a shorter
 log. It is the only layer that exercises the cooked path end to end; everything else compiles at
 startup. It needs more staged than the other layers do, because what it is exporting *is* them —

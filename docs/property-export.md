@@ -650,7 +650,7 @@ Two names for one path would both resolve to the same script. GDScript has the s
 | global registration | impossible | impossible | impossible |
 | export hint | native base | **dangling name, ClassDB error** | native base |
 | assignment type-checked | yes, measured | ABI says yes, **unverified** | yes, measured — A2 |
-| serialises | no — class lost, values kept | no — bare `Resource`, values lost too | unchanged |
+| serialises | no — class lost, values kept | no — bare `Resource`, values lost too | unchanged; measured in Stage C |
 
 ### The plan
 
@@ -717,25 +717,97 @@ The scan had to stop returning early to do it: it used to stop at the file's own
 `scripts/inert_global.verse` is the fixture, and `COVERAGE_EXPLANATIONS` asserts the reason rather
 than the whole sentence, the way the module ones do.
 
-**Stage C — serialisation, and the one deliberate divergence.** Losing the class on save is a defect
-of GDScript's, not a behaviour to mirror. Two alternatives, not two steps:
+**Stage C — serialisation.** Spiked, measured, and **C1 is taken**. The spike changed two of the
+things the plan assumed, so the reasoning below is the measurement rather than the prediction.
 
-- **C1 — state the rule and stop.** A resource class that is to be *authored* or *persisted* lives
-  in its own `.verse`. Zero cost, and what GDScript effectively forces anyway, since an inner class
-  cannot be authored as a `.tres` either. Stage B's warning already points here.
-- **C2 — sub-resource scripts, which would beat GDScript.** Address a second class as
-  `res://player.verse::my_resource` so a `.tres` or `.tscn` can reference it. Plausible *because*
-  these classes have stable names the host already instantiates by — `vh_instantiate` takes a
-  module-qualified name — unlike GDScript's anonymous subclasses. **Spike it before designing it:**
-  `ResourceLoader` picks a format loader by extension, and `player.verse::my_resource` has extension
-  `verse::my_resource`, so it may never route to `VerseResourceFormatLoader` at all. Godot builds
-  such paths from the container side (`scene/resources/packed_scene.cpp:2358` is `get_path() +
-  "::"`), which is not the same as serving one. If the spike says no, C2 is dead and C1 is the
-  answer.
+### What actually happens on save, measured
 
-**Recommended order:** A2, A1, B, then C1 as documentation. **A1, A2 and B are done; C is the only
-stage open.** C2 only if authoring parity *beyond* GDScript is wanted and the spike comes back
-positive — it is a feature with real surface, not a gap-closer.
+A `settings_resource` holding both kinds of reference member, saved to `.tres` and loaded back:
+
+    [gd_resource type="Resource" script_class="SettingsResource" format=3]
+    [ext_resource type="Script" path="res://scripts/settings_resource.verse" id="1_1jej0"]
+
+    [sub_resource type="Gradient" id="Gradient_evxac"]
+    offsets = PackedFloat32Array(0, 0.5, 1)
+    colors = PackedColorArray(0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1)
+
+    [sub_resource type="Resource" id="Resource_vju0x"]
+
+    [resource]
+    script = ExtResource("1_1jej0")
+    Title = "spike"
+    Stowaway = SubResource("Resource_vju0x")
+    Palette = SubResource("Gradient_evxac")
+
+**The mirrored member is fine.** `Palette` writes as a real `Gradient` with its data and comes back
+as one — `PaletteIsSet` is still true after the reload. Nothing about reference members is broken in
+general, which is the first thing the spike was for.
+
+**The second-class member is lost, and the sub-resource written for it is empty.** No `script` line,
+no `Value = 5`; `StowedValue` reads `-1` after the reload, so the option came back empty. Verse is
+here slightly *behind* GDScript, which keeps the values as raw properties (`v = 42`) and loses only
+the class.
+
+### Why, which is the whole argument for C1
+
+Not because Godot drops it. Because **a Verse object's members live in the VM, and its Godot peer
+carries none of them.** What bridges the two is *being a script*: `settings_resource` round-trips
+because the script is attached to the resource, so `get_property_list` and `get` reach the VM and
+`ResourceSaver` sees real properties. A second class in the file can never be a script — that is
+R-LANG-6, and Godot's one-global-class-per-path ceiling underneath it — so its peer is a bare
+`Resource` with nothing on it, and an empty sub-resource is all there is to write.
+
+So the rule is not a preference, and C1 is not a shrug:
+
+> **A Verse class that is to be authored as a `.tres` or persisted inside one lives in its own
+> `.verse` file.** What makes values persist is the script, and only the class named after the file
+> can be one.
+
+Stage B's warning already says exactly this at the attribute, which is where an author is standing
+when they need it — *"Move `stowaway` into a file of its own to register it"*.
+
+### C2 is possible, and it is a feature rather than a gap-closer
+
+The spike's other job was to kill C2 cheaply, and it did not. The plan expected
+`res://player.verse::my_resource` never to reach `VerseResourceFormatLoader`, because its extension
+is `verse::my_resource`. Half right:
+
+- Godot's default `recognize_path` compares the path's *suffix* against each recognized extension
+  (`core/io/resource_loader.cpp:75-80`), so `.verse::my_resource` is declined — as predicted.
+- But `recognize_path` tries the **`_recognize_path` virtual first** (`:62-66`), and
+  `VerseResourceFormatLoader` simply does not override it. An extension may claim any path it likes.
+- The *"Resource file not found"* the spike saw is the fallback after the loader loop (`:325`), not
+  a gate before it.
+
+And the connection the plan did not draw: **C2 is the serialisation fix, not merely an addressing
+convenience.** A sub-resource script is exactly what the peer is missing — make `stowaway` loadable
+as a `Script` and the ordinary property bridge applies, values and all.
+
+It is still a feature with real surface, which is why it is not being built on the strength of
+"possible": `_recognize_path`, `_get_resource_type`, a path the saver will write from
+`resource->get_path()`, EditorFileSystem's scan, dependency tracking and `.verse.uid`. **Take it up
+only if authoring parity beyond GDScript is actually wanted**; C1 is what a project needs to not lose
+data, and C1 costs nothing.
+
+### What is measured where
+
+The `.tres` printed above came from a throwaway `SceneTree` script run against `tests/integration`
+(`godot --headless --path tests/integration --script res://c2_spike.gd`): it set a `Gradient` into
+`Palette`, called `Stow()`, saved, printed the file verbatim and read it back. It is not kept — four
+calls, cheaper to rebuild than to trust a summary — but its *conclusions* are, as five cases in
+`test_cases.gd` that run in the editor and in an export both:
+
+- the mirrored member survives and comes back a real `Gradient`, which is the half worth guarding,
+  because it is what says the loss below is specific rather than general;
+- the second-class member reads back `-1`, the empty option.
+
+That last one asserts a limitation on purpose, the way `get_global_name`'s does. **If it ever starts
+passing a value back, C2 was built and this section is what to correct.**
+
+**Recommended order:** A2, A1, B, then C1 as documentation. **All of it is done: A1, A2, B, and C
+settled as C1.** C2's spike came back positive on routing, so it is possible rather than dead — but
+it stays unbuilt unless authoring parity *beyond* GDScript is actually wanted, because it is a
+feature with real surface and C1 is what stops data being lost.
 
 ### Where this stands
 
@@ -762,9 +834,21 @@ read agree with each other. They run in the export too.
 scanner cases and three `COVERAGE_EXPLANATIONS` lines; see Stage B above for the one thing the plan
 had wrong about where a `_validate` warning ends up.
 
-**C is what is left**, and C1 — state the rule and stop — is the recommendation. Stage B's warning
-already points there: it tells the author to move the class into a file of its own, which is the
-rule C1 would write down.
+**C is settled as C1**, on a spike rather than on the recommendation. The rule is written down here
+and next to R-EXP-6 in `spec.md`, and it has a reason rather than a preference behind it: what makes
+a value persist is the script, and only the class named after the file can be one. Stage B's warning
+already says it at the attribute.
+
+The spike did **not** kill C2, which is the one thing here worth knowing before anyone reopens it:
+routing is a `_recognize_path` override away, and a sub-resource script would fix serialisation
+properly rather than work around it. It is unbuilt because it is a feature, not because it is
+impossible — the decision it waits on is whether authoring parity beyond GDScript is wanted at all.
+
+**One thing C1 does not do is make the loss loud.** A script that writes a second-class member,
+saves, and reloads gets an empty option back with no diagnostic anywhere. Stage B's principle would
+say that is a request the bridge accepts and cannot serve; C1 as scoped is documentation only, so
+this is recorded as a candidate rather than done. The cheap form is a warning from the save path
+when an exported member holds a peer with no script.
 
 The GDScript probe that produced every measurement above is four files — an outer script with an
 inner class, a `class_name` script beside it, and a `SceneTree` driver — and is worth rebuilding

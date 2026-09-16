@@ -591,8 +591,13 @@ B closed the other half: `@global_class` on a class that is not the file's now s
 attribute's line in the editor and once per build in the log. It used to be accepted and ignored
 without a word, which is the part that was the bridge's own fault rather than Godot's.
 
-**C — serialisation — is what is left**, and C1 (state the rule, and let Stage B's warning point at
-it) is the recommendation.
+**C — serialisation — is settled as C1**, on a spike rather than on the recommendation. A second
+class's member saves as an *empty* sub-resource and reads back empty, while a mirrored member beside
+it round-trips intact; the reason is that a Verse object's members live in the VM and only a
+*script* bridges them to Godot, which by R-LANG-6 only the file-named class can be. So the rule --
+a class to be authored or persisted lives in its own `.verse` -- has a mechanism behind it, and
+Stage B's warning already says it at the attribute. C2 was not killed by its spike: routing is a
+`_recognize_path` override away, and it stays unbuilt as a feature rather than as an impossibility.
 
 It is also the case `phase-4b-design.md` §5 put out of scope — "a resource that holds another
 resource as an exported member … worth a case but not worth blocking the stage". It was worth
