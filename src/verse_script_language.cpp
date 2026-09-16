@@ -544,6 +544,42 @@ static Dictionary project_build_warning(const PackedStringArray &p_paths) {
 	return warning;
 }
 
+// `@global_class` on a class that is not the one named after its file registers nothing at all, and
+// until now did so silently -- which is the defect, not the limitation. Godot collects one global
+// class per script *path*: `_get_global_class_name` is a per-path virtual answering a single name,
+// and ScriptServer maps that name back to the path, so a second name in one file has nowhere to
+// live. GDScript has the same ceiling and gives no syntax for asking; this bridge accepts the
+// attribute, so it owes the author a sentence. docs/property-export.md §"A second class in one file".
+//
+// A warning and not an error: the file compiles, the class is ordinary Verse, and a member typed as
+// one still exports -- filtered by its nearest mirrored Godot class, which is what Stage A1 built.
+// Only the request the attribute makes is impossible, so only that is reported.
+//
+// One sentence, two reporters. `_validate` puts it on the attribute's line in the script editor,
+// where it appears and clears as the attribute is typed; report_name_collisions prints it once per
+// build, which is the half a test can read -- a `_validate` warning is returned to the editor's C++
+// and never reaches the log.
+static String inert_global_class_message(const String &p_class_name, const String &p_file_stem) {
+	return String("`@global_class` on `") + p_class_name
+			+ String("` registers nothing. Godot collects one global class per script file, and only `")
+			+ p_file_stem + String("` -- the class named after this file -- can be that class. Move `")
+			+ p_class_name + String("` into a file of its own to register it, or drop the attribute: a ")
+			+ String("member typed as `") + p_class_name
+			+ String("` still exports, filtered by its nearest Godot base class.");
+}
+
+static Dictionary inert_global_class_warning(const String &p_class_name, const String &p_file_stem, int64_t p_line) {
+	Dictionary warning;
+	warning["start_line"] = p_line;
+	warning["end_line"] = p_line;
+	warning["leftmost_column"] = 1;
+	warning["rightmost_column"] = 1;
+	warning["code"] = 0;
+	warning["string_code"] = String("VERSE_GLOBAL_CLASS_INERT");
+	warning["message"] = inert_global_class_message(p_class_name, p_file_stem);
+	return warning;
+}
+
 Dictionary VerseScriptLanguage::_validate(const String &p_script, const String &p_path, bool p_validate_functions, bool p_validate_errors, bool p_validate_warnings, bool p_validate_safe_lines) const {
 	TypedArray<Dictionary> errors = diagnostics_fitted_to(check_buffer(p_path, p_script), p_script);
 
@@ -612,6 +648,18 @@ Dictionary VerseScriptLanguage::_validate(const String &p_script, const String &
 		}
 		if (script_warnings_by_path.has(p_path)) {
 			warnings.append_array(TypedArray<Dictionary>(script_warnings_by_path[p_path]));
+		}
+		// Read from the buffer rather than from the last analysis, so it appears and clears as the
+		// attribute is typed and deleted: the scanner is text-only and has no host call in it. The
+		// host could not answer this anyway -- the semantic program records the attribute as applied,
+		// because it *is* applied; what it cannot know is that Godot has one slot per file.
+		const VerseClassDecl decl = verse_scan_class_decl(p_script.utf8().get_data(),
+				p_path.get_file().get_basename().utf8().get_data());
+		for (const VerseClassDecl::InertGlobalClass &inert : decl.inert_global_classes) {
+			warnings.push_back(inert_global_class_warning(String(inert.name.c_str()),
+					p_path.get_file().get_basename(),
+					// The scanner counts rows from zero; Godot's warning lines start at one.
+					inert.attribute_line + 1));
 		}
 		const TypedArray<Dictionary> compiler_warnings = diagnostics_fitted_to(compiler_warnings_for(p_path), p_script);
 		for (int64_t i = 0; i < compiler_warnings.size(); i++) {
@@ -2949,6 +2997,19 @@ void VerseScriptLanguage::report_name_collisions(const PackedStringArray &p_sour
 		const String path = p_sources[i];
 		const String stem = path.get_file().get_basename();
 		const VerseClassDecl decl = verse_scan_class_decl(p_texts[i], stem.utf8().get_data());
+
+		// Reported before the no-class-of-its-own test below, not after: a file whose *only*
+		// `@global_class` is on a class that is not the file's declares no script at all, and the
+		// attribute is exactly why its author thinks it does.
+		//
+		// This belongs beside the collision checks rather than apart from them -- both are about
+		// what reaches Godot's one flat registry, and this pass is the once-per-build moment where
+		// every source is in hand.
+		for (const VerseClassDecl::InertGlobalClass &inert : decl.inert_global_classes) {
+			UtilityFunctions::push_warning(path + String(":") + String::num_int64(inert.attribute_line + 1)
+					+ String(": ") + inert_global_class_message(String(inert.name.c_str()), stem));
+		}
+
 		if (decl.name.empty()) {
 			continue;
 		}

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 // The top-level class a .verse file declares, read out of the source text.
 //
@@ -21,6 +22,21 @@ struct VerseClassDecl {
 	// Zero-based row the declaration is on, or -1 when there is none. The comment block above it
 	// is the class' documentation, and finding that block needs the row.
 	int line = -1;
+
+	// `@global_class` written on one of the file's *other* top-level classes, which registers
+	// nothing: Godot collects one global class per script *path*, so a second name in one file has
+	// nowhere to live. Collected so `_validate` can say so at the attribute rather than leaving the
+	// request silently ignored -- see docs/property-export.md §"A second class in one file".
+	//
+	// Populated even when `name` is empty: a file whose only `@global_class` is on a class that is
+	// not the file's declares no script at all, and that is precisely the case worth a warning.
+	struct InertGlobalClass {
+		std::string name;
+		// Zero-based row of the `@global_class` line itself, not of the class below it. The warning
+		// belongs on the attribute, which is the thing that does nothing.
+		int attribute_line = -1;
+	};
+	std::vector<InertGlobalClass> inert_global_classes;
 };
 
 // Scans for a top-level `name := class(base):` and the attributes directly above it. Comments and

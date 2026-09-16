@@ -211,6 +211,13 @@ case down with it. Both projects' assertions live in `run_tests.py` rather than 
 because `ScriptLanguage` exposes nothing a script can ask — the only way to read what an author
 would see is to read what the editor prints.
 
+**A `_validate` warning is not something the editor prints**, which is the trap in that sentence: it
+is returned to the editor's own C++ for the gutter and the warnings panel, and reaches no log, so
+`coverage_diagnostic` cannot assert one. The diagnostics it *does* assert are compile errors and
+`report_name_collisions`' `push_warning`/`push_error`. A diagnostic that has to be both seen at a
+line and asserted needs two reporters over one message function — `inert_global_class_message` is
+the worked example.
+
 **export** — exports `tests/integration` headless, asserts the *tree* it produced, then **launches
 it** and asserts what its cases reported: 346 passed, 0 failed, 10 skipped, with the counts named in
 `run_tests.py` so a case that stops running in an export reads as a failure rather than as a shorter

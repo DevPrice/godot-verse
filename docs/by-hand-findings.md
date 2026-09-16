@@ -581,12 +581,18 @@ turns out to lose the class on save entirely. **`property-export.md` §"A second
 is the whole of it**: the three planes an inner class lives on, why the registration cannot be
 granted, and Stages A/B/C.
 
-Stage A is done. The slot is now drawn filtered by the class's nearest mirrored ancestor, which is
-GDScript's own fallback (A1), and the write that picker admits is refused by class at the ABI — on
-the handle path and the instance path alike, verified rather than assumed (A2). **The refusal is
-what makes the wide picker honest**, and for `?stowaway` it refuses everything, because no Godot
-object can carry a class that is not the one named after its file. B (a `_validate` warning for an
-inert `@global_class`) and C (serialisation) are open and are in that section.
+Stages A and B are done. The slot is now drawn filtered by the class's nearest mirrored ancestor,
+which is GDScript's own fallback (A1), and the write that picker admits is refused by class at the
+ABI — on the handle path and the instance path alike, verified rather than assumed (A2). **The
+refusal is what makes the wide picker honest**, and for `?stowaway` it refuses everything, because
+no Godot object can carry a class that is not the one named after its file.
+
+B closed the other half: `@global_class` on a class that is not the file's now says so, at the
+attribute's line in the editor and once per build in the log. It used to be accepted and ignored
+without a word, which is the part that was the bridge's own fault rather than Godot's.
+
+**C — serialisation — is what is left**, and C1 (state the rule, and let Stage B's warning point at
+it) is the recommendation.
 
 It is also the case `phase-4b-design.md` §5 put out of scope — "a resource that holds another
 resource as an exported member … worth a case but not worth blocking the stage". It was worth

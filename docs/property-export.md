@@ -688,16 +688,34 @@ Two names for one path would both resolve to the same script. GDScript has the s
 *Done when* an integration case shows a second-class export drawing a `Resource` picker and refusing
 a wrong-class assignment, in the editor run and the exported run both.
 
-**Stage B — stop accepting a request that cannot be served.** GDScript gives no syntax for asking an
-inner class to register; this bridge lets `@global_class` be written on a non-file-named class and
-silently ignores it. A `_validate` warning at the attribute's line: that it registers nothing, that
-Godot collects one global class per script path, and that the member still exports filtered by its
-native base. **Consumer-side only** — `src/verse_class_decl.{h,cpp}` reports the other top-level
-classes carrying the attribute (name and line), `_validate` turns each into a warning. No ABI
-change, no host rebuild, and `verse_class_decl` is godot-cpp-free with its own unit-test binary, so
-the scan change is testable with no Godot in the loop.
+**Stage B — stop accepting a request that cannot be served. Done.** GDScript gives no syntax for
+asking an inner class to register; this bridge let `@global_class` be written on a non-file-named
+class and ignored it in silence, which is the defect — the limitation is Godot's and is not going
+anywhere, but passing over the request without a word is the bridge's own.
 
-*Done when* `tests/coverage_diagnostic` asserts the sentence, the way it asserts the module ones.
+Consumer-side only, as planned: no ABI change and no host rebuild.
+`VerseClassDecl::inert_global_classes` carries every *other* top-level class in the file that
+carries the attribute, with the row of the **attribute** rather than of the class, because the
+attribute is the thing that does nothing. Six cases in `verse_class_decl_test`, godot-cpp-free and
+with no Godot in the loop.
+
+One thing the plan had wrong, and it is worth knowing before writing another diagnostic: **a
+`_validate` warning never reaches a log.** It is returned to the editor's own C++, which draws it in
+the gutter and the warnings panel, so *Done when `tests/coverage_diagnostic` asserts the sentence*
+could not have been met by `_validate` alone — the module diagnostics it is modelled on are
+`push_warning`/`push_error` from `report_name_collisions`, which is a different mechanism that
+happens to produce a similar-looking sentence. So there are two reporters over **one**
+`inert_global_class_message`:
+
+- `_validate` puts it on the attribute's line, read from the buffer, so it appears and clears as the
+  attribute is typed. This is what an author actually sees.
+- `report_name_collisions` prints it once per build. This is the half a test can read, and it sits
+  beside the other checks about what reaches Godot's one flat registry.
+
+The scan had to stop returning early to do it: it used to stop at the file's own class, so a second
+`@global_class` written *below* the script's class was invisible. `tests/coverage_diagnostic`'s
+`scripts/inert_global.verse` is the fixture, and `COVERAGE_EXPLANATIONS` asserts the reason rather
+than the whole sentence, the way the module ones do.
 
 **Stage C — serialisation, and the one deliberate divergence.** Losing the class on save is a defect
 of GDScript's, not a behaviour to mirror. Two alternatives, not two steps:
@@ -715,7 +733,7 @@ of GDScript's, not a behaviour to mirror. Two alternatives, not two steps:
   "::"`), which is not the same as serving one. If the spike says no, C2 is dead and C1 is the
   answer.
 
-**Recommended order:** A2, A1, B, then C1 as documentation. A1 and A2 are done; B is next. C2 only if authoring parity *beyond*
+**Recommended order:** A2, A1, B, then C1 as documentation. A1, A2 and B are done; C is open. C2 only if authoring parity *beyond*
 GDScript is wanted and the spike comes back positive — it is a feature with real surface, not a
 gap-closer.
 
@@ -740,7 +758,13 @@ below inherits what they wrote, and every one of them reads the slot back **thro
 (`StowedValue`, `PaletteIsSet`) rather than through `get()`, because a bad write and a matching bad
 read agree with each other. They run in the export too.
 
-**B is next**, and it is consumer-side only: no ABI change and no host rebuild.
+**B is done too**, consumer-side only exactly as planned — no ABI change and no host rebuild. Six
+scanner cases and three `COVERAGE_EXPLANATIONS` lines; see Stage B above for the one thing the plan
+had wrong about where a `_validate` warning ends up.
+
+**C is what is left**, and C1 — state the rule and stop — is the recommendation. Stage B's warning
+already points there: it tells the author to move the class into a file of its own, which is the
+rule C1 would write down.
 
 The GDScript probe that produced every measurement above is four files — an outer script with an
 inner class, a `class_name` script beside it, and a `SceneTree` driver — and is worth rebuilding

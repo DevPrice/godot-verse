@@ -176,6 +176,13 @@ VerseClassDecl verse_scan_class_decl(const std::string &p_source, const std::str
 	VerseClassDecl decl;
 	bool pending_global = false;
 	bool pending_tool = false;
+	// Where the pending `@global_class` was written, so a warning about an inert one lands on the
+	// attribute rather than on the class it failed to register.
+	int pending_global_line = -1;
+	// The file's own class, once seen. The scan no longer stops there: every top-level class after
+	// it still has to be looked at, because an inert `@global_class` can be written below the
+	// script's class as easily as above it.
+	bool found_the_class = false;
 
 	VerseLexState state;
 	std::vector<VerseToken> tokens;
@@ -201,6 +208,7 @@ VerseClassDecl verse_scan_class_decl(const std::string &p_source, const std::str
 			const std::string attribute = take_identifier(line, pos);
 			if (attribute == GlobalClassAttribute) {
 				pending_global = true;
+				pending_global_line = row;
 			} else if (attribute == ToolAttribute) {
 				pending_tool = true;
 			}
@@ -232,9 +240,19 @@ VerseClassDecl verse_scan_class_decl(const std::string &p_source, const std::str
 		// Every other top-level class in the file is somebody else's -- a helper, a base, a
 		// parametric one -- and skipping it is the whole of what modules changed here. Note the
 		// attributes above *it* go with it, so pending_global clears with it too.
-		if (!p_file_stem.empty() && name != p_file_stem) {
+		//
+		// With no stem to match, the first class is the file's: a caller with no file in hand still
+		// gets one answer, and every class after it is one of the others.
+		const bool is_the_class = p_file_stem.empty() ? !found_the_class : name == p_file_stem;
+		if (!is_the_class) {
+			// The attribute asks for something Godot has nowhere to put. Recorded rather than
+			// dropped, because silently ignoring a request is the defect -- see the struct.
+			if (pending_global) {
+				decl.inert_global_classes.push_back({ name, pending_global_line });
+			}
 			pending_global = false;
 			pending_tool = false;
+			pending_global_line = -1;
 			continue;
 		}
 
@@ -244,7 +262,10 @@ VerseClassDecl verse_scan_class_decl(const std::string &p_source, const std::str
 		decl.base = take_first_super(line, pos);
 		decl.is_global = pending_global;
 		decl.is_tool = pending_tool;
-		return decl;
+		found_the_class = true;
+		pending_global = false;
+		pending_tool = false;
+		pending_global_line = -1;
 	}
 
 	return decl;

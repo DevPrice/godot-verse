@@ -429,6 +429,14 @@ COVERAGE_EXPLANATIONS = [
     # warning that leaked around it would print as this line without the prefix.
     "WARNING: res://scripts/probe.verse:38:9: Unreachable code - previous expression is guaranteed "
     "to exit early.",
+    # B19 Stage B: `@global_class` on a class that is not the one named after its file. The
+    # attribute is accepted by the compiler and registers nothing, which the bridge used to pass
+    # over in silence. Asserted on the reason rather than on the whole sentence, the way the module
+    # ones are. The editor also puts this on the attribute's line through `_validate`; only the
+    # build's copy reaches a log, which is why this is the half a test can read.
+    "`@global_class` on `sidecar` registers nothing",
+    "Godot collects one global class per script file",
+    "still exports, filtered by its nearest Godot base class",
 ]
 
 

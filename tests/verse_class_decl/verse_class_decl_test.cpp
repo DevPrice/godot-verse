@@ -246,6 +246,100 @@ bool TestToolAndGlobalTogether()
 	return Step("both attributes bind to the same class", Decl.is_tool && Decl.is_global);
 }
 
+// Godot collects one global class per script *path*, so `@global_class` on any class but the file's
+// own is a request with nowhere to go. Each is reported so `_validate` can say so at the attribute
+// instead of ignoring it silently. docs/property-export.md §"A second class in one file".
+
+bool TestInertGlobalClassRecorded()
+{
+	const char* Source =
+		"@global_class\n"
+		"settings := class(resource):\n"
+		"\n"
+		"@global_class\n"
+		"stowaway := class(resource):\n";
+	const VerseClassDecl Decl = verse_scan_class_decl(Source, "settings");
+	return Step("the file's own @global_class still registers", Decl.name == "settings" && Decl.is_global)
+		&& Step("a second one is reported as inert", Decl.inert_global_classes.size() == 1)
+		&& Step("named, so the warning can name it", Decl.inert_global_classes[0].name == "stowaway")
+		&& Step("and located at the attribute, not at the class",
+				Decl.inert_global_classes[0].attribute_line == 3);
+}
+
+bool TestInertGlobalClassAboveTheScript()
+{
+	// The half that already worked: the attribute above another class never reached the file's.
+	// What is new is that it is now reported rather than only withheld.
+	const char* Source =
+		"@global_class\n"
+		"helper := class(object):\n"
+		"\n"
+		"player := class(node2d):\n";
+	const VerseClassDecl Decl = verse_scan_class_decl(Source, "player");
+	return Step("an inert attribute above the file's class is reported too",
+				Decl.inert_global_classes.size() == 1
+					&& Decl.inert_global_classes[0].name == "helper"
+					&& Decl.inert_global_classes[0].attribute_line == 0)
+		&& Step("and the file's class is still not global", !Decl.is_global);
+}
+
+bool TestPlainSecondClassIsNotReported()
+{
+	// A second class is ordinary in Verse and in GDScript alike. Only the attribute is a request
+	// that cannot be served, so only the attribute is reported.
+	const char* Source =
+		"player := class(node2d):\n"
+		"\n"
+		"helper := class(object):\n";
+	const VerseClassDecl Decl = verse_scan_class_decl(Source, "player");
+	return Step("a second class with no attribute says nothing", Decl.inert_global_classes.empty());
+}
+
+bool TestSeveralInertGlobalClasses()
+{
+	// Below the file's own class, which is the half the scan could not see when it stopped at the
+	// first match.
+	const char* Source =
+		"player := class(node2d):\n"
+		"\n"
+		"@global_class\n"
+		"one := class(resource):\n"
+		"\n"
+		"@tool\n"
+		"@global_class\n"
+		"two := class(resource):\n";
+	const VerseClassDecl Decl = verse_scan_class_decl(Source, "player");
+	return Step("every inert attribute is reported, in declaration order",
+				Decl.inert_global_classes.size() == 2
+					&& Decl.inert_global_classes[0].name == "one"
+					&& Decl.inert_global_classes[1].name == "two")
+		&& Step("each at its own attribute's line, past an unrelated attribute",
+				Decl.inert_global_classes[0].attribute_line == 2
+					&& Decl.inert_global_classes[1].attribute_line == 6);
+}
+
+bool TestInertGlobalClassInCommentIgnored()
+{
+	// The same lexer guarantee the file's own attribute has: a commented-out attribute is text.
+	const char* Source =
+		"player := class(node2d):\n"
+		"\n"
+		"# @global_class\n"
+		"helper := class(object):\n";
+	const VerseClassDecl Decl = verse_scan_class_decl(Source, "player");
+	return Step("a commented-out @global_class is not reported", Decl.inert_global_classes.empty());
+}
+
+bool TestFileWithOnlyAnInertGlobalClass()
+{
+	// No class named after the file, so no script -- and the attribute is why the author thinks
+	// there is one. The report has to survive `name` being empty.
+	const VerseClassDecl Decl = verse_scan_class_decl("@global_class\nhelper := class(object):\n", "player");
+	return Step("a file with no script of its own still reports the inert attribute",
+				Decl.name.empty() && Decl.inert_global_classes.size() == 1
+					&& Decl.inert_global_classes[0].name == "helper");
+}
+
 } // namespace
 
 int main()
@@ -280,6 +374,12 @@ int main()
 	Ok = TestAttributeOnTheNamedClassStillBinds() && Ok;
 	Ok = TestToolAttribute() && Ok;
 	Ok = TestToolAndGlobalTogether() && Ok;
+	Ok = TestInertGlobalClassRecorded() && Ok;
+	Ok = TestInertGlobalClassAboveTheScript() && Ok;
+	Ok = TestPlainSecondClassIsNotReported() && Ok;
+	Ok = TestSeveralInertGlobalClasses() && Ok;
+	Ok = TestInertGlobalClassInCommentIgnored() && Ok;
+	Ok = TestFileWithOnlyAnInertGlobalClass() && Ok;
 
 	printf("[verse_class_decl_test] %s\n", Ok ? "ALL PASS" : "FAILURES");
 	return Ok ? 0 : 1;
