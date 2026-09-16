@@ -703,20 +703,36 @@ def emit_enums(enums: dict) -> list:
 # extension_api.json and asserts every one is covered exactly once, so a Godot renumbering is a
 # generation failure rather than a value read off the wrong lane.
 #
-# There is no overloaded `VariantFrom`. 1 read Verse as overloading freely on parameter type, and it
-# does not -- the compiler rejected two arrangements in a row, each time refusing the *definitions*
-# rather than a call:
+# There is no overloaded `VariantFrom` -- no single `AsVariant(Value)` taking anything -- and two
+# independent things forbid one. The first is a rule of the language, and every pair below was run
+# in `tests/verse_probe/variant_api_probe.verse` rather than reasoned about:
 #
-# - **two array-typed overloads are ambiguous whatever their element types**, because `array{}` is a
-#   call site that cannot resolve them: an empty array literal has no element type. `string` is
-#   `[]char`, so that is every packed array plus String at once;
-# - and `VariantFrom(:logic)` is ambiguous with `VariantFrom(:[]char)`, which no reading of
-#   "overloads on parameter type" predicts.
+#   **An overload set may hold at most one parameter from the emptiable family: `logic`, any
+#   option, and any array.** `string` is `[]char`, so it is in that family too.
 #
-# So each lane gets its own `VariantFrom<GodotType>`, symmetric with its `As<GodotType>` reader. That
-# loses `VariantFrom(42)`, and buys a rule that is one sentence and cannot be undermined by whatever
-# Verse's real overload rule turns out to be. Where overloading *is* known to work is within one
-# class on distinct non-array types -- `dictionary.GetInt` takes a string, an int or a vector2i.
+# Compiles: int+float, int+string, int+logic, logic+vector2. Refused, at the *definitions* and just
+# as firmly inside a class as at module scope: logic+string, logic+[]int, string+[]int,
+# []int+[]float, logic+?int, ?int+[]int. The likely mechanism is that `false` is both a `logic` and
+# the empty option, and an option is a 0-or-1 array -- one value inhabiting all three families is a
+# call site that resolves none of them, which is the same shape of argument as `array{}` having no
+# element type. The mechanism is a conjecture; the ten measurements are not.
+#
+# This **corrects** docs/phase-4b-design.md 15, which recorded `VariantFrom(:logic)` as ambiguous
+# with `VariantFrom(:[]char)` "for no reason any reading of overloads-on-parameter-type predicts",
+# and concluded that module-level overloading was the problem. It is not: GodotMath.native.verse
+# overloads `Abs` across nine receiver types and `Length` across seven. One rule about emptiable
+# types covers both refusals and predicts the other eight.
+#
+# The second reason is arithmetic, and it would stand in a language that overloaded perfectly:
+# **38 lanes over 32 Verse types**. `string` carries String, StringName and NodePath; `int` carries
+# Int and RID; `[]int` carries all three integer packings; `[]float` carries both float packings.
+# An overloaded builder picks one lane per Verse type by construction, so six lanes would have no
+# spelling at all -- and a StringName is not a String to a Dictionary that was keyed with one.
+#
+# So each lane keeps its own `VariantFrom<GodotType>`. That loses `VariantFrom(42)` and buys a rule
+# that is one sentence. The **readers** answer the same ergonomic complaint a different way: the
+# lane is still in the name, so nothing is overloaded, but they are spelled on the receiver --
+# `V.AsInt[]`, the way Epic's own JSON API reads. See emit_variant_readers.
 #
 # `kind` is not carried: the variant_kind enumerator is derived from `godot_type` by
 # screaming_pascal_case, which keeps Godot's own TYPE_ prefix. Stripping it would give `Int` and
@@ -803,6 +819,17 @@ VARIANT_DECIDES_CONVERTERS = {"VhToObject"}
 # which makes this the one reliable way from an element's TypeInfo back to its As/VariantFrom pair.
 LANE_BY_PACKER = {lane.from_fn: lane.reader for lane in VARIANT_LANES}
 
+
+def lane_unpacker(reader: str) -> str:
+    """The plain-function half of a lane's reader.
+
+    `V.AsInt[]` is an extension method, which is a module-level `operator'.AsInt'` and therefore
+    cannot be handed anywhere a *function value* is wanted: its shape is receiver-plus-tuple, not
+    one variant. `typed_array` wants exactly that value in its `Unpack` member, 74 times below. So
+    the tag check stays an ordinary named function and the extension method forwards to it.
+    """
+    return f"VhUnpack{reader}"
+
 # Variant::Type number (as a string, the way extension_api.json spells it inside a typedarray) ->
 # enumerator name. Filled by check_variant_lanes, which is the one place that reads the numbers.
 GODOT_VARIANT_TYPE_BY_TAG = {}
@@ -864,7 +891,7 @@ def emit_math_packed_converters() -> list:
 
 
 def emit_variant_readers(api: dict, enums: dict) -> list:
-    """VariantKind over Godot's own variant_type, one As<GodotType> per lane, and the
+    """VariantKind over Godot's own variant_type, the two halves of each lane's reader, and the
     VariantFrom<GodotType> family."""
     values = check_variant_lanes(api)
 
@@ -892,15 +919,24 @@ def emit_variant_readers(api: dict, enums: dict) -> list:
     blocks.append("VhToVariant(Value:variant)<reads>:variant = Value")
     blocks.append("VhFromVariant(Value:variant)<reads>:variant = Value")
 
-    readers = []
+    # Two definitions per lane. The public one is the receiver spelling -- `V.AsInt[]` rather than
+    # `AsInt[V]` -- which is how Epic's own JSON API reads and is what an author reaches for. It has
+    # to be an *extension method* rather than a method on the struct, because Verse cannot reopen a
+    # class and `variant` is declared by hand in Godot.native.verse while these are generated.
+    #
+    # `<decides>` survives the desugaring intact: `V.AsInt[]` is a failure-callable
+    # `operator'.AsInt'(V, ())`, measured in tests/verse_probe/variant_api_probe.verse. The private
+    # half is there because a function *value* cannot be one of these -- see lane_unpacker.
     for lane in VARIANT_LANES:
         convert = (f"{lane.to_fn}[Value]" if lane.to_fn in VARIANT_DECIDES_CONVERTERS
                    else f"{lane.to_fn}(Value)")
-        readers.append(
-            f"As{lane.reader}<public>(Value:variant)<decides><reads>:{lane.verse_type} =\n"
+        blocks.append(
+            f"{lane_unpacker(lane.reader)}(Value:variant)<decides><reads>:{lane.verse_type} =\n"
             f"    Value.Tag = {lane.tag}\n"
             f"    {convert}")
-    blocks.extend(readers)
+        blocks.append(
+            f"(Value:variant).As{lane.reader}<public>()<decides><reads>:{lane.verse_type} ="
+            f" {lane_unpacker(lane.reader)}[Value]")
 
     for lane in VARIANT_LANES:
         blocks.append(
@@ -952,9 +988,11 @@ def element_converters(suffix: str, info: TypeInfo):
 
     `Unpack` and `Pack` are function *values*, and Verse has no anonymous functions, so each has to
     name something. Wherever the element type is one of Variant's own lanes, that is its
-    `As<GodotType>` reader and `VariantFrom<GodotType>` builder -- the reader checks the tag and is
-    already <decides>, which is the contract exactly. The lane is found by the element's packer rather
-    than by its Godot name, because those names do not always agree: RID's reader is `AsRid`.
+    `VhUnpack<GodotType>` reader and `VariantFrom<GodotType>` builder -- the reader checks the tag
+    and is already <decides>, which is the contract exactly. It is the private half deliberately:
+    the public `V.As<GodotType>[]` is an extension method and has the wrong shape for a function
+    value. The lane is found by the element's packer rather than by its Godot name, because those
+    names do not always agree: RID's reader is `AsRid`.
 
     A *class* element needs its own pair. Both halves have to name the class -- `VhFromObject` takes
     the base `object` where the member's declared type says `node`, and a Verse function type is not
@@ -965,7 +1003,7 @@ def element_converters(suffix: str, info: TypeInfo):
     # type says `node`.
     lane = None if info.pack_fn == "VhFromObject" else LANE_BY_PACKER.get(info.pack_fn)
     if lane is not None:
-        return f"As{lane}", f"VariantFrom{lane}", []
+        return lane_unpacker(lane), f"VariantFrom{lane}", []
     read = f"VhTo{suffix}Element"
     write = f"VhFrom{suffix}Element"
     return read, write, [
@@ -2443,7 +2481,7 @@ VARIANT_TEMPLATE = """
 # Neither family is overloaded -- the type is in the name, for the reason gen_verse_api.py records
 # where it emits them.
 #
-#     if (Health := AsInt[V]):
+#     if (Health := V.AsInt[]):
 #         Print("hp {{Health}}")
 #
 #     case (VariantKind(V)):          # when the type is not known at all
@@ -2452,9 +2490,12 @@ VARIANT_TEMPLATE = """
 #
 #     Node.SetMeta("score", VariantFromInt(42))
 #
-# Reading is a <decides> free function rather than a cast, because Verse's own cast rejects a struct
-# on both sides -- see docs/phase-2-design.md 1 and 4.1. It reads the same at the call site and it
-# boxes nothing.
+# Reading is <decides> rather than a cast, because Verse's own cast rejects a struct on both sides
+# -- see docs/phase-2-design.md 1 and 4.1. It reads the same at the call site and it boxes nothing.
+# It is spelled on the receiver, `V.AsInt[]`, which is an extension method: `variant` is declared by
+# hand and Verse cannot reopen a class, so there is nothing to hang a real method on. `VariantKind`
+# stays a free function on purpose -- as a receiver spelling it would put `Kind` in module scope,
+# and a module-level name makes every local of that name ambiguous rather than shadowed.
 
 {readers}
 

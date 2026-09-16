@@ -804,6 +804,25 @@ it is not in `run_tests.py`.
   parameter is not a tuple. Any fixed parameter in front makes all of them distinguishable again.
   It decides how many loose arities a generated vararg may have — four with a prefix, one without —
   and it will decide the same for anything else overloading a value form against an array form.
+- **An overload set may hold at most one parameter from the *emptiable* family: `logic`, any option
+  and any array** — and `string` is `[]char`, so it is in that family too. int+float, int+string,
+  int+logic and logic+vector2 all compile; logic+string, logic+`[]int`, string+`[]int`,
+  `[]int`+`[]float`, logic+`?int` and `?int`+`[]int` are all refused, at the *definitions*, and
+  refused just as firmly inside a class or as extension methods on the receiver. The likely
+  mechanism is that `false` is both a `logic` and the empty option, and an option is a 0-or-1
+  array — one value inhabiting all three families is a call site that resolves none of them, the
+  same shape of argument as `array{}` having no element type. Measured in
+  `tests/verse_probe/variant_api_probe.verse`; **this is why there is no overloaded `AsVariant`**
+  and why each Variant lane keeps its own `VariantFrom<GodotType>`. It also retires
+  `phase-4b-design.md` §15's claim that module-level overloading was to blame —
+  `GodotMath.native.verse` overloads `Abs` across nine receiver types.
+- **A reader is spelled on the receiver: `V.AsInt[]`, not `AsInt[V]`.** It is an extension method,
+  because `variant` is hand-written and the readers are generated and Verse cannot reopen a class,
+  and `<decides>` survives the desugaring. Each lane also keeps a **non-public** `VhUnpack<GodotType>`
+  doing the tag check, because `typed_array` needs the reader as a function *value* in its `Unpack`
+  member and an extension method's shape is receiver-plus-tuple. `VariantKind(V)` deliberately did
+  not move: as `V.Kind()` it would put `Kind` in module scope, where a local of that name becomes
+  ambiguous rather than shadowing.
 - **The mirror's `Tag...` constants are not a script's to write.** `TagInt` and its 38 siblings
   carry no access specifier, so they are the mirror's own; a script naming one is glitch 3593,
   whose message is about control scopes. What a Godot property dictionary's `"type"` key wants is

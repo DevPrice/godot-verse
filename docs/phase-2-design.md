@@ -594,6 +594,15 @@ types (`array{}` cannot resolve them); `(:logic)` is ambiguous with `(:[]char)`;
 ambiguous with a `/Verse.org/Verse` name of the same spelling **whatever the arity**. So there is no
 overloaded `VariantFrom` — each lane has its own name, symmetric with its `As<GodotType>` reader.
 
+> **Narrower still, and now with a reason.** The first two refusals are one rule, measured in
+> `tests/verse_probe/variant_api_probe.verse` during Phase 4b: an overload set may hold at most one
+> parameter from the **emptiable** family — `logic`, any option, and any array — and `string` is
+> `[]char`. It is not about module scope, which overloads fine (`GodotMath.native.verse` overloads
+> `Abs` across nine receiver types), and class scope does not lift it. `phase-4b-design.md` §15 has
+> the ten pairs. The conclusion here — a name per lane — is unchanged, and gained a second
+> justification: 38 lanes over 32 Verse types, so six lanes have no argument type to be selected by.
+> The **readers** did move: `AsInt[V]` is now `V.AsInt[]`.
+
 **A required data member may be no less accessible than its class.** `typed_array`'s `Unpack` had to
 be `<public>`, which forced `variant` public with it. §4.1 treated making `variant` nameable as a
 narrow amendment to R-TYPE-7; it is not, because **Verse forbids non-public struct fields outright**

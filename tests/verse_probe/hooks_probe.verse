@@ -48,11 +48,11 @@ hooks_probe := class(object):
             variant{}
 
     _Set<override>(Property:string, Value:variant):logic =
-        if (Property = "Extra", Number := AsInt[Value]):
+        if (Property = "Extra", Number := Value.AsInt[]):
             set Extra = Number
             Bump()
             true
-        else if (Property = "Taken", Text := AsString[Value]):
+        else if (Property = "Taken", Text := Value.AsString[]):
             set Taken = Text
             true
         else:
@@ -79,7 +79,7 @@ hooks_probe := class(object):
     # specifier, for finding 3.
     AskGet<public>():int =
         V := _Get("Extra")
-        if (N := AsInt[V]) then N else -1
+        if (N := V.AsInt[]) then N else -1
 
     AskMissing<public>():int =
         V := _Get("NoSuchThing")

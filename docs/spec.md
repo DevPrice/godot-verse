@@ -1324,8 +1324,10 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   Two Verse facts were found the hard way and are recorded because they shape the design. A required
   data member may be **no less accessible than its class**, so the element converter had to be public,
   which forced `variant` public with it (R-TYPE-7). And Verse has **no anonymous functions**, so the
-  converter cannot be an inline lambda: it names the element type's own `As<GodotType>` reader where
-  one exists, and a generated per-class function where the element is a class — because
+  converter cannot be an inline lambda: it names the element type's own `VhUnpack<GodotType>` reader
+  where one exists — the plain-function half of `V.As<GodotType>[]`, which exists precisely because
+  an extension method is receiver-plus-tuple and cannot be a function *value* — and a generated
+  per-class function where the element is a class, because
   `VhFromObject` takes the base `object` and a Verse function type is not satisfied by one that
   merely accepts a supertype.
 
@@ -1428,7 +1430,7 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   Two things would restore it, neither of them Phase 2's: `variant` as a **class** rather than a
   struct, which is an ABI change and would give up the fixed-width no-allocation property the whole
   encoding was measured for (`abi-v2-design.md` §1a); or Verse growing non-public struct fields back.
-  The normal route is unaffected — `As<GodotType>[V]`, `VariantKind(V)`, `VariantFrom<GodotType>` —
+  The normal route is unaffected — `V.As<GodotType>[]`, `VariantKind(V)`, `VariantFrom<GodotType>` —
   and is what every generated body and every example uses. Status: **part.**
 
 ---
@@ -1651,7 +1653,7 @@ indistinguishable from a GDScript one.
   script is GDScript or C#, dynamically. Status: **done** (Phase 4 stage 2 closed the argument
   array). The dispatch itself arrived as a side effect rather than as work of its own: `Object.callv(StringName, Array) -> Variant` is an ordinary concrete method, and Godot's
   `Object` became mirrorable the moment Variant and Array both crossed (Phase 2 §4.4). A script
-  writes `AsInt[Target.Callv("_double", Args)]` and the GDScript method runs. `get`, `set`,
+  writes `Target.Callv("_double", Args).AsInt[]` and the GDScript method runs. `get`, `set`,
   `has_method` and `get_class` came with it.
 
   **The argument array** was what was missing, which the Dodge the Creeps port found and

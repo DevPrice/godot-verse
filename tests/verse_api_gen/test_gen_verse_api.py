@@ -449,7 +449,7 @@ def test_typed_array_parameter_takes_the_parametric_class():
     converters = "\n".join(g.emit_typed_array_converters(arrays, {}))
     check_true(
         "a lane element reuses its own reader rather than getting a new one",
-        "Unpack := AsStringName" in converters and "VhToStringNameElement" not in converters,
+        "Unpack := VhUnpackStringName" in converters and "VhToStringNameElement" not in converters,
     )
     check_true(
         "a class element gets one, because the converter has to name the class",
@@ -849,7 +849,8 @@ def test_generated_file_matches_hand_written_slice():
     unexplained = [
         line for line in free
         if "VhSingleton[" not in line
-        and not line.startswith("As")
+        and not line.startswith("(Value:variant).As")
+        and not line.startswith("VhUnpack")
         and not line.startswith("VhToObject(")
         # A typed container's element converter, which fails on a null object like any other object
         # read. Module-scoped and never in a script's completion.
@@ -868,11 +869,18 @@ def test_generated_file_matches_hand_written_slice():
 
     # Every Variant::Type the mirror can read has a reader and a builder, and they are named after
     # Godot's own type rather than after the Verse one.
-    readers = [line.split("<")[0] for line in free if line.startswith("As")]
-    check_true("a reader per variant lane", len(readers) == len(g.VARIANT_LANES))
+    readers = [line for line in free if line.startswith("(Value:variant).As")]
+    check_true("a reader per variant lane, spelled on the receiver", len(readers) == len(g.VARIANT_LANES))
     check_true(
         "and a builder to match each",
         all(f"VariantFrom{lane.reader}<public>(" in text for lane in g.VARIANT_LANES),
+    )
+    # The plain half is what a typed container's `Unpack` member names; an extension method is
+    # receiver-plus-tuple and cannot be a function value. Non-public, so it is not API.
+    check_true(
+        "each reader forwarding to a plain function a container can name as a value",
+        all(f"VhUnpack{lane.reader}(Value:variant)<decides><reads>:" in text
+            for lane in g.VARIANT_LANES),
     )
     check_true(
         "the kind enum keeps Godot's TYPE_ prefix, because Int and Float are taken",

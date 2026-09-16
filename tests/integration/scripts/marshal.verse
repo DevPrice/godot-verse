@@ -145,17 +145,17 @@ marshal := class(node2d):
 
     IntAt<public>(A:godot_array, Index:int)<decides>:int =
         V := A.GetVariant[Index]
-        AsInt[V]
+        V.AsInt[]
 
     Vector2XAt<public>(A:godot_array, Index:int)<decides>:float =
         V := A.GetVariant[Index]
-        AsVector2[V].X
+        V.AsVector2[].X
 
     # Asking for the wrong type is a failure, not an error -- which is the whole reason the readers
     # are <decides> rather than raising the way a mirrored getter does.
     StringAtFails<public>(A:godot_array, Index:int)<decides>:string =
         V := A.GetVariant[Index]
-        AsString[V]
+        V.AsString[]
 
     # And building one, which is the other direction: VariantFromInt rather than an overload, for
     # the reason in gen_verse_api.py's VARIANT_LANES comment.
@@ -254,7 +254,7 @@ marshal := class(node2d):
     # as a side effect of 4.4 rather than as work of its own. The argument Array comes from the
     # caller, since a script cannot mint a fresh Godot container.
     CallSibling<public>(Target:object, Method:string, Args:godot_array)<decides>:int =
-        AsInt[Target.Callv(Method, Args)]
+        Target.Callv(Method, Args).AsInt[]
 
     # The same call, with the argument list built here rather than handed over. This is what
     # `godot_array{}` could not do: it compiles and holds reference 0, which crosses as Nil, so
@@ -262,7 +262,7 @@ marshal := class(node2d):
     CallSiblingWith<public>(Target:object, Method:string, Value:int)<decides>:int =
         Args := MakeArray()
         Args.AddInt(Value)
-        AsInt[Target.Callv(Method, Args)]
+        Target.Callv(Method, Args).AsInt[]
 
     # A container built in Verse and handed *back* to Godot as a value, which is the other half:
     # what comes out the far side has to be the thing that was built, elements and all.
@@ -402,16 +402,16 @@ marshal := class(node2d):
     # plus one `[]variant` tail. Both are exercised here, because the pair is the thing that could
     # be wrong -- a call resolving to the other arity would still compile.
     CallOther<public>(Target:object, Method:string, Value:int)<transacts>:int =
-        if (N := AsInt[Target.Call(Method, array{VariantFromInt(Value)})]) then N else -1
+        if (N := Target.Call(Method, array{VariantFromInt(Value)}).AsInt[]) then N else -1
 
     # The no-tail arity of the same name.
     CallOtherNoArgs<public>(Target:object, Method:string)<transacts>:string =
-        if (S := AsString[Target.Call(Method)]) then S else "?"
+        if (S := Target.Call(Method).AsString[]) then S else "?"
 
     # Two arguments, so the tail is more than a single value dressed as an array.
     CallOtherTwo<public>(Target:object, Method:string, A:int, B:int)<transacts>:int =
         Args := array{VariantFromInt(A), VariantFromInt(B)}
-        if (N := AsInt[Target.Call(Method, Args)]) then N else -1
+        if (N := Target.Call(Method, Args).AsInt[]) then N else -1
 
     # Object.emit_signal, which is the other half of what stage 6's "done when" names.
     EmitOn<public>(Target:object, Signal:string, Value:int)<transacts>:int =
@@ -425,10 +425,10 @@ marshal := class(node2d):
     # call as the array form beside them, which is exactly what the cases assert: the two spellings
     # have to reach the same body, or one of them is resolving to an overload nobody meant.
     CallOtherLoose<public>(Target:object, Method:string, Value:int)<transacts>:int =
-        if (N := AsInt[Target.Call(Method, VariantFromInt(Value))]) then N else -1
+        if (N := Target.Call(Method, VariantFromInt(Value)).AsInt[]) then N else -1
 
     CallOtherLooseTwo<public>(Target:object, Method:string, A:int, B:int)<transacts>:int =
-        if (N := AsInt[Target.Call(Method, VariantFromInt(A), VariantFromInt(B))]) then N else -1
+        if (N := Target.Call(Method, VariantFromInt(A), VariantFromInt(B)).AsInt[]) then N else -1
 
     EmitOnLoose<public>(Target:object, Signal:string, Value:int)<transacts>:int =
         ToInt(Target.EmitSignal(Signal, VariantFromInt(Value)))
@@ -437,7 +437,7 @@ marshal := class(node2d):
     # one loose value and the array form for anything more. Two would be a tuple, and a tuple of
     # variants is `[]variant` -- one type rather than two overloads.
     CallCallableLoose<public>(C:callable, Value:int)<transacts>:int =
-        if (N := AsInt[C.Call(VariantFromInt(Value))]) then N else -1
+        if (N := C.Call(VariantFromInt(Value)).AsInt[]) then N else -1
 
     # --- the six vararg methods that live on a *reference* -------------------
     #
@@ -449,15 +449,15 @@ marshal := class(node2d):
     # Verse function's parameters are its tuple, so `Call()` beside `Call(:[]variant)` is not two
     # arities of one name. `array{}` is what an empty argument list is written as.
     CallCallable<public>(C:callable, Value:int)<transacts>:int =
-        if (N := AsInt[C.Call(array{VariantFromInt(Value)})]) then N else -1
+        if (N := C.Call(array{VariantFromInt(Value)}).AsInt[]) then N else -1
 
     # Godot's own currying: `bind` appends its arguments *after* the call's own.
     CallBound<public>(C:callable, Bound:int, Value:int)<transacts>:int =
         Curried := C.Bind(array{VariantFromInt(Bound)})
-        if (N := AsInt[Curried.Call(array{VariantFromInt(Value)})]) then N else -1
+        if (N := Curried.Call(array{VariantFromInt(Value)}).AsInt[]) then N else -1
 
     CallCallableNoArgs<public>(C:callable)<transacts>:string =
-        if (S := AsString[C.Call(array{})]) then S else "?"
+        if (S := C.Call(array{}).AsString[]) then S else "?"
 
     # A foreign signal -- one a GDScript declared or `add_user_signal` made -- emitted from Verse.
     EmitForeign<public>(Owner:object, Name:string, Value:int)<transacts>:void =

@@ -51,10 +51,10 @@ hooks := class(node2d):
 
     _Set<override>(Property:string, Value:variant):logic =
         set SetCalls = SetCalls + 1
-        if (Property = "Virtual", Number := AsInt[Value]):
+        if (Property = "Virtual", Number := Value.AsInt[]):
             set Virtual = Number
             true
-        else if (Property = "Label", Text := AsString[Value]):
+        else if (Property = "Label", Text := Value.AsString[]):
             set Label = Text
             true
         else:

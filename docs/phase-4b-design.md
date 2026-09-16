@@ -744,6 +744,8 @@ reader would act on:
   reasoning is already in `gen_verse_api.py` above `VariantLane`. **S-3 was not wrong**; it asked
   about a class's methods, where overloading does work, and a module-level function is a different
   question. The lesson is the narrow one: a spike answers the question it was given.
+  **Both halves of that bullet have since been measured and the second is wrong** — class scope does
+  not rescue the pair, and there *is* a reason. See "The variant API's two spellings" below.
 - **"The lanes stay non-public" is not true and the spec already says so.** §3 says a script "never
   sees `Tag` or `F0`". R-TYPE-7's own status paragraph records that Verse **forbids** a non-public
   field on a struct — `Verse::Version::StructFieldsMustBePublic` — so a public struct has public
@@ -996,6 +998,73 @@ that the mirror does not wrap is now reachable, and an unknown name is Godot's o
 than a second one: a Verse function's parameters are its tuple, so `Call()` beside
 `Call(:[]variant)` is one argument type rather than two arities. `C.Call(array{})` is what an empty
 argument list is written as, and a case says so.
+
+---
+
+### The variant API's two spellings, and the rule behind the one that was refused
+
+*Written after the work, prompted by an author asking for both halves at once: move the readers onto
+the value, and collapse the builders into one overloaded `AsVariant`. The first was free. The second
+is the more interesting answer, because §15 above had already recorded a refusal and recorded it as a
+mystery.*
+
+**The readers moved, and cost nothing.** `AsInt[V]` is now `V.AsInt[]`, which is how Epic's own JSON
+API reads and what an author reaches for first. It is an **extension method** rather than a method on
+the struct, and it had to be: `variant` is hand-written in `Godot.native.verse`, the readers are
+generated into `GodotClasses.native.verse`, and Verse cannot reopen a class. The part worth measuring
+was whether `<decides>` survives the desugaring — `V.AsInt[]` is a failure-call of
+`operator'.AsInt'(V, ())`, and a failure-call of a *sugared* call is a different question from a
+failure-call of a plain one. It does.
+
+Each lane therefore has two definitions, and the second is not redundancy. `typed_array` carries its
+element reader in an `Unpack` **member** — a function *value*, 74 of them — and an extension method
+has the wrong shape for one: receiver plus an argument tuple, not one variant. So the tag check stays
+a plain `VhUnpack<GodotType>`, non-public, and the extension method forwards to it. Verse having no
+anonymous functions is what makes that a rule rather than a preference.
+
+**The builders did not move, and here is the rule that stops them.** §15 recorded that
+`VariantFrom(:logic)` was ambiguous with `VariantFrom(:[]char)` "for no reason any reading of
+overloads-on-parameter-type predicts", and concluded that module-level overloading was the problem.
+That conclusion is wrong on its face and the evidence was already in the tree:
+`GodotMath.native.verse` overloads `Abs` across **nine** receiver types and `Length` across seven.
+So the pairs were run one at a time, in `tests/verse_probe/variant_api_probe.verse`:
+
+| compiles | refused |
+| --- | --- |
+| int + float | logic + string |
+| int + string | logic + `[]int` |
+| int + logic | string + `[]int` |
+| logic + vector2 | `[]int` + `[]float` |
+| | logic + `?int` |
+| | `?int` + `[]int` |
+
+> **An overload set may hold at most one parameter from the emptiable family: `logic`, any option,
+> and any array.** `string` is `[]char`, so it is in that family too.
+
+Refused at the *definitions*; refused identically as class methods, which is the half of §15's bullet
+that turns out to be false; and refused identically as extension methods on the receiver, so
+`42.ToVariant()` is not an escape either. The likely mechanism is that `false` is both a `logic` value
+and the empty option, and an option is a 0-or-1 array — one value inhabiting all three families is a
+call site that resolves none of them, which is the same shape of argument as `array{}` having no
+element type. **The mechanism is a conjecture; the ten measurements are not**, and the conjecture is
+what turned two apparently unrelated refusals into one rule that predicted the other eight.
+
+**And a second reason stands even if that one is ever fixed**, which is what makes this a decision
+rather than a workaround: there are **38 lanes over 32 Verse types**. `string` carries String,
+StringName and NodePath; `int` carries Int and RID; `[]int` carries all three integer packings;
+`[]float` carries both float packings. An overloaded builder selects a lane *by argument type*, so it
+can only ever name one per type — six lanes would have no spelling at all, and a StringName is not a
+String to a Dictionary that was keyed with one.
+
+What the first rule costs, concretely: `AsVariant(42)` and `AsVariant("hi")` could have coexisted,
+but `AsVariant(true)` could not have joined them. The most common case reading differently from its
+two neighbours is worse than a uniform name per lane, so the lane stays in the name — and the
+ergonomic complaint the author actually had is answered by the receiver spelling instead, which costs
+no overloading at all.
+
+`VariantKind(V)` stayed a free function on purpose. As `V.Kind()` it would put `Kind` in module
+scope, and a module-level name makes every local of that name *ambiguous* rather than shadowed —
+`CLAUDE.md`'s recorded trap, and `Kind` is a name a script is likely to want.
 
 ---
 

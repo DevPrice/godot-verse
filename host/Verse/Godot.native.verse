@@ -414,7 +414,7 @@ vh_object<public><native> := class:
 
     # Takes a write Godot could not place. `true` means it was taken; `false` leaves Godot to report
     # a property that does not exist. The value's Godot type is not known until it arrives, which is
-    # the whole reason `variant` is in this signature -- read it with `AsInt[Value]` and friends,
+    # the whole reason `variant` is in this signature -- read it with `Value.AsInt[]` and friends,
     # each of which fails rather than raising when the answer is no.
     _Set<public>(Property:string, Value:variant):logic = false
 
