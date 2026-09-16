@@ -2307,6 +2307,24 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 		return refuse_or_mirrored_class();
 	}
 
+	// A comment is prose and a string is data. Neither is code, so nothing under the pointer
+	// there names a definition, and the refusal has to be the bare one -- the fallback below
+	// resolves a bare *word*, and a comment is made of words.
+	//
+	// This matters far more here than the same shortcut does in GDScript. The mirror spells
+	// Godot's classes in lowercase, so `node`, `script`, `label`, `engine`, `window`, `panel`,
+	// `animation` and `resource` are all ordinary English a comment is likely to contain, and
+	// every one of them used to pop Godot's class documentation over a sentence. GDScript does
+	// the same lookup ahead of its own parse -- `if (GDScriptAnalyzer::class_exists(p_symbol))`,
+	// gdscript_editor.cpp -- and almost never meets it, because its class names are PascalCase
+	// and nobody writes `Node` in a sentence.
+	//
+	// Not interpolation: `"{Score}"` is code inside a string, and verse_position_in_string says
+	// so, because completion inside one is wanted for the same reason a tooltip is.
+	if (completing_in_comment(p_code, marker) || completing_in_string(p_code, marker)) {
+		return result;
+	}
+
 	const String before = p_code.substr(0, marker);
 	const int64_t line = before.count("\n");
 	const int64_t line_start = before.rfind("\n") + 1;
