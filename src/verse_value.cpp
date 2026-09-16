@@ -593,8 +593,13 @@ Variant vh_to_variant(const vh_value &p_value) {
 			return NodePath(string_of(p_value));
 		case VH_VARIANT_OBJECT:
 			return UtilityFunctions::instance_from_id(int_of(p_value));
+		// godot-cpp's RID has no constructor taking an id, which is why this used to answer an
+		// empty Variant -- a RID could reach Godot from Verse as nothing at all. `rid_from_int64`
+		// is Godot's own spelling of the conversion and is in @GlobalScope for exactly this.
+		// Unreachable before `rid` became a struct: RID was mirrored as an `int`, and the reader
+		// that would have produced one read the wrong lane and answered 0.
 		case VH_VARIANT_RID:
-			return Variant();
+			return UtilityFunctions::rid_from_int64(int_of(p_value));
 
 		case VH_VARIANT_VECTOR2:
 		case VH_VARIANT_VECTOR2I:

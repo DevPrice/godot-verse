@@ -39,7 +39,13 @@ rid_probe := class(object):
 	# A default-constructed one, which is Godot's own "no resource".
 	AskEmpty<public>():int = rid{}.Id                                                     # 0
 
-	# `MakeVariant` cannot reach it, and that is correct rather than a gap: a `rid` is a struct of
-	# one int, and the host has no way to tell it from any other one-int struct without being told.
-	# The named builder is what a RID is made with, which is the same rule as StringName.
-	AskMakeVariant<public>():int = if (V := MakeVariant[rid{Id := 7}]) then 1 else 0      # 0
+	# `MakeVariant` reaches it, because a `rid` names its own class exactly as a `vector2` does --
+	# which is the whole test the discovering converter applies. Only the *encoding* differs from a
+	# math struct: a scalar rather than a component array, so it is its own arm in the host.
+	AskMakeVariant<public>():int =
+		if (V := MakeVariant[rid{Id := 7}], R := V.AsRid[]) then R.Id else -1              # 7
+
+	# And it is a RID to Godot rather than an int, which is what the arm is for: picking the Int
+	# lane here would round-trip through Verse perfectly and hand Godot the wrong type.
+	AskMakeVariantIsRid<public>():int =
+		if (V := MakeVariant[rid{Id := 7}], N := V.AsInt[]) then N else -1                 # -1

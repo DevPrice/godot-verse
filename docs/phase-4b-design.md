@@ -1033,10 +1033,26 @@ property like `vector2` is. That last part found a latent generator bug of its o
 accessor emitter builds an `if`/`else` chain over a struct's fields, and with **one** field it
 degenerated to a bare `else` with no `if`. No math type has one field, so nothing had ever hit it.
 
-Still open, and small: `MakeVariant[SomeRid]` fails. A `rid` names its own class exactly as
-`vector2` does, so it is discoverable in principle; the host's converter simply consults the math
-layout table and `rid` is not in it. It needs one arm reading the `Id` field and emitting
-`VH_TYPE_INT` + `VH_VARIANT_RID`. `VariantRid(R)` is what builds one meanwhile.
+**Closing `MakeVariant[SomeRid]` turned over two more defects, both older than this work.** The
+builder itself was one arm — a `rid` names its own class exactly as a `vector2` does, so the
+discovering converter only needed to be told the encoding differs. What testing it properly found
+was that a *declared* `rid` had never worked either, in either direction:
+
+- **Inbound worked only by accident.** Classified as an ordinary user struct, a `rid` parameter was
+  filled from the single incoming int by `InstanceCall`'s rule that N arguments satisfy an N-field
+  struct. Correct answer, entirely the wrong reason — and it broke the moment `rid` stopped being a
+  user struct, with the memorable *"Cannot convert argument 2 from RID to RID"*.
+- **Outbound could not work at all.** `verse_value.cpp` answered `Variant()` for every
+  `VH_VARIANT_RID`, with no comment: godot-cpp's `RID` has no constructor taking an id. So a RID
+  reaching Godot from Verse was a null, always. `UtilityFunctions::rid_from_int64` is Godot's own
+  spelling of that conversion and is in `@GlobalScope` for exactly this purpose. Nothing had ever
+  noticed, because nothing could *produce* a RID to send: the type was an `int` and the reader that
+  would have made one read the wrong lane.
+
+The rule that came out of it is worth more than the feature: **a struct the mirror declares must be
+claimed in `DescribeExportType`, `DescribeType` and `UserStructClass` together.** Claiming it in one
+and not the others is what drops it silently into whichever arm is left, which is the `variant` trap
+recorded in `CLAUDE.md` arriving a second time, on the struct most likely to pass for a project's own.
 
 ---
 

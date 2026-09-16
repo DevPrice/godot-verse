@@ -431,6 +431,18 @@ func begin() -> void:
 			node.call("CanvasRid", node) != 0)
 	_check_eq("a RID survives a variant round trip", node.call("RoundTripRid", 99), 99)
 	_check_eq("and a RID is not an int to the readers", node.call("RidIsNotAnInt"), -1)
+	# A `rid` as a declared parameter and return type, which is a different path from the variant
+	# payload above: it goes through the host's type classification rather than through a lane.
+	# A `rid` as a declared parameter and return type, which is a different path from the variant
+	# payload above: it goes through the host's type classification rather than through a lane, and
+	# both halves of that were broken in their own way. Inbound worked only by accident -- a
+	# one-field user struct that InstanceCall filled from the single int -- and outbound could not
+	# work at all, because the consumer answered an empty Variant for every RID.
+	_check_eq("a rid crosses into a declared parameter",
+			node.call("TakeRid", node.get_canvas_item()), node.get_canvas_item().get_id())
+	var given_rid = node.call("GiveRid", 99)
+	_check("and back out as a Godot RID rather than a null", typeof(given_rid) == TYPE_RID)
+	_check_eq("carrying its id", (given_rid as RID).get_id(), 99)
 
 	# The *loose* arities, which exist because an author reached for `Call("test",
 	# VariantInt(1))` -- what `call("test", 1)` looks like in GDScript -- and got "No overload

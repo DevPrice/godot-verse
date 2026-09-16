@@ -502,3 +502,11 @@ marshal := class(node2d):
     # two lanes were the same Verse type and nothing caught a mix-up.
     RidIsNotAnInt<public>()<reads>:int =
         if (N := VariantRid(rid{Id := 7}).AsInt[]) then N else -1
+
+    # A `rid` as a *declared* type rather than as a variant payload. This is the other half of the
+    # classification question `variant` already had: a type the host does not recognise falls into
+    # whatever arm is left, silently. `rid` is not in the math layout table, so if nothing claims it
+    # it is read as an ordinary user struct and Godot is asked for a one-field tuple instead.
+    TakeRid<public>(R:rid)<reads>:int = R.Id
+
+    GiveRid<public>(Value:int)<reads>:rid = rid{Id := Value}

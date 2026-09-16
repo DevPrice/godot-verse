@@ -150,6 +150,15 @@ it asks Godot for 22 arguments, one per lane, and as neither that nor a variant 
 *reference* and is refused as a handle to a class Godot has never heard of. Both say the same
 useless sentence, *"Cannot convert argument 2 from int to Nil"*.
 
+**`rid` is the second instance of that trap and it cost the same afternoon.** It is a struct of one
+int, so it is the likeliest of all of them to pass for a project's own: as a user struct a method
+answering one handed Godot a one-field tuple, and once it was taken out of `UserStructClass` without
+being claimed in `DescribeType` it fell into the reference arm and produced *"Cannot convert argument
+2 from RID to RID"*. **A struct the mirror declares must be claimed in `DescribeExportType`,
+`DescribeType` and `UserStructClass` together, or two of the three will quietly disagree.** `rid`
+also needs its own arms in `ValueToWire` and `WireToValue`, because it is the one mirrored struct
+that crosses as a *scalar* — `VH_TYPE_INT` under `VH_VARIANT_RID` — rather than as components.
+
 `vh_object`, not `object`: `object` is the generated mirror of Godot's own `Object` class and derives
 from `vh_object`. Verse cannot reopen a class, so Object's methods could not be added to the
 hand-written root. Nothing a script writes should name `vh_object`. A native Verse type without its
@@ -858,9 +867,9 @@ it is not in `run_tests.py`.
   int, float, logic, string, a Godot object and the 16 math structs. The five lanes that *share* a
   Verse type — StringName and NodePath with `string`, two integer packings, one float packing —
   can never be what it picks, and are what the named builders are still for. **`rid` used to be a
-  sixth and is not, because it is now its own struct**; it is nonetheless not reachable by
-  `MakeVariant` yet, because the host's discovering converter only knows the math layout table.
-  It also retires
+  sixth and is not**: it is its own struct now, names its own class, and `MakeVariant[SomeRid]`
+  reaches it through its own arm in the host — a scalar under `VH_VARIANT_RID` rather than a math
+  type's component array. It also retires
   `phase-4b-design.md` §15's claim that module-level overloading was to blame —
   `GodotMath.native.verse` overloads `Abs` across nine receiver types.
 - **A reader is spelled on the receiver: `V.AsInt[]`, not `AsInt[V]`.** It is an extension method,

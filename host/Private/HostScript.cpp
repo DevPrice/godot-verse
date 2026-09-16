@@ -1907,6 +1907,30 @@ AUTORTFM_DISABLE bool IsVariantClass(const uLang::CClass& Class)
     return Path.Equals(FUtf8String(GodotVersePath) + UTF8TEXT("/variant"));
 }
 
+/// `rid`, by whole verse path, for exactly the reason IsVariantClass exists: a struct the host must
+/// claim explicitly or watch fall into another classification. `rid` has one int field, so left
+/// alone it reads as an ordinary *user* struct -- and a method returning one then handed Godot a
+/// one-field tuple where a RID was meant. The parameter direction worked by accident, because
+/// InstanceCall's rule that N arguments satisfy an N-field struct filled it from the single int.
+AUTORTFM_DISABLE bool IsRidClass(const uLang::CClass& Class)
+{
+    if (!Class.IsStruct())
+    {
+        return false;
+    }
+    const FUtf8String Path = FULangConversionUtils::ULangStrToFUtf8String(
+        Class.GetScopePath(UTF8CHAR('/'), uLang::EPathMode::PrefixSeparator));
+    return Path.Equals(FUtf8String(GodotVersePath) + UTF8TEXT("/rid"));
+}
+
+/// The decorated key `rid`'s one field is stored under, the way ReadStructComponents builds one.
+/// Named once because it is read in one direction and written in the other.
+AUTORTFM_DISABLE FUtf8String RidFieldKey()
+{
+    return FUtf8String(UTF8TEXT("(")) + GodotVersePath + UTF8TEXT("/rid:)Id");
+}
+
+
 AUTORTFM_DISABLE EClassOrigin ClassOriginOf(const uLang::CClass& Class, const uLang::CSemanticProgram& Program)
 {
     const FUtf8String Name = QualifiedNameOf(Class);
@@ -2116,6 +2140,18 @@ AUTORTFM_DISABLE void DescribeExportType(const uLang::CTypeBase* Type, const uLa
             {
                 OutDesc.Type = VH_TYPE_VARIANT;
                 OutDesc.VariantTag = VH_VARIANT_NIL;
+                OutDesc.Reject = VH_EXPORT_UNSUPPORTED_TYPE;
+                return;
+            }
+
+            // A RID is a scalar on this wire -- VH_TYPE_INT under its own variant tag -- rather
+            // than the one-field tuple its Verse struct looks like. Typed here so a method taking
+            // or answering one reaches Godot as a RID; not exportable, because a RID names a live
+            // entry in a server's table and nothing about it survives being written to a scene.
+            if (IsRidClass(*Class))
+            {
+                OutDesc.Type = VH_TYPE_INT;
+                OutDesc.VariantTag = VH_VARIANT_RID;
                 OutDesc.Reject = VH_EXPORT_UNSUPPORTED_TYPE;
                 return;
             }
@@ -2464,6 +2500,12 @@ struct GodotVerse::FEngineSignalTypes
     TMap<FUtf8String, FPayloadShape> Shapes;
 };
 
+/// `rid` in both directions, defined beside ReadMathStruct because that is where the discovery
+/// lives. At file scope rather than in the anonymous namespace below: ValueToWire and WireToValue
+/// are in it and ReadSelfDescribingValue is not, so one linkage has to serve both.
+AUTORTFM_DISABLE bool ReadRidStruct(Verse::FRunningContext Context, Verse::VValue Value, vh_value& OutValue);
+AUTORTFM_DISABLE Verse::VValue NewRidValue(Verse::FRunningContext Context, int64 Id);
+
 namespace {
 
 /// The class's recorded tables, or null. What every runtime lookup falls back to, and the whole of
@@ -2511,12 +2553,17 @@ AUTORTFM_DISABLE FMemberType DescribeType(const uLang::CTypeBase* Type, const uL
             || Name.StartsWith(UTF8TEXT("typed_dictionary"));
         const FStructLayout* const Layout = bIsOption ? nullptr : FindStructLayout(Name);
         const uLang::CClass* const UserStruct = bIsOption ? nullptr : UserStructClass(*Normal);
-        if (IsVariantClass(*Declared))
+        if (IsVariantClass(*Declared) || IsRidClass(*Declared))
         {
             // Nothing beyond what DescribeExportType already said. `variant` is neither a shape to
             // read fields off nor a handle to build a wrapper from, and leaving it to fall through
             // to the reference arm below -- which is where a struct nothing else claims lands --
             // had every `variant` parameter refused as a handle to a class Godot has never heard of.
+            //
+            // `rid` is here for the identical reason and cost the identical afternoon: taking it
+            // out of UserStructClass without claiming it here dropped it into the reference arm,
+            // and a method answering one handed Godot a null while one taking one was refused with
+            // the immortal "Cannot convert argument 2 from RID to RID".
         }
         else if (Layout)
         {
@@ -2566,6 +2613,12 @@ AUTORTFM_DISABLE const uLang::CClass* UserStructClass(const uLang::CNormalType& 
     // lanes and a script never fills them positionally. Left to DescribeExportType, which types it
     // as VH_TYPE_VARIANT; treated as a user struct it asked Godot for 22 arguments per parameter.
     if (IsVariantClass(*Class))
+    {
+        return nullptr;
+    }
+    // `rid` for the same reason and a different shape: one int field, so it is the struct most
+    // likely to pass for a user's own, and as one it crosses as a tuple instead of as a RID.
+    if (IsRidClass(*Class))
     {
         return nullptr;
     }
@@ -3037,6 +3090,14 @@ AUTORTFM_DISABLE bool ValueToWire(Verse::FRunningContext Context,
         OutValue = GodotVerse::VariantToWire(Boxed.GetValue(), OutStorage.Text,
                                              OutStorage.Blocks.AddDefaulted_GetRef());
         return true;
+    }
+
+    // A `rid` is a struct whose description says VH_TYPE_INT, so it has to be unwrapped here:
+    // nothing below recognises it, and the plain int arm would find a VValueObject where it wants
+    // an int. Same discovery `MakeVariant` uses -- one ReadRidStruct, not two that can disagree.
+    if (Declared.Described.Type == VH_TYPE_INT && Declared.Described.VariantTag == VH_VARIANT_RID)
+    {
+        return ReadRidStruct(Context, Value, OutValue);
     }
 
     // A reference, before the logic test rather than after it, because Verse's two spellings
@@ -4107,6 +4168,24 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
     // below take the same tuple lane and a different builder: theirs is a flat run of scalars laid
     // out by a generated table, and this one is a field list read off the semantic program, so its
     // fields go through this very function and can be anything a field can be.
+    // The mirror image of ValueToWire's arm: a RID arrives as a plain int under its own variant
+    // tag, and the `rid` struct it becomes has to be built here. Before the scalar arms below,
+    // which would otherwise hand the declaration a bare int and typecheck it against a struct.
+    if (Desc.Type == VH_TYPE_INT && Desc.VariantTag == VH_VARIANT_RID)
+    {
+        if (Value.Type != VH_TYPE_INT)
+        {
+            return false;
+        }
+        const Verse::VValue Built = NewRidValue(Context, Value.Int);
+        if (Built.IsUninitialized())
+        {
+            return false;
+        }
+        OutValue = Built;
+        return true;
+    }
+
     if (Declared.UserStruct.IsValid())
     {
         const FUserStructLayout& Layout = *Declared.UserStruct;
@@ -9310,6 +9389,72 @@ AUTORTFM_DISABLE bool GodotVerse::ReadMathStruct(Verse::FRunningContext Context,
     return ReadStructValue(Context, *Struct, *Layout, OutStorage, OutValue);
 }
 
+/// Godot's RID from a `rid` value, which names its own class exactly as a math struct does.
+///
+/// It is not in the layout table and must not be: a math struct crosses as a *component array*
+/// under its own variant tag, and a RID crosses as a **scalar** -- VH_TYPE_INT with
+/// VH_VARIANT_RID, the number in `Int`. Same discovery, different encoding, so it is its own arm
+/// rather than a layout row. Putting it in the table would change what VH_VARIANT_RID means on the
+/// wire, which is an ABI major for nothing Godot wants.
+AUTORTFM_DISABLE bool ReadRidStruct(Verse::FRunningContext Context,
+                                    Verse::VValue Value,
+                                    vh_value& OutValue)
+{
+    Verse::VValueObject* const Struct = Value.DynamicCast<Verse::VValueObject>();
+    if (!Struct || !Struct->GetClass().GetBaseName().AsStringView().Equals(
+                       FUtf8StringView(UTF8TEXT("rid"))))
+    {
+        return false;
+    }
+
+    // The decorated key, the way ReadStructComponents builds one -- a field is stored under
+    // `(/Godot.org/Godot/rid:)Id`, so a namesake struct of the author's own has none of them and
+    // declines here rather than being read as a RID.
+    const FUtf8String KeyText = RidFieldKey();
+    Verse::VUniqueString& Key = Verse::VUniqueString::New(Context, FUtf8StringView(KeyText));
+    const Verse::FOpResult Read = Struct->LoadField(Context, Key);
+    if (!Read.IsReturn() || !Read.Value.IsInt())
+    {
+        return false;
+    }
+
+    OutValue.Type = VH_TYPE_INT;
+    OutValue.VariantTag = VH_VARIANT_RID;
+    OutValue.Int = Read.Value.AsInt().AsInt64();
+    return true;
+}
+
+/// The `rid` a RID arriving from Godot becomes. Uninitialised on failure, the way the other
+/// builders here report one.
+///
+/// NewVObject rather than a lower-level allocation, for the reason WireToValue's user-struct arm
+/// gives: it is what marks a struct deeply mutable, and one built any other way does not compare
+/// or freeze like a struct.
+AUTORTFM_DISABLE Verse::VValue NewRidValue(Verse::FRunningContext Context, int64 Id)
+{
+    Verse::VClass* const StructClass =
+        FindMirroredVClass(Context, FUtf8StringView(UTF8TEXT("rid")));
+    if (!StructClass)
+    {
+        return Verse::VValue();
+    }
+
+    const FUtf8String KeyText = RidFieldKey();
+    Verse::VUniqueString& Key = Verse::VUniqueString::New(Context, FUtf8StringView(KeyText));
+
+    TArray<Verse::VArchetype::VEntry> Entries;
+    Entries.Add(Verse::VArchetype::VEntry::ObjectField(Context, Key));
+    Verse::VArchetype& Archetype = Verse::VArchetype::New(Context, Verse::VValue(), Entries);
+    Verse::VValueObject& Struct = StructClass->NewVObject(Context, Archetype);
+
+    if (!Struct.CreateField(Context, Key)
+        || !Struct.SetField(Context, Key, Verse::VValue(Verse::VInt(Context, Id))).IsReturn())
+    {
+        return Verse::VValue();
+    }
+    return Verse::VValue(Struct);
+}
+
 AUTORTFM_DISABLE bool GodotVerse::ReadSelfDescribingValue(Verse::FRunningContext Context,
                                                           Verse::VValue Value,
                                                           FFieldStorage& OutStorage,
@@ -9356,6 +9501,13 @@ AUTORTFM_DISABLE bool GodotVerse::ReadSelfDescribingValue(Verse::FRunningContext
         }
     }
     if (ReadMathStruct(Context, Value, OutStorage, OutValue))
+    {
+        return true;
+    }
+    // After the math structs and before the logic test, which is where every other struct-shaped
+    // arm goes. A `rid` is as self-describing as a `vector2` -- it names its own class -- and only
+    // its encoding differs.
+    if (ReadRidStruct(Context, Value, OutValue))
     {
         return true;
     }

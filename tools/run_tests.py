@@ -578,7 +578,7 @@ EXPORT_EXPECTED_CLASSES = ["marshal", "signals", "left/widget"]
 # main loop before Godot sets one up -- so they are skips in the editor run and passes here, which
 # is why 430 + 10 is the 435 + 5 the in-editor run prints rather than a plain sum. Adding a case
 # means changing this line, which is the point of it.
-EXPORT_EXPECTED_PASSES = 440
+EXPORT_EXPECTED_PASSES = 443
 EXPORT_EXPECTED_SKIPS = 10
 
 
