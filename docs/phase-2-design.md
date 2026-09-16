@@ -67,7 +67,7 @@ side, and `ToInt` is overloaded across all 758 enums. What does *not* work, each
 ambiguous **definition** rather than at a call: two array-typed overloads, whatever their element
 types, because `array{}` is a call site that cannot resolve them; `(:logic)` against `(:[]char)`;
 and any member of a class against a `/Verse.org/Verse` name of the same spelling, whatever the
-arity — `Object.to_string()` against `ToString(:[]char)`. So `VariantFrom` is **not** one name: each
+arity — `Object.to_string()` against `ToString(:[]char)`. So `Variant<GodotType>` is **not** one name: each
 Variant lane has its own, symmetric with its `As<GodotType>` reader (§11).
 
 **Verse has `case`,** so enum↔int conversion is generated Verse and needs no C++.
@@ -592,7 +592,7 @@ got *wrong*, because those are the only parts of this document worth re-reading.
 *definitions* rather than a call: two array-typed overloads are ambiguous whatever their element
 types (`array{}` cannot resolve them); `(:logic)` is ambiguous with `(:[]char)`; and a class member is
 ambiguous with a `/Verse.org/Verse` name of the same spelling **whatever the arity**. So there is no
-overloaded `VariantFrom` — each lane has its own name, symmetric with its `As<GodotType>` reader.
+overloaded `Variant<GodotType>` — each lane has its own name, symmetric with its `As<GodotType>` reader.
 
 > **Narrower still, and now with a reason.** The first two refusals are one rule, measured in
 > `tests/verse_probe/variant_api_probe.verse` during Phase 4b: an overload set may hold at most one

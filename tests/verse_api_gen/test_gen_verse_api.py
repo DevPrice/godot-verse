@@ -873,7 +873,7 @@ def test_generated_file_matches_hand_written_slice():
     check_true("a reader per variant lane, spelled on the receiver", len(readers) == len(g.VARIANT_LANES))
     check_true(
         "and a builder to match each",
-        all(f"VariantFrom{lane.reader}<public>(" in text for lane in g.VARIANT_LANES),
+        all(f"Variant{lane.reader}<public>(" in text for lane in g.VARIANT_LANES),
     )
     # The plain half is what a typed container's `Unpack` member names; an extension method is
     # receiver-plus-tuple and cannot be a function value. Non-public, so it is not API.

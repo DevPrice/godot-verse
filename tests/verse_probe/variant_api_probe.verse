@@ -12,7 +12,7 @@ using { /Godot.org/Godot }
 # failure-call of `operator'.AsInt'(V, ())`, and a failure-call of a *sugared* call is a different
 # question from a failure-call of a plain one. **Yes** -- AskReceiverRead below answers 7.
 #
-# **Q2: can the 38 `VariantFrom<GodotType>` builders be one overloaded `AsVariant(Value)`?**
+# **Q2: can the 38 `Variant<GodotType>` builders be one overloaded `AsVariant(Value)`?**
 # phase-4b-design.md 15 says no, recording that `VariantFrom(:logic)` was ambiguous with
 # `VariantFrom(:[]char)` "for no reason any reading of overloads-on-parameter-type predicts", and
 # concluding that module scope was the problem. Module scope is *not* the problem --
@@ -45,18 +45,18 @@ using { /Godot.org/Godot }
 
 # --- the refusals, for re-running one at a time ---------------------------------------------------
 #
-#   MakeVar(Value:logic)<reads>:variant = VariantFromBool(Value)
-#   MakeVar(Value:string)<reads>:variant = VariantFromString(Value)     # refused
+#   MakeVar(Value:logic)<reads>:variant = VariantBool(Value)
+#   MakeVar(Value:string)<reads>:variant = VariantString(Value)     # refused
 #
-#   MakeVar(Value:[]int)<reads>:variant = VariantFromPackedInt32Array(Value)
-#   MakeVar(Value:[]float)<reads>:variant = VariantFromPackedFloat32Array(Value)    # refused
+#   MakeVar(Value:[]int)<reads>:variant = VariantPackedInt32Array(Value)
+#   MakeVar(Value:[]float)<reads>:variant = VariantPackedFloat32Array(Value)    # refused
 #
-#   MakeVar(Value:?int)<reads>:variant = if (N := Value?) then VariantFromInt(N) else variant{}
-#   MakeVar(Value:[]int)<reads>:variant = VariantFromPackedInt32Array(Value)        # refused
+#   MakeVar(Value:?int)<reads>:variant = if (N := Value?) then VariantInt(N) else variant{}
+#   MakeVar(Value:[]int)<reads>:variant = VariantPackedInt32Array(Value)        # refused
 #
 #   variants := class<computes>:                                        # class scope does not help
-#       Of<public>(Value:logic)<reads>:variant = VariantFromBool(Value)
-#       Of<public>(Value:string)<reads>:variant = VariantFromString(Value)          # refused
+#       Of<public>(Value:logic)<reads>:variant = VariantBool(Value)
+#       Of<public>(Value:string)<reads>:variant = VariantString(Value)          # refused
 
 # --- Q1, and the overloads that are legal ---------------------------------------------------------
 
@@ -64,30 +64,30 @@ using { /Godot.org/Godot }
 (V:variant).AsIntM()<decides><reads>:int = V.AsInt[]
 
 # Legal: neither is emptiable.
-MakeVar(Value:int)<reads>:variant = VariantFromInt(Value)
-MakeVar(Value:float)<reads>:variant = VariantFromFloat(Value)
-MakeVar(Value:vector2)<reads>:variant = VariantFromVector2(Value)
+MakeVar(Value:int)<reads>:variant = VariantInt(Value)
+MakeVar(Value:float)<reads>:variant = VariantFloat(Value)
+MakeVar(Value:vector2)<reads>:variant = VariantVector2(Value)
 
 # Legal: exactly one emptiable parameter in the set. Adding `MakeVarS(Value:logic)` is the refusal.
-MakeVarS(Value:int)<reads>:variant = VariantFromInt(Value)
-MakeVarS(Value:string)<reads>:variant = VariantFromString(Value)
+MakeVarS(Value:int)<reads>:variant = VariantInt(Value)
+MakeVarS(Value:string)<reads>:variant = VariantString(Value)
 
 variant_api_probe := class(object):
 
 	# Each answer says which body won, so an overload resolving to the wrong one reads as a wrong
 	# number rather than as a pass.
 	AskReceiverRead<public>():int =
-		V := VariantFromInt(7)
+		V := VariantInt(7)
 		if (N := V.AsIntM[]) then N else -1                      # 7
 
 	AskGeneratedReader<public>():int =
-		V := VariantFromInt(8)
+		V := VariantInt(8)
 		if (N := V.AsInt[]) then N else -1                       # 8
 
 	# The reader fails rather than raising when the tag is not the one asked for, which is the whole
 	# contract and the reason it is <decides> rather than a cast.
 	AskWrongLane<public>():int =
-		V := VariantFromString("nope")
+		V := VariantString("nope")
 		if (N := V.AsInt[]) then N else -1                       # -1
 
 	AskMakeInt<public>():int =

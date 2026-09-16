@@ -349,7 +349,7 @@ func begin() -> void:
 
 	# The Array is a reference, so what Verse wrote is what GDScript sees.
 	node.call("PutInt", mixed, 0, 99)
-	_check_eq("VariantFromInt writes through the reference", mixed[0], 99)
+	_check_eq("VariantInt writes through the reference", mixed[0], 99)
 
 	# And a `variant` as a script method's own parameter and return type, which is what R-NODE-10's
 	# _Get and _Set are declared in terms of.
@@ -405,8 +405,24 @@ func begin() -> void:
 	node.call("EmitForeignNoArgs", pinger, "poked")
 	_check_eq("and a payloadless one", _vararg_pokes, 1)
 
+	# MakeVariant: the host picks the lane from the value itself. Reading the meta back through
+	# Godot is what makes these assertions about the Variant type Godot stored, rather than about
+	# Verse handing its own struct back to itself.
+	node.call("MetaFromValue", self, "mv_int", 42)
+	_check_eq("MakeVariant reaches the int lane", get_meta("mv_int"), 42)
+	_check("and it is an int to Godot, not a float",
+			typeof(get_meta("mv_int")) == TYPE_INT)
+	node.call("MetaFromString", self, "mv_str", "hello")
+	_check_eq("and the string lane", get_meta("mv_str"), "hello")
+	node.call("MetaFromVector", self, "mv_vec", 3.0, 4.0)
+	_check_eq("and a math struct, from the value alone", get_meta("mv_vec"), Vector2(3.0, 4.0))
+	_check("which arrives as a real Vector2", typeof(get_meta("mv_vec")) == TYPE_VECTOR2)
+	# A value that cannot say what it is fails rather than guessing.
+	_check_eq("and it refuses a value that cannot describe itself",
+			node.call("MakeFromArray"), 0)
+
 	# The *loose* arities, which exist because an author reached for `Call("test",
-	# VariantFromInt(1))` -- what `call("test", 1)` looks like in GDScript -- and got "No overload
+	# VariantInt(1))` -- what `call("test", 1)` looks like in GDScript -- and got "No overload
 	# of the function `Call` matches the provided arguments (:[]char,:variant)". What these assert
 	# is that the loose spelling and the array spelling reach the same call; a loose one resolving
 	# to some other overload would still compile and still answer something.

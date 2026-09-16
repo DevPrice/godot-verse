@@ -86,6 +86,18 @@ ToString<public>(Value:object)<transacts>:string = VhToString(VhCallValue(Value.
 # the integer vectors -- a double stops counting exactly above 2^53, and Godot's are 32-bit values
 # that have to survive a round trip.
 
+# SPIKE (not API yet): one builder for every value that can say what it is, against the 38 named
+# ones. `any` has nothing to resolve against, so it sidesteps the rule that an overload set may hold
+# at most one emptiable parameter -- which is what makes an overloaded `AsVariant` impossible.
+#
+# `<decides>` rather than total: a value with no Godot meaning fails here rather than answering a
+# variant holding nothing, which would be indistinguishable from a deliberate `variant{}`. What
+# fails is what cannot describe itself -- a tuple, a map, a class of the author's own, an empty
+# array. The lanes that are *not* reachable this way keep a named builder, because no Verse value
+# distinguishes them: StringName and NodePath from string, RID from int, and which of Godot's three
+# integer packings a `[]int` meant.
+MakeVariant<public>(Value:any)<decides><reads>:variant = VhVariantFromAny[Value]
+
 VhFromLogic(Value:logic)<reads>:variant = variant{Tag := TagBool, I0 := if (Value?) then 1 else 0}
 VhFromInt(Value:int)<reads>:variant = variant{Tag := TagInt, I0 := Value}
 VhFromFloat(Value:float)<reads>:variant = variant{Tag := TagFloat, F0 := Value}
@@ -171,7 +183,7 @@ callable<public> := class<computes>(godot_ref):
     #
     # Each carries one loose `variant` and one `[]variant`, which is **all** an entry point with
     # no fixed prefix may have. The loose one is what a call written the GDScript way resolves to,
-    # `C.Call(VariantFromInt(1))` rather than `C.Call(array{VariantFromInt(1)})`.
+    # `C.Call(VariantInt(1))` rather than `C.Call(array{VariantInt(1)})`.
     #
     # The generated varargs carry four loose arities; these carry one, and the difference is not a
     # choice. A Verse function's parameters *are* its tuple, so `Call(:variant, :variant)` takes

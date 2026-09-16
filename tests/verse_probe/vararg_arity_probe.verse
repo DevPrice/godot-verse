@@ -6,7 +6,7 @@ using { /Godot.org/Godot }
 #       tests/verse_probe/vararg_arity_probe.verse --class vararg_arity_probe
 #
 # phase-4b-design.md §8 proposes both shapes and stage 6 emitted only the array one, so
-# `Call("test", VariantFromInt(1))` is "no overload matches (:[]char,:variant)" -- which is the
+# `Call("test", VariantInt(1))` is "no overload matches (:[]char,:variant)" -- which is the
 # first thing an author reaches for, because it is what GDScript's `call("test", 1)` looks like.
 #
 # The question is not whether two arities work; `vararg_probe.verse` settled that. It is whether a

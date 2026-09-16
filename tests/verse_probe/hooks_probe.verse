@@ -9,7 +9,7 @@ using { /Godot.org/Godot }
 # author would write", and none of the four was obvious from reading the root:
 #
 #   - `_Get` answers `variant`, which a script can now name in a signature. `variant{}` is the whole
-#     of "not mine"; `VariantFrom<GodotType>` is the rest.
+#     of "not mine"; `Variant<GodotType>` is the rest.
 #   - `_Set` takes one and reads it with the failable `As<GodotType>` family, so its body is a
 #     failure context -- which is why an `if` is the spelling and a cast is not.
 #   - `_GetPropertyList` answers a `godot_array` the override has to *build*: `MakeArray` plus
@@ -41,9 +41,9 @@ hooks_probe := class(object):
 
     _Get<override>(Property:string):variant =
         if (Property = "Extra"):
-            VariantFromInt(Extra)
+            VariantInt(Extra)
         else if (Property = "Label"):
-            VariantFromString("from _Get")
+            VariantString("from _Get")
         else:
             variant{}
 

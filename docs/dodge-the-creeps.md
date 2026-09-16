@@ -37,7 +37,7 @@ measure of how far the bridge has got.
 | **2** | `signal hit` / `hit.emit()` | one engine signal wired to two scripts in the scene file | **R-SIG-1, R-SIG-2** | **down** (stage 4) |
 | ~~**3**~~ | `await $MessageTimer.timeout` | a four-state enum, a second Timer node, two handlers | **R-SIG-5** | **down** (Phase 5) |
 | **4** | `velocity.normalized() * speed`, `PI`, `randf()` | `scripts/vectors.verse`, six functions and three constants | **R-SCN-3** / OQ-11 | **down** (stage 6) |
-| **5** | `mob.linear_velocity = v` on an instantiated scene | `Mob.Set("linear_velocity", VariantFromVector2(V))` | **R-SCN-6** | **down** (stage 1) |
+| **5** | `mob.linear_velocity = v` on an instantiated scene | `Mob.Set("linear_velocity", VariantVector2(V))` | **R-SCN-6** | **down** (stage 1) |
 | **6** | `get_tree().call_group(&"mobs", &"queue_free")` | walk `GetNodesInGroup("mobs")` and free each | vararg, R-SCN-2 permits | **standing**, and permitted |
 | **7** | `node.callv("method", [args])` | nothing: it is spellable and cannot be given arguments | **R-INT-2** | **down** (stage 2) |
 | **8** | *(no counterpart)* | `<transacts>` on every helper, or it fails at its first call site | — | **narrowed twice, not gone** — Phase 4.5 made reading Godot `<reads>`, Phase 5 widened the handler |
@@ -234,9 +234,9 @@ because it is the whole point of Phase 2 having made `variant` nameable:
 
 ```
 			if (Mob := Scene.Instantiate[packed_scene_gen_edit_state.Disabled]):
-				Mob.Set("position", VariantFromVector2(Spawn.Position))
-				Mob.Set("rotation", VariantFromFloat(Direction))
-				Mob.Set("linear_velocity", VariantFromVector2(Velocity))
+				Mob.Set("position", VariantVector2(Spawn.Position))
+				Mob.Set("rotation", VariantFloat(Direction))
+				Mob.Set("linear_velocity", VariantVector2(Velocity))
 ```
 
 The cost is the cost of any stringly-typed call: `"linear_velocty"` compiles. The mirror's whole
@@ -394,7 +394,7 @@ and none of it needed a second attempt:
 - **Typed containers with objects in them**: `GetNodesInGroup("mobs")` is a `typed_array(node)`
   whose elements are nodes a script calls `QueueFree()` on. This is the gap Phase 2 named as the
   most-hit one in the mirror, and walking a group is the shape scene code actually has.
-- **`variant` as a parameter**: `Set`, `SetDeferred` and the `VariantFrom<GodotType>` builders carry
+- **`variant` as a parameter**: `Set`, `SetDeferred` and the `Variant<GodotType>` builders carry
   the mob's spawn state and the player's deferred collision disable.
 - **Enums and `@export_group`**: `packed_scene_gen_edit_state.Disabled` and
   `node_internal_mode.Disabled` are named values. The port used to declare an enum of its own too,

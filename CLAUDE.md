@@ -737,6 +737,16 @@ it is not in `run_tests.py`.
 
 ### Modules and names
 
+- **In `host/Verse`, a module-level function may not differ from a *type* in that package only by
+  case.** `Variant` beside the `variant` type, or `Node` beside the mirrored `node` class, makes the
+  whole package fail to load — and it fails **silently, in the runtime compiler only**: VNI accepts
+  it, the host builds and links, and then every script is refused with `status 4` and zero
+  diagnostics. Two *functions* differing only by case are fine (`VHFROMINT` beside `VhFromInt`
+  compiles), and so is all of it in an ordinary script package (`widget` struct beside a `Widget`
+  function). This is why the general variant builder is `MakeVariant` and not `Variant`, and it is
+  a live constraint on any new mirror function: check the name against the 1036 mirrored class
+  names and the four native types first. Measured in `tests/verse_probe/variant_any_probe.verse`'s
+  header; three builds to find, because only the runtime compiler objects.
 - **Every top-level name must be unique within its module.** A directory is a module only if it
   carries a `<name>.vmodule` marker, and the **marker names the module**, not the directory —
   `res://my-stuff/gameplay.vmodule` is module `gameplay`. Unmarked directories are organisational:
@@ -813,7 +823,14 @@ it is not in `run_tests.py`.
   array — one value inhabiting all three families is a call site that resolves none of them, the
   same shape of argument as `array{}` having no element type. Measured in
   `tests/verse_probe/variant_api_probe.verse`; **this is why there is no overloaded `AsVariant`**
-  and why each Variant lane keeps its own `VariantFrom<GodotType>`. It also retires
+  and why each Variant lane keeps its own `Variant<GodotType>`. What it does *not* forbid is a
+  single builder that never overloads: **`MakeVariant[Value]` takes `any`**, so there is nothing to
+  resolve, and the host reads the lane off what the value says about itself. It is `<decides>`
+  because a tuple, a map, a class of the author's own and an empty array say nothing; it reaches
+  int, float, logic, string, a Godot object and the 16 math structs. The six lanes that *share* a
+  Verse type — StringName and NodePath with `string`, RID with `int`, two integer packings, one
+  float packing — can never be what it picks, and are what the named builders are still for. It
+  also retires
   `phase-4b-design.md` §15's claim that module-level overloading was to blame —
   `GodotMath.native.verse` overloads `Abs` across nine receiver types.
 - **A reader is spelled on the receiver: `V.AsInt[]`, not `AsInt[V]`.** It is an extension method,

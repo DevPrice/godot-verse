@@ -58,7 +58,7 @@ rpcs := class(node2d):
     # is that the call is made and answers, which with no multiplayer peer set is Godot's own
     # ERR_UNCONFIGURED rather than a crash.
     SendTakeDamage<public>(Amount:int)<transacts>:int =
-        ToInt(Rpc("TakeDamage", array{VariantFromInt(Amount)}))
+        ToInt(Rpc("TakeDamage", array{VariantInt(Amount)}))
 
     # A word that is not one of Godot's seven. The attribute compiles -- its constructor only has
     # to typecheck -- so without a diagnostic this is a method the author believes is

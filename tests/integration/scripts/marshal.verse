@@ -157,10 +157,10 @@ marshal := class(node2d):
         V := A.GetVariant[Index]
         V.AsString[]
 
-    # And building one, which is the other direction: VariantFromInt rather than an overload, for
+    # And building one, which is the other direction: VariantInt rather than an overload, for
     # the reason in gen_verse_api.py's VARIANT_LANES comment.
     PutInt<public>(A:godot_array, Index:int, Value:int):void =
-        A.SetVariant(Index, VariantFromInt(Value))
+        A.SetVariant(Index, VariantInt(Value))
 
     # --- R-TYPE-1: a packed array whose elements are structs -----------------
     #
@@ -402,7 +402,7 @@ marshal := class(node2d):
     # plus one `[]variant` tail. Both are exercised here, because the pair is the thing that could
     # be wrong -- a call resolving to the other arity would still compile.
     CallOther<public>(Target:object, Method:string, Value:int)<transacts>:int =
-        if (N := Target.Call(Method, array{VariantFromInt(Value)}).AsInt[]) then N else -1
+        if (N := Target.Call(Method, array{VariantInt(Value)}).AsInt[]) then N else -1
 
     # The no-tail arity of the same name.
     CallOtherNoArgs<public>(Target:object, Method:string)<transacts>:string =
@@ -410,34 +410,34 @@ marshal := class(node2d):
 
     # Two arguments, so the tail is more than a single value dressed as an array.
     CallOtherTwo<public>(Target:object, Method:string, A:int, B:int)<transacts>:int =
-        Args := array{VariantFromInt(A), VariantFromInt(B)}
+        Args := array{VariantInt(A), VariantInt(B)}
         if (N := Target.Call(Method, Args).AsInt[]) then N else -1
 
     # Object.emit_signal, which is the other half of what stage 6's "done when" names.
     EmitOn<public>(Target:object, Signal:string, Value:int)<transacts>:int =
-        ToInt(Target.EmitSignal(Signal, array{VariantFromInt(Value)}))
+        ToInt(Target.EmitSignal(Signal, array{VariantInt(Value)}))
 
     EmitOnNoArgs<public>(Target:object, Signal:string)<transacts>:int =
         ToInt(Target.EmitSignal(Signal))
 
     # And the *loose* arities, which are what a call written the GDScript way resolves to --
-    # `Call("test", VariantFromInt(1))` rather than `Call("test", array{VariantFromInt(1)})`. Same
+    # `Call("test", VariantInt(1))` rather than `Call("test", array{VariantInt(1)})`. Same
     # call as the array form beside them, which is exactly what the cases assert: the two spellings
     # have to reach the same body, or one of them is resolving to an overload nobody meant.
     CallOtherLoose<public>(Target:object, Method:string, Value:int)<transacts>:int =
-        if (N := Target.Call(Method, VariantFromInt(Value)).AsInt[]) then N else -1
+        if (N := Target.Call(Method, VariantInt(Value)).AsInt[]) then N else -1
 
     CallOtherLooseTwo<public>(Target:object, Method:string, A:int, B:int)<transacts>:int =
-        if (N := Target.Call(Method, VariantFromInt(A), VariantFromInt(B)).AsInt[]) then N else -1
+        if (N := Target.Call(Method, VariantInt(A), VariantInt(B)).AsInt[]) then N else -1
 
     EmitOnLoose<public>(Target:object, Signal:string, Value:int)<transacts>:int =
-        ToInt(Target.EmitSignal(Signal, VariantFromInt(Value)))
+        ToInt(Target.EmitSignal(Signal, VariantInt(Value)))
 
     # A vararg on a *reference* has no fixed parameter in front of its tail, so it takes exactly
     # one loose value and the array form for anything more. Two would be a tuple, and a tuple of
     # variants is `[]variant` -- one type rather than two overloads.
     CallCallableLoose<public>(C:callable, Value:int)<transacts>:int =
-        if (N := C.Call(VariantFromInt(Value)).AsInt[]) then N else -1
+        if (N := C.Call(VariantInt(Value)).AsInt[]) then N else -1
 
     # --- the six vararg methods that live on a *reference* -------------------
     #
@@ -449,19 +449,42 @@ marshal := class(node2d):
     # Verse function's parameters are its tuple, so `Call()` beside `Call(:[]variant)` is not two
     # arities of one name. `array{}` is what an empty argument list is written as.
     CallCallable<public>(C:callable, Value:int)<transacts>:int =
-        if (N := C.Call(array{VariantFromInt(Value)}).AsInt[]) then N else -1
+        if (N := C.Call(array{VariantInt(Value)}).AsInt[]) then N else -1
 
     # Godot's own currying: `bind` appends its arguments *after* the call's own.
     CallBound<public>(C:callable, Bound:int, Value:int)<transacts>:int =
-        Curried := C.Bind(array{VariantFromInt(Bound)})
-        if (N := Curried.Call(array{VariantFromInt(Value)}).AsInt[]) then N else -1
+        Curried := C.Bind(array{VariantInt(Bound)})
+        if (N := Curried.Call(array{VariantInt(Value)}).AsInt[]) then N else -1
 
     CallCallableNoArgs<public>(C:callable)<transacts>:string =
         if (S := C.Call(array{}).AsString[]) then S else "?"
 
     # A foreign signal -- one a GDScript declared or `add_user_signal` made -- emitted from Verse.
     EmitForeign<public>(Owner:object, Name:string, Value:int)<transacts>:void =
-        MakeSignal(Owner, Name).Emit(array{VariantFromInt(Value)})
+        MakeSignal(Owner, Name).Emit(array{VariantInt(Value)})
 
     EmitForeignNoArgs<public>(Owner:object, Name:string)<transacts>:void =
         MakeSignal(Owner, Name).Emit(array{})
+
+    # `MakeVariant` -- one builder over `any`, against the 38 named ones. The host decides the lane
+    # from what the value says about itself, which is why these go out through a real Godot call
+    # rather than being read straight back: the assertion that matters is that Godot received the
+    # right *type*, not that Verse round-tripped its own struct.
+    MetaFromValue<public>(Target:object, Key:string, Value:int)<transacts>:void =
+        if (V := MakeVariant[Value]):
+            Target.SetMeta(Key, V)
+
+    MetaFromString<public>(Target:object, Key:string, Value:string)<transacts>:void =
+        if (V := MakeVariant[Value]):
+            Target.SetMeta(Key, V)
+
+    # The one that proves the mechanism: nothing declared this a vector2. The host read the class off
+    # the value and found its layout.
+    MetaFromVector<public>(Target:object, Key:string, X:float, Y:float)<transacts>:void =
+        if (V := MakeVariant[vector2{X := X, Y := Y}]):
+            Target.SetMeta(Key, V)
+
+    # And what it refuses. An array cannot say which of Godot's packings it is, so the failure is the
+    # contract rather than a gap -- 1 means it built one, which would be the bug.
+    MakeFromArray<public>()<transacts>:int =
+        if (V := MakeVariant[array{1, 2, 3}]) then 1 else 0

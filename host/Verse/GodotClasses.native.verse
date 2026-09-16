@@ -27349,9 +27349,9 @@ ToInt<public>(Value:zip_packer_zip_append)<reads>:int =
 #
 # A Godot value whose type is not known until it arrives. The type is nameable so it can appear in a
 # signature; its lanes are not, so a script reads one through the failable `As<GodotType>` readers
-# below and builds one through the matching `VariantFrom<GodotType>` (R-TYPE-7, amended in Phase 2).
-# Neither family is overloaded -- the type is in the name, for the reason gen_verse_api.py records
-# where it emits them.
+# below and builds one with `MakeVariant` or the matching `Variant<GodotType>` (R-TYPE-7, amended in
+# Phase 2). Neither named family is overloaded -- the type is in the name, for the reason
+# gen_verse_api.py records where it emits them.
 #
 #     if (Health := V.AsInt[]):
 #         Print("hp {Health}")
@@ -27360,7 +27360,18 @@ ToInt<public>(Value:zip_packer_zip_append)<reads>:int =
 #         variant_type.TypeInt => Print("an int")
 #         _ => Print("something else")
 #
-#     Node.SetMeta("score", VariantFromInt(42))
+#     Node.SetMeta("score", VariantInt(42))
+#
+# `MakeVariant` builds one from any value that can say what it is -- an int, a float, a logic, a
+# string, a Godot object or one of the 16 math structs. It is `<decides>` because the values that
+# cannot are real ones: a tuple, a map, an empty array that cannot say what it holds.
+#
+#     if (Score := MakeVariant[42]):
+#         Node.SetMeta("score", Score)
+#
+# The six lanes that share a Verse type with another -- StringName and NodePath with `string`, RID
+# with `int`, two of the three integer packings, one of the two float packings -- can never be what
+# `MakeVariant` picks, and the named builder is how those are spelled.
 #
 # Reading is <decides> rather than a cast, because Verse's own cast rejects a struct on both sides
 # -- see docs/phase-2-design.md 1 and 4.1. It reads the same at the call site and it boxes nothing.
@@ -27645,81 +27656,81 @@ VhUnpackPackedVector4Array(Value:variant)<decides><reads>:[]vector4 =
 
 (Value:variant).AsPackedVector4Array<public>()<decides><reads>:[]vector4 = VhUnpackPackedVector4Array[Value]
 
-VariantFromBool<public>(Value:logic)<reads>:variant = VhFromLogic(Value)
+VariantBool<public>(Value:logic)<reads>:variant = VhFromLogic(Value)
 
-VariantFromInt<public>(Value:int)<reads>:variant = VhFromInt(Value)
+VariantInt<public>(Value:int)<reads>:variant = VhFromInt(Value)
 
-VariantFromFloat<public>(Value:float)<reads>:variant = VhFromFloat(Value)
+VariantFloat<public>(Value:float)<reads>:variant = VhFromFloat(Value)
 
-VariantFromString<public>(Value:string)<reads>:variant = VhFromString(Value)
+VariantString<public>(Value:string)<reads>:variant = VhFromString(Value)
 
-VariantFromVector2<public>(Value:vector2)<reads>:variant = VhFromVector2(Value)
+VariantVector2<public>(Value:vector2)<reads>:variant = VhFromVector2(Value)
 
-VariantFromVector2i<public>(Value:vector2i)<reads>:variant = VhFromVector2i(Value)
+VariantVector2i<public>(Value:vector2i)<reads>:variant = VhFromVector2i(Value)
 
-VariantFromVector3<public>(Value:vector3)<reads>:variant = VhFromVector3(Value)
+VariantVector3<public>(Value:vector3)<reads>:variant = VhFromVector3(Value)
 
-VariantFromVector3i<public>(Value:vector3i)<reads>:variant = VhFromVector3i(Value)
+VariantVector3i<public>(Value:vector3i)<reads>:variant = VhFromVector3i(Value)
 
-VariantFromVector4<public>(Value:vector4)<reads>:variant = VhFromVector4(Value)
+VariantVector4<public>(Value:vector4)<reads>:variant = VhFromVector4(Value)
 
-VariantFromVector4i<public>(Value:vector4i)<reads>:variant = VhFromVector4i(Value)
+VariantVector4i<public>(Value:vector4i)<reads>:variant = VhFromVector4i(Value)
 
-VariantFromRect2<public>(Value:rect2)<reads>:variant = VhFromRect2(Value)
+VariantRect2<public>(Value:rect2)<reads>:variant = VhFromRect2(Value)
 
-VariantFromRect2i<public>(Value:rect2i)<reads>:variant = VhFromRect2i(Value)
+VariantRect2i<public>(Value:rect2i)<reads>:variant = VhFromRect2i(Value)
 
-VariantFromPlane<public>(Value:plane)<reads>:variant = VhFromPlane(Value)
+VariantPlane<public>(Value:plane)<reads>:variant = VhFromPlane(Value)
 
-VariantFromQuaternion<public>(Value:quaternion)<reads>:variant = VhFromQuaternion(Value)
+VariantQuaternion<public>(Value:quaternion)<reads>:variant = VhFromQuaternion(Value)
 
-VariantFromAABB<public>(Value:aabb)<reads>:variant = VhFromAABB(Value)
+VariantAABB<public>(Value:aabb)<reads>:variant = VhFromAABB(Value)
 
-VariantFromBasis<public>(Value:basis)<reads>:variant = VhFromBasis(Value)
+VariantBasis<public>(Value:basis)<reads>:variant = VhFromBasis(Value)
 
-VariantFromTransform2D<public>(Value:transform2d)<reads>:variant = VhFromTransform2D(Value)
+VariantTransform2D<public>(Value:transform2d)<reads>:variant = VhFromTransform2D(Value)
 
-VariantFromTransform3D<public>(Value:transform3d)<reads>:variant = VhFromTransform3D(Value)
+VariantTransform3D<public>(Value:transform3d)<reads>:variant = VhFromTransform3D(Value)
 
-VariantFromProjection<public>(Value:projection)<reads>:variant = VhFromProjection(Value)
+VariantProjection<public>(Value:projection)<reads>:variant = VhFromProjection(Value)
 
-VariantFromColor<public>(Value:color)<reads>:variant = VhFromColor(Value)
+VariantColor<public>(Value:color)<reads>:variant = VhFromColor(Value)
 
-VariantFromStringName<public>(Value:string)<reads>:variant = VhFromStringName(Value)
+VariantStringName<public>(Value:string)<reads>:variant = VhFromStringName(Value)
 
-VariantFromNodePath<public>(Value:string)<reads>:variant = VhFromNodePath(Value)
+VariantNodePath<public>(Value:string)<reads>:variant = VhFromNodePath(Value)
 
-VariantFromRid<public>(Value:int)<reads>:variant = VhFromRid(Value)
+VariantRid<public>(Value:int)<reads>:variant = VhFromRid(Value)
 
-VariantFromObject<public>(Value:object)<reads>:variant = VhFromObject(Value)
+VariantObject<public>(Value:object)<reads>:variant = VhFromObject(Value)
 
-VariantFromCallable<public>(Value:callable)<reads>:variant = VhFromCallable(Value)
+VariantCallable<public>(Value:callable)<reads>:variant = VhFromCallable(Value)
 
-VariantFromSignal<public>(Value:signal_ref)<reads>:variant = VhFromSignal(Value)
+VariantSignal<public>(Value:signal_ref)<reads>:variant = VhFromSignal(Value)
 
-VariantFromDictionary<public>(Value:dictionary)<reads>:variant = VhFromDictionary(Value)
+VariantDictionary<public>(Value:dictionary)<reads>:variant = VhFromDictionary(Value)
 
-VariantFromArray<public>(Value:godot_array)<reads>:variant = VhFromArray(Value)
+VariantArray<public>(Value:godot_array)<reads>:variant = VhFromArray(Value)
 
-VariantFromPackedByteArray<public>(Value:[]int)<reads>:variant = VhFromByteArray(Value)
+VariantPackedByteArray<public>(Value:[]int)<reads>:variant = VhFromByteArray(Value)
 
-VariantFromPackedInt32Array<public>(Value:[]int)<reads>:variant = VhFromInt32Array(Value)
+VariantPackedInt32Array<public>(Value:[]int)<reads>:variant = VhFromInt32Array(Value)
 
-VariantFromPackedInt64Array<public>(Value:[]int)<reads>:variant = VhFromInt64Array(Value)
+VariantPackedInt64Array<public>(Value:[]int)<reads>:variant = VhFromInt64Array(Value)
 
-VariantFromPackedFloat32Array<public>(Value:[]float)<reads>:variant = VhFromFloat32Array(Value)
+VariantPackedFloat32Array<public>(Value:[]float)<reads>:variant = VhFromFloat32Array(Value)
 
-VariantFromPackedFloat64Array<public>(Value:[]float)<reads>:variant = VhFromFloat64Array(Value)
+VariantPackedFloat64Array<public>(Value:[]float)<reads>:variant = VhFromFloat64Array(Value)
 
-VariantFromPackedStringArray<public>(Value:[]string)<reads>:variant = VhFromStringArray(Value)
+VariantPackedStringArray<public>(Value:[]string)<reads>:variant = VhFromStringArray(Value)
 
-VariantFromPackedVector2Array<public>(Value:[]vector2)<reads>:variant = VhFromVector2s(Value)
+VariantPackedVector2Array<public>(Value:[]vector2)<reads>:variant = VhFromVector2s(Value)
 
-VariantFromPackedVector3Array<public>(Value:[]vector3)<reads>:variant = VhFromVector3s(Value)
+VariantPackedVector3Array<public>(Value:[]vector3)<reads>:variant = VhFromVector3s(Value)
 
-VariantFromPackedColorArray<public>(Value:[]color)<reads>:variant = VhFromColors(Value)
+VariantPackedColorArray<public>(Value:[]color)<reads>:variant = VhFromColors(Value)
 
-VariantFromPackedVector4Array<public>(Value:[]vector4)<reads>:variant = VhFromVector4s(Value)
+VariantPackedVector4Array<public>(Value:[]vector4)<reads>:variant = VhFromVector4s(Value)
 
 # --- the packed arrays of a math type ----------------------------------------
 #
@@ -27912,7 +27923,7 @@ VhFromArea3DArray(Value:typed_array(area3d))<reads>:variant = variant{Tag := Tag
 MakeArea3DArray<public>()<reads>:typed_array(area3d) = VhToArea3DArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToArrayArray(Value:variant)<reads>:typed_array(godot_array) =
-    Made := typed_array(godot_array){Ref := Value.Ref, Unpack := VhUnpackArray, Pack := VariantFromArray}
+    Made := typed_array(godot_array){Ref := Value.Ref, Unpack := VhUnpackArray, Pack := VariantArray}
     VhAdopt(Made)
     Made
 
@@ -27973,7 +27984,7 @@ VhFromControlArray(Value:typed_array(control))<reads>:variant = variant{Tag := T
 MakeControlArray<public>()<reads>:typed_array(control) = VhToControlArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToDictionaryArray(Value:variant)<reads>:typed_array(dictionary) =
-    Made := typed_array(dictionary){Ref := Value.Ref, Unpack := VhUnpackDictionary, Pack := VariantFromDictionary}
+    Made := typed_array(dictionary){Ref := Value.Ref, Unpack := VhUnpackDictionary, Pack := VariantDictionary}
     VhAdopt(Made)
     Made
 
@@ -28216,7 +28227,7 @@ VhFromInputEventArray(Value:typed_array(input_event))<reads>:variant = variant{T
 MakeInputEventArray<public>()<reads>:typed_array(input_event) = VhToInputEventArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToIntArray(Value:variant)<reads>:typed_array(int) =
-    Made := typed_array(int){Ref := Value.Ref, Unpack := VhUnpackInt, Pack := VariantFromInt}
+    Made := typed_array(int){Ref := Value.Ref, Unpack := VhUnpackInt, Pack := VariantInt}
     VhAdopt(Made)
     Made
 
@@ -28303,7 +28314,7 @@ VhFromNode3DGizmoArray(Value:typed_array(node3d_gizmo))<reads>:variant = variant
 MakeNode3DGizmoArray<public>()<reads>:typed_array(node3d_gizmo) = VhToNode3DGizmoArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToNodePathArray(Value:variant)<reads>:typed_array(string) =
-    Made := typed_array(string){Ref := Value.Ref, Unpack := VhUnpackNodePath, Pack := VariantFromNodePath}
+    Made := typed_array(string){Ref := Value.Ref, Unpack := VhUnpackNodePath, Pack := VariantNodePath}
     VhAdopt(Made)
     Made
 
@@ -28338,7 +28349,7 @@ VhFromOpenXRSpatialComponentDataArray(Value:typed_array(open_xr_spatial_componen
 MakeOpenXRSpatialComponentDataArray<public>()<reads>:typed_array(open_xr_spatial_component_data) = VhToOpenXRSpatialComponentDataArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToPackedByteArrayArray(Value:variant)<reads>:typed_array([]int) =
-    Made := typed_array([]int){Ref := Value.Ref, Unpack := VhUnpackPackedByteArray, Pack := VariantFromPackedByteArray}
+    Made := typed_array([]int){Ref := Value.Ref, Unpack := VhUnpackPackedByteArray, Pack := VariantPackedByteArray}
     VhAdopt(Made)
     Made
 
@@ -28347,7 +28358,7 @@ VhFromPackedByteArrayArray(Value:typed_array([]int))<reads>:variant = variant{Ta
 MakePackedByteArrayArray<public>()<reads>:typed_array([]int) = VhToPackedByteArrayArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToPackedStringArrayArray(Value:variant)<reads>:typed_array([]string) =
-    Made := typed_array([]string){Ref := Value.Ref, Unpack := VhUnpackPackedStringArray, Pack := VariantFromPackedStringArray}
+    Made := typed_array([]string){Ref := Value.Ref, Unpack := VhUnpackPackedStringArray, Pack := VariantPackedStringArray}
     VhAdopt(Made)
     Made
 
@@ -28356,7 +28367,7 @@ VhFromPackedStringArrayArray(Value:typed_array([]string))<reads>:variant = varia
 MakePackedStringArrayArray<public>()<reads>:typed_array([]string) = VhToPackedStringArrayArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToPackedVector2ArrayArray(Value:variant)<reads>:typed_array([]vector2) =
-    Made := typed_array([]vector2){Ref := Value.Ref, Unpack := VhUnpackPackedVector2Array, Pack := VariantFromPackedVector2Array}
+    Made := typed_array([]vector2){Ref := Value.Ref, Unpack := VhUnpackPackedVector2Array, Pack := VariantPackedVector2Array}
     VhAdopt(Made)
     Made
 
@@ -28391,7 +28402,7 @@ VhFromPhysicsBody3DArray(Value:typed_array(physics_body3d))<reads>:variant = var
 MakePhysicsBody3DArray<public>()<reads>:typed_array(physics_body3d) = VhToPhysicsBody3DArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToPlaneArray(Value:variant)<reads>:typed_array(plane) =
-    Made := typed_array(plane){Ref := Value.Ref, Unpack := VhUnpackPlane, Pack := VariantFromPlane}
+    Made := typed_array(plane){Ref := Value.Ref, Unpack := VhUnpackPlane, Pack := VariantPlane}
     VhAdopt(Made)
     Made
 
@@ -28530,7 +28541,7 @@ VhFromRDVertexAttributeArray(Value:typed_array(rd_vertex_attribute))<reads>:vari
 MakeRDVertexAttributeArray<public>()<reads>:typed_array(rd_vertex_attribute) = VhToRDVertexAttributeArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToRIDArray(Value:variant)<reads>:typed_array(int) =
-    Made := typed_array(int){Ref := Value.Ref, Unpack := VhUnpackRid, Pack := VariantFromRid}
+    Made := typed_array(int){Ref := Value.Ref, Unpack := VhUnpackRid, Pack := VariantRid}
     VhAdopt(Made)
     Made
 
@@ -28539,7 +28550,7 @@ VhFromRIDArray(Value:typed_array(int))<reads>:variant = variant{Tag := TagArray,
 MakeRIDArray<public>()<reads>:typed_array(int) = VhToRIDArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToRect2Array(Value:variant)<reads>:typed_array(rect2) =
-    Made := typed_array(rect2){Ref := Value.Ref, Unpack := VhUnpackRect2, Pack := VariantFromRect2}
+    Made := typed_array(rect2){Ref := Value.Ref, Unpack := VhUnpackRect2, Pack := VariantRect2}
     VhAdopt(Made)
     Made
 
@@ -28613,7 +28624,7 @@ VhFromScriptEditorBaseArray(Value:typed_array(script_editor_base))<reads>:varian
 MakeScriptEditorBaseArray<public>()<reads>:typed_array(script_editor_base) = VhToScriptEditorBaseArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToStringArray(Value:variant)<reads>:typed_array(string) =
-    Made := typed_array(string){Ref := Value.Ref, Unpack := VhUnpackString, Pack := VariantFromString}
+    Made := typed_array(string){Ref := Value.Ref, Unpack := VhUnpackString, Pack := VariantString}
     VhAdopt(Made)
     Made
 
@@ -28622,7 +28633,7 @@ VhFromStringArray(Value:typed_array(string))<reads>:variant = variant{Tag := Tag
 MakeStringArray<public>()<reads>:typed_array(string) = VhToStringArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToStringNameArray(Value:variant)<reads>:typed_array(string) =
-    Made := typed_array(string){Ref := Value.Ref, Unpack := VhUnpackStringName, Pack := VariantFromStringName}
+    Made := typed_array(string){Ref := Value.Ref, Unpack := VhUnpackStringName, Pack := VariantStringName}
     VhAdopt(Made)
     Made
 
@@ -28657,7 +28668,7 @@ VhFromTextureLayeredArray(Value:typed_array(texture_layered))<reads>:variant = v
 MakeTextureLayeredArray<public>()<reads>:typed_array(texture_layered) = VhToTextureLayeredArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToTransform3DArray(Value:variant)<reads>:typed_array(transform3d) =
-    Made := typed_array(transform3d){Ref := Value.Ref, Unpack := VhUnpackTransform3D, Pack := VariantFromTransform3D}
+    Made := typed_array(transform3d){Ref := Value.Ref, Unpack := VhUnpackTransform3D, Pack := VariantTransform3D}
     VhAdopt(Made)
     Made
 
@@ -28705,7 +28716,7 @@ VhFromTweenArray(Value:typed_array(tween))<reads>:variant = variant{Tag := TagAr
 MakeTweenArray<public>()<reads>:typed_array(tween) = VhToTweenArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToVector2Array(Value:variant)<reads>:typed_array(vector2) =
-    Made := typed_array(vector2){Ref := Value.Ref, Unpack := VhUnpackVector2, Pack := VariantFromVector2}
+    Made := typed_array(vector2){Ref := Value.Ref, Unpack := VhUnpackVector2, Pack := VariantVector2}
     VhAdopt(Made)
     Made
 
@@ -28714,7 +28725,7 @@ VhFromVector2Array(Value:typed_array(vector2))<reads>:variant = variant{Tag := T
 MakeVector2Array<public>()<reads>:typed_array(vector2) = VhToVector2Array(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToVector2iArray(Value:variant)<reads>:typed_array(vector2i) =
-    Made := typed_array(vector2i){Ref := Value.Ref, Unpack := VhUnpackVector2i, Pack := VariantFromVector2i}
+    Made := typed_array(vector2i){Ref := Value.Ref, Unpack := VhUnpackVector2i, Pack := VariantVector2i}
     VhAdopt(Made)
     Made
 
@@ -28723,7 +28734,7 @@ VhFromVector2iArray(Value:typed_array(vector2i))<reads>:variant = variant{Tag :=
 MakeVector2iArray<public>()<reads>:typed_array(vector2i) = VhToVector2iArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToVector3Array(Value:variant)<reads>:typed_array(vector3) =
-    Made := typed_array(vector3){Ref := Value.Ref, Unpack := VhUnpackVector3, Pack := VariantFromVector3}
+    Made := typed_array(vector3){Ref := Value.Ref, Unpack := VhUnpackVector3, Pack := VariantVector3}
     VhAdopt(Made)
     Made
 
@@ -28732,7 +28743,7 @@ VhFromVector3Array(Value:typed_array(vector3))<reads>:variant = variant{Tag := T
 MakeVector3Array<public>()<reads>:typed_array(vector3) = VhToVector3Array(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToVector3iArray(Value:variant)<reads>:typed_array(vector3i) =
-    Made := typed_array(vector3i){Ref := Value.Ref, Unpack := VhUnpackVector3i, Pack := VariantFromVector3i}
+    Made := typed_array(vector3i){Ref := Value.Ref, Unpack := VhUnpackVector3i, Pack := VariantVector3i}
     VhAdopt(Made)
     Made
 
@@ -28754,7 +28765,7 @@ VhFromWindowArray(Value:typed_array(window))<reads>:variant = variant{Tag := Tag
 MakeWindowArray<public>()<reads>:typed_array(window) = VhToWindowArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
 
 VhToColorColorDict(Value:variant)<reads>:typed_dictionary(color, color) =
-    Made := typed_dictionary(color, color){Ref := Value.Ref, PackKey := VariantFromColor, Unpack := VhUnpackColor, Pack := VariantFromColor}
+    Made := typed_dictionary(color, color){Ref := Value.Ref, PackKey := VariantColor, Unpack := VhUnpackColor, Pack := VariantColor}
     VhAdopt(Made)
     Made
 
@@ -28763,7 +28774,7 @@ VhFromColorColorDict(Value:typed_dictionary(color, color))<reads>:variant = vari
 MakeColorColorDict<public>()<reads>:typed_dictionary(color, color) = VhToColorColorDict(variant{Tag := TagDictionary, Ref := VhRefNew(TagDictionary)})
 
 VhToIntStringDict(Value:variant)<reads>:typed_dictionary(int, string) =
-    Made := typed_dictionary(int, string){Ref := Value.Ref, PackKey := VariantFromInt, Unpack := VhUnpackString, Pack := VariantFromString}
+    Made := typed_dictionary(int, string){Ref := Value.Ref, PackKey := VariantInt, Unpack := VhUnpackString, Pack := VariantString}
     VhAdopt(Made)
     Made
 

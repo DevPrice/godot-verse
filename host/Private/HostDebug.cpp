@@ -181,63 +181,13 @@ AUTORTFM_DISABLE void ReadDebugValue(Verse::FRunningContext Context,
         }
     }
 
-    // Before the logic test, for the reason ValueToWire puts it there: `true` is an option around
-    // `false`, so the object case has to be settled before anything reads the cell as a logic.
-    if (UObject* const Wrapper = Value.ExtractUObject())
-    {
-        if (const verse::vh_object* const Shadow = Cast<verse::vh_object>(Wrapper))
-        {
-            Out.bHasValue = true;
-            Out.Value.Type = VH_TYPE_INT;
-            Out.Value.VariantTag = VH_VARIANT_OBJECT;
-            Out.Value.Int = Shadow->Handle.Get();
-            return;
-        }
-    }
-
-    if (Value.IsInt())
+    // Shared with `Variant(Value:any)`, which asks the identical question from the other side: what
+    // does this value say about itself when nothing has declared its type? A `vector2` in the
+    // inspector must be a Vector2 rather than the text of one, which is what the math-struct arm is
+    // there for -- the rendering below is honest and unusable.
+    if (GodotVerse::ReadSelfDescribingValue(Context, Value, Out.Storage, Out.Value))
     {
         Out.bHasValue = true;
-        Out.Value.Type = VH_TYPE_INT;
-        Out.Value.VariantTag = VH_VARIANT_INT;
-        Out.Value.Int = Value.AsInt().AsInt64();
-        return;
-    }
-    if (Value.IsFloat())
-    {
-        Out.bHasValue = true;
-        Out.Value.Type = VH_TYPE_FLOAT;
-        Out.Value.VariantTag = VH_VARIANT_FLOAT;
-        Out.Value.Float = Value.AsFloat().AsDouble();
-        return;
-    }
-    if (const Verse::VArrayBase* const Array = Value.DynamicCast<Verse::VArrayBase>())
-    {
-        const Verse::EArrayType ArrayType = Array->GetArrayType();
-        if (ArrayType == Verse::EArrayType::Char8 || ArrayType == Verse::EArrayType::Char32)
-        {
-            Out.bHasValue = true;
-            Out.Storage.Text = FUtf8String(Array->AsStringView());
-            Out.Value.Type = VH_TYPE_STRING;
-            Out.Value.VariantTag = VH_VARIANT_STRING;
-            Out.Value.String.Utf8 = reinterpret_cast<const char*>(*Out.Storage.Text);
-            Out.Value.String.Len = Out.Storage.Text.Len();
-            return;
-        }
-    }
-    // A `vector2` in the inspector must be a Vector2 rather than the text of one, which is what
-    // this is here for: the rendering below is honest and unusable.
-    if (ReadMathStruct(Context, Value, Out.Storage, Out.Value))
-    {
-        Out.bHasValue = true;
-        return;
-    }
-    if (Value.IsLogic())
-    {
-        Out.bHasValue = true;
-        Out.Value.Type = VH_TYPE_LOGIC;
-        Out.Value.VariantTag = VH_VARIANT_BOOL;
-        Out.Value.Logic = Value.AsBool() ? 1 : 0;
         return;
     }
 

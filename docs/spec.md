@@ -1430,7 +1430,8 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   Two things would restore it, neither of them Phase 2's: `variant` as a **class** rather than a
   struct, which is an ABI change and would give up the fixed-width no-allocation property the whole
   encoding was measured for (`abi-v2-design.md` §1a); or Verse growing non-public struct fields back.
-  The normal route is unaffected — `V.As<GodotType>[]`, `VariantKind(V)`, `VariantFrom<GodotType>` —
+  The normal route is unaffected — `V.As<GodotType>[]`, `VariantKind(V)`, `MakeVariant[V]` and the
+  named `Variant<GodotType>` builders —
   and is what every generated body and every example uses. Status: **part.**
 
 ---

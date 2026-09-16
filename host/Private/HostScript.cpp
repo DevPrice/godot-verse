@@ -9310,6 +9310,65 @@ AUTORTFM_DISABLE bool GodotVerse::ReadMathStruct(Verse::FRunningContext Context,
     return ReadStructValue(Context, *Struct, *Layout, OutStorage, OutValue);
 }
 
+AUTORTFM_DISABLE bool GodotVerse::ReadSelfDescribingValue(Verse::FRunningContext Context,
+                                                          Verse::VValue Value,
+                                                          FFieldStorage& OutStorage,
+                                                          vh_value& OutValue)
+{
+    // Before the logic test, for the reason ValueToWire puts it there: `true` is an option around
+    // `false`, so the object case has to be settled before anything reads the cell as a logic.
+    if (UObject* const Wrapper = Value.ExtractUObject())
+    {
+        if (const verse::vh_object* const Shadow = Cast<verse::vh_object>(Wrapper))
+        {
+            OutValue.Type = VH_TYPE_INT;
+            OutValue.VariantTag = VH_VARIANT_OBJECT;
+            OutValue.Int = Shadow->Handle.Get();
+            return true;
+        }
+    }
+
+    if (Value.IsInt())
+    {
+        OutValue.Type = VH_TYPE_INT;
+        OutValue.VariantTag = VH_VARIANT_INT;
+        OutValue.Int = Value.AsInt().AsInt64();
+        return true;
+    }
+    if (Value.IsFloat())
+    {
+        OutValue.Type = VH_TYPE_FLOAT;
+        OutValue.VariantTag = VH_VARIANT_FLOAT;
+        OutValue.Float = Value.AsFloat().AsDouble();
+        return true;
+    }
+    if (const Verse::VArrayBase* const Array = Value.DynamicCast<Verse::VArrayBase>())
+    {
+        const Verse::EArrayType ArrayType = Array->GetArrayType();
+        if (ArrayType == Verse::EArrayType::Char8 || ArrayType == Verse::EArrayType::Char32)
+        {
+            OutStorage.Text = FUtf8String(Array->AsStringView());
+            OutValue.Type = VH_TYPE_STRING;
+            OutValue.VariantTag = VH_VARIANT_STRING;
+            OutValue.String.Utf8 = reinterpret_cast<const char*>(*OutStorage.Text);
+            OutValue.String.Len = OutStorage.Text.Len();
+            return true;
+        }
+    }
+    if (ReadMathStruct(Context, Value, OutStorage, OutValue))
+    {
+        return true;
+    }
+    if (Value.IsLogic())
+    {
+        OutValue.Type = VH_TYPE_LOGIC;
+        OutValue.VariantTag = VH_VARIANT_BOOL;
+        OutValue.Logic = Value.AsBool() ? 1 : 0;
+        return true;
+    }
+    return false;
+}
+
 AUTORTFM_DISABLE void GodotVerse::NoteRuntimeErrorRaised()
 {
     // The scope UE is about to terminate is the active one, which under R-ASYNC-4 is the raising

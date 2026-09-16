@@ -945,6 +945,32 @@ void VhGetValue(int64 Handle, verse::string const& Property, TOptional<FGodotVal
     OutValue = FromWire(Value);
 }
 
+// `Variant(Value:any)`. The type dispatch happens here because Verse cannot do it at compile time:
+// an overload set may hold at most one parameter from the emptiable family (`logic`, any option and
+// any array, and `string` is `[]char`), so the 38-way overloaded builder an author reaches for does
+// not exist as a set. One `any` parameter has nothing to resolve against and sidesteps it.
+//
+// Failing rather than answering Nil is the point of the `<decides>`: a value with no Godot meaning
+// is the author's mistake, and "you cannot build a variant from this" is a better answer than a
+// variant holding nothing, which would be indistinguishable from a deliberate `variant{}`.
+void VhVariantFromAny(FVerseValue const& Value, TOptional<FGodotValue>& OutValue)
+{
+    OutValue.Reset();
+
+    // Storage outlives the Open because the string lane points into it until FromWire copies it.
+    GodotVerse::FFieldStorage Storage;
+    vh_value Wire{};
+    const bool bDescribed = AutoRTFM::Open([&] {
+        Verse::FRunningContext Context = Verse::FRunningContextPromise{};
+        return GodotVerse::ReadSelfDescribingValue(Context, Value.GetValue(), Storage, Wire);
+    });
+    if (!bDescribed)
+    {
+        return;
+    }
+    OutValue = FromWire(Wire);
+}
+
 void VhSetValue(int64 Handle, verse::string const& Property, FGodotValue const& Value)
 {
     if (RaiseIfDead(Handle, Property, TEXT("Wrote")))

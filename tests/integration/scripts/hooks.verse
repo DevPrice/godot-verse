@@ -38,13 +38,13 @@ hooks := class(node2d):
 
     _Get<override>(Property:string):variant =
         if (Property = "Virtual"):
-            VariantFromInt(Virtual)
+            VariantInt(Virtual)
         else if (Property = "Label"):
-            VariantFromString(Label)
+            VariantString(Label)
         else if (Property = "Declared"):
             # Never reached: the export answers first. A wrong number rather than the member's own,
             # so a case that did reach it says so instead of agreeing by accident.
-            VariantFromInt(-999)
+            VariantInt(-999)
         else:
             # Godot's spelling of "not mine", and Verse's: a variant holding nothing.
             variant{}

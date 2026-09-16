@@ -93,4 +93,4 @@ player := class(area2d):
 		# crosses as a variant, which a script can build for a bool but not read back -- R-TYPE-7 as
 		# Phase 2 amended it.
 		if (Shape := Hitbox?):
-			Shape.SetDeferred("disabled", VariantFromBool(true))
+			Shape.SetDeferred("disabled", VariantBool(true))

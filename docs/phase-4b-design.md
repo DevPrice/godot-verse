@@ -727,7 +727,7 @@ icon in the scene tree.
 **§3 was already built, and the document did not check.** Stage 1 — "a public `variant` façade" —
 describes work that shipped in Phase 2, commit `1c3441a`, three days before this document was
 written. `gen_verse_api.py`'s `emit_variant_readers` emits a public `As<GodotType>` per lane and a
-public `VariantFrom<GodotType>` beside it, plus a `VariantKind` the design did not think to ask for,
+public `Variant<GodotType>` beside it, plus a `VariantKind` the design did not think to ask for,
 and `tests/integration/test_cases.gd` has had a section headed "R-TYPE-7 amended: a script can name
 a Variant and read it" for as long. §3's §"Done when" was met before §3 was written.
 
@@ -1001,6 +1001,57 @@ argument list is written as, and a case says so.
 
 ---
 
+### One builder after all — `MakeVariant`, and the name it could not have
+
+*Written after the section below, which concluded that a single builder was impossible. That
+conclusion was right about **overloading** and wrong about the goal: a builder that takes `any` never
+overloads, so neither reason applies to it.*
+
+`MakeVariant<public>(Value:any)<decides><reads>:variant` is one function. The type dispatch it needs
+happens in the host, and the machinery was already there — **the debugger had the identical problem
+first**. A stopped frame carries no declaration either, so `ReadDebugValue` already answered "what
+does this value say about itself", including the ordering trap that would otherwise have cost a day:
+`true` is an option around `false`, so a Godot object must be recognised *before* anything reads the
+cell as a logic. That cascade is now `GodotVerse::ReadSelfDescribingValue`, with the debugger and the
+builder sharing one copy.
+
+It reaches **int, float, logic, string, a Godot object and the 16 math structs**. The math structs
+are the interesting half: nothing declares them, and they are found by *naming their own class*,
+which keys the generated layout table — the same table, baked into the binary, that a cooked host
+carries. It is `<decides>` because what it cannot reach is real: a tuple, a map, a class of the
+author's own, and an array — which cannot say whether it is one of Godot's three integer packings,
+and if empty cannot say anything at all. **That is the compile-time ambiguity of `array{}` arriving
+at run time instead**, which is the same rule one layer down rather than a new problem. Failing
+rather than answering `variant{}` is the whole point: an empty variant is a value someone may have
+meant.
+
+The six lanes that share a Verse type keep their named builder, and those names lost their `From`:
+`VariantFromInt` is now `VariantInt`. Both families now read as what they are — `MakeVariant[X]` when
+the value knows, `VariantStringName(S)` when only the author does.
+
+**It is not called `Variant`, and that cost three builds to learn.** In this package a module-level
+function may not differ from a *type* in the package only by case:
+
+| in the mirror | result |
+| --- | --- |
+| function `Variant` beside the `variant` type | **whole package refused** |
+| function `Node` beside the mirrored `node` class | **whole package refused** |
+| function `VHFROMINT` beside function `VhFromInt` | fine |
+| in a script package: `Widget` beside a `widget` struct, or `Variant`, or `Vector2` | fine |
+
+So it is function-versus-*type*, in a VNI package only. And it fails the worst way available: VNI
+accepts it, the host builds and links, and the **runtime** compiler then refuses the package with
+`status 4` and **zero diagnostics** — the same silence as a refused attribute, and as a mistyped
+path. `MakeVariant` also happens to be the name the API already uses for this shape: `MakeArray`,
+`MakeDictionary`, `MakeCallable`, `MakeSignal`.
+
+*A receiver spelling was measured and not built.* `(X:any).ToVariant<public>()<decides><reads>` works
+as a one-line forward and reads as the exact mirror of `V.AsInt[]`. It is out because two names for
+one operation costs a module-level name, and a module-level name makes every local of that spelling
+*ambiguous* rather than shadowed.
+
+---
+
 ### The variant API's two spellings, and the rule behind the one that was refused
 
 *Written after the work, prompted by an author asking for both halves at once: move the readers onto
@@ -1078,7 +1129,7 @@ and §8 had asked for a third that was dropped without comment:
     Rpc<public>(Method:string, Args:[]variant)<transacts>:void
     Rpc<public>(Method:string, A:variant)<transacts>:void
 
-The second is the one an author reaches for, because `Call("test", VariantFromInt(1))` is what
+The second is the one an author reaches for, because `Call("test", VariantInt(1))` is what
 `call("test", 1)` looks like in GDScript. Without it the answer is *"No overload of the function
 `Call` matches the provided arguments (:[]char,:variant)"*, which helpfully names both overloads and
 unhelpfully names neither of the ones that were wanted. Varargs now carry **four** loose arities

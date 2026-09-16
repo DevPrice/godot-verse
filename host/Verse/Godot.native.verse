@@ -94,6 +94,17 @@ VhTypeMismatch<native>(Expected:string, Value:variant)<reads>:void
 VhCallValue<native>(Handle:int, Method:string, Args:[]variant)<transacts>:variant
 VhGetValue<native>(Handle:int, Property:string)<decides><reads>:variant
 
+# The type dispatch Verse cannot do at compile time, done in the host at run time instead -- which
+# is what backs `Variant(Value:any)`. An overloaded builder is refused because an overload set may
+# hold at most one parameter from the emptiable family (`logic`, any option, any array, and `string`
+# is `[]char`); `any` sidesteps overloading entirely by having exactly one parameter.
+#
+# Fails for a value that does not describe itself, which is the whole contract: a tuple, a map, a
+# class of the author's own, an empty array that cannot say what it holds. See
+# `ReadSelfDescribingValue` in HostScript.cpp for what the list is and why the order of its tests
+# matters.
+VhVariantFromAny<native>(Value:any)<decides><reads>:variant
+
 # The same call, narrowed. 6728 of Godot's 14,933 methods are `const` *and* answer a value, and a
 # call to one observes the scene without changing it -- which is `<reads>`, not `<transacts>`. The
 # distinction is not cosmetic: an explicit specifier *narrows* in Verse, so a `<reads>` helper a

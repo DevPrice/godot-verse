@@ -8,7 +8,7 @@ using { /Verse.org/Verse }
 # The question is the one phase-4b-design.md §15 raised about `MakeVariant` and did not settle for
 # this shape: **a `<constructor>` is a module-level function**, and module-level overloading is far
 # narrower than a class's. Four arities of one constructor name is exactly the arrangement that
-# was refused for `VariantFrom`, and the attribute package is compiled by the *host* at runtime --
+# was refused for `Variant<GodotType>`, and the attribute package is compiled by the *host* at runtime --
 # where a refusal is not a diagnostic against any script, so it fails silently.
 #
 # Declared here in user scope rather than read out of the package, because that is the only place
