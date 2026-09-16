@@ -2459,6 +2459,23 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 			result["class_name"] = String(godot_class);
 			return result;
 		}
+		// A class the project declares. `player` in main.verse was a "Local Constant" with an
+		// empty box under it, where `area2d` beside it answered Godot's documentation -- and the
+		// difference was only that one of them is in the mirror's table.
+		//
+		// The class a file is named after is the one VerseScript registers a doc for, under this
+		// exact name (_get_doc_class_name), so this is the same arrangement that already makes a
+		// hover on one of its *members* say "Property" with the comment above the declaration.
+		// No early return: the doc is a script doc, so the click path skips the help viewer
+		// (script_text_editor.cpp tests is_script_doc) and needs the location below to jump with.
+		//
+		// A second class in the same file is deliberately not included. Nothing registers a doc
+		// for one, so CLASS would draw an empty box, where the local result at least carries the
+		// comment above it.
+		if (script_class_names().has(found_name)) {
+			result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS;
+			result["class_name"] = found_name;
+		}
 	} else if (kind == VH_LOOKUP_FUNCTION || kind == VH_LOOKUP_DATA) {
 		// A global is a member of nothing, so the method table has no owner to answer it by, and
 		// the file it is declared in is in the engine tree rather than in the project -- leaving
