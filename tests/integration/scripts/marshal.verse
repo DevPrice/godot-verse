@@ -488,3 +488,17 @@ marshal := class(node2d):
     # contract rather than a gap -- 1 means it built one, which would be the bug.
     MakeFromArray<public>()<transacts>:int =
         if (V := MakeVariant[array{1, 2, 3}]) then 1 else 0
+
+    # A RID out of a real Godot call. This is the end-to-end form of the lane bug: `get_canvas_item`
+    # answers a live RID, and every mirrored method returning one answered 0 while the packer wrote
+    # `Ref` and the generated reader read `I0`.
+    CanvasRid<public>(Target:canvas_item)<reads>:int = Target.GetCanvasItem().Id
+
+    # And a RID through a variant, which is the same lane one level up.
+    RoundTripRid<public>(Value:int)<reads>:int =
+        if (R := VariantRid(rid{Id := Value}).AsRid[]) then R.Id else -1
+
+    # A RID is not an int any more, which is the type safety the struct buys: as a bare `int` these
+    # two lanes were the same Verse type and nothing caught a mix-up.
+    RidIsNotAnInt<public>()<reads>:int =
+        if (N := VariantRid(rid{Id := 7}).AsInt[]) then N else -1

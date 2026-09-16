@@ -105,7 +105,14 @@ VhFromString(Value:string)<reads>:variant = variant{Tag := TagString, Text := Va
 VhFromStringName(Value:string)<reads>:variant = variant{Tag := TagStringName, Text := Value}
 VhFromNodePath(Value:string)<reads>:variant = variant{Tag := TagNodePath, Text := Value}
 VhFromObject(Value:object)<reads>:variant = variant{Tag := TagObject, Ref := Value.Handle}
-VhFromRid(Value:int)<reads>:variant = variant{Tag := TagRid, Ref := Value}
+# A RID is a plain wrapped integer, so it rides in an integer lane like one. It used to ride in
+# `Ref` beside the object handle, on the reasoning that both are ids Godot already owns -- but `Ref`
+# means "an id with identity", an object or a reference the consumer minted, and a RID has none of
+# that: nothing mints it and nothing releases it. **That lane choice was the bug**: RID was mirrored
+# as an `int`, so the generated reader was VhToInt, which reads I0, and RID was the one int-typed
+# lane that lived somewhere else. `VariantRid(...).AsRid[]` answered 0, and so did every mirrored
+# method that returns one.
+VhFromRid(Value:rid)<reads>:variant = variant{Tag := TagRid, I0 := Value.Id}
 
 # --- variant unpacking -------------------------------------------------------
 
@@ -114,6 +121,10 @@ VhFromRid(Value:int)<reads>:variant = variant{Tag := TagRid, Ref := Value}
 # been widened by the time a variant exists.
 VhToLogic(Value:variant)<reads>:logic = if (Value.I0 <> 0) then true else false
 VhToInt(Value:variant)<reads>:int = Value.I0
+
+# Reads the same lane VhFromRid writes, which is the whole of what went wrong before. Kept next to
+# it rather than beside the other unpackers for exactly that reason.
+VhToRid(Value:variant)<reads>:rid = rid{Id := Value.I0}
 VhToFloat(Value:variant)<reads>:float = Value.F0
 VhToString(Value:variant)<reads>:string = Value.Text
 

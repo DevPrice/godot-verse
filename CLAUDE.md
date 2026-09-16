@@ -349,7 +349,10 @@ the editor and `export_check.gd` as an autoload in an export.
 hierarchy, Godot's own `Object` among them; its 793 enums as real Verse enums; all 1413 of
 `extension_api.json`'s virtuals, spelled Godot's way (74 skipped with a recorded reason); properties as writable members rather than get/set pairs; 503 engine-signal
 accessors; `@GlobalScope`'s constants and statics reachable through per-class `...Statics` modules;
-the 16 math types with methods and definable operators in ordinary Verse; and `typedarray::Node` as a
+the 16 math types with methods and definable operators in ordinary Verse; **Godot's RID as a `rid`
+struct** rather than a bare `int` — it is not a math type, because it crosses as a scalar rather
+than as a component array, and its lane lives in `I0` beside every other integer rather than in
+`Ref`, which is what "an id with identity" means and a RID is not; and `typedarray::Node` as a
 `typed_array(node)` whose elements are objects a script calls methods on.
 
 **Every Godot class is mirrored by default.** `tools/verse_api_classes.txt` is a smaller curated
@@ -852,10 +855,12 @@ it is not in `run_tests.py`.
   single builder that never overloads: **`MakeVariant[Value]` takes `any`**, so there is nothing to
   resolve, and the host reads the lane off what the value says about itself. It is `<decides>`
   because a tuple, a map, a class of the author's own and an empty array say nothing; it reaches
-  int, float, logic, string, a Godot object and the 16 math structs. The six lanes that *share* a
-  Verse type — StringName and NodePath with `string`, RID with `int`, two integer packings, one
-  float packing — can never be what it picks, and are what the named builders are still for. It
-  also retires
+  int, float, logic, string, a Godot object and the 16 math structs. The five lanes that *share* a
+  Verse type — StringName and NodePath with `string`, two integer packings, one float packing —
+  can never be what it picks, and are what the named builders are still for. **`rid` used to be a
+  sixth and is not, because it is now its own struct**; it is nonetheless not reachable by
+  `MakeVariant` yet, because the host's discovering converter only knows the math layout table.
+  It also retires
   `phase-4b-design.md` §15's claim that module-level overloading was to blame —
   `GodotMath.native.verse` overloads `Abs` across nine receiver types.
 - **A reader is spelled on the receiver: `V.AsInt[]`, not `AsInt[V]`.** It is an extension method,

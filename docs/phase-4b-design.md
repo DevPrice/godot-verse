@@ -1001,6 +1001,45 @@ argument list is written as, and a case says so.
 
 ---
 
+### `rid`, and the lane that was wrong the whole time
+
+*Written after the work. It was asked for on the grounds that a RID being absent from the mirrored
+value types was "weird"; it turned out to be hiding a defect.*
+
+Godot's RID was mirrored as a bare `int`. That was wrong on taste — a RID indexes a server's table
+and nothing arithmetic about it means anything, and as an `int` nothing stopped one being passed
+where a count was wanted, across **214 mirrored signatures**. It was also wrong in fact:
+
+    VariantRid(7).AsRid[]   ->   0
+
+The packer wrote the variant's **`Ref`** lane; the generated reader was `VhToInt`, which reads
+**`I0`**. So every RID that crossed into Verse read as zero — including every mirrored method that
+returns one, silently, since a RID of 0 is Godot's own "no resource" and looks like an ordinary
+empty answer. `tests/verse_probe/rid_probe.verse`'s `AskRoundTrip` is that bug as a test, and the
+integration layer asserts the end-to-end form against Godot's own `get_canvas_item().get_id()`.
+
+**The lane choice was the cause, not a coincidence.** RID's mirrored type was `int`, so the generator
+gave it `VhToInt` — which is correct for every other int-typed lane. RID was the single exception and
+nothing marked it. So the fix was to move the lane rather than to special-case the reader: `Ref`
+means *an id with identity* — an object's instance id, or a reference the consumer minted — and a
+RID has neither, since nothing mints it and nothing releases it. In `I0` the generated default is
+right by construction and the bug cannot return the way it arrived.
+
+`rid` is deliberately **not** a math type. A math type crosses as a component array under its own
+variant tag; a RID crosses as a scalar, and routing it through `MATH_LAYOUT` would change what
+`VH_VARIANT_RID` means on the ABI — a major bump for nothing Godot wants. What it does share is the
+*shape*: a generated `struct<concrete><computes>` with one `Id:int`, flat, so it can be a `var`
+property like `vector2` is. That last part found a latent generator bug of its own — the field-named
+accessor emitter builds an `if`/`else` chain over a struct's fields, and with **one** field it
+degenerated to a bare `else` with no `if`. No math type has one field, so nothing had ever hit it.
+
+Still open, and small: `MakeVariant[SomeRid]` fails. A `rid` names its own class exactly as
+`vector2` does, so it is discoverable in principle; the host's converter simply consults the math
+layout table and `rid` is not in it. It needs one arm reading the `Id` field and emitting
+`VH_TYPE_INT` + `VH_VARIANT_RID`. `VariantRid(R)` is what builds one meanwhile.
+
+---
+
 ### One builder after all — `MakeVariant`, and the name it could not have
 
 *Written after the section below, which concluded that a single builder was impossible. That

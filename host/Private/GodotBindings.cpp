@@ -371,9 +371,19 @@ vh_value WireOf(const FOwnedValue& Owned)
     // An object is named by Godot's own instance id, so it needs no table; everything else that
     // carries a reference was given an id by the consumer.
     case VH_VARIANT_OBJECT:
-    case VH_VARIANT_RID:
         Out.Type = VH_TYPE_INT;
         Out.Int = Lanes.Ref;
+        return Out;
+
+    // A RID rides in an ordinary integer lane, not in Ref, because it is an ordinary integer: it
+    // indexes a server's table, nothing mints it, nothing releases it, and Ref means "an id with
+    // identity" -- an object, or a reference the consumer handed out. Sharing Ref with objects is
+    // what made `VariantRid(...).AsRid[]` answer 0 for as long as RID was mirrored as an `int`: the
+    // generated reader was VhToInt, which reads I0, and RID was the one int-typed lane that was
+    // somewhere else.
+    case VH_VARIANT_RID:
+        Out.Type = VH_TYPE_INT;
+        Out.Int = IntLane(Lanes, 0);
         return Out;
 
     case VH_VARIANT_NIL:
@@ -523,11 +533,15 @@ FGodotValue FromWire(const vh_value& Value)
         }
         return Out;
 
-    // An object is named by Godot's own instance id and an RID by its own number; neither needs a
-    // table entry, so both land in Ref without one being minted.
+    // An object is named by Godot's own instance id, so it lands in Ref without one being minted.
     case VH_VARIANT_OBJECT:
-    case VH_VARIANT_RID:
         Out.Ref = AsInt(Value);
+        return Out;
+
+    // A RID is a plain wrapped integer and lands in an integer lane -- see the matching arm in
+    // ToWire for why it is not in Ref beside the object handle.
+    case VH_VARIANT_RID:
+        SetIntLane(Out, 0, AsInt(Value));
         return Out;
 
     default:

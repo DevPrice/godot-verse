@@ -421,6 +421,17 @@ func begin() -> void:
 	_check_eq("and it refuses a value that cannot describe itself",
 			node.call("MakeFromArray"), 0)
 
+	# RID is a `rid` struct rather than a bare int, and the lane it rides in was wrong until it
+	# became one: the packer wrote Ref and the generated reader read I0, so every mirrored method
+	# returning a RID answered 0. Asserting against Godot's own get_canvas_item() is what makes
+	# this about the value rather than about Verse agreeing with itself.
+	_check_eq("a RID crosses from a real Godot call",
+			node.call("CanvasRid", node), node.get_canvas_item().get_id())
+	_check("and it is not zero, which is what the bug looked like",
+			node.call("CanvasRid", node) != 0)
+	_check_eq("a RID survives a variant round trip", node.call("RoundTripRid", 99), 99)
+	_check_eq("and a RID is not an int to the readers", node.call("RidIsNotAnInt"), -1)
+
 	# The *loose* arities, which exist because an author reached for `Call("test",
 	# VariantInt(1))` -- what `call("test", 1)` looks like in GDScript -- and got "No overload
 	# of the function `Call` matches the provided arguments (:[]char,:variant)". What these assert

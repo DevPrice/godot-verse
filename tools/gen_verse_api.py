@@ -147,7 +147,11 @@ SCALAR_TYPES = {
     "String": TypeInfo("string", "VhFromString", False, "VhToString", False),
     "StringName": TypeInfo("string", "VhFromStringName", False, "VhToString", False),
     "NodePath": TypeInfo("string", "VhFromNodePath", False, "VhToString", False),
-    "RID": TypeInfo("int", "VhFromRid", False, "VhToInt", False),
+    # A struct of one int rather than a bare int, for the reason a Godot RID is not a number: it
+    # names a resource inside a server and means nothing arithmetic. As an `int` it was also
+    # *wrong* -- the packer writes the Ref lane and `VhToInt` reads I0, so every RID that crossed
+    # into Verse read as 0. See emit_rid_struct.
+    "RID": TypeInfo("rid", "VhFromRid", False, "VhToRid", False),
 
     # The reference types. They cross as an id in the GDExtension's table rather than as a copy,
     # because Godot's Array and Dictionary have reference semantics an author can observe and a
@@ -278,7 +282,7 @@ def virtual_default(info, enums: dict):
         return VIRTUAL_SCALAR_DEFAULTS[verse_type]
     if verse_type.startswith("[]"):
         return "array{}"
-    if verse_type in MATH_STRUCT_NAMES:
+    if verse_type in VALUE_STRUCT_NAMES:
         return f"{verse_type}{{}}"
     for enum in enums.values():
         if enum.verse_name == verse_type and enum.values:
@@ -794,7 +798,7 @@ VARIANT_LANES = [
 ] + _math_lanes() + [
     VariantLane("TYPE_STRING_NAME", "StringName", "string", "TagStringName", "VhToString", "VhFromStringName"),
     VariantLane("TYPE_NODE_PATH", "NodePath", "string", "TagNodePath", "VhToString", "VhFromNodePath"),
-    VariantLane("TYPE_RID", "Rid", "int", "TagRid", "VhToInt", "VhFromRid"),
+    VariantLane("TYPE_RID", "Rid", "rid", "TagRid", "VhToRid", "VhFromRid"),
     VariantLane("TYPE_OBJECT", "Object", "object", "TagObject", "VhToObject", "VhFromObject"),
     VariantLane("TYPE_CALLABLE", "Callable", "callable", "TagCallable", "VhToCallable", "VhFromCallable"),
     VariantLane("TYPE_SIGNAL", "Signal", "signal_ref", "TagSignal", "VhToSignal", "VhFromSignal"),
@@ -1189,8 +1193,30 @@ def math_leaf_lanes(godot_name: str, path: str = "") -> list:
     return lanes
 
 
+def emit_rid_struct() -> str:
+    """Godot's RID as a Verse struct of one int.
+
+    It is emitted beside the math types and is deliberately *not* one of them. A math type crosses
+    as a component array under its own variant tag; a RID crosses as a **scalar** -- the host writes
+    its number into the variant's `Ref` lane (`case VH_VARIANT_RID` in GodotBindings.cpp) and the
+    ABI carries it as VH_TYPE_INT. Putting RID through MATH_LAYOUT would change what VH_VARIANT_RID
+    means on the wire, which is an ABI major and buys nothing Godot wants.
+
+    What it is for is the other half: a RID is an opaque handle into a server, not a number, and as
+    a bare `int` nothing stopped one being passed where a count was wanted. It is also what fixes
+    the lane: the packer wrote `Ref` and the generated reader was `VhToInt`, which reads `I0`, so
+    `VariantRid(7).AsRid[]` answered 0 and every RID-returning mirrored method answered 0 with it.
+
+    `<concrete><computes>` for the same reason the math structs carry it -- see emit_math_structs.
+    """
+    return ("rid<public> := struct<concrete><computes>:\n"
+            "    # Godot's own `RID.get_id()`. Opaque: it indexes a server's table and nothing else\n"
+            "    # about it is meaningful, which is why this is a struct rather than an `int`.\n"
+            "    Id<public>:int = 0")
+
+
 def emit_math_structs() -> list:
-    blocks = []
+    blocks = [emit_rid_struct()]
     for godot_name in MATH_TYPES:
         # `<concrete><computes>`, which Epic's own vector2 also carries: without it a struct
         # literal inside a `<computes>` function is refused -- "this archetype instantiation
@@ -1369,6 +1395,17 @@ FLAT_MATH_STRUCTS = {
 }
 
 VECTOR_FIELDS = {name: fields for name, (fields, _) in FLAT_MATH_STRUCTS.items()}
+
+# `rid` is flat too -- one int -- so it can be a `var` property exactly as `vector2` can, and it
+# wants the same accessor machinery. It is absent from MATH_LAYOUT because its *encoding* is a
+# scalar rather than a component array (see emit_rid_struct); that is a different question from its
+# shape, and this is the shape question.
+FLAT_MATH_STRUCTS["rid"] = (["Id"], "int")
+
+# Every Godot value type the mirror declares as a Verse struct: the 16 math types and `rid`. The
+# question this answers is "is this a struct?", which is not the question MATH_STRUCT_NAMES answers
+# -- the packed-array lanes want math types specifically, and there is no PackedRidArray.
+VALUE_STRUCT_NAMES = MATH_STRUCT_NAMES | {"rid"}
 
 
 def verse_default_literal(verse_type: str, default: str):
@@ -2232,7 +2269,7 @@ def classify_property(p: dict, resolver: TypeResolver, coverage: Coverage, metho
     # A nested math struct: see FLAT_MATH_STRUCTS. Skipping it here leaves Godot's own getter and
     # setter to be emitted as ordinary methods, so `GetGlobalTransform()` still reaches it -- what
     # is lost is only the `set Node.GlobalTransform = ...` spelling.
-    if info.verse_type in MATH_STRUCT_NAMES and info.verse_type not in FLAT_MATH_STRUCTS:
+    if info.verse_type in VALUE_STRUCT_NAMES and info.verse_type not in FLAT_MATH_STRUCTS:
         coverage.skip("property_nested_struct", record("property_nested_struct"))
         return None
 
@@ -2302,16 +2339,24 @@ def emit_property(cp: ClassifiedProperty, names: dict) -> list:
         return lines
     fields, scalar = flat
 
-    selects = " else ".join(
-        f'if ({field} = "{f}") then {current}.{f}' for f in fields[:-1]
+    # With one field there is nothing to choose between, and the `if`-chain would degenerate to a
+    # bare `else` -- which is what `rid` found. The last field is the fallthrough either way.
+    selects = "".join(
+        f'if ({field} = "{f}") then {current}.{f} else ' for f in fields[:-1]
     )
     lines += [
         f"    {get_name}<epic_internal>({accessor}:accessor, {field}:string)<transacts>:{scalar} =",
         f"        {current} := {read}",
-        f"        {selects} else {current}.{fields[-1]}",
+        f"        {selects}{current}.{fields[-1]}",
         f"    {set_name}<epic_internal>({accessor}:accessor, {field}:string, {value}:{scalar}) <transacts>:void =".replace(") <", ")<"),
         f"        {current} := {read}",
     ]
+    # One field is the same degeneration as the getter above: every branch would be the fallthrough,
+    # and a bare `else` with no `if` in front of it is not Verse. Write it unguarded.
+    if len(fields) == 1:
+        lines.append(f"        {write(ti.verse_type + '{' + fields[0] + ' := ' + value + '}')}")
+        return lines
+
     for i, f in enumerate(fields):
         members = ", ".join(
             f"{g} := {value}" if g == f else f"{g} := {current}.{g}" for g in fields
