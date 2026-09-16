@@ -144,6 +144,12 @@ instead of sources). `Verse/*.native.verse` is the `/Godot.org/Godot` package.
 (a struct, the fixed-width lanes one Godot value crosses as) and `godot_ref` (a UObject whose
 `BeginDestroy` is what releases a reference id when Verse drops the value holding it).
 
+**Those three are also the only types a native may name.** VNI refuses anything else at build time
+— *"V3564: `class engine used as a parameter/result in a native function must also be native"* — so
+a native can never answer a *mirrored* class, only `vh_object` for a cast to narrow. That is what
+keeps the 41 singleton accessors `<decides>` even though 39 of them cannot fail (spec R-TYPE-4), and
+it is the first thing to check against any plan that would have the host answer a typed object.
+
 **A `variant` crosses the script-call wire as `VH_TYPE_VARIANT` (ABI 8.6), which is a *declaration*
 type and never a payload.** A `vh_value` still carries whatever the variant holds; the type only
 tells the consumer "this argument or result accepts anything". Two traps sit under it. The

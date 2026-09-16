@@ -1394,6 +1394,16 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   Array's *elements*, one returns an editor class the rule already covers, and one is a virtual the
   generator skips. The single real exception, `EditorProperty.get_edited_property`, is editor-only.
   A hand-maintained list would be 5303 entries of ceremony to catch it.
+
+  The **singleton accessors** are the second `<decides>` family and the one where the rule is
+  loosest: 39 of the 41 are registered during `Main::setup`, so no run that can execute Verse at
+  all can find one absent, and only `EditorInterface` and `GDScriptLanguageProtocol` — the two
+  whose class says `"api_type": "editor"` — can fail in a game. They stay failable anyway, because
+  a total accessor would have to produce a mirrored class without a failure context and the only
+  spelling that could is refused: **V3564**, *"class engine used as a parameter/result in a native
+  function must also be native"*. What that costs is syntax and not effects —
+  `tests/verse_probe/singleton_effect_probe.verse` is the measurement, including that a failure
+  context over one does not force `<transacts>` on its caller.
 - **R-TYPE-5 (MUST)** A type mismatch at the boundary is a compile error wherever the typed layer
   can see it, and a diagnosable runtime error with both type names where it cannot.
   Status: **part** (`VhTypeMismatch` exists).

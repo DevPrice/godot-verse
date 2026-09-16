@@ -57102,6 +57102,15 @@ ColorStatics<public> := module:
 # `engine` would otherwise be a class no script can obtain an instance of. <decides> because
 # Engine::get_singleton answers nothing for a name this build did not register -- an editor-only
 # singleton asked for in an exported game, say.
+#
+# Which is two of the 41, and they are the two whose class says `"api_type": "editor"`:
+# EditorInterface and GDScriptLanguageProtocol. The other 39 are registered during Main::setup,
+# before any scene loads, so no run that can execute Verse at all can find one missing. The
+# `<decides>` on those is a tax and stays anyway: a non-failable accessor would have to produce the
+# class without a failure context, and the only spelling that could -- a native declared to answer
+# it -- is V3564, `class engine used as a parameter/result in a native function must also be
+# native`. tests/verse_probe/singleton_effect_probe.verse carries the measurement, including the
+# half that made it bearable: a failure context here does not force `<transacts>` on the caller.
 
 GetAccessibilityServer<public>()<decides><reads>:accessibility_server = accessibility_server[VhSingletonObject("AccessibilityServer")]
 GetAudioServer<public>()<decides><reads>:audio_server = audio_server[VhSingletonObject("AudioServer")]
