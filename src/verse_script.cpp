@@ -833,10 +833,18 @@ PropertyUsageFlags usage_for_group(int64_t p_kind) {
 // Godot knows it by is the PascalCase form of the same name it registered with, derived here through
 // verse_pascal_case rather than sent across the ABI: the host would have to reimplement the transform
 // to send it, and two implementations of one naming rule are one too many.
+//
+// **The leaf of the qualified name, not the whole of it.** Everything the host is asked about is
+// module-qualified -- `left/palette` for a class under a `.vmodule` -- and ClassDB is one flat
+// namespace a module is deliberately not part of: `@global_class` registers the file stem
+// PascalCased and nothing else. Passing the module through gave `Left/palette`, a name nothing had
+// ever registered, and the inspector answered *"Cannot get class"* the moment a slot of that type
+// was drawn. Found by hand; `by-hand-findings.md` B18.
 String filter_class_from_hint(const Dictionary &p_entry) {
 	const String verse_class = p_entry["hint_string"];
 	if ((int64_t)p_entry["hint"] == VH_EXPORT_HINT_SCRIPT_CLASS) {
-		return String(verse_pascal_case(std::string(verse_class.utf8().get_data())).c_str());
+		const String leaf = verse_class.substr(verse_class.rfind("/") + 1);
+		return String(verse_pascal_case(std::string(leaf.utf8().get_data())).c_str());
 	}
 	const char *godot_class = verse_godot_class_for(verse_class);
 	return godot_class != nullptr ? String(godot_class) : String();

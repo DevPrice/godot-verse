@@ -555,6 +555,37 @@ func begin() -> void:
 		_check_eq("a module reaches a root definition with nothing imported",
 				left_node.call("RootConstant"), 42)
 
+		# An `@export` typed as a `@global_class` Resource *in a module*. The slot is filtered by
+		# the name Godot knows the class as, which is flat -- ClassDB has one namespace and a
+		# module is deliberately not in it. Carrying the bridge's own `left/palette` here named a
+		# class nothing had registered, and the inspector said "Cannot get class 'Left/Palette'".
+		var skin := {}
+		for p in left_node.get_property_list():
+			if p["name"] == "Skin":
+				skin = p
+		_check("a module class exports a reference to another class in its module", not skin.is_empty())
+		if not skin.is_empty():
+			_check_eq("the slot is filtered by the registered class name, with no module in it",
+					skin.get("hint_string", ""), "Palette")
+			_check_eq("and it is a resource picker", skin.get("hint", -1),
+					PROPERTY_HINT_RESOURCE_TYPE)
+			# The invariant that broke, stated directly: the name the slot filters by and the name
+			# the class registers under are the same string. They are produced by two different
+			# code paths from two different inputs, which is how they came to disagree.
+			#
+			# Editor only, and for a reason worth knowing rather than worked around: `get_global_name`
+			# is read out of the *source text*, and an exported game ships every `.verse` as a
+			# one-byte stub, so it answers nothing there. It costs an export nothing, because the
+			# registry an export uses was baked into `project.godot` when it was made.
+			if editor:
+				var palette: Script = load("res://widgets/left/palette.verse")
+				_check_eq("and it is the very name the class registers under",
+						skin.get("hint_string", ""),
+						String(palette.get_global_name()) if palette != null else "")
+			else:
+				_skip("and it is the very name the class registers under",
+						"get_global_name reads the source text, which an export strips to a stub")
+
 	# --- R-EXP-5: @tool ------------------------------------------------------------------------
 	#
 	# The attribute is the bridge's own, declared in the package the host adds at runtime, so

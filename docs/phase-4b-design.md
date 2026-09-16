@@ -829,8 +829,24 @@ passing in the export run had already proved. The consumer asks it only where th
 class *and* the host has no compiler, so the editor's per-keystroke path never reaches a VM entry it
 did not have before.
 
+**And the thing §5 put out of scope was the thing that mattered.** §5 says a resource held as an
+exported member of another "is worth a case but not worth blocking the stage". It was worth blocking
+the stage: an `@export` typed as a `@global_class` Verse Resource **in a module** filtered its
+inspector slot by the bridge's own module-qualified name, so the editor answered *"Cannot get class
+'Gameplay/myResouce'"* the moment a slot of that type was drawn. Reported from somebody else's
+project within minutes of stage 3 landing, and `by-hand-findings.md` B18 is the entry. One line in
+`filter_class_from_hint`: take the **leaf** of the qualified name before PascalCasing it, because
+ClassDB is one flat namespace and `@global_class` registers the file stem and nothing else.
+
+Nothing had caught it because no fixture was both things at once — module fixtures existed, resource
+exports existed, and the combination did not. That is the general shape of what this phase kept
+finding, and it is worth saying once: **every defect in stages 2 and 3 was at a junction of two
+features that each had tests.** The double-mint, the defaults-object leak, the stripped-source base
+type, and this.
+
 The lesson is the export layer's, again: it is the only layer that runs what it built, and what it
-catches is never the thing the stage was about.
+catches is never the thing the stage was about. The lesson beside it is the by-hand session's, and
+it arrived before the session did.
 
 **Still true, and worth saying because §4 rests on all of it:** the block clause fires for a user
 class across the package boundary, at two levels of derivation, with `Self` already at the derived

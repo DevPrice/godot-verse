@@ -548,12 +548,13 @@ EXPORT_DATA_DIR_ENTRIES = {"Cooked", "Engine", "verse_classes.json"}
 EXPORT_EXPECTED_CLASSES = ["marshal", "signals", "left/widget"]
 
 # What the exported run must report, named rather than inferred (7b D5): a case that stops running
-# in an export has to read as a failure and not as a shorter log. The nine skips are test_cases.gd's
-# three `editor` blocks -- the second generation, the reload, and `is_tool` off a stripped source --
-# and 334 + 9 is the 343 the in-editor run prints. Adding a case means changing this line, which is
+# in an export has to read as a failure and not as a shorter log. The ten skips are test_cases.gd's
+# `editor` blocks -- the second generation, the reload, `is_tool` off a stripped source, and
+# `get_global_name`, which is read off the same stripped source -- and 337 + 10 is the 347 the
+# in-editor run prints. Adding a case means changing this line, which is
 # the point of it.
-EXPORT_EXPECTED_PASSES = 334
-EXPORT_EXPECTED_SKIPS = 9
+EXPORT_EXPECTED_PASSES = 337
+EXPORT_EXPECTED_SKIPS = 10
 
 
 def run_export(results: Results, engine: Path | None, godot: Path | None) -> None:

@@ -15,3 +15,10 @@ widget := class(node2d):
 
     # From helpers.verse, at the project root rather than in this module.
     RootConstant<public>()<transacts>:int = HelperAnswer
+
+    # A reference to a `@global_class` Resource declared in this same module. The inspector filters
+    # a slot by the name *Godot* knows the class as, which is the flat registered one -- and the
+    # descriptor used to carry the module-qualified Verse name instead, so the slot named a class
+    # ClassDB had never heard of. `by-hand-findings.md` B18 is where that was found.
+    @export
+    var Skin<public>:?palette = false

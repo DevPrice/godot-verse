@@ -53,7 +53,7 @@ Two documents are not phase records and are the ones to read before adding a fea
   each diff came to. The one standing is the `<transacts>` trap (wall 8), narrowed twice and not
   removed.
 - **`docs/by-hand-findings.md`** — what the by-hand editor sessions found, because everything from
-  `EngineDebugger` and the editor UI inward has no automated test and never will. B1–B9 and B15–B17
+  `EngineDebugger` and the editor UI inward has no automated test and never will. B1–B9 and B15–B18
   are defects, all fixed; B12 is a Verse fact; B13 a latency finding; B14 the sandboxed export run.
   Its "What is still open" section is where the two remaining by-hand checks live.
 

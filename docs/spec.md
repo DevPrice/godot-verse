@@ -834,8 +834,17 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
 
   The five editor steps — the New Resource dialog, the inspector, and a save from it — are in
   `by-hand-findings.md` under "R-EXP-6's editor half", because nothing a script can ask reaches any
-  of them. Out of scope, as §5 scoped them: binary `.res`, and a Verse resource held as an exported
-  member of another.
+  of them. Out of scope, as §5 scoped it: binary `.res`.
+
+  **A Verse resource held as an `@export` of another class works, and §5 was wrong to defer it.**
+  That is `VH_EXPORT_HINT_SCRIPT_CLASS`, and it was broken for any class inside a module: the
+  descriptor carries the module-qualified name every `ClassNameUtf8` in the ABI carries, and the
+  inspector filters a slot by the name *Godot* knows the class as — which is flat, because ClassDB
+  has one namespace and `@global_class` registers the file stem PascalCased. The two disagreed and
+  the editor said *"Cannot get class 'Gameplay/myResouce'"*. Reported by hand against a real project;
+  `by-hand-findings.md` B18. The consumer now takes the leaf of the qualified name, and the case is
+  asserted against `Script.get_global_name()` rather than against a constant, because the invariant
+  is that the two agree.
 - **R-EXP-7 (MUST)** A Verse script can be registered as an autoload singleton. Status: **none**.
 - **R-EXP-8 (SHOULD)** A script declares an editor icon. Status: **part**
   (`_get_class_icon_path` exists).

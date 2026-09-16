@@ -3,17 +3,19 @@
 **Status:** 2026-09-14 · the record of the windowed passes over
 what was `docs/by-hand-checklist.md`, and of the work that closed what they found. **The checklist is
 deleted**: all twenty-two of its entries were watched happen, and what is worth keeping is what they
-found rather than the list. §"What is still open" at the bottom carries the two things that
+found rather than the list. §"What is still open" at the bottom carries the three things that
 outlived it. **Every entry below is fixed**, except the two that are not defects: B11 is a
 measurement, and B8 is fixed for the half a headless run can reach and re-checkable by hand for the
-other. `tools/run_tests.py` is 2/2 with **317** integration cases.
+other. `tools/run_tests.py` is 9/9 with **347** integration cases.
 
 Four kinds of entry are below. **B1–B9** are what the session saw go wrong, each traced to the code
 that causes it rather than left as a symptom. **B10–B11** are what the session learned about the
 checklist itself: one entry did not need to be on it, and one belongs there permanently. **B12** is a
 Verse fact found while writing B10's test, which the test had got wrong. **B13** is from a later
 session, after the editor-performance commits, and is the one entry here that is about latency
-rather than behaviour.
+rather than behaviour. **B14–B18** are from the sessions each later phase owed, and B18 is the one
+that came from somebody else's project rather than from a checklist — which is why it found the
+combination no fixture had.
 
 Three of these were checked with the two tools this repository already has for the purpose rather
 than by reasoning about them — `tests/verse_probe` for B2 and B3, a scratch Godot project driven
@@ -533,6 +535,49 @@ still passes 30/30 and the export layer 308/0/9.
 
 ---
 
+## B18. An `@export` of a script class **in a module** names a class ClassDB has never heard of · **fixed**
+
+Reported from an ordinary editor session, on the first try, against a project of the reporter's own:
+picking a value for a Verse-typed resource slot in the inspector printed
+
+```
+ERROR: Cannot get class 'Gameplay/myResouce'.
+```
+
+**Two spellings of one name, produced by two code paths, and nothing had made them agree.** A
+Verse class under a `.vmodule` is `gameplay/my_resource` to the bridge, because every
+`ClassNameUtf8` in the ABI is module-qualified — that is the rule, and the export descriptor's
+`HintString` follows it. But **ClassDB is one flat namespace and a module is deliberately not part
+of it**: `@global_class` registers the *file stem*, PascalCased, and nothing else. So the registry
+held `MyResource` while the inspector slot was filtered by `verse_pascal_case("gameplay/my_resource")`
+— `Gameplay/my_resource`, a name nobody had registered — and the first thing that asked ClassDB to
+resolve it said so.
+
+The fix is one line in `filter_class_from_hint`: take the **leaf** of the qualified name before
+PascalCasing it. The host keeps sending what it is required to send; the consumer, which is the side
+that owns the Verse→Godot naming transform already, does the other half of it too.
+
+**Nothing had caught it because nothing had tried the combination.** Module fixtures existed and
+resource exports existed; no fixture was both. `tests/integration/widgets/left/palette.verse` is now
+a `@global_class` Resource inside a module and `widget.verse` beside it exports a reference to one,
+which fails the old code with `Left/palette` in exactly the reporter's shape. The assertion worth
+having is not the literal string but the invariant that broke: **the name the slot filters by and
+the name the class registers under are the same string**, checked against `Script.get_global_name()`
+rather than against a constant.
+
+**And a second text-derived answer, found beside it.** `Script.get_global_name()` is read out of
+the source text too, so it answers **nothing** in an exported game — the same shape as
+`get_instance_base_type` an hour earlier, and harmless for the same reason the base type was not:
+the registry an export uses was baked into `project.godot` when the export was made, and nothing at
+runtime asks the script. Recorded rather than fixed, and the one integration case that compares
+against it is skipped in an export with that reason printed.
+
+It is also the case `phase-4b-design.md` §5 put out of scope — "a resource that holds another
+resource as an exported member … worth a case but not worth blocking the stage". It was worth
+blocking the stage.
+
+---
+
 ## What shipped
 
 Every entry is closed. In the order they were done, which is the order the entry above them argued
@@ -592,7 +637,8 @@ rather than being claimed.
 `class(resource)` with three `@export` members — and
 `tests/integration/resources/shipped_settings.tres` is one saved from it.
 
-**To check it**, in the editor with `tests/integration` open:
+**To check it**, in a *copy* of `tests/integration` — opening it in the editor rewrites its
+committed, editor-owned `project.godot`, and the session is for clicking around in:
 
 1. **FileSystem dock → Create New → Resource.** The dialog lists the global class registry; typing
    `SettingsResource` must find it and must file it under `Resource`. This is what
