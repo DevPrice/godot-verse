@@ -69,13 +69,17 @@ Three documents are not phase records and are the ones to read before adding a f
   removed.
 - **`docs/by-hand-findings.md`** — what the by-hand editor sessions found, because everything from
   `EngineDebugger` and the editor UI inward has no automated test and never will. B1–B9, B15–B18,
-  B20, B22 and B23 are defects, all fixed; B12 is a Verse fact; B13 a latency finding; B14 the
+  B20, B22, B23 and B24 are defects, all fixed; B12 is a Verse fact; B13 a latency finding; B14 the
   sandboxed export run. **B22 is the one to read before adding anything to the native root**: a hook
   with no row in `LIFECYCLE_METHODS` is never offered as an override and never hovers, and four of
   the five sat that way for a phase because only `_Notification` had a row. **B23 is the one to read
   before adding a type to the mirror**: the editor learns what a type *is* from three generated
   tables, and a public type with a row in none of them is drawn as plain text, offered by no
-  completion and hovered as a local constant — which `variant` was for a phase. **B21 is the one
+  completion and hovered as a local constant — which `variant` was for a phase. **B24 is the one to
+  read before adding anything to the generated mirror that a script cannot write**: a fifth of every
+  completion popup was the mirror's own class var accessors, 7344 names no author can spell, because
+  `DescribeCompletion` describes any function that fits the filter and the fact that separates them
+  was already in hand for a narrower purpose. **B21 is the one
   open defect**: asking Godot for the `IP` singleton — which the
   generated accessor does whether or not it then succeeds — segfaults the process *after* everything
   has shut down, so it reads as a whole suite failing with nothing in the log. **B20 is the one to

@@ -7962,21 +7962,25 @@ AUTORTFM_DISABLE FUtf8String SpellSignature(const uLang::CFunction& Function, in
     return FULangConversionUtils::ULangStrToFUtf8String(Builder.MoveToString());
 }
 
+/// Whether this function is the `<getter>` or `<setter>` a class var names.
+///
+/// The flag is set by the analyzer where it resolves a class var's `<getter>`/`<setter>` against
+/// the functions they name, and a digest re-emits the var without the attributes -- so for the
+/// mirror, which is read from its digest after the first build, the answer comes from the side
+/// table that recorded it while those attributes were still there.
+AUTORTFM_DISABLE bool IsClassVarAccessor(const uLang::CFunction& Function, const FMirrorDefinition* Recorded)
+{
+    return Function._bIsAccessorOfSomeClassVar || (Recorded && Recorded->bIsClassVarAccessor);
+}
+
 /// Whether a subclass could redeclare a function with <override>, which is the three things the
 /// analyzer refuses one for: it has to be a class member -- a module-level function has nothing to
 /// override it from -- it must not be <final>, and it must not be a class var's <getter>/<setter>,
 /// which DetectIncorrectOverrideAttribute rejects by name. The generated Godot mirror is built out
 /// of those accessors, so leaving the last one out offers a few hundred overrides that do not
 /// compile.
-///
-/// The flag is set by the analyzer where it resolves a class var's `<getter>`/`<setter>` against
-/// the functions they name, and a digest re-emits the var without the attributes -- so for the
-/// mirror, which is read from its digest after the first build, the answer comes from the side
-/// table that recorded it while those attributes were still there.
-AUTORTFM_DISABLE bool IsOverridable(const uLang::CFunction& Function, const FMirrorDefinition* Recorded)
+AUTORTFM_DISABLE bool IsOverridable(const uLang::CFunction& Function, bool bIsClassVarAccessor)
 {
-    const bool bIsClassVarAccessor =
-        Function._bIsAccessorOfSomeClassVar || (Recorded && Recorded->bIsClassVarAccessor);
     if (Function._EnclosingScope.GetKind() != uLang::CScope::EKind::Class || bIsClassVarAccessor)
     {
         return false;
@@ -8148,10 +8152,22 @@ AUTORTFM_DISABLE bool DescribeCompletion(const uLang::CDefinition& Definition, E
         {
             return false;
         }
+
+        // A class var's `<getter>`/`<setter>` is the same kind of unspellable name as the
+        // constructor above, and there are four thousand of them: gen_verse_api.py turns each of
+        // Godot's 3312 properties into a var plus a `PositionGetter`/`PositionSetter` pair, and
+        // both take an `accessor` parameter no script can construct. Only the compiler names one,
+        // at the point it rewrites a read or a write of the var. Offered, they crowd out the
+        // members an author is reaching for -- every property of every class in the chain, twice.
+        const bool bIsClassVarAccessor = IsClassVarAccessor(*Function, Recorded);
+        if (bIsClassVarAccessor)
+        {
+            return false;
+        }
         OutItem.Kind = VH_LOOKUP_FUNCTION;
         OutItem.ParamCount = Function->_Signature.NumParams();
         OutItem.Signature = SpellSignature(*Function);
-        OutItem.bIsOverridable = IsOverridable(*Function, Recorded);
+        OutItem.bIsOverridable = IsOverridable(*Function, bIsClassVarAccessor);
         if (const CFunctionType* Type = Function->_Signature.GetFunctionType())
         {
             OutItem.Type = FULangConversionUtils::ULangStrToFUtf8String(Type->AsCode());
@@ -8718,6 +8734,13 @@ AUTORTFM_DISABLE bool ClassMembersLive(FUtf8StringView ClassName, TArray<GodotVe
 
     // The class' own scope only. What it inherits is documented by the class that declares it,
     // and for a mirrored Godot class that is Godot's own documentation rather than anything here.
+    //
+    // No access scope, which is the one thing here that admits a name a cursor could not write:
+    // CollectScope skips IsAccessibleFrom when it is null. That is safe because every
+    // `<epic_internal>` name in all four of host/Verse's files is a class var's
+    // `<getter>`/`<setter>`, and DescribeCompletion refuses those outright. Adding a non-accessor
+    // one means giving this an access scope -- and then deciding whose, since the callers are a
+    // completion at a cursor, a script's own documentation and the method outline.
     TSet<FUtf8String> Seen;
     CollectScope(*Class, nullptr, ECompleteFilter::Any, 0, Seen, OutItems);
     OutItems.Sort([](const FCompleteItem& Left, const FCompleteItem& Right) { return Left.Name < Right.Name; });

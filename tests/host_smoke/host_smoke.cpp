@@ -1406,17 +1406,33 @@ int main(int argc, char** argv)
 					{
 						CompleteOk = Step("and neither is a function no class declares", Print->IsOverridable == 0) && CompleteOk;
 					}
-					// A class var's <getter>/<setter> is a class member the analyzer nonetheless
-					// refuses an override of by name, and the generated mirror is built out of
-					// them -- node2d alone contributes a dozen.
-					if (const vh_complete_item* Accessor = Offers(Items, Count, "GlobalPositionGetter"))
+					// A class var's <getter>/<setter> is not offered at all, which is a stronger thing
+					// than the IsOverridable == 0 this used to assert of one: that kept an accessor out
+					// of the override candidates and left it in the list an author reads. Nothing can
+					// write one -- the `accessor` parameter has no spelling, and only the compiler ever
+					// names them, where it rewrites a read or a write of the var the attributes are on
+					// -- and there are 7344 in the mirror, two per Godot property. A fifth of every
+					// popup was these (by-hand-findings.md B24).
+					//
+					// Both halves, because either alone can pass for the wrong reason: the name that
+					// proves the walk reached node2d's own accessors, and a sweep that no name of the
+					// generated shape survived anywhere in the answer.
+					int32_t AccessorsOffered = 0;
+					for (int32_t Index = 0; Index < Count; ++Index)
 					{
-						CompleteOk = Step("nor is a class var's accessor", Accessor->IsOverridable == 0) && CompleteOk;
+						const std::string Name = Text(Items[Index].NameUtf8, Items[Index].NameLen);
+						if (Name.size() > 6
+							&& (Name.compare(Name.size() - 6, 6, "Getter") == 0
+								|| Name.compare(Name.size() - 6, 6, "Setter") == 0))
+						{
+							++AccessorsOffered;
+						}
 					}
-					else
-					{
-						CompleteOk = Step("the mirror's accessors reach the scope at all", false);
-					}
+					CompleteOk = Step("a class var's accessor is not offered",
+								 Offers(Items, Count, "GlobalPositionGetter") == nullptr)
+							  && CompleteOk;
+					CompleteOk = Step("and neither is any other of the mirror's 7344", AccessorsOffered == 0)
+							  && CompleteOk;
 
 					// What the editor offers on the keystroke itself, against the answer it is
 					// replaced by once the analysis lands. Both come out of the same walk over the

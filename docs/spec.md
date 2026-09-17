@@ -1875,7 +1875,19 @@ external editor is secondary.
   supplies the `)` and never the `:`: `if (X)` short of its `:` is *"Expected block, got end of line
   following `if`"*, and an unclosed bracket is *"Block starting in `(` never ends"*. So
   `verse_repair_completion_buffer` closes what the buffer leaves open and gives a bare `if` its `:`,
-  appending only past the caret so no position anything was measured against moves. `if` alone:
+  appending only past the caret so no position anything was measured against moves.
+  **Nothing a class var's `<getter>`/`<setter>` names is offered.** The mirror carries 7344 of them,
+  two per Godot property, and none is spellable: the `accessor` parameter has no spelling and only
+  the compiler ever names one, where it rewrites a read or a write of the var the attributes are on.
+  Offered, they were **2816 of 13114 options — a fifth of every popup** over `dodge-the-creeps`
+  (`tools/probe_complete.py`). `DescribeCompletion` refuses one the way it already refused a
+  compiler-generated constructor, off the flag `IsOverridable` was reading for a narrower purpose,
+  which puts the refusal below both paths a completion arrives by — the snapshot answer, whose walk
+  passes no access scope at all, and the live one.
+  **The whole surface has an instrument now**, `tools/probe_complete.py` over
+  `VerseScriptLanguage::probe_complete` — `_complete_code` is a virtual, so no script can call it,
+  which is why a fifth of the popup could be unwritable names for a phase with nothing to say so.
+  It reports the answer rather than the popup; the trigger half stays by hand. `if` alone:
   `for` and `case` recover from the missing `:` on their own, measured, and a balanced buffer is
   never touched, so nothing that parses today can be broken by it.
 - **R-TOOL-4 (MUST)** Hover and ctrl-click: type, signature, doc comment; go to definition, for

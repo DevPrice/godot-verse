@@ -852,6 +852,46 @@ now, the way `run_tests.py` does before each of its Godot layers.
 
 ---
 
+## B24. A fifth of every completion popup was a name no author could write · **fixed**
+
+A `.` in a Verse script offered a few hundred options, and `tools/probe_complete.py` says what they
+were: over `dodge-the-creeps`, **2816 of 13114 options across 60 positions -- 21.5% -- were class
+var accessors**. `AngularDampGetter(…)`, `AngularDampSetter(…)`, `AutoTranslateModeGetter(…)`, two
+per Godot property, sorted alphabetically into the middle of the list an author was reading.
+
+**What they are.** `gen_verse_api.py` turns each of Godot's 3312 properties into a Verse `var` plus
+the accessor overloads the compiler requires for one -- `var Position<public><getter(PositionGetter)>
+<setter(PositionSetter)>` -- and the generator's own comment says the rest: *"Only the compiler ever
+names them, at the point it rewrites a read or a write of the public var above."* They are
+`<epic_internal>`, they take an `accessor` parameter nothing in a script can construct, and there
+are **7344 of them, about 4380 distinct names**. Not one is spellable.
+
+**Why they were offered.** `DescribeCompletion` describes any `CFunction` that fits the filter, and
+one line above the accessor test it already refuses the compiler-generated *constructor* for exactly
+this reason. The fact that separates them was in hand and used for something else:
+`CFunction::_bIsAccessorOfSomeClassVar`, which `IsOverridable` reads so an accessor is not offered
+as an `<override>` candidate. Hoisted into `IsClassVarAccessor` and tested first, it refuses the
+item outright -- which is also cheaper than describing one, since `SpellSignature` spells a whole
+function type per item and that is where the walk spends its time.
+
+**The two paths, and why one fix covers both.** `vh_class_members` reaches completion as the
+snapshot answer `_complete_code` draws first, and `ClassMembersLive` passes **no access scope**, so
+`CollectScope`'s `IsAccessibleFrom` guard never runs there and `<epic_internal>` is no barrier at
+all. Refusing in `DescribeCompletion` is below both paths. The `nullptr` stays, with the reason
+recorded beside it: **every `<epic_internal>` name in all four of `host/Verse`'s files is an
+accessor**, counted, so with these gone it admits nothing. Adding a non-accessor one means giving
+that call an access scope, and then deciding whose -- its callers are a completion at a cursor, a
+script's own documentation and the method outline, and they would not all answer the same.
+
+**What the instrument found on the way.** `probe_complete`'s first run reported four archetype
+positions answering nothing, in `hud.verse`'s `option{Typed}`. That was the *probe* being wrong, not
+the bridge: `option` is a reserved word, `archetype_class_end` declines a `{` behind one, and
+`array{}`, `map{}` and `spawn{}` are the same shape. The picker reads the reserved words out of
+`src/verse_keywords.h` now, which is generated from the compiler's own list, so the two cannot
+disagree. The one genuine archetype position in the yardstick answers with its two fields.
+
+---
+
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks
