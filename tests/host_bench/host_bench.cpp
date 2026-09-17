@@ -738,6 +738,8 @@ int main(int argc, char** argv)
 	// retains, which is the previous one's VPackage, its UPackage and their pinned exports,
 	// none of which anything reclaims.
 	std::vector<double> GenerationSamples;
+	// The same build with one analysis in front of it -- see the loop below.
+	std::vector<double> ReusedGenerationSamples;
 	std::vector<double> RetainedKb;
 	{
 		const fs::path GameDir = VerseBase / "dodge-the-creeps" / "scripts";
@@ -787,6 +789,24 @@ int main(int argc, char** argv)
 				GenerationSamples.push_back(GenMs);
 				RetainedKb.push_back(
 					(static_cast<double>(After.PrivateUsage) - static_cast<double>(Before.PrivateUsage)) / 1024.0);
+
+				// The same build with one analysis of an untouched file in front of it, which is
+				// the editor's ordinary rhythm: the author stops typing long enough for an analysis
+				// to land, then presses Play. The host is then already holding the program that
+				// build needs and generates code straight from it.
+				const std::string Untouched = ReadFileUtf8(std::filesystem::path(GamePaths.front()));
+				if (!Untouched.empty() && CheckProjectFn(GamePaths.front().c_str(), Untouched.c_str()) == VH_OK)
+				{
+					int32_t Reused = 0;
+					const Clock::time_point ReuseStart = Clock::now();
+					const int32_t ReuseResult =
+						CompileProjectFn(GameFiles.data(), static_cast<int32_t>(GameFiles.size()), &Reused);
+					const double ReuseMs = MillisSince(ReuseStart);
+					if (ReuseResult == VH_OK)
+					{
+						ReusedGenerationSamples.push_back(ReuseMs);
+					}
+				}
 			}
 		}
 	}
@@ -819,6 +839,7 @@ int main(int argc, char** argv)
 	ReportSeries("override candidates", OverrideCandidateSamples);
 	ReportSeries("vh_class_export_list", ExportListSamples);
 	ReportSeries("generation (5-file game)", GenerationSamples);
+	ReportSeries("generation after an analysis", ReusedGenerationSamples);
 	if (!RetainedKb.empty())
 	{
 		std::vector<double> Sorted = RetainedKb;

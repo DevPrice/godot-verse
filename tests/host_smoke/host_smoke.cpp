@@ -2003,6 +2003,35 @@ int main(int argc, char** argv)
 
 		ReleaseInstanceFn(Fresh);
 		ReleaseInstanceFn(GenerationOne);
+
+		// --- and a third generation, built from the analysis before it ------------------------
+		//
+		// The editor's ordinary rhythm: the author types, an analysis lands, and then they press
+		// Play with nothing edited since. The host already holds the program that build needs --
+		// analysed under the name this generation will publish -- so it goes straight to code
+		// generation instead of parsing and analysing the whole project again.
+		//
+		// What is asserted is that a generation built the short way is the same generation, and
+		// **every check below this block is part of that assertion**: they all run against what
+		// this produced. The fixture's text is untouched, so it still reports 2.
+		const std::string OnDisk = ReadFileUtf8(ReloadPath);
+		CallsOk = Step("an analysis of what is on disk, before the build",
+					   !OnDisk.empty() && CheckProjectFn(ReloadPathUtf8.c_str(), OnDisk.c_str()) == VH_OK)
+			   && CallsOk;
+
+		int32_t ThirdGeneration = 0;
+		DiagnosticErrorCount = 0;
+		CallsOk = Step("a build with nothing edited since the analysis publishes",
+					   CompileProjectFn(SecondFiles, 7, &ThirdGeneration) == VH_OK) && CallsOk;
+		CallsOk = Step("and reports generation 3", ThirdGeneration == 3) && CallsOk;
+		CallsOk = Step("saying nothing of its own", DiagnosticErrorCount == 0) && CallsOk;
+
+		vh_instance* Reused = nullptr;
+		CallsOk = Step("its class instantiates",
+					   InstantiateFn("reload_probe", 7, &Reused) == VH_OK && Reused != nullptr) && CallsOk;
+		CallsOk = Step("and runs the code the long way had already built", ReadGeneration(Reused) == 2)
+			   && CallsOk;
+		ReleaseInstanceFn(Reused);
 	}
 
 	// The check that the verse path the host builds for a script's class --

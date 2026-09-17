@@ -21,6 +21,7 @@
 #include "Serialization/JsonWriter.h"
 #include "HostSidecar.h"
 #include "Dom/JsonValue.h"
+#include "HAL/IConsoleManager.h"
 #include "Misc/FileHelper.h"
 #include "Modules/ModuleManager.h"
 #include "SolBuildDiagnostic.h"
@@ -332,6 +333,20 @@ FUtf8String GScriptSourcePackageName;
 /// point of the phase -- but the guard on everything that reads a semantic program, which does
 /// not exist until the first build makes one.
 bool GProjectBuilt = false;
+
+/// The generation GScriptSourcePackageName is named for, and the files it was prepared from.
+///
+/// A build prepares the *next* generation's package as its last act rather than the current one's
+/// as its first, so that every analysis between two builds already runs under the name the next
+/// publish will use. That is the whole of what makes a build able to reuse an analysis: a package
+/// name no publish has used is what a generation is, and an analysis cannot be reused for a
+/// generation it was not analysed under.
+int32 GPreparedGeneration = 0;
+TArray<GodotVerse::FScriptSource> GPreparedSources;
+
+/// Whether the last analysis finished clean. A build reuses no program that a diagnostic was
+/// reported against: the slow path is what reports it at the line the author is looking at.
+bool GLastAnalysisClean = false;
 
 /// Lets `/Godot.org/` declare attributes of its own.
 ///
@@ -1089,6 +1104,200 @@ AUTORTFM_DISABLE void IncrementalizeProjectSource()
 #endif
 }
 
+/// Retires whatever source package the project holds and puts Generation's in its place, with a
+/// snippet per file. Leaves GScriptSourcePackageName, GPreparedGeneration and GPreparedSources
+/// describing it.
+///
+/// Called as a build's *last* act rather than its first, so the analyses that follow already run
+/// under the name the next publish will use -- see GPreparedGeneration.
+AUTORTFM_DISABLE void PrepareGenerationPackage(uLang::CProgramBuildManager& BuildManager,
+                                               int32 Generation,
+                                               const TArray<GodotVerse::FScriptSource>& Sources,
+                                               const TArray<FUtf8String>& Texts)
+{
+    RemoveScriptPackage(BuildManager, GScriptSourcePackageName);
+    GScriptSnippets.Empty(Sources.Num());
+
+    const FUtf8String PackageName =
+        FUtf8String(FString::Printf(TEXT("%hs_%d"), ScriptPackageBaseName, Generation));
+
+    AddScriptPackage(BuildManager, PackageName);
+    const uLang::CSourceProject::SPackage& Package = BuildManager.FindOrAddSourcePackage(
+        FULangConversionUtils::FUtf8StringToULangStr(PackageName), ScriptVersePath);
+
+    for (int32 Index = 0; Index < Sources.Num(); ++Index)
+    {
+        uLang::TSRef<FHostSourceSnippet> Snippet = uLang::TSRef<FHostSourceSnippet>::New(
+            FULangConversionUtils::FUtf8StringToULangStr(Sources[Index].Path),
+            FULangConversionUtils::FUtf8StringToULangStr(Texts[Index]));
+        GScriptSnippets.Add(Snippet);
+        FindOrAddModule(*Package._Package->_RootModule, Sources[Index].ModulePath).AddSnippet(Snippet);
+    }
+
+    GScriptSourcePackageName = PackageName;
+    GPreparedGeneration = Generation;
+    GPreparedSources = Sources;
+}
+
+/// Settles which packages the *next* parse reads from a digest and which it reads from source.
+///
+/// Run after a build rather than before it. The first IncrementalizeProjectSource could not retire
+/// a native package: it leaves a VNI package Source while `IsCompiled(Name) == None`, which is true
+/// right up until the build that registers its bindings. So the roles a session ran under used to
+/// change under it at the *second* build, where /Verse.org and /Godot.org/Godot both went External
+/// at once and an analysis went from ~1300 ms to ~750 ms. This is where that happens now: at every
+/// build, including the first.
+///
+/// Unconditional, because a failed build is exactly the case where being selective would be wrong:
+/// what deployed is what IsCompiled reports, and a package the build never got to stays Source on
+/// its own.
+///
+/// Then: what it must not be allowed to retire. **Only the generation's own package** --
+/// phase-2-design.md 181-190 measured 104 failing cases with it retired. The mirror is held Source
+/// only until the definition table has taken what a digest does not carry, which is the first
+/// build's own semantic analysis, so from the first build on it goes External and an analysis
+/// costs ~520 ms rather than ~1450 ms.
+///
+/// **The attribute package used to be kept Source here and no longer is**, and the reason it was
+/// no longer holds: a build generates a digest for every Source package it compiles, this one
+/// included -- 2175 bytes of it, which VH_TRACE_ANALYSIS prints beside the package -- so an
+/// External attribute package contributes its definitions the way any other digest does and
+/// `@export` keeps resolving. Leaving it Source is what made a build unable to reuse an analysis:
+/// the assembler publishes every Source package the program carries, and publishing one twice is
+/// `!ObjectItem->HasAnyFlags(EInternalObjectFlags::LoaderImport)` in AsyncLoading2.cpp, which is a
+/// crash and not a diagnostic.
+AUTORTFM_DISABLE void RetirePackagesAfterBuild(uLang::CProgramBuildManager& BuildManager)
+{
+    IncrementalizeProjectSource();
+
+    for (const uLang::CSourceProject::SPackage& Kept : BuildManager.GetSourceProject()->_Packages)
+    {
+        const uLang::CUTF8String& VersePathOf = Kept._Package->GetSettings()._VersePath;
+        const FUtf8StringView Name(Kept._Package->GetName().AsCString());
+        const bool bIsAttributePackage = Name.Equals(FUtf8StringView(AttributePackageName));
+        const bool bIsMirror = !bIsAttributePackage
+            && FUtf8StringView(VersePathOf.AsCString()).Equals(FUtf8StringView(GodotVersePath));
+        if (Name.Equals(FUtf8StringView(GScriptSourcePackageName))
+            || (bIsMirror && !MirrorDefinitionsRecorded()))
+        {
+            Kept._Package->SetRole(uLang::EPackageRole::Source);
+        }
+    }
+}
+
+/// Generates and publishes from the program the IDE is already holding: the last three phases of a
+/// build, with the two that produced the program skipped.
+///
+/// `FSolarisIde::BuildAll` is not usable for this -- it goes through `CProgramBuildManager::Build`,
+/// which calls `ResetSemanticProgram()` first and would throw away the very thing being reused. So
+/// the phases are driven directly, and what BuildAll does around them is reproduced here:
+///
+///   - **`SetBlockExecution`**, which is the safety-critical half. VerseVM refuses to run while a
+///     build is in flight and ticking anyway trips `ensure(!bBlockAllExecution)` and takes the
+///     process down.
+///   - the two FN version gates, read from the CVars `FSolarisIde::BuildAll` reads them from, so a
+///     project compiled this way is compiled under the same language-version rules as one compiled
+///     the long way.
+///
+/// What is *not* reproduced is BuildAll's tail -- the verse-path registry, the cached per-package
+/// diagnostics and statistics, the plugin dependency map. Each is fed by an injection that runs
+/// during **semantic analysis**, which this path does not run: the analysis that produced this
+/// program already fed them, and its own BuildAll already emptied them. There is nothing left for
+/// a tail to do.
+///
+/// Localization extraction is skipped with them, for the same reason and one more: nothing in this
+/// bridge reads `TakeLocalizationInfo`.
+AUTORTFM_DISABLE bool GenerateFromHeldProgram(uLang::CProgramBuildManager& BuildManager,
+                                              TArray<FCapturedDiagnostic>& OutDiagnostics)
+{
+#if !WITH_VERSE_COMPILER
+    return false;
+#else
+    const auto CVarInt = [](const TCHAR* Name, int32 Fallback) {
+        IConsoleVariable* const Variable = IConsoleManager::Get().FindConsoleVariable(Name);
+        return Variable ? Variable->GetInt() : Fallback;
+    };
+
+    uLang::SBuildContext Context(CreateDiagnostics(MakeIdeDiagnostics(
+        [&OutDiagnostics](const FSolDiagnostic& Diagnostic) { OutDiagnostics.Add(CaptureSolDiagnostic(Diagnostic)); })));
+    Context._Params = uLang::SBuildParams{
+        ._UploadedAtFNVersion =
+            static_cast<uint32_t>(CVarInt(TEXT("Verse.UploadedAtFNVersion"), VerseFN::UploadedAtFNVersion::Latest)),
+        ._CurrentFNVersion =
+            static_cast<uint32_t>(CVarInt(TEXT("Verse.CurrentFNVersion"), VerseFN::UploadedAtFNVersion::Latest)),
+        ._LinkType = uLang::SBuildParams::ELinkParam::RequireComplete,
+        ._bGenerateDigests = false,
+        ._bGenerateCode = true};
+
+    const bool bVerseWasBlocked = verse::FExecutionContext::SetBlockExecution(true);
+    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager.GetProgramContext()._Program;
+
+    uLang::ECompilerResult Result = BuildManager.IrGenerateProgram(Program, Context);
+    if (!uLang::IsAbortedCompile(Result))
+    {
+        Result |= BuildManager.AssembleProgram(Program, Context);
+    }
+    const bool bGenerated = !uLang::IsAbortedCompile(Result) && !Context._Diagnostics->HasErrors();
+    const uLang::ELinkerResult Linked =
+        bGenerated ? BuildManager.Link(Context) : uLang::ELinkerResult::Link_Skipped;
+
+    verse::FExecutionContext::SetBlockExecution(bVerseWasBlocked);
+
+    return bGenerated && Linked != uLang::ELinkerResult::Link_Failure && !Context._Diagnostics->HasErrors();
+#endif
+}
+
+/// Whether the program the IDE is holding is already this build's answer.
+///
+/// Every clause is a way the held program could describe something other than the files on disk,
+/// and there is no room for a "close enough": what this decides is whether a *publish* skips the
+/// analysis that would have checked it.
+///
+///   - it has to have come from an analysis rather than from a build, because code generation
+///     leaves an IR package on every module and nothing can be generated from it twice;
+///   - that analysis has to have finished clean, because the slow path is what reports a
+///     diagnostic at the line the author is looking at;
+///   - the package has to be named for the generation this build will publish, which is what
+///     PrepareGenerationPackage arranges;
+///   - the project's files have to be the same files, in the same order, in the same modules --
+///     `vh_compile_project` re-enumerates res:// every time and a file added, renamed or deleted
+///     lands here;
+///   - and every one of them has to say on disk exactly what the analysis read. An analysis reads
+///     the editor's *buffer*; a build publishes what is in the file. Godot saves before running
+///     only while `run/auto_save/save_before_running` is on, so the two really do come apart --
+///     and this is what keeps a build meaning the same thing either way.
+AUTORTFM_DISABLE bool HeldProgramIsThisBuild(const TArray<GodotVerse::FScriptSource>& Sources,
+                                             const TArray<FUtf8String>& Texts)
+{
+    if (!GProjectBuilt || !GProgramIsAnalysisOnly || !GLastAnalysisClean)
+    {
+        return false;
+    }
+    if (GPreparedGeneration != GScriptGeneration + 1)
+    {
+        return false;
+    }
+    if (GPreparedSources.Num() != Sources.Num() || GScriptSnippets.Num() != Sources.Num())
+    {
+        return false;
+    }
+
+    for (int32 Index = 0; Index < Sources.Num(); ++Index)
+    {
+        if (GPreparedSources[Index].Path != Sources[Index].Path
+            || GPreparedSources[Index].ModulePath != Sources[Index].ModulePath)
+        {
+            return false;
+        }
+        const uLang::TOptional<uLang::CUTF8String> Held = GScriptSnippets[Index]->GetText();
+        if (!Held.IsSet() || FULangConversionUtils::ULangStrToFUtf8String(*Held) != Texts[Index])
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 AUTORTFM_DISABLE bool GodotVerse::EnterContentScope()
@@ -1130,6 +1339,9 @@ AUTORTFM_DISABLE void GodotVerse::ResetScriptState()
     GScriptGeneration = 0;
     GScriptPackageName.Empty();
     GScriptSourcePackageName.Empty();
+    GPreparedGeneration = 0;
+    GPreparedSources.Empty();
+    GLastAnalysisClean = false;
     GProjectBuilt = false;
 }
 
@@ -1162,33 +1374,14 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FScriptSource>& So
         Texts.Add(FUtf8String(SourceText));
     }
 
-    RemoveScriptPackage(*BuildManager, GScriptSourcePackageName);
-    GScriptSnippets.Empty(Sources.Num());
-
     const int32 Generation = GScriptGeneration + 1;
-    const FUtf8String PackageName =
-        FUtf8String(FString::Printf(TEXT("%hs_%d"), ScriptPackageBaseName, Generation));
 
-    AddScriptPackage(*BuildManager, PackageName);
-    const uLang::CSourceProject::SPackage& Package =
-        BuildManager->FindOrAddSourcePackage(
-            FULangConversionUtils::FUtf8StringToULangStr(PackageName), ScriptVersePath);
+    // The program the last analysis left is this build's, or it is not; either way no analysis may
+    // re-arm the reuse until one has run again, so the flag is cleared before anything else can
+    // read it.
+    const bool bReuseHeldProgram = HeldProgramIsThisBuild(Sources, Texts);
+    GLastAnalysisClean = false;
 
-    for (int32 Index = 0; Index < Sources.Num(); ++Index)
-    {
-        uLang::TSRef<FHostSourceSnippet> Snippet = uLang::TSRef<FHostSourceSnippet>::New(
-            FULangConversionUtils::FUtf8StringToULangStr(Sources[Index].Path),
-            FULangConversionUtils::FUtf8StringToULangStr(Texts[Index]));
-        GScriptSnippets.Add(Snippet);
-        FindOrAddModule(*Package._Package->_RootModule, Sources[Index].ModulePath).AddSnippet(Snippet);
-    }
-
-    // Without this the build republishes the native VNI packages -- which are already loaded --
-    // and aborts inside the async loader. It marks everything already compiled External so that
-    // only the new generation's package is built.
-    IncrementalizeProjectSource();
-
-    FSolIdeBuildSettings Settings{.LinkSettings = uLang::SBuildParams::ELinkParam::RequireComplete};
     FAnalysisTrace Trace;
     const double BuildStarted = FPlatformTime::Seconds();
     // Held rather than forwarded as they arrive, for the reason CheckProject holds its own: the
@@ -1198,10 +1391,41 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FScriptSource>& So
     // build that failed -- where the AST is still whole, because it never reached codegen.
     TArray<FCapturedDiagnostic> BuildDiagnostics;
     GSnapshotTakenDuringBuild = false;
-    const bool bBuilt = GIde->BuildAll(
-        Settings,
-        MakeIdeDiagnostics([&BuildDiagnostics](const FSolDiagnostic& Diagnostic) { BuildDiagnostics.Add(CaptureSolDiagnostic(Diagnostic)); },
-                           [&Trace](const uLang::SBuildEventInfo& Event) { Trace.OnEvent(Event); }));
+
+    bool bBuilt = false;
+    if (bReuseHeldProgram)
+    {
+        // The snapshot, taken here rather than by the injection: this path runs no semantic
+        // analysis, so the hook the injection lives on never fires. Before IR generation, which is
+        // what puts the AST out of reach.
+        TakeAnalysisSnapshot();
+        GSnapshotTakenDuringBuild = true;
+
+        bBuilt = GenerateFromHeldProgram(*BuildManager, BuildDiagnostics);
+
+        // No IncrementalizeProjectSource around this one, and no role loop below it. Both exist to
+        // decide what the *parse* reads, and nothing was parsed: the roles the last slow build left
+        // are still the ones the last analysis ran under. Calling it here would be worse than
+        // pointless -- the script package is compiled now, so it would be retired to a digest this
+        // path never generated, which is a checkf inside Solaris rather than a diagnostic.
+    }
+    else
+    {
+        PrepareGenerationPackage(*BuildManager, Generation, Sources, Texts);
+
+        // Without this the build republishes the native VNI packages -- which are already loaded --
+        // and aborts inside the async loader. It marks everything already compiled External so that
+        // only the new generation's package is built.
+        IncrementalizeProjectSource();
+
+        FSolIdeBuildSettings Settings{.LinkSettings = uLang::SBuildParams::ELinkParam::RequireComplete};
+        bBuilt = GIde->BuildAll(
+            Settings,
+            MakeIdeDiagnostics([&BuildDiagnostics](const FSolDiagnostic& Diagnostic) { BuildDiagnostics.Add(CaptureSolDiagnostic(Diagnostic)); },
+                               [&Trace](const uLang::SBuildEventInfo& Event) { Trace.OnEvent(Event); }));
+
+        RetirePackagesAfterBuild(*BuildManager);
+    }
 
     auto ForwardBuildDiagnostics = [&BuildDiagnostics] {
         ResolveSubjectTypes(BuildDiagnostics);
@@ -1211,46 +1435,11 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FScriptSource>& So
         }
     };
 
-    // And again, now that the build has deployed what it compiled. The first call could not retire
-    // a native package: IncrementalizeProjectSource leaves a VNI package Source while
-    // `IsCompiled(Name) == None`, which is true right up until the build that registers its
-    // bindings. So the roles a session ran under used to change under it at the *second* build,
-    // where /Verse.org and /Godot.org/Godot both went External at once and an analysis went from
-    // ~1300 ms to ~750 ms. This is where that happens now: at every build, including the first.
-    //
-    // Unconditional, because a failed build is exactly the case where being selective would be
-    // wrong: what deployed is what IsCompiled reports, and a package the build never got to stays
-    // Source on its own.
-    IncrementalizeProjectSource();
-
-    // And what the pass above must not be allowed to retire. The generation's own package is one:
-    // phase-2-design.md 181-190 measured 104 failing cases with it retired. The attribute package
-    // is another, and it is not a matter of degree -- nothing publishes a digest for a package this
-    // process compiled out of a string, so an External one contributes no definitions at all and
-    // `@export` stops resolving.
-    //
-    // The mirror is the interesting one, and it is held Source only until the definition table has
-    // taken what a digest does not carry. That is the first build's own semantic analysis now, so
-    // this loop no longer keeps it for a second pass: from the first build on, the pass above is
-    // left to do its work and an analysis costs ~555 ms rather than ~1450 ms.
-    for (const uLang::CSourceProject::SPackage& Kept : BuildManager->GetSourceProject()->_Packages)
-    {
-        const uLang::CUTF8String& VersePathOf = Kept._Package->GetSettings()._VersePath;
-        const bool bIsAttributePackage =
-            FUtf8StringView(Kept._Package->GetName().AsCString()).Equals(FUtf8StringView(AttributePackageName));
-        const bool bIsMirror = !bIsAttributePackage
-            && FUtf8StringView(VersePathOf.AsCString()).Equals(FUtf8StringView(GodotVersePath));
-        if (&Kept == &Package || bIsAttributePackage || (bIsMirror && !MirrorDefinitionsRecorded()))
-        {
-            Kept._Package->SetRole(uLang::EPackageRole::Source);
-        }
-    }
-
     if (AnalysisTraceEnabled())
     {
-        PrintAnalysisTrace(Trace, "generation", FPlatformTime::Seconds() - BuildStarted);
+        PrintAnalysisTrace(Trace, bReuseHeldProgram ? "generation (from the held program)" : "generation",
+                           FPlatformTime::Seconds() - BuildStarted);
     }
-    GScriptSourcePackageName = PackageName;
     GProjectBuilt = true;
     if (!bBuilt)
     {
@@ -1276,7 +1465,7 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FScriptSource>& So
     }
 
     GScriptGeneration = Generation;
-    GScriptPackageName = PackageName;
+    GScriptPackageName = GScriptSourcePackageName;
     OutGeneration = Generation;
 
     IVerseModule::Get(); // Runs VerseModule::StartupModule; VerseCmd does the same before calling in.
@@ -1316,6 +1505,15 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FScriptSource>& So
     // build's last word on the source project. Only reached by a build that succeeded, which is
     // also the only kind that leaves a package the compiler will accept a digest of.
     RecordAndRetireMirror();
+
+    // And the *next* generation's package, prepared now rather than at the start of the next build
+    // -- which is what lets that build be the cheap one. Every analysis from here runs under the
+    // name the next publish will use, so an analysis that lands with nothing edited after it is a
+    // program a publish can be generated from directly. HeldProgramIsThisBuild is the whole test.
+    //
+    // The texts are the ones just built, which is what the files say; an analysis replaces one of
+    // them with the editor's buffer as the author types, and that is exactly what the test catches.
+    PrepareGenerationPackage(*BuildManager, Generation + 1, Sources, Texts);
 
     return true;
 }
@@ -1369,6 +1567,10 @@ AUTORTFM_DISABLE bool RunCheck(const FUtf8String& Path, const FUtf8String& Sourc
                            FPlatformTime::Seconds() - AnalysisStarted);
     }
     GProgramIsAnalysisOnly = GProgramIsAnalysisOnly || bAnalysed;
+
+    // What lets the next build skip straight to code generation, if nothing is edited before it
+    // comes. Only a clean analysis arms it, and only a build disarms it.
+    GLastAnalysisClean = bAnalysed;
 
     // Whatever the result, the program now describes this text. Recorded so that the two
     // buffer-taking entry points -- completion and the argument hint -- can skip re-analysing

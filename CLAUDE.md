@@ -528,6 +528,27 @@ it is not in `run_tests.py`.
   mirror definition's location or accessor flag must go through that table**, `GetScopeName()`
   included: from a digest a top-level definition's Owner and its path are *both* the digest path,
   so an `Owner == DeclaredIn` test keeps passing while both are wrong.
+- **A build after an analysis runs neither of the phases a build spends its time in.** The program
+  a clean analysis leaves *is* the next generation, so `vh_compile_project` generates code straight
+  from it — 68 ms against 694. Three things make that legal and each is load-bearing. A build
+  prepares the **next** generation's package as its last act, so every analysis between two builds
+  already runs under the name the next publish will use (`PrepareGenerationPackage`). The reuse is
+  refused unless every file on disk says exactly what the analysis read, because an analysis reads
+  the editor's *buffer* and Godot only saves before running while `run/auto_save/save_before_running`
+  is on (`HeldProgramIsThisBuild`). And `FSolarisIde::BuildAll` cannot be used for it — it goes
+  through `CProgramBuildManager::Build`, which calls `ResetSemanticProgram()` first — so
+  `GenerateFromHeldProgram` drives IR generation, assembly and the link itself and reproduces the
+  two things BuildAll does around them that matter: `SetBlockExecution`, and the two FN version
+  gates read from the CVars BuildAll reads them from. Its tail is *not* reproduced, and does not
+  need to be: everything in it is fed by an injection that runs during semantic analysis, which
+  this path does not run.
+- **Only the generation's own package may be forced back to Source after a build.** The attribute
+  package used to be too, and that alone made the reuse above impossible: the assembler publishes
+  every Source package the program carries, and publishing one twice asserts inside
+  `AsyncLoading2.cpp` (`LoaderImport`) rather than reporting anything. It is safe to let it go
+  External because a build generates a digest for every Source package it compiles, this one
+  included — 2175 bytes, which `VH_TRACE_ANALYSIS` prints beside the package — so `@export` keeps
+  resolving out of the digest.
 - **The mirror's digest is parsed once per process.** It is 2.1 MB of the 2.2 MB the parse phase
   reads and the same bytes every time, so `FGodotCachingParser` keeps the tree the parser produced
   and hands each build a clone of it: 36 ms to clone, and the parse phase falls from 202 ms to 77. uLang's own mechanism for this
@@ -545,7 +566,8 @@ it is not in `run_tests.py`.
   reaching the two snippets that could hold a cursor — 97 ms per completion. Walk the package at
   `ScriptVersePath` and nothing else.
 - The numbers this bought are in `docs/spec.md` R-PERF-2 with the machine they were taken on: a
-  whole-project analysis is **555 ms** where it was 1273, a generation **636 ms** where it was 2.2,
+  whole-project analysis is **520 ms** where it was 1273, a generation **694 ms** where it was 2.2
+  (**68 ms** when an analysis has landed since the last edit),
   and reads that cost 1.7 s during an analysis cost 0.0 ms. The four commits `dcd517e`, `40d72f4`,
   `8bbba32` and `1469dc1` are the record — that work has no design document, by decision.
 - **Adding `@tool` to an existing script needs the scene reloaded.** Editing a live `@tool` script

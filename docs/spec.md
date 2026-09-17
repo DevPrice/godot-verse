@@ -1569,7 +1569,7 @@ where it arrived**: a task scope per script instance, `Await()` on any Godot sig
 
   **After a gap in the pump, the sleepers are drained rather than spread**, which is the one thing
   Phase 5 left open (`phase-5-design.md` §7.1, closed in its §14.4). In the editor `vh_tick` no-ops
-  for the length of a background analysis — ~555 ms — so a `@tool` script's tasks stall and come
+  for the length of a background analysis — ~520 ms — so a `@tool` script's tasks stall and come
   back together. That burst cannot grow with the gap: a sleeper's deadline is stamped when `Sleep`
   is called, not accrued while the pump is stopped, so one task asleep 0.1 s across that gap has one
   deadline due and not seven, and the whole burst is bounded by the number of sleeping tasks that
@@ -2194,7 +2194,7 @@ performance claim. What is measured is recorded in R-PERF-2 and carries no thres
   for, at minimum: per-frame overhead of an empty `Process` against an empty GDScript `_process`;
   property read and write cost; a method call with marshalled arguments; project compile time at
   10, 100 and 1000 scripts; and editor analysis latency per keystroke. **The last of the five is
-  measured**: R-PERF-2's table has it at 555 ms, with a call cost and an instantiation cost beside
+  measured**: R-PERF-2's table has it at 520 ms, with a call cost and an instantiation cost beside
   it. The empty-`Process` comparison against GDScript, the property costs and the compile-time
   curve at 10/100/1000 scripts are all still outstanding, and so is every target.
 - **R-PERF-2 (MUST)** Benchmarks exist and run under R-QUAL-3 for visibility, before any target is
@@ -2210,8 +2210,9 @@ performance claim. What is measured is recorded in R-PERF-2 and carries no thres
   | --- | --- |
   | `vh_init` | **77 ms** |
   | **first** `vh_compile_project` | **2.36 s** — the mirror is still source here, and this is where the location/accessor side table is recorded |
-  | a **generation** after it | **636 ms** (min 621, max 685) |
-  | `vh_check_project` — one whole-project analysis | **555 ms** (min 536, max 820 — the max is the one analysis that parses the mirror) |
+  | a **generation** after it | **694 ms** (min 621, max 715) |
+  | a generation **after an analysis**, with nothing edited since | **68 ms** (min 66, max 76) |
+  | `vh_check_project` — one whole-project analysis | **520 ms** (min 516, max 739 — the max is the one analysis that parses the mirror) |
   | the same through `_begin`/`_poll`, wall clock | **597 ms**, 291 polls |
   | a read taken **during** an analysis (`vh_class_members`, then `vh_class_export_list`) | **0.0 ms** each, wait counter 0 — it was 1735 ms |
   | completion, members: refused / behind the analysis / warm | **0.0 / 593 / 0.7 ms** |
@@ -2238,16 +2239,22 @@ performance claim. What is measured is recorded in R-PERF-2 and carries no thres
   77 ms**, an analysis from 787 ms to 555 and a generation from 895 ms to 636, all against a mirror
   15 classes larger than the one the earlier figures were taken against.
 
-  Together: a generation was **1.54 s** and is **636 ms**, and the first build of a session was
-  **3.70 s** and is **2.36 s**.
+  **And a build after an analysis costs neither of them.** The two phases a build spends its time
+  in are the two an analysis has already run, so a build whose project nothing has edited since the
+  last analysis generates code straight from the program that analysis left: **68 ms**. That is the
+  editor's ordinary rhythm — stop typing, the analysis lands, press Play — and it is what the
+  build-on-Play trigger actually costs most of the time.
 
-  **The per-keystroke editor lag is the analysis figure, 555 ms**, and it is that rather than the
+  Together: a generation was **1.54 s**; it is **694 ms** when an author presses Play mid-edit and
+  **68 ms** when they do not, and the first build of a session was **3.70 s** and is **2.36 s**.
+
+  **The per-keystroke editor lag is the analysis figure, 520 ms**, and it is that rather than the
   1.4–1.8 s it was because every analysis after the project's first successful build reads
   `/Godot.org/Godot` as an External package from its digest rather than from 4.4 MB of source. A
   project that has never compiled keeps the mirror as source and pays the larger figure, which is
   correct: the side table that makes a digest lossless is recorded at the first build.
 
-  **Nothing on the editor's thread waits for that 555 ms.** Every read keyed by a class name answers
+  **Nothing on the editor's thread waits for that 520 ms.** Every read keyed by a class name answers
   from the snapshot the last analysis left, at 0.0 ms, including one taken while an analysis is in
   flight; the three entry points that resolve a *position* refuse with `VH_ERR_STATE` in no time
   rather than blocking. `verse/analysis_wait_ms` is the custom monitor that says so — it is the
@@ -2258,13 +2265,11 @@ performance claim. What is measured is recorded in R-PERF-2 and carries no thres
   around a build, and the "10 MB mean" an earlier pass recorded reads −10 MB now while the median
   has never moved from ~1 MB.
 
-  The generation figure is the one the build-on-Play trigger rests on: two-thirds of a second an
-  author pays on Play, and would have been two-thirds of a second on every Ctrl+S. What is left of
-  it is **semantic analysis**, ~475 ms of re-deriving the mirror's 33,043 definitions from a digest
-  that has not changed — and `CProgramBuildManager::Build` calls `ResetSemanticProgram()` before
-  every compile *and* every analysis, so there is nothing to keep. Parse caching does not reach it
-  and no amount of scheduling removes it; what would is off-thread building, or a compiler that can
-  carry a semantic program across builds.
+  What is left in both figures is **semantic analysis**: ~445 ms of re-deriving the mirror's
+  33,043 definitions from a digest that has not changed, because `CProgramBuildManager::Build` calls
+  `ResetSemanticProgram()` before every compile *and* every analysis. Reusing an analysis dodges it
+  for a build; nothing dodges it for the analysis itself. What would is off-thread building, or a
+  compiler that can carry a semantic program across builds.
 
   **An exported game does not pay any of the figures above**, which is what Phase 7 and 7b are for.
   Measured on the same machine, `dodge-the-creeps` headless, from process start to the first Verse
