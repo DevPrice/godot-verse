@@ -179,13 +179,11 @@ marshal := class(node2d):
     # The other direction, and the one nothing tested: a packed array handed to a *mirrored Godot*
     # method rides through the reference table rather than being marshalled as a script return.
     # Marshalls is a singleton and both of these are pure, so a headless Godot can answer.
-    Base64Of<public>(Bytes:[]int)<decides>:string =
-        Marshalls := GetMarshalls[]
-        Marshalls.RawToBase64(Bytes)
+    Base64Of<public>(Bytes:[]int):string =
+        GetMarshalls().RawToBase64(Bytes)
 
-    BytesOfBase64<public>(Text:string)<decides>:[]int =
-        Marshalls := GetMarshalls[]
-        Marshalls.Base64ToRaw(Text)
+    BytesOfBase64<public>(Text:string):[]int =
+        GetMarshalls().Base64ToRaw(Text)
 
     # --- R-TYPE-2, R-SCN-1: objects in a container ---------------------------
     #

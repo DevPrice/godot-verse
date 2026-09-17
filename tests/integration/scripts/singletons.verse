@@ -9,17 +9,27 @@ using { /Godot.org/Godot }
 # as an ordinary absent singleton. The host now builds a singleton at the class its *name* says,
 # which is mirrored by construction.
 #
-# `GetIP[]` is deliberately not exercised here, and not because of this: asking Godot for the IP
+# `GetIP()` is deliberately not exercised here, and not because of this: asking Godot for the IP
 # singleton at all segfaults the process at exit, on master and before this fix (by-hand-findings
 # B21). NavigationServer2D takes the identical path and does not, so it is what covers it.
 singletons := class(node2d):
 
-    # "" when the accessor fails, which is what distinguishes the fix from an absent singleton:
-    # the driver compares it against what Godot itself says the object's class is.
+    # The driver compares this against what Godot itself says the object's class is. Since the
+    # accessor became total the same break would *raise* rather than answer "", which is louder
+    # and reaches the driver as a call that produced nothing at all.
     NavigationServer2dClass<public>()<transacts>:string =
-        if (Nav := GetNavigationServer2D[]) then Nav.GetClass() else ""
+        GetNavigationServer2D().GetClass()
 
     # The control: a singleton whose registered object is of the class Godot registers it under,
     # which is the other 39 and was never affected.
     EngineClass<public>()<transacts>:string =
-        if (Eng := GetEngine[]) then Eng.GetClass() else ""
+        GetEngine().GetClass()
+
+    # The two accessors that keep `<decides>`, and what that buys. EditorInterface is
+    # `"api_type": "editor"`, so a game has no such singleton -- exported, where it was never
+    # registered, and run from the editor, where Godot refuses it outside `is_editor_hint()`. The
+    # accessor reports the absence and this method goes on to answer, which is the whole difference
+    # from GDScript: `EditorInterface` is an identifier only a TOOLS_ENABLED build registers, so an
+    # export template refuses the entire script at load rather than the one line that named it.
+    EditorInterfaceClass<public>()<transacts>:string =
+        if (Editor := GetEditorInterfaceSingleton[]) then Editor.GetClass() else "absent"

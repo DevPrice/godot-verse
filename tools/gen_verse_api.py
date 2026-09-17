@@ -2677,18 +2677,27 @@ STATICS_TEMPLATE = """
 
 SINGLETONS_TEMPLATE = """
 # Godot hands a singleton out by name rather than through the scene, so a mirrored `input` or
-# `engine` would otherwise be a class no script can obtain an instance of. <decides> because
-# Engine::get_singleton answers nothing for a name this build did not register -- an editor-only
-# singleton asked for in an exported game, say.
+# `engine` would otherwise be a class no script can obtain an instance of.
 #
-# Which is two of the 41, and they are the two whose class says `"api_type": "editor"`:
-# EditorInterface and GDScriptLanguageProtocol. The other 39 are registered during Main::setup,
-# before any scene loads, so no run that can execute Verse at all can find one missing. The
-# `<decides>` on those is a tax and stays anyway: a non-failable accessor would have to produce the
-# class without a failure context, and the only spelling that could -- a native declared to answer
-# it -- is V3564, `class engine used as a parameter/result in a native function must also be
-# native`. tests/verse_probe/singleton_effect_probe.verse carries the measurement, including the
-# half that made it bearable: a failure context here does not force `<transacts>` on the caller.
+# Two of the 41 are `<decides>`, and they are the two whose class says `"api_type": "editor"`:
+# EditorInterface and GDScriptLanguageProtocol. Engine::get_singleton answers nothing for a name
+# this build did not register, and those are the only two names a game can legitimately ask for and
+# not get -- an absence a script is entitled to handle, so the accessor hands it over.
+#
+# The other 39 are registered during Main::setup, before any scene loads, so no run that can
+# execute Verse at all can find one missing. They are total, and raise through `Err` if the cast
+# ever does refuse. R-TYPE-4 is why: nullability is a property of the *type*, and a singleton that
+# cannot be absent is not a nullable type -- the `<decides>` those carried was stating something
+# false about the type to work around V3564, `class engine used as a parameter/result in a native
+# function must also be native`, which still forbids the obvious spelling of a total accessor.
+# A raise is what this bridge already does with a stale object handle (spec R-LANG-4), and it is
+# not free: it terminates the raising instance's content scope, so that node's suspended work dies
+# and the next call into it gets a fresh scope. That is the trade -- an `if` around an impossible
+# condition, against one instance's tasks if the impossible happens.
+#
+# tests/verse_probe/singleton_effect_probe.verse carries both measurements: that a failure context
+# over the two failable ones does not force `<transacts>` on the caller, and that `Err`'s `diverges`
+# effect is allowed in every body narrow enough to reach Godot at all.
 
 {accessors}
 """
@@ -2707,10 +2716,29 @@ def singleton_accessor_name(godot_name: str, member_names: set) -> str:
     return f"{base}Singleton" if base in member_names else base
 
 
+# The sentence a total accessor raises with. It names the bridge rather than the script because
+# a raise costs the raising instance its suspended work, and an author who reads it has no `if` of
+# their own to go and look at.
+SINGLETON_ERROR_MESSAGE = (
+    "Godot has no {name} singleton; it is registered before any scene loads, "
+    "so this is a bridge failure rather than a script error"
+)
+
+
 def emit_singleton_accessors(api: dict, emit_order: list, member_names: set) -> list:
-    """One module-level accessor per emitted class that Godot registers as a singleton."""
+    """One module-level accessor per emitted class that Godot registers as a singleton.
+
+    Total for the 39 Godot registers during `Main::setup`; `<decides>` for the two it does not.
+    """
     singletons = {s["name"] for s in api.get("singletons", [])}
-    return [
+    # The two singletons a game can really be without -- EditorInterface and
+    # GDScriptLanguageProtocol -- and `api_type` is the whole test. Measured against 4.7 by walking
+    # Engine.get_singleton_list() in a headless run; every other singleton is registered before any
+    # scene loads, so no run that executes Verse at all can find one missing.
+    editor_only = {c["name"] for c in api.get("classes", []) if c.get("api_type") == "editor"}
+
+    lines = []
+    for name in sorted(n for n in emit_order if n in singletons):
         # A cast over what the host built, not a construction -- the same road every object-returning
         # method takes, and R-SCN-6's rule that the class an object crosses as is the class Godot
         # says it is rather than the one the signature named. It used to construct, and Phase 4.5 had
@@ -2719,15 +2747,27 @@ def emit_singleton_accessors(api: dict, emit_order: list, member_names: set) -> 
         # and that made a `<reads>` accessor impossible. Casting has no such effect and was the more
         # correct spelling anyway.
         #
-        # The cast is what the `<decides>` is for, and it is the *only* failure left: the host builds
-        # a handle Godot answered at the singleton's own class, so the two whose concrete class is in
-        # no extension_api.json -- IP's IPWindows, NavigationServer2D's GodotNavigationServer2D --
-        # cross as `ip` and `navigation_server2d` rather than as a bare vh_object every cast refuses.
-        f'{singleton_accessor_name(name, member_names)}<public>()<decides><reads>'
-        f':{verse_class_name(name)}'
-        f' = {verse_class_name(name)}[VhSingletonObject("{name}")]'
-        for name in sorted(n for n in emit_order if n in singletons)
-    ]
+        # The cast is the *only* failure left: the host builds a handle Godot answered at the
+        # singleton's own class, so the two whose concrete class is in no extension_api.json --
+        # IP's IPWindows, NavigationServer2D's GodotNavigationServer2D -- cross as `ip` and
+        # `navigation_server2d` rather than as a bare vh_object every cast refuses.
+        accessor = singleton_accessor_name(name, member_names)
+        verse_name = verse_class_name(name)
+        cast = f'{verse_name}[VhSingletonObject("{name}")]'
+        if name in editor_only:
+            lines.append(f"{accessor}<public>()<decides><reads>:{verse_name} = {cast}")
+            continue
+        # Total, because R-TYPE-4 puts nullability in the *type* and a singleton registered before
+        # any scene loads is not a nullable one -- the `<decides>` was stating something false about
+        # the type to work around V3564, which forbids a native answering a mirrored class. `Err`
+        # carries the `diverges` effect, which `<reads>` permits and only the native-only
+        # `<converges>` refuses, so no script body is too narrow to call one of these.
+        message = SINGLETON_ERROR_MESSAGE.format(name=name)
+        lines.append(
+            f"{accessor}<public>()<reads>:{verse_name}"
+            f' = if (S := {cast}) then S else Err("{message}")'
+        )
+    return lines
 
 
 def render(api: dict, class_blocks: list, singleton_accessors: list, typed_arrays: dict,

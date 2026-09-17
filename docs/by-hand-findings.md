@@ -664,11 +664,12 @@ that produces the cache has to be a windowed one. Nothing else here can see any 
 ## B21. Asking Godot for the `IP` singleton segfaults the process at exit · **open**
 
 Found while writing the fixture for the singleton-class fix, and it is **not** that fix's doing: it
-reproduces on master, where `GetIP[]` merely *fails*. The accessor still calls `vh_singleton`, and
-that is enough.
+reproduced on master, where the accessor merely *failed*. What the accessor does with the answer has
+never mattered — it calls `vh_singleton` first, and that is enough. Since the 39 core accessors
+became total (spec R-TYPE-4) `GetIP()` raises instead of failing, and the segfault is the same one.
 
 **The repro is ten seconds.** A `.verse` in `tests/integration/scripts` whose only body is
-`if (Ip := GetIP[]) then "ok" else "no"`, a `SceneTree` script that calls it and quits, and:
+`GetIP().GetClass()`, a `SceneTree` script that calls it and quits, and:
 
     godot --headless --path tests/integration --script res://<driver>.gd
 

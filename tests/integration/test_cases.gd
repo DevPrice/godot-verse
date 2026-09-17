@@ -822,6 +822,13 @@ func begin() -> void:
 				Engine.get_singleton("IP").get_class() != "IP")
 		_check_eq("while a singleton registered under its own class is unchanged",
 				singles.call("EngineClass"), "Engine")
+		# What the two remaining `<decides>` accessors buy. EditorInterface is registered only by a
+		# build that starts an editor, so this run and an exported one are both without it, and the
+		# script handles that and answers. GDScript cannot get this far: `EditorInterface` is an
+		# identifier a TOOLS_ENABLED build registers, so an export template refuses the whole script
+		# at load rather than the one line that named it.
+		_check_eq("an editor singleton a game cannot have is a handled absence, not a dead script",
+				singles.call("EditorInterfaceClass"), "absent")
 
 	# --- R-NODE-7 / R-NODE-8: the full virtual set ----------------------------------------------
 	#

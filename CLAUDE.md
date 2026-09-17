@@ -153,9 +153,10 @@ instead of sources). `Verse/*.native.verse` is the `/Godot.org/Godot` package.
 
 **Those three are also the only types a native may name.** VNI refuses anything else at build time
 — *"V3564: `class engine used as a parameter/result in a native function must also be native"* — so
-a native can never answer a *mirrored* class, only `vh_object` for a cast to narrow. That is what
-keeps the 41 singleton accessors `<decides>` even though 39 of them cannot fail (spec R-TYPE-4), and
-it is the first thing to check against any plan that would have the host answer a typed object.
+a native can never answer a *mirrored* class, only `vh_object` for a cast to narrow. That is why a
+singleton accessor is a cast rather than a call, and why the 39 that cannot fail have to raise
+through `Err` to be total rather than simply dropping `<decides>` (spec R-TYPE-4). It is the first
+thing to check against any plan that would have the host answer a typed object.
 
 **A `variant` crosses the script-call wire as `VH_TYPE_VARIANT` (ABI 8.6), which is a *declaration*
 type and never a payload.** A `vh_value` still carries whatever the variant holds; the type only
@@ -627,8 +628,8 @@ it is not in `run_tests.py`.
   every container wrapper do; a **mirrored Godot class cannot**, because it descends from the native
   `vh_object`, so anything a narrowed body needs must be reached by a *cast* over what the host
   built rather than by construction — which is what the singleton accessors do
-  (`GetInput()` is `input[VhSingletonObject("Input")]`), and what R-SCN-6 says they should
-  always have done.
+  (`GetInput()` casts what `VhSingletonObject("Input")` answered), and what R-SCN-6 says they
+  should always have done.
 
 ### Signals, tasks and awaiting
 
@@ -707,13 +708,15 @@ it is not in `run_tests.py`.
   without waiting, let the collector raise its start signal, then collect — which is the coupled
   pass `TickGC` takes opportunistically. Release is still "within a cycle or two", never "the next
   one": the VM's registers still name what the last frame held.
-- **Every object-returning method in the mirror is `<decides>`, and for all but the singletons that
-  is correct.** `GetParent[]`, `GetTree[]`, `GetViewport[]` are failable because Godot really
-  answers null there — R-TYPE-4's rule that nullability belongs to the *type*, so an object return
-  is the only failable one. The 41 singleton accessors look like the same thing and are not: 39 of
-  them cannot fail in any run that executes Verse at all, and the word stays only because V3564
-  forbids the alternative. So "why does this need an `if`" has two answers, and only one of them is
-  a tax worth apologising for.
+- **Every object-returning method in the mirror is `<decides>`, and the singleton accessors are
+  not.** `GetParent[]`, `GetTree[]`, `GetViewport[]` are failable because Godot really answers null
+  there — R-TYPE-4's rule that nullability belongs to the *type*, so an object return is the only
+  failable one. Of the 41 singletons only `EditorInterface` and `GDScriptLanguageProtocol` can be
+  absent in a game, and only those two accessors are failable. The other 39 are spelled
+  `GetEngine()` and raise through `Err` if the cast ever refuses — a raise rather than a plain
+  total accessor because V3564 forbids the spelling that would need neither. **A raise is not a
+  failure**: it costs the raising instance its content scope, so weigh that before spelling
+  anything else this way.
 - **`Object::get_class()` can answer a class `extension_api.json` has never heard of**, and
   `GodotClassNames.gen.h` is keyed by exact name off that dump. `GDCLASS` registers a class in
   ClassDB the first time one is constructed, so a driver class is in ClassDB and *not* in the dump —

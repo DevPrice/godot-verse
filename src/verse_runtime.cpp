@@ -1729,7 +1729,18 @@ void VerseRuntime::on_runtime_error(void *p_ctx, const vh_runtime_error *p_error
 }
 
 vh_handle VerseRuntime::api_get_singleton(void *p_ctx, const char *p_name_utf8, int32_t p_name_len) {
-	Object *singleton = Engine::get_singleton()->get_singleton(StringName(String::utf8(p_name_utf8, p_name_len)));
+	const StringName name(String::utf8(p_name_utf8, p_name_len));
+	// has_singleton first, because get_singleton's own miss is an ERR_FAIL_COND_V_MSG
+	// (core/config/engine.cpp:343). Two of the 41 accessors are <decides> precisely so a script can
+	// ask for an editor singleton in a game and handle the "no", and an engine error printed on
+	// every such call makes a handled absence read as a fault. It cannot silence all of them: a
+	// TOOLS_ENABLED binary running a game *has* EditorInterface registered and trips the second
+	// guard, "Can't retrieve singleton '%s' outside of editor", which has_singleton does not model
+	// and is_singleton_editor_only is not bound to script.
+	if (!Engine::get_singleton()->has_singleton(name)) {
+		return 0;
+	}
+	Object *singleton = Engine::get_singleton()->get_singleton(name);
 	return singleton != nullptr ? singleton->get_instance_id() : 0;
 }
 

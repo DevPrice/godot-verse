@@ -291,7 +291,36 @@ def test_singleton_accessors_cover_only_emitted_classes():
     check(
         "an accessor for the emitted singleton and nothing else",
         lines,
-        ['GetInput<public>()<decides><reads>:input = input[VhSingletonObject("Input")]'],
+        ['GetInput<public>()<reads>:input = if (S := input[VhSingletonObject("Input")]) then S'
+         ' else Err("Godot has no Input singleton; it is registered before any scene loads,'
+         ' so this is a bridge failure rather than a script error")'],
+    )
+
+
+def test_only_the_editor_singletons_are_failable():
+    """R-TYPE-4: a singleton Godot registers before any scene loads is not a nullable type.
+
+    `api_type` is the whole test, so a Godot release that moves a singleton into or out of the
+    editor moves its accessor's failability with it and nothing here has to be revised by hand.
+    """
+    api = {
+        "singletons": [{"name": "Input"}, {"name": "EditorInterface"}],
+        "classes": [
+            {"name": "Input", "api_type": "core"},
+            {"name": "EditorInterface", "api_type": "editor"},
+        ],
+    }
+    lines = g.emit_singleton_accessors(api, ["EditorInterface", "Input"], set())
+    check(
+        "the editor-only singleton is the one that keeps <decides>",
+        [line for line in lines if "<decides>" in line],
+        ['GetEditorInterface<public>()<decides><reads>:editor_interface'
+         ' = editor_interface[VhSingletonObject("EditorInterface")]'],
+    )
+    check_true(
+        "and a singleton that cannot be absent raises instead of failing",
+        all('else Err("Godot has no Input singleton' in line
+            for line in lines if "<decides>" not in line),
     )
 
 
@@ -892,8 +921,22 @@ def test_generated_file_matches_hand_written_slice():
     )
     check_true(
         "an accessor a mirrored method already names is the one that moves",
-        'GetInputSingleton<public>()<decides><reads>:input' in text
+        'GetInputSingleton<public>()<reads>:input' in text
         and "\nGetInput<public>()" not in text,
+    )
+
+    # The two whose class is `"api_type": "editor"`, named here rather than counted, because what
+    # the rule protects is that a script can still handle the one absence a game can really meet.
+    # Every other accessor raises, and 4.7 has 41 of them.
+    accessors = [line for line in text.splitlines() if "VhSingletonObject(" in line]
+    check(
+        "only the editor singletons are failable",
+        sorted(line.split("<")[0] for line in accessors if "<decides>" in line),
+        ["GetEditorInterfaceSingleton", "GetGDScriptLanguageProtocol"],
+    )
+    check_true(
+        "and every other accessor raises rather than answering nothing",
+        all("else Err(" in line for line in accessors if "<decides>" not in line),
     )
 
     # Every Variant::Type the mirror can read has a reader and a builder, and they are named after

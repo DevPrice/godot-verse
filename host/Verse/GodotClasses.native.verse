@@ -57099,57 +57099,66 @@ ColorStatics<public> := module:
     YellowGreen<public>:color = color{R := 0.6039216, G := 0.8039216, B := 0.19607843, A := 1.0}
 
 # Godot hands a singleton out by name rather than through the scene, so a mirrored `input` or
-# `engine` would otherwise be a class no script can obtain an instance of. <decides> because
-# Engine::get_singleton answers nothing for a name this build did not register -- an editor-only
-# singleton asked for in an exported game, say.
+# `engine` would otherwise be a class no script can obtain an instance of.
 #
-# Which is two of the 41, and they are the two whose class says `"api_type": "editor"`:
-# EditorInterface and GDScriptLanguageProtocol. The other 39 are registered during Main::setup,
-# before any scene loads, so no run that can execute Verse at all can find one missing. The
-# `<decides>` on those is a tax and stays anyway: a non-failable accessor would have to produce the
-# class without a failure context, and the only spelling that could -- a native declared to answer
-# it -- is V3564, `class engine used as a parameter/result in a native function must also be
-# native`. tests/verse_probe/singleton_effect_probe.verse carries the measurement, including the
-# half that made it bearable: a failure context here does not force `<transacts>` on the caller.
+# Two of the 41 are `<decides>`, and they are the two whose class says `"api_type": "editor"`:
+# EditorInterface and GDScriptLanguageProtocol. Engine::get_singleton answers nothing for a name
+# this build did not register, and those are the only two names a game can legitimately ask for and
+# not get -- an absence a script is entitled to handle, so the accessor hands it over.
+#
+# The other 39 are registered during Main::setup, before any scene loads, so no run that can
+# execute Verse at all can find one missing. They are total, and raise through `Err` if the cast
+# ever does refuse. R-TYPE-4 is why: nullability is a property of the *type*, and a singleton that
+# cannot be absent is not a nullable type -- the `<decides>` those carried was stating something
+# false about the type to work around V3564, `class engine used as a parameter/result in a native
+# function must also be native`, which still forbids the obvious spelling of a total accessor.
+# A raise is what this bridge already does with a stale object handle (spec R-LANG-4), and it is
+# not free: it terminates the raising instance's content scope, so that node's suspended work dies
+# and the next call into it gets a fresh scope. That is the trade -- an `if` around an impossible
+# condition, against one instance's tasks if the impossible happens.
+#
+# tests/verse_probe/singleton_effect_probe.verse carries both measurements: that a failure context
+# over the two failable ones does not force `<transacts>` on the caller, and that `Err`'s `diverges`
+# effect is allowed in every body narrow enough to reach Godot at all.
 
-GetAccessibilityServer<public>()<decides><reads>:accessibility_server = accessibility_server[VhSingletonObject("AccessibilityServer")]
-GetAudioServer<public>()<decides><reads>:audio_server = audio_server[VhSingletonObject("AudioServer")]
-GetCameraServer<public>()<decides><reads>:camera_server = camera_server[VhSingletonObject("CameraServer")]
-GetClassDB<public>()<decides><reads>:class_db = class_db[VhSingletonObject("ClassDB")]
-GetDisplayServer<public>()<decides><reads>:display_server = display_server[VhSingletonObject("DisplayServer")]
+GetAccessibilityServer<public>()<reads>:accessibility_server = if (S := accessibility_server[VhSingletonObject("AccessibilityServer")]) then S else Err("Godot has no AccessibilityServer singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetAudioServer<public>()<reads>:audio_server = if (S := audio_server[VhSingletonObject("AudioServer")]) then S else Err("Godot has no AudioServer singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetCameraServer<public>()<reads>:camera_server = if (S := camera_server[VhSingletonObject("CameraServer")]) then S else Err("Godot has no CameraServer singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetClassDB<public>()<reads>:class_db = if (S := class_db[VhSingletonObject("ClassDB")]) then S else Err("Godot has no ClassDB singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetDisplayServer<public>()<reads>:display_server = if (S := display_server[VhSingletonObject("DisplayServer")]) then S else Err("Godot has no DisplayServer singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
 GetEditorInterfaceSingleton<public>()<decides><reads>:editor_interface = editor_interface[VhSingletonObject("EditorInterface")]
-GetEngine<public>()<decides><reads>:engine = engine[VhSingletonObject("Engine")]
-GetEngineDebugger<public>()<decides><reads>:engine_debugger = engine_debugger[VhSingletonObject("EngineDebugger")]
-GetGDExtensionManager<public>()<decides><reads>:gd_extension_manager = gd_extension_manager[VhSingletonObject("GDExtensionManager")]
+GetEngine<public>()<reads>:engine = if (S := engine[VhSingletonObject("Engine")]) then S else Err("Godot has no Engine singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetEngineDebugger<public>()<reads>:engine_debugger = if (S := engine_debugger[VhSingletonObject("EngineDebugger")]) then S else Err("Godot has no EngineDebugger singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetGDExtensionManager<public>()<reads>:gd_extension_manager = if (S := gd_extension_manager[VhSingletonObject("GDExtensionManager")]) then S else Err("Godot has no GDExtensionManager singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
 GetGDScriptLanguageProtocol<public>()<decides><reads>:gd_script_language_protocol = gd_script_language_protocol[VhSingletonObject("GDScriptLanguageProtocol")]
-GetGeometry2D<public>()<decides><reads>:geometry2d = geometry2d[VhSingletonObject("Geometry2D")]
-GetGeometry3D<public>()<decides><reads>:geometry3d = geometry3d[VhSingletonObject("Geometry3D")]
-GetIP<public>()<decides><reads>:ip = ip[VhSingletonObject("IP")]
-GetInputSingleton<public>()<decides><reads>:input = input[VhSingletonObject("Input")]
-GetInputMap<public>()<decides><reads>:input_map = input_map[VhSingletonObject("InputMap")]
-GetJavaClassWrapper<public>()<decides><reads>:java_class_wrapper = java_class_wrapper[VhSingletonObject("JavaClassWrapper")]
-GetJavaScriptBridge<public>()<decides><reads>:java_script_bridge = java_script_bridge[VhSingletonObject("JavaScriptBridge")]
-GetMarshalls<public>()<decides><reads>:marshalls = marshalls[VhSingletonObject("Marshalls")]
-GetNativeMenu<public>()<decides><reads>:native_menu = native_menu[VhSingletonObject("NativeMenu")]
-GetNavigationMeshGenerator<public>()<decides><reads>:navigation_mesh_generator = navigation_mesh_generator[VhSingletonObject("NavigationMeshGenerator")]
-GetNavigationServer2D<public>()<decides><reads>:navigation_server2d = navigation_server2d[VhSingletonObject("NavigationServer2D")]
-GetNavigationServer2DManager<public>()<decides><reads>:navigation_server2d_manager = navigation_server2d_manager[VhSingletonObject("NavigationServer2DManager")]
-GetNavigationServer3D<public>()<decides><reads>:navigation_server3d = navigation_server3d[VhSingletonObject("NavigationServer3D")]
-GetNavigationServer3DManager<public>()<decides><reads>:navigation_server3d_manager = navigation_server3d_manager[VhSingletonObject("NavigationServer3DManager")]
-GetOS<public>()<decides><reads>:os = os[VhSingletonObject("OS")]
-GetPerformance<public>()<decides><reads>:performance = performance[VhSingletonObject("Performance")]
-GetPhysicsServer2D<public>()<decides><reads>:physics_server2d = physics_server2d[VhSingletonObject("PhysicsServer2D")]
-GetPhysicsServer2DManager<public>()<decides><reads>:physics_server2d_manager = physics_server2d_manager[VhSingletonObject("PhysicsServer2DManager")]
-GetPhysicsServer3D<public>()<decides><reads>:physics_server3d = physics_server3d[VhSingletonObject("PhysicsServer3D")]
-GetPhysicsServer3DManager<public>()<decides><reads>:physics_server3d_manager = physics_server3d_manager[VhSingletonObject("PhysicsServer3DManager")]
-GetProjectSettings<public>()<decides><reads>:project_settings = project_settings[VhSingletonObject("ProjectSettings")]
-GetRenderingServer<public>()<decides><reads>:rendering_server = rendering_server[VhSingletonObject("RenderingServer")]
-GetResourceLoader<public>()<decides><reads>:resource_loader = resource_loader[VhSingletonObject("ResourceLoader")]
-GetResourceSaver<public>()<decides><reads>:resource_saver = resource_saver[VhSingletonObject("ResourceSaver")]
-GetResourceUID<public>()<decides><reads>:resource_uid = resource_uid[VhSingletonObject("ResourceUID")]
-GetTextServerManager<public>()<decides><reads>:text_server_manager = text_server_manager[VhSingletonObject("TextServerManager")]
-GetThemeDB<public>()<decides><reads>:theme_db = theme_db[VhSingletonObject("ThemeDB")]
-GetTime<public>()<decides><reads>:time = time[VhSingletonObject("Time")]
-GetTranslationServer<public>()<decides><reads>:translation_server = translation_server[VhSingletonObject("TranslationServer")]
-GetWorkerThreadPool<public>()<decides><reads>:worker_thread_pool = worker_thread_pool[VhSingletonObject("WorkerThreadPool")]
-GetXRServer<public>()<decides><reads>:xr_server = xr_server[VhSingletonObject("XRServer")]
+GetGeometry2D<public>()<reads>:geometry2d = if (S := geometry2d[VhSingletonObject("Geometry2D")]) then S else Err("Godot has no Geometry2D singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetGeometry3D<public>()<reads>:geometry3d = if (S := geometry3d[VhSingletonObject("Geometry3D")]) then S else Err("Godot has no Geometry3D singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetIP<public>()<reads>:ip = if (S := ip[VhSingletonObject("IP")]) then S else Err("Godot has no IP singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetInputSingleton<public>()<reads>:input = if (S := input[VhSingletonObject("Input")]) then S else Err("Godot has no Input singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetInputMap<public>()<reads>:input_map = if (S := input_map[VhSingletonObject("InputMap")]) then S else Err("Godot has no InputMap singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetJavaClassWrapper<public>()<reads>:java_class_wrapper = if (S := java_class_wrapper[VhSingletonObject("JavaClassWrapper")]) then S else Err("Godot has no JavaClassWrapper singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetJavaScriptBridge<public>()<reads>:java_script_bridge = if (S := java_script_bridge[VhSingletonObject("JavaScriptBridge")]) then S else Err("Godot has no JavaScriptBridge singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetMarshalls<public>()<reads>:marshalls = if (S := marshalls[VhSingletonObject("Marshalls")]) then S else Err("Godot has no Marshalls singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetNativeMenu<public>()<reads>:native_menu = if (S := native_menu[VhSingletonObject("NativeMenu")]) then S else Err("Godot has no NativeMenu singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetNavigationMeshGenerator<public>()<reads>:navigation_mesh_generator = if (S := navigation_mesh_generator[VhSingletonObject("NavigationMeshGenerator")]) then S else Err("Godot has no NavigationMeshGenerator singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetNavigationServer2D<public>()<reads>:navigation_server2d = if (S := navigation_server2d[VhSingletonObject("NavigationServer2D")]) then S else Err("Godot has no NavigationServer2D singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetNavigationServer2DManager<public>()<reads>:navigation_server2d_manager = if (S := navigation_server2d_manager[VhSingletonObject("NavigationServer2DManager")]) then S else Err("Godot has no NavigationServer2DManager singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetNavigationServer3D<public>()<reads>:navigation_server3d = if (S := navigation_server3d[VhSingletonObject("NavigationServer3D")]) then S else Err("Godot has no NavigationServer3D singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetNavigationServer3DManager<public>()<reads>:navigation_server3d_manager = if (S := navigation_server3d_manager[VhSingletonObject("NavigationServer3DManager")]) then S else Err("Godot has no NavigationServer3DManager singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetOS<public>()<reads>:os = if (S := os[VhSingletonObject("OS")]) then S else Err("Godot has no OS singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetPerformance<public>()<reads>:performance = if (S := performance[VhSingletonObject("Performance")]) then S else Err("Godot has no Performance singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetPhysicsServer2D<public>()<reads>:physics_server2d = if (S := physics_server2d[VhSingletonObject("PhysicsServer2D")]) then S else Err("Godot has no PhysicsServer2D singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetPhysicsServer2DManager<public>()<reads>:physics_server2d_manager = if (S := physics_server2d_manager[VhSingletonObject("PhysicsServer2DManager")]) then S else Err("Godot has no PhysicsServer2DManager singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetPhysicsServer3D<public>()<reads>:physics_server3d = if (S := physics_server3d[VhSingletonObject("PhysicsServer3D")]) then S else Err("Godot has no PhysicsServer3D singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetPhysicsServer3DManager<public>()<reads>:physics_server3d_manager = if (S := physics_server3d_manager[VhSingletonObject("PhysicsServer3DManager")]) then S else Err("Godot has no PhysicsServer3DManager singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetProjectSettings<public>()<reads>:project_settings = if (S := project_settings[VhSingletonObject("ProjectSettings")]) then S else Err("Godot has no ProjectSettings singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetRenderingServer<public>()<reads>:rendering_server = if (S := rendering_server[VhSingletonObject("RenderingServer")]) then S else Err("Godot has no RenderingServer singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetResourceLoader<public>()<reads>:resource_loader = if (S := resource_loader[VhSingletonObject("ResourceLoader")]) then S else Err("Godot has no ResourceLoader singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetResourceSaver<public>()<reads>:resource_saver = if (S := resource_saver[VhSingletonObject("ResourceSaver")]) then S else Err("Godot has no ResourceSaver singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetResourceUID<public>()<reads>:resource_uid = if (S := resource_uid[VhSingletonObject("ResourceUID")]) then S else Err("Godot has no ResourceUID singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetTextServerManager<public>()<reads>:text_server_manager = if (S := text_server_manager[VhSingletonObject("TextServerManager")]) then S else Err("Godot has no TextServerManager singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetThemeDB<public>()<reads>:theme_db = if (S := theme_db[VhSingletonObject("ThemeDB")]) then S else Err("Godot has no ThemeDB singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetTime<public>()<reads>:time = if (S := time[VhSingletonObject("Time")]) then S else Err("Godot has no Time singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetTranslationServer<public>()<reads>:translation_server = if (S := translation_server[VhSingletonObject("TranslationServer")]) then S else Err("Godot has no TranslationServer singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetWorkerThreadPool<public>()<reads>:worker_thread_pool = if (S := worker_thread_pool[VhSingletonObject("WorkerThreadPool")]) then S else Err("Godot has no WorkerThreadPool singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")
+GetXRServer<public>()<reads>:xr_server = if (S := xr_server[VhSingletonObject("XRServer")]) then S else Err("Godot has no XRServer singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error")

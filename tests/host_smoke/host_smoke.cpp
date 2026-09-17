@@ -875,7 +875,7 @@ int main(int argc, char** argv)
 				const Global Globals[] = {
 					{ "Print is declared by the native package", &HelloSource, HelloPathUtf8.c_str(), "Print(", "Godot.native.verse" },
 					{ "IsInstanceValid by the layer above it", &ExportsSource, ExportsPathUtf8.c_str(), "IsInstanceValid", "GodotApi.native.verse" },
-					{ "and a singleton accessor by the generated mirror", &HelloSource, HelloPathUtf8.c_str(), "GetEngine[", "GodotClasses.native.verse" },
+					{ "and a singleton accessor by the generated mirror", &HelloSource, HelloPathUtf8.c_str(), "GetEngine(", "GodotClasses.native.verse" },
 				};
 				for (const Global& G : Globals)
 				{

@@ -349,7 +349,7 @@ and packages, never syntax.
   `/Verse.org/Simulation`'s own parametric spellings, which nothing in the bridge reaches yet.
 - **R-LANG-4 (MUST)** Failure contexts are fully usable: `<decides>` functions, `if`/`for`
   conditions, `option`, `?` and `or`, and user-authored failable functions. Status: **part** —
-  the mirror uses `<decides>` where absence is real (`GetParent()` at the root, a missing
+  the mirror uses `<decides>` where absence is real (`GetParent()` at the root, an editor
   singleton), and the semantics of a *freed* object were deliberately made a runtime error rather
   than a failure (README). That decision stands.
 - **R-LANG-5 (MUST)** Arrays, maps, tuples and their comprehensions work, and each maps to a Godot
@@ -1395,15 +1395,37 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   generator skips. The single real exception, `EditorProperty.get_edited_property`, is editor-only.
   A hand-maintained list would be 5303 entries of ceremony to catch it.
 
-  The **singleton accessors** are the second `<decides>` family and the one where the rule is
-  loosest: 39 of the 41 are registered during `Main::setup`, so no run that can execute Verse at
+  The **singleton accessors** are the second `<decides>` family, and the rule applies to them the
+  same way: 39 of the 41 are registered during `Main::setup`, so no run that can execute Verse at
   all can find one absent, and only `EditorInterface` and `GDScriptLanguageProtocol` — the two
-  whose class says `"api_type": "editor"` — can fail in a game. They stay failable anyway, because
-  a total accessor would have to produce a mirrored class without a failure context and the only
-  spelling that could is refused: **V3564**, *"class engine used as a parameter/result in a native
-  function must also be native"*. What that costs is syntax and not effects —
-  `tests/verse_probe/singleton_effect_probe.verse` is the measurement, including that a failure
-  context over one does not force `<transacts>` on its caller.
+  whose class says `"api_type": "editor"` — can fail in a game. **Those two are failable and the
+  other 39 are total**, which is this rule and not an exception to it: a singleton that cannot be
+  absent is not a nullable type, and the `<decides>` the 39 used to carry said otherwise.
+  What makes a total accessor awkward to write is still **V3564**, *"class engine used as a
+  parameter/result in a native function must also be native"* — a native cannot answer a mirrored
+  class — so the accessor handles the cast's failure itself and raises through
+  `/Verse.org/Verse`'s `Err`, whose result type `false` is uninhabited. That is the same answer
+  R-LANG-4 already gives a stale object handle.
+
+  What a raise costs is recorded rather than assumed, because it is more than a failure costs: the
+  call answers `VH_ERR_RUNTIME`, everything the body deferred before it is rolled back with the
+  transaction, and the raising instance's content scope is terminated, so that node's suspended
+  work dies and the next call into it gets a fresh scope (R-ASYNC-4, R-DIAG-3).
+  `tests/verse_probe/singleton_effect_probe.verse` is the measurement: that `Err`'s `diverges`
+  effect is allowed in every body narrow enough to reach Godot at all, and that a failure context
+  over the two that remain failable does not force `<transacts>` on its caller. It survives a cook,
+  which was not free: `Err` is a module-level native in `/Verse.org/Verse`, and a cooked
+  `VNativeProcedure` with no rebound thunk is a jump to address 0. `RebindVniModuleNatives` covers
+  it, and `tests/cooked_probe` over a cook of one class is the reading — `VH_ERR_RUNTIME` and the
+  message, with no callstack, because a runtime host has no compiler runtime to build one.
+
+  The two failable ones are also where this bridge is *better* than GDScript rather than merely
+  different. `EditorInterface` is an identifier only a `TOOLS_ENABLED` build registers, so a
+  GDScript that names it fails to compile in an export template and the node loses every method on
+  it. Here the script compiles, the accessor reports the absence at the call, and the method goes
+  on to answer — asserted in `tests/integration`. The consumer checks `Engine::has_singleton`
+  before `get_singleton` for the same reason: Godot's own miss is an `ERR_FAIL_COND_V_MSG`, and an
+  absence the script is handling should not print an engine error per call.
 - **R-TYPE-5 (MUST)** A type mismatch at the boundary is a compile error wherever the typed layer
   can see it, and a diagnosable runtime error with both type names where it cannot.
   Status: **part** (`VhTypeMismatch` exists).

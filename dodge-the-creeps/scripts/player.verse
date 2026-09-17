@@ -41,18 +41,18 @@ player := class(area2d):
 	_Process<override>(Delta:float):void =
 		# The player's movement vector.
 		var Velocity:vector2 = vector2{}
-		if (Keys := GetInputSingleton[]):
-			var Dx:float = 0.0
-			var Dy:float = 0.0
-			if (Keys.IsActionPressed("move_right")?):
-				set Dx = Dx + 1.0
-			if (Keys.IsActionPressed("move_left")?):
-				set Dx = Dx - 1.0
-			if (Keys.IsActionPressed("move_down")?):
-				set Dy = Dy + 1.0
-			if (Keys.IsActionPressed("move_up")?):
-				set Dy = Dy - 1.0
-			set Velocity = vector2{X := Dx, Y := Dy}
+		Keys := GetInputSingleton()
+		var Dx:float = 0.0
+		var Dy:float = 0.0
+		if (Keys.IsActionPressed("move_right")?):
+			set Dx = Dx + 1.0
+		if (Keys.IsActionPressed("move_left")?):
+			set Dx = Dx - 1.0
+		if (Keys.IsActionPressed("move_down")?):
+			set Dy = Dy + 1.0
+		if (Keys.IsActionPressed("move_up")?):
+			set Dy = Dy - 1.0
+		set Velocity = vector2{X := Dx, Y := Dy}
 
 		if (Velocity.Length() > 0.0):
 			set Velocity = Velocity.Normalized() * Speed
