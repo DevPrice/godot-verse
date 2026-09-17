@@ -63,10 +63,7 @@ main := class(node):
 	# The HUD's own `start_game`.
 	NewGame<public>()<transacts>:void =
 		if (Tree := GetTree[]):
-			# `call_group` is a vararg, which the mirror does not carry, so the group is walked
-			# instead: `GetNodesInGroup` answers a `typed_array(node)` whose elements have methods.
-			for (Mob : Tree.GetNodesInGroup("mobs").ToArray()):
-				Mob.QueueFree()
+			Tree.CallGroup("mobs", "queue_free")
 		set Score = 0
 		if (Hero := Player?, Start := StartPosition?):
 			Hero.Start(Start.Position)
