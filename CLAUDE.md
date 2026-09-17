@@ -383,10 +383,10 @@ the editor and `export_check.gd` as an autoload in an export.
 **What the mirror is**, since no single file shows it: all 1036 Godot classes as a Verse class
 hierarchy, Godot's own `Object` among them; its 793 enums as real Verse enums; all 1413 of
 `extension_api.json`'s virtuals, spelled Godot's way (74 skipped with a recorded reason); properties as writable members rather than get/set pairs; **Godot's `bool` as two
-different things** — 568 predicates as `<decides>:void`, the way Verse's own comparisons and
-`GodotMath`'s `HasPoint` are spelled, and `logic` kept for the 306 methods that answer a value
-rather than a test (an accessor with a `set_` twin, a virtual the script fills in, an outcome like
-`MoveAndSlide`); 503 engine-signal
+different things** — 568 predicates and 161 bool virtuals as `<decides>:void`, the way Verse's own
+comparisons and `GodotMath`'s `HasPoint` are spelled, and `logic` kept for the 306 methods that
+answer a value rather than a test (an accessor with a `set_` twin, an outcome like `MoveAndSlide`);
+503 engine-signal
 accessors; `@GlobalScope`'s constants and statics reachable through per-class `...Statics` modules;
 the 16 math types with methods and definable operators in ordinary Verse; **Godot's RID as a `rid`
 struct** rather than a bare `int` — it is not a math type, because it crosses as a scalar rather
@@ -942,6 +942,23 @@ it is not in `run_tests.py`.
   is never entered — do not "optimise" that by adding an inherited-methods pass. And **they carry
   `no_rollback`**, so a script's own `<transacts>` code may not call its own `_Get`; Godot is the
   caller. R-NODE-10 is done; `_ToString` is not among them and never will be (see "Verse itself").
+- **A virtual that answers Godot a `bool` is `<decides>:void`, and the specifier is alone.** All 161
+  of them, `_Set` included: Godot asks "did you handle it" or "is it so", which is a test and not a
+  value. `_HasPoint<override>(Point:vector2)<decides>:void = Solid?` is the spelling.
+  `<decides>` **does not narrow** — its effect descriptor rescinds only `decides` and excludes
+  nothing, so the declaration keeps the wide default set and an override still calls specifier-less
+  helpers. `<decides><transacts>` would rescind `no_rollback` and start wall 8's cascade at every
+  one of them. The price is that a bool virtual is **uncallable from Verse at all**, because a
+  failure context refuses `no_rollback`: Godot is the only caller, through `vh_instance_call`.
+  Measured both ways in `tests/verse_probe/decides_virtual_{probe,reject}.verse`, whose reject file
+  also records the one migration mistake the compiler does **not** catch — an override that fixes
+  the return type and drops the specifier is accepted, because effects are contravariant, and
+  answers *handled, every time*.
+- **The status is the whole answer for one of these, in both directions.** A `<decides>:void` call
+  writes no value whether it succeeds or declines, and Godot reads a script virtual's result
+  through `Variant::booleanize()` — `!is_zero()` — so an empty Variant is `false` either way.
+  Declining is right by accident and succeeding is silently wrong, so `call_func` writes `true` and
+  `false` itself. Anything else reading a `<decides>` result has to do the same.
 - **A class member may not shadow an inherited mirrored one, and Godot's signals are members too.**
   `Hidden:signal(int)` on a `node2d` is *"Instance data member `Hidden` is already defined in
   `canvas_item`, did you mean to add the `<override>` specifier?"* — because `canvas_item` mirrors

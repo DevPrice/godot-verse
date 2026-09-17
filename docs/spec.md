@@ -606,9 +606,13 @@ on closing it.
   reached through the same call path every other method takes:
 
       _Get<public>(Property:string):variant = variant{}
-      _Set<public>(Property:string, Value:variant):logic = false
+      _Set<public>(Property:string, Value:variant)<decides>:void = false?
       _GetPropertyList<public>():godot_array = MakeArray()
       _ValidateProperty<public>(Property:dictionary):void = {}
+
+  `_Set` is the one bool among them, so it is spelled the way every other bool virtual is — a test
+  rather than a value, `<decides>` and nothing else beside it. An override's arms already end in
+  failable reads, so the `true` each used to close with was restating what the `if` had decided.
 
   **None of the four costs a script that overrides none of them anything**, which is the reason they
   can be declared on the root at all: `vh_class_method_list` reports a class's **own** declarations,
