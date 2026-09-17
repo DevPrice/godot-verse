@@ -1,13 +1,13 @@
-# godot-verse
+# Godot Verse
 
 Epic's [Verse](https://dev.epicgames.com/documentation/en-us/uefn/verse-language-reference) as a
 scripting language for Godot 4, as a GDExtension.
 
 The goal is a first-class language, not a demo. Anything you can express about a Godot project in
-GDScript, you can express in Verse, and Verse's own features work — concurrency, failure contexts,
-and parametric types included. Godot's model stays Godot's: a node is a node, a signal is a signal,
-and a Resource is a Resource. Write Verse here if you develop in Godot, want a stronger language
-than GDScript, and don't already know Verse.
+GDScript, you can express in Verse, and Verse's own features work, with concurrency, failure contexts,
+and parametric types included. Godot's model stays Godot's: a Node is a Node, a Signal is a Signal,
+and a Resource is a Resource. Write Verse here if you develop in Godot and want a stronger language
+than GDScript, or if you just want to play with the language.
 
 ## Status: experimental
 
