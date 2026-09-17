@@ -1919,7 +1919,7 @@ UTILITY_VERSE_SPELLINGS = {
     "sin": "Sin(X)", "cos": "Cos(X)", "tan": "Tan(X)",
     "asin": "ArcSin(X)", "acos": "ArcCos(X)", "atan": "ArcTan(X)", "atan2": "ArcTan(Y, X)",
     "lerp": "Lerp(A, B, T)", "lerpf": "Lerp(A, B, T)",
-    "fmod": "Mod[X, Y]", "posmod": "Mod[X, Y]", "fposmod": "Mod[X, Y]",
+    "posmod": "Mod[X, Y]", "fposmod": "Mod[X, Y]",
     "snapped": "Snapped(X, Step)", "snappedf": "Snapped(X, Step)", "snappedi": "Snapped(X, Step)",
     "is_equal_approx": "IsEqualApprox[A, B]", "is_zero_approx": "IsZeroApprox[X]",
     "inverse_lerp": "InverseLerp(From, To, X)",
@@ -3121,6 +3121,24 @@ inline constexpr type_mapping types[] = {{
 {type_entries}
 }};
 
+// Each module-level function the mirror hand-writes that stands for a Godot one, and where Godot
+// documents it. Almost all are @GlobalScope utilities -- the page GDScript sends a click on
+// `print(` to -- and the exception is `ToString`, which is Godot's `Object.to_string` under the
+// name Verse's own string interpolation already uses.
+//
+// A function this bridge invented is deliberately absent. `MakeVariant` and `TruncatedQuotient`
+// mirror nothing, so there is no page to send them to and the comment above the declaration is the
+// better answer.
+struct global_mapping {{
+	const char *verse_name;
+	const char *godot_class;
+	const char *godot_function;
+}};
+
+inline constexpr global_mapping globals[] = {{
+{global_entries}
+}};
+
 }} // namespace verse_api
 """
 
@@ -3395,17 +3413,102 @@ def read_math_written(path: Path) -> tuple[dict, set]:
     return methods, operators
 
 
+# `PushError<public>(` and `Print<public><native>(` -- a module-level function, as opposed to the
+# `(V:vector2).Length<public>(` above it. A type declaration wears the same shape (`signal<public>
+# (t:type) := class`) and is excluded by what follows the parameters.
+FREE_FUNCTION_RE = re.compile(r"^(\w+)<public>(?:<\w+>)*\s*\(")
+
+# The hand-written files a module-level function can be declared in. GodotClasses.native.verse is
+# generated and its own globals -- the Variant builders, the enum `ToInt`s -- mirror no Godot
+# function, so it is not read.
+HAND_WRITTEN_SOURCES = ("Godot.native.verse", "GodotApi.native.verse", "GodotMath.native.verse")
+
+
+def read_free_functions(verse_dir: Path) -> set:
+    """Every module-level function name the hand-written mirror declares `<public>`."""
+    names = set()
+    for source in HAND_WRITTEN_SOURCES:
+        path = verse_dir / source
+        if not path.exists():
+            continue
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if ":= class" in line or ":= struct" in line or ":= interface" in line:
+                continue
+            match = FREE_FUNCTION_RE.match(line)
+            if match:
+                names.add(match.group(1))
+    return names
+
+
+def global_doc_rows(api: dict, verse_dir: Path) -> list:
+    """Each hand-written global that mirrors a Godot function, as (verse name, class, function).
+
+    Godot documents a function belonging to no class on @GlobalScope -- a page its documentation has
+    and ClassDB does not, and the one GDScript sends a click on `print(` to. This used to be two
+    rows written out in verse_script_language.cpp, `Print` and `IsInstanceValid`, so the other
+    forty-eight hovered as local constants: `Smoothstep`, `LerpAngle`, `Ease`, `DegToRad` and the
+    rest of the scalar math, which is what a script reaches for between the vector methods.
+
+    Matched by name, then by name ignoring case -- Godot spells eight of them without the word
+    boundary the mirror keeps, `wrapf` against `WrapF` -- and then by UTILITY_VERSE_SPELLINGS, which
+    is the record this file already keeps of which Verse spelling replaced a utility. The three
+    agree wherever more than one answers; the table alone reaches `type_string`, whose Verse name
+    (`VariantTypeName`) shares no letters with it. A spelling several utilities map to is taken only
+    when they name one function, so `Snapped` resolves by its exact name rather than by choosing
+    between `snapped`, `snappedf` and `snappedi`.
+
+    A bridge invention -- `MakeVariant`, `TruncatedQuotient`, `Vector2FromAngle` -- matches nothing
+    and gets no row, which is right: there is no Godot page to send it to, and the comment above its
+    own declaration is what the editor draws instead.
+    """
+    declared = read_free_functions(verse_dir)
+    by_verse_name = {verse_method_name(u["name"]): u["name"] for u in api.get("utility_functions", [])}
+    by_lower = {name.lower(): godot for name, godot in by_verse_name.items()}
+    by_spelling = defaultdict(set)
+    for godot_name, spelling in UTILITY_VERSE_SPELLINGS.items():
+        by_spelling[re.split(r"[\[(]", spelling)[0]].add(godot_name)
+
+    rows = []
+    for name in sorted(declared):
+        spelled = by_spelling.get(name, set())
+        godot_name = (by_verse_name.get(name) or by_lower.get(name.lower())
+                      or (next(iter(spelled)) if len(spelled) == 1 else None))
+        if godot_name:
+            rows.append((name, "@GlobalScope", godot_name))
+    # The one global that replaces a *class* method rather than a utility, which is where the
+    # generator already records that Godot's Object.to_string is spelled `ToString(Value)`.
+    for (godot_class, godot_method), spelling in FREE_FUNCTION_REPLACEMENTS.items():
+        verse_name = spelling.split("(", 1)[0]
+        if verse_name in declared:
+            rows.append((verse_name, godot_class, godot_method))
+    return sorted(rows)
+
+
 # Godot's spelling of a unary operator, against Verse's `prefix'-'`.
 GODOT_UNARY_PREFIX = "unary"
 
 
 def record_math_skips(api: dict, coverage: Coverage, math_source: Path):
-    """Records every builtin method and operator GodotMath does not define, as `math_not_written`.
+    """Records what GodotMath does *and* does not define: a documentation row for each, a skip for
+    the rest.
 
     R-SCN-2 promises that every Godot member is reachable *or the reason it is not is reported*, and
     this is the largest surface where the second half was missing: 367 methods and 261 operators
     across sixteen types, absent with nothing said. The skip is what turns "that name does not
     exist" into a sentence in the editor.
+
+    The rows are the other half of the same walk and were missing for as long. `(V:vector2).Length()`
+    is Godot's `Vector2.length` and is documented as such, but an extension method is a *module-level*
+    definition -- the compiler reports its owner as GodotMath.native.verse rather than as `vector2` --
+    so nothing keyed by owner could ever find it, and all 159 of them hovered as local constants with
+    their signature. The consumer reads the receiver off the declared type instead; what it needs
+    from here is the row.
+
+    Five written methods get no row, and none of the five is a Godot method: `GetEnd` on rect2,
+    rect2i and aabb is Godot's `end` *member* and is recorded as one below, `quaternion.Xform` is
+    Godot's `operator *` written as a method, and `transform3d.InverseOrthonormal` is a helper with
+    no Godot counterpart at all. Those two keep the comment above their own declaration, which is
+    the better answer for a spelling Godot does not have.
     """
     written_methods, written_operators = read_math_written(math_source)
 
@@ -3414,10 +3517,21 @@ def record_math_skips(api: dict, coverage: Coverage, math_source: Path):
         if godot_class not in MATH_TYPES:
             continue
         verse_class = verse_class_name(godot_class)
+        written = written_methods.get(verse_class, set())
+
+        # `GetEnd` against Godot's `end`: a member the mirror reaches with a getter rather than a
+        # method, so the method walk below cannot see it and it is documented as a property.
+        for member in builtin.get("members") or []:
+            verse_name = "Get" + verse_method_name(member["name"])
+            if verse_name in written:
+                coverage.doc_map.append(
+                    (verse_class, verse_name, godot_class, member["name"], "property"))
 
         for method in builtin.get("methods") or []:
             verse_name = verse_method_name(method["name"])
-            if verse_name in written_methods.get(verse_class, ()):
+            if verse_name in written:
+                coverage.doc_map.append(
+                    (verse_class, verse_name, godot_class, method["name"], "method"))
                 continue
             coverage.skip("math_not_written", SkippedMember(
                 verse_class, verse_name, godot_class, method["name"], "math_not_written", ""))
@@ -3549,7 +3663,7 @@ def render_class_names_header(api: dict, emit_order: list) -> str:
 
 
 def render_classes_header(api: dict, emit_order: list, method_map: list, doc_map: list,
-                         enums: dict) -> str:
+                         enums: dict, global_rows: list) -> str:
     version = api["header"]["version_full_name"]
     pairs = sorted(
         [(name, verse_class_name(name)) for name in emit_order] + list(VALUE_TYPE_CLASSES.items())
@@ -3581,9 +3695,13 @@ def render_classes_header(api: dict, emit_order: list, method_map: list, doc_map
         f'\t{{ "{verse_name}", "{godot_class}" }},'
         for verse_name, godot_class in sorted(EXPORTED_TYPES.items())
     )
+    global_entries = "\n".join(
+        f'\t{{ "{verse_name}", "{godot_class}", "{godot_function}" }},'
+        for verse_name, godot_class, godot_function in global_rows
+    )
     return CLASSES_HEADER_TEMPLATE.format(
         version=version, entries=entries, method_entries=method_entries,
-        enum_entries=enum_entries, type_entries=type_entries,
+        enum_entries=enum_entries, type_entries=type_entries, global_entries=global_entries,
     )
 
 
@@ -3677,7 +3795,8 @@ def main() -> int:
     text = render(api, class_blocks, emit_singleton_accessors(api, emit_order, member_names),
                   typed_arrays, typed_dictionaries, enums, statics_modules, utilities)
     classes_header_text = render_classes_header(api, emit_order, method_map,
-                                                coverage.doc_map, enums)
+                                                coverage.doc_map, enums,
+                                                global_doc_rows(api, resolve(root, args.math_source).parent))
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(text, encoding="utf-8", newline="\n")

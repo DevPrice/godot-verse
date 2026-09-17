@@ -52,3 +52,15 @@ hover_probe := class(node2d):
 	# A parametric type, which the compiler resolves to the function that answers one -- so its
 	# name reaches a hover as a function rather than as a class, and is the same Array either way.
 	Children<public>():typed_array(node) = MakeNodeArray()
+
+	# An extension method on a value type. It is a module-level definition of `operator'.Length'`,
+	# so the compiler reports the file as its owner and the receiver appears only in its signature.
+	Reach<public>(To:vector2):float = To.Length()
+
+	# A scalar of GodotMath's, which Godot documents on @GlobalScope beside `randf_range`.
+	Soften<public>(X:float):float = Smoothstep(0.0, 1.0, X)
+
+	# The same name spelled both ways, which is what the receiver has to tell apart: Vector2.snapped
+	# on this line and @GlobalScope.snapped on the next.
+	SnapPoint<public>(At:vector2):vector2 = At.Snapped(vector2{X := 8.0, Y := 8.0})
+	SnapScalar<public>(X:float):float = Snapped(X, 8.0)

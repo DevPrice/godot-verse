@@ -37,7 +37,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from run_tests import find_engine, find_godot  # noqa: E402
+from run_tests import find_engine, find_godot, stage_extension  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 DRIVER = "hover_probe_driver.gd"
@@ -74,6 +74,14 @@ OK = 0
 
 def collect(project: Path, godot: Path, engine: Path) -> list[dict]:
     """Runs the driver in the project and returns the rows it printed."""
+    # The library the project holds, not the one just built, is what a Godot run loads -- and a
+    # stale one reports the old answers with nothing to say it did. Two measurements of a fix that
+    # had already landed read as the fix doing nothing before this line existed. run_tests stages
+    # the same way before each of its Godot layers.
+    stale = stage_extension(project)
+    if stale:
+        raise SystemExit(f"probe_hover: {stale}")
+
     driver = project / DRIVER
     shutil.copy2(REPO / "tools" / "hover_probe.gd", driver)
     env = dict(os.environ, UE_ROOT=str(engine))
@@ -181,6 +189,20 @@ def rules(rows: list[dict]) -> list[Finding]:
         # one thing only: a `const` declared inside a function body (gdscript_editor.cpp's walk of
         # SuiteNode::Local). A class, a module, an enum, a type or a function wearing that label is
         # the label being used as a fallback for "nothing better to say".
+        #
+        # It reports ~250 rows over tests/integration and ~12 over dodge-the-creeps, and none of
+        # them is a *type* any more: every one is a function, and they fall into four families that
+        # have nothing better to say, which is the line drawn in by-hand-findings.md B23.
+        #
+        #   a global the bridge invented   MakeVariant, AsInt, VariantInt -- no Godot counterpart
+        #   a wrapper class's method       godot_array.GetInt, signal(t).Await -- likewise
+        #   Verse's own                    event, Sqrt, BitOr -- Verse's, not Godot's
+        #   the project's own              a second class in a file and its members, which no
+        #                                  script doc is registered for (see _lookup_code)
+        #
+        # All four keep the local result because it is the only one that carries prose, and the
+        # prose is the comment above the declaration. A *new* finding here is one that leaves those
+        # four -- most of all anything a mirrored class or a Godot function stands behind.
         if answered and local and host_kind in ("class", "module", "enum", "type_alias", "function"):
             findings.append(Finding(
                 "H1", row, described(row),

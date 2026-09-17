@@ -1874,7 +1874,16 @@ external editor is secondary.
   mirror exports that is not a mirrored class answers Godot's page for what it carries — `variant`
   is Variant, `godot_array` is Array, `char` is String because `string` *is* `[]char` — and the two
   that stand for nothing of Godot's, `signal(t)` and `connection`, keep the mirror's own comment
-  instead of borrowing a page that describes something else.
+  instead of borrowing a page that describes something else. The same rule reaches the mirror's
+  *functions*: the 159 math extension methods (`(V:vector2).Length()` is `Vector2.length`) and the
+  50 hand-written globals (`Smoothstep`, `LerpAngle`, `ToString`) each name the page Godot
+  documents them on. An extension method arrives as a module-level definition named
+  `operator'.Length'`, so its owner is the file rather than the receiver, and the receiver is read
+  off the first parameter of its declared type — which is also what tells `V.Snapped(Step)` from
+  the scalar `Snapped(X, Step)`, two different pages behind one name. **What stops here is what
+  mirrors nothing**: `MakeVariant`, `godot_array.GetInt`, Verse's own `event`, and a second class
+  in a file. Each keeps the local result, because it is the only one that carries the comment above
+  the declaration, and there is no Godot page to prefer over it.
 - **R-TOOL-5 (MUST)** Signature help while typing a call. Status: **part** — declines during an
   analysis for R-TOOL-4's reason, and queues that buffer so the next ask answers. It is asked about
   the same repaired buffer R-TOOL-3 describes, off the same analysis, so an unclosed call has a hint

@@ -706,7 +706,8 @@ def test_render_classes_header():
     enums = {"Node.InternalMode": g.GodotEnum(
         key="Node.InternalMode", verse_name="node_internal_mode", is_bitfield=False,
         values=[("Disabled", 0)], stripped="INTERNAL_MODE_")}
-    text = g.render_classes_header(api, ["Node2D", "Node"], method_map, doc_map, enums)
+    global_rows = [("LerpAngle", "@GlobalScope", "lerp_angle"), ("ToString", "Object", "to_string")]
+    text = g.render_classes_header(api, ["Node2D", "Node"], method_map, doc_map, enums, global_rows)
     check_true("classes header has a #pragma once", text.startswith("#pragma once"))
     check_true("classes header opens verse_api namespace", "namespace verse_api {" in text)
     check_true(
@@ -733,6 +734,18 @@ def test_render_classes_header():
     check_true(
         "an enum maps back to the Godot class and enum it was spelled from",
         '{ "node_internal_mode", "Node", "InternalMode" },' in text,
+        text,
+    )
+    # A global carries the page it is documented on as well as the name, because one of them is not
+    # on @GlobalScope: Godot's Object.to_string is what Verse's own `ToString` stands for.
+    check_true(
+        "a global names the page it is documented on",
+        '{ "LerpAngle", "@GlobalScope", "lerp_angle" },' in text,
+        text,
+    )
+    check_true(
+        "and one documented on a class names the class",
+        '{ "ToString", "Object", "to_string" },' in text,
         text,
     )
 
@@ -900,7 +913,7 @@ def test_method_map_names_the_godot_original():
         ("Node2D", "node2d", "get_position", "GetPosition", False, "method"),
         ("Node2D", "node2d", "_draw", "_Draw", True, "method"),
     ]
-    text = g.render_classes_header(api, ["Node2D"], method_map, [], {})
+    text = g.render_classes_header(api, ["Node2D"], method_map, [], {}, [])
     check_true(
         "method map carries the Godot spelling the Verse name cannot be inverted to",
         '{ "node2d", "GetPosition", "Node2D", "get_position", false, member_kind::method },' in text,
@@ -1343,6 +1356,75 @@ def test_the_value_types_are_all_of_them():
                '{ "signal", "" },' in header)
 
 
+def test_a_written_math_method_is_documented():
+    """A method GodotMath writes gets a row; the same walk records a skip for one it does not.
+
+    `(V:vector2).Length()` is `Vector2.length` and is documented as such, but an extension method is
+    a module-level definition, so the compiler reports its owner as the file. Nothing keyed by owner
+    could find it and all 159 hovered as local constants with their signature -- the consumer reads
+    the receiver off the declared type, and this is the row it reads with.
+    """
+    header = (REPO_ROOT / "src" / "verse_api_classes.h").read_text(encoding="utf-8")
+    for verse_class, verse_name, godot_class, godot_name, kind in (
+            ("vector2", "Length", "Vector2", "length", "method"),
+            ("vector2", "Snapped", "Vector2", "snapped", "method"),
+            ("color", "Darkened", "Color", "darkened", "method"),
+            # Godot's `end` is a member rather than a method, so the method walk cannot see it and
+            # the member walk beside it is what gives `GetEnd` a page.
+            ("rect2", "GetEnd", "Rect2", "end", "property"),
+    ):
+        check_true(
+            f"the checked-in header maps {verse_class}.{verse_name} to {godot_class}.{godot_name}",
+            f'{{ "{verse_class}", "{verse_name}", "{godot_class}", "{godot_name}", false, '
+            f'member_kind::{kind} }},' in header,
+        )
+    # The two written methods Godot has no such method for. `Xform` is its `operator *` and
+    # `InverseOrthonormal` is a helper of the mirror's own, so both keep their own comment.
+    for verse_class, verse_name in (("quaternion", "Xform"), ("transform3d", "InverseOrthonormal")):
+        check_true(f"and gives {verse_class}.{verse_name} no row, having nothing to point at",
+                   f'{{ "{verse_class}", "{verse_name}", ' not in header)
+
+
+def test_a_hand_written_global_is_documented():
+    """The globals table, which was two rows in verse_script_language.cpp and is now derived.
+
+    `Print` and `IsInstanceValid` had rows and the other thirty-eight globals the mirror hand-writes
+    did not, so every one of GodotMath's scalar functions drew "Local Constant".
+    """
+    import json
+
+    api = json.loads((REPO_ROOT / "godot-cpp" / "gdextension" / "extension_api-4-7.json")
+                     .read_text(encoding="utf-8"))
+    rows = dict((name, (godot_class, godot_function))
+                for name, godot_class, godot_function in g.global_doc_rows(api, REPO_ROOT / "host" / "Verse"))
+
+    check("a global named exactly as Godot names it", rows.get("LerpAngle"),
+          ("@GlobalScope", "lerp_angle"))
+    # Godot spells eight of them without the word boundary the mirror keeps.
+    check("one Godot spells without the boundary", rows.get("WrapF"), ("@GlobalScope", "wrapf"))
+    # And one that shares no letters with the Godot name, which only UTILITY_VERSE_SPELLINGS knows.
+    check("one that only the spellings table can reach", rows.get("VariantTypeName"),
+          ("@GlobalScope", "type_string"))
+    # `Object.to_string` is the one global documented on a class rather than on @GlobalScope.
+    check("and ToString, which is a class method", rows.get("ToString"), ("Object", "to_string"))
+
+    check_true("a function the bridge invented gets no row",
+               not any(name in rows for name in ("MakeVariant", "TruncatedQuotient", "MakeSignal")))
+    check_true("and an extension method is not a global",
+               "Length" not in rows and "Normalized" not in rows)
+
+
+def test_fmod_keeps_its_own_spelling():
+    """`fmod` was bound twice in UTILITY_VERSE_SPELLINGS and the second binding won.
+
+    Both sentences were true, which is why it read as correct: Verse's `Mod[X, Y]` exists and so
+    does GodotMath's `FMod(A, B)`. Only one of them is the float modulo Godot's `fmod` is, and the
+    editor was naming the other.
+    """
+    check("fmod is spelled FMod", g.UTILITY_VERSE_SPELLINGS["fmod"], "FMod(A, B)")
+    check("posmod keeps Verse's own", g.UTILITY_VERSE_SPELLINGS["posmod"], "Mod[X, Y]")
+
+
 def main():
     test_class_names()
     test_method_names()
@@ -1362,6 +1444,9 @@ def main():
     test_to_string_is_reachable_as_verses_own()
     test_every_exported_type_has_a_row()
     test_the_value_types_are_all_of_them()
+    test_a_written_math_method_is_documented()
+    test_a_hand_written_global_is_documented()
+    test_fmod_keeps_its_own_spelling()
     test_enumerator_names_strip_their_shared_prefix()
     test_enums_drop_sentinels_and_aliases()
     test_a_property_takes_its_enum_from_the_getter()

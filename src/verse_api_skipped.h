@@ -62,7 +62,7 @@ inline constexpr skipped_member skipped[] = {
 	{ "", "Floor", "@GlobalScope", "floor", "utility_has_verse_spelling", "Floor[X]" },
 	{ "", "Floorf", "@GlobalScope", "floorf", "utility_has_verse_spelling", "FloorF(X)" },
 	{ "", "Floori", "@GlobalScope", "floori", "utility_has_verse_spelling", "Floor[X]" },
-	{ "", "Fmod", "@GlobalScope", "fmod", "utility_has_verse_spelling", "Mod[X, Y]" },
+	{ "", "Fmod", "@GlobalScope", "fmod", "utility_has_verse_spelling", "FMod(A, B)" },
 	{ "", "Fposmod", "@GlobalScope", "fposmod", "utility_has_verse_spelling", "Mod[X, Y]" },
 	{ "", "Hash", "@GlobalScope", "hash", "utility_variant_only", "" },
 	{ "", "InstanceFromId", "@GlobalScope", "instance_from_id", "utility_has_verse_spelling", "InstanceFromId[Id]" },

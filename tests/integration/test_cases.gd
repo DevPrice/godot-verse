@@ -1919,6 +1919,24 @@ func begin() -> void:
 		_check_eq("a parametric type hovers as the Godot type it wraps",
 				_hover(hovers, "typed_array").get("class_name"), "Array")
 
+		# An extension method on a value type: a module-level definition of `operator'.Length'`,
+		# whose owner is the file it is written in. All 159 of GodotMath's hovered as locals with
+		# their signature until the receiver was read off the declared type instead.
+		_check_eq("a math method hovers as the Godot method it mirrors",
+				_hover(hovers, "Length").get("class_name"), "Vector2")
+		_check_eq("named as Vector2.length",
+				_hover(hovers, "Length").get("class_member"), "length")
+
+		# A scalar of the same file's, which Godot documents where it documents `randf_range`.
+		_check_eq("a scalar math global hovers on @GlobalScope",
+				_hover(hovers, "Smoothstep").get("class_name"), "@GlobalScope")
+
+		# And the pair that proves which of the two it asks first: one name, a method on a vector
+		# and a utility on a float, told apart by the receiver and by nothing else.
+		_check_eq("one name written both ways answers both pages",
+				_hover_answers(hovers, "Snapped"),
+				["@GlobalScope.snapped", "Vector2.snapped"])
+
 		# A comment is prose. The mirror spells Godot's classes in lowercase, so this is the
 		# difference between hovering a sentence and hovering code.
 		_check_eq("a Godot class name in a comment draws nothing",
@@ -1962,6 +1980,21 @@ func _hover(rows: Array, symbol: String) -> Dictionary:
 
 func _hover_type(rows: Array, symbol: String) -> int:
 	return _hover(rows, symbol).get("type", -1)
+
+
+# Every distinct Godot page a name hovers to, sorted. A name written two ways -- `Snapped` as a
+# method on a vector2 and as a utility on a float -- is one symbol with two right answers, and
+# _hover would only ever report whichever came first in the file.
+func _hover_answers(rows: Array, symbol: String) -> Array:
+	var seen := {}
+	for row in rows:
+		if row["symbol"] != symbol or row["token"] == "comment" or row["token"] == "string":
+			continue
+		if row["class_name"] != "":
+			seen["%s.%s" % [row["class_name"], row["class_member"]]] = true
+	var answers := seen.keys()
+	answers.sort()
+	return answers
 
 
 func _comment_hover(rows: Array, symbol: String) -> Dictionary:

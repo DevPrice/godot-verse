@@ -804,6 +804,52 @@ each have a case. **The colouring itself still has no test and cannot have one f
 never reaches, so no GDScript can construct one. It is in the same bucket as the rest of the editor
 UI, and the steps are below.
 
+### The same walk, one table over: the functions
+
+Fixing the types left `tools/probe_hover.py` reporting 290 mislabelled names over `tests/integration`
+and 16 over `dodge-the-creeps`, every one of them a *function*. The largest group was the one an
+author meets first: `Length`, `Normalized`, `Rotated` and `Clamp` on a `vector2` — the yardstick's
+own code — each drawing "Local Constant" over its signature, though Godot documents all of them.
+
+Three causes, one shape. **An extension method's owner is the file it is written in**: `(V:vector2)
+.Length()` declares `operator'.Length'` at module level, so `godot_method_for(owner, name)` had a
+path where it wanted `vector2`, and the receiver appears nowhere but the signature. **Nothing
+recorded the pairs**: the generator's math pass walked every builtin method to record the ones
+GodotMath does *not* write, and threw away the ones it does. **And the globals table was two rows
+hand-written in `verse_script_language.cpp`** — `Print` and `IsInstanceValid` — so the other
+forty-eight, all of GodotMath's scalar half among them, had nothing to name.
+
+What closes it: the skip walk records a row for a written method as well as a skip for an absent one
+(159 methods, plus three `GetEnd`s that are Godot *members* rather than methods), the globals table
+is generated from what the hand-written files declare (50 rows, matched to a Godot utility by name,
+then ignoring case, then through `UTILITY_VERSE_SPELLINGS` — which is the only way to reach
+`type_string`, whose Verse spelling is `VariantTypeName`), and the consumer reads the receiver off
+the first parameter of the declared type. That last part is also the disambiguation: `Snapped` is
+`Vector2.snapped` on a vector and `@GlobalScope.snapped` on a float, and only the receiver says
+which.
+
+Two smaller things fell out of it. `GodotMath.native.verse` **was not in `is_godot_package_global`'s
+list of files** — it postdates the list — so every global in the file was excluded from the path it
+needed before any of the above could run. And `UTILITY_VERSE_SPELLINGS` **bound `fmod` twice**; the
+second binding won, so R-SCN-2's sentence for `fmod` named Verse's integer `Mod[X, Y]` rather than
+GodotMath's `FMod(A, B)`. Both sentences are true, which is why it read as correct.
+
+**Where this stops, and why that is a decision rather than an omission.** 250 rows remain over
+`tests/integration` and 12 over the yardstick, in four families: a global the bridge invented
+(`MakeVariant`, `AsInt`), a wrapper class's method (`godot_array.GetInt`, `signal(t).Await`),
+Verse's own (`event`, `Sqrt`), and the project's own second classes and their members. **None of
+them mirrors a Godot function.** The wrappers are the tempting ones — `godot_array.Length` is
+plainly `Array.size` — but their bodies call `VhRefSize` and the ABI's own reference primitives, not
+a named Godot method, so a table pointing them at one would be judged rather than read. The mirror's
+comment above each declaration is what the tooltip draws instead, and it is a better description of
+a *typed* accessor than Godot's page for the untyped one. `probe_hover.py`'s H1 rule now names the
+four families, so what it reports reads as a line rather than as a backlog.
+
+**And the instrument was measuring a stale build.** `probe_hover.py` runs Godot in a project and the
+project holds whatever library was last staged there, so two measurements of a fix that had already
+landed came back unchanged and read as the fix doing nothing. It stages the built extension itself
+now, the way `run_tests.py` does before each of its Godot layers.
+
 ---
 
 ## What is still open

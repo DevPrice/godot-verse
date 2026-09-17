@@ -146,28 +146,61 @@ const verse_api::method_mapping *godot_method_for(const String &p_verse_class, c
 	return nullptr;
 }
 
-// The Godot function one of the bridge's globals stands for. Godot documents its global functions
-// on @GlobalScope -- a class its documentation has and ClassDB does not, and the one GDScript
-// sends a click on `print(` to -- so naming it is what gives a global the tooltip and the jump a
-// mirrored method already gets. Hand-written because the globals are: gen_verse_api.py mirrors
-// classes, and a global belongs to none.
-struct global_mapping {
-	const char *verse_name;
-	const char *godot_function;
-};
-
-constexpr global_mapping globals[] = {
-	{ "IsInstanceValid", "is_instance_valid" },
-	{ "Print", "print" },
-};
-
-const char *godot_global_for(const String &p_verse_name) {
-	for (size_t i = 0; i < std::size(globals); i++) {
-		if (p_verse_name == globals[i].verse_name) {
-			return globals[i].godot_function;
+// The Godot function one of the mirror's globals stands for, and the page it is documented on.
+// Godot documents a function belonging to no class on @GlobalScope -- a class its documentation has
+// and ClassDB does not, and the one GDScript sends a click on `print(` to -- so naming it is what
+// gives a global the tooltip and the jump a mirrored method already gets.
+//
+// Two rows of this were written out here, `Print` and `IsInstanceValid`, and the other forty-eight
+// globals the mirror hand-writes had none: `Smoothstep`, `LerpAngle`, `DegToRad` and the rest of
+// GodotMath's scalar half all drew "Local Constant". The table is generated from what those files
+// declare now, so a global added to one of them is documented by the next generation or by nothing.
+const verse_api::global_mapping *godot_global_for(const String &p_verse_name) {
+	for (size_t i = 0; i < std::size(verse_api::globals); i++) {
+		if (p_verse_name == verse_api::globals[i].verse_name) {
+			return &verse_api::globals[i];
 		}
 	}
 	return nullptr;
+}
+
+// `operator'.Length'` -> `Length`, and empty for a name that is not an extension method's.
+//
+// An extension method is a *module-level* definition -- `(V:vector2).Length<public>()` declares
+// `operator'.Length'` beside everything else in the file -- so the owner the compiler reports for
+// one is the file it is written in, and the type it is written *on* appears nowhere but its
+// signature. This is what tells the two kinds of global apart before asking about either.
+String verse_extension_method_name(const String &p_name) {
+	const String prefix = "operator'.";
+	if (!p_name.begins_with(prefix) || !p_name.ends_with("'") || p_name.length() <= prefix.length() + 1) {
+		return String();
+	}
+	return p_name.substr(prefix.length(), p_name.length() - prefix.length() - 1);
+}
+
+// The receiver of an extension method, read off its declared type: the first parameter of
+// `type{_(:vector2,:tuple())<reads>:float}`. Depth-counted rather than split on the first comma,
+// because a receiver can be parametric -- `typed_array(node)` carries one of its own.
+String verse_receiver_type(const String &p_function_type) {
+	const String prefix = "type{_(:";
+	if (!p_function_type.begins_with(prefix)) {
+		return String();
+	}
+	int64_t depth = 0;
+	for (int64_t i = prefix.length(); i < p_function_type.length(); i++) {
+		const char32_t c = p_function_type[i];
+		if (c == U'(' || c == U'[' || c == U'{') {
+			depth++;
+		} else if (c == U')' || c == U']' || c == U'}') {
+			if (depth == 0) {
+				return p_function_type.substr(prefix.length(), i - prefix.length());
+			}
+			depth--;
+		} else if (c == U',' && depth == 0) {
+			return p_function_type.substr(prefix.length(), i - prefix.length());
+		}
+	}
+	return String();
 }
 
 // The Godot class a generated singleton accessor hands out -- GetEngine's Engine, which is the
@@ -292,9 +325,14 @@ bool is_godot_package_global(const String &p_owner, const String &p_path) {
 		return false;
 	}
 	const String file = p_path.get_file();
+	// GodotMath.native.verse is the fourth and was missing until the math methods were looked for
+	// in it: it is where every extension method on a value type and every scalar `LerpAngle` is
+	// written, so leaving it out excluded the largest group of globals the package has from ever
+	// being documented as one.
 	return file == String("Godot.native.verse")
 			|| file == String("GodotApi.native.verse")
-			|| file == String("GodotClasses.native.verse");
+			|| file == String("GodotClasses.native.verse")
+			|| file == String("GodotMath.native.verse");
 }
 
 const char *mirrored_class(const String &p_godot_class) {
@@ -2684,10 +2722,26 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 		// the file it is declared in is in the engine tree rather than in the project -- leaving
 		// it, before this, described by its own comment and with nowhere to click through to.
 		if (is_godot_package_global(found_owner, own_path)) {
-			if (const char *global_function = godot_global_for(found_name)) {
+			// An extension method first, because the two overlap by name and only one of them
+			// has a receiver: `Snapped` is `(V:vector2).Snapped(Step)` *and* the scalar
+			// `Snapped(X, Step)`, and Godot documents them in two different places. Asking about
+			// the receiver is what separates them -- and is the only way to reach any of
+			// GodotMath's 159 methods, whose owner is the file rather than the type.
+			const String extension_name = verse_extension_method_name(found_name);
+			if (!extension_name.is_empty()) {
+				const verse_api::method_mapping *on_receiver = godot_method_for(
+						verse_receiver_type(result["doc_type"]), extension_name);
+				if (on_receiver != nullptr) {
+					result["type"] = lookup_result_for(on_receiver->kind);
+					result["class_name"] = String(on_receiver->godot_class);
+					result["class_member"] = String(on_receiver->godot_method);
+					return result;
+				}
+			}
+			if (const verse_api::global_mapping *global = godot_global_for(found_name)) {
 				result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS_METHOD;
-				result["class_name"] = String("@GlobalScope");
-				result["class_member"] = String(global_function);
+				result["class_name"] = String(global->godot_class);
+				result["class_member"] = String(global->godot_function);
 				return result;
 			}
 			const String singleton_class = godot_singleton_class_for(found_name);
