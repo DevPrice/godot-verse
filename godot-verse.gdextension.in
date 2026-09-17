@@ -3,4 +3,8 @@
 entry_symbol = "godot_verse_init"
 compatibility_minimum = "4.7"
 
+[icons]
+
+VerseScript = "verse.svg"
+
 [libraries]

@@ -21,6 +21,9 @@ addons/*/bin/
 # godot
 .godot/
 *.import
+# The script icon's import options are load-bearing -- `convert_colors_with_editor_theme` is what
+# keeps a white glyph visible on a light editor theme, and this file is where Godot reads it.
+!**/addons/godot-verse/verse.svg.import
 
 # unreal host build products
 host/Intermediate/
