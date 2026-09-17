@@ -144,6 +144,15 @@ exports := class(object):
     BumpLabel<public>():void =
         set Label = Label + "!"
 
+    # A parametric receiver, which is the shape completion had to instantiate to match: `Emit` and
+    # `Subscribe` are declared as `(Ev:event(t) where t:type).X`, and `event(int)` is not a subtype
+    # of `event(t)`. Carries no signal attribute, so it is not a signal and the signal list is
+    # unchanged by it.
+    Pinged<public>:event(int) = event(int){}
+
+    PingOnce<public>()<transacts>:void =
+        Pinged.Emit(1)
+
     # --- ABI v2 dispatch fixtures (R-NODE-6) -------------------------------------
     # One method per argument shape the wire carries, each returning something derived from what it
     # was given, so a single call checks the round trip in both directions.

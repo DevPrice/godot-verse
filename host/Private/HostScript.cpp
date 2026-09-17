@@ -8516,9 +8516,36 @@ AUTORTFM_DISABLE void CollectExtensionMethods(const uLang::CScope* FromScope,
             {
                 continue;
             }
+            const CTypeBase* ReceiverParam = Params[0]->GetType();
+
+            // A *parametric* receiver is declared against a type variable -- `(Ev:event(t) where
+            // t:type).Emit` -- and `event(int)` is not a subtype of `event(t)`: a parametric class
+            // is nominal, so the two are different CClasses and the match below refuses outright.
+            // `Emit` and `Subscribe` were the whole visible cost, since they are the only two
+            // extension methods the bridge declares that way, and both are what an author reaches
+            // for on a declared `event(t)` member.
+            //
+            // Instantiating is what a call site does: the type variables become fresh flow types,
+            // and matching then constrains them the way overload resolution would. Only for a
+            // signature that has any, so nothing else pays for it, and the flow types are this
+            // call's own -- constraining them is visible to nothing else.
+            if (const CFunctionType* FunctionType = Function->_Signature.GetFunctionType())
+            {
+                if (!FunctionType->GetTypeVariables().IsEmpty())
+                {
+                    if (const CFunctionType* Instantiated = SemanticTypeUtils::Instantiate(
+                            FunctionType, VerseFN::UploadedAtFNVersion::Latest))
+                    {
+                        const CTypeBase& ParamsType = Instantiated->GetParamsType();
+                        const CTupleType* const Tuple = ParamsType.GetNormalType().AsNullable<CTupleType>();
+                        ReceiverParam = Tuple && Tuple->Num() > 0 ? (*Tuple)[0] : &ParamsType;
+                    }
+                }
+            }
+
             // Contravariant: matching against the parameter's own type, the same test overload
             // resolution runs for an extension call, is what lets a subtype receiver still match.
-            if (!SemanticTypeUtils::Matches(&ReceiverType, Params[0]->GetType(), VerseFN::UploadedAtFNVersion::Latest))
+            if (!SemanticTypeUtils::Matches(&ReceiverType, ReceiverParam, VerseFN::UploadedAtFNVersion::Latest))
             {
                 continue;
             }

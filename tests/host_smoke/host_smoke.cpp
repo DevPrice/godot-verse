@@ -1202,6 +1202,38 @@ int main(int argc, char** argv)
 						  && CompleteOk;
 			}
 
+			// A parametric receiver. `event(t)`'s Emit and Subscribe are extension methods declared
+			// against a type variable, and a parametric class is nominal -- `event(int)` is a
+			// different CClass from `event(t)`, so the plain subtype test refused both and the two
+			// verbs an author reaches for on a declared event member were absent from the popup.
+			// The class's own members were there throughout, which is what made it read as the
+			// list being complete.
+			const size_t EventUse = ExportsSource.find("Pinged.Emit(1)");
+			CompleteOk = Step("located the fixture's event member", EventUse != std::string::npos) && CompleteOk;
+			if (EventUse != std::string::npos)
+			{
+				std::string EventTyping = ExportsSource;
+				EventTyping.replace(EventUse, strlen("Pinged.Emit(1)"), "Pinged.VhCompletionCursor");
+				RowColumnOf(EventTyping, EventUse + strlen("Pinged") - 1, RecvRow, RecvColumn);
+				AnalyseCompletionBuffer(EventTyping);
+				if (Step("vh_complete_symbol on a parametric receiver",
+						CompleteSymbolFn(ExportsPathUtf8.c_str(), EventTyping.c_str(), RecvRow, RecvColumn,
+										 VH_COMPLETE_MEMBERS, &Items, &Count) == VH_OK))
+				{
+					CompleteOk = Step("it offers the class' own Await", Offers(Items, Count, "Await") != nullptr) && CompleteOk;
+					CompleteOk = Step("and the extension method Emit", Offers(Items, Count, "Emit") != nullptr) && CompleteOk;
+					CompleteOk = Step("and Subscribe", Offers(Items, Count, "Subscribe") != nullptr) && CompleteOk;
+					// The instantiation is per receiver and not a free pass: `signal(t)`'s own
+					// extension methods are not event(t)'s, and nothing declared for a different
+					// parametric class may ride in behind the two that match.
+					CompleteOk = Step("but not vector2's Length", Offers(Items, Count, "Length") == nullptr) && CompleteOk;
+				}
+				else
+				{
+					CompleteOk = false;
+				}
+			}
+
 			// An enum used as a *type name* rather than a value -- `node_process_mode.<cursor>`,
 			// which is how an author actually spells an enumerator (`SetProcessMode(node_process_
 			// mode.Always)`) -- has a CTypeType result rather than a CEnumeration one, and used to
