@@ -44,6 +44,27 @@ POSITIONS = "complete_probe_positions.json"
 
 IDENT = re.compile(r"[A-Za-z0-9_]")
 WORD_BEFORE = re.compile(r"[A-Za-z0-9_]+$")
+NUMBER_BEFORE = re.compile(r"(?:^|[^A-Za-z0-9_])[0-9]+$")
+PATH_SEGMENT_BEFORE = re.compile(r"/[A-Za-z0-9_]*$")
+
+
+def in_string(raw: bytes, at: int) -> bool:
+    """Whether byte `at` of one line of code sits inside a string literal.
+
+    The line has had its comment stripped already, so a `"` is a quote and nothing else. Escapes
+    count: `"a\"b"` is one literal.
+    """
+    quote = False
+    escaped = False
+    for i in range(at):
+        char = chr(raw[i])
+        if escaped:
+            escaped = False
+        elif quote and char == "\\":
+            escaped = True
+        elif char == '"':
+            quote = not quote
+    return quote
 
 
 def reserved_words() -> set[str]:
@@ -85,6 +106,22 @@ def positions_in(source: str, wanted: set[str], reserved: set[str]) -> list[tupl
             if char == "." and "member" in wanted:
                 # Right after the dot, where the prefix is empty: the snapshot answers first and
                 # the analysis refines it, and both halves are worth a row.
+                #
+                # Four dots are not member accesses and C4 would report every one of them. The
+                # `.` of `1.5` is part of the number, which is the test _complete_code makes with
+                # ends_a_number_literal. A `.` inside a string is text, which it routes to the
+                # string answer instead -- a caret inside a string is still probed, because every
+                # other character of one is a `scope` position and _complete_code tests for a
+                # string before it tests for anything else. A `.` in a verse path is a package
+                # name: `using { /Godot.org/Godot }` is the first line of nearly every script, and
+                # what stands in front of the dot is reached through a `/` rather than evaluated.
+                # And `..` is the range operator.
+                if NUMBER_BEFORE.search(raw[:at].decode("utf-8", "ignore")) or in_string(raw, at):
+                    continue
+                if PATH_SEGMENT_BEFORE.search(raw[:at].decode("utf-8", "ignore")):
+                    continue
+                if before == "." or (at + 1 < len(raw) and chr(raw[at + 1]) == "."):
+                    continue
                 found.append((line_number, at + 1, "member"))
             elif char == "{" and "field" in wanted:
                 word = WORD_BEFORE.search(raw[:at].decode("utf-8", "ignore"))
@@ -220,6 +257,17 @@ def rules(rows: list[dict]) -> list[Finding]:
                 "C2", row,
                 "no options",
                 "the archetype's fields, or the callee's named parameters"))
+
+        # C4. The same thing for a `.`, which is the most bounded position of the three and the
+        # only one that had no rule: what may be written there is the receiver's members and
+        # nothing else, so an empty answer is the popup having nothing to draw rather than the
+        # bridge declining to guess. It is the refined answer that is read -- the first one is
+        # allowed to be empty, and C3 is what watches that half.
+        if row["at"] == "member" and row["count"] == 0:
+            findings.append(Finding(
+                "C4", row,
+                "no options",
+                "the receiver's own members and its bases'"))
 
         # C3. The popup opened on the snapshot and the analysis then replaced its whole contents.
         # Not a defect -- it is R-TOOL-3's design, the answer arriving at once and refining in
