@@ -4288,6 +4288,7 @@ inline constexpr skipped_member skipped[] = {
 	{ "nine_patch_rect", "Texture", "NinePatchRect", "texture", "property_object_type", "`GetTexture()` and `SetTexture()`" },
 	{ "node", "EditorDescription", "Node", "editor_description", "property_container_type", "`GetEditorDescription()` and `SetEditorDescription()`" },
 	{ "node", "GetAutoTranslateMode", "Node", "get_auto_translate_mode", "superseded_by_property", "`AutoTranslateMode`" },
+	{ "node", "GetNodeOrNull", "Node", "get_node_or_null", "method_renamed", "`GetNode`, since an object return is already failable" },
 	{ "node", "GetOrphanNodeIds", "Node", "get_orphan_node_ids", "static", "" },
 	{ "node", "GetPhysicsInterpolationMode", "Node", "get_physics_interpolation_mode", "superseded_by_property", "`PhysicsInterpolationMode`" },
 	{ "node", "GetPhysicsProcessPriority", "Node", "get_physics_process_priority", "superseded_by_property", "`ProcessPhysicsPriority`" },

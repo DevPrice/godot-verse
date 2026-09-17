@@ -1759,7 +1759,6 @@ struct string_argument_rule {
 
 constexpr string_argument_rule string_argument_rules[] = {
 	{ "GetNode", string_argument::node_path, 0 },
-	{ "GetNodeOrNull", string_argument::node_path, 0 },
 	{ "HasNode", string_argument::node_path, 0 },
 	{ "FindChild", string_argument::node_path, 0 },
 	{ "FindChildren", string_argument::node_path, 0 },
@@ -4424,6 +4423,12 @@ String skipped_member_explanation(const verse_api::skipped_member &p_entry) {
 	if (reason == "property_renamed") {
 		return String("a Verse function already answers to that name, so it is the property ")
 				+ detail + ".";
+	}
+	// The mirror emits the method under another name, so the author who typed Godot's is one word
+	// from working code rather than looking at a gap. Only the *lost* spelling has a row: the name
+	// the rename took resolves, so a row keyed on it could answer nothing but itself.
+	if (reason == "method_renamed") {
+		return String("it is reachable as ") + detail + ".";
 	}
 	if (reason == "superseded_by_free_function") {
 		return String("it is reachable as ") + detail + ", which is also what string interpolation uses.";

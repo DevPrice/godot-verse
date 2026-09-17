@@ -69,6 +69,22 @@ VERSE_AMBIGUOUS_MEMBER_NAMES = {"Min", "Max", "ToString"}
 # answered by the editor with the one that works.
 PROPERTY_RENAMES = {"Min": "Minimum", "Max": "Maximum"}
 
+# A Godot method the mirror emits under a different name, and the method that name displaces.
+#
+# One pair, and it is Verse's failure model rather than taste that decides it. R-TYPE-4 makes every
+# object return `<decides>`, so `get_node` and `get_node_or_null` cross as the same signature; what
+# is left of the difference is that Godot's `get_node` is a wrapper whose whole body is an
+# `ERR_FAIL_V_MSG` (scene/main/node.cpp). In Verse that prints a red line on the branch the compiler
+# has already forced the author to write, so the silent one is the one worth having -- and `OrNull`
+# names a thing Verse does not have. The spelling that lost is recorded as a skip pointing here, the
+# way PROPERTY_RENAMES' is, so an author who ported `GetNodeOrNull` from GDScript is told the word.
+METHOD_RENAMES = {
+    ("Node", "get_node_or_null"): ("GetNode", "`GetNode`, since an object return is already failable"),
+}
+
+# The methods a rename displaces, which are dropped outright.
+METHOD_DISPLACED = {("Node", "get_node")}
+
 # Godot members that are reachable as a module-level function instead of as a method, because Verse
 # already gives the name a meaning worth keeping.
 #
@@ -1634,6 +1650,18 @@ def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members
         coverage.skip("superseded_by_free_function", record(
             "superseded_by_free_function", f"`{FREE_FUNCTION_REPLACEMENTS[(godot_class, m['name'])]}`"))
         return None
+    # The rename pair. The displaced method is dropped outright; the renamed one is emitted under
+    # the new name and its own spelling recorded, so an author who typed either is answered.
+    renamed_to = None
+    if (godot_class, m["name"]) in METHOD_RENAMES:
+        renamed_to, rename_detail = METHOD_RENAMES[(godot_class, m["name"])]
+        coverage.skip("method_renamed", record("method_renamed", rename_detail))
+    elif (godot_class, m["name"]) in METHOD_DISPLACED:
+        # Counted but given no lookup row: its Verse name is the one the rename took, so the row
+        # would be keyed on an identifier that resolves, and unambiguous_skipped_member would answer
+        # a bare `GetNode` with "Godot has get_node, but it is reachable as `GetNode`".
+        coverage.skip("method_renamed")
+        return None
     if not is_virtual and verse_method_name(m["name"]) in VERSE_AMBIGUOUS_MEMBER_NAMES:
         raise ValueError(
             f"{godot_class}.{m['name']} would be a method named "
@@ -1685,7 +1713,8 @@ def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members
 
     return ClassifiedMethod(
         godot_name=m["name"],
-        verse_name=verse_virtual_name(m["name"]) if is_virtual else verse_method_name(m["name"]),
+        verse_name=renamed_to or (
+            verse_virtual_name(m["name"]) if is_virtual else verse_method_name(m["name"])),
         params=params,
         return_type=return_info,
         is_void=is_void,

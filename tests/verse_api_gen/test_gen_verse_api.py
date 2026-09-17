@@ -386,6 +386,42 @@ def test_base_member_shadow():
     )
 
 
+def test_get_node_takes_the_or_null_spelling():
+    """Godot's two lookups are one signature in Verse, and the silent one keeps the plain name.
+
+    R-TYPE-4 makes every object return `<decides>`, so `get_node` and `get_node_or_null` cross
+    identically; all that is left of the difference is the `ERR_FAIL_V_MSG` in Godot's `get_node`,
+    which prints on the branch the compiler has already forced the author to write.
+    """
+    api = {
+        "classes": [
+            {"name": "Object", "inherits": None, "methods": []},
+            {
+                "name": "Node",
+                "inherits": "Object",
+                "methods": [
+                    dict(_method("get_node", "Node", [{"name": "path", "type": "NodePath"}]),
+                         is_const=True),
+                    dict(_method("get_node_or_null", "Node", [{"name": "path", "type": "NodePath"}]),
+                         is_const=True),
+                ],
+            },
+        ]
+    }
+    coverage = g.Coverage()
+    blocks, _emit_order, _method_map, _members, _arrays, _dicts = g.generate(api, ["Node"], coverage, {})
+    node_block = next(b for b in blocks if b.startswith("node"))
+    check_true("GetNode dispatches get_node_or_null",
+               "GetNode<public>(Path:string)<decides><reads>:node" in node_block
+               and '"get_node_or_null"' in node_block, node_block)
+    check_true("and Godot's own get_node is not emitted", '"get_node"' not in node_block, node_block)
+    check("both spellings accounted for", coverage.skip_reasons["method_renamed"], 2)
+    rows = {(sm.verse_name, sm.reason) for sm in coverage.skipped_members}
+    check_true("only the lost spelling gets a lookup row, since GetNode itself resolves",
+               ("GetNodeOrNull", "method_renamed") in rows
+               and ("GetNode", "method_renamed") not in rows, sorted(rows))
+
+
 def test_virtual_names_keep_godots_underscore():
     """A virtual is `_Ready`, not `Ready`, and it is measured rather than preferred.
 
@@ -1134,6 +1170,7 @@ def main():
     test_singleton_accessor_yields_to_a_method_of_the_same_name()
     test_shadow_suppression_across_inheritance()
     test_base_member_shadow()
+    test_get_node_takes_the_or_null_spelling()
     test_unsupported_type_skipping()
     test_typed_array_parameter_takes_the_parametric_class()
     test_union_parameter_widens_to_the_common_ancestor()
