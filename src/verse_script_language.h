@@ -6,6 +6,7 @@
 #include <godot_cpp/classes/script_language_extension.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
+#include <godot_cpp/variant/packed_int32_array.hpp>
 #include <godot_cpp/variant/packed_string_array.hpp>
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
@@ -216,6 +217,20 @@ public:
 	// file on disk and reports what _lookup_code answered beside what the host resolved, which
 	// is the pair a mislabelled tooltip has to be read out of. tools/probe_hover.py consumes it.
 	godot::TypedArray<godot::Dictionary> probe_hover(const godot::String &p_path);
+
+	// The same seam for completion. p_positions is flat (line, column) pairs, zero-based,
+	// with the column a byte offset into the line the way probe_hover reports one -- chosen
+	// by the caller rather than walked here, because a completion costs an analysis where a
+	// hover costs none: _complete_code substitutes a placeholder for the identifier being
+	// typed, so the text the host is asked about differs per caret and the one analysis
+	// probe_hover gets away with does not exist here.
+	//
+	// Each position is asked twice, which is what an author gets: the first answer comes from
+	// whatever the last analysis left and queues the buffer this caret needs, and the second
+	// comes from that. In the editor _frame reaps the queue; this has no frames, so it
+	// flushes the check itself. tools/probe_complete.py consumes it.
+	godot::TypedArray<godot::Dictionary> probe_complete(
+		const godot::String &p_path, const godot::PackedInt32Array &p_positions);
 
 	// Errors the project build reported against one script, in the shape _validate returns.
 	// The build is the only thing that ever produces them: asking the compiler again for a

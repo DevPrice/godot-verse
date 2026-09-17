@@ -460,6 +460,8 @@ void VerseScriptLanguage::_bind_methods() {
 	// the method that can be called, and it exists because every tooltip the script editor draws
 	// is otherwise testable only by hand.
 	ClassDB::bind_method(D_METHOD("probe_hover", "path"), &VerseScriptLanguage::probe_hover);
+	ClassDB::bind_method(D_METHOD("probe_complete", "path", "positions"),
+		&VerseScriptLanguage::probe_complete);
 }
 
 String VerseScriptLanguage::_get_name() const {
@@ -3031,6 +3033,101 @@ TypedArray<Dictionary> VerseScriptLanguage::probe_hover(const String &p_path) {
 		}
 		line_start = line_end + 1;
 		line++;
+	}
+
+	return rows;
+}
+
+// Every completion the editor could ask for at the positions it is handed.
+//
+// Two things the editor does have to be reproduced or the rows describe a popup nobody can raise.
+// The marker is spliced at the caret, which is what CodeEdit's get_text_with_cursor_char does. And
+// each position is asked twice: _complete_code answers immediately from whatever the last analysis
+// left and queues the buffer this caret actually needs, and only the second ask sees that buffer.
+// Both answers are reported, because the difference between them is a real thing an author sees --
+// the popup that opens at once and refines in place.
+//
+// What this does *not* cover is whether the popup opens at all. CodeEdit decides that from its own
+// completion-prefix table (scene/gui/code_edit.cpp), which no answer from here can reach.
+TypedArray<Dictionary> VerseScriptLanguage::probe_complete(
+		const String &p_path, const PackedInt32Array &p_positions) {
+	TypedArray<Dictionary> rows;
+
+	ensure_project_built();
+	flush_pending_check();
+
+	const String file = FileAccess::get_file_as_string(p_path);
+	if (FileAccess::get_open_error() != OK) {
+		return rows;
+	}
+	const String source = verse_newline_normalized(file);
+	const CharString source_utf8 = source.utf8();
+	const std::string all(source_utf8.get_data(), (size_t)source_utf8.length());
+
+	std::vector<size_t> line_starts;
+	line_starts.push_back(0);
+	for (size_t i = 0; i < all.size(); i++) {
+		if (all[i] == '\n') {
+			line_starts.push_back(i + 1);
+		}
+	}
+
+	auto describe = [](const Dictionary &p_answer, Dictionary &r_row, const String &p_prefix) {
+		const Array options = p_answer.get("options", Array());
+		Array names;
+		for (int64_t i = 0; i < options.size(); i++) {
+			const Dictionary option = options[i];
+			Dictionary row;
+			row["display"] = option.get("display", String());
+			row["insert_text"] = option.get("insert_text", String());
+			row["kind"] = option.get("kind", (int64_t)-1);
+			row["location"] = option.get("location", (int64_t)-1);
+			names.push_back(row);
+		}
+		r_row[p_prefix + String("count")] = (int64_t)options.size();
+		r_row[p_prefix + String("options")] = names;
+		r_row[p_prefix + String("force")] = p_answer.get("force", false);
+		r_row[p_prefix + String("call_hint")] = p_answer.get("call_hint", String());
+	};
+
+	for (int64_t i = 0; i + 1 < p_positions.size(); i += 2) {
+		const int64_t line = p_positions[i];
+		const int64_t column = p_positions[i + 1];
+		if (line < 0 || (size_t)line >= line_starts.size() || column < 0) {
+			continue;
+		}
+		const size_t at = line_starts[(size_t)line] + (size_t)column;
+		if (at > all.size()) {
+			continue;
+		}
+
+		const std::string buffer = all.substr(0, at) + "\xEF\xBF\xBF" + all.substr(at);
+		const String code = String::utf8(buffer.data(), (int64_t)buffer.length());
+
+		Dictionary row;
+		row["line"] = line;
+		row["column"] = column;
+		// The character the caret sits behind, which is what decides both the position's own
+		// question here and whether CodeEdit would have raised the popup at all.
+		row["trigger"] = at > 0 ? String::utf8(all.data() + at - 1, 1) : String();
+
+		const Dictionary first = _complete_code(code, p_path, nullptr);
+		describe(first, row, "first_");
+
+		// Only when the first ask actually queued something. A caret the host can already describe
+		// answers once and the two halves of the row are the same list, which is itself worth
+		// reporting: it says the author saw the right names without waiting.
+		const bool queued = has_pending_check;
+		if (queued) {
+			flush_pending_check();
+			const Dictionary second = _complete_code(code, p_path, nullptr);
+			describe(second, row, "");
+		} else {
+			describe(first, row, "");
+		}
+		row["refined"] = queued;
+
+		rows.push_back(row);
 	}
 
 	return rows;
