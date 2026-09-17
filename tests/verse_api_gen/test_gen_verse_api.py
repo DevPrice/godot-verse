@@ -451,7 +451,7 @@ def test_a_predicate_decides_and_an_accessor_answers_logic():
                     _method("move_and_slide", "bool"),
                     # Unprefixed, and a predicate anyway -- PREDICATE_EXTRA keys this one by class.
                     _method("file_exists", "bool", [{"name": "path", "type": "String"}]),
-                    # The script answers this one and Godot consumes it, so it is not a test.
+                    # A virtual, which is a predicate whatever its name.
                     dict(_method("_has_point", "bool"), is_virtual=True),
                 ],
             },
@@ -466,11 +466,56 @@ def test_a_predicate_decides_and_an_accessor_answers_logic():
         ("FontIsForceAutohinter", "FontIsForceAutohinter<public>()<reads>:logic"),
         ("MoveAndSlide", "MoveAndSlide<public>()<transacts>:logic"),
         ("FileExists", "FileExists<public>(Path:string)<decides><transacts>:void"),
-        ("_HasPoint", "_HasPoint<public>():logic"),
+        ("_HasPoint", "_HasPoint<public>()<decides>:void"),
     ]:
         check_true(f"{name} is spelled {want.split(chr(40))[0]}...", want in block, block)
     check_true("a predicate's body is the query operator over VhToLogic",
                "VhToLogic(VhCallValueConst(Handle, \"is_playing\", array{}))?" in block, block)
+
+
+def test_a_bool_virtual_decides_with_nothing_but_decides():
+    """A bool virtual is `<decides>:void`, and the specifier is alone on purpose.
+
+    `<decides>` does not narrow: its effect descriptor rescinds only `decides` and excludes
+    nothing, so the declaration keeps the wide default set and an override may still call a
+    specifier-less helper. `<decides><transacts>` would rescind `no_rollback` and start wall 8's
+    cascade at every such call. Both halves are measured in
+    `tests/verse_probe/decides_virtual_{probe,reject}.verse`; this asserts the generator emits the
+    one that was chosen.
+
+    The default body has to fail, because an unoverridden Godot virtual answers "not handled".
+    """
+    api = {
+        "classes": [
+            {"name": "Object", "inherits": None, "methods": []},
+            {
+                "name": "Control",
+                "inherits": "Object",
+                "methods": [
+                    dict(_method("_has_point", "bool"), is_virtual=True),
+                    # Not predicate-named and with no `set_` twin, so only being a virtual puts it
+                    # here -- which is the rule this case exists for.
+                    dict(_method("_process", "bool"), is_virtual=True),
+                    # A void virtual is untouched, and so is one that answers a value.
+                    dict(_method("_draw", None), is_virtual=True),
+                    dict(_method("_get_minimum_size", "int"), is_virtual=True),
+                ],
+            },
+        ]
+    }
+    coverage = g.Coverage()
+    blocks, _emit_order, _method_map, _members, _arrays, _dicts = g.generate(api, ["Control"], coverage, {})
+    block = next(b for b in blocks if b.startswith("control"))
+    check_true("a bool virtual is <decides>:void with a failing default",
+               "_HasPoint<public>()<decides>:void = false?" in block, block)
+    check_true("and it is so whatever the name says",
+               "_Process<public>()<decides>:void = false?" in block, block)
+    check_true("the specifier is <decides> and nothing else",
+               "<decides><transacts>:void = false?" not in block
+               and "<decides><reads>:void = false?" not in block, block)
+    check_true("a void virtual is untouched", "_Draw<public>():void = {}" in block, block)
+    check_true("and so is one that answers a value",
+               "_GetMinimumSize<public>():int = 0" in block, block)
 
 
 def test_virtual_names_keep_godots_underscore():
@@ -493,6 +538,7 @@ def test_virtual_emits_a_default_body():
             {"name": "Thing", "inherits": "Object", "methods": [
                 dict(_method("_ready", None), is_virtual=True),
                 dict(_method("_has_point", "bool"), is_virtual=True),
+                dict(_method("_get_minimum_size", "int"), is_virtual=True),
                 # No default can be written for an object return, so it is a recorded skip rather
                 # than a silent absence.
                 dict(_method("_get_owner", "Object"), is_virtual=True),
@@ -505,7 +551,9 @@ def test_virtual_emits_a_default_body():
     check_true("a void virtual is declared with an empty body",
                "    _Ready<public>():void = {}" in block, block)
     check_true("a value-returning one answers Godot's own default",
-               "    _HasPoint<public>():logic = false" in block, block)
+               "    _GetMinimumSize<public>():int = 0" in block, block)
+    check_true("and a bool one declines instead, because it is <decides>",
+               "    _HasPoint<public>()<decides>:void = false?" in block, block)
     check_true("a virtual with no writable default is skipped, not emitted",
                "_GetOwner" not in block, block)
     check("and the skip says why", coverage.skip_reasons.get("virtual_no_default"), 1)
@@ -960,10 +1008,11 @@ def test_generated_file_matches_hand_written_slice():
         body = text[pos:end]
         blocks[name] = {"base": base, "names": method_re.findall(body)}
 
-    # A mirrored method on a *Godot class* may report exactly two absences, and both are real: a
-    # null object return (R-TYPE-4 puts nullability in the type) and a predicate answering no.
-    # Anything else claiming failure is a method whose caller would have to write an `if` around a
-    # case that never arrives.
+    # A mirrored method on a *Godot class* may report exactly three absences, and all are real: a
+    # null object return (R-TYPE-4 puts nullability in the type), a predicate answering no, and a
+    # bool virtual's own declaration, whose unoverridden body declines because "not handled" is
+    # what it has to mean. Anything else claiming failure is a method whose caller would have to
+    # write an `if` around a case that never arrives.
     #
     # Two kinds of definition fail for their own real reasons and are excluded: the singleton
     # accessors, which fail when the name is not registered in this build and are told apart by
@@ -973,16 +1022,24 @@ def test_generated_file_matches_hand_written_slice():
         line for line in text.splitlines()
         if "<decides>" in line and not line.lstrip().startswith("#") and "VhRefGet[" not in line
     ]
+    def failable_shape_is_known(line):
+        return ("VhObjectFrom[" in line
+                or (":void = VhToLogic(" in line and line.rstrip().endswith("?"))
+                or line.rstrip().endswith("<decides>:void = false?"))
+
     members = [line for line in failable if line.startswith("    ")]
     check_true(
-        "every failable method on a mirrored Godot class returns an object or is a predicate",
-        any(members)
-        and all("VhObjectFrom[" in line
-                or (":void = VhToLogic(" in line and line.rstrip().endswith("?"))
-                for line in members),
+        "every failable method on a mirrored Godot class returns an object, tests, or is a virtual",
+        any(members) and all(failable_shape_is_known(line) for line in members),
+        [line for line in members if not failable_shape_is_known(line)][:3],
+    )
+    check_true(
+        "and a bool virtual carries <decides> and nothing else",
+        not any("<decides><" in line or "><decides>" in line
+                for line in members if line.rstrip().endswith("= false?")),
         [line for line in members
-         if "VhObjectFrom[" not in line
-         and not (":void = VhToLogic(" in line and line.rstrip().endswith("?"))][:3],
+         if line.rstrip().endswith("= false?")
+         and ("<decides><" in line or "><decides>" in line)][:3],
     )
     container_reads = [
         line for line in text.splitlines()
@@ -1230,6 +1287,9 @@ def main():
     test_base_member_shadow()
     test_get_node_takes_the_or_null_spelling()
     test_a_predicate_decides_and_an_accessor_answers_logic()
+    test_a_bool_virtual_decides_with_nothing_but_decides()
+    test_virtual_names_keep_godots_underscore()
+    test_virtual_emits_a_default_body()
     test_unsupported_type_skipping()
     test_typed_array_parameter_takes_the_parametric_class()
     test_union_parameter_widens_to_the_common_ancestor()

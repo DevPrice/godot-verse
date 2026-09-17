@@ -172,11 +172,23 @@ def is_predicate_method(godot_class: str, m: dict, siblings: dict) -> bool:
     Asked by both emitters. A static never reaches classify_method -- it is skipped there and
     emitted into the class's `...Statics` module instead -- and `FileAccess.file_exists` is as much
     a predicate for living in one, so the rule may not key on `is_static`.
+
+    A virtual is a predicate whatever its name, and the effect it carries is `<decides>` **alone**.
+    That is load-bearing and was measured rather than chosen: `<decides>` does not narrow, so the
+    override goes on calling specifier-less helpers, where `<decides><transacts>` would start wall
+    8's cascade at each of them. The cost is that the virtual becomes uncallable from Verse -- a
+    failure context refuses `no_rollback` -- which is the position the five hand-written hooks are
+    already in, since Godot is the caller. Both halves are in
+    `tests/verse_probe/decides_virtual_{probe,reject}.verse`.
     """
     if (m.get("return_value") or {}).get("type") != "bool":
         return False
+    # Every bool virtual, with none of the rules below. They sort a *test* from a *value* among
+    # methods, and a virtual's bool is never a value: Godot asks "did you handle it" or "is it so",
+    # and the script answers. There is no `set_` twin to be the write half of, and no outcome that
+    # is not a yes or a no.
     if m.get("is_virtual"):
-        return False
+        return True
     key = (godot_class, m["name"])
     if key in PREDICATE_EXCLUDE:
         return False
@@ -389,10 +401,15 @@ VIRTUAL_SCALAR_DEFAULTS = {
 }
 
 
-def virtual_default(info, enums: dict):
+def virtual_default(info, enums: dict, is_predicate: bool = False):
     """The default body for a virtual returning `info`, or None when there is nothing to write."""
     if info is None:
         return "{}"
+    # An unoverridden bool virtual answers "not handled", and for a `<decides>:void` one that is a
+    # failure rather than a value. `false?` is the query operator over a literal, which is the
+    # shortest expression that fails.
+    if is_predicate:
+        return "false?"
     verse_type = info.verse_type
     if verse_type in VIRTUAL_SCALAR_DEFAULTS:
         return VIRTUAL_SCALAR_DEFAULTS[verse_type]
@@ -1803,9 +1820,11 @@ def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members
         if params[i].default is not None and any(p.default is None for p in params[i + 1:]):
             params[i] = params[i]._replace(default=None)
 
+    is_predicate = is_predicate_method(godot_class, m, siblings or {})
+
     default_body = None
     if is_virtual:
-        default_body = virtual_default(return_info, resolver.enums)
+        default_body = virtual_default(return_info, resolver.enums, is_predicate)
         if default_body is None:
             coverage.skip("virtual_no_default", record(
                 "virtual_no_default", f"`{return_info.verse_type}`" if return_info else ""))
@@ -1832,7 +1851,7 @@ def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members
         # shape a non-atomic method is -- an Error, the receiver, an object, or a plain value.
         godot_return=return_value["type"] if return_value else "",
         is_vararg=bool(m.get("is_vararg")),
-        is_predicate=is_predicate_method(godot_class, m, siblings or {}),
+        is_predicate=is_predicate,
     )
 
 
@@ -2252,6 +2271,10 @@ def emit_method(cm: ClassifiedMethod) -> str:
     # `<transacts>`, so an overriding body may call whatever Godot it likes, where narrowing here
     # would refuse a body that called a specifier-less helper.
     if cm.default_body is not None:
+        # `<decides>` and nothing else: it adds the one bit and keeps the default set, so an
+        # override may still call a specifier-less helper. See is_predicate_method.
+        if cm.is_predicate:
+            return f"    {cm.verse_name}<public>({param_decl})<decides>:void = {cm.default_body}"
         result = "void" if cm.is_void else cm.return_type.verse_type
         return f"    {cm.verse_name}<public>({param_decl}):{result} = {cm.default_body}"
 

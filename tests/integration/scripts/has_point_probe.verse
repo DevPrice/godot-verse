@@ -10,8 +10,14 @@ using { /Godot.org/Godot }
 # (`by-hand-findings.md` B10 and B11).
 #
 # What makes this a test of the virtual rather than of the plumbing is that both answers are
-# exercised in one run: `false` must send the click past this control, and `true` must keep it. A
-# virtual that never ran answers the generated default, `false`, and would pass half of that.
+# exercised in one run: declining must send the click past this control, and succeeding must keep
+# it. A virtual that never ran answers the generated default, which also declines, and would pass
+# half of that.
+#
+# It is also the only automated test of a `<decides>` virtual end to end -- the override declines,
+# the host answers VH_ERR_FAILED, and the consumer writes `false` for Godot to read. The decorated
+# name is tested here too, silently: it is what `instance_has_function` keys on, and if `<decides>`
+# had changed it the override would read as unimplemented and both halves would answer the default.
 @global_class
 has_point_probe := class(control):
 
@@ -21,7 +27,10 @@ has_point_probe := class(control):
 	# Clicks the engine decided belonged to this control.
 	var Clicks<public>:int = 0
 
-	_HasPoint<override>(Point:vector2):logic = Solid
+	# `<decides>` alone, matching the mirror: it keeps the wide default effect set, so this body
+	# could still call a specifier-less helper. `<decides><transacts>` could not -- measured in
+	# `tests/verse_probe/decides_virtual_reject.verse` case 2.
+	_HasPoint<override>(Point:vector2)<decides>:void = Solid?
 
 	# `IsPressed[]`, in brackets, because a mirrored predicate is `<decides>` and there is no other
 	# way to write it. That is the point of the spelling: as a `logic`-returning method this read

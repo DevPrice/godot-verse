@@ -386,24 +386,29 @@ void call_func(GDExtensionScriptInstanceDataPtr p_self, GDExtensionConstStringNa
 			self->verse_object, method->decorated.get_data(),
 			args.empty() ? nullptr : args.data(), (int32_t)p_argument_count, result);
 
+	// A Godot bool virtual crosses as `<decides>:void`, so the *status* is the whole answer and the
+	// value is empty in both directions -- succeeding writes nothing, and declining writes nothing.
+	// Godot reads a script virtual's result through VariantCaster, so a bool one goes through
+	// `Variant::booleanize()`, which is `!is_zero()`: an empty Variant reads as false whichever way
+	// the call went. Declining is right by accident; succeeding is wrong, and silently, because the
+	// override ran and answered yes. So both arms are written rather than either being inferred.
+	//
+	// For a *void* Godot virtual Godot discards the result, so writing it there costs nothing, and
+	// a <decides> method that answers a real value is not this case -- it keeps Nil, which is the
+	// Godot spelling of a script's own `Find[]` declining.
+	const bool decides_virtual = method->can_fail && !method->returns_value
+			&& method->godot_virtual != StringName();
+
 	switch (status) {
 		case VH_OK:
-			*reinterpret_cast<Variant *>(r_return) = result;
+			*reinterpret_cast<Variant *>(r_return) = decides_virtual ? Variant(true) : result;
 			r_error->error = GDEXTENSION_CALL_OK;
 			return;
 
-		// A <decides> method that ran and declined. Nil is the Godot spelling of that, and it is
-		// not a call error: the script answered, and its answer was "no".
-		//
-		// A *virtual* that answers nothing is the one case where Nil is not enough. Godot reads a
-		// script virtual's result through VariantCaster, so a bool one goes through
-		// `Variant::booleanize()`, which is `!is_zero()` -- and Nil is zero, so a declined call
-		// already reads as false today. That is three coincidences deep (the shim default-
-		// constructs the Variant, NIL is zero, booleanize is the caster), and it is one Godot
-		// release from not being true, so the answer is written rather than left to be inferred.
-		// For a void virtual Godot discards the result, so writing it costs nothing there.
+		// A <decides> method that ran and declined. Not a call error: the script answered, and its
+		// answer was "no".
 		case VH_ERR_FAILED:
-			if (method->can_fail && !method->returns_value && method->godot_virtual != StringName()) {
+			if (decides_virtual) {
 				*reinterpret_cast<Variant *>(r_return) = false;
 			}
 			r_error->error = GDEXTENSION_CALL_OK;
