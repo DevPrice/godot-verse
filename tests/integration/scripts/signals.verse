@@ -1,4 +1,7 @@
 using { /Godot.org/Godot }
+# `listenable` alone needs this. `event` and `cancelable` arrive through the Godot package's own
+# imports; /Verse.org/Concurrency does not, and the compiler names the using when it is missing.
+using { /Verse.org/Concurrency }
 
 # R-SIG-1/2/3/4/6: a signal a script declares, emits, and subscribes to.
 #
@@ -138,6 +141,26 @@ signals := class(node2d):
     # connection cannot be scoped to one.
     SubscribeToStruck<public>()<transacts>:void =
         Struck.Subscribe(OnStruck)
+
+    # --- the other spelling, supported alongside -------------------------------
+    #
+    # `signal(t)` declares a signal too, and both are kept because they are not interchangeable:
+    # this one satisfies `listenable(t)` and connects only for the length of a wait, where an
+    # `event(t)` satisfies `awaitable(t)`/`signalable(t)` and holds one connection for the
+    # instance's life. Godot cannot tell them apart, which is what this case is here to hold true.
+    @export_signal
+    Chimed<public>:signal(int) = signal(int){}
+
+    # `Signal` rather than `Emit`: on a `signal(t)` the emit verb is the class's own method, and it
+    # is `<transacts>` because it bottoms out in a native rather than in `signalable.Signal`.
+    EmitChimed<public>(Times:int)<transacts>:void = Chimed.Signal(Times)
+
+    SubscribeToChimed<public>()<transacts>:void =
+        Chimed.Subscribe(OnScored)
+
+    # The interop the two spellings differ on, as a type question rather than a behavioural one: a
+    # `signal(t)` can be handed to Verse code taking a `listenable(t)` and an `event(t)` cannot.
+    ChimedAsListenable<public>()<transacts>:listenable(int) = Chimed
 
     # R-SIG-6: receiving a signal a *GDScript* node emits. `Subscribe` is for a signal this class
     # declares; this is the general form underneath it, and it is the same Callable either way.

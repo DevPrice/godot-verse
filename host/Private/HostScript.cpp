@@ -6123,8 +6123,8 @@ AUTORTFM_DISABLE bool GetClassSignalsLive(FUtf8StringView ClassName, TArray<Godo
                 Desc.RejectDetail = Shape.RejectDetail;
             }
 
-            Desc.bLegacyType = bIsSignalType;
-            FillLocation(*Member, Desc.DeclaredIn, Desc.Line, Desc.Column);
+            FUtf8String DeclaredIn;
+            FillLocation(*Member, DeclaredIn, Desc.Line, Desc.Column);
             OutSignals.Add(MoveTemp(Desc));
         }
     }
@@ -8794,51 +8794,6 @@ namespace {
 /// and so used to be describable, but nothing addresses one -- only the class named after its file
 /// can go on a node -- and recursing would harvest the archetype the compiler generates per class
 /// along with it.
-/// One warning per `signal(t)`-declared member: R-SIG-1's older spelling, kept working and no
-/// longer the one to write.
-///
-/// A warning rather than a `Reject`, and the difference is the whole point of it. A reject means
-/// "not registered with Godot", which is what the author has to be told about a member that cannot
-/// work. This member works: it registers, emits, connects and is awaited exactly as it always did.
-/// What has changed is that an `event(t)` does all of that *and* is the type Verse's own
-/// concurrency vocabulary is built on, so there is no longer a reason to reach for the bridge's.
-///
-/// Reported through the ordinary diagnostic channel rather than through `vh_signal_desc`, which
-/// gets it both reporters for free and costs no ABI: the consumer files a VH_SEVERITY_WARNING into
-/// `compiler_warnings_by_path` for the gutter and `log_build_diagnostics` pushes it to the log,
-/// which is the half a headless test can read. `inert_global_class_message` is the same shape
-/// written the other way round, in the consumer.
-///
-/// Emitted from the snapshot pass because that is the one walk of every script class that happens
-/// inside an analysis, so the warning refreshes per keystroke the way a compiler's own does.
-AUTORTFM_DISABLE void WarnOnLegacySignalTypes(const TArray<GodotVerse::FSignalDesc>& Signals)
-{
-    for (const GodotVerse::FSignalDesc& Signal : Signals)
-    {
-        if (!Signal.bLegacyType || Signal.DeclaredIn.IsEmpty())
-        {
-            continue;
-        }
-        const FUtf8String Message = FUtf8String(UTF8TEXT("`")) + Signal.Name
-            + UTF8TEXT("` is declared as a `signal(t)`. Declare it as Verse's own `event(t)` "
-                       "instead -- `")
-            + Signal.Name
-            + UTF8TEXT("<public>:event(t) = event(t){}` -- which Godot sees identically and which "
-                       "also satisfies `awaitable(t)` for code that has never heard of this bridge. "
-                       "Emit it with `Emit` rather than `Signal`. `signal(t)` remains what the "
-                       "engine's own signal accessors answer.");
-        GodotVerse::ReportDiagnostic(VH_SEVERITY_WARNING,
-                                     FUtf8StringView(Message),
-                                     FUtf8StringView(Signal.DeclaredIn),
-                                     Signal.Line,
-                                     Signal.Column,
-                                     Signal.Line,
-                                     Signal.Column,
-                                     FUtf8StringView(),
-                                     0);
-    }
-}
-
 AUTORTFM_DISABLE void CollectSnapshotClassNames(const uLang::CModule& Module,
                                                 const FUtf8String& Path,
                                                 TArray<FUtf8String>& Out)
@@ -9362,7 +9317,6 @@ AUTORTFM_DISABLE void TakeAnalysisSnapshot()
 
         GetClassMethodsLive(ClassName, Entry.Methods);
         GetClassSignalsLive(ClassName, Entry.Signals);
-        WarnOnLegacySignalTypes(Entry.Signals);
         GetClassRpcsLive(ClassName, Entry.Rpcs);
         Entry.ToStringDecorated = FindToStringExtensionLive(ClassName);
 

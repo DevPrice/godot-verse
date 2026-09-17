@@ -1,9 +1,13 @@
 # How a script declares a signal
 
-The research behind moving a script-declared signal from a `signal(t)` member to `@export_signal` over an
-ordinary `event(t)`, and the staged plan that follows from it. Not a phase record: this is the
+The research behind `@export_signal` and the two member types it accepts — the bridge's `signal(t)`
+and Verse's own `event(t)` — and the staged work that produced them. Not a phase record: this is the
 document to read before touching `GetClassSignalsLive`, `BindSignals`, or anything that tests
 `IsSignalClass`.
+
+**Both spellings are supported and neither is deprecated.** §11 is the table of which to reach for
+and why the plan's original answer — deprecate `signal(t)` — was wrong. §12 is why the Verse book's
+"Subscribable Events" is not a third option yet.
 
 `docs/spec.md` R-SIG-1 carries the requirement and the per-stage status. This carries the reasoning
 and the measurements, including the ones that say what **cannot** be done.
@@ -18,11 +22,12 @@ The shipped mechanism reads a signal off the member's *type*:
 `signal(t)` is ordinary parametric Verse over the native `vh_signal`, holding a `/Verse.org/Verse`
 `event(t)` in its `Ev` field. It works, and R-SIG-1 through R-SIG-6 are green on it.
 
-What it costs is a bridge type in the author's vocabulary where Verse already has one. A script that
-wants to hand a signal to any Verse code taking an `awaitable(t)` or a `listenable(t)` cannot: a
-`signal(t)` is shaped like those interfaces and implements none of them. The target is that the
-member *is* a `event(t)` — the type Verse's own concurrency vocabulary is built on — and an
-attribute says it is also a Godot signal:
+What it cost at the time was a bridge type in the author's vocabulary where Verse already has one: a
+script that wanted to hand a signal to Verse code taking an `awaitable(t)` or a `listenable(t)` could
+not, because `signal(t)` was shaped like those interfaces and implemented none of them. Stage 1 fixed
+half of that by giving it `listenable(t)`. The other half is that the member can *be* an
+`event(t)` — the type Verse's own concurrency vocabulary is built on — with an attribute saying it is
+also a Godot signal:
 
     player := class(area2d):
         @export_signal
@@ -62,8 +67,8 @@ Two smaller facts finish it off:
 
 - `event(t) := class(event_base_intrnl, signalable(t), awaitable(t))` — no `subscribable`, so a
   plain `event(t)` does not implement `listenable` either. The type that does is
-  `subscribable_event_intrnl`, which is `<epic_internal>` and whose own comment says it "should be
-  deleted and use event instead once we get event API changes complete." Do not build on it.
+  `subscribable_event_intrnl`, which is `<epic_internal>` and slated for deletion by its own
+  comment. Reachable and tempting; §12 is why it is not the answer.
 - A field whose `Await` and `Subscribe` are the *author's* implementation would register with Godot
   and then never hear it: subscription has to go out through `connect`, not into a local list (§5).
 
@@ -101,7 +106,7 @@ no second spelling to fall back on: `@export_category` can be a `<constructor>` 
 attributes an author already writes, and it says what it does — the member exists either way, and
 the attribute is what sends it to Godot, exactly as `@export` sends a member to the inspector.
 **`signal(t)` is therefore not renamed at any stage**, which retires the `engine_signal(t)` idea in
-§7 and leaves Stage 4 with nothing to rename.
+§7.
 
 ## 4. What is settled by measurement
 
@@ -310,27 +315,17 @@ around. A bare `event(t)` is the only case with no such hook, because its `Await
 So `signal(t)` members keep connect-while-awaiting for good, alongside the engine accessors, and
 only `@export_signal` members trade it for a connection that lives as long as the instance.
 
-**Stage 3 — make it the spelling. Done.** Every fixture and both of `dodge-the-creeps`'s declarations
-are `event(t)` now, and a `signal(t)` member draws a deprecation warning at its own line.
-
-*The warning is not a `Reject`, and that decided how it travels.* A reject means "not registered
-with Godot"; this member registers, emits, connects and is awaited exactly as before, so a reject
-would be a lie. `vh_signal_desc` has no room for a second kind of complaint either — it is handed
-back as an array, so growing it changes the stride an older consumer indexes by, which is what made
-9.0 a major for `IsNamed`. What it uses instead is the diagnostic channel the compiler's own
-warnings travel: a `VH_SEVERITY_WARNING` with the member's file and line, emitted from the snapshot
-pass, which the consumer files into `compiler_warnings_by_path` for the gutter and
-`log_build_diagnostics` pushes to the log for a test to read. Two reporters, one message, no ABI
-change. `FSignalDesc` carries a host-side `bLegacyType` and `DeclaredIn` to make it; neither
-crosses.
+**Stage 3 — port the fixtures, keep both spellings. Done.** Every fixture and both of
+`dodge-the-creeps`'s declarations are `event(t)` now, which is what exercises the newer path. Both
+spellings stay supported, and §11 is why.
 
 *What the port cost, which is the part worth knowing before doing it again.* Nine connection-count
 assertions moved, all by exactly one, because an `@export_signal` event member holds a connection of
 its own. `test_cases.gd` names that term `OWN_CONNECTION` rather than burying a `+ 1`, since the
 whole point is that it is the member's and not the case's.
 
-**Stage 4 — `signal(t)` keeps one job**: the engine accessors. It stops being something a script
-declares.
+**Stage 4 — dropped.** It would have made `GetClassSignalsLive` refuse a `signal(t)` member outright,
+leaving the type as the engine accessors' alone. §11 is why that is the wrong end state.
 
 ## 9. Accepted costs
 
@@ -361,3 +356,76 @@ The failure mode if one is missed is a signal that registers and whose payload c
 the assertion is the argument count and the names, never that the signal exists. `CollectDeclaredTypes`
 was in fact the one missed, and §8's Stage 2b entry records what that cost and why only the export
 layer could see it.
+
+## 11. Why both spellings stay
+
+The staged plan deprecated `signal(t)` as a declaration from its first draft, on one argument: a
+bridge type in the author's vocabulary where Verse already has one. That argument is real and it is
+the *only* one, and weighed against what deprecation gives up it does not carry.
+
+**`signal(t)` has three properties `event(t)` does not**, and two of them are recorded elsewhere in
+this document as costs of the event spelling:
+
+- **It satisfies `listenable(t)`** (§4, Stage 1), so it can be handed to Verse code taking one.
+  `event(t)` is `signalable` + `awaitable` with no `subscribable`. Neither type's interface set is a
+  superset of the other's — but `signalable` is the half that cannot usefully be called, since its
+  `Signal` is `no_rollback` (§2), so `signal(t)` has the more useful pair.
+- **Its connection is scoped to the wait**, which is R-SIG-5's stated property and what
+  `tests/integration` asserts on both sides of a `race`. An event member holds one for the
+  instance's life, made lazily at first entry, with one ordering left uncovered (§8, Stage 2b).
+- **It has no bypass hazard.** `Ev.Signal(x)` on an event member resumes Verse awaiters without
+  telling Godot — legal, undiagnosable, and accepted in §9. A `signal(t)`'s `Signal` *is* the
+  bridge's, so there is nothing to bypass.
+
+What `event(t)` wins is that it is the language's own type, and that it is where Epic is heading:
+when `subscribable_event` ships publicly it replaces the event family, not this bridge's class.
+
+So the two are not the old one and the new one. They are two declarations with different properties,
+which is a much easier thing to document than two that behave identically:
+
+| reach for | when |
+| --- | --- |
+| `event(t)` | the member should satisfy `awaitable(t)` for Verse code that has never heard of Godot, or you want the spelling that ages into `subscribable_event` |
+| `signal(t)` | you want the connection scoped to the wait, no bypass hazard, or `listenable(t)` conformance |
+
+**What was almost missed.** The `listenable` asymmetry was found, written down, and raised before
+the port — and the port deprecated the only declaration that has it anyway, because the plan said to.
+A staged plan is a prediction, and this one outlived the facts that produced it by about one stage.
+
+## 12. Subscribable events, and why they are not the answer either
+
+The Verse book's "Subscribable Events" is the obvious thing to reach for instead of a plain
+`event(t)`, and it is not available. The book says so itself: the feature "has not yet been released
+and is not currently available", and `subscribable_event` is error 3506 in this drop.
+
+What this engine has is `subscribable_event_intrnl`, in `Event.native.verse`:
+
+    subscribable_event_intrnl<native><epic_internal>(t:type) := class(event(t), listenable(t)):
+         Subscribe<native><override>(Callback(:t):void)<transacts>:cancelable
+         Signal<native><override>(Val:t)<predicts>:void
+
+Measured in `tests/verse_probe/subscribable_event_probe.verse`: it **is** reachable from a script
+package (they are `InternalUser`, which unlocks `epic_internal`), it **does** satisfy `listenable(t)`,
+and its `Signal` is **still** refused from a `<transacts>` body — glitch 3512, `no_rollback`, despite
+the `<predicts>` on the override. So the emit verb stays the bridge's whichever event type a member
+uses.
+
+**Epic reached §2's conclusion in their own code**, which is worth quoting because three separate
+findings here are stated in one comment (`agent_group.native.verse:90`):
+
+> Signalling is native because `listenable` has no `Signal`, and `subscribable_event_intrnl.Signal`
+> has the `no_rollback` effect, which a `<transacts>` function cannot call.
+
+**It is still not the type to build on.** Its own comment says "This type should be deleted and use
+event instead once we get event API changes complete", so making it the author-facing declaration is
+a bet against Epic that costs every script that declared one. Its native `Subscribe` is a *member*,
+which would win over the bridge's extension method and silently take the local path instead of
+connecting to Godot — losing the rollback compensation `tests/integration` asserts and the visibility
+`get_signal_connection_list` gives. And the gap it would close is already closed by keeping
+`signal(t)` (§11).
+
+Epic's own pattern is the tell: every use declares the member as `listenable(t)` and only the
+initialiser names the concrete type. They are already hiding it behind the interface because they
+expect it to change. **Re-check on every engine drop** — if `subscribable_event` lands publicly it
+becomes a third spelling `@export_signal` should accept, and adding it changes nothing about the
+emit verb.

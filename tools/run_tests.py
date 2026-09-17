@@ -395,11 +395,6 @@ def run_integration(results: Results, engine: Path | None, godot: Path | None) -
             # well formed in every other way, which is what makes it the test of the rule rather
             # than of the ladder above it.
             "carries no `@export_signal`, so Godot is never told about it",
-            # R-SIG-1 Stage 3: the `signal(t)` declaration is deprecated. A warning rather than a
-            # reject, because the member still works -- so it travels the diagnostic channel the
-            # compiler's own warnings use rather than `vh_signal_desc`, which would have cost a
-            # major ABI bump to grow.
-            "is declared as a `signal(t)`. Declare it as Verse's own `event(t)` instead",
             # R-EXP-9, an `@rpc` whose words Godot does not know:
             "is not an @rpc word",
             # R-EXP-1, an inspector hint on a type it cannot describe:
@@ -588,9 +583,9 @@ EXPORT_EXPECTED_CLASSES = ["marshal", "signals", "left/widget"]
 # other way round -- only an exported game has autoloads at all, because `--script` replaces the
 # main loop before Godot sets one up -- so they are skips in the editor run and passes here. The two
 # runs therefore report different totals from one set of lines, and neither is a function of the
-# other: the in-editor run prints 471 passed and 5 skipped against the numbers below. Adding a case
+# other: the in-editor run prints 476 passed and 5 skipped against the numbers below. Adding a case
 # means changing this line, which is the point of it.
-EXPORT_EXPECTED_PASSES = 450
+EXPORT_EXPECTED_PASSES = 455
 EXPORT_EXPECTED_SKIPS = 11
 
 

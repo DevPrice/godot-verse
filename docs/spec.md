@@ -656,9 +656,9 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
 
 - **R-SIG-1 (MUST)** A Verse script declares signals with argument types, and they appear in the
   editor's Node panel where a designer connects them. Status: **done** for the declaration and the
-  list (Phase 4 stage 4); the Node panel itself is R-SIG-4's by-hand check. **The spelling is
-  moving** — see "The declaration is moving to `@export_signal`" below and `docs/signal-declaration.md`,
-  which carries the staged plan and the measurements.
+  list (Phase 4 stage 4); the Node panel itself is R-SIG-4's by-hand check. **Two member types
+  declare one**, neither deprecated — see below and `docs/signal-declaration.md`, which carries the
+  measurements and §11's table of which to reach for.
 
   **The member's name is the signal's name**, whichever spelling declares it, so there is no second
   place to spell it and nothing to drift.
@@ -700,8 +700,17 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   **A member may also be declared as an ordinary `event(t)`**, so that it is the type Verse's own
   concurrency vocabulary is built on rather than a bridge type shaped like it. Status: **done**.
   Godot cannot tell the two apart — same signal list, same argument names, same reassembly inbound,
-  same GDScript interop — and what the author gains is that the member satisfies `awaitable(t)` and
-  `signalable(t)` for code that has never heard of this bridge:
+  same GDScript interop — and the choice between them is about what the *Verse* side gets:
+
+  | reach for | when |
+  | --- | --- |
+  | `event(t)` | the member should satisfy `awaitable(t)` for Verse code that has never heard of Godot, or you want the spelling that ages into Verse's own `subscribable_event` when it ships |
+  | `signal(t)` | you want the connection scoped to the wait, no bypass hazard, or `listenable(t)` conformance |
+
+  Neither is deprecated, and that is a correction: the plan deprecated `signal(t)` and was wrong to,
+  because it is the only one of the two that satisfies `listenable(t)`, keeps R-SIG-5's scoped
+  connection, and cannot have its emission bypassed. `docs/signal-declaration.md` §11 has the whole
+  comparison. The event spelling:
 
   ```
   player := class(area2d):

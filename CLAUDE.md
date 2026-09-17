@@ -687,11 +687,16 @@ it is not in `run_tests.py`.
   `VH_SIGNAL_NEEDS_ATTRIBUTE`, because that type has no purpose but Godot. The attribute could not
   be spelled `@signal` — a bare marker is a class, the attribute package shares
   `/Godot.org/Godot`'s verse path, and a third definition of `signal` is glitch 3532.
-- **`event(t)` is the spelling to write; `signal(t)` is deprecated as a declaration** and warns at
-  the member's line. A warning and not a `Reject`, because the member still works — so it travels
-  the compiler's own diagnostic channel (`VH_SEVERITY_WARNING`, emitted from the snapshot pass)
-  rather than `vh_signal_desc`, which is array-returned and could not grow a field without a major
-  bump. `signal(t)` remains what the 503 engine accessors answer.
+- **Both member types are supported and neither is deprecated**, because they are not
+  interchangeable. `event(t)` satisfies `awaitable(t)`/`signalable(t)` and is where Epic is heading;
+  `signal(t)` satisfies **`listenable(t)`**, keeps its connection scoped to the wait, and has no
+  bypass hazard. `docs/signal-declaration.md` §11 is the table of which to reach for. `signal(t)` is
+  also what the 503 engine accessors answer, which is not going to change.
+- **The Verse book's `subscribable_event` does not exist in this drop** — the book says the feature
+  is unreleased. What exists is `subscribable_event_intrnl`, `<epic_internal>` and slated for
+  deletion by its own comment; it *is* reachable from a script package and *does* satisfy
+  `listenable`, and its `Signal` is still `no_rollback`, so it changes nothing about the emit verb.
+  `docs/signal-declaration.md` §12 is why it is not built on. Re-check on every engine drop.
 - **The emit verb is the bridge's, whichever type declares the member.** `signal(t).Signal` and
   `event(t).Emit` both go out to Godot and come back through the member's connection, which is what
   makes a Verse handler and a GDScript handler see one ordering. An event's own `Signal` resumes

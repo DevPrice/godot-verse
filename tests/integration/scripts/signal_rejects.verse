@@ -1,7 +1,6 @@
 using { /Godot.org/Godot }
 
-# R-SIG-1's refusals: five members that compile and cannot work, and one that works and is
-# deprecated for the type it is declared with.
+# R-SIG-1's refusals: five members that compile and cannot work.
 #
 # Each one used to be accepted silently -- the member compiled, the signal was absent from Godot,
 # and the author found out at the first emission, at runtime, or never. They are decidable from the
@@ -58,16 +57,7 @@ signal_rejects := class(node2d):
     # Node panel that is empty for no stated reason.
     Forgotten<public>:signal(int) = signal(int){}
 
-    # The deprecation, which is not a reject: this member registers, emits and connects exactly as
-    # it always did, and the warning says only that `event(t)` is the type to declare now. Kept
-    # working rather than refused, so the file proves a deprecated spelling still works -- and kept
-    # separate from `Forgotten` above, which would otherwise carry two messages and make neither
-    # assertable on its own.
-    @export_signal
-    Legacy<public>:signal(int) = signal(int){}
-
     EmitFine<public>(Points:int)<transacts>:void = Fine.Emit(Points)
-    EmitLegacy<public>(Points:int)<transacts>:void = Legacy.Signal(Points)
 
     # Emitting a refused signal is the runtime half: the binding carries its reject reason, so each
     # of these says *its own* reason rather than the generic "names nothing" they all used to say.

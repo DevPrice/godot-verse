@@ -1047,6 +1047,35 @@ func begin() -> void:
 		_check_eq("a GDScript emission of a declared signal reaches a Verse handler",
 				[emitter_node.call("ReadSeen"), emitter_node.call("ReadSeenBy")], [9, "spike"])
 
+		# --- the other spelling, supported alongside --------------------------
+		#
+		# `signal(t)` declares a signal too. Both are kept because they are not interchangeable --
+		# this one satisfies `listenable(t)` and connects only for the length of a wait, an
+		# `event(t)` satisfies `awaitable(t)` and holds one connection for the instance's life --
+		# and the claim here is that Godot cannot tell them apart.
+		_check("a signal(t) member reaches get_signal_list beside the event ones",
+				by_name.has("Chimed"))
+		if by_name.has("Chimed"):
+			var chimed_args: Array = by_name["Chimed"]["args"]
+			_check_eq("with the same one argument an event payload of that type gets",
+					chimed_args.size(), 1)
+
+		_signal_points = 0
+		emitter_node.connect("Chimed", _on_verse_scored)
+		emitter_node.call("EmitChimed", 4)
+		_check_eq("Signal on a signal(t) member reaches a GDScript handler", _signal_points, 4)
+
+		emitter_node.call("ResetSeen")
+		emitter_node.call("SubscribeToChimed")
+		emitter_node.emit_signal("Chimed", 5)
+		_check_eq("and a GDScript emission of one reaches a Verse handler",
+				emitter_node.call("ReadSeen"), 5)
+
+		# Its connection is scoped to the subscription rather than to the instance, which is the
+		# property the event spelling trades away: no OWN_CONNECTION term here.
+		_check_eq("a signal(t) member carries no connection of its own",
+				emitter_node.get_signal_connection_list("Chimed").size(), 2)
+
 		# Godot's own signals, through the accessor the generator emits per signal per class. The
 		# engine emits `renamed` itself, so nothing here emits it: setting the name is the event.
 		# Emitted by hand rather than by setting the name: Node::set_name only emits `renamed` for a
