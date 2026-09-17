@@ -270,11 +270,28 @@ a signal. That was the risk that could have sunk the design, and it is measured 
 **Stage 2b — the `event(t)` runtime half. Done.** `BindSignals` casting to `verse::event` when the
 member is not a `vh_signal`; `VhEventEmit`/`VhEventSubscribe` taking the event through `any`, with
 `Emit` and `Subscribe` as parametric extension methods over them; **one Godot connection per
-`@export_signal` event member**, made at `BindSignals` and held for the instance's life; a
+`@export_signal` event member**, held for the instance's life; a
 `GEventBindingIds` table keyed by the event object, which is what `event(t)` has instead of the `Id`
 field `vh_signal` carries; `ReleaseInstance` dropping the binding, the callback row, the reference
 and the strong pointer together; and `CollectDeclaredTypes` recording the shape for a runtime host.
 Nine cases in `tests/integration`, all running in an export too.
+
+**Where that connection can be made is not a free choice, and two plausible answers are both wrong.**
+Not inside `vh_instantiate`: the consumer builds the Verse object *before* it installs the script
+instance on the node, and `Object::has_signal` answers off the installed instance, so Godot refuses
+with *"Attempt to connect nonexistent signal"*. Not at the end of the consumer's `create()` either —
+the object does not hold the script instance until `_instance_create` has **returned** to Godot,
+which is later still and not a point this side can name. Both were built and both failed the same
+way, and the failure is silent in the worst possible shape: the member registers, emissions still
+reach Godot, and only delivery *back into the event* is missing, so every await on it hangs.
+`ConnectDelivery`'s failure is now reported rather than ignored, which is how the second attempt was
+caught in one run instead of by reading.
+
+What works is **the first entry into the instance** (`EnsureEventConnections`, from `InstanceCall`).
+It is late enough because a call into the instance is Godot dispatching to an installed script
+instance, and early enough because a Verse awaiter can only exist after Verse code has run on the
+object — and running Verse code on it *is* an entry. The one ordering left uncovered, Godot emitting
+before any Verse code runs on that node, has nothing on the Verse side to deliver to.
 
 *§10's warning collected immediately, which is worth recording rather than quietly fixing.* Two of
 the three call sites were moved and `CollectDeclaredTypes` was not, so the editor run passed all
@@ -293,9 +310,24 @@ around. A bare `event(t)` is the only case with no such hook, because its `Await
 So `signal(t)` members keep connect-while-awaiting for good, alongside the engine accessors, and
 only `@export_signal` members trade it for a connection that lives as long as the instance.
 
-**Stage 3 — make it the spelling.** Warn on a `signal`-typed member the way the export rejections
-warn — two reporters over one message, per `log_script_warnings` — and port the fixtures and
-`dodge-the-creeps`.
+**Stage 3 — make it the spelling. Done.** Every fixture and both of `dodge-the-creeps`'s declarations
+are `event(t)` now, and a `signal(t)` member draws a deprecation warning at its own line.
+
+*The warning is not a `Reject`, and that decided how it travels.* A reject means "not registered
+with Godot"; this member registers, emits, connects and is awaited exactly as before, so a reject
+would be a lie. `vh_signal_desc` has no room for a second kind of complaint either — it is handed
+back as an array, so growing it changes the stride an older consumer indexes by, which is what made
+9.0 a major for `IsNamed`. What it uses instead is the diagnostic channel the compiler's own
+warnings travel: a `VH_SEVERITY_WARNING` with the member's file and line, emitted from the snapshot
+pass, which the consumer files into `compiler_warnings_by_path` for the gutter and
+`log_build_diagnostics` pushes to the log for a test to read. Two reporters, one message, no ABI
+change. `FSignalDesc` carries a host-side `bLegacyType` and `DeclaredIn` to make it; neither
+crosses.
+
+*What the port cost, which is the part worth knowing before doing it again.* Nine connection-count
+assertions moved, all by exactly one, because an `@export_signal` event member holds a connection of
+its own. `test_cases.gd` names that term `OWN_CONNECTION` rather than burying a `+ 1`, since the
+whole point is that it is the member's and not the case's.
 
 **Stage 4 — `signal(t)` keeps one job**: the engine accessors. It stops being something a script
 declares.

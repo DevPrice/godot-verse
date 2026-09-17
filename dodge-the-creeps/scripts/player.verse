@@ -19,7 +19,7 @@ player := class(area2d):
 	# signal's name; main subscribes to it rather than the scene wiring Area2D.body_entered to two
 	# scripts at once, which is what the port did before a script could declare one.
 	@export_signal
-	Hit<public>:signal() = signal(){}
+	Hit<public>:event() = event(){}
 
 	var Sprite:?animated_sprite2d = false
 	var Hitbox:?collision_shape2d = false
@@ -89,7 +89,7 @@ player := class(area2d):
 	OnBodyEntered<public>(Body:node2d):void =
 		# The player disappears after being hit.
 		Hide()
-		Hit.Signal(())
+		Hit.Emit(())
 		# Must be deferred, as a physics property cannot change inside a physics callback. The value
 		# crosses as a variant, which a script can build for a bool but not read back -- R-TYPE-7 as
 		# Phase 2 amended it.

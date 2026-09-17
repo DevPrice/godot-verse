@@ -39,6 +39,17 @@ var _hit: Control = null
 var _vararg_ping := -1
 var _vararg_pokes := 0
 
+# An `@export_signal` member declared as an `event(t)` holds one Godot connection of its own, made
+# at the first entry into the instance and held for the instance's life. A bare event's `Await` is
+# Verse's own native, so there is no hook at the await for the host to connect from -- which is the
+# one place R-SIG-5's "the connection lives exactly as long as the wait" is traded away, and it is
+# traded only for the thing that buys it.
+#
+# So every count below is the member's own plus whatever the case made. A *foreign* signal and an
+# engine accessor still connect per subscription and per wait, which is why the `Tally` and
+# `timeout` cases further down carry no such term.
+const OWN_CONNECTION := 1
+
 
 func _on_verse_touched(body: Node2D) -> void:
 	_signal_object = body
@@ -50,16 +61,6 @@ func _on_verse_reported(damage: int, by: String, point: Vector2) -> void:
 	_signal_report = [damage, by, point]
 
 
-# The same, for a member declared as Verse's own `event(t)` rather than as a `signal(t)`. Godot
-# cannot tell the two apart, which is the claim these cases exist to check.
-func _on_verse_logged(damage: int, by: String, point: Vector2) -> void:
-	_signal_report = [damage, by, point]
-
-
-# `_on_event_pinged` rather than `_on_verse_pinged`: the vararg cases already have a handler of
-# that name taking an int, and GDScript has no overloading.
-func _on_event_pinged() -> void:
-	_signal_hits += 1
 
 
 func _on_verse_hit() -> void:
@@ -1034,59 +1035,17 @@ func begin() -> void:
 						func(m): return String(m["name"]) == "OnReported")[0]["args"] as Array).size(),
 				1)
 
-		# --- the `event(t)` spelling ------------------------------------------
-		#
-		# R-SIG-1's other declaration: `@export_signal` over Verse's own `event(t)`. Every claim
-		# here is that Godot cannot tell it from the `signal(t)` half above -- same signal list,
-		# same argument names, same reassembly inbound, same GDScript interop. What differs is on
-		# the Verse side, where the member also satisfies `awaitable(t)`.
-		for spelled in ["Pinged", "Tallied", "Logged"]:
-			_check("an @export_signal event member reaches get_signal_list: " + spelled,
-					by_name.has(spelled))
-
-		if by_name.has("Logged"):
-			var logged_args: Array = by_name["Logged"]["args"]
-			_check_eq("a struct payload through an event is one argument per field",
-					logged_args.size(), 3)
-			if logged_args.size() == 3:
-				# The row the whole design turned on: the payload type is read off a type-variable
-				# substitution, and `event(t)` is declared in /Verse.org/Verse, which is loaded from
-				# a digest. An unread substitution is not an error -- it is an empty shape, which
-				# would register this signal with zero arguments and emit nothing.
-				_check_eq("named by the field, off a digest-loaded event(t)",
-						[String(logged_args[0]["name"]), String(logged_args[1]["name"]),
-								String(logged_args[2]["name"])],
-						["Damage", "By", "Point"])
-
-		# Outbound: Verse's `Emit` goes out to Godot, so a GDScript handler runs.
-		_signal_report.clear()
-		emitter_node.connect("Logged", _on_verse_logged)
-		emitter_node.call("EmitLogged", 21, "maul")
-		_check_eq("Emit on an event member reaches a GDScript handler, fields in order",
-				_signal_report, [21, "maul", Vector2(7, 8)])
-
-		_signal_hits = 0
-		emitter_node.connect("Pinged", _on_event_pinged)
-		emitter_node.call("EmitPinged")
-		_check_eq("an empty payload through an event emits with no arguments", _signal_hits, 1)
-
-		# Inbound: a Verse handler subscribed through the bridge's own Subscribe, which connects to
-		# Godot rather than registering on the event locally -- the half that makes R-SIG-6 work.
-		emitter_node.call("ResetEventSeen")
-		emitter_node.call("SubscribeToLogged")
-		emitter_node.call("EmitLogged", 9, "dirk")
-		_check_eq("a Verse handler receives an event's struct payload as one value",
-				[emitter_node.call("ReadEventSeen"), emitter_node.call("ReadEventBy")],
-				[9, "dirk"])
-
-		# And an emission raised by *GDScript* reaches the Verse subscriber, which is what the
-		# member's permanent connection buys: a bare event has no hook at the await to connect from,
-		# so the connection is made once at instantiation and held for the instance's life.
-		emitter_node.call("ResetEventSeen")
-		emitter_node.call("SubscribeToTallied")
-		emitter_node.emit_signal("Tallied", 6)
-		_check_eq("a GDScript emission of an event member reaches a Verse handler",
-				emitter_node.call("ReadEventSeen"), 6)
+		# An emission raised by *GDScript* on this node reaches a Verse subscriber. The member is an
+		# `event(t)`, whose Godot connection is made once at construction rather than for the length
+		# of one wait -- a bare event offers no hook at the await to connect from -- so this works
+		# with nothing awaiting and is the half of R-SIG-6 that connection model has to keep.
+		# `Struck` rather than `Scored`, which the subscription cases below count connections on:
+		# this one leaves a subscription behind on purpose, to show it keeps receiving.
+		emitter_node.call("ResetSeen")
+		emitter_node.call("SubscribeToStruck")
+		emitter_node.emit_signal("Struck", 9, "spike")
+		_check_eq("a GDScript emission of a declared signal reaches a Verse handler",
+				[emitter_node.call("ReadSeen"), emitter_node.call("ReadSeenBy")], [9, "spike"])
 
 		# Godot's own signals, through the accessor the generator emits per signal per class. The
 		# engine emits `renamed` itself, so nothing here emits it: setting the name is the event.
@@ -2035,13 +1994,13 @@ func step() -> bool:
 			# `AutoRTFM::OnAbort<SameAsClosed>` that disconnects. These are what say it runs.
 			_tx.call("SubscribePlainly")
 			_check_eq("a plain Subscribe connects",
-					_tx.get_signal_connection_list("Hit").size(), 1)
+					_tx.get_signal_connection_list("Hit").size(), OWN_CONNECTION + 1)
 			_tx.call("SubscribeThenDecline")
 			_check_eq("a Subscribe undone by a top-level decline leaves no connection",
-					_tx.get_signal_connection_list("Hit").size(), 1)
+					_tx.get_signal_connection_list("Hit").size(), OWN_CONNECTION + 1)
 			_tx.call("SubscribeThenFailInner")
 			_check_eq("a Subscribe undone by a failed context leaves no connection",
-					_tx.get_signal_connection_list("Hit").size(), 1)
+					_tx.get_signal_connection_list("Hit").size(), OWN_CONNECTION + 1)
 		2:
 			# A raise, which aborts the host's transaction and drops what it had deferred. Three of
 			# them, in one frame, with ordinary calls between: before Phase 5 the second and third
@@ -2063,7 +2022,7 @@ func step() -> bool:
 			# can be neither deferred nor ignored, and nothing undoes it.
 			_tx.call("ConnectThenRaise")
 			_check_eq("a mutate-and-answer call survives the raise that follows it",
-					_tx.get_signal_connection_list("Scored").size(), 1)
+					_tx.get_signal_connection_list("Scored").size(), OWN_CONNECTION + 1)
 
 			# R-DIAG-3: the same raise, over and over, must not print its stack over and over.
 			# Godot already drops the *errors* past max_errors_per_second and says so once; the
@@ -2103,7 +2062,7 @@ func step() -> bool:
 
 			# One Godot connection, ours, for the duration of the wait.
 			_check_eq("awaiting connects to the signal",
-					_conc.get_signal_connection_list("Fired").size(), 1)
+					_conc.get_signal_connection_list("Fired").size(), OWN_CONNECTION)
 		4:
 			_check_eq("and the task is still suspended a frame later", _conc.call("ReadStage"), 1)
 
@@ -2111,7 +2070,7 @@ func step() -> bool:
 			_conc.emit_signal("Fired")
 			_check_eq("emitting resumes the awaiting task", _conc.call("ReadStage"), 2)
 			_check_eq("and the connection it made is gone again",
-					_conc.get_signal_connection_list("Fired").size(), 0)
+					_conc.get_signal_connection_list("Fired").size(), OWN_CONNECTION)
 
 			# The payload comes back typed, which is what the event buys.
 			_conc.call("Reset")
@@ -2173,12 +2132,12 @@ func step() -> bool:
 			_conc.call("StartRace")
 			_check_eq("racing two awaits connects to both",
 					[_conc.get_signal_connection_list("Fired").size(),
-							_conc.get_signal_connection_list("Scored").size()], [1, 1])
+							_conc.get_signal_connection_list("Scored").size()], [OWN_CONNECTION, OWN_CONNECTION])
 			_conc.emit_signal("Fired")
 			_check_eq("the race returns when the first fires", _conc.call("ReadStage"), 30)
 			_check_eq("and the loser leaves no connection behind",
 					[_conc.get_signal_connection_list("Fired").size(),
-							_conc.get_signal_connection_list("Scored").size()], [0, 0])
+							_conc.get_signal_connection_list("Scored").size()], [OWN_CONNECTION, OWN_CONNECTION])
 
 			# A signal handler may start a task now, which is what widening Subscribe's callback
 			# was for -- and the shape a game-over sequence is written in.

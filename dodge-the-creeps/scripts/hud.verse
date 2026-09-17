@@ -29,7 +29,7 @@ hud := class(canvas_layer):
 	# main.tscn connect StartButton.pressed to main's own NewGame -- one engine signal wired to two
 	# scripts, because this one had nothing to emit.
 	@export_signal
-	StartGame<public>:signal() = signal(){}
+	StartGame<public>:event() = event(){}
 
 	var ScoreLabel:?label = false
 	var MessageLabel:?label = false
@@ -85,4 +85,4 @@ hud := class(canvas_layer):
 	OnStartPressed<public>():void =
 		if (Button := StartButton?):
 			Button.Hide()
-		StartGame.Signal(())
+		StartGame.Emit(())

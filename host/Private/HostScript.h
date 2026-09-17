@@ -219,6 +219,16 @@ struct FSignalDesc
     int32 Reject{0};
     /// The argument or field a payload rejection is about; empty for a rejection about the member.
     FUtf8String RejectDetail;
+
+    /// Declared as a `signal(t)` rather than as Verse's own `event(t)`, and the file it is in.
+    ///
+    /// Host-side only and deliberately not on `vh_signal_desc`: the wire struct is handed back as
+    /// an array, so growing it changes the stride an older consumer indexes by, which is the same
+    /// hazard that made 9.0 a major for `IsNamed`. Nothing here needs to cross -- the deprecation
+    /// is reported as an ordinary warning diagnostic at the member's line, which is a channel both
+    /// halves already have.
+    bool bLegacyType{false};
+    FUtf8String DeclaredIn;
 };
 
 /// The signals ClassName declares, its base script classes' included (R-SIG-6.6: signals inherit,

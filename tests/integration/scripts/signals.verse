@@ -3,13 +3,14 @@ using { /Godot.org/Godot }
 # R-SIG-1/2/3/4/6: a signal a script declares, emits, and subscribes to.
 #
 # `@export_signal` is what registers a member with Godot, and the member's *name* is the signal's
-# name, so there is no second place to spell that and nothing to drift. Two member types carry it,
-# and both are here because the point is that they behave identically from Godot's side:
+# name, so there is no second place to spell that and nothing to drift. The member is Verse's own
+# `event(t)`, which also satisfies `awaitable(t)` for code that has never heard of Godot, and whose
+# Godot connection is made once at construction and held for the instance's life -- a bare event
+# offers no hook at the await to connect from, which is the one place R-SIG-5's
+# connect-for-the-length-of-one-wait is traded away.
 #
-#   - `signal(t)`, the bridge's own type, whose Await connects for the length of one wait.
-#   - `event(t)`, Verse's own, which also satisfies `awaitable`/`signalable` for code that has
-#     never heard of Godot, and whose Godot connection is made once and held for the instance's
-#     life -- because a bare event offers no hook at the await to connect from.
+# `signal(t)` still declares a signal and is deprecated for it; `signal_rejects.verse` carries the
+# one member left that says so. It remains what the engine's own accessors answer.
 # A struct payload's fields, which is the one spelling that carries *names* to Godot. R-TYPE-7:
 # Verse forbids a non-public struct field, so every one of these is `<public>` because it must be.
 strike_report := struct:
@@ -22,21 +23,21 @@ signals := class(node2d):
 
     # No payload. `tuple()` is the empty tuple, and Godot sees a signal with no arguments.
     @export_signal
-    Hit<public>:signal() = signal(){}
+    Hit<public>:event() = event(){}
 
     # One argument, named for its type because Verse tuples cannot name their elements.
     @export_signal
-    Scored<public>:signal(int) = signal(int){}
+    Scored<public>:event(int) = event(int){}
 
     # Two, as `Arg0` and `Arg1`. A handler still writes two parameters: a multi-parameter Verse
     # function satisfies a one-tuple-parameter callback, because a function's parameter *is* its
     # tuple.
     @export_signal
-    Struck<public>:signal(tuple(int, string)) = signal(tuple(int, string)){}
+    Struck<public>:event(tuple(int, string)) = event(tuple(int, string)){}
 
     # An object payload, which is what `body_entered` shaped signals carry.
     @export_signal
-    Touched<public>:signal(node2d) = signal(node2d){}
+    Touched<public>:event(node2d) = event(node2d){}
 
     # A struct payload: one Godot argument per top-level field, *named by the field*. This is the
     # spelling that gives the connect dialog and "Make Function" real names instead of `Arg0`, and
@@ -49,10 +50,10 @@ signals := class(node2d):
     # callback for the same reason -- a function's parameter *is* its tuple -- so this is that rule
     # reaching the one spelling that carries names.
     @export_signal
-    Reported<public>:signal(strike_report) = signal(strike_report){}
+    Reported<public>:event(strike_report) = event(strike_report){}
 
     EmitReported<public>(Amount:int, Source:string)<transacts>:void =
-        Reported.Signal(strike_report{Damage := Amount, By := Source, Point := vector2{X := 3.0, Y := 4.0}})
+        Reported.Emit(strike_report{Damage := Amount, By := Source, Point := vector2{X := 3.0, Y := 4.0}})
 
     var ReportedDamage<public>:int = 0
     var ReportedBy<public>:string = ""
@@ -72,11 +73,11 @@ signals := class(node2d):
     ReadReportedBy<public>()<transacts>:string = ReportedBy
     ReadReportedX<public>()<transacts>:float = ReportedX
 
-    EmitTouched<public>(Body:node2d)<transacts>:void = Touched.Signal(Body)
+    EmitTouched<public>(Body:node2d)<transacts>:void = Touched.Emit(Body)
 
-    EmitHit<public>()<transacts>:void = Hit.Signal(())
-    EmitScored<public>(Points:int)<transacts>:void = Scored.Signal(Points)
-    EmitStruck<public>(Damage:int, By:string)<transacts>:void = Struck.Signal((Damage, By))
+    EmitHit<public>()<transacts>:void = Hit.Emit(())
+    EmitScored<public>(Points:int)<transacts>:void = Scored.Emit(Points)
+    EmitStruck<public>(Damage:int, By:string)<transacts>:void = Struck.Emit((Damage, By))
 
     # --- the subscribing half -------------------------------------------------
 
@@ -131,58 +132,12 @@ signals := class(node2d):
 
     ReadRenames<public>()<transacts>:int = Renames
 
-    # --- the `event(t)` spelling ----------------------------------------------
-    #
-    # The same three shapes as above, declared on Verse's own event. Godot cannot tell the
-    # difference: `_get_script_signal_list` reports these beside the `signal(t)` ones, GDScript
-    # connects to them by name, and a struct payload still arrives as one argument per field.
-    #
-    # What differs on the Verse side is that the member *is* an `event(t)`, so it satisfies
-    # `awaitable(t)` and can be handed to code that knows nothing about this bridge.
-
-    @export_signal
-    Pinged<public>:event() = event(){}
-
-    @export_signal
-    Tallied<public>:event(int) = event(int){}
-
-    # The row that has the most to get wrong: a struct payload reached through an event rather than
-    # through a signal, so it proves DescribePayload's struct branch is reached by both and that the
-    # type-variable substitution reads off a digest-loaded `event(t)`.
-    @export_signal
-    Logged<public>:event(strike_report) = event(strike_report){}
-
-    # `Emit`, not `Signal`: `signalable.Signal` carries no_rollback and a <transacts> body -- which
-    # every Godot callback is -- may not call it. The bridge owns the emit verb for that reason and
-    # because Godot has to be the dispatcher.
-    EmitPinged<public>()<transacts>:void = Pinged.Emit(())
-    EmitTallied<public>(Points:int)<transacts>:void = Tallied.Emit(Points)
-    EmitLogged<public>(Amount:int, Source:string)<transacts>:void =
-        Logged.Emit(strike_report{Damage := Amount, By := Source, Point := vector2{X := 7.0, Y := 8.0}})
-
-    var EventSeen<public>:int = 0
-    var EventBy<public>:string = ""
-
-    OnTallied<public>(Points:int)<transacts>:void =
-        set EventSeen = EventSeen + Points
-
-    # One struct parameter against three Godot arguments, the same reassembly the `signal(t)` half
-    # relies on -- InstanceCall packs N arguments into one struct parameter with N fields.
-    OnLogged<public>(Report:strike_report)<transacts>:void =
-        set EventSeen = Report.Damage
-        set EventBy = Report.By
-
-    SubscribeToTallied<public>()<transacts>:void =
-        Tallied.Subscribe(OnTallied)
-
-    SubscribeToLogged<public>()<transacts>:void =
-        Logged.Subscribe(OnLogged)
-
-    ReadEventSeen<public>()<transacts>:int = EventSeen
-    ReadEventBy<public>()<transacts>:string = EventBy
-    ResetEventSeen<public>()<transacts>:void =
-        set EventSeen = 0
-        set EventBy = ""
+    # The member's Godot connection is made once at construction rather than per wait, so an
+    # emission raised by *GDScript* on this node reaches a Verse subscriber with nothing awaiting.
+    # That is what a bare `event(t)` buys and costs: no hook at the await to connect from, so the
+    # connection cannot be scoped to one.
+    SubscribeToStruck<public>()<transacts>:void =
+        Struck.Subscribe(OnStruck)
 
     # R-SIG-6: receiving a signal a *GDScript* node emits. `Subscribe` is for a signal this class
     # declares; this is the general form underneath it, and it is the same Callable either way.

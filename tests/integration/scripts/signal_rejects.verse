@@ -1,6 +1,7 @@
 using { /Godot.org/Godot }
 
-# R-SIG-1's refusals: five `signal` members that compile and cannot work.
+# R-SIG-1's refusals: five members that compile and cannot work, and one that works and is
+# deprecated for the type it is declared with.
 #
 # Each one used to be accepted silently -- the member compiled, the signal was absent from Godot,
 # and the author found out at the first emission, at runtime, or never. They are decidable from the
@@ -24,31 +25,31 @@ signal_rejects := class(node2d):
 
     # The one that works, so the file proves the pass rejects individually rather than wholesale.
     @export_signal
-    Fine<public>:signal(int) = signal(int){}
+    Fine<public>:event(int) = event(int){}
 
     # VH_SIGNAL_IS_VAR. A signal is an identity, not a value: the binding is minted once against
     # the object the member was constructed on, so reassigning the member leaves the name pointing
     # at a row nothing emits through.
     @export_signal
-    var Reassignable<public>:signal(int) = signal(int){}
+    var Reassignable<public>:event(int) = event(int){}
 
     # VH_SIGNAL_NOT_PUBLIC. Connecting is something done from outside the class, and this member
     # cannot be seen from there. Registered with Godot anyway before this pass existed, which is the
     # opposite of what the design asked for.
     @export_signal
-    Unseen:signal(int) = signal(int){}
+    Unseen:event(int) = event(int){}
 
     # VH_SIGNAL_PAYLOAD_NESTED_STRUCT. A struct payload decomposes one level, into one Godot
     # argument per top-level field. Godot has no argument shape for a struct, so `Inner` has nothing
     # to become.
     @export_signal
-    Nested<public>:signal(reject_outer) = signal(reject_outer){}
+    Nested<public>:event(reject_outer) = event(reject_outer){}
 
     # VH_SIGNAL_PAYLOAD_UNSUPPORTED. An option around something that is not a Godot object: the
     # wire reads a cleared option as a null reference, so `false` and `option{3}` would arrive
     # indistinguishable.
     @export_signal
-    Maybe<public>:signal(?int) = signal(?int){}
+    Maybe<public>:event(?int) = event(?int){}
 
     # VH_SIGNAL_NEEDS_ATTRIBUTE. Well formed in every other way -- it is the missing
     # `@export_signal` and nothing else, which is what makes it the fixture for the reject rather
@@ -57,14 +58,23 @@ signal_rejects := class(node2d):
     # Node panel that is empty for no stated reason.
     Forgotten<public>:signal(int) = signal(int){}
 
-    EmitFine<public>(Points:int)<transacts>:void = Fine.Signal(Points)
+    # The deprecation, which is not a reject: this member registers, emits and connects exactly as
+    # it always did, and the warning says only that `event(t)` is the type to declare now. Kept
+    # working rather than refused, so the file proves a deprecated spelling still works -- and kept
+    # separate from `Forgotten` above, which would otherwise carry two messages and make neither
+    # assertable on its own.
+    @export_signal
+    Legacy<public>:signal(int) = signal(int){}
+
+    EmitFine<public>(Points:int)<transacts>:void = Fine.Emit(Points)
+    EmitLegacy<public>(Points:int)<transacts>:void = Legacy.Signal(Points)
 
     # Emitting a refused signal is the runtime half: the binding carries its reject reason, so each
     # of these says *its own* reason rather than the generic "names nothing" they all used to say.
     # One per reason, because "it was rejected" and "it was rejected for the right reason" are
     # different claims and only the second is worth anything to the author reading the message.
-    EmitUnseen<public>(Points:int)<transacts>:void = Unseen.Signal(Points)
-    EmitReassignable<public>(Points:int)<transacts>:void = Reassignable.Signal(Points)
-    EmitNested<public>()<transacts>:void = Nested.Signal(reject_outer{})
-    EmitMaybe<public>()<transacts>:void = Maybe.Signal(option{3})
+    EmitUnseen<public>(Points:int)<transacts>:void = Unseen.Emit(Points)
+    EmitReassignable<public>(Points:int)<transacts>:void = Reassignable.Emit(Points)
+    EmitNested<public>()<transacts>:void = Nested.Emit(reject_outer{})
+    EmitMaybe<public>()<transacts>:void = Maybe.Emit(option{3})
     EmitForgotten<public>(Points:int)<transacts>:void = Forgotten.Signal(Points)

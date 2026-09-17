@@ -17,11 +17,11 @@ using { /Godot.org/Godot }
 concurrency := class(node2d):
 
 	@export_signal
-	Fired<public>:signal() = signal(){}
+	Fired<public>:event() = event(){}
 	@export_signal
-	Scored<public>:signal(int) = signal(int){}
+	Scored<public>:event(int) = event(int){}
 	@export_signal
-	Struck<public>:signal(tuple(int, string)) = signal(tuple(int, string)){}
+	Struck<public>:event(tuple(int, string)) = event(tuple(int, string)){}
 
 	var Seen<public>:int = 0
 	var SeenBy<public>:string = ""
@@ -56,9 +56,9 @@ concurrency := class(node2d):
 	StartWaitForStruck<public>():void =
 		spawn{WaitForStruck()}
 
-	EmitFired<public>()<transacts>:void = Fired.Signal(())
-	EmitScored<public>(Points:int)<transacts>:void = Scored.Signal(Points)
-	EmitStruck<public>(Damage:int, By:string)<transacts>:void = Struck.Signal((Damage, By))
+	EmitFired<public>()<transacts>:void = Fired.Emit(())
+	EmitScored<public>(Points:int)<transacts>:void = Scored.Emit(Points)
+	EmitStruck<public>(Damage:int, By:string)<transacts>:void = Struck.Emit((Damage, By))
 
 	ReadStage<public>()<transacts>:int = Stage
 	ReadSeen<public>()<transacts>:int = Seen

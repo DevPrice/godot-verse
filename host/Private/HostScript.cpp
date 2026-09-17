@@ -6123,8 +6123,8 @@ AUTORTFM_DISABLE bool GetClassSignalsLive(FUtf8StringView ClassName, TArray<Godo
                 Desc.RejectDetail = Shape.RejectDetail;
             }
 
-            FUtf8String DeclaredIn;
-            FillLocation(*Member, DeclaredIn, Desc.Line, Desc.Column);
+            Desc.bLegacyType = bIsSignalType;
+            FillLocation(*Member, Desc.DeclaredIn, Desc.Line, Desc.Column);
             OutSignals.Add(MoveTemp(Desc));
         }
     }
@@ -6456,25 +6456,10 @@ AUTORTFM_DISABLE void BindSignals(UObject* Instance,
         GEventBindingIds.Add(Held, Id);
         OutEventBindings.Add(Id);
 
-        // One connection, held for the instance's life, and only for a signal Godot was actually
-        // told about: `connect` refuses a name a refused signal never registered under, and
-        // "connect failed" is a worse sentence than the one the editor already gave at the line.
-        //
-        // Not VH_CONNECT_ONE_SHOT, which is what an await wants: this is every emission for as long
-        // as the node lives, because a bare `event(t)` offers no hook at the await to connect from.
-        if (bRegistered)
-        {
-            FCallbackTarget Target;
-            Target.OwnerHandle = Handle;
-            Target.EventSignalId = Id;
-            int64 CallableRef = 0;
-            const int64 CallbackId = ConnectDelivery(Handle, Signal.Name, MoveTemp(Target), 0, CallableRef);
-            if (CallbackId != 0)
-            {
-                GSignalBindings[Id].CallableRef = CallableRef;
-                GSignalBindings[Id].CallbackId = CallbackId;
-            }
-        }
+        // The connection is *not* made here. This runs inside vh_instantiate, which the consumer
+        // calls before it installs the script instance on the object, so Godot does not yet know
+        // the script has a signal of this name and answers "Attempt to connect nonexistent signal".
+        // AttachInstance below is the hook that runs once it does.
     }
 }
 
@@ -8809,6 +8794,51 @@ namespace {
 /// and so used to be describable, but nothing addresses one -- only the class named after its file
 /// can go on a node -- and recursing would harvest the archetype the compiler generates per class
 /// along with it.
+/// One warning per `signal(t)`-declared member: R-SIG-1's older spelling, kept working and no
+/// longer the one to write.
+///
+/// A warning rather than a `Reject`, and the difference is the whole point of it. A reject means
+/// "not registered with Godot", which is what the author has to be told about a member that cannot
+/// work. This member works: it registers, emits, connects and is awaited exactly as it always did.
+/// What has changed is that an `event(t)` does all of that *and* is the type Verse's own
+/// concurrency vocabulary is built on, so there is no longer a reason to reach for the bridge's.
+///
+/// Reported through the ordinary diagnostic channel rather than through `vh_signal_desc`, which
+/// gets it both reporters for free and costs no ABI: the consumer files a VH_SEVERITY_WARNING into
+/// `compiler_warnings_by_path` for the gutter and `log_build_diagnostics` pushes it to the log,
+/// which is the half a headless test can read. `inert_global_class_message` is the same shape
+/// written the other way round, in the consumer.
+///
+/// Emitted from the snapshot pass because that is the one walk of every script class that happens
+/// inside an analysis, so the warning refreshes per keystroke the way a compiler's own does.
+AUTORTFM_DISABLE void WarnOnLegacySignalTypes(const TArray<GodotVerse::FSignalDesc>& Signals)
+{
+    for (const GodotVerse::FSignalDesc& Signal : Signals)
+    {
+        if (!Signal.bLegacyType || Signal.DeclaredIn.IsEmpty())
+        {
+            continue;
+        }
+        const FUtf8String Message = FUtf8String(UTF8TEXT("`")) + Signal.Name
+            + UTF8TEXT("` is declared as a `signal(t)`. Declare it as Verse's own `event(t)` "
+                       "instead -- `")
+            + Signal.Name
+            + UTF8TEXT("<public>:event(t) = event(t){}` -- which Godot sees identically and which "
+                       "also satisfies `awaitable(t)` for code that has never heard of this bridge. "
+                       "Emit it with `Emit` rather than `Signal`. `signal(t)` remains what the "
+                       "engine's own signal accessors answer.");
+        GodotVerse::ReportDiagnostic(VH_SEVERITY_WARNING,
+                                     FUtf8StringView(Message),
+                                     FUtf8StringView(Signal.DeclaredIn),
+                                     Signal.Line,
+                                     Signal.Column,
+                                     Signal.Line,
+                                     Signal.Column,
+                                     FUtf8StringView(),
+                                     0);
+    }
+}
+
 AUTORTFM_DISABLE void CollectSnapshotClassNames(const uLang::CModule& Module,
                                                 const FUtf8String& Path,
                                                 TArray<FUtf8String>& Out)
@@ -9332,6 +9362,7 @@ AUTORTFM_DISABLE void TakeAnalysisSnapshot()
 
         GetClassMethodsLive(ClassName, Entry.Methods);
         GetClassSignalsLive(ClassName, Entry.Signals);
+        WarnOnLegacySignalTypes(Entry.Signals);
         GetClassRpcsLive(ClassName, Entry.Rpcs);
         Entry.ToStringDecorated = FindToStringExtensionLive(ClassName);
 
@@ -9583,6 +9614,56 @@ AUTORTFM_DISABLE GodotVerse::FInstance* GodotVerse::Instantiate(FUtf8StringView 
     return Made;
 }
 
+/// Connects each `@export_signal` event member, once, at the first entry into the instance.
+///
+/// **Not at vh_instantiate, and the reason is Godot's own ordering.** The consumer builds the Verse
+/// object *before* it installs the script instance on the node, and `Object::has_signal` answers
+/// off the installed instance -- so a connect there is refused with "Attempt to connect nonexistent
+/// signal", and the member would register, emit normally, and silently never deliver back. Nor at
+/// the end of the consumer's create(): the object does not hold the script instance until
+/// `_instance_create` has *returned* to Godot, which is later still and not a point this side can
+/// name.
+///
+/// First entry is both late enough and early enough. It is late enough because a call into the
+/// instance is Godot dispatching to an installed script instance; and it is early enough because a
+/// Verse awaiter can only exist after Verse code has run on this object, and running Verse code on
+/// it *is* an entry. The one ordering left uncovered -- Godot emits before any Verse code runs --
+/// has nothing on the Verse side to deliver to.
+AUTORTFM_DISABLE void EnsureEventConnections(GodotVerse::FInstance& Instance)
+{
+    for (const int64 Id : Instance.EventBindings)
+    {
+        FSignalBinding* const Binding = GSignalBindings.Find(Id);
+        // Idempotent, and a refused signal is skipped: Godot was never told about one, so `connect`
+        // would fail on the name and "connect failed" is a worse sentence than the one the editor
+        // already gave at the member's line.
+        if (!Binding || Binding->CallbackId != 0 || Binding->Reject != VH_SIGNAL_OK)
+        {
+            continue;
+        }
+
+        FCallbackTarget Target;
+        Target.OwnerHandle = Binding->OwnerHandle;
+        Target.EventSignalId = Id;
+        int64 CallableRef = 0;
+        const int64 CallbackId =
+            ConnectDelivery(Binding->OwnerHandle, Binding->Name, MoveTemp(Target), 0, CallableRef);
+        if (CallbackId != 0)
+        {
+            Binding->CallableRef = CallableRef;
+            Binding->CallbackId = CallbackId;
+            continue;
+        }
+
+        // Silence here would be the worst answer available: the member registers, emissions still
+        // reach Godot, and only delivery *back into the event* is missing -- so every await on it
+        // hangs and nothing says why.
+        GodotVerse::ReportError(FUtf8String(UTF8TEXT("The signal `")) + Binding->Name
+            + UTF8TEXT("` was registered but could not be connected, so awaiting it would never "
+                       "resume."));
+    }
+}
+
 AUTORTFM_DISABLE void GodotVerse::ReleaseInstance(FInstance* Instance)
 {
     if (Instance)
@@ -9704,6 +9785,12 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
     {
         return VH_ERR_STATE;
     }
+
+    // The first entry into this instance is the earliest point at which Godot will accept a connect
+    // to one of the script's own signals, so it is where an `@export_signal` event member's
+    // connection is made. A no-op for every instance that declares none, and for every call after
+    // the first.
+    EnsureEventConnections(*Instance);
 
     // The signature, for the parameter and result types. Asked of the semantic program rather than
     // of the VM because that is the only view that carries declared types -- the bytecode has

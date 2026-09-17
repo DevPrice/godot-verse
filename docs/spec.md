@@ -882,8 +882,12 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   engine accessors alike — because `signal.Await` is the bridge's own method and `VhSignalAwait` is
   the hook it connects from. The one case that cannot work that way is R-SIG-1's `@export_signal` spelling:
   a bare `event(t)`'s `Await` is Verse's native, so there is nothing to connect from and the member
-  gets **one connection at `vh_instantiate`, held for the instance's life** instead. That is the only
-  place the property above is traded away, and it is traded for the only thing that buys it.
+  gets **one connection held for the instance's life** instead, made at the first entry into the
+  instance. Not earlier: until Godot has installed the script instance on the object it refuses the
+  connect as naming a nonexistent signal, and that point is after `_instance_create` has returned,
+  which is not a moment this side can name. First entry is early enough because a Verse awaiter can
+  only exist once Verse code has run on the object. That is the only place the property above is
+  traded away, and it is traded for the only thing that buys it.
   `docs/signal-declaration.md` §7 has why two mechanisms is the right answer rather than an
   inconsistency, and C#'s prior art for the same split.
 

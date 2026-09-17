@@ -12,6 +12,6 @@ using { /Godot.org/Godot }
 signal_no_owner := class:
 
     @export_signal
-    Orphan<public>:signal(int) = signal(int){}
+    Orphan<public>:event(int) = event(int){}
 
     Read<public>()<transacts>:int = 0

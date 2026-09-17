@@ -687,14 +687,25 @@ it is not in `run_tests.py`.
   `VH_SIGNAL_NEEDS_ATTRIBUTE`, because that type has no purpose but Godot. The attribute could not
   be spelled `@signal` — a bare marker is a class, the attribute package shares
   `/Godot.org/Godot`'s verse path, and a third definition of `signal` is glitch 3532.
+- **`event(t)` is the spelling to write; `signal(t)` is deprecated as a declaration** and warns at
+  the member's line. A warning and not a `Reject`, because the member still works — so it travels
+  the compiler's own diagnostic channel (`VH_SEVERITY_WARNING`, emitted from the snapshot pass)
+  rather than `vh_signal_desc`, which is array-returned and could not grow a field without a major
+  bump. `signal(t)` remains what the 503 engine accessors answer.
 - **The emit verb is the bridge's, whichever type declares the member.** `signal(t).Signal` and
   `event(t).Emit` both go out to Godot and come back through the member's connection, which is what
   makes a Verse handler and a GDScript handler see one ordering. An event's own `Signal` resumes
   Verse awaiters *without telling Godot* — legal, undiagnosable, and right on a non-`@export_signal`
   event; C# carries the same hazard in its `backing_` field.
-- **An `@export_signal` event member holds one Godot connection for the instance's life**, made at
-  `BindSignals`, because a bare `event(t)`'s `Await` is Verse's own native and offers no hook to
-  connect from. Every `signal(t)` — declared or engine accessor — keeps connect-while-awaiting, and
+- **An `@export_signal` event member holds one Godot connection for the instance's life**, because a
+  bare `event(t)`'s `Await` is Verse's own native and offers no hook to connect from. It is made at
+  the **first entry into the instance** (`EnsureEventConnections`, from `InstanceCall`) and cannot be
+  made earlier: `vh_instantiate` runs before the consumer installs the script instance, and
+  `Object::has_signal` answers off the installed instance, so Godot refuses with *"Attempt to connect
+  nonexistent signal"* — as it does at the end of the consumer's `create()` too, since the object
+  does not hold the instance until `_instance_create` has returned. The failure is silent in the
+  worst shape (registers, emits, never delivers back, every await hangs), so `ConnectDelivery`'s
+  refusal is reported. Every `signal(t)` — declared or engine accessor — keeps connect-while-awaiting, and
   `tests/integration` asserts the connection count returns to zero on both sides of a `race`.
   `GEventBindingIds` is what an event has instead of `vh_signal`'s `Id` field, and `ReleaseInstance`
   drops the row, the callback, the reference and the strong pointer together — the strong pointer is
