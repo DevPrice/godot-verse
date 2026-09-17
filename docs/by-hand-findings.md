@@ -855,7 +855,7 @@ now, the way `run_tests.py` does before each of its Godot layers.
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks
-is not worth keeping. Ten things stand open, all of them things no automated layer can reach.
+is not worth keeping. Eleven things stand open, all of them things no automated layer can reach.
 Phase 6's session has since been run and is recorded below with what it found, because the steps
 are worth keeping: its half of the debugger has no other test.
 
@@ -871,6 +871,18 @@ an exported type, and one of Verse's own.
 Nothing automated sees this. The tables behind it are checked in the units layer, which is the part
 that drifted; that the highlighter reads them and the editor draws the result is what the eye is
 for.
+
+### The Node panel, for a signal that is not `<public>`
+
+`@export_signal` registers a member whatever its access level — the access check is gone, and
+R-SIG-1 says why. The integration layer asserts the registration, the connection and the delivery in
+both directions, which is everything a headless run can see. What it cannot see is the panel.
+
+**To check it:** put a script on a node with `Own<private>:event(int)` and `@export_signal` above it,
+open the **Node** dock, and connect `Own` to a method through the dialog. It must appear in the list
+beside the `<public>` ones, with the same payload row, and the connection must save into the scene
+and fire at runtime. There is nothing in the drawing path that reads an access level, which is
+exactly why this is an eye check rather than a suspicion.
 
 ### `_CanDropData` has never been exercised
 

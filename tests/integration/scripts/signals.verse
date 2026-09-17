@@ -166,3 +166,43 @@ signals := class(node2d):
     # declares; this is the general form underneath it, and it is the same Callable either way.
     ConnectTo<public>(Other:object, Name:string)<transacts>:void =
         Other.Connect(Name, MakeCallable(int, OnScored))
+
+    # --- access levels: the attribute is the whole gate ------------------------
+    #
+    # `@export_signal` registers a member whatever its access level, and none of these carries
+    # `<public>`. The bridge used to refuse them with VH_SIGNAL_NOT_PUBLIC, on the reading that
+    # connecting is done from outside the class -- but connecting is not done from Verse at all. A
+    # designer connects in the Node panel and GDScript connects by string name, and neither consults
+    # a Verse specifier. Nothing else in the bridge tested one either: a non-public `@export` member
+    # has always reached the inspector and a non-public method has always been callable from Godot.
+    #
+    # What the specifier still governs is which *Verse* code may name the member, which is the whole
+    # of what it ever promised. It buys no privacy from Godot: a registered signal can be connected
+    # and emitted by anything holding the node, which is as true of `Own` below as of `Hit` above.
+
+    # No specifier at all, which is the spelling an author reaches for without thinking and the one
+    # that used to be refused with no hint that a missing word was the cause.
+    @export_signal
+    Unspecified:event(int) = event(int){}
+
+    @export_signal
+    Guarded<protected>:event(int) = event(int){}
+
+    @export_signal
+    Own<private>:event(int) = event(int){}
+
+    # The `signal(t)` spelling takes the same path with one difference worth covering: the host
+    # writes the binding id *into* the member's own object at instantiation, reached by name off the
+    # instance's shape, so this asserts the write half is as access-blind as the list is.
+    @export_signal
+    Quiet<private>:signal(int) = signal(int){}
+
+    # Delivery back *into* a non-public member: the connection is made by name off the installed
+    # script instance, and the name is all Godot ever had of it.
+    SubscribeToOwn<public>()<transacts>:void =
+        Own.Subscribe(OnScored)
+
+    EmitUnspecified<public>(Points:int)<transacts>:void = Unspecified.Emit(Points)
+    EmitGuarded<public>(Points:int)<transacts>:void = Guarded.Emit(Points)
+    EmitOwn<public>(Points:int)<transacts>:void = Own.Emit(Points)
+    EmitQuiet<public>(Times:int)<transacts>:void = Quiet.Signal(Times)

@@ -1,6 +1,6 @@
 using { /Godot.org/Godot }
 
-# R-SIG-1's refusals: five members that compile and cannot work.
+# R-SIG-1's refusals: four members that compile and cannot work.
 #
 # Each one used to be accepted silently -- the member compiled, the signal was absent from Godot,
 # and the author found out at the first emission, at runtime, or never. They are decidable from the
@@ -32,11 +32,9 @@ signal_rejects := class(node2d):
     @export_signal
     var Reassignable<public>:event(int) = event(int){}
 
-    # VH_SIGNAL_NOT_PUBLIC. Connecting is something done from outside the class, and this member
-    # cannot be seen from there. Registered with Godot anyway before this pass existed, which is the
-    # opposite of what the design asked for.
-    @export_signal
-    Unseen:event(int) = event(int){}
+    # There is no access-level refusal here, and its absence is the point: a member's access level
+    # is not tested at all. `signals.verse` carries the four non-public members that register, and
+    # says why connecting was never a Verse-visibility question.
 
     # VH_SIGNAL_PAYLOAD_NESTED_STRUCT. A struct payload decomposes one level, into one Godot
     # argument per top-level field. Godot has no argument shape for a struct, so `Inner` has nothing
@@ -63,7 +61,6 @@ signal_rejects := class(node2d):
     # of these says *its own* reason rather than the generic "names nothing" they all used to say.
     # One per reason, because "it was rejected" and "it was rejected for the right reason" are
     # different claims and only the second is worth anything to the author reading the message.
-    EmitUnseen<public>(Points:int)<transacts>:void = Unseen.Emit(Points)
     EmitReassignable<public>(Points:int)<transacts>:void = Reassignable.Emit(Points)
     EmitNested<public>()<transacts>:void = Nested.Emit(reject_outer{})
     EmitMaybe<public>()<transacts>:void = Maybe.Emit(option{3})

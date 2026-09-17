@@ -915,7 +915,7 @@ typedef struct vh_method_desc
  * worst outcome -- the author sees neither the connection nor a reason, and finds out at the first
  * emission, at runtime, if at all.
  *
- * All five are decidable from the declaration alone, which is the point: each was a runtime
+ * All of them are decidable from the declaration alone, which is the point: each was a runtime
  * surprise before it was a reject code. */
 typedef enum vh_signal_reject
 {
@@ -926,8 +926,17 @@ typedef enum vh_signal_reject
 	 * at a row nothing emits through. */
 	VH_SIGNAL_IS_VAR,
 
-	/* Not `<public>`. Godot registers signals per script class and connects by name from outside
-	 * the class entirely, so a member the rest of the program cannot see has no one to connect it. */
+	/* RETIRED, and never produced: a member's access level is not tested. It used to mean "not
+	 * `<public>`", on the reading that connecting is done from outside the class -- but connecting
+	 * is not done from Verse at all. A designer connects in the Node panel and GDScript connects by
+	 * string name, and neither consults a Verse specifier; what the specifier governs is which Verse
+	 * code may name the member. Nothing else here tested one either: a non-public `@export` member
+	 * has always reached the inspector and a non-public method has always been callable from Godot.
+	 *
+	 * The value stays because removing it renumbers the three codes below, and the mismatch would
+	 * surface as a signal refused for the wrong stated reason rather than as a version refusal.
+	 * **Delete it at the next major bump**, along with the consumer's sentence for it and the host's
+	 * SignalRejectReason case, which are kept for exactly as long as this is. */
 	VH_SIGNAL_NOT_PUBLIC,
 
 	/* The declaring class has no Godot object to register on -- it does not derive from `object`,

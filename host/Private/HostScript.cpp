@@ -5725,6 +5725,8 @@ AUTORTFM_DISABLE FUtf8String SignalRejectReason(int32 Reject, const FUtf8String&
     {
     case VH_SIGNAL_IS_VAR:
         return UTF8TEXT("a `signal` member must not be `var`.");
+    // Retired: GetClassSignalsLive no longer tests access. Kept while the enumerator is, so a
+    // descriptor recorded by an older host still reads as itself rather than as the default.
     case VH_SIGNAL_NOT_PUBLIC:
         return UTF8TEXT("a `signal` member must be `<public>` for anything outside the class to connect to it.");
     case VH_SIGNAL_NO_GODOT_OWNER:
@@ -6093,14 +6095,26 @@ AUTORTFM_DISABLE bool GetClassSignalsLive(FUtf8StringView ClassName, TArray<Godo
 
             // Member first, payload second: "this cannot be a signal at all" is a better sentence
             // than "its third argument has no Godot type", and the author fixes the member either
-            // way. Order within the three is declaration order -- `var` is the one an author is
-            // most likely to have written on purpose and to need talking out of.
+            // way. Order within the two is declaration order.
             //
-            // The missing attribute sits after those three and before the payload, and both sides
-            // of that are deliberate. A member with no Godot owner is not fixed by an attribute, so
+            // The missing attribute sits after those two and before the payload, and both sides of
+            // that are deliberate. A member with no Godot owner is not fixed by an attribute, so
             // telling the author to write one there would be the wrong edit; and complaining about
             // the payload of a member Godot was never told about is noise before the edit that
             // matters.
+            //
+            // **The member's access level is not tested, and VH_SIGNAL_NOT_PUBLIC is retired.** It
+            // read as a third rung here, on the reading that connecting is something done from
+            // outside the class. Connecting is not done from Verse at all: a designer connects in
+            // the Node panel and GDScript connects by string name, and neither consults a Verse
+            // specifier. Nothing else in the bridge tests one either -- GetClassExportsLive and
+            // GetClassMethodsLive never have, so a non-public `@export` member has always reached
+            // the inspector and a non-public method has always been callable from Godot. What the
+            // specifier still governs is which *Verse* code may name the member, which is the whole
+            // of what it ever promised. tests/verse_probe/signal_access_probe.verse is the
+            // measurement, and signal_shadow_probe.verse is why binding by name is still safe: the
+            // compiler refuses a member shadowing an inaccessible one of the same name (3593), so
+            // two members of one name cannot reach the list.
             if (!bHasGodotOwner)
             {
                 Desc.Reject = VH_SIGNAL_NO_GODOT_OWNER;
@@ -6108,10 +6122,6 @@ AUTORTFM_DISABLE bool GetClassSignalsLive(FUtf8StringView ClassName, TArray<Godo
             else if (Member->IsVar())
             {
                 Desc.Reject = VH_SIGNAL_IS_VAR;
-            }
-            else if (Member->DerivedAccessLevel()._Kind != uLang::SAccessLevel::EKind::Public)
-            {
-                Desc.Reject = VH_SIGNAL_NOT_PUBLIC;
             }
             else if (!bCarriesAttribute)
             {

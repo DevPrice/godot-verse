@@ -1118,6 +1118,46 @@ func begin() -> void:
 		emitter_node.call("EmitScored", 1)
 		_check("emitting after the subscriber was freed is not an error", true)
 
+		# --- access levels: `@export_signal` is the whole gate -----------------
+		#
+		# None of these four carries `<public>`, and all four register. The bridge used to refuse
+		# them, on the reading that connecting is done from outside the class -- but connecting is
+		# not done from Verse at all: the Node panel connects by name and so does GDScript, and
+		# neither consults a Verse specifier. What a specifier governs is which Verse code may name
+		# the member, and it buys no privacy from Godot: each of these is connected and emitted from
+		# here, which is the whole claim.
+		var access_names := {}
+		for entry in emitter_node.get_signal_list():
+			access_names[String(entry["name"])] = entry
+		_check("a member with no access specifier registers", access_names.has("Unspecified"))
+		_check("and a `<protected>` one", access_names.has("Guarded"))
+		_check("and a `<private>` one", access_names.has("Own"))
+		_check("and a `<private>` signal(t), whose binding id the host writes into the member",
+				access_names.has("Quiet"))
+
+		_signal_points = 0
+		emitter_node.connect("Unspecified", _on_verse_scored)
+		emitter_node.call("EmitUnspecified", 3)
+		_check_eq("an unspecified member emits to a GDScript handler", _signal_points, 3)
+		emitter_node.connect("Guarded", _on_verse_scored)
+		emitter_node.call("EmitGuarded", 4)
+		_check_eq("a `<protected>` one does too", _signal_points, 4)
+		emitter_node.connect("Own", _on_verse_scored)
+		emitter_node.call("EmitOwn", 5)
+		_check_eq("and a `<private>` one", _signal_points, 5)
+		emitter_node.connect("Quiet", _on_verse_scored)
+		emitter_node.call("EmitQuiet", 6)
+		_check_eq("and a `<private>` signal(t)", _signal_points, 6)
+
+		# Delivery *back* into the member, which is the half a non-public event could have lost on
+		# its own: the connection ConnectDelivery makes is by name off the installed script
+		# instance, and the name is all Godot ever had.
+		emitter_node.call("ResetSeen")
+		emitter_node.call("SubscribeToOwn")
+		emitter_node.emit_signal("Own", 7)
+		_check_eq("a GDScript emission of a `<private>` signal reaches a Verse handler",
+				emitter_node.call("ReadSeen"), 7)
+
 	# --- R-SIG-1: the declarations that compile and cannot work ---------------------------------
 	#
 	# Four members the compiler accepts and the bridge refuses, each decidable from the declaration.
@@ -1133,7 +1173,6 @@ func begin() -> void:
 			reject_names[String(entry["name"])] = entry
 		_check("a signal with nothing wrong with it is still registered", reject_names.has("Fine"))
 		_check_eq("a `var` signal is not", reject_names.has("Reassignable"), false)
-		_check_eq("nor a non-public one", reject_names.has("Unseen"), false)
 		_check_eq("nor one whose struct payload nests a struct", reject_names.has("Nested"), false)
 		_check_eq("nor one whose payload has no Godot type", reject_names.has("Maybe"), false)
 
@@ -1141,16 +1180,15 @@ func begin() -> void:
 		reject_node.set_script(reject_script)
 		tree.root.add_child(reject_node)
 		_check("has_signal agrees with the list", reject_node.has_signal("Fine"))
-		_check_eq("and refuses the rejected one", reject_node.has_signal("Unseen"), false)
+		_check_eq("and refuses the rejected one", reject_node.has_signal("Reassignable"), false)
 		_signal_points = 0
 		reject_node.connect("Fine", _on_verse_scored)
 		reject_node.call("EmitFine", 6)
 		_check_eq("the good signal on that class still emits", _signal_points, 6)
 		# Emitting a refused signal reports its own reason rather than the generic "names nothing".
 		# The *text* is what matters and GDScript cannot read push_error output, so what is asserted
-		# here is that none of the four is fatal; the four sentences are eyeballed in the run log and
-		# recorded in phase-4-gaps.md §2.
-		reject_node.call("EmitUnseen", 1)
+		# here is that none of them is fatal; the sentences are eyeballed in the run log and recorded
+		# in phase-4-gaps.md §2.
 		reject_node.call("EmitReassignable", 1)
 		reject_node.call("EmitNested")
 		reject_node.call("EmitMaybe")

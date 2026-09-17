@@ -88,10 +88,16 @@ apart in `GetClassSignalsLive` rather than folded into one test:
 An event is useful purely between Verse tasks, so opting out is an ordinary thing to mean. A
 `signal(t)` has no purpose but Godot, so opting out is far likelier to be a forgotten line — and the
 alternative to the warning is a Node panel that is empty for no stated reason, which is the failure
-this whole rejection pass exists to remove. The reject sits after `NO_GODOT_OWNER`, `IS_VAR` and
-`NOT_PUBLIC` and before the payload reasons: an attribute is the wrong edit to suggest for a member
-with no Godot owner, and a payload complaint about a member Godot was never told about is noise
-before the edit that matters.
+this whole rejection pass exists to remove. The reject sits after `NO_GODOT_OWNER` and `IS_VAR` and
+before the payload reasons: an attribute is the wrong edit to suggest for a member with no Godot
+owner, and a payload complaint about a member Godot was never told about is noise before the edit
+that matters.
+
+**The attribute is the *whole* gate, and the access level is not part of it.** `NOT_PUBLIC` was a
+third rung on that ladder and is retired: connecting is not done from Verse, so a Verse specifier was
+never what stood between a member and a connection. A designer connects in the Node panel, GDScript
+connects by string name, and `GetClassExportsLive` and `GetClassMethodsLive` have never tested access
+either. The measurements are in §4.
 
 **The attribute is `@export_signal`, and `@signal` is unavailable rather than unwanted.** The
 attribute package shares `/Godot.org/Godot`'s verse path so that a script's existing
@@ -123,6 +129,17 @@ Every row below was run, not read. The probe fixtures stay so each can be re-run
 | Is `listenable(t)` implementable from a user package? | Yes, `<override>` on both methods | `signal_listenable_probe.verse` Q1 |
 | Is such a class usable *as* the interface, and awaitable through it? | Yes | `signal_listenable_probe.verse` Q1a, Q1b |
 | Does a parametric extension method on a native parametric class work? | Yes | `signal_listenable_probe.verse` Q2 |
+| What does `DerivedAccessLevel()` answer for a member with no specifier? | Not `Public` — it read `NOT_PUBLIC` like `<protected>` and `<private>` did | `signal_access_probe.verse` |
+| May a subclass declare a member a base class already uses `<private>`? | **No** — glitch 3593 *and* 3532 | `signal_shadow_probe.verse` |
+
+The second of those is what makes dropping the access check safe rather than merely desirable.
+Binding is keyed by name — `FindShapeField` walks the object's class chain for `(<class>:)<Name>` —
+and `GetClassSignalsLive` walks the script chain base-first, so two same-named members would produce
+two descriptors of one name where Godot holds one signal per name. Public members can't reach that
+(3532, *"already defined in"*), and the question was whether an **inaccessible** base member escapes
+it. It does not: 3593, *"definition Hidden cannot override an inaccessible parent definition"*, fires
+first. Re-run that fixture on an engine drop — 3593 is the refusal specifically about accessibility,
+and it is the one holding the guarantee up.
 
 The last row also carries a spelling worth not re-deriving: `where t:type` goes **inside the
 receiver's parens**, as `/Verse.org/Verse` spells its own —

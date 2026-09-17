@@ -4241,6 +4241,8 @@ static String signal_rejection_message(const VerseSignalInfo &p_signal) {
 			return name + String(" is a `var`, and a signal is an identity rather than a value. Its ")
 					+ String("binding is made once against the object the member was built on, so ")
 					+ String("reassigning it leaves the name pointing at nothing. Drop the `var`.");
+		// Retired with the enumerator: the host does not test a member's access level, so this is
+		// unreachable from a host built against this header. Kept for as long as the value is.
 		case VH_SIGNAL_NOT_PUBLIC:
 			return name + String(" is not `<public>`, so nothing outside the class can connect to it ")
 					+ String("-- which is the only thing connecting ever is. Declare it `")

@@ -13,13 +13,13 @@ player := class(area2d):
 
 	# How fast the player will move (pixels/sec).
 	@export
-	var Speed<public>:float = 400.0
+	var Speed:float = 400.0
 
 	# `signal hit` in the GDScript. The member's *type* is the declaration and its name is the
 	# signal's name; main subscribes to it rather than the scene wiring Area2D.body_entered to two
 	# scripts at once, which is what the port did before a script could declare one.
 	@export_signal
-	Hit<public>:event() = event(){}
+	Hit:event() = event(){}
 
 	var Sprite:?animated_sprite2d = false
 	var Hitbox:?collision_shape2d = false
@@ -77,7 +77,7 @@ player := class(area2d):
 				set Rotation = if (Velocity.Y > 0.0) then PiFloat else 0.0
 
 	# Called by main when a round starts.
-	Start<public>(Pos:vector2)<transacts>:void =
+	Start(Pos:vector2)<transacts>:void =
 		set Position = Pos
 		set Rotation = 0.0
 		Show()
@@ -86,7 +86,7 @@ player := class(area2d):
 
 	# Connected in player.tscn to this node's own body_entered, which is how a Godot author wires a
 	# node's own signal to its own script -- the Node panel, not a line of code.
-	OnBodyEntered<public>(Body:node2d):void =
+	OnBodyEntered(Body:node2d):void =
 		# The player disappears after being hit.
 		Hide()
 		Hit.Emit(())

@@ -774,16 +774,31 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   **A signal the bridge cannot carry is refused at the member**, reusing R-EXP-3's shape rather than
   failing at the emission — `vh_signal_desc` carries a `Reject` the way `vh_export_desc` does,
   `_get_script_signal_list` drops a rejected signal so Godot is never told about one nothing can
-  emit, and `_validate` turns the reason into a warning at the member's own line. The five reasons,
+  emit, and `_validate` turns the reason into a warning at the member's own line. The four reasons,
   all decidable from the declaration:
 
   | `vh_signal_reject` | the declaration |
   | --- | --- |
   | `IS_VAR` | a `var` member — a signal is an identity, and the binding is minted once |
-  | `NOT_PUBLIC` | not `<public>`, so nothing outside the class can connect to it |
   | `NO_GODOT_OWNER` | a class that does not derive from `object`, so nothing ever hands it a handle |
   | `PAYLOAD_UNSUPPORTED` | an argument with no Godot type |
   | `PAYLOAD_NESTED_STRUCT` | a struct payload whose field is itself a struct |
+
+  **A member's access level is not among them**, and `NOT_PUBLIC` is retired. It read as a fifth
+  reason on the understanding that connecting is done from outside the class — but connecting is not
+  done from Verse at all. A designer connects in the Node panel and GDScript connects by string name,
+  and neither consults a Verse specifier; nothing else in the bridge tested one either, so a
+  non-public `@export` member has always reached the inspector and a non-public method has always
+  been callable from Godot. What a specifier governs is which *Verse* code may name the member.
+
+  The consequence is worth saying plainly, because the specifier does not say it: **a registered
+  signal is connectable and emittable by anything holding the node**, `<private>` included.
+  `Object::emit_signal("Own")` from GDScript reaches it. The privacy is from Verse callers and from
+  nothing else. `tests/verse_probe/signal_access_probe.verse` is the measurement, and
+  `signal_shadow_probe.verse` is why binding by name stays unambiguous: the compiler refuses a member
+  that shadows an inaccessible one of the same name (glitch 3593), so two members of one name cannot
+  reach the list. The enumerator keeps its value until the next major ABI bump, because removing it
+  renumbers the three codes after it.
 
   `NO_GODOT_OWNER` is the one with no GDScript counterpart, and the asymmetry is worth stating: every
   GDScript class extends Object, so every instance carries a signal table of its own and a

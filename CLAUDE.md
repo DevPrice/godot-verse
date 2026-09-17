@@ -697,6 +697,14 @@ it is not in `run_tests.py`.
   `VH_SIGNAL_NEEDS_ATTRIBUTE`, because that type has no purpose but Godot. The attribute could not
   be spelled `@signal` — a bare marker is a class, the attribute package shares
   `/Godot.org/Godot`'s verse path, and a third definition of `signal` is glitch 3532.
+- **The attribute is the whole gate: a member's access level is not tested, and
+  `VH_SIGNAL_NOT_PUBLIC` is retired** (the enumerator keeps its value until the next major bump, or
+  the three codes after it renumber). Connecting is not done from Verse — the Node panel and
+  GDScript both connect by name — and nothing else in the bridge tested access either, so a
+  non-public `@export` member has always reached the inspector. A `<private>` signal is therefore
+  private from *Verse* callers and from nothing else: anything holding the node can connect to it
+  and emit it. Binding stays unambiguous because the compiler refuses a member that shadows an
+  inaccessible one of the same name (glitch 3593, `tests/verse_probe/signal_shadow_probe.verse`).
 - **Both member types are supported and neither is deprecated**, because they are not
   interchangeable. `event(t)` satisfies `awaitable(t)`/`signalable(t)` and is where Epic is heading;
   `signal(t)` satisfies **`listenable(t)`**, keeps its connection scoped to the wait, and has no
