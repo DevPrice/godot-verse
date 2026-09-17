@@ -1987,10 +1987,26 @@ AUTORTFM_DISABLE FUtf8String AttributeText(const uLang::CDataDefinition& Member,
     return Text.IsSet() ? FULangConversionUtils::ULangStrToFUtf8String(*Text) : FUtf8String();
 }
 
+/// The definition a question about source should be asked of.
+///
+/// Instantiating a parametric class makes a fresh CDefinition per member -- `typed_array(node)`
+/// has its own `ToArray` -- and none of them was written anywhere: the file, the line and the
+/// prose all belong to the generic declaration they were instantiated from. uLang says so itself
+/// where it *ensures* against `GetAttributes` on an instantiated definition, "which inherits its
+/// attributes from its prototype definition" (uLang/Semantics/Definition.h:222).
+///
+/// An ordinary definition is its own prototype, so this is identity for all but the mirror's four
+/// parametric classes.
+AUTORTFM_DISABLE const uLang::CDefinition& PrototypeOf(const uLang::CDefinition& Definition)
+{
+    const uLang::CDefinition* const Prototype = Definition.GetPrototypeDefinition();
+    return Prototype ? *Prototype : Definition;
+}
+
 /// Where the parse says a definition was written.
 AUTORTFM_DISABLE void LocationFromVst(const uLang::CDefinition& Definition, FUtf8String& OutPath, int32& OutLine, int32& OutColumn)
 {
-    if (const uLang::CExpressionBase* DefinitionNode = Definition.GetAstNode())
+    if (const uLang::CExpressionBase* DefinitionNode = PrototypeOf(Definition).GetAstNode())
     {
         if (const Verse::Vst::Node* Vst = DefinitionNode->GetMappedVstNode())
         {
@@ -2030,8 +2046,12 @@ int32 GMirrorKeyCollisions = 0;
 /// one synthetic snippet a digest is. The signature is what tells an overload from its sibling:
 /// GodotMath declares `operator'+'` once per math type, all of them at module scope with two
 /// parameters, and the function type is the only thing that differs.
-AUTORTFM_DISABLE FUtf8String MirrorKeyOf(const uLang::CDefinition& Definition)
+AUTORTFM_DISABLE FUtf8String MirrorKeyOf(const uLang::CDefinition& RawDefinition)
 {
+    // The prototype's name, so a member reached through a concrete instantiation --
+    // `typed_array(node).ToArray` -- keys to the generic declaration this table actually recorded.
+    // Recording walks the generic, whose prototype is itself, so no recorded key moves.
+    const uLang::CDefinition& Definition = PrototypeOf(RawDefinition);
     FUtf8String Key = FULangConversionUtils::ULangStrToFUtf8String(uLang::GetQualifiedNameString(Definition));
     if (const uLang::CFunction* Function = Definition.AsNullable<uLang::CFunction>())
     {
@@ -2064,6 +2084,31 @@ AUTORTFM_DISABLE const FMirrorDefinition* FindMirrorDefinition(const uLang::CDef
     return GMirrorDefinitions.Find(MirrorKeyOf(Definition));
 }
 
+/// The class a parametric type definition stands for, or null for anything else.
+///
+/// `signal(t) := class(...)` is a CFunction whose result is a type rather than a value, so every
+/// walk that tests for a function and stops finds one here. The class is inside the CTypeType the
+/// signature answers -- the same unwrap DescribeCompletion does for an archetype's receiver.
+AUTORTFM_DISABLE const uLang::CClass* ParametricClassOf(const uLang::CDefinition& Definition)
+{
+    const uLang::CFunction* const Function = Definition.AsNullable<uLang::CFunction>();
+    if (!Function)
+    {
+        return nullptr;
+    }
+    const uLang::CFunctionType* const Type = Function->_Signature.GetFunctionType();
+    if (!Type)
+    {
+        return nullptr;
+    }
+    const uLang::CTypeType* const TypeType = Type->GetReturnType().GetNormalType().AsNullable<uLang::CTypeType>();
+    if (!TypeType || !TypeType->PositiveType())
+    {
+        return nullptr;
+    }
+    return TypeType->PositiveType()->GetNormalType().AsNullable<uLang::CClass>();
+}
+
 AUTORTFM_DISABLE void RecordMirrorScope(const uLang::CLogicalScope& Scope)
 {
     for (const uLang::TSRef<uLang::CDefinition>& Definition : Scope.GetDefinitions())
@@ -2087,7 +2132,17 @@ AUTORTFM_DISABLE void RecordMirrorScope(const uLang::CLogicalScope& Scope)
             // line and not the file. Counted so that a drift in what a key has to carry is visible
             // rather than silent.
             FUtf8String Key = MirrorKeyOf(*Definition);
-            GMirrorKeyCollisions += GMirrorDefinitions.Contains(Key) ? 1 : 0;
+            if (GMirrorDefinitions.Contains(Key))
+            {
+                ++GMirrorKeyCollisions;
+                // Named, not just counted: a count says a key has stopped being unique and leaves
+                // whoever reads it to find out which, and the answer decides whether the cost is a
+                // line number or a whole definition's documentation.
+                if (AnalysisTraceEnabled())
+                {
+                    fprintf(stderr, "[vh-trace]   mirror key collision: %s\n", reinterpret_cast<const char*>(*Key));
+                }
+            }
             GMirrorDefinitions.FindOrAdd(MoveTemp(Key), Entry);
         }
 
@@ -2098,6 +2153,16 @@ AUTORTFM_DISABLE void RecordMirrorScope(const uLang::CLogicalScope& Scope)
         if (Inner && !Definition->AsNullable<uLang::CFunction>())
         {
             RecordMirrorScope(*Inner);
+        }
+        else if (const uLang::CClass* const Parametric = ParametricClassOf(*Definition))
+        {
+            // A *parametric* class is a CFunction -- `signal(t) := class...` is a function
+            // answering a type -- so the rule above walked straight past every member of one, and
+            // signal(t).Await, typed_array(t).ToArray and event(t)'s members had no recorded
+            // location at all. After the first build the mirror is read from its digest, and a
+            // digest is one synthetic snippet with no file behind it, so the consumer had nothing
+            // to read a comment from and hovered them with a type and an empty box.
+            RecordMirrorScope(*Parametric);
         }
     }
 }
@@ -7568,6 +7633,89 @@ AUTORTFM_DISABLE bool IsFunctionParameter(const uLang::CDefinition& Definition)
 
 } // namespace
 
+namespace {
+
+/// A definition's documentation as prose, with every delimiter taken off, or empty.
+///
+/// Two sources, and a definition has one or the other rather than both.
+///
+/// **`@doc("...")` is how Verse's own library documents itself** -- 132 of them across
+/// /Verse.org/Verse, `Sqrt` and `Concatenate` among them -- and an attribute's text is reachable
+/// from nowhere else: a consumer reading the source file above the declaration finds an attribute
+/// line, not prose. GetAttributeTextValue is the only accessor there is, and it takes a single
+/// string, which is what @doc carries.
+///
+/// **A comment block is how this bridge documents its own**, and the parser keeps one as prefix
+/// comments on the node that begins the construct. That is the same association
+/// verse_doc_comment_above warns about on the consumer's side: for a member behind four lines of
+/// `@editable` the comments hang off the attribute clause rather than the member, so this can come
+/// back empty where re-reading the file would not. It is a fallback for a definition whose file
+/// the consumer cannot open, not a replacement for that reading.
+///
+/// The shape matches verse_doc_comment_above's exactly -- delimiter gone, each line trimmed,
+/// joined with newlines -- so a consumer cannot tell which side produced a given description.
+AUTORTFM_DISABLE FUtf8String DocOf(const uLang::CDefinition& Definition, const uLang::CSemanticProgram& Program)
+{
+    // The prototype: prose is written once, on the generic declaration, and GetAttributes
+    // *ensures* against being asked of an instantiated definition (PrototypeOf says why).
+    const uLang::CDefinition& Prototype = PrototypeOf(Definition);
+
+    if (const uLang::CClass* const DocClass = Program._doc_attribute.Get())
+    {
+        const uLang::TOptional<uLang::CUTF8String> Text =
+            Prototype.GetAttributes().GetAttributeTextValue(DocClass, Program);
+        if (Text.IsSet() && Text->ByteLen() > 0)
+        {
+            return FULangConversionUtils::ULangStrToFUtf8String(*Text);
+        }
+    }
+
+    const uLang::CExpressionBase* const Ast = Prototype.GetAstNode();
+    const Verse::Vst::Node* const Vst = Ast ? Ast->GetMappedVstNode() : nullptr;
+    if (!Vst)
+    {
+        return FUtf8String();
+    }
+
+    FUtf8String Prose;
+    for (const Verse::Vst::TNodeRef<Verse::Vst::Node>& Node : Vst->GetPrefixComments())
+    {
+        const Verse::Vst::Comment* const Comment = Node->AsNullable<Verse::Vst::Comment>();
+        if (!Comment)
+        {
+            continue;
+        }
+        FUtf8String Line(Comment->GetSourceCStr());
+        Line.TrimStartAndEndInline();
+        // `<#>` before `<#`, or the longer delimiter is read as the shorter plus a `>`.
+        if (Line.StartsWith(UTF8TEXT("<#>")))
+        {
+            Line.RightChopInline(3);
+        }
+        else if (Line.StartsWith(UTF8TEXT("<#")))
+        {
+            Line.RightChopInline(2);
+            if (Line.EndsWith(UTF8TEXT("#>")))
+            {
+                Line.LeftChopInline(2);
+            }
+        }
+        else if (Line.StartsWith(UTF8TEXT("#")))
+        {
+            Line.RightChopInline(1);
+        }
+        Line.TrimStartAndEndInline();
+        if (!Prose.IsEmpty())
+        {
+            Prose += UTF8TEXT("\n");
+        }
+        Prose += Line;
+    }
+    return Prose;
+}
+
+}
+
 AUTORTFM_DISABLE bool GodotVerse::LookupSymbol(FUtf8StringView Path, int32 Line, int32 Column, FLookupDesc& OutDesc)
 {
     OutDesc = FLookupDesc{};
@@ -7648,6 +7796,14 @@ AUTORTFM_DISABLE bool GodotVerse::LookupSymbol(FUtf8StringView Path, int32 Line,
 
     OutDesc.bIsParameter = IsFunctionParameter(Definition);
 
+    // Not for a parameter: its source range is the line its whole function is declared on, so the
+    // prose "above" it is the function's -- which would describe an argument with the method's
+    // documentation. The consumer skips a parameter for the same reason on its own side.
+    if (!OutDesc.bIsParameter)
+    {
+        OutDesc.Doc = DocOf(Definition, *Program);
+    }
+
     FillLocation(Definition, OutDesc.Path, OutDesc.Line, OutDesc.Column);
 
     // Only at a declaration. A call site already resolves to the implementation that will run,
@@ -7658,6 +7814,7 @@ AUTORTFM_DISABLE bool GodotVerse::LookupSymbol(FUtf8StringView Path, int32 Line,
         if (const uLang::CDefinition* Overridden = Definition.GetOverriddenDefinition())
         {
             OutDesc.OverriddenOwner = OwnerNameOf(*Overridden);
+            OutDesc.OverriddenDoc = DocOf(*Overridden, *Program);
             FillLocation(*Overridden, OutDesc.OverriddenPath, OutDesc.OverriddenLine, OutDesc.OverriddenColumn);
         }
     }

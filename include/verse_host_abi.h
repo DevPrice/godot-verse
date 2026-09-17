@@ -42,8 +42,8 @@ extern "C" {
  * The mismatch surfaces at vh_init, not at compile time, because the two sides are compiled by
  * different toolchains and nothing links them.
  */
-#define VH_ABI_VERSION_MAJOR 10
-#define VH_ABI_VERSION_MINOR 1
+#define VH_ABI_VERSION_MAJOR 11
+#define VH_ABI_VERSION_MINOR 0
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
 typedef int32_t vh_bool;
@@ -1481,6 +1481,12 @@ typedef enum vh_lookup_kind
  * terminated. */
 typedef struct vh_lookup_desc
 {
+	/* sizeof(vh_lookup_desc) as the host built it. Added at 11.0, which is what made 11.0 a major:
+	 * this struct had no size field, so there was nothing a consumer could check before reading a
+	 * field appended after the version it was built against, and no way to make the addition
+	 * ignorable. It is here so the next addition can be a minor. */
+	int32_t StructSize;
+
 	const char* NameUtf8;
 	int32_t NameLen;
 
@@ -1537,6 +1543,32 @@ typedef struct vh_lookup_desc
 	int32_t OverriddenPathLen;
 	int32_t OverriddenLine;
 	int32_t OverriddenColumn;
+
+	/* The definition's own documentation, as prose with every comment delimiter taken off, or
+	 * empty where it has none. Added at 11.0.
+	 *
+	 * Here because for two whole families of definition the consumer cannot read it any other way,
+	 * and both are ordinary things to hover.
+	 *
+	 * Verse's own library documents itself with a `@doc("...")` *attribute* rather than a comment
+	 * -- 132 of them across /Verse.org/Verse -- so a consumer reading the source file above the
+	 * declaration finds an attribute line and no prose. Nothing else exposes an attribute's text.
+	 *
+	 * And a definition in a package the project does not own has no file the consumer may open:
+	 * the path here names one in the engine tree, which an editor can neither be sure of nor be
+	 * expected to read on a hover keystroke.
+	 *
+	 * Filled from the `@doc` attribute where there is one and from the comment block the parser
+	 * kept above the declaration otherwise. The consumer should still prefer its own reading of a
+	 * file it holds the buffer for -- that one is current with an unsaved edit and this is not,
+	 * since it describes the text the last analysis saw. */
+	const char* DocUtf8;
+	int32_t DocLen;
+
+	/* The overridden definition's documentation, on the same terms, so an override carrying no
+	 * prose of its own can show its parent's. Empty when OverriddenOwnerUtf8 is. */
+	const char* OverriddenDocUtf8;
+	int32_t OverriddenDocLen;
 } vh_lookup_desc;
 
 /* Resolves the identifier at Line/Column of PathUtf8 to the definition it refers to.

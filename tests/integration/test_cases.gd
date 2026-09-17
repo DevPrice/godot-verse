@@ -1975,6 +1975,26 @@ func begin() -> void:
 				_hover_answers(hovers, "Snapped"),
 				["@GlobalScope.snapped", "Vector2.snapped"])
 
+		# Verse's own library documents itself with `@doc("...")` rather than with a comment block,
+		# and an attribute's text is reachable from nowhere on this side: re-reading the source
+		# above the declaration finds an attribute line. The host reads it and hands it over, which
+		# is the only reason either of these draws prose at all.
+		#
+		# Epic's own words rather than "not empty": an empty box and a box holding the wrong thing
+		# both pass a length check, and what is being proved is that the text came from the engine
+		# rather than from anything written here.
+		_check("a Verse standard library function hovers with Epic's own documentation",
+				"square root" in _hover(hovers, "Sqrt").get("description", ""))
+		_check("and so does one of its classes",
+				_hover(hovers, "event").get("description", "") != "")
+
+		# A method of a parametric class, which is a CFunction to the compiler -- `signal(t)` is a
+		# function answering a type -- so the walk that records where a mirror definition was
+		# written stopped at it, and after the first build its members had no location to read a
+		# comment from. This one is the bridge's own prose, by the other route.
+		_check("a parametric class's method hovers with the comment above it",
+				_hover(hovers, "Await").get("description", "") != "")
+
 		# A comment is prose. The mirror spells Godot's classes in lowercase, so this is the
 		# difference between hovering a sentence and hovering code.
 		_check_eq("a Godot class name in a comment draws nothing",

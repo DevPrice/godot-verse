@@ -279,3 +279,8 @@ exports_probe := class(node2d):
 # that `@global_class` is not the half `exports_probe` is missing.
 exports_unregistered := class(node2d) {}
 
+
+# Names one of Verse's own, whose documentation is a `@doc` attribute rather than a comment. The
+# lookup case reads Epic's own sentence back off it; nothing else in this project can, because an
+# attribute's text is not in the source above the declaration and no other accessor exposes it.
+RootOf<public>(X:float)<reads>:float = Sqrt(X)

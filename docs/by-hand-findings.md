@@ -892,6 +892,58 @@ disagree. The one genuine archetype position in the yardstick answers with its t
 
 ---
 
+## B25. Verse's own library hovered with a type and an empty box · **fixed**
+
+`Sqrt`, `event`, `Concatenate` and everything else `/Verse.org/Verse` declares drew their type and
+nothing under it. So did `signal(t).Await` and `typed_array(t).ToArray`. Three separate causes,
+found one behind another.
+
+**Verse documents itself with an attribute, not with a comment.** `Engine/Plugins/Verse/Verse/
+Source/Verse/Verse/Verse/` carries **132 `@doc("...")` attributes** across 24 files, and that is
+the whole of its prose. Every description this bridge draws is read out of the *source text above
+the declaration* (`verse_doc_comment_above`), and above `Sqrt` there is an attribute line. No
+amount of reading better finds it, and nothing else on the consumer's side exposes an attribute's
+text — so the host reads it with `GetAttributeTextValue` against `CSemanticProgram::_doc_attribute`
+and hands it over, which is what **ABI 11.0** is for.
+
+The route this was expected to take turned out not to be the one. `DigestGenerator.cpp:1962`
+rewrites `@doc` into `#` line comments when it writes a digest, *"regardless of whether it includes
+epic_internal definitions"*, and dumping the 32,481-byte digest the trace reports for `Verse/Verse`
+shows them there in full. But the definitions the host actually holds are not from that digest: a
+probe printing `GetMappedVstNode()->Whence()` for `Sqrt` reports
+`.../Verse/Verse/Verse/Math.native.verse row=37`, which is the real file at the exact row of its
+`@vm_no_effect_token` — so the attribute is still on the definition and the digest's comments are
+never reached. Both facts are worth keeping: the attribute is the route, and a digest is not
+automatically what a package is read from just because it has one.
+
+**A parametric class is a `CFunction`.** `signal(t) := class(...)` is a function answering a type,
+so `RecordMirrorScope`'s rule — walk into anything that is a scope *unless* it is a function, since
+a function's parameters and locals are reachable from nowhere a cursor can be — walked straight
+past every member of `signal(t)`, `typed_array(t)`, `typed_dictionary(k,v)` and `event(t)`. After
+the first build the mirror is read from its own digest, which is one synthetic snippet at a path no
+file is written to, so those members had no recorded location and the consumer had nothing to read
+a comment from. `ParametricClassOf` unwraps the `CTypeType` the signature answers and the walk
+recurses into the class: **33,047 definitions became 33,067**.
+
+**And an instantiated definition is not the one that was written.** `typed_array(node)` mints a
+fresh `CDefinition` per member, so the `ToArray` a cursor resolves to is not the `ToArray` the
+table recorded, and its key missed. uLang states the rule where it *ensures* against
+`GetAttributes` on one — *"which inherits its attributes from its prototype definition"*
+(`uLang/Semantics/Definition.h:222`) — and that ensure firing in the integration log is what found
+this. `PrototypeOf` is now asked before the key is built, before the location is read and before
+the prose is: an ordinary definition is its own prototype, so nothing else moves.
+
+**What is left is correct.** `VariantBool` still hovers with no description, because
+`GodotClasses.native.verse` has no comment above it — the generator does not write one for the
+per-lane variant builders. That is a generator question and not a plumbing one.
+
+**The rule the consumer follows** is that its own reading of the file wins and the host's answer is
+the fallback. Reading the file is current with an *unsaved* edit where the host describes the text
+the last analysis saw, and the parser hangs a comment off whichever node begins a construct, so for
+a member behind four lines of `@editable` the host's answer is empty where re-reading is not.
+
+---
+
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks

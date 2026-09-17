@@ -497,6 +497,9 @@ struct FLookupDesc
     FUtf8String OverriddenPath;
     int32 OverriddenLine{-1};
     int32 OverriddenColumn{-1};
+    /// Prose, delimiters stripped, or empty. See DocOf.
+    FUtf8String Doc;
+    FUtf8String OverriddenDoc;
 };
 
 /// Resolves the identifier at Line/Column of Path against the analysed program.

@@ -1280,6 +1280,7 @@ extern "C" int32_t vh_lookup_symbol(const char* PathUtf8, int32_t Line, int32_t 
     }
 
     Desc = vh_lookup_desc{
+        (int32_t)sizeof(vh_lookup_desc),
         reinterpret_cast<const char*>(*Lookup.Name),
         Lookup.Name.Len(),
         reinterpret_cast<const char*>(*Lookup.Path),
@@ -1299,7 +1300,11 @@ extern "C" int32_t vh_lookup_symbol(const char* PathUtf8, int32_t Line, int32_t 
         reinterpret_cast<const char*>(*Lookup.OverriddenPath),
         Lookup.OverriddenPath.Len(),
         Lookup.OverriddenLine,
-        Lookup.OverriddenColumn};
+        Lookup.OverriddenColumn,
+        reinterpret_cast<const char*>(*Lookup.Doc),
+        Lookup.Doc.Len(),
+        reinterpret_cast<const char*>(*Lookup.OverriddenDoc),
+        Lookup.OverriddenDoc.Len()};
 
     *OutResult = &Desc;
     return VH_OK;

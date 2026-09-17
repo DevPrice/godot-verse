@@ -782,6 +782,46 @@ int main(int argc, char** argv)
 				}
 			}
 
+
+			// Documentation, which reaches the consumer only through the ABI for two families it
+			// cannot read itself.
+			//
+			// Verse's own library documents itself with `@doc("...")` -- 132 of them across
+			// /Verse.org/Verse -- and an attribute's text is in no comment above the declaration,
+			// so a consumer re-reading the source file finds an attribute line and nothing else.
+			// The engine's sources are also not files an editor should open on a hover keystroke.
+			const size_t SqrtUse = ExportsSource.find("Sqrt(X)");
+			if (Step("the fixture still names one of Verse's own", SqrtUse != std::string::npos))
+			{
+				int32_t SqrtRow = 0;
+				int32_t SqrtColumn = 0;
+				RowColumnOf(ExportsSource, SqrtUse, SqrtRow, SqrtColumn);
+				const vh_lookup_desc* SqrtLookup = nullptr;
+				if (Step("vh_lookup_symbol on a Verse standard library function",
+						LookupSymbolFn(ExportsPathUtf8.c_str(), SqrtRow, SqrtColumn, &SqrtLookup) == VH_OK)
+					&& SqrtLookup)
+				{
+					const std::string Doc = Text(SqrtLookup->DocUtf8, SqrtLookup->DocLen);
+					LookupOk = Step("it resolves to Sqrt", Text(SqrtLookup->NameUtf8, SqrtLookup->NameLen) == "Sqrt") && LookupOk;
+					// Epic's own sentence, which is the whole point: nothing in this repository
+					// wrote it and nothing here could have.
+					LookupOk = Step("and carries Epic's own @doc text",
+									 Doc.find("square root") != std::string::npos)
+							&& LookupOk;
+					// The struct grew at 11.0 and gained a size field in the same change, so a
+					// consumer has something to check before reading a field appended after the
+					// version it was built for.
+					LookupOk = Step("the descriptor reports its own size",
+									 SqrtLookup->StructSize == (int32_t)sizeof(vh_lookup_desc))
+							&& LookupOk;
+				}
+				else
+				{
+					LookupOk = false;
+				}
+			}
+
+
 			// A definition resolves at its own name, so hovering a method where it is declared
 			// describes it. The narrowing this needs is what stops a blank column in the body
 			// from resolving to the enclosing function too.

@@ -64,3 +64,18 @@ hover_probe := class(node2d):
 	# on this line and @GlobalScope.snapped on the next.
 	SnapPoint<public>(At:vector2):vector2 = At.Snapped(vector2{X := 8.0, Y := 8.0})
 	SnapScalar<public>(X:float):float = Snapped(X, 8.0)
+
+	# Verse's own, which documents itself with a `@doc` attribute rather than with the comment
+	# block every other family here uses. An attribute's text is in no line above the
+	# declaration, so re-reading the source -- which is how every description on this side is
+	# found -- can never produce it. The host reads it and hands it over (ABI 11.0).
+	RootOf<public>(X:float):float = Sqrt(X)
+
+	# One of Verse's own classes, named in a parameter rather than constructed. `event(t)` is
+	# what `@export_signal` takes beside `signal(t)`, so a script meets it early.
+	Holds<public>(E:event(int)):int = 0
+
+	# A method of a *parametric* class. `signal(t)` is a function answering a type, so the walk
+	# that records where a mirror definition was written stopped at it and every member of one
+	# lost its location to the digest -- a type and an empty box.
+	Waits<public>(Clock:timer)<suspends>:tuple() = Clock.Timeout().Await()

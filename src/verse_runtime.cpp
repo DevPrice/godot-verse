@@ -507,6 +507,11 @@ Dictionary VerseRuntime::lookup_symbol(const String &p_globalized_path, int32_t 
 	result["overridden_owner"] = String::utf8(desc->OverriddenOwnerUtf8, desc->OverriddenOwnerLen);
 	result["overridden_path"] = String::utf8(desc->OverriddenPathUtf8, desc->OverriddenPathLen);
 	result["overridden_line"] = (int64_t)desc->OverriddenLine;
+	// The prose for a definition whose file this side cannot read: Verse's own library,
+	// which documents itself with a `@doc` attribute rather than a comment, and anything in
+	// a package the project does not own. Empty for everything that has none.
+	result["doc"] = String::utf8(desc->DocUtf8, desc->DocLen);
+	result["overridden_doc"] = String::utf8(desc->OverriddenDocUtf8, desc->OverriddenDocLen);
 	return result;
 }
 

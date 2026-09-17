@@ -2808,6 +2808,26 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 	if (description.is_empty() && overrides_something) {
 		description = comment_at(overridden_path, overridden_line);
 	}
+
+	// The host's own reading, last, for the two families this side can say nothing about.
+	//
+	// Verse's library documents itself with a `@doc("...")` *attribute* rather than a comment --
+	// 132 of them across /Verse.org/Verse -- so the text above the declaration is an attribute
+	// line and comment_at finds nothing however well it reads. And a definition in a package the
+	// project does not own has a path in the engine tree, which is not a file an editor should
+	// be opening on a hover keystroke. `Sqrt`, `Concatenate` and `event` all drew a type and an
+	// empty box before this.
+	//
+	// Last rather than first, because reading the file beats it twice over: it is current with an
+	// unsaved edit where the host describes the text the last analysis saw, and the parser hangs
+	// a comment off whichever node begins the construct, so for a member behind four lines of
+	// `@editable` the host's answer is empty where re-reading is not.
+	if (description.is_empty() && !is_parameter) {
+		description = found["doc"];
+		if (description.is_empty() && overrides_something) {
+			description = found["overridden_doc"];
+		}
+	}
 	if (!description.is_empty()) {
 		result["description"] = description;
 	}

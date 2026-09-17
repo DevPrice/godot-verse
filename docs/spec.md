@@ -1920,6 +1920,17 @@ external editor is secondary.
   mirrors nothing**: `MakeVariant`, `godot_array.GetInt`, Verse's own `event`, and a second class
   in a file. Each keeps the local result, because it is the only one that carries the comment above
   the declaration, and there is no Godot page to prefer over it.
+  **What the comment above the declaration cannot reach, the host now hands over** (ABI **11.0**,
+  `vh_lookup_desc::DocUtf8`). Verse's own library documents itself with a `@doc("...")` *attribute*
+  — 132 of them across `/Verse.org/Verse` — so the text is in no line above the declaration and no
+  reading of the source produces it; and a definition in a package the project does not own has its
+  file in the engine tree, which is not one an editor should open on a hover keystroke. `Sqrt`,
+  `event` and `Concatenate` drew a type and an empty box until the host read the attribute with
+  `GetAttributeTextValue` and reported it. The consumer still prefers its own reading of a file it
+  holds the buffer for: that one is current with an unsaved edit and this is not.
+  **11.0 is a major because `vh_lookup_desc` had no `StructSize`** — nothing a consumer could check
+  before reading a field appended after the version it was built against, and no way to make the
+  addition ignorable. The field is there now, so the next one can be a minor.
 - **R-TOOL-5 (MUST)** Signature help while typing a call. Status: **part** — declines during an
   analysis for R-TOOL-4's reason, and queues that buffer so the next ask answers. It is asked about
   the same repaired buffer R-TOOL-3 describes, off the same analysis, so an unclosed call has a hint

@@ -69,7 +69,7 @@ Three documents are not phase records and are the ones to read before adding a f
   removed.
 - **`docs/by-hand-findings.md`** — what the by-hand editor sessions found, because everything from
   `EngineDebugger` and the editor UI inward has no automated test and never will. B1–B9, B15–B18,
-  B20, B22, B23 and B24 are defects, all fixed; B12 is a Verse fact; B13 a latency finding; B14 the
+  B20 and B22–B25 are defects, all fixed; B12 is a Verse fact; B13 a latency finding; B14 the
   sandboxed export run. **B22 is the one to read before adding anything to the native root**: a hook
   with no row in `LIFECYCLE_METHODS` is never offered as an override and never hovers, and four of
   the five sat that way for a phase because only `_Notification` had a row. **B23 is the one to read
@@ -79,7 +79,11 @@ Three documents are not phase records and are the ones to read before adding a f
   read before adding anything to the generated mirror that a script cannot write**: a fifth of every
   completion popup was the mirror's own class var accessors, 7344 names no author can spell, because
   `DescribeCompletion` describes any function that fits the filter and the fact that separates them
-  was already in hand for a narrower purpose. **B21 is the one
+  was already in hand for a narrower purpose. **B25 is the one to read before asking the compiler
+  anything about where a definition was written**: Verse's own library documents itself with a
+  `@doc` attribute rather than a comment, a parametric class is a `CFunction` so a walk that stops
+  at functions loses every member of one, and an instantiated definition is not the one that was
+  written — `PrototypeOf` is the answer to the last. **B21 is the one
   open defect**: asking Godot for the `IP` singleton — which the
   generated accessor does whether or not it then succeeds — segfaults the process *after* everything
   has shut down, so it reads as a whole suite failing with nothing in the log. **B20 is the one to
@@ -100,7 +104,7 @@ Three documents are not phase records and are the ones to read before adding a f
 `include/verse_host_abi.h` is the only thing that crosses. Plain C — the two sides cannot share a
 C++ ABI. It is staged into the host's `Public/` by `build_host.py`, so both compile the same file.
 
-**`VH_ABI_VERSION` is 10.0.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
+**`VH_ABI_VERSION` is 11.0.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
 a major bump is a layout or meaning change and both sides must be rebuilt; a minor bump adds
 something an older consumer can ignore behind a `StructSize` check. A change to the header means
 bumping it and rebuilding **both** sides — the mismatch surfaces at `vh_init`, not at compile time.
@@ -115,6 +119,10 @@ as corruption rather than as a refusal. 9.0 added `IsNamed` there for that reaso
 analysis-only program behind it, so the three position entry points answer `VH_ERR_STATE` after
 a build until a consumer asks for an analysis. An older consumer would have read that as "no
 such symbol" and drawn nothing, silently.
+**11.0 grew `vh_lookup_desc`**, which carries a definition's documentation now (`DocUtf8`) — and it
+had to be a major because that struct had no `StructSize`, so there was nothing a consumer could
+check before reading a field appended after the version it was built for. The size field went in
+with it, so the next addition there can be a minor.
 
 `vh_host_kind()` is readable before `vh_init` and answers editor, runtime or cooker; the eleven
 compiler-side entry points answer `VH_ERR_UNSUPPORTED` in a runtime host.
@@ -535,6 +543,21 @@ it is not in `run_tests.py`.
   (`VerseScriptLanguage::build_project`), and `probe_hover`, which has no frames, flushes it itself.
   **A hook of uLang's own is the only place a code-generating build is still describable** — add
   anything that needs the build's AST there, not after `BuildAll`.
+- **Ask a definition's *prototype* where it was written, what it says and what it is called.**
+  Instantiating a parametric class mints a fresh `CDefinition` per member — `typed_array(node)` has
+  its own `ToArray` — and none of them was written anywhere: the file, the line and the prose all
+  belong to the generic declaration. uLang states the rule where it `ensure`s against
+  `GetAttributes` on one, *"which inherits its attributes from its prototype definition"*
+  (`Definition.h:222`), and that ensure is the only thing that reports it. `PrototypeOf` is the
+  helper; an ordinary definition is its own prototype, so it is identity everywhere else. The same
+  sentence has a second half: **a parametric class is a `CFunction`**, so any walk that stops at a
+  function walks past every member of `signal(t)`, `typed_array(t)`, `typed_dictionary(k,v)` and
+  `event(t)` (`by-hand-findings.md` B25).
+- **Verse's own library documents itself with `@doc`, not with a comment.** 132 attributes across
+  `/Verse.org/Verse`, and `GetAttributeTextValue` against `CSemanticProgram::_doc_attribute` is the
+  only way to read one — nothing above the declaration in the source carries the prose. A digest
+  *does* rewrite `@doc` into `#` comments (`DigestGenerator.cpp:1962`), but that is not the text the
+  host holds: those definitions come from the real engine files, loci and attributes intact.
 - **Nothing may read declared types off the live semantic program.** IR generation *rewrites* the
   program the build was holding: a method answering a struct gets a coerced override generated
   beside it, decorating to the same name with one synthetic `Argument` parameter. `InstanceCall`
