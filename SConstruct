@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 import os
+import subprocess
 import sys
 
-from methods import print_error
+from methods import print_error, print_warning
 from gdextension import generate as generate_gdextension, library_filename, verify_shlib_affixes
 
 localEnv = Environment(tools=["default"], PLATFORM="")
@@ -86,3 +87,48 @@ actions = [
     port_output_action,
 ]
 Default(*actions)
+
+# The UE commit the three host targets are built and measured against. Nothing under src/ compiles
+# against UE, so this is a warning and never an error -- what it catches is a checkout that moved
+# under binaries nothing else compares. VH_BUILD_HOST_ID digests host/ and the ABI header alone, so
+# a host rebuilt on a different engine keeps the same id and a cook taken on one engine loads into a
+# runtime host built on another without a word (docs/phase-7b-design.md §13.5).
+ENGINE_COMMIT = "203d76492ebc201b95a505d16cbc045d5a38d37d"
+
+
+def engine_head(engine):
+    """The checkout's HEAD, or None when git cannot answer for it -- no git, or not a checkout."""
+    try:
+        result = subprocess.run(["git", "-C", engine, "rev-parse", "HEAD"],
+                                capture_output=True, text=True, check=False)
+    except FileNotFoundError:
+        return None
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def warn_on_engine_mismatch():
+    """Says so when the Unreal checkout is not at ENGINE_COMMIT.
+
+    Resolution order is tools/run_tests.py's, less the flag it has and this does not: $UE_ROOT, then
+    ../UnrealEngine. A machine with no checkout is silent rather than nagged, because the
+    GDExtension builds without one and only the host targets need an engine at all.
+    """
+    root = os.environ.get("UE_ROOT")
+    if root and not os.path.isdir(root):
+        print_warning(f"UE_ROOT is {root}, which is not a directory, so the engine commit went unchecked.")
+        return
+    engine = root or os.path.join(Dir("#").abspath, os.pardir, "UnrealEngine")
+    if not os.path.isdir(engine):
+        return
+    head = engine_head(engine)
+    if head is None or head == ENGINE_COMMIT:
+        return
+    print_warning(
+        f"the Unreal checkout at {os.path.normpath(engine)} is at {head[:10]}, not the "
+        f"{ENGINE_COMMIT[:10]} this repo expects. Any host binary in bin/ was built against a "
+        f"different engine: rebuild with tools/build_host.py, or update ENGINE_COMMIT in SConstruct "
+        f"if the move is deliberate.")
+
+
+# Last, so that godot-cpp's own configuration output does not bury it.
+warn_on_engine_mismatch()
