@@ -23,9 +23,12 @@ has_point_probe := class(control):
 
 	_HasPoint<override>(Point:vector2):logic = Solid
 
-	# `IsPressed()?`, not `IsPressed()`. The cast already makes the clause list failable, so a bare
-	# `logic` beside it is accepted -- and then evaluated and thrown away, so the body runs on the
-	# release as well as the press. Measured, not guessed (`by-hand-findings.md` B12).
+	# `IsPressed[]`, in brackets, because a mirrored predicate is `<decides>` and there is no other
+	# way to write it. That is the point of the spelling: as a `logic`-returning method this read
+	# `IsPressed()` just as happily, and a bare `logic` beside a failable clause is evaluated and
+	# thrown away -- so the body ran on the release as well as the press, measured rather than
+	# guessed (`by-hand-findings.md` B12). The trap is still there for a `logic` that comes from
+	# somewhere else; what changed is that Godot's predicates no longer hand you one.
 	_GuiInput<override>(Event:input_event):void =
-		if (Button := input_event_mouse_button[Event], Button.IsPressed()?):
+		if (Button := input_event_mouse_button[Event], Button.IsPressed[]):
 			set Clicks = Clicks + 1

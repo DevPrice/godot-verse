@@ -382,7 +382,11 @@ the editor and `export_check.gd` as an autoload in an export.
 
 **What the mirror is**, since no single file shows it: all 1036 Godot classes as a Verse class
 hierarchy, Godot's own `Object` among them; its 793 enums as real Verse enums; all 1413 of
-`extension_api.json`'s virtuals, spelled Godot's way (74 skipped with a recorded reason); properties as writable members rather than get/set pairs; 503 engine-signal
+`extension_api.json`'s virtuals, spelled Godot's way (74 skipped with a recorded reason); properties as writable members rather than get/set pairs; **Godot's `bool` as two
+different things** — 568 predicates as `<decides>:void`, the way Verse's own comparisons and
+`GodotMath`'s `HasPoint` are spelled, and `logic` kept for the 306 methods that answer a value
+rather than a test (an accessor with a `set_` twin, a virtual the script fills in, an outcome like
+`MoveAndSlide`); 503 engine-signal
 accessors; `@GlobalScope`'s constants and statics reachable through per-class `...Statics` modules;
 the 16 math types with methods and definable operators in ordinary Verse; **Godot's RID as a `rid`
 struct** rather than a bare `int` — it is not a math type, because it crosses as a scalar rather
@@ -1040,9 +1044,11 @@ it is not in `run_tests.py`.
 - **A bare `logic` in an `if` clause list is evaluated and thrown away.** `if (X)` alone is refused
   — *"Expected an expression that can fail in the 'if' condition clause"* — but as soon as *some*
   clause can fail, a `logic`-valued one beside it is accepted and **not tested**, so the body runs
-  either way with no diagnostic. `if (Button := input_event_mouse_button[Event], Button.IsPressed())`
-  runs on the release as well as the press; `Button.IsPressed()?` is the spelling that tests it.
-  Measured in `tests/verse_probe` after it produced a passing test that was counting twice.
+  either way with no diagnostic. Measured in `tests/verse_probe` after it produced a passing test
+  that was counting twice (`by-hand-findings.md` B12). **The mirror no longer hands you one**: a
+  Godot predicate is `<decides>`, so `Button.IsPressed[]` is the only spelling and the brackets
+  cannot be forgotten. The trap is still live for a `logic` from anywhere else — a `var` of your
+  own, a virtual's return, an accessor with a `set_` twin — and `X?` is what tests one.
 - **Verse silently drops a continuation line that begins with an operator.** An expression written
   as `0.5 * ((A * 2.0)` then `+ B * W` on the next line compiles, runs, and answers *the first line
   only* — no diagnostic, no warning. Two of `GodotMath.native.verse`'s formulas answered 0.0 that

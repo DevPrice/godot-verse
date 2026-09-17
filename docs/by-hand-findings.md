@@ -332,9 +332,16 @@ compiles, it runs, and it answers something other than what was written. It is i
 that one now.
 
 Nothing in the repository had it. Every `logic`-returning call in a condition across `host/Verse`,
-`dodge-the-creeps`, `demo` and `tests/` is either `?`-suffixed — `Keys.IsActionPressed("move_right")?`
+`dodge-the-creeps`, `demo` and `tests/` was either `?`-suffixed — `Keys.IsActionPressed("move_right")?`
 in the yardstick, four times — or a comparison operator, which is genuinely `<decides>`. The one
 occurrence was the fixture written three minutes earlier.
+
+**Since recorded, the exposure is gone at the source.** The mirror's 568 predicates are
+`<decides>:void` rather than `logic`-returning, so `Keys.IsActionPressed["move_right"]` is the only
+spelling there is and those four `?`s no longer exist. The Verse fact above is unchanged and still
+worth reading: a `logic` from anywhere else — a `var` of your own, a virtual's return, an accessor
+with a `set_` twin — sits in an `if` clause list exactly as quietly as it did. What changed is that
+Godot's own predicates stopped handing you one.
 
 ---
 

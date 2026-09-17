@@ -357,7 +357,9 @@ marshal := class(node2d):
 
     NodeClassOf<public>(Target:node):string = Target.GetClass()
 
-    CanCall<public>(Target:object, Method:string):logic = Target.HasMethod(Method)
+    # The other direction, and the reason a predicate being `<decides>` costs an author nothing:
+    # `logic{...}` is Verse's own macro for the failable-to-logic conversion, the inverse of `X?`.
+    CanCall<public>(Target:object, Method:string):logic = logic{Target.HasMethod[Method]}
 
     # --- Godot's Object.to_string, as Verse's own ToString --------------------
     #

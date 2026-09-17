@@ -388,7 +388,7 @@ and none of it needed a second attempt:
   `Hud.ShowGameOver()` — three scripts calling each other's methods, all of it compile-checked.
 - **An `@export` slot typed as a Resource** — `?packed_scene` — is a resource picker that resolves,
   which is how the mob scene reaches main.
-- **The Input singleton**: `GetInputSingleton()` then `IsActionPressed("move_right")`. No
+- **The Input singleton**: `GetInputSingleton()` then `IsActionPressed["move_right"]`. No
   `@GlobalScope` needed, because Godot's singletons are objects and Phase 2 generated an accessor
   for each. It was `GetInputSingleton[]` inside an `if` until the 39 singletons Godot registers
   before any scene loads became total (spec R-TYPE-4), which took a level of indentation off

@@ -422,6 +422,57 @@ def test_get_node_takes_the_or_null_spelling():
                and ("GetNode", "method_renamed") not in rows, sorted(rows))
 
 
+def test_a_predicate_decides_and_an_accessor_answers_logic():
+    """Godot's `bool` is two things, and Verse spells the test and the value differently.
+
+    The rule is PREDICATE_NAME_RE plus a `set_` twin check; the shape it copies is Epic's own
+    `.native.verse` bindings, where `IsInScene()<decides><reads>:void` sits beside
+    `GetCollidable()<reads>:logic`. `GodotMath.native.verse` already spelled every hand-written
+    predicate this way, so this is the mirror catching up with its own math types.
+    """
+    api = {
+        "classes": [
+            {"name": "Object", "inherits": None, "methods": []},
+            {
+                "name": "ZIPReader",
+                "inherits": "Object",
+                "methods": [
+                    # Predicate-named, no twin: the common case.
+                    dict(_method("is_playing", "bool"), is_const=True),
+                    # An accessor, told apart by its twin rather than by its name.
+                    dict(_method("is_point_disabled", "bool",
+                                 [{"name": "id", "type": "int"}]), is_const=True),
+                    _method("set_point_disabled", None, [{"name": "id", "type": "int"},
+                                                         {"name": "disabled", "type": "bool"}]),
+                    # A server's flattened pair, where the twin is not a prefix.
+                    dict(_method("font_is_force_autohinter", "bool"), is_const=True),
+                    _method("font_set_force_autohinter", None, [{"name": "on", "type": "bool"}]),
+                    # An outcome rather than a success, and unprefixed: stays a value.
+                    _method("move_and_slide", "bool"),
+                    # Unprefixed, and a predicate anyway -- PREDICATE_EXTRA keys this one by class.
+                    _method("file_exists", "bool", [{"name": "path", "type": "String"}]),
+                    # The script answers this one and Godot consumes it, so it is not a test.
+                    dict(_method("_has_point", "bool"), is_virtual=True),
+                ],
+            },
+        ]
+    }
+    coverage = g.Coverage()
+    blocks, _emit_order, _method_map, _members, _arrays, _dicts = g.generate(api, ["ZIPReader"], coverage, {})
+    block = next(b for b in blocks if b.startswith("zip_reader"))
+    for name, want in [
+        ("IsPlaying", "IsPlaying<public>()<decides><reads>:void"),
+        ("IsPointDisabled", "IsPointDisabled<public>(Id:int)<reads>:logic"),
+        ("FontIsForceAutohinter", "FontIsForceAutohinter<public>()<reads>:logic"),
+        ("MoveAndSlide", "MoveAndSlide<public>()<transacts>:logic"),
+        ("FileExists", "FileExists<public>(Path:string)<decides><transacts>:void"),
+        ("_HasPoint", "_HasPoint<public>():logic"),
+    ]:
+        check_true(f"{name} is spelled {want.split(chr(40))[0]}...", want in block, block)
+    check_true("a predicate's body is the query operator over VhToLogic",
+               "VhToLogic(VhCallValueConst(Handle, \"is_playing\", array{}))?" in block, block)
+
+
 def test_virtual_names_keep_godots_underscore():
     """A virtual is `_Ready`, not `Ready`, and it is measured rather than preferred.
 
@@ -909,9 +960,10 @@ def test_generated_file_matches_hand_written_slice():
         body = text[pos:end]
         blocks[name] = {"base": base, "names": method_re.findall(body)}
 
-    # A null Godot object is the only absence a mirrored method on a *Godot class* can report, so
-    # every remaining <decides> there must be an object return. Anything else claiming failure is a
-    # method whose caller would have to write an `if` around a case that never arrives.
+    # A mirrored method on a *Godot class* may report exactly two absences, and both are real: a
+    # null object return (R-TYPE-4 puts nullability in the type) and a predicate answering no.
+    # Anything else claiming failure is a method whose caller would have to write an `if` around a
+    # case that never arrives.
     #
     # Two kinds of definition fail for their own real reasons and are excluded: the singleton
     # accessors, which fail when the name is not registered in this build and are told apart by
@@ -921,10 +973,16 @@ def test_generated_file_matches_hand_written_slice():
         line for line in text.splitlines()
         if "<decides>" in line and not line.lstrip().startswith("#") and "VhRefGet[" not in line
     ]
+    members = [line for line in failable if line.startswith("    ")]
     check_true(
-        "every failable method on a mirrored Godot class returns an object",
-        any(line.startswith("    ") for line in failable)
-        and all("VhObjectFrom[" in line for line in failable if line.startswith("    ")),
+        "every failable method on a mirrored Godot class returns an object or is a predicate",
+        any(members)
+        and all("VhObjectFrom[" in line
+                or (":void = VhToLogic(" in line and line.rstrip().endswith("?"))
+                for line in members),
+        [line for line in members
+         if "VhObjectFrom[" not in line
+         and not (":void = VhToLogic(" in line and line.rstrip().endswith("?"))][:3],
     )
     container_reads = [
         line for line in text.splitlines()
@@ -1171,6 +1229,7 @@ def main():
     test_shadow_suppression_across_inheritance()
     test_base_member_shadow()
     test_get_node_takes_the_or_null_spelling()
+    test_a_predicate_decides_and_an_accessor_answers_logic()
     test_unsupported_type_skipping()
     test_typed_array_parameter_takes_the_parametric_class()
     test_union_parameter_widens_to_the_common_ancestor()

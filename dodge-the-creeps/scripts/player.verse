@@ -45,13 +45,13 @@ player := class(area2d):
 		Keys := GetInputSingleton()
 		var Dx:float = 0.0
 		var Dy:float = 0.0
-		if (Keys.IsActionPressed("move_right")?):
+		if (Keys.IsActionPressed["move_right"]):
 			set Dx = Dx + 1.0
-		if (Keys.IsActionPressed("move_left")?):
+		if (Keys.IsActionPressed["move_left"]):
 			set Dx = Dx - 1.0
-		if (Keys.IsActionPressed("move_down")?):
+		if (Keys.IsActionPressed["move_down"]):
 			set Dy = Dy + 1.0
-		if (Keys.IsActionPressed("move_up")?):
+		if (Keys.IsActionPressed["move_up"]):
 			set Dy = Dy - 1.0
 		set Velocity = vector2{X := Dx, Y := Dy}
 

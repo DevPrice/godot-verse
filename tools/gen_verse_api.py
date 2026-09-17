@@ -85,6 +85,106 @@ METHOD_RENAMES = {
 # The methods a rename displaces, which are dropped outright.
 METHOD_DISPLACED = {("Node", "get_node")}
 
+# A Godot `bool` is two different things, and Verse spells them differently.
+#
+# Verse's own comparisons are `<decides>` rather than logic-returning -- uLang builds `<`, `>`, `=`
+# and `<>` with bFallible set (SemanticProgram.cpp's AddBinaryOp) -- and Epic's own `.native.verse`
+# bindings over C++ bool split the same way: `<decides>:void` for a predicate (`IsEnabled`,
+# `IsInScene`, `ContainsTag`, `HasValidAnimation`) and `:logic` for the read half of a property
+# (`GetCollidable` beside `SetCollidable`). The mirror used to spell every bool `logic`, which is
+# the half Epic reserves for the property, and it cost every test a `?`:
+#
+#     if (Keys.IsActionPressed("move_right")?)   # was
+#     if (Keys.IsActionPressed["move_right"])    # is
+#
+# Dropping that `?` was *silent*. A bare `logic` beside a failable clause in an `if` is evaluated
+# and never tested, so the body ran on the false case too -- the trap CLAUDE.md records, found by a
+# test that counted twice. `<decides>` has no silent form in either direction: omitting the brackets
+# is an error naming the fix, and `logic{X}` refuses an expression that cannot fail.
+#
+# What stays `logic` is everything an author *produces*, stores or hands on rather than tests:
+#
+#   - a property's own `var X:logic`, which is superseded before it reaches classify_method;
+#   - an accessor with a `set_` twin, indexed or not -- `IsPointDisabled(Id)`, `GetBit(Index)`;
+#   - a virtual, whose bool the script answers and Godot consumes. `<decides>` is arguably right
+#     for those too, but it is `vh_instance_call`'s to interpret, so it is a later pass;
+#   - an outcome that is not a success: `move_and_slide` answers "did it collide".
+PREDICATE_NAME_RE = re.compile(
+    r"(^|_)(is|has|can|are|should|supports|overlaps|intersects|matches|was)_")
+
+# Predicates whose Godot name carries no prefix the rule can see. Hand-read off the 4.7 dump: these
+# are the `bool` methods that are neither a virtual, nor an accessor with a `set_` twin, nor
+# predicate-named -- everything else in that bucket is an action whose bool is its outcome
+# (`store_8`, `try_lock`, `undo`, `load_resource_pack`) and keeps `logic`.
+PREDICATE_EXTRA = {
+    ("ClassDB", "class_exists"),
+    ("Crypto", "constant_time_compare"),
+    ("Crypto", "verify"),
+    ("DirAccess", "dir_exists"),
+    ("DirAccess", "dir_exists_absolute"),
+    ("DirAccess", "file_exists"),
+    ("DisplayServer", "clipboard_has"),
+    ("EditorExportPreset", "has"),
+    ("FileAccess", "eof_reached"),
+    ("FileAccess", "file_exists"),
+    ("JavaScriptBridge", "pwa_needs_update"),
+    ("NavigationServer2D", "region_owns_point"),
+    ("NavigationServer3D", "region_owns_point"),
+    ("PhysicsBody2D", "test_move"),
+    ("PhysicsBody3D", "test_move"),
+    ("PhysicsServer2D", "body_test_motion"),
+    ("PhysicsServer3D", "body_test_motion"),
+    ("ResourceLoader", "exists"),
+    ("Script", "instance_has"),
+    ("Shape2D", "collide"),
+    ("Shape2D", "collide_with_motion"),
+    ("StyleBox", "test_mask"),
+    ("TextServer", "has"),
+    ("TextServer", "spoof_check"),
+    ("ZIPReader", "file_exists"),
+}
+
+# Predicate-named methods that are not predicates, and keep `logic`. Empty, and kept as the seam:
+# the name rule is a heuristic over 1036 classes, so the first counter-example belongs here with the
+# sentence that says why rather than in a widened regex.
+PREDICATE_EXCLUDE = set()
+
+
+def setter_twin_names(godot_name: str) -> set:
+    """The `set_` spellings of a reader, for telling an accessor from a predicate.
+
+    Two shapes, because Godot writes both: `is_point_disabled` pairs with `set_point_disabled`, and
+    the servers' flattened `font_is_force_autohinter` pairs with `font_set_force_autohinter`.
+    """
+    names = set()
+    leading = re.match(r"^(is|get|has)_(.*)$", godot_name)
+    if leading:
+        names.add("set_" + leading.group(2))
+    inner = re.search(r"(^|_)(is|get|has)_", godot_name)
+    if inner:
+        names.add(godot_name[:inner.end(1)] + "set_" + godot_name[inner.end(0):])
+    return names
+
+
+def is_predicate_method(godot_class: str, m: dict, siblings: dict) -> bool:
+    """Whether this `bool`-returning method is a test rather than a value. See PREDICATE_NAME_RE.
+
+    Asked by both emitters. A static never reaches classify_method -- it is skipped there and
+    emitted into the class's `...Statics` module instead -- and `FileAccess.file_exists` is as much
+    a predicate for living in one, so the rule may not key on `is_static`.
+    """
+    if (m.get("return_value") or {}).get("type") != "bool":
+        return False
+    if m.get("is_virtual"):
+        return False
+    key = (godot_class, m["name"])
+    if key in PREDICATE_EXCLUDE:
+        return False
+    if setter_twin_names(m["name"]) & set(siblings):
+        return False
+    return key in PREDICATE_EXTRA or bool(PREDICATE_NAME_RE.search(m["name"]))
+
+
 # Godot members that are reachable as a module-level function instead of as a method, because Verse
 # already gives the name a meaning worth keeping.
 #
@@ -1295,12 +1395,12 @@ def emit_math_packers() -> list:
 ClassifiedMethod = namedtuple(
     "ClassifiedMethod",
     ["godot_name", "verse_name", "params", "return_type", "is_void", "default_body", "is_const",
-     "godot_return", "is_vararg"],
+     "godot_return", "is_vararg", "is_predicate"],
     # A virtual is the only method with a default body, and it is what makes the declaration a
     # declaration rather than a call: everything else dispatches through the handle. `is_const` is
     # Godot's own flag, and it decides `<reads>` against `<transacts>` (docs/phase-4.5-design.md 3).
     # `is_vararg` makes emit_method answer two lines instead of one -- see there.
-    defaults=(None, False, "", False),
+    defaults=(None, False, "", False, False),
 )
 ClassifiedProperty = namedtuple(
     "ClassifiedProperty", ["godot_name", "verse_name", "type_info", "getter", "setter", "index"]
@@ -1626,7 +1726,7 @@ CONST_OVERRIDES = frozenset([
 
 
 def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members: set,
-                    godot_class: str = ""):
+                    godot_class: str = "", siblings: dict | None = None):
     """Returns a ClassifiedMethod, or None (and records why in coverage) if the method is skipped."""
     def record(reason: str, detail: str = ""):
         return SkippedMember(verse_class_name(godot_class), verse_method_name(m["name"]),
@@ -1732,6 +1832,7 @@ def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members
         # shape a non-atomic method is -- an Error, the receiver, an object, or a plain value.
         godot_return=return_value["type"] if return_value else "",
         is_vararg=bool(m.get("is_vararg")),
+        is_predicate=is_predicate_method(godot_class, m, siblings or {}),
     )
 
 
@@ -1905,7 +2006,10 @@ def emit_static_methods(api: dict, emit_order: list, resolver: TypeResolver,
             by_class.setdefault(godot_class["name"], []).append(method)
 
     blocks = []
+    all_methods_by_class = {c["name"]: {m["name"]: m for m in c.get("methods", []) or []}
+                            for c in api["classes"]}
     for godot_class, methods in sorted(by_class.items()):
+        methods_by_name = all_methods_by_class[godot_class]
         lines = []
         for method in methods:
             verse_name = verse_method_name(method["name"])
@@ -1939,6 +2043,9 @@ def emit_static_methods(api: dict, emit_order: list, resolver: TypeResolver,
             elif info.unpack_decides:
                 lines.append(f"    {verse_name}<public>({decl})<decides><transacts>:{info.verse_type}"
                              f" = {info.unpack_fn}[{call}]")
+            elif is_predicate_method(godot_class, method, methods_by_name):
+                lines.append(f"    {verse_name}<public>({decl})<decides><transacts>:void"
+                             f" = {info.unpack_fn}({call})?")
             else:
                 lines.append(f"    {verse_name}<public>({decl})<transacts>:{info.verse_type}"
                              f" = {info.unpack_fn}({call})")
@@ -2226,6 +2333,13 @@ def emit_method(cm: ClassifiedMethod) -> str:
         else:
             body = f"{ti.unpack_fn}({call})"
 
+        # A predicate is the test, not the value: `<decides>:void` over `VhToLogic(...)?`, which is
+        # the query operator and is itself `<decides>`. `void` takes the `logic` the query answers,
+        # so the tail needs no discarding. See PREDICATE_NAME_RE for which bools land here.
+        if cm.is_predicate:
+            lines.append(f"    {cm.verse_name}<public>({decl})<decides>{effect}:void = {body}?")
+            continue
+
         effects = f"<decides>{effect}" if ti.unpack_decides else effect
         lines.append(f"    {cm.verse_name}<public>({decl}){effects}:{ti.verse_type} = {body}")
 
@@ -2473,7 +2587,7 @@ def generate(api: dict, requested: list, coverage: Coverage, enums: dict):
                     verse_class_name(name), verse_method_name(m["name"]), name, m["name"],
                     "superseded_by_property", f"`{replacement}`"))
                 continue
-            cm = classify_method(m, resolver, coverage, member_names, name)
+            cm = classify_method(m, resolver, coverage, member_names, name, methods_by_name)
             if cm is not None:
                 candidates.append(cm)
         candidates.sort(key=lambda cm: (cm.verse_name, cm.godot_name))
