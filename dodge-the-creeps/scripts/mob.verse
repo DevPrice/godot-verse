@@ -1,12 +1,9 @@
 using { /Godot.org/Godot }
 
-# mob.gd, ported. `mob_types.pick_random()` is an Array method Godot's Array has and `godot_array`
-# does not, so the animation names come back as a Verse `[]string` from
-# SpriteFrames.get_animation_names and the pick is Godot's own `randi_range`.
-#
-# Godot's rather than Verse's `GetRandomInt`, and that is R-AUD-2's one exception: a Verse-side RNG
-# would silently ignore `seed()` and `randomize()`, so a project that seeds for a replay would get a
-# different game. Everything else still follows the rule that Verse's spelling wins.
+# `godot_array` has no `pick_random()`, so `GetAnimationNames()` comes back as a Verse `[]string`
+# and the pick uses Godot's own `RandiRange` rather than a Verse RNG -- a Verse-side RNG would
+# silently ignore `seed()`/`randomize()`, so a project that seeds for a replay would get a
+# different game (R-AUD-2's one exception to Verse's spelling otherwise winning).
 @global_class
 mob := class(rigid_body2d):
 

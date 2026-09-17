@@ -1,23 +1,13 @@
 using { /Godot.org/Godot }
 
-# player.gd, ported. It is the GDScript with Verse's types on it now: `$AnimatedSprite2D` is a
-# lookup and a cast, `velocity.normalized() * speed` is arithmetic, and `signal hit` is a member.
-#
-# The three node references are cached in `_Ready`, which is what GDScript's
-# `@onready var sprite = $AnimatedSprite2D` is. They used to be `@export` slots the scene filled in,
-# because `GetNode` answers a `node` and nothing turned that into the `animated_sprite2d` whose
-# `Play()` the next line wants. R-SCN-6's cast is what took the wiring back out of the scene file
-# and put it in the script, where reading the script tells you what it touches.
 @global_class
 player := class(area2d):
 
-	# How fast the player will move (pixels/sec).
 	@export
 	var Speed:float = 400.0
 
-	# `signal hit` in the GDScript. The member's *type* is the declaration and its name is the
-	# signal's name; main subscribes to it rather than the scene wiring Area2D.body_entered to two
-	# scripts at once, which is what the port did before a script could declare one.
+	# The member's type declares it as a signal; its name is the signal's name. main subscribes to
+	# this instead of the scene wiring Area2D.body_entered directly.
 	@export_signal
 	Hit:event() = event(){}
 
@@ -25,7 +15,6 @@ player := class(area2d):
 	var Hitbox:?collision_shape2d = false
 	var Trail:?gpu_particles2d = false
 
-	# Size of the game window.
 	var ScreenSize:vector2 = vector2{}
 
 	_Ready<override>():void =
@@ -40,7 +29,6 @@ player := class(area2d):
 		Hide()
 
 	_Process<override>(Delta:float):void =
-		# The player's movement vector.
 		var Velocity:vector2 = vector2{}
 		Keys := GetInputSingleton()
 		var Dx:float = 0.0
@@ -84,14 +72,11 @@ player := class(area2d):
 		if (Shape := Hitbox?):
 			set Shape.Disabled = false
 
-	# Connected in player.tscn to this node's own body_entered, which is how a Godot author wires a
-	# node's own signal to its own script -- the Node panel, not a line of code.
+	# Connected in player.tscn to this node's own body_entered signal, wired via the Node panel.
 	OnBodyEntered(Body:node2d):void =
-		# The player disappears after being hit.
 		Hide()
 		Hit.Emit(())
-		# Must be deferred, as a physics property cannot change inside a physics callback. The value
-		# crosses as a variant, which a script can build for a bool but not read back -- R-TYPE-7 as
-		# Phase 2 amended it.
+		# Deferred: a physics property cannot change inside a physics callback. The value crosses
+		# as a variant, which a script can build for a bool but not read back (R-TYPE-7).
 		if (Shape := Hitbox?):
 			Shape.SetDeferred("disabled", VariantBool(true))
