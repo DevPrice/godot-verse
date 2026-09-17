@@ -528,13 +528,24 @@ it is not in `run_tests.py`.
   mirror definition's location or accessor flag must go through that table**, `GetScopeName()`
   included: from a digest a top-level definition's Owner and its path are *both* the digest path,
   so an `Owner == DeclaredIn` test keeps passing while both are wrong.
+- **The mirror's digest is parsed once per process.** It is 2.1 MB of the 2.2 MB the parse phase
+  reads and the same bytes every time, so `FGodotCachingParser` keeps the tree the parser produced
+  and hands each build a clone of it: 36 ms to clone, and the parse phase falls from 202 ms to 77. uLang's own mechanism for this
+  (`SBuildContext::bCloneValidSnippetVsts`, with `ISourceSnippet::IsSnippetValid` as its test) is
+  unreachable twice over — the flag is set on a context `CProgramBuildManager::Build` constructs,
+  and a digest's snippet is a `CSourceDataSnippet`, which does not override the test — so the seam
+  used instead is `SToolchainOverrides::Parser` on a build manager handed to
+  `ISolarisIde::SetBuildManager`, which is why `EnsureIde` constructs one. **`SetBuildManager` must
+  come before `SetSourceProject`**, which wires the project into whichever manager the IDE holds.
+  The cache fills on a text's *second* sighting: the one large snippet parsed exactly once is the
+  mirror's own source at the first build, and caching that cost a clone nothing ever read.
 - **The "user package" test is `InternalUser`, and the mirror passes it.** `SetupVerse(...,
   InternalUser)` in `VerseHost.Build.cs` sets it on `/Godot.org/Godot` and the attribute package
   sets it too, so "walk every InternalUser package" walks all 4.3 MB of the mirror's AST before
   reaching the two snippets that could hold a cursor — 97 ms per completion. Walk the package at
   `ScriptVersePath` and nothing else.
 - The numbers this bought are in `docs/spec.md` R-PERF-2 with the machine they were taken on: a
-  whole-project analysis is **721 ms** where it was 1273, a generation **1.54 s** where it was 2.2,
+  whole-project analysis is **555 ms** where it was 1273, a generation **636 ms** where it was 2.2,
   and reads that cost 1.7 s during an analysis cost 0.0 ms. The four commits `dcd517e`, `40d72f4`,
   `8bbba32` and `1469dc1` are the record — that work has no design document, by decision.
 - **Adding `@tool` to an existing script needs the scene reloaded.** Editing a live `@tool` script

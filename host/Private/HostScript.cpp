@@ -84,6 +84,7 @@
 #include "uLang/SourceProject/VerseScope.h"
 #include "uLang/SourceProject/VerseVersion.h"
 #include "uLang/CompilerPasses/ApiLayerInjections.h"
+#include "uLang/CompilerPasses/IParserPass.h"
 #include "uLang/Toolchain/ModularFeatureManager.h"
 #include "uLang/Toolchain/ProgramBuildManager.h"
 
@@ -356,6 +357,130 @@ public:
         ProgramContext._Program->_EpicInternalModulePrefixes.AddUnique("/Godot.org/");
         return false; // Do not halt the toolchain.
     }
+};
+
+/// Whether VH_TRACE_ANALYSIS asked for a trace. Defined below, beside the trace it gates.
+AUTORTFM_DISABLE bool AnalysisTraceEnabled();
+
+/// The parser, with one snippet's parse remembered: /Godot.org/Godot's digest, which is the same
+/// 2.1 MB of text at every build and every analysis for the life of the process.
+///
+/// 97% of the digest bytes the parse phase reads are the mirror's; a project's own files are a
+/// rounding error beside it. Cloning the tree that parse produced costs **36 ms** where reading the
+/// text again costs most of the phase, so the phase goes from **202 ms to 77 ms** and an analysis
+/// from 787 ms to 555 (spec.md R-PERF-2 has the table and the machine).
+///
+/// uLang has a dormant mechanism for this -- `SBuildContext::bCloneValidSnippetVsts`, with
+/// `ISourceSnippet::IsSnippetValid` as its test -- and it cannot be reached from here twice over:
+/// the flag is set on a build context `CProgramBuildManager::Build` constructs and nothing exposes,
+/// and a digest's snippet is a `CSourceDataSnippet`, which does not override `IsSnippetValid`, so
+/// the base's `false` stands however the flag is set. Nothing in the engine sets it, either.
+///
+/// Substituting the pass is the supported seam instead: `SToolchainOverrides::Parser` is what the
+/// build manager is constructed with, and `ISolarisIde::SetBuildManager` takes a manager built that
+/// way. Everything else -- the FN version gates, `SetBlockExecution`, the source project, the
+/// registries a build updates -- stays `FSolarisIde::BuildAll`'s.
+///
+/// One entry, and a threshold that only the mirror clears: the next largest digest is `/Verse.org`
+/// at 32 KB, and a script's own file is both small and different at every keystroke, so a cache
+/// with room for it would hold nothing but misses.
+///
+/// **The cached tree is the one the parser produced, cloned before anything read it.** Semantic
+/// analysis is handed a fresh clone each time for the same reason the engine's own path clones:
+/// what a later phase writes onto a VST node must not be what the next build starts from.
+class FGodotCachingParser : public uLang::IParserPass
+{
+public:
+    explicit FGodotCachingParser(const uLang::TSRef<uLang::IParserPass>& InInner)
+        : Inner(InInner)
+    {}
+
+    // No AUTORTFM_DISABLE, unlike everything else here that reaches Solaris: `IParserPass` declares
+    // this one AUTORTFM_ENABLE and an override may not narrow the mode. It is safe because a parse
+    // is only ever reached from a build, and every road into a build is disabled already.
+    virtual void ProcessSnippet(const Verse::Vst::TNodeRef<Verse::Vst::Snippet>& OutVst,
+                                const uLang::CUTF8StringView& TextViewSnippet,
+                                const uLang::SBuildContext& BuildContext,
+                                const uint32_t VerseVersion,
+                                const uint32_t UploadedAtFNVersion) const override
+    {
+        // The version pair is part of the key rather than assumed: a digest carries its own
+        // effective Verse version (CToolchain::FillInVst reads it off the digest, not off the
+        // package), and the same text at a different version is a different parse.
+        if (CachedVst.IsValid() && CachedVerseVersion == VerseVersion
+            && CachedUploadedAtFNVersion == UploadedAtFNVersion && CachedText.ToStringView() == TextViewSnippet)
+        {
+            // One clone per child rather than one clone of the snippet whose children are then
+            // moved across: `AppendChild` calls `DropParent`, which removes the node from the
+            // array being walked. A freshly cloned node has no parent to drop, so nothing the
+            // cache holds is touched -- and the cached tree has to survive, since every later
+            // build reads it again.
+            OutVst->AccessChildren().Reserve(OutVst->GetChildCount() + CachedVst->GetChildCount());
+            for (const Verse::Vst::TNodeRef<Verse::Vst::Node>& Child : CachedVst->GetChildren())
+            {
+                OutVst->AppendChild(Child->CloneNode());
+            }
+            OutVst->SetForm(CachedVst->GetForm());
+            OutVst->SetWhence(CachedVst->Whence());
+            return;
+        }
+
+        Inner->ProcessSnippet(OutVst, TextViewSnippet, BuildContext, VerseVersion, UploadedAtFNVersion);
+
+        // FillInVst swaps a clean diagnostics object in around each snippet, so this is what *this*
+        // snippet's parse reported and nothing else. A tree with a syntax error in it is not one to
+        // hand back a second time.
+        if (TextViewSnippet.ByteLen() < CacheThresholdBytes || BuildContext._Diagnostics->HasErrors())
+        {
+            return;
+        }
+
+        // On the *second* sighting of a text, not the first. The one large snippet that is only
+        // ever parsed once is the mirror's own source, which the first build reads and no build
+        // after it does -- every later one reads the digest instead. Caching on sight put a clone
+        // of 4.6 MB of Verse on the first build's critical path and never hit it, which cost the
+        // first build ~240 ms to save nothing.
+        if (SeenText.ToStringView() != TextViewSnippet)
+        {
+            SeenText = uLang::CUTF8String(TextViewSnippet);
+            return;
+        }
+        CachedText = Move(SeenText);
+        SeenText = uLang::CUTF8String();
+
+        const double Started = FPlatformTime::Seconds();
+        CachedVst = OutVst->CloneNode().As<Verse::Vst::Snippet>();
+        CachedVerseVersion = VerseVersion;
+        CachedUploadedAtFNVersion = UploadedAtFNVersion;
+
+        // Open because the checker takes this function's AutoRTFM mode from the interface it
+        // overrides, and everything the trace touches is the host's own disabled code.
+        AutoRTFM::Open([&] {
+            if (!AnalysisTraceEnabled())
+            {
+                return;
+            }
+            fprintf(stderr,
+                    "[vh-trace] parse cache: %d KB of text, %.1f ms to clone\n",
+                    (int32)(CachedText.ByteLen() / 1024),
+                    (FPlatformTime::Seconds() - Started) * 1000.0);
+            fflush(stderr);
+        });
+    }
+
+private:
+    /// Above the largest digest that is not the mirror's by a factor of sixteen.
+    static constexpr int32 CacheThresholdBytes = 512 * 1024;
+
+    uLang::TSRef<uLang::IParserPass> Inner;
+
+    // ProcessSnippet is const on the interface; the cache is the whole reason this type exists.
+    mutable uLang::CUTF8String CachedText;
+    /// The last large snippet parsed without being cached -- see the second-sighting rule above.
+    mutable uLang::CUTF8String SeenText;
+    mutable Verse::Vst::TNodePtr<Verse::Vst::Snippet> CachedVst;
+    mutable uint32_t CachedVerseVersion = 0;
+    mutable uint32_t CachedUploadedAtFNVersion = 0;
 };
 
 /// Adds the attribute package to the IDE's source project.
@@ -930,6 +1055,21 @@ AUTORTFM_DISABLE bool EnsureIde()
                                   .bAllowExperimental = true};
 
     TSharedRef<ISolarisIde> Ide = SolarisModule.MakeDevEnvironment(IdeConfig);
+
+    // A build manager of our own, for one reason: the parser is a toolchain part and a toolchain is
+    // what a build manager is constructed with, so caching the mirror's parse means constructing
+    // one. Before SetSourceProject, which is what wires the project into whichever manager the IDE
+    // is holding. If the parser feature is not registered -- nothing in the engine unregisters it,
+    // but a missing one would be a null deref here rather than a slower analysis -- the IDE keeps
+    // the manager MakeDevEnvironment gave it.
+    if (const uLang::TOptional<uLang::TSRef<uLang::IParserPass>> Parser = uLang::GetModularFeature<uLang::IParserPass>())
+    {
+        uLang::SBuildManagerParams ManagerParams;
+        ManagerParams._ToolchainOverrides.Parser =
+            uLang::TSPtr<uLang::IParserPass>(uLang::TSRef<FGodotCachingParser>::New(*Parser));
+        Ide->SetBuildManager(uLang::TSRef<uLang::CProgramBuildManager>::New(ManagerParams));
+    }
+
     Ide->SetSourceProject(*MaybeSourceProject);
     AddAttributePackage(*Ide);
     GSourceProject = MaybeSourceProject;
@@ -1092,7 +1232,7 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FScriptSource>& So
     // The mirror is the interesting one, and it is held Source only until the definition table has
     // taken what a digest does not carry. That is the first build's own semantic analysis now, so
     // this loop no longer keeps it for a second pass: from the first build on, the pass above is
-    // left to do its work and an analysis costs ~750 ms rather than ~1450 ms.
+    // left to do its work and an analysis costs ~555 ms rather than ~1450 ms.
     for (const uLang::CSourceProject::SPackage& Kept : BuildManager->GetSourceProject()->_Packages)
     {
         const uLang::CUTF8String& VersePathOf = Kept._Package->GetSettings()._VersePath;
