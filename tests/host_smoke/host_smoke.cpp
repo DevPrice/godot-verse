@@ -1161,6 +1161,47 @@ int main(int argc, char** argv)
 				}
 			}
 
+			// A call's *result* as the receiver, which is the one shape the innermost-wins walk got
+			// wrong: an invocation and its argument clause both end at the `)` the position names,
+			// and the argument won. Every member access on a call answered nothing --
+			// `GetViewportRect().Size`, `Timeout().Await()`, `GetInputSingleton().` most of all.
+			//
+			// `Lerp` answers a color and takes one, so the same two assertions the receiver-by-type
+			// case above makes are the ones to make here: the field says the type was resolved at
+			// all, and the extension method says it was resolved to color rather than to the tuple
+			// `(Tint, 0.5)` the old walk found.
+			if (TintUse != std::string::npos)
+			{
+				const char* CallReceiver = "Tint.Lerp(Tint, 0.5)";
+				std::string CallTyping = ExportsSource;
+				CallTyping.replace(TintUse, strlen("Tint.B"),
+								   std::string(CallReceiver) + ".VhCompletionCursor");
+				RowColumnOf(CallTyping, TintUse + strlen(CallReceiver) - 1, RecvRow, RecvColumn);
+				AnalyseCompletionBuffer(CallTyping);
+				if (Step("vh_complete_symbol on a call's result",
+						CompleteSymbolFn(ExportsPathUtf8.c_str(), CallTyping.c_str(), RecvRow, RecvColumn,
+										 VH_COMPLETE_MEMBERS, &Items, &Count) == VH_OK))
+				{
+					CompleteOk = Step("it offers the answered color's own field",
+									 Offers(Items, Count, "B") != nullptr)
+							  && CompleteOk;
+					CompleteOk = Step("and its extension method", Offers(Items, Count, "Lerp") != nullptr) && CompleteOk;
+				}
+				else
+				{
+					CompleteOk = false;
+				}
+
+				// The callee's own last byte is not a receiver position and must stay one: a
+				// function value has no members, and offering any would be offering a call the
+				// compiler refuses.
+				RowColumnOf(CallTyping, TintUse + strlen("Tint.Lerp") - 1, RecvRow, RecvColumn);
+				CompleteOk = Step("but the callee's own name still answers nothing",
+								 CompleteSymbolFn(ExportsPathUtf8.c_str(), CallTyping.c_str(), RecvRow, RecvColumn,
+												  VH_COMPLETE_MEMBERS, &Items, &Count) == VH_ERR_NOT_FOUND)
+						  && CompleteOk;
+			}
+
 			// An enum used as a *type name* rather than a value -- `node_process_mode.<cursor>`,
 			// which is how an author actually spells an enumerator (`SetProcessMode(node_process_
 			// mode.Always)`) -- has a CTypeType result rather than a CEnumeration one, and used to

@@ -7891,13 +7891,25 @@ struct AUTORTFM_DISABLE FCompletionVisitor : public uLang::SAstVisitor
                 Locals.AddUnique(&*static_cast<const CExprDataDefinition&>(AstNode)._DataMember);
             }
 
-            // The receiver of a `.`, kept innermost-wins. Definition nodes span their bodies and
-            // so would swallow any cursor inside one; an error node's type is unknown by
-            // construction -- but its analysed children survive it, which is exactly what lets a
-            // half-typed member still name a receiver.
+            // The receiver of a `.`. Definition nodes span their bodies and so would swallow any
+            // cursor inside one; an error node's type is unknown by construction -- but its
+            // analysed children survive it, which is exactly what lets a half-typed member still
+            // name a receiver.
+            //
+            // Two candidates, because innermost-wins is the wrong rule on its own and is still the
+            // right fallback. The position asked about is the receiver's *last byte*, so the node
+            // meant is the one whose locus ends just past it -- and for a call, the invocation and
+            // its argument clause both end at the `)`. Innermost-wins picks the argument, whose
+            // type is the tuple that was passed: `GetInputSingleton().` offered nothing at all,
+            // and so did every other member access on a call's result. The walk is outermost
+            // first, so the first node ending at the cursor is the outermost one.
             if (bContainsCursor && IsReceiverCandidate(AstNode.GetNodeType()))
             {
                 Expr = &static_cast<const CExpressionBase&>(AstNode);
+                if (!EndsAtCursor && Vst->Whence().GetEnd() == uLang::STextPosition{Row, Column + 1})
+                {
+                    EndsAtCursor = &static_cast<const CExpressionBase&>(AstNode);
+                }
             }
         }
         AstNode.VisitChildren(*this);
@@ -7923,11 +7935,15 @@ struct AUTORTFM_DISABLE FCompletionVisitor : public uLang::SAstVisitor
     uint32 Row;
     uint32 Column;
     const uLang::CExpressionBase* Expr{nullptr};
+    const uLang::CExpressionBase* EndsAtCursor{nullptr};
     const uLang::CScope* Scope{nullptr};
     TArray<const uLang::CDataDefinition*> Locals;
     /// Whether this package holds the file at all. Without it the default scope would make every
     /// other package answer with its own root module.
     bool bSawPath{false};
+
+    /// The expression a `.` at the asked-about position hangs off, or null.
+    const uLang::CExpressionBase* Receiver() const { return EndsAtCursor ? EndsAtCursor : Expr; }
 };
 
 /// Strips the wrappers a value picks up on its way out of a `var` member or an `option`, none of
@@ -8053,11 +8069,11 @@ AUTORTFM_DISABLE FUtf8String SubjectTypeOfDiagnostic(FUtf8StringView Path, int32
             }
             FCompletionVisitor Visitor(FUtf8String(Path), (uint32)(Row - 1), (uint32)(Column - 3), Package->_RootModule);
             Package->_RootModule->GetAstPackage()->VisitChildren(Visitor);
-            if (!Visitor.bSawPath || !Visitor.Expr)
+            if (!Visitor.bSawPath || !Visitor.Receiver())
             {
                 continue;
             }
-            const CNormalType* Type = UnwrapToMemberBearingType(Visitor.Expr->GetResultType(*Program));
+            const CNormalType* Type = UnwrapToMemberBearingType(Visitor.Receiver()->GetResultType(*Program));
             // A receiver written as a type name -- `node_process_mode.Inherit` -- resolves to the
             // type of types, wrapping the one the message would have named.
             if (const CTypeType* TypeType = Type ? Type->AsNullable<CTypeType>() : nullptr)
@@ -8622,11 +8638,11 @@ AUTORTFM_DISABLE bool GodotVerse::Complete(FUtf8StringView Path,
                 //
                 // The name resolves to a type rather than to a value, so the CTypeType unwrap the
                 // member branch does for `node_process_mode.` is the same one needed here.
-                if (!Visitor.Expr)
+                if (!Visitor.Receiver())
                 {
                     continue;
                 }
-                const uLang::CNormalType* Named = UnwrapToMemberBearingType(Visitor.Expr->GetResultType(*Program));
+                const uLang::CNormalType* Named = UnwrapToMemberBearingType(Visitor.Receiver()->GetResultType(*Program));
                 if (const uLang::CTypeType* TypeType = Named ? Named->AsNullable<uLang::CTypeType>() : nullptr)
                 {
                     Named = TypeType->PositiveType() ? UnwrapToMemberBearingType(TypeType->PositiveType()) : nullptr;
@@ -8640,11 +8656,11 @@ AUTORTFM_DISABLE bool GodotVerse::Complete(FUtf8StringView Path,
             }
             else if (Mode == VH_COMPLETE_MEMBERS)
             {
-                if (!Visitor.Expr)
+                if (!Visitor.Receiver())
                 {
                     continue;
                 }
-                const uLang::CNormalType* Type = UnwrapToMemberBearingType(Visitor.Expr->GetResultType(*Program));
+                const uLang::CNormalType* Type = UnwrapToMemberBearingType(Visitor.Receiver()->GetResultType(*Program));
                 if (!Type)
                 {
                     continue;
