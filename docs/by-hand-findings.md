@@ -719,7 +719,7 @@ for:
 | **B5**, **B6** | `_get_built_in_templates` answers one template against `Object`; `_make_template` fills in `p_template` when it is given one. The template is GDScript's, and compiles. |
 | **B7** | `explain_effect_errors` and its two helpers deleted. `run_tests.py` asserts the compiler's own text for both shapes. |
 | **B9** | `_err_print_error`, not `UtilityFunctions::push_error` — the latter is GDScript's variadic global, which concatenates. |
-| **B8** | `VerseScript` tracks its owners; `_reload` re-attaches, carrying exported values across. |
+| **B8** | `VerseScript` tracks its owners; `_reload` re-attaches, carrying exported values across. **Read B26 before trusting that last clause** — the carrying across is what erased them, and the re-attach is now conditional on the compile having succeeded. |
 | **B10** | `tests/integration/scripts/has_point_probe.verse` and two cases, both answers exercised. |
 | **B12** | `CLAUDE.md`, beside the dropped-continuation-line constraint. |
 | **B13** | `vh_class_override_candidates` (ABI 7.1) hands the snapshot's per-class override candidates over without waiting; the language folds them into the first answer through the same `completes_as_override` the refined path uses. |
@@ -941,6 +941,68 @@ per-lane variant builders. That is a generator question and not a plumbing one.
 the fallback. Reading the file is current with an *unsaved* edit where the host describes the text
 the last analysis saw, and the parser hangs a comment off whichever node begins a construct, so for
 a member behind four lines of `@editable` the host's answer is empty where re-reading is not.
+
+---
+
+## B26. Saving a `.verse` erased its own exported values, and B8's re-attach is what did it · **fixed, by-hand check owed**
+
+Reported rather than watched: an `@export`'s value in the inspector kept going to null while a
+script was mid-edit and not compiling. Traced through the engine sources rather than in a session,
+so the fix below is argued and built and **has not yet been seen to work in a window** — the steps
+are at the end of this entry.
+
+**The code meant to preserve the values is what destroyed them.** Every save of a `.verse` goes
+through `VerseResourceFormatSaver::_save`, which calls `_reload`, which called `reload_instances`
+unconditionally. That reads the script's exported values off each owning object, swaps the script
+off and back on to force a fresh instance, and writes them back — B8's work, and correct as far as
+it goes. What it did not account for is that in the editor a non-tool script's owner holds a
+`PlaceHolderScriptInstance`, whose `values` map is the **only** copy those values have anywhere:
+`Object::set_script(Variant())` is a `memdelete` (`core/object/object.cpp:150`), so the copy is gone
+the moment the swap starts and everything rests on the write-back landing. It did not land, for two
+reasons that are independent of each other.
+
+**`PlaceHolderScriptInstance::set` refuses any name the script will not report a default for**
+(`core/object/script_language.cpp:597`), and for a GDExtension script that is `_has_property_default_value`
+(`core/object/script_language_extension.h:165`). This bridge answered it with *"is the default
+non-nil"*, which tied two unrelated things to it. A nil default is what an object-, node- or
+resource-typed export **always** has — the host records the entry and `ReadDefaultFieldOf` hands
+back an invalid value — and it is what **every** export has while the last build failed, because
+`_get_property_default_value` short-circuits on `has_own_class`, which is `valid && has_class(...)`
+and `valid` is false when *any* file in the project carries a diagnostic. So the fresh placeholder
+declined every value handed to it. `Object::set` does fall through to `property_set_fallback`, but
+that no-ops unless `is_placeholder_fallback_enabled()`, and `refresh_exports` keys the fallback on
+*this file's* diagnostics — so when the broken file was a different one, nothing caught the value
+at all and it was simply dropped.
+
+**And a placeholder created during the failure was given no property list.**
+`_placeholder_instance_create` calls `update_placeholders`, which returned early whenever the
+fallback was on. That early return is right for a placeholder already holding a good list and wrong
+for one created a microsecond earlier holding nothing: no inspector rows, and nothing stored for the
+node the next time the scene was saved. `reload_instances` creates exactly such a placeholder.
+
+**Three changes, all in `verse_script.cpp`, none touching the host or the ABI.** `_reload`
+re-attaches only when `compile()` answered `OK`, because a failed compile publishes no generation
+and the swap is loss with no gain — which is also the rule the rest of the bridge already follows,
+that a failed build leaves the last good generation running. `_has_property_default_value` answers
+Godot's actual question, *is this one of my exported members*, off the export list rather than off
+the default's type; GDScript answers the same question the same way, its
+`member_default_values_cache` holding an entry for `@export var target: Node2D` whose value is null,
+so the name is known and the default is not. And `update_placeholders` hands the last good list over
+**with no defaults** when the fallback is on, rather than returning: `PlaceHolderScriptInstance::update`
+erases only the values whose names are absent from the list it is given
+(`core/object/script_language.cpp:723`), and an empty values dictionary overwrites none of them, so
+every placeholder that already holds that list is left exactly as it was and a new one gets a shape.
+
+**Nothing automated can see any of this**, for B8's reason: a placeholder only exists under
+`is_editor_hint()`. All four layers stay green, which says only that nothing else moved.
+
+**To check it:** attach a script with an `int` export and a `node2d` export to a node, set both in
+the inspector, and save the scene. Then (1) break the script — delete a closing paren — save it, and
+confirm both values still show; (2) fix the script, save, and confirm both survived and the node
+runs the new code; (3) repeat (1) with the break in a *different* `.verse` file, which is the case
+where the fallback never engages and the value used to be dropped outright. Step (3) failed before
+this with a perfectly valid script in front of you, and the `node2d` export in step (1) failed on
+every save whether or not anything was broken.
 
 ---
 

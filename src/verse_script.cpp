@@ -604,9 +604,16 @@ void VerseScript::_set_source_code(const String &p_code) {
 // Re-attaching is the second half and is not optional. An instance holds a vh_instance made
 // against one generation and adopts nothing, so without this a saved edit is compiled, analysed,
 // reported on, and still not running (by-hand-findings.md B8).
+//
+// Only on a compile that succeeded. Re-attaching destroys every instance and every placeholder, and
+// a placeholder's `values` map is the *only* copy of an exported value a non-tool script has in the
+// editor -- so a swap that hands back an instance of the same retiring class is loss with no gain.
+// A failed compile publishes no generation, which is exactly when there is nothing to adopt.
 Error VerseScript::_reload(bool p_keep_state) {
 	const Error status = compile();
-	reload_instances();
+	if (status == OK) {
+		reload_instances();
+	}
 	return status;
 }
 
@@ -698,8 +705,30 @@ TypedArray<Dictionary> VerseScript::_get_script_signal_list() const {
 	return out;
 }
 
+// Whether this is one of the script's own exported members -- which is Godot's question, and not
+// the one this used to answer.
+//
+// PlaceHolderScriptInstance::set refuses a value outright for a name this says no to
+// (engine: core/object/script_language.cpp:597), and a placeholder's values are the only copy a
+// non-tool script's exports have in the editor. Answering it with "is the default non-nil" tied two
+// unrelated things to it: a nil default is what an object-, node- or resource-typed export always
+// has, and what *every* export has while the last build failed, because _get_property_default_value
+// below short-circuits on has_own_class. So a save during a failed compile -- or any save at all,
+// for an object-typed export -- had reload_instances hand the values back to a placeholder that
+// declined every one of them, and the node read null from then on.
+//
+// GDScript answers the same question the same way: its member_default_values_cache holds an entry
+// for `@export var target: Node2D` whose value is null, so the name is known and the default is not.
 bool VerseScript::_has_property_default_value(const StringName &p_property) const {
-	return _get_property_default_value(p_property).get_type() != Variant::NIL;
+	refresh_exports();
+	for (int64_t i = 0; i < exports_cache.size(); i++) {
+		const Dictionary property = exports_cache[i];
+		if (((int64_t)property["usage"] & PROPERTY_USAGE_SCRIPT_VARIABLE) != 0
+				&& StringName(property["name"]) == p_property) {
+			return true;
+		}
+	}
+	return false;
 }
 
 Variant VerseScript::_get_property_default_value(const StringName &p_property) const {
@@ -723,33 +752,43 @@ void VerseScript::update_placeholders() {
 		return;
 	}
 
-	// Nothing to hand over that would not be a downgrade. A placeholder keeps whatever it was
-	// last given, and fallback is what makes Godot read the inspector out of that copy instead of
-	// asking this script -- so the author sees the properties they had while they fix the file.
-	if (placeholder_fallback_enabled) {
+	// Fallback means there is no *fresh* list to hand over, not that there is nothing to hand over.
+	// A placeholder keeps whatever it was last given, which is what lets the author see the
+	// properties they had while they fix the file -- but a placeholder created *during* the failure
+	// was given nothing, and returning here left it with no properties at all: no inspector rows,
+	// and nothing stored for the node the next time the scene was saved. reload_instances creates
+	// exactly such a placeholder, which is how a save during a broken compile emptied a node.
+	//
+	// The last good list with no defaults is what covers both. PlaceHolderScriptInstance::update
+	// erases only the values whose names are *absent* from the list it is given
+	// (engine: core/object/script_language.cpp:723), and an empty values dictionary overwrites
+	// none of them, so every placeholder that already holds this list is left exactly as it was.
+	const bool have_defaults = !placeholder_fallback_enabled;
+	const TypedArray<Dictionary> properties = exports_cache;
+	if (!have_defaults && properties.is_empty()) {
 		return;
 	}
 
-	const TypedArray<Dictionary> properties = exports_cache;
-
 	Dictionary values;
-	for (int64_t i = 0; i < properties.size(); i++) {
-		const Dictionary property = properties[i];
-		// A section header is a layout marker, not a property, and has no value to report. The
-		// three depths are three separate bits, so all three have to be tested: a category or a
-		// subgroup tested against PROPERTY_USAGE_GROUP alone reads as a property.
-		const int64_t header_usage = PROPERTY_USAGE_CATEGORY | PROPERTY_USAGE_GROUP | PROPERTY_USAGE_SUBGROUP;
-		if (((int64_t)property["usage"] & header_usage) != 0) {
-			continue;
-		}
-		const StringName name = property["name"];
-		// A default only exists once code generation has run, and the export list outlives that:
-		// a project whose build failed can describe its members but cannot instantiate one to
-		// read them off. Omitting the name leaves the placeholder's own value alone, where a nil
-		// would overwrite it and then be written to the scene as the property's value.
-		const Variant default_value = _get_property_default_value(name);
-		if (default_value.get_type() != Variant::NIL) {
-			values[name] = default_value;
+	if (have_defaults) {
+		for (int64_t i = 0; i < properties.size(); i++) {
+			const Dictionary property = properties[i];
+			// A section header is a layout marker, not a property, and has no value to report. The
+			// three depths are three separate bits, so all three have to be tested: a category or a
+			// subgroup tested against PROPERTY_USAGE_GROUP alone reads as a property.
+			const int64_t header_usage = PROPERTY_USAGE_CATEGORY | PROPERTY_USAGE_GROUP | PROPERTY_USAGE_SUBGROUP;
+			if (((int64_t)property["usage"] & header_usage) != 0) {
+				continue;
+			}
+			const StringName name = property["name"];
+			// A default only exists once code generation has run, and the export list outlives that:
+			// a project whose build failed can describe its members but cannot instantiate one to
+			// read them off. Omitting the name leaves the placeholder's own value alone, where a nil
+			// would overwrite it and then be written to the scene as the property's value.
+			const Variant default_value = _get_property_default_value(name);
+			if (default_value.get_type() != Variant::NIL) {
+				values[name] = default_value;
+			}
 		}
 	}
 

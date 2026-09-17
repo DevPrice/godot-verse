@@ -69,8 +69,12 @@ Three documents are not phase records and are the ones to read before adding a f
   removed.
 - **`docs/by-hand-findings.md`** — what the by-hand editor sessions found, because everything from
   `EngineDebugger` and the editor UI inward has no automated test and never will. B1–B9, B15–B18,
-  B20 and B22–B25 are defects, all fixed; B12 is a Verse fact; B13 a latency finding; B14 the
-  sandboxed export run. **B22 is the one to read before adding anything to the native root**: a hook
+  B20 and B22–B26 are defects, all fixed; B12 is a Verse fact; B13 a latency finding; B14 the
+  sandboxed export run. **B26 is the one to read before touching `_reload`, the placeholder path or
+  anything a script answers about a default**: a placeholder's `values` map is the only copy a
+  non-tool script's exported values have in the editor, Godot refuses to store one for a name
+  `_has_property_default_value` says no to, and B8's re-attach destroyed both — so a save during a
+  failed compile emptied the node it was meant to carry across. **B22 is the one to read before adding anything to the native root**: a hook
   with no row in `LIFECYCLE_METHODS` is never offered as an override and never hovers, and four of
   the five sat that way for a phase because only `_Notification` had a row. **B23 is the one to read
   before adding a type to the mirror**: the editor learns what a type *is* from three generated
