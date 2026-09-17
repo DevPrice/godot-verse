@@ -1884,6 +1884,15 @@ external editor is secondary.
   compiler-generated constructor, off the flag `IsOverridable` was reading for a narrower purpose,
   which puts the refusal below both paths a completion arrives by — the snapshot answer, whose walk
   passes no access scope at all, and the live one.
+  **Whether Godot opens the popup is the editor's decision and not the language's.** The trigger
+  characters are hard-coded in `CodeTextEditor`'s constructor — `.`, `,`, `(`, `=`, `$`, `@`, `"`,
+  `'` — and a caret with nothing typed behind a character outside that list is cancelled by
+  `CodeEdit::_filter_code_completion_candidates`, which `force` does not exempt. Two of the
+  positions above sit behind a character Godot never needed, so `vector2{` and `Foo(?` were
+  answering correctly and being closed before they drew; a second field already worked, because `,`
+  is in the list. The list is a per-`CodeEdit` property, so `VerseEditorPlugin` widens it with `{`
+  and `?` on the Verse editor alone. Not `:` or `<`: those decline an empty prefix in
+  `_complete_code` itself, so a popup there would have nothing to draw.
   **The whole surface has an instrument now**, `tools/probe_complete.py` over
   `VerseScriptLanguage::probe_complete` — `_complete_code` is a virtual, so no script can call it,
   which is why a fifth of the popup could be unwritable names for a phase with nothing to say so.

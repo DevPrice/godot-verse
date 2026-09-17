@@ -370,6 +370,14 @@ slower machine. Its arguments are the host DLL, the engine, **the repo root** an
 milliseconds, and what the snapshot cost. stderr rather than the diagnostic callback because a
 background analysis runs off the game thread and every ABI callback is the game thread's alone.
 
+**`tools/probe_hover.py`** and **`tools/probe_complete.py`** are the editor's two answers, measured.
+`_lookup_code` and `_complete_code` are both virtuals, which ClassDB stores as metadata rather than
+as a callable MethodBind, so no script can reach either — `probe_hover` and `probe_complete` on
+`VerseScriptLanguage` are the seams, and both tools report findings rather than passing or failing.
+Neither sees what the editor *draws*: the tooltip's rendering and whether the completion popup opens
+at all are Godot's own C++, and that half is `docs/by-hand-findings.md`. A completion position costs
+an analysis where a hover costs none, so `probe_complete` takes a `--limit` and picks its carets.
+
 **`dodge-the-creeps/`** is the yardstick: the whole game in Verse, with no GDScript in it but the
 check drivers. `godot --headless --fixed-fps 60 --path dodge-the-creeps -s res://headless_check.gd`,
 30 checks, one line each. `--fixed-fps` is not optional; headless, a `Timer` counts real seconds

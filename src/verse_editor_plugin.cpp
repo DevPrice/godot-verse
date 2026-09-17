@@ -1,10 +1,13 @@
 #include "verse_editor_plugin.h"
 
 #include "verse_host_paths.h"
+#include "verse_script.h"
 #include "verse_script_language.h"
 
+#include <godot_cpp/classes/code_edit.hpp>
 #include <godot_cpp/classes/editor_interface.hpp>
 #include <godot_cpp/classes/script_editor.hpp>
+#include <godot_cpp/classes/script_editor_base.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
 using namespace godot;
@@ -15,6 +18,8 @@ static const char *BUILD_MENU_ITEM = "Build Verse";
 
 void VerseEditorPlugin::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("build_from_menu"), &VerseEditorPlugin::build_from_menu);
+	ClassDB::bind_method(D_METHOD("widen_completion_prefixes"),
+		&VerseEditorPlugin::widen_completion_prefixes);
 }
 
 void VerseEditorPlugin::_enter_tree() {
@@ -40,9 +45,17 @@ void VerseEditorPlugin::_enter_tree() {
 	// .verse files it has no compiler to read (R-DIST-9 .. R-DIST-11).
 	export_plugin.instantiate();
 	add_export_plugin(export_plugin);
+
+	// Fires on every tab switch and on every script opened, after the tab is current
+	// (ScriptEditor::_go_to_tab and ::edit both call notify_script_changed at the end), which
+	// is what widen_completion_prefixes needs: it reads the editor that is on screen.
+	EditorInterface::get_singleton()->get_script_editor()->connect("editor_script_changed",
+		callable_mp(this, &VerseEditorPlugin::widen_completion_prefixes).unbind(1));
 }
 
 void VerseEditorPlugin::_exit_tree() {
+	EditorInterface::get_singleton()->get_script_editor()->disconnect("editor_script_changed",
+		callable_mp(this, &VerseEditorPlugin::widen_completion_prefixes).unbind(1));
 	remove_export_plugin(export_plugin);
 	export_plugin.unref();
 	remove_context_menu_plugin(module_menu);
@@ -62,6 +75,47 @@ bool VerseEditorPlugin::_build() {
 		return true; // Nothing registered the language, so there is nothing of ours to build.
 	}
 	return language->build_project() == OK;
+}
+
+// Godot decides for itself whether to raise the completion popup, and the test is a table of
+// trigger characters CodeTextEditor hard-codes -- `.`, `,`, `(`, `=`, `$`, `@`, `"` and `'`
+// (editor/gui/code_editor.cpp). A caret with nothing typed after a character outside that table is
+// cancelled outright by CodeEdit::_filter_code_completion_candidates, and `force` does not exempt
+// it: the only branch `code_completion_forced` reaches is the one for `(`.
+//
+// Two of the positions _complete_code narrows on sit behind a character Godot has never needed.
+// `vector2{` offers the archetype's fields and `Foo(?` offers the callee's named parameters, and
+// at each of them every other name in scope is *refused* by the compiler rather than merely
+// unlikely -- so the popup was answering correctly and being closed before it drew. A second field
+// already worked, because `,` is in Godot's table; only the first one was unreachable.
+//
+// The other narrowed positions are deliberately absent. A type after `:` and a specifier after `<`
+// decline an empty prefix in _complete_code itself, so putting them here would raise a popup with
+// nothing to show.
+//
+// Set on the script's own CodeEdit rather than globally, so a GDScript tab keeps Godot's set.
+void VerseEditorPlugin::widen_completion_prefixes() {
+	ScriptEditor *script_editor = EditorInterface::get_singleton()->get_script_editor();
+	if (script_editor == nullptr) {
+		return;
+	}
+	const Ref<Script> current = script_editor->get_current_script();
+	if (Object::cast_to<VerseScript>(current.ptr()) == nullptr) {
+		return;
+	}
+	ScriptEditorBase *editor = script_editor->get_current_editor();
+	CodeEdit *code = editor != nullptr ? Object::cast_to<CodeEdit>(editor->get_base_editor()) : nullptr;
+	if (code == nullptr) {
+		return;
+	}
+
+	TypedArray<String> prefixes = code->get_code_completion_prefixes();
+	for (const char *wanted : { "{", "?" }) {
+		if (!prefixes.has(String(wanted))) {
+			prefixes.push_back(String(wanted));
+		}
+	}
+	code->set_code_completion_prefixes(prefixes);
 }
 
 void VerseEditorPlugin::build_from_menu() {

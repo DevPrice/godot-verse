@@ -31,6 +31,11 @@ public:
 private:
 	void build_from_menu();
 
+	// Godot raises the completion popup on its own from a table of trigger characters, and
+	// the table is the editor's rather than the language's. Two positions this bridge
+	// answers for are not in it; this puts them there, on the Verse script's own CodeEdit.
+	void widen_completion_prefixes();
+
 	godot::Ref<VerseSyntaxHighlighter> highlighter;
 	godot::Ref<VerseModuleMenu> module_menu;
 	godot::Ref<VerseExportPlugin> export_plugin;

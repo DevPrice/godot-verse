@@ -912,6 +912,19 @@ Nothing automated sees this. The tables behind it are checked in the units layer
 that drifted; that the highlighter reads them and the editor draws the result is what the eye is
 for.
 
+### The completion popup, where Godot decides whether to open one · after B24
+
+**To check it:** in the script editor, type `vector2{` and stop. The popup must open by itself, with
+`X` and `Y` in it and nothing else. Then type `Input.IsActionPressed("ui_accept", ?` and stop: the
+popup must open with the callee's named parameters. Both were answering correctly before and being
+closed before they drew, so what is being read here is the *trigger*, and nothing headless can reach
+it — `CodeEdit` decides it from a table no answer from the language passes through.
+
+Then check the same `.` popup an ordinary member completion opens and read the list for a name
+ending in `Getter` or `Setter`. There must be none; `probe_complete.py`'s C1 rule is the automated
+half, and it counts them, but only the eye sees what the list actually looks like to someone
+reading it.
+
 ### The Node panel, for a signal that is not `<public>`
 
 `@export_signal` registers a member whatever its access level — the access check is gone, and
@@ -1205,12 +1218,20 @@ still there, and the hint above the caret must read `IsActionPressed(Action:stri
 it: `if (Target?` and a member declared `:?node2d`, both of which are ordinary code and neither of
 which has a set of names to offer.
 
-**The popup does not open on the bare `?`**, and that is not a defect of this feature. Nothing here
-registers code-completion prefixes, so `CodeEdit` requests completion only on an identifier
-character — the same reason `@` and `.` open nothing until the next keystroke. Ctrl+Space on a bare
-`?` does answer, with every named parameter. Whether to register `?`, `@` and `.` as prefixes is one
-override (`_get_code_completion_prefixes`) and a decision about all three at once, which is why it
-was not taken along the way.
+**The popup opens on the bare `?` now, and the first diagnosis of why it did not was wrong.** There
+is no `_get_code_completion_prefixes` on `ScriptLanguageExtension` — the trigger characters are the
+*editor's*, hard-coded in `CodeTextEditor`'s constructor as `.`, `,`, `(`, `=`, `$`, `@`, `"` and
+`'` (`editor/gui/code_editor.cpp:2100`), and `@` and `.` were in that list all along. Only `?` was
+outside it. A caret with nothing typed behind a character outside the list is cancelled by
+`CodeEdit::_filter_code_completion_candidates`, and `force` does not exempt it: the one branch
+`code_completion_forced` reaches is the one for `(`.
+
+What the list is, though, is a per-`CodeEdit` **property** with a bound setter, so a language can
+widen it for its own editor and leave every other tab alone.
+`VerseEditorPlugin::widen_completion_prefixes` adds `?` and `{` on `editor_script_changed`.
+Only those two: a type after `:` and a
+specifier after `<` decline an empty prefix inside `_complete_code` itself, so putting them in the
+list would raise a popup with nothing to draw.
 
 ### And when one of these is looked at again
 
