@@ -140,6 +140,23 @@ constexpr const char* AttributePackageSource =
     "@attribscope_data\n"
     "export<public> := class<computes>(attribute) {}\n"
     "\n"
+    "# Sends the member to Godot as a signal, the way C#'s [Signal] does for a delegate. The\n"
+    "# member is an ordinary /Verse.org/Verse `event(t)`, so it is awaitable and satisfies\n"
+    "# `awaitable(t)` for any Verse code that has never heard of Godot; the attribute is what\n"
+    "# also registers it with the engine. Its *name* is the signal's name and its `t` is the\n"
+    "# payload, so there is no second place to spell either.\n"
+    "#\n"
+    "#     @export_signal\n"
+    "#     Struck<public>:event(struck_payload) = event(struck_payload){}\n"
+    "#\n"
+    "# Not spelled `@export_signal`'s obvious short name: a bare marker attribute *is* a class,\n"
+    "# this package shares /Godot.org/Godot's verse path, and a third definition of `signal`\n"
+    "# beside `signal(t)` and its `signal()` alias is glitch 3532 (docs/signal-declaration.md 3).\n"
+    "# It joins the @export* family instead, which is what it does: the member exists either\n"
+    "# way, and the attribute is what sends it to Godot.\n"
+    "@attribscope_data\n"
+    "export_signal<public> := class<computes>(attribute) {}\n"
+    "\n"
     "# Runs the class's Ready and Process in the editor as well as in the game, the way C#'s\n"
     "# [Tool] does. A marker with no argument, and opt-in per class rather than per project: a\n"
     "# tool script runs against the scene the author is editing, with its mistakes.\n"
@@ -1836,6 +1853,13 @@ struct GodotVerse::FInstance
     /// Set by the first call into the object, after which a non-var member can no longer be
     /// given a value. See WriteInstanceField.
     bool bSealed = false;
+
+    /// The `@export_signal` event bindings this instance made, so ReleaseInstance can drop them.
+    ///
+    /// Godot's own connection needs no disconnect -- the Callable is owned by this same node, so it
+    /// dies with it -- but the binding row holds a strong pointer to the event and a reference id,
+    /// and neither of those has anything else to end it.
+    TArray<int64> EventBindings;
 };
 
 namespace {
@@ -1933,6 +1957,7 @@ namespace {
 /// `<constructor>` function beside it: GetAttributeTextValue matches on the invocation's return
 /// type, and a single string argument is the one attribute payload SOL-972 leaves readable.
 constexpr const char* ExportAttributePath = "/Godot.org/Godot/export";
+constexpr const char* ExportSignalAttributePath = "/Godot.org/Godot/export_signal";
 constexpr const char* StaticsAttributePath = "/Godot.org/Godot/statics_attribute";
 constexpr const char* RpcAttributePath = "/Godot.org/Godot/rpc_attribute";
 constexpr const char* ExportFileAttributePath = "/Godot.org/Godot/export_file_attribute";
@@ -4031,6 +4056,11 @@ struct FCallbackTarget
     /// a *foreign* signal receives, because nothing declares that signal's payload and there is no
     /// per-argument shape to convert against.
     bool bArgsAsArray = false;
+
+    /// Non-zero for the permanent connection an `@export_signal` event member holds: the binding
+    /// whose `Event` this emission is signalled into. The event-member analogue of AwaitToken, and
+    /// exclusive with it -- an await is one wait, this is every emission for the instance's life.
+    int64 EventSignalId = 0;
 };
 
 TMap<int64, FCallbackTarget> GCallbacks;
@@ -4061,10 +4091,33 @@ struct FSignalBinding
     /// which is what a script running outside the editor gets, and it was the whole complaint.
     int32 Reject = VH_SIGNAL_OK;
     FUtf8String RejectDetail;
+
+    /// The `event(t)` an `@export_signal` member holds, and the connection that feeds it.
+    ///
+    /// Null for a `signal(t)`, whose event is reached through the signal object at each await and
+    /// whose connection lives exactly as long as that wait. An `event(t)` has no such hook -- its
+    /// `Await` is Verse's own native -- so the connection is made once here and held for the
+    /// instance's life, which is the one place R-SIG-5's connect-while-awaiting is traded away.
+    ///
+    /// Held strongly because it is what an emission is delivered into, and dropped at
+    /// ReleaseInstance: a strong pointer kept past the node would be a GC root per scripted node,
+    /// which is the shape of leak that looks entirely normal in a working scene.
+    TStrongObjectPtr<UObject> Event;
+    int64 CallableRef = 0;
+    int64 CallbackId = 0;
 };
 
 TMap<int64, FSignalBinding> GSignalBindings;
 int64 GNextSignalId = 1;
+
+/// The `event(t)` an `@export_signal` member holds -> its binding id.
+///
+/// A `signal(t)` needs no such table: the row's id is written into the object's own `Id` field at
+/// bind time, which is what the native class exists for. `event(t)` is Verse's own and cannot be
+/// reopened to carry one, so the object *is* the key -- which is also why the binding holds it
+/// strongly. The raw pointer is safe for exactly as long as that strong pointer is, and both are
+/// dropped together at ReleaseInstance.
+TMap<const UObject*, int64> GEventBindingIds;
 
 /// One live connection, which is what a `connection` names.
 struct FSubscription
@@ -5464,6 +5517,25 @@ AUTORTFM_DISABLE bool IsSignalClass(const uLang::CClass& Declared)
     return false;
 }
 
+/// Whether a declared type is a `/Verse.org/Verse` `event(t)`: a class whose chain reaches
+/// `event_base_intrnl`, which is the root Epic gave the event family for exactly this kind of test.
+///
+/// The `@export_signal` half of R-SIG-1. Keyed on the base rather than on `event` itself so a
+/// subclass of one still counts, and on the *name* rather than on an interface: `listenable(t)` is
+/// `awaitable` + `subscribable` and does not extend `signalable`, so it can neither be signalled
+/// into nor heard out of (docs/signal-declaration.md 3).
+AUTORTFM_DISABLE bool IsEventClass(const uLang::CClass& Declared)
+{
+    for (const uLang::CClass* Cursor = &Declared; Cursor != nullptr; Cursor = Cursor->GetSuperClass())
+    {
+        if (FUtf8StringView(Cursor->AsNameCString()).Equals(UTF8TEXT("event_base_intrnl")))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 /// The payload type of a signal class: the type argument the member's declaration instantiated it
 /// with.
 ///
@@ -5662,6 +5734,8 @@ AUTORTFM_DISABLE FUtf8String SignalRejectReason(int32 Reject, const FUtf8String&
     case VH_SIGNAL_PAYLOAD_NESTED_STRUCT:
         return FUtf8String(UTF8TEXT("its payload field `")) + Detail
             + UTF8TEXT("` is itself a struct, and a payload decomposes one level only.");
+    case VH_SIGNAL_NEEDS_ATTRIBUTE:
+        return UTF8TEXT("it carries no `@export_signal`, so Godot was never told about it.");
     default:
         return UTF8TEXT("the declaration was refused.");
     }
@@ -5936,6 +6010,13 @@ AUTORTFM_DISABLE bool GetClassSignalsLive(FUtf8StringView ClassName, TArray<Godo
     }
     const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
 
+    // Absent when the attribute package did not make it into the program, which also means no
+    // script could have applied it. Unlike GetClassExportsLive's, this is not a reason to refuse
+    // the whole answer: the `signal(t)` spelling needs no attribute, so the list is still correct
+    // for every class that has not adopted the newer one.
+    const uLang::CClass* const ExportSignalAttribute =
+        Program->FindDefinitionByVersePath<uLang::CClass>(ExportSignalAttributePath);
+
     const FUtf8String ClassPath = FUtf8String(ScriptVersePath) + UTF8TEXT("/") + FUtf8String(ClassName);
     const uLang::CClass* Class = Program->FindDefinitionByVersePath<uLang::CClass>(
         FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath));
@@ -5971,7 +6052,27 @@ AUTORTFM_DISABLE bool GetClassSignalsLive(FUtf8StringView ClassName, TArray<Godo
             const uLang::CTypeBase* const MemberType = Member->GetType();
             const uLang::CNormalType* const Normal = MemberType ? &UnwrapDeclaredType(*MemberType, bIsOption) : nullptr;
             const uLang::CClass* const Declared = Normal ? Normal->AsNullable<uLang::CClass>() : nullptr;
-            if (!Declared || !IsSignalClass(*Declared))
+
+            // `@export_signal` is what registers a member with Godot, whichever type declares it --
+            // the same bargain `@export` makes for the inspector (R-SIG-1). What the two types
+            // differ in is what *silence* means, which is why they are told apart here rather than
+            // folded into one test:
+            //
+            //   - an `event(t)` is useful purely between Verse tasks, so one without the attribute
+            //     is not a signal and not a complaint. It is absent from the list entirely.
+            //   - a `signal(t)` has no purpose but Godot, so one without the attribute is far
+            //     likelier to have forgotten it than to have meant it. It is listed and refused,
+            //     which puts the sentence at the member's own line instead of leaving the Node
+            //     panel empty for no stated reason.
+            const bool bIsSignalType = Declared && IsSignalClass(*Declared);
+            const bool bIsEventType = Declared && IsEventClass(*Declared);
+            if (!bIsSignalType && !bIsEventType)
+            {
+                continue;
+            }
+            const bool bCarriesAttribute = ExportSignalAttribute
+                && Member->GetAttributes().HasAttributeClass(ExportSignalAttribute, *Program);
+            if (bIsEventType && !bCarriesAttribute)
             {
                 continue;
             }
@@ -5994,6 +6095,12 @@ AUTORTFM_DISABLE bool GetClassSignalsLive(FUtf8StringView ClassName, TArray<Godo
             // than "its third argument has no Godot type", and the author fixes the member either
             // way. Order within the three is declaration order -- `var` is the one an author is
             // most likely to have written on purpose and to need talking out of.
+            //
+            // The missing attribute sits after those three and before the payload, and both sides
+            // of that are deliberate. A member with no Godot owner is not fixed by an attribute, so
+            // telling the author to write one there would be the wrong edit; and complaining about
+            // the payload of a member Godot was never told about is noise before the edit that
+            // matters.
             if (!bHasGodotOwner)
             {
                 Desc.Reject = VH_SIGNAL_NO_GODOT_OWNER;
@@ -6005,6 +6112,10 @@ AUTORTFM_DISABLE bool GetClassSignalsLive(FUtf8StringView ClassName, TArray<Godo
             else if (Member->DerivedAccessLevel()._Kind != uLang::SAccessLevel::EKind::Public)
             {
                 Desc.Reject = VH_SIGNAL_NOT_PUBLIC;
+            }
+            else if (!bCarriesAttribute)
+            {
+                Desc.Reject = VH_SIGNAL_NEEDS_ATTRIBUTE;
             }
             else
             {
@@ -6267,7 +6378,18 @@ namespace {
 /// member's *type* said what the payload is and its *name* is the signal's name, and both are
 /// resolved here once rather than at every emission. S-A is the spike that says the write survives
 /// -- two production paths already fill a class-typed member at construction.
-AUTORTFM_DISABLE void BindSignals(UObject* Instance, FUtf8StringView ClassName, int64 Handle)
+/// Defined below, beside the await it was factored out of. Declared here because an
+/// `@export_signal` member's connection is made at bind time rather than at a wait.
+AUTORTFM_DISABLE int64 ConnectDelivery(int64 OwnerHandle,
+                                       const FUtf8String& Name,
+                                       FCallbackTarget Target,
+                                       int32 ConnectFlags,
+                                       int64& OutCallableRef);
+
+AUTORTFM_DISABLE void BindSignals(UObject* Instance,
+                                  FUtf8StringView ClassName,
+                                  int64 Handle,
+                                  TArray<int64>& OutEventBindings)
 {
     TArray<GodotVerse::FSignalDesc> Signals;
     if (!GodotVerse::GetClassSignals(ClassName, Signals) || Signals.IsEmpty())
@@ -6286,8 +6408,10 @@ AUTORTFM_DISABLE void BindSignals(UObject* Instance, FUtf8StringView ClassName, 
 
     for (const GodotVerse::FSignalDesc& Signal : Signals)
     {
-        verse::vh_signal* const Shadow = Cast<verse::vh_signal>(PeekFieldObject(Instance, FUtf8StringView(Signal.Name)));
-        if (!Shadow)
+        UObject* const Held = PeekFieldObject(Instance, FUtf8StringView(Signal.Name));
+        verse::vh_signal* const Shadow = Cast<verse::vh_signal>(Held);
+        verse::event* const Event = Shadow ? nullptr : Cast<verse::event>(Held);
+        if (!Shadow && !Event)
         {
             // A declared signal whose member holds nothing. Saying so beats emitting into the void
             // later, which is what an unbound id does.
@@ -6316,8 +6440,41 @@ AUTORTFM_DISABLE void BindSignals(UObject* Instance, FUtf8StringView ClassName, 
         }
 
         const int64 Id = GNextSignalId++;
+        if (Shadow)
+        {
+            GSignalBindings.Add(Id, MoveTemp(Binding));
+            Shadow->Id.Init(Id, Shadow);
+            continue;
+        }
+
+        // An `@export_signal` event member. There is no `Id` field to write -- `event(t)` is
+        // Verse's own class and cannot be reopened -- so the binding holds the event instead, and
+        // the emit and subscribe natives find the row by the object they are handed.
+        Binding.Event = TStrongObjectPtr<UObject>(Held);
+        const bool bRegistered = Binding.Reject == VH_SIGNAL_OK;
         GSignalBindings.Add(Id, MoveTemp(Binding));
-        Shadow->Id.Init(Id, Shadow);
+        GEventBindingIds.Add(Held, Id);
+        OutEventBindings.Add(Id);
+
+        // One connection, held for the instance's life, and only for a signal Godot was actually
+        // told about: `connect` refuses a name a refused signal never registered under, and
+        // "connect failed" is a worse sentence than the one the editor already gave at the line.
+        //
+        // Not VH_CONNECT_ONE_SHOT, which is what an await wants: this is every emission for as long
+        // as the node lives, because a bare `event(t)` offers no hook at the await to connect from.
+        if (bRegistered)
+        {
+            FCallbackTarget Target;
+            Target.OwnerHandle = Handle;
+            Target.EventSignalId = Id;
+            int64 CallableRef = 0;
+            const int64 CallbackId = ConnectDelivery(Handle, Signal.Name, MoveTemp(Target), 0, CallableRef);
+            if (CallbackId != 0)
+            {
+                GSignalBindings[Id].CallableRef = CallableRef;
+                GSignalBindings[Id].CallbackId = CallbackId;
+            }
+        }
     }
 }
 
@@ -6563,6 +6720,48 @@ AUTORTFM_DISABLE int64 GodotVerse::SubscribeSignal(int64 SignalId, const FVerseV
     return Id;
 }
 
+namespace {
+/// The binding an `@export_signal` member's event names, or 0.
+///
+/// 0 means the member was never bound: a `signal(t)` a script built for itself answers the same
+/// way, and both reach the "names nothing" sentence rather than silently emitting into the void.
+AUTORTFM_DISABLE int64 EventBindingFor(UObject* Event)
+{
+    if (!Event)
+    {
+        return 0;
+    }
+    const int64* const Found = GEventBindingIds.Find(Event);
+    return Found ? *Found : 0;
+}
+}
+
+AUTORTFM_DISABLE void GodotVerse::EmitEventSignal(UObject* Event, const FVerseValue& Payload)
+{
+    const int64 SignalId = EventBindingFor(Event);
+    if (SignalId == 0)
+    {
+        ReportError(UTF8TEXT("Emit was called on an `event` that is not an `@export_signal` member "
+                             "of a class Godot instantiated, so it names no Godot signal. An event "
+                             "a script builds for itself is a Verse event and nothing more -- "
+                             "`Signal` is how tasks are resumed through one."));
+        return;
+    }
+    EmitSignal(SignalId, Payload);
+}
+
+AUTORTFM_DISABLE int64 GodotVerse::SubscribeEventSignal(UObject* Event, const FVerseValue& Callback)
+{
+    const int64 SignalId = EventBindingFor(Event);
+    if (SignalId == 0)
+    {
+        ReportError(UTF8TEXT("Subscribe was called on an `event` that is not an `@export_signal` "
+                             "member of a class Godot instantiated, so it names no Godot signal."));
+        return 0;
+    }
+    return SubscribeSignal(SignalId, Callback);
+}
+
 AUTORTFM_DISABLE void GodotVerse::CancelSubscription(int64 SubscriptionId)
 {
     const FSubscription* const Found = GSubscriptions.Find(SubscriptionId);
@@ -6774,6 +6973,61 @@ AUTORTFM_DISABLE int32 DeliverToAwaiter(int64 Token, const vh_value* Args, int32
                 // event::Signal resumes the suspended awaits in FIFO order, under each task's own
                 // content scope, skipping any whose scope was terminated -- Epic's code, and the
                 // reason `Await` needed no scheduler of its own.
+                Event->Signal(FVerseValue(Payload));
+            });
+        });
+    });
+    if (TransactionResult != AutoRTFM::ETransactionResult::Committed)
+    {
+        return VH_ERR_RUNTIME;
+    }
+    return Status;
+}
+
+/// Signals an `@export_signal` member's event with an emission Godot just delivered.
+///
+/// The permanent-connection counterpart of DeliverToAwaiter, and deliberately the same shape: the
+/// payload is rebuilt against the same recorded `FPayloadShape` the descriptor was generated from,
+/// so a struct payload comes back a struct and a tuple comes back a tuple whichever spelling
+/// declared it. What differs is only where the event comes from -- the binding holds it, rather than
+/// it being found by walking a `signal` object's shape.
+///
+/// Every emission arrives here, including the script's own `Emit`: the emit verb goes out to Godot
+/// and Godot dispatches back, which is what makes a Verse handler and a GDScript handler see the
+/// same ordering.
+AUTORTFM_DISABLE int32 DeliverToEvent(int64 SignalId, const vh_value* Args, int32 ArgCount)
+{
+    const FSignalBinding* const Binding = GSignalBindings.Find(SignalId);
+    if (!Binding)
+    {
+        return VH_ERR_NOT_FOUND;
+    }
+    UObject* const Held = Binding->Event.Get();
+    if (!Held)
+    {
+        // The instance was released between Godot queueing the emission and delivering it, which
+        // is the event-member analogue of a wait that stopped waiting.
+        return VH_OK;
+    }
+    const FPayloadShape Shape = Binding->Payload;
+
+    int32 Status = VH_OK;
+    Verse::FRunningContext Context = Verse::FRunningContextPromise{};
+    const AutoRTFM::ETransactionResult TransactionResult = AutoRTFM::Transact([&] {
+        AutoRTFM::Open([&] {
+            EnterVerse(Context, [&] {
+                verse::event* const Event = Cast<verse::event>(Held);
+                if (!Event)
+                {
+                    Status = VH_ERR_NOT_FOUND;
+                    return;
+                }
+                Verse::VValue Payload;
+                if (!PayloadValue(Context, Shape, Args, ArgCount, Payload))
+                {
+                    Status = VH_ERR_ARGUMENT;
+                    return;
+                }
                 Event->Signal(FVerseValue(Payload));
             });
         });
@@ -8999,7 +9253,12 @@ AUTORTFM_DISABLE void CollectDeclaredTypes(FUtf8StringView ClassName, GodotVerse
             }
             FMemberType Described = DescribeType(Member->GetType(), *Program);
             Described.bIsVar = Member->IsVar();
-            if (Described.ReferenceClass && IsSignalClass(*Described.ReferenceClass))
+            // Both spellings, and unconditionally rather than only for a member carrying
+            // `@export_signal`: this table is what a runtime host reads *instead of* a semantic
+            // program, and recording a shape for a member that turns out not to be registered
+            // costs a map entry, where missing one costs an emission that silently carries nothing.
+            if (Described.ReferenceClass
+                && (IsSignalClass(*Described.ReferenceClass) || IsEventClass(*Described.ReferenceClass)))
             {
                 FPayloadShape Shape;
                 DescribePayload(SignalPayloadType(*Described.ReferenceClass), *Program, Shape);
@@ -9315,9 +9574,11 @@ AUTORTFM_DISABLE GodotVerse::FInstance* GodotVerse::Instantiate(FUtf8StringView 
     Shadow->Handle.Set(Handle, Shadow);
 
     // Before the instance is handed back, so a Ready() that emits already has a bound signal.
-    BindSignals(Instance, ClassName, Handle);
+    TArray<int64> EventBindings;
+    BindSignals(Instance, ClassName, Handle, EventBindings);
 
     FInstance* Made = new FInstance{TStrongObjectPtr<UObject>(Instance), Handle, Scope};
+    Made->EventBindings = MoveTemp(EventBindings);
     GInstancesByHandle.Add(Handle, Made);
     return Made;
 }
@@ -9343,6 +9604,32 @@ AUTORTFM_DISABLE void GodotVerse::ReleaseInstance(FInstance* Instance)
         if (Instance->Scope.IsValid() && !Instance->Scope->WasTerminated())
         {
             Instance->Scope->Terminate();
+        }
+
+        // The `@export_signal` connections this instance made. Godot's side of each dies with the
+        // node -- the Callable is owned by this same object -- but the binding row holds a strong
+        // pointer to the event and a reference id, and nothing else would ever end those. A row
+        // kept here is a GC root per scripted node, which is a leak that looks entirely normal.
+        FHostState& Host = GetHost();
+        for (const int64 Id : Instance->EventBindings)
+        {
+            if (const FSignalBinding* const Binding = GSignalBindings.Find(Id))
+            {
+                if (Binding->CallableRef != 0 && Host.Godot.ReleaseRef)
+                {
+                    Host.Godot.ReleaseRef(Host.Godot.Ctx, Binding->CallableRef);
+                }
+                if (Binding->CallbackId != 0)
+                {
+                    FScopeLock Lock(&GCallbacksLock);
+                    GCallbacks.Remove(Binding->CallbackId);
+                }
+                if (const UObject* const Event = Binding->Event.Get())
+                {
+                    GEventBindingIds.Remove(Event);
+                }
+            }
+            GSignalBindings.Remove(Id);
         }
     }
     delete Instance;
@@ -9809,6 +10096,14 @@ AUTORTFM_DISABLE int32 GodotVerse::InvokeCallback(int64 CallbackId,
     if (Target.AwaitToken != 0)
     {
         return DeliverToAwaiter(Target.AwaitToken, Args, ArgCount);
+    }
+
+    // The permanent connection an `@export_signal` event member holds. Before the instance lookup
+    // below for the same reason the await branch is: this Callable feeds an event rather than
+    // calling a method, so there is no decorated name to resolve.
+    if (Target.EventSignalId != 0)
+    {
+        return DeliverToEvent(Target.EventSignalId, Args, ArgCount);
     }
 
     FInstance** const Bound = GInstancesByHandle.Find(Target.OwnerHandle);

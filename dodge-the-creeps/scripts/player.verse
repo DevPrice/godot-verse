@@ -18,6 +18,7 @@ player := class(area2d):
 	# `signal hit` in the GDScript. The member's *type* is the declaration and its name is the
 	# signal's name; main subscribes to it rather than the scene wiring Area2D.body_entered to two
 	# scripts at once, which is what the port did before a script could declare one.
+	@export_signal
 	Hit<public>:signal() = signal(){}
 
 	var Sprite:?animated_sprite2d = false

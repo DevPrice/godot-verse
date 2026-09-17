@@ -400,10 +400,13 @@ VhFromStringArray(Values:[]string)<reads>:variant = VhFromStrings(TagPackedStrin
 #         Hit<public>:signal() = signal(){}
 #         Struck<public>:signal(tuple(int, string)) = signal(tuple(int, string)){}
 #
-# Shaped like Verse's own `listenable` rather than implementing it, and the difference is not a
-# preference: `signalable.Signal` is `no_rollback`, so it would be uncallable from inside the
-# transaction every Godot callback runs in. `cancelable` is the one of the four whose domain fits,
-# and Subscribe answers it.
+# Implements Verse's own `listenable(t)`, so a script's signal and all 503 engine-signal accessors
+# can be handed to anything that takes one. It is `awaitable(t)` + `subscribable(t)` and does **not**
+# extend `signalable(t)` -- which is the whole reason this is reachable. `signalable.Signal` carries
+# `no_rollback` and would be uncallable from inside the transaction every Godot callback runs in, so
+# emission stays `VhSignalEmit` below and this class implements the two halves that can be narrowed.
+# Measured in tests/verse_probe/signal_listenable_probe.verse; docs/signal-declaration.md 7 has why
+# the accessors keep this type rather than moving to a bare `event(t)`.
 #
 # The payload is one type, and tuples carry arity above one: a multi-parameter Verse function
 # satisfies a one-tuple-parameter callback, because a Verse function's parameter *is* its tuple. So
@@ -413,7 +416,7 @@ VhFromStringArray(Values:[]string)<reads>:variant = VhFromStrings(TagPackedStrin
 # The neighbour to keep it apart from is `signal_ref` above, which is Godot's Signal *value* -- a
 # reference to a signal someone else declared, with no type to read a payload off. This one is the
 # declaration, and a mirrored engine-signal accessor answers one of these too.
-signal<public>(t:type) := class(vh_signal):
+signal<public>(t:type) := class(vh_signal, listenable(t)):
 
     # What an awaiting task suspends on, and what the host signals when Godot emits (R-SIG-5).
     #
@@ -448,7 +451,7 @@ signal<public>(t:type) := class(vh_signal):
     # *invokes* the callback, and a `<transacts>` body may not invoke a wide one. That does not
     # reach us -- the host invokes subscribers from C++ through `VFunction::Invoke`, where Verse's
     # effect checking is not in the way.
-    Subscribe<public>(Callback(:t):void)<transacts>:cancelable =
+    Subscribe<override>(Callback(:t):void)<transacts>:cancelable =
         connection{Subscription := VhSignalSubscribe(Id, Callback)}
 
     # Suspends until Godot emits this signal, and answers the payload -- typed, because `t` is the
@@ -470,7 +473,7 @@ signal<public>(t:type) := class(vh_signal):
     # The Godot connection lives exactly as long as the wait. `defer` runs on the way out whether
     # the task resumed or was cancelled -- by `race`, by the node being freed, by a rebuild -- which
     # is what keeps a cancelled wait from leaving a connection behind.
-    Await<public>()<suspends>:t =
+    Await<override>()<suspends>:t =
         Token := VhSignalAwait(Self)
         defer:
             VhSignalAwaitEnd(Token)
@@ -495,6 +498,37 @@ connection<public> := class(cancelable):
     Subscription:int = 0
 
     Cancel<override>()<transacts>:void = VhSignalCancel(Subscription)
+
+# --- `@export_signal`, over Verse's own event -------------------------------
+#
+# The member is an ordinary `/Verse.org/Verse` `event(t)`, so `Await` and `Signal` are Verse's and
+# anything taking an `awaitable(t)` or a `signalable(t)` accepts it. What the attribute adds is
+# Godot, and these two are the half Godot needs:
+#
+#     @export_signal
+#     Struck<public>:event(struck_payload) = event(struck_payload){}
+#
+#     OnBodyEntered<override>(Body:node2d):void = Struck.Emit(struck_payload{Damage := 5})
+#
+# **`Emit` rather than the event's own `Signal`, and that is not a preference.** `signalable.Signal`
+# carries `no_rollback`, so a `<transacts>` body -- which every Godot callback is -- may not call
+# it at all (measured: glitch 3512, tests/verse_probe/event_probe.verse Q2). And Godot has to be the
+# dispatcher, or a GDScript connection never fires. So the emit verb is the bridge's, exactly as
+# C#'s generated `EmitSignalX` is rather than raising the C# event.
+#
+# `Ev.Signal(X)` still compiles from a specifier-less body and resumes Verse awaiters **without
+# telling Godot**. That is a real edge and it is deliberate rather than overlooked: on a non-
+# `@export_signal` event it is the right call, and there is nothing on a stdlib class to diagnose
+# it with. C# carries the same hazard in its `backing_` field.
+(Ev:event(t) where t:type).Emit<public>(Val:t)<transacts>:void =
+    VhEventEmit(Ev, Val)
+
+# `event(t)` is `signalable` + `awaitable` and deliberately not `subscribable`, so there is no
+# `Subscribe` to inherit. This one is the bridge's for a second reason too: a subscription has to go
+# *out* to Godot as a connection, not into a local list, or it would never hear an emission from
+# GDScript -- and hearing those is R-SIG-6.
+(Ev:event(t) where t:type).Subscribe<public>(Callback(:t):void)<transacts>:cancelable =
+    connection{Subscription := VhEventSubscribe(Ev, Callback)}
 
 # --- typed containers --------------------------------------------------------
 

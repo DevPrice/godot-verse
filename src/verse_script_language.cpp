@@ -4177,6 +4177,12 @@ static String signal_rejection_message(const VerseSignalInfo &p_signal) {
 		case VH_SIGNAL_PAYLOAD_UNSUPPORTED:
 			return name + String(" has a payload argument `") + p_signal.reject_detail
 					+ String("` with no Godot type, so an emission would have nothing to carry it in.");
+		case VH_SIGNAL_NEEDS_ATTRIBUTE:
+			return name + String(" carries no `@export_signal`, so Godot is never told about it: it ")
+					+ String("cannot be connected in the Node panel, emitted to, or seen from ")
+					+ String("GDScript. The attribute is what registers a member, the way `@export` ")
+					+ String("is what sends one to the inspector. Write `@export_signal` on the line ")
+					+ String("above `") + name + String("`.");
 		default:
 			return name + String(" cannot be registered with Godot, so nothing can connect to it.");
 	}
@@ -4226,6 +4232,8 @@ static String signal_rejection_code(int32_t p_reject) {
 			return String("SIGNAL_NO_GODOT_OWNER");
 		case VH_SIGNAL_PAYLOAD_NESTED_STRUCT:
 			return String("SIGNAL_PAYLOAD_NESTED_STRUCT");
+		case VH_SIGNAL_NEEDS_ATTRIBUTE:
+			return String("SIGNAL_NEEDS_ATTRIBUTE");
 		default:
 			return String("SIGNAL_PAYLOAD_UNSUPPORTED");
 	}

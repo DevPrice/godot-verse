@@ -287,6 +287,17 @@ AUTORTFM_DISABLE int64 SubscribeSignal(int64 SignalId, const FVerseValue& Callba
 /// Disconnects. Idempotent, as event_subscription::Cancel is in UEFN.
 AUTORTFM_DISABLE void CancelSubscription(int64 SubscriptionId);
 
+/// The same two, for an `@export_signal` member, which names its binding by the `event(t)` object
+/// it holds rather than by an id: `event` is Verse's own class and cannot be reopened to carry an
+/// `Id` field the way the native `vh_signal` does.
+///
+/// Both answer the binding the object was given at vh_instantiate and then do exactly what the
+/// id-taking pair above does -- the emission still goes out to Godot and comes back through the
+/// member's permanent connection, which is what makes a Verse handler and a GDScript handler see
+/// one ordering (R-SIG-1).
+AUTORTFM_DISABLE void EmitEventSignal(UObject* Event, const FVerseValue& Payload);
+AUTORTFM_DISABLE int64 SubscribeEventSignal(UObject* Event, const FVerseValue& Callback);
+
 /// Begins one wait on the signal a `signal` object names (R-SIG-5), answering a token.
 ///
 /// The object rather than its id, because an engine-signal accessor mints a fresh `signal`

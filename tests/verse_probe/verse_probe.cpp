@@ -210,6 +210,7 @@ int main(int argc, char** argv)
 	auto CompileFn = Resolve<vh_compile_project_fn>(Module_, "vh_compile_project");
 	auto HasClassFn = Resolve<vh_has_class_fn>(Module_, "vh_has_class");
 	auto MethodListFn = Resolve<vh_class_method_list_fn>(Module_, "vh_class_method_list");
+	auto SignalListFn = Resolve<vh_class_signal_list_fn>(Module_, "vh_class_signal_list");
 	auto InstantiateFn = Resolve<vh_instantiate_fn>(Module_, "vh_instantiate");
 	auto ReleaseFn = Resolve<vh_release_instance_fn>(Module_, "vh_release_instance");
 	auto CallFn = Resolve<vh_instance_call_fn>(Module_, "vh_instance_call");
@@ -253,6 +254,32 @@ int main(int argc, char** argv)
 	if (Status == VH_OK && !ClassName.empty())
 	{
 		printf("[probe] vh_has_class(%s): %d\n", ClassName.c_str(), static_cast<int>(HasClassFn(ClassName.c_str())));
+
+		// The signal list before the methods, because the question it answers is usually about a
+		// *declaration* rather than about a call: a payload that decomposes into no arguments is
+		// what an unread type-variable substitution looks like, and it is indistinguishable from
+		// `event(tuple())` unless the fixture says which it meant.
+		const vh_signal_desc* Signals = nullptr;
+		int32_t SignalCount = 0;
+		if (SignalListFn(ClassName.c_str(), &Signals, &SignalCount) == VH_OK)
+		{
+			printf("[probe] %d signal(s)\n", SignalCount);
+			for (int32_t Index = 0; Index < SignalCount; ++Index)
+			{
+				const vh_signal_desc& Signal = Signals[Index];
+				printf("[probe]   %.*s  args=%d  reject=%d%s%.*s\n",
+					   Signal.NameLen, Signal.NameUtf8,
+					   Signal.ArgCount, Signal.Reject,
+					   Signal.RejectDetailLen > 0 ? " detail=" : "",
+					   Signal.RejectDetailLen, Signal.RejectDetailUtf8);
+				for (int32_t ArgIndex = 0; ArgIndex < Signal.ArgCount; ++ArgIndex)
+				{
+					const vh_param_desc& Arg = Signal.Args[ArgIndex];
+					printf("[probe]     arg %d: %.*s type=%d tag=%d\n",
+						   ArgIndex, Arg.NameLen, Arg.NameUtf8, Arg.Type, Arg.VariantTag);
+				}
+			}
+		}
 
 		const vh_method_desc* Methods = nullptr;
 		int32_t MethodCount = 0;

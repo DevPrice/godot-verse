@@ -192,6 +192,25 @@ VhSignalSubscribe<native>(Id:int, Callback:any)<transacts>:int
 # Idempotent, as `event_subscription.Cancel` is in UEFN: a second Cancel does nothing.
 VhSignalCancel<native>(Subscription:int)<transacts>:void
 
+# The same two, for an `@export_signal` member -- an ordinary `/Verse.org/Verse` `event(t)` whose
+# Godot half is the binding made at construction (R-SIG-1).
+#
+# `Ev` crosses as `any` and not as a typed parameter, and that is forced rather than loose: a native
+# may name only `vh_object`, `variant` and `godot_ref`, and VNI refuses anything else at build time
+# with V3564. `event` is Verse's own class, so there is no C++ shadow to declare and no way to spell
+# it here. The host recovers the UObject and looks the binding up by it, which is what `event` has
+# instead of the `Id` field `vh_signal` carries -- Verse cannot reopen a class to add one.
+#
+# Emission is immediate, exactly as VhSignalEmit above is, and for the same reason: it goes out to
+# Godot and comes back through the member's own connection, so handlers run synchronously and a
+# Verse handler and a GDScript handler see one ordering.
+VhEventEmit<native>(Ev:any, Payload:any)<transacts>:void
+
+# Connects, and answers a subscription id -- 0 if the callback is not a method bound to a live
+# script instance, or if the event is not an `@export_signal` member. Compensated on abort the way
+# VhSignalSubscribe is, because it mutates Godot *and* answers a value.
+VhEventSubscribe<native>(Ev:any, Callback:any)<transacts>:int
+
 # Binds one of *Godot's own* 489 signals, for the accessors the generator emits per class --
 # `Timer.Timeout()`, `Button.Pressed()`. A script-declared signal is bound at construction instead,
 # because the host walks the class's members for it; an engine signal has no member to walk.

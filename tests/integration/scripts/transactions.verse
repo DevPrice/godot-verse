@@ -108,10 +108,12 @@ transactions := class(node2d):
 
 	# --- S-3: does a rollback compensation reach this call path? -------------------------------
 
+	@export_signal
 	Hit<public>:signal() = signal(){}
 
 	# The one `ConnectThenRaise` uses: `MakeCallable` wants a type argument, and an int payload is
 	# the plainest one to spell.
+	@export_signal
 	Scored<public>:signal(int) = signal(int){}
 
 	var Hits<public>:int = 0

@@ -390,6 +390,11 @@ def run_integration(results: Results, engine: Path | None, godot: Path | None) -
             "can be assigned in the inspector but not saved",
             # R-SIG-1, a signal declaration Godot is never told about:
             "is a `var`, and a signal is an identity rather than a value",
+            # R-SIG-1's other half: `@export_signal` is what registers a member, so a `signal(t)`
+            # without it is listed and refused rather than skipped. The one reject whose fixture is
+            # well formed in every other way, which is what makes it the test of the rule rather
+            # than of the ladder above it.
+            "carries no `@export_signal`, so Godot is never told about it",
             # R-EXP-9, an `@rpc` whose words Godot does not know:
             "is not an @rpc word",
             # R-EXP-1, an inspector hint on a type it cannot describe:
@@ -576,10 +581,11 @@ EXPORT_EXPECTED_CLASSES = ["marshal", "signals", "left/widget"]
 # source, `get_global_name`, which is read off the same stripped source, and the hover tooltip,
 # which needs an analysis a runtime host has no compiler to produce. The five R-EXP-7 cases run the
 # other way round -- only an exported game has autoloads at all, because `--script` replaces the
-# main loop before Godot sets one up -- so they are skips in the editor run and passes here, which
-# is why 430 + 10 is the 435 + 5 the in-editor run prints rather than a plain sum. Adding a case
+# main loop before Godot sets one up -- so they are skips in the editor run and passes here. The two
+# runs therefore report different totals from one set of lines, and neither is a function of the
+# other: the in-editor run prints 479 passed and 5 skipped against the numbers below. Adding a case
 # means changing this line, which is the point of it.
-EXPORT_EXPECTED_PASSES = 449
+EXPORT_EXPECTED_PASSES = 458
 EXPORT_EXPECTED_SKIPS = 11
 
 

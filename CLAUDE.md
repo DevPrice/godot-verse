@@ -53,7 +53,14 @@ not a description of what exists.
 | `phase-7-design.md` | §13 (§14 not built, §15 exit) | the three UBT targets, the cooker, the export plugin |
 | `phase-7b-design.md` | §13 (§14, §15) | an exported game runs its Verse |
 
-Two documents are not phase records and are the ones to read before adding a feature:
+Three documents are not phase records and are the ones to read before adding a feature:
+
+- **`docs/signal-declaration.md`** — why a script-declared signal is moving from a `signal(t)` member
+  to `@export_signal` over an ordinary `event(t)`, what that cannot change (the emit verb stays the
+  bridge's: `signalable.Signal` is `no_rollback` and Godot has to be the dispatcher), and the staged
+  plan. §4 is the measured table, including the three refusals; §7 is why the 503 engine accessors
+  **stay** on `signal(t)` rather than moving with it; §10 is the five `IsSignalClass` call sites and
+  which three move. Read it before touching anything that tests for a signal type.
 
 - **`docs/dodge-the-creeps.md`** — the eight things a Godot author writes without thinking, each
   measured in a real game rather than estimated, with the requirement that gives it a spelling.
@@ -674,9 +681,28 @@ it is not in `run_tests.py`.
 - **A signal declaration is validated in `GetClassSignals`**, so Godot is never told about a signal
   nothing can emit: `vh_signal_desc` carries a `Reject` the way `vh_export_desc` does, and
   `_validate` says why at the member's line.
-- Verse's own `signalable`/`subscribable` cannot be implemented here — their domains are
-  `no_rollback` and every Godot callback runs in a transaction — so `signal` has their *vocabulary*
-  and not their interfaces.
+- **`@export_signal` is what registers a member, on both spellings** — a `signal(t)` *or* an
+  ordinary `event(t)`. What differs is silence: an event without it is not a signal and is absent
+  from the list, while a `signal(t)` without it is listed and refused with
+  `VH_SIGNAL_NEEDS_ATTRIBUTE`, because that type has no purpose but Godot. The attribute could not
+  be spelled `@signal` — a bare marker is a class, the attribute package shares
+  `/Godot.org/Godot`'s verse path, and a third definition of `signal` is glitch 3532.
+- **The emit verb is the bridge's, whichever type declares the member.** `signal(t).Signal` and
+  `event(t).Emit` both go out to Godot and come back through the member's connection, which is what
+  makes a Verse handler and a GDScript handler see one ordering. An event's own `Signal` resumes
+  Verse awaiters *without telling Godot* — legal, undiagnosable, and right on a non-`@export_signal`
+  event; C# carries the same hazard in its `backing_` field.
+- **An `@export_signal` event member holds one Godot connection for the instance's life**, made at
+  `BindSignals`, because a bare `event(t)`'s `Await` is Verse's own native and offers no hook to
+  connect from. Every `signal(t)` — declared or engine accessor — keeps connect-while-awaiting, and
+  `tests/integration` asserts the connection count returns to zero on both sides of a `race`.
+  `GEventBindingIds` is what an event has instead of `vh_signal`'s `Id` field, and `ReleaseInstance`
+  drops the row, the callback, the reference and the strong pointer together — the strong pointer is
+  a GC root per scripted node if it outlives the instance.
+- Verse's own `signalable` cannot be implemented here — its `Signal` is `no_rollback` and every
+  Godot callback runs in a transaction. **`listenable` can and is**: it is `awaitable` +
+  `subscribable` and does *not* extend `signalable`, so `signal(t)` implements it and a declared
+  signal or an engine accessor can be handed to any Verse code taking one.
 
 ### Objects that are not nodes
 

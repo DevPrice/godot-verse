@@ -43,7 +43,7 @@ extern "C" {
  * different toolchains and nothing links them.
  */
 #define VH_ABI_VERSION_MAJOR 10
-#define VH_ABI_VERSION_MINOR 0
+#define VH_ABI_VERSION_MINOR 1
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
 typedef int32_t vh_bool;
@@ -943,7 +943,16 @@ typedef enum vh_signal_reject
 	 * payload decomposes one level, into one Godot argument per top-level field -- which is what
 	 * buys the connect dialog real names -- and there is no second level to decompose into:
 	 * Godot has no argument shape for "a struct". RejectDetail names the field. */
-	VH_SIGNAL_PAYLOAD_NESTED_STRUCT
+	VH_SIGNAL_PAYLOAD_NESTED_STRUCT,
+
+	/* A `signal(t)` member with no `@export_signal`. The attribute is what registers a member with
+	 * Godot (R-SIG-1), and a member is not registered without it -- but a `signal(t)` has no use
+	 * other than Godot, so one that opted out is far likelier to have forgotten than to have meant
+	 * it, and silence would be a Node panel that is empty for no stated reason.
+	 *
+	 * An `event(t)` with no attribute is NOT this: an event is useful purely between Verse tasks,
+	 * so it is simply not a signal and is absent from the list rather than listed and refused. */
+	VH_SIGNAL_NEEDS_ATTRIBUTE
 } vh_signal_reject;
 
 /* One signal a script's class declares (R-SIG-1).

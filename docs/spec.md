@@ -656,29 +656,75 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
 
 - **R-SIG-1 (MUST)** A Verse script declares signals with argument types, and they appear in the
   editor's Node panel where a designer connects them. Status: **done** for the declaration and the
-  list (Phase 4 stage 4); the Node panel itself is R-SIG-4's by-hand check.
+  list (Phase 4 stage 4); the Node panel itself is R-SIG-4's by-hand check. **The spelling is
+  moving** — see "The declaration is moving to `@export_signal`" below and `docs/signal-declaration.md`,
+  which carries the staged plan and the measurements.
 
-  **There is no `@signal` attribute.** The member's *type* is the declaration and its *name* is the
-  signal's name, so there is no second place to spell either and nothing to drift:
+  **The member's name is the signal's name**, whichever spelling declares it, so there is no second
+  place to spell it and nothing to drift.
+
+  **`@export_signal` is what registers a member with Godot**, and it is required on both spellings —
+  the same bargain `@export` makes for the inspector. Status: **done**.
 
   ```
   player := class(area2d):
+      @export_signal
       Hit<public>:signal(tuple()) = signal(tuple()){}
+      @export_signal
       Struck<public>:signal(tuple(int, string)) = signal(tuple(int, string)){}
   ```
 
-  A bridge attribute exists where the *text* is the only source — `@global_class` survives without
-  compilation because Godot asks about files it has only scanned — and a signal list is not one of
-  those cases: the host reads declared types out of the semantic program already, so
-  `vh_class_signal_list` refreshes per keystroke the way the method and export lists do. A signal
-  declared in a script that has never been built appears after the next Build, which is the same
-  bargain an `@export` *default* already makes.
+  What the two member types differ in is what *silence* means, and the difference is the whole
+  reason they are told apart rather than folded into one test. An `event(t)` is useful purely
+  between Verse tasks, so one without the attribute is not a signal and not a complaint — it is
+  absent from the list. A `signal(t)` has no purpose but Godot, so one without the attribute is far
+  likelier to be a forgotten line than a decision: it is **listed and refused** with
+  `VH_SIGNAL_NEEDS_ATTRIBUTE`, which puts the sentence at the member's own line instead of leaving
+  the Node panel empty for no stated reason. `tests/integration/scripts/signal_rejects.verse`'s
+  `Forgotten` is the fixture, well formed in every other way so that it tests the rule rather than
+  the ladder above it.
 
-  The shape is Verse's own `listenable` **without implementing it**, and the difference is forced
-  rather than preferred: `signalable.Signal` is `no_rollback`, so it would be uncallable from
-  inside the transaction every Godot callback runs in, and `subscribable.Subscribe` fixes its
-  callback at a no_rollback domain that could not touch Godot. `cancelable` is the one of the four
-  whose domain fits, and `Subscribe` answers it. `awaitable` is Phase 5's.
+  The attribute's *name* is not the obvious one, and that is a collision rather than a preference: a
+  bare marker attribute is a class, the attribute package shares `/Godot.org/Godot`'s verse path so
+  a script's existing `using` reaches it, and a third definition of `signal` beside `signal(t)` and
+  its `signal()` alias is glitch 3532. It joins the `@export*` family instead, which is what it
+  does. `docs/signal-declaration.md` §3 has the measurement.
+
+  The attribute is read out of the semantic program rather than out of the text, so
+  `vh_class_signal_list` refreshes per keystroke the way the method and export lists do — a bridge
+  attribute is read from the *text* only where the text is the only source, which is `@global_class`
+  and `@icon`, because Godot asks about files it has only scanned. A signal declared in a script that
+  has never been built appears after the next Build, which is the same bargain an `@export`
+  *default* already makes.
+
+  **A member may also be declared as an ordinary `event(t)`**, so that it is the type Verse's own
+  concurrency vocabulary is built on rather than a bridge type shaped like it. Status: **done**.
+  Godot cannot tell the two apart — same signal list, same argument names, same reassembly inbound,
+  same GDScript interop — and what the author gains is that the member satisfies `awaitable(t)` and
+  `signalable(t)` for code that has never heard of this bridge:
+
+  ```
+  player := class(area2d):
+      @export_signal
+      Struck<public>:event(struck_payload) = event(struck_payload){}
+  ```
+
+  The attribute is a bare marker with no argument — the name stays the member's, which is also what
+  C# does (it registers under the delegate's own spelling, PascalCase and all). What does **not**
+  move is the emit verb: `signalable.Signal` carries `no_rollback`, so a `<transacts>` body may not
+  call it (measured, uLang glitch 3512, `tests/verse_probe/event_probe.verse`), and Godot has to be
+  the dispatcher for a GDScript connection to fire at all. So the author emits with a bridge-owned
+  `Struck.Emit(...)` and the field's own `Signal` is left alone. C# reached the same split for the
+  second reason alone.
+
+  `signal(t)` was described as shaped like Verse's own `listenable` **without implementing it**, and
+  that was over-drawn: the reasoning is `signalable.Signal` being `no_rollback`, and `listenable` is
+  `awaitable` + `subscribable` and does **not** extend `signalable`. **It implements `listenable(t)`
+  now**, which gives a script's declared signals and all 503 engine-signal accessors the same
+  interop without touching their connection model. `signal(t)` keeps its place as the accessors'
+  return type, because a script's own signal always has a receiver while a foreign object's has none
+  until someone asks — C# ships that same asymmetry, a local delegate list for declared signals and
+  a real per-handler `Connect` for engine ones.
 
   **The payload is one type, and tuples carry arity above one.** A multi-parameter Verse function
   satisfies a one-tuple-parameter callback, because a function's parameter *is* its tuple, so
@@ -739,7 +785,11 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   list and the construction-time binding walk the whole chain. Phase 2 shipped exactly this bug once
   already, for `@export` on a base script class.
 - **R-SIG-2 (MUST)** A script emits a declared signal with arguments. Status: **done** (Phase 4
-  stage 4). `Hit.Signal(())`, `Struck.Signal((9, "spike"))`.
+  stage 4). `Hit.Signal(())`, `Struck.Signal((9, "spike"))`. Under R-SIG-1's `@export_signal` spelling the
+  verb is `Hit.Emit(())` — a bridge-owned extension method on `event(t)`, because the field's own
+  `Signal` carries `no_rollback` and is refused from the transaction a Godot callback runs in.
+  Either way the emission reaches Godot rather than the Verse event directly, which is what makes a
+  GDScript connection fire.
 
   **Emission is immediate, and that is a stated exception.** Every other void mutation in the mirror
   defers to `AutoRTFM::OnCommit`, which is what makes `<transacts>` literally true for 6813 methods.
@@ -827,6 +877,15 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   `defer` — which runs whether the task resumed or was cancelled, by `race`, by the node being
   freed, or by a rebuild. `tests/integration` asserts the connection count is back to zero on both
   sides of a race.
+
+  **That stays true everywhere a `signal(t)` is awaited** — a script's own declarations and all 503
+  engine accessors alike — because `signal.Await` is the bridge's own method and `VhSignalAwait` is
+  the hook it connects from. The one case that cannot work that way is R-SIG-1's `@export_signal` spelling:
+  a bare `event(t)`'s `Await` is Verse's native, so there is nothing to connect from and the member
+  gets **one connection at `vh_instantiate`, held for the instance's life** instead. That is the only
+  place the property above is traded away, and it is traded for the only thing that buys it.
+  `docs/signal-declaration.md` §7 has why two mechanisms is the right answer rather than an
+  inconsistency, and C#'s prior art for the same split.
 
   **How an emission reaches the event** is the host's half and is smaller than the design budgeted
   for: `verse::event` is a UObject with a public C++ `Signal`, so the host reads the event off the

@@ -16,8 +16,11 @@ using { /Godot.org/Godot }
 @global_class
 concurrency := class(node2d):
 
+	@export_signal
 	Fired<public>:signal() = signal(){}
+	@export_signal
 	Scored<public>:signal(int) = signal(int){}
+	@export_signal
 	Struck<public>:signal(tuple(int, string)) = signal(tuple(int, string)){}
 
 	var Seen<public>:int = 0

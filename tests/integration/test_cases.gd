@@ -50,6 +50,18 @@ func _on_verse_reported(damage: int, by: String, point: Vector2) -> void:
 	_signal_report = [damage, by, point]
 
 
+# The same, for a member declared as Verse's own `event(t)` rather than as a `signal(t)`. Godot
+# cannot tell the two apart, which is the claim these cases exist to check.
+func _on_verse_logged(damage: int, by: String, point: Vector2) -> void:
+	_signal_report = [damage, by, point]
+
+
+# `_on_event_pinged` rather than `_on_verse_pinged`: the vararg cases already have a handler of
+# that name taking an int, and GDScript has no overloading.
+func _on_event_pinged() -> void:
+	_signal_hits += 1
+
+
 func _on_verse_hit() -> void:
 	_signal_hits += 1
 
@@ -1021,6 +1033,60 @@ func begin() -> void:
 				(emitter_node.get_method_list().filter(
 						func(m): return String(m["name"]) == "OnReported")[0]["args"] as Array).size(),
 				1)
+
+		# --- the `event(t)` spelling ------------------------------------------
+		#
+		# R-SIG-1's other declaration: `@export_signal` over Verse's own `event(t)`. Every claim
+		# here is that Godot cannot tell it from the `signal(t)` half above -- same signal list,
+		# same argument names, same reassembly inbound, same GDScript interop. What differs is on
+		# the Verse side, where the member also satisfies `awaitable(t)`.
+		for spelled in ["Pinged", "Tallied", "Logged"]:
+			_check("an @export_signal event member reaches get_signal_list: " + spelled,
+					by_name.has(spelled))
+
+		if by_name.has("Logged"):
+			var logged_args: Array = by_name["Logged"]["args"]
+			_check_eq("a struct payload through an event is one argument per field",
+					logged_args.size(), 3)
+			if logged_args.size() == 3:
+				# The row the whole design turned on: the payload type is read off a type-variable
+				# substitution, and `event(t)` is declared in /Verse.org/Verse, which is loaded from
+				# a digest. An unread substitution is not an error -- it is an empty shape, which
+				# would register this signal with zero arguments and emit nothing.
+				_check_eq("named by the field, off a digest-loaded event(t)",
+						[String(logged_args[0]["name"]), String(logged_args[1]["name"]),
+								String(logged_args[2]["name"])],
+						["Damage", "By", "Point"])
+
+		# Outbound: Verse's `Emit` goes out to Godot, so a GDScript handler runs.
+		_signal_report.clear()
+		emitter_node.connect("Logged", _on_verse_logged)
+		emitter_node.call("EmitLogged", 21, "maul")
+		_check_eq("Emit on an event member reaches a GDScript handler, fields in order",
+				_signal_report, [21, "maul", Vector2(7, 8)])
+
+		_signal_hits = 0
+		emitter_node.connect("Pinged", _on_event_pinged)
+		emitter_node.call("EmitPinged")
+		_check_eq("an empty payload through an event emits with no arguments", _signal_hits, 1)
+
+		# Inbound: a Verse handler subscribed through the bridge's own Subscribe, which connects to
+		# Godot rather than registering on the event locally -- the half that makes R-SIG-6 work.
+		emitter_node.call("ResetEventSeen")
+		emitter_node.call("SubscribeToLogged")
+		emitter_node.call("EmitLogged", 9, "dirk")
+		_check_eq("a Verse handler receives an event's struct payload as one value",
+				[emitter_node.call("ReadEventSeen"), emitter_node.call("ReadEventBy")],
+				[9, "dirk"])
+
+		# And an emission raised by *GDScript* reaches the Verse subscriber, which is what the
+		# member's permanent connection buys: a bare event has no hook at the await to connect from,
+		# so the connection is made once at instantiation and held for the instance's life.
+		emitter_node.call("ResetEventSeen")
+		emitter_node.call("SubscribeToTallied")
+		emitter_node.emit_signal("Tallied", 6)
+		_check_eq("a GDScript emission of an event member reaches a Verse handler",
+				emitter_node.call("ReadEventSeen"), 6)
 
 		# Godot's own signals, through the accessor the generator emits per signal per class. The
 		# engine emits `renamed` itself, so nothing here emits it: setting the name is the event.

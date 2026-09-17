@@ -28,6 +28,7 @@ hud := class(canvas_layer):
 	# `signal start_game` in the GDScript. main subscribes to it, where the port used to have
 	# main.tscn connect StartButton.pressed to main's own NewGame -- one engine signal wired to two
 	# scripts, because this one had nothing to emit.
+	@export_signal
 	StartGame<public>:signal() = signal(){}
 
 	var ScoreLabel:?label = false

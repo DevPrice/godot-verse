@@ -696,6 +696,24 @@ void VhSignalCancel(int64 Subscription)
     AutoRTFM::Open([&] { GodotVerse::CancelSubscription(Subscription); });
 }
 
+// The `@export_signal` pair. Both take the event through `any` because a native may name only
+// vh_object, variant and godot_ref -- VNI refuses anything else at build time (V3564) -- and
+// `event` is Verse's own class, so there is no shadow to declare. `any` is the same door
+// VhCallableFrom and VhSignalSubscribe already pass a Verse function through.
+void VhEventEmit(FVerseValue const& Ev, FVerseValue const& Payload)
+{
+    AutoRTFM::Open([&] {
+        GodotVerse::EmitEventSignal(Ev.GetValue().ExtractUObject(), Payload);
+    });
+}
+
+int64 VhEventSubscribe(FVerseValue const& Ev, FVerseValue const& Callback)
+{
+    return AutoRTFM::Open([&] {
+        return GodotVerse::SubscribeEventSignal(Ev.GetValue().ExtractUObject(), Callback);
+    });
+}
+
 int64 VhSignalBind(int64 Handle, verse::string const& Class, verse::string const& Accessor, verse::string const& Name)
 {
     const FUtf8String OwnClass(ToView(Class));

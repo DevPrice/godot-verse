@@ -1,6 +1,6 @@
 using { /Godot.org/Godot }
 
-# R-SIG-1's refusals: four `signal` members that compile and cannot work.
+# R-SIG-1's refusals: five `signal` members that compile and cannot work.
 #
 # Each one used to be accepted silently -- the member compiled, the signal was absent from Godot,
 # and the author found out at the first emission, at runtime, or never. They are decidable from the
@@ -23,27 +23,39 @@ reject_outer := struct:
 signal_rejects := class(node2d):
 
     # The one that works, so the file proves the pass rejects individually rather than wholesale.
+    @export_signal
     Fine<public>:signal(int) = signal(int){}
 
     # VH_SIGNAL_IS_VAR. A signal is an identity, not a value: the binding is minted once against
     # the object the member was constructed on, so reassigning the member leaves the name pointing
     # at a row nothing emits through.
+    @export_signal
     var Reassignable<public>:signal(int) = signal(int){}
 
     # VH_SIGNAL_NOT_PUBLIC. Connecting is something done from outside the class, and this member
     # cannot be seen from there. Registered with Godot anyway before this pass existed, which is the
     # opposite of what the design asked for.
+    @export_signal
     Unseen:signal(int) = signal(int){}
 
     # VH_SIGNAL_PAYLOAD_NESTED_STRUCT. A struct payload decomposes one level, into one Godot
     # argument per top-level field. Godot has no argument shape for a struct, so `Inner` has nothing
     # to become.
+    @export_signal
     Nested<public>:signal(reject_outer) = signal(reject_outer){}
 
     # VH_SIGNAL_PAYLOAD_UNSUPPORTED. An option around something that is not a Godot object: the
     # wire reads a cleared option as a null reference, so `false` and `option{3}` would arrive
     # indistinguishable.
+    @export_signal
     Maybe<public>:signal(?int) = signal(?int){}
+
+    # VH_SIGNAL_NEEDS_ATTRIBUTE. Well formed in every other way -- it is the missing
+    # `@export_signal` and nothing else, which is what makes it the fixture for the reject rather
+    # than for the ladder above it. A `signal(t)` has no purpose but Godot, so opting out is far
+    # likelier to be a forgotten line than a decision, and the alternative to this warning is a
+    # Node panel that is empty for no stated reason.
+    Forgotten<public>:signal(int) = signal(int){}
 
     EmitFine<public>(Points:int)<transacts>:void = Fine.Signal(Points)
 
@@ -55,3 +67,4 @@ signal_rejects := class(node2d):
     EmitReassignable<public>(Points:int)<transacts>:void = Reassignable.Signal(Points)
     EmitNested<public>()<transacts>:void = Nested.Signal(reject_outer{})
     EmitMaybe<public>()<transacts>:void = Maybe.Signal(option{3})
+    EmitForgotten<public>(Points:int)<transacts>:void = Forgotten.Signal(Points)
