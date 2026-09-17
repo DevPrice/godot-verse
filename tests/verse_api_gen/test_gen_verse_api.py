@@ -935,12 +935,24 @@ def test_generated_method_map_covers_a_known_method():
         "the checked-in header maps node._Ready to Node._ready",
         '{ "node", "_Ready", "Node", "_ready", true, member_kind::method },' in header,
     )
-    # `_notification` is in no part of extension_api.json, so it is hand-written on the native root
-    # -- and a script overriding it still wants Godot's documentation for it.
-    check_true(
-        "and vh_object._Notification to Object._notification",
-        '{ "vh_object", "_Notification", "Object", "_notification", true, member_kind::method },' in header,
-    )
+    # None of the five script-level hooks is in any part of extension_api.json, so all five are
+    # hand-written on the native root -- and a row here is what makes the editor offer the override
+    # at all. `completes_as_override` admits a member of `vh_object` only when the method map finds
+    # it and the row says virtual, so a hook missing from this table is one nobody can complete and
+    # nobody can hover. Four of them were missing for exactly that reason (by-hand-findings.md B1's
+    # mechanism, rediscovered on `_Set`), which is why this checks the set rather than one row.
+    for verse_name, godot_name in [
+        ("_Notification", "_notification"),
+        ("_Get", "_get"),
+        ("_Set", "_set"),
+        ("_GetPropertyList", "_get_property_list"),
+        ("_ValidateProperty", "_validate_property"),
+    ]:
+        check_true(
+            f"and vh_object.{verse_name} to Object.{godot_name}, marked virtual",
+            f'{{ "vh_object", "{verse_name}", "Object", "{godot_name}", true, member_kind::method }},'
+            in header,
+        )
 
 
 def test_classes_header_file_matches_generated_verse_file():

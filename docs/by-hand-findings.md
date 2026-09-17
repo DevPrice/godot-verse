@@ -726,6 +726,38 @@ for:
 
 ---
 
+## B22. Four of the five script-level hooks were never offered as overrides · **fixed**
+
+Found while testing the `<decides>` virtuals: typing `_Set` in a class body completed nothing. It
+had never completed anything, and neither had `_Get`, `_GetPropertyList` or `_ValidateProperty`.
+
+`completes_as_override` admits a member of the native root only when the generated method map finds
+it *and* the row says virtual:
+
+    if (const verse_api::method_mapping *mirrored = godot_method_for(owner, p_item["name"])) {
+        return mirrored->is_virtual;
+    }
+    return verse_godot_class_for(owner) == nullptr && owner != String("vh_object");
+
+`_Set` is on `vh_object` and had no row, so it fell to the second line and was rejected by
+`owner != "vh_object"`. The map had exactly one hand-written row -- B1 added the `is_virtual` column
+and gave `_Notification` one, because `_Notification` was the only hook that existed then. The other
+four arrived with R-NODE-10 and nobody added theirs beside it.
+
+The same table answers hover, so those four had no documentation link either. `_Notification`
+worked throughout, which is what made the gap look like working behaviour.
+
+**What closes it.** Four rows in `LIFECYCLE_METHODS` (`tools/gen_verse_api.py`), which is the whole
+fix -- `verse_api_classes.h` is the only generated file that changes and no host rebuild is needed.
+The four names also go into `BASE_MEMBER_NAMES`, so a Godot release that starts describing `_get`
+generates nothing that shadows the hand-written one.
+
+The units layer now checks the **set** of five rather than `_Notification` alone, since checking one
+row is precisely what let four siblings go missing. What it still cannot check is whether the editor
+draws the option: this needed a by-hand session to find and needs one to confirm.
+
+---
+
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks
@@ -738,8 +770,8 @@ are worth keeping: its half of the debugger has no other test.
 The one entry that was never ticked, and §B11 above is the measurement that says why no headless run
 can reach it. It is a `Control` virtual Godot asks only from the drag path.
 
-**To check it:** give a Control a `_CanDropData<override>(AtPosition:vector2, Data:variant):logic`
-returning `true` and a `_DropData<override>` that prints, put it in a windowed scene beside another
+**To check it:** give a Control a `_CanDropData<override>(AtPosition:vector2, Data:variant)<decides>:void`
+whose body succeeds and a `_DropData<override>` that prints, put it in a windowed scene beside another
 Control, start a drag with `force_drag` and drop it on the first. The cursor must accept the drop
 and `_DropData` must run. A wrong default is a script that works and an engine that behaves
 differently, with nothing printed. `phase-4-gaps.md` G19 carries the same note against the gap it

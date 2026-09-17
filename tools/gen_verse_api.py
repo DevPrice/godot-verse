@@ -32,10 +32,16 @@ EXTENSION_API = "godot-cpp/gdextension/extension_api-4-7.json"
 # names in completion where the one a user reaches for first is the empty one.
 NATIVE_ROOT = "vh_object"
 
-# What the hand-written native root carries, and so what no generated member may shadow. Since
-# Phase 4 that is two things: the handle, and the one script-level hook extension_api.json does not
-# describe. Godot's three lifecycle virtuals moved to `node`, where Godot declares them.
-BASE_MEMBER_NAMES = {"Handle", "_Notification"}
+# What the hand-written native root carries, and so what no generated member may shadow: the handle
+# and the five script-level hooks extension_api.json does not describe. Godot's three lifecycle
+# virtuals moved to `node`, where Godot declares them.
+#
+# None of the five is in the dump today, so none of them can collide today. They are listed anyway,
+# because a Godot release that started describing `_get` would otherwise generate a second one onto
+# `object` and silently shadow the root's -- and the hand-written one is the one with a body.
+BASE_MEMBER_NAMES = {
+    "Handle", "_Notification", "_Get", "_Set", "_GetPropertyList", "_ValidateProperty",
+}
 
 # /Verse.org/Verse is in scope in every generated body, and Verse reports an ambiguity rather
 # than shadowing, so a parameter named Min breaks any method that mentions it. The standard
@@ -3242,15 +3248,24 @@ def render_skipped_header(api: dict, skipped: list) -> str:
 # them the editor calls `vector2` a local constant.
 VALUE_TYPE_CLASSES = {"Vector2": "vector2", "Vector3": "vector3", "Color": "color"}
 
-# object's three lifecycle methods are hand-written in Godot.native.verse rather than mirrored --
-# the generator skips virtuals -- but they exist to be the Verse spelling of Godot's, and a script
-# overriding one wants Godot's documentation for it. Listed as (verse class, verse method, godot
-# class, godot method), the shape the method map already carries.
-# The one virtual that is hand-written rather than generated, so a hover on it still finds Godot's
-# documentation. Everything else Godot calls on a script is in extension_api.json and is generated
-# onto the class that declares it; `_notification` is in no part of it (docs/phase-4-design.md 7.3).
+# The virtuals that are hand-written on the native root rather than generated, listed as (verse
+# class, verse method, godot class, godot method, is_virtual) -- the shape the method map carries.
+# Godot offers this family to *scripts* rather than registering it in ClassDB, so no part of
+# extension_api.json describes any of them (docs/phase-4-design.md 7.3) and nothing else would put
+# them in the map.
+#
+# **A row here is what makes the editor offer the override**, which is not obvious from the name of
+# the table. `completes_as_override` in verse_script_language.cpp admits a member of the native root
+# only when `godot_method_for` finds it and the row says virtual, so a hook with no row is never
+# offered and never hovers to Godot's documentation. That is `by-hand-findings.md` B1's mechanism
+# exactly: B1 added the `is_virtual` column and gave `_Notification` a row, and the other four
+# arrived later with R-NODE-10 and were never added beside it.
 LIFECYCLE_METHODS = [
     (NATIVE_ROOT, "_Notification", "Object", "_notification", True),
+    (NATIVE_ROOT, "_Get", "Object", "_get", True),
+    (NATIVE_ROOT, "_Set", "Object", "_set", True),
+    (NATIVE_ROOT, "_GetPropertyList", "Object", "_get_property_list", True),
+    (NATIVE_ROOT, "_ValidateProperty", "Object", "_validate_property", True),
 ]
 
 # The fields of those hand-written value types, in the same shape. Listed rather than read out of

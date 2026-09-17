@@ -68,9 +68,11 @@ Three documents are not phase records and are the ones to read before adding a f
   each diff came to. The one standing is the `<transacts>` trap (wall 8), narrowed twice and not
   removed.
 - **`docs/by-hand-findings.md`** — what the by-hand editor sessions found, because everything from
-  `EngineDebugger` and the editor UI inward has no automated test and never will. B1–B9, B15–B18
-  and B20 are defects, all fixed; B12 is a Verse fact; B13 a latency finding; B14 the sandboxed
-  export run. **B21 is the one open defect**: asking Godot for the `IP` singleton — which the
+  `EngineDebugger` and the editor UI inward has no automated test and never will. B1–B9, B15–B18,
+  B20 and B22 are defects, all fixed; B12 is a Verse fact; B13 a latency finding; B14 the sandboxed
+  export run. **B22 is the one to read before adding anything to the native root**: a hook with no
+  row in `LIFECYCLE_METHODS` is never offered as an override and never hovers, and four of the five
+  sat that way for a phase because only `_Notification` had a row. **B21 is the one open defect**: asking Godot for the `IP` singleton — which the
   generated accessor does whether or not it then succeeds — segfaults the process *after* everything
   has shut down, so it reads as a whole suite failing with nothing in the log. **B20 is the one to
   read before touching `_get_documentation`**: Godot asks for a
