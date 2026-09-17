@@ -615,6 +615,13 @@ int main(int argc, char** argv)
 	double InstantiateUs = 0.0;
 	double CallUs = 0.0;
 	double InstanceKb = 0.0;
+	// What a Godot bool virtual costs now that it is <decides>:void. Godot asks `_HasPoint` once per
+	// input event per Control under the cursor, and every "no" is a Verse failure rather than a
+	// returned `false` -- so the question is whether declining is materially dearer than answering.
+	// `NotBelow(N, Least)` is the fixture's <decides> method and the two loops below differ only in
+	// which way it goes.
+	double DecideOkUs = 0.0;
+	double DeclineUs = 0.0;
 	{
 		constexpr int InstanceCount = 200;
 		constexpr int CallsPerInstance = 200;
@@ -656,6 +663,36 @@ int main(int argc, char** argv)
 		}
 		const double CallMs = MillisSince(CallStart);
 
+		// The same loop against the <decides> method, succeeding and then declining. Same arity,
+		// same marshalling, same instances: the only difference is the FOpResult the VM answers.
+		vh_value Decide[2] = {};
+		Decide[0].Type = VH_TYPE_INT;
+		Decide[1].Type = VH_TYPE_INT;
+
+		Decide[0].Int = 25;
+		Decide[1].Int = 17;
+		const Clock::time_point DecideOkStart = Clock::now();
+		for (int Round = 0; Round < CallsPerInstance; ++Round)
+		{
+			for (vh_instance* Instance : Instances)
+			{
+				InstanceCallFn(Instance, "(/user@localhost/exports:)NotBelow(:int,:int)", Decide, 2, nullptr, &Result);
+			}
+		}
+		const double DecideOkMs = MillisSince(DecideOkStart);
+
+		Decide[0].Int = 17;
+		Decide[1].Int = 25;
+		const Clock::time_point DeclineStart = Clock::now();
+		for (int Round = 0; Round < CallsPerInstance; ++Round)
+		{
+			for (vh_instance* Instance : Instances)
+			{
+				InstanceCallFn(Instance, "(/user@localhost/exports:)NotBelow(:int,:int)", Decide, 2, nullptr, &Result);
+			}
+		}
+		const double DeclineMs = MillisSince(DeclineStart);
+
 		for (vh_instance* Instance : Instances)
 		{
 			ReleaseInstanceFn(Instance);
@@ -666,6 +703,9 @@ int main(int argc, char** argv)
 			InstantiateUs = (MakeMs * 1000.0) / static_cast<double>(Instances.size());
 			CallUs = (CallMs * 1000.0)
 				/ (static_cast<double>(Instances.size()) * static_cast<double>(CallsPerInstance));
+			const double PerCall = static_cast<double>(Instances.size()) * static_cast<double>(CallsPerInstance);
+			DecideOkUs = (DecideOkMs * 1000.0) / PerCall;
+			DeclineUs = (DeclineMs * 1000.0) / PerCall;
 			InstanceKb = (static_cast<double>(After.PrivateUsage) - static_cast<double>(Before.PrivateUsage))
 				/ 1024.0 / static_cast<double>(Instances.size());
 		}
@@ -858,6 +898,14 @@ int main(int argc, char** argv)
 	}
 	printf("[bench] %-28s %8.1f us\n", "vh_instantiate (per node)", InstantiateUs);
 	printf("[bench] %-28s %8.2f us\n", "vh_instance_call (per call)", CallUs);
+	printf("[bench] %-28s %8.2f us  (%+.0f%% vs a total call)\n",
+		   "  <decides>, succeeding",
+		   DecideOkUs,
+		   CallUs > 0.0 ? ((DecideOkUs - CallUs) / CallUs) * 100.0 : 0.0);
+	printf("[bench] %-28s %8.2f us  (%+.0f%% vs succeeding)\n",
+		   "  <decides>, declining",
+		   DeclineUs,
+		   DecideOkUs > 0.0 ? ((DeclineUs - DecideOkUs) / DecideOkUs) * 100.0 : 0.0);
 	printf("[bench] %-28s %8.1f KB\n", "retained per instance", InstanceKb);
 	printf("[bench] %-28s %8.2f us  (%+.0f%%, %lld consumer asks)\n",
 		   "vh_instance_call (debugging)",

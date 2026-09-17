@@ -2321,8 +2321,18 @@ performance claim. What is measured is recorded in R-PERF-2 and carries no thres
   | `vh_class_override_candidates` | **0.0 ms**, 259 candidates for a `node2d` |
   | `vh_instantiate` | **5.2 µs** per node |
   | `vh_instance_call` | **0.24 µs** per call |
+  | `vh_instance_call`, a `<decides>` method succeeding | **0.25 µs** per call |
+  | `vh_instance_call`, a `<decides>` method declining | **0.26 µs** per call |
   | retained per instance | **5.0 KB** |
   | retained per generation | **1.0 MB** |
+
+  **Declining costs nothing.** The two `<decides>` rows are the same fixture method called two
+  ways -- `NotBelow(25, 17)` and `NotBelow(17, 25)` -- so the only difference between them is
+  which `FOpResult` the VM answers, and the gap is inside the noise of a 0.24 µs call. That is
+  what made it safe to spell all 161 Godot bool virtuals `<decides>:void`: `_HasPoint` is asked
+  once per input event per `Control` under the cursor, and every "no" is now a Verse failure
+  rather than a returned `false`. `HostScript`'s `FOpResult::Fail` arm sets a status and breaks
+  without aborting the surrounding AutoRTFM transaction, which is why there is nothing to pay.
 
   **A build costs one analysis, not two.** The first `vh_compile_project` was 3.70 s and a
   generation 1.54 s when each ended with a whole analysis-only pass over the same sources, run only
