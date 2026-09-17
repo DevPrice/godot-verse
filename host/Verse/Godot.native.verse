@@ -449,11 +449,19 @@ vh_object<public><native> := class:
     # cannot race: the export wins and this is never asked.
     _Get<public>(Property:string):variant = variant{}
 
-    # Takes a write Godot could not place. `true` means it was taken; `false` leaves Godot to report
-    # a property that does not exist. The value's Godot type is not known until it arrives, which is
-    # the whole reason `variant` is in this signature -- read it with `Value.AsInt[]` and friends,
-    # each of which fails rather than raising when the answer is no.
-    _Set<public>(Property:string, Value:variant):logic = false
+    # Takes a write Godot could not place. Succeeding means it was taken; declining leaves Godot to
+    # report a property that does not exist. The value's Godot type is not known until it arrives,
+    # which is the whole reason `variant` is in this signature -- read it with `Value.AsInt[]` and
+    # friends, each of which fails rather than raising when the answer is no.
+    #
+    # `<decides>:void` rather than `:logic`, matching the 160 generated bool virtuals: the readers
+    # an override uses are already failable, so the body is already a failure context and the
+    # `true`/`false` it used to end each arm with was saying twice what the `if` had said once. The
+    # specifier is `<decides>` alone and that is not shorthand -- it keeps the wide default effect
+    # set, so an override may still call a specifier-less helper, where `<decides><transacts>`
+    # would refuse one. Both halves are measured in
+    # `tests/verse_probe/decides_virtual_{probe,reject}.verse`.
+    _Set<public>(Property:string, Value:variant)<decides>:void = false?
 
     # The properties this object serves beyond the ones `@export` declares: an array of Godot's own
     # property dictionaries, keyed "name", "type", "hint", "hint_string" and "usage". Godot's own

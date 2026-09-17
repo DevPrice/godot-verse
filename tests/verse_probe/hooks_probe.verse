@@ -32,6 +32,10 @@ using { /Godot.org/Godot }
 #   4. **An override may call a specifier-less helper.** `Bump` has no specifier and `_Set` calls it.
 #      Under a `<transacts>` declaration on the root that would have been 3512 at the call site,
 #      one file at a time, which is the cascade `docs/dodge-the-creeps.md` wall 8 is about.
+#      **This still holds now that `_Set` is `<decides>`**, and it is the reason the specifier is
+#      `<decides>` alone: adding it keeps the default set rather than replacing it, so the call to
+#      `Bump` below is as legal as it was. `decides_virtual_reject.verse` case 2 is the same call
+#      under `<decides><transacts>`, where it is refused.
 
 hooks_probe := class(object):
 
@@ -47,16 +51,14 @@ hooks_probe := class(object):
         else:
             variant{}
 
-    _Set<override>(Property:string, Value:variant):logic =
+    _Set<override>(Property:string, Value:variant)<decides>:void =
         if (Property = "Extra", Number := Value.AsInt[]):
             set Extra = Number
             Bump()
-            true
         else if (Property = "Taken", Text := Value.AsString[]):
             set Taken = Text
-            true
         else:
-            false
+            false?
 
     _GetPropertyList<override>():godot_array =
         List := MakeArray()

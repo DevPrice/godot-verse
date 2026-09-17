@@ -49,17 +49,17 @@ hooks := class(node2d):
             # Godot's spelling of "not mine", and Verse's: a variant holding nothing.
             variant{}
 
-    _Set<override>(Property:string, Value:variant):logic =
+    _Set<override>(Property:string, Value:variant)<decides>:void =
         set SetCalls = SetCalls + 1
         if (Property = "Virtual", Number := Value.AsInt[]):
             set Virtual = Number
-            true
         else if (Property = "Label", Text := Value.AsString[]):
             set Label = Text
-            true
         else:
-            # Anything else -- including "Declared", which never arrives here at all.
-            false
+            # Anything else -- including "Declared", which never arrives here at all. `false?` is
+            # how a `<decides>` body says no; the `true` each arm above used to end with is gone,
+            # because reaching the end of the arm is what succeeding means.
+            false?
 
     # The two properties this object serves beyond its exports, as Godot's own property
     # dictionaries. `ToInt` is how a script spells a Variant::Type: the `Tag...` constants are
