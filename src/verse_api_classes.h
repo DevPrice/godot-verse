@@ -8,6 +8,10 @@
 // Verse class it should subclass without re-deriving gen_verse_api.py's name transform.
 // A Godot class that was not emitted (see GodotClasses.native.verse's coverage report) is
 // absent here; the caller walks ClassDB::get_parent_class until it finds one that is.
+//
+// The sixteen value types and RID are here too, though none of them is a ClassDB class: they are
+// Godot types with Godot names and Godot documentation, which is what every reader of this table
+// but _make_template is asking about, and ClassDB never answers one as a node's class.
 
 namespace verse_api {
 
@@ -17,6 +21,7 @@ struct class_mapping {
 };
 
 inline constexpr class_mapping classes[] = {
+	{ "AABB", "aabb" },
 	{ "AESContext", "aes_context" },
 	{ "AStar2D", "a_star2d" },
 	{ "AStar3D", "a_star3d" },
@@ -124,6 +129,7 @@ inline constexpr class_mapping classes[] = {
 	{ "BackBufferCopy", "back_buffer_copy" },
 	{ "BaseButton", "base_button" },
 	{ "BaseMaterial3D", "base_material3d" },
+	{ "Basis", "basis" },
 	{ "BitMap", "bit_map" },
 	{ "BlitMaterial", "blit_material" },
 	{ "Bone2D", "bone2d" },
@@ -638,6 +644,7 @@ inline constexpr class_mapping classes[] = {
 	{ "PlaceholderTexture2DArray", "placeholder_texture2d_array" },
 	{ "PlaceholderTexture3D", "placeholder_texture3d" },
 	{ "PlaceholderTextureLayered", "placeholder_texture_layered" },
+	{ "Plane", "plane" },
 	{ "PlaneMesh", "plane_mesh" },
 	{ "PointLight2D", "point_light2d" },
 	{ "PointMesh", "point_mesh" },
@@ -653,9 +660,11 @@ inline constexpr class_mapping classes[] = {
 	{ "ProceduralSkyMaterial", "procedural_sky_material" },
 	{ "ProgressBar", "progress_bar" },
 	{ "ProjectSettings", "project_settings" },
+	{ "Projection", "projection" },
 	{ "PropertyTweener", "property_tweener" },
 	{ "QuadMesh", "quad_mesh" },
 	{ "QuadOccluder3D", "quad_occluder3d" },
+	{ "Quaternion", "quaternion" },
 	{ "RDAccelerationStructureGeometry", "rd_acceleration_structure_geometry" },
 	{ "RDAccelerationStructureInstance", "rd_acceleration_structure_instance" },
 	{ "RDAttachmentFormat", "rd_attachment_format" },
@@ -676,10 +685,13 @@ inline constexpr class_mapping classes[] = {
 	{ "RDTextureView", "rd_texture_view" },
 	{ "RDUniform", "rd_uniform" },
 	{ "RDVertexAttribute", "rd_vertex_attribute" },
+	{ "RID", "rid" },
 	{ "RandomNumberGenerator", "random_number_generator" },
 	{ "Range", "range" },
 	{ "RayCast2D", "ray_cast2d" },
 	{ "RayCast3D", "ray_cast3d" },
+	{ "Rect2", "rect2" },
+	{ "Rect2i", "rect2i" },
 	{ "RectangleShape2D", "rectangle_shape2d" },
 	{ "RefCounted", "ref_counted" },
 	{ "ReferenceRect", "reference_rect" },
@@ -865,6 +877,8 @@ inline constexpr class_mapping classes[] = {
 	{ "Timer", "timer" },
 	{ "TorusMesh", "torus_mesh" },
 	{ "TouchScreenButton", "touch_screen_button" },
+	{ "Transform2D", "transform2d" },
+	{ "Transform3D", "transform3d" },
 	{ "Translation", "translation" },
 	{ "TranslationDomain", "translation_domain" },
 	{ "TranslationServer", "translation_server" },
@@ -888,7 +902,11 @@ inline constexpr class_mapping classes[] = {
 	{ "VSlider", "v_slider" },
 	{ "VSplitContainer", "v_split_container" },
 	{ "Vector2", "vector2" },
+	{ "Vector2i", "vector2i" },
 	{ "Vector3", "vector3" },
+	{ "Vector3i", "vector3i" },
+	{ "Vector4", "vector4" },
+	{ "Vector4i", "vector4i" },
 	{ "VehicleBody3D", "vehicle_body3d" },
 	{ "VehicleWheel3D", "vehicle_wheel3d" },
 	{ "VideoStream", "video_stream" },
@@ -16681,6 +16699,31 @@ inline constexpr enum_mapping enums[] = {
 	{ "xr_server_tracker_type", "XRServer", "TrackerType" },
 	{ "zip_packer_compression_level", "ZIPPacker", "CompressionLevel" },
 	{ "zip_packer_zip_append", "ZIPPacker", "ZipAppend" },
+};
+
+// Every other type name the Godot package exports, and the documentation page that describes what
+// its values are -- empty for the two that stand for nothing of Godot's. These are hand-written in
+// Godot.native.verse and GodotApi.native.verse, so no other table in this header knows them, and
+// each consumer fails its own way without a row: the syntax highlighter colours the name as plain
+// text, completion never offers it, and a hover draws "Local Constant" over whatever the mirror's
+// own comment says.
+//
+// The mirrored classes and enums above are types too; this is what is left of the package.
+struct type_mapping {
+	const char *verse_name;
+	const char *godot_class;
+};
+
+inline constexpr type_mapping types[] = {
+	{ "callable", "Callable" },
+	{ "connection", "" },
+	{ "dictionary", "Dictionary" },
+	{ "godot_array", "Array" },
+	{ "signal", "" },
+	{ "signal_ref", "Signal" },
+	{ "typed_array", "Array" },
+	{ "typed_dictionary", "Dictionary" },
+	{ "variant", "Variant" },
 };
 
 } // namespace verse_api

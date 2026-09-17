@@ -758,12 +758,73 @@ draws the option: this needed a by-hand session to find and needs one to confirm
 
 ---
 
+## B23. `variant` and `[]char` were drawn as plain text, and `variant` hovered as a local · **fixed**
+
+Reported from an editor session: `[]char` and `variant` are not coloured, and hovering either one
+says "Local Constant". Both are true and they are the visible corner of one defect — the editor
+learned what a type is from **three** lists, and between them they missed most of the mirror.
+
+    verse_api::classes[]        the 1036 mirrored classes, plus three value types hand-added to it
+    verse_api::enums[]          the 793 mirrored enums -- read by the hover and by nothing else
+    native_type_names[]         two names in verse_syntax_highlighter.cpp
+
+`variant` was in the third list and was deleted from it by `3f24348`, which took `<public>` off the
+type; `e2e4dcf` made it public again for `typed_array`'s constructor and nothing put it back. It
+has been a type a script writes in `_Get` and `_Set` ever since, drawn as an unknown word.
+
+The three value types in the first list are `VALUE_TYPE_CLASSES`, added so that "the editor calls
+`vector2` a local constant" would stop being true. It stayed true for the other thirteen, and for
+`rid`. The 793 enums were in no list the highlighter read at all, so `node_internal_mode` hovered
+into Godot's own documentation and coloured as prose.
+
+**Four surfaces, not one.** The same tables answer the hover, the syntax highlighter, the class
+names completion offers when the host has offered nothing (`mirrored_class_names`), and the Godot
+type → Verse type mapping. A name in none of them fails all four, which is why this reads as
+several unrelated complaints.
+
+**What closes it.** One generated table, `verse_api::types[]`, for every exported type name that is
+not a mirrored class or enum, each with the Godot page that documents what it carries (empty for
+`signal(t)` and `connection`, which stand for nothing of Godot's and keep the mirror's own comment
+instead). `VALUE_TYPE_CLASSES` becomes all sixteen math types and `RID`. The highlighter reads all
+three tables, and what is left hand-written is the three ABI natives a script must never be offered
+and Verse's own type names -- `char`, `event`, `cancelable` and the rest, which are not reserved
+words and so are not lexed as keywords. Which ones those are was asked of the compiler rather than
+recalled: `tests/verse_probe/stdlib_types_probe.verse`, where `awaitable` and `task` want
+`using { /Verse.org/Concurrency }` and `agent` does not exist here at all.
+
+`char` answers Godot's **String** page, because `string` *is* `[]char` — one type the compiler
+prints two ways, and the tooltip should not disagree with itself about which.
+
+**What is tested and what is not.** The units layer checks the type table against the two
+hand-written mirror files, in both directions: a public type with no row fails, and a row for a name
+nothing declares fails. That is the check `variant` needed and did not have. The integration layer
+checks the tooltips through `probe_hover` — `vector2i`, `rid`, `variant`, `char` and `typed_array`
+each have a case. **The colouring itself still has no test and cannot have one from a headless run**:
+`VerseSyntaxHighlighter` is registered at `MODULE_INITIALIZATION_LEVEL_EDITOR`, which `--script`
+never reaches, so no GDScript can construct one. It is in the same bucket as the rest of the editor
+UI, and the steps are below.
+
+---
+
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks
-is not worth keeping. Nine things stand open, all of them things no automated layer can reach.
+is not worth keeping. Ten things stand open, all of them things no automated layer can reach.
 Phase 6's session has since been run and is recorded below with what it found, because the steps
 are worth keeping: its half of the debugger has no other test.
+
+### The script editor's colours, after B23
+
+**To check it:** open a `.verse` file in Godot's script editor with a line naming one of each --
+`Cell:vector2i`, `Nothing:variant`, `Mode:node_internal_mode`, `Greeting:[]char`, `Hit:event(int)`
+-- and read the colours. Every one of those names must be the base-type colour the editor gives
+`node2d` on the line above it, and none of them the plain text colour a local gets. The names to
+watch are the ones from each of the four groups: a mirrored class, a mirrored enum, a value type,
+an exported type, and one of Verse's own.
+
+Nothing automated sees this. The tables behind it are checked in the units layer, which is the part
+that drifted; that the highlighter reads them and the editor draws the result is what the eye is
+for.
 
 ### `_CanDropData` has never been exercised
 

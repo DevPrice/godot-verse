@@ -33,3 +33,22 @@ hover_probe := class(node2d):
 	# A mirrored engine signal, which is a Verse function and a Godot *signal* -- the pair that
 	# made every one of the 503 accessors hover as a method Godot does not have.
 	Ticks<public>(Clock:timer):signal() = Clock.Timeout()
+
+	# A Godot value type that is not one of the three the generator names. Thirteen of the sixteen
+	# hovered as a local constant, which is the very thing naming `vector2` fixed for one of them.
+	Cell<public>():vector2i = vector2i{X := 1, Y := 2}
+
+	# Godot's RID, which is a struct of this bridge's own rather than one of the math types.
+	Blank<public>():rid = rid{}
+
+	# The wire type `_Get` and `_Set` are declared in terms of, and the type a script names most
+	# often after the classes themselves.
+	Nothing<public>():variant = variant{}
+
+	# Verse's `string`, spelled the way the compiler prints it. `char` is a type of
+	# /Verse.org/Verse's that the reserved-word list does not carry, so nothing here knows it.
+	Letters<public>():[]char = "hover"
+
+	# A parametric type, which the compiler resolves to the function that answers one -- so its
+	# name reaches a hover as a function rather than as a class, and is the same Array either way.
+	Children<public>():typed_array(node) = MakeNodeArray()

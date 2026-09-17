@@ -1273,6 +1273,76 @@ def test_to_string_is_reachable_as_verses_own():
           coverage.skipped_members[0].detail, "`ToString(Value)`")
 
 
+# The three the type table leaves out on purpose: a script has no business writing any of them, so
+# completion must not offer them, and the syntax highlighter names them itself.
+PLUMBING_TYPES = {"vh_object", "vh_signal", "godot_ref"}
+
+
+def test_every_exported_type_has_a_row():
+    """A public type in the hand-written mirror that no table knows is invisible to the editor.
+
+    This is the check `variant` needed and did not have. It is public -- typed_array's constructor
+    forces it to be -- and a script writes it in `_Get` and `_Set`; the editor drew it as plain
+    text and hovered it as a local constant for a phase, because the one list that carried it was
+    dropped when it briefly stopped being public and nothing noticed when it came back.
+
+    The generated file is not scanned: those names come from the generator's own tables and are
+    checked above. These two are hand-written, so the list of them is hand-written too.
+    """
+    import re
+
+    declared = set()
+    for name in ("Godot.native.verse", "GodotApi.native.verse"):
+        source = (REPO_ROOT / "host" / "Verse" / name).read_text(encoding="utf-8")
+        # Specifiers and parameters arrive in either order and any number -- `variant<public>
+        # <native>`, `signal<public>(t:type)` -- so they are matched as one run and read after.
+        for name, decoration in re.findall(
+                r"^(\w+)((?:<\w+>|\([^)]*\))*) := (?:class|struct|interface)\b", source, re.MULTILINE):
+            if "<public>" in decoration:
+                declared.add(name)
+
+    check_true("the hand-written mirror declares public types at all", len(declared) > 5)
+    check(
+        "every public type in the hand-written mirror is a row or deliberate plumbing",
+        declared - set(g.EXPORTED_TYPES) - PLUMBING_TYPES,
+        set(),
+    )
+    # The wrappers are the rows that come from the generated file instead of from those two, so
+    # they are named rather than scanned for -- and a new one has to arrive here as well, since the
+    # editor would otherwise learn nothing about it either.
+    check(
+        "every reference wrapper has a row",
+        {name for name, _ in g.REFERENCE_TYPES} - set(g.EXPORTED_TYPES),
+        set(),
+    )
+    # The other direction: a row for a name nothing declares would colour a word that is not a
+    # type.
+    check(
+        "and every row is a type something declares",
+        set(g.EXPORTED_TYPES) - declared - {name for name, _ in g.REFERENCE_TYPES},
+        set(),
+    )
+
+
+def test_the_value_types_are_all_of_them():
+    """All sixteen and RID, which is what `vector2i` hovering into nothing was.
+
+    Three of the sixteen were named here, so `vector2` reached Godot's documentation, appeared in
+    the completion list and coloured as a type, and `vector2i` beside it did none of the three.
+    """
+    check("every math type is a value type row", set(g.VALUE_TYPE_CLASSES) - set(g.MATH_TYPES), {"RID"})
+    check("and every math type has one", set(g.MATH_TYPES) - set(g.VALUE_TYPE_CLASSES), set())
+    header = (REPO_ROOT / "src" / "verse_api_classes.h").read_text(encoding="utf-8")
+    for godot_name, verse_name in (("Vector2i", "vector2i"), ("RID", "rid"), ("Transform3D", "transform3d")):
+        check_true(f"the checked-in header maps {godot_name} to {verse_name}",
+                   f'{{ "{godot_name}", "{verse_name}" }},' in header)
+    # `variant` is not a Godot class and has no row in that table; the type table is where it is.
+    check_true("and carries variant in the type table",
+               '{ "variant", "Variant" },' in header)
+    check_true("with no page for the declaration types Godot does not document",
+               '{ "signal", "" },' in header)
+
+
 def main():
     test_class_names()
     test_method_names()
@@ -1290,6 +1360,8 @@ def main():
     test_ancestor_pull_in()
     test_a_member_ambiguous_with_a_verse_name()
     test_to_string_is_reachable_as_verses_own()
+    test_every_exported_type_has_a_row()
+    test_the_value_types_are_all_of_them()
     test_enumerator_names_strip_their_shared_prefix()
     test_enums_drop_sentinels_and_aliases()
     test_a_property_takes_its_enum_from_the_getter()

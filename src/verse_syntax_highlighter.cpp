@@ -83,16 +83,38 @@ bool is_marker_word_char(char p_c) {
 	return std::isalnum(static_cast<unsigned char>(p_c)) || p_c == '_';
 }
 
-// The one type /Godot.org/Godot exports that no generated entry stands behind. It is hand-written
-// rather than mirrored precisely because Godot's Object is the single class gen_verse_api.py
-// skips, so it is absent from the table it belongs in -- and a script names it in its own class
-// header, which is the commonest place a type name appears at all. Everything else the package
-// exports to a script is either a mirrored class, which the table already carries, or a call,
-// which colours from its position. The `variant` tuple is not on either list because it is not
-// exported: a script cannot name it.
+// The type names no generated table stands behind, in two groups.
+//
+// The three natives the ABI is built out of: gen_verse_api.py leaves them out of the type table
+// on purpose, because completion must never offer a script `vh_object` or `godot_ref`. A script
+// still *reads* them -- in a diagnostic, in the mirror's own source, in a `_Get` it is writing --
+// and a name the editor draws as plain text reads as a name it does not know.
+//
+// Then Verse's own type names, which the reserved-word list does not carry: `char8` is a reserved
+// word and `char` is not, though `char` is what the compiler prints and `string` is `[]char`. The
+// same holds for the concurrency vocabulary a signal declaration is written in. Which names those
+// are was measured rather than reasoned about -- tests/verse_probe/stdlib_types_probe.verse is the
+// file, and it records that `awaitable` and `task` need `using { /Verse.org/Concurrency }` while
+// the rest resolve with the Godot package alone.
+//
+// Everything else the package exports is a mirrored class, a mirrored enum or one of the other
+// exported types, and all three tables are read below.
 constexpr const char *native_type_names[] = {
-	"object",
 	"vh_object",
+	"vh_signal",
+	"godot_ref",
+
+	"awaitable",
+	"cancelable",
+	"char",
+	"comparable",
+	"error",
+	"event",
+	"listenable",
+	"signalable",
+	"subscribable",
+	"task",
+	"weak_map",
 };
 
 std::string word_at(const CharString &p_utf8, int p_begin, int p_end) {
@@ -561,6 +583,19 @@ void VerseSyntaxHighlighter::rebuild_name_caches() const {
 
 	for (size_t i = 0; i < std::size(verse_api::classes); i++) {
 		type_names.insert(verse_api::classes[i].verse_name);
+	}
+	// The 793 mirrored enums are types a script writes as often as it writes a class -- every
+	// `node_internal_mode` in a declaration -- and the editor already sends a hover on one to
+	// Godot's own documentation, so drawing it as plain text was the one surface that disagreed.
+	for (size_t i = 0; i < std::size(verse_api::enums); i++) {
+		type_names.insert(verse_api::enums[i].verse_enum);
+	}
+	// `variant`, the containers, `callable` and the two signal types: the package's exported types
+	// that stand for no Godot class, so the table above cannot carry them. The sixteen value types
+	// and `rid` are in that one, and three of them used to be -- `vector2` coloured and `vector2i`
+	// beside it did not.
+	for (size_t i = 0; i < std::size(verse_api::types); i++) {
+		type_names.insert(verse_api::types[i].verse_name);
 	}
 	for (size_t i = 0; i < std::size(native_type_names); i++) {
 		type_names.insert(native_type_names[i]);

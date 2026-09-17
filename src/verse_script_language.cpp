@@ -117,9 +117,19 @@ VerseRuntime *get_runtime() {
 //
 // Deliberately not folded into verse_godot_class_for: that one answers "is this name part of the
 // generated API", which `vh_object` is not, and the completion path relies on the distinction.
+//
+// The generated type table is the rest of the package's names: `variant` is Godot's Variant and
+// `godot_array` is its Array, and neither is a class the mirror generates. A row with no page --
+// `signal(t)`, `connection` -- answers nothing here rather than pointing at a page that describes
+// something else, and falls through to the comment above the declaration.
 const char *godot_doc_class_for(const String &p_verse_class) {
 	if (p_verse_class == String("vh_object")) {
 		return "Object";
+	}
+	for (size_t i = 0; i < std::size(verse_api::types); i++) {
+		if (p_verse_class == verse_api::types[i].verse_name) {
+			return verse_api::types[i].godot_class[0] == '\0' ? nullptr : verse_api::types[i].godot_class;
+		}
 	}
 	return verse_godot_class_for(p_verse_class);
 }
@@ -247,6 +257,10 @@ String godot_statics_class_for(const String &p_verse_name) {
 // hover on one to Godot's page is the same answer GDScript gives, and by the same reasoning:
 // `Variant::get_type_by_name(p_symbol)` is the second thing its lookup_code tries.
 //
+// `char` is here because `string` *is* `[]char` -- one type the compiler prints two ways, and the
+// spelling an author meets in a signature it did not write. Answering one page for one type is
+// what keeps the two spellings from disagreeing about what they are.
+//
 // `void` is deliberately absent, along with `any` and the rest. Godot documents no page for them,
 // GDScript answers nothing for `void` either, and the alternative -- a box reading "Local
 // Constant void" with nothing in it -- is what this table exists to stop.
@@ -260,7 +274,7 @@ const char *godot_doc_class_for_primitive(const String &p_verse_type) {
 	if (p_verse_type == String("logic")) {
 		return "bool";
 	}
-	if (p_verse_type == String("string")) {
+	if (p_verse_type == String("string") || p_verse_type == String("char")) {
 		return "String";
 	}
 	return nullptr;
@@ -2682,6 +2696,14 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 				result["class_name"] = singleton_class;
 				return result;
 			}
+			// A parametric type is a function to the compiler -- `typed_array(t)` resolves to the
+			// one that answers the type -- so the name of one arrives here rather than in the
+			// class arm above, and is the same type either way.
+			if (const char *godot_class = godot_doc_class_for(found_name)) {
+				result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS;
+				result["class_name"] = String(godot_class);
+				return result;
+			}
 		}
 
 		// A mirrored property is a var, so the kind alone cannot separate it from a script's own
@@ -3647,12 +3669,19 @@ void VerseScriptLanguage::on_filesystem_changed() {
 	module_map_built = false;
 }
 
+// Every class name a script can write, for the completion list Godot asks for when the host has
+// offered nothing: the mirrored classes, and the package's other exported types beside them.
+// `variant` and `signal` are as nameable as `node2d` is -- a script writes them in `_Get`'s
+// signature and in every declared signal -- and were offered by nothing.
 const PackedStringArray &VerseScriptLanguage::mirrored_class_names() {
 	static PackedStringArray names = []() {
 		PackedStringArray built;
-		built.resize((int64_t)std::size(verse_api::classes));
+		built.resize((int64_t)(std::size(verse_api::classes) + std::size(verse_api::types)));
 		for (size_t i = 0; i < std::size(verse_api::classes); i++) {
 			built.set((int64_t)i, String(verse_api::classes[i].verse_name));
+		}
+		for (size_t i = 0; i < std::size(verse_api::types); i++) {
+			built.set((int64_t)(std::size(verse_api::classes) + i), String(verse_api::types[i].verse_name));
 		}
 		return built;
 	}();

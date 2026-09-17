@@ -1801,7 +1801,15 @@ external editor is secondary.
   interpolation. Status: **done**. The member set comes from the analysis where there is one — the
   class's own data members plus every property and signal accessor it inherits — and from a scan of
   the buffer's indentation only for a file that has never been built. Comment markers (the editor's
-  own critical/warning/notice word lists) colour the way GDScript's do.
+  own critical/warning/notice word lists) colour the way GDScript's do. The **type** set is every
+  name the mirror exports — the 1036 classes, the 793 enums, the sixteen value types, `rid`,
+  `variant` and the containers — plus Verse's own type names that its reserved-word list does not
+  carry, which is `char` and the concurrency vocabulary. Three of those groups reached it through
+  one table and the rest through none, so `vector2` coloured and `vector2i` did not; the units layer
+  now checks the tables against the mirror's own source, which is the half of this a headless run
+  can see. Whether the editor *draws* the colour stays a by-hand check
+  (`by-hand-findings.md` B23): the highlighter registers at Godot's editor initialization level, so
+  nothing a `--script` run can reach ever constructs one.
 - **R-TOOL-2 (MUST)** Inline diagnostics as you type, from real semantic analysis rather than a
   local parse. Status: **done** — analysis re-runs per keystroke, off the main thread, and is not
   subject to the single-generation rule. The editor's thread does not wait for one: what `_validate`
@@ -1862,7 +1870,11 @@ external editor is secondary.
   than waiting; Godot treats that as "no result" and the next hover answers. Every one of those
   refusals first tries the symbol as a mirrored class name against the generated table, which needs
   no AST and no host — so a hover on `node2d` answers during an analysis, before a first build, and
-  on a buffer the analysis has not caught up with. It never preempts a resolved answer.
+  on a buffer the analysis has not caught up with. It never preempts a resolved answer. A type the
+  mirror exports that is not a mirrored class answers Godot's page for what it carries — `variant`
+  is Variant, `godot_array` is Array, `char` is String because `string` *is* `[]char` — and the two
+  that stand for nothing of Godot's, `signal(t)` and `connection`, keep the mirror's own comment
+  instead of borrowing a page that describes something else.
 - **R-TOOL-5 (MUST)** Signature help while typing a call. Status: **part** — declines during an
   analysis for R-TOOL-4's reason, and queues that buffer so the next ask answers. It is asked about
   the same repaired buffer R-TOOL-3 describes, off the same analysis, so an unclosed call has a hint

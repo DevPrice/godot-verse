@@ -1895,6 +1895,30 @@ func begin() -> void:
 		_check_eq("`void` draws no tooltip rather than an empty one",
 				_hover(hovers, "void").get("result"), ERR_UNAVAILABLE)
 
+		# The type names the mirror exports that are not mirrored classes. Every one of these was
+		# a "Local Constant" or nothing at all, and each reached the editor through a different
+		# table: `vector2` was named in the class table and the other fifteen value types were not,
+		# and `variant` was dropped from the type set when it briefly stopped being public and was
+		# never put back when it became public again.
+		_check_eq("a value type hovers as the Godot type it is",
+				_hover(hovers, "vector2i").get("class_name"), "Vector2i")
+		_check_eq("and Godot's RID likewise",
+				_hover(hovers, "rid").get("class_name"), "RID")
+		_check_eq("`variant` hovers as Godot's Variant, not as a local constant",
+				_hover(hovers, "variant").get("class_name"), "Variant")
+		_check_eq("and as a class result, which is what fetches the page",
+				_hover_type(hovers, "variant"), ScriptLanguageExtension.LOOKUP_RESULT_CLASS)
+
+		# `string` is `[]char`: one type the compiler prints two ways, so both spellings answer the
+		# page that describes what crosses.
+		_check_eq("`char` hovers as the String a []char becomes",
+				_hover(hovers, "char").get("class_name"), "String")
+
+		# A parametric type is a function to the compiler -- the one that answers the type -- so
+		# its name arrives by a different route than `variant` above and needs its own arm.
+		_check_eq("a parametric type hovers as the Godot type it wraps",
+				_hover(hovers, "typed_array").get("class_name"), "Array")
+
 		# A comment is prose. The mirror spells Godot's classes in lowercase, so this is the
 		# difference between hovering a sentence and hovering code.
 		_check_eq("a Godot class name in a comment draws nothing",

@@ -3038,6 +3038,10 @@ CLASSES_HEADER_TEMPLATE = """#pragma once
 // Verse class it should subclass without re-deriving gen_verse_api.py's name transform.
 // A Godot class that was not emitted (see GodotClasses.native.verse's coverage report) is
 // absent here; the caller walks ClassDB::get_parent_class until it finds one that is.
+//
+// The sixteen value types and RID are here too, though none of them is a ClassDB class: they are
+// Godot types with Godot names and Godot documentation, which is what every reader of this table
+// but _make_template is asking about, and ClassDB never answers one as a node's class.
 
 namespace verse_api {{
 
@@ -3098,6 +3102,23 @@ struct enum_mapping {{
 
 inline constexpr enum_mapping enums[] = {{
 {enum_entries}
+}};
+
+// Every other type name the Godot package exports, and the documentation page that describes what
+// its values are -- empty for the two that stand for nothing of Godot's. These are hand-written in
+// Godot.native.verse and GodotApi.native.verse, so no other table in this header knows them, and
+// each consumer fails its own way without a row: the syntax highlighter colours the name as plain
+// text, completion never offers it, and a hover draws "Local Constant" over whatever the mirror's
+// own comment says.
+//
+// The mirrored classes and enums above are types too; this is what is left of the package.
+struct type_mapping {{
+	const char *verse_name;
+	const char *godot_class;
+}};
+
+inline constexpr type_mapping types[] = {{
+{type_entries}
 }};
 
 }} // namespace verse_api
@@ -3243,10 +3264,49 @@ def render_skipped_header(api: dict, skipped: list) -> str:
         version=api["header"]["version_full_name"], entries=entries)
 
 
-# Godot builtins rather than mirrored classes, so they are hand-written in GodotApi.native.verse
-# and never reach emit_order -- but they are Godot types with Godot documentation, and without
-# them the editor calls `vector2` a local constant.
-VALUE_TYPE_CLASSES = {"Vector2": "vector2", "Vector3": "vector3", "Color": "color"}
+# Godot builtins rather than mirrored classes, so they never reach emit_order -- but they are Godot
+# types, with Godot names and Godot documentation pages, and every consumer of the class table
+# below wants them: the editor calls a name it cannot find a local constant, offers it in no
+# completion list and colours it as plain text.
+#
+# All sixteen and RID, not the three this started as. `vector2` was named here and `vector2i` was
+# not, so one hovered into Godot's documentation and the other into an empty box, one was offered by
+# completion and the other by nothing, and `Vector2Statics` found its class where `Vector2iStatics`
+# -- which is resolved by stripping the suffix and looking the rest up here -- found none.
+VALUE_TYPE_CLASSES = dict(
+    [(name, verse_class_name(name)) for name in MATH_TYPES] + [("RID", "rid")]
+)
+
+# The type names /Godot.org/Godot exports that stand for no Godot *class*, and the documentation
+# page each one's values are described by -- empty where Godot documents nothing, which is not the
+# same as having nothing to say: the mirror's own comment above the declaration is what the editor
+# draws for those.
+#
+# These are hand-written in Godot.native.verse and GodotApi.native.verse rather than generated, so
+# nothing else in this file knows their names. tests/verse_api_gen checks the list against those
+# files, because a type added there and not here is invisible to the editor in exactly the way
+# `variant` was: public since Phase 2's spikes, and dropped from the highlighter's type set while
+# it briefly was not.
+#
+# `signal(t)` and `connection` have no page on purpose. Godot's Signal is the *value* -- which is
+# `signal_ref`, and gets it -- where a `signal(t)` is this bridge's declaration type and a
+# `connection` is what Godot's own editor calls a connection but documents nowhere.
+#
+# The three natives the ABI is built out of are absent for a different reason: `vh_object`,
+# `vh_signal` and `godot_ref` are names a script should never write, so completion must not offer
+# them. The syntax highlighter names them itself, because a script still *reads* them in a
+# diagnostic.
+EXPORTED_TYPES = {
+    "variant": "Variant",
+    "godot_array": "Array",
+    "dictionary": "Dictionary",
+    "typed_array": "Array",
+    "typed_dictionary": "Dictionary",
+    "callable": "Callable",
+    "signal_ref": "Signal",
+    "signal": "",
+    "connection": "",
+}
 
 # The virtuals that are hand-written on the native root rather than generated, listed as (verse
 # class, verse method, godot class, godot method, is_virtual) -- the shape the method map carries.
@@ -3517,8 +3577,13 @@ def render_classes_header(api: dict, emit_order: list, method_map: list, doc_map
         f'\t{{ "{verse_enum}", "{godot_class}", "{godot_enum}" }},'
         for verse_enum, godot_class, godot_enum in enum_rows
     )
+    type_entries = "\n".join(
+        f'\t{{ "{verse_name}", "{godot_class}" }},'
+        for verse_name, godot_class in sorted(EXPORTED_TYPES.items())
+    )
     return CLASSES_HEADER_TEMPLATE.format(
-        version=version, entries=entries, method_entries=method_entries, enum_entries=enum_entries
+        version=version, entries=entries, method_entries=method_entries,
+        enum_entries=enum_entries, type_entries=type_entries,
     )
 
 
