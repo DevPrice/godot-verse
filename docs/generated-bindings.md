@@ -414,7 +414,7 @@ language — and for a binding it would come from the same place, the addon's ow
 `Callv` escape hatch has no `<reads>` spelling, so reading a third-party property from a `<reads>`
 function is wall 8's cascade for no reason.
 
-### 10.7 Three more traps, for §6
+### 10.7 Four more traps, for §6
 
 - **A method parameter may not share a name with an inherited mirrored property.**
   `Apply(Power:int, Scale:float)` on a `class(node2d)` is glitch 3532 — *"The data
@@ -435,6 +435,16 @@ function is wall 8's cascade for no reason.
   because a leading underscore is skipped (§6) and properties are R-INT-9's remainder.
   `tests/verse_probe/empty_class_probe.verse` is the measurement, and it checks the three things a
   binding has to do — declare, serve as a parameter type, and serve as a downcast target.
+- **A binding is in no map the analysis snapshot carried, and half the editor asks that map
+  first.** `vh_class_members` reads `GSnapshot->Classes`, which `TakeAnalysisSnapshot` fills by
+  walking the **script package alone** — so every answer the editor takes from the snapshot
+  rather than from a resolved position knew nothing about a binding, and `main_script{}.` opened
+  an empty completion popup that filled only when the analysis for that keystroke landed
+  (`by-hand-findings.md` B33). Bindings are harvested now, into a map of their own: beside
+  `Classes` rather than in it, because every other question that map answers — abstractness,
+  exports, whether the published generation carries the class — is about a class the project
+  declares, and because a binding sharing a name with a script class would otherwise take its
+  place there.
 
 ### 10.8 What §9 should now say
 

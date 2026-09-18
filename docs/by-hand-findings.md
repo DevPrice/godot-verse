@@ -1305,6 +1305,55 @@ B19's pair from the other side.
 
 ---
 
+## B33. `main_script{}.` opened an empty completion popup · **fixed**
+
+Reported from an editor session: nothing is offered behind `main_script{}.`, where `main_script`
+is the binding generated from a GDScript `class_name`.
+
+**Completion has two answers and only the first is a popup.** `_complete_code` answers from the
+last analysis at once and queues the buffer this caret actually needs;
+`refresh_completion_if_current` asks again when that lands. What the author sees when the popup
+opens is the first answer alone. Measured on a copy of `demo` with `tools/probe_complete.py`:
+
+    main_script{}.    0 options at once, 296 after the analysis
+    Self.             3 options at once, 298 after the analysis
+
+**Two things were missing and either alone was enough.** `receiver_classes_from_text` knew three
+receiver shapes -- `Self`, a member of the file's own class, and a mirrored class written
+outright -- and an archetype is none of them: the word ending at `}` is empty, so nothing
+resolved. And a binding's members were in no map the snapshot carried, so even with the class
+name in hand there would have been nothing to offer: `vh_class_members` reads
+`GSnapshot->Classes`, which `TakeAnalysisSnapshot` fills by walking the **script package alone**.
+
+**What closes it.** The snapshot harvests the bindings package too, into a map of its own rather
+than into `Classes`. Beside it for two reasons: everything reading `Classes` is asking about a
+class the *project* declares -- whether it is abstract, what it exports, whether the published
+generation carries it -- and a binding answers none of those; and in one map a binding would take
+a script class's place, which a project with a `class_name Mover` GDScript beside a `mover.verse`
+would do on its first analysis. Members only, because the expensive half of that loop
+(`ClassOverrideCandidatesLive`, which describes a mirrored class's whole inherited surface)
+describes something nothing can override.
+
+The consumer half reads an archetype's class off the text in front of its brace, and **declines
+rather than guesses when a quote is in the span**: a brace inside a string literal counts as one
+to a scan like that, and a wrong member list is worse than a late one because the author acts on
+it. It reaches a class the project declares as well as a binding, neither of which is in the
+mirror's table the bare-name path tests against.
+
+Measured at the same caret afterwards: **0 becomes 3** -- `Hit(`, `Label()`, `Heavy()` -- with the
+refined 387 unchanged. The integration layer asserts the *first* answer at that caret, which is
+the number that was wrong; asserting the refined one would have passed throughout.
+
+**What it does not fix is the larger half, and it is worth knowing before reading much into a
+popup.** The snapshot carries no *mirrored* class's members, so the immediate answer covers a
+script class, a binding and nothing else: `node2d{}.` opens empty, and `Self.` in a
+node2d-derived class offers that class's own three members and none of node2d's. Every one of
+those fills when the analysis lands. Widening it means describing the mirror into the snapshot,
+which is 1036 classes against the handful this walks now, and that is a measurement rather than
+a decision.
+
+---
+
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks

@@ -9292,14 +9292,23 @@ AUTORTFM_DISABLE bool ClassOverrideCandidatesLive(FUtf8StringView ClassName,
 AUTORTFM_DISABLE bool GodotVerse::ClassMembers(FUtf8StringView ClassName, TArray<FCompleteItem>& OutItems)
 {
     OutItems.Empty();
-    const FAnalysisSnapshot::FClass* const Found =
-        GSnapshot ? GSnapshot->Classes.Find(FUtf8String(ClassName)) : nullptr;
-    if (!Found)
+    if (!GSnapshot)
     {
         return false;
     }
-    OutItems = Found->Members;
-    return true;
+    if (const FAnalysisSnapshot::FClass* const Found = GSnapshot->Classes.Find(FUtf8String(ClassName)))
+    {
+        OutItems = Found->Members;
+        return true;
+    }
+    // A generated binding. Asked second because the two are different namespaces and a name in
+    // both is the author's own class rather than the one generated from their GDScript.
+    if (const TArray<FCompleteItem>* const Binding = GSnapshot->BindingMembers.Find(FUtf8String(ClassName)))
+    {
+        OutItems = *Binding;
+        return true;
+    }
+    return false;
 }
 
 AUTORTFM_DISABLE bool GodotVerse::ClassOverrideCandidates(FUtf8StringView ClassName, TArray<FCompleteItem>& OutItems)
@@ -9862,6 +9871,29 @@ AUTORTFM_DISABLE void TakeAnalysisSnapshot()
         ClassOverrideCandidatesLive(ClassName, Entry.Members, Entry.OverrideCandidates);
         CandidateSeconds += FPlatformTime::Seconds() - CandidatesStarted;
         Candidates += Entry.OverrideCandidates.Num();
+    }
+
+    // The generated bindings, which the walk above does not reach: it is of the script package
+    // alone, so `main_script{}.` opened an empty popup and filled only once the analysis for
+    // that one keystroke had landed.
+    //
+    // Members alone. None of the describing work above applies to a binding -- it declares no
+    // exports, no RPCs and no signals of its own, and nothing overrides one -- and
+    // ClassOverrideCandidatesLive is the expensive half of that loop, which is why this is not
+    // the same pass with a different module handed to it.
+    if (const uLang::CModule* const BindingsModule =
+            Program->FindDefinitionByVersePath<uLang::CModule>(BindingsVersePath))
+    {
+        for (const uLang::TSRef<uLang::CClass>& Binding : BindingsModule->GetDefinitionsOfKind<uLang::CClass>())
+        {
+            TArray<GodotVerse::FCompleteItem> Members;
+            TSet<FUtf8String> Seen;
+            CollectScope(*Binding, nullptr, ECompleteFilter::Any, 0, Seen, Members);
+            Members.Sort([](const GodotVerse::FCompleteItem& Left, const GodotVerse::FCompleteItem& Right) {
+                return Left.Name < Right.Name;
+            });
+            Snapshot->BindingMembers.Add(FUtf8String(Binding->AsNameCString()), MoveTemp(Members));
+        }
     }
 
     if (Program->_AstProject)

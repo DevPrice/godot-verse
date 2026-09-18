@@ -2155,6 +2155,35 @@ func begin() -> void:
 		# it is where the pointer is over the right half of the last glyph. Every hover row for one
 		# occurrence has to agree, which is what the whole-word check is.
 		_check("every column of a word answers alike", _hover_columns_agree(hovers, "Timeout"))
+
+		# --- the completion popup behind a `.` -------------------------------------------------
+		#
+		# Completion has two answers and only the first is a popup: `_complete_code` answers from the
+		# last analysis at once and queues the buffer this caret needs, and the editor draws what it
+		# was handed. A receiver the snapshot cannot type answers nothing, and nothing is an empty
+		# popup -- so what is asserted here is the **first** answer. The refined one was already
+		# right when `mob{}.` drew nothing at all (by-hand-findings.md B33).
+		var binding_path := "res://scripts/bindings.verse"
+		# Normalised the way the seam normalises it, or a CRLF checkout shifts every column.
+		var binding_source := FileAccess.get_file_as_string(binding_path).replace("\r\n", "\n")
+		var caret := binding_source.find("mob{}.")
+		_check("bindings.verse writes an archetype receiver", caret >= 0)
+		if caret >= 0:
+			var head := binding_source.substr(0, caret + "mob{}.".length())
+			var rows: Array = _verse_language().call("probe_complete", binding_path,
+					PackedInt32Array([head.count("\n"), head.length() - (head.rfind("\n") + 1)]))
+			_check_eq("the completion seam answers one row per caret", rows.size(), 1)
+			if rows.size() == 1:
+				var opened := []
+				for option in rows[0]["first_options"]:
+					opened.append(String(option["insert_text"]))
+				_check("a binding's own members are offered the moment the popup opens",
+						opened.has("Hit(") and opened.has("Label()"))
+				var refined := []
+				for option in rows[0]["options"]:
+					refined.append(String(option["insert_text"]))
+				_check("and the analysis keeps them rather than replacing them",
+						refined.has("Hit(") and refined.size() > opened.size())
 	else:
 		_skip("the script editor's hover tooltip", "no analysis in an exported game")
 

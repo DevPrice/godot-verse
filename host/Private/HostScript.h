@@ -787,6 +787,19 @@ struct FAnalysisSnapshot
     /// Module-qualified, exactly as every ClassNameUtf8 in the ABI is: `player`, `gameplay/player`.
     TMap<FUtf8String, FClass> Classes;
 
+    /// A generated binding's own members, keyed by the binding's class name.
+    ///
+    /// Beside Classes rather than in it, and that is the point: everything reading Classes is
+    /// asking about a class the *project* declares -- whether it is abstract, what it exports,
+    /// whether the published generation carries it -- and a binding answers none of those. In one
+    /// map a binding would also take a script class's place, which a project with a
+    /// `class_name Mover` GDScript beside a `mover.verse` would do on its first analysis.
+    ///
+    /// Members and nothing else, because a completion behind a `.` is the one question a script
+    /// asks about a binding that cannot wait for an analysis. The sidecar does not carry these:
+    /// a runtime host completes nothing.
+    TMap<FUtf8String, TArray<GodotVerse::FCompleteItem>> BindingMembers;
+
     /// ResolveUnknownName's whole answer, inverted: which modules declare each top-level name. Built
     /// here because the walk reads the AST project, which the worker rebuilds under it -- that read
     /// never waited and so was a race as well as a cost.

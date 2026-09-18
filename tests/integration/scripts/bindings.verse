@@ -29,3 +29,14 @@ bindings := class(node2d):
 	# script's method carries no such claim.
 	AskHeavy<public>(N:node2d)<transacts>:logic =
 		if (M := mob[N]) then M.Heavy() else false
+
+	# What the completion case in test_cases.gd reads. The two shapes differ in what the *snapshot*
+	# can say about them, which is what an author sees the instant the popup opens: an archetype
+	# names its class in front of its own brace, and a local names nothing until the analysis for
+	# that keystroke lands.
+	AskFresh<public>()<transacts>:int =
+		M := mob{}
+		M.Hit(1)
+
+	AskDirect<public>()<transacts>:int =
+		mob{}.Hit(1)

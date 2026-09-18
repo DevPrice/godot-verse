@@ -2015,25 +2015,69 @@ static void collect_input_actions(Array &r_options) {
 // a member being declared, and an inherited method offered there completes to the whole
 // declaration that overrides it rather than to a call. Everything else in scope is still offered,
 // so a misread of the position costs nothing beyond an option that was already going to be there.
+
+// The byte an archetype receiver's class name ends at -- the `main_script` of `main_script{}.`
+// -- or p_receiver_end itself when the receiver is not an archetype, or -1 for one this cannot
+// read.
+//
+// A `}` where the receiver ends closes an archetype, and the class is the word in front of the
+// brace that opened it. A quote anywhere in the span is where this declines rather than
+// guesses: a brace inside a string literal counts as one to a scan like this, and a wrong
+// member list is worse than a late one.
+static int64_t archetype_receiver_end(const String &p_source, int64_t p_receiver_end) {
+	if (p_receiver_end < 0 || p_receiver_end >= p_source.length() || p_source[p_receiver_end] != '}') {
+		return p_receiver_end;
+	}
+	int64_t depth = 0;
+	for (int64_t scan = p_receiver_end; scan >= 0; scan--) {
+		const char32_t at = p_source[scan];
+		if (at == '"') {
+			return -1;
+		}
+		if (at == '}') {
+			depth++;
+		} else if (at == '{') {
+			depth--;
+			if (depth == 0) {
+				return scan - 1;
+			}
+		}
+	}
+	return -1;
+}
+
 // The classes whose members a `.` at p_receiver_end reaches, nearest first, decided from the
 // buffer and the snapshot alone -- which is the whole of what exists while the analysis that would
 // answer properly is still running.
 //
-// Three receivers are knowable without one. `Self` is the class this file declares, and the class
+// Four receivers are knowable without one. `Self` is the class this file declares, and the class
 // header names its base. A bare name the class declares carries a declared type, which the snapshot
-// spells. And a mirrored class written outright is its own answer. Everything else -- a call's
-// result, a local, a dotted chain -- needs the types this deliberately does not build, and answers
-// nothing rather than guessing: a wrong member list is worse than a late one, because the author
-// acts on it.
+// spells. A mirrored class written outright is its own answer. And an archetype names its class in
+// front of its own brace. Everything else -- a call's result, a local, a dotted chain -- needs the
+// types this deliberately does not build, and answers nothing rather than guessing: a wrong member
+// list is worse than a late one, because the author acts on it.
 PackedStringArray VerseScriptLanguage::receiver_classes_from_text(const String &p_source, const String &p_path, int64_t p_receiver_end) const {
 	VerseRuntime *runtime = get_runtime();
-	const String word = word_ending_at(p_source, p_receiver_end);
-	if (runtime == nullptr || word.is_empty()) {
+	if (runtime == nullptr) {
 		return PackedStringArray();
 	}
-	const int64_t word_start = p_receiver_end - word.length() + 1;
+
+	const int64_t class_end = archetype_receiver_end(p_source, p_receiver_end);
+	const bool is_archetype = class_end != p_receiver_end;
+	const String word = class_end < 0 ? String() : word_ending_at(p_source, class_end);
+	if (word.is_empty()) {
+		return PackedStringArray();
+	}
+	const int64_t word_start = class_end - word.length() + 1;
 	if (word_start > 0 && p_source[word_start - 1] == '.') {
 		return PackedStringArray();
+	}
+
+	// The word in front of an archetype's brace is a type by construction, so it is taken as one
+	// without the table test the bare-name path below needs -- which is what reaches a class the
+	// project declares and a generated binding alike, neither of which is in that table.
+	if (is_archetype) {
+		return member_bearing_chain(word);
 	}
 
 	const String own_class = qualified_class_name(p_path);
