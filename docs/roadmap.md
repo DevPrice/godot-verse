@@ -898,6 +898,63 @@ ever need to reach. No design yet, by decision; when it is written it starts fro
 
 ---
 
+## Phase 7c — Generated bindings for classes the mirror does not carry
+
+**Designed, spiked, not built.** [`generated-bindings.md`](generated-bindings.md) is the design,
+written before the work, and its **§10 is the part to read** — all five spikes came back and two
+of them corrected the decision table. R-INT-7 to R-INT-12.
+
+**Why now, and why not earlier.** The mirror is generated from `extension_api.json`, which
+describes core Godot and nothing else, so a class a third-party GDExtension registers and a class
+a script declares with `class_name` are both invisible as *types*. R-INT-2 has covered them
+dynamically since Phase 4 — `Target.Callv("hit", Args).AsInt[]` works — so this is not a gap in
+what a script can do. It is a gap in what the editor can tell the author: no completion, no hover,
+no argument hint, and a wrong name that fails at runtime rather than at the call.
+
+It waits until after Phase 7b for a reason that is now a requirement rather than a preference:
+R-INT-11 says an exported game runs a script that uses a binding, and there was no cooked path to
+carry the mapping on until the sidecar existed.
+
+- **R-INT-7, R-INT-8** — the generator and the package. A binding is a subclass of the mirrored
+  base in a package of the project's own, generated under `.godot/`, regenerated on any roster
+  change and on project open. Generational naming, for the reason R-ITER-1's generations are (OQ-8).
+- **R-INT-9** — the classifications, and the one thing that has to move first: **`CallConst` on
+  `object`**, without which no binding can be `<reads>` at all. One extension method over the
+  `VhCallValueConst` native that is already there, so no new native and no ABI change — but it is
+  a widening of the public Verse surface and should land as its own commit, with the reasoning in
+  `generated-bindings.md` §10.6.
+- **R-INT-10** — inheritance, and the refusal. `boss := class(mob)` and
+  `player := class(rapier_character_body)` both work; `player := class(mob)` cannot, and is refused
+  in `_validate` at the class's own line rather than left to raise at the first inherited call.
+  This is R-INT-6's answer, and R-INT-6 is updated to say so.
+- **R-INT-11, R-INT-12** — the cooked path and construction. The class-to-binding mapping joins
+  the sidecar; `GodotPeerClassFor` learns the bindings package, without which constructing a
+  binding mints its nearest *mirrored* ancestor and a working scene looks entirely normal.
+
+**The order the spikes argue for.** `CallConst` first, because R-INT-9 is unbuildable without it
+and it is the only piece that touches the mirror. Then the host half — the bindings package and
+the fourth question in `ObjectForHandle` — which §10.1 and §10.3 have both already run in
+miniature. Then the generator, which is the largest piece and the one with a differential test
+against `GodotClasses.native.verse` to keep it honest. The consumer's roster watching is last and
+is the smallest.
+
+**What has to be decided inside the phase, not before it.** OQ-19: what the host's UObject pool
+gets raised to. §10.5 measured the ceiling at a few hundred binding classes and showed that one
+flag on `GEngineLoop.PreInit` removes it, but the pool is pre-sized, so the number is memory every
+project spends whether or not it has an addon.
+
+**What this phase makes answerable rather than answering.** B-1 in the design document — whether
+the mirror shrinks to a curated core once per-project bindings exist. §10.5 gives it its first
+number (a binding class costs ~0.87 ms of analysis, which is what a mirrored class costs), and the
+real question is when the bindings package gets its digest. It gets one at the first build, which
+is the same bargain the mirror has.
+
+**Exit:** an addon installed into `tests/integration` is completable, hoverable and callable with
+declared types; a `.gd` fixture with a `class_name` is too; the export layer runs a case that
+calls through a binding; and `run_tests.py` is still one command.
+
+---
+
 ## Phase 8 — The manual, and 1.0
 
 **Why now.** "Usable by someone else" is not testable without documentation, and the manual is

@@ -6,6 +6,11 @@ registers in ClassDB, and a class a **script** declares with `class_name` — GD
 document is the design for generating Verse for both, and the record of the decisions that shaped
 it.
 
+**§10 is the section written after the spikes, and it corrects §4 twice.** Read it before
+trusting the decision table: the `<reads>` row does not work as written, and the volume row has a
+hard ceiling §4 did not know about. The rest of the body stands and is still the record of why
+each shape was chosen.
+
 R-INT-2 is already done and is not what this is about: `Target.Callv("hit", Args).AsLogic[]` works
 today. What this buys is a declared type — completion, hover, an argument hint, and a compile error
 at the call rather than an empty `variant` at runtime.
@@ -208,3 +213,227 @@ the compiler, do not read `SemanticAnalyzer.cpp`.
 | --- | --- | --- |
 | **B-1** | Does the mirror shrink to a curated core now that per-project bindings exist? Decide with numbers once the generator does, the way `phase-2-design.md` §3 decided `--all`. | R-SCN-2, R-PERF-2 |
 | **B-2** | Does any of the C# half work? `script_classes_updated` is language-agnostic, so C# bindings generate with no new code — and OQ-17 still says no test in this repository has ever run C#. | OQ-17 |
+
+## 10. What the spikes came back with
+
+All five of §7 ran on 2026-09-17, against engine `203d764` and ABI 11.0. Two of them change §4.
+
+Spikes 1 and 3 needed a throwaway host patch, and both were reverted; each is described where its
+reading is, in §10.1 and §10.3, closely enough to write again. Spike 2 needed none, so its fixtures
+are kept -- `tests/verse_probe/final_probe.verse` and `final_reject.verse`.
+
+### 10.1 A project class survives the adoption path (spike 1)
+
+Yes, and nothing new was needed underneath it. A `/user@localhost` class named as the answer to
+`GetClassOf` crossed in as itself, downcast, and ran a method:
+
+```
+spike_binding<public> := class(node):
+    Hit<public>(Power:int)<transacts>:int = Power * 2
+
+Probe<public>(N:node)<transacts>:int = if (B := spike_binding[N]) then B.Hit(21) else -1
+```
+
+`Probe` answered **42** with `--class-of spike_binding`, and **-1** with both controls —
+`--class-of Timer`, where the mirror's own row wins, and `--class-of NoSuchClass`, where nothing
+resolves. So `NewMirroredWrapper` takes a project `UClass` unmodified: an `FAdoptPeerScope` and a
+`NewObject<UObject>` are the whole of it, and §3's "the construction path underneath needs nothing
+new" is confirmed rather than assumed.
+
+The patch was three lines — `MirroredClassForHandle` falling through to `FindGodotClass` when the
+mirror has no row. The real fourth question is keyed differently (§3), but it builds on exactly this.
+
+### 10.2 `<final>` is available, and glitch 3569 is its number (spike 2)
+
+`class<final>(object)` compiles in a `/user@localhost` package, and the subclass is refused:
+
+```
+error 3569: Class `final_derived` cannot be a subclass of the class `final_base` which has the
+`final` attribute.
+```
+
+§4 guessed at `ErrSemantic_FinalSuperclass` and had no number. The decision not to use it stands and
+is now grounded rather than inferred: the refusal fires at the *subclass's* declaration, so a
+generated `boss := class(mob)` would report the error against a generated file the author cannot
+edit — which is worse than the bridge's own refusal in §5, not better.
+
+### 10.3 A separate package digests, and survives being replaced (spike 3)
+
+Both halves, decisively.
+
+A second source package added at runtime went **External with a digest at the first build**, beside
+the attribute package that already does this:
+
+```
+package GodotAttributes   verse=/Godot.org/Godot     role=External digest=  2248 B snippets=1
+package GodotBindings_1   verse=/Godot.org/Bindings  role=External digest=   159 B snippets=1
+package GodotScripts_1    verse=/user@localhost      role=Source   digest=    29 B snippets=1
+```
+
+Replacement mid-session works when the package is **generational the way the script package is** — a
+name no publish has used, with the retiring one removed from the source project first. That is not a
+nicety: §6 already records that publishing one Source package name twice asserts inside
+`AsyncLoading2.cpp` rather than reporting anything, and a fresh name per roster change is what
+avoids it. Two builds in one process, with the bindings source swapped between them, and a script
+that names only what the *second* roster carries:
+
+```
+[probe] ...:6:51: error 3506: Unknown member `Damp` in `rapier_body`.
+[probe] ...:7:38: error 3506: Unknown identifier `rapier_joint`.
+[probe] compile 1: status 4, generation 0, 2 error(s)
+[probe] compile 2: status 0, generation 1, 0 error(s)
+[probe] call AskDamp: status 0, int 42
+[probe] call AskSlack: status 0, int 5
+```
+
+Build 1 refuses both names; build 2 resolves and runs both. `GodotBindings_1` (159 B) is replaced by
+`GodotBindings_2` (306 B) with nothing asserting in between.
+
+Two things the patch had to get right, and both are load-bearing for the real thing. The bindings
+package's **dependencies must exclude the script package's own generations** — the script package
+depends on this one, so the edge runs one way only. And the bindings package must exist **before**
+the first `PrepareGenerationPackage`, because `AddScriptPackage` takes the script package's
+dependency list fresh from whatever else the project holds at that moment.
+
+### 10.4 `--stage-only` is more than §1 claimed (spike 4)
+
+§1 argued that the relink is for the generated C++ tables and not for the Verse. That is right, and
+understated: a **whole new `.verse` file** dropped into the mirror package and staged with
+`build_host.py --stage-only` — no UBT run, no VNI, no manifest edit — was compiled, resolved and
+called by the runtime compiler. So was a class in it deriving from a mirrored class:
+
+```
+spike_mob<public> := class(timer):
+    Hit<public>(Power:int)<transacts>:int = Power * 2
+```
+
+`GodotPeerClassFor` walked past it to `Timer` and minted the right peer, because the walk takes the
+nearest ancestor with a row in the generated name table and a staged class has none.
+
+What this does *not* do is make the mirror the right home. It sharpens §1's real argument instead:
+the obstacle was never the build, it is that the mirror is **one package in the engine tree, shared
+by every project on the machine**. That reasoning now carries the whole decision on its own.
+
+### 10.5 The cost is linear, and there is a ceiling §4 did not know about (spike 5)
+
+Measured with synthetic binding classes shaped the way §2 shows — a subclass of a mirrored class
+with five properties, an enum, a declared signal and eight methods — compiled as one Source package.
+Absolute numbers are a cold one-shot process and are pessimistic against R-PERF-2's steady state;
+the **deltas** are the reading.
+
+| classes | parse | semantic | analysis | Δ over 0 | per class | generation |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0 | 346.0 | 1005.8 | 1351.8 | — | — | 2332.9 |
+| 10 | 348.1 | 1016.4 | 1364.5 | +12.7 | 1.27 | 2361.5 |
+| 50 | 355.1 | 1040.0 | 1395.1 | +43.3 | 0.87 | 2407.2 |
+| 200 | 369.1 | 1175.6 | 1544.7 | +192.9 | 0.96 | 2678.2 |
+| 500 | 399.6 | 1393.1 | 1792.7 | +440.9 | 0.88 | 3193.5 |
+| 1000 | 454.5 | 1763.3 | 2217.8 | +866.0 | 0.87 | 4074.9 |
+
+All in ms. **A binding class costs ~0.87 ms of analysis, linearly**, which is about what a mirrored
+class costs — `phase-2-design.md` §3.1 measured the mirror at 2.6 ms per class over 60 and 0.83 ms
+over 1022. §4's volume decision is therefore justified by the numbers rather than by analogy: carried
+as Source, 200 binding classes add ~193 ms to *every* per-keystroke analysis against R-PERF-2's
+520 ms whole-project figure, and 1000 add ~866 ms. The digest is what makes "bind everything"
+affordable, exactly as §4 said.
+
+**The ceiling is the finding §4 did not have.** At 600 classes the build failed with a diagnosed
+runtime error, and at 1000 with a fatal one:
+
+```
+ErrRuntime_MemoryLimitExceeded: Exceeded memory limit(s). (Ran out of memory for allocating
+`UObject`s while attempting to construct a Verse object of type event!)
+
+Maximum number of UObjects (131072) exceeded when trying to add 1 object(s), make sure you update
+MaxObjectsInGame/MaxObjectsInEditor/MaxObjectsInProgram in project settings.
+```
+
+Every Verse class is a `UVerseClass` with a `UFunction` per method, and the mirror's own 1036 are
+already in that pool. Declared signals are not the driver — 1000 classes without one fail the same
+way — they are only what happens to allocate last, because a `signal(t)` member constructs an `event`
+UObject during module evaluation.
+
+It is raisable, and raising it works. `UObjectBase.cpp:1274` reads
+`[/Script/Engine.GarbageCollectionSettings] gc.MaxObjectsInProgram` from `GEngineIni`, defaulting a
+Program to 100K. Adding
+`-ini:Engine:[/Script/Engine.GarbageCollectionSettings]:gc.MaxObjectsInProgram=500000` to the
+`GEngineLoop.PreInit` line in `VerseHost.cpp` took 1000 binding classes from fatal to a clean build.
+So the ceiling is a **decision to take deliberately**, in the host's own PreInit, rather than a wall
+— but a project that installs a large addon hits it at a few hundred classes if nobody takes it, and
+the failure mode at the fatal end names UE's setting and nothing about Verse or this bridge.
+
+### 10.6 The one that changes §4: a binding cannot spell `<reads>`
+
+§4 says the classification rules are `gen_verse_api.py`'s, exactly, including *"`<reads>` where Godot
+says `is_const` and the method answers something"*. **A binding in a package of its own cannot spell
+that**, and the refusal comes four ways at once:
+
+```
+error 3512: This invocation calls a function (`(/Godot.org/Godot/object:)Call`) that has the
+'transacts' effect, which is not allowed by its context.
+error 3593: Invalid access of internal function `(/Godot.org/Godot:)VhToInt` ...
+error 3593: Invalid access of internal function `(/Godot.org/Godot:)VhCallValueConst` ...
+error 3593: Invalid access of internal data `(/Godot.org/Godot/vh_object:)Handle` ...
+```
+
+Every `object.Call` and `Callv` overload is `<transacts>`; there is no `<reads>` call verb anywhere
+in the public surface. And the three things the mirror's own `<reads>` bodies use — the const-call
+native, the packers, and `Handle` itself — all carry no `<public>`.
+
+**Verse's internal access is scoped by verse path, not by package.** That is the fact that opens the
+fork, and the attribute package is the existing proof of it: a *second* package at
+`/Godot.org/Godot` reaches everything the mirror's own files do. Three options, all three run:
+
+| | `<reads>` bindings | a binding name colliding with a mirrored one |
+| --- | --- | --- |
+| `/Godot.org/Bindings` (§4's choice) | **impossible** — the four refusals above | an ambiguity at the *use* site, spellable `(/Godot.org/Bindings:)timer` |
+| `/Godot.org/Godot` (the attribute package's path) | **works** — `VhCallValueConst`, `VhToInt` and `Handle` all resolve | glitch **3532** at the generated declaration, against a file the author cannot edit, unspellable |
+| `/Godot.org/Bindings` **plus one addition to the mirror** | **works** | unchanged from §4 |
+
+The third is the recommendation, and it was run end to end. One `<public>` extension method on
+`object`, which needs no new native because `VhCallValueConst` already exists:
+
+```
+(Target:object).CallConst<public>(Method:string, Args:[]variant)<reads>:variant =
+    VhToVariant(VhCallValueConst(Target.Handle, "call", array{VhFromStringName(Method)} + Args))
+```
+
+With it staged, a binding at `/Godot.org/Bindings` declaring
+`Tag<public>()<reads>:int = CallConst("tag", array{}).AsInt[] or 0` compiled and ran. `Target` rather
+than `Self`, which is V3514 — *"Cannot use reserved identifier `Self` as definition name"*.
+
+It is a widening of the public surface and should be taken as one: a script could then declare
+`<reads>` over a Godot call that mutates. That is no worse than what the mirror already does for its
+3996 `<reads>` methods, where the honesty comes from Godot's `is_const` rather than from the
+language — and for a binding it would come from the same place, the addon's own
+`METHOD_FLAG_CONST`. A GDScript class has no const methods at all, so script-class bindings are
+`<transacts>` throughout and never reach this. It also closes a gap a script has today: R-INT-2's
+`Callv` escape hatch has no `<reads>` spelling, so reading a third-party property from a `<reads>`
+function is wall 8's cascade for no reason.
+
+### 10.7 Two more traps, for §6
+
+- **A method parameter may not share a name with an inherited mirrored property.**
+  `Apply(Power:int, Scale:float)` on a `class(node2d)` is glitch 3532 — *"The data
+  `(/user@localhost/bind_class_0/Apply:)Scale` ... is ambiguous with ... `(/Godot.org/Godot/node2d:)Scale`"*.
+  §6 has the member case and CLAUDE.md has the module-level case; this is a third, and the generator
+  meets it on every method it emits, because an addon's parameter names are not ours to choose. The
+  filter is the whole inherited property and signal set of the binding's base, which
+  `verse_api::methods` already carries by declaring class.
+- **The readers are `AsBool`, not `AsLogic`.** Godot's `bool` is 568 predicates spelled
+  `<decides>:void` and 306 `logic`-answering methods, but the *variant* reader is one function and it
+  is `AsBool`. The doc's own opening line says `AsLogic[]`, which does not exist.
+
+### 10.8 What §9 should now say
+
+**B-1 has its first number.** A binding class costs what a mirrored class costs, so "curated mirror
+plus generated bindings" trades ~0.87 ms of per-keystroke analysis per class for ~0.87 ms per class —
+nothing, until the digest is in it, and then everything, because the mirror is digested and a Source
+bindings package is not. The question is really *how early the bindings package gets its digest*, and
+§10.3 says it gets one at the first build.
+
+**The ceiling is a question of its own**, and it went to `spec.md` §14 as **OQ-19** rather than into
+§9: it is not about bindings, it is about what a Program pre-sizes its UObject pool to, and generated
+bindings are only what makes the answer urgent. §10.5 shows the wall is real at a few hundred binding
+classes and that one flag on `PreInit` removes it. The number is not a detail — the pool is
+pre-sized, so it is memory spent whether or not a project has an addon.

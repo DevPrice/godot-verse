@@ -1760,6 +1760,12 @@ where it arrived**: a task scope per script instance, `Await()` on any Godot sig
 The requirement is full, two-way, first-class: to the rest of the engine a Verse class is
 indistinguishable from a GDScript one.
 
+**R-INT-7 to R-INT-12 are the other direction of the same sentence**, and they are newer than
+the rest of this section: a GDScript class is *not* indistinguishable from a Godot one to a
+Verse script, because the mirror is generated from `extension_api.json` and that file describes
+core Godot and nothing else. `docs/generated-bindings.md` is the design, and its §10 is the
+section written after the spikes.
+
 - **R-INT-1 (MUST)** GDScript and C# can instantiate a Verse class by its global name, call its
   methods with arguments and return values, read and write its properties, and connect its
   signals — with no Verse-specific API and no knowledge that Verse is involved. Depends on
@@ -1788,6 +1794,16 @@ indistinguishable from a GDScript one.
   spelled, since their converters are module-scoped — and `Add<Element>` appends. This is
   R-TYPE-2's other half and landed with it.
 
+  **`CallConst` is the `<reads>` half, and it arrived with R-INT-9.** Every `Call` and `Callv`
+  overload is `<transacts>`, so reading a third-party property from a `<reads>` function started
+  wall 8's cascade for no reason — the call is const and answers a value, which is exactly the
+  test the mirror's own 3996 `<reads>` methods pass. `CallConst` is an extension method on
+  `object` over the `VhCallValueConst` native that was already there, so it costs no new native
+  and no ABI change. What it does cost is that the honesty is the caller's: nothing checks that
+  the method named is const, exactly as nothing checks it for the mirror's own — there the
+  generator reads Godot's `is_const`, and for a binding it reads the addon's
+  `METHOD_FLAG_CONST`. For a hand-written call it reads nothing.
+
   Proving it turned up a rule that had leaked out of the place it belonged: an object-typed
   *exported member* must be optional, because the inspector can leave a slot empty, and that rule was
   being applied to method *arguments* too — where it is not merely unnecessary but wrong. A parameter
@@ -1804,6 +1820,101 @@ indistinguishable from a GDScript one.
 - **R-INT-6 (MAY)** A Verse class extends a class *defined by a GDScript or C# script*. Godot does
   not generally support cross-language script inheritance, so this is permission to do it if the
   engine ever makes it cheap, not an obligation. Composition and signals cover the need.
+
+  **Status: refused, and the refusal is now specified rather than incidental** (R-INT-10). The
+  engine does not make it cheap and the reason is structural at both ends: `GDScriptFunction::call`
+  takes a `GDScriptInstance*` and indexes members by slot, so it cannot run against a
+  `VerseScriptInstance`; `GDScript::base` is a `Ref<GDScript>`, so the chain cannot hold a Verse
+  class either; and an `Object` holds exactly one `script_instance`, so there is no seam to add
+  one. Generated bindings make the *spelling* available — `player := class(mob)` compiles, because
+  `mob` is an ordinary Verse class — which is what turns this from a gap into a trap, so the
+  bridge refuses it at the class's own line.
+
+- **R-INT-7 (MUST)** Every class ClassDB carries that the mirror does not, and every script class
+  with a `class_name`, is reachable from a Verse script as a **declared type** — completion,
+  hover, an argument hint, and a compile error at the call rather than an empty `variant` at
+  runtime. A script with no `class_name` has no global name to bind and is skipped; it is *said*
+  to be skipped rather than silently absent. The dynamic route (R-INT-2) is unaffected and stays
+  the answer for anything a binding cannot describe. Status: **not built** — designed in
+  [`generated-bindings.md`](generated-bindings.md), all five spikes back (§10), Phase 7c.
+
+  The shape is a **subclass of the mirrored base**, not a wrapper holding one: a wrapper cannot
+  be passed to `AddChild` and reads `M.Target.GetName()` at every call site. A binding therefore
+  inherits all 3312 mirrored properties and 503 signal accessors, and `mob[SomeNode]` is Verse's
+  own downcast over R-SCN-6's cast with no new machinery. Measured: a `/user@localhost` class
+  crossed in through `ObjectForHandle`, downcast and ran a method, with `NewMirroredWrapper`
+  unmodified (`generated-bindings.md` §10.1).
+
+- **R-INT-8 (MUST)** Bindings are generated into a Verse package of the project's own, at
+  `/Godot.org/Bindings`, regenerated whenever the class roster changes, and never committed:
+  they live under `.godot/`, which Godot regenerates routinely, so generation runs on project
+  open as well as on a roster change. The trigger is language-agnostic —
+  `EditorFileSystem.script_classes_updated` for script classes and `GDExtensionManager`'s three
+  signals for ClassDB — so C# costs no new code (OQ-17 still says no test here has ever run it).
+  Status: **not built** — designed in [`generated-bindings.md`](generated-bindings.md), all five
+  spikes back (§10), Phase 7c.
+
+  **A package of its own, rather than rows in the mirror.** The mirror is one package in the
+  engine tree, shared by every project on the machine, and these classes are per-project and
+  change when someone installs an addon. The build cost is *not* the reason: a whole new `.verse`
+  file staged into the mirror with `build_host.py --stage-only` — no UBT run, no VNI — compiles
+  and runs (`generated-bindings.md` §10.4).
+
+  The package is **generational**, named afresh per roster change with the retiring one removed
+  from the source project first, for the reason R-ITER-1's generations are (OQ-8): the assembler
+  publishes every Source package the program carries, and publishing one name twice is
+  `!ObjectItem->HasAnyFlags(EInternalObjectFlags::LoaderImport)` inside `AsyncLoading2.cpp`,
+  which is a crash and not a diagnostic. Measured across two builds in one process, with the
+  roster changed between them (`generated-bindings.md` §10.3).
+
+- **R-INT-9 (MUST)** A binding's members carry the same classifications the mirror's do:
+  `<decides>` for an object return, `<decides>:void` for a predicate, `logic` for a method that
+  answers a value rather than a test, `<reads>` where the source says the method is const *and*
+  it answers something, properties as writable members except where a nested struct or a
+  container forces a getter/setter pair. Enums, constants and statics are bound too — a
+  third-party physics class is unusable without its enums. Status: **not built** — designed in
+  [`generated-bindings.md`](generated-bindings.md), all five spikes back (§10), Phase 7c.
+
+  **`<reads>` needs `CallConst` and could not exist without it.** Verse's internal access is
+  scoped by verse path, so a package at `/Godot.org/Bindings` reaches neither
+  `VhCallValueConst`, nor the packers, nor `vh_object.Handle` — and `object.Call` is
+  `<transacts>` in every overload. The three ways out were all run and the other two were
+  rejected: sharing `/Godot.org/Godot` makes a name collision glitch 3532 against a generated
+  file the author cannot edit, and dropping `<reads>` makes every binding method a wall-8
+  cascade source. See `generated-bindings.md` §10.6.
+
+  A GDScript class has no const methods, so script-class bindings are `<transacts>` throughout
+  and never reach this.
+
+- **R-INT-10 (MUST)** Binding-to-binding inheritance mirrors the source hierarchy, and the one
+  case that cannot work is refused where the author can see it. Three cases, and only the third
+  is a problem: `boss := class(mob)` between two bindings stays inside GDScript's own chain and
+  works; `player := class(rapier_character_body)` is ordinary Godot inheritance and works; and
+  `player := class(mob)` — a *Verse script* extending a *script-class* binding — cannot, because
+  the inherited methods forward to `Call("hit")` on an object whose script is `player.verse`.
+  Status: **not built** — designed in [`generated-bindings.md`](generated-bindings.md), all five
+  spikes back (§10), Phase 7c.
+
+  It is refused in `_validate`, at the class's own line, naming this requirement and the
+  one-script-per-node rule. Not by `<final>`, which is available in a user package and refuses
+  with glitch 3569 (`tests/verse_probe/final_probe.verse`): marking a binding final would also
+  refuse the generated `boss := class(mob)` that a GDScript hierarchy forces, and would report it
+  against a generated file rather than against what the author wrote.
+
+- **R-INT-11 (MUST)** An exported game runs a script that uses a binding. A game shipping a
+  physics addon needs its bindings at runtime, so the class-to-binding mapping joins the sidecar
+  beside the declared types and the 503 signal payloads (R-DIST-11), and the export layer asserts
+  a case that calls through one. Status: **not built** — designed in
+  [`generated-bindings.md`](generated-bindings.md), all five spikes back (§10), Phase 7c.
+
+- **R-INT-12 (SHOULD)** A script constructs a bound class by the Godot spelling: a ClassDB class
+  through `ClassDB.instantiate(name)`, a script class by minting its base and then `set_script`,
+  which R-INT-1 already names. Status: **not built** — designed in
+  [`generated-bindings.md`](generated-bindings.md), all five spikes back (§10), Phase 7c.
+  Constructing a binding mints the *bound* Godot class and not its
+  nearest mirrored ancestor, which is the trap: `GodotPeerClassFor` walks to the nearest ancestor
+  in `/Godot.org/Godot` to decide what to mint, so left alone it hands back a `RigidBody2D` where
+  a `RapierBody2D` was meant — silently, while a working scene looks entirely normal.
 
 ---
 
@@ -2496,6 +2607,7 @@ A closed question keeps its row so that the reason it is closed is not lost.
 | **OQ-16** | What anchors a Verse callback that is not a bound method? Godot answers this twice: a `self`-capturing lambda reports the captured object and dies with it, while a plain lambda is anchored to the script resource, overrides `is_valid` to ignore ObjectDB, and is Godot's own documented leak (the `GDScriptLambdaCallables` TODO, GH-102327). | R-SIG-3, R-INT-4, and library-level handlers | Phase 4a accepts only a bound method — the half of Godot's design that does not leak — and refuses an unbound function with a diagnostic. Answering means choosing an owner: a runtime-owned anchor with an explicit `Cancel`, or an explicit-owner spelling (`SubscribeAs(Owner, F)`) that keeps lifetime visible. **Phase 5 closes it for the case it creates and leaves the rest**: an awaiting continuation is owned by its task, which is owned by its instance's scope, so freeing the node cancels the task and drops the connection with no new spelling — one mechanism serving this and R-ASYNC-5 together. An unbound callback *outside* a task stays refused, exactly as Phase 4a decided, so the original question is narrowed rather than answered. |
 | **OQ-17** | Does any of the C# interop work? R-SIG-6, R-INT-1, R-INT-2 and R-INT-5 name C# as a MUST, and **no test in this repository has ever run C#** — every fixture is GDScript, and exercising C# needs a .NET Godot build that `tools/run_tests.py` does not have. | R-SIG-6, R-INT-1, R-INT-2, R-INT-5 | Get a .NET Godot into the harness and run the existing interop cases from C# before 1.0. Until then those four statuses describe GDScript only, and say so. Phase 4 enlarges the claim rather than testing it, which is why this is recorded now. |
 | **OQ-18** ✅ | Can a Verse package be loaded from an IoStore container by a host that is not a cooked game? `FLinkerLoad` has no `Verse::VCell` support at all, so a loose cooked `.uasset` is unreadable (`phase-7-design.md` §13.7); the zen loader's `FExportArchive` is the only thing in the engine that reads a cell (`AsyncLoading2.cpp:3184`). | R-DIST-9, R-DIST-10, R-DIST-11 | **Closed: yes, to both halves.** `verse_cook.exe` converts its loose cook with `CreateIoStoreContainerFiles` — which parses `FCommandLine::Get()` rather than the line it is handed, and needs a script-objects buffer, a commands list and a compact-binary oplog manifest that a cook of this shape does not otherwise produce — and `verse_host_runtime.dll` mounts the result the way `FPakPlatformFile` mounts a pak's. The mount needed one line nothing in this host was calling: `USE_IO_DISPATCHER` is false for a Program with no Engine, so `FIoDispatcher::InitializePostSettings()` never ran, `IsInitialized()` answered true anyway and every read was issued and never completed. **What the question did not ask, and what actually cost the phase, is whether a package loaded that way can be *called***: a cooked `VNativeProcedure`'s thunk is a C++ function pointer and does not serialise, and the engine rebinds the module-scoped ones only from the assembler, which a compiler-less host never runs. `phase-7b-design.md` §13.8 and §13.9 are the whole of it; the cooked payload is 5.0 MB and an exported game reaches its first Verse `_Ready` in 0.54 s against 4.08 s compiled at startup. |
+| **OQ-19** | What does the host's UObject pool get raised to, and who decides? Every Verse class is a `UVerseClass` with a `UFunction` per method, and the mirror's own 1036 are already in a pool a Program pre-sizes to 131,072. Generated bindings put the roster on top of that, and it runs out at a few hundred binding classes of ordinary shape — at the diagnosed end *"ErrRuntime_MemoryLimitExceeded ... while attempting to construct a Verse object of type event!"*, at the fatal end UE's own message naming `MaxObjectsInProgram` and nothing about Verse or this bridge. Raising it works and costs one flag: `-ini:Engine:[/Script/Engine.GarbageCollectionSettings]:gc.MaxObjectsInProgram=...` on the `GEngineLoop.PreInit` line took 1000 binding classes from fatal to a clean build (`generated-bindings.md` §10.5). | R-INT-7, R-INT-8 | Pick the number with the bindings phase, and pick it knowingly: the pool is pre-sized, so it is memory spent whether or not a project has an addon. Until then the ceiling is a wall a large addon hits with no message an author can act on. |
 | **RISK-1** | UE's licensing applies to games shipped with the host, including royalties. This is a permanent property of the current distribution model and may deter adoption regardless of anything built here. | adoption | Disclose prominently (R-DIST-3). No mitigation available. |
 | **RISK-2** | Tracking Godot `master` and UE `main` simultaneously means two moving dependencies with no compatibility window. | R-QUAL-7 | Accepted deliberately while pre-1.0; revisit at the first release. |
 
