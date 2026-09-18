@@ -7969,8 +7969,10 @@ namespace {
 /// back empty where re-reading the file would not. It is a fallback for a definition whose file
 /// the consumer cannot open, not a replacement for that reading.
 ///
-/// The shape matches verse_doc_comment_above's exactly -- delimiter gone, each line trimmed,
-/// joined with newlines -- so a consumer cannot tell which side produced a given description.
+/// The shape matches verse_doc_comment_above's exactly -- the delimiter and the one space after
+/// it gone, indentation kept so an indented sample is still a code block to the consumer's
+/// converter, trailing space trimmed, joined with newlines -- so a consumer cannot tell which
+/// side produced a given description.
 AUTORTFM_DISABLE FUtf8String DocOf(const uLang::CDefinition& Definition, const uLang::CSemanticProgram& Program)
 {
     // The prototype: prose is written once, on the generic declaration, and GetAttributes
@@ -8021,7 +8023,11 @@ AUTORTFM_DISABLE FUtf8String DocOf(const uLang::CDefinition& Definition, const u
         {
             Line.RightChopInline(1);
         }
-        Line.TrimStartAndEndInline();
+        if (Line.StartsWith(UTF8TEXT(" ")))
+        {
+            Line.RightChopInline(1);
+        }
+        Line.TrimEndInline();
         if (!Prose.IsEmpty())
         {
             Prose += UTF8TEXT("\n");

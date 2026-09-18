@@ -80,6 +80,15 @@ hover_probe := class(node2d):
 	# lost its location to the digest -- a type and an empty box.
 	Waits<public>(Clock:timer)<suspends>:tuple() = Clock.Timeout().Await()
 
+	# The prose itself, which reaches Godot as its own doc BBCode: lines join into a paragraph, a
+	# blank line separates two, a `span` is code, a **word** is bold and Floor[X] is not a tag.
+	#
+	# The second paragraph, with the sample the mirror's own comments write after a blank line:
+	#
+	#     Result := Floor[X]
+	#         Nested := 1
+	Prose<public>(X:float):int = 0
+
 	# The three types declared below this class, named here so each has a reference to hover as
 	# well as its declaration.
 	Helped<public>(H:hover_helper):int = H.Amount

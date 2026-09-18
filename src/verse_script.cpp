@@ -1,6 +1,7 @@
 #include "verse_script.h"
 
 #include "verse_class_decl.h"
+#include "verse_doc_markup.h"
 #include "verse_runtime.h"
 #include "verse_script_instance.h"
 #include "verse_script_language.h"
@@ -393,7 +394,7 @@ TypedArray<Dictionary> VerseScript::_get_documentation() const {
 		// Every member of this class is declared in this file, so the comment is in the buffer
 		// being edited rather than on disk -- which is what keeps documentation current with an
 		// unsaved edit, the same way the analysis behind it is.
-		const String description = verse_doc_comment_above(source, line);
+		const String description = verse_doc_bbcode(verse_doc_comment_above(source, line));
 
 		Dictionary entry;
 		entry["name"] = name;
@@ -413,8 +414,11 @@ TypedArray<Dictionary> VerseScript::_get_documentation() const {
 	Dictionary doc;
 	doc["name"] = class_name;
 	doc["inherits"] = String(decl.base.c_str());
-	doc["brief_description"] = verse_doc_comment_above(source, decl.line);
-	doc["description"] = verse_doc_comment_above(source, decl.line);
+	// The brief is the first paragraph, which is GDScript's split too (parse_class_doc_comment):
+	// the class reference draws it under the name and the whole text further down.
+	const String class_doc = verse_doc_bbcode(verse_doc_comment_above(source, decl.line));
+	doc["brief_description"] = String::utf8(verse_doc_brief(class_doc.utf8().get_data()).c_str());
+	doc["description"] = class_doc;
 	doc["properties"] = properties;
 	doc["methods"] = methods;
 	doc["script_path"] = get_path();

@@ -4,6 +4,7 @@
 #include "verse_bindings_gen.h"
 #include "verse_api_skipped.h"
 #include "verse_class_decl.h"
+#include "verse_doc_markup.h"
 #include "verse_keywords.h"
 #include "verse_lexer.h"
 #include "verse_module_map.h"
@@ -64,6 +65,11 @@ String verse_newline_normalized(const String &p_source) {
 // member at its first attribute, and verse_scan_class_decl reports a class at the `:= class` row
 // itself -- so `mover`'s whole comment was dropped where `spinner`'s, carrying no attribute,
 // survived.
+//
+// Only the delimiter and the one space after it come off, not the line's indentation: an indented
+// sample under a blank line is a code block to verse_doc_to_bbcode, and it was flattened into the
+// sentence before it when every line was stripped. The host's DocOf reads the same way, so the two
+// sides still produce one shape.
 String verse_doc_comment_above(const String &p_source, int64_t p_line) {
 	const PackedStringArray lines = p_source.split("\n");
 	PackedStringArray collected;
@@ -82,11 +88,15 @@ String verse_doc_comment_above(const String &p_source, int64_t p_line) {
 		} else {
 			break;
 		}
-		collected.push_back(line.strip_edges());
+		collected.push_back(line.trim_prefix(" ").rstrip(" \t"));
 	}
 
 	collected.reverse();
-	return String("\n").join(collected).strip_edges();
+	return String("\n").join(collected).lstrip("\n").rstrip("\n");
+}
+
+String verse_doc_bbcode(const String &p_doc) {
+	return String::utf8(verse_doc_to_bbcode(p_doc.utf8().get_data()).c_str());
 }
 
 #ifdef TOOLS_ENABLED
@@ -3028,8 +3038,10 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 			description = found["overridden_doc"];
 		}
 	}
+	// Godot reads a local result's description as its own doc BBCode and draws every `\n` as a
+	// paragraph, so the prose goes over converted, not as the reader joined it.
 	if (!description.is_empty()) {
-		result["description"] = description;
+		result["description"] = verse_doc_bbcode(description);
 	}
 
 	// A local result that carries no type, no description and no class is a tooltip with nothing

@@ -2154,6 +2154,20 @@ external editor is secondary.
   **11.0 is a major because `vh_lookup_desc` had no `StructSize`** — nothing a consumer could check
   before reading a field appended after the version it was built against, and no way to make the
   addition ignorable. The field is there now, so the next one can be a minor.
+  **The prose reaches Godot as its own doc BBCode.** Godot draws a local result's description with
+  `_add_text_to_rt` — every `\n` a paragraph, every `[` a tag, and nothing read for a backtick — and
+  both readers joined comment lines with `\n`, so a five-line comment was five paragraphs with its
+  backticks printed and `Floor[X]` half-parsed. `src/verse_doc_markup.{h,cpp}` converts at the
+  boundary, in every place a description is handed over (the lookup result, and a script doc's
+  members and class text): consecutive lines join with a space and a blank line is a paragraph, which
+  is GDScript's own `_process_doc_line` rule; a backtick span is `[code]`; an indented or fenced
+  block is `[codeblock lang=verse]`, named so Godot does not run the GDScript highlighter over it;
+  `**bold**` and `*emphasis*` under Markdown's rule; a bullet breaks the line; a tag Godot's own
+  documentation accepts passes through, and any other bracket is `[lb]`/`[rb]`. The readers keep a
+  line's indentation now — only the delimiter and the one space after it come off — because an
+  indented sample stripped flat is a sentence. The rules are the units layer's
+  (`tests/verse_doc_markup`), the whole converted string of one member is asserted in
+  `tests/integration`, and what the tooltip draws with it is by hand.
 - **R-TOOL-5 (MUST)** Signature help while typing a call. Status: **part** — declines during an
   analysis for R-TOOL-4's reason, and queues that buffer so the next ask answers. It is asked about
   the same repaired buffer R-TOOL-3 describes, off the same analysis, so an unclosed call has a hint

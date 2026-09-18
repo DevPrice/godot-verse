@@ -2201,6 +2201,17 @@ func begin() -> void:
 		_check("a parametric class's method hovers with the comment above it",
 				_hover(hovers, "Await").get("description", "") != "")
 
+		# The description's *format*. Godot draws a local result's description as its own doc
+		# BBCode -- `_add_text_to_rt`, where `\n` is a paragraph and `[` opens a tag -- and the
+		# reader joined comment lines with `\n`, so a five-line comment was five paragraphs with
+		# its backticks printed. This is the whole converted string, because the join, the
+		# escape, the code span and the indented block are one answer and a substring check
+		# would pass a description with any two of them wrong. What the tooltip *draws* with it
+		# is by hand (by-hand-findings.md).
+		_check_eq("a description reaches Godot as its doc BBCode",
+				_hover(hovers, "Prose").get("description", ""),
+				"The prose itself, which reaches Godot as its own doc BBCode: lines join into a paragraph, a blank line separates two, a [code]span[/code] is code, a [b]word[/b] is bold and Floor[lb]X[rb] is not a tag.\nThe second paragraph, with the sample the mirror's own comments write after a blank line:\n[codeblock lang=verse]\nResult := Floor[X]\n    Nested := 1\n[/codeblock]")
+
 		# The types the file declares beside its own class. A type's name has no type to spell --
 		# the host fills one for a data member and for a function, and a type is neither -- so each
 		# of these drew the label, the name, a colon and nothing after it. The word comes from the

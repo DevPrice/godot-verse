@@ -1926,6 +1926,23 @@ Only those two: a type after `:` and a
 specifier after `<` decline an empty prefix inside `_complete_code` itself, so putting them in the
 list would raise a popup with nothing to draw.
 
+### The tooltip's rendering of a converted description · **owed**
+
+A description reaches Godot as doc BBCode now (`src/verse_doc_markup.{h,cpp}`, spec R-TOOL-4):
+lines joined into paragraphs, backticks as `[code]`, an indented sample as `[codeblock
+lang=verse]`, every other bracket escaped. The string is asserted whole in `tests/integration`
+against `hover_probe.verse`'s `Prose` member, and the rules one by one in the units layer. What no
+headless run can read is what `_add_text_to_rt` then draws with it.
+
+**To check it:** in the script editor, hover `Prose` in `tests/integration/scripts/hover_probe.verse`.
+The tooltip must show two paragraphs and not five, `span` in the code font with a background, `word`
+in bold, `Floor[X]` with its brackets, and the sample as one code block with `Nested := 1` indented
+under `Result := Floor[X]` and a copy button beside it. Then open the class reference for
+`hover_probe` (**Search Help**, or ctrl+click the class name): the same text must render the same
+way under the member, and the class's brief under its name must be the comment's first paragraph
+alone. A `[b]` written in a comment must render bold, and `Items[i]` in a sentence must render as
+written rather than in italics.
+
 ### And when one of these is looked at again
 
 Record what you saw the way every other correction in this repository is recorded: in

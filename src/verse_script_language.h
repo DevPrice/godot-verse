@@ -39,6 +39,10 @@ godot::String verse_newline_normalized(const godot::String &p_source);
 // whole of where a script's documentation comes from.
 godot::String verse_doc_comment_above(const godot::String &p_source, int64_t p_line);
 
+// verse_doc_to_bbcode over a godot::String: what verse_doc_comment_above produced, in the BBCode
+// Godot's documentation renderer reads. Every description handed to Godot goes through it.
+godot::String verse_doc_bbcode(const godot::String &p_doc);
+
 // The Godot class a mirrored Verse class name stands for, or nullptr for a name that is not part of
 // the generated API -- a class the author wrote, most often. Shared rather than looked up twice:
 // verse_script.cpp turns an export's class hint into the name an inspector slot filters by, and
