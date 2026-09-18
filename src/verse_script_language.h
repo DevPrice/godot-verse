@@ -2,6 +2,8 @@
 
 // _make_template returns a Ref<Script>, and Ref's destructor needs the complete type;
 // script_language_extension.hpp only forward-declares it.
+#include "verse_bindings.h"
+
 #include <godot_cpp/templates/hash_set.hpp>
 #include <godot_cpp/classes/script.hpp>
 #include <godot_cpp/classes/script_language_extension.hpp>
@@ -186,12 +188,19 @@ public:
 	// package name.
 	// False when the host is not up yet, which leaves the request armed for the next frame.
 	bool refresh_bindings();
+	// What a withheld build says instead of the diagnostics it is withholding.
+	void warn_incomplete_roster() const;
 	bool bindings_hook_connected = false;
 	bool bindings_refresh_pending = true;
 	// True when the last generation emitted a class as a bare type -- because its script would not
 	// load, or because it was held back to avoid a cyclic one (B30) -- which re-arms the refresh
 	// until one describes everything.
 	bool bindings_incomplete = false;
+	// Which ones, so the withheld build can say so. A verdict nobody prints is the right answer to
+	// a diagnostic that is already false, and it was the *whole* answer -- so a node whose script
+	// failed to attach reached GDScript as "on a base object of type 'Nil'" and named neither the
+	// script nor the reason (B36).
+	std::vector<std::string> bindings_incomplete_classes;
 	// A build against such a roster cannot describe every binding, so a Verse file *calling* one of
 	// their methods fails against members that land on the next frame's generation. That build's
 	// verdict is withheld rather than logged and these two carry the correction: one build, on the
@@ -226,6 +235,10 @@ public:
 	const godot::HashMap<godot::String, BindingInfo> &bindings() const { return bindings_by_verse_class; }
 
 	godot::HashMap<godot::String, BindingInfo> bindings_by_verse_class;
+	// The last generation's classes, whole, which BindingInfo above is not: it keeps names and
+	// drops the types a declaration needs. Handed to the next generation so a script held back to
+	// avoid a cyclic load keeps the members the last one read off it (B36).
+	std::vector<VerseBindingClass> last_binding_classes;
 
 	// The consumer half of R-DIAG-4's break decision, reached from VerseRuntime's ABI callbacks.
 	//

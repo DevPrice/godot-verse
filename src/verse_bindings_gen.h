@@ -24,6 +24,15 @@
 /// printed is the asking side's, naming the script asked for and never the one it collided with
 /// (`by-hand-findings.md` B30). Only a script that *names a Verse class* can close that loop, and
 /// those are the only ones held back.
-VerseBindings verse_generate_bindings(bool p_inside_resource_load = false);
+///
+/// **`p_previous` is what a held-back script's members come from**, and without it a generation
+/// taken during a load *destroys* a roster that was complete. A held-back class used to be emitted
+/// bare, so a Verse file calling one of its methods stopped compiling -- and a script that names a
+/// Verse class names it on every load, so this is not a first-build state that passes: it is every
+/// time the scene is instantiated. Describing it from the last generation is stale at worst, where
+/// empty is wrong every time, and the class stays in `incomplete` either way so the corrective
+/// build still runs (B36).
+VerseBindings verse_generate_bindings(bool p_inside_resource_load = false,
+		const std::vector<VerseBindingClass> *p_previous = nullptr);
 
 #endif // VERSE_BINDINGS_GEN_H

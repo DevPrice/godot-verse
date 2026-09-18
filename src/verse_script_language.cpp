@@ -4091,6 +4091,29 @@ bool VerseScriptLanguage::is_script_binding(const String &p_verse_class) const {
 	return binding != nullptr && !binding->script_class.is_empty();
 }
 
+void VerseScriptLanguage::warn_incomplete_roster() const {
+	String named;
+	for (const std::string &verse_class : bindings_incomplete_classes) {
+		const String name = String(verse_class.c_str());
+		const BindingInfo *info = binding_for(name);
+		named += named.is_empty() ? String("`") : String(", `");
+		named += name + String("`");
+		if (info != nullptr && !info->script_path.is_empty()) {
+			named += String(" (") + info->script_path + String(")");
+		}
+	}
+	UtilityFunctions::push_warning(String(
+			"Verse: this build ran against an incomplete binding roster, so its errors are withheld "
+			"for one pass. ") + named + String(" is declared with no members, because the script it "
+			"stands for names a Verse class -- loading it to describe it while a .verse is loading "
+			"would be a cyclic load, so it is held back instead. A Verse file that names one of its "
+			"*methods* does not compile on this pass, and a node that loses its script over it is "
+			"reported by GDScript as a null value with nothing said about Verse. The next build "
+			"describes it in full; what no build can repair is a node the scene has already "
+			"finished instantiating. Reach the method through `Call`/`Callv` (R-INT-2) rather than "
+			"naming it, and the cycle is broken."));
+}
+
 bool VerseScriptLanguage::refresh_bindings() {
 #ifdef TOOLS_ENABLED
 	VerseRuntime *runtime = get_runtime();
@@ -4106,14 +4129,17 @@ bool VerseScriptLanguage::refresh_bindings() {
 	// about the wrong script (B30). On that stack the generator holds back the scripts that can
 	// close the loop and no others: each is still declared from the class list, and
 	// `bindings_incomplete` asks again on the next frame for its members.
-	const VerseBindings bindings = verse_generate_bindings(VerseResourceFormatLoader::is_loading());
+	const VerseBindings bindings = verse_generate_bindings(
+			VerseResourceFormatLoader::is_loading(), &last_binding_classes);
 	runtime->set_bindings(bindings);
+	last_binding_classes = bindings.classes;
 
 	// A class emitted as a bare type because its script would not load. That is the ordinary state
 	// of a GDScript naming a Verse class *before the first build*, so it is not worth a warning --
 	// what it is worth is asking again, because the build this generation feeds is exactly what
 	// makes the script loadable. The next ask fills the members in.
 	bindings_incomplete = !bindings.incomplete.empty();
+	bindings_incomplete_classes = bindings.incomplete;
 
 	bindings_by_verse_class.clear();
 	for (const VerseBindingClass &binding : bindings.classes) {
@@ -4263,6 +4289,11 @@ Error VerseScriptLanguage::build_project() {
 	if (withhold) {
 		provisional_build_allowed = false;
 		corrective_build_pending = true;
+		// Withholding the diagnostics is not withholding the fact. The corrective build repairs
+		// the *project*, and it cannot repair a node the scene already tried and failed to give a
+		// script to -- so on a cold run this is the only sentence anyone gets, and without it the
+		// first thing said is GDScript's, about a value that is null for a reason named nowhere.
+		warn_incomplete_roster();
 	}
 
 	// The host loaded each of these from disk just now, so this is the text it holds. Seeding it

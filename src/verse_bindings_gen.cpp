@@ -155,6 +155,19 @@ std::string native_base_of(const std::unordered_map<std::string, std::string> &p
 	return std::string();
 }
 
+/// What the last generation said about this script class, or null if it said nothing.
+const VerseBindingClass *remembered_class(const std::vector<VerseBindingClass> *p_previous, const std::string &p_script_class) {
+	if (p_previous == nullptr || p_script_class.empty()) {
+		return nullptr;
+	}
+	for (const VerseBindingClass &was : *p_previous) {
+		if (was.script_class == p_script_class) {
+			return &was;
+		}
+	}
+	return nullptr;
+}
+
 /// Whether a ClassDB class is one the mirror already carries.
 bool is_mirrored(const String &p_godot_name) {
 	return !mirrored_verse_class(p_godot_name).empty();
@@ -323,7 +336,7 @@ void describe_from_script(const Ref<Script> &p_script, const VerseBindingRoster 
 
 } // namespace
 
-VerseBindings verse_generate_bindings(bool p_inside_resource_load) {
+VerseBindings verse_generate_bindings(bool p_inside_resource_load, const std::vector<VerseBindingClass> *p_previous) {
 	VerseBindings bindings;
 
 	ClassDBSingleton *db = ClassDBSingleton::get_singleton();
@@ -448,6 +461,14 @@ VerseBindings verse_generate_bindings(bool p_inside_resource_load) {
 			continue;
 		}
 		if (!script.is_valid()) {
+			// The members the last generation described, because a generation taken during a load
+			// otherwise *unsays* what a complete one had already said -- and a script naming a
+			// Verse class is held back on every load, not once (B36). Stale at worst; the class is
+			// still reported incomplete, so the corrective build replaces this with a read one.
+			if (const VerseBindingClass *remembered = remembered_class(p_previous, binding.script_class)) {
+				binding.methods = remembered->methods;
+				binding.signals = remembered->signals;
+			}
 			// Say so, once per generation, rather than leaving an author to wonder why completion
 			// offers a class with one meaningless method on it.
 			bindings.incomplete.push_back(binding.verse_class);

@@ -1426,6 +1426,51 @@ Two cases in the integration layer, one per kind of class, both over a `mob` the
 
 ---
 
+## B36. A node lost its script and GDScript reported a null value · **said, not closed**
+
+Reported from an editor session: *"Invalid access to property or key 'Greeting' on a base
+object of type 'Nil'"* at `main.gd:6`, with nothing else printed anywhere.
+
+**It is a cross-language load cycle, and three arms of an A/B on a copy of `demo/` name it.**
+`main.gd` carries `@export var mover: Mover`, so it names a Verse class; `mover.verse` calls
+`main_script{}.SomeMethod[...]`, so it names a member of `main.gd`'s binding. Loading either
+requires the other.
+
+  - the two files as written: `mover` is null and no Verse runs at all;
+  - the same files with the `main_script` call removed: everything runs;
+  - the same files with `main.gd` typing the export `Node2D` rather than `Mover`, so it names
+    no Verse class: everything runs, the `main_script` call included.
+
+**What the guard does, and what it costs.** A GDScript naming a Verse class is held back during
+a `.verse` load, because asking Godot for it there is the cyclic load B30 records. Its binding
+is then declared with no members -- which §6's bargain says is fine, because "the next
+generation fills the members in". That is true for a file naming the *type* and false for one
+naming a *member*: a member against a memberless class is a compile error, the build fails, the
+script never becomes valid, and the scene's assignment of it to a node silently does nothing. A
+script that names a Verse class names it on **every** load, so this is not a first-build state
+that passes.
+
+**Two things changed and neither closes it.** A generation taken during a load no longer
+*unsays* what a complete one said: the classes the last generation described are handed to the
+next, and a held-back script keeps its last-known members rather than losing them. That covers
+a session in which a complete generation has already happened -- an editor that has built. It
+does not cover a cold start, where the first generation is the one inside the load and there is
+nothing yet to remember; Play launches a new process, so the editor's memory does not reach it.
+
+**So the withheld build says so now, which is the part that was actually missing.** A build
+against an incomplete roster withholds its diagnostics because they are false by the time
+anyone reads them -- and that was the *whole* of what it did, so on a cold run the first and
+only sentence was GDScript's, about a value that is null for a reason named nowhere. The
+warning names the class, the script it stands for, why it was held back, and the one workaround:
+reach the method through `Call`/`Callv` (R-INT-2) rather than naming it. Once per session, which
+is what `provisional_build_allowed` already bounds.
+
+**What would close it** is a description cache that outlives the process, the way Godot caches
+its own global class list in `.godot/global_script_class_cache.cfg`. Not built: the shape needs
+deciding, and the sentence above is what an author gets until it is.
+
+---
+
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks
