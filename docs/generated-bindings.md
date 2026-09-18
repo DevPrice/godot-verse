@@ -414,7 +414,7 @@ language — and for a binding it would come from the same place, the addon's ow
 `Callv` escape hatch has no `<reads>` spelling, so reading a third-party property from a `<reads>`
 function is wall 8's cascade for no reason.
 
-### 10.7 Four more traps, for §6
+### 10.7 Five more traps, for §6
 
 - **A method parameter may not share a name with an inherited mirrored property.**
   `Apply(Power:int, Scale:float)` on a `class(node2d)` is glitch 3532 — *"The data
@@ -445,6 +445,15 @@ function is wall 8's cascade for no reason.
   exports, whether the published generation carries the class — is about a class the project
   declares, and because a binding sharing a name with a script class would otherwise take its
   place there.
+- **An object is a type a binding has to be able to name, and naming one wrong refuses the whole
+  package.** `verse_type_for` could type an object only as a class the *mirror* carries, which
+  cost a method naming a script class its place in the binding and cost a method answering a
+  mirrored class rather more: it was emitted with a declared result and a `variant` body, and a
+  package that does not compile is every binding in the project (`by-hand-findings.md` B35). Two
+  things make it work. The roster is collected in full before any member is typed — Verse
+  resolves module-scope definitions in any order, so the dependency order the old comment said
+  was needed is not — and an object result is `<decides>`, over `AsObject[]` and a downcast,
+  because a class has no value standing for “Godot answered nothing”.
 
 ### 10.8 What §9 should now say
 

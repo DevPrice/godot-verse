@@ -22,3 +22,15 @@ func label() -> String:
 
 func heavy() -> bool:
 	return true
+
+
+# An object, in both directions and at both kinds of class: `Mob` is this script's own, which no
+# mirror carries and only the binding beside it declares, and `Node2D` is one the mirror has. A
+# method whose signature the generator cannot type is left out of the binding entirely, so these
+# four are what say it can type an object at all.
+func mate(other: Mob) -> Mob:
+	return other
+
+
+func place(where: Node2D) -> Node2D:
+	return where

@@ -43,13 +43,22 @@ std::string mirrored_verse_class(const String &p_godot_name) {
 	return std::string();
 }
 
-/// The Verse type a Godot `Variant::Type` plus class name crosses as, or empty when the mirror has
-/// no spelling for it.
+/// Every class this generation will declare, Godot's name for it -> the Verse name it is given.
+///
+/// A class typed as another binding is what this exists for, and it has to be a whole-roster answer
+/// rather than a running one: a method of the first class emitted can name the last, and nothing
+/// orders a Godot class list. Verse does not mind -- module-scope definitions resolve in any order,
+/// which the mirror relies on 12,000 lines before it declares `node2d` -- so the roster is collected
+/// first and every member is typed against all of it.
+using VerseBindingRoster = std::unordered_map<std::string, std::string>;
+
+/// The Verse type a Godot `Variant::Type` plus class name crosses as, or empty when neither the
+/// mirror nor this generation's own roster has a spelling for it.
 ///
 /// Deliberately narrow. A member the generator cannot type is **left out** rather than guessed at:
 /// a wrong type compiles and then fails at the call, where an absent one is the dynamic route the
 /// author already had (R-INT-2). The set here is what a reader exists for in `verse_bindings.cpp`.
-std::string verse_type_for(int64_t p_variant_type, const String &p_class_name) {
+std::string verse_type_for(int64_t p_variant_type, const String &p_class_name, const VerseBindingRoster &p_roster) {
 	switch (p_variant_type) {
 		case Variant::NIL:
 			return std::string(); // void for a result; refused for a parameter.
@@ -73,11 +82,14 @@ std::string verse_type_for(int64_t p_variant_type, const String &p_class_name) {
 		case Variant::DICTIONARY:
 			return "dictionary";
 		case Variant::OBJECT: {
-			// An object crosses as the mirrored class it is, and only as one the mirror carries:
-			// a binding naming another binding would need the two emitted in dependency order,
-			// which the roster does not give.
+			// The mirror first, because a class in both is the mirror's: `Node2D` is `node2d`
+			// wherever it appears, and a binding is only ever generated for what the mirror lacks.
 			const std::string mirrored = mirrored_verse_class(p_class_name);
-			return mirrored.empty() ? std::string() : mirrored;
+			if (!mirrored.empty()) {
+				return mirrored;
+			}
+			const VerseBindingRoster::const_iterator bound = p_roster.find(utf8_of(p_class_name));
+			return bound == p_roster.end() ? std::string() : bound->second;
 		}
 		default:
 			return std::string();
@@ -164,7 +176,7 @@ std::string mirrored_base_of(ClassDBSingleton *p_db, const String &p_godot_name)
 }
 
 /// Reads one class's own methods and signals out of ClassDB.
-void describe_from_classdb(ClassDBSingleton *p_db, const String &p_godot_name, VerseBindingClass &r_class) {
+void describe_from_classdb(ClassDBSingleton *p_db, const String &p_godot_name, const VerseBindingRoster &p_roster, VerseBindingClass &r_class) {
 	// no_inheritance, or every binding re-declares its base's members and trips Verse's shadow
 	// rule -- a member that shadows an inherited one is glitch 3532 at the declaration.
 	const TypedArray<Dictionary> methods = p_db->class_get_method_list(p_godot_name, true);
@@ -187,13 +199,13 @@ void describe_from_classdb(ClassDBSingleton *p_db, const String &p_godot_name, V
 		out.is_const = (flags & METHOD_FLAG_CONST) != 0;
 
 		const Dictionary ret = method.get("return", Dictionary());
-		out.result_type = verse_type_for(ret.get("type", (int64_t)Variant::NIL), ret.get("class_name", String()));
+		out.result_type = verse_type_for(ret.get("type", (int64_t)Variant::NIL), ret.get("class_name", String()), p_roster);
 
 		bool usable = true;
 		const Array args = method.get("args", Array());
 		for (int64_t a = 0; a < args.size(); a++) {
 			const Dictionary arg = args[a];
-			const std::string type = verse_type_for(arg.get("type", (int64_t)Variant::NIL), arg.get("class_name", String()));
+			const std::string type = verse_type_for(arg.get("type", (int64_t)Variant::NIL), arg.get("class_name", String()), p_roster);
 			if (type.empty()) {
 				usable = false;
 				break;
@@ -219,7 +231,7 @@ void describe_from_classdb(ClassDBSingleton *p_db, const String &p_godot_name, V
 		const Array args = signal.get("args", Array());
 		for (int64_t a = 0; a < args.size(); a++) {
 			const Dictionary arg = args[a];
-			const std::string type = verse_type_for(arg.get("type", (int64_t)Variant::NIL), arg.get("class_name", String()));
+			const std::string type = verse_type_for(arg.get("type", (int64_t)Variant::NIL), arg.get("class_name", String()), p_roster);
 			if (type.empty()) {
 				usable = false;
 				break;
@@ -238,7 +250,7 @@ void describe_from_classdb(ClassDBSingleton *p_db, const String &p_godot_name, V
 /// `_get_script_method_list(r_list, true)` with no own-only flag), so the base's are subtracted --
 /// re-declaring one is glitch 3532 at the declaration, with nothing said about where the collision
 /// came from.
-void describe_from_script(const Ref<Script> &p_script, VerseBindingClass &r_class) {
+void describe_from_script(const Ref<Script> &p_script, const VerseBindingRoster &p_roster, VerseBindingClass &r_class) {
 	std::set<std::string> inherited;
 	Ref<Script> base = p_script->get_base_script();
 	while (base.is_valid()) {
@@ -265,13 +277,13 @@ void describe_from_script(const Ref<Script> &p_script, VerseBindingClass &r_clas
 		out.is_const = false;
 
 		const Dictionary ret = method.get("return", Dictionary());
-		out.result_type = verse_type_for(ret.get("type", (int64_t)Variant::NIL), ret.get("class_name", String()));
+		out.result_type = verse_type_for(ret.get("type", (int64_t)Variant::NIL), ret.get("class_name", String()), p_roster);
 
 		bool usable = true;
 		const Array args = method.get("args", Array());
 		for (int64_t a = 0; a < args.size(); a++) {
 			const Dictionary arg = args[a];
-			const std::string type = verse_type_for(arg.get("type", (int64_t)Variant::NIL), arg.get("class_name", String()));
+			const std::string type = verse_type_for(arg.get("type", (int64_t)Variant::NIL), arg.get("class_name", String()), p_roster);
 			if (type.empty()) {
 				usable = false;
 				break;
@@ -296,7 +308,7 @@ void describe_from_script(const Ref<Script> &p_script, VerseBindingClass &r_clas
 		const Array args = signal.get("args", Array());
 		for (int64_t a = 0; a < args.size(); a++) {
 			const Dictionary arg = args[a];
-			const std::string type = verse_type_for(arg.get("type", (int64_t)Variant::NIL), arg.get("class_name", String()));
+			const std::string type = verse_type_for(arg.get("type", (int64_t)Variant::NIL), arg.get("class_name", String()), p_roster);
 			if (type.empty()) {
 				usable = false;
 				break;
@@ -323,6 +335,16 @@ VerseBindings verse_generate_bindings(bool p_inside_resource_load) {
 	// name is snake_cased, so `FooBar` and `Foo_Bar` would both be `foo_bar`. First one wins and
 	// the second is dropped rather than emitted as a redefinition.
 	std::set<std::string> taken;
+
+	// Declared first, described second. A method may name any class in the generation and a Godot
+	// class list is in no order this could rely on, so nothing is typed until every name is known.
+	// The two vectors are appended together and read by index.
+	VerseBindingRoster roster;
+	struct FPending {
+		String godot_class;
+		Ref<Script> script;
+	};
+	std::vector<FPending> pending;
 
 	// --- ClassDB, minus everything the mirror carries -------------------------------------------
 	const PackedStringArray class_list = db->get_class_list();
@@ -354,7 +376,8 @@ VerseBindings verse_generate_bindings(bool p_inside_resource_load) {
 		if (binding.verse_class.empty() || !taken.insert(binding.verse_class).second) {
 			continue;
 		}
-		describe_from_classdb(db, godot_name, binding);
+		roster[binding.godot_class] = binding.verse_class;
+		pending.push_back({ godot_name, Ref<Script>() });
 		bindings.classes.push_back(binding);
 	}
 
@@ -424,14 +447,22 @@ VerseBindings verse_generate_bindings(bool p_inside_resource_load) {
 		if (binding.verse_class.empty() || !taken.insert(binding.verse_class).second) {
 			continue;
 		}
-		if (script.is_valid()) {
-			describe_from_script(script, binding);
-		} else {
+		if (!script.is_valid()) {
 			// Say so, once per generation, rather than leaving an author to wonder why completion
 			// offers a class with one meaningless method on it.
 			bindings.incomplete.push_back(binding.verse_class);
 		}
+		roster[binding.script_class] = binding.verse_class;
+		pending.push_back({ String(), script });
 		bindings.classes.push_back(binding);
+	}
+
+	for (size_t i = 0; i < pending.size(); i++) {
+		if (pending[i].script.is_valid()) {
+			describe_from_script(pending[i].script, roster, bindings.classes[i]);
+		} else if (!pending[i].godot_class.is_empty()) {
+			describe_from_classdb(db, pending[i].godot_class, roster, bindings.classes[i]);
+		}
 	}
 
 	bindings.source = verse_emit_bindings(bindings.classes);

@@ -69,13 +69,27 @@ Three documents are not phase records and are the ones to read before adding a f
   removed.
 - **`docs/by-hand-findings.md`** — what the by-hand editor sessions found, because everything from
   `EngineDebugger` and the editor UI inward has no automated test and never will. B1–B9, B15–B18,
-  B20 and B22–B33 are defects, all fixed; B12 is a Verse fact; B13 a latency finding; B14 the
+  B20 and B22–B35 are defects, all fixed; B12 is a Verse fact; B13 a latency finding; B14 the
   sandboxed export run. **B30 is the one to read before calling `ResourceLoader` from anything a
   resource load can reach**: Godot answers a cyclic load `ERR_BUSY` and a null `Ref` silently, so
   the only thing printed is the asking side's own sentence — which names the resource *asked for*
   and never the one it collided with, and reads as that resource being broken. A `.verse` load
   builds the project, a build generates the bindings, and generating them loads every `class_name`
   script, so a GDScript naming a Verse class reaches itself.
+  **B35 is the one to read before touching what a generated binding can name**: a method the
+  generator cannot type is left out of the binding, so a GDScript method taking its own
+  `class_name` was simply absent — and one *answering* a class the mirror carries was worse,
+  emitted with a declared result over a `variant` body, which refuses the whole bindings
+  package and with it every Verse script in the project. A binding may name a binding: Verse
+  resolves module-scope definitions in any order, so the roster is collected before anything
+  is typed, and an object result is `<decides>` over `AsObject[]` and a downcast because a
+  class has no value standing for “Godot answered nothing”.
+  **B34 is the one to read before touching how an argument reaches the VM**: `WireToValue`
+  decided which class a declaration named *before* looking at whether a value had arrived, so
+  an optional parameter of any class but the mirror's refused Godot's own null — the one value
+  every object slot can hold. Null is answered first now, and the class lookup behind it is
+  per package (`FindMirroredClass`, `FindGodotClass`, `FindBindingClass`), which is the rule
+  `WriteInstanceFieldInstance` already followed for a member.
   **B31 is the one to read before drawing a type's own name anywhere**: a type has no
   type to spell, so `vh_lookup_desc::TypeUtf8` is empty for one, and the kind cannot stand in
   for it either — a class, a struct and an interface all arrive as `VH_LOOKUP_CLASS`. The word

@@ -114,6 +114,11 @@ std::string call_expression(const VerseBindingMethod &p_method) {
 /// The reader that turns the answering `variant` back into the declared type, and the fallback for
 /// when it declines. A binding never raises: Godot answering something unexpected is not the
 /// author's mistake and is not worth an instance's content scope.
+///
+/// **A class type has no row here and cannot have one**, which is why an object result is emitted
+/// `<decides>` instead: there is no value of a class that stands for "Godot answered nothing", and
+/// the nearest thing to one -- `some_class{}` -- would mint a live Godot object per declined call.
+/// That is the mirror's rule too (R-TYPE-4): every object-returning method in it is failable.
 struct FReader {
 	const char *accessor;
 	const char *fallback;
@@ -211,11 +216,17 @@ std::string verse_emit_binding_class(const VerseBindingClass &p_class) {
 
 	for (const VerseBindingMethod &method : p_class.methods) {
 		const FReader reader = reader_for(method.result_type);
+		// Every type the enumeration can name is either one this has a reader for or a class, so
+		// "no reader" is the test for the latter rather than a shape to guard against.
+		const bool answers_object = !method.result_type.empty() && reader.accessor == nullptr;
 		out += "\t";
 		out += verse_binding_member_name(method.godot_name);
 		out += "<public>(";
 		out += param_list(method);
 		out += ")";
+		if (answers_object) {
+			out += "<decides>";
+		}
 		// A method answering nothing is `<transacts>` whatever Godot's const flag says: the 38
 		// const-and-void methods in Godot's own API are `OS.set_environment` and friends, which
 		// plainly do something. The test is const *and answering*, the mirror's exactly.
@@ -238,12 +249,15 @@ std::string verse_emit_binding_class(const VerseBindingClass &p_class) {
 			out += reader.fallback;
 			out += "\n";
 		} else {
-			// No reader for the declared type, so the method answers the raw `variant`. A script
-			// cannot spell that type, so this arm is only reached for a result the enumeration
-			// should have refused -- it is here so a bad row is a compile error in the generated
-			// file rather than a silently dropped method.
+			// The mirror's own spelling for an object result, and for its reasons: `AsObject[]`
+			// reads the handle out of the answering `variant`, and the downcast is what narrows an
+			// `object` to the class Godot annotated. Both decline rather than answering, which is
+			// what makes the method `<decides>` and is the whole of how "Godot answered null"
+			// crosses -- a class has no value that means nothing.
+			out += method.result_type;
+			out += "[";
 			out += call_expression(method);
-			out += "\n";
+			out += ".AsObject[]]\n";
 		}
 	}
 

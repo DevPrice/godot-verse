@@ -678,18 +678,18 @@ EXPORT_DATA_DIR_ENTRIES = {"Cooked", "Engine", "verse_classes.json"}
 EXPORT_EXPECTED_CLASSES = ["marshal", "signals", "left/widget"]
 
 # What the exported run must report, named rather than inferred (7b D5): a case that stops running
-# in an export has to read as a failure and not as a shorter log. The fifteen skips are
+# in an export has to read as a failure and not as a shorter log. The nineteen skips are
 # test_cases.gd's `editor` blocks -- the second generation, the reload, `is_tool` off a stripped
 # source, `get_global_name`, which is read off the same stripped source, and the hover tooltip,
-# which needs an analysis a runtime host has no compiler to produce, and the four binding casts,
-# which want a class-to-binding table the sidecar does not carry yet (R-INT-11). The five R-EXP-7 cases run the
+# which needs an analysis a runtime host has no compiler to produce, and the eight cases over a
+# binding, which want a class-to-binding table the sidecar does not carry yet (R-INT-11). The five R-EXP-7 cases run the
 # other way round -- only an exported game has autoloads at all, because `--script` replaces the
 # main loop before Godot sets one up -- so they are skips in the editor run and passes here. The two
 # runs therefore report different totals from one set of lines, and neither is a function of the
-# other: the in-editor run prints 524 passed and 5 skipped against the numbers below. Adding a case
+# other: the in-editor run prints 533 passed and 5 skipped against the numbers below. Adding a case
 # means changing this line, which is the point of it.
-EXPORT_EXPECTED_PASSES = 478
-EXPORT_EXPECTED_SKIPS = 15
+EXPORT_EXPECTED_PASSES = 483
+EXPORT_EXPECTED_SKIPS = 19
 
 
 def run_export(results: Results, engine: Path | None, godot: Path | None) -> None:

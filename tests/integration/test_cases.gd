@@ -365,6 +365,22 @@ func begin() -> void:
 	else:
 		_check("an optional reference is an object like any other", false)
 
+	# Null, and the class the parameter names. The host decided which class a declaration named
+	# before it looked at whether a value had arrived at all, so an optional parameter of the
+	# project's own class refused Godot's own null with "Cannot convert argument 1 from Nil to
+	# Object" -- a sentence about the one value that signature exists to accept
+	# (`by-hand-findings.md` B34).
+	_check("null satisfies an optional mirrored parameter", node.call("MaybeTimerIsEmpty", null))
+	_check("and an optional parameter of the project's own class",
+			node.call("MaybeMarshalIsEmpty", null))
+	_check("which a real node then does not", not node.call("MaybeMarshalIsEmpty", node))
+	# The non-empty half, which is what says the refusal was not simply moved: the object that
+	# arrives is that node's own script instance, so a member read off it holds what the script does.
+	_check_eq("and the object that arrives is that node's own instance",
+			node.call("MaybeMarshalCounter", node), node.get("Counter"))
+	_check_eq("a bare parameter of the project's own class takes one too",
+			node.call("MarshalCounter", node), node.get("Counter"))
+
 	var script_by_name := {}
 	for method in (script as Script).get_script_method_list():
 		script_by_name[String(method["name"])] = method
@@ -638,6 +654,10 @@ func begin() -> void:
 		_skip("and reaches a method whose declared result type is GDScript's", "the sidecar carries no binding table yet (R-INT-11)")
 		_skip("and a bool answers a logic rather than a <decides>", "the sidecar carries no binding table yet (R-INT-11)")
 		_skip("a node carrying no such script declines the cast", "the sidecar carries no binding table yet (R-INT-11)")
+		_skip("a method taking its own GDScript class is in the binding", "the sidecar carries no binding table yet (R-INT-11)")
+		_skip("and one taking a class the mirror carries", "the sidecar carries no binding table yet (R-INT-11)")
+		_skip("null satisfies an optional parameter of a binding class", "the sidecar carries no binding table yet (R-INT-11)")
+		_skip("and a node carrying that GDScript satisfies it", "the sidecar carries no binding table yet (R-INT-11)")
 	elif binding_script == null or not binding_script.can_instantiate():
 		_check("a script naming a generated binding compiles", false)
 	else:
@@ -659,6 +679,24 @@ func begin() -> void:
 				binder.call("AskLabel", mob_node), "mob")
 		_check("and a bool answers a logic rather than a <decides>",
 				binder.call("AskHeavy", mob_node))
+
+		# An object, in both directions. `mate` is annotated with the GDScript class's own name,
+		# which no mirror carries and only the binding beside it declares, and a method the
+		# generator cannot type is left out of the binding entirely -- so `Mob.mate` was simply
+		# absent, and `Mob.place`, whose `Node2D` the mirror does carry, was emitted answering a
+		# `variant` where it had declared a `node2d` and took the whole project's build down with
+		# it (`by-hand-findings.md` B35).
+		_check_eq("a method taking its own GDScript class is in the binding",
+				binder.call("AskMate", mob_node), 42)
+		_check_eq("and one taking a class the mirror carries",
+				binder.call("AskPlace", mob_node), String(mob_node.name))
+
+		# The same class as a *script's* own parameter, which is the host's argument wire rather
+		# than the generated package.
+		_check("null satisfies an optional parameter of a binding class",
+				binder.call("AskMaybeMobEmpty", null))
+		_check_eq("and a node carrying that GDScript satisfies it",
+				binder.call("AskMaybeMobLabel", mob_node), "mob")
 
 		# A node with no such script declines the cast rather than answering something. The
 		# binding is a *type*, so this is the compiler's own failure and costs nothing at all.

@@ -1903,10 +1903,13 @@ section written after the spikes.
   answers a value rather than a test, `<reads>` where the source says the method is const *and*
   it answers something, properties as writable members except where a nested struct or a
   container forces a getter/setter pair. Enums, constants and statics are bound too — a
-  third-party physics class is unusable without its enums. Status: **`CallConst` done, the
-  classifications not built.** `CallConst` and `CallvConst` are in
-  `GodotApi.native.verse` and asserted in the integration and export layers; the generator
-  that would emit the classifications is Phase 7c.
+  third-party physics class is unusable without its enums. Status: **`CallConst`, `<reads>`,
+  `logic` and `<decides>` for an object return are done; predicates, properties, enums,
+  constants and statics are not.** `CallConst` and `CallvConst` are in
+  `GodotApi.native.verse` and asserted in the integration and export layers, and the emitter
+  reads Godot's own `METHOD_FLAG_CONST` for `<reads>`. An object return is `<decides>` over
+  `AsObject[]` and a downcast, which is what lets a binding name a class at all — the mirror's
+  or another binding's (`by-hand-findings.md` B35). What is left is Phase 7c's.
 
   **`<reads>` needs `CallConst` and could not exist without it.** Verse's internal access is
   scoped by verse path, so a package at `/Godot.org/Bindings` reaches neither

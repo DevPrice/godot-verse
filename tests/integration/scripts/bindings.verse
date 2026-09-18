@@ -30,6 +30,26 @@ bindings := class(node2d):
 	AskHeavy<public>(N:node2d)<transacts>:logic =
 		if (M := mob[N]) then M.Heavy() else false
 
+	# An object in both directions, at both kinds of class: `mob` is the binding's own type, which no
+	# mirror carries, and `node2d` is one the mirror does. Both are `<decides>` -- a class has no
+	# value standing for "Godot answered nothing", which is why the mirror's own object-returning
+	# methods are failable too (R-TYPE-4). A method the generator cannot type is left out of the
+	# binding entirely, so naming these at all is what says it can type an object.
+	AskMate<public>(N:node2d)<transacts>:int =
+		if (M := mob[N], Same := M.Mate[M]) then Same.Hit(21) else -1
+
+	AskPlace<public>(N:node2d)<transacts>:string =
+		if (M := mob[N], Where := M.Place[N]) then Where.GetName() else "?"
+
+	# A binding as a parameter of a *script's* own method, which reaches the host's argument wire
+	# rather than the generated package: null is the empty option whatever package declares the
+	# class (`by-hand-findings.md` B34).
+	AskMaybeMobEmpty<public>(M:?mob)<transacts>:logic =
+		if (M?) then false else true
+
+	AskMaybeMobLabel<public>(M:?mob)<transacts>:string =
+		if (Held := M?) then Held.Label() else "<none>"
+
 	# What the completion case in test_cases.gd reads. The two shapes differ in what the *snapshot*
 	# can say about them, which is what an author sees the instant the popup opens: an archetype
 	# names its class in front of its own brace, and a local names nothing until the analysis for

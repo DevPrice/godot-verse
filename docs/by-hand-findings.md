@@ -1354,6 +1354,78 @@ a decision.
 
 ---
 
+## B34. An optional parameter refused Godot's own null · **fixed**
+
+Reported from an editor session: `SomeMethod(Mover:?mover)` called from GDScript with `null`
+answered *"Invalid type in function 'SomeMethod' in base 'Node2D (Mover)'. Cannot convert
+argument 1 from Nil to Object."*
+
+**The refusal was about the class, and it was made before the value was looked at.**
+`WireToValue`'s reference arm opened by refusing any declared class that was not the mirror's:
+a parameter typed as one of the project's own had no spelling on that wire, because a handle
+alone cannot say which of a node's declarations it was meant to satisfy. The null case sat
+*below* that test, so a value that needs no class at all never reached it -- an empty option is
+`false`, and building one asks nothing of the declaration but whether it is an option.
+
+Two things follow from that ordering, and the second was hidden by the first. **Null is
+answered first now**, whatever class the parameter names. And the lookup the handle path then
+makes is per *package* rather than mirror-or-nothing: the mirror's own, the project's
+(`FindGodotClass`, over the qualified name) and the generated bindings' (`FindBindingClass`).
+That is `WriteInstanceFieldInstance`'s rule, written there a phase earlier for a *member* and
+never carried across to an argument -- so setting a `?mover` property worked while passing one
+to a method did not.
+
+**ABI 12.0 did not cause this and did make it visible.** The refusal is as old as the arm; what
+12.0 changed is that the parameter now tells Godot it takes a `Mover` (B32), so the call hint
+invites exactly the argument the host was refusing.
+
+Seven cases in the integration layer, over all three packages a class can be declared in, and
+each is asserted in both directions: null arrives as the empty option, and a real node arrives
+as that node's own script instance rather than as a second wrapper around the same handle.
+
+---
+
+## B35. A GDScript method naming a class was missing from its binding · **fixed**
+
+Reported from an editor session: a GDScript `class_name` method that uses its own class type
+does not reach the generated binding.
+
+**Two failures under one cause**, which is that `verse_type_for` could type an object only as a
+class the *mirror* carries. A parameter it cannot type drops the whole method, so
+`func mate(other: Mob) -> Mob` was simply absent. A *result* it cannot type is indistinguishable
+from `void` in that function's answer -- both are the empty string -- so the same method without
+the parameter would have been emitted answering nothing.
+
+**The third case is the one nobody reported, because it does not look like this at all.** A
+result the mirror *does* carry -- `func place(where: Node2D) -> Node2D` -- was typed, emitted,
+and had no reader, so it fell to an arm whose own comment called it unreachable and handed back
+the raw `variant`:
+
+    GodotBindings.verse:45:7: This function returns a value of type node2d, but the function
+    body's result is an incompatible value of type variant.
+
+That is the whole package refused, and the package is every binding in the project, so one
+annotated GDScript method stopped every Verse script in the project from compiling. Measured by
+adding the method to `tests/integration/mob.gd` before anything was changed, which is also what
+keeps it measured.
+
+**The obstacle the old comment named was not one.** It read that a binding naming another
+binding "would need the two emitted in dependency order, which the roster does not give" -- but
+Verse's module-scope definitions resolve in any order, which the generated mirror relies on
+12,000 lines before it declares `node2d`. So the roster is collected in full first and every
+member is typed against all of it, and a binding can name a binding.
+
+**An object result is `<decides>`**, which is the mirror's own rule (R-TYPE-4) and follows from
+there being no value of a class that stands for "Godot answered nothing": the nearest thing to
+one, `some_class{}`, would mint a live Godot object per declined call. The body is the mirror's
+shape too -- `AsObject[]` to read the handle out of the answering `variant`, then the downcast
+that narrows it to the class Godot annotated.
+
+Two cases in the integration layer, one per kind of class, both over a `mob` the project's own
+`mob.gd` declares and nothing on disk spells in Verse.
+
+---
+
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks

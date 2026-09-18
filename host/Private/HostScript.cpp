@@ -4957,6 +4957,26 @@ AUTORTFM_DISABLE Verse::VValue NewArrayValue(Verse::FRunningContext Context,
     return Verse::VValue(Verse::VArray::New(Context, (uint32)ItemCount, Init));
 }
 
+/// The UClass a declared reference type names, wherever the class was declared.
+///
+/// Three packages can declare one and each answers to a different lookup: the mirror's own, the
+/// project's (which is what `@global_class` registers with Godot), and the generated bindings' --
+/// which `ClassOriginOf` calls Other, because a binding resolves at neither of the first two verse
+/// paths. Null for a class none of them carries, which a nested class is and so is one left behind
+/// by a retired generation.
+AUTORTFM_DISABLE UClass* DeclaredReferenceClass(const FMemberType& Declared)
+{
+    switch (Declared.ReferenceOrigin)
+    {
+    case EClassOrigin::Mirrored:
+        return FindMirroredClass(FUtf8StringView(Declared.ReferenceName));
+    case EClassOrigin::Script:
+        return FindGodotClass(FUtf8StringView(Declared.ReferenceQualifiedName));
+    default:
+        return FindBindingClass(FUtf8StringView(Declared.ReferenceName));
+    }
+}
+
 /// Builds the value to write, given the one already in the slot. An uninitialized return means the
 /// value has no representation in this member and nothing is written.
 /// Builds a Verse value of the declared type from the wire.
@@ -4977,25 +4997,20 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
     const GodotVerse::FExportDesc& Desc = Declared.Described;
 
     // A reference arrives as a handle naming a Godot object, so the Verse wrapper has to be built
-    // here -- and only a mirrored class can be built from a handle alone. A parameter typed as one
-    // of the project's own classes has no spelling on this wire: the object it should receive
-    // already exists as some node's instance, and there is nothing in a handle to find it by.
+    // here -- and the declared type is the whole of what says which class to build.
     if (!Declared.ReferenceName.IsEmpty())
     {
-        // A parameter typed as one of the project's own classes still has no spelling on this
-        // wire: the object it should receive is some node's own instance, and a handle alone does
-        // not say which declaration it was meant to satisfy. R-SCN-6 makes that reachable the
-        // other way round -- take a `node2d` and cast it.
-        if (Declared.ReferenceOrigin != EClassOrigin::Mirrored)
-        {
-            return false;
-        }
         const int64 Handle = Value.Type == VH_TYPE_INT ? Value.Int : 0;
         if (Handle == 0)
         {
-            // Only an optional parameter has a value to stand for nothing. A bare `node2d` refuses,
-            // which reaches the caller as VH_ERR_ARGUMENT rather than as a runtime error: passing
-            // null where the signature does not allow it is the caller's mistake.
+            // Null, and it is spellable whatever class the parameter names: an empty option needs
+            // no class to build. This used to sit behind the origin test below, so `SomeMethod(?mover)`
+            // refused Godot's own null with "Cannot convert argument 1 from Nil to Object" -- a
+            // sentence about a value that was exactly what the signature asked for.
+            //
+            // A bare `node2d` still refuses, which reaches the caller as VH_ERR_ARGUMENT rather than
+            // as a runtime error: passing null where the signature does not allow it is the caller's
+            // mistake.
             if (!Declared.bReferenceIsOption)
             {
                 return false;
@@ -5008,7 +5023,7 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
         // script's own object, which is what makes `if (M := mob[Body])` inside the handler work --
         // the whole point of the cast. The declared class is then the *lower* bound, and a handle
         // whose object does not meet it is VH_ERR_ARGUMENT rather than a raise.
-        UClass* const DeclaredClass = FindMirroredClass(FUtf8StringView(Declared.ReferenceName));
+        UClass* const DeclaredClass = DeclaredReferenceClass(Declared);
         UObject* const Referenced = GodotVerse::ObjectForHandle(Handle, DeclaredClass);
         if (!Referenced || !DeclaredClass || !Referenced->IsA(DeclaredClass))
         {

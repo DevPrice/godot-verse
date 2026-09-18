@@ -573,6 +573,28 @@ marshal := class(node2d):
     # And the other end of the call, which asks the same question of the result.
     GivesTimer<public>(Clock:timer):timer = Clock
 
+    # --- what null satisfies, and at which kind of class ----------------------
+    #
+    # Null is the one value every object slot can hold and the empty option is what Verse spells it
+    # as, so an optional parameter takes it whatever class it names. These are called with null and
+    # with a real node, because the host resolves the declared class by a lookup per package and it
+    # used to make that decision *before* looking at whether a value had arrived at all -- so a
+    # parameter of the project's own class refused Godot's own null (`by-hand-findings.md` B34).
+
+    MaybeTimerIsEmpty<public>(Clock:?timer)<transacts>:logic =
+        if (Clock?) then false else true
+
+    MaybeMarshalIsEmpty<public>(Other:?marshal)<transacts>:logic =
+        if (Other?) then false else true
+
+    # The non-empty half, which is what says the refusal was not simply moved: the object that
+    # arrives is the node's own instance, so a member of it reads what that script holds.
+    MaybeMarshalCounter<public>(Other:?marshal)<transacts>:int =
+        if (M := Other?) then M.Counter else -1
+
+    # A bare one of the project's own classes, which had no spelling on this wire at all.
+    MarshalCounter<public>(Other:marshal)<transacts>:int = Other.Counter
+
 # The unregistered class TakesHelper names. Ordinary Verse -- a helper beside the class the file
 # is named after -- and the shape every project writes sooner or later.
 marshal_helper := class(node2d):
