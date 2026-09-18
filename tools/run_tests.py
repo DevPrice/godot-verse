@@ -319,7 +319,12 @@ def stage_extension(project: Path, for_export: bool = False) -> str | None:
 
     target_dir = project / "addons" / "godot-verse" / "bin" / "windows-x86_64"
     target_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(editor_dll, target_dir / editor_dll.name)
+    # demo/ is where scons installs, so staging *into* demo/ is a copy onto itself -- which
+    # Windows reports as WinError 32, "used by another process", the same sentence an open
+    # editor produces. Every tool that takes a --project was therefore unable to aim at the
+    # one project this repository treats as the worked example.
+    if editor_dll.resolve() != (target_dir / editor_dll.name).resolve():
+        shutil.copy2(editor_dll, target_dir / editor_dll.name)
     # The .gdextension names a debug library too, and Godot refuses to load the extension at all
     # when a named library is missing -- so the editor build stands in for it rather than being
     # left absent.
