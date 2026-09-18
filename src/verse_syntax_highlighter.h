@@ -17,6 +17,15 @@
 // Colours Verse source through the lexer in verse_lexer.h/.cpp, which is what makes nested
 // comments and comments-inside-strings come out right where Godot's stock CodeHighlighter
 // (fed from VerseScriptLanguage's delimiter lists) cannot express them.
+// Which of the editor theme's three type colours a name draws in. GDScript's own split,
+// gdscript_highlighter.cpp:776-818: an exposed ClassDB class and a global enum are engine
+// types, a global script class is a user type, and the Variant type names are base types.
+enum class VerseTypeKind {
+	Base,
+	Engine,
+	User,
+};
+
 class VerseSyntaxHighlighter : public godot::EditorSyntaxHighlighter {
 	GDCLASS(VerseSyntaxHighlighter, godot::EditorSyntaxHighlighter)
 
@@ -99,7 +108,7 @@ private:
 	// names rather than source positions on purpose -- a
 	// name does not move when a line is inserted above it, so colouring stays put while the
 	// author types, which is the one thing per-keystroke recolouring cannot tolerate.
-	mutable std::unordered_set<std::string> type_names;
+	mutable std::unordered_map<std::string, VerseTypeKind> type_names;
 
 	// Every field the currently open script can reach bare (Verse code writes no `self.`), so
 	// unlike a dotted access these need their name on record to colour. Read out of the analysis
@@ -129,7 +138,9 @@ private:
 	godot::Color function_color = godot::Color(0.34f, 0.7f, 1.0f);
 	godot::Color function_definition_color = godot::Color(0.4f, 0.9f, 1.0f);
 	godot::Color annotation_color = godot::Color(1.0f, 0.7f, 0.45f);
-	godot::Color type_color = godot::Color(0.15f, 0.85f, 0.76f);
+	godot::Color base_type_color = godot::Color(0.64f, 1.0f, 0.83f);
+	godot::Color engine_type_color = godot::Color(0.51f, 0.83f, 1.0f);
+	godot::Color user_type_color = godot::Color(0.42f, 0.67f, 0.93f);
 	godot::Color member_color = godot::Color(0.74f, 0.48f, 0.95f);
 	godot::Color text_color = godot::Color(0.85f, 0.85f, 0.85f);
 };

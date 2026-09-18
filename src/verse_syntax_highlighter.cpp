@@ -4,6 +4,7 @@
 #include "verse_script.h"
 #include "verse_script_language.h"
 
+#include <godot_cpp/classes/class_db_singleton.hpp>
 #include <godot_cpp/classes/editor_interface.hpp>
 #include <godot_cpp/classes/editor_settings.hpp>
 #include <godot_cpp/classes/engine.hpp>
@@ -117,6 +118,23 @@ constexpr const char *native_type_names[] = {
 	"weak_map",
 };
 
+// The mirror's own classes, split once per process into the two colours they are not all of.
+// `verse_api::classes` carries the sixteen math types and `rid` beside the 1036 engine classes
+// and ClassDB has heard of none of those (by-hand-findings.md B28) -- which is exactly the line
+// GDScript draws between a Variant type and an engine class, so the same test serves here.
+const std::unordered_map<std::string, VerseTypeKind> &mirror_type_kinds() {
+	static const std::unordered_map<std::string, VerseTypeKind> kinds = []() {
+		std::unordered_map<std::string, VerseTypeKind> built;
+		ClassDBSingleton *db = ClassDBSingleton::get_singleton();
+		for (size_t i = 0; i < std::size(verse_api::classes); i++) {
+			const bool engine = db != nullptr && db->class_exists(verse_api::classes[i].godot_name);
+			built[verse_api::classes[i].verse_name] = engine ? VerseTypeKind::Engine : VerseTypeKind::Base;
+		}
+		return built;
+	}();
+	return kinds;
+}
+
 std::string word_at(const CharString &p_utf8, int p_begin, int p_end) {
 	if (p_end <= p_begin || p_end > p_utf8.length()) {
 		return std::string();
@@ -180,7 +198,8 @@ bool collect_member_name(const CharString &p_utf8, const std::vector<VerseToken>
 // for the one top-level keyword that scanner does not track. Verse's flat project scope means an
 // enum declared here is nameable from any other script too, but this only sees the file open in
 // this editor -- the type_names set already accepts that trade for script_class_names the same way.
-void collect_enum_name(const CharString &p_utf8, const std::vector<VerseToken> &p_tokens, std::unordered_set<std::string> &r_names) {
+void collect_enum_name(const CharString &p_utf8, const std::vector<VerseToken> &p_tokens,
+		std::unordered_map<std::string, VerseTypeKind> &r_names) {
 	const std::vector<size_t> sig = significant_tokens(p_tokens);
 	if (sig.size() < 3 || p_tokens[sig[0]].column != 0 || p_tokens[sig[0]].kind != VerseTokenKind::Identifier) {
 		return;
@@ -195,7 +214,7 @@ void collect_enum_name(const CharString &p_utf8, const std::vector<VerseToken> &
 	}
 	const std::string name = word_at(p_utf8, p_tokens[sig[0]].column, token_text_end(p_tokens, sig[0], p_utf8.length()));
 	if (!name.empty()) {
-		r_names.insert(name);
+		r_names[name] = VerseTypeKind::User;
 	}
 }
 
@@ -331,8 +350,16 @@ godot::Color VerseSyntaxHighlighter::color_for_identifier(const CharString &p_ut
 		return text_color;
 	}
 	const std::string word(p_utf8.get_data() + p_begin, (size_t)(p_end - p_begin));
-	if (type_names.count(word) > 0) {
-		return type_color;
+	const std::unordered_map<std::string, VerseTypeKind>::const_iterator type = type_names.find(word);
+	if (type != type_names.end()) {
+		switch (type->second) {
+			case VerseTypeKind::Engine:
+				return engine_type_color;
+			case VerseTypeKind::User:
+				return user_type_color;
+			default:
+				return base_type_color;
+		}
 	}
 	return member_names.count(word) > 0 ? member_color : text_color;
 }
@@ -441,7 +468,9 @@ void VerseSyntaxHighlighter::_update_cache() {
 	annotation_color = read_color(settings, "text_editor/theme/highlighting/gdscript/annotation_color", annotation_color);
 	member_color = read_color(settings, "text_editor/theme/highlighting/member_variable_color", member_color);
 	text_color = read_color(settings, "text_editor/theme/highlighting/text_color", text_color);
-	type_color = read_color(settings, "text_editor/theme/highlighting/base_type_color", type_color);
+	base_type_color = read_color(settings, "text_editor/theme/highlighting/base_type_color", base_type_color);
+	engine_type_color = read_color(settings, "text_editor/theme/highlighting/engine_type_color", engine_type_color);
+	user_type_color = read_color(settings, "text_editor/theme/highlighting/user_type_color", user_type_color);
 
 	comment_marker_colors[(int)CommentMarkerLevel::Critical] = read_color(settings, "text_editor/theme/highlighting/comment_markers/critical_color", comment_marker_colors[(int)CommentMarkerLevel::Critical]);
 	comment_marker_colors[(int)CommentMarkerLevel::Warning] = read_color(settings, "text_editor/theme/highlighting/comment_markers/warning_color", comment_marker_colors[(int)CommentMarkerLevel::Warning]);
@@ -581,31 +610,39 @@ void VerseSyntaxHighlighter::rebuild_name_caches() const {
 		}
 	}
 
-	for (size_t i = 0; i < std::size(verse_api::classes); i++) {
-		type_names.insert(verse_api::classes[i].verse_name);
-	}
+	const std::unordered_map<std::string, VerseTypeKind> &mirror = mirror_type_kinds();
+	type_names.insert(mirror.begin(), mirror.end());
 	// The 793 mirrored enums are types a script writes as often as it writes a class -- every
 	// `node_internal_mode` in a declaration -- and the editor already sends a hover on one to
 	// Godot's own documentation, so drawing it as plain text was the one surface that disagreed.
 	for (size_t i = 0; i < std::size(verse_api::enums); i++) {
-		type_names.insert(verse_api::enums[i].verse_enum);
+		type_names[verse_api::enums[i].verse_enum] = VerseTypeKind::Engine;
 	}
 	// `variant`, the containers, `callable` and the two signal types: the package's exported types
 	// that stand for no Godot class, so the table above cannot carry them. The sixteen value types
 	// and `rid` are in that one, and three of them used to be -- `vector2` coloured and `vector2i`
 	// beside it did not.
 	for (size_t i = 0; i < std::size(verse_api::types); i++) {
-		type_names.insert(verse_api::types[i].verse_name);
+		type_names[verse_api::types[i].verse_name] = VerseTypeKind::Base;
 	}
 	for (size_t i = 0; i < std::size(native_type_names); i++) {
-		type_names.insert(native_type_names[i]);
+		type_names[native_type_names[i]] = VerseTypeKind::Base;
 	}
 	if (VerseScriptLanguage *language = VerseScriptLanguage::singleton()) {
 		// The cached list, shared with completion: this used to walk the whole of res:// with
 		// DirAccess every time the theme changed or a highlighter was reassigned.
 		const PackedStringArray &names = language->script_class_names();
 		for (int64_t i = 0; i < names.size(); i++) {
-			type_names.insert(names[i].utf8().get_data());
+			type_names[names[i].utf8().get_data()] = VerseTypeKind::User;
+		}
+		// R-INT-7's generated bindings, on whichever side of the same line they belong: a class a
+		// GDExtension registered is an engine type, and one a script declares with `class_name` is
+		// the project's own. Neither was in any of the tables above, so both drew as plain text --
+		// which is how a name the editor does not know reads.
+		for (const KeyValue<String, VerseScriptLanguage::BindingInfo> &binding : language->bindings()) {
+			type_names[binding.key.utf8().get_data()] = binding.value.script_class.is_empty()
+					? VerseTypeKind::Engine
+					: VerseTypeKind::User;
 		}
 	}
 	names_dirty = false;

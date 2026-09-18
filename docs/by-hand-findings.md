@@ -1102,14 +1102,20 @@ is not worth keeping. Eleven things stand open, all of them things no automated 
 Phase 6's session has since been run and is recorded below with what it found, because the steps
 are worth keeping: its half of the debugger has no other test.
 
-### The script editor's colours, after B23
+### The script editor's colours, after B23 and the three type tiers
 
 **To check it:** open a `.verse` file in Godot's script editor with a line naming one of each --
 `Cell:vector2i`, `Nothing:variant`, `Mode:node_internal_mode`, `Greeting:[]char`, `Hit:event(int)`
--- and read the colours. Every one of those names must be the base-type colour the editor gives
-`node2d` on the line above it, and none of them the plain text colour a local gets. The names to
+-- and read the colours. None of them may be the plain text colour a local gets. The names to
 watch are the ones from each of the four groups: a mirrored class, a mirrored enum, a value type,
 an exported type, and one of Verse's own.
+
+**Then read the three tiers against each other**, which is GDScript's arrangement and is what a
+Godot author's eye is already trained on: `node2d` and `node_internal_mode` in the engine-type
+colour, `vector2i` and `variant` in the base-type colour, and the project's own class -- plus any
+binding generated for a GDScript `class_name` -- in the user-type colour. A binding for a class a
+**GDExtension** registered belongs with `node2d`, and checking that one takes a project with a real
+addon in it; nothing in this repository has one.
 
 Nothing automated sees this. The tables behind it are checked in the units layer, which is the part
 that drifted; that the highlighter reads them and the editor draws the result is what the eye is
