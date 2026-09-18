@@ -686,6 +686,19 @@ it is not in `run_tests.py`.
   38 const-and-void methods are `OS.set_environment`, `CanvasItem.draw_string` and 36 more that
   plainly do something. A `<reads>` body dispatches through `VhCallValueConst`, not `VhCallValue`;
   the two have to move together.
+- **The dynamic route has a `<reads>` twin too, and its honesty is the caller's.** `object.Call`
+  and `Callv` are generated from Godot's own `call` and `callv`, which are not const, so both are
+  `<transacts>` — which meant R-INT-2's escape hatch could not be used from a `<reads>` function
+  at all, and reading one value off a GDScript node pulled the specifier onto every caller above
+  it. `CallConst` and `CallvConst` in `GodotApi.native.verse` are the twins: same C++ call, six
+  arities plus the `godot_array` spelling, hand-written because Verse cannot reopen the generated
+  `object`. **Nothing checks that the method named is const** — for a mirrored method the
+  generator reads Godot's `is_const` and for a generated binding it reads `METHOD_FLAG_CONST`
+  (spec R-INT-9), but a hand-written call has only the author's word, and naming a mutating method
+  through one means a failure that should have undone the write does not. They are also what makes
+  a bindings package possible at all: **Verse's internal access is scoped by verse path, not by
+  package**, so anything outside `/Godot.org/Godot` reaches neither `VhCallValueConst` nor the
+  packers nor `vh_object.Handle` (`docs/generated-bindings.md` §10.6).
 - **An archetype instantiation carries the constructing class's own effect.** `variant{Tag := ...}`
   inside a `<reads>` or `<computes>` function is *"This archetype instantiation constructs a class
   that has the 'transacts' effect"* unless the class says `<computes>`. `variant`, `godot_ref` and

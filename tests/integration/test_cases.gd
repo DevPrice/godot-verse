@@ -550,6 +550,27 @@ func begin() -> void:
 			node.call("CallSibling", self, "_double", [21]), 42)
 	_check("Object.has_method sees a GDScript method", node.call("CanCall", self, "_double"))
 
+	# --- R-INT-9: the same, from a `<reads>` Verse function --------------------------------------
+	#
+	# `CallConst` is the `<reads>` twin of `Call`, and it exists because `Object::call` is not const
+	# so the generated `Call` cannot be: without it a Verse function that only *reads* a GDScript
+	# node had to declare `<transacts>`, and so did everything that called it. The values here are
+	# the same ones the `<transacts>` cases above assert -- what changed is the specifier the Verse
+	# side could write, which the compiler checked before this ever ran.
+	_check_eq("a <reads> Verse function calls a GDScript method",
+			node.call("CallOtherConst", self, "_double", 21), 42)
+	_check_eq("with no arguments",
+			node.call("CallOtherConstNoArgs", self, "_say"), "said")
+	_check_eq("with an argument tail it built",
+			node.call("CallOtherConstTwo", self, "_add_two", 20, 22), 42)
+	_check_eq("and through the godot_array spelling",
+			node.call("CallvOtherConst", self, "_double", [21]), 42)
+	
+	# A <reads> function calling a <reads> function that reaches Godot, which is the cascade this
+	# closes: before CallConst the leaf forced <transacts> on every caller above it.
+	_check_eq("a <reads> function calls a <reads> function that reaches Godot",
+			node.call("SumOtherConst", self, "_double", 10, 11), 42)
+
 	# --- R-TYPE-2 / R-INT-2: a container the script built itself --------------------------------
 	#
 	# Until now a script could only hold a container Godot handed it. `godot_array{}` compiles and

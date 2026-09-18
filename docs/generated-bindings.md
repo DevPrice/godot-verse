@@ -390,8 +390,11 @@ fork, and the attribute package is the existing proof of it: a *second* package 
 | `/Godot.org/Godot` (the attribute package's path) | **works** — `VhCallValueConst`, `VhToInt` and `Handle` all resolve | glitch **3532** at the generated declaration, against a file the author cannot edit, unspellable |
 | `/Godot.org/Bindings` **plus one addition to the mirror** | **works** | unchanged from §4 |
 
-The third is the recommendation, and it was run end to end. One `<public>` extension method on
-`object`, which needs no new native because `VhCallValueConst` already exists:
+The third is the recommendation, it was run end to end, and it is now **built** — `CallConst`
+and `CallvConst` in `GodotApi.native.verse`, six arities plus the `godot_array` spelling,
+asserted in the integration and export layers and put to the runtime compiler in
+`tests/verse_probe/call_const_probe.verse`. One `<public>` extension method on `object`, which
+needs no new native because `VhCallValueConst` already exists:
 
 ```
 (Target:object).CallConst<public>(Method:string, Args:[]variant)<reads>:variant =

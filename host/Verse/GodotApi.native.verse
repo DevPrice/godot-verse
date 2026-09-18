@@ -587,6 +587,58 @@ typed_dictionary<public>(k:type, v:type) := class<computes>(godot_ref):
 
     Set<public>(Key:k, Value:v)<transacts>:void = VhRefSet(Ref, PackKey(Key), Pack(Value))
 
+# --- calling Godot from a <reads> function ------------------------------------
+#
+# `object.Call` and `Callv` are generated from Godot's own `call` and `callv`, and both are
+# `<transacts>`, because `Object::call` is not const and dispatches to anything at all. So the
+# dynamic route -- R-INT-2's `Target.Callv("hit", Args)`, which is the only way to reach a class
+# the mirror does not carry -- could not be used from a `<reads>` function, and reading one
+# property off a GDScript node started wall 8's cascade through the caller's whole file.
+#
+# These are the `<reads>` twins, and nothing new crosses for them: `VhCallValueConst` is the same
+# C++ call as `VhCallValue` and has been there since Phase 4.5. The pair differ only in what the
+# compiler will let a caller be, which is the same bargain the mirror's own 3996 `<reads>` methods
+# are built on.
+#
+# **The honesty is the caller's**, and that is the whole of the bargain. Nothing checks that the
+# method named is const -- exactly as nothing checks it for a mirrored method, where the
+# declaration is only as true as Godot's `is_const` flag. A generated binding gets the same
+# guarantee from the addon's own `METHOD_FLAG_CONST` (R-INT-9), which is why these exist: without
+# them a binding cannot be `<reads>` at all, because a package outside this verse path reaches
+# neither `VhCallValueConst` nor `Handle`. A hand-written call gets no guarantee, and naming a
+# mutating method through one tells the transaction machinery something it cannot check: the write
+# happens, and a failure that should have undone it does not.
+#
+# Extension methods rather than members, because Verse cannot reopen a class and `object` is
+# generated. That puts both names in **module** scope, so a local or a parameter called
+# `CallConst` is ambiguous rather than shadowing in every file importing this package -- the tax
+# `ToString`, `Length` and `Angle` already charge.
+(Target:object).CallConst<public>(Method:string)<reads>:variant =
+    VhCallValueConst(Target.Handle, "call", array{VhFromStringName(Method)})
+
+(Target:object).CallConst<public>(Method:string, Arg1:variant)<reads>:variant =
+    VhCallValueConst(Target.Handle, "call", array{VhFromStringName(Method), Arg1})
+
+(Target:object).CallConst<public>(Method:string, Arg1:variant, Arg2:variant)<reads>:variant =
+    VhCallValueConst(Target.Handle, "call", array{VhFromStringName(Method), Arg1, Arg2})
+
+(Target:object).CallConst<public>(Method:string, Arg1:variant, Arg2:variant, Arg3:variant)<reads>:variant =
+    VhCallValueConst(Target.Handle, "call", array{VhFromStringName(Method), Arg1, Arg2, Arg3})
+
+(Target:object).CallConst<public>(Method:string, Arg1:variant, Arg2:variant, Arg3:variant, Arg4:variant)<reads>:variant =
+    VhCallValueConst(Target.Handle, "call", array{VhFromStringName(Method), Arg1, Arg2, Arg3, Arg4})
+
+# The loose form. One `[]variant` is distinguishable from the fixed arities above only because
+# `Method` sits in front of it: a tuple of one repeated type *is* an array of it, so without a
+# fixed parameter the empty tuple and the empty array would be the same overload.
+(Target:object).CallConst<public>(Method:string, Args:[]variant)<reads>:variant =
+    VhCallValueConst(Target.Handle, "call", array{VhFromStringName(Method)} + Args)
+
+# And the `godot_array` spelling, which is what a script that built its arguments with
+# `MakeArray()` already holds.
+(Target:object).CallvConst<public>(Method:string, ArgArray:godot_array)<reads>:variant =
+    VhCallValueConst(Target.Handle, "callv", array{VhFromStringName(Method), VhFromArray(ArgArray)})
+
 # --- @GlobalScope utilities that are Godot's behaviour rather than Verse's spelling -------------
 #
 # R-SCN-3/G11. Godot has 114 utility functions and Verse's own stdlib answers most of them, so under

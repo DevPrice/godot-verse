@@ -413,6 +413,41 @@ marshal := class(node2d):
         Args := array{VariantInt(A), VariantInt(B)}
         if (N := Target.Call(Method, Args).AsInt[]) then N else -1
 
+    # --- R-INT-9: the same reach, from a `<reads>` function ------------------
+    #
+    # `Call` and `Callv` are `<transacts>`, because `Object::call` dispatches to anything at all.
+    # So until `CallConst` existed, reading one value off a GDScript node pulled `<transacts>`
+    # onto every function above it, a file at a time -- docs/dodge-the-creeps.md wall 8. These
+    # four are the same calls as the four above with the specifier narrowed, and **the fact that
+    # this file compiles is half the assertion**: the effect would be refused at the call site,
+    # not here, so a regression reads as a build failure rather than as a wrong number.
+    CallOtherConst<public>(Target:object, Method:string, Value:int)<reads>:int =
+        if (N := Target.CallConst(Method, VariantInt(Value)).AsInt[]) then N else -1
+
+    # The no-argument arity, which is the one `Method:string` alone has to distinguish: a tuple of
+    # one repeated type is an array of it, so without that fixed parameter this and the loose form
+    # below would be one overload.
+    CallOtherConstNoArgs<public>(Target:object, Method:string)<reads>:string =
+        if (S := Target.CallConst(Method).AsString[]) then S else "?"
+
+    # The loose form, with the tail built here.
+    CallOtherConstTwo<public>(Target:object, Method:string, A:int, B:int)<reads>:int =
+        Args := array{VariantInt(A), VariantInt(B)}
+        if (N := Target.CallConst(Method, Args).AsInt[]) then N else -1
+
+    # And the `godot_array` spelling. The array is the caller's, because `MakeArray` is
+    # `<transacts>` and could not be called from here -- which is the honest shape: building a
+    # Godot container is a write, and only the *call* was ever const.
+    CallvOtherConst<public>(Target:object, Method:string, Args:godot_array)<reads>:int =
+        if (N := Target.CallvConst(Method, Args).AsInt[]) then N else -1
+
+    # A `<reads>` function calling a `<reads>` function that reaches Godot. This is the one that
+    # could not be written at all before, and it is why the addition exists rather than being a
+    # convenience: narrowing is contagious downward, so one `<transacts>` leaf used to decide the
+    # specifier of everything that reached it.
+    SumOtherConst<public>(Target:object, Method:string, A:int, B:int)<reads>:int =
+        CallOtherConst(Target, Method, A) + CallOtherConst(Target, Method, B)
+
     # Object.emit_signal, which is the other half of what stage 6's "done when" names.
     EmitOn<public>(Target:object, Signal:string, Value:int)<transacts>:int =
         ToInt(Target.EmitSignal(Signal, array{VariantInt(Value)}))

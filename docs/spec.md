@@ -1794,7 +1794,7 @@ section written after the spikes.
   spelled, since their converters are module-scoped — and `Add<Element>` appends. This is
   R-TYPE-2's other half and landed with it.
 
-  **`CallConst` is the `<reads>` half, and it arrived with R-INT-9.** Every `Call` and `Callv`
+  **`CallConst` is the `<reads>` half, and it is done.** Every `Call` and `Callv`
   overload is `<transacts>`, so reading a third-party property from a `<reads>` function started
   wall 8's cascade for no reason — the call is const and answers a value, which is exactly the
   test the mirror's own 3996 `<reads>` methods pass. `CallConst` is an extension method on
@@ -1872,8 +1872,10 @@ section written after the spikes.
   answers a value rather than a test, `<reads>` where the source says the method is const *and*
   it answers something, properties as writable members except where a nested struct or a
   container forces a getter/setter pair. Enums, constants and statics are bound too — a
-  third-party physics class is unusable without its enums. Status: **not built** — designed in
-  [`generated-bindings.md`](generated-bindings.md), all five spikes back (§10), Phase 7c.
+  third-party physics class is unusable without its enums. Status: **`CallConst` done, the
+  classifications not built.** `CallConst` and `CallvConst` are in
+  `GodotApi.native.verse` and asserted in the integration and export layers; the generator
+  that would emit the classifications is Phase 7c.
 
   **`<reads>` needs `CallConst` and could not exist without it.** Verse's internal access is
   scoped by verse path, so a package at `/Godot.org/Bindings` reaches neither

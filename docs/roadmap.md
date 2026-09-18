@@ -900,7 +900,7 @@ ever need to reach. No design yet, by decision; when it is written it starts fro
 
 ## Phase 7c — Generated bindings for classes the mirror does not carry
 
-**Designed, spiked, not built.** [`generated-bindings.md`](generated-bindings.md) is the design,
+**Designed, spiked, and one piece built.** [`generated-bindings.md`](generated-bindings.md) is the design,
 written before the work, and its **§10 is the part to read** — all five spikes came back and two
 of them corrected the decision table. R-INT-7 to R-INT-12.
 
@@ -918,11 +918,13 @@ carry the mapping on until the sidecar existed.
 - **R-INT-7, R-INT-8** — the generator and the package. A binding is a subclass of the mirrored
   base in a package of the project's own, generated under `.godot/`, regenerated on any roster
   change and on project open. Generational naming, for the reason R-ITER-1's generations are (OQ-8).
-- **R-INT-9** — the classifications, and the one thing that has to move first: **`CallConst` on
-  `object`**, without which no binding can be `<reads>` at all. One extension method over the
-  `VhCallValueConst` native that is already there, so no new native and no ABI change — but it is
-  a widening of the public Verse surface and should land as its own commit, with the reasoning in
-  `generated-bindings.md` §10.6.
+- **R-INT-9** — the classifications. The one thing that had to move first is **done**:
+  `CallConst` and `CallvConst` on `object`, without which no binding can be `<reads>` at all.
+  Six arities plus the `godot_array` spelling, over the `VhCallValueConst` native that was
+  already there — no new native, no ABI change. `tests/verse_probe/call_const_probe.verse` is
+  the overload set put to the runtime compiler, which is the half a host build cannot answer;
+  `marshal.verse` and `test_cases.gd` carry five assertions that run in the editor and in an
+  export. What is left of R-INT-9 is the generator that decides which methods get the word.
 - **R-INT-10** — inheritance, and the refusal. `boss := class(mob)` and
   `player := class(rapier_character_body)` both work; `player := class(mob)` cannot, and is refused
   in `_validate` at the class's own line rather than left to raise at the first inherited call.
@@ -932,7 +934,7 @@ carry the mapping on until the sidecar existed.
   binding mints its nearest *mirrored* ancestor and a working scene looks entirely normal.
 
 **The order the spikes argue for.** `CallConst` first, because R-INT-9 is unbuildable without it
-and it is the only piece that touches the mirror. Then the host half — the bindings package and
+and it is the only piece that touches the mirror — **done**. Then the host half — the bindings package and
 the fourth question in `ObjectForHandle` — which §10.1 and §10.3 have both already run in
 miniature. Then the generator, which is the largest piece and the one with a differential test
 against `GodotClasses.native.verse` to keep it honest. The consumer's roster watching is last and
