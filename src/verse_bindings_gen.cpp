@@ -3,6 +3,7 @@
 #include "verse_api_classes.h"
 
 #include <godot_cpp/classes/class_db_singleton.hpp>
+#include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
 #include <godot_cpp/classes/script.hpp>
@@ -96,6 +97,50 @@ std::string safe_param_name(const String &p_godot_name, int64_t p_index) {
 		name = "Arg" + std::to_string(p_index);
 	}
 	return "In" + name;
+}
+
+/// Whether a script's text names one of the project's Verse classes.
+///
+/// The test for "loading this could come back to where this generation is standing". Godot resolves
+/// such a name by loading the `.verse`, that load builds the project, and the build generates these
+/// bindings, so the script is already on this thread's load stack and asking for it again is cyclic.
+///
+/// **Text, because GDScript keeps no dependency list**: `ResourceFormatLoaderGDScript` forwards
+/// `GDScriptParser::get_dependencies`, which returns an empty list under a `// TODO: Keep track of
+/// deps.` (`gdscript_parser.h:1699-1702`). Over-inclusive on purpose -- a name in a comment holds
+/// the script back for one generation, where a script wrongly *not* held back is the error line
+/// this exists to remove.
+bool names_a_verse_class(const String &p_path, const std::vector<String> &p_verse_classes) {
+	if (p_verse_classes.empty()) {
+		return false;
+	}
+	const String text = FileAccess::get_file_as_string(p_path);
+	for (const String &verse_class : p_verse_classes) {
+		if (text.find(verse_class) >= 0) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/// The nearest base a script class has that is not itself a script class -- its engine class.
+///
+/// Follows the global class list, which records the declared base rather than the engine one, so
+/// `class_name Enemy extends Actor` where `Actor` is also a script resolves in two steps. Bounded
+/// because a project whose class list names a cycle is a project this must still return from.
+std::string native_base_of(const std::unordered_map<std::string, std::string> &p_bases, const std::string &p_class) {
+	std::string cursor = p_class;
+	for (int guard = 0; guard < 64; guard++) {
+		const std::unordered_map<std::string, std::string>::const_iterator found = p_bases.find(cursor);
+		if (found == p_bases.end()) {
+			return cursor;
+		}
+		if (found->second.empty()) {
+			return std::string();
+		}
+		cursor = found->second;
+	}
+	return std::string();
 }
 
 /// Whether a ClassDB class is one the mirror already carries.
@@ -266,7 +311,7 @@ void describe_from_script(const Ref<Script> &p_script, VerseBindingClass &r_clas
 
 } // namespace
 
-VerseBindings verse_generate_bindings() {
+VerseBindings verse_generate_bindings(bool p_inside_resource_load) {
 	VerseBindings bindings;
 
 	ClassDBSingleton *db = ClassDBSingleton::get_singleton();
@@ -318,6 +363,25 @@ VerseBindings verse_generate_bindings() {
 	// `get_global_class_list` is language-agnostic, so C# rides along with no new code -- and
 	// OQ-17 still says no test in this repository has ever run C#.
 	const TypedArray<Dictionary> globals = ProjectSettings::get_singleton()->get_global_class_list();
+
+	// What each script class extends, so a base can be resolved without loading anything. The list
+	// records the *declared* base, which for `class_name Foo extends Bar` is another script class,
+	// so this is walked rather than read once. The Verse class names beside it are what a script has
+	// to mention for its load to reach back here.
+	std::unordered_map<std::string, std::string> declared_bases;
+	std::vector<String> verse_classes;
+	for (int64_t i = 0; i < globals.size(); i++) {
+		const Dictionary entry = globals[i];
+		const String script_name = entry.get("class", String());
+		if (script_name.is_empty()) {
+			continue;
+		}
+		declared_bases[utf8_of(script_name)] = utf8_of(entry.get("base", String()));
+		if (String(entry.get("path", String())).get_extension().to_lower() == "verse") {
+			verse_classes.push_back(script_name);
+		}
+	}
+
 	for (int64_t i = 0; i < globals.size(); i++) {
 		const Dictionary entry = globals[i];
 		const String script_name = entry.get("class", String());
@@ -331,26 +395,23 @@ VerseBindings verse_generate_bindings() {
 			continue;
 		}
 
-		// **The load can fail, and skipping the class when it does is a deadlock.** A GDScript that
-		// names a Verse global class does not parse until the Verse project has built -- and the
-		// build needs this package, because a Verse file may name the binding. Dropping the class
-		// here made `test := class(main_script)` an unknown identifier, which failed the build,
+		// **The load can fail, and skipping the class when it does is a deadlock.** Dropping the
+		// class made `test := class(main_script)` an unknown identifier, which failed the build,
 		// which left the Verse class unregistered, which is why the load failed. Round it went.
 		//
-		// So the *type* is never lost, only its members: the global class list already says what the
-		// script extends, which is all a declaration needs. Anything naming the binding compiles,
-		// the build succeeds, the script becomes loadable, and the next generation fills the members
-		// in -- which is the same bargain §6 asks for when a script simply does not compile.
-		// Attempted every time, even on the first generation of a session where a GDScript naming a
-		// Verse global class cannot parse yet and Godot prints `Error loading resource` for it. Not
-		// attempting would be quieter and worse: a Verse file calling a binding's *method* would not
-		// compile on the first build, because the first generation would have described nothing.
-		// The message is accurate, appears once per generation, and stops after the first build.
-		const Ref<Script> script = ResourceLoader::get_singleton()->load(path);
+		// So the *type* is never lost, only its members: the class list already says what the script
+		// extends, which is all a declaration needs. Anything naming the binding compiles, the build
+		// succeeds, the script becomes loadable, and the next generation fills the members in --
+		// which is the same bargain §6 asks for when a script simply does not compile.
+		Ref<Script> script;
+		if (!p_inside_resource_load || !names_a_verse_class(path, verse_classes)) {
+			script = ResourceLoader::get_singleton()->load(path);
+		}
 
+		// The script's own answer first, because a script may extend one this list does not carry.
 		const std::string base = script.is_valid()
 				? mirrored_verse_class(script->get_instance_base_type())
-				: mirrored_verse_class(entry.get("base", String()));
+				: mirrored_verse_class(String(native_base_of(declared_bases, utf8_of(script_name)).c_str()));
 		if (base.empty()) {
 			continue;
 		}

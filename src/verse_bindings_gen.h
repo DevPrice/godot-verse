@@ -17,6 +17,13 @@
 /// them: the mirror has all 1036 of `extension_api.json`'s. What is left are the classes
 /// `GDCLASS` registers without the dump ever hearing of them -- `IPWindows`,
 /// `GodotNavigationServer2D` -- plus whatever an addon brought.
-VerseBindings verse_generate_bindings();
+///
+/// **`p_inside_resource_load` is true when this is reached from inside a resource load**, where one
+/// of the scripts to describe may be the one already being loaded further up the stack -- a cyclic
+/// load, which Godot answers with ERR_BUSY, a null Ref and no sentence of its own, so the only thing
+/// printed is the asking side's, naming the script asked for and never the one it collided with
+/// (`by-hand-findings.md` B30). Only a script that *names a Verse class* can close that loop, and
+/// those are the only ones held back.
+VerseBindings verse_generate_bindings(bool p_inside_resource_load = false);
 
 #endif // VERSE_BINDINGS_GEN_H

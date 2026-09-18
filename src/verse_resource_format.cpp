@@ -11,6 +11,23 @@
 
 using namespace godot;
 
+namespace {
+
+// Per thread, because that is the scope ResourceLoader's own cyclic-load detection uses: a load on
+// another thread is not this thread's cycle and must not be made to look like one.
+thread_local int load_depth = 0;
+
+struct LoadDepthScope {
+	LoadDepthScope() { load_depth++; }
+	~LoadDepthScope() { load_depth--; }
+};
+
+} // namespace
+
+bool VerseResourceFormatLoader::is_loading() {
+	return load_depth > 0;
+}
+
 PackedStringArray VerseResourceFormatLoader::_get_recognized_extensions() const {
 	PackedStringArray extensions;
 	extensions.push_back("verse");
@@ -29,6 +46,8 @@ String VerseResourceFormatLoader::_get_resource_type(const String &p_path) const
 }
 
 Variant VerseResourceFormatLoader::_load(const String &p_path, const String &p_original_path, bool p_use_sub_threads, int32_t p_cache_mode) const {
+	const LoadDepthScope in_load;
+
 	const String text = FileAccess::get_file_as_string(p_path);
 	if (FileAccess::get_open_error() != OK) {
 		return ERR_FILE_CANT_OPEN;

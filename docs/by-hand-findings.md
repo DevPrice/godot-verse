@@ -1123,6 +1123,72 @@ click that did not work.
 
 ---
 
+## B30. `Error loading resource: 'res://main.gd'` at every editor startup · **fixed, measured**
+
+One red line in the Output panel a second into every session, naming a GDScript the project is
+built around and saying nothing about what went wrong with it:
+
+    E 0:00:00:895   load: Error loading resource: 'res://main.gd'.
+      <C++ Source>  core/core_bind.cpp:82 @ load()
+
+It appears whether or not any Verse file names that script, and it stops after the first build --
+which is what made it read as "a GDScript naming a Verse class cannot parse until Verse has built",
+and that is not what it is.
+
+**It is a cyclic load, and the error is the shape of one.** Godot answers `ERR_BUSY` and a null
+`Ref` to a load of something already being loaded further up the *same thread's* stack, silently
+(`core/io/resource_loader.cpp:1049-1056`); the only thing printed is the caller's own
+`ERR_FAIL_COND_V_MSG`, which is what `core_bind.cpp:82` is. So the message names the resource the
+caller asked for and never the one it collided with. The stack is:
+
+    main.gd                       Godot loads it, and the analyzer meets `@export var mover: Mover`
+      mover.verse                 make_script_meta_type(ResourceLoader::load(path, "Script"))
+        VerseScript::compile()    ensure_project_built()
+          refresh_bindings()      R-INT-7 generates a binding per `class_name`
+            main.gd               already being loaded on this thread -> ERR_BUSY
+
+Two things are worth reading off that. The absent GDScript diagnostic is a *fact*, not a missing
+clue: `ResourceFormatLoaderGDScript::load` prints its own sentence only `if (err && scr.is_valid())`
+(`gdscript_resource_format.cpp:47-50`), and a load that never reached GDScript has neither. And the
+direction of the reference is the opposite of the one suspected -- it is the GDScript naming a Verse
+class that closes the loop, so the error appears in a project where no `.verse` file has ever heard
+of `main.gd`.
+
+**The fix is to know when the generator is on that stack, and which one script must wait.**
+`VerseResourceFormatLoader` keeps a `thread_local` depth around `_load` -- per thread, because a load
+on another thread is not this thread's cycle -- and on that stack the generator holds back the
+scripts whose *text* names one of the project's Verse classes, because only such a script can close
+the loop. Each is still declared: the global class list records what every script extends, followed
+through the list where that is another script class, so nothing about the type is lost and the
+members arrive with the next frame's generation, which `bindings_incomplete` already asks for.
+Measured on a fixture of `demo`: the line is gone, and `bindings.verse` carries the same members.
+
+Text, because there is nothing better to ask. `ResourceFormatLoaderGDScript::get_dependencies`
+forwards `GDScriptParser::get_dependencies`, which returns an empty list under a `// TODO: Keep track
+of deps.` (`gdscript_parser.h:1699-1702`); `ResourceLoader.load_threaded_get_status` answers only for
+a load *it* was asked to start; and a GDScript mid-load is not in `ResourceCache`, because
+`GDScriptCache::get_shallow_script` uses `set_path_cache`, which deliberately does not register it,
+and `set_path` comes only at the end of `get_full_script` (`gdscript_cache.cpp:396-400`). So nothing
+Godot exposes can be asked "is this path being loaded right now".
+
+**Two fixes were tried and measured before this one**, and both are worth not repeating. Skipping
+*every* script load on that stack took the integration layer down: `mob.gd` names no Verse class, so
+its load was never cyclic, and holding it back left the first build with a memberless `mob` and a
+Verse file that calls `Hit` on one. And loading through `ResourceLoader`'s threaded pair -- which
+drops the error where `load()` reports it (`core_bind.cpp:72-76` against `:82`) -- **deadlocks**: the
+request spawns a worker to load the script, that worker needs the `.verse` this thread is holding,
+and the two wait on each other. The run had to be stopped by PID.
+
+**What it does not fix, which is the same interaction seen from the other end.** A Verse file that
+*calls* a binding's method -- not merely names the type -- still fails the build that this stack
+triggers, with `Unknown member` at that call, because that generation had no members to describe.
+The members land a frame later and nothing rebuilds, so the error sits in the panel until the author
+builds or plays. Verified identical before and after this fix by rebuilding the previous library and
+running the same fixture, so it is this bug's neighbour rather than its remainder: what it wants is
+for a refresh that completes a previously incomplete roster to re-arm a build.
+
+---
+
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks

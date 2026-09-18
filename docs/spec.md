@@ -1868,6 +1868,18 @@ section written after the spikes.
   decision: the editor's ClassDB carries every editor-only class, and binding those produced 1677
   lines of Verse for classes an exported game does not have.
 
+  **A generation may be reached from inside a resource load, and there one script may not be
+  loaded.** "Before every build" includes the build a `.verse` load performs to make the script
+  valid, so a GDScript that names a Verse class reaches its own load through it — `main.gd` →
+  `mover.verse` → build → generate → `main.gd` — which Godot refuses as a cyclic load with
+  `ERR_BUSY`, a null `Ref` and no sentence of its own (`by-hand-findings.md` B30). The generation is
+  still made there, and still loads every other script, because a build whose bindings have no
+  members refuses every Verse file that *calls* one: what is held back is the scripts whose text
+  names a Verse class, which are the only ones that can close the loop. **The class list is enough
+  for a declaration** — it records what each script extends, followed through the list where that is
+  another script class — so the type is never lost, only its members, and only until the next
+  frame.
+
   **A package of its own, rather than rows in the mirror.** The mirror is one package in the
   engine tree, shared by every project on the machine, and these classes are per-project and
   change when someone installs an addon. The build cost is *not* the reason: a whole new `.verse`

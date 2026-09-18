@@ -69,8 +69,14 @@ Three documents are not phase records and are the ones to read before adding a f
   removed.
 - **`docs/by-hand-findings.md`** — what the by-hand editor sessions found, because everything from
   `EngineDebugger` and the editor UI inward has no automated test and never will. B1–B9, B15–B18,
-  B20 and B22–B28 are defects, all fixed; B12 is a Verse fact; B13 a latency finding; B14 the
-  sandboxed export run. **B27 is the one to read before adding a completion option that inserts
+  B20 and B22–B30 are defects, all fixed; B12 is a Verse fact; B13 a latency finding; B14 the
+  sandboxed export run. **B30 is the one to read before calling `ResourceLoader` from anything a
+  resource load can reach**: Godot answers a cyclic load `ERR_BUSY` and a null `Ref` silently, so
+  the only thing printed is the asking side's own sentence — which names the resource *asked for*
+  and never the one it collided with, and reads as that resource being broken. A `.verse` load
+  builds the project, a build generates the bindings, and generating them loads every `class_name`
+  script, so a GDScript naming a Verse class reaches itself.
+  **B27 is the one to read before adding a completion option that inserts
   anything but a bare name**: Godot re-asks for completion after confirming one only when the
   inserted text's last character is in `code_completion_prefixes`, and that re-ask is the whole of
   how the argument hint appears — so every `<decides>` call, inserting a `[`, silently got none.

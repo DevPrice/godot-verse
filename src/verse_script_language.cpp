@@ -7,6 +7,7 @@
 #include "verse_keywords.h"
 #include "verse_lexer.h"
 #include "verse_module_map.h"
+#include "verse_resource_format.h"
 #include "verse_runtime.h"
 #include "verse_script.h"
 
@@ -4005,7 +4006,13 @@ bool VerseScriptLanguage::refresh_bindings() {
 		return false;
 	}
 
-	const VerseBindings bindings = verse_generate_bindings();
+	// The generator loads every `class_name` script, and a GDScript naming a Verse class reaches
+	// this from inside that script's own load, where asking for it again is a cyclic load. Godot
+	// refuses one silently, so the only thing said is the asking side's `Error loading resource` --
+	// about the wrong script (B30). On that stack the generator holds back the scripts that can
+	// close the loop and no others: each is still declared from the class list, and
+	// `bindings_incomplete` asks again on the next frame for its members.
+	const VerseBindings bindings = verse_generate_bindings(VerseResourceFormatLoader::is_loading());
 	runtime->set_bindings(bindings);
 
 	// A class emitted as a bare type because its script would not load. That is the ordinary state
