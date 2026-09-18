@@ -194,22 +194,43 @@ bool collect_member_name(const CharString &p_utf8, const std::vector<VerseToken>
 	return true;
 }
 
-// The same `name := enum{...}` shape verse_scan_class_decl looks for in `name := class(...):`,
-// for the one top-level keyword that scanner does not track. Verse's flat project scope means an
-// enum declared here is nameable from any other script too, but this only sees the file open in
-// this editor -- the type_names set already accepts that trade for script_class_names the same way.
-void collect_enum_name(const CharString &p_utf8, const std::vector<VerseToken> &p_tokens,
+// A type the open file declares at top level: `name := class(...)`, and the same shape for
+// `struct`, `interface` and `enum`.
+//
+// `verse_scan_class_decl` tracks the class a file is **named after** and nothing else, because that
+// is the only one that can go on a node -- and `script_class_names` is built from it, so the one
+// kind of type name nothing coloured was a *second* class in a file. That is ordinary Verse and is
+// what a file writes whenever it declares a helper beside its node class:
+//
+//     test := class(main_script):
+//     mover := class(node2d):
+//
+// Verse's flat project scope means every one of these is nameable from any other script too, but
+// this only sees the file open in this editor -- the same trade type_names already accepts.
+void collect_type_name(const CharString &p_utf8, const std::vector<VerseToken> &p_tokens,
 		std::unordered_map<std::string, VerseTypeKind> &r_names) {
 	const std::vector<size_t> sig = significant_tokens(p_tokens);
-	if (sig.size() < 3 || p_tokens[sig[0]].column != 0 || p_tokens[sig[0]].kind != VerseTokenKind::Identifier) {
+	if (sig.empty() || p_tokens[sig[0]].column != 0 || p_tokens[sig[0]].kind != VerseTokenKind::Identifier) {
 		return;
 	}
-	if (p_tokens[sig[1]].kind != VerseTokenKind::Symbol ||
-			word_at(p_utf8, p_tokens[sig[1]].column, token_text_end(p_tokens, sig[1], p_utf8.length())) != ":=") {
+	// Not necessarily the next token: an access specifier may sit between the name and the `:=`,
+	// which `widget<public> := class...` is the ordinary spelling of. Column 0 plus an identifier
+	// has already established that this is a top-level definition, so the first `:=` on the line
+	// is this definition's.
+	size_t assign = 0;
+	for (size_t i = 1; i < sig.size(); i++) {
+		if (p_tokens[sig[i]].kind == VerseTokenKind::Symbol &&
+				word_at(p_utf8, p_tokens[sig[i]].column, token_text_end(p_tokens, sig[i], p_utf8.length())) == ":=") {
+			assign = i;
+			break;
+		}
+	}
+	if (assign == 0 || assign + 1 >= sig.size() || p_tokens[sig[assign + 1]].kind != VerseTokenKind::Keyword) {
 		return;
 	}
-	if (p_tokens[sig[2]].kind != VerseTokenKind::Keyword ||
-			word_at(p_utf8, p_tokens[sig[2]].column, token_text_end(p_tokens, sig[2], p_utf8.length())) != "enum") {
+	const std::string keyword = word_at(p_utf8, p_tokens[sig[assign + 1]].column,
+			token_text_end(p_tokens, sig[assign + 1], p_utf8.length()));
+	if (keyword != "class" && keyword != "struct" && keyword != "interface" && keyword != "enum") {
 		return;
 	}
 	const std::string name = word_at(p_utf8, p_tokens[sig[0]].column, token_text_end(p_tokens, sig[0], p_utf8.length()));
@@ -595,7 +616,7 @@ void VerseSyntaxHighlighter::rebuild_name_caches() const {
 			if (!analysed && collect_member_name(utf8, tokens, member_name, member_column)) {
 				member_candidates.emplace_back(member_column, std::move(member_name));
 			}
-			collect_enum_name(utf8, tokens, type_names);
+			collect_type_name(utf8, tokens, type_names);
 		}
 
 		// indent_unit == 0 means the file has no indented code at all (a library file of only

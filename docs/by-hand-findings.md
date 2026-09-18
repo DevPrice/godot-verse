@@ -1145,6 +1145,12 @@ binding generated for a GDScript `class_name` -- in the user-type colour. A bind
 **GDExtension** registered belongs with `node2d`, and checking that one takes a project with a real
 addon in it; nothing in this repository has one.
 
+**And a second class in the file**, which is the one that was missed: only the class a file is
+named after reaches `script_class_names`, so `test := class(main_script)` beside `mover := class
+(node2d)` drew as plain text while its own base drew as a type. Declare a second class, a `struct`
+and an `enum` at top level and read all three; the name being declared is user-coloured on the
+declaration line itself as well as wherever it is used below.
+
 Nothing automated sees this. The tables behind it are checked in the units layer, which is the part
 that drifted; that the highlighter reads them and the editor draws the result is what the eye is
 for.
