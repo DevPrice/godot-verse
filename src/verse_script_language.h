@@ -182,6 +182,9 @@ public:
 	bool refresh_bindings();
 	bool bindings_hook_connected = false;
 	bool bindings_refresh_pending = true;
+	// True when the last generation emitted a class as a bare type because its script would not
+	// load, which re-arms the refresh until one describes everything.
+	bool bindings_incomplete = false;
 	// The Verse names of the bindings that stand for a *script* class, which is the one base a
 	// Verse class may not extend (R-INT-10). Filled by refresh_bindings.
 	godot::HashSet<godot::String> script_binding_names;

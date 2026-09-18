@@ -3647,7 +3647,10 @@ void VerseScriptLanguage::_frame() {
 		// Regenerated on the frame after the roster moved rather than inside the signal, because
 		// the generator loads every `class_name` script and the signal is emitted from the middle
 		// of the editor's own scan.
-		if (bindings_refresh_pending && refresh_bindings()) {
+		// `bindings_incomplete` re-arms this once: a class whose script could not be described is
+		// asked about again on the next frame, by which time the build has usually made it
+		// loadable. It clears itself when a generation describes everything.
+		if ((bindings_refresh_pending || bindings_incomplete) && refresh_bindings()) {
 			bindings_refresh_pending = false;
 		}
 
@@ -3926,6 +3929,12 @@ bool VerseScriptLanguage::refresh_bindings() {
 
 	const VerseBindings bindings = verse_generate_bindings();
 	runtime->set_bindings(bindings);
+
+	// A class emitted as a bare type because its script would not load. That is the ordinary state
+	// of a GDScript naming a Verse class *before the first build*, so it is not worth a warning --
+	// what it is worth is asking again, because the build this generation feeds is exactly what
+	// makes the script loadable. The next ask fills the members in.
+	bindings_incomplete = !bindings.incomplete.empty();
 
 	script_binding_names.clear();
 	for (const VerseBindingClass &binding : bindings.classes) {

@@ -52,6 +52,10 @@ struct VerseBindings {
 	/// The whole package as one Verse snippet, or empty when there is nothing to bind.
 	std::string source;
 	std::vector<VerseBindingClass> classes;
+	/// Bindings emitted as a bare type because the script could not be loaded to describe it --
+	/// which a GDScript naming a Verse class cannot be until the Verse project has built. The
+	/// members fill in on a later generation; until then the class exists and is empty.
+	std::vector<std::string> incomplete;
 };
 
 /// `RapierBody2D` -> `rapier_body2d`, which is `gen_verse_api.py`'s `verse_class_name` exactly.

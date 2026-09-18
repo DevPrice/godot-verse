@@ -331,14 +331,26 @@ VerseBindings verse_generate_bindings() {
 			continue;
 		}
 
+		// **The load can fail, and skipping the class when it does is a deadlock.** A GDScript that
+		// names a Verse global class does not parse until the Verse project has built -- and the
+		// build needs this package, because a Verse file may name the binding. Dropping the class
+		// here made `test := class(main_script)` an unknown identifier, which failed the build,
+		// which left the Verse class unregistered, which is why the load failed. Round it went.
+		//
+		// So the *type* is never lost, only its members: the global class list already says what the
+		// script extends, which is all a declaration needs. Anything naming the binding compiles,
+		// the build succeeds, the script becomes loadable, and the next generation fills the members
+		// in -- which is the same bargain §6 asks for when a script simply does not compile.
+		// Attempted every time, even on the first generation of a session where a GDScript naming a
+		// Verse global class cannot parse yet and Godot prints `Error loading resource` for it. Not
+		// attempting would be quieter and worse: a Verse file calling a binding's *method* would not
+		// compile on the first build, because the first generation would have described nothing.
+		// The message is accurate, appears once per generation, and stops after the first build.
 		const Ref<Script> script = ResourceLoader::get_singleton()->load(path);
-		if (script.is_null()) {
-			// A script that does not compile reports no members, and emitting an empty class would
-			// silently delete an API. Skipping keeps the previous binding until it compiles again.
-			continue;
-		}
 
-		const std::string base = mirrored_verse_class(script->get_instance_base_type());
+		const std::string base = script.is_valid()
+				? mirrored_verse_class(script->get_instance_base_type())
+				: mirrored_verse_class(entry.get("base", String()));
 		if (base.empty()) {
 			continue;
 		}
@@ -350,7 +362,13 @@ VerseBindings verse_generate_bindings() {
 		if (binding.verse_class.empty() || !taken.insert(binding.verse_class).second) {
 			continue;
 		}
-		describe_from_script(script, binding);
+		if (script.is_valid()) {
+			describe_from_script(script, binding);
+		} else {
+			// Say so, once per generation, rather than leaving an author to wonder why completion
+			// offers a class with one meaningless method on it.
+			bindings.incomplete.push_back(binding.verse_class);
+		}
 		bindings.classes.push_back(binding);
 	}
 
