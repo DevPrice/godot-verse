@@ -288,6 +288,11 @@ What it needs is small, and it is `spec.md` §6's to name rather than this docum
 an empty container and add to it. `VhRefNew` is already the native function for the first half, and
 the generator already emits the typed accessors for the second.
 
+**Correcting the snippet above, twice over.** Phase 4 answered this with `MakeArray()`, which left
+the spelling written there compiling and meaning nothing. It means what it reads as now: a container
+mints from its own data-member default, so `Args := godot_array{}` is a live, empty Godot Array and
+the two lines work as written. `spec.md` R-TYPE-2 has what that cost.
+
 Probing this also turned up a **misleading diagnostic**, fixed in the same commit: reference 0 was
 reported as "a Godot container the bridge no longer holds … a handle kept past the object that
 owned it", which sends the author looking for a lifetime bug they do not have. Reference 0 never

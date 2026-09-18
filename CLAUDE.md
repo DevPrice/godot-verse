@@ -771,8 +771,11 @@ it is not in `run_tests.py`.
   packers nor `vh_object.Handle` (`docs/generated-bindings.md` §10.6).
 - **An archetype instantiation carries the constructing class's own effect.** `variant{Tag := ...}`
   inside a `<reads>` or `<computes>` function is *"This archetype instantiation constructs a class
-  that has the 'transacts' effect"* unless the class says `<computes>`. `variant`, `godot_ref` and
-  every container wrapper do; a **mirrored Godot class cannot**, because it descends from the native
+  that has the 'transacts' effect"* unless the class says `<computes>`. `variant` and `godot_ref` do,
+  and so do `callable` and `signal_ref`; the four containers say **`<reads>`** instead, which is as
+  wide as the default that mints them and the block that adopts them and no wider, so a `<reads>`
+  converter builds one and a `<computes>` body does not. A **mirrored Godot class cannot**, because
+  it descends from the native
   `vh_object`, so anything a narrowed body needs must be reached by a *cast* over what the host
   built rather than by construction — which is what the singleton accessors do
   (`GetInput()` casts what `VhSingletonObject("Input")` answered), and what R-SCN-6 says they
@@ -884,6 +887,20 @@ it is not in `run_tests.py`.
 - **`node2d{}` is a live Node2D**, not the handle of 0 it was before 4b. The "reach through a handle
   of 0" trick three fixtures used to spell a deliberate raise is gone; the replacement is
   `viewport{}` — an archetype of a class Godot will not instantiate, which raises naming the class.
+- **`godot_array{}` and `dictionary{}` are live, empty Godot containers**, and the mechanism is not
+  `node2d{}`'s. A minting `block:` clause is unwritable for a container: a `var` member needs
+  `allocates` and an assignment is `transacts` outright, so the class would be `transacts` and would
+  drag the mirror's 379 container-answering `<reads>` methods across with it. What mints instead is
+  a **data-member default** — `Ref<override>:int = VhRefNewDefault(TagArray)` — which is legal
+  because glitch 3582 bans only a *divergent* call in a default and `VhRefNewDefault` is
+  `<converges>`, a specifier only a native may carry. **A field the archetype supplies wins over an
+  overridden default**, which is the whole reason `VhToArray` pays nothing. The `block:` that
+  remains does one thing, `VhAdoptRef(Self)`, because a container the archetype minted reached no
+  converter and so had no `UObject` shadow to release its table entry; that call is `<reads>` and
+  writes nothing, which is what keeps the class `<reads>`. All of it is measured in
+  `tests/verse_probe/ref_block_probe.verse`. `MakeArray()` and `MakeDictionary()` still exist and do
+  nothing; a `typed_array(t)` has no bare archetype, because `Unpack` and `Pack` are required
+  members, so its maker supplies those two and no `Ref` and the same default mints it.
 - **`BeginDestroy` releases only what the host recorded as minted.** Every object crossing *from*
   Godot is a `vh_object` too, and an unconditional release would free a node the scene owns. The
   row that records it carries two pointers to one object and they answer different questions: a

@@ -170,8 +170,9 @@ VhCallableFrom<native>(Callback:any)<transacts>:int
 #
 # Id is written by the host at construction, the way Handle is: it names the owner, the signal's
 # name and the payload's declared shape, all of which the host read out of the semantic program.
-# A `signal` a script builds for itself holds 0 and names nothing, which is the same bargain
-# `godot_array{}` makes.
+# A `signal` a script builds for itself holds 0 and names nothing. `godot_array{}` used to make the
+# same bargain and no longer does -- a container mints from its own default -- so this is the one
+# handle left in the mirror whose archetype is inert.
 vh_signal<public><native> := class:
     Id<native>:int = 0
 
@@ -320,6 +321,26 @@ VhRefSize<native>(Ref:int)<reads>:int
 # A fresh empty container of the Godot type Tag names.
 VhRefNew<native>(Tag:int)<reads>:int
 
+# The same call, spelled so that a data-member *default* may make it -- which is the whole of what
+# makes `godot_array{}` an empty Godot Array rather than a reference of 0.
+#
+# A default may be neither a divergent call (glitch **3582**, "Divergent calls (calls that might not
+# complete) cannot be used to define data-members") nor one that reads the instance, and
+# `<converges>` is native-only (glitch 3565) -- so this is a claim only the mirror can make, and the
+# reason it is a second declaration rather than a specifier on VhRefNew: every other caller should
+# keep saying `<reads>`, which is the honest width for a call that reaches Godot.
+#
+# `ctor_delegate_probe.verse` left this spelling open for `vh_object` and gave a reason not to take
+# it: a `<converges>` native minting a Godot *object* puts it outside the transaction that made it,
+# so a `helper{}` in a failing computation leaks its peer. A container is the case that reason does
+# not reach. What a dropped container leaks is a table entry, and a table entry is released by the
+# collection that finds the Verse value unreachable -- which an abort produces -- where a
+# Verse-minted node is deliberately never freed (docs/phase-4b-design.md 4.4).
+#
+# It answers 0 under a reading device, the way VhAdoptOrMint does, so the throwaway instance the
+# export defaults are read off does not reach Godot once per analysis per exporting class.
+VhRefNewDefault<native>(Tag:int)<converges>:int
+
 # Invokes a Callable. What makes a callback-taking engine API reachable (R-TYPE-3).
 VhRefInvoke<native>(Ref:int, Args:[]variant)<transacts>:variant
 VhRefInvokeVoid<native>(Ref:int, Args:[]variant)<transacts>:void
@@ -465,13 +486,13 @@ vh_object<public><native> := class:
 
     # The properties this object serves beyond the ones `@export` declares: an array of Godot's own
     # property dictionaries, keyed "name", "type", "hint", "hint_string" and "usage". Godot's own
-    # shape, so there is nothing to translate -- `MakeDictionary()` builds one and `MakeArray()`
-    # holds them.
+    # shape, so there is nothing to translate -- `dictionary{}` builds one and `godot_array{}` holds
+    # them.
     #
-    # The default reaches up into GodotApi.native.verse, which is the one place in this file that
-    # does. An empty `godot_array` is the honest answer and the alternative -- a `Ref` of 0 -- is
-    # the dead-reference footgun Phase 4b spent its first stage removing.
-    _GetPropertyList<public>():godot_array = MakeArray()
+    # The archetype is a live empty Array. It used to be a `Ref` of 0, which is the dead-reference
+    # footgun Phase 4b spent its first stage removing, and this default had to reach up into
+    # GodotApi.native.verse for `MakeArray()` to avoid it.
+    _GetPropertyList<public>():godot_array = godot_array{}
 
     # A last look at one property's dictionary before the inspector draws it, mutated in place --
     # Godot's own shape again, and the one of the four that is purely additive, since a property

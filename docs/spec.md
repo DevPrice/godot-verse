@@ -1430,11 +1430,30 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   `VhFromObject` takes the base `object` and a Verse function type is not satisfied by one that
   merely accepts a supertype.
 
-  **One half is still missing, and the port found it:** a script can read and write the containers
-  Godot hands it and cannot **make** one. `godot_array{}` compiles and holds reference 0, which
-  crosses as `Nil`; `VhRefNew` is module-scoped and there is no public constructor. So a container
-  is something a script passes on rather than something it can originate, which is what stops
-  R-INT-2 short — see `docs/dodge-the-creeps.md` wall 7.
+  **The archetype is the maker now, which closes wall 7 rather than working around it.** Phase 4's
+  `MakeArray()` gave a script a way to originate a container and left `godot_array{}` — the
+  spelling a Godot author reaches for first — compiling and holding reference 0, which crosses as
+  `Nil`. A container mints from its own **data-member default** instead, so `godot_array{}` and
+  `dictionary{}` are live, empty Godot containers; the typed forms mint the same way, from a maker
+  that supplies their two converters and no `Ref`. `MakeArray()` and `MakeDictionary()` remain as
+  the published names and do no work.
+
+  Three measurements decided that shape, all in `tests/verse_probe/ref_block_probe.verse`. A field
+  the **archetype supplies wins** over an overridden default, so `VhToArray` pays nothing for a mint
+  it would immediately overwrite. A **`block:` clause cannot do it**: a `var` member needs
+  `allocates` and an assignment is `transacts` outright, glitch 3512 twice over, so a container with
+  a minting block would be a `transacts` class and would drag the mirror's 379 container-answering
+  `<reads>` methods across with it. And a **`<converges><native>` call is accepted as a default**,
+  which is the question `ctor_delegate_probe.verse` left open when glitch 3582 refused an ordinary
+  one — `<converges>` being native-only is what makes this the mirror's to spell and not a
+  script's. The class carries `<reads>`, which is exactly as wide as the two calls in it: the
+  default, and a `block:` that only adopts.
+
+  Adoption is why that block exists. A container the archetype minted reached no converter, so
+  nothing passed it to a native, so it had no `UObject` shadow — and the shadow is the only thing
+  that releases the table entry when Verse drops the value (`docs/abi-v2-design.md` §1a).
+  `VhRefNewDefault` answers 0 under a reading device, for the reason `VhAdoptOrMint` does: the
+  throwaway instance the export defaults are read off runs its members' initializers in full.
 - **R-TYPE-3 (MUST)** `Callable` is a Verse value a script can hold, invoke, and hand back to
   Godot — this is what makes R-SIG-3 and any callback-taking engine API work. Status: **done**,
   both directions since Phase 4 stage 3. A `callable` is held, passed back, and invoked with

@@ -295,17 +295,16 @@ signal_ref<public> := class<computes>(godot_ref):
 
 # Every wrapper is adopted on the way in, which is what puts the UObject shadow behind it and so
 # what makes dropping it release the table entry.
+#
+# `godot_array`, `dictionary` and the two typed containers adopt from a `block:` clause of their own
+# instead, because they have to: their archetype mints when nothing is supplied, so a wrapper is
+# reachable without passing through any converter. `callable` and `signal_ref` have nothing to mint
+# and are still adopted here.
 VhAdopt(Value:godot_ref)<reads>:void = VhAdoptRef(Value)
 
-VhToArray(Value:variant)<reads>:godot_array =
-    Made := godot_array{Ref := Value.Ref}
-    VhAdopt(Made)
-    Made
+VhToArray(Value:variant)<reads>:godot_array = godot_array{Ref := Value.Ref}
 
-VhToDictionary(Value:variant)<reads>:dictionary =
-    Made := dictionary{Ref := Value.Ref}
-    VhAdopt(Made)
-    Made
+VhToDictionary(Value:variant)<reads>:dictionary = dictionary{Ref := Value.Ref}
 
 VhToCallable(Value:variant)<reads>:callable =
     Made := callable{Ref := Value.Ref}
@@ -321,22 +320,18 @@ VhToSignal(Value:variant)<reads>:signal_ref =
 
 # A fresh, empty Godot container, owned by the value that comes back (R-TYPE-2, R-INT-2).
 #
-# Without these a script could only ever hold a container Godot handed it, which is what made
-# `Callv` unusable -- `godot_array{}` compiles and holds reference 0, which crosses as Nil, so the
-# one method that takes an argument list could not be given one. Every other way of reaching a
-# Godot API that takes an Array was closed for the same reason.
+# Both are the archetype now, and the archetype is the point: `godot_array{}` used to compile and
+# hold reference 0, which crosses as Nil, so the one method that takes an argument list could not be
+# given one and every other Godot API taking an Array was closed the same way. A container mints
+# from its own data-member default instead (`VhRefNewDefault`, and `emit_container_classes` in
+# tools/gen_verse_api.py writes the two lines), so the spelling a Godot author reaches for first is
+# the one that works.
 #
-# Adopted on the way out, like every other wrapper: that is what puts the UObject shadow behind it,
-# and the shadow is what releases the table entry when Verse drops the value.
-MakeArray<public>()<reads>:godot_array =
-    Made := godot_array{Ref := VhRefNew(TagArray)}
-    VhAdopt(Made)
-    Made
+# These stay because they are the names R-TYPE-2 published and because `MakeDictionary()` beside
+# `MakeCallable` and `MakeSignal` reads as one family. Nothing here is doing work any more.
+MakeArray<public>()<reads>:godot_array = godot_array{}
 
-MakeDictionary<public>()<reads>:dictionary =
-    Made := dictionary{Ref := VhRefNew(TagDictionary)}
-    VhAdopt(Made)
-    Made
+MakeDictionary<public>()<reads>:dictionary = dictionary{}
 
 # A Verse function as a Godot Callable (R-TYPE-3's other direction, R-INT-4). What makes every
 # callback-taking engine API reachable, and what a signal subscribes with.
@@ -558,12 +553,27 @@ connection<public> := class(cancelable):
 #
 # `Unpack` is <public> because it has to be: a required data member may be no less accessible than
 # the constructor, and the class is public so a script can name `typed_array(node)` in a signature.
-# That costs nothing, because the gate on building one is `Ref` -- inherited from godot_ref, never
-# public, and worthless at its default of 0. A script can write `typed_array(node){Unpack := ...}`
-# and get a container naming nothing.
-typed_array<public>(t:type) := class<computes>(godot_ref):
+# That costs nothing. It used to cost nothing because the inherited `Ref` was worthless at its
+# default of 0, so a script writing `typed_array(node){Unpack := ..., Pack := ...}` got a container
+# naming nothing; now it gets a real empty Godot Array with the converters it asked for, which is
+# a container and not a capability -- the packers a script would have to write to fill `Unpack` are
+# the ordinary public readers on `variant`.
+#
+# `<reads>` rather than `<computes>`, and the two lines below are why. The default mints, which is a
+# call, and the block adopts, which is another; both are `<reads>` and neither writes a member, so
+# the class is exactly as wide as they are. A block that *assigned* would be `transacts` outright
+# (glitch 3512, measured in tests/verse_probe/ref_block_probe.verse) and would drag the mirror's 379
+# container-answering `<reads>` methods across with it.
+typed_array<public>(t:type) := class<reads>(godot_ref):
     Unpack<public>:type{_(:variant)<decides><reads>:t}
     Pack<public>:type{_(:t)<reads>:variant}
+
+    # A Godot Array when the archetype names none, the named one otherwise: a supplied field wins
+    # over an overridden default, so no converter pays for a mint it is about to overwrite.
+    Ref<override>:int = VhRefNewDefault(TagArray)
+
+    block:
+        VhAdoptRef(Self)
 
     # How many elements it holds.
     Length<public>()<reads>:int = VhRefSize(Ref)
@@ -589,10 +599,15 @@ typed_array<public>(t:type) := class<computes>(godot_ref):
 
 # Godot's Dictionary with a key and a value type -- `typeddictionary::int;String`. The same shape as
 # typed_array with one more converter, because a key has to be packed to be looked up.
-typed_dictionary<public>(k:type, v:type) := class<computes>(godot_ref):
+typed_dictionary<public>(k:type, v:type) := class<reads>(godot_ref):
     PackKey<public>:type{_(:k)<reads>:variant}
     Unpack<public>:type{_(:variant)<decides><reads>:v}
     Pack<public>:type{_(:v)<reads>:variant}
+
+    Ref<override>:int = VhRefNewDefault(TagDictionary)
+
+    block:
+        VhAdoptRef(Self)
 
     Length<public>()<reads>:int = VhRefSize(Ref)
 

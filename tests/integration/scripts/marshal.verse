@@ -82,6 +82,30 @@ marshal := class(node2d):
     # R-TYPE-3: a Callable the script was handed, invoked with arguments.
     CallIt<public>(Fn:callable, Arg:int):int = Fn.CallInt(array{Arg})
 
+    # --- R-TYPE-2: a container the script built for itself --------------------
+    #
+    # The bare archetype, which is the spelling a Godot author reaches for first. It used to hold
+    # reference 0 and cross as Nil, so a script could only ever hand Godot a container Godot had
+    # handed it first; a container mints from its own data-member default now. What these assert on
+    # the far side is that Godot got an Array it can read, write and store -- a reference of 0 would
+    # arrive as null and fail every one of them.
+    MadeArray<public>()<reads>:godot_array = godot_array{}
+
+    MadeArrayFilled<public>():godot_array =
+        Made := godot_array{}
+        Made.AddInt(7)
+        Made.AddString("x")
+        Made
+
+    MadeDictionary<public>():dictionary =
+        Made := dictionary{}
+        Made.SetInt("hp", 3)
+        Made
+
+    # The typed container has no bare archetype -- `Unpack` and `Pack` are required members with no
+    # defaults -- so its maker supplies those two and no `Ref`, which is what mints it.
+    MadeNodeArray<public>()<reads>:typed_array(node) = MakeNodeArray()
+
     # --- packed arrays -------------------------------------------------------
     # Values on Godot's side and Verse arrays on this one, whatever the wire does between.
 

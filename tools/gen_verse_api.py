@@ -392,8 +392,12 @@ def verse_virtual_name(godot_name: str) -> str:
 # where Godot's own default is "not handled" this is what that must mean.
 #
 # A type with no entry here and no rule below is a *skip*, recorded with its reason rather than
-# quietly absent: an object return has no zero value a script could write, and a typed container
-# would have to mint a Godot Array on every call Godot makes to a virtual nobody overrode.
+# quietly absent: an object return has no zero value a script could write.
+#
+# The container entries are archetypes and every one of them is a live, empty Godot container --
+# `godot_array{}` mints from its own data-member default. That costs nothing at run time, because a
+# default body for a virtual the script did not declare is never reached: vh_class_method_list
+# reports a class's *own* declarations, so Godot never enters the VM for one.
 VIRTUAL_SCALAR_DEFAULTS = {
     "logic": "false",
     "int": "0",
@@ -424,8 +428,8 @@ def virtual_default(info, enums: dict, is_predicate: bool = False):
     # A parametric container has no archetype to write: `typed_array(dictionary){}` does not
     # compile, because `Unpack` and `Pack` are required data members with no defaults -- one class
     # covers every element type by carrying the conversion as a *value*, which is the whole design
-    # (GodotApi.native.verse). What it has instead is the generated maker beside its converters, and
-    # that answers a real empty Godot array rather than the reference 0 `godot_array{}` holds.
+    # (GodotApi.native.verse). What it has instead is the generated maker beside its converters,
+    # which supplies those two and nothing else, so the same default mints the same empty Array.
     if verse_type.startswith("typed_array(") and info.unpack_fn.startswith("VhTo"):
         return f"Make{info.unpack_fn[len('VhTo'):]}()"
     if verse_type in VALUE_STRUCT_NAMES:
@@ -1193,38 +1197,39 @@ def emit_typed_array_converters(typed_arrays: dict, typed_dictionaries: dict) ->
     for suffix in sorted(typed_arrays):
         info = typed_arrays[suffix]
         read, write = element_pair(suffix, info)
+        # No VhAdopt anywhere below: typed_array and typed_dictionary adopt from a block clause of
+        # their own, which they have to -- their archetype mints when nothing is supplied, so a
+        # wrapper is reachable without passing through a converter at all.
         blocks.append(
-            f"VhTo{suffix}Array(Value:variant)<reads>:typed_array({info.verse_type}) =\n"
-            f"    Made := typed_array({info.verse_type})"
-            f"{{Ref := Value.Ref, Unpack := {read}, Pack := {write}}}\n"
-            f"    VhAdopt(Made)\n"
-            f"    Made")
+            f"VhTo{suffix}Array(Value:variant)<reads>:typed_array({info.verse_type}) ="
+            f" typed_array({info.verse_type})"
+            f"{{Ref := Value.Ref, Unpack := {read}, Pack := {write}}}")
         blocks.append(
             f"VhFrom{suffix}Array(Value:typed_array({info.verse_type}))<reads>:variant ="
             f" variant{{Tag := TagArray, Ref := Value.Ref}}")
         # A script cannot spell the converter pair -- element_pair's functions are module-scoped --
-        # so an empty typed container has to be minted here or not at all. R-TYPE-2's other half:
-        # the mirrored methods taking a typed Array had nothing a script could pass them.
+        # so an empty typed container has to be made here or not at all. R-TYPE-2's other half: the
+        # mirrored methods taking a typed Array had nothing a script could pass them. Naming no
+        # `Ref` is what mints it, which is the line `godot_array{}` takes too.
         blocks.append(
             f"Make{suffix}Array<public>()<reads>:typed_array({info.verse_type}) ="
-            f" VhTo{suffix}Array(variant{{Tag := TagArray, Ref := VhRefNew(TagArray)}})")
+            f" typed_array({info.verse_type}){{Unpack := {read}, Pack := {write}}}")
 
     for suffix, (key_info, value_info) in sorted(typed_dictionaries.items()):
         _key_read, key_write = element_pair(f"{suffix}Key", key_info)
         value_read, value_write = element_pair(f"{suffix}Value", value_info)
         spelling = f"typed_dictionary({key_info.verse_type}, {value_info.verse_type})"
         blocks.append(
-            f"VhTo{suffix}Dict(Value:variant)<reads>:{spelling} =\n"
-            f"    Made := {spelling}"
-            f"{{Ref := Value.Ref, PackKey := {key_write}, Unpack := {value_read}, Pack := {value_write}}}\n"
-            f"    VhAdopt(Made)\n"
-            f"    Made")
+            f"VhTo{suffix}Dict(Value:variant)<reads>:{spelling} ="
+            f" {spelling}"
+            f"{{Ref := Value.Ref, PackKey := {key_write}, Unpack := {value_read}, Pack := {value_write}}}")
         blocks.append(
             f"VhFrom{suffix}Dict(Value:{spelling})<reads>:variant ="
             f" variant{{Tag := TagDictionary, Ref := Value.Ref}}")
         blocks.append(
             f"Make{suffix}Dict<public>()<reads>:{spelling} ="
-            f" VhTo{suffix}Dict(variant{{Tag := TagDictionary, Ref := VhRefNew(TagDictionary)}})")
+            f" {spelling}"
+            f"{{PackKey := {key_write}, Unpack := {value_read}, Pack := {value_write}}}")
     return blocks
 
 
@@ -1282,7 +1287,29 @@ def emit_container_classes() -> list:
     """godot_array and dictionary, with a typed accessor pair per element type and key type."""
     blocks = []
     for verse_name, keys in CONTAINER_KEYS.items():
-        lines = [f"{verse_name}<public> := class<computes>(godot_ref):", ""]
+        tag = "TagArray" if verse_name == "godot_array" else "TagDictionary"
+        # `<reads>` rather than `<computes>`, because the two lines below are both calls and both
+        # are `<reads>`. A block that *assigned* would be `transacts` outright -- glitch 3512,
+        # measured in tests/verse_probe/ref_block_probe.verse -- and would drag every one of the
+        # mirror's container-answering `<reads>` methods across with it.
+        lines = [f"{verse_name}<public> := class<reads>(godot_ref):", ""]
+        # What makes `godot_array{}` an empty Godot Array rather than a reference of 0, which is
+        # the dead-reference footgun Phase 4b spent its first stage removing. A field the archetype
+        # supplies wins over an overridden default, so `VhToArray` pays nothing for a mint it would
+        # immediately overwrite; and the block is what puts the UObject shadow behind a container
+        # that reached no converter, which is the only thing that will release its table entry.
+        lines.append(f"    # What makes `{verse_name}{{}}` an empty Godot {tag[3:]} rather than a reference of 0,")
+        lines.append("    # which is the dead-reference footgun Phase 4b spent its first stage removing. A field the")
+        lines.append("    # archetype supplies wins over an overridden default, so a converter pays nothing for a")
+        lines.append("    # mint it would immediately overwrite -- measured in tests/verse_probe/ref_block_probe.verse.")
+        lines.append(f"    Ref<override>:int = VhRefNewDefault({tag})")
+        lines.append("")
+        lines.append("    # Adoption, which every wrapper needs and which this one cannot leave to its converter: a")
+        lines.append("    # container the archetype minted reached no converter at all. The shadow this materialises")
+        lines.append("    # is the only thing that will release the table entry when Verse drops the value.")
+        lines.append("    block:")
+        lines.append("        VhAdoptRef(Self)")
+        lines.append("")
         lines.append("    # How many elements it holds.")
         lines.append("    Length<public>()<reads>:int = VhRefSize(Ref)")
         lines.append("")

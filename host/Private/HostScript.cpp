@@ -4804,6 +4804,11 @@ AUTORTFM_DISABLE FUtf8String GodotVerse::ClassBaseType(FUtf8StringView ClassName
     return GodotClass ? FUtf8String(GodotClass) : FUtf8String();
 }
 
+AUTORTFM_DISABLE bool GodotVerse::IsMintSuppressed()
+{
+    return GSuppressMintDepth > 0;
+}
+
 AUTORTFM_DISABLE void GodotVerse::ReleaseMintedPeer(const UObject* Owner, int64 Handle, bool bDiscard)
 {
     if (Handle == 0)

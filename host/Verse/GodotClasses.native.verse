@@ -27758,7 +27758,19 @@ VhFromVector4s(Values:[]vector4)<reads>:variant = VhFromValues(TagPackedVector4A
 # (R-TYPE-7). Every read is failable: a key that is absent, an index out of range, and an element
 # of another type are all the same answer, and it is "no" rather than an error.
 
-godot_array<public> := class<computes>(godot_ref):
+godot_array<public> := class<reads>(godot_ref):
+
+    # What makes `godot_array{}` an empty Godot Array rather than a reference of 0,
+    # which is the dead-reference footgun Phase 4b spent its first stage removing. A field the
+    # archetype supplies wins over an overridden default, so a converter pays nothing for a
+    # mint it would immediately overwrite -- measured in tests/verse_probe/ref_block_probe.verse.
+    Ref<override>:int = VhRefNewDefault(TagArray)
+
+    # Adoption, which every wrapper needs and which this one cannot leave to its converter: a
+    # container the archetype minted reached no converter at all. The shadow this materialises
+    # is the only thing that will release the table entry when Verse drops the value.
+    block:
+        VhAdoptRef(Self)
 
     # How many elements it holds.
     Length<public>()<reads>:int = VhRefSize(Ref)
@@ -27813,7 +27825,19 @@ godot_array<public> := class<computes>(godot_ref):
     SetObject<public>(Index:int, Value:object)<transacts>:void = VhRefSet(Ref, VhFromInt(Index), VhFromObject(Value))
     AddObject<public>(Value:object)<transacts>:void = VhRefSet(Ref, VhFromInt(VhRefSize(Ref)), VhFromObject(Value))
 
-dictionary<public> := class<computes>(godot_ref):
+dictionary<public> := class<reads>(godot_ref):
+
+    # What makes `dictionary{}` an empty Godot Dictionary rather than a reference of 0,
+    # which is the dead-reference footgun Phase 4b spent its first stage removing. A field the
+    # archetype supplies wins over an overridden default, so a converter pays nothing for a
+    # mint it would immediately overwrite -- measured in tests/verse_probe/ref_block_probe.verse.
+    Ref<override>:int = VhRefNewDefault(TagDictionary)
+
+    # Adoption, which every wrapper needs and which this one cannot leave to its converter: a
+    # container the archetype minted reached no converter at all. The shadow this materialises
+    # is the only thing that will release the table entry when Verse drops the value.
+    block:
+        VhAdoptRef(Self)
 
     # How many elements it holds.
     Length<public>()<reads>:int = VhRefSize(Ref)
@@ -27905,887 +27929,665 @@ VhToArea2DElement(Value:variant)<decides><reads>:area2d = area2d[VhObjectFrom[Va
 
 VhFromArea2DElement(Value:area2d)<reads>:variant = VhFromObject(Value)
 
-VhToArea2DArray(Value:variant)<reads>:typed_array(area2d) =
-    Made := typed_array(area2d){Ref := Value.Ref, Unpack := VhToArea2DElement, Pack := VhFromArea2DElement}
-    VhAdopt(Made)
-    Made
+VhToArea2DArray(Value:variant)<reads>:typed_array(area2d) = typed_array(area2d){Ref := Value.Ref, Unpack := VhToArea2DElement, Pack := VhFromArea2DElement}
 
 VhFromArea2DArray(Value:typed_array(area2d))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeArea2DArray<public>()<reads>:typed_array(area2d) = VhToArea2DArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeArea2DArray<public>()<reads>:typed_array(area2d) = typed_array(area2d){Unpack := VhToArea2DElement, Pack := VhFromArea2DElement}
 
 VhToArea3DElement(Value:variant)<decides><reads>:area3d = area3d[VhObjectFrom[Value]]
 
 VhFromArea3DElement(Value:area3d)<reads>:variant = VhFromObject(Value)
 
-VhToArea3DArray(Value:variant)<reads>:typed_array(area3d) =
-    Made := typed_array(area3d){Ref := Value.Ref, Unpack := VhToArea3DElement, Pack := VhFromArea3DElement}
-    VhAdopt(Made)
-    Made
+VhToArea3DArray(Value:variant)<reads>:typed_array(area3d) = typed_array(area3d){Ref := Value.Ref, Unpack := VhToArea3DElement, Pack := VhFromArea3DElement}
 
 VhFromArea3DArray(Value:typed_array(area3d))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeArea3DArray<public>()<reads>:typed_array(area3d) = VhToArea3DArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeArea3DArray<public>()<reads>:typed_array(area3d) = typed_array(area3d){Unpack := VhToArea3DElement, Pack := VhFromArea3DElement}
 
-VhToArrayArray(Value:variant)<reads>:typed_array(godot_array) =
-    Made := typed_array(godot_array){Ref := Value.Ref, Unpack := VhUnpackArray, Pack := VariantArray}
-    VhAdopt(Made)
-    Made
+VhToArrayArray(Value:variant)<reads>:typed_array(godot_array) = typed_array(godot_array){Ref := Value.Ref, Unpack := VhUnpackArray, Pack := VariantArray}
 
 VhFromArrayArray(Value:typed_array(godot_array))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeArrayArray<public>()<reads>:typed_array(godot_array) = VhToArrayArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeArrayArray<public>()<reads>:typed_array(godot_array) = typed_array(godot_array){Unpack := VhUnpackArray, Pack := VariantArray}
 
 VhToBaseButtonElement(Value:variant)<decides><reads>:base_button = base_button[VhObjectFrom[Value]]
 
 VhFromBaseButtonElement(Value:base_button)<reads>:variant = VhFromObject(Value)
 
-VhToBaseButtonArray(Value:variant)<reads>:typed_array(base_button) =
-    Made := typed_array(base_button){Ref := Value.Ref, Unpack := VhToBaseButtonElement, Pack := VhFromBaseButtonElement}
-    VhAdopt(Made)
-    Made
+VhToBaseButtonArray(Value:variant)<reads>:typed_array(base_button) = typed_array(base_button){Ref := Value.Ref, Unpack := VhToBaseButtonElement, Pack := VhFromBaseButtonElement}
 
 VhFromBaseButtonArray(Value:typed_array(base_button))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeBaseButtonArray<public>()<reads>:typed_array(base_button) = VhToBaseButtonArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeBaseButtonArray<public>()<reads>:typed_array(base_button) = typed_array(base_button){Unpack := VhToBaseButtonElement, Pack := VhFromBaseButtonElement}
 
 VhToCameraFeedElement(Value:variant)<decides><reads>:camera_feed = camera_feed[VhObjectFrom[Value]]
 
 VhFromCameraFeedElement(Value:camera_feed)<reads>:variant = VhFromObject(Value)
 
-VhToCameraFeedArray(Value:variant)<reads>:typed_array(camera_feed) =
-    Made := typed_array(camera_feed){Ref := Value.Ref, Unpack := VhToCameraFeedElement, Pack := VhFromCameraFeedElement}
-    VhAdopt(Made)
-    Made
+VhToCameraFeedArray(Value:variant)<reads>:typed_array(camera_feed) = typed_array(camera_feed){Ref := Value.Ref, Unpack := VhToCameraFeedElement, Pack := VhFromCameraFeedElement}
 
 VhFromCameraFeedArray(Value:typed_array(camera_feed))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeCameraFeedArray<public>()<reads>:typed_array(camera_feed) = VhToCameraFeedArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeCameraFeedArray<public>()<reads>:typed_array(camera_feed) = typed_array(camera_feed){Unpack := VhToCameraFeedElement, Pack := VhFromCameraFeedElement}
 
 VhToCompositorEffectElement(Value:variant)<decides><reads>:compositor_effect = compositor_effect[VhObjectFrom[Value]]
 
 VhFromCompositorEffectElement(Value:compositor_effect)<reads>:variant = VhFromObject(Value)
 
-VhToCompositorEffectArray(Value:variant)<reads>:typed_array(compositor_effect) =
-    Made := typed_array(compositor_effect){Ref := Value.Ref, Unpack := VhToCompositorEffectElement, Pack := VhFromCompositorEffectElement}
-    VhAdopt(Made)
-    Made
+VhToCompositorEffectArray(Value:variant)<reads>:typed_array(compositor_effect) = typed_array(compositor_effect){Ref := Value.Ref, Unpack := VhToCompositorEffectElement, Pack := VhFromCompositorEffectElement}
 
 VhFromCompositorEffectArray(Value:typed_array(compositor_effect))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeCompositorEffectArray<public>()<reads>:typed_array(compositor_effect) = VhToCompositorEffectArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeCompositorEffectArray<public>()<reads>:typed_array(compositor_effect) = typed_array(compositor_effect){Unpack := VhToCompositorEffectElement, Pack := VhFromCompositorEffectElement}
 
 VhToControlElement(Value:variant)<decides><reads>:control = control[VhObjectFrom[Value]]
 
 VhFromControlElement(Value:control)<reads>:variant = VhFromObject(Value)
 
-VhToControlArray(Value:variant)<reads>:typed_array(control) =
-    Made := typed_array(control){Ref := Value.Ref, Unpack := VhToControlElement, Pack := VhFromControlElement}
-    VhAdopt(Made)
-    Made
+VhToControlArray(Value:variant)<reads>:typed_array(control) = typed_array(control){Ref := Value.Ref, Unpack := VhToControlElement, Pack := VhFromControlElement}
 
 VhFromControlArray(Value:typed_array(control))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeControlArray<public>()<reads>:typed_array(control) = VhToControlArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeControlArray<public>()<reads>:typed_array(control) = typed_array(control){Unpack := VhToControlElement, Pack := VhFromControlElement}
 
-VhToDictionaryArray(Value:variant)<reads>:typed_array(dictionary) =
-    Made := typed_array(dictionary){Ref := Value.Ref, Unpack := VhUnpackDictionary, Pack := VariantDictionary}
-    VhAdopt(Made)
-    Made
+VhToDictionaryArray(Value:variant)<reads>:typed_array(dictionary) = typed_array(dictionary){Ref := Value.Ref, Unpack := VhUnpackDictionary, Pack := VariantDictionary}
 
 VhFromDictionaryArray(Value:typed_array(dictionary))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeDictionaryArray<public>()<reads>:typed_array(dictionary) = VhToDictionaryArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeDictionaryArray<public>()<reads>:typed_array(dictionary) = typed_array(dictionary){Unpack := VhUnpackDictionary, Pack := VariantDictionary}
 
 VhToDrawableTexture2DElement(Value:variant)<decides><reads>:drawable_texture2d = drawable_texture2d[VhObjectFrom[Value]]
 
 VhFromDrawableTexture2DElement(Value:drawable_texture2d)<reads>:variant = VhFromObject(Value)
 
-VhToDrawableTexture2DArray(Value:variant)<reads>:typed_array(drawable_texture2d) =
-    Made := typed_array(drawable_texture2d){Ref := Value.Ref, Unpack := VhToDrawableTexture2DElement, Pack := VhFromDrawableTexture2DElement}
-    VhAdopt(Made)
-    Made
+VhToDrawableTexture2DArray(Value:variant)<reads>:typed_array(drawable_texture2d) = typed_array(drawable_texture2d){Ref := Value.Ref, Unpack := VhToDrawableTexture2DElement, Pack := VhFromDrawableTexture2DElement}
 
 VhFromDrawableTexture2DArray(Value:typed_array(drawable_texture2d))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeDrawableTexture2DArray<public>()<reads>:typed_array(drawable_texture2d) = VhToDrawableTexture2DArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeDrawableTexture2DArray<public>()<reads>:typed_array(drawable_texture2d) = typed_array(drawable_texture2d){Unpack := VhToDrawableTexture2DElement, Pack := VhFromDrawableTexture2DElement}
 
 VhToENetPacketPeerElement(Value:variant)<decides><reads>:e_net_packet_peer = e_net_packet_peer[VhObjectFrom[Value]]
 
 VhFromENetPacketPeerElement(Value:e_net_packet_peer)<reads>:variant = VhFromObject(Value)
 
-VhToENetPacketPeerArray(Value:variant)<reads>:typed_array(e_net_packet_peer) =
-    Made := typed_array(e_net_packet_peer){Ref := Value.Ref, Unpack := VhToENetPacketPeerElement, Pack := VhFromENetPacketPeerElement}
-    VhAdopt(Made)
-    Made
+VhToENetPacketPeerArray(Value:variant)<reads>:typed_array(e_net_packet_peer) = typed_array(e_net_packet_peer){Ref := Value.Ref, Unpack := VhToENetPacketPeerElement, Pack := VhFromENetPacketPeerElement}
 
 VhFromENetPacketPeerArray(Value:typed_array(e_net_packet_peer))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeENetPacketPeerArray<public>()<reads>:typed_array(e_net_packet_peer) = VhToENetPacketPeerArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeENetPacketPeerArray<public>()<reads>:typed_array(e_net_packet_peer) = typed_array(e_net_packet_peer){Unpack := VhToENetPacketPeerElement, Pack := VhFromENetPacketPeerElement}
 
 VhToFoldableContainerElement(Value:variant)<decides><reads>:foldable_container = foldable_container[VhObjectFrom[Value]]
 
 VhFromFoldableContainerElement(Value:foldable_container)<reads>:variant = VhFromObject(Value)
 
-VhToFoldableContainerArray(Value:variant)<reads>:typed_array(foldable_container) =
-    Made := typed_array(foldable_container){Ref := Value.Ref, Unpack := VhToFoldableContainerElement, Pack := VhFromFoldableContainerElement}
-    VhAdopt(Made)
-    Made
+VhToFoldableContainerArray(Value:variant)<reads>:typed_array(foldable_container) = typed_array(foldable_container){Ref := Value.Ref, Unpack := VhToFoldableContainerElement, Pack := VhFromFoldableContainerElement}
 
 VhFromFoldableContainerArray(Value:typed_array(foldable_container))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeFoldableContainerArray<public>()<reads>:typed_array(foldable_container) = VhToFoldableContainerArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeFoldableContainerArray<public>()<reads>:typed_array(foldable_container) = typed_array(foldable_container){Unpack := VhToFoldableContainerElement, Pack := VhFromFoldableContainerElement}
 
 VhToFontElement(Value:variant)<decides><reads>:font = font[VhObjectFrom[Value]]
 
 VhFromFontElement(Value:font)<reads>:variant = VhFromObject(Value)
 
-VhToFontArray(Value:variant)<reads>:typed_array(font) =
-    Made := typed_array(font){Ref := Value.Ref, Unpack := VhToFontElement, Pack := VhFromFontElement}
-    VhAdopt(Made)
-    Made
+VhToFontArray(Value:variant)<reads>:typed_array(font) = typed_array(font){Ref := Value.Ref, Unpack := VhToFontElement, Pack := VhFromFontElement}
 
 VhFromFontArray(Value:typed_array(font))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeFontArray<public>()<reads>:typed_array(font) = VhToFontArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeFontArray<public>()<reads>:typed_array(font) = typed_array(font){Unpack := VhToFontElement, Pack := VhFromFontElement}
 
 VhToGLTFAccessorElement(Value:variant)<decides><reads>:gltf_accessor = gltf_accessor[VhObjectFrom[Value]]
 
 VhFromGLTFAccessorElement(Value:gltf_accessor)<reads>:variant = VhFromObject(Value)
 
-VhToGLTFAccessorArray(Value:variant)<reads>:typed_array(gltf_accessor) =
-    Made := typed_array(gltf_accessor){Ref := Value.Ref, Unpack := VhToGLTFAccessorElement, Pack := VhFromGLTFAccessorElement}
-    VhAdopt(Made)
-    Made
+VhToGLTFAccessorArray(Value:variant)<reads>:typed_array(gltf_accessor) = typed_array(gltf_accessor){Ref := Value.Ref, Unpack := VhToGLTFAccessorElement, Pack := VhFromGLTFAccessorElement}
 
 VhFromGLTFAccessorArray(Value:typed_array(gltf_accessor))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeGLTFAccessorArray<public>()<reads>:typed_array(gltf_accessor) = VhToGLTFAccessorArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeGLTFAccessorArray<public>()<reads>:typed_array(gltf_accessor) = typed_array(gltf_accessor){Unpack := VhToGLTFAccessorElement, Pack := VhFromGLTFAccessorElement}
 
 VhToGLTFAnimationElement(Value:variant)<decides><reads>:gltf_animation = gltf_animation[VhObjectFrom[Value]]
 
 VhFromGLTFAnimationElement(Value:gltf_animation)<reads>:variant = VhFromObject(Value)
 
-VhToGLTFAnimationArray(Value:variant)<reads>:typed_array(gltf_animation) =
-    Made := typed_array(gltf_animation){Ref := Value.Ref, Unpack := VhToGLTFAnimationElement, Pack := VhFromGLTFAnimationElement}
-    VhAdopt(Made)
-    Made
+VhToGLTFAnimationArray(Value:variant)<reads>:typed_array(gltf_animation) = typed_array(gltf_animation){Ref := Value.Ref, Unpack := VhToGLTFAnimationElement, Pack := VhFromGLTFAnimationElement}
 
 VhFromGLTFAnimationArray(Value:typed_array(gltf_animation))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeGLTFAnimationArray<public>()<reads>:typed_array(gltf_animation) = VhToGLTFAnimationArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeGLTFAnimationArray<public>()<reads>:typed_array(gltf_animation) = typed_array(gltf_animation){Unpack := VhToGLTFAnimationElement, Pack := VhFromGLTFAnimationElement}
 
 VhToGLTFBufferViewElement(Value:variant)<decides><reads>:gltf_buffer_view = gltf_buffer_view[VhObjectFrom[Value]]
 
 VhFromGLTFBufferViewElement(Value:gltf_buffer_view)<reads>:variant = VhFromObject(Value)
 
-VhToGLTFBufferViewArray(Value:variant)<reads>:typed_array(gltf_buffer_view) =
-    Made := typed_array(gltf_buffer_view){Ref := Value.Ref, Unpack := VhToGLTFBufferViewElement, Pack := VhFromGLTFBufferViewElement}
-    VhAdopt(Made)
-    Made
+VhToGLTFBufferViewArray(Value:variant)<reads>:typed_array(gltf_buffer_view) = typed_array(gltf_buffer_view){Ref := Value.Ref, Unpack := VhToGLTFBufferViewElement, Pack := VhFromGLTFBufferViewElement}
 
 VhFromGLTFBufferViewArray(Value:typed_array(gltf_buffer_view))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeGLTFBufferViewArray<public>()<reads>:typed_array(gltf_buffer_view) = VhToGLTFBufferViewArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeGLTFBufferViewArray<public>()<reads>:typed_array(gltf_buffer_view) = typed_array(gltf_buffer_view){Unpack := VhToGLTFBufferViewElement, Pack := VhFromGLTFBufferViewElement}
 
 VhToGLTFCameraElement(Value:variant)<decides><reads>:gltf_camera = gltf_camera[VhObjectFrom[Value]]
 
 VhFromGLTFCameraElement(Value:gltf_camera)<reads>:variant = VhFromObject(Value)
 
-VhToGLTFCameraArray(Value:variant)<reads>:typed_array(gltf_camera) =
-    Made := typed_array(gltf_camera){Ref := Value.Ref, Unpack := VhToGLTFCameraElement, Pack := VhFromGLTFCameraElement}
-    VhAdopt(Made)
-    Made
+VhToGLTFCameraArray(Value:variant)<reads>:typed_array(gltf_camera) = typed_array(gltf_camera){Ref := Value.Ref, Unpack := VhToGLTFCameraElement, Pack := VhFromGLTFCameraElement}
 
 VhFromGLTFCameraArray(Value:typed_array(gltf_camera))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeGLTFCameraArray<public>()<reads>:typed_array(gltf_camera) = VhToGLTFCameraArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeGLTFCameraArray<public>()<reads>:typed_array(gltf_camera) = typed_array(gltf_camera){Unpack := VhToGLTFCameraElement, Pack := VhFromGLTFCameraElement}
 
 VhToGLTFLightElement(Value:variant)<decides><reads>:gltf_light = gltf_light[VhObjectFrom[Value]]
 
 VhFromGLTFLightElement(Value:gltf_light)<reads>:variant = VhFromObject(Value)
 
-VhToGLTFLightArray(Value:variant)<reads>:typed_array(gltf_light) =
-    Made := typed_array(gltf_light){Ref := Value.Ref, Unpack := VhToGLTFLightElement, Pack := VhFromGLTFLightElement}
-    VhAdopt(Made)
-    Made
+VhToGLTFLightArray(Value:variant)<reads>:typed_array(gltf_light) = typed_array(gltf_light){Ref := Value.Ref, Unpack := VhToGLTFLightElement, Pack := VhFromGLTFLightElement}
 
 VhFromGLTFLightArray(Value:typed_array(gltf_light))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeGLTFLightArray<public>()<reads>:typed_array(gltf_light) = VhToGLTFLightArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeGLTFLightArray<public>()<reads>:typed_array(gltf_light) = typed_array(gltf_light){Unpack := VhToGLTFLightElement, Pack := VhFromGLTFLightElement}
 
 VhToGLTFMeshElement(Value:variant)<decides><reads>:gltf_mesh = gltf_mesh[VhObjectFrom[Value]]
 
 VhFromGLTFMeshElement(Value:gltf_mesh)<reads>:variant = VhFromObject(Value)
 
-VhToGLTFMeshArray(Value:variant)<reads>:typed_array(gltf_mesh) =
-    Made := typed_array(gltf_mesh){Ref := Value.Ref, Unpack := VhToGLTFMeshElement, Pack := VhFromGLTFMeshElement}
-    VhAdopt(Made)
-    Made
+VhToGLTFMeshArray(Value:variant)<reads>:typed_array(gltf_mesh) = typed_array(gltf_mesh){Ref := Value.Ref, Unpack := VhToGLTFMeshElement, Pack := VhFromGLTFMeshElement}
 
 VhFromGLTFMeshArray(Value:typed_array(gltf_mesh))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeGLTFMeshArray<public>()<reads>:typed_array(gltf_mesh) = VhToGLTFMeshArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeGLTFMeshArray<public>()<reads>:typed_array(gltf_mesh) = typed_array(gltf_mesh){Unpack := VhToGLTFMeshElement, Pack := VhFromGLTFMeshElement}
 
 VhToGLTFNodeElement(Value:variant)<decides><reads>:gltf_node = gltf_node[VhObjectFrom[Value]]
 
 VhFromGLTFNodeElement(Value:gltf_node)<reads>:variant = VhFromObject(Value)
 
-VhToGLTFNodeArray(Value:variant)<reads>:typed_array(gltf_node) =
-    Made := typed_array(gltf_node){Ref := Value.Ref, Unpack := VhToGLTFNodeElement, Pack := VhFromGLTFNodeElement}
-    VhAdopt(Made)
-    Made
+VhToGLTFNodeArray(Value:variant)<reads>:typed_array(gltf_node) = typed_array(gltf_node){Ref := Value.Ref, Unpack := VhToGLTFNodeElement, Pack := VhFromGLTFNodeElement}
 
 VhFromGLTFNodeArray(Value:typed_array(gltf_node))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeGLTFNodeArray<public>()<reads>:typed_array(gltf_node) = VhToGLTFNodeArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeGLTFNodeArray<public>()<reads>:typed_array(gltf_node) = typed_array(gltf_node){Unpack := VhToGLTFNodeElement, Pack := VhFromGLTFNodeElement}
 
 VhToGLTFSkeletonElement(Value:variant)<decides><reads>:gltf_skeleton = gltf_skeleton[VhObjectFrom[Value]]
 
 VhFromGLTFSkeletonElement(Value:gltf_skeleton)<reads>:variant = VhFromObject(Value)
 
-VhToGLTFSkeletonArray(Value:variant)<reads>:typed_array(gltf_skeleton) =
-    Made := typed_array(gltf_skeleton){Ref := Value.Ref, Unpack := VhToGLTFSkeletonElement, Pack := VhFromGLTFSkeletonElement}
-    VhAdopt(Made)
-    Made
+VhToGLTFSkeletonArray(Value:variant)<reads>:typed_array(gltf_skeleton) = typed_array(gltf_skeleton){Ref := Value.Ref, Unpack := VhToGLTFSkeletonElement, Pack := VhFromGLTFSkeletonElement}
 
 VhFromGLTFSkeletonArray(Value:typed_array(gltf_skeleton))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeGLTFSkeletonArray<public>()<reads>:typed_array(gltf_skeleton) = VhToGLTFSkeletonArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeGLTFSkeletonArray<public>()<reads>:typed_array(gltf_skeleton) = typed_array(gltf_skeleton){Unpack := VhToGLTFSkeletonElement, Pack := VhFromGLTFSkeletonElement}
 
 VhToGLTFSkinElement(Value:variant)<decides><reads>:gltf_skin = gltf_skin[VhObjectFrom[Value]]
 
 VhFromGLTFSkinElement(Value:gltf_skin)<reads>:variant = VhFromObject(Value)
 
-VhToGLTFSkinArray(Value:variant)<reads>:typed_array(gltf_skin) =
-    Made := typed_array(gltf_skin){Ref := Value.Ref, Unpack := VhToGLTFSkinElement, Pack := VhFromGLTFSkinElement}
-    VhAdopt(Made)
-    Made
+VhToGLTFSkinArray(Value:variant)<reads>:typed_array(gltf_skin) = typed_array(gltf_skin){Ref := Value.Ref, Unpack := VhToGLTFSkinElement, Pack := VhFromGLTFSkinElement}
 
 VhFromGLTFSkinArray(Value:typed_array(gltf_skin))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeGLTFSkinArray<public>()<reads>:typed_array(gltf_skin) = VhToGLTFSkinArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeGLTFSkinArray<public>()<reads>:typed_array(gltf_skin) = typed_array(gltf_skin){Unpack := VhToGLTFSkinElement, Pack := VhFromGLTFSkinElement}
 
 VhToGLTFTextureElement(Value:variant)<decides><reads>:gltf_texture = gltf_texture[VhObjectFrom[Value]]
 
 VhFromGLTFTextureElement(Value:gltf_texture)<reads>:variant = VhFromObject(Value)
 
-VhToGLTFTextureArray(Value:variant)<reads>:typed_array(gltf_texture) =
-    Made := typed_array(gltf_texture){Ref := Value.Ref, Unpack := VhToGLTFTextureElement, Pack := VhFromGLTFTextureElement}
-    VhAdopt(Made)
-    Made
+VhToGLTFTextureArray(Value:variant)<reads>:typed_array(gltf_texture) = typed_array(gltf_texture){Ref := Value.Ref, Unpack := VhToGLTFTextureElement, Pack := VhFromGLTFTextureElement}
 
 VhFromGLTFTextureArray(Value:typed_array(gltf_texture))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeGLTFTextureArray<public>()<reads>:typed_array(gltf_texture) = VhToGLTFTextureArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeGLTFTextureArray<public>()<reads>:typed_array(gltf_texture) = typed_array(gltf_texture){Unpack := VhToGLTFTextureElement, Pack := VhFromGLTFTextureElement}
 
 VhToGLTFTextureSamplerElement(Value:variant)<decides><reads>:gltf_texture_sampler = gltf_texture_sampler[VhObjectFrom[Value]]
 
 VhFromGLTFTextureSamplerElement(Value:gltf_texture_sampler)<reads>:variant = VhFromObject(Value)
 
-VhToGLTFTextureSamplerArray(Value:variant)<reads>:typed_array(gltf_texture_sampler) =
-    Made := typed_array(gltf_texture_sampler){Ref := Value.Ref, Unpack := VhToGLTFTextureSamplerElement, Pack := VhFromGLTFTextureSamplerElement}
-    VhAdopt(Made)
-    Made
+VhToGLTFTextureSamplerArray(Value:variant)<reads>:typed_array(gltf_texture_sampler) = typed_array(gltf_texture_sampler){Ref := Value.Ref, Unpack := VhToGLTFTextureSamplerElement, Pack := VhFromGLTFTextureSamplerElement}
 
 VhFromGLTFTextureSamplerArray(Value:typed_array(gltf_texture_sampler))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeGLTFTextureSamplerArray<public>()<reads>:typed_array(gltf_texture_sampler) = VhToGLTFTextureSamplerArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeGLTFTextureSamplerArray<public>()<reads>:typed_array(gltf_texture_sampler) = typed_array(gltf_texture_sampler){Unpack := VhToGLTFTextureSamplerElement, Pack := VhFromGLTFTextureSamplerElement}
 
 VhToImageElement(Value:variant)<decides><reads>:image = image[VhObjectFrom[Value]]
 
 VhFromImageElement(Value:image)<reads>:variant = VhFromObject(Value)
 
-VhToImageArray(Value:variant)<reads>:typed_array(image) =
-    Made := typed_array(image){Ref := Value.Ref, Unpack := VhToImageElement, Pack := VhFromImageElement}
-    VhAdopt(Made)
-    Made
+VhToImageArray(Value:variant)<reads>:typed_array(image) = typed_array(image){Ref := Value.Ref, Unpack := VhToImageElement, Pack := VhFromImageElement}
 
 VhFromImageArray(Value:typed_array(image))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeImageArray<public>()<reads>:typed_array(image) = VhToImageArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeImageArray<public>()<reads>:typed_array(image) = typed_array(image){Unpack := VhToImageElement, Pack := VhFromImageElement}
 
 VhToImporterMeshElement(Value:variant)<decides><reads>:importer_mesh = importer_mesh[VhObjectFrom[Value]]
 
 VhFromImporterMeshElement(Value:importer_mesh)<reads>:variant = VhFromObject(Value)
 
-VhToImporterMeshArray(Value:variant)<reads>:typed_array(importer_mesh) =
-    Made := typed_array(importer_mesh){Ref := Value.Ref, Unpack := VhToImporterMeshElement, Pack := VhFromImporterMeshElement}
-    VhAdopt(Made)
-    Made
+VhToImporterMeshArray(Value:variant)<reads>:typed_array(importer_mesh) = typed_array(importer_mesh){Ref := Value.Ref, Unpack := VhToImporterMeshElement, Pack := VhFromImporterMeshElement}
 
 VhFromImporterMeshArray(Value:typed_array(importer_mesh))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeImporterMeshArray<public>()<reads>:typed_array(importer_mesh) = VhToImporterMeshArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeImporterMeshArray<public>()<reads>:typed_array(importer_mesh) = typed_array(importer_mesh){Unpack := VhToImporterMeshElement, Pack := VhFromImporterMeshElement}
 
 VhToInputEventElement(Value:variant)<decides><reads>:input_event = input_event[VhObjectFrom[Value]]
 
 VhFromInputEventElement(Value:input_event)<reads>:variant = VhFromObject(Value)
 
-VhToInputEventArray(Value:variant)<reads>:typed_array(input_event) =
-    Made := typed_array(input_event){Ref := Value.Ref, Unpack := VhToInputEventElement, Pack := VhFromInputEventElement}
-    VhAdopt(Made)
-    Made
+VhToInputEventArray(Value:variant)<reads>:typed_array(input_event) = typed_array(input_event){Ref := Value.Ref, Unpack := VhToInputEventElement, Pack := VhFromInputEventElement}
 
 VhFromInputEventArray(Value:typed_array(input_event))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeInputEventArray<public>()<reads>:typed_array(input_event) = VhToInputEventArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeInputEventArray<public>()<reads>:typed_array(input_event) = typed_array(input_event){Unpack := VhToInputEventElement, Pack := VhFromInputEventElement}
 
-VhToIntArray(Value:variant)<reads>:typed_array(int) =
-    Made := typed_array(int){Ref := Value.Ref, Unpack := VhUnpackInt, Pack := VariantInt}
-    VhAdopt(Made)
-    Made
+VhToIntArray(Value:variant)<reads>:typed_array(int) = typed_array(int){Ref := Value.Ref, Unpack := VhUnpackInt, Pack := VariantInt}
 
 VhFromIntArray(Value:typed_array(int))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeIntArray<public>()<reads>:typed_array(int) = VhToIntArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeIntArray<public>()<reads>:typed_array(int) = typed_array(int){Unpack := VhUnpackInt, Pack := VariantInt}
 
 VhToMaterialElement(Value:variant)<decides><reads>:material = material[VhObjectFrom[Value]]
 
 VhFromMaterialElement(Value:material)<reads>:variant = VhFromObject(Value)
 
-VhToMaterialArray(Value:variant)<reads>:typed_array(material) =
-    Made := typed_array(material){Ref := Value.Ref, Unpack := VhToMaterialElement, Pack := VhFromMaterialElement}
-    VhAdopt(Made)
-    Made
+VhToMaterialArray(Value:variant)<reads>:typed_array(material) = typed_array(material){Ref := Value.Ref, Unpack := VhToMaterialElement, Pack := VhFromMaterialElement}
 
 VhFromMaterialArray(Value:typed_array(material))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeMaterialArray<public>()<reads>:typed_array(material) = VhToMaterialArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeMaterialArray<public>()<reads>:typed_array(material) = typed_array(material){Unpack := VhToMaterialElement, Pack := VhFromMaterialElement}
 
 VhToMeshElement(Value:variant)<decides><reads>:mesh = mesh[VhObjectFrom[Value]]
 
 VhFromMeshElement(Value:mesh)<reads>:variant = VhFromObject(Value)
 
-VhToMeshArray(Value:variant)<reads>:typed_array(mesh) =
-    Made := typed_array(mesh){Ref := Value.Ref, Unpack := VhToMeshElement, Pack := VhFromMeshElement}
-    VhAdopt(Made)
-    Made
+VhToMeshArray(Value:variant)<reads>:typed_array(mesh) = typed_array(mesh){Ref := Value.Ref, Unpack := VhToMeshElement, Pack := VhFromMeshElement}
 
 VhFromMeshArray(Value:typed_array(mesh))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeMeshArray<public>()<reads>:typed_array(mesh) = VhToMeshArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeMeshArray<public>()<reads>:typed_array(mesh) = typed_array(mesh){Unpack := VhToMeshElement, Pack := VhFromMeshElement}
 
 VhToNodeElement(Value:variant)<decides><reads>:node = node[VhObjectFrom[Value]]
 
 VhFromNodeElement(Value:node)<reads>:variant = VhFromObject(Value)
 
-VhToNodeArray(Value:variant)<reads>:typed_array(node) =
-    Made := typed_array(node){Ref := Value.Ref, Unpack := VhToNodeElement, Pack := VhFromNodeElement}
-    VhAdopt(Made)
-    Made
+VhToNodeArray(Value:variant)<reads>:typed_array(node) = typed_array(node){Ref := Value.Ref, Unpack := VhToNodeElement, Pack := VhFromNodeElement}
 
 VhFromNodeArray(Value:typed_array(node))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeNodeArray<public>()<reads>:typed_array(node) = VhToNodeArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeNodeArray<public>()<reads>:typed_array(node) = typed_array(node){Unpack := VhToNodeElement, Pack := VhFromNodeElement}
 
 VhToNode2DElement(Value:variant)<decides><reads>:node2d = node2d[VhObjectFrom[Value]]
 
 VhFromNode2DElement(Value:node2d)<reads>:variant = VhFromObject(Value)
 
-VhToNode2DArray(Value:variant)<reads>:typed_array(node2d) =
-    Made := typed_array(node2d){Ref := Value.Ref, Unpack := VhToNode2DElement, Pack := VhFromNode2DElement}
-    VhAdopt(Made)
-    Made
+VhToNode2DArray(Value:variant)<reads>:typed_array(node2d) = typed_array(node2d){Ref := Value.Ref, Unpack := VhToNode2DElement, Pack := VhFromNode2DElement}
 
 VhFromNode2DArray(Value:typed_array(node2d))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeNode2DArray<public>()<reads>:typed_array(node2d) = VhToNode2DArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeNode2DArray<public>()<reads>:typed_array(node2d) = typed_array(node2d){Unpack := VhToNode2DElement, Pack := VhFromNode2DElement}
 
 VhToNode3DElement(Value:variant)<decides><reads>:node3d = node3d[VhObjectFrom[Value]]
 
 VhFromNode3DElement(Value:node3d)<reads>:variant = VhFromObject(Value)
 
-VhToNode3DArray(Value:variant)<reads>:typed_array(node3d) =
-    Made := typed_array(node3d){Ref := Value.Ref, Unpack := VhToNode3DElement, Pack := VhFromNode3DElement}
-    VhAdopt(Made)
-    Made
+VhToNode3DArray(Value:variant)<reads>:typed_array(node3d) = typed_array(node3d){Ref := Value.Ref, Unpack := VhToNode3DElement, Pack := VhFromNode3DElement}
 
 VhFromNode3DArray(Value:typed_array(node3d))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeNode3DArray<public>()<reads>:typed_array(node3d) = VhToNode3DArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeNode3DArray<public>()<reads>:typed_array(node3d) = typed_array(node3d){Unpack := VhToNode3DElement, Pack := VhFromNode3DElement}
 
 VhToNode3DGizmoElement(Value:variant)<decides><reads>:node3d_gizmo = node3d_gizmo[VhObjectFrom[Value]]
 
 VhFromNode3DGizmoElement(Value:node3d_gizmo)<reads>:variant = VhFromObject(Value)
 
-VhToNode3DGizmoArray(Value:variant)<reads>:typed_array(node3d_gizmo) =
-    Made := typed_array(node3d_gizmo){Ref := Value.Ref, Unpack := VhToNode3DGizmoElement, Pack := VhFromNode3DGizmoElement}
-    VhAdopt(Made)
-    Made
+VhToNode3DGizmoArray(Value:variant)<reads>:typed_array(node3d_gizmo) = typed_array(node3d_gizmo){Ref := Value.Ref, Unpack := VhToNode3DGizmoElement, Pack := VhFromNode3DGizmoElement}
 
 VhFromNode3DGizmoArray(Value:typed_array(node3d_gizmo))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeNode3DGizmoArray<public>()<reads>:typed_array(node3d_gizmo) = VhToNode3DGizmoArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeNode3DGizmoArray<public>()<reads>:typed_array(node3d_gizmo) = typed_array(node3d_gizmo){Unpack := VhToNode3DGizmoElement, Pack := VhFromNode3DGizmoElement}
 
-VhToNodePathArray(Value:variant)<reads>:typed_array(string) =
-    Made := typed_array(string){Ref := Value.Ref, Unpack := VhUnpackNodePath, Pack := VariantNodePath}
-    VhAdopt(Made)
-    Made
+VhToNodePathArray(Value:variant)<reads>:typed_array(string) = typed_array(string){Ref := Value.Ref, Unpack := VhUnpackNodePath, Pack := VariantNodePath}
 
 VhFromNodePathArray(Value:typed_array(string))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeNodePathArray<public>()<reads>:typed_array(string) = VhToNodePathArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeNodePathArray<public>()<reads>:typed_array(string) = typed_array(string){Unpack := VhUnpackNodePath, Pack := VariantNodePath}
 
 VhToOpenXRSpatialCapabilityConfigurationBaseHeaderElement(Value:variant)<decides><reads>:open_xr_spatial_capability_configuration_base_header = open_xr_spatial_capability_configuration_base_header[VhObjectFrom[Value]]
 
 VhFromOpenXRSpatialCapabilityConfigurationBaseHeaderElement(Value:open_xr_spatial_capability_configuration_base_header)<reads>:variant = VhFromObject(Value)
 
-VhToOpenXRSpatialCapabilityConfigurationBaseHeaderArray(Value:variant)<reads>:typed_array(open_xr_spatial_capability_configuration_base_header) =
-    Made := typed_array(open_xr_spatial_capability_configuration_base_header){Ref := Value.Ref, Unpack := VhToOpenXRSpatialCapabilityConfigurationBaseHeaderElement, Pack := VhFromOpenXRSpatialCapabilityConfigurationBaseHeaderElement}
-    VhAdopt(Made)
-    Made
+VhToOpenXRSpatialCapabilityConfigurationBaseHeaderArray(Value:variant)<reads>:typed_array(open_xr_spatial_capability_configuration_base_header) = typed_array(open_xr_spatial_capability_configuration_base_header){Ref := Value.Ref, Unpack := VhToOpenXRSpatialCapabilityConfigurationBaseHeaderElement, Pack := VhFromOpenXRSpatialCapabilityConfigurationBaseHeaderElement}
 
 VhFromOpenXRSpatialCapabilityConfigurationBaseHeaderArray(Value:typed_array(open_xr_spatial_capability_configuration_base_header))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeOpenXRSpatialCapabilityConfigurationBaseHeaderArray<public>()<reads>:typed_array(open_xr_spatial_capability_configuration_base_header) = VhToOpenXRSpatialCapabilityConfigurationBaseHeaderArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeOpenXRSpatialCapabilityConfigurationBaseHeaderArray<public>()<reads>:typed_array(open_xr_spatial_capability_configuration_base_header) = typed_array(open_xr_spatial_capability_configuration_base_header){Unpack := VhToOpenXRSpatialCapabilityConfigurationBaseHeaderElement, Pack := VhFromOpenXRSpatialCapabilityConfigurationBaseHeaderElement}
 
 VhToOpenXRSpatialComponentDataElement(Value:variant)<decides><reads>:open_xr_spatial_component_data = open_xr_spatial_component_data[VhObjectFrom[Value]]
 
 VhFromOpenXRSpatialComponentDataElement(Value:open_xr_spatial_component_data)<reads>:variant = VhFromObject(Value)
 
-VhToOpenXRSpatialComponentDataArray(Value:variant)<reads>:typed_array(open_xr_spatial_component_data) =
-    Made := typed_array(open_xr_spatial_component_data){Ref := Value.Ref, Unpack := VhToOpenXRSpatialComponentDataElement, Pack := VhFromOpenXRSpatialComponentDataElement}
-    VhAdopt(Made)
-    Made
+VhToOpenXRSpatialComponentDataArray(Value:variant)<reads>:typed_array(open_xr_spatial_component_data) = typed_array(open_xr_spatial_component_data){Ref := Value.Ref, Unpack := VhToOpenXRSpatialComponentDataElement, Pack := VhFromOpenXRSpatialComponentDataElement}
 
 VhFromOpenXRSpatialComponentDataArray(Value:typed_array(open_xr_spatial_component_data))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeOpenXRSpatialComponentDataArray<public>()<reads>:typed_array(open_xr_spatial_component_data) = VhToOpenXRSpatialComponentDataArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeOpenXRSpatialComponentDataArray<public>()<reads>:typed_array(open_xr_spatial_component_data) = typed_array(open_xr_spatial_component_data){Unpack := VhToOpenXRSpatialComponentDataElement, Pack := VhFromOpenXRSpatialComponentDataElement}
 
-VhToPackedByteArrayArray(Value:variant)<reads>:typed_array([]int) =
-    Made := typed_array([]int){Ref := Value.Ref, Unpack := VhUnpackPackedByteArray, Pack := VariantPackedByteArray}
-    VhAdopt(Made)
-    Made
+VhToPackedByteArrayArray(Value:variant)<reads>:typed_array([]int) = typed_array([]int){Ref := Value.Ref, Unpack := VhUnpackPackedByteArray, Pack := VariantPackedByteArray}
 
 VhFromPackedByteArrayArray(Value:typed_array([]int))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakePackedByteArrayArray<public>()<reads>:typed_array([]int) = VhToPackedByteArrayArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakePackedByteArrayArray<public>()<reads>:typed_array([]int) = typed_array([]int){Unpack := VhUnpackPackedByteArray, Pack := VariantPackedByteArray}
 
-VhToPackedStringArrayArray(Value:variant)<reads>:typed_array([]string) =
-    Made := typed_array([]string){Ref := Value.Ref, Unpack := VhUnpackPackedStringArray, Pack := VariantPackedStringArray}
-    VhAdopt(Made)
-    Made
+VhToPackedStringArrayArray(Value:variant)<reads>:typed_array([]string) = typed_array([]string){Ref := Value.Ref, Unpack := VhUnpackPackedStringArray, Pack := VariantPackedStringArray}
 
 VhFromPackedStringArrayArray(Value:typed_array([]string))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakePackedStringArrayArray<public>()<reads>:typed_array([]string) = VhToPackedStringArrayArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakePackedStringArrayArray<public>()<reads>:typed_array([]string) = typed_array([]string){Unpack := VhUnpackPackedStringArray, Pack := VariantPackedStringArray}
 
-VhToPackedVector2ArrayArray(Value:variant)<reads>:typed_array([]vector2) =
-    Made := typed_array([]vector2){Ref := Value.Ref, Unpack := VhUnpackPackedVector2Array, Pack := VariantPackedVector2Array}
-    VhAdopt(Made)
-    Made
+VhToPackedVector2ArrayArray(Value:variant)<reads>:typed_array([]vector2) = typed_array([]vector2){Ref := Value.Ref, Unpack := VhUnpackPackedVector2Array, Pack := VariantPackedVector2Array}
 
 VhFromPackedVector2ArrayArray(Value:typed_array([]vector2))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakePackedVector2ArrayArray<public>()<reads>:typed_array([]vector2) = VhToPackedVector2ArrayArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakePackedVector2ArrayArray<public>()<reads>:typed_array([]vector2) = typed_array([]vector2){Unpack := VhUnpackPackedVector2Array, Pack := VariantPackedVector2Array}
 
 VhToPhysicsBody2DElement(Value:variant)<decides><reads>:physics_body2d = physics_body2d[VhObjectFrom[Value]]
 
 VhFromPhysicsBody2DElement(Value:physics_body2d)<reads>:variant = VhFromObject(Value)
 
-VhToPhysicsBody2DArray(Value:variant)<reads>:typed_array(physics_body2d) =
-    Made := typed_array(physics_body2d){Ref := Value.Ref, Unpack := VhToPhysicsBody2DElement, Pack := VhFromPhysicsBody2DElement}
-    VhAdopt(Made)
-    Made
+VhToPhysicsBody2DArray(Value:variant)<reads>:typed_array(physics_body2d) = typed_array(physics_body2d){Ref := Value.Ref, Unpack := VhToPhysicsBody2DElement, Pack := VhFromPhysicsBody2DElement}
 
 VhFromPhysicsBody2DArray(Value:typed_array(physics_body2d))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakePhysicsBody2DArray<public>()<reads>:typed_array(physics_body2d) = VhToPhysicsBody2DArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakePhysicsBody2DArray<public>()<reads>:typed_array(physics_body2d) = typed_array(physics_body2d){Unpack := VhToPhysicsBody2DElement, Pack := VhFromPhysicsBody2DElement}
 
 VhToPhysicsBody3DElement(Value:variant)<decides><reads>:physics_body3d = physics_body3d[VhObjectFrom[Value]]
 
 VhFromPhysicsBody3DElement(Value:physics_body3d)<reads>:variant = VhFromObject(Value)
 
-VhToPhysicsBody3DArray(Value:variant)<reads>:typed_array(physics_body3d) =
-    Made := typed_array(physics_body3d){Ref := Value.Ref, Unpack := VhToPhysicsBody3DElement, Pack := VhFromPhysicsBody3DElement}
-    VhAdopt(Made)
-    Made
+VhToPhysicsBody3DArray(Value:variant)<reads>:typed_array(physics_body3d) = typed_array(physics_body3d){Ref := Value.Ref, Unpack := VhToPhysicsBody3DElement, Pack := VhFromPhysicsBody3DElement}
 
 VhFromPhysicsBody3DArray(Value:typed_array(physics_body3d))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakePhysicsBody3DArray<public>()<reads>:typed_array(physics_body3d) = VhToPhysicsBody3DArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakePhysicsBody3DArray<public>()<reads>:typed_array(physics_body3d) = typed_array(physics_body3d){Unpack := VhToPhysicsBody3DElement, Pack := VhFromPhysicsBody3DElement}
 
-VhToPlaneArray(Value:variant)<reads>:typed_array(plane) =
-    Made := typed_array(plane){Ref := Value.Ref, Unpack := VhUnpackPlane, Pack := VariantPlane}
-    VhAdopt(Made)
-    Made
+VhToPlaneArray(Value:variant)<reads>:typed_array(plane) = typed_array(plane){Ref := Value.Ref, Unpack := VhUnpackPlane, Pack := VariantPlane}
 
 VhFromPlaneArray(Value:typed_array(plane))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakePlaneArray<public>()<reads>:typed_array(plane) = VhToPlaneArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakePlaneArray<public>()<reads>:typed_array(plane) = typed_array(plane){Unpack := VhUnpackPlane, Pack := VariantPlane}
 
 VhToRDAccelerationStructureGeometryElement(Value:variant)<decides><reads>:rd_acceleration_structure_geometry = rd_acceleration_structure_geometry[VhObjectFrom[Value]]
 
 VhFromRDAccelerationStructureGeometryElement(Value:rd_acceleration_structure_geometry)<reads>:variant = VhFromObject(Value)
 
-VhToRDAccelerationStructureGeometryArray(Value:variant)<reads>:typed_array(rd_acceleration_structure_geometry) =
-    Made := typed_array(rd_acceleration_structure_geometry){Ref := Value.Ref, Unpack := VhToRDAccelerationStructureGeometryElement, Pack := VhFromRDAccelerationStructureGeometryElement}
-    VhAdopt(Made)
-    Made
+VhToRDAccelerationStructureGeometryArray(Value:variant)<reads>:typed_array(rd_acceleration_structure_geometry) = typed_array(rd_acceleration_structure_geometry){Ref := Value.Ref, Unpack := VhToRDAccelerationStructureGeometryElement, Pack := VhFromRDAccelerationStructureGeometryElement}
 
 VhFromRDAccelerationStructureGeometryArray(Value:typed_array(rd_acceleration_structure_geometry))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeRDAccelerationStructureGeometryArray<public>()<reads>:typed_array(rd_acceleration_structure_geometry) = VhToRDAccelerationStructureGeometryArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeRDAccelerationStructureGeometryArray<public>()<reads>:typed_array(rd_acceleration_structure_geometry) = typed_array(rd_acceleration_structure_geometry){Unpack := VhToRDAccelerationStructureGeometryElement, Pack := VhFromRDAccelerationStructureGeometryElement}
 
 VhToRDAccelerationStructureInstanceElement(Value:variant)<decides><reads>:rd_acceleration_structure_instance = rd_acceleration_structure_instance[VhObjectFrom[Value]]
 
 VhFromRDAccelerationStructureInstanceElement(Value:rd_acceleration_structure_instance)<reads>:variant = VhFromObject(Value)
 
-VhToRDAccelerationStructureInstanceArray(Value:variant)<reads>:typed_array(rd_acceleration_structure_instance) =
-    Made := typed_array(rd_acceleration_structure_instance){Ref := Value.Ref, Unpack := VhToRDAccelerationStructureInstanceElement, Pack := VhFromRDAccelerationStructureInstanceElement}
-    VhAdopt(Made)
-    Made
+VhToRDAccelerationStructureInstanceArray(Value:variant)<reads>:typed_array(rd_acceleration_structure_instance) = typed_array(rd_acceleration_structure_instance){Ref := Value.Ref, Unpack := VhToRDAccelerationStructureInstanceElement, Pack := VhFromRDAccelerationStructureInstanceElement}
 
 VhFromRDAccelerationStructureInstanceArray(Value:typed_array(rd_acceleration_structure_instance))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeRDAccelerationStructureInstanceArray<public>()<reads>:typed_array(rd_acceleration_structure_instance) = VhToRDAccelerationStructureInstanceArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeRDAccelerationStructureInstanceArray<public>()<reads>:typed_array(rd_acceleration_structure_instance) = typed_array(rd_acceleration_structure_instance){Unpack := VhToRDAccelerationStructureInstanceElement, Pack := VhFromRDAccelerationStructureInstanceElement}
 
 VhToRDAttachmentFormatElement(Value:variant)<decides><reads>:rd_attachment_format = rd_attachment_format[VhObjectFrom[Value]]
 
 VhFromRDAttachmentFormatElement(Value:rd_attachment_format)<reads>:variant = VhFromObject(Value)
 
-VhToRDAttachmentFormatArray(Value:variant)<reads>:typed_array(rd_attachment_format) =
-    Made := typed_array(rd_attachment_format){Ref := Value.Ref, Unpack := VhToRDAttachmentFormatElement, Pack := VhFromRDAttachmentFormatElement}
-    VhAdopt(Made)
-    Made
+VhToRDAttachmentFormatArray(Value:variant)<reads>:typed_array(rd_attachment_format) = typed_array(rd_attachment_format){Ref := Value.Ref, Unpack := VhToRDAttachmentFormatElement, Pack := VhFromRDAttachmentFormatElement}
 
 VhFromRDAttachmentFormatArray(Value:typed_array(rd_attachment_format))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeRDAttachmentFormatArray<public>()<reads>:typed_array(rd_attachment_format) = VhToRDAttachmentFormatArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeRDAttachmentFormatArray<public>()<reads>:typed_array(rd_attachment_format) = typed_array(rd_attachment_format){Unpack := VhToRDAttachmentFormatElement, Pack := VhFromRDAttachmentFormatElement}
 
 VhToRDFramebufferPassElement(Value:variant)<decides><reads>:rd_framebuffer_pass = rd_framebuffer_pass[VhObjectFrom[Value]]
 
 VhFromRDFramebufferPassElement(Value:rd_framebuffer_pass)<reads>:variant = VhFromObject(Value)
 
-VhToRDFramebufferPassArray(Value:variant)<reads>:typed_array(rd_framebuffer_pass) =
-    Made := typed_array(rd_framebuffer_pass){Ref := Value.Ref, Unpack := VhToRDFramebufferPassElement, Pack := VhFromRDFramebufferPassElement}
-    VhAdopt(Made)
-    Made
+VhToRDFramebufferPassArray(Value:variant)<reads>:typed_array(rd_framebuffer_pass) = typed_array(rd_framebuffer_pass){Ref := Value.Ref, Unpack := VhToRDFramebufferPassElement, Pack := VhFromRDFramebufferPassElement}
 
 VhFromRDFramebufferPassArray(Value:typed_array(rd_framebuffer_pass))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeRDFramebufferPassArray<public>()<reads>:typed_array(rd_framebuffer_pass) = VhToRDFramebufferPassArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeRDFramebufferPassArray<public>()<reads>:typed_array(rd_framebuffer_pass) = typed_array(rd_framebuffer_pass){Unpack := VhToRDFramebufferPassElement, Pack := VhFromRDFramebufferPassElement}
 
 VhToRDHitGroupElement(Value:variant)<decides><reads>:rd_hit_group = rd_hit_group[VhObjectFrom[Value]]
 
 VhFromRDHitGroupElement(Value:rd_hit_group)<reads>:variant = VhFromObject(Value)
 
-VhToRDHitGroupArray(Value:variant)<reads>:typed_array(rd_hit_group) =
-    Made := typed_array(rd_hit_group){Ref := Value.Ref, Unpack := VhToRDHitGroupElement, Pack := VhFromRDHitGroupElement}
-    VhAdopt(Made)
-    Made
+VhToRDHitGroupArray(Value:variant)<reads>:typed_array(rd_hit_group) = typed_array(rd_hit_group){Ref := Value.Ref, Unpack := VhToRDHitGroupElement, Pack := VhFromRDHitGroupElement}
 
 VhFromRDHitGroupArray(Value:typed_array(rd_hit_group))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeRDHitGroupArray<public>()<reads>:typed_array(rd_hit_group) = VhToRDHitGroupArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeRDHitGroupArray<public>()<reads>:typed_array(rd_hit_group) = typed_array(rd_hit_group){Unpack := VhToRDHitGroupElement, Pack := VhFromRDHitGroupElement}
 
 VhToRDPipelineColorBlendStateAttachmentElement(Value:variant)<decides><reads>:rd_pipeline_color_blend_state_attachment = rd_pipeline_color_blend_state_attachment[VhObjectFrom[Value]]
 
 VhFromRDPipelineColorBlendStateAttachmentElement(Value:rd_pipeline_color_blend_state_attachment)<reads>:variant = VhFromObject(Value)
 
-VhToRDPipelineColorBlendStateAttachmentArray(Value:variant)<reads>:typed_array(rd_pipeline_color_blend_state_attachment) =
-    Made := typed_array(rd_pipeline_color_blend_state_attachment){Ref := Value.Ref, Unpack := VhToRDPipelineColorBlendStateAttachmentElement, Pack := VhFromRDPipelineColorBlendStateAttachmentElement}
-    VhAdopt(Made)
-    Made
+VhToRDPipelineColorBlendStateAttachmentArray(Value:variant)<reads>:typed_array(rd_pipeline_color_blend_state_attachment) = typed_array(rd_pipeline_color_blend_state_attachment){Ref := Value.Ref, Unpack := VhToRDPipelineColorBlendStateAttachmentElement, Pack := VhFromRDPipelineColorBlendStateAttachmentElement}
 
 VhFromRDPipelineColorBlendStateAttachmentArray(Value:typed_array(rd_pipeline_color_blend_state_attachment))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeRDPipelineColorBlendStateAttachmentArray<public>()<reads>:typed_array(rd_pipeline_color_blend_state_attachment) = VhToRDPipelineColorBlendStateAttachmentArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeRDPipelineColorBlendStateAttachmentArray<public>()<reads>:typed_array(rd_pipeline_color_blend_state_attachment) = typed_array(rd_pipeline_color_blend_state_attachment){Unpack := VhToRDPipelineColorBlendStateAttachmentElement, Pack := VhFromRDPipelineColorBlendStateAttachmentElement}
 
 VhToRDPipelineShaderElement(Value:variant)<decides><reads>:rd_pipeline_shader = rd_pipeline_shader[VhObjectFrom[Value]]
 
 VhFromRDPipelineShaderElement(Value:rd_pipeline_shader)<reads>:variant = VhFromObject(Value)
 
-VhToRDPipelineShaderArray(Value:variant)<reads>:typed_array(rd_pipeline_shader) =
-    Made := typed_array(rd_pipeline_shader){Ref := Value.Ref, Unpack := VhToRDPipelineShaderElement, Pack := VhFromRDPipelineShaderElement}
-    VhAdopt(Made)
-    Made
+VhToRDPipelineShaderArray(Value:variant)<reads>:typed_array(rd_pipeline_shader) = typed_array(rd_pipeline_shader){Ref := Value.Ref, Unpack := VhToRDPipelineShaderElement, Pack := VhFromRDPipelineShaderElement}
 
 VhFromRDPipelineShaderArray(Value:typed_array(rd_pipeline_shader))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeRDPipelineShaderArray<public>()<reads>:typed_array(rd_pipeline_shader) = VhToRDPipelineShaderArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeRDPipelineShaderArray<public>()<reads>:typed_array(rd_pipeline_shader) = typed_array(rd_pipeline_shader){Unpack := VhToRDPipelineShaderElement, Pack := VhFromRDPipelineShaderElement}
 
 VhToRDPipelineSpecializationConstantElement(Value:variant)<decides><reads>:rd_pipeline_specialization_constant = rd_pipeline_specialization_constant[VhObjectFrom[Value]]
 
 VhFromRDPipelineSpecializationConstantElement(Value:rd_pipeline_specialization_constant)<reads>:variant = VhFromObject(Value)
 
-VhToRDPipelineSpecializationConstantArray(Value:variant)<reads>:typed_array(rd_pipeline_specialization_constant) =
-    Made := typed_array(rd_pipeline_specialization_constant){Ref := Value.Ref, Unpack := VhToRDPipelineSpecializationConstantElement, Pack := VhFromRDPipelineSpecializationConstantElement}
-    VhAdopt(Made)
-    Made
+VhToRDPipelineSpecializationConstantArray(Value:variant)<reads>:typed_array(rd_pipeline_specialization_constant) = typed_array(rd_pipeline_specialization_constant){Ref := Value.Ref, Unpack := VhToRDPipelineSpecializationConstantElement, Pack := VhFromRDPipelineSpecializationConstantElement}
 
 VhFromRDPipelineSpecializationConstantArray(Value:typed_array(rd_pipeline_specialization_constant))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeRDPipelineSpecializationConstantArray<public>()<reads>:typed_array(rd_pipeline_specialization_constant) = VhToRDPipelineSpecializationConstantArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeRDPipelineSpecializationConstantArray<public>()<reads>:typed_array(rd_pipeline_specialization_constant) = typed_array(rd_pipeline_specialization_constant){Unpack := VhToRDPipelineSpecializationConstantElement, Pack := VhFromRDPipelineSpecializationConstantElement}
 
 VhToRDUniformElement(Value:variant)<decides><reads>:rd_uniform = rd_uniform[VhObjectFrom[Value]]
 
 VhFromRDUniformElement(Value:rd_uniform)<reads>:variant = VhFromObject(Value)
 
-VhToRDUniformArray(Value:variant)<reads>:typed_array(rd_uniform) =
-    Made := typed_array(rd_uniform){Ref := Value.Ref, Unpack := VhToRDUniformElement, Pack := VhFromRDUniformElement}
-    VhAdopt(Made)
-    Made
+VhToRDUniformArray(Value:variant)<reads>:typed_array(rd_uniform) = typed_array(rd_uniform){Ref := Value.Ref, Unpack := VhToRDUniformElement, Pack := VhFromRDUniformElement}
 
 VhFromRDUniformArray(Value:typed_array(rd_uniform))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeRDUniformArray<public>()<reads>:typed_array(rd_uniform) = VhToRDUniformArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeRDUniformArray<public>()<reads>:typed_array(rd_uniform) = typed_array(rd_uniform){Unpack := VhToRDUniformElement, Pack := VhFromRDUniformElement}
 
 VhToRDVertexAttributeElement(Value:variant)<decides><reads>:rd_vertex_attribute = rd_vertex_attribute[VhObjectFrom[Value]]
 
 VhFromRDVertexAttributeElement(Value:rd_vertex_attribute)<reads>:variant = VhFromObject(Value)
 
-VhToRDVertexAttributeArray(Value:variant)<reads>:typed_array(rd_vertex_attribute) =
-    Made := typed_array(rd_vertex_attribute){Ref := Value.Ref, Unpack := VhToRDVertexAttributeElement, Pack := VhFromRDVertexAttributeElement}
-    VhAdopt(Made)
-    Made
+VhToRDVertexAttributeArray(Value:variant)<reads>:typed_array(rd_vertex_attribute) = typed_array(rd_vertex_attribute){Ref := Value.Ref, Unpack := VhToRDVertexAttributeElement, Pack := VhFromRDVertexAttributeElement}
 
 VhFromRDVertexAttributeArray(Value:typed_array(rd_vertex_attribute))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeRDVertexAttributeArray<public>()<reads>:typed_array(rd_vertex_attribute) = VhToRDVertexAttributeArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeRDVertexAttributeArray<public>()<reads>:typed_array(rd_vertex_attribute) = typed_array(rd_vertex_attribute){Unpack := VhToRDVertexAttributeElement, Pack := VhFromRDVertexAttributeElement}
 
-VhToRIDArray(Value:variant)<reads>:typed_array(rid) =
-    Made := typed_array(rid){Ref := Value.Ref, Unpack := VhUnpackRid, Pack := VariantRid}
-    VhAdopt(Made)
-    Made
+VhToRIDArray(Value:variant)<reads>:typed_array(rid) = typed_array(rid){Ref := Value.Ref, Unpack := VhUnpackRid, Pack := VariantRid}
 
 VhFromRIDArray(Value:typed_array(rid))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeRIDArray<public>()<reads>:typed_array(rid) = VhToRIDArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeRIDArray<public>()<reads>:typed_array(rid) = typed_array(rid){Unpack := VhUnpackRid, Pack := VariantRid}
 
-VhToRect2Array(Value:variant)<reads>:typed_array(rect2) =
-    Made := typed_array(rect2){Ref := Value.Ref, Unpack := VhUnpackRect2, Pack := VariantRect2}
-    VhAdopt(Made)
-    Made
+VhToRect2Array(Value:variant)<reads>:typed_array(rect2) = typed_array(rect2){Ref := Value.Ref, Unpack := VhUnpackRect2, Pack := VariantRect2}
 
 VhFromRect2Array(Value:typed_array(rect2))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeRect2Array<public>()<reads>:typed_array(rect2) = VhToRect2Array(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeRect2Array<public>()<reads>:typed_array(rect2) = typed_array(rect2){Unpack := VhUnpackRect2, Pack := VariantRect2}
 
 VhToRegExMatchElement(Value:variant)<decides><reads>:reg_ex_match = reg_ex_match[VhObjectFrom[Value]]
 
 VhFromRegExMatchElement(Value:reg_ex_match)<reads>:variant = VhFromObject(Value)
 
-VhToRegExMatchArray(Value:variant)<reads>:typed_array(reg_ex_match) =
-    Made := typed_array(reg_ex_match){Ref := Value.Ref, Unpack := VhToRegExMatchElement, Pack := VhFromRegExMatchElement}
-    VhAdopt(Made)
-    Made
+VhToRegExMatchArray(Value:variant)<reads>:typed_array(reg_ex_match) = typed_array(reg_ex_match){Ref := Value.Ref, Unpack := VhToRegExMatchElement, Pack := VhFromRegExMatchElement}
 
 VhFromRegExMatchArray(Value:typed_array(reg_ex_match))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeRegExMatchArray<public>()<reads>:typed_array(reg_ex_match) = VhToRegExMatchArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeRegExMatchArray<public>()<reads>:typed_array(reg_ex_match) = typed_array(reg_ex_match){Unpack := VhToRegExMatchElement, Pack := VhFromRegExMatchElement}
 
 VhToRichTextEffectElement(Value:variant)<decides><reads>:rich_text_effect = rich_text_effect[VhObjectFrom[Value]]
 
 VhFromRichTextEffectElement(Value:rich_text_effect)<reads>:variant = VhFromObject(Value)
 
-VhToRichTextEffectArray(Value:variant)<reads>:typed_array(rich_text_effect) =
-    Made := typed_array(rich_text_effect){Ref := Value.Ref, Unpack := VhToRichTextEffectElement, Pack := VhFromRichTextEffectElement}
-    VhAdopt(Made)
-    Made
+VhToRichTextEffectArray(Value:variant)<reads>:typed_array(rich_text_effect) = typed_array(rich_text_effect){Ref := Value.Ref, Unpack := VhToRichTextEffectElement, Pack := VhFromRichTextEffectElement}
 
 VhFromRichTextEffectArray(Value:typed_array(rich_text_effect))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeRichTextEffectArray<public>()<reads>:typed_array(rich_text_effect) = VhToRichTextEffectArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeRichTextEffectArray<public>()<reads>:typed_array(rich_text_effect) = typed_array(rich_text_effect){Unpack := VhToRichTextEffectElement, Pack := VhFromRichTextEffectElement}
 
 VhToScriptElement(Value:variant)<decides><reads>:script = script[VhObjectFrom[Value]]
 
 VhFromScriptElement(Value:script)<reads>:variant = VhFromObject(Value)
 
-VhToScriptArray(Value:variant)<reads>:typed_array(script) =
-    Made := typed_array(script){Ref := Value.Ref, Unpack := VhToScriptElement, Pack := VhFromScriptElement}
-    VhAdopt(Made)
-    Made
+VhToScriptArray(Value:variant)<reads>:typed_array(script) = typed_array(script){Ref := Value.Ref, Unpack := VhToScriptElement, Pack := VhFromScriptElement}
 
 VhFromScriptArray(Value:typed_array(script))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeScriptArray<public>()<reads>:typed_array(script) = VhToScriptArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeScriptArray<public>()<reads>:typed_array(script) = typed_array(script){Unpack := VhToScriptElement, Pack := VhFromScriptElement}
 
 VhToScriptBacktraceElement(Value:variant)<decides><reads>:script_backtrace = script_backtrace[VhObjectFrom[Value]]
 
 VhFromScriptBacktraceElement(Value:script_backtrace)<reads>:variant = VhFromObject(Value)
 
-VhToScriptBacktraceArray(Value:variant)<reads>:typed_array(script_backtrace) =
-    Made := typed_array(script_backtrace){Ref := Value.Ref, Unpack := VhToScriptBacktraceElement, Pack := VhFromScriptBacktraceElement}
-    VhAdopt(Made)
-    Made
+VhToScriptBacktraceArray(Value:variant)<reads>:typed_array(script_backtrace) = typed_array(script_backtrace){Ref := Value.Ref, Unpack := VhToScriptBacktraceElement, Pack := VhFromScriptBacktraceElement}
 
 VhFromScriptBacktraceArray(Value:typed_array(script_backtrace))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeScriptBacktraceArray<public>()<reads>:typed_array(script_backtrace) = VhToScriptBacktraceArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeScriptBacktraceArray<public>()<reads>:typed_array(script_backtrace) = typed_array(script_backtrace){Unpack := VhToScriptBacktraceElement, Pack := VhFromScriptBacktraceElement}
 
 VhToScriptEditorBaseElement(Value:variant)<decides><reads>:script_editor_base = script_editor_base[VhObjectFrom[Value]]
 
 VhFromScriptEditorBaseElement(Value:script_editor_base)<reads>:variant = VhFromObject(Value)
 
-VhToScriptEditorBaseArray(Value:variant)<reads>:typed_array(script_editor_base) =
-    Made := typed_array(script_editor_base){Ref := Value.Ref, Unpack := VhToScriptEditorBaseElement, Pack := VhFromScriptEditorBaseElement}
-    VhAdopt(Made)
-    Made
+VhToScriptEditorBaseArray(Value:variant)<reads>:typed_array(script_editor_base) = typed_array(script_editor_base){Ref := Value.Ref, Unpack := VhToScriptEditorBaseElement, Pack := VhFromScriptEditorBaseElement}
 
 VhFromScriptEditorBaseArray(Value:typed_array(script_editor_base))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeScriptEditorBaseArray<public>()<reads>:typed_array(script_editor_base) = VhToScriptEditorBaseArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeScriptEditorBaseArray<public>()<reads>:typed_array(script_editor_base) = typed_array(script_editor_base){Unpack := VhToScriptEditorBaseElement, Pack := VhFromScriptEditorBaseElement}
 
-VhToStringArray(Value:variant)<reads>:typed_array(string) =
-    Made := typed_array(string){Ref := Value.Ref, Unpack := VhUnpackString, Pack := VariantString}
-    VhAdopt(Made)
-    Made
+VhToStringArray(Value:variant)<reads>:typed_array(string) = typed_array(string){Ref := Value.Ref, Unpack := VhUnpackString, Pack := VariantString}
 
 VhFromStringArray(Value:typed_array(string))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeStringArray<public>()<reads>:typed_array(string) = VhToStringArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeStringArray<public>()<reads>:typed_array(string) = typed_array(string){Unpack := VhUnpackString, Pack := VariantString}
 
-VhToStringNameArray(Value:variant)<reads>:typed_array(string) =
-    Made := typed_array(string){Ref := Value.Ref, Unpack := VhUnpackStringName, Pack := VariantStringName}
-    VhAdopt(Made)
-    Made
+VhToStringNameArray(Value:variant)<reads>:typed_array(string) = typed_array(string){Ref := Value.Ref, Unpack := VhUnpackStringName, Pack := VariantStringName}
 
 VhFromStringNameArray(Value:typed_array(string))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeStringNameArray<public>()<reads>:typed_array(string) = VhToStringNameArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeStringNameArray<public>()<reads>:typed_array(string) = typed_array(string){Unpack := VhUnpackStringName, Pack := VariantStringName}
 
 VhToTexture2DElement(Value:variant)<decides><reads>:texture2d = texture2d[VhObjectFrom[Value]]
 
 VhFromTexture2DElement(Value:texture2d)<reads>:variant = VhFromObject(Value)
 
-VhToTexture2DArray(Value:variant)<reads>:typed_array(texture2d) =
-    Made := typed_array(texture2d){Ref := Value.Ref, Unpack := VhToTexture2DElement, Pack := VhFromTexture2DElement}
-    VhAdopt(Made)
-    Made
+VhToTexture2DArray(Value:variant)<reads>:typed_array(texture2d) = typed_array(texture2d){Ref := Value.Ref, Unpack := VhToTexture2DElement, Pack := VhFromTexture2DElement}
 
 VhFromTexture2DArray(Value:typed_array(texture2d))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeTexture2DArray<public>()<reads>:typed_array(texture2d) = VhToTexture2DArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeTexture2DArray<public>()<reads>:typed_array(texture2d) = typed_array(texture2d){Unpack := VhToTexture2DElement, Pack := VhFromTexture2DElement}
 
 VhToTextureLayeredElement(Value:variant)<decides><reads>:texture_layered = texture_layered[VhObjectFrom[Value]]
 
 VhFromTextureLayeredElement(Value:texture_layered)<reads>:variant = VhFromObject(Value)
 
-VhToTextureLayeredArray(Value:variant)<reads>:typed_array(texture_layered) =
-    Made := typed_array(texture_layered){Ref := Value.Ref, Unpack := VhToTextureLayeredElement, Pack := VhFromTextureLayeredElement}
-    VhAdopt(Made)
-    Made
+VhToTextureLayeredArray(Value:variant)<reads>:typed_array(texture_layered) = typed_array(texture_layered){Ref := Value.Ref, Unpack := VhToTextureLayeredElement, Pack := VhFromTextureLayeredElement}
 
 VhFromTextureLayeredArray(Value:typed_array(texture_layered))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeTextureLayeredArray<public>()<reads>:typed_array(texture_layered) = VhToTextureLayeredArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeTextureLayeredArray<public>()<reads>:typed_array(texture_layered) = typed_array(texture_layered){Unpack := VhToTextureLayeredElement, Pack := VhFromTextureLayeredElement}
 
-VhToTransform3DArray(Value:variant)<reads>:typed_array(transform3d) =
-    Made := typed_array(transform3d){Ref := Value.Ref, Unpack := VhUnpackTransform3D, Pack := VariantTransform3D}
-    VhAdopt(Made)
-    Made
+VhToTransform3DArray(Value:variant)<reads>:typed_array(transform3d) = typed_array(transform3d){Ref := Value.Ref, Unpack := VhUnpackTransform3D, Pack := VariantTransform3D}
 
 VhFromTransform3DArray(Value:typed_array(transform3d))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeTransform3DArray<public>()<reads>:typed_array(transform3d) = VhToTransform3DArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeTransform3DArray<public>()<reads>:typed_array(transform3d) = typed_array(transform3d){Unpack := VhUnpackTransform3D, Pack := VariantTransform3D}
 
 VhToTranslationElement(Value:variant)<decides><reads>:translation = translation[VhObjectFrom[Value]]
 
 VhFromTranslationElement(Value:translation)<reads>:variant = VhFromObject(Value)
 
-VhToTranslationArray(Value:variant)<reads>:typed_array(translation) =
-    Made := typed_array(translation){Ref := Value.Ref, Unpack := VhToTranslationElement, Pack := VhFromTranslationElement}
-    VhAdopt(Made)
-    Made
+VhToTranslationArray(Value:variant)<reads>:typed_array(translation) = typed_array(translation){Ref := Value.Ref, Unpack := VhToTranslationElement, Pack := VhFromTranslationElement}
 
 VhFromTranslationArray(Value:typed_array(translation))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeTranslationArray<public>()<reads>:typed_array(translation) = VhToTranslationArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeTranslationArray<public>()<reads>:typed_array(translation) = typed_array(translation){Unpack := VhToTranslationElement, Pack := VhFromTranslationElement}
 
 VhToTreeItemElement(Value:variant)<decides><reads>:tree_item = tree_item[VhObjectFrom[Value]]
 
 VhFromTreeItemElement(Value:tree_item)<reads>:variant = VhFromObject(Value)
 
-VhToTreeItemArray(Value:variant)<reads>:typed_array(tree_item) =
-    Made := typed_array(tree_item){Ref := Value.Ref, Unpack := VhToTreeItemElement, Pack := VhFromTreeItemElement}
-    VhAdopt(Made)
-    Made
+VhToTreeItemArray(Value:variant)<reads>:typed_array(tree_item) = typed_array(tree_item){Ref := Value.Ref, Unpack := VhToTreeItemElement, Pack := VhFromTreeItemElement}
 
 VhFromTreeItemArray(Value:typed_array(tree_item))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeTreeItemArray<public>()<reads>:typed_array(tree_item) = VhToTreeItemArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeTreeItemArray<public>()<reads>:typed_array(tree_item) = typed_array(tree_item){Unpack := VhToTreeItemElement, Pack := VhFromTreeItemElement}
 
 VhToTweenElement(Value:variant)<decides><reads>:tween = tween[VhObjectFrom[Value]]
 
 VhFromTweenElement(Value:tween)<reads>:variant = VhFromObject(Value)
 
-VhToTweenArray(Value:variant)<reads>:typed_array(tween) =
-    Made := typed_array(tween){Ref := Value.Ref, Unpack := VhToTweenElement, Pack := VhFromTweenElement}
-    VhAdopt(Made)
-    Made
+VhToTweenArray(Value:variant)<reads>:typed_array(tween) = typed_array(tween){Ref := Value.Ref, Unpack := VhToTweenElement, Pack := VhFromTweenElement}
 
 VhFromTweenArray(Value:typed_array(tween))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeTweenArray<public>()<reads>:typed_array(tween) = VhToTweenArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeTweenArray<public>()<reads>:typed_array(tween) = typed_array(tween){Unpack := VhToTweenElement, Pack := VhFromTweenElement}
 
-VhToVector2Array(Value:variant)<reads>:typed_array(vector2) =
-    Made := typed_array(vector2){Ref := Value.Ref, Unpack := VhUnpackVector2, Pack := VariantVector2}
-    VhAdopt(Made)
-    Made
+VhToVector2Array(Value:variant)<reads>:typed_array(vector2) = typed_array(vector2){Ref := Value.Ref, Unpack := VhUnpackVector2, Pack := VariantVector2}
 
 VhFromVector2Array(Value:typed_array(vector2))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeVector2Array<public>()<reads>:typed_array(vector2) = VhToVector2Array(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeVector2Array<public>()<reads>:typed_array(vector2) = typed_array(vector2){Unpack := VhUnpackVector2, Pack := VariantVector2}
 
-VhToVector2iArray(Value:variant)<reads>:typed_array(vector2i) =
-    Made := typed_array(vector2i){Ref := Value.Ref, Unpack := VhUnpackVector2i, Pack := VariantVector2i}
-    VhAdopt(Made)
-    Made
+VhToVector2iArray(Value:variant)<reads>:typed_array(vector2i) = typed_array(vector2i){Ref := Value.Ref, Unpack := VhUnpackVector2i, Pack := VariantVector2i}
 
 VhFromVector2iArray(Value:typed_array(vector2i))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeVector2iArray<public>()<reads>:typed_array(vector2i) = VhToVector2iArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeVector2iArray<public>()<reads>:typed_array(vector2i) = typed_array(vector2i){Unpack := VhUnpackVector2i, Pack := VariantVector2i}
 
-VhToVector3Array(Value:variant)<reads>:typed_array(vector3) =
-    Made := typed_array(vector3){Ref := Value.Ref, Unpack := VhUnpackVector3, Pack := VariantVector3}
-    VhAdopt(Made)
-    Made
+VhToVector3Array(Value:variant)<reads>:typed_array(vector3) = typed_array(vector3){Ref := Value.Ref, Unpack := VhUnpackVector3, Pack := VariantVector3}
 
 VhFromVector3Array(Value:typed_array(vector3))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeVector3Array<public>()<reads>:typed_array(vector3) = VhToVector3Array(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeVector3Array<public>()<reads>:typed_array(vector3) = typed_array(vector3){Unpack := VhUnpackVector3, Pack := VariantVector3}
 
-VhToVector3iArray(Value:variant)<reads>:typed_array(vector3i) =
-    Made := typed_array(vector3i){Ref := Value.Ref, Unpack := VhUnpackVector3i, Pack := VariantVector3i}
-    VhAdopt(Made)
-    Made
+VhToVector3iArray(Value:variant)<reads>:typed_array(vector3i) = typed_array(vector3i){Ref := Value.Ref, Unpack := VhUnpackVector3i, Pack := VariantVector3i}
 
 VhFromVector3iArray(Value:typed_array(vector3i))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeVector3iArray<public>()<reads>:typed_array(vector3i) = VhToVector3iArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeVector3iArray<public>()<reads>:typed_array(vector3i) = typed_array(vector3i){Unpack := VhUnpackVector3i, Pack := VariantVector3i}
 
 VhToWindowElement(Value:variant)<decides><reads>:window = window[VhObjectFrom[Value]]
 
 VhFromWindowElement(Value:window)<reads>:variant = VhFromObject(Value)
 
-VhToWindowArray(Value:variant)<reads>:typed_array(window) =
-    Made := typed_array(window){Ref := Value.Ref, Unpack := VhToWindowElement, Pack := VhFromWindowElement}
-    VhAdopt(Made)
-    Made
+VhToWindowArray(Value:variant)<reads>:typed_array(window) = typed_array(window){Ref := Value.Ref, Unpack := VhToWindowElement, Pack := VhFromWindowElement}
 
 VhFromWindowArray(Value:typed_array(window))<reads>:variant = variant{Tag := TagArray, Ref := Value.Ref}
 
-MakeWindowArray<public>()<reads>:typed_array(window) = VhToWindowArray(variant{Tag := TagArray, Ref := VhRefNew(TagArray)})
+MakeWindowArray<public>()<reads>:typed_array(window) = typed_array(window){Unpack := VhToWindowElement, Pack := VhFromWindowElement}
 
-VhToColorColorDict(Value:variant)<reads>:typed_dictionary(color, color) =
-    Made := typed_dictionary(color, color){Ref := Value.Ref, PackKey := VariantColor, Unpack := VhUnpackColor, Pack := VariantColor}
-    VhAdopt(Made)
-    Made
+VhToColorColorDict(Value:variant)<reads>:typed_dictionary(color, color) = typed_dictionary(color, color){Ref := Value.Ref, PackKey := VariantColor, Unpack := VhUnpackColor, Pack := VariantColor}
 
 VhFromColorColorDict(Value:typed_dictionary(color, color))<reads>:variant = variant{Tag := TagDictionary, Ref := Value.Ref}
 
-MakeColorColorDict<public>()<reads>:typed_dictionary(color, color) = VhToColorColorDict(variant{Tag := TagDictionary, Ref := VhRefNew(TagDictionary)})
+MakeColorColorDict<public>()<reads>:typed_dictionary(color, color) = typed_dictionary(color, color){PackKey := VariantColor, Unpack := VhUnpackColor, Pack := VariantColor}
 
-VhToIntStringDict(Value:variant)<reads>:typed_dictionary(int, string) =
-    Made := typed_dictionary(int, string){Ref := Value.Ref, PackKey := VariantInt, Unpack := VhUnpackString, Pack := VariantString}
-    VhAdopt(Made)
-    Made
+VhToIntStringDict(Value:variant)<reads>:typed_dictionary(int, string) = typed_dictionary(int, string){Ref := Value.Ref, PackKey := VariantInt, Unpack := VhUnpackString, Pack := VariantString}
 
 VhFromIntStringDict(Value:typed_dictionary(int, string))<reads>:variant = variant{Tag := TagDictionary, Ref := Value.Ref}
 
-MakeIntStringDict<public>()<reads>:typed_dictionary(int, string) = VhToIntStringDict(variant{Tag := TagDictionary, Ref := VhRefNew(TagDictionary)})
+MakeIntStringDict<public>()<reads>:typed_dictionary(int, string) = typed_dictionary(int, string){PackKey := VariantInt, Unpack := VhUnpackString, Pack := VariantString}
 
 object<public> := class(vh_object):
 

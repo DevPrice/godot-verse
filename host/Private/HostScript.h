@@ -193,6 +193,12 @@ AUTORTFM_DISABLE int64 AdoptOrMintPeer(verse::vh_object* Self, const char*& OutR
 /// object, which is what bDiscard tells the consumer.
 AUTORTFM_DISABLE void ReleaseMintedPeer(const UObject* Owner, int64 Handle, bool bDiscard = false);
 
+/// Whether construction is running under a reading device -- the throwaway instance the export
+/// defaults are read off, whose members initialize in full. AdoptOrMintPeer consults this itself;
+/// it is exposed because a container's default mints through GodotBindings rather than through
+/// that path, and the leak it guards against is the same one.
+AUTORTFM_DISABLE bool IsMintSuppressed();
+
 /// A Verse function value as a Godot Callable (R-TYPE-3's other direction, R-INT-4, and what
 /// signals subscribe with). Answers the reference id of a Callable the GDExtension minted, or 0
 /// for a value that is not a Verse function bound to a live script instance -- which is the only

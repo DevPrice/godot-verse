@@ -295,6 +295,21 @@ func begin() -> void:
 	var doubler := Callable(self, "_double")
 	_check_eq("a Callable is invocable from Verse", node.call("CallIt", doubler, 21), 42)
 
+	# R-TYPE-2: a container the script built for itself, from the bare archetype. `godot_array{}`
+	# used to hold reference 0, which crosses as Nil, so every one of these would have been null.
+	var made_array: Variant = node.call("MadeArray")
+	_check("a bare godot_array{} arrives as an empty Array",
+			made_array is Array and (made_array as Array).is_empty())
+
+	var filled: Variant = node.call("MadeArrayFilled")
+	_check("and one the script filled arrives with its elements",
+			filled is Array and (filled as Array).size() == 2 and filled[0] == 7 and filled[1] == "x")
+
+	var made_dict: Variant = node.call("MadeDictionary")
+	_check("a bare dictionary{} arrives as a Dictionary",
+			made_dict is Dictionary and (made_dict as Dictionary).get("hp") == 3)
+
+
 	# --- packed arrays ------------------------------------------------------------------------
 	#
 	# A Verse `[]float` is equally a PackedFloat32Array, a PackedFloat64Array and an Array, so a

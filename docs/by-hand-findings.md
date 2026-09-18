@@ -1550,8 +1550,8 @@ That left 34 skips, all of them a `typed_array(...)` return, and the reason was 
 and not the same cause: `typed_array(dictionary){}` does not compile, because `Unpack` and
 `Pack` are required data members with no defaults -- one class covers every element type by
 carrying the conversion as a *value*, which is the whole design. What it has instead is the
-generated maker beside its converters, `MakeDictionaryArray()`, which answers a real empty
-Godot array rather than the reference 0 that `godot_array{}` holds. **So the category is empty
+generated maker beside its converters, `MakeDictionaryArray()`, which supplies those two members
+and no `Ref` -- so the same data-member default mints it that mints a bare `godot_array{}`. **So the category is empty
 and all 1413 of Godot's virtuals are in the mirror.** The reason stays in the generator and in
 the editor's explanation, so a future Godot return type with no default reappears through it
 rather than going quiet -- and the units layer keeps it exercised with a typed *dictionary*,

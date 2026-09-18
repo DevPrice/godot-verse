@@ -24,13 +24,20 @@ using { /Godot.org/Godot }
 #
 # The two errors this file still reports are its result, the way `async_reject.verse`'s are.
 #
-# **What it left open, and why it was not taken.** 3582 names *divergent* calls, and glitch 3565
-# below says `<converges>` is native-only -- so a `<converges><native>` default may well be accepted,
-# which would make a bare `helper{}` mint its own Godot peer. It was not pursued because the effect
-# would be a lie in the direction that matters here: minting a Godot object is `<transacts>`, and a
-# `<converges>` native claiming otherwise puts an object outside the transaction that created it, so
-# a `helper{}` inside a failing computation would leak its peer. Phase 4.5 measured what a failure
-# undoes; this would be the one construction it could not.
+# **What it left open, and why it was not taken *here*.** 3582 names *divergent* calls, and glitch
+# 3565 below says `<converges>` is native-only -- so a `<converges><native>` default may well be
+# accepted, which would make a bare `helper{}` mint its own Godot peer. It was not pursued for
+# `vh_object` because the effect would be a lie in the direction that matters there: minting a Godot
+# object is `<transacts>`, and a `<converges>` native claiming otherwise puts an object outside the
+# transaction that created it, so a `helper{}` inside a failing computation would leak its peer.
+# Phase 4.5 measured what a failure undoes; this would be the one construction it could not.
+#
+# **It is accepted, and a container is the case that reason does not reach.** `godot_array{}` mints
+# its own empty Godot Array from `Ref<override>:int = VhRefNewDefault(TagArray)`, which is this
+# spelling. What a dropped container leaks is a table entry, and a table entry is released by the
+# collection that finds the Verse value unreachable -- which an aborted transaction produces --
+# where a Verse-minted node is deliberately never freed. `ref_block_probe.verse` is the rest of
+# that measurement, including the two refusals that ruled out doing it with a `block:` clause.
 
 Minted<public>()<converges>:int = 77
 

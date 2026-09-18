@@ -1114,6 +1114,21 @@ int64 VhRefNew(int64 Tag)
     return Host.Godot.NewRef ? CallGodot([&] { return Host.Godot.NewRef(Host.Godot.Ctx, (int32)Tag); }) : 0;
 }
 
+int64 VhRefNewDefault(int64 Tag)
+{
+    // A reading device's members initialize in full, so without this the throwaway instance the
+    // export defaults are read off would ask Godot for a container once per analysis, per exporting
+    // class. 0 is what a container-typed member's declared default meant before any of this.
+    //
+    // Open for the reason VhAdoptOrMint's is: the flag is a thread_local the AutoRTFM compiler never
+    // saw, and this runs inside whatever transaction the construction is in.
+    if (AutoRTFM::Open([] { return GodotVerse::IsMintSuppressed(); }))
+    {
+        return 0;
+    }
+    return VhRefNew(Tag);
+}
+
 void VhRefInvoke(int64 Ref, TArray<FGodotValue> const& Args, FGodotValue& OutValue)
 {
     OutValue = FGodotValue{};
