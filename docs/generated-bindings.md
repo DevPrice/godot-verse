@@ -440,3 +440,67 @@ bindings package is not. The question is really *how early the bindings package 
 bindings are only what makes the answer urgent. §10.5 shows the wall is real at a few hundred binding
 classes and that one flag on `PreInit` removes it. The number is not a detail — the pool is
 pre-sized, so it is memory spent whether or not a project has an addon.
+
+## 11. What the editor says about a binding
+
+Completion worked from the first generation. Hover, ctrl+click and syntax highlighting answered
+nothing at all, and one fact runs under all three: **a binding's Verse declaration is not a file.**
+The package is a synthetic snippet, read back from its digest in the engine tree after the first
+build (§10.3), so what a lookup answers for `mob` is a path no editor can open and a comment nobody
+wrote. Measured with `tools/probe_hover.py` against `tests/integration`:
+
+| hovered | the host answers | the editor drew |
+| --- | --- | --- |
+| `mob` | class, at `Digests/GodotBindings_1/GodotBindings_1.digest.verse` | nothing — no class to name, no prose to read and no location to jump with, which `hide_if_empty` turns into `ERR_UNAVAILABLE`, so there was no ctrl-hover underline either |
+| `Hit` | function, owner `mob`, same path | "Local Constant Hit: `type{_(:int)<transacts>:int}`", and nowhere to click |
+| `node2d` beside them | class, at `GodotClasses.native.verse` | Godot's class documentation |
+
+**Completion was never in this**, which is worth saying because it looks like the same question: at
+`M.` the popup carries `Hit(…)`, `Label()` and `Heavy()` among the 387 the base contributes, because
+it resolves against the semantic program rather than against a table on this side. Everything that
+*did* fail resolved correctly too, and then had nothing on the consumer's side to turn into an
+answer.
+
+So the fix is not to make the generated Verse reachable. It is to stop routing through it: what the
+author wrote is either the GDScript the binding stands for or nothing at all, and each of those has
+a page.
+
+- **A script binding answers its own script.** `LOOKUP_RESULT_CLASS`, `class_name` the global name
+  (`Mob`), `script_path` the `.gd` and `location` 0 — which is GDScript's own answer for a global
+  class name, `gdscript_editor.cpp`'s `ScriptServer::is_global_class` arm. Both halves are needed:
+  the help viewer is skipped for a **script** doc (`script_text_editor.cpp` tests `is_script_doc`),
+  so the click falls through to the location, and the tooltip still comes from the class doc Godot
+  generates out of the script's `##` comments.
+- **A GDExtension binding answers the Godot class**, with no location, so the click opens the
+  documentation the way `node2d` already does. There is no source under `res://` for it to open.
+- **A member answers under its *Godot* name**: `Hit` documents nothing, `hit` is what GDScript
+  declared. A signal is a `signal(t)` data member, so the Verse kind cannot tell a method from a
+  signal and the roster does.
+
+That needs the roster kept on the consumer's side, which `refresh_bindings` was throwing away —
+`VerseScriptLanguage::BindingInfo`, one row per binding with the Godot class, the script's global
+name and path, and the Verse-to-Godot member map. R-INT-11's sidecar wants the same table in an
+exported game.
+
+**The colours are the third surface and they are a table, not a lookup.** The highlighter's
+`type_names` was four generated tables plus the project's own Verse classes, and a binding is in
+none of them, so it drew as plain text — which is how a name the editor does not know reads. Filling
+it in was the moment to split the one colour into the three the editor theme carries, the way
+GDScript does (`gdscript_highlighter.cpp:776-818`):
+
+| colour | Verse names |
+| --- | --- |
+| engine type | the mirrored classes ClassDB knows, the 793 mirrored enums, a binding for a **GDExtension** class |
+| user type | the project's own Verse classes, an enum declared in the open file, a binding for a script's **`class_name`** |
+| base type | the 16 math types and `rid`, the exported types (`variant`, the containers, `callable`, the signal types), and Verse's own |
+
+`verse_api::classes` needs one test to split it, because it carries the math types and `rid` beside
+the 1036 engine classes and ClassDB has heard of none of those — which is B28's test exactly, and is
+the same line GDScript draws between a Variant type and an engine class. `int`, `float`, `string`,
+`logic` and `void` stay in the keyword colour, because Verse's compiler reserves them and Godot's
+does not.
+
+**The GDExtension arm of all three is unmeasured here**, and will stay that way until a fixture
+project carries a real GDExtension: `tests/integration` has only script bindings, and
+`tests/host_smoke`'s `rapier_body` roster is the host's side of the wire, where no editor is
+involved.
