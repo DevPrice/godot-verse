@@ -179,13 +179,9 @@ std::string verse_binding_member_name(const std::string &p_godot_name) {
 }
 
 std::string verse_emit_binding_class(const VerseBindingClass &p_class) {
+	// Built before the header, because a class with no members is written in the other of Verse's
+	// two forms and the choice cannot be made until the members are in.
 	std::string out;
-	out += p_class.verse_class;
-	out += "<public> := class(";
-	out += p_class.verse_base;
-	out += "):\n";
-
-	bool wrote_member = false;
 
 	for (const VerseBindingSignal &signal : p_class.signals) {
 		const std::string name = verse_binding_member_name(signal.godot_name);
@@ -211,7 +207,6 @@ std::string verse_emit_binding_class(const VerseBindingClass &p_class) {
 		out += ") = signal(";
 		out += payload;
 		out += "){}\n";
-		wrote_member = true;
 	}
 
 	for (const VerseBindingMethod &method : p_class.methods) {
@@ -250,16 +245,27 @@ std::string verse_emit_binding_class(const VerseBindingClass &p_class) {
 			out += call_expression(method);
 			out += "\n";
 		}
-		wrote_member = true;
 	}
 
-	if (!wrote_member) {
-		// Verse has no empty class body. A binding with nothing callable is still worth declaring,
-		// because it is a *type* -- a parameter, a cast target, a base for the next binding down.
-		out += "\tBound<public>()<reads>:logic = true\n";
+	std::string header = p_class.verse_class;
+	header += "<public> := class(";
+	header += p_class.verse_base;
+
+	if (out.empty()) {
+		// A binding with nothing callable is still worth declaring, because it is a *type* -- a
+		// parameter, a cast target, a base for the next binding down. It is the *indented* form
+		// that needs a member, not Verse: `class(node2d) {}` compiles, takes a downcast and serves
+		// as a parameter type, all three measured in `tests/verse_probe/empty_class_probe.verse`.
+		// This used to carry a `Bound<public>()<reads>:logic = true` filler instead, which read as
+		// a member of the author's own class that they could neither find nor explain.
+		//
+		// A whole class of them is ordinary rather than exceptional: a GDScript declaring only
+		// Godot virtuals and `@export` variables has nothing a binding can carry today, because a
+		// leading underscore is skipped and properties are R-INT-9's remainder.
+		return header + ") {}\n";
 	}
 
-	return out;
+	return header + "):\n" + out;
 }
 
 std::string verse_emit_bindings(const std::vector<VerseBindingClass> &p_classes) {

@@ -414,7 +414,7 @@ language — and for a binding it would come from the same place, the addon's ow
 `Callv` escape hatch has no `<reads>` spelling, so reading a third-party property from a `<reads>`
 function is wall 8's cascade for no reason.
 
-### 10.7 Two more traps, for §6
+### 10.7 Three more traps, for §6
 
 - **A method parameter may not share a name with an inherited mirrored property.**
   `Apply(Power:int, Scale:float)` on a `class(node2d)` is glitch 3532 — *"The data
@@ -426,6 +426,15 @@ function is wall 8's cascade for no reason.
 - **The readers are `AsBool`, not `AsLogic`.** Godot's `bool` is 568 predicates spelled
   `<decides>:void` and 306 `logic`-answering methods, but the *variant* reader is one function and it
   is `AsBool`. The doc's own opening line says `AsLogic[]`, which does not exist.
+- **A class with no members is spelled `class(base) {}`, and a binding with no members is ordinary.**
+  It is the *indented* form that needs a member — `class(node2d):` followed by nothing is a parse
+  error — and the brace form has no such requirement. The emitter first read that as "Verse has no
+  empty class body" and wrote a `Bound<public>()<reads>:logic = true` filler instead, which is a
+  member of the author's own class that is in the binding and not in their `.gd`. The case is not
+  rare: a GDScript declaring only Godot virtuals and `@export` variables has nothing else to carry,
+  because a leading underscore is skipped (§6) and properties are R-INT-9's remainder.
+  `tests/verse_probe/empty_class_probe.verse` is the measurement, and it checks the three things a
+  binding has to do — declare, serve as a parameter type, and serve as a downcast target.
 
 ### 10.8 What §9 should now say
 
