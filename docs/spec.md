@@ -1900,8 +1900,11 @@ section written after the spikes.
   works; `player := class(rapier_character_body)` is ordinary Godot inheritance and works; and
   `player := class(mob)` — a *Verse script* extending a *script-class* binding — cannot, because
   the inherited methods forward to `Call("hit")` on an object whose script is `player.verse`.
-  Status: **not built** — designed in [`generated-bindings.md`](generated-bindings.md), all five
-  spikes back (§10), Phase 7c.
+  Status: **done** for the refusal, which is the half that needed building — the two cases that
+  work need no code and get none. One sentence written twice, the way `inert_global_class_message`
+  is: an error `_validate` draws at the class's own line, and a warning `log_script_warnings` pushes
+  so a headless run can assert it. `tests/integration/scripts/extends_binding.verse` is the fixture
+  and it **compiles**, which is what makes it a test of the rule rather than of the compiler.
 
   It is refused in `_validate`, at the class's own line, naming this requirement and the
   one-script-per-node rule. Not by `<final>`, which is available in a user package and refuses

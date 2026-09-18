@@ -900,8 +900,8 @@ ever need to reach. No design yet, by decision; when it is written it starts fro
 
 ## Phase 7c — Generated bindings for classes the mirror does not carry
 
-**Mostly built.** R-INT-7 and R-INT-8 are done, R-INT-9 carries methods and signals, R-INT-11 is
-half done and R-INT-10 is not started. [`generated-bindings.md`](generated-bindings.md) is the design,
+**Mostly built.** R-INT-7, R-INT-8 and R-INT-10 are done; R-INT-9 carries methods and signals;
+R-INT-11 and R-INT-12 are half each. [`generated-bindings.md`](generated-bindings.md) is the design,
 written before the work, and its **§10 is the part to read** — all five spikes came back and two
 of them corrected the decision table. R-INT-7 to R-INT-12.
 
@@ -929,9 +929,10 @@ carry the mapping on until the sidecar existed.
   the overload set put to the runtime compiler, which is the half a host build cannot answer;
   `marshal.verse` and `test_cases.gd` carry five assertions that run in the editor and in an
   export. What is left of R-INT-9 is the generator that decides which methods get the word.
-- **R-INT-10** — **not started**, and it is the one that matters most of what is left: the spelling
-  `player := class(mob)` compiles today and raises at the first inherited call, a long way from its
-  cause. The refusal belongs in `_validate`, at the class's own line.
+- **R-INT-10** — **done.** `player := class(mob)` compiles and would raise at the first inherited
+  call, a long way from its cause, so the bridge refuses it at the class's own line. Two reporters
+  over one message, the way `inert_global_class_message` is: `_validate` for the gutter, and
+  `log_script_warnings` so a headless run can assert it.
 - **R-INT-11, R-INT-12** — half each. `GodotPeerClassFor` knows the bindings package, so a binding
   mints what it binds; the export plugin generates the package and hands it to `verse_cook.exe`, so
   an exported game's Verse compiles. What is left is the **table** in the sidecar, without which a
