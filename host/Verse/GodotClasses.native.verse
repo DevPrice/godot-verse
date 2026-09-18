@@ -30278,7 +30278,7 @@ node<public> := class(object):
     CallThreadSafe<public>(Method:string, Args:[]variant)<transacts>:variant = VhToVariant(VhCallValue(Handle, "call_thread_safe", array{VhFromStringName(Method)} + Args))
     CanAutoTranslate<public>()<decides><reads>:void = VhToLogic(VhCallValueConst(Handle, "can_auto_translate", array{}))?
     CanProcess<public>()<decides><reads>:void = VhToLogic(VhCallValueConst(Handle, "can_process", array{}))?
-    CreateTween<public>()<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "create_tween", array{})]]
+    CreateTween<public>()<transacts>:tween = if (Answered := tween[VhObjectFrom[VhCallValue(Handle, "create_tween", array{})]]) then Answered else Err("Godot's create_tween answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
     Duplicate<public>(?Flags:int = 15)<decides><reads>:node = node[VhObjectFrom[VhCallValueConst(Handle, "duplicate", array{VhFromInt(Flags)})]]
     FindChild<public>(Pattern:string, ?Recursive:logic = true, ?Owned:logic = true)<decides><reads>:node = node[VhObjectFrom[VhCallValueConst(Handle, "find_child", array{VhFromString(Pattern), VhFromLogic(Recursive), VhFromLogic(Owned)})]]
     FindChildren<public>(Pattern:string, ?Type:string = "", ?Recursive:logic = true, ?Owned:logic = true)<reads>:typed_array(node) = VhToNodeArray(VhCallValueConst(Handle, "find_children", array{VhFromString(Pattern), VhFromString(Type), VhFromLogic(Recursive), VhFromLogic(Owned)}))
@@ -30597,7 +30597,7 @@ physics_direct_body_state2d<public> := class(object):
     GetContactLocalVelocityAtPosition<public>(ContactIdx:int)<reads>:vector2 = VhToVector2(VhCallValueConst(Handle, "get_contact_local_velocity_at_position", array{VhFromInt(ContactIdx)}))
     GetInverseInertia<public>()<reads>:float = VhToFloat(VhCallValueConst(Handle, "get_inverse_inertia", array{}))
     GetInverseMass<public>()<reads>:float = VhToFloat(VhCallValueConst(Handle, "get_inverse_mass", array{}))
-    GetSpaceState<public>()<decides><transacts>:physics_direct_space_state2d = physics_direct_space_state2d[VhObjectFrom[VhCallValue(Handle, "get_space_state", array{})]]
+    GetSpaceState<public>()<transacts>:physics_direct_space_state2d = if (Answered := physics_direct_space_state2d[VhObjectFrom[VhCallValue(Handle, "get_space_state", array{})]]) then Answered else Err("Godot's get_space_state answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
     GetStep<public>()<reads>:float = VhToFloat(VhCallValueConst(Handle, "get_step", array{}))
     GetTotalAngularDamp<public>()<reads>:float = VhToFloat(VhCallValueConst(Handle, "get_total_angular_damp", array{}))
     GetTotalGravity<public>()<reads>:vector2 = VhToVector2(VhCallValueConst(Handle, "get_total_gravity", array{}))
@@ -30677,7 +30677,7 @@ physics_direct_body_state3d<public> := class(object):
     GetInverseInertiaTensor<public>()<reads>:basis = VhToBasis(VhCallValueConst(Handle, "get_inverse_inertia_tensor", array{}))
     GetInverseMass<public>()<reads>:float = VhToFloat(VhCallValueConst(Handle, "get_inverse_mass", array{}))
     GetPrincipalInertiaAxes<public>()<reads>:basis = VhToBasis(VhCallValueConst(Handle, "get_principal_inertia_axes", array{}))
-    GetSpaceState<public>()<decides><transacts>:physics_direct_space_state3d = physics_direct_space_state3d[VhObjectFrom[VhCallValue(Handle, "get_space_state", array{})]]
+    GetSpaceState<public>()<transacts>:physics_direct_space_state3d = if (Answered := physics_direct_space_state3d[VhObjectFrom[VhCallValue(Handle, "get_space_state", array{})]]) then Answered else Err("Godot's get_space_state answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
     GetStep<public>()<reads>:float = VhToFloat(VhCallValueConst(Handle, "get_step", array{}))
     GetTotalAngularDamp<public>()<reads>:float = VhToFloat(VhCallValueConst(Handle, "get_total_angular_damp", array{}))
     GetTotalGravity<public>()<reads>:vector3 = VhToVector3(VhCallValueConst(Handle, "get_total_gravity", array{}))
@@ -32642,7 +32642,7 @@ canvas_item<public> := class(node):
     IsTransformNotificationEnabled<public>()<decides><reads>:void = VhToLogic(VhCallValueConst(Handle, "is_transform_notification_enabled", array{}))?
     IsVisibleInTree<public>()<decides><reads>:void = VhToLogic(VhCallValueConst(Handle, "is_visible_in_tree", array{}))?
     MakeCanvasPositionLocal<public>(ViewportPoint:vector2)<reads>:vector2 = VhToVector2(VhCallValueConst(Handle, "make_canvas_position_local", array{VhFromVector2(ViewportPoint)}))
-    MakeInputLocal<public>(Event:input_event)<decides><reads>:input_event = input_event[VhObjectFrom[VhCallValueConst(Handle, "make_input_local", array{VhFromObject(Event)})]]
+    MakeInputLocal<public>(Event:input_event)<reads>:input_event = if (Answered := input_event[VhObjectFrom[VhCallValueConst(Handle, "make_input_local", array{VhFromObject(Event)})]]) then Answered else Err("Godot's make_input_local answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
     MoveToFront<public>()<transacts>:void = VhCallVoid(Handle, "move_to_front", array{})
     QueueRedraw<public>()<transacts>:void = VhCallVoid(Handle, "queue_redraw", array{})
     SetInstanceShaderParameter<public>(Name:string, Value:variant)<transacts>:void = VhCallVoid(Handle, "set_instance_shader_parameter", array{VhFromStringName(Name), VhFromVariant(Value)})
@@ -36015,18 +36015,18 @@ scene_tree<public> := class(main_loop):
     ChangeSceneToFile<public>(Path:string)<transacts>:error = VhToError(VhCallValue(Handle, "change_scene_to_file", array{VhFromString(Path)}))
     ChangeSceneToNode<public>(Node:node)<transacts>:error = VhToError(VhCallValue(Handle, "change_scene_to_node", array{VhFromObject(Node)}))
     ChangeSceneToPacked<public>(PackedScene:packed_scene)<transacts>:error = VhToError(VhCallValue(Handle, "change_scene_to_packed", array{VhFromObject(PackedScene)}))
-    CreateTimer<public>(TimeSec:float, ?ProcessAlways:logic = true, ?ProcessInPhysics:logic = false, ?IgnoreTimeScale:logic = false)<decides><transacts>:scene_tree_timer = scene_tree_timer[VhObjectFrom[VhCallValue(Handle, "create_timer", array{VhFromFloat(TimeSec), VhFromLogic(ProcessAlways), VhFromLogic(ProcessInPhysics), VhFromLogic(IgnoreTimeScale)})]]
-    CreateTween<public>()<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "create_tween", array{})]]
+    CreateTimer<public>(TimeSec:float, ?ProcessAlways:logic = true, ?ProcessInPhysics:logic = false, ?IgnoreTimeScale:logic = false)<transacts>:scene_tree_timer = if (Answered := scene_tree_timer[VhObjectFrom[VhCallValue(Handle, "create_timer", array{VhFromFloat(TimeSec), VhFromLogic(ProcessAlways), VhFromLogic(ProcessInPhysics), VhFromLogic(IgnoreTimeScale)})]]) then Answered else Err("Godot's create_timer answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
+    CreateTween<public>()<transacts>:tween = if (Answered := tween[VhObjectFrom[VhCallValue(Handle, "create_tween", array{})]]) then Answered else Err("Godot's create_tween answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
     GetCurrentScene<public>()<decides><reads>:node = node[VhObjectFrom[VhCallValueConst(Handle, "get_current_scene", array{})]]
     GetEditedSceneRoot<public>()<decides><reads>:node = node[VhObjectFrom[VhCallValueConst(Handle, "get_edited_scene_root", array{})]]
     GetFirstNodeInGroup<public>(Group:string)<decides><transacts>:node = node[VhObjectFrom[VhCallValue(Handle, "get_first_node_in_group", array{VhFromStringName(Group)})]]
     GetFrame<public>()<reads>:int = VhToInt(VhCallValueConst(Handle, "get_frame", array{}))
-    GetMultiplayer<public>(?ForPath:string = "")<decides><reads>:multiplayer_api = multiplayer_api[VhObjectFrom[VhCallValueConst(Handle, "get_multiplayer", array{VhFromNodePath(ForPath)})]]
+    GetMultiplayer<public>(?ForPath:string = "")<reads>:multiplayer_api = if (Answered := multiplayer_api[VhObjectFrom[VhCallValueConst(Handle, "get_multiplayer", array{VhFromNodePath(ForPath)})]]) then Answered else Err("Godot's get_multiplayer answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
     GetNodeCount<public>()<reads>:int = VhToInt(VhCallValueConst(Handle, "get_node_count", array{}))
     GetNodeCountInGroup<public>(Group:string)<reads>:int = VhToInt(VhCallValueConst(Handle, "get_node_count_in_group", array{VhFromStringName(Group)}))
     GetNodesInGroup<public>(Group:string)<transacts>:typed_array(node) = VhToNodeArray(VhCallValue(Handle, "get_nodes_in_group", array{VhFromStringName(Group)}))
     GetProcessedTweens<public>()<transacts>:typed_array(tween) = VhToTweenArray(VhCallValue(Handle, "get_processed_tweens", array{}))
-    GetRoot<public>()<decides><reads>:window = window[VhObjectFrom[VhCallValueConst(Handle, "get_root", array{})]]
+    GetRoot<public>()<reads>:window = if (Answered := window[VhObjectFrom[VhCallValueConst(Handle, "get_root", array{})]]) then Answered else Err("Godot's get_root answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
     HasGroup<public>(Name:string)<reads>:logic = VhToLogic(VhCallValueConst(Handle, "has_group", array{VhFromStringName(Name)}))
     IsAccessibilityEnabled<public>()<decides><reads>:void = VhToLogic(VhCallValueConst(Handle, "is_accessibility_enabled", array{}))?
     IsAccessibilitySupported<public>()<decides><reads>:void = VhToLogic(VhCallValueConst(Handle, "is_accessibility_supported", array{}))?
@@ -36709,8 +36709,8 @@ triangle_mesh<public> := class(ref_counted):
 
 tween<public> := class(ref_counted):
 
-    BindNode<public>(Node:node)<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "bind_node", array{VhFromObject(Node)})]]
-    Chain<public>()<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "chain", array{})]]
+    BindNode<public>(Node:node)<transacts>:tween = if (Answered := tween[VhObjectFrom[VhCallValue(Handle, "bind_node", array{VhFromObject(Node)})]]) then Answered else Err("Godot's bind_node answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
+    Chain<public>()<transacts>:tween = if (Answered := tween[VhObjectFrom[VhCallValue(Handle, "chain", array{})]]) then Answered else Err("Godot's chain answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
     CustomStep<public>(Delta:float)<transacts>:logic = VhToLogic(VhCallValue(Handle, "custom_step", array{VhFromFloat(Delta)}))
     GetLoopsLeft<public>()<reads>:int = VhToInt(VhCallValueConst(Handle, "get_loops_left", array{}))
     GetTotalElapsedTime<public>()<reads>:float = VhToFloat(VhCallValueConst(Handle, "get_total_elapsed_time", array{}))
@@ -36718,24 +36718,24 @@ tween<public> := class(ref_counted):
     IsRunning<public>()<decides><reads>:void = VhToLogic(VhCallValueConst(Handle, "is_running", array{}))?
     IsValid<public>()<decides><transacts>:void = VhToLogic(VhCallValue(Handle, "is_valid", array{}))?
     Kill<public>()<transacts>:void = VhCallVoid(Handle, "kill", array{})
-    Parallel<public>()<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "parallel", array{})]]
+    Parallel<public>()<transacts>:tween = if (Answered := tween[VhObjectFrom[VhCallValue(Handle, "parallel", array{})]]) then Answered else Err("Godot's parallel answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
     Pause<public>()<transacts>:void = VhCallVoid(Handle, "pause", array{})
     Play<public>()<transacts>:void = VhCallVoid(Handle, "play", array{})
-    SetEase<public>(Arg0:tween_ease_type)<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "set_ease", array{VhFromTweenEaseType(Arg0)})]]
-    SetIgnoreTimeScale<public>(?Ignore:logic = true)<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "set_ignore_time_scale", array{VhFromLogic(Ignore)})]]
-    SetLoops<public>(?Loops:int = 0)<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "set_loops", array{VhFromInt(Loops)})]]
-    SetParallel<public>(?Arg0:logic = true)<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "set_parallel", array{VhFromLogic(Arg0)})]]
-    SetPauseMode<public>(Mode:tween_tween_pause_mode)<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "set_pause_mode", array{VhFromTweenTweenPauseMode(Mode)})]]
-    SetProcessMode<public>(Mode:tween_tween_process_mode)<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "set_process_mode", array{VhFromTweenTweenProcessMode(Mode)})]]
-    SetSpeedScale<public>(Speed:float)<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "set_speed_scale", array{VhFromFloat(Speed)})]]
-    SetTrans<public>(Trans:tween_transition_type)<decides><transacts>:tween = tween[VhObjectFrom[VhCallValue(Handle, "set_trans", array{VhFromTweenTransitionType(Trans)})]]
+    SetEase<public>(Arg0:tween_ease_type)<transacts>:tween = if (Answered := tween[VhObjectFrom[VhCallValue(Handle, "set_ease", array{VhFromTweenEaseType(Arg0)})]]) then Answered else Err("Godot's set_ease answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
+    SetIgnoreTimeScale<public>(?Ignore:logic = true)<transacts>:tween = if (Answered := tween[VhObjectFrom[VhCallValue(Handle, "set_ignore_time_scale", array{VhFromLogic(Ignore)})]]) then Answered else Err("Godot's set_ignore_time_scale answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
+    SetLoops<public>(?Loops:int = 0)<transacts>:tween = if (Answered := tween[VhObjectFrom[VhCallValue(Handle, "set_loops", array{VhFromInt(Loops)})]]) then Answered else Err("Godot's set_loops answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
+    SetParallel<public>(?Arg0:logic = true)<transacts>:tween = if (Answered := tween[VhObjectFrom[VhCallValue(Handle, "set_parallel", array{VhFromLogic(Arg0)})]]) then Answered else Err("Godot's set_parallel answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
+    SetPauseMode<public>(Mode:tween_tween_pause_mode)<transacts>:tween = if (Answered := tween[VhObjectFrom[VhCallValue(Handle, "set_pause_mode", array{VhFromTweenTweenPauseMode(Mode)})]]) then Answered else Err("Godot's set_pause_mode answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
+    SetProcessMode<public>(Mode:tween_tween_process_mode)<transacts>:tween = if (Answered := tween[VhObjectFrom[VhCallValue(Handle, "set_process_mode", array{VhFromTweenTweenProcessMode(Mode)})]]) then Answered else Err("Godot's set_process_mode answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
+    SetSpeedScale<public>(Speed:float)<transacts>:tween = if (Answered := tween[VhObjectFrom[VhCallValue(Handle, "set_speed_scale", array{VhFromFloat(Speed)})]]) then Answered else Err("Godot's set_speed_scale answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
+    SetTrans<public>(Trans:tween_transition_type)<transacts>:tween = if (Answered := tween[VhObjectFrom[VhCallValue(Handle, "set_trans", array{VhFromTweenTransitionType(Trans)})]]) then Answered else Err("Godot's set_trans answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
     Stop<public>()<transacts>:void = VhCallVoid(Handle, "stop", array{})
-    TweenAwait<public>(Signal:signal_ref)<decides><transacts>:await_tweener = await_tweener[VhObjectFrom[VhCallValue(Handle, "tween_await", array{VhFromSignal(Signal)})]]
-    TweenCallback<public>(Callback:callable)<decides><transacts>:callback_tweener = callback_tweener[VhObjectFrom[VhCallValue(Handle, "tween_callback", array{VhFromCallable(Callback)})]]
-    TweenInterval<public>(Time:float)<decides><transacts>:interval_tweener = interval_tweener[VhObjectFrom[VhCallValue(Handle, "tween_interval", array{VhFromFloat(Time)})]]
-    TweenMethod<public>(Method:callable, From:variant, To:variant, Duration:float)<decides><transacts>:method_tweener = method_tweener[VhObjectFrom[VhCallValue(Handle, "tween_method", array{VhFromCallable(Method), VhFromVariant(From), VhFromVariant(To), VhFromFloat(Duration)})]]
-    TweenProperty<public>(Object:object, Property:string, FinalVal:variant, Duration:float)<decides><transacts>:property_tweener = property_tweener[VhObjectFrom[VhCallValue(Handle, "tween_property", array{VhFromObject(Object), VhFromNodePath(Property), VhFromVariant(FinalVal), VhFromFloat(Duration)})]]
-    TweenSubtween<public>(Subtween:tween)<decides><transacts>:subtween_tweener = subtween_tweener[VhObjectFrom[VhCallValue(Handle, "tween_subtween", array{VhFromObject(Subtween)})]]
+    TweenAwait<public>(Signal:signal_ref)<transacts>:await_tweener = if (Answered := await_tweener[VhObjectFrom[VhCallValue(Handle, "tween_await", array{VhFromSignal(Signal)})]]) then Answered else Err("Godot's tween_await answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
+    TweenCallback<public>(Callback:callable)<transacts>:callback_tweener = if (Answered := callback_tweener[VhObjectFrom[VhCallValue(Handle, "tween_callback", array{VhFromCallable(Callback)})]]) then Answered else Err("Godot's tween_callback answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
+    TweenInterval<public>(Time:float)<transacts>:interval_tweener = if (Answered := interval_tweener[VhObjectFrom[VhCallValue(Handle, "tween_interval", array{VhFromFloat(Time)})]]) then Answered else Err("Godot's tween_interval answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
+    TweenMethod<public>(Method:callable, From:variant, To:variant, Duration:float)<transacts>:method_tweener = if (Answered := method_tweener[VhObjectFrom[VhCallValue(Handle, "tween_method", array{VhFromCallable(Method), VhFromVariant(From), VhFromVariant(To), VhFromFloat(Duration)})]]) then Answered else Err("Godot's tween_method answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
+    TweenProperty<public>(Object:object, Property:string, FinalVal:variant, Duration:float)<transacts>:property_tweener = if (Answered := property_tweener[VhObjectFrom[VhCallValue(Handle, "tween_property", array{VhFromObject(Object), VhFromNodePath(Property), VhFromVariant(FinalVal), VhFromFloat(Duration)})]]) then Answered else Err("Godot's tween_property answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
+    TweenSubtween<public>(Subtween:tween)<transacts>:subtween_tweener = if (Answered := subtween_tweener[VhObjectFrom[VhCallValue(Handle, "tween_subtween", array{VhFromObject(Subtween)})]]) then Answered else Err("Godot's tween_subtween answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
     StepFinished<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "tween", "StepFinished", "step_finished")}
     LoopFinished<public>()<transacts>:signal(int) = signal(int){Id := VhSignalBind(Handle, "tween", "LoopFinished", "loop_finished")}
     Finished<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "tween", "Finished", "finished")}
@@ -37574,7 +37574,7 @@ button_group<public> := class(resource):
 
 callback_tweener<public> := class(tweener):
 
-    SetDelay<public>(Delay:float)<decides><transacts>:callback_tweener = callback_tweener[VhObjectFrom[VhCallValue(Handle, "set_delay", array{VhFromFloat(Delay)})]]
+    SetDelay<public>(Delay:float)<transacts>:callback_tweener = if (Answered := callback_tweener[VhObjectFrom[VhCallValue(Handle, "set_delay", array{VhFromFloat(Delay)})]]) then Answered else Err("Godot's set_delay answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
 
 camera3d<public> := class(node3d):
 
@@ -39763,7 +39763,7 @@ input_event<public> := class(resource):
     IsMatch<public>(Event:?input_event, ?ExactMatch:logic = true)<decides><reads>:void = VhToLogic(VhCallValueConst(Handle, "is_match", array{VhFromMaybeObject(Event), VhFromLogic(ExactMatch)}))?
     IsPressed<public>()<decides><reads>:void = VhToLogic(VhCallValueConst(Handle, "is_pressed", array{}))?
     IsReleased<public>()<decides><reads>:void = VhToLogic(VhCallValueConst(Handle, "is_released", array{}))?
-    XformedBy<public>(Arg0:transform2d, ?LocalOfs:vector2 = vector2{X := 0.0, Y := 0.0})<decides><reads>:input_event = input_event[VhObjectFrom[VhCallValueConst(Handle, "xformed_by", array{VhFromTransform2D(Arg0), VhFromVector2(LocalOfs)})]]
+    XformedBy<public>(Arg0:transform2d, ?LocalOfs:vector2 = vector2{X := 0.0, Y := 0.0})<reads>:input_event = if (Answered := input_event[VhObjectFrom[VhCallValueConst(Handle, "xformed_by", array{VhFromTransform2D(Arg0), VhFromVector2(LocalOfs)})]]) then Answered else Err("Godot's xformed_by answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
 
 interval_tweener<public> := class(tweener):
 
@@ -40005,9 +40005,9 @@ mesh_library<public> := class(resource):
 
 method_tweener<public> := class(tweener):
 
-    SetDelay<public>(Delay:float)<decides><transacts>:method_tweener = method_tweener[VhObjectFrom[VhCallValue(Handle, "set_delay", array{VhFromFloat(Delay)})]]
-    SetEase<public>(Arg0:tween_ease_type)<decides><transacts>:method_tweener = method_tweener[VhObjectFrom[VhCallValue(Handle, "set_ease", array{VhFromTweenEaseType(Arg0)})]]
-    SetTrans<public>(Trans:tween_transition_type)<decides><transacts>:method_tweener = method_tweener[VhObjectFrom[VhCallValue(Handle, "set_trans", array{VhFromTweenTransitionType(Trans)})]]
+    SetDelay<public>(Delay:float)<transacts>:method_tweener = if (Answered := method_tweener[VhObjectFrom[VhCallValue(Handle, "set_delay", array{VhFromFloat(Delay)})]]) then Answered else Err("Godot's set_delay answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
+    SetEase<public>(Arg0:tween_ease_type)<transacts>:method_tweener = if (Answered := method_tweener[VhObjectFrom[VhCallValue(Handle, "set_ease", array{VhFromTweenEaseType(Arg0)})]]) then Answered else Err("Godot's set_ease answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
+    SetTrans<public>(Trans:tween_transition_type)<transacts>:method_tweener = if (Answered := method_tweener[VhObjectFrom[VhCallValue(Handle, "set_trans", array{VhFromTweenTransitionType(Trans)})]]) then Answered else Err("Godot's set_trans answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
 
 missing_resource<public> := class(resource):
 
@@ -41124,13 +41124,13 @@ polygon_path_finder<public> := class(resource):
 
 property_tweener<public> := class(tweener):
 
-    AsRelative<public>()<decides><transacts>:property_tweener = property_tweener[VhObjectFrom[VhCallValue(Handle, "as_relative", array{})]]
-    From<public>(Value:variant)<decides><transacts>:property_tweener = property_tweener[VhObjectFrom[VhCallValue(Handle, "from", array{VhFromVariant(Value)})]]
-    FromCurrent<public>()<decides><transacts>:property_tweener = property_tweener[VhObjectFrom[VhCallValue(Handle, "from_current", array{})]]
-    SetCustomInterpolator<public>(InterpolatorMethod:callable)<decides><transacts>:property_tweener = property_tweener[VhObjectFrom[VhCallValue(Handle, "set_custom_interpolator", array{VhFromCallable(InterpolatorMethod)})]]
-    SetDelay<public>(Delay:float)<decides><transacts>:property_tweener = property_tweener[VhObjectFrom[VhCallValue(Handle, "set_delay", array{VhFromFloat(Delay)})]]
-    SetEase<public>(Arg0:tween_ease_type)<decides><transacts>:property_tweener = property_tweener[VhObjectFrom[VhCallValue(Handle, "set_ease", array{VhFromTweenEaseType(Arg0)})]]
-    SetTrans<public>(Trans:tween_transition_type)<decides><transacts>:property_tweener = property_tweener[VhObjectFrom[VhCallValue(Handle, "set_trans", array{VhFromTweenTransitionType(Trans)})]]
+    AsRelative<public>()<transacts>:property_tweener = if (Answered := property_tweener[VhObjectFrom[VhCallValue(Handle, "as_relative", array{})]]) then Answered else Err("Godot's as_relative answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
+    From<public>(Value:variant)<transacts>:property_tweener = if (Answered := property_tweener[VhObjectFrom[VhCallValue(Handle, "from", array{VhFromVariant(Value)})]]) then Answered else Err("Godot's from answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
+    FromCurrent<public>()<transacts>:property_tweener = if (Answered := property_tweener[VhObjectFrom[VhCallValue(Handle, "from_current", array{})]]) then Answered else Err("Godot's from_current answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
+    SetCustomInterpolator<public>(InterpolatorMethod:callable)<transacts>:property_tweener = if (Answered := property_tweener[VhObjectFrom[VhCallValue(Handle, "set_custom_interpolator", array{VhFromCallable(InterpolatorMethod)})]]) then Answered else Err("Godot's set_custom_interpolator answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
+    SetDelay<public>(Delay:float)<transacts>:property_tweener = if (Answered := property_tweener[VhObjectFrom[VhCallValue(Handle, "set_delay", array{VhFromFloat(Delay)})]]) then Answered else Err("Godot's set_delay answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
+    SetEase<public>(Arg0:tween_ease_type)<transacts>:property_tweener = if (Answered := property_tweener[VhObjectFrom[VhCallValue(Handle, "set_ease", array{VhFromTweenEaseType(Arg0)})]]) then Answered else Err("Godot's set_ease answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
+    SetTrans<public>(Trans:tween_transition_type)<transacts>:property_tweener = if (Answered := property_tweener[VhObjectFrom[VhCallValue(Handle, "set_trans", array{VhFromTweenTransitionType(Trans)})]]) then Answered else Err("Godot's set_trans answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
 
 ray_cast3d<public> := class(node3d):
 
@@ -41871,7 +41871,7 @@ sub_viewport<public> := class(viewport):
 
 subtween_tweener<public> := class(tweener):
 
-    SetDelay<public>(Delay:float)<decides><transacts>:subtween_tweener = subtween_tweener[VhObjectFrom[VhCallValue(Handle, "set_delay", array{VhFromFloat(Delay)})]]
+    SetDelay<public>(Delay:float)<transacts>:subtween_tweener = if (Answered := subtween_tweener[VhObjectFrom[VhCallValue(Handle, "set_delay", array{VhFromFloat(Delay)})]]) then Answered else Err("Godot's set_delay answered nothing, and its own API says it cannot; this is a bridge failure rather than a script error")
 
 syntax_highlighter<public> := class(resource):
 

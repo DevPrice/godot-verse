@@ -37,8 +37,10 @@ hud := class(canvas_layer):
 		if (Message := MessageLabel?):
 			Message.SetText("Dodge the\nCreeps")
 			Message.Show()
-		if (Tree := GetTree[], Wait := Tree.CreateTimer[1.0]):
-			Wait.Timeout().Await()
+		# `CreateTimer` is total: Godot's own API marks its result as one that cannot be null, so
+		# the mirror declares it that way and only `GetTree` is left to fail here.
+		if (Tree := GetTree[]):
+			Tree.CreateTimer(1.0).Timeout().Await()
 		if (Button := StartButton?):
 			Button.Show()
 

@@ -612,6 +612,16 @@ marshal := class(node2d):
 
     HasOwner<public>()<reads>:logic = if (GetOwner[]) then true else false
 
+    # The same metadata at the other end of the call. `SceneTree.get_root` is marked as a result
+    # that cannot be null, so the mirror declares it total -- `GetRoot()` and not `GetRoot[]` -- and
+    # this body would not compile against a `<decides>` one, which is the whole of what it asserts.
+    #
+    # The tree is a parameter rather than `GetTree[]`, because the editor-side driver runs its
+    # first pass from the SceneTree's own `_init`: the root exists, but a node added to it has not
+    # entered the tree yet, so `GetTree` declines there and succeeds in an export. Nothing about
+    # this case is meant to be about that.
+    RootName<public>(Tree:scene_tree)<transacts>:string = Tree.GetRoot().GetName()
+
 # The unregistered class TakesHelper names. Ordinary Verse -- a helper beside the class the file
 # is named after -- and the shape every project writes sooner or later.
 marshal_helper := class(node2d):

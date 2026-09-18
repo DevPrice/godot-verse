@@ -1418,12 +1418,14 @@ def emit_math_packers() -> list:
 ClassifiedMethod = namedtuple(
     "ClassifiedMethod",
     ["godot_name", "verse_name", "params", "return_type", "is_void", "default_body", "is_const",
-     "godot_return", "is_vararg", "is_predicate"],
+     "godot_return", "is_vararg", "is_predicate", "return_required"],
     # A virtual is the only method with a default body, and it is what makes the declaration a
     # declaration rather than a call: everything else dispatches through the handle. `is_const` is
     # Godot's own flag, and it decides `<reads>` against `<transacts>` (docs/phase-4.5-design.md 3).
     # `is_vararg` makes emit_method answer two lines instead of one -- see there.
-    defaults=(None, False, "", False, False),
+    # `return_required` is Godot's `RequiredResult<T>`, which is what takes `<decides>` back off an
+    # object return: see emit_method.
+    defaults=(None, False, "", False, False, False),
 )
 ClassifiedProperty = namedtuple(
     "ClassifiedProperty", ["godot_name", "verse_name", "type_info", "getter", "setter", "index"]
@@ -1859,6 +1861,10 @@ def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members
         godot_return=return_value["type"] if return_value else "",
         is_vararg=bool(m.get("is_vararg")),
         is_predicate=is_predicate,
+        # `RequiredResult<T>`, the other half of the metadata B37 reads for an argument. A virtual
+        # is excluded because its body is a declaration to override rather than a call to make:
+        # there is no answer from Godot to be total about.
+        return_required=bool(return_value) and return_value.get("meta") == "required" and not is_virtual,
     )
 
 
@@ -2374,7 +2380,20 @@ def emit_method(cm: ClassifiedMethod) -> str:
 
         call = f'{dispatch}(Handle, "{cm.godot_name}", {arg_list})'
         ti = cm.return_type
-        if ti.pack_fn == "VhFromObject":
+        if ti.pack_fn == "VhFromObject" and cm.return_required:
+            # Godot says this one cannot answer null (`RequiredResult<T>`), so the method is not
+            # `<decides>` and every caller is spared a failure context for a case that does not
+            # arise. 40 of the mirror's 759 object returns are marked and they are the ones that
+            # hurt most -- the whole Tween builder chain, `SceneTree.GetRoot`, `CreateTimer`.
+            #
+            # Total, not infallible: the cast can still decline if Godot answers a class outside the
+            # mirror, and `Err` is what R-TYPE-4 already spends there -- the same answer the 39
+            # total singleton accessors give, and for the same reason. A raise costs the raising
+            # instance's content scope, which is the price of Godot contradicting its own metadata.
+            body = (f'if (Answered := {ti.verse_type}[VhObjectFrom[{call}]]) then Answered'
+                    f' else Err("Godot\'s {cm.godot_name} answered nothing, and its own API says it'
+                    f' cannot; this is a bridge failure rather than a script error")')
+        elif ti.pack_fn == "VhFromObject":
             # The cast, not a construction: the host builds the object at the class Godot says it
             # is, and this narrows it to what the signature promised (R-SCN-6). It can decline --
             # Godot answering a class outside the mirror -- and the method was already <decides>
@@ -2392,7 +2411,7 @@ def emit_method(cm: ClassifiedMethod) -> str:
             lines.append(f"    {cm.verse_name}<public>({decl})<decides>{effect}:void = {body}?")
             continue
 
-        effects = f"<decides>{effect}" if ti.unpack_decides else effect
+        effects = f"<decides>{effect}" if ti.unpack_decides and not cm.return_required else effect
         lines.append(f"    {cm.verse_name}<public>({decl}){effects}:{ti.verse_type} = {body}")
 
     return "\n".join(lines)

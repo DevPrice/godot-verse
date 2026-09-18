@@ -1514,9 +1514,25 @@ Godot accepts null for both. `VariantMaybeObject` is the public builder they pac
 because a bindings package sits at `/Godot.org/Bindings` and Verse's internal access is scoped
 by verse path rather than by package.
 
+**The same PR answers the result direction, and there the win is the other way round.**
+`RequiredResult<T>` marks a return that cannot be null, and **40 of the mirror's 759 object
+returns carry it** -- so those 40 lose the `<decides>` a caller had to spend a failure context
+on. They are not a random 40: the whole Tween builder chain is in it (`TweenProperty`,
+`SetTrans`, `SetEase`, `Parallel`, `Chain` and eighteen more), with `SceneTree.GetRoot`,
+`CreateTimer`, `CreateTween` and `GetMultiplayer`. Chaining a tween was a bracket per link and
+is now a call per link.
+
+Total is not infallible, and the difference is where `Err` goes. The *cast* can still refuse --
+Godot answering a class outside the mirror -- so a required return raises there, which is what
+R-TYPE-4 already spends on the 39 total singleton accessors and for the same reason. A raise
+costs the raising instance's content scope; that is the price of Godot contradicting its own
+metadata, and it is not a case any correct program reaches.
+
 What is unchanged, and said here so it does not read as an oversight: a **virtual**'s
 parameters, which Godot passes rather than receives, and a **signal**'s payload. Both can carry
-null and neither is spelled for it.
+null and neither is spelled for it. A virtual is excluded from the result rule too -- its body
+is a declaration to override rather than a call to make, so there is no answer to be total
+about.
 
 ---
 

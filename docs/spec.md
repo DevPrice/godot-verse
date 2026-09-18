@@ -1503,6 +1503,15 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   such metadata in either of its sources -- GDScript has no annotation and
   `class_get_method_list` carries none -- so every object argument of one is optional.
 
+  **And the result direction reads the same metadata to take `<decides>` away.**
+  `RequiredResult<T>` marks a return that cannot be null, and 40 of the mirror's 759 object
+  returns carry it -- the whole Tween builder chain, `SceneTree.GetRoot`, `CreateTimer`,
+  `CreateTween`, `GetMultiplayer`. Those are total, so a caller spends no failure context on a
+  case that does not arise. They are not infallible: the *cast* can still refuse if Godot
+  answers a class outside the mirror, and a required return raises through `Err` there, which
+  is what the 39 total singleton accessors below already do. A virtual is excluded, because its
+  body is a declaration to override rather than a call to make.
+
   The **singleton accessors** are the second `<decides>` family, and the rule applies to them the
   same way: 39 of the 41 are registered during `Main::setup`, so no run that can execute Verse at
   all can find one absent, and only `EditorInterface` and `GDScriptLanguageProtocol` — the two

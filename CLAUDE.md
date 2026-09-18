@@ -83,8 +83,10 @@ Three documents are not phase records and are the ones to read before adding a f
   yardstick needed no edit. A plain value does **not** coerce to an option, so the rest cost
   their callers an `option{}`; options *are* covariant, so one `VhFromMaybeObject(?object)`
   packs every one. A generated binding has no metadata in either source, so all of its object
-  arguments are optional. A virtual's parameters and a signal's payload are not spelled for
-  null and can carry it.
+  arguments are optional. The same metadata reads the other way for a *result*:
+  `RequiredResult<T>` takes `<decides>` off 40 of the mirror's 759 object returns, so the Tween
+  chain and `SceneTree.GetRoot` are ordinary calls. A virtual's parameters and a signal's
+  payload are not spelled for null and can carry it.
   **B36 is the one to read before changing when the bindings are generated**: a GDScript that
   names a Verse class is held back during a `.verse` load to avoid B30's cycle, and its binding
   is then declared with no members — so a Verse file naming one of its *methods* fails to
@@ -891,10 +893,14 @@ it is not in `run_tests.py`.
   without waiting, let the collector raise its start signal, then collect — which is the coupled
   pass `TickGC` takes opportunistically. Release is still "within a cycle or two", never "the next
   one": the VM's registers still name what the last frame held.
-- **Every object-returning method in the mirror is `<decides>`, and the singleton accessors are
-  not.** `GetParent[]`, `GetTree[]`, `GetViewport[]` are failable because Godot really answers null
-  there — R-TYPE-4's rule that nullability belongs to the *type*, so an object return is the only
-  failable one. Of the 41 singletons only `EditorInterface` and `GDScriptLanguageProtocol` can be
+- **An object-returning method in the mirror is `<decides>` unless Godot says the result cannot
+  be null, and the singleton accessors are not.** `GetParent[]`, `GetTree[]`, `GetViewport[]` are
+  failable because Godot really answers null there — R-TYPE-4's rule that nullability belongs to
+  the *type*, so an object return is the only failable one. **40 of the 759 are not**, because
+  `RequiredResult<T>` marks them (godotengine/godot#86079): the whole Tween builder chain,
+  `SceneTree.GetRoot`, `CreateTimer`, `CreateTween`, `GetMultiplayer`. Those are spelled
+  `GetRoot()` and raise through `Err` if the *cast* refuses — Godot answering a class outside
+  the mirror — which is the same answer the 39 total singleton accessors give. Of the 41 singletons only `EditorInterface` and `GDScriptLanguageProtocol` can be
   absent in a game, and only those two accessors are failable. The other 39 are spelled
   `GetEngine()` and raise through `Err` if the cast ever refuses — a raise rather than a plain
   total accessor because V3564 forbids the spelling that would need neither. **A raise is not a

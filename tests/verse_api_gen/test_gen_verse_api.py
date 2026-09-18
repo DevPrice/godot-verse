@@ -348,6 +348,12 @@ def _method(name, ret_type=None, args=None):
     return m
 
 
+def _required_result(m):
+    """Godot's `RequiredResult<T>`, which the dump spells as metadata on the return value."""
+    m["return_value"]["meta"] = "required"
+    return m
+
+
 def test_shadow_suppression_across_inheritance():
     api = {
         "classes": [
@@ -699,6 +705,45 @@ def test_an_object_parameter_is_optional_unless_godot_marks_it_required():
     check_true(
         "and packs through the one that has a Nil to answer with",
         "VhFromMaybeObject(Target)" in body,
+    )
+
+
+def test_an_object_result_godot_marks_required_is_not_decides():
+    """The other half of #86079's metadata: `RequiredResult<T>` takes the failure context away.
+
+    An object result is `<decides>` because Godot can answer null (R-TYPE-4). Where Godot says it
+    cannot, the method is total and the cast's own refusal -- a class outside the mirror -- raises
+    through `Err`, which is what the 39 total singleton accessors already spend there.
+    """
+    api = {
+        "classes": [
+            {"name": "Object", "inherits": None, "methods": []},
+            {"name": "Node", "inherits": "Object", "methods": []},
+            {
+                "name": "Thing",
+                "inherits": "Object",
+                "methods": [
+                    _required_result(_method("sure", "Node")),
+                    _method("unsure", "Node"),
+                ],
+            },
+        ]
+    }
+    coverage = g.Coverage()
+    blocks, order, _map, _members, _arrays, _dicts = g.generate(
+        api, ["Thing", "Node"], coverage, {})
+    body = blocks[order.index("Thing")]
+    check_true(
+        "a required object result drops the <decides>",
+        "Sure<public>()<transacts>:node = if (Answered :=" in body,
+    )
+    check_true(
+        "and raises where the cast itself declines",
+        "else Err(" in body,
+    )
+    check_true(
+        "one Godot does not mark keeps it",
+        "Unsure<public>()<decides><transacts>:node = node[VhObjectFrom[" in body,
     )
 
 
@@ -1508,6 +1553,8 @@ def main():
     test_unsupported_type_skipping()
     test_typed_array_parameter_takes_the_parametric_class()
     test_union_parameter_widens_to_the_common_ancestor()
+    test_an_object_parameter_is_optional_unless_godot_marks_it_required()
+    test_an_object_result_godot_marks_required_is_not_decides()
     test_a_raw_pointer_is_its_own_permitted_skip()
     test_class_type_falls_back_to_nearest_emitted_ancestor()
     test_render_classes_header()

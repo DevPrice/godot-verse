@@ -391,6 +391,11 @@ func begin() -> void:
 	_check("a real node reaches a mirrored optional parameter", node.call("HasOwner"))
 	node.call("ClearOwner")
 	_check("and null reaches it too, which is what the option is for", not node.call("HasOwner"))
+	# And the same metadata read at the other end: a result Godot marks as one that cannot be null
+	# drops the `<decides>` a caller would otherwise need a failure context for. The Verse body
+	# spells `GetRoot()` rather than `GetRoot[]`, so it would not have compiled before this.
+	_check_eq("a result Godot marks required is reached without a failure context",
+			node.call("RootName", tree), String(tree.root.name))
 
 	var script_by_name := {}
 	for method in (script as Script).get_script_method_list():
