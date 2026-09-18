@@ -89,6 +89,16 @@ bool VerseEditorPlugin::_build() {
 // unlikely -- so the popup was answering correctly and being closed before it drew. A second field
 // already worked, because `,` is in Godot's table; only the first one was unreachable.
 //
+// `[` is in the table for a second reason, and it is the argument hint rather than the popup.
+// `confirm_code_completion` re-asks for completion once it has inserted an option, and only when
+// the inserted text's last character is in this table (scene/gui/code_edit.cpp) -- which is the
+// whole of how the hint appears the moment a call is completed. Verse spells a `<decides>` call
+// with brackets, so completion_option_for inserts `GetNode[`, and every failable call in the
+// mirror -- every object-returning method and all 568 predicates -- landed on a character that
+// asked for nothing. The hint was already correct when something asked: call_opened_with_bracket
+// exists to spell it with the brackets the author wrote. Nothing asked until the first argument
+// character, which reaches _complete_code through the `!is_symbol` arm instead.
+//
 // The other narrowed positions are deliberately absent. A type after `:` and a specifier after `<`
 // decline an empty prefix in _complete_code itself, so putting them here would raise a popup with
 // nothing to show.
@@ -110,7 +120,7 @@ void VerseEditorPlugin::widen_completion_prefixes() {
 	}
 
 	TypedArray<String> prefixes = code->get_code_completion_prefixes();
-	for (const char *wanted : { "{", "?" }) {
+	for (const char *wanted : { "{", "?", "[" }) {
 		if (!prefixes.has(String(wanted))) {
 			prefixes.push_back(String(wanted));
 		}

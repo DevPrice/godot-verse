@@ -374,19 +374,30 @@ private:
 	// poll is what pairs a warning set with the diagnostics reported out of the same one.
 	mutable godot::Dictionary script_warnings_by_path;
 
-	// The buffer waiting for an analysis, and the one an analysis is running for. Only one runs
-	// at a time, and a newer buffer replaces a waiting one rather than queueing behind it.
+	// The buffers waiting for an analysis, and the one an analysis is running for. Only one runs
+	// at a time, and a newer buffer replaces a waiting one of its own kind rather than queueing
+	// behind it.
+	//
+	// Two slots rather than one, and the second is not a luxury: confirming a completion changes
+	// the text, so _validate runs on the editor's idle timer a moment after _complete_code queued
+	// the buffer the argument hint is waiting on. Sharing a slot let that validate displace it --
+	// and nothing re-asks, because poll_check refreshes the popup only when the analysis that
+	// landed was the completion one, so the hint stayed blank until the next keystroke. Which of
+	// the two won was a race against how busy the host was, which is what made it intermittent.
 	mutable bool has_pending_check = false;
 	mutable godot::String pending_check_path;
 	mutable godot::String pending_check_source;
+	mutable bool has_pending_completion_check = false;
+	mutable godot::String pending_completion_path;
+	mutable godot::String pending_completion_source;
 	mutable godot::String in_flight_path;
 	mutable godot::String in_flight_source;
 
-	// Whether that buffer is a completion buffer rather than the author's own text -- the half-typed
-	// identifier replaced by the placeholder. Its diagnostics describe a line nobody has finished
-	// writing, so poll_check drops them instead of drawing them; what it keeps is the record that
-	// the host now holds this text, which is the whole reason the analysis was asked for.
-	mutable bool pending_check_is_completion = false;
+	// Whether the buffer in flight is a completion buffer rather than the author's own text -- the
+	// half-typed identifier replaced by the placeholder. Its diagnostics describe a line nobody has
+	// finished writing, so poll_check drops them instead of drawing them; what it keeps is the
+	// record that the host now holds this text, which is the whole reason the analysis was asked
+	// for.
 	mutable bool in_flight_is_completion = false;
 
 	// The completion buffer whose analysis is worth re-asking completion for once it lands, and
@@ -413,8 +424,8 @@ private:
 	mutable int32_t signature_cache_column = -1;
 	mutable godot::Dictionary signature_cache;
 
-	// Queues p_path's buffer for analysis. p_is_completion marks it as a completion buffer: see
-	// pending_check_is_completion.
+	// Queues p_path's buffer for analysis in the slot p_is_completion picks: see
+	// has_pending_completion_check.
 	void request_check(const godot::String &p_path, const godot::String &p_normalized_source, bool p_is_completion = false) const;
 	void start_pending_check() const;
 

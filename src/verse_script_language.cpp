@@ -108,6 +108,20 @@ VerseRuntime *get_runtime() {
 	return Object::cast_to<VerseRuntime>(Engine::get_singleton()->get_singleton("VerseRuntime"));
 }
 
+// The same answer as verse_godot_class_for, but only when ClassDB has heard of it -- which is the
+// test every caller that walks an ancestry has to make first.
+//
+// That table carries the sixteen math types and `rid` beside the 1036 classes, for their Godot
+// names and their documentation pages, and not one of them is a ClassDB class: a Variant type is
+// not registered there. So `ClassDB::get_parent_class("Vector3")` is a failed ERR_FAIL, printing
+// *"Cannot get class 'Vector3'."* per keystroke on the completion path that asks -- and answering
+// an empty name, so the walk it was starting finds nothing anyway. A value type has no ancestry to
+// find: its members are all its own.
+const char *godot_classdb_class_for(const String &p_verse_class) {
+	const char *godot_name = verse_godot_class_for(p_verse_class);
+	return godot_name != nullptr && ClassDB::class_exists(godot_name) ? godot_name : nullptr;
+}
+
 // The Godot class whose documentation describes a Verse class. That is the mirrored table plus the
 // one name missing from it: `vh_object`. That is Godot.native.verse's hand-written native root, the
 // base Godot's own mirrored `object` derives from -- so it is not part of the generated API and not
@@ -1583,7 +1597,7 @@ static PackedStringArray member_bearing_chain(const String &p_verse_class) {
 		return chain;
 	}
 	chain.push_back(p_verse_class);
-	const char *godot_name = verse_godot_class_for(p_verse_class);
+	const char *godot_name = godot_classdb_class_for(p_verse_class);
 	if (godot_name == nullptr) {
 		return chain;
 	}
@@ -2059,7 +2073,7 @@ void VerseScriptLanguage::collect_signal_names(const String &p_source, const Str
 	}
 
 	for (int64_t i = 0; i < chain.size(); i++) {
-		if (const char *godot_class = verse_godot_class_for(chain[i])) {
+		if (const char *godot_class = godot_classdb_class_for(chain[i])) {
 			// With inheritance, so the first mirrored class in the chain is the last one to ask.
 			const TypedArray<Dictionary> signals = ClassDB::class_get_signal_list(String(godot_class), false);
 			for (int64_t s = 0; s < signals.size(); s++) {
@@ -3137,7 +3151,10 @@ TypedArray<Dictionary> VerseScriptLanguage::probe_complete(
 		// Only when the first ask actually queued something. A caret the host can already describe
 		// answers once and the two halves of the row are the same list, which is itself worth
 		// reporting: it says the author saw the right names without waiting.
-		const bool queued = has_pending_check;
+		//
+		// The completion slot alone: _complete_code queues nothing else, and the ordinary one may
+		// still hold the buffer the build queued if some earlier caret's flush took this one.
+		const bool queued = has_pending_completion_check;
 		if (queued) {
 			flush_pending_check();
 			const Dictionary second = _complete_code(code, p_path, nullptr);
@@ -4077,12 +4094,19 @@ void VerseScriptLanguage::request_check(const String &p_path, const String &p_no
 		return;
 	}
 
-	// Newest buffer wins: while an analysis runs the editor keeps typing, and every intermediate
-	// state is worth less than the one the author is looking at now.
-	pending_check_path = p_path;
-	pending_check_source = p_normalized_source;
-	pending_check_is_completion = p_is_completion;
-	has_pending_check = true;
+	// Newest buffer wins *within its kind*: while an analysis runs the editor keeps typing, and
+	// every intermediate state is worth less than the one the author is looking at now. Across the
+	// two kinds nothing displaces anything, because a completion buffer and the author's own text
+	// are different questions with different consumers -- which is what the second slot is for.
+	if (p_is_completion) {
+		pending_completion_path = p_path;
+		pending_completion_source = p_normalized_source;
+		has_pending_completion_check = true;
+	} else {
+		pending_check_path = p_path;
+		pending_check_source = p_normalized_source;
+		has_pending_check = true;
+	}
 
 	// Queued, not started. Nothing that describes a class joins the analysis thread any more --
 	// since ABI v7 they answer from the snapshot the last one left -- but an analysis still blocks
@@ -4093,7 +4117,7 @@ void VerseScriptLanguage::request_check(const String &p_path, const String &p_no
 }
 
 void VerseScriptLanguage::start_pending_check() const {
-	if (!has_pending_check) {
+	if (!has_pending_check && !has_pending_completion_check) {
 		return;
 	}
 
@@ -4102,32 +4126,53 @@ void VerseScriptLanguage::start_pending_check() const {
 		return;
 	}
 
-	const String globalized = ProjectSettings::get_singleton()->globalize_path(pending_check_path);
-	if (runtime->begin_check_project(globalized, pending_check_source) != OK) {
+	// The completion buffer first when both are waiting: a popup and an argument hint are blocked
+	// on it and are drawing nothing meanwhile, where the author's own buffer feeds a gutter that is
+	// still showing the last analysis' diagnostics. Each kind holds only its newest buffer, so
+	// preferring one delays the other by a single analysis and can never queue a third.
+	const bool completion = has_pending_completion_check;
+	const String path = completion ? pending_completion_path : pending_check_path;
+	const String source = completion ? pending_completion_source : pending_check_source;
+
+	const String globalized = ProjectSettings::get_singleton()->globalize_path(path);
+	if (runtime->begin_check_project(globalized, source) != OK) {
 		return;
 	}
 
 	// The host has taken this text, so it is what the next result answers for.
-	in_flight_path = pending_check_path;
-	in_flight_source = pending_check_source;
-	in_flight_is_completion = pending_check_is_completion;
-	has_pending_check = false;
+	in_flight_path = path;
+	in_flight_source = source;
+	in_flight_is_completion = completion;
+	if (completion) {
+		has_pending_completion_check = false;
+	} else {
+		has_pending_check = false;
+	}
 }
 
 void VerseScriptLanguage::flush_pending_check() const {
-	if (!has_pending_check) {
+	if (!has_pending_check && !has_pending_completion_check) {
 		return;
 	}
 
 	VerseRuntime *runtime = get_runtime();
 	if (runtime == nullptr || !runtime->is_host_loaded() || !runtime->host_has_compiler()) {
 		has_pending_check = false;
+		has_pending_completion_check = false;
 		return;
 	}
 
-	const String path = pending_check_path;
-	const String source = pending_check_source;
-	has_pending_check = false;
+	// The completion slot first, in the order start_pending_check prefers them and for the same
+	// reason. One flush runs one analysis and leaves the other slot for _frame; probe_complete is
+	// what makes that enough, because it flushes once per caret and each caret queues one buffer.
+	const bool completion = has_pending_completion_check;
+	const String path = completion ? pending_completion_path : pending_check_path;
+	const String source = completion ? pending_completion_source : pending_check_source;
+	if (completion) {
+		has_pending_completion_check = false;
+	} else {
+		has_pending_check = false;
+	}
 
 	// The synchronous entry point, which is what makes this a flush rather than a second queue: it
 	// blocks on whatever the background thread is doing and then analyses.
@@ -4699,7 +4744,7 @@ String skipped_member_explanation(const verse_api::skipped_member &p_entry) {
 // most derived one -- `sprite2d` for a method Node declares. ClassDB is what knows the chain, and
 // the two name tables are what cross between its spelling and Verse's.
 const verse_api::skipped_member *skipped_member_for(const String &p_verse_class, const String &p_member) {
-	const char *godot_name = verse_godot_class_for(p_verse_class);
+	const char *godot_name = godot_classdb_class_for(p_verse_class);
 	if (godot_name == nullptr) {
 		// A math type. ClassDB has never heard of Vector2 -- it is a Variant type, not a class --
 		// so there is no chain to walk and no parent to inherit from: a vector2's members are all

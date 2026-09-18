@@ -1006,6 +1006,95 @@ every save whether or not anything was broken.
 
 ---
 
+## B27. The argument hint went missing after a failable call, and after a race · **fixed, two causes, by-hand check owed**
+
+Reported rather than watched: the parameter tooltip that stands above the caret while a call is
+open *sometimes* does not appear after completing a function. Two independent causes, one
+deterministic and one a race, and the second is why the first read as intermittent. Both are argued
+from the sources the way B26 was and neither has been seen in a window; the steps are in
+§"What is still open".
+
+**Godot asks for the hint only when the inserted text ends in a trigger character.**
+`CodeEdit::confirm_code_completion` ends with `if (code_completion_prefixes.has(
+caret_last_completion_char)) { request_code_completion(); }` (`scene/gui/code_edit.cpp:2712`), and
+that re-request is the whole of how a hint appears the moment a call is completed: it lands in
+`_complete_code`, which fills `call_hint`, and `ScriptTextEditor::_code_complete_script` hands the
+result to `set_code_hint`. The table is Godot's own eight characters (`editor/gui/code_editor.cpp`
+:2101) plus the `{` and `?` `widen_completion_prefixes` adds for B24's two popups.
+
+Verse spells a `<decides>` call with brackets, so `completion_option_for` inserts `GetNode[` — and
+**every failable call in the mirror, which is every object-returning method and all 568 predicates,
+landed on a character that asked for nothing**. Nothing was wrong with the answer: `call_hint_for`
+had already been asked, and `call_opened_with_bracket` exists precisely to spell the hint with the
+brackets the author wrote. `[` joins the table. What disguised this as intermittent rather than
+absolute is that the hint *does* appear as soon as the first argument character is typed, which
+reaches `request_code_completion` through its `!is_symbol` arm instead.
+
+**And the analysis the hint was waiting for could be displaced by the validate behind it.** When
+the host does not already describe the buffer, `vh_signature_at` answers `VH_ERR_STATE`, and
+`_complete_code` queues that completion buffer and draws nothing; `refresh_completion_if_current`
+is what re-asks once it lands. That recovery fires only when the analysis that landed *was* the
+completion one (`in_flight_is_completion`). `request_check` kept **one** pending slot, newest
+buffer wins — and confirming a completion changes the text, so the editor's idle timer runs
+`_validate` a moment later and queued the author's real buffer into that same slot. If the host
+happened to be busy when the hint was asked for, which is the common case because the previous
+keystroke's analysis is usually still running, the completion request was gone before it ever
+started and nothing re-asked. No hint until the next keystroke.
+
+The fix is a second slot, one per kind, with `start_pending_check` preferring the completion one: a
+popup and a hint are blocked on it and drawing nothing, where the author's own buffer feeds a
+gutter still showing the last analysis' diagnostics. Each slot holds only its newest buffer, so
+preferring one delays the other by a single analysis and can never queue a third. Which of the two
+won the one slot was a race against how busy the host was, and that is the whole of why this was
+reported as *sometimes*.
+
+**The third cause is not a defect.** `enclosing_call_callee_end` answers -1 at a newline it meets
+at bracket depth 0, so a call whose arguments continue on the next line gets no hint. That is
+deliberate and the comment there says why.
+
+---
+
+## B28. `Cannot get class 'Vector3'.`, once per keystroke · **fixed, measured**
+
+Reported as a burst of errors in the Output panel while editing a `.verse` file, with nothing else
+apparently wrong. It is `ClassDB::get_parent_class` failing its `ERR_FAIL`
+(`core/object/class_db.cpp:357`), and three call sites in `src/verse_script_language.cpp` could
+reach it with a name ClassDB has never heard of.
+
+**`verse_api::classes` is not only classes.** The generated table carries the sixteen math types
+and `rid` beside the 1036 mirrored classes, and its own header comment says why: they are Godot
+types with Godot names and Godot documentation pages, which is what every reader of it but
+`_make_template` is asking about. So `verse_godot_class_for("vector3")` answers `"Vector3"` — and
+`Vector3` is a Variant type, not a registered class, so anything that walks `get_parent_class` from
+what that function answers fails the check and walks nothing.
+
+**`skipped_member_for` already had the guard and it had gone stale.** Its `godot_name == nullptr`
+branch is commented *"A math type. ClassDB has never heard of Vector2"* and searches the skip rows
+by Verse name instead — written in `db6505d`, correct then, and dead from the moment the value
+types joined that table. A math type took the walking branch instead, printed the error, and found
+no skip row.
+
+`godot_classdb_class_for` is the one test — `verse_godot_class_for` plus `ClassDB::class_exists` —
+and the three sites take it: `member_bearing_chain`, `skipped_member_for` and
+`collect_signal_names`, the last of which would have said the same thing through
+`class_get_signal_list` with double quotes instead. A value type has no ancestry to walk in any
+case: its members are all its own.
+
+**Where it comes from, and why the two reports arrived together.** `member_bearing_chain` is
+reached from `receiver_classes_from_text`, which runs *only* in the not-ready branch of member
+completion — the partial answer drawn while the analysis that would answer properly is still
+running. So a burst of these is a direct readout that the host is declining to describe the buffer,
+which is the same condition B27's second cause turns into a missing hint. They are not the same
+defect and they share a trigger.
+
+**Measured both ways.** `tools/complete_probe.gd` driven by hand against `dodge-the-creeps`, at a
+`.` on a `var ScreenSize:vector2` member added for the run: before, `ERROR: Cannot get class
+'Vector2'.` and 34 options; after, no error and the same 34. `probe_complete.py` cannot see this
+and its silence means nothing — it captures the subprocess' output and discards it on success, so
+the errors never reach a terminal. Driving the driver directly is what reads them.
+
+---
+
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks
@@ -1038,6 +1127,17 @@ Then check the same `.` popup an ordinary member completion opens and read the l
 ending in `Getter` or `Setter`. There must be none; `probe_complete.py`'s C1 rule is the automated
 half, and it counts them, but only the eye sees what the list actually looks like to someone
 reading it.
+
+**And the argument hint, which B27 owes.** Complete a call with parentheses — `Input.
+IsActionPressed(` — and the hint must be standing above the caret the instant the option lands,
+with the first parameter between the markers. Then complete a *failable* one, `GetNode[`, and watch
+for the same thing: that is B27's first cause, and `[` in the prefix table is the whole of the fix,
+so a hint that appears only once an argument character is typed means it did not take. Then press
+**Play**, let the game come up, come back and complete another call straight away: that is the
+window where the host is refusing positions and the queued analysis is what puts the hint there, so
+the hint may be a beat late but it must arrive without a further keystroke. Do that last one twice
+with a save in between, which is what puts a `_validate` behind the completion and is B27's second
+cause.
 
 ### The Node panel, for a signal that is not `<public>`
 

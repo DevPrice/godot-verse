@@ -69,8 +69,16 @@ Three documents are not phase records and are the ones to read before adding a f
   removed.
 - **`docs/by-hand-findings.md`** — what the by-hand editor sessions found, because everything from
   `EngineDebugger` and the editor UI inward has no automated test and never will. B1–B9, B15–B18,
-  B20 and B22–B26 are defects, all fixed; B12 is a Verse fact; B13 a latency finding; B14 the
-  sandboxed export run. **B26 is the one to read before touching `_reload`, the placeholder path or
+  B20 and B22–B28 are defects, all fixed; B12 is a Verse fact; B13 a latency finding; B14 the
+  sandboxed export run. **B27 is the one to read before adding a completion option that inserts
+  anything but a bare name**: Godot re-asks for completion after confirming one only when the
+  inserted text's last character is in `code_completion_prefixes`, and that re-ask is the whole of
+  how the argument hint appears — so every `<decides>` call, inserting a `[`, silently got none.
+  Its second half is why `request_check` keeps a slot per kind: one slot let `_validate` displace
+  the analysis a hint was waiting on, and only a completion analysis re-asks. **B28 is the one to
+  read before walking a class ancestry from a mirrored name**: `verse_api::classes` carries the
+  sixteen math types and `rid` beside the 1036 classes, ClassDB has heard of none of them, and
+  `godot_classdb_class_for` is the test every such walk has to make first. **B26 is the one to read before touching `_reload`, the placeholder path or
   anything a script answers about a default**: a placeholder's `values` map is the only copy a
   non-tool script's exported values have in the editor, Godot refuses to store one for a name
   `_has_property_default_value` says no to, and B8's re-attach destroyed both — so a save during a
