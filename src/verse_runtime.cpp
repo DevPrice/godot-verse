@@ -270,6 +270,7 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 	godot_api.CallMethod = &VerseRuntime::api_call_method;
 	godot_api.GetSingleton = &VerseRuntime::api_get_singleton;
 	godot_api.GetClassOf = &VerseRuntime::api_get_class_of;
+	godot_api.GetScriptClassOf = &VerseRuntime::api_get_script_class_of;
 	godot_api.MakeCallable = &VerseRuntime::api_make_callable;
 	godot_api.CallStatic = &VerseRuntime::api_call_static;
 	godot_api.CallUtility = &VerseRuntime::api_call_utility;
@@ -356,6 +357,44 @@ bool VerseRuntime::host_has_compiler() const {
 	// an export ships, published nothing, and every script in the game came up with no class.
 	// Found by running an exported dodge-the-creeps; nothing in the suite had ever launched one.
 	return host.is_loaded() && host.host_kind() == VH_HOST_KIND_EDITOR;
+}
+
+Error VerseRuntime::set_bindings(const VerseBindings &p_bindings) {
+	if (!host.is_loaded() || host.SetBindings == nullptr) {
+		// A host older than ABI 11.1, or a runtime host, which reads its bindings from the cook.
+		return ERR_UNAVAILABLE;
+	}
+
+	// The CharStrings have to outlive the call, exactly as compile_project's paths do: the rows
+	// are pointers into them and the host copies everything only once it is inside.
+	std::vector<CharString> utf8_names;
+	std::vector<vh_binding_class> rows;
+	utf8_names.reserve(p_bindings.classes.size() * 3);
+	rows.reserve(p_bindings.classes.size());
+	for (const VerseBindingClass &binding : p_bindings.classes) {
+		utf8_names.push_back(String(binding.godot_class.c_str()).utf8());
+		const CharString &godot_class = utf8_names.back();
+		utf8_names.push_back(String(binding.script_class.c_str()).utf8());
+		const CharString &script_class = utf8_names.back();
+		utf8_names.push_back(String(binding.verse_class.c_str()).utf8());
+		const CharString &verse_class = utf8_names.back();
+
+		vh_binding_class row{};
+		row.GodotClassUtf8 = binding.godot_class.empty() ? nullptr : godot_class.get_data();
+		row.GodotClassLen = binding.godot_class.empty() ? 0 : (int32_t)godot_class.length();
+		row.ScriptClassUtf8 = binding.script_class.empty() ? nullptr : script_class.get_data();
+		row.ScriptClassLen = binding.script_class.empty() ? 0 : (int32_t)script_class.length();
+		row.VerseClassUtf8 = verse_class.get_data();
+		row.VerseClassLen = (int32_t)verse_class.length();
+		rows.push_back(row);
+	}
+
+	const CharString source_utf8 = String(p_bindings.source.c_str()).utf8();
+	const int32_t status = host.SetBindings(
+			p_bindings.source.empty() ? nullptr : source_utf8.get_data(),
+			p_bindings.source.empty() ? 0 : (int32_t)source_utf8.length(),
+			rows.empty() ? nullptr : rows.data(), (int32_t)rows.size());
+	return status == VH_OK ? OK : ERR_INVALID_PARAMETER;
 }
 
 Error VerseRuntime::compile_project(const PackedStringArray &p_globalized_paths, const PackedStringArray &p_module_paths, Dictionary *r_diagnostics_by_path) {
@@ -1760,6 +1799,31 @@ int32_t VerseRuntime::api_get_class_of(void *p_ctx, vh_handle p_handle, vh_arena
 		return VH_CALL_DEAD_OBJECT;
 	}
 	return variant_to_vh(Variant(obj->get_class()), p_arena, *r_class_name) ? VH_CALL_OK : VH_CALL_BAD_VALUE;
+}
+
+int32_t VerseRuntime::api_get_script_class_of(void *p_ctx, vh_handle p_handle, vh_arena *p_arena, vh_value *r_name) {
+	if (r_name == nullptr) {
+		return VH_CALL_BAD_VALUE;
+	}
+	Object *obj = UtilityFunctions::instance_from_id(p_handle);
+	if (obj == nullptr) {
+		return VH_CALL_DEAD_OBJECT;
+	}
+
+	// `get_class()` cannot answer this and that is the whole reason this callback exists: a node
+	// carrying `mob.gd` answers Node2D, because a script is not a ClassDB class. The global name is
+	// what a `class_name` registers and what a generated binding is keyed on (R-INT-7).
+	const Ref<Script> script = obj->get_script();
+	if (script.is_null()) {
+		return VH_CALL_NO_SUCH_MEMBER;
+	}
+	const String global_name = script->get_global_name();
+	if (global_name.is_empty()) {
+		// A script with no `class_name` has no global name to bind, and is skipped by the generator
+		// for the same reason -- there is nothing to key a binding on.
+		return VH_CALL_NO_SUCH_MEMBER;
+	}
+	return variant_to_vh(Variant(global_name), p_arena, *r_name) ? VH_CALL_OK : VH_CALL_BAD_VALUE;
 }
 
 void VerseRuntime::on_diagnostic(void *p_ctx, const vh_diagnostic *p_diagnostic) {

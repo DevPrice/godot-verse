@@ -1,5 +1,6 @@
 #pragma once
 
+#include "verse_bindings.h"
 #include "verse_host.h"
 #include "verse_host_abi.h"
 
@@ -143,6 +144,10 @@ public:
 	// While r_diagnostics_by_path is non-null every diagnostic the host reports, whatever its
 	// severity, is filed under its own source path as { severity, line, column, message, path,
 	// code } and nothing reaches the output log.
+	// Replaces the bindings package (R-INT-8). Takes effect at the host's next build or
+	// analysis, whichever comes first; the host keeps the dirty flag.
+	godot::Error set_bindings(const VerseBindings &p_bindings);
+
 	godot::Error compile_project(const godot::PackedStringArray &p_globalized_paths, const godot::PackedStringArray &p_module_paths, godot::Dictionary *r_diagnostics_by_path);
 
 	// The two halves of a Godot Callable that calls a Verse function (R-INT-4, R-SIG-3). Called
@@ -368,6 +373,7 @@ private:
 	static int32_t api_call_method(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count, vh_arena *p_arena, vh_value *r_value);
 	static vh_handle api_get_singleton(void *p_ctx, const char *p_name_utf8, int32_t p_name_len);
 	static int32_t api_get_class_of(void *p_ctx, vh_handle p_handle, vh_arena *p_arena, vh_value *r_class_name);
+	static int32_t api_get_script_class_of(void *p_ctx, vh_handle p_handle, vh_arena *p_arena, vh_value *r_name);
 	static int64_t api_make_callable(void *p_ctx, int64_t p_callback_id, vh_handle p_owner_handle);
 	static int32_t api_call_static(void *p_ctx, const char *p_class_utf8, int32_t p_class_len, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count, vh_arena *p_arena, vh_value *r_value);
 	static int32_t api_call_utility(void *p_ctx, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count, vh_arena *p_arena, vh_value *r_value);

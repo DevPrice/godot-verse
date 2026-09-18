@@ -223,7 +223,7 @@ AUTORTFM_DISABLE INT32_MAIN_INT32_ARGC_TCHAR_ARGV()
 	FCommandLine::Parse(FCommandLine::Get(), Tokens, Switches);
 	if (Tokens.Num() < 2)
 	{
-		Say(TEXT("usage: verse_cook <manifest> <out_dir> [--keep-loose] [--verbose]"));
+		Say(TEXT("usage: verse_cook <manifest> <out_dir> [-bindings=<file>] [--keep-loose] [--verbose]"));
 		Leave(2);
 	}
 
@@ -245,6 +245,22 @@ AUTORTFM_DISABLE INT32_MAIN_INT32_ARGC_TCHAR_ARGV()
 	{
 		Say(FString::Printf(TEXT("error: the Verse host would not start (status %d)"), Status));
 		Leave(2);
+	}
+
+	// The bindings package, which the *editor* generated and which a cook cannot: its classes come
+	// from ClassDB and from Godot's global class list, and this program has no Godot at all. So the
+	// export plugin writes what it generated beside the manifest and names it here (R-INT-11).
+	// Absent is the ordinary case -- a project with no addons and no `class_name` scripts.
+	FString BindingsPath;
+	if (FParse::Value(FCommandLine::Get(), TEXT("bindings="), BindingsPath))
+	{
+		FString BindingsSource;
+		if (!FFileHelper::LoadFileToString(BindingsSource, *FPaths::ConvertRelativePathToFull(BindingsPath)))
+		{
+			Say(FString::Printf(TEXT("error: could not read the bindings package at %s"), *BindingsPath));
+			Leave(2);
+		}
+		GodotVerse::SetBindings(FUtf8String(BindingsSource), TArray<GodotVerse::FBindingClass>());
 	}
 
 	Say(TEXT("verse_cook: compiling"));

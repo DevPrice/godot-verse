@@ -581,17 +581,18 @@ EXPORT_DATA_DIR_ENTRIES = {"Cooked", "Engine", "verse_classes.json"}
 EXPORT_EXPECTED_CLASSES = ["marshal", "signals", "left/widget"]
 
 # What the exported run must report, named rather than inferred (7b D5): a case that stops running
-# in an export has to read as a failure and not as a shorter log. The eleven skips are
+# in an export has to read as a failure and not as a shorter log. The fifteen skips are
 # test_cases.gd's `editor` blocks -- the second generation, the reload, `is_tool` off a stripped
 # source, `get_global_name`, which is read off the same stripped source, and the hover tooltip,
-# which needs an analysis a runtime host has no compiler to produce. The five R-EXP-7 cases run the
+# which needs an analysis a runtime host has no compiler to produce, and the four binding casts,
+# which want a class-to-binding table the sidecar does not carry yet (R-INT-11). The five R-EXP-7 cases run the
 # other way round -- only an exported game has autoloads at all, because `--script` replaces the
 # main loop before Godot sets one up -- so they are skips in the editor run and passes here. The two
 # runs therefore report different totals from one set of lines, and neither is a function of the
-# other: the in-editor run prints 499 passed and 5 skipped against the numbers below. Adding a case
+# other: the in-editor run prints 507 passed and 5 skipped against the numbers below. Adding a case
 # means changing this line, which is the point of it.
-EXPORT_EXPECTED_PASSES = 468
-EXPORT_EXPECTED_SKIPS = 11
+EXPORT_EXPECTED_PASSES = 469
+EXPORT_EXPECTED_SKIPS = 15
 
 
 def run_export(results: Results, engine: Path | None, godot: Path | None) -> None:
@@ -783,7 +784,11 @@ def _check_pck(pck: Path, project: Path) -> bool:
     ok = True
     sources = sorted(files, key=str)
     verse = [name for name in sources if name.endswith(".verse")]
-    expected_verse = len(list(project.rglob("*.verse")))
+    # Not `.godot/`: the generated bindings package lives there and is not project source. It is
+    # handed to the cooker on the command line rather than shipped, so a game holds no copy of it
+    # -- and Godot excludes every dot-directory from an export anyway.
+    expected_verse = len([p for p in project.rglob("*.verse")
+                          if not any(part.startswith(".") for part in p.relative_to(project).parts)])
     if len(verse) == expected_verse:
         print(f"[export] all {expected_verse} .verse files are in the pack: ok")
     else:

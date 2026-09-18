@@ -172,6 +172,15 @@ public:
 
 	// Bound so EditorFileSystem's filesystem_changed can reach it. Nothing else calls it.
 	void on_filesystem_changed();
+	void on_script_classes_updated();
+
+	// Regenerates the bindings package and hands it to the host (R-INT-7, R-INT-8). Cheap to
+	// call when nothing changed: the host compares the source and only a *changed* one costs a
+	// package name.
+	// False when the host is not up yet, which leaves the request armed for the next frame.
+	bool refresh_bindings();
+	bool bindings_hook_connected = false;
+	bool bindings_refresh_pending = true;
 
 	// The consumer half of R-DIAG-4's break decision, reached from VerseRuntime's ABI callbacks.
 	//

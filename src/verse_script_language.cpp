@@ -1,6 +1,7 @@
 #include "verse_script_language.h"
 
 #include "verse_api_classes.h"
+#include "verse_bindings_gen.h"
 #include "verse_api_skipped.h"
 #include "verse_class_decl.h"
 #include "verse_keywords.h"
@@ -467,6 +468,7 @@ void VerseScriptLanguage::_bind_methods() {
 	// Only so EditorFileSystem's filesystem_changed has something to connect to; a signal needs a
 	// bound method, and nothing else here is reachable from Godot by name.
 	ClassDB::bind_method(D_METHOD("on_filesystem_changed"), &VerseScriptLanguage::on_filesystem_changed);
+	ClassDB::bind_method(D_METHOD("on_script_classes_updated"), &VerseScriptLanguage::on_script_classes_updated);
 
 	// The hover harness' one seam. `_lookup_code` is a virtual, and a virtual is metadata in
 	// ClassDB rather than a MethodBind (class_db.cpp's add_virtual_method fills virtual_methods
@@ -3592,6 +3594,26 @@ void VerseScriptLanguage::_frame() {
 			}
 		}
 
+		// The roster hook, beside it and for the same reason -- there is no EditorFileSystem to
+		// connect to until the editor's singletons exist. `script_classes_updated` is
+		// language-agnostic, so a C# `class_name` re-arms this with no code of its own; OQ-17 is
+		// still that nothing here has ever run C#.
+		if (!bindings_hook_connected) {
+			EditorInterface *editor_interface = verse_editor_interface();
+			EditorFileSystem *filesystem = editor_interface != nullptr ? editor_interface->get_resource_filesystem() : nullptr;
+			if (filesystem != nullptr) {
+				filesystem->connect("script_classes_updated", Callable(this, "on_script_classes_updated"));
+				bindings_hook_connected = true;
+			}
+		}
+
+		// Regenerated on the frame after the roster moved rather than inside the signal, because
+		// the generator loads every `class_name` script and the signal is emitted from the middle
+		// of the editor's own scan.
+		if (bindings_refresh_pending && refresh_bindings()) {
+			bindings_refresh_pending = false;
+		}
+
 		// The first ask, and every one a change to the program has re-armed. The poll above is
 		// what clears docs_refresh_attempted, so this costs one republish per analysis rather
 		// than one per frame for a class that still cannot be described.
@@ -3845,6 +3867,46 @@ void VerseScriptLanguage::invalidate_script_class_names() const {
 	script_class_names_built = false;
 }
 
+void VerseScriptLanguage::on_script_classes_updated() {
+	bindings_refresh_pending = true;
+}
+
+bool VerseScriptLanguage::refresh_bindings() {
+#ifdef TOOLS_ENABLED
+	VerseRuntime *runtime = get_runtime();
+	if (runtime == nullptr || !runtime->is_host_loaded() || !runtime->host_has_compiler()) {
+		// The host loads lazily, so the first frames of a session have nothing to hand a package
+		// to. Answering false keeps the request armed rather than dropping it.
+		return false;
+	}
+
+	const VerseBindings bindings = verse_generate_bindings();
+	runtime->set_bindings(bindings);
+
+	// Written as well as handed over, because a generated file nobody can read is a generated file
+	// nobody can debug: the Verse the host compiled is exactly these bytes, so a diagnostic against
+	// `GodotBindings.verse` has somewhere to point. Under `.godot/`, which is never committed and
+	// which `find_project_files` already skips along with every other dot-directory -- so it is not
+	// project source and is never compiled twice.
+	const String generated = "res://.godot/verse/bindings.verse";
+	if (bindings.source.empty()) {
+		if (FileAccess::file_exists(generated)) {
+			DirAccess::remove_absolute(generated);
+		}
+		return true;
+	}
+	if (DirAccess::make_dir_recursive_absolute("res://.godot/verse") == OK) {
+		Ref<FileAccess> file = FileAccess::open(generated, FileAccess::WRITE);
+		if (file.is_valid()) {
+			file->store_string(String(bindings.source.c_str()));
+		}
+	}
+	return true;
+#else
+	return true;
+#endif
+}
+
 void VerseScriptLanguage::on_filesystem_changed() {
 	// EditorFileSystem emits this at the end of every scan and once per frame for a batch of
 	// update_file calls, which covers a file created, deleted, renamed or moved however it
@@ -3901,6 +3963,15 @@ Error VerseScriptLanguage::build_project() {
 	// hook a game -- where there is no EditorFileSystem to signal -- still has.
 	invalidate_script_class_names();
 	refresh_module_map();
+
+	// And the bindings, for the same reason and one more: a build is the one moment a *script*
+	// the roster names is guaranteed to be on disk and loadable, and a Verse file naming a binding
+	// does not compile until the package holding it is in the project. `_frame` refreshes these
+	// too, which is what makes an addon completable without a build -- but a headless run reaches
+	// this before its first frame.
+	if (bindings_refresh_pending && refresh_bindings()) {
+		bindings_refresh_pending = false;
+	}
 
 	// An exported game has nothing to build. vh_init loaded the generation the cooker published,
 	// and every .verse under res:// is a one-byte stub (D10) -- compiling those would replace a

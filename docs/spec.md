@@ -1835,8 +1835,11 @@ section written after the spikes.
   hover, an argument hint, and a compile error at the call rather than an empty `variant` at
   runtime. A script with no `class_name` has no global name to bind and is skipped; it is *said*
   to be skipped rather than silently absent. The dynamic route (R-INT-2) is unaffected and stays
-  the answer for anything a binding cannot describe. Status: **not built** — designed in
-  [`generated-bindings.md`](generated-bindings.md), all five spikes back (§10), Phase 7c.
+  the answer for anything a binding cannot describe. Status: **done for a script class, and for a
+  GDExtension class as far as this harness can see one.** A GDScript `class_name` is a Verse type:
+  `tests/integration/mob.gd` is reached as `mob`, and the cast, the declared result types and the
+  `logic` are all asserted. What a binding carries is still only methods and signals — properties,
+  enums, constants and statics are R-INT-9's remainder.
 
   The shape is a **subclass of the mirrored base**, not a wrapper holding one: a wrapper cannot
   be passed to `AddChild` and reads `M.Target.GetName()` at every call site. A binding therefore
@@ -1851,9 +1854,11 @@ section written after the spikes.
   open as well as on a roster change. The trigger is language-agnostic —
   `EditorFileSystem.script_classes_updated` for script classes and `GDExtensionManager`'s three
   signals for ClassDB — so C# costs no new code (OQ-17 still says no test here has ever run it).
-  Status: **the package is done, the trigger is not.** `vh_set_bindings` (ABI 11.1) replaces the
-  package and `host_smoke` asserts a roster change across two builds, source and table apart; what
-  is missing is the consumer that watches the roster and writes the file.
+  Status: **done.** The consumer regenerates on `script_classes_updated` and before every build, and
+  writes the package to `res://.godot/verse/bindings.verse` for the author to read when a diagnostic
+  names it. **Only what a GDExtension registered is bound**, which was a correction rather than a
+  decision: the editor's ClassDB carries every editor-only class, and binding those produced 1677
+  lines of Verse for classes an exported game does not have.
 
   **A package of its own, rather than rows in the mirror.** The mirror is one package in the
   engine tree, shared by every project on the machine, and these classes are per-project and
@@ -1907,13 +1912,19 @@ section written after the spikes.
 - **R-INT-11 (MUST)** An exported game runs a script that uses a binding. A game shipping a
   physics addon needs its bindings at runtime, so the class-to-binding mapping joins the sidecar
   beside the declared types and the 503 signal payloads (R-DIST-11), and the export layer asserts
-  a case that calls through one. Status: **not built** — designed in
-  [`generated-bindings.md`](generated-bindings.md), all five spikes back (§10), Phase 7c.
+  a case that calls through one. Status: **half done.** The export plugin generates the package and
+  hands it to `verse_cook.exe` as `-bindings=<file>`, so an exported game's Verse compiles against
+  its bindings and the export layer asserts that. What is missing is the **table**: the
+  class-to-binding map lives only in the editor host's memory, so a handle in an exported game
+  cannot be keyed on it. The four cast cases are printed as skips in the export run, with that
+  reason, rather than dropped.
 
 - **R-INT-12 (SHOULD)** A script constructs a bound class by the Godot spelling: a ClassDB class
   through `ClassDB.instantiate(name)`, a script class by minting its base and then `set_script`,
-  which R-INT-1 already names. Status: **not built** — designed in
-  [`generated-bindings.md`](generated-bindings.md), all five spikes back (§10), Phase 7c.
+  which R-INT-1 already names. Status: **the host half is done, the consumer's is not.**
+  `GodotPeerClassFor` answers a binding's own Godot class and `host_smoke` asserts it mints that
+  rather than the mirrored ancestor; what the consumer does with a *script* binding's global name —
+  make the base, then `set_script` — is not written, so constructing one from Verse is refused.
   Constructing a binding mints the *bound* Godot class and not its
   nearest mirrored ancestor, which is the trap: `GodotPeerClassFor` walks to the nearest ancestor
   in `/Godot.org/Godot` to decide what to mint, so left alone it hands back a `RigidBody2D` where

@@ -136,6 +136,7 @@ bool VerseHostLibrary::load(const String &p_dll_path, String &r_error) {
 	// The eleven that need a compiler, plus vh_host_kind, which a host older than 8.2 has not got.
 	resolve_optional(handle, "vh_host_kind", HostKind);
 	resolve_optional(handle, "vh_compile_project", CompileProject);
+	resolve_optional(handle, "vh_set_bindings", SetBindings);
 	resolve_optional(handle, "vh_resolve_unknown_name", ResolveUnknownName);
 	resolve_optional(handle, "vh_check_project", CheckProject);
 	resolve_optional(handle, "vh_check_project_begin", CheckProjectBegin);

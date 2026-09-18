@@ -900,7 +900,8 @@ ever need to reach. No design yet, by decision; when it is written it starts fro
 
 ## Phase 7c — Generated bindings for classes the mirror does not carry
 
-**Designed, spiked, and one piece built.** [`generated-bindings.md`](generated-bindings.md) is the design,
+**Mostly built.** R-INT-7 and R-INT-8 are done, R-INT-9 carries methods and signals, R-INT-11 is
+half done and R-INT-10 is not started. [`generated-bindings.md`](generated-bindings.md) is the design,
 written before the work, and its **§10 is the part to read** — all five spikes came back and two
 of them corrected the decision table. R-INT-7 to R-INT-12.
 
@@ -915,9 +916,12 @@ It waits until after Phase 7b for a reason that is now a requirement rather than
 R-INT-11 says an exported game runs a script that uses a binding, and there was no cooked path to
 carry the mapping on until the sidecar existed.
 
-- **R-INT-7, R-INT-8** — the generator and the package. A binding is a subclass of the mirrored
-  base in a package of the project's own, generated under `.godot/`, regenerated on any roster
-  change and on project open. Generational naming, for the reason R-ITER-1's generations are (OQ-8).
+- **R-INT-7, R-INT-8** — **done.** A binding is a subclass of the mirrored base in a package of the
+  project's own, generated under `.godot/`, regenerated on `script_classes_updated` and before every
+  build. Generational naming, for the reason R-ITER-1's generations are (OQ-8). One correction the
+  design did not have: **only what a GDExtension registered is bound**, because the editor's ClassDB
+  carries every editor-only class and binding those emitted 1677 lines of Verse for classes an
+  exported game does not have.
 - **R-INT-9** — the classifications. The one thing that had to move first is **done**:
   `CallConst` and `CallvConst` on `object`, without which no binding can be `<reads>` at all.
   Six arities plus the `godot_array` spelling, over the `VhCallValueConst` native that was
@@ -925,13 +929,14 @@ carry the mapping on until the sidecar existed.
   the overload set put to the runtime compiler, which is the half a host build cannot answer;
   `marshal.verse` and `test_cases.gd` carry five assertions that run in the editor and in an
   export. What is left of R-INT-9 is the generator that decides which methods get the word.
-- **R-INT-10** — inheritance, and the refusal. `boss := class(mob)` and
-  `player := class(rapier_character_body)` both work; `player := class(mob)` cannot, and is refused
-  in `_validate` at the class's own line rather than left to raise at the first inherited call.
-  This is R-INT-6's answer, and R-INT-6 is updated to say so.
-- **R-INT-11, R-INT-12** — the cooked path and construction. The class-to-binding mapping joins
-  the sidecar; `GodotPeerClassFor` learns the bindings package, without which constructing a
-  binding mints its nearest *mirrored* ancestor and a working scene looks entirely normal.
+- **R-INT-10** — **not started**, and it is the one that matters most of what is left: the spelling
+  `player := class(mob)` compiles today and raises at the first inherited call, a long way from its
+  cause. The refusal belongs in `_validate`, at the class's own line.
+- **R-INT-11, R-INT-12** — half each. `GodotPeerClassFor` knows the bindings package, so a binding
+  mints what it binds; the export plugin generates the package and hands it to `verse_cook.exe`, so
+  an exported game's Verse compiles. What is left is the **table** in the sidecar, without which a
+  handle in an exported game cannot be keyed on a binding — the four cast cases are skips in the
+  export run — and the consumer's half of R-INT-12, which is `set_script` for a script binding.
 
 **The order the spikes argue for.** `CallConst` first, because R-INT-9 is unbuildable without it
 and it is the only piece that touches the mirror — **done**. Then the host half — the bindings package and

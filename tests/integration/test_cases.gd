@@ -571,6 +571,58 @@ func begin() -> void:
 	_check_eq("a <reads> function calls a <reads> function that reaches Godot",
 			node.call("SumOtherConst", self, "_double", 10, 11), 42)
 
+	# --- R-INT-7: the same GDScript class as a *declared type* -----------------------------------
+	#
+	# `res://mob.gd` is ordinary GDScript with a `class_name` and no knowledge of Verse.
+	# `res://scripts/bindings.verse` names `mob`, which nothing on disk declares: the editor read
+	# `Mob` out of Godot's global class list, described it from `get_script_method_list`, emitted
+	# Verse for it and handed that to the host as a package of its own. So the first assertion is
+	# that the fixture *compiled at all* -- a binding that did not generate is an unknown
+	# identifier, not a wrong answer.
+	# The *cast* is editor-only until R-INT-11 carries the class-to-binding table in the sidecar.
+	# A cooked game compiles the bindings package -- the export plugin writes it and the cooker
+	# is handed it -- so `bindings.verse` is in the export and this fixture proves it compiled
+	# there. What an exported host cannot yet do is *key* a crossing handle on it, because the
+	# table lives only in the editor host's memory.
+	var binding_script: Script = ResourceLoader.load("res://scripts/bindings.verse")
+	if not editor:
+		_check("a script naming a generated binding compiles", binding_script != null and binding_script.can_instantiate())
+		_skip("a Verse script casts a node to its GDScript class's binding", "the sidecar carries no binding table yet (R-INT-11)")
+		_skip("and reaches a method whose declared result type is GDScript's", "the sidecar carries no binding table yet (R-INT-11)")
+		_skip("and a bool answers a logic rather than a <decides>", "the sidecar carries no binding table yet (R-INT-11)")
+		_skip("a node carrying no such script declines the cast", "the sidecar carries no binding table yet (R-INT-11)")
+	elif binding_script == null or not binding_script.can_instantiate():
+		_check("a script naming a generated binding compiles", false)
+	else:
+		_check("a script naming a generated binding compiles", true)
+		var binder := Node2D.new()
+		binder.set_script(binding_script)
+		tree.root.add_child(binder)
+
+		var mob_node: Node2D = Mob.new()
+		tree.root.add_child(mob_node)
+
+		# The cast is Verse's own downcast over R-SCN-6, with no new machinery: the handle
+		# crosses in and `ObjectForHandle` asks whether a script on it names a binding before
+		# it asks what `get_class()` says -- which answers RigidBody2D here and would give a
+		# mirror wrapper the cast could never succeed against.
+		_check_eq("a Verse script casts a node to its GDScript class's binding",
+				binder.call("AskCast", mob_node), 42)
+		_check_eq("and reaches a method whose declared result type is GDScript's",
+				binder.call("AskLabel", mob_node), "mob")
+		_check("and a bool answers a logic rather than a <decides>",
+				binder.call("AskHeavy", mob_node))
+
+		# A node with no such script declines the cast rather than answering something. The
+		# binding is a *type*, so this is the compiler's own failure and costs nothing at all.
+		var plain := Node2D.new()
+		tree.root.add_child(plain)
+		_check_eq("a node carrying no such script declines the cast",
+				binder.call("AskCast", plain), -1)
+		plain.queue_free()
+		mob_node.queue_free()
+		binder.queue_free()
+
 	# --- R-TYPE-2 / R-INT-2: a container the script built itself --------------------------------
 	#
 	# Until now a script could only hold a container Godot handed it. `godot_array{}` compiles and

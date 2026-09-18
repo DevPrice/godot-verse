@@ -1,6 +1,7 @@
 #include "verse_export_plugin.h"
 
 #include "verse_export_paths.h"
+#include "verse_bindings_gen.h"
 #include "verse_host_paths.h"
 #include "verse_script_language.h"
 
@@ -127,9 +128,30 @@ void VerseExportPlugin::_export_begin(const PackedStringArray &p_features, bool 
 		file->store_string(String("\n").join(lines) + String("\n"));
 	}
 
+	// The bindings package (R-INT-11). The cooker cannot generate it -- its classes come from
+	// ClassDB and from Godot's global class list, and `verse_cook.exe` has no Godot -- so what the
+	// editor generated is written out and named on the command line. Beside the work directory for
+	// the manifest's reason: the plugin ships that directory whole and this is not part of a game.
+	const VerseBindings bindings = verse_generate_bindings();
+	String bindings_path;
+	if (!bindings.source.empty()) {
+		bindings_path = work + String(".bindings.verse");
+		Ref<FileAccess> file = FileAccess::open(bindings_path, FileAccess::WRITE);
+		if (file.is_null()) {
+			refused = true;
+			temp_dir = String();
+			say(EditorExportPlatform::EXPORT_MESSAGE_ERROR, String("Could not write ") + bindings_path);
+			return;
+		}
+		file->store_string(String(bindings.source.c_str()));
+	}
+
 	PackedStringArray args;
 	args.push_back(manifest);
 	args.push_back(work);
+	if (!bindings_path.is_empty()) {
+		args.push_back(String("-bindings=") + bindings_path);
+	}
 
 	Array output;
 	const int32_t status = OS::get_singleton()->execute(cooker, args, output, /*read_stderr*/ true);
