@@ -421,6 +421,13 @@ def virtual_default(info, enums: dict, is_predicate: bool = False):
         return VIRTUAL_SCALAR_DEFAULTS[verse_type]
     if verse_type.startswith("[]"):
         return "array{}"
+    # A parametric container has no archetype to write: `typed_array(dictionary){}` does not
+    # compile, because `Unpack` and `Pack` are required data members with no defaults -- one class
+    # covers every element type by carrying the conversion as a *value*, which is the whole design
+    # (GodotApi.native.verse). What it has instead is the generated maker beside its converters, and
+    # that answers a real empty Godot array rather than the reference 0 `godot_array{}` holds.
+    if verse_type.startswith("typed_array(") and info.unpack_fn.startswith("VhTo"):
+        return f"Make{info.unpack_fn[len('VhTo'):]}()"
     if verse_type in VALUE_STRUCT_NAMES:
         return f"{verse_type}{{}}"
     for enum in enums.values():

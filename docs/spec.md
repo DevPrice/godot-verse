@@ -496,7 +496,10 @@ on closing it.
   `_unhandled_key_input`, `_gui_input`, `_draw`, `_notification`, `_get_configuration_warnings`,
   `_to_string`, and the rest — not a curated list of three. The mechanism must be general: a new
   Godot virtual in a future engine version must not require a code change here.
-  Status: **done** (Phase 4 stage 5). All **1413** of `extension_api.json`'s virtuals are generated
+  Status: **done** (Phase 4 stage 5), and all 1413 are emitted rather than most of them: the two
+  return kinds that had no default body -- an object, and a parametric container -- both have
+  one now, an option's `false` and the container's generated maker (`by-hand-findings.md` B37).
+  All **1413** of `extension_api.json`'s virtuals are generated
   onto the class that declares them — `_Input` and `_Ready` on `node`, `_Draw` on `canvas_item`,
   `_GuiInput` on `control` — with a default body a script says `<override>` over, and Verse's own
   redeclaration rules supply the error when a signature is wrong. The mechanism is general by

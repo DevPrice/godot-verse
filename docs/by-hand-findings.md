@@ -1544,8 +1544,18 @@ with `false`, which is Godot's own contract written down, and they are in the mi
 `EditorExportPlugin._CustomizeResource` and 37 more. The 2 that *are* marked keep the class and
 default to `Err("...must be overridden...")`: an override really must answer, and a body no
 override replaces is one nothing calls, because `vh_class_method_list` reports a class's own
-declarations. The skip category is 34 rows now instead of 77, and what is left is a parametric
-container, which has no literal either.
+declarations.
+
+That left 34 skips, all of them a `typed_array(...)` return, and the reason was the same shape
+and not the same cause: `typed_array(dictionary){}` does not compile, because `Unpack` and
+`Pack` are required data members with no defaults -- one class covers every element type by
+carrying the conversion as a *value*, which is the whole design. What it has instead is the
+generated maker beside its converters, `MakeDictionaryArray()`, which answers a real empty
+Godot array rather than the reference 0 that `godot_array{}` holds. **So the category is empty
+and all 1413 of Godot's virtuals are in the mirror.** The reason stays in the generator and in
+the editor's explanation, so a future Godot return type with no default reappears through it
+rather than going quiet -- and the units layer keeps it exercised with a typed *dictionary*,
+which has neither a literal nor a maker.
 
 What is unchanged, and said here so it does not read as an oversight: a **signal**'s payload,
 which can carry null and is not spelled for it.

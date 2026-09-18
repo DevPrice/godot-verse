@@ -9,15 +9,12 @@ probe := class(node2d):
     # superseded_by_property: Node2D.get_position is reachable as the property `Position`.
     Superseded()<transacts>:vector2 = GetPosition()
 
-    # virtual_no_default: since Phase 4 every one of Godot's 1413 virtuals is generated, so
-    # `_EnterTree` is an ordinary member of `node` and only the ones whose return type has no
-    # writable default are skipped. An unoverridden virtual has to answer *something*, and a
-    # parametric container has no literal to be that.
-    #
-    # An *object* return used to be here and is not skipped any more: Godot says which returns may
-    # be null, so the mirror declares those `?class`, and an option has a default where a class has
-    # none (`by-hand-findings.md` B37).
-    Virtual(S:audio_stream)<transacts>:void = S.GetParameterList()
+    # There is no `virtual_no_default` case to probe any more, and the absence is the record of why.
+    # An unoverridden virtual has to answer *something*, and the two kinds that had nothing to
+    # answer with both do now: an object return is an option, which defaults to `false`, and a
+    # parametric container has the generated maker beside its converters. All 1413 are in the
+    # mirror. The reason still exists in the generator and in the editor's explanation, so a future
+    # Godot return type that has no default comes back through it rather than silently.
 
     # property_renamed: VisualShaderNodeFloatParameter.max cannot be a `var` named Max --
     # /Verse.org/Verse's Max is a function, and data has no signature to be told apart by -- so it is

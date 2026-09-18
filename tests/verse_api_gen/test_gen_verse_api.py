@@ -548,9 +548,13 @@ def test_virtual_emits_a_default_body():
                 # An object return is declared as an option, which is what gives it a default at
                 # all -- `false`. Godot marks the returns that may not be null and this is not one.
                 dict(_method("_get_owner", "Object"), is_virtual=True),
-                # A parametric container has no literal to default to, so it is a recorded skip
-                # rather than a silent absence.
+                # A typed array has no literal either -- `typed_array(dictionary){}` does not
+                # compile, because Unpack and Pack are required members -- but it has the generated
+                # maker beside its converters, which answers a real empty Godot array.
                 dict(_method("_get_parameter_list", "typedarray::Dictionary"), is_virtual=True),
+                # A typed *dictionary* has neither, so it is a recorded skip rather than a silent
+                # absence, and it is what keeps that path exercised now the mirror needs none.
+                dict(_method("_get_defaults", "typeddictionary::int;String"), is_virtual=True),
             ]},
         ]
     }
@@ -565,8 +569,11 @@ def test_virtual_emits_a_default_body():
                "    _HasPoint<public>()<decides>:void = false?" in block, block)
     check_true("an object-returning one is an option, which is what it defaults to",
                "    _GetOwner<public>():?object = false" in block, block)
+    check_true("a typed array one answers the maker beside its converters",
+               "    _GetParameterList<public>():typed_array(dictionary) = MakeDictionaryArray()" in block,
+               block)
     check_true("a virtual with no writable default is skipped, not emitted",
-               "_GetParameterList" not in block, block)
+               "_GetDefaults" not in block, block)
     check("and the skip says why", coverage.skip_reasons.get("virtual_no_default"), 1)
 
 

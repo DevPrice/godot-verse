@@ -438,8 +438,11 @@ def run_integration(results: Results, engine: Path | None, godot: Path | None) -
 # in this repository is read by whoever wrote the generator and by nobody else.
 COVERAGE_EXPLANATIONS = [
     "Godot has get_position, but it is reachable as the property `Position`.",
-    "Godot has AudioStream._get_parameter_list, but it is a Godot virtual returning "
-    "`typed_array(dictionary)`",
+    # `virtual_no_default` has no row to assert: every one of Godot's 1413 virtuals is generated
+    # now, because the two return kinds that had nothing to answer with both got one -- an object
+    # return is an option defaulting to `false`, and a parametric container has its generated maker.
+    # The reason is still in the generator and in the explanation, so a future Godot type with no
+    # default reappears here rather than going quiet.
     "Godot has VisualShaderNodeFloatParameter.max, but a Verse function already answers to that "
     "name, so it is the property `Maximum`.",
     "Godot has VisualShaderNodeFloatParameter.get_max, but it is reachable as the property `Maximum`.",
@@ -475,7 +478,7 @@ COVERAGE_EXPLANATIONS = [
     # A compiler warning, pinned to its severity: the build logs a warning as a warning, where an
     # analysis logs nothing at any severity. Every diagnostic is filed through one sink now, so a
     # warning that leaked around it would print as this line without the prefix.
-    "WARNING: res://scripts/probe.verse:42:9: Unreachable code - previous expression is guaranteed "
+    "WARNING: res://scripts/probe.verse:39:9: Unreachable code - previous expression is guaranteed "
     "to exit early.",
     # B19 Stage B: `@global_class` on a class that is not the one named after its file. The
     # attribute is accepted by the compiler and registers nothing, which the bridge used to pass

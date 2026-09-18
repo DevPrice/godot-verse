@@ -490,7 +490,7 @@ the editor and `export_check.gd` as an autoload in an export.
 
 **What the mirror is**, since no single file shows it: all 1036 Godot classes as a Verse class
 hierarchy, Godot's own `Object` among them; its 793 enums as real Verse enums; all 1413 of
-`extension_api.json`'s virtuals, spelled Godot's way (74 skipped with a recorded reason); properties as writable members rather than get/set pairs; **Godot's `bool` as two
+`extension_api.json`'s virtuals, spelled Godot's way, every one of them emitted; properties as writable members rather than get/set pairs; **Godot's `bool` as two
 different things** — 568 predicates and 161 bool virtuals as `<decides>:void`, the way Verse's own
 comparisons and `GodotMath`'s `HasPoint` are spelled, and `logic` kept for the 306 methods that
 answer a value rather than a test (an accessor with a `set_` twin, an outcome like `MoveAndSlide`);
