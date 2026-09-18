@@ -15,6 +15,8 @@
 #include <godot_cpp/classes/performance.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/classes/ref_counted.hpp>
+#include <godot_cpp/classes/resource_loader.hpp>
+#include <godot_cpp/classes/script.hpp>
 #include <godot_cpp/classes/scene_tree.hpp>
 #include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/classes/window.hpp>
@@ -1311,18 +1313,65 @@ int32_t VerseRuntime::api_call_method(void *p_ctx, vh_handle p_handle, const cha
 }
 
 
+/// The script a global `class_name` stands for, or an invalid Ref.
+///
+/// The class list is the only place a script class's path is written down -- ClassDB has never
+/// heard of one -- and it lives in `project.godot`, so an exported game answers this too.
+static Ref<Script> script_for_global_class(const StringName &p_class_name) {
+	ProjectSettings *settings = ProjectSettings::get_singleton();
+	if (settings == nullptr) {
+		return Ref<Script>();
+	}
+	const TypedArray<Dictionary> globals = settings->get_global_class_list();
+	for (int64_t i = 0; i < globals.size(); i++) {
+		const Dictionary entry = globals[i];
+		if (StringName(entry.get("class", String())) != p_class_name) {
+			continue;
+		}
+		const String path = entry.get("path", String());
+		if (path.is_empty()) {
+			return Ref<Script>();
+		}
+		return ResourceLoader::get_singleton()->load(path);
+	}
+	return Ref<Script>();
+}
+
 vh_handle VerseRuntime::api_instantiate_class(void *p_ctx, const char *p_class_utf8, int32_t p_class_len) {
 	const StringName class_name(String::utf8(p_class_utf8, p_class_len));
 
-	// Asked rather than attempted: ClassDB::instantiate on an abstract class or on one of the
-	// engine's singleton services pushes an error of its own and answers nil, and the sentence the
-	// script's author needs ("that class has no object to be") is the host's to raise.
 	ClassDBSingleton *class_db = ClassDBSingleton::get_singleton();
-	if (class_db == nullptr || !class_db->class_exists(class_name) || !class_db->can_instantiate(class_name)) {
+	if (class_db == nullptr) {
 		return 0;
 	}
 
-	const Variant made = class_db->instantiate(class_name);
+	Variant made;
+	// Asked rather than attempted: ClassDB::instantiate on an abstract class or on one of the
+	// engine's singleton services pushes an error of its own and answers nil, and the sentence the
+	// script's author needs ("that class has no object to be") is the host's to raise.
+	if (class_db->class_exists(class_name) && class_db->can_instantiate(class_name)) {
+		made = class_db->instantiate(class_name);
+	} else if (const Ref<Script> script = script_for_global_class(class_name); script.is_valid()) {
+		// R-INT-12. A script's `class_name` is not a ClassDB class and never will be, so there is
+		// nothing for `instantiate` to make and the host's sentence -- "that class has no object to
+		// be" -- was true of the wrong question. Godot's own way to build one is to make the base
+		// the script extends and attach the script, which is what `MainScript.new()` does
+		// underneath.
+		//
+		// Minting one is legal even though R-INT-10 refuses a Verse class that *extends* a script
+		// binding: what that refuses is putting a second script on a node whose script is already
+		// the Verse one, and this object is fresh and holds exactly the script the binding's
+		// methods call through.
+		const StringName base = script->get_instance_base_type();
+		if (!class_db->class_exists(base) || !class_db->can_instantiate(base)) {
+			return 0;
+		}
+		made = class_db->instantiate(base);
+		if (Object *based = Object::cast_to<Object>(made)) {
+			based->set_script(script);
+		}
+	}
+
 	Object *obj = Object::cast_to<Object>(made);
 	if (obj == nullptr) {
 		return 0;

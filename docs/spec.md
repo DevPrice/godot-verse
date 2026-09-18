@@ -1932,10 +1932,16 @@ section written after the spikes.
 
 - **R-INT-12 (SHOULD)** A script constructs a bound class by the Godot spelling: a ClassDB class
   through `ClassDB.instantiate(name)`, a script class by minting its base and then `set_script`,
-  which R-INT-1 already names. Status: **the host half is done, the consumer's is not.**
+  which R-INT-1 already names. Status: **done.**
   `GodotPeerClassFor` answers a binding's own Godot class and `host_smoke` asserts it mints that
-  rather than the mirrored ancestor; what the consumer does with a *script* binding's global name —
-  make the base, then `set_script` — is not written, so constructing one from Verse is refused.
+  rather than the mirrored ancestor; `api_instantiate_class` makes a script class by loading it
+  out of the global class list, instantiating `get_instance_base_type()` and attaching the script,
+  which is what `MainScript.new()` does underneath. Reaching for the class list rather than for
+  the binding roster is deliberate: the roster is the editor's, and `project.godot` carries the
+  class list into an exported game. **Minting one is legal where attaching is not** — R-INT-10
+  refuses a Verse class that extends a script binding *on a node*, because that node's one script
+  instance would be the Verse one; a minted object is fresh and holds exactly the script the
+  binding's methods call through.
   Constructing a binding mints the *bound* Godot class and not its
   nearest mirrored ancestor, which is the trap: `GodotPeerClassFor` walks to the nearest ancestor
   in `/Godot.org/Godot` to decide what to mint, so left alone it hands back a `RigidBody2D` where
@@ -1955,10 +1961,16 @@ external editor is secondary.
   own critical/warning/notice word lists) colour the way GDScript's do. The **type** set is every
   name the mirror exports — the 1036 classes, the 793 enums, the sixteen value types, `rid`,
   `variant` and the containers — plus Verse's own type names that its reserved-word list does not
-  carry, which is `char` and the concurrency vocabulary. Three of those groups reached it through
+  carry, which is `char` and the concurrency vocabulary, plus every generated binding (R-INT-7)
+  and every type the open file declares at top level. Three of those groups reached it through
   one table and the rest through none, so `vector2` coloured and `vector2i` did not; the units layer
   now checks the tables against the mirror's own source, which is the half of this a headless run
-  can see. Whether the editor *draws* the colour stays a by-hand check
+  can see. **A type draws in one of the editor's three type colours**, split GDScript's way
+  (`gdscript_highlighter.cpp`): engine for a mirrored class ClassDB knows, a mirrored enum and a
+  GDExtension binding; user for the project's own classes, a binding for a script `class_name` and
+  anything the open file declares; base for the value types and the exported ones. Only the class a
+  file is *named after* is project-wide — a second class in a file is coloured in that file alone,
+  which is the same trade the member scan already makes. Whether the editor *draws* the colour stays a by-hand check
   (`by-hand-findings.md` B23): the highlighter registers at Godot's editor initialization level, so
   nothing a `--script` run can reach ever constructs one.
 - **R-TOOL-2 (MUST)** Inline diagnostics as you type, from real semantic analysis rather than a
