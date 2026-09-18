@@ -828,7 +828,7 @@ Dictionary VerseScriptLanguage::_validate(const String &p_script, const String &
 	{
 		const VerseClassDecl base_decl = verse_scan_class_decl(p_script.utf8().get_data(),
 				p_path.get_file().get_basename().utf8().get_data());
-		if (!base_decl.base.empty() && script_binding_names.has(String(base_decl.base.c_str()))) {
+		if (!base_decl.base.empty() && is_script_binding(String(base_decl.base.c_str()))) {
 			errors.push_back(script_binding_base_error(
 					script_binding_base_message(String(base_decl.name.c_str()), String(base_decl.base.c_str())),
 					// The scanner counts rows from zero; Godot's error lines start at one.
@@ -2543,6 +2543,31 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 // with a real type rather than LOOKUP_RESULT_MAX because newer Godot bounds-checks the value and
 // would turn every hover into the error spam this used to be written to avoid.
 //
+// R-INT-7's bindings, which have a Verse declaration that nobody wrote. The package is a synthetic
+// snippet the host reads back from a digest in the engine tree, so the location a lookup answers
+// is a file no editor can open and the comment above it is generated -- which left a hover on a
+// binding with no class to name, no prose to draw and nowhere to jump, and hide_if_empty turned
+// that into no tooltip and no ctrl-hover underline at all.
+//
+// What the author *did* write is either the GDScript the binding stands for or nothing, and both
+// have a documentation page: a script class has the doc Godot generates for it, a GDExtension
+// class the one built from ClassDB. Naming it is what fetches either.
+//
+// The location beside it is what makes the click land, and it is GDScript's own answer for a
+// global class name (gdscript_editor.cpp's `ScriptServer::is_global_class` arm): the script's
+// path, and 0 for the line, because a script's method list carries no line numbers. It is not
+// redundant with class_name -- the help viewer is skipped for a *script* doc
+// (script_text_editor.cpp tests is_script_doc), and a script binding's class is one, so the
+// click falls through to the location. A GDExtension class has neither, and goes to the docs.
+static void fill_binding_result(Dictionary &r_result, const VerseScriptLanguage::BindingInfo &p_binding) {
+	r_result["result"] = (int64_t)OK;
+	r_result["class_name"] = p_binding.script_class.is_empty() ? p_binding.godot_class : p_binding.script_class;
+	if (!p_binding.script_path.is_empty()) {
+		r_result["script_path"] = p_binding.script_path;
+		r_result["location"] = (int64_t)0;
+	}
+}
+
 // The two live types are the only ones that serve both features: SCRIPT_LOCATION jumps but shows
 // no tooltip at all, and the CLASS_* types route into Godot's own class documentation, which has
 // nothing to say about a Verse definition. LOCAL_VARIABLE and LOCAL_CONSTANT build a tooltip out
@@ -2564,6 +2589,15 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 			result["result"] = (int64_t)OK;
 			result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS;
 			result["class_name"] = String(godot_class);
+			return result;
+		}
+		// A binding survives the same five cases, and for the same reason: the table is the
+		// consumer's own, so it answers with no host, no build, a stale buffer and a busy
+		// analysis alike. It is asked after the mirror because the mirror cannot be shadowed --
+		// a binding for a class the mirror carries is never generated.
+		if (const BindingInfo *binding = p_symbol.is_empty() ? nullptr : binding_for(p_symbol)) {
+			result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS;
+			fill_binding_result(result, *binding);
 		}
 		return result;
 	};
@@ -2751,6 +2785,10 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 		if (script_class_names().has(found_name)) {
 			result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS;
 			result["class_name"] = found_name;
+		} else if (const BindingInfo *binding = binding_for(found_name)) {
+			result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS;
+			fill_binding_result(result, *binding);
+			return result;
 		}
 	} else if (kind == VH_LOOKUP_ENUM) {
 		if (const verse_api::enum_mapping *mirrored = godot_enum_for(found_name)) {
@@ -2848,6 +2886,24 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 		// Only a class: a parameter's owner is the function that declares it, and a local's is a
 		// block. Neither is a property of anything, and both keep the local results, which are the
 		// only ones that can carry prose this has read out of the source itself.
+		// A binding's member, under the Godot name it calls rather than the Verse one it is
+		// written as: `Hit` documents nothing, `hit` is the method GDScript declared. A signal
+		// is a `signal(t)` data member, so the Verse kind cannot tell the two apart and the
+		// table does -- the same reason the mirror's own arm above reads its table's kind.
+		if (const BindingInfo *binding = binding_for(found_owner)) {
+			const HashMap<String, String>::ConstIterator method_found = binding->methods.find(found_name);
+			const HashMap<String, String>::ConstIterator signal_found = binding->signals.find(found_name);
+			if (method_found != binding->methods.end() || signal_found != binding->signals.end()) {
+				const bool is_signal = method_found == binding->methods.end();
+				result["type"] = (int64_t)(is_signal
+								? ScriptLanguageExtension::LOOKUP_RESULT_CLASS_SIGNAL
+								: ScriptLanguageExtension::LOOKUP_RESULT_CLASS_METHOD);
+				fill_binding_result(result, *binding);
+				result["class_member"] = is_signal ? signal_found->value : method_found->value;
+				return result;
+			}
+		}
+
 		if (script_class_names().has(found_owner)) {
 			result["type"] = (int64_t)(kind == VH_LOOKUP_FUNCTION
 							? ScriptLanguageExtension::LOOKUP_RESULT_CLASS_METHOD
@@ -3865,7 +3921,7 @@ void VerseScriptLanguage::report_name_collisions(const PackedStringArray &p_sour
 
 		// R-INT-10's second reporter. The error itself goes to `_validate`, which reaches the
 		// gutter and no log -- so nothing headless could assert it without this line.
-		if (!decl.base.empty() && script_binding_names.has(String(decl.base.c_str()))) {
+		if (!decl.base.empty() && is_script_binding(String(decl.base.c_str()))) {
 			UtilityFunctions::push_error(path + String(": ")
 					+ script_binding_base_message(String(decl.name.c_str()), String(decl.base.c_str())));
 		}
@@ -3918,6 +3974,16 @@ void VerseScriptLanguage::on_script_classes_updated() {
 	bindings_refresh_pending = true;
 }
 
+const VerseScriptLanguage::BindingInfo *VerseScriptLanguage::binding_for(const String &p_verse_class) const {
+	const HashMap<String, BindingInfo>::ConstIterator found = bindings_by_verse_class.find(p_verse_class);
+	return found != bindings_by_verse_class.end() ? &found->value : nullptr;
+}
+
+bool VerseScriptLanguage::is_script_binding(const String &p_verse_class) const {
+	const BindingInfo *binding = binding_for(p_verse_class);
+	return binding != nullptr && !binding->script_class.is_empty();
+}
+
 bool VerseScriptLanguage::refresh_bindings() {
 #ifdef TOOLS_ENABLED
 	VerseRuntime *runtime = get_runtime();
@@ -3936,11 +4002,23 @@ bool VerseScriptLanguage::refresh_bindings() {
 	// makes the script loadable. The next ask fills the members in.
 	bindings_incomplete = !bindings.incomplete.empty();
 
-	script_binding_names.clear();
+	bindings_by_verse_class.clear();
 	for (const VerseBindingClass &binding : bindings.classes) {
-		if (!binding.script_class.empty()) {
-			script_binding_names.insert(String(binding.verse_class.c_str()));
+		BindingInfo info;
+		info.godot_class = String(binding.godot_class.c_str());
+		info.script_class = String(binding.script_class.c_str());
+		info.script_path = String(binding.script_path.c_str());
+		// The same function the emitter names the member with, rather than a field beside it:
+		// two spellings of one name are two things that can disagree.
+		for (const VerseBindingMethod &method : binding.methods) {
+			info.methods.insert(String(verse_binding_member_name(method.godot_name).c_str()),
+					String(method.godot_name.c_str()));
 		}
+		for (const VerseBindingSignal &signal : binding.signals) {
+			info.signals.insert(String(verse_binding_member_name(signal.godot_name).c_str()),
+					String(signal.godot_name.c_str()));
+		}
+		bindings_by_verse_class.insert(String(binding.verse_class.c_str()), info);
 	}
 
 	// Written as well as handed over, because a generated file nobody can read is a generated file

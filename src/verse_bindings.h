@@ -39,6 +39,9 @@ struct VerseBindingClass {
 	std::string godot_class;
 	/// The script's global `class_name`, or empty for a ClassDB class.
 	std::string script_class;
+	/// Where that script lives, so a click on the binding can open the file the author really
+	/// wrote. Empty for a ClassDB class, which has no source under res:// at all.
+	std::string script_path;
 	/// The generated Verse class name.
 	std::string verse_class;
 	/// The Verse class this one derives from: another binding, or a mirrored class.

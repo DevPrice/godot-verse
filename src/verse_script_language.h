@@ -185,9 +185,31 @@ public:
 	// True when the last generation emitted a class as a bare type because its script would not
 	// load, which re-arms the refresh until one describes everything.
 	bool bindings_incomplete = false;
-	// The Verse names of the bindings that stand for a *script* class, which is the one base a
-	// Verse class may not extend (R-INT-10). Filled by refresh_bindings.
-	godot::HashSet<godot::String> script_binding_names;
+	// What a generated binding stands for, which is the only thing the editor can say about
+	// one. The Verse declaration says nothing: the package is a synthetic snippet the host
+	// reads back from a digest in the engine tree, so a binding's `path` is a file no editor
+	// can open and there is no comment above it that anybody wrote.
+	//
+	// Filled by refresh_bindings, and read by _lookup_code, the syntax highlighter and
+	// R-INT-10's refusal.
+	struct BindingInfo {
+		/// The ClassDB class, or empty for a script class.
+		godot::String godot_class;
+		/// The global `class_name`, or empty for a ClassDB class.
+		godot::String script_class;
+		/// The script's res:// path, or empty for a ClassDB class.
+		godot::String script_path;
+		/// Verse member name -> the Godot name it calls, which is what names a doc page.
+		godot::HashMap<godot::String, godot::String> methods;
+		godot::HashMap<godot::String, godot::String> signals;
+	};
+	const BindingInfo *binding_for(const godot::String &p_verse_class) const;
+	// A binding that stands for a *script* class, which is the one base a Verse class may not
+	// extend (R-INT-10).
+	bool is_script_binding(const godot::String &p_verse_class) const;
+	const godot::HashMap<godot::String, BindingInfo> &bindings() const { return bindings_by_verse_class; }
+
+	godot::HashMap<godot::String, BindingInfo> bindings_by_verse_class;
 
 	// The consumer half of R-DIAG-4's break decision, reached from VerseRuntime's ABI callbacks.
 	//

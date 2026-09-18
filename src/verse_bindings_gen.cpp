@@ -357,6 +357,7 @@ VerseBindings verse_generate_bindings() {
 
 		VerseBindingClass binding;
 		binding.script_class = utf8_of(script_name);
+		binding.script_path = utf8_of(path);
 		binding.verse_class = verse_binding_class_name(binding.script_class);
 		binding.verse_base = base;
 		if (binding.verse_class.empty() || !taken.insert(binding.verse_class).second) {

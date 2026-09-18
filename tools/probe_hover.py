@@ -230,13 +230,24 @@ def rules(rows: list[dict]) -> list[Finding]:
                 "H4", row, "a tooltip with neither a type nor a description in it",
                 "a type, the way GDScript fills doc_type for every local"))
 
-        # H5. The host resolved the identifier, knows its type, and the editor draws nothing.
+        # H5. The host resolved the identifier, knows what it is, and the editor draws nothing.
         # Silence is a legitimate answer where there is nothing to say -- `void` has no Godot page
         # and GDScript answers nothing for it either -- so the test is that something was in hand.
-        if not answered and host_resolved and row.get("host_type"):
+        #
+        # A type is what "in hand" meant, and a *class* has none: LookupSymbol fills Type for a
+        # data definition and a function only. So a generated binding, whose whole failure was a
+        # resolved class with nothing on this side to say about it, sat in the corpus reporting
+        # nothing at all -- which is why the kind is asked here beside the type.
+        #
+        # It reports two rows over tests/integration, both `cancelable`, and they are one standing
+        # family rather than a defect of the day: a class of Verse's own library has no Godot page
+        # to name and documents itself with a `@doc` attribute where it documents itself at all.
+        # A *new* row here is one that leaves that family.
+        if not answered and host_resolved and (row.get("host_type") or host_kind == "class"):
+            described_as = f" of type {row['host_type']}" if row.get("host_type") else ""
             findings.append(Finding(
                 "H5", row, "no tooltip",
-                f"a tooltip: the host resolved this to a {host_kind} of type {row['host_type']}"))
+                f"a tooltip: the host resolved this to a {host_kind}{described_as}"))
 
     # H6. A word in prose. `# the script looks up a node` is not code, and a hover over it that
     # answers Godot's Script or Node documentation is the mirror's lowercase class names colliding

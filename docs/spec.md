@@ -1841,6 +1841,14 @@ section written after the spikes.
   `logic` are all asserted. What a binding carries is still only methods and signals — properties,
   enums, constants and statics are R-INT-9's remainder.
 
+  **The editor's four answers are four separate pieces of work and completion was the only one
+  that came free.** Hover, ctrl+click and syntax highlighting all answered nothing for a binding,
+  because a binding's declaration is a synthetic snippet read back from a digest in the engine
+  tree rather than a file under `res://`. They answer for what the author actually wrote instead:
+  the GDScript for a script binding, Godot's class documentation for a GDExtension one, and a
+  member under its Godot name. `generated-bindings.md` §11 is the record, and
+  `tools/probe_hover.py`'s H5 is what fails if it regresses.
+
   The shape is a **subclass of the mirrored base**, not a wrapper holding one: a wrapper cannot
   be passed to `AddChild` and reads `M.Target.GetName()` at every call site. A binding therefore
   inherits all 3312 mirrored properties and 503 signal accessors, and `mob[SomeNode]` is Verse's
