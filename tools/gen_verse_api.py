@@ -1418,14 +1418,15 @@ def emit_math_packers() -> list:
 ClassifiedMethod = namedtuple(
     "ClassifiedMethod",
     ["godot_name", "verse_name", "params", "return_type", "is_void", "default_body", "is_const",
-     "godot_return", "is_vararg", "is_predicate", "return_required"],
+     "godot_return", "is_vararg", "is_predicate", "return_required", "return_optional"],
     # A virtual is the only method with a default body, and it is what makes the declaration a
     # declaration rather than a call: everything else dispatches through the handle. `is_const` is
     # Godot's own flag, and it decides `<reads>` against `<transacts>` (docs/phase-4.5-design.md 3).
     # `is_vararg` makes emit_method answer two lines instead of one -- see there.
     # `return_required` is Godot's `RequiredResult<T>`, which is what takes `<decides>` back off an
-    # object return: see emit_method.
-    defaults=(None, False, "", False, False, False),
+    # object return; `return_optional` is the same metadata read for a *virtual*, where it decides
+    # whether the declaration is `?class` or the class itself. See emit_method.
+    defaults=(None, False, "", False, False, False, False),
 )
 ClassifiedProperty = namedtuple(
     "ClassifiedProperty", ["godot_name", "verse_name", "type_info", "getter", "setter", "index"]
@@ -1831,9 +1832,31 @@ def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members
 
     is_predicate = is_predicate_method(godot_class, m, siblings or {})
 
+    # `RequiredResult<T>`. A virtual is *not* excluded: Godot declaring that a result cannot be null
+    # is a promise an override has to keep, so it decides how the declaration is spelled here the
+    # same way it decides `<decides>` for a call.
+    return_required = bool(return_value) and return_value.get("meta") == "required"
+    answers_object = return_info is not None and return_info.pack_fn == "VhFromObject"
+    # An object-returning virtual is declared as an *option* unless Godot says the result cannot be
+    # null -- which is Godot's own contract, and is what finally gives these a default body. All 43
+    # of them used to be skipped outright for want of one, because no value of a class can stand in
+    # for "nobody overrode this"; an option has `false`.
+    return_optional = is_virtual and answers_object and not return_required
+
     default_body = None
     if is_virtual:
-        default_body = virtual_default(return_info, resolver.enums, is_predicate)
+        if return_optional:
+            default_body = "false"
+        elif answers_object:
+            # Required, so the declaration keeps the class and there is still nothing to answer with.
+            # A body no override replaces is one Godot would be given a wrong value by, so it raises
+            # instead -- the same `Err` R-TYPE-4 spends on a total accessor, and for the same reason.
+            # It is unreachable in any project that overrides the virtual, which is every project
+            # that has Godot call it at all: a class's *own* declarations are what get reported.
+            default_body = (f'Err("{m["name"]} must be overridden: Godot\'s API declares its result'
+                            f' as one that cannot be null, so there is no value to answer with")')
+        else:
+            default_body = virtual_default(return_info, resolver.enums, is_predicate)
         if default_body is None:
             coverage.skip("virtual_no_default", record(
                 "virtual_no_default", f"`{return_info.verse_type}`" if return_info else ""))
@@ -1861,10 +1884,8 @@ def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members
         godot_return=return_value["type"] if return_value else "",
         is_vararg=bool(m.get("is_vararg")),
         is_predicate=is_predicate,
-        # `RequiredResult<T>`, the other half of the metadata B37 reads for an argument. A virtual
-        # is excluded because its body is a declaration to override rather than a call to make:
-        # there is no answer from Godot to be total about.
-        return_required=bool(return_value) and return_value.get("meta") == "required" and not is_virtual,
+        return_required=return_required,
+        return_optional=return_optional,
     )
 
 
@@ -2310,7 +2331,8 @@ def emit_method(cm: ClassifiedMethod) -> str:
         # override may still call a specifier-less helper. See is_predicate_method.
         if cm.is_predicate:
             return f"    {cm.verse_name}<public>({param_decl})<decides>:void = {cm.default_body}"
-        result = "void" if cm.is_void else cm.return_type.verse_type
+        result = "void" if cm.is_void else (
+            f"?{cm.return_type.verse_type}" if cm.return_optional else cm.return_type.verse_type)
         return f"    {cm.verse_name}<public>({param_decl}):{result} = {cm.default_body}"
 
     args = emit_call_args(cm.params)

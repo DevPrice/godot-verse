@@ -85,8 +85,13 @@ Three documents are not phase records and are the ones to read before adding a f
   packs every one. A generated binding has no metadata in either source, so all of its object
   arguments are optional. The same metadata reads the other way for a *result*:
   `RequiredResult<T>` takes `<decides>` off 40 of the mirror's 759 object returns, so the Tween
-  chain and `SceneTree.GetRoot` are ordinary calls. A virtual's parameters and a signal's
-  payload are not spelled for null and can carry it.
+  chain and `SceneTree.GetRoot` are ordinary calls. **A virtual reads both halves**, because
+  Godot's declaration is a promise the override keeps — which is what finally gave the 43
+  object-returning virtuals a default body and took them off the skip list: 41 are `?class`
+  defaulting to `false`, and the 2 Godot marks keep the class and default to `Err`. A signal's
+  payload is still not spelled for null and can carry it. The **singletons** are not this rule
+  and have no metadata to read: the dump's table is a name and a type, and which two can be
+  absent comes from `"api_type": "editor"`.
   **B36 is the one to read before changing when the bindings are generated**: a GDScript that
   names a Verse class is held back during a `.verse` load to avoid B30's cycle, and its binding
   is then declared with no members — so a Verse file naming one of its *methods* fails to

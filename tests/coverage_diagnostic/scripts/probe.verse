@@ -11,9 +11,13 @@ probe := class(node2d):
 
     # virtual_no_default: since Phase 4 every one of Godot's 1413 virtuals is generated, so
     # `_EnterTree` is an ordinary member of `node` and only the ones whose return type has no
-    # writable default are skipped. An unoverridden virtual has to answer *something*, and there is
-    # no zero value for an object.
-    Virtual(C:control)<transacts>:void = C.MakeCustomTooltip("hi")
+    # writable default are skipped. An unoverridden virtual has to answer *something*, and a
+    # parametric container has no literal to be that.
+    #
+    # An *object* return used to be here and is not skipped any more: Godot says which returns may
+    # be null, so the mirror declares those `?class`, and an option has a default where a class has
+    # none (`by-hand-findings.md` B37).
+    Virtual(S:audio_stream)<transacts>:void = S.GetParameterList()
 
     # property_renamed: VisualShaderNodeFloatParameter.max cannot be a `var` named Max --
     # /Verse.org/Verse's Max is a function, and data has no signature to be told apart by -- so it is

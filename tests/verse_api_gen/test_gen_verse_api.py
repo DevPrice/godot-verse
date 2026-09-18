@@ -545,9 +545,12 @@ def test_virtual_emits_a_default_body():
                 dict(_method("_ready", None), is_virtual=True),
                 dict(_method("_has_point", "bool"), is_virtual=True),
                 dict(_method("_get_minimum_size", "int"), is_virtual=True),
-                # No default can be written for an object return, so it is a recorded skip rather
-                # than a silent absence.
+                # An object return is declared as an option, which is what gives it a default at
+                # all -- `false`. Godot marks the returns that may not be null and this is not one.
                 dict(_method("_get_owner", "Object"), is_virtual=True),
+                # A parametric container has no literal to default to, so it is a recorded skip
+                # rather than a silent absence.
+                dict(_method("_get_parameter_list", "typedarray::Dictionary"), is_virtual=True),
             ]},
         ]
     }
@@ -560,8 +563,10 @@ def test_virtual_emits_a_default_body():
                "    _GetMinimumSize<public>():int = 0" in block, block)
     check_true("and a bool one declines instead, because it is <decides>",
                "    _HasPoint<public>()<decides>:void = false?" in block, block)
+    check_true("an object-returning one is an option, which is what it defaults to",
+               "    _GetOwner<public>():?object = false" in block, block)
     check_true("a virtual with no writable default is skipped, not emitted",
-               "_GetOwner" not in block, block)
+               "_GetParameterList" not in block, block)
     check("and the skip says why", coverage.skip_reasons.get("virtual_no_default"), 1)
 
 
@@ -744,6 +749,48 @@ def test_an_object_result_godot_marks_required_is_not_decides():
     check_true(
         "one Godot does not mark keeps it",
         "Unsure<public>()<decides><transacts>:node = node[VhObjectFrom[" in body,
+    )
+
+
+def test_an_object_returning_virtual_reads_the_same_metadata():
+    """A virtual is a promise an override keeps, so the metadata decides its declaration too.
+
+    All 43 of the mirror's object-returning virtuals used to be skipped for want of a default body:
+    no value of a class can stand in for "nobody overrode this". An *option* has one, and Godot's
+    own contract says which returns may be empty -- so the unmarked ones are declared `?class` with
+    `false`, and a marked one keeps the class and raises, because an override really must answer.
+    """
+    api = {
+        "classes": [
+            {"name": "Object", "inherits": None, "methods": []},
+            {"name": "Node", "inherits": "Object", "methods": []},
+            {
+                "name": "Thing",
+                "inherits": "Object",
+                "methods": [
+                    dict(_method("_pick", "Node"), is_virtual=True),
+                    dict(_required_result(_method("_must_pick", "Node")), is_virtual=True),
+                    dict(_method("_watch", None, [{"name": "target", "type": "Node"}]),
+                         is_virtual=True),
+                ],
+            },
+        ]
+    }
+    coverage = g.Coverage()
+    blocks, order, _map, _members, _arrays, _dicts = g.generate(
+        api, ["Thing", "Node"], coverage, {})
+    body = blocks[order.index("Thing")]
+    check_true(
+        "an object-returning virtual Godot may answer null for is an option",
+        "_Pick<public>():?node = false" in body,
+    )
+    check_true(
+        "and a required one keeps the class and says it must be overridden",
+        "_MustPick<public>():node = Err(" in body,
+    )
+    check_true(
+        "a virtual's object parameter follows the argument rule, because Godot is what passes it",
+        "_Watch<public>(Target:?node):void = {}" in body,
     )
 
 
@@ -1555,6 +1602,7 @@ def main():
     test_union_parameter_widens_to_the_common_ancestor()
     test_an_object_parameter_is_optional_unless_godot_marks_it_required()
     test_an_object_result_godot_marks_required_is_not_decides()
+    test_an_object_returning_virtual_reads_the_same_metadata()
     test_a_raw_pointer_is_its_own_permitted_skip()
     test_class_type_falls_back_to_nearest_emitted_ancestor()
     test_render_classes_header()

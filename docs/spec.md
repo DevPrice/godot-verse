@@ -1509,8 +1509,20 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   `CreateTween`, `GetMultiplayer`. Those are total, so a caller spends no failure context on a
   case that does not arise. They are not infallible: the *cast* can still refuse if Godot
   answers a class outside the mirror, and a required return raises through `Err` there, which
-  is what the 39 total singleton accessors below already do. A virtual is excluded, because its
-  body is a declaration to override rather than a call to make.
+  is what the 39 total singleton accessors below already do.
+
+  **A virtual reads the same metadata, because Godot's declaration is a promise the override
+  keeps.** Its parameters follow the argument rule -- Godot is what passes one -- and its
+  result follows the return rule, which is what finally gave the 43 object-returning virtuals a
+  default body: all of them used to be skipped, since no value of a class stands in for "nobody
+  overrode this". The 41 Godot does not mark are `?class` defaulting to `false`; the 2 it marks
+  keep the class and default to `Err`, which nothing reaches, because a class's *own*
+  declarations are what `vh_class_method_list` reports.
+
+  **The singleton accessors are not this rule**, and there is nothing to read for them: the
+  dump's `singletons` table carries a name and a type and no metadata at all. Which two can be
+  absent comes from the class's `"api_type": "editor"`, which is a stronger answer than
+  `required` would be -- it names them rather than marking the rest.
 
   The **singleton accessors** are the second `<decides>` family, and the rule applies to them the
   same way: 39 of the 41 are registered during `Main::setup`, so no run that can execute Verse at

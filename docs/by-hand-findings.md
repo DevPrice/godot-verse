@@ -1528,11 +1528,27 @@ R-TYPE-4 already spends on the 39 total singleton accessors and for the same rea
 costs the raising instance's content scope; that is the price of Godot contradicting its own
 metadata, and it is not a case any correct program reaches.
 
-What is unchanged, and said here so it does not read as an oversight: a **virtual**'s
-parameters, which Godot passes rather than receives, and a **signal**'s payload. Both can carry
-null and neither is spelled for it. A virtual is excluded from the result rule too -- its body
-is a declaration to override rather than a call to make, so there is no answer to be total
-about.
+**A virtual reads the same metadata in both directions, and excluding it was wrong.** The first
+pass here said a virtual's body is a declaration to override rather than a call to make, so
+there was no answer from Godot to be total about -- which misses that Godot's declaration is a
+promise the *override* has to keep. It is also how the parameter direction had already been
+generated: 111 of the mirror's virtuals carry an optional object parameter, because Godot is
+what passes one and 142 of the 157 on emittable virtuals are unmarked. `Node._Input`'s is
+marked, so it is still `Event:input_event`.
+
+The result direction is where it paid. **All 43 object-returning virtuals used to be skipped
+outright** -- `virtual_no_default`, because no value of a class can stand in for "nobody
+overrode this" -- and an *option* has one. So the 41 Godot does not mark are declared `?class`
+with `false`, which is Godot's own contract written down, and they are in the mirror now:
+`Control._MakeCustomTooltip`, `AnimationNode._GetChildByName`, `AudioStream._InstantiatePlayback`,
+`EditorExportPlugin._CustomizeResource` and 37 more. The 2 that *are* marked keep the class and
+default to `Err("...must be overridden...")`: an override really must answer, and a body no
+override replaces is one nothing calls, because `vh_class_method_list` reports a class's own
+declarations. The skip category is 34 rows now instead of 77, and what is left is a parametric
+container, which has no literal either.
+
+What is unchanged, and said here so it does not read as an oversight: a **signal**'s payload,
+which can carry null and is not spelled for it.
 
 ---
 

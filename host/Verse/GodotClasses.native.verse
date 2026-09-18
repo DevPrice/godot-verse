@@ -32964,6 +32964,8 @@ editor_export_plugin<public> := class(ref_counted):
     Skip<public>()<transacts>:void = VhCallVoid(Handle, "skip", array{})
     _BeginCustomizeResources<public>(Platform:?editor_export_platform, Features:[]string)<decides>:void = false?
     _BeginCustomizeScenes<public>(Platform:?editor_export_platform, Features:[]string)<decides>:void = false?
+    _CustomizeResource<public>(Resource:?resource, Path:string):?resource = false
+    _CustomizeScene<public>(Scene:?node, Path:string):?node = false
     _EndCustomizeResources<public>():void = {}
     _EndCustomizeScenes<public>():void = {}
     _EndGenerateAppleEmbeddedProject<public>(Path:string, WillBuildArchive:logic):void = {}
@@ -33131,6 +33133,7 @@ editor_plugin<public> := class(node):
     _ForwardCanvasForceDrawOverViewport<public>(ViewportControl:?control):void = {}
     _ForwardCanvasGuiInput<public>(Event:?input_event)<decides>:void = false?
     _GetBreakpoints<public>():[]string = array{}
+    _GetPluginIcon<public>():?texture2d = false
     _GetPluginName<public>():string = ""
     _GetState<public>():dictionary = dictionary{}
     _GetUnsavedStatus<public>(ForScene:string):string = ""
@@ -33151,6 +33154,7 @@ editor_plugin<public> := class(node):
 
 editor_resource_conversion_plugin<public> := class(ref_counted):
 
+    _Convert<public>(Resource:?resource):?resource = false
     _ConvertsTo<public>():string = ""
     _Handles<public>(Resource:?resource)<decides>:void = false?
 
@@ -33167,6 +33171,8 @@ editor_resource_preview_generator<public> := class(ref_counted):
 
     RequestDrawAndWait<public>(Viewport:rid)<transacts>:void = VhCallVoid(Handle, "request_draw_and_wait", array{VhFromRid(Viewport)})
     _CanGenerateSmallPreview<public>()<decides>:void = false?
+    _Generate<public>(Resource:?resource, Size:vector2i, Metadata:dictionary):?texture2d = false
+    _GenerateFromPath<public>(Path:string, Size:vector2i, Metadata:dictionary):?texture2d = false
     _GenerateSmallPreviewAutomatically<public>()<decides>:void = false?
     _Handles<public>(Type:string)<decides>:void = false?
 
@@ -33174,6 +33180,7 @@ editor_resource_tooltip_plugin<public> := class(ref_counted):
 
     RequestThumbnail<public>(Path:string, Control:?texture_rect)<transacts>:void = VhCallVoid(Handle, "request_thumbnail", array{VhFromString(Path), VhFromMaybeObject(Control)})
     _Handles<public>(Type:string)<decides>:void = false?
+    _MakeTooltipForPath<public>(Path:string, Metadata:dictionary, Base:?control):?control = false
 
 editor_scene_format_importer<public> := class(ref_counted):
 
@@ -33182,10 +33189,12 @@ editor_scene_format_importer<public> := class(ref_counted):
     _GetExtensions<public>():[]string = array{}
     _GetImportOptions<public>(Path:string):void = {}
     _GetOptionVisibility<public>(Path:string, ForAnimation:logic, Option:string):variant = variant{}
+    _ImportScene<public>(Path:string, Flags:int, Options:dictionary):?object = false
 
 editor_scene_post_import<public> := class(ref_counted):
 
     GetSourceFile<public>()<reads>:string = VhToString(VhCallValueConst(Handle, "get_source_file", array{}))
+    _PostImport<public>(Scene:?node):?object = false
 
 editor_scene_post_import_plugin<public> := class(ref_counted):
 
@@ -34548,6 +34557,7 @@ physics_direct_body_state2d_extension<public> := class(physics_direct_body_state
     _GetConstantTorque<public>():float = 0.0
     _GetContactCollider<public>(ContactIdx:int):rid = rid{}
     _GetContactColliderId<public>(ContactIdx:int):int = 0
+    _GetContactColliderObject<public>(ContactIdx:int):?object = false
     _GetContactColliderPosition<public>(ContactIdx:int):vector2 = vector2{}
     _GetContactColliderShape<public>(ContactIdx:int):int = 0
     _GetContactColliderVelocityAtPosition<public>(ContactIdx:int):vector2 = vector2{}
@@ -34560,6 +34570,7 @@ physics_direct_body_state2d_extension<public> := class(physics_direct_body_state
     _GetInverseInertia<public>():float = 0.0
     _GetInverseMass<public>():float = 0.0
     _GetLinearVelocity<public>():vector2 = vector2{}
+    _GetSpaceState<public>():physics_direct_space_state2d = Err("_get_space_state must be overridden: Godot's API declares its result as one that cannot be null, so there is no value to answer with")
     _GetStep<public>():float = 0.0
     _GetTotalAngularDamp<public>():float = 0.0
     _GetTotalGravity<public>():vector2 = vector2{}
@@ -34597,6 +34608,7 @@ physics_direct_body_state3d_extension<public> := class(physics_direct_body_state
     _GetConstantTorque<public>():vector3 = vector3{}
     _GetContactCollider<public>(ContactIdx:int):rid = rid{}
     _GetContactColliderId<public>(ContactIdx:int):int = 0
+    _GetContactColliderObject<public>(ContactIdx:int):?object = false
     _GetContactColliderPosition<public>(ContactIdx:int):vector3 = vector3{}
     _GetContactColliderShape<public>(ContactIdx:int):int = 0
     _GetContactColliderVelocityAtPosition<public>(ContactIdx:int):vector3 = vector3{}
@@ -34611,6 +34623,7 @@ physics_direct_body_state3d_extension<public> := class(physics_direct_body_state
     _GetInverseMass<public>():float = 0.0
     _GetLinearVelocity<public>():vector3 = vector3{}
     _GetPrincipalInertiaAxes<public>():basis = basis{}
+    _GetSpaceState<public>():physics_direct_space_state3d = Err("_get_space_state must be overridden: Godot's API declares its result as one that cannot be null, so there is no value to answer with")
     _GetStep<public>():float = 0.0
     _GetTotalAngularDamp<public>():float = 0.0
     _GetTotalGravity<public>():vector3 = vector3{}
@@ -34842,6 +34855,7 @@ physics_server2d_extension<public> := class(physics_server2d):
     _BodyGetConstantTorque<public>(Body:rid):float = 0.0
     _BodyGetContactsReportedDepthThreshold<public>(Body:rid):float = 0.0
     _BodyGetContinuousCollisionDetectionMode<public>(Body:rid):physics_server2d_ccd_mode = physics_server2d_ccd_mode.Disabled
+    _BodyGetDirectState<public>(Body:rid):?physics_direct_body_state2d = false
     _BodyGetMaxContactsReported<public>(Body:rid):int = 0
     _BodyGetMode<public>(Body:rid):physics_server2d_body_mode = physics_server2d_body_mode.Static
     _BodyGetObjectInstanceId<public>(Body:rid):int = 0
@@ -34915,6 +34929,7 @@ physics_server2d_extension<public> := class(physics_server2d):
     _SpaceCreate<public>():rid = rid{}
     _SpaceGetContactCount<public>(Space:rid):int = 0
     _SpaceGetContacts<public>(Space:rid):[]vector2 = array{}
+    _SpaceGetDirectState<public>(Space:rid):?physics_direct_space_state2d = false
     _SpaceGetParam<public>(Space:rid, Param:physics_server2d_space_parameter):float = 0.0
     _SpaceIsActive<public>(Space:rid)<decides>:void = false?
     _SpaceSetActive<public>(Space:rid, Active:logic):void = {}
@@ -34974,6 +34989,7 @@ physics_server3d_extension<public> := class(physics_server3d):
     _BodyGetConstantForce<public>(Body:rid):vector3 = vector3{}
     _BodyGetConstantTorque<public>(Body:rid):vector3 = vector3{}
     _BodyGetContactsReportedDepthThreshold<public>(Body:rid):float = 0.0
+    _BodyGetDirectState<public>(Body:rid):?physics_direct_body_state3d = false
     _BodyGetMaxContactsReported<public>(Body:rid):int = 0
     _BodyGetMode<public>(Body:rid):physics_server3d_body_mode = physics_server3d_body_mode.Static
     _BodyGetObjectInstanceId<public>(Body:rid):int = 0
@@ -35108,6 +35124,7 @@ physics_server3d_extension<public> := class(physics_server3d):
     _SpaceCreate<public>():rid = rid{}
     _SpaceGetContactCount<public>(Space:rid):int = 0
     _SpaceGetContacts<public>(Space:rid):[]vector3 = array{}
+    _SpaceGetDirectState<public>(Space:rid):?physics_direct_space_state3d = false
     _SpaceGetParam<public>(Space:rid, Param:physics_server3d_space_parameter):float = 0.0
     _SpaceIsActive<public>(Space:rid)<decides>:void = false?
     _SpaceSetActive<public>(Space:rid, Active:logic):void = {}
@@ -35807,6 +35824,8 @@ render_data_extension<public> := class(render_data):
 
     _GetCameraAttributes<public>():rid = rid{}
     _GetEnvironment<public>():rid = rid{}
+    _GetRenderSceneBuffers<public>():?render_scene_buffers = false
+    _GetRenderSceneData<public>():?render_scene_data = false
 
 render_data_rd<public> := class(render_data):
 
@@ -36085,6 +36104,7 @@ script_language_extension<public> := class(script_language):
     _CanInheritFromFile<public>()<decides>:void = false?
     _CanMakeFunction<public>()<decides>:void = false?
     _CompleteCode<public>(Code:string, Path:string, Owner:?object):dictionary = dictionary{}
+    _CreateScript<public>():?object = false
     _DebugGetError<public>():string = ""
     _DebugGetGlobals<public>(MaxSubitems:int, MaxDepth:int):dictionary = dictionary{}
     _DebugGetStackLevelCount<public>():int = 0
@@ -36114,6 +36134,7 @@ script_language_extension<public> := class(script_language):
     _IsUsingTemplates<public>()<decides>:void = false?
     _LookupCode<public>(Code:string, Symbol:string, Path:string, Owner:?object):dictionary = dictionary{}
     _MakeFunction<public>(ClassName:string, FunctionName:string, FunctionArgs:[]string):string = ""
+    _MakeTemplate<public>(Template:string, ClassName:string, BaseClassName:string):?script = false
     _OpenInExternalEditor<public>(Script:?script, Line:int, Column:int):error = error.Ok
     _OverridesExternalEditor<public>()<decides>:void = false?
     _PreferredFileNameCasing<public>():script_language_script_name_casing = script_language_script_name_casing.Auto
@@ -37246,6 +37267,7 @@ animation_node<public> := class(resource):
     SetInputName<public>(Input:int, Name:string)<transacts>:logic = VhToLogic(VhCallValue(Handle, "set_input_name", array{VhFromInt(Input), VhFromString(Name)}))
     SetParameter<public>(Name:string, Value:variant)<transacts>:void = VhCallVoid(Handle, "set_parameter", array{VhFromStringName(Name), VhFromVariant(Value)})
     _GetCaption<public>():string = ""
+    _GetChildByName<public>(Name:string):?animation_node = false
     _GetChildNodes<public>():dictionary = dictionary{}
     _GetParameterDefaultValue<public>(Parameter:string):variant = variant{}
     _GetParameterList<public>():godot_array = godot_array{}
@@ -37386,6 +37408,8 @@ audio_bus_layout<public> := class(resource):
 
 audio_effect<public> := class(resource):
 
+    _Instantiate<public>():?audio_effect_instance = false
+
 audio_effect_spectrum_analyzer_instance<public> := class(audio_effect_instance):
 
     GetMagnitudeForFrequencyRange<public>(FromHz:float, ToHz:float, Mode:audio_effect_spectrum_analyzer_instance_magnitude_mode)<reads>:vector2 = VhToVector2(VhCallValueConst(Handle, "get_magnitude_for_frequency_range", array{VhFromFloat(FromHz), VhFromFloat(ToHz), VhFromAudioEffectSpectrumAnalyzerInstanceMagnitudeMode(Mode)}))
@@ -37415,6 +37439,7 @@ audio_stream<public> := class(resource):
     _GetStreamName<public>():string = ""
     _GetTags<public>():dictionary = dictionary{}
     _HasLoop<public>()<decides>:void = false?
+    _InstantiatePlayback<public>():?audio_stream_playback = false
     _IsMonophonic<public>()<decides>:void = false?
     ParameterListChanged<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "audio_stream", "ParameterListChanged", "parameter_list_changed")}
 
@@ -38194,6 +38219,7 @@ control<public> := class(canvas_item):
     _GetTooltipAutoTranslateModeAt<public>(AtPosition:vector2):node_auto_translate_mode = node_auto_translate_mode.Inherit
     _GuiInput<public>(Event:input_event):void = {}
     _HasPoint<public>(Point:vector2)<decides>:void = false?
+    _MakeCustomTooltip<public>(ForText:string):?object = false
     Resized<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "control", "Resized", "resized")}
     GuiInput<public>()<transacts>:signal(input_event) = signal(input_event){Id := VhSignalBind(Handle, "control", "GuiInput", "gui_input")}
     MouseEntered<public>()<transacts>:signal(tuple()) = signal(tuple()){Id := VhSignalBind(Handle, "control", "MouseEntered", "mouse_entered")}
@@ -38364,7 +38390,9 @@ editor_export_platform_extension<public> := class(editor_export_platform):
     _GetDeviceArchitecture<public>(Device:int):string = ""
     _GetExportOptionVisibility<public>(Preset:?editor_export_preset, Option:string)<decides>:void = false?
     _GetExportOptionWarning<public>(Preset:?editor_export_preset, Option:string):string = ""
+    _GetLogo<public>():?texture2d = false
     _GetName<public>():string = ""
+    _GetOptionIcon<public>(Device:int):?texture2d = false
     _GetOptionLabel<public>(Device:int):string = ""
     _GetOptionTooltip<public>(Device:int):string = ""
     _GetOptionsCount<public>():int = 0
@@ -38372,6 +38400,7 @@ editor_export_platform_extension<public> := class(editor_export_platform):
     _GetOsName<public>():string = ""
     _GetPlatformFeatures<public>():[]string = array{}
     _GetPresetFeatures<public>(Preset:?editor_export_preset):[]string = array{}
+    _GetRunIcon<public>():?texture2d = false
     _HasValidExportConfiguration<public>(Preset:?editor_export_preset, Debug:logic)<decides>:void = false?
     _HasValidProjectConfiguration<public>(Preset:?editor_export_preset)<decides>:void = false?
     _Initialize<public>():void = {}
@@ -38443,6 +38472,7 @@ editor_node3d_gizmo_plugin<public> := class(resource):
     _CanCommitHandleOnClick<public>()<decides>:void = false?
     _CommitHandle<public>(Gizmo:?editor_node3d_gizmo, HandleId:int, Secondary:logic, Restore:variant, Cancel:logic):void = {}
     _CommitSubgizmos<public>(Gizmo:?editor_node3d_gizmo, Ids:[]int, Restores:typed_array(transform3d), Cancel:logic):void = {}
+    _CreateGizmo<public>(ForNode3d:?node3d):?editor_node3d_gizmo = false
     _GetGizmoName<public>():string = ""
     _GetHandleName<public>(Gizmo:?editor_node3d_gizmo, HandleId:int, Secondary:logic):string = ""
     _GetHandleValue<public>(Gizmo:?editor_node3d_gizmo, HandleId:int, Secondary:logic):variant = variant{}
@@ -39035,14 +39065,17 @@ gltf_document_extension<public> := class(resource):
 
     _ConvertSceneNode<public>(State:?gltf_state, GltfNode:?gltf_node, SceneNode:?node):void = {}
     _ExportNode<public>(State:?gltf_state, GltfNode:?gltf_node, Json:dictionary, Node:?node):error = error.Ok
+    _ExportObjectModelProperty<public>(State:?gltf_state, NodePath:string, GodotNode:?node, GltfNodeIndex:int, TargetObject:?object, TargetDepth:int):?gltf_object_model_property = false
     _ExportPost<public>(State:?gltf_state):error = error.Ok
     _ExportPostConvert<public>(State:?gltf_state, Root:?node):error = error.Ok
     _ExportPreflight<public>(State:?gltf_state, Root:?node):error = error.Ok
     _ExportPreserialize<public>(State:?gltf_state):error = error.Ok
+    _GenerateSceneNode<public>(State:?gltf_state, GltfNode:?gltf_node, SceneParent:?node):?node3d = false
     _GetImageFileExtension<public>():string = ""
     _GetSaveableImageFormats<public>():[]string = array{}
     _GetSupportedExtensions<public>():[]string = array{}
     _ImportNode<public>(State:?gltf_state, GltfNode:?gltf_node, Json:dictionary, Node:?node):error = error.Ok
+    _ImportObjectModelProperty<public>(State:?gltf_state, SplitJsonPointer:[]string, PartialPaths:typed_array(string)):?gltf_object_model_property = false
     _ImportPost<public>(State:?gltf_state, Root:?node):error = error.Ok
     _ImportPostParse<public>(State:?gltf_state):error = error.Ok
     _ImportPreGenerate<public>(State:?gltf_state):error = error.Ok
@@ -39972,6 +40005,7 @@ mesh<public> := class(resource):
     _SurfaceGetArrays<public>(Index:int):godot_array = godot_array{}
     _SurfaceGetFormat<public>(Index:int):int = 0
     _SurfaceGetLods<public>(Index:int):dictionary = dictionary{}
+    _SurfaceGetMaterial<public>(Index:int):?material = false
     _SurfaceGetPrimitiveType<public>(Index:int):int = 0
     _SurfaceSetMaterial<public>(Index:int, Material:?material):void = {}
 
@@ -40090,6 +40124,7 @@ multi_mesh<public> := class(resource):
 
 multiplayer_api_extension<public> := class(multiplayer_api):
 
+    _GetMultiplayerPeer<public>():?multiplayer_peer = false
     _GetPeerIds<public>():[]int = array{}
     _GetRemoteSenderId<public>():int = 0
     _GetUniqueId<public>():int = 0
@@ -41952,6 +41987,7 @@ text_server_extension<public> := class(text_server):
     _FontGetSupportedChars<public>(FontRid:rid):string = ""
     _FontGetSupportedGlyphs<public>(FontRid:rid):[]int = array{}
     _FontGetTextureCount<public>(FontRid:rid, Size:vector2i):int = 0
+    _FontGetTextureImage<public>(FontRid:rid, Size:vector2i, TextureIndex:int):?image = false
     _FontGetTextureOffsets<public>(FontRid:rid, Size:vector2i, TextureIndex:int):[]int = array{}
     _FontGetTransform<public>(FontRid:rid):transform2d = transform2d{}
     _FontGetUnderlinePosition<public>(FontRid:rid, Size:int):float = 0.0
@@ -42413,6 +42449,7 @@ video_stream<public> := class(resource):
 
     GetFile<public>()<transacts>:string = VhToString(VhCallValue(Handle, "get_file", array{}))
     SetFile<public>(File:string)<transacts>:void = VhCallVoid(Handle, "set_file", array{VhFromString(File)})
+    _InstantiatePlayback<public>():?video_stream_playback = false
 
 video_stream_playback<public> := class(resource):
 
@@ -42421,6 +42458,7 @@ video_stream_playback<public> := class(resource):
     _GetLength<public>():float = 0.0
     _GetMixRate<public>():int = 0
     _GetPlaybackPosition<public>():float = 0.0
+    _GetTexture<public>():?texture2d = false
     _IsPaused<public>()<decides>:void = false?
     _IsPlaying<public>()<decides>:void = false?
     _Play<public>():void = {}
@@ -42518,6 +42556,7 @@ web_rtc_peer_connection_extension<public> := class(web_rtc_peer_connection):
 
     _AddIceCandidate<public>(SdpMidName:string, SdpMlineIndex:int, SdpName:string):error = error.Ok
     _Close<public>():void = {}
+    _CreateDataChannel<public>(Label:string, Config:dictionary):?web_rtc_data_channel = false
     _CreateOffer<public>():error = error.Ok
     _GetConnectionState<public>():web_rtc_peer_connection_connection_state = web_rtc_peer_connection_connection_state.New
     _GetGatheringState<public>():web_rtc_peer_connection_gathering_state = web_rtc_peer_connection_gathering_state.New
@@ -45173,6 +45212,7 @@ editor_export_platform_windows<public> := class(editor_export_platform_pc):
 
 editor_syntax_highlighter<public> := class(syntax_highlighter):
 
+    _Create<public>():?editor_syntax_highlighter = false
     _GetName<public>():string = ""
     _GetSupportedLanguages<public>():[]string = array{}
 
@@ -48694,11 +48734,13 @@ script_extension<public> := class(script):
 
     _CanInstantiate<public>()<decides>:void = false?
     _EditorCanReloadFromFile<public>()<decides>:void = false?
+    _GetBaseScript<public>():?script = false
     _GetClassIconPath<public>():string = ""
     _GetConstants<public>():dictionary = dictionary{}
     _GetDocClassName<public>():string = ""
     _GetGlobalName<public>():string = ""
     _GetInstanceBaseType<public>():string = ""
+    _GetLanguage<public>():?script_language = false
     _GetMemberLine<public>(Member:string):int = 0
     _GetMethodInfo<public>(Method:string):dictionary = dictionary{}
     _GetPropertyDefaultValue<public>(Property:string):variant = variant{}
@@ -49947,6 +49989,7 @@ texture2d<public> := class(texture):
     _DrawRectRegion<public>(ToCanvasItem:rid, Rect:rect2, SrcRect:rect2, Modulate:color, Transpose:logic, ClipUv:logic):void = {}
     _GetFormat<public>():image_format = image_format.L8
     _GetHeight<public>():int = 0
+    _GetImage<public>():?image = false
     _GetMipmapCount<public>():int = 0
     _GetWidth<public>():int = 0
     _HasAlpha<public>()<decides>:void = false?
@@ -49979,6 +50022,7 @@ texture_layered<public> := class(texture):
     HasMipmaps<public>()<decides><reads>:void = VhToLogic(VhCallValueConst(Handle, "has_mipmaps", array{}))?
     _GetFormat<public>():image_format = image_format.L8
     _GetHeight<public>():int = 0
+    _GetLayerData<public>(LayerIndex:int):?image = false
     _GetLayeredType<public>():int = 0
     _GetLayers<public>():int = 0
     _GetWidth<public>():int = 0
