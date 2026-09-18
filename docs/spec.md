@@ -1851,8 +1851,9 @@ section written after the spikes.
   open as well as on a roster change. The trigger is language-agnostic —
   `EditorFileSystem.script_classes_updated` for script classes and `GDExtensionManager`'s three
   signals for ClassDB — so C# costs no new code (OQ-17 still says no test here has ever run it).
-  Status: **not built** — designed in [`generated-bindings.md`](generated-bindings.md), all five
-  spikes back (§10), Phase 7c.
+  Status: **the package is done, the trigger is not.** `vh_set_bindings` (ABI 11.1) replaces the
+  package and `host_smoke` asserts a roster change across two builds, source and table apart; what
+  is missing is the consumer that watches the roster and writes the file.
 
   **A package of its own, rather than rows in the mirror.** The mirror is one package in the
   engine tree, shared by every project on the machine, and these classes are per-project and

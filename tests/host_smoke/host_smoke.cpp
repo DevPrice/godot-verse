@@ -50,6 +50,36 @@ static int32_t SmokeGetClassOf(void*, vh_handle, vh_arena*, vh_value*)
 	return VH_CALL_DEAD_OBJECT;
 }
 
+/* No script on any handle here, which is the honest answer for a harness with no Godot: the script
+ * arm of the fourth question is exercised by the integration layer, where there is a real .gd. */
+static int32_t SmokeGetScriptClassOf(void*, vh_handle, vh_arena*, vh_value*)
+{
+	return VH_CALL_NO_SUCH_MEMBER;
+}
+
+/* The bindings package, as the editor will generate it: two classes over mirrored bases, handed
+ * over as one Verse snippet rather than read off disk. The second roster differs in both halves --
+ * the *source* (Push multiplies by three) and the *table* (rapier_body binds a different Godot
+ * class) -- because those are two separate things the host has to replace and a test that moved
+ * only one of them would pass with the other stuck. */
+static const char* const BindingsRosterOne =
+	"using { /Godot.org/Godot }\n"
+	"\n"
+	"rapier_body<public> := class(ref_counted):\n"
+	"    Push<public>(Power:int)<transacts>:int = Power * 2\n"
+	"\n"
+	"rapier_joint<public> := class(ref_counted):\n"
+	"    Slack<public>()<transacts>:int = 5\n";
+
+static const char* const BindingsRosterTwo =
+	"using { /Godot.org/Godot }\n"
+	"\n"
+	"rapier_body<public> := class(ref_counted):\n"
+	"    Push<public>(Power:int)<transacts>:int = Power * 3\n"
+	"\n"
+	"rapier_joint<public> := class(ref_counted):\n"
+	"    Slack<public>()<transacts>:int = 5\n";
+
 /* R-NODE-3's harness: a Godot object counter standing in for Godot.
  *
  * The one thing no Godot project can assert is a *count* -- a peer minted and never released is a
@@ -514,6 +544,7 @@ int main(int argc, char** argv)
 	auto CollectGarbageFn = Resolve<vh_collect_garbage_fn>(Module, "vh_collect_garbage", &ResolveOk);
 	auto ClassBaseTypeFn = Resolve<vh_class_base_type_fn>(Module, "vh_class_base_type", &ResolveOk);
 	auto CompileProjectFn = Resolve<vh_compile_project_fn>(Module, "vh_compile_project", &ResolveOk);
+	auto SetBindingsFn = Resolve<vh_set_bindings_fn>(Module, "vh_set_bindings", &ResolveOk);
 	auto HasClassFn = Resolve<vh_has_class_fn>(Module, "vh_has_class", &ResolveOk);
 	auto ClassExportListFn = Resolve<vh_class_export_list_fn>(Module, "vh_class_export_list", &ResolveOk);
 	auto ClassDefaultFieldFn = Resolve<vh_class_default_field_fn>(Module, "vh_class_default_field", &ResolveOk);
@@ -564,6 +595,7 @@ int main(int argc, char** argv)
 	Desc.Godot.SetProperty = &SmokeSetProperty;
 	Desc.Godot.CallMethod = &SmokeCallMethod;
 	Desc.Godot.GetClassOf = &SmokeGetClassOf;
+	Desc.Godot.GetScriptClassOf = &SmokeGetScriptClassOf;
 	Desc.Godot.InstantiateClass = &SmokeInstantiateClass;
 	Desc.Godot.ReleaseObject = &SmokeReleaseObject;
 	Desc.Godot.DebugShouldBreak = &SmokeDebugShouldBreak;
@@ -603,21 +635,81 @@ int main(int argc, char** argv)
 	std::string TasksPathUtf8 = TasksPath.string();
 	std::string ObjectsPathUtf8 = ObjectsPath.string();
 	std::string DebugPathUtf8 = DebugPath.string();
-	vh_source_file ProjectFiles[6] = {
+	fs::path BindingsPath = VerseBase / "tests" / "host_smoke" / "bindings.verse";
+	std::string BindingsPathUtf8 = BindingsPath.string();
+	vh_source_file ProjectFiles[7] = {
 		{ VersePathUtf8.c_str(), nullptr },
 		{ ExportsPathUtf8.c_str(), nullptr },
 		{ ReloadPathUtf8.c_str(), nullptr },
 		{ TasksPathUtf8.c_str(), nullptr },
 		{ DebugPathUtf8.c_str(), nullptr },
 		{ ObjectsPathUtf8.c_str(), nullptr },
+		{ BindingsPathUtf8.c_str(), nullptr },
 	};
+
+	/* Before the build, which is the contract: vh_set_bindings records and marks dirty, and the
+	 * package is put into the project by whichever of the build or the analysis comes first. A
+	 * roster set after a build is not in that build. */
+	{
+		const vh_binding_class Roster[2] = {
+			{ "RapierBody2D", 12, nullptr, 0, "rapier_body", 11 },
+			{ "RapierJoint2D", 13, nullptr, 0, "rapier_joint", 12 },
+		};
+		Step("vh_set_bindings",
+			 SetBindingsFn(BindingsRosterOne, (int32_t)strlen(BindingsRosterOne), Roster, 2) == VH_OK);
+	}
+
 	int32_t Generation = 0;
-	if (!Step("vh_compile_project", CompileProjectFn(ProjectFiles, 6, &Generation) == VH_OK))
+	if (!Step("vh_compile_project", CompileProjectFn(ProjectFiles, 7, &Generation) == VH_OK))
 	{
 		ShutdownFn();
 		return 1;
 	}
 	Step("the first build is generation 1", Generation == 1);
+
+	// --- generated bindings (R-INT-7, R-INT-8) --------------------------------------------------
+	//
+	// The bindings package is not on disk: its Verse came over vh_set_bindings as a string, the way
+	// the editor will hand over what it generated under `.godot/`. So these four say that a second
+	// source package added at runtime is compiled, is resolvable from a script in `/user@localhost`,
+	// and mints the Godot class it *binds* rather than the mirrored one it derives from.
+	{
+		auto ReadInt = [&](vh_instance* Target, const char* Decorated) {
+			vh_value Result{};
+			if (InstanceCallFn(Target, Decorated, nullptr, 0, nullptr, &Result) != VH_OK
+				|| Result.Type != VH_TYPE_INT)
+			{
+				return (int64_t)-1;
+			}
+			return Result.Int;
+		};
+
+		vh_instance* Bound = nullptr;
+		const bool Made = InstantiateFn("bindings", 77, &Bound) == VH_OK && Bound != nullptr;
+		Step("a script resolves a class from the bindings package", Made);
+		if (Made)
+		{
+			MintedClass.clear();
+			Step("and calls a method on one",
+				 ReadInt(Bound, "(/user@localhost/bindings:)MakeBound") == 42);
+
+			// The trap this exists for. `rapier_body` derives from `ref_counted`, so the walk to the
+			// nearest mirrored ancestor answers RefCounted -- which is the wrong object to make. A
+			// binding mints what the table says it binds.
+			Step("constructing one mints the Godot class it binds, not its mirrored ancestor",
+				 MintedClass == "RapierBody2D");
+
+			Step("a second class in the same package resolves too",
+				 ReadInt(Bound, "(/user@localhost/bindings:)MakeSecond") == 5);
+
+			vh_value IsRef{};
+			Step("and a binding is its mirrored base, to Verse's own downcast",
+				 InstanceCallFn(Bound, "(/user@localhost/bindings:)AskIsRefCounted", nullptr, 0, nullptr, &IsRef) == VH_OK
+					 && IsRef.Type == VH_TYPE_LOGIC && IsRef.Logic != 0);
+
+			ReleaseInstanceFn(Bound);
+		}
+	}
 
 	// Instantiated here rather than beside the generation checks below, because the point of it is
 	// to be older than the second generation.
@@ -2059,7 +2151,7 @@ int main(int argc, char** argv)
 					   WriteFileUtf8(ReloadPath, ReloadProbeSource(2))
 						   && WriteFileUtf8(ModuleProbePath, ModuleProbeSource())) && CallsOk;
 
-		vh_source_file SecondFiles[7] = {
+		vh_source_file SecondFiles[8] = {
 			{ VersePathUtf8.c_str(), nullptr },
 			{ ExportsPathUtf8.c_str(), nullptr },
 			{ ReloadPathUtf8.c_str(), nullptr },
@@ -2067,12 +2159,46 @@ int main(int argc, char** argv)
 			{ TasksPathUtf8.c_str(), nullptr },
 			{ DebugPathUtf8.c_str(), nullptr },
 			{ ObjectsPathUtf8.c_str(), nullptr },
+			{ BindingsPathUtf8.c_str(), nullptr },
 		};
+
+		/* The roster replaced between two builds, which is the half of R-INT-8 that a single build
+		 * cannot show. The source changes and so does the table, and the two are asserted apart:
+		 * MakeBound's value says the *source* was replaced, MintedClass says the *table* was. */
+		{
+			const vh_binding_class Roster[2] = {
+				{ "RapierBody3D", 12, nullptr, 0, "rapier_body", 11 },
+				{ "RapierJoint2D", 13, nullptr, 0, "rapier_joint", 12 },
+			};
+			CallsOk = Step("vh_set_bindings again, with a different roster",
+						   SetBindingsFn(BindingsRosterTwo, (int32_t)strlen(BindingsRosterTwo), Roster, 2) == VH_OK)
+				&& CallsOk;
+		}
 		int32_t SecondGeneration = 0;
 		DiagnosticErrorCount = 0;
-		const bool SecondBuilt = CompileProjectFn(SecondFiles, 7, &SecondGeneration) == VH_OK;
+		const bool SecondBuilt = CompileProjectFn(SecondFiles, 8, &SecondGeneration) == VH_OK;
 		CallsOk = Step("a second vh_compile_project in the same process builds", SecondBuilt) && CallsOk;
 		CallsOk = Step("and reports generation 2", SecondGeneration == 2) && CallsOk;
+
+		// The replaced roster, read back. Nothing asserts the package *name* changed, because
+		// nothing outside the host can see it -- what says it was replaced rather than reused is
+		// that the build succeeded at all: republishing one package name is an assert inside
+		// AsyncLoading2 and would have taken the process down instead of failing this step.
+		{
+			vh_instance* Rebound = nullptr;
+			const bool Remade = SecondBuilt && InstantiateFn("bindings", 78, &Rebound) == VH_OK && Rebound != nullptr;
+			CallsOk = Step("the bindings package survives a second build", Remade) && CallsOk;
+			if (Remade)
+			{
+				MintedClass.clear();
+				vh_value Result{};
+				const bool Called = InstanceCallFn(Rebound, "(/user@localhost/bindings:)MakeBound", nullptr, 0, nullptr, &Result) == VH_OK
+					&& Result.Type == VH_TYPE_INT;
+				CallsOk = Step("a replaced bindings source is the one that runs", Called && Result.Int == 63) && CallsOk;
+				CallsOk = Step("and a replaced table is the one that mints", MintedClass == "RapierBody3D") && CallsOk;
+				ReleaseInstanceFn(Rebound);
+			}
+		}
 		CallsOk = Step("a file in a module reaches a root definition with nothing imported",
 					   SecondBuilt && DiagnosticErrorCount == 0) && CallsOk;
 
@@ -2151,7 +2277,7 @@ int main(int argc, char** argv)
 		int32_t ThirdGeneration = 0;
 		DiagnosticErrorCount = 0;
 		CallsOk = Step("a build with nothing edited since the analysis publishes",
-					   CompileProjectFn(SecondFiles, 7, &ThirdGeneration) == VH_OK) && CallsOk;
+					   CompileProjectFn(SecondFiles, 8, &ThirdGeneration) == VH_OK) && CallsOk;
 		CallsOk = Step("and reports generation 3", ThirdGeneration == 3) && CallsOk;
 		CallsOk = Step("saying nothing of its own", DiagnosticErrorCount == 0) && CallsOk;
 

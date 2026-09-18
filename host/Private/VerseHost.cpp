@@ -441,6 +441,51 @@ extern "C" void vh_collect_garbage(void)
     GodotVerse::CollectGarbageNow();
 }
 
+extern "C" int32_t vh_set_bindings(const char* SourceUtf8, int32_t SourceLen,
+                                   const vh_binding_class* Classes, int32_t ClassCount)
+{
+    VH_REFUSE_WITHOUT_COMPILER(VH_ERR_UNSUPPORTED);
+    if (WrongThread("vh_set_bindings"))
+    {
+        return VH_ERR_THREAD;
+    }
+    if (SourceLen < 0 || ClassCount < 0 || (ClassCount > 0 && !Classes) || (SourceLen > 0 && !SourceUtf8))
+    {
+        return VH_ERR_ABI;
+    }
+    if (!GetHost().bInitialized)
+    {
+        return VH_ERR_STATE;
+    }
+
+    TArray<GodotVerse::FBindingClass> Bindings;
+    Bindings.Reserve(ClassCount);
+    for (int32_t Index = 0; Index < ClassCount; ++Index)
+    {
+        const vh_binding_class& Row = Classes[Index];
+        if (!Row.VerseClassUtf8 || Row.VerseClassLen <= 0)
+        {
+            return VH_ERR_ABI;
+        }
+        GodotVerse::FBindingClass Binding;
+        if (Row.GodotClassUtf8 && Row.GodotClassLen > 0)
+        {
+            Binding.GodotClass = FUtf8String(GodotVerse::MakeView(Row.GodotClassUtf8, Row.GodotClassLen));
+        }
+        if (Row.ScriptClassUtf8 && Row.ScriptClassLen > 0)
+        {
+            Binding.ScriptClass = FUtf8String(GodotVerse::MakeView(Row.ScriptClassUtf8, Row.ScriptClassLen));
+        }
+        Binding.VerseClass = FUtf8String(GodotVerse::MakeView(Row.VerseClassUtf8, Row.VerseClassLen));
+        Bindings.Add(MoveTemp(Binding));
+    }
+
+    GodotVerse::SetBindings(
+        SourceLen > 0 ? FUtf8String(GodotVerse::MakeView(SourceUtf8, SourceLen)) : FUtf8String(),
+        MoveTemp(Bindings));
+    return VH_OK;
+}
+
 extern "C" int32_t vh_compile_project(const vh_source_file* Files, int32_t Count, int32_t* OutGeneration)
 {
     VH_REFUSE_WITHOUT_COMPILER(VH_ERR_UNSUPPORTED);

@@ -116,7 +116,7 @@ Three documents are not phase records and are the ones to read before adding a f
 `include/verse_host_abi.h` is the only thing that crosses. Plain C — the two sides cannot share a
 C++ ABI. It is staged into the host's `Public/` by `build_host.py`, so both compile the same file.
 
-**`VH_ABI_VERSION` is 11.0.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
+**`VH_ABI_VERSION` is 11.1.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
 a major bump is a layout or meaning change and both sides must be rebuilt; a minor bump adds
 something an older consumer can ignore behind a `StructSize` check. A change to the header means
 bumping it and rebuilding **both** sides — the mismatch surfaces at `vh_init`, not at compile time.
@@ -131,6 +131,12 @@ as corruption rather than as a refusal. 9.0 added `IsNamed` there for that reaso
 analysis-only program behind it, so the three position entry points answer `VH_ERR_STATE` after
 a build until a consumer asks for an analysis. An older consumer would have read that as "no
 such symbol" and drawn nothing, silently.
+**11.1 is generated bindings' half of the wire**: `vh_set_bindings`, the `vh_binding_class`
+row and a `GetScriptClassOf` callback appended to `vh_godot_api`. A minor, because a consumer
+that never calls it is unaffected — but `vh_binding_class` is the *second* struct a minor can
+never grow, for `vh_complete_item`'s reason exactly: the rows are handed over as an array, so a
+field appended at the end changes the stride the host indexes by and the mismatch reads as
+corruption rather than as a refusal.
 **11.0 grew `vh_lookup_desc`**, which carries a definition's documentation now (`DocUtf8`) — and it
 had to be a major because that struct had no `StructSize`, so there was nothing a consumer could
 check before reading a field appended after the version it was built for. The size field went in

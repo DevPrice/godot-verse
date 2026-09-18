@@ -43,7 +43,7 @@ extern "C" {
  * different toolchains and nothing links them.
  */
 #define VH_ABI_VERSION_MAJOR 11
-#define VH_ABI_VERSION_MINOR 0
+#define VH_ABI_VERSION_MINOR 1
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
 typedef int32_t vh_bool;
@@ -475,6 +475,21 @@ typedef struct vh_godot_api
 	 *
 	 * OutValue may be left VH_TYPE_VOID for a method that answers nothing. */
 	int32_t (*RefCall)(void* Ctx, int64_t Ref, const char* NameUtf8, int32_t NameLen, const vh_value* Args, int32_t ArgCount, vh_arena* Arena, vh_value* OutValue);
+
+	/* --- v11.1: generated bindings ----------------------------------------------------------- */
+
+	/* The *global class name* of the script a handle carries -- `Mob` for a node whose script is a
+	 * GDScript with `class_name Mob` -- written into OutName as a VH_TYPE_STRING allocated from
+	 * Arena. VH_CALL_NO_SUCH_MEMBER when the object carries no script, or one with no class_name.
+	 *
+	 * GetClassOf cannot answer this and that is the whole reason it exists: `get_class()` on a node
+	 * carrying `mob.gd` answers `Node2D`, because a script is not a ClassDB class. A binding for a
+	 * ClassDB class is keyed on GetClassOf; a binding for a *script* class can only be keyed on
+	 * this (spec R-INT-7, docs/generated-bindings.md 3).
+	 *
+	 * Asked once per handle and cached with GetClassOf's answer, so a consumer that lets a script
+	 * be replaced on a live object has to say so -- vh_set_bindings drops the cache. */
+	int32_t (*GetScriptClassOf)(void* Ctx, vh_handle Handle, vh_arena* Arena, vh_value* OutName);
 } vh_godot_api;
 
 /* How the frame about to execute relates to the frame the debugger last stopped in.
@@ -754,6 +769,58 @@ typedef struct vh_source_file
 	 * about res://, and the host never learns what res:// means. */
 	const char* ModulePathUtf8;
 } vh_source_file;
+
+/* One generated binding: a Godot class the mirror does not carry, and the Verse class that stands
+ * for it in the bindings package (spec R-INT-7).
+ *
+ * **This struct can never grow.** The rows are handed over as an array, so a field appended at the
+ * end changes the stride the host indexes by and the mismatch reads as corruption rather than as a
+ * refusal -- the same reason vh_complete_item is frozen. A new field means a major bump.
+ *
+ * Exactly one of the two keys is set, and which one says what kind of binding this is:
+ *
+ *   - **GodotClassUtf8** for a class ClassDB carries -- a third-party GDExtension's. It is what
+ *     GetClassOf answers, and it is also what InstantiateClass is handed to mint one.
+ *   - **ScriptClassUtf8** for a class a *script* declares with `class_name`. GetClassOf answers the
+ *     script's native base for one of these, so the key has to be GetScriptClassOf's answer. What
+ *     InstantiateClass is handed is this name, and the consumer is the side that knows it means
+ *     "make the base and set_script" (spec R-INT-12) -- the host never learns what a script is.
+ */
+typedef struct vh_binding_class
+{
+	/* The ClassDB class name, or NULL/0 for a script class. */
+	const char* GodotClassUtf8;
+	int32_t GodotClassLen;
+
+	/* The script's global class name, or NULL/0 for a ClassDB class. */
+	const char* ScriptClassUtf8;
+	int32_t ScriptClassLen;
+
+	/* The class in the bindings package, unqualified: the bindings package has no modules. */
+	const char* VerseClassUtf8;
+	int32_t VerseClassLen;
+} vh_binding_class;
+
+/* Replaces the bindings package: the generated Verse for every class the mirror does not carry,
+ * plus the table that says which Godot class each one stands for.
+ *
+ * SourceUtf8 is one Verse snippet -- the whole package, which has no modules and no files. Passing
+ * a zero-length source with no rows retires the package, which is what a project with no addons and
+ * no `class_name` scripts has.
+ *
+ * **Takes effect at the next build or analysis**, not here: this records the source and marks it
+ * dirty, and the package is put into the project by whichever comes first. The package is
+ * generational for the reason the script package is -- publishing one package name twice asserts
+ * inside the async loader rather than reporting anything -- so each call that changes the source
+ * costs a package name, and a consumer that calls this on every keystroke will exhaust them.
+ * Call it when the *roster* changes.
+ *
+ * Copies everything it is given; the caller may free its buffers on return. Drops the per-handle
+ * class cache, because a roster change is exactly when a handle's answer changes.
+ *
+ * VH_ERR_UNSUPPORTED in a runtime host, which reads its bindings from the cook. */
+VH_ATTR VH_API int32_t vh_set_bindings(const char* SourceUtf8, int32_t SourceLen,
+                                       const vh_binding_class* Classes, int32_t ClassCount);
 
 /* Compiles every listed .verse file as ONE Verse program, publishing a new generation of it.
  *
@@ -1968,6 +2035,7 @@ typedef int32_t (*vh_init_fn)(const vh_init_desc*);
 typedef void (*vh_shutdown_fn)(void);
 typedef void (*vh_tick_fn)(double, vh_tick_stats*);
 typedef void (*vh_collect_garbage_fn)(void);
+typedef int32_t (*vh_set_bindings_fn)(const char*, int32_t, const vh_binding_class*, int32_t);
 typedef int32_t (*vh_compile_project_fn)(const vh_source_file*, int32_t, int32_t*);
 typedef int32_t (*vh_resolve_unknown_name_fn)(const char*, const vh_module_ref**, int32_t*);
 typedef int32_t (*vh_check_project_fn)(const char*, const char*);

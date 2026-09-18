@@ -115,6 +115,18 @@ constexpr const char* AttributePackageName = "GodotAttributes";
 constexpr const char* AttributePackageVersePath = GodotVersePath;
 constexpr const char* AttributeSnippetPath = "GodotAttributes.verse";
 
+/// The generated bindings (R-INT-7): every ClassDB class the mirror does not carry, and every
+/// script class with a `class_name`, as ordinary Verse subclasses of their mirrored base.
+///
+/// A verse path of its own rather than the mirror's, so a binding whose name collides with a
+/// mirrored one is an ambiguity the author resolves at the use site -- `(/Godot.org/Bindings:)timer`
+/// -- rather than a redefinition reported against a generated file nobody can edit. What that costs
+/// is that the package cannot see anything `<internal>` to the mirror, which is why `CallConst`
+/// exists (docs/generated-bindings.md 10.6).
+constexpr const char* BindingsPackageBaseName = "GodotBindings";
+constexpr const char* BindingsVersePath = "/Godot.org/Bindings";
+constexpr const char* BindingsSnippetPath = "GodotBindings.verse";
+
 /// The attributes this bridge owns, as Verse source compiled in this process.
 ///
 /// They cannot ship in host/Verse with the rest of the package: `class(attribute)` is refused
@@ -340,6 +352,29 @@ TOptional<TSharedRef<ISolIdeSourceProject>> GSourceProject;
 /// which is the state the editor is in before its first Play.
 int32 GScriptGeneration = 0;
 FUtf8String GScriptPackageName;
+
+/// The bindings package: what the consumer last handed over, the name the last prepare used, and
+/// whether the source has changed since. Generational for the reason the script package is.
+FUtf8String GBindingsSource;
+FUtf8String GBindingsPackageName;
+int32 GBindingsGeneration = 0;
+bool GBindingsDirty = false;
+
+/// Godot class name -> the Verse class in the bindings package, and the same for a script's global
+/// class name. Two maps rather than one, because the two questions are asked of different
+/// callbacks and a ClassDB name and a script name can collide with each other.
+TMap<FUtf8String, FUtf8String> GBindingByGodotClass;
+TMap<FUtf8String, FUtf8String> GBindingByScriptClass;
+
+/// The reverse, for minting: the Verse binding class -> the name InstantiateClass is handed. A
+/// ClassDB binding hands over its Godot class name; a script binding hands over the script's global
+/// name, and the consumer is the side that knows that means "make the base and set_script"
+/// (R-INT-12). The host never learns what a script is.
+TMap<FUtf8String, FUtf8String> GMintNameByBinding;
+
+/// Empties the two caches that answer "what does this cross as" and "what does this mint".
+/// Declared here and defined beside the maps, which are a long way down this file.
+AUTORTFM_DISABLE void ForgetCachedClasses();
 
 /// The package the *source project* currently holds, which is not the same thing: a build that
 /// failed published nothing but left its source behind for analysis to report against, so this
@@ -568,6 +603,94 @@ AUTORTFM_DISABLE void AddScriptPackage(uLang::CProgramBuildManager& BuildManager
         }
     }
     Package._Package->SetDependencyPackages(uLang::Move(Dependencies));
+}
+
+/// Puts a fresh generation of the bindings package into the source project, retiring the previous
+/// one by name (R-INT-8).
+///
+/// **Generational for the reason the script package is**, and it is not a style choice: the
+/// assembler publishes every Source package the program carries, and publishing one name twice is
+/// `!ObjectItem->HasAnyFlags(EInternalObjectFlags::LoaderImport)` inside AsyncLoading2.cpp, which is
+/// a crash and not a diagnostic. Changing what a package *says* means changing what it is called.
+///
+/// Its dependencies exclude every generation of the script package, because the edge runs the other
+/// way: a script names binding classes, and a binding names only mirrored ones. Including them
+/// would be a cycle the build reports as an unresolved import.
+///
+/// Ends by recomputing the *script* package's dependency list, which is the half that is easy to
+/// miss. AddScriptPackage takes that list fresh from whatever else the project holds, and the
+/// generation package was prepared at the end of the last build -- before this package existed
+/// under this name. Without the recompute an analysis resolves no binding at all until a build has
+/// been round.
+AUTORTFM_DISABLE void PrepareBindingsPackage(uLang::CProgramBuildManager& BuildManager)
+{
+    uLang::TArray<uLang::CSourceProject::SPackage>& Packages = BuildManager.GetSourceProject()->_Packages;
+    if (!GBindingsPackageName.IsEmpty())
+    {
+        for (int32 Index = Packages.Num() - 1; Index >= 0; --Index)
+        {
+            if (FUtf8String(Packages[Index]._Package->GetName().AsCString()) == GBindingsPackageName)
+            {
+                Packages.RemoveAt(Index);
+            }
+        }
+        GBindingsPackageName.Empty();
+    }
+
+    GBindingsDirty = false;
+    if (GBindingsSource.IsEmpty())
+    {
+        // A project with no addons and no `class_name` scripts. No package at all rather than an
+        // empty one: an empty Verse snippet is a parse error, not a package with nothing in it.
+        return;
+    }
+
+    const FUtf8String PackageName =
+        FUtf8String(FString::Printf(TEXT("%hs_%d"), BindingsPackageBaseName, ++GBindingsGeneration));
+
+    const uLang::CSourceProject::SPackage& Package = BuildManager.FindOrAddSourcePackage(
+        FULangConversionUtils::FUtf8StringToULangStr(PackageName), BindingsVersePath);
+    Package._Package->SetVerseScope(uLang::EVerseScope::InternalUser);
+    Package._Package->SetVerseVersion(Verse::Version::LatestUnstable);
+    Package._Package->SetAllowExperimental(true);
+
+    uLang::TArray<uLang::CUTF8String> Dependencies;
+    for (const uLang::CSourceProject::SPackage& Other : Packages)
+    {
+        const FUtf8StringView OtherName(Other._Package->GetName().AsCString());
+        if (&Other != &Package && !OtherName.StartsWith(FUtf8StringView(ScriptPackageBaseName)))
+        {
+            Dependencies.Add(Other._Package->GetName());
+        }
+    }
+    Package._Package->SetDependencyPackages(uLang::Move(Dependencies));
+
+    BuildManager.AddSourceSnippet(
+        uLang::TSRef<uLang::CSourceDataSnippet>::New(
+            uLang::CUTF8String(BindingsSnippetPath),
+            FULangConversionUtils::FUtf8StringToULangStr(GBindingsSource)),
+        FULangConversionUtils::FUtf8StringToULangStr(PackageName),
+        BindingsVersePath);
+
+    GBindingsPackageName = PackageName;
+
+    if (!GScriptSourcePackageName.IsEmpty())
+    {
+        AddScriptPackage(BuildManager, GScriptSourcePackageName);
+    }
+}
+
+/// Puts a pending bindings package into the project, if the consumer has handed over a new one.
+///
+/// Called by the build and by the analysis alike, because a roster change has to reach completion
+/// without waiting for a build -- an addon's classes are completable "within a second or two of the
+/// addon loading" (R-INT-8), and an analysis is what runs in that second.
+AUTORTFM_DISABLE void FlushPendingBindings(uLang::CProgramBuildManager& BuildManager)
+{
+    if (GBindingsDirty)
+    {
+        PrepareBindingsPackage(BuildManager);
+    }
 }
 
 /// Drops a generation's package out of the source project.
@@ -1356,10 +1479,56 @@ AUTORTFM_DISABLE void GodotVerse::ResetScriptState()
     GScriptGeneration = 0;
     GScriptPackageName.Empty();
     GScriptSourcePackageName.Empty();
+    GBindingsPackageName.Empty();
+    GBindingsSource.Empty();
+    GBindingsDirty = false;
+    GBindingByGodotClass.Empty();
+    GBindingByScriptClass.Empty();
+    GMintNameByBinding.Empty();
     GPreparedGeneration = 0;
     GPreparedSources.Empty();
     GLastAnalysisClean = false;
     GProjectBuilt = false;
+}
+
+AUTORTFM_DISABLE void GodotVerse::SetBindings(const FUtf8String& Source, TArray<FBindingClass>&& Classes)
+{
+    // The table is replaced whatever the source says -- a consumer may hand over the same Verse
+    // with a different mapping, which is what happens when a script keeps its `class_name` and
+    // Godot renumbers nothing.
+    GBindingByGodotClass.Empty(Classes.Num());
+    GBindingByScriptClass.Empty(Classes.Num());
+    GMintNameByBinding.Empty(Classes.Num());
+    for (const FBindingClass& Binding : Classes)
+    {
+        if (Binding.VerseClass.IsEmpty())
+        {
+            continue;
+        }
+        if (!Binding.GodotClass.IsEmpty())
+        {
+            GBindingByGodotClass.Add(Binding.GodotClass, Binding.VerseClass);
+            GMintNameByBinding.Add(Binding.VerseClass, Binding.GodotClass);
+        }
+        else if (!Binding.ScriptClass.IsEmpty())
+        {
+            GBindingByScriptClass.Add(Binding.ScriptClass, Binding.VerseClass);
+            GMintNameByBinding.Add(Binding.VerseClass, Binding.ScriptClass);
+        }
+    }
+
+    // Only a *changed* source costs a package name. A roster whose Verse text is identical -- a
+    // scene reload, a project reopen -- must not, or a session that reopens often exhausts them.
+    if (GBindingsSource != Source)
+    {
+        GBindingsSource = Source;
+        GBindingsDirty = true;
+    }
+
+    // A roster change is exactly when a handle's answer changes, and the class cache is keyed per
+    // handle for the life of the process. The peer cache goes with it: what a script class mints
+    // depends on whether a binding now sits between it and the mirror.
+    ForgetCachedClasses();
 }
 
 AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FScriptSource>& Sources, int32& OutGeneration)
@@ -1396,7 +1565,9 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FScriptSource>& So
     // The program the last analysis left is this build's, or it is not; either way no analysis may
     // re-arm the reuse until one has run again, so the flag is cleared before anything else can
     // read it.
-    const bool bReuseHeldProgram = HeldProgramIsThisBuild(Sources, Texts);
+    // A pending bindings package makes the held program stale whatever the sources say: it was
+    // analysed against a roster this build does not have.
+    const bool bReuseHeldProgram = !GBindingsDirty && HeldProgramIsThisBuild(Sources, Texts);
     GLastAnalysisClean = false;
 
     FAnalysisTrace Trace;
@@ -1428,6 +1599,9 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FScriptSource>& So
     }
     else
     {
+        // Before PrepareGenerationPackage, which is what takes the script package's dependency
+        // list fresh -- a bindings package added after it would be depended on by nothing.
+        FlushPendingBindings(*BuildManager);
         PrepareGenerationPackage(*BuildManager, Generation, Sources, Texts);
 
         // Without this the build republishes the native VNI packages -- which are already loaded --
@@ -1544,6 +1718,11 @@ AUTORTFM_DISABLE bool RunCheck(const FUtf8String& Path, const FUtf8String& Sourc
     if (!GProjectBuilt || !GIde.IsValid())
     {
         return false;
+    }
+
+    if (const uLang::TSPtr<uLang::CProgramBuildManager> Manager = GIde->GetBuildManager(); Manager.IsValid())
+    {
+        FlushPendingBindings(*Manager);
     }
 
     for (const uLang::TSRef<FHostSourceSnippet>& Snippet : GScriptSnippets)
@@ -1890,12 +2069,12 @@ AUTORTFM_DISABLE void EnterVerseOn(Verse::FRunningContext& Context, GodotVerse::
     Context.EnterVM(Forward<TBody>(Body));
 }
 
-/// The UClass behind a script's top-level Verse class, or null if there is no such class or it
-/// does not derive from object. A class that does not derive from object has no
+/// The UClass behind a top-level Verse class in a named package, or null if there is no such class
+/// or it does not derive from object. A class that does not derive from object has no
 /// native representation at all, so `Cast<UClass>` is itself most of the check.
-AUTORTFM_DISABLE UClass* FindGodotClass(FUtf8StringView ClassName)
+AUTORTFM_DISABLE UClass* FindClassInPackage(FUtf8StringView PackageName, const char* VersePath, FUtf8StringView ClassName)
 {
-    Verse::VPackage* Package = Verse::GlobalProgram ? Verse::GlobalProgram->LookupPackage(GScriptPackageName) : nullptr;
+    Verse::VPackage* Package = Verse::GlobalProgram ? Verse::GlobalProgram->LookupPackage(FUtf8String(PackageName)) : nullptr;
     if (!Package)
     {
         return nullptr;
@@ -1904,7 +2083,7 @@ AUTORTFM_DISABLE UClass* FindGodotClass(FUtf8StringView ClassName)
     // A qualified name decorates as (scope:)leaf, and the module is part of the scope:
     // `gameplay/player` is `(/user@localhost/gameplay:)player`. A root-module class has no module
     // to add and decorates exactly as it did before modules existed.
-    FUtf8String Scope(ScriptVersePath);
+    FUtf8String Scope(VersePath);
     FUtf8String Leaf(ClassName);
     int32 LastSlash = INDEX_NONE;
     if (Leaf.FindLastChar(UTF8CHAR('/'), LastSlash))
@@ -1931,6 +2110,21 @@ AUTORTFM_DISABLE UClass* FindGodotClass(FUtf8StringView ClassName)
         }
     });
     return Found;
+}
+
+/// The project's own class of this name, in the generation currently published.
+AUTORTFM_DISABLE UClass* FindGodotClass(FUtf8StringView ClassName)
+{
+    return FindClassInPackage(GScriptPackageName, ScriptVersePath, ClassName);
+}
+
+/// The binding class of this name. Never module-qualified: the bindings package is generated as one
+/// snippet with no modules in it.
+AUTORTFM_DISABLE UClass* FindBindingClass(FUtf8StringView ClassName)
+{
+    return GBindingsPackageName.IsEmpty()
+        ? nullptr
+        : FindClassInPackage(GBindingsPackageName, BindingsVersePath, ClassName);
 }
 }
 
@@ -4290,6 +4484,12 @@ const char* GodotNameForMirroredClass(FUtf8StringView VerseName)
 /// publishes new ones.
 TMap<const UClass*, const char*> GPeerClassCache;
 
+AUTORTFM_DISABLE void ForgetCachedClasses()
+{
+    GHandleClassCache.Empty();
+    GPeerClassCache.Empty();
+}
+
 AUTORTFM_DISABLE const char* GodotPeerClassFor(const UClass* Class)
 {
     if (const char** Cached = GPeerClassCache.Find(Class))
@@ -4298,6 +4498,27 @@ AUTORTFM_DISABLE const char* GodotPeerClassFor(const UClass* Class)
     }
 
     const char* Found = nullptr;
+    // The bindings package comes first, and it has to: a binding's whole point is that Godot has a
+    // class the mirror does not, so the mirrored ancestor this walk would otherwise reach is the
+    // *wrong* class to mint -- a RigidBody2D where a RapierBody2D was meant, silently, while a
+    // working scene looks entirely normal (docs/generated-bindings.md 6).
+    for (const UClass* Cursor = Class; Cursor && !Found; Cursor = Cursor->GetSuperClass())
+    {
+        const UVerseClass* const VerseClass = Cast<UVerseClass>(Cursor);
+        const Verse::VClass* const VClass = VerseClass ? VerseClass->Class.Get() : nullptr;
+        if (!VClass
+            || !VClass->GetPackage().GetRootPath().AsStringView().Equals(FUtf8StringView(BindingsVersePath)))
+        {
+            continue;
+        }
+        if (const FUtf8String* const MintName = GMintNameByBinding.Find(FUtf8String(VClass->GetBaseName().AsStringView())))
+        {
+            // Held by the map for as long as the roster does, and the map outlives the cache: both
+            // are emptied together by SetBindings.
+            Found = reinterpret_cast<const char*>(**MintName);
+        }
+    }
+
     for (const UClass* Cursor = Class; Cursor && !Found; Cursor = Cursor->GetSuperClass())
     {
         const UVerseClass* const VerseClass = Cast<UVerseClass>(Cursor);
@@ -4344,7 +4565,16 @@ const char* MirroredNameForGodotClass(FUtf8StringView GodotName)
     return nullptr;
 }
 
-/// The mirrored class a live handle should cross as, cached per handle.
+/// The class a live handle should cross as, cached per handle.
+///
+/// Four questions, in this order, and the order is the point: a binding is *more derived* than the
+/// mirrored class the handle would otherwise become, and a script binding is more derived still.
+///
+///   1. Does a script on this object name a binding? `get_class()` answers a script's native base,
+///      so this one can only be asked of GetScriptClassOf.
+///   2. Does this object's ClassDB class name a binding? A third-party GDExtension's class.
+///   3. Is it one of the mirror's own?
+///   4. Nothing -- the caller's declared type, or a bare vh_object for a cast to decline.
 AUTORTFM_DISABLE UClass* MirroredClassForHandle(int64 Handle)
 {
     if (UClass** Cached = GHandleClassCache.Find(Handle))
@@ -4354,7 +4584,23 @@ AUTORTFM_DISABLE UClass* MirroredClassForHandle(int64 Handle)
 
     UClass* Found = nullptr;
     GodotVerse::FHostState& Host = GodotVerse::GetHost();
-    if (Host.Godot.GetClassOf)
+
+    if (!GBindingByScriptClass.IsEmpty() && Host.Godot.GetScriptClassOf)
+    {
+        GodotVerse::FCallArena Arena;
+        vh_value ScriptName{};
+        if (Host.Godot.GetScriptClassOf(Host.Godot.Ctx, Handle, &Arena, &ScriptName) == VH_CALL_OK
+            && ScriptName.Type == VH_TYPE_STRING)
+        {
+            const FUtf8String Named(GodotVerse::MakeView(ScriptName.String.Utf8, ScriptName.String.Len));
+            if (const FUtf8String* const VerseName = GBindingByScriptClass.Find(Named))
+            {
+                Found = FindBindingClass(*VerseName);
+            }
+        }
+    }
+
+    if (!Found && Host.Godot.GetClassOf)
     {
         GodotVerse::FCallArena Arena;
         vh_value ClassName{};
@@ -4362,9 +4608,16 @@ AUTORTFM_DISABLE UClass* MirroredClassForHandle(int64 Handle)
             && ClassName.Type == VH_TYPE_STRING)
         {
             const FUtf8StringView GodotName = GodotVerse::MakeView(ClassName.String.Utf8, ClassName.String.Len);
-            if (const char* VerseName = MirroredNameForGodotClass(GodotName))
+            if (const FUtf8String* const VerseName = GBindingByGodotClass.Find(FUtf8String(GodotName)))
             {
-                Found = FindMirroredClass(FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(VerseName)));
+                Found = FindBindingClass(*VerseName);
+            }
+            if (!Found)
+            {
+                if (const char* VerseName = MirroredNameForGodotClass(GodotName))
+                {
+                    Found = FindMirroredClass(FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(VerseName)));
+                }
             }
         }
     }

@@ -37,6 +37,26 @@ struct FScriptSource
     FUtf8String ModulePath;
 };
 
+/// One generated binding: a Godot class the mirror does not carry, and the Verse class in the
+/// bindings package that stands for it.
+///
+/// Exactly one key is set. GodotClass is what GetClassOf answers, for a ClassDB class;
+/// ScriptClass is what GetScriptClassOf answers, for a class a script declares -- GetClassOf
+/// answers the script's *native base* for one of those, so it cannot be the key.
+struct FBindingClass
+{
+    FUtf8String GodotClass;
+    FUtf8String ScriptClass;
+    FUtf8String VerseClass;
+};
+
+/// Replaces the bindings package and the table that keys it.
+///
+/// Records and marks dirty; the package is put into the source project by the next build or
+/// analysis, whichever comes first. Generational, so each *changed* source costs a package name --
+/// publishing one name twice asserts inside the async loader (R-INT-8).
+AUTORTFM_DISABLE void SetBindings(const FUtf8String& Source, TArray<FBindingClass>&& Classes);
+
 /// Builds every source as one program and publishes it as a new generation, writing that
 /// generation's number -- counting from 1 -- through OutGeneration.
 ///
