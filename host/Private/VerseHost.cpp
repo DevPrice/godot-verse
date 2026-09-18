@@ -837,6 +837,9 @@ extern "C" int32_t vh_class_method_list(const char* ClassNameUtf8, const vh_meth
             Out.Type = Param.Type;
             Out.VariantTag = Param.VariantTag;
             Out.HasDefault = Param.bHasDefault ? 1 : 0;
+            Out.ClassUtf8 = reinterpret_cast<const char*>(*Param.ClassName);
+            Out.ClassLen = Param.ClassName.Len();
+            Out.ClassKind = Param.ClassKind;
         }
     }
 
@@ -855,6 +858,9 @@ extern "C" int32_t vh_class_method_list(const char* ClassNameUtf8, const vh_meth
         Out.RequiredParamCount = Method.RequiredParamCount;
         Out.ResultType = Method.ResultType;
         Out.ResultVariantTag = Method.ResultVariantTag;
+        Out.ResultClassUtf8 = reinterpret_cast<const char*>(*Method.ResultClassName);
+        Out.ResultClassLen = Method.ResultClassName.Len();
+        Out.ResultClassKind = Method.ResultClassKind;
         Out.CanFail = Method.bCanFail ? 1 : 0;
         Out.Suspends = Method.bSuspends ? 1 : 0;
         Out.GodotVirtualUtf8 = reinterpret_cast<const char*>(*Method.GodotVirtual);
@@ -916,6 +922,9 @@ extern "C" int32_t vh_class_signal_list(const char* ClassNameUtf8, const vh_sign
             Out.Type = Arg.Type;
             Out.VariantTag = Arg.VariantTag;
             Out.HasDefault = 0;
+            Out.ClassUtf8 = reinterpret_cast<const char*>(*Arg.ClassName);
+            Out.ClassLen = Arg.ClassName.Len();
+            Out.ClassKind = Arg.ClassKind;
         }
     }
 

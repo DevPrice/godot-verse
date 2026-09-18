@@ -2636,6 +2636,19 @@ AUTORTFM_DISABLE FUtf8String QualifiedNameOf(const uLang::CClass& Class)
     return Path.StartsWith(Prefix) ? Path.RightChop(Prefix.Len()) : FUtf8String(Class.AsNameCString());
 }
 
+/// Whether Godot has a name for this class at all: `@global_class`, and being the class its own
+/// file is named after.
+///
+/// Both halves are needed, and testing only the first was a defect an author met within minutes
+/// (B19). A global class is collected per *path* -- `_get_global_class_name` answers one name
+/// per script -- so a second global class in one file registers nothing and has nowhere to live.
+AUTORTFM_DISABLE bool RegistersWithGodot(const uLang::CClass& Class, const uLang::CSemanticProgram& Program)
+{
+    const uLang::CClass* const GlobalClassAttribute =
+        Program.FindDefinitionByVersePath<uLang::CClass>(GlobalClassAttributePath);
+    return Class.HasAttributeSubclass(GlobalClassAttribute, Program) && IsClassNamedAfterItsFile(Class);
+}
+
 /// Verse's own `variant` -- the fixed-width lanes one Godot value of unknown type crosses as.
 ///
 /// Matched on the whole verse path rather than on the name, because a project may declare a struct
@@ -2976,9 +2989,7 @@ AUTORTFM_DISABLE void DescribeExportType(const uLang::CTypeBase* Type, const uLa
             // that accepts a `.tres` of that class is worth far more than no slot at all. This is
             // GDScript's own rule -- `_find_narrowest_native_or_global_class`, the *or* being the
             // half this used to skip. `by-hand-findings.md` B19.
-            const CClass* GlobalClassAttribute = Program.FindDefinitionByVersePath<CClass>(GlobalClassAttributePath);
-            const bool bRegisters = Class->HasAttributeSubclass(GlobalClassAttribute, Program)
-                && IsClassNamedAfterItsFile(*Class);
+            const bool bRegisters = RegistersWithGodot(*Class, Program);
             if (!bRegisters)
             {
                 OutDesc.Hint = VH_EXPORT_HINT_CLASS;
@@ -3150,6 +3161,36 @@ struct FMemberType
     /// FMemberTypes of its own, which a struct with a struct field makes recursive.
     TSharedPtr<struct FUserStructLayout> UserStruct;
 };
+
+/// The class a parameter, a result or a signal argument names, in the two fields the ABI
+/// carries for one -- vh_param_desc::ClassUtf8 and ClassKind, which document the rule.
+///
+/// The fallback is the whole of what this adds over reading the type: a script class Godot has
+/// not registered is reported as its nearest *mirrored* ancestor, because a consumer can only
+/// name a class Godot can resolve and `Node2D` says more than nothing. That is the same answer
+/// an exported member of that type gets, and for the same reason.
+AUTORTFM_DISABLE void DescribeClassOf(const FMemberType& Type, const uLang::CSemanticProgram& Program,
+                                     FUtf8String& OutName, int32& OutKind)
+{
+    OutName.Reset();
+    OutKind = VH_CLASS_NONE;
+    // ReferenceName is the test for "is this a reference"; the pointer beside it is the
+    // analysis's, and both answers below are read off it. A host with no semantic program never
+    // reaches here at all -- it reads its descriptions out of a sidecar, already resolved.
+    if (Type.ReferenceName.IsEmpty() || Type.ReferenceClass == nullptr)
+    {
+        return;
+    }
+    if (Type.ReferenceOrigin == EClassOrigin::Script && RegistersWithGodot(*Type.ReferenceClass, Program))
+    {
+        OutName = QualifiedNameOf(*Type.ReferenceClass);
+        OutKind = VH_CLASS_SCRIPT;
+        return;
+    }
+    // A mirrored class answers itself here, so this is the same call for both remaining cases.
+    OutName = NativeClassOf(*Type.ReferenceClass, Program);
+    OutKind = OutName.IsEmpty() ? VH_CLASS_NONE : VH_CLASS_MIRRORED;
+}
 
 /// One method's declared parameter and result types, which is what a call needs and what
 /// FMethodDesc -- which carries only what crosses the ABI -- does not have.
@@ -5613,6 +5654,7 @@ AUTORTFM_DISABLE bool GetClassMethodsLive(FUtf8StringView ClassName, TArray<Godo
             Out.VariantTag = ParamType.Described.Type == VH_TYPE_ARRAY
                 ? VH_VARIANT_NIL
                 : ParamType.Described.VariantTag;
+            DescribeClassOf(ParamType, *Program, Out.ClassName, Out.ClassKind);
             Out.bHasDefault = Param->HasInitializer();
             if (!Out.bHasDefault)
             {
@@ -5623,6 +5665,7 @@ AUTORTFM_DISABLE bool GetClassMethodsLive(FUtf8StringView ClassName, TArray<Godo
         const FMemberType ResultType = DescribeType(&Type->GetReturnType(), *Program);
         Desc.ResultType = ResultType.Described.Type;
         Desc.ResultVariantTag = ResultType.Described.VariantTag;
+        DescribeClassOf(ResultType, *Program, Desc.ResultClassName, Desc.ResultClassKind);
 
         if (OverridesMirroredDefinition(*Function))
         {
@@ -6408,6 +6451,7 @@ AUTORTFM_DISABLE bool GetClassSignalsLive(FUtf8StringView ClassName, TArray<Godo
                 Param.Name = Arg.Name;
                 Param.Type = Arg.Type.Described.Type;
                 Param.VariantTag = Arg.Type.Described.VariantTag;
+                DescribeClassOf(Arg.Type, *Program, Param.ClassName, Param.ClassKind);
                 Desc.Args.Add(MoveTemp(Param));
             }
 

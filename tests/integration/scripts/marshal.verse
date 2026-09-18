@@ -545,3 +545,35 @@ marshal := class(node2d):
     TakeRid<public>(R:rid)<reads>:int = R.Id
 
     GiveRid<public>(Value:int)<reads>:rid = rid{Id := Value}
+
+    # --- R-NODE-9: what a parameter's declared class reaches Godot as ---------
+    #
+    # A PropertyInfo with no class beside its type is all Godot has to go on, and what it draws
+    # for one is `Object` -- in a call hint, in the connect dialog and in the documentation --
+    # whatever the declaration said. The bodies are trivial on purpose: what is under test is the
+    # description of the method, and nothing here is ever called.
+
+    # A mirrored class, which Godot knows by its own name.
+    TakesTimer<public>(Clock:timer):int = 0
+
+    # A class of the project's own that Godot *has* registered, which it knows by the PascalCase
+    # of the file's stem rather than by the Verse spelling.
+    TakesMarshal<public>(Other:marshal):int = 0
+
+    # One it has not: no @global_class, so nothing can name it, and the nearest mirrored class is
+    # reported instead. A name Godot cannot resolve would be worse than a less specific one it
+    # can, which is GDScript's own _find_narrowest_native_or_global_class.
+    TakesHelper<public>(Helper:marshal_helper):int = 0
+
+    # An optional reference, which is an object to Godot exactly as a plain one is: null is the
+    # empty case, and it is the one value every object slot can hold. So the two spellings differ
+    # in what Verse makes the body prove and in nothing Godot is told.
+    TakesMaybeTimer<public>(Clock:?timer):int = 0
+
+    # And the other end of the call, which asks the same question of the result.
+    GivesTimer<public>(Clock:timer):timer = Clock
+
+# The unregistered class TakesHelper names. Ordinary Verse -- a helper beside the class the file
+# is named after -- and the shape every project writes sooner or later.
+marshal_helper := class(node2d):
+    Amount<public>:int = 1

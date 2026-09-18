@@ -3310,6 +3310,46 @@ int main(int argc, char** argv)
 		Step("a <decides> method says so", NotBelow && NotBelow->CanFail != 0);
 		Step("and one that cannot fail does not", AddInts && AddInts->CanFail == 0);
 
+		// The class a parameter declares. A consumer describing this method to a host language has
+		// only "an object" to say about it otherwise, whatever the declaration said, and the three
+		// cases below are the three answers there are. Each name is Verse's spelling, because the
+		// mapping to another language's is the consumer's table rather than the host's.
+		const vh_method_desc* TakesTimer = ListOk ? Find("TakesTimer") : nullptr;
+		Step("a mirrored class parameter names the class",
+			 TakesTimer && TakesTimer->ParamCount == 1
+				 && TakesTimer->Params[0].ClassKind == VH_CLASS_MIRRORED
+				 && Text(TakesTimer->Params[0].ClassUtf8, TakesTimer->Params[0].ClassLen) == "timer");
+		Step("and a parameter of no class says so",
+			 AddInts && AddInts->Params[0].ClassKind == VH_CLASS_NONE
+				 && AddInts->Params[0].ClassLen == 0);
+
+		// The fallback, and the reason the kind is carried rather than left to be inferred: a class
+		// the consumer's own language has no name for is reported as the nearest mirrored one,
+		// because a name that cannot be resolved is worse than a less specific one that can.
+		//
+		// Both ways of having no name are fixtures here, which is B19's pair: `exports_probe` carries
+		// @global_class and is not the class its file is named after, and `exports_unregistered`
+		// carries no attribute. **No class in this project is registered**, which is why the one
+		// positive case -- a parameter reported as VH_CLASS_SCRIPT -- is in the integration layer,
+		// against a project whose class is named after its file.
+		const vh_method_desc* TakesProbe = ListOk ? Find("TakesProbe") : nullptr;
+		Step("an attribute on a class that is not its file's registers nothing, so a parameter falls back",
+			 TakesProbe && TakesProbe->ParamCount == 1
+				 && TakesProbe->Params[0].ClassKind == VH_CLASS_MIRRORED
+				 && Text(TakesProbe->Params[0].ClassUtf8, TakesProbe->Params[0].ClassLen) == "node2d");
+
+		const vh_method_desc* TakesUnregistered = ListOk ? Find("TakesUnregistered") : nullptr;
+		Step("and so does one with no attribute at all",
+			 TakesUnregistered && TakesUnregistered->ParamCount == 1
+				 && TakesUnregistered->Params[0].ClassKind == VH_CLASS_MIRRORED
+				 && Text(TakesUnregistered->Params[0].ClassUtf8,
+						 TakesUnregistered->Params[0].ClassLen) == "node2d");
+
+		const vh_method_desc* GivesTimer = ListOk ? Find("GivesTimer") : nullptr;
+		Step("and a result answers the same question at the other end of the call",
+			 GivesTimer && GivesTimer->ResultClassKind == VH_CLASS_MIRRORED
+				 && Text(GivesTimer->ResultClassUtf8, GivesTimer->ResultClassLen) == "timer");
+
 		// Nothing in `exports` overrides a Godot virtual, so every method here is the script's own.
 		bool AnyVirtual = false;
 		for (int32_t Index = 0; ListOk && Index < MethodCount; ++Index)

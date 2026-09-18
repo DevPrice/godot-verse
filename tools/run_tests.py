@@ -190,7 +190,7 @@ COOK_EXPECTED_CLASSES = ["debug_probe", "exports", "tasks"]
 
 # What HostSidecar.cpp is writing. Asserted rather than ignored because the sidecar is the one
 # cooked artifact a human reads, and a version nobody bumped is how a reader-writer pair drifts.
-SIDECAR_VERSION = 6
+SIDECAR_VERSION = 7
 
 
 def run_cook(results: Results, engine: Path) -> None:
@@ -686,9 +686,9 @@ EXPORT_EXPECTED_CLASSES = ["marshal", "signals", "left/widget"]
 # other way round -- only an exported game has autoloads at all, because `--script` replaces the
 # main loop before Godot sets one up -- so they are skips in the editor run and passes here. The two
 # runs therefore report different totals from one set of lines, and neither is a function of the
-# other: the in-editor run prints 507 passed and 5 skipped against the numbers below. Adding a case
+# other: the in-editor run prints 520 passed and 5 skipped against the numbers below. Adding a case
 # means changing this line, which is the point of it.
-EXPORT_EXPECTED_PASSES = 469
+EXPORT_EXPECTED_PASSES = 478
 EXPORT_EXPECTED_SKIPS = 15
 
 

@@ -553,7 +553,12 @@ on closing it.
   reads the class's own declarations out of the semantic program — names, parameters with their own
   names and types, result type, `<decides>`/`<suspends>`, and Godot's name for the virtual it
   overrides — and the script instance answers `has_method`, `get_method_list` and
-  `get_method_argument_count` from it.
+  `get_method_argument_count` from it. A parameter of an object type also reports **the class it
+  declares** (ABI 12.0), as does a result and a signal argument, because a `PropertyInfo` with no
+  `class_name` is what Godot draws as `Object` however specific the declaration was. A script
+  class Godot has not registered reports its nearest mirrored ancestor instead of a name nothing
+  can resolve, which is the rule an exported member of that type already followed
+  (`by-hand-findings.md` B32).
 - **R-NODE-10 (SHOULD)** The script-level hooks Godot offers a script rather than registering in
   ClassDB are reachable: `_to_string`, `_get`, `_set`, `_get_property_list`, `_validate_property`.
   Status: **done** (Phase 4b stage 5). Named

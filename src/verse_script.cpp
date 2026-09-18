@@ -32,11 +32,15 @@ VerseRuntime *get_runtime() {
 // The two argument slots of the Dictionary shape ScriptExtension::_get_method_info wants for a
 // MethodInfo. A declared type gives the typed one; PROPERTY_USAGE_NIL_IS_VARIANT on the untyped one
 // is what tells Godot the absence is deliberate rather than a property nobody set a type on.
-Dictionary typed_argument(const String &p_name, Variant::Type p_type) {
+Dictionary typed_argument(const String &p_name, Variant::Type p_type,
+		const StringName &p_class_name = StringName()) {
 	Dictionary arg;
 	arg["name"] = p_name;
 	arg["type"] = (int64_t)p_type;
-	arg["class_name"] = StringName();
+	// Only where the argument is an object: a class name on anything else is a filter Godot
+	// would apply to a value that can never satisfy it. An optional reference is an object too
+	// -- null is the empty case -- so `?timer` keeps its class exactly as `timer` does.
+	arg["class_name"] = p_type == Variant::OBJECT ? p_class_name : StringName();
 	arg["hint"] = (int64_t)PROPERTY_HINT_NONE;
 	arg["hint_string"] = String();
 	// A NIL type here means "any", not "must be nil" -- which is what NIL_IS_VARIANT tells Godot,
@@ -70,13 +74,14 @@ Dictionary method_info_dict(const VerseMethodInfo &p_method) {
 	info["flags"] = (int64_t)METHOD_FLAG_NORMAL;
 	info["id"] = -1;
 	info["default_args"] = Array();
-	info["return"] = p_method.returns_value ? typed_argument(String(), p_method.return_type)
-										   : untyped_argument(String());
+	info["return"] = p_method.returns_value
+			? typed_argument(String(), p_method.return_type, p_method.return_class_name)
+			: untyped_argument(String());
 
 	TypedArray<Dictionary> args;
 	for (int64_t i = 0; i < p_method.params.size(); i++) {
 		const VerseMethodInfo::Param &param = p_method.params[i];
-		args.push_back(typed_argument(String(param.name), param.type));
+		args.push_back(typed_argument(String(param.name), param.type, param.class_name));
 	}
 	info["args"] = args;
 	return info;
@@ -694,7 +699,8 @@ TypedArray<Dictionary> VerseScript::_get_script_signal_list() const {
 		}
 		Array args;
 		for (int64_t j = 0; j < signal.args.size(); j++) {
-			args.push_back(typed_argument(String(signal.args[j].name), signal.args[j].type));
+			args.push_back(typed_argument(String(signal.args[j].name), signal.args[j].type,
+					signal.args[j].class_name));
 		}
 		Dictionary info;
 		info["name"] = String(signal.name);
@@ -897,29 +903,14 @@ PropertyUsageFlags usage_for_group(int64_t p_kind) {
 	}
 }
 
-// The name an export's reference slot is filtered by: the Godot class for one of the mirrors, and the
-// registered class name for one of the project's own.
-//
-// A mirrored name is resolved through the generated API's table, the only place the two spellings are
-// written down together. A script's class has no entry there -- nothing generated it -- and the name
-// Godot knows it by is the PascalCase form of the same name it registered with, derived here through
-// verse_pascal_case rather than sent across the ABI: the host would have to reimplement the transform
-// to send it, and two implementations of one naming rule are one too many.
-//
-// **The leaf of the qualified name, not the whole of it.** Everything the host is asked about is
-// module-qualified -- `left/palette` for a class under a `.vmodule` -- and ClassDB is one flat
-// namespace a module is deliberately not part of: `@global_class` registers the file stem
-// PascalCased and nothing else. Passing the module through gave `Left/palette`, a name nothing had
-// ever registered, and the inspector answered *"Cannot get class"* the moment a slot of that type
-// was drawn. Found by hand; `by-hand-findings.md` B18.
+// The name an export's reference slot is filtered by. An export says which kind of class it names
+// with its hint and a method parameter says it with a vh_class_kind, which is the same fact in
+// two spellings -- so both go through verse_godot_class_name, where the rule is written down.
 String filter_class_from_hint(const Dictionary &p_entry) {
-	const String verse_class = p_entry["hint_string"];
-	if ((int64_t)p_entry["hint"] == VH_EXPORT_HINT_SCRIPT_CLASS) {
-		const String leaf = verse_class.substr(verse_class.rfind("/") + 1);
-		return String(verse_pascal_case(std::string(leaf.utf8().get_data())).c_str());
-	}
-	const char *godot_class = verse_godot_class_for(verse_class);
-	return godot_class != nullptr ? String(godot_class) : String();
+	const int32_t kind = (int64_t)p_entry["hint"] == VH_EXPORT_HINT_SCRIPT_CLASS
+			? VH_CLASS_SCRIPT
+			: VH_CLASS_MIRRORED;
+	return String(verse_godot_class_name(p_entry["hint_string"], kind));
 }
 
 Dictionary property_for(const Dictionary &p_entry, Variant::Type p_type) {

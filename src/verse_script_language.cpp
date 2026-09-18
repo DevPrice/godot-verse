@@ -104,6 +104,29 @@ const char *verse_godot_class_for(const String &p_verse_class) {
 	return nullptr;
 }
 
+// A mirrored name is resolved through the generated API's table, the only place the two spellings
+// are written down together. A script's class has no entry there -- nothing generated it -- and the
+// name Godot knows it by is the PascalCase form of the name it registered with, derived here rather
+// than sent across the ABI: the host would have to reimplement the transform to send it, and two
+// implementations of one naming rule are one too many.
+StringName verse_godot_class_name(const String &p_verse_class, int32_t p_class_kind) {
+	if (p_verse_class.is_empty()) {
+		return StringName();
+	}
+	if (p_class_kind == VH_CLASS_SCRIPT) {
+		// **The leaf of the qualified name, not the whole of it.** Everything the host is asked about
+		// is module-qualified -- `left/palette` for a class under a `.vmodule` -- and ClassDB is one
+		// flat namespace a module is deliberately not part of: `@global_class` registers the file
+		// stem PascalCased and nothing else. Passing the module through gave `Left/palette`, a name
+		// nothing had ever registered, and the inspector answered *"Cannot get class"* the moment a
+		// slot of that type was drawn. Found by hand; `by-hand-findings.md` B18.
+		const String leaf = p_verse_class.substr(p_verse_class.rfind("/") + 1);
+		return StringName(String(verse_pascal_case(std::string(leaf.utf8().get_data())).c_str()));
+	}
+	const char *godot_class = verse_godot_class_for(p_verse_class);
+	return godot_class != nullptr ? StringName(godot_class) : StringName();
+}
+
 namespace {
 
 VerseRuntime *get_runtime() {

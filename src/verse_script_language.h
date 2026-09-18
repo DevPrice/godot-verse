@@ -43,6 +43,12 @@ godot::String verse_doc_comment_above(const godot::String &p_source, int64_t p_l
 // that has to be the same table the rest of the bridge resolves a Verse class name through.
 const char *verse_godot_class_for(const godot::String &p_verse_class);
 
+// The name Godot knows a declared class by, from the two fields the ABI carries for one
+// (vh_param_desc::ClassUtf8 and ClassKind, and vh_export_desc's hint pair, which say the same
+// thing two ways). Empty for a class Godot has no name for, which is what leaves an argument
+// drawn as a plain Object rather than filtered by a name nothing can resolve.
+godot::StringName verse_godot_class_name(const godot::String &p_verse_class, int32_t p_class_kind);
+
 #ifdef TOOLS_ENABLED
 // The EditorInterface singleton, or nullptr when this process is not an editor.
 //

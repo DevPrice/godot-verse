@@ -157,6 +157,18 @@ exports := class(object):
     # One method per argument shape the wire carries, each returning something derived from what it
     # was given, so a single call checks the round trip in both directions.
     AddInts<public>(A:int, B:int):int = A + B
+
+    # The class a parameter declares, which the method list carries beside its type (ABI 12.0).
+    # Nothing calls these: what is under test is the *description* of the method.
+    #
+    # No class in this project is registered with Godot, so both script-class parameters below are
+    # fallbacks and they are B19's pair: `exports_probe` has the attribute and is not its file's
+    # class, `exports_unregistered` has no attribute. The registered case needs a project whose
+    # class is named after its file, and is asserted in the integration layer against one.
+    TakesTimer<public>(Clock:timer):int = 0
+    TakesProbe<public>(Probe:exports_probe):int = 0
+    TakesUnregistered<public>(Other:exports_unregistered):int = 0
+    GivesTimer<public>(Clock:timer):timer = Clock
     ScaleFloat<public>(V:float, By:float):float = V * By
     Decorate<public>(Prefix:string, Suffix:string):string = "{Prefix}{Label}{Suffix}"
     Negate<public>(Flag:logic):logic = if (Flag?) then false else true

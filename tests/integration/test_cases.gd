@@ -332,6 +332,53 @@ func begin() -> void:
 	else:
 		_check("a method reports its arguments", false)
 
+	# R-NODE-9: the class a parameter declares, which is the whole of what Godot draws in a call
+	# hint. A PropertyInfo with no class_name is `Object` however specific the declaration was.
+	#
+	# Read off the *node* here and off the script below, because the two are built by different
+	# code: an instance answers get_method_list through the raw GDExtension vtable and a script
+	# answers _get_script_method_list with a Dictionary, and only one of them used to be wrong at
+	# a time when the other was right.
+	if names.has("TakesTimer"):
+		_check_eq("a mirrored class parameter is named to Godot",
+				String(names["TakesTimer"]["args"][0]["class_name"]), "Timer")
+	else:
+		_check("a mirrored class parameter is named to Godot", false)
+	if names.has("TakesMarshal"):
+		_check_eq("a registered script class parameter is named as Godot registered it",
+				String(names["TakesMarshal"]["args"][0]["class_name"]), "Marshal")
+	else:
+		_check("a registered script class parameter is named as Godot registered it", false)
+	if names.has("TakesHelper"):
+		_check_eq("an unregistered one falls back to its nearest mirrored class",
+				String(names["TakesHelper"]["args"][0]["class_name"]), "Node2D")
+	else:
+		_check("an unregistered one falls back to its nearest mirrored class", false)
+	if names.has("TakesMaybeTimer"):
+		# `?timer` reaches Godot as an object, not as a variant: null is the empty case and every
+		# object slot can hold it, so the two spellings differ in what Verse makes the body prove
+		# and in nothing Godot is told. Asserted because it was assumed to go the other way.
+		var maybe_arg: Dictionary = names["TakesMaybeTimer"]["args"][0]
+		_check_eq("an optional reference is an object like any other",
+				int(maybe_arg["type"]), TYPE_OBJECT)
+		_check_eq("and is named by the same class", String(maybe_arg["class_name"]), "Timer")
+	else:
+		_check("an optional reference is an object like any other", false)
+
+	var script_by_name := {}
+	for method in (script as Script).get_script_method_list():
+		script_by_name[String(method["name"])] = method
+	if script_by_name.has("TakesTimer"):
+		_check_eq("the script's own list names it too",
+				String(script_by_name["TakesTimer"]["args"][0]["class_name"]), "Timer")
+	else:
+		_check("the script's own list names it too", false)
+	if script_by_name.has("GivesTimer"):
+		_check_eq("and a result is named at the other end of the call",
+				String(script_by_name["GivesTimer"]["return"]["class_name"]), "Timer")
+	else:
+		_check("and a result is named at the other end of the call", false)
+
 	# A Godot virtual is listed under Godot's own name, which is how the engine finds it. Asked of
 	# the *script's* list rather than the node's: a node's merges ClassDB's, where `_ready` is
 	# registered whatever the script says, so the node's list can never tell the two apart.
@@ -1041,6 +1088,18 @@ func begin() -> void:
 			if struck_args.size() == 2:
 				_check_eq("positionally named", String(struck_args[0]["name"]), "Arg0")
 				_check_eq("and typed element by element", int(struck_args[1]["type"]), TYPE_STRING)
+
+		if by_name.has("Touched"):
+			# A signal argument is a vh_param_desc like a method's, so it answers the same
+			# question -- and this is the one the connect dialog reads to say what a handler
+			# receives.
+			var touched_args: Array = by_name["Touched"]["args"]
+			_check_eq("an object payload is one argument", touched_args.size(), 1)
+			if touched_args.size() == 1:
+				_check_eq("named as the Godot class it carries",
+						String(touched_args[0]["class_name"]), "Node2D")
+		else:
+			_check("an object payload is one argument", false)
 
 		_check("Object.has_signal sees it", emitter_node.has_signal("Hit"))
 

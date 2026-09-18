@@ -17,7 +17,7 @@ namespace {
 /// Bumped when the shape below changes in a way a reader of the old shape would misread. The
 /// cooker and the runtime host are built together and shipped together, so this is a tripwire
 /// against a stale cook in a game directory rather than a compatibility mechanism.
-constexpr int32 SidecarVersion = 6;
+constexpr int32 SidecarVersion = 7;
 
 FString Utf8ToFString(const FUtf8String& Value)
 {
@@ -228,6 +228,8 @@ TSharedPtr<FJsonObject> WriteParam(const GodotVerse::FParamDesc& Param)
     Object->SetNumberField(TEXT("type"), (int32)Param.Type);
     Object->SetNumberField(TEXT("tag"), Param.VariantTag);
     Object->SetBoolField(TEXT("default"), Param.bHasDefault);
+    Object->SetStringField(TEXT("class"), Utf8ToFString(Param.ClassName));
+    Object->SetNumberField(TEXT("classKind"), Param.ClassKind);
     return Object;
 }
 
@@ -238,6 +240,8 @@ GodotVerse::FParamDesc ReadParam(const TSharedPtr<FJsonObject>& Object)
     Param.Type = (vh_type)(int32)Object->GetNumberField(TEXT("type"));
     Param.VariantTag = (int32)Object->GetNumberField(TEXT("tag"));
     Param.bHasDefault = Object->GetBoolField(TEXT("default"));
+    Param.ClassName = FStringToUtf8(Object->GetStringField(TEXT("class")));
+    Param.ClassKind = (int32)Object->GetNumberField(TEXT("classKind"));
     return Param;
 }
 
@@ -255,6 +259,8 @@ TSharedPtr<FJsonObject> WriteMethod(const GodotVerse::FMethodDesc& Method)
     Object->SetNumberField(TEXT("required"), Method.RequiredParamCount);
     Object->SetNumberField(TEXT("result"), (int32)Method.ResultType);
     Object->SetNumberField(TEXT("resultTag"), Method.ResultVariantTag);
+    Object->SetStringField(TEXT("resultClass"), Utf8ToFString(Method.ResultClassName));
+    Object->SetNumberField(TEXT("resultClassKind"), Method.ResultClassKind);
     Object->SetBoolField(TEXT("canFail"), Method.bCanFail);
     Object->SetBoolField(TEXT("suspends"), Method.bSuspends);
     Object->SetStringField(TEXT("virtual"), Utf8ToFString(Method.GodotVirtual));
@@ -279,6 +285,8 @@ GodotVerse::FMethodDesc ReadMethod(const TSharedPtr<FJsonObject>& Object)
     Method.RequiredParamCount = (int32)Object->GetNumberField(TEXT("required"));
     Method.ResultType = (vh_type)(int32)Object->GetNumberField(TEXT("result"));
     Method.ResultVariantTag = (int32)Object->GetNumberField(TEXT("resultTag"));
+    Method.ResultClassName = FStringToUtf8(Object->GetStringField(TEXT("resultClass")));
+    Method.ResultClassKind = (int32)Object->GetNumberField(TEXT("resultClassKind"));
     Method.bCanFail = Object->GetBoolField(TEXT("canFail"));
     Method.bSuspends = Object->GetBoolField(TEXT("suspends"));
     Method.GodotVirtual = FStringToUtf8(Object->GetStringField(TEXT("virtual")));

@@ -839,6 +839,8 @@ Vector<VerseMethodInfo> VerseRuntime::class_methods(const String &p_class_name) 
 		info.suspends = desc.Suspends != 0;
 		info.returns_value = desc.ResultType != VH_TYPE_VOID;
 		info.return_type = info.returns_value ? variant_type_for(desc.ResultType, desc.ResultVariantTag) : Variant::NIL;
+		info.return_class_name = verse_godot_class_name(
+				String::utf8(desc.ResultClassUtf8, desc.ResultClassLen), desc.ResultClassKind);
 
 		info.params.resize(desc.ParamCount);
 		for (int32_t j = 0; j < desc.ParamCount; ++j) {
@@ -846,6 +848,8 @@ Vector<VerseMethodInfo> VerseRuntime::class_methods(const String &p_class_name) 
 			VerseMethodInfo::Param &out = info.params.write[j];
 			out.name = StringName(String::utf8(param.NameUtf8, param.NameLen));
 			out.type = variant_type_for(param.Type, param.VariantTag);
+			out.class_name = verse_godot_class_name(
+					String::utf8(param.ClassUtf8, param.ClassLen), param.ClassKind);
 		}
 	}
 	return methods;
@@ -930,6 +934,8 @@ Vector<VerseSignalInfo> VerseRuntime::class_signals(const String &p_class_name) 
 			VerseSignalInfo::Arg &out = info.args.write[j];
 			out.name = StringName(String::utf8(arg.NameUtf8, arg.NameLen));
 			out.type = variant_type_for(arg.Type, arg.VariantTag);
+			out.class_name = verse_godot_class_name(
+					String::utf8(arg.ClassUtf8, arg.ClassLen), arg.ClassKind);
 		}
 	}
 	return signals;

@@ -217,9 +217,13 @@ struct MethodListStorage {
 	std::deque<String> hint_strings;
 };
 
-GDExtensionPropertyInfo make_property(MethodListStorage &r_storage, const StringName &p_name, Variant::Type p_type) {
+GDExtensionPropertyInfo make_property(MethodListStorage &r_storage, const StringName &p_name,
+		Variant::Type p_type, const StringName &p_class_name = StringName()) {
 	r_storage.names.push_back(p_name);
-	r_storage.names.push_back(StringName());
+	// Only where the argument is an object, which is the same guard verse_script.cpp's
+	// typed_argument applies: a class name on anything else filters by something no value of
+	// that type can satisfy.
+	r_storage.names.push_back(p_type == Variant::OBJECT ? p_class_name : StringName());
 	r_storage.hint_strings.push_back(String());
 
 	GDExtensionPropertyInfo info = {};
@@ -260,7 +264,8 @@ const GDExtensionMethodInfo *get_method_list_func(GDExtensionScriptInstanceDataP
 		const VerseMethodInfo &method = methods[i];
 		const size_t first_argument = storage->arguments.size();
 		for (int64_t j = 0; j < method.params.size(); j++) {
-			storage->arguments.push_back(make_property(*storage, method.params[j].name, method.params[j].type));
+			storage->arguments.push_back(make_property(*storage, method.params[j].name,
+					method.params[j].type, method.params[j].class_name));
 		}
 
 		// The name Godot calls it by: a script method keeps its Verse spelling, and one that
@@ -271,7 +276,8 @@ const GDExtensionMethodInfo *get_method_list_func(GDExtensionScriptInstanceDataP
 		GDExtensionMethodInfo info = {};
 		info.name = (GDExtensionStringNamePtr)&storage->names.back();
 		info.return_value = make_property(*storage, StringName(),
-				method.returns_value ? method.return_type : Variant::NIL);
+				method.returns_value ? method.return_type : Variant::NIL,
+				method.return_class_name);
 		info.flags = METHOD_FLAG_NORMAL;
 		info.id = 0;
 		info.argument_count = (uint32_t)method.params.size();

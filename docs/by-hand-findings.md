@@ -1261,6 +1261,50 @@ a build if it is quietly reversed.
 
 ---
 
+## B32. Every object parameter reached Godot as `Object` · **fixed**
+
+Reported from an editor session: a Verse method declared `(Clock:timer)` shows its parameter as
+`Object` wherever Godot describes the method, though the declaration names a class.
+
+**What Godot has to go on is a `PropertyInfo`, and its `class_name` was always empty.**
+`typed_argument` filled a name and a `Variant::Type` and left the class a default `StringName`,
+because `VerseMethodInfo::Param` had nothing else in it, because `vh_param_desc` had no class
+field. Everything below that is honest: `Variant::OBJECT` with no class *is* what Godot draws as
+`Object`.
+
+**It could not be read off anything the ABI already carried.** The decorated name the method list
+hands over does spell the parameter's type -- `(/user@localhost/exports:)AddInts(:int,:int)` --
+but that is the VM's mangling, and parsing it is guessing where the host can be asked. So
+`vh_param_desc` grew the class and the package that declares it and `vh_method_desc` the same pair
+for its result, and the bump is a **major** for the reason recorded twice before it: these
+descriptors are handed over as *arrays*, so a field at the end changes the stride the consumer
+indexes by and the mismatch reads as corruption rather than as a refusal.
+
+**A signal argument is a `vh_param_desc`, so it came along**, which is what the Node panel's
+connect dialog reads to say what a handler will receive.
+
+There are three answers and the third is the one worth knowing. A mirrored class is Godot's own
+name; a script class Godot has registered is the PascalCase of its file's stem; and a script class
+it has **not** registered is reported as its nearest mirrored ancestor, because a name Godot
+cannot resolve is worse than a less specific one it can. That is GDScript's own
+`_find_narrowest_native_or_global_class`, and the rule `vh_export_desc` already followed for an
+inspector slot -- so the two now answer the same question the same way.
+
+**One assumption was wrong and the measurement caught it.** `?timer` was expected to cross as a
+variant, with the class dropped for want of an object slot to filter. It crosses as an *object*:
+null is the empty case and it is the one value every object slot can hold, so an optional
+reference is named exactly as a plain one is. The case that asserts it says so.
+
+Five cases in the ABI layer and nine in the integration layer, the latter split deliberately
+across both descriptions Godot asks for -- a node answers `get_method_list` through the raw
+GDExtension vtable and a script answers `_get_script_method_list` with a Dictionary, and only one
+of them was ever wrong at a time when the other was right. The one *positive* script-class case
+has to be there rather than in the ABI layer: no class in `tests/host_smoke` is registered, since
+`exports_probe` carries `@global_class` and is not the class its file is named after, which is
+B19's pair from the other side.
+
+---
+
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks

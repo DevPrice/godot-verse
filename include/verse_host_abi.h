@@ -42,8 +42,8 @@ extern "C" {
  * The mismatch surfaces at vh_init, not at compile time, because the two sides are compiled by
  * different toolchains and nothing links them.
  */
-#define VH_ABI_VERSION_MAJOR 11
-#define VH_ABI_VERSION_MINOR 1
+#define VH_ABI_VERSION_MAJOR 12
+#define VH_ABI_VERSION_MINOR 0
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
 typedef int32_t vh_bool;
@@ -916,7 +916,17 @@ VH_ATTR VH_API void vh_release_instance(vh_instance* Instance);
 
 /* ----------------------------------------------------------- dispatch (v2) -- */
 
-/* One parameter of a script method. */
+/* Which package declares a class a value names, which decides how its name is spelled to
+ * Godot: a mirrored class goes through the consumer's generated table (`timer` -> `Timer`)
+ * and a script class through the rule @global_class registers under (`mover` -> `Mover`). */
+typedef enum vh_class_kind
+{
+	VH_CLASS_NONE = 0, /* the value names no class */
+	VH_CLASS_MIRRORED, /* one of the generated mirror's, which is one of Godot's own */
+	VH_CLASS_SCRIPT    /* one the project declares in a .verse file */
+} vh_class_kind;
+
+/* One parameter of a script method, and one argument of a script signal. */
 typedef struct vh_param_desc
 {
 	const char* NameUtf8; /* the parameter's own name, for an editor's argument hint */
@@ -924,6 +934,27 @@ typedef struct vh_param_desc
 	int32_t Type;       /* vh_type -- how an argument of this parameter is laid out */
 	int32_t VariantTag; /* vh_variant_tag -- what Godot type the consumer should convert from */
 	vh_bool HasDefault; /* a `?Named:t = default` parameter, which the caller may omit */
+
+	/* The class an object-typed parameter names, for a consumer that has to tell Godot what
+	 * the parameter accepts. Without it Godot has only "an object" to draw, whatever the
+	 * declaration said, in every call hint and every connect dialog. Empty, with ClassKind
+	 * VH_CLASS_NONE, for a parameter of any other type.
+	 *
+	 * A *Verse* name, the way vh_export_desc's two class fields are, because the mapping to
+	 * Godot's spelling is a generated table the consumer holds and not one the host has:
+	 * `timer` for VH_CLASS_MIRRORED, and the module-qualified `mover` or `left/palette` for
+	 * VH_CLASS_SCRIPT -- whose registered name is the PascalCase of the *leaf*, because a
+	 * module is not part of what @global_class registers.
+	 *
+	 * A script class Godot has not registered -- no @global_class, or not the class its file
+	 * is named after -- is reported as VH_CLASS_MIRRORED naming its nearest mirrored ancestor
+	 * instead. A name Godot cannot resolve is worse than a less specific one it can, which is
+	 * GDScript's own _find_narrowest_native_or_global_class and the rule
+	 * vh_export_desc::NativeClassUtf8 already follows. Empty where the chain reaches `object`
+	 * without passing a mirrored class. */
+	const char* ClassUtf8;
+	int32_t ClassLen;
+	int32_t ClassKind; /* vh_class_kind */
 } vh_param_desc;
 
 /* One method a script's class defines, for R-NODE-9 and for binding Godot's virtuals.
@@ -951,6 +982,13 @@ typedef struct vh_method_desc
 
 	int32_t ResultType;       /* vh_type; VH_TYPE_VOID for a method returning nothing */
 	int32_t ResultVariantTag; /* vh_variant_tag */
+
+	/* The class an object-typed result names, laid out like vh_param_desc's three above and
+	 * decided by the same rules. The same question at the other end of the call: a consumer
+	 * describing this method to Godot has "an object" to say about what it answers. */
+	const char* ResultClassUtf8;
+	int32_t ResultClassLen;
+	int32_t ResultClassKind; /* vh_class_kind */
 
 	/* The method can fail -- declared <decides>. A failing call answers VH_CALL_NO_SUCH_MEMBER
 	 * rather than raising, and the consumer turns that into whatever its own language spells

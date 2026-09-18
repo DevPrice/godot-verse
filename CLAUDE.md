@@ -69,7 +69,7 @@ Three documents are not phase records and are the ones to read before adding a f
   removed.
 - **`docs/by-hand-findings.md`** — what the by-hand editor sessions found, because everything from
   `EngineDebugger` and the editor UI inward has no automated test and never will. B1–B9, B15–B18,
-  B20 and B22–B31 are defects, all fixed; B12 is a Verse fact; B13 a latency finding; B14 the
+  B20 and B22–B32 are defects, all fixed; B12 is a Verse fact; B13 a latency finding; B14 the
   sandboxed export run. **B30 is the one to read before calling `ResourceLoader` from anything a
   resource load can reach**: Godot answers a cyclic load `ERR_BUSY` and a null `Ref` silently, so
   the only thing printed is the asking side's own sentence — which names the resource *asked for*
@@ -126,7 +126,7 @@ Three documents are not phase records and are the ones to read before adding a f
 `include/verse_host_abi.h` is the only thing that crosses. Plain C — the two sides cannot share a
 C++ ABI. It is staged into the host's `Public/` by `build_host.py`, so both compile the same file.
 
-**`VH_ABI_VERSION` is 11.1.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
+**`VH_ABI_VERSION` is 12.0.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
 a major bump is a layout or meaning change and both sides must be rebuilt; a minor bump adds
 something an older consumer can ignore behind a `StructSize` check. A change to the header means
 bumping it and rebuilding **both** sides — the mismatch surfaces at `vh_init`, not at compile time.
@@ -141,6 +141,14 @@ as corruption rather than as a refusal. 9.0 added `IsNamed` there for that reaso
 analysis-only program behind it, so the three position entry points answer `VH_ERR_STATE` after
 a build until a consumer asks for an analysis. An older consumer would have read that as "no
 such symbol" and drawn nothing, silently.
+**12.0 is what a parameter says about the class it declares**: `vh_param_desc` grew
+`ClassUtf8` and a `ClassKind` beside it, and `vh_method_desc` the same pair for its result, so
+a consumer can tell Godot that `Fire(Target:timer)` takes a **Timer** rather than an Object.
+A signal argument is a `vh_param_desc` and came along with it. It had to be a major because
+**both of those structs are handed over as arrays**, which makes them the third and fourth
+whose stride a minor can never change. A script class the consumer has not registered is
+reported as its nearest mirrored ancestor rather than by a name nothing can resolve — the rule
+`vh_export_desc::NativeClassUtf8` already followed, and GDScript's own.
 **11.1 is generated bindings' half of the wire**: `vh_set_bindings`, the `vh_binding_class`
 row and a `GetScriptClassOf` callback appended to `vh_godot_api`. A minor, because a consumer
 that never calls it is unaffected — but `vh_binding_class` is the *second* struct a minor can
@@ -941,7 +949,7 @@ it is not in `run_tests.py`.
   `PackageRelativeVersePath` is dead under VerseVM — and asking the *semantic* program for one must
   not use `EPathMode::PackageRelative`, which is fatal for a class with no package.
 - **A runtime host has no semantic program and can never build one**, so everything the analysis
-  alone could describe is recorded and carried in the sidecar (version **6**): the declared types of
+  alone could describe is recorded and carried in the sidecar (version **7**): the declared types of
   every member, method and signal, **whether a member is `var`** (without which every write an
   exported game made to its own state was silently dropped), the payload of all 503 mirrored
   engine-signal accessors (without which `Timer.Timeout().Await()` connects and never resumes), the

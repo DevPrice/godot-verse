@@ -220,6 +220,12 @@ struct FParamDesc
     int32 VariantTag{VH_VARIANT_NIL};
     /// A `?Named:t = default` parameter, which a caller may omit.
     bool bHasDefault{false};
+    /// The class an object-typed parameter names, as the consumer has to spell it to Godot,
+    /// and which package declares it. Empty and VH_CLASS_NONE for any other type. See
+    /// vh_param_desc::ClassUtf8 for what a script class that Godot has not registered
+    /// reports instead.
+    FUtf8String ClassName;
+    int32 ClassKind{VH_CLASS_NONE};
 };
 
 /// One signal a script's class declares (R-SIG-1), as Godot's signal list wants it.
@@ -371,6 +377,9 @@ struct FMethodDesc
 
     vh_type ResultType{VH_TYPE_VOID};
     int32 ResultVariantTag{VH_VARIANT_NIL};
+    /// The class an object-typed result names, decided exactly as FParamDesc::ClassName is.
+    FUtf8String ResultClassName;
+    int32 ResultClassKind{VH_CLASS_NONE};
 
     /// Declared <decides>: the call may run and decline, which is not the same as being absent.
     bool bCanFail{false};

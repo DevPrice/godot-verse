@@ -34,11 +34,17 @@ struct VerseMethodInfo {
 	struct Param {
 		godot::StringName name;
 		godot::Variant::Type type = godot::Variant::NIL;
+		// The Godot class an object-typed parameter accepts, resolved here rather than at each
+		// of the two places that describe a method -- Godot draws `Object` for an argument with
+		// no class whatever the declaration said. Empty for any other type.
+		godot::StringName class_name;
 	};
 	godot::Vector<Param> params;
 	int32_t required_params = 0;
 
 	godot::Variant::Type return_type = godot::Variant::NIL;
+	// The Godot class an object-typed result answers, on Param::class_name's terms.
+	godot::StringName return_class_name;
 	bool returns_value = false;
 
 	bool can_fail = false;
@@ -55,6 +61,8 @@ struct VerseSignalInfo {
 	struct Arg {
 		godot::StringName name;
 		godot::Variant::Type type = godot::Variant::NIL;
+		// The Godot class an object-typed argument carries, on VerseMethodInfo::Param's terms.
+		godot::StringName class_name;
 	};
 	godot::Vector<Arg> args;
 
