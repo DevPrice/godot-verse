@@ -1428,7 +1428,7 @@ ClassifiedMethod = namedtuple(
 ClassifiedProperty = namedtuple(
     "ClassifiedProperty", ["godot_name", "verse_name", "type_info", "getter", "setter", "index"]
 )
-Param = namedtuple("Param", ["verse_name", "type_info", "default"])
+Param = namedtuple("Param", ["verse_name", "type_info", "default", "optional"], defaults=(False,))
 
 
 def build_parent_map(classes: list) -> dict:
@@ -1811,7 +1811,8 @@ def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members
         pname = verse_param_name(arg["name"], i, RESERVED_WORDS, used_param_names, members)
         used_param_names.add(pname)
         default = arg.get("default_value")
-        params.append(Param(pname, info, verse_default_literal(info.verse_type, default) if default else None))
+        params.append(Param(pname, info, verse_default_literal(info.verse_type, default) if default else None,
+                            object_param_is_optional(info, arg)))
 
     if unsupported_seen:
         if all(POINTER_TYPE_RE.search(seen) for seen in unsupported_seen):
@@ -1983,7 +1984,7 @@ def emit_utility_functions(api: dict, resolver: TypeResolver, coverage: Coverage
                 break
             pname = verse_param_name(arg["name"], index, RESERVED_WORDS, used, set())
             used.add(pname)
-            params.append(Param(pname, info, None))
+            params.append(Param(pname, info, None, object_param_is_optional(info, arg)))
         if unsupported:
             coverage.skip("utility_not_dispatched", SkippedMember(
                 "", verse_name, "@GlobalScope", name, "utility_not_dispatched", ""))
@@ -1991,7 +1992,7 @@ def emit_utility_functions(api: dict, resolver: TypeResolver, coverage: Coverage
 
         return_type = utility.get("return_type")
         info = resolver.classify(return_type) if return_type else None
-        decl = ", ".join(f"{q.verse_name}:{q.type_info.verse_type}" for q in params)
+        decl = ", ".join(f"{q.verse_name}:{param_type(q)}" for q in params)
         args = emit_call_args(params)
         call = f'VhCallUtility("{name}", array{{{args}}})'
         if info is None:
@@ -2048,7 +2049,7 @@ def emit_static_methods(api: dict, emit_order: list, resolver: TypeResolver,
                     break
                 pname = verse_param_name(arg["name"], index, RESERVED_WORDS, used, set())
                 used.add(pname)
-                params.append(Param(pname, info, None))
+                params.append(Param(pname, info, None, object_param_is_optional(info, arg)))
             return_value = method.get("return_value")
             info = resolver.classify(return_value["type"]) if return_value else None
             if unsupported or (return_value and info is None) or method.get("is_vararg"):
@@ -2057,7 +2058,7 @@ def emit_static_methods(api: dict, emit_order: list, resolver: TypeResolver,
                     "static_unsupported", ""))
                 continue
 
-            decl = ", ".join(f"{q.verse_name}:{q.type_info.verse_type}" for q in params)
+            decl = ", ".join(f"{q.verse_name}:{param_type(q)}" for q in params)
             args = emit_call_args(params)
             call = f'VhCallStatic("{godot_class}", "{method["name"]}", array{{{args}}})'
             if info is None:
@@ -2217,9 +2218,31 @@ def emit_signal_accessor(godot_class: str, sig: dict, resolver: TypeResolver, co
                   f' "{name}", "{sig["name"]}")}}')
 
 
+def object_param_is_optional(info, arg) -> bool:
+    """Whether Godot accepts null for this object argument, which is what decides `?node2d`.
+
+    The dump says so per argument, and it says it the other way round: `"meta": "required"` marks an
+    object argument that may **not** be null, and one that carries nothing may be
+    (godotengine/godot#86079). 112 of the mirror's 1020 object arguments are marked, and the calls an
+    author reaches for most are among them -- `AddChild`, `RemoveChild`, `Reparent`, `IsAncestorOf`,
+    `DrawTexture` -- so the common call is spelled exactly as it was.
+
+    The annotation is partial and still being adopted upstream, so *not* required means only that
+    Godot has not said. Reading it as "null is accepted at the call boundary" is what Godot itself
+    does, and the alternative is worse than a wrapped argument: a parameter Verse cannot spell null
+    for is a call a script cannot make at all, which is what `by-hand-findings.md` B37 was.
+    """
+    return info.pack_fn == "VhFromObject" and arg.get("meta") != "required"
+
+
+def param_type(p) -> str:
+    return f"?{p.type_info.verse_type}" if p.optional else p.type_info.verse_type
+
+
 def emit_call_args(params) -> str:
     return ", ".join(
-        f"{p.type_info.pack_fn}({p.verse_name})" if not p.type_info.pack_decides
+        f"VhFromMaybeObject({p.verse_name})" if p.optional
+        else f"{p.type_info.pack_fn}({p.verse_name})" if not p.type_info.pack_decides
         else f"{p.type_info.pack_fn}[{p.verse_name}]"
         for p in params
     )
@@ -2266,8 +2289,8 @@ def emit_method(cm: ClassifiedMethod) -> str:
     already packed, and `VhCallValue` wants one array.
     """
     param_decl = ", ".join(
-        f"{p.verse_name}:{p.type_info.verse_type}" if p.default is None
-        else f"?{p.verse_name}:{p.type_info.verse_type} = {p.default}"
+        f"{p.verse_name}:{param_type(p)}" if p.default is None
+        else f"?{p.verse_name}:{param_type(p)} = {p.default}"
         for p in cm.params
     )
 

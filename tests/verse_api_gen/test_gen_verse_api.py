@@ -645,15 +645,61 @@ def test_union_parameter_widens_to_the_common_ancestor():
     blocks, order, _map, _members, _arrays, _dicts = g.generate(
         api, ["Thing", "BaseMaterial3D", "ShaderMaterial"], coverage, {})
     body = blocks[order.index("Thing")]
+    # Optional because neither argument carries `"meta": "required"`, which is the next test's
+    # subject rather than this one's -- what these two assert is the class the union widened to.
     check_true(
         "a union parameter widens to the class every member derives from",
-        "SetMaterial<public>(Material:material)" in body,
+        "SetMaterial<public>(Material:?material)" in body,
     )
     check_true(
         "and an exclusion is dropped rather than narrowing anything",
-        "SetTexture<public>(Texture:material)" in body,
+        "SetTexture<public>(Texture:?material)" in body,
     )
     check("neither is recorded as unsupported", coverage.skip_reasons["unsupported_type"], 0)
+
+
+def test_an_object_parameter_is_optional_unless_godot_marks_it_required():
+    """R-TYPE-4 over godotengine/godot#86079's metadata, which is the only thing that says.
+
+    Godot's dump marks an object argument that may *not* be null and says nothing about one that
+    may, so the absence is the signal and the mirror reads it the way Godot does. 112 of 1020 are
+    marked, and they are the calls an author makes most -- which is why the common one is unchanged.
+    """
+    api = {
+        "classes": [
+            {"name": "Object", "inherits": None, "methods": []},
+            {"name": "Node", "inherits": "Object", "methods": []},
+            {
+                "name": "Thing",
+                "inherits": "Object",
+                "methods": [
+                    _method("adopt", None,
+                            [{"name": "child", "type": "Node", "meta": "required"}]),
+                    _method("watch", None, [{"name": "target", "type": "Node"}]),
+                ],
+            },
+        ]
+    }
+    coverage = g.Coverage()
+    blocks, order, _map, _members, _arrays, _dicts = g.generate(
+        api, ["Thing", "Node"], coverage, {})
+    body = blocks[order.index("Thing")]
+    check_true(
+        "a required object parameter keeps the class itself",
+        "Adopt<public>(Child:node)" in body,
+    )
+    check_true(
+        "and packs through the plain builder",
+        "VhFromObject(Child)" in body,
+    )
+    check_true(
+        "one Godot does not mark is optional, because null is a value it accepts",
+        "Watch<public>(Target:?node)" in body,
+    )
+    check_true(
+        "and packs through the one that has a Nil to answer with",
+        "VhFromMaybeObject(Target)" in body,
+    )
 
 
 def test_a_raw_pointer_is_its_own_permitted_skip():

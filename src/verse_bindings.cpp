@@ -72,9 +72,12 @@ const char *builder_for(const std::string &p_type) {
 	if (p_type == "dictionary") {
 		return "VariantDictionary";
 	}
-	// Every other parameter type this generator emits is a mirrored class, and an object packs
-	// through the one builder that takes the whole hierarchy.
-	return "VariantObject";
+	// Every other parameter type this generator emits is a class, and an object packs through the
+	// one builder that takes the whole hierarchy. The optional spelling is every object *argument*
+	// of a binding, because nothing Godot reports about one says whether it accepts null and Godot
+	// itself accepts it: GDScript has no such annotation, and `class_get_method_list` carries none
+	// of the `required` metadata the mirror reads out of the API dump.
+	return p_type.rfind("?", 0) == 0 ? "VariantMaybeObject" : "VariantObject";
 }
 
 /// The signature Verse spells for a parameter list.

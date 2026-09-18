@@ -595,6 +595,23 @@ marshal := class(node2d):
     # A bare one of the project's own classes, which had no spelling on this wire at all.
     MarshalCounter<public>(Other:marshal)<transacts>:int = Other.Counter
 
+    # --- null through a *mirrored* parameter ----------------------------------
+    #
+    # `Node.set_owner` carries no `"meta": "required"`, so Godot accepts null there and the mirror
+    # declares `Owner:?node`. That spelling is the whole of how a Verse script says null to Godot:
+    # a class has no value meaning nothing, so before this the call could not be made at all.
+    # `GetOwner[]` is the reader, and it is `<decides>` for the same reason in the other direction.
+
+    # Three calls rather than one, because a write to Godot defers to the transaction's commit: a
+    # body that set the owner and then read it back saw what was there before it ran, which is the
+    # rule `spec.md` records beside R-AUD-1 and is a property of every Godot write, not of this one.
+
+    SetOwnerTo<public>(N:node)<transacts>:void = SetOwner(option{N})
+
+    ClearOwner<public>()<transacts>:void = SetOwner(false)
+
+    HasOwner<public>()<reads>:logic = if (GetOwner[]) then true else false
+
 # The unregistered class TakesHelper names. Ordinary Verse -- a helper beside the class the file
 # is named after -- and the shape every project writes sooner or later.
 marshal_helper := class(node2d):

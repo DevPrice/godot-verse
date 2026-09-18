@@ -98,6 +98,14 @@ ToString<public>(Value:object)<transacts>:string = VhToString(VhCallValue(Value.
 # integer packings a `[]int` meant.
 MakeVariant<public>(Value:any)<decides><reads>:variant = VhVariantFromAny[Value]
 
+# The public builder for an object argument that may be empty, and the generated bindings are what
+# it exists for: a bindings package sits at `/Godot.org/Bindings`, and Verse's internal access is
+# scoped by verse path, so it reaches neither `VhFromMaybeObject` nor a variant's lanes. Godot has
+# no nullability to read for a binding -- GDScript has no such annotation and
+# `ClassDB.class_get_method_list` carries none -- so every object argument of one is declared
+# optional, which is how Godot itself treats them.
+VariantMaybeObject<public>(Value:?object)<reads>:variant = VhFromMaybeObject(Value)
+
 VhFromLogic(Value:logic)<reads>:variant = variant{Tag := TagBool, I0 := if (Value?) then 1 else 0}
 VhFromInt(Value:int)<reads>:variant = variant{Tag := TagInt, I0 := Value}
 VhFromFloat(Value:float)<reads>:variant = variant{Tag := TagFloat, F0 := Value}
@@ -105,6 +113,13 @@ VhFromString(Value:string)<reads>:variant = variant{Tag := TagString, Text := Va
 VhFromStringName(Value:string)<reads>:variant = variant{Tag := TagStringName, Text := Value}
 VhFromNodePath(Value:string)<reads>:variant = variant{Tag := TagNodePath, Text := Value}
 VhFromObject(Value:object)<reads>:variant = variant{Tag := TagObject, Ref := Value.Handle}
+# Null, which is the one value every Godot object slot can hold and which no class has a value for.
+# A variant with no lane set is Nil -- the struct's own comment says so -- and Nil is exactly what
+# Godot's `null` crosses as, so the empty option needs no tag of its own.
+#
+# Options are covariant, measured in `tests/verse_probe/option_variance_probe.verse`, which is why
+# this takes `?object` once rather than being inlined at each of the mirror's 865 object arguments.
+VhFromMaybeObject(Value:?object)<reads>:variant = if (V := Value?) then VhFromObject(V) else variant{}
 # A RID is a plain wrapped integer, so it rides in an integer lane like one. It used to ride in
 # `Ref` beside the object handle, on the reasoning that both are ids Godot already owns -- but `Ref`
 # means "an id with identity", an object or a reference the consumer minted, and a RID has none of

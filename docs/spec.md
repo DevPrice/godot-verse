@@ -1491,6 +1491,18 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   generator skips. The single real exception, `EditorProperty.get_edited_property`, is editor-only.
   A hand-maintained list would be 5303 entries of ceremony to catch it.
 
+  **The argument direction is the same rule read off Godot's own metadata.** An object argument
+  the API dump marks `"meta": "required"` is declared as the class; one it does not is declared
+  `?class`, because Godot accepts null there and a class has no value that spells it -- so
+  before this the call could not be made at all (`by-hand-findings.md` B37). The polarity is
+  Godot's: `RequiredParam<T>` (godotengine/godot#86079) marks the arguments that refuse null,
+  and 112 of the mirror's 1020 are marked. They are the ones an author writes most, so
+  `AddChild(Child)` is unchanged and `dodge-the-creeps` needed no edit. A plain value does not
+  coerce to an option, so the remainder cost their callers an `option{}`; options *are*
+  covariant, so one `VhFromMaybeObject(?object)` packs all of them. A generated binding has no
+  such metadata in either of its sources -- GDScript has no annotation and
+  `class_get_method_list` carries none -- so every object argument of one is optional.
+
   The **singleton accessors** are the second `<decides>` family, and the rule applies to them the
   same way: 39 of the 41 are registered during `Main::setup`, so no run that can execute Verse at
   all can find one absent, and only `EditorInterface` and `GDScriptLanguageProtocol` — the two

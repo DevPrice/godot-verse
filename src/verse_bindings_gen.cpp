@@ -96,6 +96,20 @@ std::string verse_type_for(int64_t p_variant_type, const String &p_class_name, c
 	}
 }
 
+/// The type a parameter is *declared* as, which is not always the type its value crosses at.
+///
+/// An object argument is optional, because null is a value every Godot object slot can hold and
+/// nothing a binding is described from says otherwise: GDScript has no nullability annotation, and
+/// `ClassDB.class_get_method_list` carries none of the `required` metadata the mirror reads out of
+/// the API dump (godotengine/godot#86079). So the mirror's rule -- optional unless Godot says
+/// required -- reads here as "always", which is also how Godot treats the call.
+///
+/// A *result* is left alone: an object result is already `<decides>`, which says the same thing at
+/// the other end of the call.
+std::string declared_param_type(int64_t p_variant_type, const std::string &p_type) {
+	return p_variant_type == Variant::OBJECT ? "?" + p_type : p_type;
+}
+
 /// A parameter name Verse will accept beside the class's inherited members.
 ///
 /// Two collisions to dodge and the second is not obvious. Verse's own reserved words, and -- the
@@ -223,7 +237,8 @@ void describe_from_classdb(ClassDBSingleton *p_db, const String &p_godot_name, c
 				usable = false;
 				break;
 			}
-			out.params.push_back({ safe_param_name(arg.get("name", String()), a), type });
+			out.params.push_back({ safe_param_name(arg.get("name", String()), a),
+					declared_param_type(arg.get("type", (int64_t)Variant::NIL), type) });
 		}
 		if (!usable) {
 			continue;
@@ -301,7 +316,8 @@ void describe_from_script(const Ref<Script> &p_script, const VerseBindingRoster 
 				usable = false;
 				break;
 			}
-			out.params.push_back({ safe_param_name(arg.get("name", String()), a), type });
+			out.params.push_back({ safe_param_name(arg.get("name", String()), a),
+					declared_param_type(arg.get("type", (int64_t)Variant::NIL), type) });
 		}
 		if (usable) {
 			r_class.methods.push_back(out);

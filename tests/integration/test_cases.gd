@@ -381,6 +381,17 @@ func begin() -> void:
 	_check_eq("a bare parameter of the project's own class takes one too",
 			node.call("MarshalCounter", node), node.get("Counter"))
 
+	# And null the other way, through a parameter of the *mirror* rather than of a script. Godot's
+	# own dump says which object arguments accept it -- `"meta": "required"` marks the ones that do
+	# not -- and `Node.set_owner` is not one of them, so the mirror declares `Owner:?node`. Before
+	# that spelling existed a Verse script could not make this call at all: a class has no value
+	# that means nothing (R-TYPE-4).
+	# Read in a later call than the write, because a Godot write defers to the transaction's commit.
+	node.call("SetOwnerTo", node.get_parent())
+	_check("a real node reaches a mirrored optional parameter", node.call("HasOwner"))
+	node.call("ClearOwner")
+	_check("and null reaches it too, which is what the option is for", not node.call("HasOwner"))
+
 	var script_by_name := {}
 	for method in (script as Script).get_script_method_list():
 		script_by_name[String(method["name"])] = method
@@ -656,6 +667,7 @@ func begin() -> void:
 		_skip("a node carrying no such script declines the cast", "the sidecar carries no binding table yet (R-INT-11)")
 		_skip("a method taking its own GDScript class is in the binding", "the sidecar carries no binding table yet (R-INT-11)")
 		_skip("and one taking a class the mirror carries", "the sidecar carries no binding table yet (R-INT-11)")
+		_skip("and null is a value that parameter takes", "the sidecar carries no binding table yet (R-INT-11)")
 		_skip("null satisfies an optional parameter of a binding class", "the sidecar carries no binding table yet (R-INT-11)")
 		_skip("and a node carrying that GDScript satisfies it", "the sidecar carries no binding table yet (R-INT-11)")
 	elif binding_script == null or not binding_script.can_instantiate():
@@ -690,6 +702,10 @@ func begin() -> void:
 				binder.call("AskMate", mob_node), 42)
 		_check_eq("and one taking a class the mirror carries",
 				binder.call("AskPlace", mob_node), String(mob_node.name))
+		# `mate` returns what it is given, so null in is a declined downcast out -- which is the
+		# whole of what an optional object parameter buys a script.
+		_check("and null is a value that parameter takes",
+				binder.call("AskMateNothing", mob_node))
 
 		# The same class as a *script's* own parameter, which is the host's argument wire rather
 		# than the generated package.

@@ -69,13 +69,22 @@ Three documents are not phase records and are the ones to read before adding a f
   removed.
 - **`docs/by-hand-findings.md`** — what the by-hand editor sessions found, because everything from
   `EngineDebugger` and the editor UI inward has no automated test and never will. B1–B9, B15–B18,
-  B20, B22–B35 are defects, all fixed, and B36 is reported rather than closed; B12 is a Verse fact; B13 a latency finding; B14 the
+  B20, B22–B35 and B37 are defects, all fixed, and B36 is reported rather than closed; B12 is a Verse fact; B13 a latency finding; B14 the
   sandboxed export run. **B30 is the one to read before calling `ResourceLoader` from anything a
   resource load can reach**: Godot answers a cyclic load `ERR_BUSY` and a null `Ref` silently, so
   the only thing printed is the asking side's own sentence — which names the resource *asked for*
   and never the one it collided with, and reads as that resource being broken. A `.verse` load
   builds the project, a build generates the bindings, and generating them loads every `class_name`
   script, so a GDScript naming a Verse class reaches itself.
+  **B37 is the one to read before declaring a Godot parameter anywhere**: Verse has no null and
+  a class has no value for one, so an object argument is declared `?class` unless Godot's own
+  dump marks it `"meta": "required"` (godotengine/godot#86079) — 112 of the mirror's 1020 are
+  marked, and they are the ones written most, so `AddChild(Child)` is unchanged and the
+  yardstick needed no edit. A plain value does **not** coerce to an option, so the rest cost
+  their callers an `option{}`; options *are* covariant, so one `VhFromMaybeObject(?object)`
+  packs every one. A generated binding has no metadata in either source, so all of its object
+  arguments are optional. A virtual's parameters and a signal's payload are not spelled for
+  null and can carry it.
   **B36 is the one to read before changing when the bindings are generated**: a GDScript that
   names a Verse class is held back during a `.verse` load to avoid B30's cycle, and its binding
   is then declared with no members — so a Verse file naming one of its *methods* fails to

@@ -1471,6 +1471,55 @@ deciding, and the sentence above is what an author gets until it is.
 
 ---
 
+## B37. A Verse script could not pass null to Godot · **fixed**
+
+Reported: *"Inputs to Godot-declared functions (gdscript or classdb) that take object arguments
+should have the function mirrored in Verse with an optional argument; there's no way to pass
+`null` from Verse today."*
+
+**True, and the type system is why.** Verse has no null and a class has no value standing for
+one, so a parameter declared `node2d` had no argument an author could write for Godot's `null`
+-- a call that needed one could not be made at all. R-TYPE-4 had already answered the *return*
+direction, where an object return is `<decides>`; the argument direction had no answer.
+
+**Godot says which arguments accept it, and it says so the other way round.**
+`godotengine/godot#86079` added `RequiredParam<T>`, which the API dump carries as
+`"meta": "required"` on an object argument that may **not** be null; absence is the nullable
+case. In the pinned 4.7 dump, **112 of the mirror's 1020 object arguments are marked**, and the
+calls an author writes most are among them -- `AddChild`, `RemoveChild`, `Reparent`,
+`IsAncestorOf`, `DrawTexture` -- so the common call is spelled exactly as it was. The whole of
+`dodge-the-creeps`, a real game written in Verse, needed no edit: 30 checks, unchanged.
+
+The annotation is partial and still being adopted upstream, so *not required* means only that
+Godot has not said. Reading it as "null is accepted at the call boundary" is what Godot itself
+does, and it is the reading that costs an author a wrapped argument rather than a call they
+cannot make.
+
+**Two facts from the compiler decided the spelling**, both kept in `tests/verse_probe`:
+
+  - a plain value does **not** coerce to an option -- *"This function parameter expects a value
+    of type ?node2d, but this argument is an incompatible value of type node2d. Did you mean
+    `option`?"* -- so `option{X}` at the call site is the cost, which is why the `required` half
+    matters as much as it does;
+  - options **are** covariant, so `?node2d` satisfies `?object` and the mirror packs through one
+    `VhFromMaybeObject` rather than inlining an unwrap at each of its 865 object arguments.
+
+An overload of both spellings was measured and rejected. The declarations are accepted and a
+plain call resolves, but `Take(false)` matches neither -- Verse reads a bare `false` as a
+`logic` -- so null would have needed a typed local, which is the one thing this exists to avoid.
+
+**A generated binding has no metadata to read, so every object argument of one is optional.**
+GDScript has no nullability annotation and `ClassDB.class_get_method_list` carries none, and
+Godot accepts null for both. `VariantMaybeObject` is the public builder they pack through,
+because a bindings package sits at `/Godot.org/Bindings` and Verse's internal access is scoped
+by verse path rather than by package.
+
+What is unchanged, and said here so it does not read as an oversight: a **virtual**'s
+parameters, which Godot passes rather than receives, and a **signal**'s payload. Both can carry
+null and neither is spelled for it.
+
+---
+
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks

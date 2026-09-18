@@ -414,7 +414,7 @@ language — and for a binding it would come from the same place, the addon's ow
 `Callv` escape hatch has no `<reads>` spelling, so reading a third-party property from a `<reads>`
 function is wall 8's cascade for no reason.
 
-### 10.7 Five more traps, for §6
+### 10.7 Six more traps, for §6
 
 - **A method parameter may not share a name with an inherited mirrored property.**
   `Apply(Power:int, Scale:float)` on a `class(node2d)` is glitch 3532 — *"The data
@@ -454,6 +454,14 @@ function is wall 8's cascade for no reason.
   resolves module-scope definitions in any order, so the dependency order the old comment said
   was needed is not — and an object result is `<decides>`, over `AsObject[]` and a downcast,
   because a class has no value standing for “Godot answered nothing”.
+- **And an object *argument* is optional, because nothing here can say otherwise.** The mirror
+  reads `"meta": "required"` off the API dump and declares the 112 arguments Godot marks as the
+  class itself; a binding has no such metadata in either source — GDScript carries no
+  nullability annotation and `ClassDB.class_get_method_list` carries none of the dump's — and
+  Godot accepts null for both, so every object argument of a binding is declared `?class`
+  (`by-hand-findings.md` B37). They pack through `VariantMaybeObject`, which is public for the
+  reason `CallConst` is: a bindings package sits at `/Godot.org/Bindings` and reaches nothing
+  internal to `/Godot.org/Godot`.
 
 ### 10.8 What §9 should now say
 

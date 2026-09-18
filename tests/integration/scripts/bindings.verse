@@ -35,11 +35,19 @@ bindings := class(node2d):
 	# value standing for "Godot answered nothing", which is why the mirror's own object-returning
 	# methods are failable too (R-TYPE-4). A method the generator cannot type is left out of the
 	# binding entirely, so naming these at all is what says it can type an object.
+	# The arguments are wrapped because a binding's object parameters are optional: nothing Godot
+	# reports about a GDScript method says whether it accepts null, and Godot's answer is that it
+	# does. The mirror is the other way round -- it reads `required` out of the API dump, so
+	# `AddChild(Child)` is still written plainly.
 	AskMate<public>(N:node2d)<transacts>:int =
-		if (M := mob[N], Same := M.Mate[M]) then Same.Hit(21) else -1
+		if (M := mob[N], Same := M.Mate[option{M}]) then Same.Hit(21) else -1
 
 	AskPlace<public>(N:node2d)<transacts>:string =
-		if (M := mob[N], Where := M.Place[N]) then Where.GetName() else "?"
+		if (M := mob[N], Where := M.Place[option{N}]) then Where.GetName() else "?"
+
+	# And the point of the option: a GDScript method taking an object can be handed nothing.
+	AskMateNothing<public>(N:node2d)<transacts>:logic =
+		if (M := mob[N], M.Mate[false]) then false else true
 
 	# A binding as a parameter of a *script's* own method, which reaches the host's argument wire
 	# rather than the generated package: null is the empty option whatever package declares the
