@@ -2,6 +2,7 @@
 
 // _make_template returns a Ref<Script>, and Ref's destructor needs the complete type;
 // script_language_extension.hpp only forward-declares it.
+#include <godot_cpp/templates/hash_set.hpp>
 #include <godot_cpp/classes/script.hpp>
 #include <godot_cpp/classes/script_language_extension.hpp>
 #include <godot_cpp/variant/array.hpp>
@@ -181,6 +182,9 @@ public:
 	bool refresh_bindings();
 	bool bindings_hook_connected = false;
 	bool bindings_refresh_pending = true;
+	// The Verse names of the bindings that stand for a *script* class, which is the one base a
+	// Verse class may not extend (R-INT-10). Filled by refresh_bindings.
+	godot::HashSet<godot::String> script_binding_names;
 
 	// The consumer half of R-DIAG-4's break decision, reached from VerseRuntime's ABI callbacks.
 	//

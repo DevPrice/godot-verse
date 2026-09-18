@@ -745,6 +745,28 @@ static String inert_global_class_message(const String &p_class_name, const Strin
 			+ String("` still exports, filtered by its nearest Godot base class.");
 }
 
+// R-INT-10. One sentence, written twice: as an error the editor draws at the class's own line,
+// and as a warning `log_script_warnings` pushes so a headless run can assert it. That is the rule
+// `inert_global_class_message` below is the other worked example of -- a `_validate` error reaches
+// the gutter and no log, so a diagnostic that has to be both seen and tested needs two reporters.
+static String script_binding_base_message(const String &p_class_name, const String &p_base) {
+	return String("`") + p_class_name + String("` extends `") + p_base
+			+ String("`, which is the generated binding for a class a *script* declares. That cannot work: ")
+			+ String("Godot gives an object exactly one script instance, so the inherited methods would ")
+			+ String("forward to a `") + p_base + String("` that is not there -- `") + p_class_name
+			+ String("`'s own script is the only one the node has (R-INT-6, R-INT-10). Extend the ")
+			+ String("binding's own Godot base instead and hold the other node, or move the shared code ")
+			+ String("into Verse.");
+}
+
+static Dictionary script_binding_base_error(const String &p_message, int64_t p_line) {
+	Dictionary error;
+	error["line"] = p_line;
+	error["column"] = 1;
+	error["message"] = p_message;
+	return error;
+}
+
 static Dictionary inert_global_class_warning(const String &p_class_name, const String &p_file_stem, int64_t p_line) {
 	Dictionary warning;
 	warning["start_line"] = p_line;
@@ -796,6 +818,21 @@ Dictionary VerseScriptLanguage::_validate(const String &p_script, const String &
 			elsewhere.append_array(diagnostics_fitted_to(filed, String(analyzed_source_by_path[other_path])));
 		} else {
 			elsewhere.append_array(filed);
+		}
+	}
+
+	// R-INT-10, read off the buffer rather than the last analysis so it appears and clears as the
+	// base is typed. The compiler cannot diagnose it: `player := class(mob)` is a perfectly ordinary
+	// Verse subclass and every method on it resolves. What makes it wrong is Godot's one-script-per-
+	// object rule, which no part of Verse knows about.
+	{
+		const VerseClassDecl base_decl = verse_scan_class_decl(p_script.utf8().get_data(),
+				p_path.get_file().get_basename().utf8().get_data());
+		if (!base_decl.base.empty() && script_binding_names.has(String(base_decl.base.c_str()))) {
+			errors.push_back(script_binding_base_error(
+					script_binding_base_message(String(base_decl.name.c_str()), String(base_decl.base.c_str())),
+					// The scanner counts rows from zero; Godot's error lines start at one.
+					base_decl.line + 1));
 		}
 	}
 
@@ -3823,6 +3860,13 @@ void VerseScriptLanguage::report_name_collisions(const PackedStringArray &p_sour
 			}
 		}
 
+		// R-INT-10's second reporter. The error itself goes to `_validate`, which reaches the
+		// gutter and no log -- so nothing headless could assert it without this line.
+		if (!decl.base.empty() && script_binding_names.has(String(decl.base.c_str()))) {
+			UtilityFunctions::push_error(path + String(": ")
+					+ script_binding_base_message(String(decl.name.c_str()), String(decl.base.c_str())));
+		}
+
 		// The pre-build class picker resolves a script base by matching the file stem across
 		// res://, which modules can make ambiguous. It falls back to Node and says nothing, on a
 		// scan thread where it cannot say anything; here is where it can.
@@ -3882,6 +3926,13 @@ bool VerseScriptLanguage::refresh_bindings() {
 
 	const VerseBindings bindings = verse_generate_bindings();
 	runtime->set_bindings(bindings);
+
+	script_binding_names.clear();
+	for (const VerseBindingClass &binding : bindings.classes) {
+		if (!binding.script_class.empty()) {
+			script_binding_names.insert(String(binding.verse_class.c_str()));
+		}
+	}
 
 	// Written as well as handed over, because a generated file nobody can read is a generated file
 	// nobody can debug: the Verse the host compiled is exactly these bytes, so a diagnostic against

@@ -404,6 +404,10 @@ def run_integration(results: Results, engine: Path | None, godot: Path | None) -
             "is not an @rpc word",
             # R-EXP-1, an inspector hint on a type it cannot describe:
             "which describes an `int` -- and this member is not one",
+            # R-INT-10, a Verse class extending the binding for a *script* class. The one
+            # inheritance case that cannot work, and the only one the compiler is happy with:
+            # `extends_binding.verse` compiles, so nothing but this sentence says it is wrong.
+            "which is the generated binding for a class a *script* declares",
         ],
     )
 
