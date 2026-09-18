@@ -3723,6 +3723,17 @@ void VerseScriptLanguage::_frame() {
 			bindings_refresh_pending = false;
 		}
 
+		// Directly after that refresh, which is what makes this build's roster the complete one.
+		// The build being corrected was made from inside a resource load with scripts held back, so
+		// it described their bindings as bare types and refused every Verse file that called one
+		// (B30); its verdict was withheld rather than logged, and this is the build that produces a
+		// real one. Fired whether or not the roster actually completed: a script that can never be
+		// described would otherwise leave the withheld verdict unreported for the session.
+		if (corrective_build_pending) {
+			corrective_build_pending = false;
+			build_project();
+		}
+
 		// The first ask, and every one a change to the program has re-armed. The poll above is
 		// what clears docs_refresh_attempted, so this costs one republish per analysis rather
 		// than one per frame for a class that still cannot be described.
@@ -4159,6 +4170,18 @@ Error VerseScriptLanguage::build_project() {
 	Dictionary errors_by_globalized;
 	const Error status = runtime->compile_project(globalized, modules, &errors_by_globalized);
 
+	// **A build against a held-back roster is provisional, and a failed one says nothing.** Those
+	// bindings carry types and no members, so a Verse file calling `MainScript.Greet()` fails here
+	// against a member that lands on the next frame's generation -- a diagnostic that is already
+	// false by the time anyone reads it, and the log has no way to retract a line (which is the
+	// same reason check_buffer keeps analysis diagnostics out of it). The script editor's own list
+	// is replaced wholesale on the next validate, so record_diagnostics below still runs.
+	const bool withhold = status != OK && bindings_incomplete && provisional_build_allowed;
+	if (withhold) {
+		provisional_build_allowed = false;
+		corrective_build_pending = true;
+	}
+
 	// The host loaded each of these from disk just now, so this is the text it holds. Seeding it
 	// here is what makes the *first* validate of a file free rather than only the repeats -- and
 	// record_diagnostics below measures a diagnostic's span against it, so it has to be filled
@@ -4182,15 +4205,23 @@ Error VerseScriptLanguage::build_project() {
 	report_name_collisions(sources, texts);
 	log_script_warnings(sources);
 
-	const Array reported = errors_by_globalized.keys();
-	for (int64_t i = 0; i < reported.size(); i++) {
-		log_build_diagnostics(TypedArray<Dictionary>(errors_by_globalized[reported[i]]));
+	if (!withhold) {
+		const Array reported = errors_by_globalized.keys();
+		for (int64_t i = 0; i < reported.size(); i++) {
+			log_build_diagnostics(TypedArray<Dictionary>(errors_by_globalized[reported[i]]));
+		}
 	}
 
+	// Marked built even when the verdict is withheld, so ensure_project_built answers the failure
+	// rather than rebuilding: refresh_from_analysis asks it again from inside compile(), and a
+	// build that re-entered itself there would report the very diagnostics being withheld.
 	project_built = true;
 	project_build_status = status;
 
 	if (status != OK) {
+		if (withhold) {
+			return status;
+		}
 		// Nothing was published, so whatever ran before this still runs (R-ITER-5). The
 		// diagnostics above say what is wrong; this says what that costs.
 		UtilityFunctions::push_warning(

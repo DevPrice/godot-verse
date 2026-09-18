@@ -182,9 +182,19 @@ public:
 	bool refresh_bindings();
 	bool bindings_hook_connected = false;
 	bool bindings_refresh_pending = true;
-	// True when the last generation emitted a class as a bare type because its script would not
-	// load, which re-arms the refresh until one describes everything.
+	// True when the last generation emitted a class as a bare type -- because its script would not
+	// load, or because it was held back to avoid a cyclic one (B30) -- which re-arms the refresh
+	// until one describes everything.
 	bool bindings_incomplete = false;
+	// A build against such a roster cannot describe every binding, so a Verse file *calling* one of
+	// their methods fails against members that land on the next frame's generation. That build's
+	// verdict is withheld rather than logged and these two carry the correction: one build, on the
+	// next frame, with the roster as complete as it is going to get.
+	//
+	// Once per session. A roster that never completes would otherwise withhold every verdict it
+	// ever produced, which is a silent session rather than a noisy one.
+	bool provisional_build_allowed = true;
+	bool corrective_build_pending = false;
 	// What a generated binding stands for, which is the only thing the editor can say about
 	// one. The Verse declaration says nothing: the package is a synthetic snippet the host
 	// reads back from a digest in the engine tree, so a binding's `path` is a file no editor

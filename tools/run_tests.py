@@ -87,16 +87,23 @@ def find_godot(explicit: str | None) -> Path | None:
 
 
 def run(name: str, argv: list[str], results: Results, cwd: Path | None = None,
-        require_line: str | None = None, require_all: list[str] | None = None) -> bool:
+        require_line: str | None = None, require_all: list[str] | None = None,
+        refute_all: list[str] | None = None) -> bool:
     """Runs a test binary, echoing its own per-case lines. Exit code decides pass or fail.
 
     `require_line` is for a runner that can exit 0 without having finished. Godot is one: an
     unhandled GDScript error aborts _init, so `quit(1)` is never reached and the process leaves with
     0 -- which reported a whole layer green while a third of its cases had not run. Requiring the
     summary line the suite prints last is what makes "it stopped early" a failure.
+
+    `refute_all` is the other direction, and it is what a defect in the *editor's own output* needs:
+    a cyclic load and a diagnostic about a member that arrives a frame later are both things Godot
+    prints and nothing returns, so the only assertion available is that the sentence is absent.
+    Pair it with `require_line`, or a run that died before printing anything passes every refutation
+    it was given.
     """
     print(f"[run_tests] --- {name} ---")
-    if require_line is None and require_all is None:
+    if require_line is None and require_all is None and refute_all is None:
         completed = subprocess.run(argv, cwd=str(cwd or REPO))
         ok = completed.returncode == 0
     else:
@@ -114,6 +121,12 @@ def run(name: str, argv: list[str], results: Results, cwd: Path | None = None,
             else:
                 ok = False
                 print(f"[run_tests] {name}: never said {expected!r}")
+        for unwanted in refute_all or []:
+            if unwanted in output:
+                ok = False
+                print(f"[run_tests] {name}: said {unwanted!r}, which it must not")
+            else:
+                print(f"[run_tests] {name}: never said {unwanted!r}")
     results.record(name, ok)
     return ok
 
@@ -507,6 +520,81 @@ def run_coverage_diagnostic(results: Results, engine: Path | None, godot: Path |
     )
 
 
+BINDING_CYCLE_REFUSALS = [
+    # B30. The generator asked for a script Godot was already loading, and ResourceLoader answered
+    # ERR_BUSY with nothing said -- so the only line printed names the file asked for rather than
+    # the one it collided with, and reads as that file being broken.
+    "Error loading resource: 'res://cycle_probe.gd'",
+    # B30's neighbour. The generation that fed this build held that script back, so `cycle_probe`
+    # was declared with no members and `caller.verse` failed against one that landed a frame later.
+    "Unknown member `Doubled`",
+    # And the consequence of the line above, which is the part an author actually pays: a build that
+    # published nothing because of a diagnostic that was already false.
+    "the project did not build",
+]
+
+
+def write_global_class_list(project: Path, entries: list[dict[str, object]]) -> None:
+    """Writes the class list a headless run reads, which the editor is what normally produces.
+
+    `ProjectSettings::get_global_class_list` loads `.godot/global_script_class_cache.cfg`
+    (`project_settings.cpp:1462-1487`) and nothing outside the editor writes it, so a project that
+    has never been opened reports no script classes at all -- and a binding generator with no script
+    classes generates nothing, which would make this layer pass by having nothing to test. Written
+    here rather than committed for the reason the `.gdextension` is: `.godot/` is Godot's to
+    regenerate, and a fixture kept there is a fixture that disappears.
+    """
+    rows = ",\n".join(
+        "{" + ",\n".join(f'"{key}": {value}' for key, value in row.items()) + "}"
+        for row in entries
+    )
+    godot_dir = project / ".godot"
+    godot_dir.mkdir(exist_ok=True)
+    (godot_dir / "global_script_class_cache.cfg").write_text(
+        f"list=[{rows}]\n", encoding="utf-8")
+
+
+def run_binding_cycle(results: Results, engine: Path | None, godot: Path | None) -> None:
+    """B30 and its neighbour, in their own project because the cycle fires during startup."""
+    project = REPO / "tests" / "binding_cycle"
+    if not (project / "project.godot").is_file():
+        results.skip("binding_cycle", "tests/binding_cycle is not a Godot project")
+        return
+    if godot is None:
+        results.skip("binding_cycle", "no Godot binary -- set GODOT or pass --godot")
+        return
+    if engine is None:
+        results.skip("binding_cycle", "no Unreal checkout -- set UE_ROOT or pass --engine")
+        return
+
+    why = stage_extension(project)
+    if why is not None:
+        results.skip("binding_cycle", why)
+        return
+
+    write_global_class_list(project, [
+        {"base": '&"Node2D"', "class": '&"CycleProbe"', "icon": '""', "is_abstract": "false",
+         "is_tool": "false", "language": '&"GDScript"', "path": '"res://cycle_probe.gd"'},
+        {"base": '&"Node2D"', "class": '&"Widget"', "icon": '""', "is_abstract": "false",
+         "is_tool": "false", "language": '&"Verse"', "path": '"res://scripts/widget.verse"'},
+    ])
+
+    run(
+        "binding_cycle",
+        [
+            str(godot),
+            "--headless",
+            "--path", str(project),
+            "--script", "res://probe_main.gd",
+            "--quit-after", "600",
+        ],
+        results,
+        require_line="[cycle] done",
+        require_all=["[cycle] loaded cycle_probe.gd: yes"],
+        refute_all=BINDING_CYCLE_REFUSALS,
+    )
+
+
 # ---------------------------------------------------------------------------------- export --
 
 PACK_HEADER_MAGIC = 0x43504447  # "GDPC"
@@ -881,6 +969,7 @@ def main() -> None:
     if args.only in (None, "integration"):
         run_integration(results, engine, godot)
         run_coverage_diagnostic(results, engine, godot)
+        run_binding_cycle(results, engine, godot)
     if args.only in (None, "export"):
         run_export(results, engine, godot)
 

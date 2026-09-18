@@ -298,12 +298,18 @@ executable. If a future engine drop provides one, that script finds and execs it
 **abi** — `host_smoke`, the whole C ABI with no Godot, plus a `verse_cook` case that cooks
 `tests/host_smoke`'s fixtures and asserts the packages, the container and the sidecar.
 
-**integration** — two headless Godot projects. `tests/integration` for behaviour;
+**integration** — three headless Godot projects. `tests/integration` for behaviour;
 `tests/coverage_diagnostic` for the R-SCN-2 diagnostics, which is its own project because its one
 script deliberately does not compile and one unresolvable name in the first would take every other
-case down with it. Both projects' assertions live in `run_tests.py` rather than in the project,
+case down with it; and `tests/binding_cycle` for B30, where a GDScript with a `class_name` also
+names a Verse class and the binding generator is asked for the script Godot is already loading.
+That one is its own project because the cycle fires during startup, before any case could run. All
+three projects' assertions live in `run_tests.py` rather than in the project,
 because `ScriptLanguage` exposes nothing a script can ask — the only way to read what an author
-would see is to read what the editor prints.
+would see is to read what the editor prints. **`binding_cycle`'s assertions are refutations**
+(`refute_all`), because what a cyclic load and a premature diagnostic produce is printed output and
+nothing else — a working run says nothing at all, so `require_line` has to be paired with them or a
+run that died early would pass every one.
 
 **A `_validate` warning is not something the editor prints**, which is the trap in that sentence: it
 is returned to the editor's own C++ for the gutter and the warnings panel, and reaches no log, so no

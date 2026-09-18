@@ -1,0 +1,26 @@
+; Engine configuration file.
+;
+; A third headless Godot project, for the one interaction the other two cannot hold: a GDScript with
+; a `class_name` that also *names a Verse class*. Resolving that name loads the `.verse`, loading a
+; `.verse` builds the project, and a build generates a binding for every `class_name` script -- so
+; the generator is asked for the very script Godot is already loading. That is a cyclic load
+; (`docs/by-hand-findings.md` B30), and both of its symptoms are things the editor *prints* rather
+; than things a script can ask about, which is why the assertions live in tools/run_tests.py.
+;
+; It cannot go in tests/integration: the cycle has to fire during startup, before any case runs, and
+; a project that reproduces it on purpose would change what every other case is running against. It
+; cannot go in tests/coverage_diagnostic either, because that project deliberately does not compile
+; and half of what this one asserts is that a build *succeeds*.
+;
+; Never opened in the editor, which is what makes these comments safe here and not in demo's.
+; Driven by tools/run_tests.py, which stages the GDExtension and writes the global class list this
+; run needs. No verse/host setting is written: UE_ROOT is exported into the Godot it launches and
+; the extension reads that first (R-DIST-12).
+
+config_version=5
+
+[application]
+
+config/name="godot-verse binding cycle"
+run/main_scene=""
+config/features=PackedStringArray("4.5")

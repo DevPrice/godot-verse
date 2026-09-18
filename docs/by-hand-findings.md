@@ -1179,13 +1179,38 @@ drops the error where `load()` reports it (`core_bind.cpp:72-76` against `:82`) 
 request spawns a worker to load the script, that worker needs the `.verse` this thread is holding,
 and the two wait on each other. The run had to be stopped by PID.
 
-**What it does not fix, which is the same interaction seen from the other end.** A Verse file that
-*calls* a binding's method -- not merely names the type -- still fails the build that this stack
-triggers, with `Unknown member` at that call, because that generation had no members to describe.
-The members land a frame later and nothing rebuilds, so the error sits in the panel until the author
-builds or plays. Verified identical before and after this fix by rebuilding the previous library and
-running the same fixture, so it is this bug's neighbour rather than its remainder: what it wants is
-for a refresh that completes a previously incomplete roster to re-arm a build.
+**The same interaction from the other end, fixed after it.** A Verse file that *calls* a binding's
+method -- not merely names the type -- failed the build this stack triggers, with `Unknown member` at
+that call, because that generation had no members to describe. The members landed a frame later and
+nothing rebuilt, so the error sat in the panel until the author built or played.
+
+**A build against a held-back roster is provisional, and a failed one now says nothing.** Its
+diagnostics are a sentence about a member that exists by the time anyone reads it, and the output log
+has no way to retract a line -- the same reason `check_buffer` keeps analysis diagnostics out of it.
+The script editor's own list is replaced wholesale on the next validate, so `record_diagnostics`
+still runs and the gutter is unaffected; what is withheld is `log_build_diagnostics` and the "did not
+build" warning. `_frame` then builds once more, directly after the refresh that completes the roster,
+and that build reports.
+
+Three things bound it. It is withheld **once per session**, so a roster that can never complete costs
+one silent verdict rather than a silent session. The corrective build fires **whether or not the
+roster completed**, for the same reason. And the project is still marked built, with the failure
+kept as its status -- because `refresh_from_analysis` asks `ensure_project_built` again from inside
+`compile()`, and a build that re-entered itself there would print the very diagnostics being
+withheld.
+
+Measured on a fixture of `demo` in all three shapes: a Verse file calling a held-back binding's
+method builds silently; a genuine `Unknown identifier` beside it is still reported, once; and a
+GDScript with a syntax error -- which can never be described, so the roster never completes -- has
+its verdict reported too.
+
+**`tests/binding_cycle` is the automated half, and it is the first this area has had.** A third
+headless project, because the cycle has to fire during startup and a project that reproduces it on
+purpose would change what every other case in `tests/integration` runs against. Its assertions are
+*refutations* -- `run_tests.py` grew a `refute_all` for it -- since both symptoms are things Godot
+prints and nothing returns. Confirmed to fail against both previous libraries: reverting `src/` to
+before B30's fix brings back `Error loading resource`, and reverting only the provisional-build
+change brings back `Unknown member`.
 
 ---
 
