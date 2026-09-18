@@ -57,6 +57,16 @@ struct VerseClassDecl {
 // file in hand -- a test, a scratch buffer -- wants.
 VerseClassDecl verse_scan_class_decl(const std::string &p_source, const std::string &p_file_stem = std::string());
 
+// The keyword a top-level `name := ...` definition of p_name is written with -- "class",
+// "struct", "interface", "enum" or "module" -- or empty when the source declares no such name
+// at that level.
+//
+// The script editor's tooltip is the caller. A type's own name has no type to spell, so the
+// host's lookup carries none for one and the tooltip drew the label, the name, a colon and
+// nothing after it. The kind cannot supply the word either: a class, a struct and an interface
+// all arrive as VH_LOOKUP_CLASS, and nothing else in the answer separates them.
+std::string verse_scan_type_keyword(const std::string &p_source, const std::string &p_name);
+
 // The Godot type name for a Verse class name: `player_controller` becomes `PlayerController`.
 //
 // Godot's global class names share one namespace with the engine's own PascalCase types, so the

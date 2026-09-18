@@ -79,3 +79,23 @@ hover_probe := class(node2d):
 	# that records where a mirror definition was written stopped at it and every member of one
 	# lost its location to the digest -- a type and an empty box.
 	Waits<public>(Clock:timer)<suspends>:tuple() = Clock.Timeout().Await()
+
+	# The three types declared below this class, named here so each has a reference to hover as
+	# well as its declaration.
+	Helped<public>(H:hover_helper):int = H.Amount
+	Reads<public>():hover_reading = hover_reading{}
+	Pace<public>():hover_tempo = hover_tempo.Slow
+
+# A second class in the file, which is ordinary Verse: a helper beside the class the script is
+# named after. Nothing registers a doc for one, so it keeps the local result -- and the type
+# beside it was a colon with nothing after it, because a type has no type to spell.
+hover_helper := class:
+	Amount<public>:int = 1
+
+# A struct, which reaches a hover as the same VH_LOOKUP_CLASS a class does. The word can only
+# come from the declaration, since nothing in the answer tells the two apart.
+hover_reading := struct:
+	Value<public>:float = 0.0
+
+# An enum of the project's own, which is what the one hard-coded word used to cover alone.
+hover_tempo := enum{Slow, Fast}

@@ -2068,6 +2068,25 @@ func begin() -> void:
 		_check("a parametric class's method hovers with the comment above it",
 				_hover(hovers, "Await").get("description", "") != "")
 
+		# The types the file declares beside its own class. A type's name has no type to spell --
+		# the host fills one for a data member and for a function, and a type is neither -- so each
+		# of these drew the label, the name, a colon and nothing after it. The word comes from the
+		# declaration, which is the only place it is: a struct and an interface both arrive here as
+		# a class.
+		_check_eq("a second class in the file hovers as a class",
+				_hover(hovers, "hover_helper").get("doc_type"), "class")
+		_check_eq("a struct is not called a class",
+				_hover(hovers, "hover_reading").get("doc_type"), "struct")
+		_check_eq("an enum the project declares keeps its own word",
+				_hover(hovers, "hover_tempo").get("doc_type"), "enum")
+
+		# And the label stays a local, which is a decision rather than the gap above: nothing
+		# registers a doc for a second class in a file, so a CLASS result would draw an empty box
+		# where the local carries the comment written above it (by-hand-findings.md B31).
+		_check_eq("a second class keeps the local result, which is what carries its comment",
+				_hover_type(hovers, "hover_helper"),
+				ScriptLanguageExtension.LOOKUP_RESULT_LOCAL_CONSTANT)
+
 		# A comment is prose. The mirror spells Godot's classes in lowercase, so this is the
 		# difference between hovering a sentence and hovering code.
 		_check_eq("a Godot class name in a comment draws nothing",

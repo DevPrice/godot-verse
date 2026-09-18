@@ -2722,14 +2722,6 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 	const String found_owner = found["owner"];
 	const int64_t kind = found["kind"];
 
-	// GodotVerse::LookupSymbol only fills Type for a CDataDefinition or CFunction, so an enum's own
-	// name -- neither -- would otherwise tooltip with a blank type beside "Local Constant". Wrong
-	// label aside (Godot's lookup result has no "local type" of its own to ask for instead, and an
-	// enumerator genuinely is one), a blank type says nothing at all.
-	if (kind == VH_LOOKUP_ENUM && String(result["doc_type"]).is_empty()) {
-		result["doc_type"] = String("enum");
-	}
-
 	// An override means something the declaration itself does not say. Only at a declaration: a
 	// call site already resolves to the implementation that will run, and sending that to the
 	// parent would be wrong rather than merely unhelpful.
@@ -2745,6 +2737,17 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 		return result;
 	}
 
+	// The file a definition was written in. The buffer for the file being edited may be ahead of
+	// what is on disk; anything else is at worst as stale as the analysis that pointed here.
+	auto source_at = [&](const String &p_definition_path) -> String {
+		if (p_definition_path == globalized) {
+			return normalized;
+		}
+		const String res_path = path_by_globalized.get(p_definition_path, String());
+		return verse_newline_normalized(FileAccess::get_file_as_string(
+				res_path.is_empty() ? p_definition_path : res_path));
+	};
+
 	// The comment block above a definition, wherever it was written. A file the project does not
 	// own -- Godot.native.verse in the engine tree -- cannot be jumped to, but its comment is
 	// still the best description of what a script is overriding.
@@ -2752,14 +2755,7 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 		if (p_line < 0 || p_definition_path.is_empty()) {
 			return String();
 		}
-		// The buffer for the file being edited may be ahead of what is on disk; anything else is
-		// at worst as stale as the analysis that pointed here.
-		if (p_definition_path == globalized) {
-			return verse_doc_comment_above(normalized, p_line);
-		}
-		const String res_path = path_by_globalized.get(p_definition_path, String());
-		const String source = FileAccess::get_file_as_string(res_path.is_empty() ? p_definition_path : res_path);
-		return verse_doc_comment_above(verse_newline_normalized(source), p_line);
+		return verse_doc_comment_above(source_at(p_definition_path), p_line);
 	};
 
 	const int64_t own_line = found["line"];
@@ -2770,6 +2766,26 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 	// "above" it is the function's -- describing an argument with the method's prose. It has no
 	// documentation of its own, and GDScript gives one none either.
 	const String own_description = is_parameter ? String() : comment_at(own_path, own_line);
+
+	// A type's own name has no type to spell -- LookupSymbol fills Type for a CDataDefinition or
+	// a CFunction, and a class, a struct, an interface, an enum and a module are none of those --
+	// so the tooltip drew the label, the name, a colon and nothing. The declaration is the only
+	// place the word is: the kind cannot supply it either, since a struct and an interface both
+	// arrive as VH_LOOKUP_CLASS.
+	//
+	// Only for a file the project owns, and that guard is what keeps this off the common path: a
+	// mirrored class carries no type either, and its declaration is 2 MB of generated Verse in
+	// the engine tree -- read on every hover over `node2d`, to produce a word the Godot page two
+	// lines below replaces.
+	//
+	// The label beside it stays "Local Constant", which is wrong and has nowhere better to go:
+	// Godot's results are a location, eight class members and the two locals (B31).
+	const bool names_a_type = kind == VH_LOOKUP_CLASS || kind == VH_LOOKUP_ENUM || kind == VH_LOOKUP_MODULE;
+	if (names_a_type && String(result["doc_type"]).is_empty() &&
+			(own_path == globalized || path_by_globalized.has(own_path))) {
+		result["doc_type"] = String(verse_scan_type_keyword(
+				source_at(own_path).utf8().get_data(), found_name.utf8().get_data()).c_str());
+	}
 
 	if (kind == VH_LOOKUP_CLASS) {
 		if (const char *godot_class = godot_doc_class_for(found_name)) {

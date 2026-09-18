@@ -383,6 +383,44 @@ bool TestFileWithOnlyAnInertGlobalClass()
 
 } // namespace
 
+// The word a type's own name hovers with, which the ABI has nothing to answer: a type has no
+// type to spell, and the lookup kind cannot separate a struct from a class.
+bool TestTypeKeyword()
+{
+	const std::string Source =
+			"using { /Godot.org/Godot }\n\n"
+			"helper := class(node2d):\n\tAmount<public>:int = 1\n\n"
+			"reading := struct:\n\tValue<public>:float = 0.0\n\n"
+			"tempo := enum{Slow, Fast}\n\n"
+			"named := interface:\n\tName<public>()<transacts>:string\n";
+	return Step("a class reports class", verse_scan_type_keyword(Source, "helper") == "class")
+		&& Step("a struct reports struct", verse_scan_type_keyword(Source, "reading") == "struct")
+		&& Step("an enum reports enum", verse_scan_type_keyword(Source, "tempo") == "enum")
+		&& Step("an interface reports interface", verse_scan_type_keyword(Source, "named") == "interface");
+}
+
+bool TestTypeKeywordPastWhatPrecedesTheAssignment()
+{
+	// The two things that sit between the name and the `:=`: an access specifier, which a
+	// module written for @statics carries, and a parametric class's own parameters.
+	return Step("an access specifier before the := is skipped",
+			verse_scan_type_keyword("Statics<public> := module:\n\tX<public>:int = 1\n", "Statics") == "module")
+		&& Step("a parametric class's parameters are skipped",
+			verse_scan_type_keyword("box(t:type) := class:\n\tValue<public>:t\n", "box") == "class");
+}
+
+bool TestTypeKeywordRefusals()
+{
+	return Step("a member of a class is not a top-level type",
+			verse_scan_type_keyword("mover := class(node2d):\n\tinner := class:\n", "inner").empty())
+		&& Step("a function is not a type",
+			verse_scan_type_keyword("Unbox<public>(B:box):int = 0\n", "Unbox").empty())
+		&& Step("a name the source does not declare is empty",
+			verse_scan_type_keyword("mover := class(node2d):\n", "widget").empty())
+		&& Step("a class inside a block comment is not one",
+			verse_scan_type_keyword("<#\nhelper := class:\n#>\n", "helper").empty());
+}
+
 int main()
 {
 	bool Ok = true;
@@ -424,6 +462,9 @@ int main()
 	Ok = TestSeveralInertGlobalClasses() && Ok;
 	Ok = TestInertGlobalClassInCommentIgnored() && Ok;
 	Ok = TestFileWithOnlyAnInertGlobalClass() && Ok;
+	Ok = TestTypeKeyword() && Ok;
+	Ok = TestTypeKeywordPastWhatPrecedesTheAssignment() && Ok;
+	Ok = TestTypeKeywordRefusals() && Ok;
 
 	printf("[verse_class_decl_test] %s\n", Ok ? "ALL PASS" : "FAILURES");
 	return Ok ? 0 : 1;

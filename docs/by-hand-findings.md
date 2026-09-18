@@ -1214,6 +1214,53 @@ change brings back `Unknown member`.
 
 ---
 
+## B31. A type the project declares hovered with a colon and nothing after it · **fixed**
+
+Reported from an editor session: `mover_direction` and `something`, both declared in the file
+being read, say *"Local Constant"*. Two things are true of that box and only one of them is a
+defect.
+
+**The label is a decision, and it predates the report.** Godot's `LookupResultType` is a script
+location, eight `CLASS_*` members and two locals; there is no result meaning "a type", so a type
+the project declares and Godot does not document has nowhere else to land. `LOOKUP_RESULT_CLASS`
+is reachable but worse: only the class a file is **named after** registers a script doc
+(`_get_doc_class_name`), so for a second class in a file the tooltip would draw an empty
+documentation box where the local result carries the comment written above the declaration.
+`e36629d` took that decision for a class and `d62abd0` for an enum, and nothing since has
+touched either -- what changed the week this was reported is `a77f8c0`, which started
+*colouring* a second class as a type, so the tooltip calling it a local became visible.
+
+**What was a gap is the line under the label: `something:` and then nothing.**
+`GodotVerse::LookupSymbol` fills `TypeUtf8` for a `CDataDefinition` or a `CFunction`, and a type
+is neither -- so every class, struct, interface, enum and module the project declares reached the
+editor with a blank type. The enum arm had already patched exactly this with the hard-coded word
+`enum`, which is why one of the two names in the report drew *something* and the other drew
+nothing.
+
+**The word can only come from the declaration.** The ABI cannot supply it: a class, a struct and
+an interface all arrive as `VH_LOOKUP_CLASS` and nothing else in `vh_lookup_desc` separates them,
+so "class" would be wrong for two of the three, and both of those are in `tests/integration`
+already. `verse_scan_type_keyword` reads it out of the source the way `verse_scan_class_decl`
+reads a class's base -- the first `:=` on a top-level line, because what sits before it is an
+access specifier (`StaticsProbeStatics<public> := module:`) or a parametric class's own
+parameters (`box(t:type) := class:`), and a parametric class's name lexes as a *function* rather
+than as an identifier, which is what the first version of this got wrong.
+
+It reads the file only when the project owns it, and that guard is the whole of what keeps it off
+the common path: a mirrored class has a blank type too, and its declaration is 2 MB of generated
+Verse in the engine tree -- read on every hover over `node2d`, to produce a word that the Godot
+documentation page found two lines later replaces.
+
+**Measured.** `tools/probe_hover.py` over `tests/integration` reported **H4 -- a tooltip with
+neither a type nor a description in it -- 12 rows before and 0 after**. H1 rises by the eight rows
+the new fixture shapes add, which is the label above rather than this. Four unit cases cover the
+scanner with no Godot at all, and four integration cases cover what the editor draws: the second
+class, the struct that must not be called a class, the project's own enum -- the case the
+hard-coded word used to carry alone -- and the label staying a local, so the decision above fails
+a build if it is quietly reversed.
+
+---
+
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks

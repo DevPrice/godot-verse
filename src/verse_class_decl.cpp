@@ -309,3 +309,49 @@ VerseClassDecl verse_scan_class_decl(const std::string &p_source, const std::str
 
 	return decl;
 }
+
+std::string verse_scan_type_keyword(const std::string &p_source, const std::string &p_name) {
+	if (p_name.empty()) {
+		return std::string();
+	}
+
+	VerseLexState state;
+	std::vector<VerseToken> tokens;
+
+	for (const std::string &line : split_lines(p_source)) {
+		tokens.clear();
+		verse_lex_line(line, state, tokens);
+
+		// A parametric class's name is lexed as a function -- `box(t:type) := class:` -- so the
+		// kind cannot be narrowed to an identifier here. What has to be refused is the text that
+		// only looks like a definition, which is the same pair verse_scan_class_decl refuses.
+		VerseTokenKind kind = VerseTokenKind::Text;
+		if (!first_token_at_column_zero(tokens, kind) || kind == VerseTokenKind::Comment ||
+				kind == VerseTokenKind::String) {
+			continue;
+		}
+		size_t pos = 0;
+		if (take_identifier(line, pos) != p_name) {
+			continue;
+		}
+		// Whatever sits between the name and the `:=` belongs to this definition: an access
+		// specifier in `StaticsProbeStatics<public> := module:`, a parametric class's own
+		// parameters in `box(t:type) := class:`. Column 0 has already established that the
+		// definition is this line's, so the first `:=` on it is the one.
+		const size_t assign = line.find(":=", pos);
+		if (assign == std::string::npos) {
+			continue;
+		}
+		pos = assign + 2;
+		skip_spaces(line, pos);
+		const std::string keyword = take_identifier(line, pos);
+		if (keyword == "class" || keyword == "struct" || keyword == "interface" ||
+				keyword == "enum" || keyword == "module") {
+			return keyword;
+		}
+		// The name is declared here and is not a type, so it has a type of its own to spell and
+		// no caller needs this. A top-level name is declared once.
+		return std::string();
+	}
+	return std::string();
+}
