@@ -466,11 +466,14 @@ author wrote is either the GDScript the binding stands for or nothing at all, an
 a page.
 
 - **A script binding answers its own script.** `LOOKUP_RESULT_CLASS`, `class_name` the global name
-  (`Mob`), `script_path` the `.gd` and `location` 0 — which is GDScript's own answer for a global
-  class name, `gdscript_editor.cpp`'s `ScriptServer::is_global_class` arm. Both halves are needed:
-  the help viewer is skipped for a **script** doc (`script_text_editor.cpp` tests `is_script_doc`),
-  so the click falls through to the location, and the tooltip still comes from the class doc Godot
-  generates out of the script's `##` comments.
+  (`Mob`), the `.gd` and `location` 0 — which is GDScript's own answer for a global class name,
+  `gdscript_editor.cpp`'s `ScriptServer::is_global_class` arm. Both halves are needed: the help
+  viewer is skipped for a **script** doc (`script_text_editor.cpp` tests `is_script_doc`), so the
+  click falls through to the location, and the tooltip still comes from the class doc Godot
+  generates out of the script's `##` comments. The script is named **twice**, as `script` and as
+  `script_path`, because Godot renamed that field between 4.7 and 4.8 and a result carrying one of
+  them is, in the other editor, a location with no script beside it — which means *a line in the
+  file being edited*. B29 is what that looked like.
 - **A GDExtension binding answers the Godot class**, with no location, so the click opens the
   documentation the way `node2d` already does. There is no source under `res://` for it to open.
 - **A member answers under its *Godot* name**: `Hit` documents nothing, `hit` is what GDScript

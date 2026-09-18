@@ -2563,6 +2563,13 @@ static void fill_binding_result(Dictionary &r_result, const VerseScriptLanguage:
 	r_result["result"] = (int64_t)OK;
 	r_result["class_name"] = p_binding.script_class.is_empty() ? p_binding.godot_class : p_binding.script_class;
 	if (!p_binding.script_path.is_empty()) {
+		// **Both spellings, and that is not belt and braces.** Godot renamed this field: 4.7
+		// reads a `Ref<Script>` off the result and 4.8 reads `script_path`
+		// (`editor/script/editor_language.h`). A result that fills one of them is, in the other
+		// editor, a location with *no script beside it* -- which ScriptTextEditor reads as a line
+		// in the file being edited, so a click on a binding scrolled the open file to its own top
+		// instead of opening the GDScript. The jump at the end of _lookup_code sets both.
+		r_result["script"] = ResourceLoader::get_singleton()->load(p_binding.script_path);
 		r_result["script_path"] = p_binding.script_path;
 		r_result["location"] = (int64_t)0;
 	}
@@ -3114,6 +3121,11 @@ TypedArray<Dictionary> VerseScriptLanguage::probe_hover(const String &p_path) {
 				row["description"] = answer.get("description", String());
 				row["location"] = answer.get("location", (int64_t)-1);
 				row["script_path"] = answer.get("script_path", String());
+				// The other half of where a click lands, and the half this was blind to: 4.7
+				// reads the script off the result as a Ref and 4.8 reads the path, so a row
+				// carrying a path alone looked like a complete answer and was one in one
+				// editor only. A bool rather than the object, because a row is JSON.
+				row["has_script"] = answer.get("script", Variant()).booleanize();
 
 				// What the host resolved, which is what says whether the label above is the right
 				// one for it. The consumer cannot ask separately -- only this side knows which

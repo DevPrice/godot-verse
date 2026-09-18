@@ -1093,6 +1093,34 @@ defect and they share a trigger.
 and its silence means nothing — it captures the subprocess' output and discards it on success, so
 the errors never reach a terminal. Driving the driver directly is what reads them.
 
+
+---
+
+## B29. Ctrl+click on a binding scrolled the open file to its own top · **fixed, measured**
+
+Ctrl+click on `main_script` in `demo/scripts/mover.verse` -- the binding for `res://main.gd`'s
+`class_name MainScript` -- moved the caret to the top of `mover.verse` instead of opening `main.gd`.
+The answer the bridge gave was right, and `probe_hover` said so: `CLASS`, `MainScript`,
+`res://main.gd`, location 0. The editor was reading a *different field*.
+
+**Godot renamed it between 4.7 and 4.8.** The lookup result carries `Ref<Script> script` in 4.7 and
+`String script_path` in 4.8 (`editor/script/editor_language.h`, where the struct also moved). This
+machine develops against a 4.8-dev checkout of Godot's source and *runs* 4.7.2, so a field read out
+of the source is not necessarily the field the editor will read.
+
+The consequence is not a missing jump, which is what makes it hard to recognise. A result with a
+location and no script beside it is a legitimate answer meaning **a line in the file being edited**,
+so `ScriptTextEditor` did exactly that: `goto_line_centered(location - 1)`, and location 0 is line
+-1, which clamps to the top. A jump into another file and a jump within this one differ by that one
+field, so filling half of it turns one into the other silently.
+
+The jump at the end of `_lookup_code` had set both spellings since it was written. The binding arms
+added beside it set one. **A result that fills either must fill both**, and
+`probe_hover.py`'s **H9** is now the automated half: it reports a row with a location that names the
+script one way and not the other. It was blind to this before, because the row it built carried
+`script_path` and nothing about `script` -- so the corpus showed a complete-looking answer for the
+click that did not work.
+
 ---
 
 ## What is still open

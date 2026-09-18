@@ -249,6 +249,17 @@ def rules(rows: list[dict]) -> list[Finding]:
                 "H5", row, "no tooltip",
                 f"a tooltip: the host resolved this to a {host_kind}{described_as}"))
 
+        # H9. A jump names the script twice or it is only half a jump. Godot renamed the field
+        # between 4.7 and 4.8 -- a `Ref<Script>` there, a `script_path` here -- and a result
+        # filling one of them is, in the other editor, a location with no script beside it,
+        # which ScriptTextEditor reads as a line in the file being *edited*. So a ctrl+click
+        # scrolls the open file to its own top rather than opening the file the answer named.
+        # A same-file jump fills neither and is not this: it *means* the file being edited.
+        if row.get("location", -1) >= 0 and bool(row.get("script_path")) != bool(row.get("has_script")):
+            findings.append(Finding(
+                "H9", row, "a jump that names the script one way and not the other",
+                "both `script` and `script_path`, so the click lands in 4.7 and 4.8 alike"))
+
     # H6. A word in prose. `# the script looks up a node` is not code, and a hover over it that
     # answers Godot's Script or Node documentation is the mirror's lowercase class names colliding
     # with English. GDScript has the same shortcut ahead of its parse and almost never meets it,
