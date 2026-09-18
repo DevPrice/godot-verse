@@ -2212,6 +2212,29 @@ func begin() -> void:
 				_hover(hovers, "Prose").get("description", ""),
 				"The prose itself, which reaches Godot as its own doc BBCode: lines join into a paragraph, a blank line separates two, a [code]span[/code] is code, a [b]word[/b] is bold and Floor[lb]X[rb] is not a tag.\nThe second paragraph, with the sample the mirror's own comments write after a blank line:\n[codeblock lang=verse]\nResult := Floor[X]\n    Nested := 1\n[/codeblock]")
 
+		# The other two comment forms. Verse has no doc-comment syntax, so whatever comment sits
+		# above a declaration documents it -- and a `<# #>` block's inner lines carry no
+		# delimiter, so a reader walking up by line prefix answered `>` for one and the first
+		# line alone for a `<#>` comment. The reader lexes now (verse_doc_markup.h).
+		_check_eq("a block comment documents the member under it",
+				_hover(hovers, "Blocked").get("description", ""),
+				"The other two comment forms, which the reader used to misread: this block read as [code]>[/code], the closing line stripped to that and the walk stopped at the line above it.")
+		_check_eq("an indented comment documents the member under it",
+				_hover(hovers, "Indented").get("description", ""),
+				"An indented comment, whose body is whatever sits indented under the marker. The second line is the proof, because only the first survived before.")
+
+		# A class under a `.vmodule`. Its doc is registered as `left/widget`, and Godot looks a
+		# member's doc up by the class name the lookup reports -- which was the bare `widget`, a
+		# name no doc was registered under, so every member of a class in a module hovered with
+		# an empty box (by-hand-findings.md B38).
+		var module_hovers: Array = _verse_language().call("probe_hover", "res://widgets/left/widget.verse")
+		_check_eq("a class in a module hovers under its module-qualified name",
+				_hover(module_hovers, "widget").get("class_name"), "left/widget")
+		_check_eq("and so does a member of it",
+				_hover(module_hovers, "RootConstant").get("class_name"), "left/widget")
+		_check("with the comment above the member",
+				"From helpers.verse" in _hover(module_hovers, "RootConstant").get("description", ""))
+
 		# The types the file declares beside its own class. A type's name has no type to spell --
 		# the host fills one for a data member and for a function, and a type is neither -- so each
 		# of these drew the label, the name, a colon and nothing after it. The word comes from the

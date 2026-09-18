@@ -1618,7 +1618,10 @@ typedef struct vh_lookup_desc
 	/* The name of the scope the definition was declared in -- for a method, the class that
 	 * declares it, which is the one an inherited call resolves to rather than the one it was
 	 * called through. Empty at the top level. This is what lets a consumer recognise a
-	 * definition as belonging to a mirrored Godot class and name the Godot original. */
+	 * definition as belonging to a mirrored Godot class and name the Godot original.
+	 *
+	 * A class is named the way ClassNameUtf8 names one everywhere in this header: `left/widget`
+	 * for a script class under a `.vmodule`, the bare name for a mirrored or a bound class. */
 	const char* OwnerUtf8;
 	int32_t OwnerLen;
 
@@ -1777,7 +1780,8 @@ typedef struct vh_complete_item
 	int32_t TypeLen;
 
 	/* The scope that declares it, which is how the consumer recognises a name as belonging to a
-	 * mirrored Godot class. Empty at the top level. */
+	 * mirrored Godot class. Empty at the top level. A script class is module-qualified, as
+	 * vh_lookup_desc::OwnerUtf8 says. */
 	const char* OwnerUtf8;
 	int32_t OwnerLen;
 

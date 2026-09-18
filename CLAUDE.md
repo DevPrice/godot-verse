@@ -76,6 +76,18 @@ Three documents are not phase records and are the ones to read before adding a f
   and never the one it collided with, and reads as that resource being broken. A `.verse` load
   builds the project, a build generates the bindings, and generating them loads every `class_name`
   script, so a GDScript naming a Verse class reaches itself.
+  **B38 is the one to read before touching where a script's documentation is registered, the
+  name it is registered under, or what counts as the comment above a declaration**: Godot draws a
+  script-class member's tooltip from the *registered* script doc and from nothing else — the
+  lookup result's `description` is read for the two local results alone — and `EditorHelp` queues
+  a doc registered before its own regeneration has finished and discards that queue when the
+  regeneration starts, so B20's once-per-re-arm pass could land and be thrown away. A lookup that
+  names a script class registers that script's doc first (`ensure_script_doc_published`), the
+  name is module-qualified on both sides (`left/widget`, which `OwnerNameOf` now answers for a
+  class scope), and the comment reader lexes because two of Verse's three comment forms span
+  lines. Verse has no doc-comment syntax: the comment above a declaration is the documentation,
+  which is Epic's own convention, and a script may write `@doc("...")` with
+  `using { /Verse.org/Native }`.
   **B37 is the one to read before declaring a Godot parameter anywhere**: Verse has no null and
   a class has no value for one, so an object argument is declared `?class` unless Godot's own
   dump marks it `"meta": "required"` (godotengine/godot#86079) — 112 of the mirror's 1020 are
@@ -220,7 +232,7 @@ compiler-side entry points answer `VH_ERR_UNSUPPORTED` in a runtime host.
 | `verse_class_decl.{h,cpp}` | scans the top-level class **named after the file** and its `@global_class` attribute out of the text; defers comments and strings to the lexer, and shares its lack of godot-cpp |
 | `verse_module_map.{h,cpp}` | which module each `.verse` is in, from the `.vmodule` markers; pure, and the third godot-cpp-free unit |
 | `verse_bindings.{h,cpp}` | the naming and the emission for generated bindings (R-INT-7) — `split_pascal` is `gen_verse_api.py`'s exactly. The fourth godot-cpp-free unit |
-| `verse_doc_markup.{h,cpp}` | the prose above a declaration as the doc BBCode Godot's renderer reads: GDScript's paragraph join, backticks to `[code]`, an indented or fenced block to `[codeblock lang=verse]`, every other `[` escaped. Applied wherever a description is handed to Godot — `_lookup_code` and `_get_documentation` — and never before, so the two readers keep one shape. The fifth godot-cpp-free unit |
+| `verse_doc_markup.{h,cpp}` | which comment documents a declaration (`verse_doc_comment_above`, over the lexer: `#` lines, a `<# #>` block dedented, a `<#>` body, attribute lines stepped over, a blank line or code ending the walk) and the prose as the doc BBCode Godot's renderer reads: GDScript's paragraph join, backticks to `[code]`, an indented or fenced block to `[codeblock lang=verse]`, every other `[` escaped. Applied wherever a description is handed to Godot — `_lookup_code` and `_get_documentation` — and never before, so the two readers keep one shape; the host's `DocOf` reads the parser's comment nodes by the same rules. The fifth godot-cpp-free unit, linked with the lexer |
 | `verse_bindings_gen.{h,cpp}` | the half that needs Godot: which classes exist. **Only `API_EXTENSION`** of ClassDB, plus every script class with a `class_name` — the editor's ClassDB carries every editor-only class and binding those emitted 1677 lines of Verse for classes no game has |
 | `verse_export_plugin.{h,cpp}` | editor-only: runs `verse_cook.exe` over the project, strips every `.verse` to a one-byte stub so `ext_resource path=` still resolves, and refuses a platform this bridge does not reach |
 | `verse_export_paths.{h,cpp}` | the one rule for where a game's cooked Verse lives — `verse_data` beside the executable — shared by the export plugin that creates it and the runtime that finds it |
@@ -1219,6 +1231,13 @@ it is not in `run_tests.py`.
   status 4 with zero diagnostics, and a *user* package may not declare `class(attribute)` at
   all, so the attribute package cannot be checked in isolation either. The integration layer
   is where Godot's own diagnostic path prints it.
+- **Verse has no doc-comment syntax, and `@doc` is a `using` away.** The parser knows `#`,
+  `<# ... #>` and `<#>` and no documentation variant; what documents a declaration is the comment
+  above it, which is what Epic's own generators read and what a library `@doc("...")` is rewritten
+  into in a digest. A script may write `@doc("...")` itself with `using { /Verse.org/Native }`
+  (`tests/verse_probe/doc_attribute_probe.verse`); without the `using` it is glitch 3506. The
+  bridge reads the comment first and the attribute as the host's fallback, so either documents a
+  member.
 - **`operator'()'` is a reserved intrinsic.** Verse rewrites `Data[Key]` on a non-function callee
   into a call to it, but refuses to let anything *define* one — as a class member or as a free
   function — so the bracket syntax cannot be given a meaning. Container lookup is

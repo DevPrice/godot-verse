@@ -2168,6 +2168,23 @@ external editor is secondary.
   indented sample stripped flat is a sentence. The rules are the units layer's
   (`tests/verse_doc_markup`), the whole converted string of one member is asserted in
   `tests/integration`, and what the tooltip draws with it is by hand.
+  **What documents a declaration is the comment above it, in any of Verse's three forms.** Verse
+  has no doc-comment syntax — `#`, `<# ... #>` and `<#>` are the parser's `line`, `block` and `ind`
+  and there is no fourth — and Epic's own tooling reads the prefix comments as the documentation
+  (`VerseJsonInterfaceGen`), rewriting a library `@doc("...")` into `# ` lines above the
+  declaration when it writes a digest. The reader lexes rather than walking up by line prefix,
+  because a block's inner lines carry no delimiter and a `<#>` comment's body is whatever is
+  indented under it: a walk by prefix answered `>` for the one and the first line alone for the
+  other (`by-hand-findings.md` B38). Both sides read by one set of rules, `verse_doc_markup.h`'s,
+  and a script may also write `@doc("...")` of its own with `using { /Verse.org/Native }`, which the
+  host's attribute fallback already reads (`tests/verse_probe/doc_attribute_probe.verse`).
+  **The doc a member's tooltip is drawn from is registered when the hover names the class**, not
+  only from the once-per-re-arm pass B20 left: Godot draws a script-class member's tooltip from the
+  registered script doc alone, and that pass could be discarded by Godot's own regeneration or miss
+  a script it never held (B38). A lookup naming a script class calls `ensure_script_doc_published`
+  first, and the name is the module-qualified one on both sides — `left/widget` — which the host
+  now reports as a member's owner, because the bare name is what Godot's doc lookup failed to find
+  for every class under a `.vmodule`.
 - **R-TOOL-5 (MUST)** Signature help while typing a call. Status: **part** — declines during an
   analysis for R-TOOL-4's reason, and queues that buffer so the next ask answers. It is asked about
   the same repaired buffer R-TOOL-3 describes, off the same analysis, so an unclosed call has a hint

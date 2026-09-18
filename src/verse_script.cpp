@@ -176,8 +176,11 @@ bool VerseScript::analysis_landed() {
 	// Every landed analysis, not only the one this script asked for. refresh_exports believes the
 	// project's diagnostics rather than this file's, so an edit to a file this script never heard
 	// of can be the reason its list has to give way to the placeholder's. The rebuild itself waits
-	// for the next ask, which is what stops the inspector paying for it on every redraw.
+	// for the next ask, which is what stops the inspector paying for it on every redraw. The
+	// documentation is the same shape: described from the analysis, re-registered on the next
+	// hover that wants it.
 	exports_current = false;
+	doc_current = false;
 
 	if (!awaiting_analysis) {
 		return false;
@@ -215,6 +218,7 @@ void VerseScript::refresh_from_analysis() {
 	// What lets update_placeholders below actually rebuild the list: a new generation changes the
 	// declared defaults even when the analysis behind the shape has not moved.
 	exports_current = false;
+	doc_current = false;
 
 	// A file is valid when the project built and this file is not one of the reasons it might not
 	// have. Attachability is the separate question below: a `.verse` holding only module-level
@@ -317,6 +321,10 @@ bool VerseScript::is_compiled() const {
 	return has_own_class;
 }
 
+bool VerseScript::doc_is_current() const {
+	return doc_current;
+}
+
 bool VerseScript::_editor_can_reload_from_file() {
 	return true;
 }
@@ -375,11 +383,13 @@ TypedArray<Dictionary> VerseScript::_get_documentation() const {
 	// an empty list, and only the first is worth asking again about.
 	if (!on_verse_thread || class_name.is_empty() || runtime == nullptr || !runtime->is_host_loaded()
 			|| !runtime->has_class(class_name)) {
+		doc_current = false;
 		if (language != nullptr) {
 			language->note_script_docs_deferred();
 		}
 		return docs;
 	}
+	doc_current = true;
 
 	const TypedArray<Dictionary> members = runtime->class_members(class_name);
 

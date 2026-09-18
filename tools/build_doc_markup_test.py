@@ -39,12 +39,14 @@ def main() -> None:
 
     repo = repo_root()
     markup_src = repo / "src" / "verse_doc_markup.cpp"
+    # The comment reader lexes its way up to the declaration, so the lexer is linked in as well.
+    lexer_src = repo / "src" / "verse_lexer.cpp"
     test_src = repo / "tests" / "verse_doc_markup" / "verse_doc_markup_test.cpp"
     src_dir = repo / "src"
     out_dir = repo / "bin"
     out_exe = out_dir / "verse_doc_markup_test.exe"
 
-    for path in (markup_src, test_src):
+    for path in (markup_src, lexer_src, test_src):
         if not path.exists():
             print(f"error: {path} does not exist", file=sys.stderr)
             sys.exit(1)
@@ -53,7 +55,7 @@ def main() -> None:
 
     cl_cmd = (
         f'call "{vcvars64}" && '
-        f'cl /std:c++20 /EHsc /Zi /I"{src_dir}" "{markup_src}" "{test_src}" '
+        f'cl /std:c++20 /EHsc /Zi /I"{src_dir}" "{markup_src}" "{lexer_src}" "{test_src}" '
         f'/Fe"{out_exe}" /Fo"{out_dir}\\\\"'
     )
     print(f"[build_doc_markup_test] running: {cl_cmd}")

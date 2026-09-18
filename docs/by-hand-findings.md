@@ -1562,6 +1562,69 @@ which can carry null and is not spelled for it.
 
 ---
 
+## B38. The comment above a member stopped reaching its hover, again · **fixed, three causes**
+
+Reported as "Verse comments no longer show as documentation in the hover tooltip / hint for user
+code", the day after the description started crossing as doc BBCode. The BBCode was not it: the
+lookup result still carried the converted comment, and `tests/integration` asserted the whole
+string. What was missing was between the lookup and the screen, and there were three things there.
+
+**The doc Godot draws from was not registered, and B20's fix could not guarantee it would be.**
+For a member of a script class the tooltip is drawn from the class's *registered documentation*
+and from nothing else — `description` on the lookup result is read for the two local results alone
+(`EditorHelpBit::parse_symbol`). B20 made `_get_documentation` decline off the editor's thread and
+re-register every script from `_frame`, once per re-arm, over the scripts alive at that moment. Two
+things in `EditorHelp` defeat that pass. `add_doc` **queues** a doc added before the session's
+script-doc regeneration has finished, and `_regen_script_doc_thread` **clears the queue** when it
+starts — so a republish that landed early was discarded, and the regeneration then asked every
+script again from its loader thread, where each declined. And a script the regeneration loaded and
+dropped is in nobody's list by the time the pass runs. The re-arm is an analysis landing or a build,
+so an editor opened and hovered without a keystroke could sit with no doc for the class until a
+save — which is the one event Godot republishes on, and why "save the file and hover again" is the
+test that confirms this cause.
+
+The fix is to register the doc at the moment it is certainly wanted. A lookup that is about to
+name a script class — as the owner of a member, or as the class at its own declaration — calls
+`ensure_script_doc_published` first, which re-registers that one script through
+`clear_docs_from_script`/`update_docs_from_script` unless the script says what Godot holds was
+described from the text and analysis it has now (`VerseScript::doc_is_current`, set by a
+`_get_documentation` that answered and cleared by every landed analysis and generation). It runs on
+the editor's thread, costs one snapshot read when the doc is current, and does not depend on when
+Godot's own pass ran. The `_frame` republish stays for the class reference panel.
+
+**Inside a module, the doc and the lookup disagreed about the class's name.** `_get_documentation`
+registers a class as `verse_class_name()` — module-qualified, `left/widget` — and the host reported
+a member's owner as the enclosing scope's bare name, `widget`, which `script_class_names()` (keyed
+by file stem) accepted. Godot then looked `widget` up in its doc data and found nothing, so every
+member of a class under a `.vmodule` hovered with an empty box, and the root module never showed it.
+`OwnerNameOf` answers `QualifiedNameOf` for a class scope now, `script_class_names()` carries the
+qualified name (completion offers its leaf), and a class at its own declaration is named from the
+file it was written in, because its owner there is the module or the snippet and never the class.
+`tests/integration` hovers `widgets/left/widget.verse` and asserts `left/widget` both ways.
+
+**The reader misread two of Verse's three comment forms.** `verse_doc_comment_above` walked up by
+line prefix. A multi-line `<# ... #>` block answered `>` — the closing `#>` stripped to that, and
+the line above it, carrying no delimiter, ending the walk — and a `<#>` comment kept its first line
+alone. It lexes now (`verse_doc_markup.h` has the rules, `tests/verse_doc_markup` the cases): the
+walk collects lines the lexer says are comment, an attribute line is still stepped over, a block's
+lines are dedented by what they share, and the host's `DocOf` reads the parser's comment nodes by
+the same rules. `hover_probe.verse`'s `Blocked` and `Indented` members assert both forms.
+
+**And the question the report asked**: Verse has no doc-comment syntax. Three comment forms
+(`ParserPass.cpp`: `line`, `block`, `ind`) and no documentation variant. Epic's own tooling treats
+the comments above a declaration as its documentation — `VerseJsonInterfaceGen` writes a node's
+prefix comments as the definition's docs, and the digest generator rewrites a library `@doc("...")`
+attribute into `# ` lines above the declaration — so the convention this bridge follows is Epic's.
+A script *may* write `@doc("...")` itself, with `using { /Verse.org/Native }`
+(`tests/verse_probe/doc_attribute_probe.verse`), and the host's attribute fallback already reads
+it; without the `using` it is glitch 3506, "Unknown identifier `doc`".
+
+**What is still by hand:** whether the tooltip now draws the doc in a fresh editor with no save —
+the timing cause has no headless reproduction, since `cmdline_mode` skips the regeneration that
+causes it (B20). §"The tooltip's rendering of a converted description" below carries the steps.
+
+---
+
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks
@@ -1934,14 +1997,19 @@ lang=verse]`, every other bracket escaped. The string is asserted whole in `test
 against `hover_probe.verse`'s `Prose` member, and the rules one by one in the units layer. What no
 headless run can read is what `_add_text_to_rt` then draws with it.
 
-**To check it:** in the script editor, hover `Prose` in `tests/integration/scripts/hover_probe.verse`.
-The tooltip must show two paragraphs and not five, `span` in the code font with a background, `word`
-in bold, `Floor[X]` with its brackets, and the sample as one code block with `Nested := 1` indented
-under `Result := Floor[X]` and a copy button beside it. Then open the class reference for
-`hover_probe` (**Search Help**, or ctrl+click the class name): the same text must render the same
-way under the member, and the class's brief under its name must be the comment's first paragraph
-alone. A `[b]` written in a comment must render bold, and `Items[i]` in a sentence must render as
-written rather than in italics.
+**To check it:** open `tests/integration` in the editor, open
+`tests/integration/scripts/hover_probe.verse` in the script editor, and **without saving anything**
+hover `Prose`. The tooltip must carry the comment at all — that is B38's timing cause, which only a
+fresh editor shows — and show two paragraphs and not five, `span` in the code font with a
+background, `word` in bold, `Floor[X]` with its brackets, and the sample as one code block with
+`Nested := 1` indented under `Result := Floor[X]` and a copy button beside it. Hover `Blocked` and
+`Indented` two members down: each must show its comment as one paragraph, with no `>` and no missing
+second line. Then open `widgets/left/widget.verse` and hover `RootConstant`: the tooltip must say
+"Method" and carry "From helpers.verse". Then open the class reference for `hover_probe` (**Search
+Help**, or ctrl+click the class name): the same text must render the same way under the member, and
+the class's brief under its name must be the comment's first paragraph alone. A `[b]` written in a
+comment must render bold, and `Items[i]` in a sentence must render as written rather than in
+italics.
 
 ### And when one of these is looked at again
 

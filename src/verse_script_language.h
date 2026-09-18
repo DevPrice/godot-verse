@@ -376,6 +376,10 @@ public:
 	// Cached, because the walk underneath is a recursive DirAccess enumeration of the whole
 	// project and completion asked for it on every keystroke. invalidate_script_class_names is
 	// what puts a new, renamed or deleted file into it.
+	//
+	// Module-qualified -- `left/widget` for a file under a `.vmodule` -- which is the name the
+	// host reports as a member's owner and the name the script registers its documentation
+	// under. A caller offering a name for an author to type takes the leaf.
 	const godot::PackedStringArray &script_class_names() const;
 
 	// Every class name the generated Godot mirror carries, as Strings built once for the process.
@@ -517,6 +521,13 @@ private:
 	// too early gets described again: Godot builds its script docs once per session, on a loader
 	// thread of its own, and otherwise republishes a script's only when it is saved.
 	void republish_script_docs() const;
+
+	// Registers one script class's documentation, if what Godot holds for it is not what the
+	// current analysis would say. Called from a lookup that is about to name the class, because
+	// the tooltip for a member of a script class is drawn from the registered doc and from
+	// nothing else -- so a hover is the moment the doc has to exist, and the one place that
+	// knows it is wanted (B38).
+	void ensure_script_doc_published(const godot::String &p_class_name) const;
 
 	// Reaps a finished analysis and starts whatever came in while it ran. Called once per frame.
 	void poll_check() const;

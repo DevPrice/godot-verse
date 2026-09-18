@@ -1,8 +1,221 @@
 #include "verse_doc_markup.h"
 
+#include "verse_lexer.h"
+
+#include <algorithm>
 #include <cstring>
 #include <string_view>
 #include <vector>
+
+namespace {
+
+struct DocSourceLine {
+	std::string text;
+	std::vector<VerseToken> tokens;
+	VerseLexState before;
+	VerseLexState after;
+};
+
+// p_source's lines from the first through p_last, each with the state the lexer carried into it.
+// A blank line inside a `<# ... #>` block has no token at all, so the state before it is the
+// only thing that says it is comment.
+std::vector<DocSourceLine> lex_lines_through(const std::string &p_source, int p_last) {
+	std::vector<DocSourceLine> lines;
+	VerseLexState state;
+	size_t from = 0;
+	while ((int)lines.size() <= p_last && from <= p_source.size()) {
+		const size_t newline = p_source.find('\n', from);
+		const size_t end = newline == std::string::npos ? p_source.size() : newline;
+		DocSourceLine line;
+		line.text = p_source.substr(from, end - from);
+		if (!line.text.empty() && line.text.back() == '\r') {
+			line.text.pop_back();
+		}
+		line.before = state;
+		verse_lex_line(line.text, state, line.tokens);
+		line.after = state;
+		lines.push_back(std::move(line));
+		if (newline == std::string::npos) {
+			break;
+		}
+		from = newline + 1;
+	}
+	return lines;
+}
+
+bool inherits_comment(const VerseLexState &p_state) {
+	return p_state.block_comment_depth > 0 || p_state.indent_comment_column >= 0;
+}
+
+// Whether the line is comment and whitespace and nothing else, with r_column the byte the comment
+// starts at -- 0 for one a line above opened, which is also what a blank line inside one is.
+bool comment_only(const DocSourceLine &p_line, size_t &r_column) {
+	r_column = 0;
+	if (p_line.tokens.empty()) {
+		return inherits_comment(p_line.before);
+	}
+	bool seen = false;
+	for (const VerseToken &token : p_line.tokens) {
+		if (token.kind == VerseTokenKind::Comment) {
+			if (!seen) {
+				r_column = (size_t)token.column;
+			}
+			seen = true;
+		} else if (token.kind != VerseTokenKind::Text) {
+			return false;
+		}
+	}
+	if (inherits_comment(p_line.before)) {
+		r_column = 0;
+	}
+	return seen;
+}
+
+bool attribute_line(const DocSourceLine &p_line) {
+	for (const VerseToken &token : p_line.tokens) {
+		if (token.kind != VerseTokenKind::Text) {
+			return token.kind == VerseTokenKind::Attribute;
+		}
+	}
+	return false;
+}
+
+std::string rstripped(std::string_view p_text) {
+	const size_t end = p_text.find_last_not_of(" \t");
+	return std::string(end == std::string_view::npos ? std::string_view() : p_text.substr(0, end + 1));
+}
+
+// What follows a delimiter on its own line: one space is the delimiter's, the rest is text.
+std::string after_delimiter(std::string_view p_rest) {
+	if (p_rest.starts_with(" ")) {
+		p_rest.remove_prefix(1);
+	}
+	return rstripped(p_rest);
+}
+
+// The body of a block or indented comment: its continuation lines dedented by what they share,
+// blank lines at either end dropped, and the opener's own remainder first when it says anything.
+void append_body(std::vector<std::string> &r_out, std::string p_opener_rest, std::vector<std::string> p_lines) {
+	size_t common = std::string::npos;
+	const std::string *reference = nullptr;
+	for (const std::string &line : p_lines) {
+		if (line.find_first_not_of(" \t") == std::string::npos) {
+			continue;
+		}
+		const size_t indent = line.find_first_not_of(" \t");
+		if (reference == nullptr) {
+			reference = &line;
+			common = indent;
+			continue;
+		}
+		size_t shared = 0;
+		while (shared < common && shared < indent && line[shared] == (*reference)[shared]) {
+			shared++;
+		}
+		common = shared;
+	}
+	if (common == std::string::npos) {
+		common = 0;
+	}
+
+	std::vector<std::string> body;
+	if (!p_opener_rest.empty()) {
+		body.push_back(std::move(p_opener_rest));
+	}
+	for (const std::string &line : p_lines) {
+		body.push_back(line.size() > common ? rstripped(std::string_view(line).substr(common)) : std::string());
+	}
+	while (!body.empty() && body.front().empty()) {
+		body.erase(body.begin());
+	}
+	while (!body.empty() && body.back().empty()) {
+		body.pop_back();
+	}
+	r_out.insert(r_out.end(), body.begin(), body.end());
+}
+
+} // namespace
+
+std::string verse_doc_comment_above(const std::string &p_source, int p_line) {
+	if (p_line <= 0) {
+		return std::string();
+	}
+	const std::vector<DocSourceLine> lines = lex_lines_through(p_source, p_line - 1);
+
+	std::vector<int> collected;
+	for (int i = std::min(p_line, (int)lines.size()) - 1; i >= 0; i--) {
+		size_t column = 0;
+		if (comment_only(lines[i], column)) {
+			collected.push_back(i);
+		} else if (!attribute_line(lines[i])) {
+			break;
+		}
+	}
+	std::reverse(collected.begin(), collected.end());
+
+	std::vector<std::string> out;
+	for (size_t k = 0; k < collected.size();) {
+		const DocSourceLine &line = lines[collected[k]];
+		size_t column = 0;
+		comment_only(line, column);
+		const std::string_view rest = std::string_view(line.text).substr(column);
+
+		// Consecutive collected lines that the state says are still inside the comment this one
+		// opened -- the block until its closer, the indented body while it stays indented.
+		auto continuation = [&](auto p_inside) {
+			std::vector<std::string> body;
+			size_t j = k;
+			while (p_inside(lines[collected[j]].after) && j + 1 < collected.size() && collected[j + 1] == collected[j] + 1) {
+				j++;
+				body.push_back(lines[collected[j]].text);
+			}
+			return std::make_pair(j, body);
+		};
+
+		if (inherits_comment(line.before) || rest.starts_with("<#")) {
+			const bool indented = !inherits_comment(line.before) && rest.starts_with("<#>");
+			std::string opener_rest;
+			if (indented) {
+				opener_rest = after_delimiter(rest.substr(3));
+			} else if (!inherits_comment(line.before)) {
+				opener_rest = after_delimiter(rest.substr(2));
+			}
+			auto [last, body] = indented
+					? continuation([](const VerseLexState &p_state) { return p_state.indent_comment_column >= 0; })
+					: continuation([](const VerseLexState &p_state) { return p_state.block_comment_depth > 0; });
+			if (!indented) {
+				// The closer sits on the last line the block reaches, whichever that is.
+				std::string &closing = body.empty() ? opener_rest : body.back();
+				const size_t closer = closing.rfind("#>");
+				if (closer != std::string::npos && lines[collected[last]].after.block_comment_depth == 0) {
+					closing = rstripped(std::string_view(closing).substr(0, closer));
+				}
+			}
+			append_body(out, std::move(opener_rest), std::move(body));
+			k = last + 1;
+			continue;
+		}
+
+		if (rest.starts_with("#")) {
+			out.push_back(after_delimiter(rest.substr(1)));
+		}
+		k++;
+	}
+
+	std::string joined;
+	for (const std::string &line : out) {
+		if (!joined.empty()) {
+			joined += "\n";
+		}
+		joined += line;
+	}
+	const size_t first = joined.find_first_not_of('\n');
+	if (first == std::string::npos) {
+		return std::string();
+	}
+	const size_t last = joined.find_last_not_of('\n');
+	return joined.substr(first, last - first + 1);
+}
 
 namespace {
 

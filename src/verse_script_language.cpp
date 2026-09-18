@@ -47,52 +47,18 @@ String verse_newline_normalized(const String &p_source) {
 	return p_source.replace("\r\n", "\n").replace("\r", "\n");
 }
 
-// The run of comment lines immediately above p_line, with the delimiters taken off so a hover
-// shows prose rather than syntax. Verse has no doc-comment form of its own, so this is the whole
-// convention: whatever precedes a definition documents it.
+// The comment block immediately above p_line, as prose. The rules are verse_doc_markup's, where
+// they are unit-tested; this is the godot::String face of them.
 //
 // Read out of the source rather than asked of the compiler. The parser does keep comments, but it
 // hangs one off whichever node begins the construct, and for a member behind four lines of
 // `@editable` and friends that is the attribute clause rather than the member -- so recovering
-// the association costs more Vst archaeology than re-reading four lines of text.
-//
-// A `<# #>` block contributes only the lines that open with its delimiter; a continuation line
-// reads as ordinary text and stops the walk, which is the conservative direction to be wrong in.
-//
-// An attribute line is stepped over rather than ending the walk: the prose an author writes for
-// `@global_class mover` or for an `@export` member sits above the attribute clause, not between it
-// and the declaration. Which line p_line is decides whether that matters -- the host reports a
-// member at its first attribute, and verse_scan_class_decl reports a class at the `:= class` row
-// itself -- so `mover`'s whole comment was dropped where `spinner`'s, carrying no attribute,
-// survived.
-//
-// Only the delimiter and the one space after it come off, not the line's indentation: an indented
-// sample under a blank line is a code block to verse_doc_to_bbcode, and it was flattened into the
-// sentence before it when every line was stripped. The host's DocOf reads the same way, so the two
-// sides still produce one shape.
+// the association costs more Vst archaeology than re-reading the text. The host's DocOf reads
+// those nodes by the same rules, as the fallback for a file this side cannot open.
 String verse_doc_comment_above(const String &p_source, int64_t p_line) {
-	const PackedStringArray lines = p_source.split("\n");
-	PackedStringArray collected;
-
-	for (int64_t i = p_line - 1; i >= 0 && i < lines.size(); i--) {
-		String line = lines[i].strip_edges();
-		if (line.begins_with("@")) {
-			continue;
-		}
-		if (line.begins_with("<#>")) {
-			line = line.substr(3);
-		} else if (line.begins_with("<#")) {
-			line = line.substr(2).trim_suffix("#>");
-		} else if (line.begins_with("#")) {
-			line = line.substr(1);
-		} else {
-			break;
-		}
-		collected.push_back(line.trim_prefix(" ").rstrip(" \t"));
-	}
-
-	collected.reverse();
-	return String("\n").join(collected).lstrip("\n").rstrip("\n");
+	const CharString utf8 = p_source.utf8();
+	const std::string source(utf8.get_data(), (size_t)utf8.length());
+	return String::utf8(verse_doc_comment_above(source, (int)p_line).c_str());
 }
 
 String verse_doc_bbcode(const String &p_doc) {
@@ -1738,7 +1704,9 @@ static Dictionary override_option_for(const Dictionary &p_item) {
 // override that is already written from being offered again.
 static bool completes_as_override(const Dictionary &p_item, const String &p_enclosing_class) {
 	const String owner = p_item["owner"];
-	if (!(bool)p_item["is_overridable"] || String(p_item["signature"]).is_empty() || owner == p_enclosing_class) {
+	// The owner of a script class's member is module-qualified -- `left/widget` -- and the class
+	// this is declaring in was read off the buffer, where only the bare name is written.
+	if (!(bool)p_item["is_overridable"] || String(p_item["signature"]).is_empty() || owner.get_file() == p_enclosing_class) {
 		return false;
 	}
 	if (const verse_api::method_mapping *mirrored = godot_method_for(owner, p_item["name"])) {
@@ -2594,10 +2562,14 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 		}
 	}
 
+	// The bare name, which is what an author types: `left/widget` is how the bridge and the host
+	// spell the class, and no Verse source ever does. Two modules' `widget`s are one option.
 	const PackedStringArray &class_names = script_class_names();
 	for (int64_t i = 0; i < class_names.size(); i++) {
-		if (matches_typed_class_prefix(class_names[i], prefix) && !host_offered_names.has(class_names[i])) {
-			options.push_back(completion_option(class_names[i], ScriptLanguageExtension::CODE_COMPLETION_KIND_CLASS, ScriptLanguageExtension::LOCATION_OTHER_USER_CODE));
+		const String leaf = class_names[i].get_file();
+		if (matches_typed_class_prefix(leaf, prefix) && !host_offered_names.has(leaf)) {
+			host_offered_names.insert(leaf);
+			options.push_back(completion_option(leaf, ScriptLanguageExtension::CODE_COMPLETION_KIND_CLASS, ScriptLanguageExtension::LOCATION_OTHER_USER_CODE));
 		}
 	}
 
@@ -2883,9 +2855,17 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 		// A second class in the same file is deliberately not included. Nothing registers a doc
 		// for one, so CLASS would draw an empty box, where the local result at least carries the
 		// comment above it.
-		if (script_class_names().has(found_name)) {
+		//
+		// Under the module-qualified name, which is what the doc is registered as: `left/widget`
+		// for a class under a `.vmodule`, and only the file-named class registers one. The name
+		// comes from the file the definition was written in, because at its own declaration a
+		// class's owner is the module or the snippet around it and never spells the class.
+		const String own_res_path = own_path == globalized ? p_path : String(path_by_globalized.get(own_path, String()));
+		const String own_qualified = own_res_path.is_empty() ? String() : qualified_class_name(own_res_path);
+		if (own_qualified.get_file() == found_name && script_class_names().has(own_qualified)) {
+			ensure_script_doc_published(own_qualified);
 			result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS;
-			result["class_name"] = found_name;
+			result["class_name"] = own_qualified;
 		} else if (const BindingInfo *binding = binding_for(found_name)) {
 			result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS;
 			fill_binding_result(result, *binding);
@@ -3005,7 +2985,14 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 			}
 		}
 
+		//
+		// The owner is module-qualified for a script class -- `left/widget`, the same string
+		// _get_doc_class_name registers -- because Godot looks the doc up by exactly that name.
+		// And the doc is registered now if it is not current, because Godot draws the tooltip
+		// from it and nothing else: the description filled below is read for a local result
+		// alone (B38).
 		if (script_class_names().has(found_owner)) {
+			ensure_script_doc_published(found_owner);
 			result["type"] = (int64_t)(kind == VH_LOOKUP_FUNCTION
 							? ScriptLanguageExtension::LOOKUP_RESULT_CLASS_METHOD
 							: ScriptLanguageExtension::LOOKUP_RESULT_CLASS_PROPERTY);
@@ -4078,7 +4065,7 @@ const PackedStringArray &VerseScriptLanguage::script_class_names() const {
 		const PackedStringArray sources = find_verse_sources("res://");
 		script_class_names_cache.clear();
 		for (int64_t i = 0; i < sources.size(); i++) {
-			script_class_names_cache.push_back(sources[i].get_file().get_basename());
+			script_class_names_cache.push_back(qualified_class_name(sources[i]));
 		}
 		script_class_names_built = true;
 	}
@@ -4696,6 +4683,40 @@ void VerseScriptLanguage::republish_script_docs() const {
 		}
 		script_editor->clear_docs_from_script(ref);
 		script_editor->update_docs_from_script(ref);
+	}
+#endif
+}
+
+// The republish above cannot be relied on to have happened by the time a tooltip needs the doc,
+// and B38 is the record of how it was missed. It runs once per re-arm over the scripts alive at
+// that moment; EditorHelp queues a doc added before its own regeneration has finished and
+// *discards* the queue when that regeneration starts (editor_help.cpp, _regen_script_doc_thread);
+// and a script the regeneration loaded and dropped is in nobody's list when the pass runs. A
+// hover that names the class is the one moment the doc is certainly wanted, and the script knows
+// whether what Godot holds was described from the text the host now describes.
+void VerseScriptLanguage::ensure_script_doc_published(const String &p_class_name) const {
+#ifdef TOOLS_ENABLED
+	EditorInterface *editor_interface = verse_editor_interface();
+	ScriptEditor *script_editor = editor_interface != nullptr ? editor_interface->get_script_editor() : nullptr;
+	if (script_editor == nullptr) {
+		return;
+	}
+
+	const std::vector<VerseScript *> scripts = live_scripts;
+	for (VerseScript *script : scripts) {
+		if (script->verse_class_name() != p_class_name) {
+			continue;
+		}
+		if (script->doc_is_current()) {
+			return;
+		}
+		const Ref<Script> ref = Ref<Script>(script);
+		if (ref.is_null() || ref->get_path().is_empty()) {
+			return;
+		}
+		script_editor->clear_docs_from_script(ref);
+		script_editor->update_docs_from_script(ref);
+		return;
 	}
 #endif
 }

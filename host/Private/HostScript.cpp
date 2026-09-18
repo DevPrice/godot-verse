@@ -2516,15 +2516,26 @@ AUTORTFM_DISABLE bool IsClassNamedAfterItsFile(const uLang::CDefinition& Definit
     return FUtf8String(Stem) == FUtf8String(Definition.AsNameCString());
 }
 
+AUTORTFM_DISABLE FUtf8String QualifiedNameOf(const uLang::CClass& Class);
+
 /// The name an answer carries as a definition's owner: the class for a member, and for a top-level
 /// definition the file it was written in, since a snippet scope carries its path as its name. That
 /// makes it a location as much as a name -- the Godot side tests the two against each other to
 /// recognise a package global -- so a mirror definition answers it from the table as well.
+///
+/// A class is named the way every ClassNameUtf8 in the ABI names one: `left/widget` for a script
+/// class under a `.vmodule`, its bare name for a mirrored or a bound one. The consumer registers
+/// a script class's documentation under that string and Godot looks the doc up by it, so a
+/// member owned by the bare `widget` found no documentation at all inside a module (B38).
 AUTORTFM_DISABLE FUtf8String OwnerNameOf(const uLang::CDefinition& Definition, const FMirrorDefinition* Recorded)
 {
     if (Recorded && Definition._EnclosingScope.GetKind() == uLang::CScope::EKind::Snippet)
     {
         return GMirrorPaths[Recorded->PathIndex];
+    }
+    if (Definition._EnclosingScope.GetKind() == uLang::CScope::EKind::Class)
+    {
+        return QualifiedNameOf(static_cast<const uLang::CClass&>(Definition._EnclosingScope));
     }
     return FUtf8String(Definition._EnclosingScope.GetScopeName().AsCString());
 }
@@ -7969,10 +7980,109 @@ namespace {
 /// back empty where re-reading the file would not. It is a fallback for a definition whose file
 /// the consumer cannot open, not a replacement for that reading.
 ///
-/// The shape matches verse_doc_comment_above's exactly -- the delimiter and the one space after
-/// it gone, indentation kept so an indented sample is still a code block to the consumer's
-/// converter, trailing space trimmed, joined with newlines -- so a consumer cannot tell which
-/// side produced a given description.
+/// The shape matches verse_doc_comment_above's exactly (src/verse_doc_markup.h has the rules): a
+/// `#` line is what follows the delimiter and one space, indentation kept so an indented sample is
+/// still a code block to the consumer's converter; a `<# ... #>` block and a `<#>` comment are the
+/// text between or under their delimiters, the continuation lines dedented by what they share and
+/// blank lines at either end dropped; every line trimmed at its end and joined with newlines. So a
+/// consumer cannot tell which side produced a given description.
+AUTORTFM_DISABLE void AppendCommentProse(TArray<FUtf8String>& OutLines, const FUtf8String& Source)
+{
+    FUtf8StringView Text = FUtf8StringView(Source);
+    Text.TrimStartAndEndInline();
+
+    // `<#>` before `<#`, or the longer delimiter is read as the shorter plus a `>`.
+    if (Text.StartsWith(FUtf8StringView(UTF8TEXT("<#>"))))
+    {
+        Text.RightChopInline(3);
+    }
+    else if (Text.StartsWith(FUtf8StringView(UTF8TEXT("<#"))))
+    {
+        Text.RightChopInline(2);
+        if (Text.EndsWith(FUtf8StringView(UTF8TEXT("#>"))))
+        {
+            Text.LeftChopInline(2);
+        }
+    }
+    else if (Text.StartsWith(FUtf8StringView(UTF8TEXT("#"))))
+    {
+        Text.RightChopInline(1);
+    }
+
+    TArray<FUtf8String> Lines;
+    FUtf8String(Text).ParseIntoArray(Lines, UTF8TEXT("\n"), /*InCullEmpty*/ false);
+    if (Lines.IsEmpty())
+    {
+        return;
+    }
+    for (FUtf8String& Line : Lines)
+    {
+        Line.TrimEndInline();
+    }
+
+    // The delimiter's own line: one space is the delimiter's, the rest is text.
+    FUtf8String& First = Lines[0];
+    if (First.StartsWith(UTF8TEXT(" ")))
+    {
+        First.RightChopInline(1);
+    }
+
+    // The continuation lines, dedented by the leading whitespace every non-blank one shares.
+    int32 Common = -1;
+    for (int32 Index = 1; Index < Lines.Num(); Index++)
+    {
+        const FUtf8String& Line = Lines[Index];
+        int32 Indent = 0;
+        while (Indent < Line.Len() && (Line[Indent] == UTF8CHAR(' ') || Line[Indent] == UTF8CHAR('\t')))
+        {
+            Indent++;
+        }
+        if (Indent == Line.Len())
+        {
+            continue;
+        }
+        if (Common < 0)
+        {
+            Common = Indent;
+            continue;
+        }
+        const FUtf8String& Reference = Lines[1];
+        int32 Shared = 0;
+        while (Shared < Common && Shared < Indent && Line[Shared] == Reference[Shared])
+        {
+            Shared++;
+        }
+        Common = Shared;
+    }
+    for (int32 Index = 1; Index < Lines.Num() && Common > 0; Index++)
+    {
+        FUtf8String& Line = Lines[Index];
+        if (Line.Len() <= Common)
+        {
+            Line.Empty();
+        }
+        else
+        {
+            Line.RightChopInline(Common);
+        }
+    }
+
+    int32 Begin = 0;
+    int32 End = Lines.Num();
+    while (Begin < End && Lines[Begin].IsEmpty())
+    {
+        Begin++;
+    }
+    while (End > Begin && Lines[End - 1].IsEmpty())
+    {
+        End--;
+    }
+    for (int32 Index = Begin; Index < End; Index++)
+    {
+        OutLines.Add(Lines[Index]);
+    }
+}
+
 AUTORTFM_DISABLE FUtf8String DocOf(const uLang::CDefinition& Definition, const uLang::CSemanticProgram& Program)
 {
     // The prototype: prose is written once, on the generic declaration, and GetAttributes
@@ -7996,38 +8106,19 @@ AUTORTFM_DISABLE FUtf8String DocOf(const uLang::CDefinition& Definition, const u
         return FUtf8String();
     }
 
-    FUtf8String Prose;
+    TArray<FUtf8String> Lines;
     for (const Verse::Vst::TNodeRef<Verse::Vst::Node>& Node : Vst->GetPrefixComments())
     {
-        const Verse::Vst::Comment* const Comment = Node->AsNullable<Verse::Vst::Comment>();
-        if (!Comment)
+        // The node's text is the comment as written, delimiters included, for all three kinds
+        // (tLang.cpp prints it back verbatim), so one stripping rule serves every one.
+        if (const Verse::Vst::Comment* const Comment = Node->AsNullable<Verse::Vst::Comment>())
         {
-            continue;
+            AppendCommentProse(Lines, FUtf8String(Comment->GetSourceCStr()));
         }
-        FUtf8String Line(Comment->GetSourceCStr());
-        Line.TrimStartAndEndInline();
-        // `<#>` before `<#`, or the longer delimiter is read as the shorter plus a `>`.
-        if (Line.StartsWith(UTF8TEXT("<#>")))
-        {
-            Line.RightChopInline(3);
-        }
-        else if (Line.StartsWith(UTF8TEXT("<#")))
-        {
-            Line.RightChopInline(2);
-            if (Line.EndsWith(UTF8TEXT("#>")))
-            {
-                Line.LeftChopInline(2);
-            }
-        }
-        else if (Line.StartsWith(UTF8TEXT("#")))
-        {
-            Line.RightChopInline(1);
-        }
-        if (Line.StartsWith(UTF8TEXT(" ")))
-        {
-            Line.RightChopInline(1);
-        }
-        Line.TrimEndInline();
+    }
+    FUtf8String Prose;
+    for (const FUtf8String& Line : Lines)
+    {
         if (!Prose.IsEmpty())
         {
             Prose += UTF8TEXT("\n");

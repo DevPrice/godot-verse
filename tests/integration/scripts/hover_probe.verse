@@ -89,6 +89,15 @@ hover_probe := class(node2d):
 	#         Nested := 1
 	Prose<public>(X:float):int = 0
 
+	<# The other two comment forms, which the reader used to misread: this block read as `>`,
+	   the closing line stripped to that and the walk stopped at the line above it. #>
+	Blocked<public>():int = 0
+
+	<#>
+		An indented comment, whose body is whatever sits indented under the marker.
+		The second line is the proof, because only the first survived before.
+	Indented<public>():int = 0
+
 	# The three types declared below this class, named here so each has a reference to hover as
 	# well as its declaration.
 	Helped<public>(H:hover_helper):int = H.Amount

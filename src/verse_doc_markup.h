@@ -24,6 +24,35 @@
 // tests/verse_doc_markup, and both sides of the ABI produce the same input shape (a line per
 // comment line, the delimiter and one space taken off, indentation kept, joined with `\n`).
 
+// The comment block immediately above line p_line (0-based) of p_source, as prose: every
+// delimiter taken off, joined with `\n`, empty when nothing documents that line.
+//
+// Verse has no doc-comment form of its own, so this is the whole convention, and it is the one
+// Epic's tooling follows: the digest generator rewrites a `@doc("...")` attribute into `#` lines
+// above the declaration, and VerseJsonInterfaceGen writes a definition's prefix comments as its
+// documentation. Whatever comment precedes a definition documents it.
+//
+// Read with the lexer rather than by line prefix, because two of Verse's three comment forms
+// span lines: a `<# ... #>` block's inner lines carry no delimiter, and a `<#>` comment's body is
+// whatever is indented under it. Walking up by prefix alone read a multi-line block as `>` -- the
+// closing `#>` stripped to that, and the line above it ending the walk.
+//
+// The rules, each a case in tests/verse_doc_markup:
+//   - a `#` line contributes what follows the `#` and one space, indentation kept, so an indented
+//     sample is still a code block to verse_doc_to_bbcode;
+//   - a `<# ... #>` block contributes the text between its delimiters, its lines dedented by what
+//     they share, leading and trailing blank lines dropped;
+//   - a `<#>` comment contributes what follows the marker on its line and the body indented under
+//     it, dedented the same way;
+//   - an attribute line between the comment and the declaration is stepped over: the prose for
+//     `@global_class mover` or an `@export` member sits above the attribute clause;
+//   - a blank line or a line of code ends the walk. A comment trailing code on the line above
+//     documents nothing, and neither does one separated by a blank line.
+//
+// The host's DocOf reads the parser's own comment nodes by the same rules, so a consumer cannot
+// tell which side produced a description.
+std::string verse_doc_comment_above(const std::string &p_source, int p_line);
+
 // The BBCode for p_doc. Empty in, empty out.
 std::string verse_doc_to_bbcode(const std::string &p_doc);
 

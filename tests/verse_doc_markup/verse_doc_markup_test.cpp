@@ -166,9 +166,66 @@ bool TestCarriageReturns()
 
 } // namespace
 
+bool ExpectAbove(const char* Name, const std::string& Source, int Line, const std::string& Want)
+{
+	const std::string Got = verse_doc_comment_above(Source, Line);
+	const bool Ok = Got == Want;
+	if (!Ok)
+	{
+		printf("    want: %s\n    got:  %s\n", Want.c_str(), Got.c_str());
+	}
+	return Step(Name, Ok);
+}
+
+bool TestCommentAbove()
+{
+	// The reader: which comment documents a declaration, and what each form contributes.
+	return ExpectAbove("line comments directly above are the doc",
+				"# First.\n# Second.\nFoo():int = 1\n", 2, "First.\nSecond.")
+		&& ExpectAbove("indentation after the delimiter is kept",
+				"\t# Sample:\n\t#\n\t#     X := 1\n\tFoo():int = 1\n", 3, "Sample:\n\n    X := 1")
+		&& ExpectAbove("an attribute line is stepped over",
+				"# The member.\n@export\nvar X:int = 1\n", 2, "The member.")
+		&& ExpectAbove("an attribute with an argument is stepped over",
+				"# The member.\n@export_range(\"0,10\")\nvar X:int = 1\n", 2, "The member.")
+		&& ExpectAbove("a blank line ends the walk",
+				"# Elsewhere.\n\nFoo():int = 1\n", 2, "")
+		&& ExpectAbove("a line of code ends the walk",
+				"# Above the code.\nX := 1\nFoo():int = 1\n", 2, "")
+		&& ExpectAbove("a comment trailing code documents nothing",
+				"X := 1 # trailing\nFoo():int = 1\n", 1, "")
+		&& ExpectAbove("the first line has nothing above it",
+				"Foo():int = 1\n", 0, "")
+		&& ExpectAbove("a line past the end has nothing above it",
+				"# Only.\n", 5, "")
+		&& ExpectAbove("a one-line block comment",
+				"<# The doc. #>\nFoo():int = 1\n", 1, "The doc.")
+		&& ExpectAbove("a block comment across lines is dedented",
+				"\t<#\n\t\tFirst line.\n\t\tSecond line.\n\t#>\n\tFoo():int = 1\n", 4, "First line.\nSecond line.")
+		&& ExpectAbove("a block's closing line is not a `>`",
+				"<# One.\n   Two. #>\nFoo():int = 1\n", 2, "One.\nTwo.")
+		&& ExpectAbove("a blank line inside a block stays inside it",
+				"<#\nFirst.\n\nSecond.\n#>\nFoo():int = 1\n", 5, "First.\n\nSecond.")
+		&& ExpectAbove("an indented comment contributes its body",
+				"\t<#>\n\t\tThe doc.\n\t\tIts second line.\n\tFoo():int = 1\n", 3, "The doc.\nIts second line.")
+		&& ExpectAbove("an indented comment's own line counts too",
+				"<#> Heading.\n\tBody.\nFoo():int = 1\n", 2, "Heading.\nBody.")
+		&& ExpectAbove("an indented sample inside an indented comment is kept",
+				"\t<#>\n\t\tSample:\n\t\t\n\t\t    X := 1\n\tFoo():int = 1\n", 4, "Sample:\n\n    X := 1")
+		&& ExpectAbove("line comments and a block above them are one doc",
+				"<# Above. #>\n# Below.\nFoo():int = 1\n", 2, "Above.\nBelow.")
+		&& ExpectAbove("Windows line endings are not text",
+				"# First.\r\n# Second.\r\nFoo():int = 1\r\n", 2, "First.\nSecond.")
+		&& ExpectAbove("a class with a global class attribute",
+				"# A mover.\n@global_class\nmover := class(node2d):\n", 2, "A mover.")
+		&& ExpectAbove("only the block nearest the declaration",
+				"# Far.\n\n# Near.\nFoo():int = 1\n", 3, "Near.");
+}
+
 int main()
 {
-	const bool Ok = TestEmpty()
+	const bool Ok = TestCommentAbove()
+		&& TestEmpty()
 		&& TestLinesJoinIntoParagraphs()
 		&& TestInlineCode()
 		&& TestBracketsAreEscaped()

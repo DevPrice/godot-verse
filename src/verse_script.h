@@ -91,6 +91,12 @@ public:
 	bool is_compiled() const;
 	godot::String verse_class_name() const;
 
+	// Whether the documentation Godot holds for this script was described from the text and the
+	// analysis it has now. False until _get_documentation answers on the editor's thread, and
+	// again whenever an analysis or a generation lands, since either can change what a member
+	// is. What acts on it is VerseScriptLanguage::ensure_script_doc_published.
+	bool doc_is_current() const;
+
 	vh_instance *make_instance(int64_t p_object_id) const;
 	void free_instance(vh_instance *p_instance) const;
 	bool instance_has_function(vh_instance *p_instance, const char *p_decorated_name) const;
@@ -199,6 +205,10 @@ private:
 	// moments the answer can change -- an analysis landing, a generation being published, and
 	// Godot asking for an update -- and set by the rebuild.
 	mutable bool exports_current = false;
+
+	// See doc_is_current. Cleared beside exports_current, set by a _get_documentation that
+	// answered rather than declined.
+	mutable bool doc_current = false;
 
 	// The method table from the same analysis as exports_cache, and refreshed with it. Cached
 	// rather than re-asked because Godot calls _has_method on paths that run per frame, and each
