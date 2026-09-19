@@ -11,6 +11,7 @@
 #include <godot_cpp/variant/utility_functions.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <set>
 #include <unordered_map>
 
@@ -51,6 +52,12 @@ std::string mirrored_verse_class(const String &p_godot_name) {
 /// which the mirror relies on 12,000 lines before it declares `node2d` -- so the roster is collected
 /// first and every member is typed against all of it.
 using VerseBindingRoster = std::unordered_map<std::string, std::string>;
+
+/// Every enum this generation declares, Godot's `Owner.Enum` spelling -> the Verse name it is
+/// given. Keyed the way Godot's own metadata names one: an enum-typed argument reports the enum's
+/// type in `class_name`, as `Thing.State`, with PROPERTY_USAGE_CLASS_IS_ENUM set (measured against
+/// Godot 4.7, for a GDScript method and a ClassDB one alike).
+using VerseEnumRoster = std::unordered_map<std::string, std::string>;
 
 /// The Verse type a Godot `Variant::Type` plus class name crosses as, or empty when neither the
 /// mirror nor this generation's own roster has a spelling for it.
@@ -96,6 +103,36 @@ std::string verse_type_for(int64_t p_variant_type, const String &p_class_name, c
 	}
 }
 
+/// Whether a Verse type name is one of this generation's own enums.
+bool is_bound_enum(const std::string &p_type, const VerseEnumRoster &p_enums) {
+	for (const std::pair<const std::string, std::string> &row : p_enums) {
+		if (row.second == p_type) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/// The Verse type for one argument, result or property, enums included.
+///
+/// Godot spells an enum as an `int` whose `class_name` names it -- `Thing.State` -- and whose usage
+/// carries PROPERTY_USAGE_CLASS_IS_ENUM, for a GDScript member and a ClassDB one alike (measured,
+/// Godot 4.7). An enum this generation does not declare falls back to the int it really is, which
+/// is what an author would have had to write anyway.
+std::string member_type_for(const Dictionary &p_entry, const VerseBindingRoster &p_roster,
+		const VerseEnumRoster &p_enums) {
+	const int64_t type = p_entry.get("type", (int64_t)Variant::NIL);
+	const int64_t usage = p_entry.get("usage", (int64_t)0);
+	const String class_name = p_entry.get("class_name", String());
+	if (type == Variant::INT && (usage & PROPERTY_USAGE_CLASS_IS_ENUM) != 0) {
+		const VerseEnumRoster::const_iterator bound = p_enums.find(utf8_of(class_name));
+		if (bound != p_enums.end()) {
+			return bound->second;
+		}
+	}
+	return verse_type_for(type, class_name, p_roster);
+}
+
 /// The type a parameter is *declared* as, which is not always the type its value crosses at.
 ///
 /// An object argument is optional, because null is a value every Godot object slot can hold and
@@ -123,6 +160,129 @@ std::string safe_param_name(const String &p_godot_name, int64_t p_index) {
 		name = "Arg" + std::to_string(p_index);
 	}
 	return "In" + name;
+}
+
+/// The Verse spelling of every member the binding's *mirrored* ancestry already declares.
+///
+/// A member may not shadow an inherited one -- glitch 3532 at the declaration, with nothing said
+/// about where the collision came from -- and the mirror declares 3312 properties and 503 signal
+/// accessors a binding could collide with. `Mob extends RigidBody2D` declaring `var mass` is the
+/// ordinary case rather than an exotic one, and the cost of getting it wrong is the whole package:
+/// a bindings package that does not compile takes every binding in the project with it (B35).
+std::set<std::string> inherited_member_names(ClassDBSingleton *p_db, const String &p_godot_base) {
+	std::set<std::string> names;
+	for (String cursor = p_godot_base; !cursor.is_empty(); cursor = p_db->get_parent_class(cursor)) {
+		const std::string godot_name = utf8_of(cursor);
+		for (const verse_api::method_mapping &member : verse_api::methods) {
+			if (godot_name == member.godot_class) {
+				names.insert(member.verse_method);
+			}
+		}
+	}
+	return names;
+}
+
+/// One class's enums as the generator wants them, read out of ClassDB.
+void collect_classdb_enums(ClassDBSingleton *p_db, const String &p_godot_name, VerseBindingClass &r_class) {
+	const PackedStringArray enums = p_db->class_get_enum_list(p_godot_name, true);
+	for (int64_t i = 0; i < enums.size(); i++) {
+		const String enum_name = enums[i];
+		const PackedStringArray constants = p_db->class_get_enum_constants(p_godot_name, enum_name, true);
+		if (constants.is_empty()) {
+			continue;
+		}
+
+		std::vector<std::string> godot_names;
+		for (int64_t c = 0; c < constants.size(); c++) {
+			godot_names.push_back(utf8_of(constants[c]));
+		}
+		const std::vector<std::string> verse_names = verse_binding_enumerator_names(godot_names);
+
+		VerseBindingEnum bound;
+		bound.godot_name = utf8_of(enum_name);
+		bound.verse_name = verse_binding_enum_name(utf8_of(p_godot_name), bound.godot_name);
+		for (int64_t c = 0; c < constants.size(); c++) {
+			bound.values.push_back({ verse_names[c],
+					p_db->class_get_integer_constant(p_godot_name, constants[c]) });
+		}
+		r_class.enums.push_back(bound);
+	}
+}
+
+/// The same, for a script class, whose enums arrive as Dictionary values in the constant map.
+///
+/// `{ &"State": { "IDLE": 0, "BUSY": 1 } }` is what a GDScript `enum State { IDLE, BUSY }` reports
+/// (measured, Godot 4.7), so a Dictionary-valued constant is an enum and everything else is a
+/// constant. There is no third kind: a `const` holding a real Dictionary is indistinguishable here
+/// and would be bound as an enum of its keys, which is why only integer-valued entries are kept.
+void collect_script_enums(const Ref<Script> &p_script, VerseBindingClass &r_class) {
+	const Dictionary constants = p_script->get_script_constant_map();
+	const Array names = constants.keys();
+	for (int64_t i = 0; i < names.size(); i++) {
+		const Variant value = constants[names[i]];
+		if (value.get_type() != Variant::DICTIONARY) {
+			continue;
+		}
+		const Dictionary entries = value;
+		const Array keys = entries.keys();
+		std::vector<std::string> godot_names;
+		std::vector<int64_t> numbers;
+		for (int64_t k = 0; k < keys.size(); k++) {
+			const Variant number = entries[keys[k]];
+			if (keys[k].get_type() != Variant::STRING || number.get_type() != Variant::INT) {
+				godot_names.clear();
+				break;
+			}
+			godot_names.push_back(utf8_of(keys[k]));
+			numbers.push_back(number);
+		}
+		if (godot_names.empty()) {
+			continue;
+		}
+
+		const std::vector<std::string> verse_names = verse_binding_enumerator_names(godot_names);
+		VerseBindingEnum bound;
+		bound.godot_name = utf8_of(names[i]);
+		bound.verse_name = verse_binding_enum_name(r_class.script_class, bound.godot_name);
+		for (size_t k = 0; k < godot_names.size(); k++) {
+			bound.values.push_back({ verse_names[k], numbers[k] });
+		}
+		r_class.enums.push_back(bound);
+	}
+}
+
+/// The Verse literal for a constant's value, or empty when it has none this can write.
+std::string constant_literal(const Variant &p_value, std::string &r_type) {
+	switch (p_value.get_type()) {
+		case Variant::BOOL:
+			r_type = "logic";
+			return (bool)p_value ? "true" : "false";
+		case Variant::INT:
+			r_type = "int";
+			return std::string(String::num_int64((int64_t)p_value).utf8().get_data());
+		case Variant::FLOAT: {
+			r_type = "float";
+			const double number = p_value;
+			// Verse has no literal for either, and a constant that cannot be written is left out
+			// rather than approximated: `Vector2.INF` is the mirror's own example.
+			if (std::isinf(number) || std::isnan(number)) {
+				return std::string();
+			}
+			// `1` is an int literal and `1.0` is a float: a float constant has to carry its point.
+			std::string text = utf8_of(String::num(number, 17));
+			return text.find('.') == std::string::npos ? text + ".0" : text;
+		}
+		case Variant::STRING:
+		case Variant::STRING_NAME: {
+			r_type = "string";
+			const std::string text = utf8_of(p_value);
+			// A quote or a backslash would end the literal early, and an interpolation brace would
+			// make Verse evaluate the rest. None of the three is worth escaping for a constant.
+			return text.find_first_of("\"\\{}\n\r") == std::string::npos ? "\"" + text + "\"" : std::string();
+		}
+		default:
+			return std::string();
+	}
 }
 
 /// Whether a script's text names one of the project's Verse classes.
@@ -202,11 +362,21 @@ std::string mirrored_base_of(ClassDBSingleton *p_db, const String &p_godot_name)
 	return std::string();
 }
 
-/// Reads one class's own methods and signals out of ClassDB.
-void describe_from_classdb(ClassDBSingleton *p_db, const String &p_godot_name, const VerseBindingRoster &p_roster, VerseBindingClass &r_class) {
+/// Reads one class's own methods, signals, properties and constants out of ClassDB.
+void describe_from_classdb(ClassDBSingleton *p_db, const String &p_godot_name, const VerseBindingRoster &p_roster,
+		const VerseEnumRoster &p_enums, const std::set<std::string> &p_inherited, VerseBindingClass &r_class) {
 	// no_inheritance, or every binding re-declares its base's members and trips Verse's shadow
 	// rule -- a member that shadows an inherited one is glitch 3532 at the declaration.
 	const TypedArray<Dictionary> methods = p_db->class_get_method_list(p_godot_name, true);
+
+	// The whole method list before any of it is classified: the `set_` twin that tells a property's
+	// read half from a predicate is a *sibling*, so `is_point_disabled` needs to know whether this
+	// class also declares `set_point_disabled`.
+	std::set<std::string> sibling_names;
+	for (int64_t i = 0; i < methods.size(); i++) {
+		sibling_names.insert(utf8_of(Dictionary(methods[i]).get("name", String())));
+	}
+
 	for (int64_t i = 0; i < methods.size(); i++) {
 		const Dictionary method = methods[i];
 		const String name = method.get("name", String());
@@ -223,16 +393,25 @@ void describe_from_classdb(ClassDBSingleton *p_db, const String &p_godot_name, c
 
 		VerseBindingMethod out;
 		out.godot_name = utf8_of(name);
-		out.is_const = (flags & METHOD_FLAG_CONST) != 0;
+		out.is_static = (flags & METHOD_FLAG_STATIC) != 0;
+		// A static is dispatched through `ClassDB.class_call_static`, which is not const whatever
+		// the method it reaches is, so `<reads>` is not available to one.
+		out.is_const = !out.is_static && (flags & METHOD_FLAG_CONST) != 0;
 
 		const Dictionary ret = method.get("return", Dictionary());
-		out.result_type = verse_type_for(ret.get("type", (int64_t)Variant::NIL), ret.get("class_name", String()), p_roster);
+		out.result_type = member_type_for(ret, p_roster, p_enums);
+		out.is_predicate = out.result_type == "logic" &&
+				verse_binding_is_predicate(out.godot_name, sibling_names);
+
+		if (!out.is_static && p_inherited.count(verse_binding_member_name(out.godot_name)) > 0) {
+			continue;
+		}
 
 		bool usable = true;
 		const Array args = method.get("args", Array());
 		for (int64_t a = 0; a < args.size(); a++) {
 			const Dictionary arg = args[a];
-			const std::string type = verse_type_for(arg.get("type", (int64_t)Variant::NIL), arg.get("class_name", String()), p_roster);
+			const std::string type = member_type_for(arg, p_roster, p_enums);
 			if (type.empty()) {
 				usable = false;
 				break;
@@ -243,14 +422,31 @@ void describe_from_classdb(ClassDBSingleton *p_db, const String &p_godot_name, c
 		if (!usable) {
 			continue;
 		}
-		r_class.methods.push_back(out);
+		(out.is_static ? r_class.statics : r_class.methods).push_back(out);
+	}
+
+	// **No properties here, and none are missing.** A ClassDB property is *defined* by a getter and
+	// a setter method -- `ADD_PROPERTY` names both -- and those are in the method list above, so a
+	// binding already answers `GetProcessCallback()` and `SetProcessCallback()`. Only a GDScript
+	// `var`, which has no such pair, needs one invented (see describe_from_script).
+
+	// The enum constants are already carried by the enums themselves, and a Verse enumerator and a
+	// constant of the same name in one module is a redefinition.
+	const PackedStringArray constants = p_db->class_get_integer_constant_list(p_godot_name, true);
+	for (int64_t i = 0; i < constants.size(); i++) {
+		const String name = constants[i];
+		if (!String(p_db->class_get_integer_constant_enum(p_godot_name, name, true)).is_empty()) {
+			continue;
+		}
+		r_class.constants.push_back({ verse_binding_constant_name(utf8_of(name)), "int",
+				utf8_of(String::num_int64(p_db->class_get_integer_constant(p_godot_name, name))) });
 	}
 
 	const TypedArray<Dictionary> signals = p_db->class_get_signal_list(p_godot_name, true);
 	for (int64_t i = 0; i < signals.size(); i++) {
 		const Dictionary signal = signals[i];
 		const String name = signal.get("name", String());
-		if (name.is_empty()) {
+		if (name.is_empty() || p_inherited.count(verse_binding_member_name(utf8_of(name))) > 0) {
 			continue;
 		}
 		VerseBindingSignal out;
@@ -259,7 +455,7 @@ void describe_from_classdb(ClassDBSingleton *p_db, const String &p_godot_name, c
 		const Array args = signal.get("args", Array());
 		for (int64_t a = 0; a < args.size(); a++) {
 			const Dictionary arg = args[a];
-			const std::string type = verse_type_for(arg.get("type", (int64_t)Variant::NIL), arg.get("class_name", String()), p_roster);
+			const std::string type = member_type_for(arg, p_roster, p_enums);
 			if (type.empty()) {
 				usable = false;
 				break;
@@ -278,7 +474,8 @@ void describe_from_classdb(ClassDBSingleton *p_db, const String &p_godot_name, c
 /// `_get_script_method_list(r_list, true)` with no own-only flag), so the base's are subtracted --
 /// re-declaring one is glitch 3532 at the declaration, with nothing said about where the collision
 /// came from.
-void describe_from_script(const Ref<Script> &p_script, const VerseBindingRoster &p_roster, VerseBindingClass &r_class) {
+void describe_from_script(const Ref<Script> &p_script, const VerseBindingRoster &p_roster,
+		const VerseEnumRoster &p_enums, const std::set<std::string> &p_inherited, VerseBindingClass &r_class) {
 	std::set<std::string> inherited;
 	Ref<Script> base = p_script->get_base_script();
 	while (base.is_valid()) {
@@ -287,6 +484,11 @@ void describe_from_script(const Ref<Script> &p_script, const VerseBindingRoster 
 			const Dictionary method = base_methods[i];
 			inherited.insert(utf8_of(method.get("name", String())));
 		}
+		const TypedArray<Dictionary> base_properties = base->get_script_property_list();
+		for (int64_t i = 0; i < base_properties.size(); i++) {
+			const Dictionary property = base_properties[i];
+			inherited.insert(utf8_of(property.get("name", String())));
+		}
 		base = base->get_base_script();
 	}
 
@@ -294,7 +496,8 @@ void describe_from_script(const Ref<Script> &p_script, const VerseBindingRoster 
 	for (int64_t i = 0; i < methods.size(); i++) {
 		const Dictionary method = methods[i];
 		const String name = method.get("name", String());
-		if (name.is_empty() || name.begins_with("_") || inherited.count(utf8_of(name)) > 0) {
+		if (name.is_empty() || name.begins_with("_") || inherited.count(utf8_of(name)) > 0 ||
+				p_inherited.count(verse_binding_member_name(utf8_of(name))) > 0) {
 			continue;
 		}
 
@@ -303,15 +506,21 @@ void describe_from_script(const Ref<Script> &p_script, const VerseBindingRoster 
 		// GDScript has no const methods at all, so every script binding is `<transacts>` and the
 		// `<reads>` half of R-INT-9 never fires here.
 		out.is_const = false;
+		out.is_static = (int64_t(method.get("flags", 0)) & METHOD_FLAG_STATIC) != 0;
+		// **And no script method is a predicate.** The mirror's rule reads a test out of Godot's
+		// own naming, which Godot chose for its own C++ API; a GDScript author writing
+		// `func is_alive() -> bool` has made no such claim, and turning two letters of their method
+		// name into `<decides>` would change how every caller spells it. Their `bool` is a `logic`.
+		out.is_predicate = false;
 
 		const Dictionary ret = method.get("return", Dictionary());
-		out.result_type = verse_type_for(ret.get("type", (int64_t)Variant::NIL), ret.get("class_name", String()), p_roster);
+		out.result_type = member_type_for(ret, p_roster, p_enums);
 
 		bool usable = true;
 		const Array args = method.get("args", Array());
 		for (int64_t a = 0; a < args.size(); a++) {
 			const Dictionary arg = args[a];
-			const std::string type = verse_type_for(arg.get("type", (int64_t)Variant::NIL), arg.get("class_name", String()), p_roster);
+			const std::string type = member_type_for(arg, p_roster, p_enums);
 			if (type.empty()) {
 				usable = false;
 				break;
@@ -320,7 +529,58 @@ void describe_from_script(const Ref<Script> &p_script, const VerseBindingRoster 
 					declared_param_type(arg.get("type", (int64_t)Variant::NIL), type) });
 		}
 		if (usable) {
-			r_class.methods.push_back(out);
+			(out.is_static ? r_class.statics : r_class.methods).push_back(out);
+		}
+	}
+
+	// PROPERTY_USAGE_SCRIPT_VARIABLE is the filter: the list opens with a category row naming the
+	// file, which is there only under TOOLS_ENABLED and is not a property at all.
+	const TypedArray<Dictionary> properties = p_script->get_script_property_list();
+	for (int64_t i = 0; i < properties.size(); i++) {
+		const Dictionary property = properties[i];
+		const String name = property.get("name", String());
+		const int64_t usage = property.get("usage", (int64_t)0);
+		if (name.is_empty() || (usage & PROPERTY_USAGE_SCRIPT_VARIABLE) == 0 ||
+				inherited.count(utf8_of(name)) > 0) {
+			continue;
+		}
+		const std::string type = member_type_for(property, p_roster, p_enums);
+		if (type.empty() || (!is_bound_enum(type, p_enums) && !verse_binding_can_be_property(type))) {
+			continue;
+		}
+		// The pair's own names are what may collide, not the property's: `var speed` becomes
+		// `GetSpeed` and `SetSpeed`, and either may already be an inherited mirrored member or a
+		// method this script declares itself. A collision is glitch 3532 at the generated
+		// declaration, which costs the whole package, so the property is dropped instead.
+		const std::string accessor = verse_binding_member_name(utf8_of(name));
+		bool clear = true;
+		for (const char *const half : { "Get", "Set" }) {
+			const std::string spelled = half + accessor;
+			clear = clear && p_inherited.count(spelled) == 0;
+			for (const VerseBindingMethod &method : r_class.methods) {
+				clear = clear && verse_binding_member_name(method.godot_name) != spelled;
+			}
+		}
+		if (!clear) {
+			continue;
+		}
+		// Every GDScript `var` is written as well as read -- there is no read-only `var`, and a
+		// custom setter is still a setter -- so there is nothing else to ask about one.
+		r_class.properties.push_back({ utf8_of(name), type });
+	}
+
+	const Dictionary constants = p_script->get_script_constant_map();
+	const Array constant_names = constants.keys();
+	for (int64_t i = 0; i < constant_names.size(); i++) {
+		const Variant value = constants[constant_names[i]];
+		// A Dictionary-valued constant is an enum, which `collect_script_enums` has already taken.
+		if (value.get_type() == Variant::DICTIONARY) {
+			continue;
+		}
+		std::string type;
+		const std::string literal = constant_literal(value, type);
+		if (!literal.empty()) {
+			r_class.constants.push_back({ verse_binding_constant_name(utf8_of(constant_names[i])), type, literal });
 		}
 	}
 
@@ -328,7 +588,7 @@ void describe_from_script(const Ref<Script> &p_script, const VerseBindingRoster 
 	for (int64_t i = 0; i < signals.size(); i++) {
 		const Dictionary signal = signals[i];
 		const String name = signal.get("name", String());
-		if (name.is_empty()) {
+		if (name.is_empty() || p_inherited.count(verse_binding_member_name(utf8_of(name))) > 0) {
 			continue;
 		}
 		VerseBindingSignal out;
@@ -337,7 +597,7 @@ void describe_from_script(const Ref<Script> &p_script, const VerseBindingRoster 
 		const Array args = signal.get("args", Array());
 		for (int64_t a = 0; a < args.size(); a++) {
 			const Dictionary arg = args[a];
-			const std::string type = verse_type_for(arg.get("type", (int64_t)Variant::NIL), arg.get("class_name", String()), p_roster);
+			const std::string type = member_type_for(arg, p_roster, p_enums);
 			if (type.empty()) {
 				usable = false;
 				break;
@@ -405,6 +665,9 @@ VerseBindings verse_generate_bindings(bool p_inside_resource_load, const std::ve
 		if (binding.verse_class.empty() || !taken.insert(binding.verse_class).second) {
 			continue;
 		}
+		// Enums with the roster rather than with the members, for the roster's own reason: a method
+		// of the first class emitted may take the last class's enum.
+		collect_classdb_enums(db, godot_name, binding);
 		roster[binding.godot_class] = binding.verse_class;
 		pending.push_back({ godot_name, Ref<Script>() });
 		bindings.classes.push_back(binding);
@@ -484,21 +747,47 @@ VerseBindings verse_generate_bindings(bool p_inside_resource_load, const std::ve
 			if (const VerseBindingClass *remembered = remembered_class(p_previous, binding.script_class)) {
 				binding.methods = remembered->methods;
 				binding.signals = remembered->signals;
+				binding.properties = remembered->properties;
+				binding.constants = remembered->constants;
+				binding.statics = remembered->statics;
+				binding.enums = remembered->enums;
 			}
 			// Say so, once per generation, rather than leaving an author to wonder why completion
 			// offers a class with one meaningless method on it.
 			bindings.incomplete.push_back(binding.verse_class);
+		} else {
+			collect_script_enums(script, binding);
 		}
 		roster[binding.script_class] = binding.verse_class;
 		pending.push_back({ String(), script });
 		bindings.classes.push_back(binding);
 	}
 
+	// Every enum every bound class declares, keyed as Godot's metadata names one.
+	VerseEnumRoster enum_roster;
+	for (const VerseBindingClass &binding : bindings.classes) {
+		const std::string owner = binding.godot_class.empty() ? binding.script_class : binding.godot_class;
+		for (const VerseBindingEnum &bound : binding.enums) {
+			enum_roster[owner + "." + bound.godot_name] = bound.verse_name;
+		}
+	}
+
 	for (size_t i = 0; i < pending.size(); i++) {
+		VerseBindingClass &binding = bindings.classes[i];
 		if (pending[i].script.is_valid()) {
-			describe_from_script(pending[i].script, roster, bindings.classes[i]);
+			describe_from_script(pending[i].script, roster, enum_roster,
+					inherited_member_names(db, String(pending[i].script->get_instance_base_type())), binding);
 		} else if (!pending[i].godot_class.is_empty()) {
-			describe_from_classdb(db, pending[i].godot_class, roster, bindings.classes[i]);
+			describe_from_classdb(db, pending[i].godot_class, roster, enum_roster,
+					inherited_member_names(db, db->get_parent_class(pending[i].godot_class)), binding);
+		}
+
+		// The module is named after Godot's own spelling of the class, which is what the mirror
+		// does -- `NodeStatics` -- and the suffix is load-bearing rather than decoration: a module
+		// called `Mob` would make any local of that name ambiguous.
+		if (!binding.constants.empty() || !binding.statics.empty()) {
+			binding.statics_module =
+					(binding.godot_class.empty() ? binding.script_class : binding.godot_class) + "Statics";
 		}
 	}
 

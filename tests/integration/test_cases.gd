@@ -690,6 +690,17 @@ func begin() -> void:
 		_skip("and null is a value that parameter takes", "the sidecar carries no binding table yet (R-INT-11)")
 		_skip("null satisfies an optional parameter of a binding class", "the sidecar carries no binding table yet (R-INT-11)")
 		_skip("and a node carrying that GDScript satisfies it", "the sidecar carries no binding table yet (R-INT-11)")
+		_skip("a GDScript var is reached through the binding's accessor pair", "the sidecar carries no binding table yet (R-INT-11)")
+		_skip("and written through it", "the sidecar carries no binding table yet (R-INT-11)")
+		_skip("which the next call reads back", "the sidecar carries no binding table yet (R-INT-11)")
+		_skip("including a string, which a member could not have carried", "the sidecar carries no binding table yet (R-INT-11)")
+		_skip("a GDScript const is in the class's statics module", "the sidecar carries no binding table yet (R-INT-11)")
+		_skip("and a string one", "the sidecar carries no binding table yet (R-INT-11)")
+		_skip("a GDScript static is called through the script resource", "the sidecar carries no binding table yet (R-INT-11)")
+		_skip("a GDScript enum is a Verse enum with Godot's numbers", "the sidecar carries no binding table yet (R-INT-11)")
+		_skip("an enum crosses as an argument and comes back as a result", "the sidecar carries no binding table yet (R-INT-11)")
+		_skip("and an enum-typed var reads through the pair", "the sidecar carries no binding table yet (R-INT-11)")
+		_skip("and writes through it", "the sidecar carries no binding table yet (R-INT-11)")
 	elif binding_script == null or not binding_script.can_instantiate():
 		_check("a script naming a generated binding compiles", false)
 	else:
@@ -733,6 +744,47 @@ func begin() -> void:
 				binder.call("AskMaybeMobEmpty", null))
 		_check_eq("and a node carrying that GDScript satisfies it",
 				binder.call("AskMaybeMobLabel", mob_node), "mob")
+
+		# --- R-INT-9: what a binding carries besides its methods ----------------------------
+		#
+		# A GDScript `var` as an accessor pair. The names are the generator's, because a
+		# GDScript property has none of its own and the Verse member spelling would cost the
+		# class its archetype: a member with `<getter>`/`<setter>` must be uninitialized, and
+		# every archetype of the class would then have to initialize it.
+		_check_eq("a GDScript var is reached through the binding's accessor pair",
+				binder.call("AskSpeed", mob_node), 1.5)
+		# The write is checked on Godot's side and on the next call, never in the same one: a
+		# write to Godot defers to the transaction's commit, so the computation that made it
+		# does not see it.
+		binder.call("AskSetSpeed", mob_node, 3.25)
+		_check_eq("and written through it", mob_node.speed, 3.25)
+		_check_eq("which the next call reads back", binder.call("AskSpeed", mob_node), 3.25)
+		# A `string` var, which the member spelling could not have carried at all: `string` is
+		# `[]char`, and a container-typed member is asked for indexed accessors.
+		_check_eq("including a string, which a member could not have carried",
+				binder.call("AskTag", mob_node), "m")
+
+		# A constant and a static are not members of the class: Verse has data on no type and
+		# has no `static`, so both live in a module named after the class, the way the mirror
+		# puts Godot's own in `NodeStatics`.
+		_check_eq("a GDScript const is in the class's statics module",
+				binder.call("AskLimit"), 7)
+		_check_eq("and a string one", binder.call("AskTitle"), "mob")
+		# Dispatched through the script *resource*: a script class has no ClassDB entry, so
+		# `ClassDB.class_call_static` -- what a bound GDExtension class uses -- cannot reach it.
+		_check_eq("a GDScript static is called through the script resource",
+				binder.call("AskSpawnCost", 3), 21)
+
+		# A GDScript enum is a real Verse enum at the package's module scope, with `ToInt` as
+		# its public conversion -- the same spelling the mirror gives its own 793.
+		_check_eq("a GDScript enum is a Verse enum with Godot's numbers",
+				binder.call("AskEnumValue"), 2)
+		_check_eq("an enum crosses as an argument and comes back as a result",
+				binder.call("AskShift", mob_node), 1)
+		_check_eq("and an enum-typed var reads through the pair",
+				binder.call("AskMode", mob_node), 0)
+		binder.call("AskSetMode", mob_node)
+		_check_eq("and writes through it", int(mob_node.mode), 2)
 
 		# A node with no such script declines the cast rather than answering something. The
 		# binding is a *type*, so this is the compiler's own failure and costs nothing at all.

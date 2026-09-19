@@ -1,6 +1,8 @@
 #include "verse_bindings.h"
 
+#include <algorithm>
 #include <cctype>
+#include <cstring>
 
 namespace {
 
@@ -34,6 +36,22 @@ std::string lower(const std::string &p_text) {
 	out.reserve(p_text.size());
 	for (const char c : p_text) {
 		out += (char)std::tolower((unsigned char)c);
+	}
+	return out;
+}
+
+/// `thing_state` -> `ThingState`, which is `gen_verse_api.py`'s `enum_converter_stem`: the name the
+/// variant-to-enum converter is spelled from.
+std::string enum_stem(const std::string &p_verse_enum) {
+	std::string out;
+	bool at_start = true;
+	for (const char c : p_verse_enum) {
+		if (c == '_') {
+			at_start = true;
+			continue;
+		}
+		out += at_start ? (char)std::toupper((unsigned char)c) : c;
+		at_start = false;
 	}
 	return out;
 }
@@ -94,24 +112,66 @@ std::string param_list(const VerseBindingMethod &p_method) {
 	return out;
 }
 
+/// The expression that packs one declared value into the `variant` a call takes.
+///
+/// An enum has no lane of its own: Godot carries every one as an int, and `ToInt` is the public
+/// name the mirror gives that conversion, so a bound enum crosses the same way a mirrored one does.
+std::string pack_expression(const std::string &p_type, const std::string &p_value, const VerseBindingEnumNames &p_enums) {
+	if (p_enums.count(p_type) > 0) {
+		return "VariantInt(ToInt(" + p_value + "))";
+	}
+	return std::string(builder_for(p_type)) + "(" + p_value + ")";
+}
+
 /// The call that reaches Godot, and the only place the two verbs are chosen between.
 ///
 /// `CallConst` where Godot says the method is const, which is R-INT-9's classification and the
 /// whole reason that verb exists: `Call` is `<transacts>`, so a binding built on it would start
 /// wall 8's cascade in every caller that only reads.
-std::string call_expression(const VerseBindingMethod &p_method) {
-	std::string out = p_method.is_const && !p_method.result_type.empty() ? "CallConst(\"" : "Call(\"";
+std::string call_expression(const VerseBindingMethod &p_method, const VerseBindingEnumNames &p_enums) {
+	const bool reads = p_method.is_const && (!p_method.result_type.empty() || p_method.is_predicate);
+	std::string out = reads ? "CallConst(\"" : "Call(\"";
 	out += p_method.godot_name;
 	out += "\"";
 	for (const auto &param : p_method.params) {
 		out += ", ";
-		out += builder_for(param.second);
-		out += "(";
-		out += param.first;
-		out += ")";
+		out += pack_expression(param.second, param.first, p_enums);
 	}
 	out += ")";
 	return out;
+}
+
+/// The same call, without an object to make it on: Godot's own by-name static dispatch.
+///
+/// Two spellings, because the two kinds of bound class are dispatched differently and neither can
+/// serve the other. A ClassDB class has `ClassDB.class_call_static`, which the mirror already
+/// carries. A script class has no ClassDB entry at all -- its statics live on the *script
+/// resource*, and calling one means loading that resource and calling through it, which is what
+/// `Thing.make()` does underneath in GDScript (measured headless, Godot 4.7).
+std::string static_call_expression(const VerseBindingMethod &p_method, const VerseBindingClass &p_class,
+		const VerseBindingEnumNames &p_enums) {
+	std::string args;
+	for (const auto &param : p_method.params) {
+		args += ", ";
+		args += pack_expression(param.second, param.first, p_enums);
+	}
+
+	if (!p_class.godot_class.empty()) {
+		// Past four arguments the mirror's loose arities run out and the array spelling is the one
+		// left, which takes the same values in one `array{}`.
+		if (p_method.params.size() > 4) {
+			std::string packed;
+			for (size_t i = 0; i < p_method.params.size(); i++) {
+				packed += i > 0 ? ", " : "";
+				packed += pack_expression(p_method.params[i].second, p_method.params[i].first, p_enums);
+			}
+			return "GetClassDB().ClassCallStatic(\"" + p_class.godot_class + "\", \"" +
+					p_method.godot_name + "\", array{" + packed + "})";
+		}
+		return "GetClassDB().ClassCallStatic(\"" + p_class.godot_class + "\", \"" +
+				p_method.godot_name + "\"" + args + ")";
+	}
+	return "StaticScript.Call(\"" + p_method.godot_name + "\"" + args + ")";
 }
 
 /// The reader that turns the answering `variant` back into the declared type, and the fallback for
@@ -158,6 +218,96 @@ FReader reader_for(const std::string &p_type) {
 	return { nullptr, nullptr };
 }
 
+/// One method's declaration and body, at `p_indent`, over a call the caller has already spelled.
+///
+/// Shared by a class's own methods and by its `...Statics` module, which differ in how the call is
+/// reached and in nothing else: the five shapes a result takes -- a predicate's status, an enum, a
+/// value with a reader, an object, and nothing -- are the same on both sides.
+///
+/// `p_guard` is a failable clause the body must pass before the call, and it is what a *script*
+/// class's static needs: its dispatch is through the script resource, so the resource has to be
+/// loaded first and the load can decline. Empty for everything else. In a `<decides>` body it is a
+/// line of its own, because the whole body is already a failure context; in a total one it joins
+/// the `if` that was there anyway.
+std::string emit_method(const VerseBindingMethod &p_method, const std::string &p_call,
+		const std::string &p_guard, const VerseBindingEnumNames &p_enums, const std::string &p_indent) {
+	const bool is_enum = p_enums.count(p_method.result_type) > 0;
+	const FReader reader = is_enum ? FReader{ nullptr, nullptr } : reader_for(p_method.result_type);
+	const bool answers_object = !p_method.result_type.empty() && !is_enum && reader.accessor == nullptr;
+	const bool decides = answers_object || p_method.is_predicate;
+	const bool reads = p_method.is_const && (!p_method.result_type.empty() || p_method.is_predicate);
+	const std::string body_indent = p_indent + "\t";
+
+	std::string out = p_indent;
+	out += verse_binding_member_name(p_method.godot_name);
+	out += "<public>(";
+	out += param_list(p_method);
+	out += ")";
+	if (decides) {
+		out += "<decides>";
+	}
+	// A method answering nothing is `<transacts>` whatever Godot's const flag says: the 38
+	// const-and-void methods in Godot's own API are `OS.set_environment` and friends, which
+	// plainly do something. The test is const *and answering*, the mirror's exactly -- and a
+	// predicate answers, since its whole value is the status.
+	out += reads ? "<reads>" : "<transacts>";
+	out += ":";
+	// A predicate's result *is* its status: `<decides>:void` writes no value in either direction,
+	// which is why `call_func` writes the bool itself for a script's own virtuals.
+	out += p_method.is_predicate || p_method.result_type.empty() ? "void" : p_method.result_type;
+	out += " =\n";
+
+	if (decides) {
+		if (!p_guard.empty()) {
+			out += body_indent + p_guard + "\n";
+		}
+		out += body_indent;
+		if (p_method.is_predicate) {
+			// Declining is "no", which is the honest answer when Godot hands back something that is
+			// not a bool: a binding never raises, and there is no third status to report it with.
+			out += p_call + ".AsBool[]?\n";
+		} else {
+			// `AsObject[]` reads the handle out of the answering `variant` and the downcast narrows
+			// it to the class Godot annotated. Both decline rather than answering, which is the
+			// whole of how "Godot answered null" crosses -- a class has no value that means nothing.
+			out += p_method.result_type + "[" + p_call + ".AsObject[]]\n";
+		}
+		return out;
+	}
+
+	if (p_method.result_type.empty()) {
+		if (!p_guard.empty()) {
+			out += body_indent + "if (" + p_guard + "):\n";
+			out += body_indent + "\t" + p_call + "\n";
+			return out;
+		}
+		// A void method still has to swallow the `variant` the call answers, which is what the
+		// braces are for: a block whose last expression is a call is void.
+		out += body_indent + "{ " + p_call + "; }\n";
+		return out;
+	}
+
+	if (is_enum) {
+		// Total, because a method that answers a *value* must not claim it can fail: a number no
+		// enumerator has is Godot disagreeing with its own metadata, and the converter answers the
+		// first enumerator for it exactly as the mirror's does.
+		const std::string read = "VhTo" + enum_stem(p_method.result_type) + "(" + p_call + ")";
+		out += body_indent;
+		out += p_guard.empty() ? read
+							   : "if (" + p_guard + ") then " + read + " else " + p_method.result_type +
+						"." + p_enums.at(p_method.result_type);
+		out += "\n";
+		return out;
+	}
+
+	out += body_indent + "if (";
+	if (!p_guard.empty()) {
+		out += p_guard + ", ";
+	}
+	out += "Read := " + p_call + "." + reader.accessor + "[]) then Read else " + reader.fallback + "\n";
+	return out;
+}
+
 } // namespace
 
 std::string verse_binding_class_name(const std::string &p_godot_name) {
@@ -186,7 +336,130 @@ std::string verse_binding_member_name(const std::string &p_godot_name) {
 	return out;
 }
 
-std::string verse_emit_binding_class(const VerseBindingClass &p_class) {
+std::string verse_binding_constant_name(const std::string &p_godot_name) {
+	std::string out;
+	bool at_start = true;
+	for (const char c : p_godot_name) {
+		if (c == '_') {
+			at_start = true;
+			continue;
+		}
+		// The whole name is shouting -- `NOTIFICATION_ENTER_TREE`, `IDLE` -- so every character but
+		// the first of each word comes down, where a method name keeps the tail it was written with.
+		out += at_start ? (char)std::toupper((unsigned char)c) : (char)std::tolower((unsigned char)c);
+		at_start = false;
+	}
+	return out;
+}
+
+std::string verse_binding_enum_name(const std::string &p_owner, const std::string &p_godot_enum) {
+	return verse_binding_class_name(p_owner) + "_" + verse_binding_class_name(p_godot_enum);
+}
+
+std::vector<std::string> verse_binding_enumerator_names(const std::vector<std::string> &p_godot_names) {
+	std::vector<std::string> full;
+	full.reserve(p_godot_names.size());
+	for (const std::string &name : p_godot_names) {
+		full.push_back(verse_binding_constant_name(name));
+	}
+	if (p_godot_names.size() < 2) {
+		return full;
+	}
+
+	// The words every name starts with, never consuming the last word -- `TIMER_PROCESS_PHYSICS`
+	// and `TIMER_PROCESS_IDLE` share `TIMER_PROCESS`, and a one-word name keeps itself.
+	std::vector<std::vector<std::string>> split;
+	size_t shortest = SIZE_MAX;
+	for (const std::string &name : p_godot_names) {
+		std::vector<std::string> words;
+		std::string word;
+		for (const char c : name) {
+			if (c == '_') {
+				words.push_back(word);
+				word.clear();
+			} else {
+				word += c;
+			}
+		}
+		words.push_back(word);
+		shortest = std::min(shortest, words.size());
+		split.push_back(words);
+	}
+
+	size_t shared = 0;
+	for (size_t i = 0; i + 1 < shortest; i++) {
+		bool all = true;
+		for (const std::vector<std::string> &words : split) {
+			all = all && words[i] == split[0][i];
+		}
+		if (!all) {
+			break;
+		}
+		shared++;
+	}
+	if (shared == 0) {
+		return full;
+	}
+
+	std::vector<std::string> shortened;
+	std::set<std::string> distinct;
+	for (const std::vector<std::string> &words : split) {
+		std::string name;
+		for (size_t i = shared; i < words.size(); i++) {
+			name += verse_binding_constant_name(words[i]);
+		}
+		// Abandoned all or nothing, so one enum reads one way: a `Bool` beside a `TypeInt` would be
+		// worse than either. An identifier may not start with a digit, and two enumerators may not
+		// come out the same.
+		if (name.empty() || std::isdigit((unsigned char)name[0]) || !distinct.insert(name).second) {
+			return full;
+		}
+		shortened.push_back(name);
+	}
+	return shortened;
+}
+
+bool verse_binding_can_be_property(const std::string &p_type) {
+	return reader_for(p_type).accessor != nullptr;
+}
+
+bool verse_binding_is_predicate(const std::string &p_godot_name, const std::set<std::string> &p_sibling_names) {
+	// The read half of a property answers a value rather than a test, and its setter is how you
+	// tell: `is_point_disabled` pairs with `set_point_disabled`, and the servers' flattened
+	// `font_is_force_autohinter` pairs with `font_set_force_autohinter`.
+	static const char *const readers[] = { "is_", "get_", "has_" };
+	for (const char *const reader : readers) {
+		if (p_godot_name.rfind(reader, 0) == 0 &&
+				p_sibling_names.count("set_" + p_godot_name.substr(strlen(reader))) > 0) {
+			return false;
+		}
+		const std::string inner = std::string("_") + reader;
+		const size_t at = p_godot_name.find(inner);
+		if (at != std::string::npos) {
+			const std::string twin = p_godot_name.substr(0, at + 1) + "set_" +
+					p_godot_name.substr(at + inner.size());
+			if (p_sibling_names.count(twin) > 0) {
+				return false;
+			}
+		}
+	}
+
+	// `gen_verse_api.py`'s PREDICATE_NAME_RE, at a word boundary. Its companion table of predicates
+	// whose name carries no prefix -- `class_exists`, `test_move`, 24 more -- is not ported: every
+	// entry in it names a *mirrored* class, and a mirrored class is never bound. An addon's
+	// unprefixed predicate answers a `logic`, which is the same thing the mirror did for all of
+	// them before that table was read off the dump by hand.
+	static const char *const prefixes[] = { "is_", "has_", "can_", "are_", "should_", "supports_",
+		"overlaps_", "intersects_", "matches_", "was_" };
+	for (const char *const prefix : prefixes) {
+		if (p_godot_name.rfind(prefix, 0) == 0 || p_godot_name.find(std::string("_") + prefix) != std::string::npos) {
+			return true;
+		}
+	}
+	return false;
+}
+
+std::string verse_emit_binding_class(const VerseBindingClass &p_class, const VerseBindingEnumNames &p_enums) {
 	// Built before the header, because a class with no members is written in the other of Verse's
 	// two forms and the choice cannot be made until the members are in.
 	std::string out;
@@ -217,51 +490,31 @@ std::string verse_emit_binding_class(const VerseBindingClass &p_class) {
 		out += "){}\n";
 	}
 
-	for (const VerseBindingMethod &method : p_class.methods) {
-		const FReader reader = reader_for(method.result_type);
-		// Every type the enumeration can name is either one this has a reader for or a class, so
-		// "no reader" is the test for the latter rather than a shape to guard against.
-		const bool answers_object = !method.result_type.empty() && reader.accessor == nullptr;
-		out += "\t";
-		out += verse_binding_member_name(method.godot_name);
-		out += "<public>(";
-		out += param_list(method);
-		out += ")";
-		if (answers_object) {
-			out += "<decides>";
-		}
-		// A method answering nothing is `<transacts>` whatever Godot's const flag says: the 38
-		// const-and-void methods in Godot's own API are `OS.set_environment` and friends, which
-		// plainly do something. The test is const *and answering*, the mirror's exactly.
-		out += method.is_const && !method.result_type.empty() ? "<reads>" : "<transacts>";
-		out += ":";
-		out += method.result_type.empty() ? "void" : method.result_type;
-		out += " =\n\t\t";
-		if (method.result_type.empty()) {
-			// A void method still has to swallow the `variant` the call answers, which is what the
-			// braces are for: a block whose last expression is a call is void.
-			out += "{ ";
-			out += call_expression(method);
-			out += "; }\n";
-		} else if (reader.accessor != nullptr) {
-			out += "if (Read := ";
-			out += call_expression(method);
-			out += ".";
-			out += reader.accessor;
-			out += "[]) then Read else ";
-			out += reader.fallback;
-			out += "\n";
+	// A GDScript `var` as the accessor pair Godot itself would have given it, had it been a ClassDB
+	// property: `GetSpeed()` and `SetSpeed(V)`. The names are invented, which is done here and
+	// almost nowhere else -- the alternative was a Verse member, and that spelling costs the class
+	// its archetype (see VerseBindingProperty).
+	for (const VerseBindingProperty &property : p_class.properties) {
+		const std::string name = verse_binding_member_name(property.godot_name);
+		const bool is_enum = p_enums.count(property.type) > 0;
+		const std::string read = "Get(\"" + property.godot_name + "\")";
+
+		out += "\tGet" + name + "<public>()<transacts>:" + property.type + " =\n\t\t";
+		if (is_enum) {
+			out += "VhTo" + enum_stem(property.type) + "(" + read + ")\n";
 		} else {
-			// The mirror's own spelling for an object result, and for its reasons: `AsObject[]`
-			// reads the handle out of the answering `variant`, and the downcast is what narrows an
-			// `object` to the class Godot annotated. Both decline rather than answering, which is
-			// what makes the method `<decides>` and is the whole of how "Godot answered null"
-			// crosses -- a class has no value that means nothing.
-			out += method.result_type;
-			out += "[";
-			out += call_expression(method);
-			out += ".AsObject[]]\n";
+			const FReader reader = reader_for(property.type);
+			out += "if (Read := " + read + "." + reader.accessor + "[]) then Read else " +
+					reader.fallback + "\n";
 		}
+
+		out += "\tSet" + name + "<public>(Value:" + property.type + ")<transacts>:void =\n\t\t";
+		out += "Set(\"" + property.godot_name + "\", " +
+				pack_expression(property.type, "Value", p_enums) + ")\n";
+	}
+
+	for (const VerseBindingMethod &method : p_class.methods) {
+		out += emit_method(method, call_expression(method, p_enums), std::string(), p_enums, "\t");
 	}
 
 	std::string header = p_class.verse_class;
@@ -285,6 +538,67 @@ std::string verse_emit_binding_class(const VerseBindingClass &p_class) {
 	return header + "):\n" + out;
 }
 
+std::string verse_emit_binding_enums(const VerseBindingClass &p_class) {
+	std::string out;
+	for (const VerseBindingEnum &bound : p_class.enums) {
+		const std::string owner = p_class.godot_class.empty() ? p_class.script_class : p_class.godot_class;
+		const std::string stem = enum_stem(bound.verse_name);
+		out += "# Godot's " + owner + "." + bound.godot_name + ".\n";
+		out += bound.verse_name + "<public> := enum:\n";
+		for (const auto &value : bound.values) {
+			out += "\t" + value.first + "\n";
+		}
+
+		// variant -> enum, and total: a method that answers a *value* must not claim it can fail.
+		// A number no enumerator has is Godot disagreeing with its own metadata, and the first
+		// enumerator is what the mirror answers for one too. Internal, because it is what a
+		// generated body needs and not something a script has any use for -- the public direction
+		// is `ToInt` below, which is also what makes a bitfield combination spellable.
+		out += "\nVhTo" + stem + "(Value:variant)<reads>:" + bound.verse_name + " =\n";
+		out += "\tcase (Value.AsInt[] or -1):\n";
+		std::set<int64_t> seen;
+		for (const auto &value : bound.values) {
+			// Godot lets two enumerators share a number -- an alias -- and a `case` may not answer
+			// one twice. First wins, which is the one Godot's own list names first.
+			if (seen.insert(value.second).second) {
+				out += "\t\t" + std::to_string(value.second) + " => " + bound.verse_name + "." + value.first + "\n";
+			}
+		}
+		out += "\t\t_ => " + bound.verse_name + "." + bound.values.front().first + "\n";
+
+		out += "\nToInt<public>(Value:" + bound.verse_name + ")<reads>:int =\n";
+		out += "\tcase (Value):\n";
+		for (const auto &value : bound.values) {
+			out += "\t\t" + bound.verse_name + "." + value.first + " => " + std::to_string(value.second) + "\n";
+		}
+		out += "\n";
+	}
+	return out;
+}
+
+std::string verse_emit_binding_statics(const VerseBindingClass &p_class, const VerseBindingEnumNames &p_enums) {
+	if (p_class.statics_module.empty()) {
+		return std::string();
+	}
+
+	std::string out = p_class.statics_module + "<public> := module:\n";
+	for (const VerseBindingConstant &constant : p_class.constants) {
+		out += "\t" + constant.verse_name + "<public>:" + constant.type + " = " + constant.literal + "\n";
+	}
+
+	for (const VerseBindingMethod &method : p_class.statics) {
+		// A script class has no ClassDB entry, so its statics live on the script *resource* and the
+		// resource has to be loaded before one can be called. A ClassDB class needs no such guard:
+		// `ClassDB.class_call_static` takes the class by name.
+		const std::string guard = p_class.godot_class.empty()
+				? "StaticScript := GetResourceLoader().Load[\"" + p_class.script_path +
+						"\", \"Script\", resource_loader_cache_mode.Reuse]"
+				: std::string();
+		out += emit_method(method, static_call_expression(method, p_class, p_enums), guard, p_enums, "\t");
+	}
+	return out;
+}
+
 std::string verse_emit_bindings(const std::vector<VerseBindingClass> &p_classes) {
 	if (p_classes.empty()) {
 		return std::string();
@@ -298,9 +612,35 @@ std::string verse_emit_bindings(const std::vector<VerseBindingClass> &p_classes)
 			"# one a script declares with `class_name`. See docs/generated-bindings.md.\n"
 			"\n"
 			"using { /Godot.org/Godot }\n";
+
+	// Every enum this generation declares, which a member of any class may name: a method of the
+	// first class emitted can take the last class's enum, and nothing orders a Godot class list.
+	VerseBindingEnumNames enums;
+	for (const VerseBindingClass &binding : p_classes) {
+		for (const VerseBindingEnum &bound : binding.enums) {
+			enums[bound.verse_name] = bound.values.front().first;
+		}
+	}
+
+	// Enums first, because they are types and the classes below name them. Verse would not mind
+	// either order -- module-scope definitions resolve in any -- but a reader would.
+	for (const VerseBindingClass &binding : p_classes) {
+		const std::string block = verse_emit_binding_enums(binding);
+		if (!block.empty()) {
+			out += "\n" + block;
+		}
+	}
+
 	for (const VerseBindingClass &binding : p_classes) {
 		out += "\n";
-		out += verse_emit_binding_class(binding);
+		out += verse_emit_binding_class(binding, enums);
+	}
+
+	for (const VerseBindingClass &binding : p_classes) {
+		const std::string block = verse_emit_binding_statics(binding, enums);
+		if (!block.empty()) {
+			out += "\n" + block;
+		}
 	}
 	return out;
 }
