@@ -228,7 +228,7 @@ from it. The spec commits to both states rather than waiting.
   class sidecar in a `verse_data` directory beside the executable, carries the
   runtime host as a `.gdextension` `[dependencies]` row and strips every `.verse` to a stub, with no
   manual copying of anything. `run_tests.py`'s `export` layer exports `tests/integration`, asserts
-  the whole tree, **launches it and asserts its counts** — 317 passed, 0 failed, 9 skipped — and
+  the whole tree, **launches it and asserts its counts** — 511 passed, 0 failed, 11 skipped — and
   `dodge-the-creeps` exported and run outside the repo passes all 30 of its checks
   (`by-hand-findings.md` B14). Windows only: no Linux or macOS export has ever been attempted
   (R-PLAT-1).
@@ -1958,13 +1958,46 @@ section written after the spikes.
   answers a value rather than a test, `<reads>` where the source says the method is const *and*
   it answers something, properties as writable members except where a nested struct or a
   container forces a getter/setter pair. Enums, constants and statics are bound too — a
-  third-party physics class is unusable without its enums. Status: **`CallConst`, `<reads>`,
-  `logic` and `<decides>` for an object return are done; predicates, properties, enums,
-  constants and statics are not.** `CallConst` and `CallvConst` are in
-  `GodotApi.native.verse` and asserted in the integration and export layers, and the emitter
-  reads Godot's own `METHOD_FLAG_CONST` for `<reads>`. An object return is `<decides>` over
-  `AsObject[]` and a downcast, which is what lets a binding name a class at all — the mirror's
-  or another binding's (`by-hand-findings.md` B35). What is left is Phase 7c's.
+  third-party physics class is unusable without its enums. Status: **done, and the property
+  clause is the one that reads differently than it was written.** `CallConst` and `CallvConst`
+  are in `GodotApi.native.verse` and asserted in the integration and export layers, and the
+  emitter reads Godot's own `METHOD_FLAG_CONST` for `<reads>`. An object return is `<decides>`
+  over `AsObject[]` and a downcast, which is what lets a binding name a class at all — the
+  mirror's or another binding's (`by-hand-findings.md` B35).
+
+  **A property is an accessor pair here, not a writable member, and the package is why.** Verse
+  accepts a member with `<getter>`/`<setter>` only *uninitialized* or `= external{}`; the second
+  is a digest's spelling, and the first makes every archetype of the class initialize it, so
+  `mob{}` — R-INT-12's construction — would stop compiling. The mirror spells all 3312 of its
+  properties as members because VNI compiles it, where `external{}` is legal. What follows is
+  that a ClassDB property needs nothing at all: it is *defined* by a getter and a setter method,
+  both of which are in the class's method list already, so `GetProcessCallback()` and
+  `SetProcessCallback()` are bound as ordinary methods. A GDScript `var`, which has no accessor
+  pair of its own, is given the one Godot would have given it — `GetSpeed()`, `SetSpeed(V)` —
+  and that spelling carries a `string` var, which a member could not have: `string` is `[]char`,
+  and a container-typed member is asked for indexed accessor overloads the mirror skips 403
+  properties rather than write.
+
+  **A predicate is read off Godot's own naming, so only a ClassDB class has one.** The rule is
+  `gen_verse_api.py`'s — the name prefix, minus a method with a `set_` twin, which is a
+  property's read half answering a value. A GDScript `func is_alive() -> bool` makes no such
+  claim, and its `bool` stays a `logic`.
+
+  **A static's dispatch differs by kind and neither spelling serves the other.** A ClassDB
+  class has `ClassDB.class_call_static`, which the mirror carries; a script class has no ClassDB
+  entry, so its statics live on the script *resource* and are called through it, which is what
+  `Mob.spawn_cost()` does underneath (measured headless, Godot 4.7).
+
+  **An enum is a real Verse enum** at the bindings package's module scope, with the mirror's own
+  public `ToInt` beside it and an internal converter back. Godot reports an enum-typed member as
+  an `int` whose `class_name` names the enum — `Mob.State` — with `PROPERTY_USAGE_CLASS_IS_ENUM`,
+  for a GDScript member and a ClassDB one alike, so both directions are typed from the same
+  metadata. Constants go where the statics go, in the class's `...Statics` module.
+
+  Every member is checked against the whole mirrored ancestry before it is emitted, which the
+  property work made unavoidable: `Mob extends RigidBody2D` declaring `var mass` is ordinary, and
+  a member that shadows an inherited one is glitch 3532 against a generated line — which costs
+  the package, and with it every binding in the project.
 
   **`<reads>` needs `CallConst` and could not exist without it.** Verse's internal access is
   scoped by verse path, so a package at `/Godot.org/Bindings` reaches neither
@@ -1998,12 +2031,20 @@ section written after the spikes.
 - **R-INT-11 (MUST)** An exported game runs a script that uses a binding. A game shipping a
   physics addon needs its bindings at runtime, so the class-to-binding mapping joins the sidecar
   beside the declared types and the 503 signal payloads (R-DIST-11), and the export layer asserts
-  a case that calls through one. Status: **half done.** The export plugin generates the package and
-  hands it to `verse_cook.exe` as `-bindings=<file>`, so an exported game's Verse compiles against
-  its bindings and the export layer asserts that. What is missing is the **table**: the
-  class-to-binding map lives only in the editor host's memory, so a handle in an exported game
-  cannot be keyed on it. The four cast cases are printed as skips in the export run, with that
-  reason, rather than dropped.
+  a case that calls through one. Status: **done.** The export plugin generates the package and
+  hands it to `verse_cook.exe` as `-bindings=<file>`, and the table that keys it as
+  `-binding-classes=<file>` — one row per line, `verse⇥godot⇥script`, because the table is not
+  recoverable from the Verse: a binding's class name says nothing about whether it stands for a
+  ClassDB class or for a script's `class_name`, and an exported game matches those against two
+  different callbacks. The cook writes the rows into the sidecar (**version 8**), the runtime host
+  reads them back through `AdoptCookedBindings`, and `LoadCookedProject` recognises the
+  `GodotBindings_` mount point the way it already recognises `GodotScripts_` — without which
+  `FindBindingClass` has no package to look in, since a runtime host never prepares one.
+
+  Before it, a cooked game compiled the bindings package and could reach nothing in it: a handle
+  crossed as its nearest *mirrored* ancestor and every cast declined, which is a wrong answer
+  rather than an error. The twenty-one binding cases in `tests/integration` were skips in the
+  export run and are assertions in it now.
 
 - **R-INT-12 (SHOULD)** A script constructs a bound class by the Godot spelling: a ClassDB class
   through `ClassDB.instantiate(name)`, a script class by minting its base and then `set_script`,
@@ -2016,7 +2057,10 @@ section written after the spikes.
   class list into an exported game. **Minting one is legal where attaching is not** — R-INT-10
   refuses a Verse class that extends a script binding *on a node*, because that node's one script
   instance would be the Verse one; a minted object is fresh and holds exactly the script the
-  binding's methods call through.
+  binding's methods call through. Both spellings are asserted in `tests/integration` and in an
+  export — `mob{}` bound to a local and `mob{}.Hit(1)` written outright — which is what the
+  requirement had been missing: `host_smoke` covered the *peer class* and nothing called through
+  one.
   Constructing a binding mints the *bound* Godot class and not its
   nearest mirrored ancestor, which is the trap: `GodotPeerClassFor` walks to the nearest ancestor
   in `/Godot.org/Godot` to decide what to mint, so left alone it hands back a `RigidBody2D` where

@@ -260,7 +260,7 @@ compiler-side entry points answer `VH_ERR_UNSUPPORTED` in a runtime host.
 | `verse_lexer.{h,cpp}` | resumable per-line lexer, and `verse_repair_completion_buffer` — which finishes off the caret's line so a half-written `if` does not cost the whole file its AST. No godot-cpp dependency, so both are unit-testable standalone |
 | `verse_class_decl.{h,cpp}` | scans the top-level class **named after the file** and its `@global_class` attribute out of the text; defers comments and strings to the lexer, and shares its lack of godot-cpp |
 | `verse_module_map.{h,cpp}` | which module each `.verse` is in, from the `.vmodule` markers; pure, and the third godot-cpp-free unit |
-| `verse_bindings.{h,cpp}` | the naming and the emission for generated bindings (R-INT-7) — `split_pascal` is `gen_verse_api.py`'s exactly. The fourth godot-cpp-free unit |
+| `verse_bindings.{h,cpp}` | the naming, the classification and the emission for generated bindings (R-INT-7, R-INT-9) — `split_pascal` and the predicate rule are `gen_verse_api.py`'s exactly, and the enum naming is too. The fourth godot-cpp-free unit |
 | `verse_doc_markup.{h,cpp}` | which comment documents a declaration (`verse_doc_comment_above`, over the lexer: `#` lines, a `<# #>` block dedented, a `<#>` body, attribute lines stepped over, a blank line or code ending the walk) and the prose as the doc BBCode Godot's renderer reads: GDScript's paragraph join, backticks to `[code]`, an indented or fenced block to `[codeblock lang=verse]`, every other `[` escaped. Applied wherever a description is handed to Godot — `_lookup_code` and `_get_documentation` — and never before, so the two readers keep one shape; the host's `DocOf` reads the parser's comment nodes by the same rules. The fifth godot-cpp-free unit, linked with the lexer |
 | `verse_signature.{h,cpp}` | splits a Verse function signature (`vh_complete_item::Signature`, the host's `SpellSignature`) into arguments, effect specifiers and result type, all at the top level so a type's own brackets are not separators. `_get_documentation` builds a `MethodDoc` from it, because Godot draws `Name(arg: type) -> return` from the three apart — handing the whole function type over as `return_type` drew no arguments. The sixth godot-cpp-free unit |
 | `verse_bindings_gen.{h,cpp}` | the half that needs Godot: which classes exist. **Only `API_EXTENSION`** of ClassDB, plus every script class with a `class_name` — the editor's ClassDB carries every editor-only class and binding those emitted 1677 lines of Verse for classes no game has |
@@ -420,7 +420,7 @@ has only built has never called `_validate` and the map is empty. **The gutter i
 by-hand** — the build copy proves the sentence and the line, not that the editor draws either.
 
 **export** — exports `tests/integration` headless, asserts the *tree* it produced, then **launches
-it** and asserts what its cases reported: 364 passed, 0 failed, 10 skipped, with the counts named in
+it** and asserts what its cases reported: 511 passed, 0 failed, 11 skipped, with the counts named in
 `run_tests.py` so a case that stops running in an export reads as a failure rather than as a shorter
 log. It is the only layer that exercises the cooked path end to end; everything else compiles at
 startup. It needs more staged than the other layers do, because what it is exporting *is* them —
@@ -1056,13 +1056,17 @@ it is not in `run_tests.py`.
   `PackageRelativeVersePath` is dead under VerseVM — and asking the *semantic* program for one must
   not use `EPathMode::PackageRelative`, which is fatal for a class with no package.
 - **A runtime host has no semantic program and can never build one**, so everything the analysis
-  alone could describe is recorded and carried in the sidecar (version **7**): the declared types of
+  alone could describe is recorded and carried in the sidecar (version **8**): the declared types of
   every member, method and signal, **whether a member is `var`** (without which every write an
   exported game made to its own state was silently dropped), the payload of all 503 mirrored
   engine-signal accessors (without which `Timer.Timeout().Await()` connects and never resumes), the
   **decorated name of a class's `ToString` extension method** (R-NODE-10: it is a module-level
-  definition, so there is nothing on the class to find it from), and the cooked package list — a
-  container holds package *ids*, which are hashes, and mount points are still registered by name.
+  definition, so there is nothing on the class to find it from), the cooked package list — a
+  container holds package *ids*, which are hashes, and mount points are still registered by name —
+  and the **class-to-binding table** (R-INT-11), which only the editor can enumerate, since it comes
+  from ClassDB and Godot's global class list. Without it a cooked game compiles its bindings package
+  and can reach nothing in it: a handle crosses as its nearest *mirrored* ancestor and every cast
+  declines, which is a wrong answer rather than an error.
 - **Every package the program has must reach the container.** A VNI package the runtime host cannot
   find is only a warning from `JitVniPackages`, and then every import into it in every other package
   silently resolves to null — which is how `/Solaris/_Verse/VNI/VerseNative` went missing for a
@@ -1274,6 +1278,14 @@ it is not in `run_tests.py`.
   into a call to it, but refuses to let anything *define* one — as a class member or as a free
   function — so the bracket syntax cannot be given a meaning. Container lookup is
   `Data.GetInt[Key]`.
+- **A `var` with `<getter>`/`<setter>` may only be written two ways, and a source package has one
+  of them.** The compiler asks for *"either uninitialized or initialized with `= external{}`"*, and
+  `external{}` is *"a placeholder allowed only in digests"* — which the mirror may write because VNI
+  compiles it, and nothing compiled at runtime may. What is left costs the class its archetype: an
+  uninitialized member must be supplied by every archetype of the class, so `some_class{}` becomes
+  *"Object archetype must initialize data member `X`"*. **This is why a generated binding spells a
+  GDScript `var` as `GetX()`/`SetX(V)`** (`generated-bindings.md` §10.9) and why nothing else
+  outside the mirror should reach for the accessor protocol.
 - **A `var` property cannot hold a nested struct or a container.** Verse asks a struct-typed `var`
   for a field-named accessor overload per nesting level, and `transform3d`'s two members have
   different types, so no one getter signature satisfies it. `gen_verse_api.py` leaves those as

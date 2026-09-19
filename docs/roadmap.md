@@ -900,10 +900,12 @@ ever need to reach. No design yet, by decision; when it is written it starts fro
 
 ## Phase 7c — Generated bindings for classes the mirror does not carry
 
-**Mostly built.** R-INT-7, R-INT-8 and R-INT-10 are done; R-INT-9 carries methods and signals;
-R-INT-11 and R-INT-12 are half each. [`generated-bindings.md`](generated-bindings.md) is the design,
-written before the work, and its **§10 is the part to read** — all five spikes came back and two
-of them corrected the decision table. R-INT-7 to R-INT-12.
+**Built; exit met.** All six of R-INT-7 through R-INT-12 are done.
+[`generated-bindings.md`](generated-bindings.md) is the design, written before the work, and its
+**§10 is the part to read** — all five spikes came back, two of them corrected the decision table,
+and **§10.9 is what the last of the work corrected after that**, including the one decision §4 got
+backwards: a property here is an accessor pair rather than a writable member, because the member
+spelling would cost every binding class its archetype.
 
 **Why now, and why not earlier.** The mirror is generated from `extension_api.json`, which
 describes core Godot and nothing else, so a class a third-party GDExtension registers and a class
@@ -928,23 +930,34 @@ carry the mapping on until the sidecar existed.
   already there — no new native, no ABI change. `tests/verse_probe/call_const_probe.verse` is
   the overload set put to the runtime compiler, which is the half a host build cannot answer;
   `marshal.verse` and `test_cases.gd` carry five assertions that run in the editor and in an
-  export. What is left of R-INT-9 is the generator that decides which methods get the word.
+  export. The rest is **done** too: a predicate is read off Godot's own naming and so exists only
+  on a ClassDB class; a property is an accessor pair rather than a member, which §4 had backwards
+  (§10.9); a static is dispatched by `ClassDB.class_call_static` for a ClassDB class and through
+  the script *resource* for a script class; and an enum is a real Verse enum at the package's
+  module scope, with `ToInt` beside it, typed from the `PROPERTY_USAGE_CLASS_IS_ENUM` metadata
+  both kinds of class report.
 - **R-INT-10** — **done.** `player := class(mob)` compiles and would raise at the first inherited
   call, a long way from its cause, so the bridge refuses it at the class's own line. Two reporters
   over one message, the way `inert_global_class_message` is: `_validate` for the gutter, and
   `log_script_warnings` so a headless run can assert it.
-- **R-INT-11, R-INT-12** — half each. `GodotPeerClassFor` knows the bindings package, so a binding
-  mints what it binds; the export plugin generates the package and hands it to `verse_cook.exe`, so
-  an exported game's Verse compiles. What is left is the **table** in the sidecar, without which a
-  handle in an exported game cannot be keyed on a binding — the four cast cases are skips in the
-  export run — and the consumer's half of R-INT-12, which is `set_script` for a script binding.
+- **R-INT-11, R-INT-12** — **done.** `GodotPeerClassFor` knows the bindings package, so a binding
+  mints what it binds, and `api_instantiate_class` makes a script class by instantiating its base
+  and attaching the script — which had a `host_smoke` case for the peer class and nothing that
+  called through one until `mob{}.Hit(1)` became an assertion. The export plugin hands the cooker
+  the generated package *and* the table that keys it, the cook writes the rows into the sidecar
+  (version 8), and the runtime host installs them, so a handle in an exported game is keyed on a
+  binding exactly as it is in the editor. The binding cases are assertions in the export run
+  rather than skips.
 
 **The order the spikes argue for.** `CallConst` first, because R-INT-9 is unbuildable without it
 and it is the only piece that touches the mirror — **done**. Then the host half — the bindings package and
 the fourth question in `ObjectForHandle` — which §10.1 and §10.3 have both already run in
-miniature. Then the generator, which is the largest piece and the one with a differential test
-against `GodotClasses.native.verse` to keep it honest. The consumer's roster watching is last and
-is the smallest.
+miniature. Then the generator, which is the largest piece. **The differential test it was to be
+kept honest with was not built**: the classifier is C++ and the mirror's own answers come out of
+`extension_api.json`, which nothing on the C++ side can read — the repository has no JSON parser
+there. What the generator has instead is the integration layer, where the whole generated package
+is compiled by the real compiler on every run, and a wrong classification is a build failure. The
+consumer's roster watching is last and is the smallest.
 
 **What has to be decided inside the phase, not before it.** OQ-19: what the host's UObject pool
 gets raised to. §10.5 measured the ceiling at a few hundred binding classes and showed that one
@@ -960,6 +973,13 @@ is the same bargain the mirror has.
 **Exit:** an addon installed into `tests/integration` is completable, hoverable and callable with
 declared types; a `.gd` fixture with a `class_name` is too; the export layer runs a case that
 calls through a binding; and `run_tests.py` is still one command.
+
+**Exit met**, with one clause standing on a stand-in: no third-party addon is installed into
+`tests/integration`, and what exercises the ClassDB half instead is this bridge's *own* extension,
+whose nine registered classes are `API_EXTENSION` and are bound on every run. The `.gd` fixture
+half is direct — `mob.gd` carries a method, a property, a constant, an enum and a static, and each
+is asserted through the binding in the editor and in an export. The export run is 511 passed, 0
+failed, 11 skipped.
 
 ---
 

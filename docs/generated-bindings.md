@@ -477,6 +477,69 @@ bindings are only what makes the answer urgent. §10.5 shows the wall is real at
 classes and that one flag on `PreInit` removes it. The number is not a detail — the pool is
 pre-sized, so it is memory spent whether or not a project has an addon.
 
+### 10.9 What the last five members corrected — one of them a §4 decision
+
+§4 says the classification rules are `gen_verse_api.py`'s, exactly, *"properties as writable members
+except where a nested struct or a container forces a getter/setter pair"*. **A property here cannot
+be a member at all, and the reason is the package rather than the property.** The compiler says it in
+as many words:
+
+```
+error: Data members with `<getter(...)>` and `<setter(...)>` must be either uninitialized
+       or initialized with `= external{}`.
+error: external{} macro must not be used in regular Verse code. It is a placeholder allowed
+       only in digests.
+```
+
+So a source package has exactly one of the two spellings available, and it costs the class its
+archetype: an uninitialized member must be supplied by every archetype, so `mob{}` — which R-INT-12
+needs and `tests/integration` asserts — becomes *"Object archetype must initialize data member
+`Speed`"*. The mirror escapes this because VNI compiles it, where `external{}` is legal.
+
+What follows is better than a workaround. **A ClassDB property needs nothing:** it is *defined* by a
+getter and a setter method (`ADD_PROPERTY` names both), and those are in the class's method list, so
+a binding already answers `GetProcessCallback()` and `SetProcessCallback()`. Only a GDScript `var`
+has no pair, and it is given the one Godot would have given it — `GetSpeed()`, `SetSpeed(V)`. That
+spelling also carries a `string` var, which the member spelling could not have: `string` is `[]char`,
+and a container-typed member is asked for `TagGetter(:accessor, :int):char`, the indexed overloads
+the mirror skips 403 properties rather than write. The names are invented, which is done almost
+nowhere else in this project; the alternative was to bind no GDScript `var` at all.
+
+Four more, each measured rather than reasoned about (headless Godot 4.7):
+
+- **A GDScript static is reachable, and not through ClassDB.** `script.call("make", 4)` answers
+  `12` on the script *resource*, which is what `Thing.make()` does underneath. A script class has no
+  ClassDB entry, so `ClassDB.class_call_static` — what a bound GDExtension class uses — cannot reach
+  one. The generated body loads the script and calls through it, which is the only spelling of the
+  five that needs a failable guard before the call.
+- **Godot's enum metadata is the same for both kinds of class.** An enum-typed argument, result or
+  property is an `int` whose `class_name` is `Thing.State` with `PROPERTY_USAGE_CLASS_IS_ENUM`
+  (65536) in its usage. A GDScript `enum State { IDLE, BUSY }` arrives in the constant map as a
+  *Dictionary* value, `{"IDLE": 0, "BUSY": 1}`, which is what tells an enum from a constant.
+- **A ClassDB enum property carries no class name.** `Timer.process_callback` reports an `int` with
+  an empty `class_name` and `"Physics,Idle"` as a hint string, so it is typed `int` and nothing is
+  lost: the enum itself is still bound and `ToInt` still spells a value for it.
+- **A predicate belongs to ClassDB classes alone.** The rule reads a test out of Godot's own naming,
+  which Godot chose for its own C++ API. A GDScript author writing `func is_alive() -> bool` has
+  made no such claim, and `<decides>` would change how every caller spells the call. `PREDICATE_EXTRA`
+  — the 26 predicates whose Godot name carries no prefix — is not ported, because every entry names a
+  *mirrored* class and a mirrored class is never bound.
+
+**And the member-shadow rule is not optional once properties exist.** `Mob extends RigidBody2D`
+declaring `var mass` is the ordinary case, not an exotic one, and a member that shadows an inherited
+mirrored one is glitch 3532 against a line the author cannot edit — which refuses the package, and
+with it every binding in the project (B35). Every method, property and signal is checked against the
+whole mirrored ancestry (`verse_api::methods`, keyed by declaring class) before it is emitted, and a
+collision drops that member rather than the package.
+
+**The differential test §4 promised is not built.** It would run the C++ classifier over the mirrored
+classes and assert it reproduces `GodotClasses.native.verse`, and the C++ side cannot read
+`extension_api.json`: there is no JSON parser on that side of the repository. What stands in for it
+is the integration layer, where the whole generated package is compiled by the real Verse compiler on
+every run — a wrong classification is a build failure, not a silent drift — plus the assertions that
+call through each of the five member kinds. The gap is that the *mirror's* rules and the bindings'
+can still drift apart without a test saying so.
+
 ## 11. What the editor says about a binding
 
 Completion worked from the first generation. Hover, ctrl+click and syntax highlighting answered
