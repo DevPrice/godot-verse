@@ -1625,6 +1625,55 @@ causes it (B20). §"The tooltip's rendering of a converted description" below ca
 
 ---
 
+## B39. An exported value was rewritten as `null` while a `.verse` was edited · **fixed, by-hand check owed**
+
+Reported from a working tree: `dodge-the-creeps/main.tscn` had grown a line, `Speed = null`, under
+the Player node — an instance of `player.tscn`, whose script is `player.verse` with `var Speed:float
+= 400.0`. The base scene stores no `Speed`, so the instance should inherit 400.0 and serialize
+nothing. This is B26's family, in a case B26 did not cover: a value that is *inherited* rather than
+overridden in the scene being saved.
+
+**Why a null reaches the file.** `SceneState::_parse_node` writes a property only when the live
+value differs from the default, and it reads the two against different states. The live value is
+read first as `p_node->get(name)` (`packed_scene.cpp:961`); the default is read second through
+`PropertyUtils::get_property_default_value`, which calls `topmost_script->update_exports()` before
+it reads (`property_utils.cpp:159`). So a bare `null` from the first read loses the comparison
+against a real `400.0` from the second, and `Speed = null` is written.
+
+**Where the null came from.** `player.verse` read `null` whenever the placeholder could not supply
+a real value, and the editor passes through two such states while a script is edited. In *fallback*
+mode — which `refresh_exports` used to enter on any diagnostic — `PlaceHolderScriptInstance::get`
+never falls back to the script default (`script_language.cpp:648`), so an un-overridden export reads
+null. And `_get_property_default_value` returned `Variant()` whenever `has_own_class` was false,
+which a break in *any* file makes true, with no cache of the last good default. When the
+`update_exports()` inside the save then completed a pending build, the default flipped to 400.0
+while the already-captured live value was still null.
+
+**The fix, all in `verse_script.{h,cpp}`, no host or ABI change.** The placeholder is frozen in its
+last good configuration on any failure rather than switched to fallback. `_get_property_default_value`
+caches each default it reads successfully (`last_good_defaults`) and serves the cache whenever
+`has_own_class` is false, so a known member never reads null. `refresh_exports` keeps the last good
+`exports_cache` on every failure path — as B26 already did, so an incomplete recovered list is still
+never believed — and now leaves the fallback *off* once a build has ever succeeded
+(`had_successful_exports`), enabling it only before the first build, which is the one case a
+placeholder has nothing to serve. The cache warms on every good build through the default read
+`update_placeholders` already does, so no extra VM call is added.
+
+This also closes B26's step 3 properly: a break in a *different* file left `has_own_class` false and
+dropped the default to null even though this file was fine, which the cache now covers.
+
+**Nothing automated can see it**, for B26's and B8's reason: a placeholder exists only under
+`is_editor_hint()`. All four layers stay green, which says only that nothing else moved.
+
+**To check it:** attach a script with a plain `int` or `float` export to a node, set nothing (leave
+it at its default), and instance that node into a *second* scene. Save the second scene, then (1)
+break the script — delete a closing paren — and save it, and confirm the second scene's `.tscn` does
+not grow a `= null` line for the export; (2) repeat with the break in a *third*, unrelated `.verse`
+file, which is B26's step 3; (3) override the value in the second scene, break the script, save, and
+confirm the override survives. Step (1) is what wrote `Speed = null` here.
+
+---
+
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks

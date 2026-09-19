@@ -751,12 +751,20 @@ bool VerseScript::_has_property_default_value(const StringName &p_property) cons
 	return false;
 }
 
+// A default lives nowhere but in generated code, so only a successful build of this file's class
+// can read one. When the build has failed or has not run, the last default this file did evaluate
+// is the honest answer: returning a bare null here is what let the scene saver decide the live
+// value differed from the default and write `Speed = null` over it (B39). The good read caches as
+// it goes, so the fallback is warm by the time a build breaks.
 Variant VerseScript::_get_property_default_value(const StringName &p_property) const {
 	VerseRuntime *runtime = get_runtime();
-	if (!has_own_class || runtime == nullptr) {
-		return Variant();
+	if (has_own_class && runtime != nullptr) {
+		const Variant value = runtime->class_default_field(verse_class_name(), String(p_property));
+		last_good_defaults[p_property] = value;
+		return value;
 	}
-	return runtime->class_default_field(verse_class_name(), String(p_property));
+	const HashMap<StringName, Variant>::ConstIterator found = last_good_defaults.find(p_property);
+	return found != last_good_defaults.end() ? found->value : Variant();
 }
 
 void VerseScript::_update_exports() {
@@ -1064,10 +1072,15 @@ void VerseScript::refresh_exports() const {
 	}
 	exports_current = true;
 
+	// Fallback belongs to a placeholder with no last-good list to serve, which is only the case
+	// before the first successful build. After one, exports_cache and last_good_defaults hold the
+	// last good shape and values, and the placeholder serves those with the fallback off -- so an
+	// export this build cannot evaluate reads its last good default rather than a null the scene
+	// saver would write over the real value (B39).
 	VerseRuntime *runtime = get_runtime();
 	VerseScriptLanguage *language = VerseScriptLanguage::singleton();
 	if (runtime == nullptr || language == nullptr) {
-		placeholder_fallback_enabled = true;
+		placeholder_fallback_enabled = !had_successful_exports;
 		return;
 	}
 
@@ -1075,14 +1088,14 @@ void VerseScript::refresh_exports() const {
 	// the program -- with however many of its members the recovery managed to reach. Believing
 	// that list would drop the members it lost, and dropping a member is what erases its value.
 	if (!language->diagnostics_for(get_path()).is_empty()) {
-		placeholder_fallback_enabled = true;
+		placeholder_fallback_enabled = !had_successful_exports;
 		return;
 	}
 
 	bool found = false;
 	const TypedArray<Dictionary> exports = runtime->class_exports(verse_class_name(), &found);
 	if (!found) {
-		placeholder_fallback_enabled = true;
+		placeholder_fallback_enabled = !had_successful_exports;
 		return;
 	}
 
@@ -1131,6 +1144,7 @@ void VerseScript::refresh_exports() const {
 
 	exports_cache = properties;
 	placeholder_fallback_enabled = false;
+	had_successful_exports = true;
 }
 
 // ScriptEditor::script_goto_method calls this by name for the Connections dock's "Go to method"

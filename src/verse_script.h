@@ -8,6 +8,7 @@
 
 #include <vector>
 #include <godot_cpp/classes/script_language.hpp>
+#include <godot_cpp/templates/hash_map.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/string_name.hpp>
@@ -221,5 +222,22 @@ private:
 	// _is_placeholder_fallback_enabled and switches every placeholder to serving its own stored
 	// properties and values -- which is how a node keeps what the inspector last showed, and how
 	// a scene loaded against a broken script hands its values back once the script builds again.
+	//
+	// Enabled only until the first successful build: after that a last-good list and its defaults
+	// exist (exports_cache and last_good_defaults), so the placeholder serves those with the
+	// fallback off rather than answering a bare null for an export it cannot currently evaluate.
+	// That null is what the scene saver serialized as `Speed = null` (B39).
 	mutable bool placeholder_fallback_enabled = false;
+
+	// The last default this file's build could actually evaluate, per export. A default exists
+	// nowhere but in generated code, so a failed or pending build cannot read one and
+	// _get_property_default_value would answer null -- which the scene saver writes over the real
+	// value. Filled whenever a default is read successfully (has_own_class) and served whenever it
+	// cannot be, so a known member never reads null (B39).
+	mutable godot::HashMap<godot::StringName, godot::Variant> last_good_defaults;
+
+	// Whether a build has ever produced this file's export list. Before the first one there is no
+	// last-good list to fall back on, which is the one case placeholder_fallback_enabled is still
+	// for: a placeholder created before any analysis.
+	mutable bool had_successful_exports = false;
 };
