@@ -2751,12 +2751,11 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 	result["result"] = (int64_t)OK;
 	// Godot's two local results are its only ones that carry prose, so everything with no class
 	// to name lands on one of them, and which one is the whole of the label: "Local Constant" or
-	// "Local Variable" (editor_help.cpp). A parameter is neither `var` nor a constant, and
-	// GDScript settles it -- gdscript_editor.cpp's walk of SuiteNode::Local takes the
-	// LOCAL_CONSTANT arm for CONSTANT alone, and PARAMETER, FOR_VARIABLE and PATTERN_BIND all
-	// share the VARIABLE one. "Local Constant" for `Delta:float` was this bridge reading `var`
-	// off the declaration and asking no further question.
-	result["type"] = (int64_t)(bool(found["is_var"]) || is_parameter
+	// "Local Variable" (editor_help.cpp). Only a `var` is mutable in Verse -- a parameter is not,
+	// and neither is a plain binding -- so the constant is the right label for everything else.
+	// GDScript spells a parameter the other way because there a parameter is reassignable, which
+	// is why this does not simply follow gdscript_editor.cpp's SuiteNode::Local walk.
+	result["type"] = (int64_t)(bool(found["is_var"])
 					? ScriptLanguageExtension::LOOKUP_RESULT_LOCAL_VARIABLE
 					: ScriptLanguageExtension::LOOKUP_RESULT_LOCAL_CONSTANT);
 	result["doc_type"] = found["type"];

@@ -2100,10 +2100,10 @@ func begin() -> void:
 		_check_eq("named as the class the script registers a doc for",
 				_hover(hovers, "hover_probe").get("class_name"), "hover_probe")
 
-		# A parameter. GDScript's walk of SuiteNode::Local takes the LOCAL_CONSTANT arm for a
-		# `const` alone; PARAMETER shares the VARIABLE one.
-		_check_eq("a parameter is a Local Variable, not a Local Constant",
-				_hover_type(hovers, "Factor"), ScriptLanguageExtension.LOOKUP_RESULT_LOCAL_VARIABLE)
+		# A parameter is immutable in Verse -- only a `var` is mutable -- so it hovers as a Local
+		# Constant. GDScript spells a parameter the other way because there it is reassignable.
+		_check_eq("a parameter is a Local Constant, not a Local Variable",
+				_hover_type(hovers, "Factor"), ScriptLanguageExtension.LOOKUP_RESULT_LOCAL_CONSTANT)
 		_check_eq("and carries its declared type", _hover(hovers, "Factor").get("doc_type"), "float")
 
 		# Verse's primitives are what they cross as, and GDScript sends `int` to the same page.
