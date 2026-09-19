@@ -242,6 +242,7 @@ compiler-side entry points answer `VH_ERR_UNSUPPORTED` in a runtime host.
 | `verse_module_map.{h,cpp}` | which module each `.verse` is in, from the `.vmodule` markers; pure, and the third godot-cpp-free unit |
 | `verse_bindings.{h,cpp}` | the naming and the emission for generated bindings (R-INT-7) — `split_pascal` is `gen_verse_api.py`'s exactly. The fourth godot-cpp-free unit |
 | `verse_doc_markup.{h,cpp}` | which comment documents a declaration (`verse_doc_comment_above`, over the lexer: `#` lines, a `<# #>` block dedented, a `<#>` body, attribute lines stepped over, a blank line or code ending the walk) and the prose as the doc BBCode Godot's renderer reads: GDScript's paragraph join, backticks to `[code]`, an indented or fenced block to `[codeblock lang=verse]`, every other `[` escaped. Applied wherever a description is handed to Godot — `_lookup_code` and `_get_documentation` — and never before, so the two readers keep one shape; the host's `DocOf` reads the parser's comment nodes by the same rules. The fifth godot-cpp-free unit, linked with the lexer |
+| `verse_signature.{h,cpp}` | splits a Verse function signature (`vh_complete_item::Signature`, the host's `SpellSignature`) into arguments, effect specifiers and result type, all at the top level so a type's own brackets are not separators. `_get_documentation` builds a `MethodDoc` from it, because Godot draws `Name(arg: type) -> return` from the three apart — handing the whole function type over as `return_type` drew no arguments. The sixth godot-cpp-free unit |
 | `verse_bindings_gen.{h,cpp}` | the half that needs Godot: which classes exist. **Only `API_EXTENSION`** of ClassDB, plus every script class with a `class_name` — the editor's ClassDB carries every editor-only class and binding those emitted 1677 lines of Verse for classes no game has |
 | `verse_export_plugin.{h,cpp}` | editor-only: runs `verse_cook.exe` over the project, strips every `.verse` to a one-byte stub so `ext_resource path=` still resolves, and refuses a platform this bridge does not reach |
 | `verse_export_paths.{h,cpp}` | the one rule for where a game's cooked Verse lives — `verse_data` beside the executable — shared by the export plugin that creates it and the runtime that finds it |
@@ -341,6 +342,7 @@ can never reach (`phase-7-design.md` §13.2). What helps is Shipping — 72.7 MB
     python tools/build_class_decl_test.py # class-declaration scanner test binary
     python tools/build_module_map_test.py # module-map test binary
     python tools/build_doc_markup_test.py # doc-markup converter test binary
+    python tools/build_signature_test.py  # signature parser test binary
     python tools/build_bench.py           # host benchmark (timings, not pass/fail)
     python tools/build_verse_probe.py     # the Verse probe (asks the compiler a question)
     python tools/build_cooked_probe.py    # the cooked probe (asks a runtime host what an export sees)
@@ -366,7 +368,7 @@ executable. If a future engine drop provides one, that script finds and execs it
     python tools/run_tests.py --only units       # or units / abi / integration / export
     python tools/run_tests.py --build            # rebuild the test binaries first
 
-**units** — lexer, class-declaration scanner, module map, doc-markup converter, generator. No
+**units** — lexer, class-declaration scanner, module map, doc-markup converter, signature parser, generator. No
 Godot, no UE.
 
 **abi** — `host_smoke`, the whole C ABI with no Godot, plus a `verse_cook` case that cooks
@@ -445,6 +447,7 @@ The binaries still run standalone, which is what to reach for when bisecting one
     bin/verse_class_decl_test.exe
     bin/verse_module_map_test.exe
     bin/verse_doc_markup_test.exe
+    bin/verse_signature_test.exe
     python tests/verse_api_gen/test_gen_verse_api.py
 
 ### Instruments, which are not tests

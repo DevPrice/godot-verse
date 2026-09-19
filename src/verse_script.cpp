@@ -3,6 +3,7 @@
 #include "verse_class_decl.h"
 #include "verse_doc_markup.h"
 #include "verse_runtime.h"
+#include "verse_signature.h"
 #include "verse_script_instance.h"
 #include "verse_script_language.h"
 #include "verse_value.h"
@@ -410,10 +411,24 @@ TypedArray<Dictionary> VerseScript::_get_documentation() const {
 		entry["name"] = name;
 		entry["description"] = description;
 		if (kind == VH_LOOKUP_FUNCTION) {
-			// The whole signature as Verse spells it. Godot's own doc renders `return_type` beside
-			// the name, and a Verse function type reads better there than a decomposition into
-			// Godot's argument shape would -- the parameter names live in the argument hint.
-			entry["return_type"] = member["type"];
+			// Godot draws a method's title as `Name(arg: type, ...) -> return_type` from the
+			// arguments and the result kept apart (editor_help.cpp's SYMBOL_HINT_SIGNATURE), so the
+			// signature is split into those pieces rather than handed over whole -- which drew
+			// `Name() -> params->result`, no arguments and the function type standing in for the
+			// return. The types keep their Verse spelling, the same as the argument hint beside the
+			// tooltip, and the effect specifiers become qualifiers, which Godot draws after the
+			// signature the way it draws `const`.
+			const VerseSignature signature = verse_parse_signature(String(member["signature"]).utf8().get_data());
+			Array arguments;
+			for (const VerseSignatureParam &param : signature.params) {
+				Dictionary argument;
+				argument["name"] = String::utf8(param.name.c_str());
+				argument["type"] = String::utf8(param.type.c_str());
+				arguments.push_back(argument);
+			}
+			entry["arguments"] = arguments;
+			entry["return_type"] = String::utf8(signature.result_type.c_str());
+			entry["qualifiers"] = String::utf8(signature.specifiers.c_str());
 			methods.push_back(entry);
 		} else {
 			entry["type"] = member["type"];

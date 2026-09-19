@@ -142,6 +142,7 @@ def run_units(results: Results, do_build: bool) -> None:
         ("verse_class_decl_test.exe", "build_class_decl_test.py"),
         ("verse_module_map_test.exe", "build_module_map_test.py"),
         ("verse_doc_markup_test.exe", "build_doc_markup_test.py"),
+        ("verse_signature_test.exe", "build_signature_test.py"),
     ):
         if do_build and not build(builder):
             results.record(binary, False)
