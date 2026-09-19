@@ -48,6 +48,13 @@ public:
 	godot::Error _reload(bool p_keep_state) override;
 	godot::StringName _get_doc_class_name() const override;
 	godot::TypedArray<godot::Dictionary> _get_documentation() const override;
+
+	// Makes this script hand `p_docs` back from _get_documentation verbatim rather than scanning
+	// its own source. Set only on the language's API doc carrier, whose job is to register pages
+	// for the Godot-package functions no Godot class documents (B40); an ordinary script never
+	// calls this and describes its own class as before.
+	void set_injected_documentation(const godot::TypedArray<godot::Dictionary> &p_docs);
+
 	godot::String _get_class_icon_path() const override;
 	bool _has_method(const godot::StringName &p_method) const override;
 	bool _has_static_method(const godot::StringName &p_method) const override;
@@ -194,6 +201,10 @@ private:
 	// to a node. False for a library file -- a `.verse` of module-level functions, which is most of
 	// what makes one flat scope livable while modules wait (R-LANG-6).
 	bool has_own_class = false;
+
+	// Documentation handed back verbatim from _get_documentation, in place of scanning the source.
+	// Non-empty only on the language's API doc carrier (set_injected_documentation).
+	godot::TypedArray<godot::Dictionary> injected_documentation;
 
 	// The property list the last believable analysis produced. Kept rather than recomputed on
 	// demand so that a file which currently does not analyse still has an export list to show:

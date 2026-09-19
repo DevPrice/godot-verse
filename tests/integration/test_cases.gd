@@ -2171,6 +2171,18 @@ func begin() -> void:
 		_check_eq("named as Vector2.length",
 				_hover(hovers, "Length").get("class_member"), "length")
 
+		# An extension method on a Verse type Godot has no page for -- `event(t).Emit`. It is a
+		# method of the receiver, not a local constant of a function type, and a page is registered
+		# for it under the receiver's own name so the tooltip has one to draw (B40). The registration
+		# needs the script editor, which a headless run has none of, so what this asserts is the
+		# result shape the editor would render; the drawing itself is a by-hand check.
+		_check_eq("an event extension method hovers as a method, not a local",
+				_hover_type(hovers, "Emit"), ScriptLanguageExtension.LOOKUP_RESULT_CLASS_METHOD)
+		_check_eq("named under its receiver",
+				_hover(hovers, "Emit").get("class_name"), "event")
+		_check_eq("and by its own name",
+				_hover(hovers, "Emit").get("class_member"), "Emit")
+
 		# A scalar of the same file's, which Godot documents where it documents `randf_range`.
 		_check_eq("a scalar math global hovers on @GlobalScope",
 				_hover(hovers, "Smoothstep").get("class_name"), "@GlobalScope")

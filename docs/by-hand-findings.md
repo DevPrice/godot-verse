@@ -1674,6 +1674,47 @@ confirm the override survives. Step (1) is what wrote `Speed = null` here.
 
 ---
 
+## B40. An extension method on a Verse type hovered as a "Local Constant" · **fixed, render by hand**
+
+Reported from a hover: `Emit` in `Hit.Emit(())` drew as a **Local Constant** whose type was the
+whole function type, `type{_(:event(t),:t where t)<transacts>:void}`. The same shape hit every
+extension method the Godot package declares on a Verse type Godot has no class for -- `event(t).Emit`,
+`signal_ref.Subscribe`, `variant.AsInt` -- because the lookup could point only at a Godot doc page,
+and there is none for `event`.
+
+**Why it was a local.** Godot's tooltip has exactly two results that carry prose without a registered
+class doc, and both are locals (`editor_help.cpp`). A function reached by name with no page to send it
+to fell to one of them, so the label was wrong -- a function is not a constant -- and the type shown
+was the function's whole type rather than a signature.
+
+**The fix registers a page on demand.** `EditorHelp` is not exposed to a GDExtension, so the only
+door onto the doc store is `ScriptEditor::update_docs_from_script`, which takes a script. The
+language keeps one hidden carrier script (`api_doc_carrier`), kept out of `live_scripts` so no build
+or analysis walks it, whose documentation is a page per receiver a hover has asked about. A lookup
+that lands on such a function builds the page -- the method's arguments and return split from the
+declared type by `verse_signature`, the receiver dropped, the comment carried as the description --
+registers it under the receiver's own name (`event`), and answers `CLASS_METHOD`. The result is the
+same shape whether or not an editor is present, so the lookup is testable headless; the registration
+runs only with a script editor, which a headless run has none of.
+
+**What is tested and what is by hand.** `tests/integration` asserts the lookup answers
+`CLASS_METHOD` under receiver `event` for `event(t).Emit` (`hover_probe.verse`'s `Fires`). Whether
+the editor *draws* the page -- the method signature and the comment beneath it -- is by hand, because
+the registration needs the script editor a headless run does not have, and because the tooltip is
+Godot's own C++.
+
+**To check it:** open a `.verse` file that calls an event's `Emit` (dodge-the-creeps' `player.verse`
+has `Hit.Emit(())`) and hover `Emit`. It must draw as a method -- `event.Emit` with its argument and
+`-> void` -- with the comment from `GodotApi.native.verse` beneath, not as a "Local Constant" whose
+type is the function type. Then hover `Subscribe` and `Await` on an event or a `signal_ref` for the
+same.
+
+**A limitation, recorded:** the declared type carries no parameter *names*, only types, so the drawn
+signature is `Emit(: t) -> void`. Names would need the host to carry the spelled signature in the
+lookup result, which is a later ABI addition rather than part of this.
+
+---
+
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks

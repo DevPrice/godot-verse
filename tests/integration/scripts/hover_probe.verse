@@ -75,6 +75,12 @@ hover_probe := class(node2d):
 	# what `@export_signal` takes beside `signal(t)`, so a script meets it early.
 	Holds<public>(E:event(int)):int = 0
 
+	# An extension method on a Verse type Godot has no page for. `event(t).Emit` is a module-level
+	# definition of the Godot package, so it hovered as a "Local Constant" whose type was the whole
+	# function type -- until a documentation page was registered for it on demand under its receiver
+	# (B40). The receiver is `event`, and the member is `Emit`.
+	Fires<public>(E:event(int))<transacts>:void = E.Emit(1)
+
 	# A method of a *parametric* class. `signal(t)` is a function answering a type, so the walk
 	# that records where a mirror definition was written stopped at it and every member of one
 	# lost its location to the digest -- a type and an empty box.

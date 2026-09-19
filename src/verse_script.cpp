@@ -364,7 +364,17 @@ StringName VerseScript::_get_doc_class_name() const {
 // Declining and asking to be asked again is the answer. republish_script_docs is what asks, on the
 // editor's own thread. A `.verse` that declares no class of its own is the other way to have
 // nothing to say and is never worth re-asking about, so it is separated out first (R-LANG-6).
+void VerseScript::set_injected_documentation(const TypedArray<Dictionary> &p_docs) {
+	injected_documentation = p_docs;
+}
+
 TypedArray<Dictionary> VerseScript::_get_documentation() const {
+	// The API doc carrier hands its pages back as they are: it has no source class to scan, and
+	// these describe Godot-package functions rather than this file (B40).
+	if (!injected_documentation.is_empty()) {
+		return injected_documentation;
+	}
+
 	TypedArray<Dictionary> docs;
 
 	const String source = verse_newline_normalized(source_code);

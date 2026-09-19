@@ -69,7 +69,7 @@ Three documents are not phase records and are the ones to read before adding a f
   removed.
 - **`docs/by-hand-findings.md`** — what the by-hand editor sessions found, because everything from
   `EngineDebugger` and the editor UI inward has no automated test and never will. B1–B9, B15–B18,
-  B20, B22–B35, B37 and B39 are defects, all fixed, and B36 is reported rather than closed; B12 is a Verse fact; B13 a latency finding; B14 the
+  B20, B22–B35, B37, B39 and B40 are defects, all fixed, and B36 is reported rather than closed; B12 is a Verse fact; B13 a latency finding; B14 the
   sandboxed export run. **B30 is the one to read before calling `ResourceLoader` from anything a
   resource load can reach**: Godot answers a cyclic load `ERR_BUSY` and a null `Ref` silently, so
   the only thing printed is the asking side's own sentence — which names the resource *asked for*
@@ -97,6 +97,17 @@ Three documents are not phase records and are the ones to read before adding a f
   when the build cannot, and the fallback is left *off* once a build has ever succeeded
   (`had_successful_exports`) rather than switched on by any diagnostic, so a known member never
   reads null. It also closes B26's step 3, where a break in a *different* file dropped the default.
+  **B40 is the one to read before touching how a Godot-package function hovers**: an extension
+  method on a Verse type Godot has no page for — `event(t).Emit`, `signal_ref.Subscribe`,
+  `variant.AsInt` — hovered as a "Local Constant" whose type was the whole function type, because
+  Godot's only prose-carrying results without a registered doc are the two locals. A page is
+  registered on demand instead: `EditorHelp` is not exposed, so the one door is
+  `ScriptEditor::update_docs_from_script`, fed by a hidden carrier script (`api_doc_carrier`, kept
+  out of `live_scripts`) whose documentation is a page per receiver a hover has asked about
+  (`publish_api_method`). The lookup answers `CLASS_METHOD` under the receiver's own name whether or
+  not an editor is present, so it is testable headless; the drawing is by hand. The method's
+  arguments and return come from `verse_signature`, and the declared type carries no parameter
+  names, so the drawn signature is `Emit(: t) -> void` until the host carries a spelled signature.
   **B37 is the one to read before declaring a Godot parameter anywhere**: Verse has no null and
   a class has no value for one, so an object argument is declared `?class` unless Godot's own
   dump marks it `"meta": "required"` (godotengine/godot#86079) — 112 of the mirror's 1020 are

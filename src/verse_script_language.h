@@ -3,8 +3,11 @@
 // _make_template returns a Ref<Script>, and Ref's destructor needs the complete type;
 // script_language_extension.hpp only forward-declares it.
 #include "verse_bindings.h"
+#include "verse_script.h"
 
+#include <godot_cpp/templates/hash_map.hpp>
 #include <godot_cpp/templates/hash_set.hpp>
+#include <godot_cpp/classes/ref.hpp>
 #include <godot_cpp/classes/script.hpp>
 #include <godot_cpp/classes/script_language_extension.hpp>
 #include <godot_cpp/variant/array.hpp>
@@ -529,6 +532,17 @@ private:
 	// knows it is wanted (B38).
 	void ensure_script_doc_published(const godot::String &p_class_name) const;
 
+	// Registers a documentation page for a Godot-package function that no Godot class documents --
+	// an extension method on a Verse type like `event(t)`, or a free function of GodotApi -- so a
+	// hover draws a method tooltip rather than a constant whose type is the whole function type. No
+	// Godot page exists for one, and `EditorHelp` is not exposed to a GDExtension, so the page is
+	// carried by `api_doc_carrier`: a script with no file whose only job is to feed
+	// `ScriptEditor::update_docs_from_script`, the one door onto the doc store. Returns the class
+	// name to put in the lookup result, or empty when there is no script editor to register with
+	// (a headless run), so the caller falls back to the local result (B40).
+	godot::String publish_api_method(const godot::String &p_receiver_type, const godot::String &p_member,
+			const godot::String &p_function_type, const godot::String &p_description) const;
+
 	// Reaps a finished analysis and starts whatever came in while it ran. Called once per frame.
 	void poll_check() const;
 
@@ -538,6 +552,13 @@ private:
 
 	std::vector<VerseScript *> live_scripts;
 	std::unordered_map<int64_t, VerseScriptInstance *> live_instances;
+
+	// The doc carrier and the pages it holds, for publish_api_method. The carrier is a VerseScript
+	// with no file, kept out of live_scripts so the build and analysis walks never reach it; its
+	// documentation is whatever api_doc_pages currently holds, one ClassDoc per Godot-package
+	// receiver a hover has asked about. Mutable because a hover is const and is where they fill.
+	mutable godot::Ref<VerseScript> api_doc_carrier;
+	mutable godot::HashMap<godot::String, godot::Dictionary> api_doc_pages;
 
 	// Replaces diagnostics_by_path and compiler_warnings_by_path with one analysis' results,
 	// sorted by severity. Analysis covers the whole project, so a file absent from the result

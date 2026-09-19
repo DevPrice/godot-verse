@@ -11,6 +11,7 @@
 #include "verse_resource_format.h"
 #include "verse_runtime.h"
 #include "verse_script.h"
+#include "verse_signature.h"
 
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/engine.hpp>
@@ -2931,6 +2932,29 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 				result["class_name"] = String(godot_class);
 				return result;
 			}
+
+			// An extension method on a Verse type that no Godot page covers -- `event(t).Emit`,
+			// `signal_ref.Subscribe`, `variant.AsInt`. Register a page for it and answer
+			// CLASS_METHOD, so it draws as a method with its arguments and its own comment rather
+			// than as a "Local Constant" whose type is the whole function type (B40). Only a
+			// function, and only with a receiver to name the page after; a free function keeps the
+			// local result, and so does any hover in a headless run, where publish_api_method finds
+			// no script editor to register with and answers empty.
+			const String api_extension = verse_extension_method_name(found_name);
+			if (kind == VH_LOOKUP_FUNCTION && !api_extension.is_empty()) {
+				const String function_type = result["doc_type"];
+				const String receiver = verse_receiver_type(function_type);
+				if (!receiver.is_empty()) {
+					const String doc_class = publish_api_method(receiver, api_extension,
+							function_type, verse_doc_bbcode(String(found["doc"])));
+					if (!doc_class.is_empty()) {
+						result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS_METHOD;
+						result["class_name"] = doc_class;
+						result["class_member"] = api_extension;
+						return result;
+					}
+				}
+			}
 		}
 
 		// A mirrored property is a var, so the kind alone cannot separate it from a script's own
@@ -4718,6 +4742,94 @@ void VerseScriptLanguage::ensure_script_doc_published(const String &p_class_name
 		return;
 	}
 #endif
+}
+
+String VerseScriptLanguage::publish_api_method(const String &p_receiver_type, const String &p_member,
+		const String &p_function_type, const String &p_description) const {
+	// The page is named after the receiver, without its type parameters: `event(t)` documents its
+	// methods under `event`, the name a reader sees and the compiler prints. The page is built and
+	// the class name returned whether or not an editor is present -- so the lookup result is the
+	// same shape in a headless run, which is the only place this can be tested -- and the
+	// registration below happens only when there is a script editor to register with.
+	const int64_t paren = p_receiver_type.find("(");
+	const String doc_class = paren < 0 ? p_receiver_type : p_receiver_type.substr(0, paren);
+	if (doc_class.is_empty()) {
+		return String();
+	}
+
+	// The declared type is `type{_(:receiver, :p1, ...)<effects>:result}`. Unwrap it to the plain
+	// signature the parser reads, then drop the receiver, which is the extension method's first
+	// parameter and not one the author writes at the call. The parameters carry no names here --
+	// the declared type does not record them -- so the tooltip shows their types alone.
+	String signature_text = p_function_type;
+	if (signature_text.begins_with("type{_")) {
+		signature_text = signature_text.substr(6, signature_text.length() - 6);
+		const int64_t last_brace = signature_text.rfind("}");
+		if (last_brace >= 0) {
+			signature_text = signature_text.substr(0, last_brace);
+		}
+	}
+	const VerseSignature signature = verse_parse_signature(signature_text.utf8().get_data());
+
+	Array arguments;
+	for (size_t i = 1; i < signature.params.size(); i++) {
+		Dictionary argument;
+		argument["name"] = String::utf8(signature.params[i].name.c_str());
+		argument["type"] = String::utf8(signature.params[i].type.c_str());
+		arguments.push_back(argument);
+	}
+
+	Dictionary method;
+	method["name"] = p_member;
+	method["arguments"] = arguments;
+	method["return_type"] = String::utf8(signature.result_type.c_str());
+	method["qualifiers"] = String::utf8(signature.specifiers.c_str());
+	method["description"] = p_description;
+
+	// One page per receiver, its methods replaced by name so re-hovering one does not double it.
+	Dictionary page = api_doc_pages.has(doc_class) ? api_doc_pages[doc_class] : Dictionary();
+	Array methods = page.has("methods") ? (Array)page["methods"] : Array();
+	bool replaced = false;
+	for (int64_t i = 0; i < methods.size(); i++) {
+		const Dictionary existing = methods[i];
+		if (String(existing["name"]) == p_member) {
+			methods[i] = method;
+			replaced = true;
+			break;
+		}
+	}
+	if (!replaced) {
+		methods.push_back(method);
+	}
+	page["name"] = doc_class;
+	page["inherits"] = String();
+	page["is_script_doc"] = true;
+	page["methods"] = methods;
+	api_doc_pages[doc_class] = page;
+
+#ifdef TOOLS_ENABLED
+	EditorInterface *editor_interface = verse_editor_interface();
+	ScriptEditor *script_editor = editor_interface != nullptr ? editor_interface->get_script_editor() : nullptr;
+	if (script_editor != nullptr) {
+		// The carrier is created once and kept out of live_scripts: it has no source class and must
+		// not be walked by a build or an analysis. Its documentation is every page gathered so far,
+		// which update_docs_from_script registers by class name -- the only door onto the doc store,
+		// since EditorHelp is not bound (B40).
+		if (api_doc_carrier.is_null()) {
+			api_doc_carrier = Ref<VerseScript>(memnew(VerseScript));
+			const_cast<VerseScriptLanguage *>(this)->unregister_script(api_doc_carrier.ptr());
+		}
+		TypedArray<Dictionary> pages;
+		for (const KeyValue<String, Dictionary> &entry : api_doc_pages) {
+			pages.push_back(entry.value);
+		}
+		api_doc_carrier->set_injected_documentation(pages);
+
+		const Ref<Script> ref = api_doc_carrier;
+		script_editor->update_docs_from_script(ref);
+	}
+#endif
+	return doc_class;
 }
 
 // What a rejected export has to say for itself, at the line that declared it.
