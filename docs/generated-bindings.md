@@ -477,33 +477,47 @@ bindings are only what makes the answer urgent. §10.5 shows the wall is real at
 classes and that one flag on `PreInit` removes it. The number is not a detail — the pool is
 pre-sized, so it is memory spent whether or not a project has an addon.
 
-### 10.9 What the last five members corrected — one of them a §4 decision
+### 10.9 What the last five members corrected, and one wrong conclusion drawn on the way
 
-§4 says the classification rules are `gen_verse_api.py`'s, exactly, *"properties as writable members
-except where a nested struct or a container forces a getter/setter pair"*. **A property here cannot
-be a member at all, and the reason is the package rather than the property.** The compiler says it in
-as many words:
+§4's property clause — *"properties as writable members except where a nested struct or a container
+forces a getter/setter pair"* — **holds, and it was briefly recorded here as not holding.** The
+mistake is worth keeping, because the two errors that produced it arrive together and the second is
+caused by the first:
 
 ```
-error: Data members with `<getter(...)>` and `<setter(...)>` must be either uninitialized
-       or initialized with `= external{}`.
+error: `Tag`'s accessors contain the following errors:
+       Missing definitions:
+           TagGetter(:accessor,:int)<transacts>:char
+           TagSetter(:accessor,:int,:char)<transacts>:void
 error: external{} macro must not be used in regular Verse code. It is a placeholder allowed
        only in digests.
 ```
 
-So a source package has exactly one of the two spellings available, and it costs the class its
-archetype: an uninitialized member must be supplied by every archetype, so `mob{}` — which R-INT-12
-needs and `tests/integration` asserts — becomes *"Object archetype must initialize data member
-`Speed`"*. The mirror escapes this because VNI compiles it, where `external{}` is legal.
+Read together they say "a member with accessors cannot use `external{}` outside a digest, and a
+source package may not use the other spelling either". Read against the compiler they do not.
+Glitch 3558 is raised only when the enclosing package's role is not External **and**
+`bAllowExternalMacroCallInNonExternalRole` is unset (`SemanticAnalyzer.cpp:16009`) — and that flag
+is set for exactly this case, with a comment saying so: *"optional accessors must be initialized
+with `= external{}` regardless of package role"* (`:20121`). The second error fired because the
+first one had already stopped `Tag`'s accessors from being registered, so the member had none by
+the time the macro was analysed. `Tag` is a `string`, which is `[]char`: a **container**-typed var
+is asked for the indexed accessor overloads above, which is §4's own exception and what the mirror
+skips all 403 of its container properties for.
 
-What follows is better than a workaround. **A ClassDB property needs nothing:** it is *defined* by a
-getter and a setter method (`ADD_PROPERTY` names both), and those are in the class's method list, so
-a binding already answers `GetProcessCallback()` and `SetProcessCallback()`. Only a GDScript `var`
-has no pair, and it is given the one Godot would have given it — `GetSpeed()`, `SetSpeed(V)`. That
-spelling also carries a `string` var, which the member spelling could not have: `string` is `[]char`,
-and a container-typed member is asked for `TagGetter(:accessor, :int):char`, the indexed overloads
-the mirror skips 403 properties rather than write. The names are invented, which is done almost
-nowhere else in this project; the alternative was to bind no GDScript `var` at all.
+So the shape is the mirror's: a member with `<getter>`/`<setter>` and `= external{}` for every
+value type, and `GetTag()`/`SetTag(V)` for a container. What the wrong conclusion cost was a round
+of the work and four documents that had to be corrected; what it would have cost if it had shipped
+is a spelling no Verse author recognises for the commonest thing a GDScript class has.
+
+**A ClassDB property needs neither**, and this part was right: it is *defined* by a getter and a
+setter method (`ADD_PROPERTY` names both), and those are in the class's method list, so a binding
+already answers `GetProcessCallback()` and `SetProcessCallback()`. Only a GDScript `var` is bound
+here, and the pair is the only place in the generated package where a name is invented.
+
+**The uninitialized spelling is real and is the wrong one.** It is the other half of the compiler's
+own sentence — *"either uninitialized or initialized with `= external{}`"* — and it costs the class
+its archetype: every archetype must supply an uninitialized member, so `mob{}` becomes *"Object
+archetype must initialize data member `Speed`"* and R-INT-12's construction goes with it.
 
 Four more, each measured rather than reasoned about (headless Godot 4.7):
 

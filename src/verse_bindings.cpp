@@ -423,6 +423,10 @@ bool verse_binding_can_be_property(const std::string &p_type) {
 	return reader_for(p_type).accessor != nullptr;
 }
 
+bool verse_binding_property_is_member(const std::string &p_type) {
+	return p_type != "string" && p_type != "godot_array" && p_type != "dictionary";
+}
+
 bool verse_binding_is_predicate(const std::string &p_godot_name, const std::set<std::string> &p_sibling_names) {
 	// The read half of a property answers a value rather than a test, and its setter is how you
 	// tell: `is_point_disabled` pairs with `set_point_disabled`, and the servers' flattened
@@ -490,27 +494,51 @@ std::string verse_emit_binding_class(const VerseBindingClass &p_class, const Ver
 		out += "){}\n";
 	}
 
-	// A GDScript `var` as the accessor pair Godot itself would have given it, had it been a ClassDB
-	// property: `GetSpeed()` and `SetSpeed(V)`. The names are invented, which is done here and
-	// almost nowhere else -- the alternative was a Verse member, and that spelling costs the class
-	// its archetype (see VerseBindingProperty).
+	// A GDScript `var` as an ordinary Verse member, the way the mirror spells all 3312 of its own,
+	// except for a container type -- which is the mirror's own exception too.
 	for (const VerseBindingProperty &property : p_class.properties) {
 		const std::string name = verse_binding_member_name(property.godot_name);
 		const bool is_enum = p_enums.count(property.type) > 0;
 		const std::string read = "Get(\"" + property.godot_name + "\")";
+		const bool as_member = is_enum || verse_binding_property_is_member(property.type);
 
-		out += "\tGet" + name + "<public>()<transacts>:" + property.type + " =\n\t\t";
+		std::string get_body;
 		if (is_enum) {
-			out += "VhTo" + enum_stem(property.type) + "(" + read + ")\n";
+			get_body = "VhTo" + enum_stem(property.type) + "(" + read + ")\n";
 		} else {
 			const FReader reader = reader_for(property.type);
-			out += "if (Read := " + read + "." + reader.accessor + "[]) then Read else " +
+			get_body = "if (Read := " + read + "." + reader.accessor + "[]) then Read else " +
 					reader.fallback + "\n";
 		}
-
-		out += "\tSet" + name + "<public>(Value:" + property.type + ")<transacts>:void =\n\t\t";
-		out += "Set(\"" + property.godot_name + "\", " +
+		const std::string set_body = "Set(\"" + property.godot_name + "\", " +
 				pack_expression(property.type, "Value", p_enums) + ")\n";
+
+		if (as_member) {
+			// The var is `external{}` and the accessors are `epic_internal`, which is the mirror's
+			// spelling exactly -- and it is available here, in a Source package, *because* the
+			// member has accessors: the package-role rule that bans `external{}` outside a digest
+			// is waived for one, in as many words (SemanticAnalyzer.cpp:20121, "optional accessors
+			// must be initialized with `= external{}` regardless of package role"). The specifier
+			// is `epic_internal` because the `accessor` parameter is, and a definition may be no
+			// more accessible than what it depends on; the bindings package is InternalUser, which
+			// is what makes that reachable.
+			out += "\tvar " + name + "<public><getter(" + name + "Getter)><setter(" + name +
+					"Setter)>:" + property.type + " = external {}\n";
+			out += "\t" + name + "Getter<epic_internal>(Accessor:accessor)<transacts>:" +
+					property.type + " =\n\t\t" + get_body;
+			out += "\t" + name + "Setter<epic_internal>(Accessor:accessor, Value:" + property.type +
+					")<transacts>:void =\n\t\t" + set_body;
+			continue;
+		}
+
+		// A container-typed property is the pair instead, and the names are invented -- which is
+		// done here and almost nowhere else. Verse asks a container-typed member for *indexed*
+		// accessor overloads, `TagGetter(:accessor, :int):char`, so that `set M.Tag[0] = 'x'` could
+		// resolve; the mirror meets the same wall and skips all 403 of them, leaving Godot's own
+		// getter and setter standing as methods. A GDScript `var` has no such pair to leave.
+		out += "\tGet" + name + "<public>()<transacts>:" + property.type + " =\n\t\t" + get_body;
+		out += "\tSet" + name + "<public>(Value:" + property.type + ")<transacts>:void =\n\t\t" +
+				set_body;
 	}
 
 	for (const VerseBindingMethod &method : p_class.methods) {

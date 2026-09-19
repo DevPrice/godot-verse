@@ -735,11 +735,10 @@ func begin() -> void:
 
 		# --- R-INT-9: what a binding carries besides its methods ----------------------------
 		#
-		# A GDScript `var` as an accessor pair. The names are the generator's, because a
-		# GDScript property has none of its own and the Verse member spelling would cost the
-		# class its archetype: a member with `<getter>`/`<setter>` must be uninitialized, and
-		# every archetype of the class would then have to initialize it.
-		_check_eq("a GDScript var is reached through the binding's accessor pair",
+		# A GDScript `var` as an ordinary Verse member, which is what the mirror's own
+		# properties are. `= external{}` is what makes that spellable in a Source package: the
+		# rule that keeps it inside digests is waived for a member with accessors.
+		_check_eq("a GDScript var is an ordinary member on the binding",
 				binder.call("AskSpeed", mob_node), 1.5)
 		# The write is checked on Godot's side and on the next call, never in the same one: a
 		# write to Godot defers to the transaction's commit, so the computation that made it
@@ -747,9 +746,10 @@ func begin() -> void:
 		binder.call("AskSetSpeed", mob_node, 3.25)
 		_check_eq("and written through it", mob_node.speed, 3.25)
 		_check_eq("which the next call reads back", binder.call("AskSpeed", mob_node), 3.25)
-		# A `string` var, which the member spelling could not have carried at all: `string` is
-		# `[]char`, and a container-typed member is asked for indexed accessors.
-		_check_eq("including a string, which a member could not have carried",
+		# A `string` var is the one shape that cannot be a member -- `string` is `[]char`, and
+		# a container-typed member is asked for indexed accessors -- so it gets the pair, which
+		# is the only place in the generated package where a name is invented.
+		_check_eq("a container-typed one gets the accessor pair instead",
 				binder.call("AskTag", mob_node), "m")
 
 		# A constant and a static are not members of the class: Verse has data on no type and

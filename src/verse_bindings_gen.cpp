@@ -427,8 +427,8 @@ void describe_from_classdb(ClassDBSingleton *p_db, const String &p_godot_name, c
 
 	// **No properties here, and none are missing.** A ClassDB property is *defined* by a getter and
 	// a setter method -- `ADD_PROPERTY` names both -- and those are in the method list above, so a
-	// binding already answers `GetProcessCallback()` and `SetProcessCallback()`. Only a GDScript
-	// `var`, which has no such pair, needs one invented (see describe_from_script).
+	// binding already answers `GetProcessCallback()` and `SetProcessCallback()`. A GDScript `var`
+	// has no such pair and is bound as a member instead (see describe_from_script).
 
 	// The enum constants are already carried by the enums themselves, and a Verse enumerator and a
 	// constant of the same name in one module is a redefinition.
@@ -548,17 +548,23 @@ void describe_from_script(const Ref<Script> &p_script, const VerseBindingRoster 
 		if (type.empty() || (!is_bound_enum(type, p_enums) && !verse_binding_can_be_property(type))) {
 			continue;
 		}
-		// The pair's own names are what may collide, not the property's: `var speed` becomes
-		// `GetSpeed` and `SetSpeed`, and either may already be an inherited mirrored member or a
-		// method this script declares itself. A collision is glitch 3532 at the generated
-		// declaration, which costs the whole package, so the property is dropped instead.
-		const std::string accessor = verse_binding_member_name(utf8_of(name));
+		// Every name this property will emit, because any of them may already be an inherited
+		// mirrored member or a method this script declares itself, and a collision is glitch 3532
+		// at the generated declaration -- which costs the whole package (B35). The property is
+		// dropped instead. A member emits three names, since the compiler is told the accessors by
+		// name and they are members too; a container's pair emits two.
+		const std::string spelled = verse_binding_member_name(utf8_of(name));
+		std::vector<std::string> emitted;
+		if (is_bound_enum(type, p_enums) || verse_binding_property_is_member(type)) {
+			emitted = { spelled, spelled + "Getter", spelled + "Setter" };
+		} else {
+			emitted = { "Get" + spelled, "Set" + spelled };
+		}
 		bool clear = true;
-		for (const char *const half : { "Get", "Set" }) {
-			const std::string spelled = half + accessor;
-			clear = clear && p_inherited.count(spelled) == 0;
+		for (const std::string &candidate : emitted) {
+			clear = clear && p_inherited.count(candidate) == 0;
 			for (const VerseBindingMethod &method : r_class.methods) {
-				clear = clear && verse_binding_member_name(method.godot_name) != spelled;
+				clear = clear && verse_binding_member_name(method.godot_name) != candidate;
 			}
 		}
 		if (!clear) {

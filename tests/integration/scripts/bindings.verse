@@ -69,22 +69,23 @@ bindings := class(node2d):
 	AskDirect<public>()<transacts>:int =
 		mob{}.Hit(1)
 
-	# R-INT-9's remainder. A GDScript `var` is reached as the accessor pair Godot would have given
-	# it had it been a ClassDB property -- the names are the generator's, because a GDScript `var`
-	# has no accessor methods of its own and a Verse member with `<getter>`/`<setter>` would cost
-	# this class its archetype: such a member must be uninitialized, and then `mob{}` below would
-	# have to initialize every one of them.
+	# R-INT-9's remainder. A GDScript `var` is an ordinary Verse member on the binding, read and
+	# written the way the mirror's own 3312 properties are -- its `<getter>`/`<setter>` reach Godot
+	# through `Get`/`Set`, and its `= external{}` is legal in this Source package because a member
+	# *with accessors* is exempt from the rule that keeps `external{}` inside digests.
 	AskSpeed<public>(N:node2d)<transacts>:float =
-		if (M := mob[N]) then M.GetSpeed() else -1.0
+		if (M := mob[N]) then M.Speed else -1.0
 
 	# Writing and reading back are two calls, not one: a write to Godot defers to the commit, so a
 	# read in the same computation still sees what was there before it (R-AUD-1's measured rule).
 	AskSetSpeed<public>(N:node2d, To:float)<transacts>:void =
 		if (M := mob[N]):
-			M.SetSpeed(To)
+			set M.Speed = To
 
-	# A string, which a member could not have carried at all: `string` is `[]char`, and Verse asks
-	# a container-typed member for indexed accessors. As a method pair it is ordinary.
+	# A string is the one shape that cannot be a member: `string` is `[]char`, and Verse asks a
+	# container-typed member for indexed accessors -- `TagGetter(:accessor, :int):char` -- which
+	# the mirror skips 403 properties rather than write. So it gets the pair Godot would have
+	# given it, which is the only place in the package where a name is invented.
 	AskTag<public>(N:node2d)<transacts>:string =
 		if (M := mob[N]) then M.GetTag() else "?"
 
@@ -112,8 +113,8 @@ bindings := class(node2d):
 		if (M := mob[N]) then ToInt(M.Shift(mob_state.Busy)) else -1
 
 	AskMode<public>(N:node2d)<transacts>:int =
-		if (M := mob[N]) then ToInt(M.GetMode()) else -1
+		if (M := mob[N]) then ToInt(M.Mode) else -1
 
 	AskSetMode<public>(N:node2d)<transacts>:void =
 		if (M := mob[N]):
-			M.SetMode(mob_state.Done)
+			set M.Mode = mob_state.Done

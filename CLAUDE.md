@@ -1278,14 +1278,20 @@ it is not in `run_tests.py`.
   into a call to it, but refuses to let anything *define* one — as a class member or as a free
   function — so the bracket syntax cannot be given a meaning. Container lookup is
   `Data.GetInt[Key]`.
-- **A `var` with `<getter>`/`<setter>` may only be written two ways, and a source package has one
-  of them.** The compiler asks for *"either uninitialized or initialized with `= external{}`"*, and
-  `external{}` is *"a placeholder allowed only in digests"* — which the mirror may write because VNI
-  compiles it, and nothing compiled at runtime may. What is left costs the class its archetype: an
-  uninitialized member must be supplied by every archetype of the class, so `some_class{}` becomes
-  *"Object archetype must initialize data member `X`"*. **This is why a generated binding spells a
-  GDScript `var` as `GetX()`/`SetX(V)`** (`generated-bindings.md` §10.9) and why nothing else
-  outside the mirror should reach for the accessor protocol.
+- **A `var` with `<getter>`/`<setter>` may only be written two ways, and only one of them keeps the
+  class constructible.** The compiler asks for *"either uninitialized or initialized with
+  `= external{}`"*. `external{}` **is available outside a digest for this one case** — glitch 3558
+  is raised only when the package's role is not External *and*
+  `bAllowExternalMacroCallInNonExternalRole` is unset, and that flag is set for a member with
+  accessors, under the comment *"optional accessors must be initialized with `= external{}`
+  regardless of package role"* (`SemanticAnalyzer.cpp:16009` and `:20121`). The other spelling
+  costs the class its archetype: an uninitialized member must be supplied by every archetype, so
+  `some_class{}` becomes *"Object archetype must initialize data member `X`"*. **The trap is that a
+  container-typed var is refused first** — `string` is `[]char`, so Verse asks for indexed accessor
+  overloads (`XGetter(:accessor, :int):char`) — **and its failure then produces 3558 as a cascade**,
+  which reads as `external{}` being banned outright. That is what generated bindings got wrong for a
+  round (`generated-bindings.md` §10.9); a container property is the accessor pair, everything else
+  is a member.
 - **A `var` property cannot hold a nested struct or a container.** Verse asks a struct-typed `var`
   for a field-named accessor overload per nesting level, and `transform3d`'s two members have
   different types, so no one getter signature satisfies it. `gen_verse_api.py` leaves those as

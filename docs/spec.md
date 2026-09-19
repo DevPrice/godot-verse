@@ -1965,18 +1965,18 @@ section written after the spikes.
   over `AsObject[]` and a downcast, which is what lets a binding name a class at all — the
   mirror's or another binding's (`by-hand-findings.md` B35).
 
-  **A property is an accessor pair here, not a writable member, and the package is why.** Verse
-  accepts a member with `<getter>`/`<setter>` only *uninitialized* or `= external{}`; the second
-  is a digest's spelling, and the first makes every archetype of the class initialize it, so
-  `mob{}` — R-INT-12's construction — would stop compiling. The mirror spells all 3312 of its
-  properties as members because VNI compiles it, where `external{}` is legal. What follows is
-  that a ClassDB property needs nothing at all: it is *defined* by a getter and a setter method,
-  both of which are in the class's method list already, so `GetProcessCallback()` and
-  `SetProcessCallback()` are bound as ordinary methods. A GDScript `var`, which has no accessor
-  pair of its own, is given the one Godot would have given it — `GetSpeed()`, `SetSpeed(V)` —
-  and that spelling carries a `string` var, which a member could not have: `string` is `[]char`,
-  and a container-typed member is asked for indexed accessor overloads the mirror skips 403
-  properties rather than write.
+  **A property is a writable member, as written**, and `= external{}` is what makes that
+  spellable in a package compiled at runtime: the rule that keeps `external{}` inside digests is
+  waived for a member *with accessors*, in as many words — *"optional accessors must be
+  initialized with `= external{}` regardless of package role"* (`SemanticAnalyzer.cpp:20121`).
+  The other spelling the compiler accepts, an uninitialized member, would have cost the class
+  its archetype: every archetype must supply one, so `mob{}` — R-INT-12's construction — would
+  stop compiling. A ClassDB property needs nothing at all, because it is *defined* by a getter
+  and a setter method and both are in the class's method list already. Only a GDScript `var` is
+  bound here, and the requirement's own exception holds for the same reason it does in the
+  mirror: a **container**-typed one is not a member, because `string` is `[]char` and Verse asks
+  a container-typed var for indexed accessor overloads the mirror skips 403 properties rather
+  than write. That one gets `GetTag()`/`SetTag(V)`, the pair a ClassDB class would have had.
 
   **A predicate is read off Godot's own naming, so only a ClassDB class has one.** The rule is
   `gen_verse_api.py`'s — the name prefix, minus a method with a `set_` twin, which is a

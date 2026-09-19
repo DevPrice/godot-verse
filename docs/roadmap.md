@@ -903,9 +903,9 @@ ever need to reach. No design yet, by decision; when it is written it starts fro
 **Built; exit met.** All six of R-INT-7 through R-INT-12 are done.
 [`generated-bindings.md`](generated-bindings.md) is the design, written before the work, and its
 **§10 is the part to read** — all five spikes came back, two of them corrected the decision table,
-and **§10.9 is what the last of the work corrected after that**, including the one decision §4 got
-backwards: a property here is an accessor pair rather than a writable member, because the member
-spelling would cost every binding class its archetype.
+and **§10.9 is what the last of the work corrected after that** — including a conclusion this phase
+drew wrongly and then withdrew, that a property here could not be a writable member. It can; the
+two errors that say otherwise arrive together and the second is a cascade from the first.
 
 **Why now, and why not earlier.** The mirror is generated from `extension_api.json`, which
 describes core Godot and nothing else, so a class a third-party GDExtension registers and a class
@@ -931,8 +931,8 @@ carry the mapping on until the sidecar existed.
   the overload set put to the runtime compiler, which is the half a host build cannot answer;
   `marshal.verse` and `test_cases.gd` carry five assertions that run in the editor and in an
   export. The rest is **done** too: a predicate is read off Godot's own naming and so exists only
-  on a ClassDB class; a property is an accessor pair rather than a member, which §4 had backwards
-  (§10.9); a static is dispatched by `ClassDB.class_call_static` for a ClassDB class and through
+  on a ClassDB class; a property is a writable member, as §4 said, with a container-typed one the
+  exception it named (§10.9); a static is dispatched by `ClassDB.class_call_static` for a ClassDB class and through
   the script *resource* for a script class; and an enum is a real Verse enum at the package's
   module scope, with `ToInt` beside it, typed from the `PROPERTY_USAGE_CLASS_IS_ENUM` metadata
   both kinds of class report.

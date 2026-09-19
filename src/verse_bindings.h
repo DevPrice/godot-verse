@@ -37,13 +37,19 @@ struct VerseBindingMethod {
 	bool is_static = false;
 };
 
-/// One `var` a GDScript class declares, reached as the accessor pair `GetSpeed()`/`SetSpeed(V)`.
+/// One `var` a GDScript class declares, reached the way the mirror's own properties are:
+/// `set Thing.Speed = 2.0`, over a member whose `<getter>`/`<setter>` call Godot.
 ///
-/// **Not a Verse member with `<getter>`/`<setter>`, and the reason is the package rather than the
-/// property.** That spelling needs the var to be uninitialized or `= external{}`; `external{}` is a
-/// digest's alone, and an uninitialized member makes every archetype of the class initialize it, so
-/// `mob{}` would stop compiling and R-INT-12's construction with it. The mirror is compiled by VNI,
-/// where `external{}` is legal, which is why it can spell all 3312 of its properties as members.
+/// **`= external{}` is available here although this is a Source package**, which is the one thing
+/// about it worth knowing: the rule that bans `external{}` outside a digest is waived for a member
+/// *with accessors*, in as many words -- *"optional accessors must be initialized with
+/// `= external{}` regardless of package role"* (`SemanticAnalyzer.cpp:20121`). Without it the var
+/// would have to be uninitialized, which is the only other spelling the compiler takes, and then
+/// every archetype of the class would have to supply it -- `mob{}` would stop compiling and
+/// R-INT-12's construction with it.
+///
+/// A **container**-typed property is the exception and gets `GetTag()`/`SetTag(V)` instead; see
+/// `verse_binding_property_is_member`.
 ///
 /// **Only a script class has these.** A ClassDB property is defined in terms of a getter and a
 /// setter *method*, both of which are in the class's method list already, so a ClassDB binding gets
@@ -153,10 +159,18 @@ std::vector<std::string> verse_binding_enumerator_names(const std::vector<std::s
 ///
 /// A class-typed one cannot, for the reason an object result is `<decides>`: the getter would have
 /// to answer something for "Godot has nothing here", and a class has no such value. Every other
-/// type the enumeration can name has a reader and a builder, `string` included -- which a property
-/// spelled as a *member* could not have carried, since `string` is `[]char` and a container-typed
-/// var is asked for indexed accessor overloads the mirror skips 403 properties rather than write.
+/// type the enumeration can name has a reader and a builder.
 bool verse_binding_can_be_property(const std::string &p_type);
+
+/// Whether such a property is spelled as a Verse *member* rather than as an accessor pair.
+///
+/// A container type is not, and it is the only kind that is not: `string` is `[]char`, and Verse
+/// asks a container-typed var for *indexed* accessor overloads -- `TagGetter(:accessor, :int):char`
+/// -- so that `set Thing.Tag[0] = 'x'` could resolve. The mirror meets the same wall and skips all
+/// 403 of them, which is R-INT-9's own "except where a nested struct or a container forces a
+/// getter/setter pair"; there it leaves Godot's own accessors standing as methods, and here, for a
+/// GDScript `var` that has none, the pair is generated.
+bool verse_binding_property_is_member(const std::string &p_type);
 
 /// Whether a `bool`-returning Godot method is a test rather than a value.
 ///
