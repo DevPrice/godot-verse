@@ -2104,6 +2104,14 @@ func begin() -> void:
 		# Constant. GDScript spells a parameter the other way because there it is reassignable.
 		_check_eq("a parameter is a Local Constant, not a Local Variable",
 				_hover_type(hovers, "Factor"), ScriptLanguageExtension.LOOKUP_RESULT_LOCAL_CONSTANT)
+
+		# A parameter's own comment reaches its hover, both a `#` line above it and an inline
+		# `<# #>` before it. The host reads it off the parameter's node; the consumer's line-based
+		# reader could not, because a parameter's source line is the one the function opens on (B41).
+		_check_eq("a `#` line above a parameter is its description",
+				_hover(hovers, "First").get("description"), "the first parameter")
+		_check_eq("an inline `<# #>` before a parameter is its description",
+				_hover(hovers, "Second").get("description"), "the second parameter")
 		_check_eq("and carries its declared type", _hover(hovers, "Factor").get("doc_type"), "float")
 
 		# Verse's primitives are what they cross as, and GDScript sends `int` to the same page.

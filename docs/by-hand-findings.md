@@ -1715,6 +1715,34 @@ lookup result, which is a later ABI addition rather than part of this.
 
 ---
 
+## B41. A parameter's own comment did not reach its hover · **fixed, measured**
+
+Reported from a hover: a comment written for a parameter -- a `#` line above it, or an inline
+`<# doc #>` before it -- drew nothing. Only a member or a function carried its comment into the
+tooltip.
+
+**Why the consumer could not read it.** The hover re-reads the source file by line and takes the
+comment block above the declaration's line. That is right for a member, but a parameter's recorded
+line is the line its function opens on, so "the comment above it" is the function's -- which would
+describe an argument with the method's prose. The consumer skipped a parameter for that reason, and
+so the parameter's own comment was never read.
+
+**The host is the reader that can tell them apart.** `DocOf` reads the prefix comments off the
+parameter's own VST node rather than by source line, so it gets the comment written against the
+parameter and not the function's. `LookupSymbol` now fills a parameter's `Doc`, and the hover draws
+the host's `doc` for a parameter -- at its declaration and at every use -- while leaving the
+line-based path for everything else. Both comment forms the parser attaches to a parameter node are
+covered, including a `#` line above the first parameter, which the parser keeps on the parameter
+rather than on the clause.
+
+**This one is measured, not by hand.** The description comes from the host, which a headless run
+loads, so `tests/integration` asserts both forms on `hover_probe.verse`'s `Marks`: a `#` line above
+`First` and an inline `<# #>` before `Second` each reach the parameter's description. A parameter is
+a Local Constant, one of the two results that carry prose in a tooltip, so the comment rides in its
+description.
+
+---
+
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks

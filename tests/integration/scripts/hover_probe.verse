@@ -81,6 +81,15 @@ hover_probe := class(node2d):
 	# (B40). The receiver is `event`, and the member is `Emit`.
 	Fires<public>(E:event(int))<transacts>:void = E.Emit(1)
 
+	# Parameters documented two ways, both of which reach the parameter's own hover because the host
+	# reads the comment off the parameter's node rather than by source line (B41): a `#` line above
+	# the parameter, and an inline `<# #>` block before it. The line-based reader could not, because
+	# a parameter's source line is shared with the ones around it.
+	Marks<public>(
+		# the first parameter
+		First:int,
+		<# the second parameter #> Second:int):int = First + Second
+
 	# A method of a *parametric* class. `signal(t)` is a function answering a type, so the walk
 	# that records where a mirror definition was written stopped at it and every member of one
 	# lost its location to the digest -- a type and an empty box.

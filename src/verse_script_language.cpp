@@ -2761,6 +2761,19 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 					: ScriptLanguageExtension::LOOKUP_RESULT_LOCAL_CONSTANT);
 	result["doc_type"] = found["type"];
 
+	// A parameter's documentation is the host's to give, because the host reads the comment written
+	// against the parameter itself -- the inline `<# doc #> P:t`, or a `#` line above it on its own
+	// line -- where the consumer's line-based reader below would read the function's comment for a
+	// parameter that shares the function's declaration line. So the host's `doc` is used for a
+	// parameter at its declaration (which returns early just below) and at every use, and the
+	// source-reading path leaves a parameter alone (B41).
+	if (is_parameter) {
+		const String param_doc = found["doc"];
+		if (!param_doc.is_empty()) {
+			result["description"] = verse_doc_bbcode(param_doc);
+		}
+	}
+
 	// A definition that came from the mirrored Godot API is described by Godot's own class
 	// documentation, which is better than anything this could say and is already installed. Both
 	// paths key off class_name: the click sends it to the help viewer instead of jumping, and the

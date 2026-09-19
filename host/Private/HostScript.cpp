@@ -8210,13 +8210,13 @@ AUTORTFM_DISABLE bool GodotVerse::LookupSymbol(FUtf8StringView Path, int32 Line,
 
     OutDesc.bIsParameter = IsFunctionParameter(Definition);
 
-    // Not for a parameter: its source range is the line its whole function is declared on, so the
-    // prose "above" it is the function's -- which would describe an argument with the method's
-    // documentation. The consumer skips a parameter for the same reason on its own side.
-    if (!OutDesc.bIsParameter)
-    {
-        OutDesc.Doc = DocOf(Definition, *Program);
-    }
+    // A parameter's comment is read here too, unlike before. DocOf reads the prefix comments off
+    // the definition's own VST node, so a parameter gets the comment written against *it* -- the
+    // inline `<# doc #> P:t`, or a `#` line above it on its own line -- and not the function's.
+    // The consumer cannot do this: it re-reads the source by line, and for a parameter on the same
+    // line as the function declaration "the comment above" is the function's, so the host is the
+    // only reader that can tell them apart (B41).
+    OutDesc.Doc = DocOf(Definition, *Program);
 
     FillLocation(Definition, OutDesc.Path, OutDesc.Line, OutDesc.Column);
 
