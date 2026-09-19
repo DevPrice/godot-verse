@@ -57,6 +57,17 @@ struct FBindingClass
 /// publishing one name twice asserts inside the async loader (R-INT-8).
 AUTORTFM_DISABLE void SetBindings(const FUtf8String& Source, TArray<FBindingClass>&& Classes);
 
+/// The rows the last SetBindings was given, which is what the cook writes into the sidecar.
+AUTORTFM_DISABLE const TArray<FBindingClass>& GetBindingClasses();
+
+/// Installs a cooked game's binding table and names the package the cook published it as.
+///
+/// The half of SetBindings that an exported game can do: there is no source to compile -- the
+/// bindings package is in the container beside the project's own -- so nothing is marked dirty and
+/// no generation is prepared. Without it a handle whose class or script names a binding crosses as
+/// its nearest *mirrored* ancestor, and every cast to the binding declines (R-INT-11).
+AUTORTFM_DISABLE void AdoptCookedBindings(TArray<FBindingClass>&& Classes, FUtf8StringView PackageName);
+
 /// Builds every source as one program and publishes it as a new generation, writing that
 /// generation's number -- counting from 1 -- through OutGeneration.
 ///

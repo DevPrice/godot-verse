@@ -37,9 +37,16 @@ namespace GodotVerse {
 AUTORTFM_DISABLE bool WriteClassSidecar(const FString& Path, const TArray<FString>& CookedPackages,
     int32 Generation, FUtf8String& OutError);
 
-/// Reads one back and publishes it as *the* snapshot. False with OutError set when the file is
-/// missing, unparseable, or written by a different sidecar version.
-AUTORTFM_DISABLE bool LoadClassSidecar(const FString& Path, FUtf8String& OutError);
+/// Reads one back and publishes it as *the* snapshot, and installs the binding table beside it.
+///
+/// BindingsPackage is the package the cook published the bindings as, which only the caller knows:
+/// it comes off the mount points, where a runtime host learns every other package name too. Empty
+/// when the cook carried no bindings, and then the table has nothing to look up anyway.
+///
+/// False with OutError set when the file is missing, unparseable, or written by a different
+/// sidecar version.
+AUTORTFM_DISABLE bool LoadClassSidecar(const FString& Path, FUtf8StringView BindingsPackage,
+    FUtf8String& OutError);
 
 /// Reads the sidecar's header -- the stamp and the package list -- and nothing else.
 ///

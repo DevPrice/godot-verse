@@ -673,35 +673,13 @@ func begin() -> void:
 	# Verse for it and handed that to the host as a package of its own. So the first assertion is
 	# that the fixture *compiled at all* -- a binding that did not generate is an unknown
 	# identifier, not a wrong answer.
-	# The *cast* is editor-only until R-INT-11 carries the class-to-binding table in the sidecar.
-	# A cooked game compiles the bindings package -- the export plugin writes it and the cooker
-	# is handed it -- so `bindings.verse` is in the export and this fixture proves it compiled
-	# there. What an exported host cannot yet do is *key* a crossing handle on it, because the
-	# table lives only in the editor host's memory.
+	# **Every case here runs in an export too** (R-INT-11). The export plugin writes the generated
+	# package and the table that keys it, the cooker puts both in the cook, and the sidecar carries
+	# the table -- so an exported game keys a crossing handle on a binding exactly as the editor
+	# does. Before that the whole block below was a row of skips: the package compiled in the cook
+	# and nothing could ever be cast to one of its classes.
 	var binding_script: Script = ResourceLoader.load("res://scripts/bindings.verse")
-	if not editor:
-		_check("a script naming a generated binding compiles", binding_script != null and binding_script.can_instantiate())
-		_skip("a Verse script casts a node to its GDScript class's binding", "the sidecar carries no binding table yet (R-INT-11)")
-		_skip("and reaches a method whose declared result type is GDScript's", "the sidecar carries no binding table yet (R-INT-11)")
-		_skip("and a bool answers a logic rather than a <decides>", "the sidecar carries no binding table yet (R-INT-11)")
-		_skip("a node carrying no such script declines the cast", "the sidecar carries no binding table yet (R-INT-11)")
-		_skip("a method taking its own GDScript class is in the binding", "the sidecar carries no binding table yet (R-INT-11)")
-		_skip("and one taking a class the mirror carries", "the sidecar carries no binding table yet (R-INT-11)")
-		_skip("and null is a value that parameter takes", "the sidecar carries no binding table yet (R-INT-11)")
-		_skip("null satisfies an optional parameter of a binding class", "the sidecar carries no binding table yet (R-INT-11)")
-		_skip("and a node carrying that GDScript satisfies it", "the sidecar carries no binding table yet (R-INT-11)")
-		_skip("a GDScript var is reached through the binding's accessor pair", "the sidecar carries no binding table yet (R-INT-11)")
-		_skip("and written through it", "the sidecar carries no binding table yet (R-INT-11)")
-		_skip("which the next call reads back", "the sidecar carries no binding table yet (R-INT-11)")
-		_skip("including a string, which a member could not have carried", "the sidecar carries no binding table yet (R-INT-11)")
-		_skip("a GDScript const is in the class's statics module", "the sidecar carries no binding table yet (R-INT-11)")
-		_skip("and a string one", "the sidecar carries no binding table yet (R-INT-11)")
-		_skip("a GDScript static is called through the script resource", "the sidecar carries no binding table yet (R-INT-11)")
-		_skip("a GDScript enum is a Verse enum with Godot's numbers", "the sidecar carries no binding table yet (R-INT-11)")
-		_skip("an enum crosses as an argument and comes back as a result", "the sidecar carries no binding table yet (R-INT-11)")
-		_skip("and an enum-typed var reads through the pair", "the sidecar carries no binding table yet (R-INT-11)")
-		_skip("and writes through it", "the sidecar carries no binding table yet (R-INT-11)")
-	elif binding_script == null or not binding_script.can_instantiate():
+	if binding_script == null or not binding_script.can_instantiate():
 		_check("a script naming a generated binding compiles", false)
 	else:
 		_check("a script naming a generated binding compiles", true)
@@ -744,6 +722,16 @@ func begin() -> void:
 				binder.call("AskMaybeMobEmpty", null))
 		_check_eq("and a node carrying that GDScript satisfies it",
 				binder.call("AskMaybeMobLabel", mob_node), "mob")
+
+		# R-INT-12: constructing one. A script class has no ClassDB entry, so there is nothing
+		# for `instantiate` to make -- the host asks the consumer, which loads the script out of
+		# the global class list, instantiates `get_instance_base_type()` and attaches the script.
+		# That is what `Mob.new()` does underneath, and `GodotPeerClassFor` is what keeps the
+		# minted object a Mob rather than the nearest mirrored ancestor.
+		_check_eq("a Verse script mints a GDScript class through its binding",
+				binder.call("AskFresh"), 2)
+		_check_eq("and the archetype spelling mints one too",
+				binder.call("AskDirect"), 2)
 
 		# --- R-INT-9: what a binding carries besides its methods ----------------------------
 		#

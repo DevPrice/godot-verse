@@ -372,6 +372,11 @@ TMap<FUtf8String, FUtf8String> GBindingByScriptClass;
 /// (R-INT-12). The host never learns what a script is.
 TMap<FUtf8String, FUtf8String> GMintNameByBinding;
 
+/// The same rows before they were indexed, which is what the cook writes into the sidecar: an
+/// exported game has no Godot to enumerate and no editor to have asked, so the table has to travel
+/// with the packages it describes (R-INT-11).
+TArray<GodotVerse::FBindingClass> GBindingRows;
+
 /// Empties the two caches that answer "what does this cross as" and "what does this mint".
 /// Declared here and defined beside the maps, which are a long way down this file.
 AUTORTFM_DISABLE void ForgetCachedClasses();
@@ -1491,15 +1496,20 @@ AUTORTFM_DISABLE void GodotVerse::ResetScriptState()
     GProjectBuilt = false;
 }
 
-AUTORTFM_DISABLE void GodotVerse::SetBindings(const FUtf8String& Source, TArray<FBindingClass>&& Classes)
+namespace {
+
+/// Builds the three lookups out of the rows, replacing whatever was there.
+///
+/// Shared by the editor's `SetBindings` and by an exported game's `AdoptCookedBindings`, which are
+/// handed the same rows from two different places -- the consumer's enumeration, and the sidecar
+/// the cook wrote it into. One indexer, so the two cannot disagree about what a row means.
+AUTORTFM_DISABLE void IndexBindings(const TArray<GodotVerse::FBindingClass>& Classes)
 {
-    // The table is replaced whatever the source says -- a consumer may hand over the same Verse
-    // with a different mapping, which is what happens when a script keeps its `class_name` and
-    // Godot renumbers nothing.
     GBindingByGodotClass.Empty(Classes.Num());
     GBindingByScriptClass.Empty(Classes.Num());
     GMintNameByBinding.Empty(Classes.Num());
-    for (const FBindingClass& Binding : Classes)
+    GBindingRows = Classes;
+    for (const GodotVerse::FBindingClass& Binding : Classes)
     {
         if (Binding.VerseClass.IsEmpty())
         {
@@ -1516,6 +1526,32 @@ AUTORTFM_DISABLE void GodotVerse::SetBindings(const FUtf8String& Source, TArray<
             GMintNameByBinding.Add(Binding.VerseClass, Binding.ScriptClass);
         }
     }
+}
+
+} // namespace
+
+AUTORTFM_DISABLE const TArray<GodotVerse::FBindingClass>& GodotVerse::GetBindingClasses()
+{
+    return GBindingRows;
+}
+
+AUTORTFM_DISABLE void GodotVerse::AdoptCookedBindings(TArray<FBindingClass>&& Classes,
+    FUtf8StringView PackageName)
+{
+    IndexBindings(Classes);
+    // The package the *cook* published, rather than one this process prepared: a runtime host has
+    // no build manager and never names a generation of its own, so this is the only way
+    // FindBindingClass has a package to look in.
+    GBindingsPackageName = FUtf8String(PackageName);
+    ForgetCachedClasses();
+}
+
+AUTORTFM_DISABLE void GodotVerse::SetBindings(const FUtf8String& Source, TArray<FBindingClass>&& Classes)
+{
+    // The table is replaced whatever the source says -- a consumer may hand over the same Verse
+    // with a different mapping, which is what happens when a script keeps its `class_name` and
+    // Godot renumbers nothing.
+    IndexBindings(Classes);
 
     // Only a *changed* source costs a package name. A roster whose Verse text is identical -- a
     // scene reload, a project reopen -- must not, or a session that reopens often exhausts them.

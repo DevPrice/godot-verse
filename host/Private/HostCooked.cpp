@@ -332,6 +332,9 @@ AUTORTFM_DISABLE bool GodotVerse::LoadCookedProject(const FString& CookedDir, FU
     // mirror, the standard library -- are not loaded here: Solaris loaded them itself during
     // module startup, out of the containers MountCookedContainers put down first.
     FString ScriptPackageName;
+    // The bindings package the cook published, which `FindBindingClass` needs a name for: an
+    // exported game never prepares one of its own, because it never compiles (R-INT-11).
+    FString BindingsPackageName;
     for (const FString& PackagePath : Packages)
     {
         if (IsVniPackage(PackagePath))
@@ -356,6 +359,10 @@ AUTORTFM_DISABLE bool GodotVerse::LoadCookedProject(const FString& CookedDir, FU
         {
             ScriptPackageName = MountPoint;
         }
+        else if (MountPoint.StartsWith(TEXT("GodotBindings_")))
+        {
+            BindingsPackageName = MountPoint;
+        }
     }
 
     if (ScriptPackageName.IsEmpty())
@@ -370,7 +377,7 @@ AUTORTFM_DISABLE bool GodotVerse::LoadCookedProject(const FString& CookedDir, FU
     RebindVniModuleNatives();
 
     FUtf8String SidecarError;
-    if (!LoadClassSidecar(SidecarPathFor(CookedDir), SidecarError))
+    if (!LoadClassSidecar(SidecarPathFor(CookedDir), FUtf8String(BindingsPackageName), SidecarError))
     {
         OutError = SidecarError;
         return false;

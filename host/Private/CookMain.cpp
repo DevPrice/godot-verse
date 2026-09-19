@@ -260,7 +260,40 @@ AUTORTFM_DISABLE INT32_MAIN_INT32_ARGC_TCHAR_ARGV()
 			Say(FString::Printf(TEXT("error: could not read the bindings package at %s"), *BindingsPath));
 			Leave(2);
 		}
-		GodotVerse::SetBindings(FUtf8String(BindingsSource), TArray<GodotVerse::FBindingClass>());
+		// And the table that keys it, written beside the package by the same plugin. It cannot be
+		// read out of the Verse: a binding's class name says nothing about whether it stands for a
+		// ClassDB class or for a script's `class_name`, and an exported game matches those against
+		// two different callbacks. Without the table a cook compiles the bindings and ships no way
+		// to reach one, which is where R-INT-11 stood.
+		TArray<GodotVerse::FBindingClass> BindingClasses;
+		FString TablePath;
+		if (FParse::Value(FCommandLine::Get(), TEXT("binding-classes="), TablePath))
+		{
+			TArray<FString> Rows;
+			if (!FFileHelper::LoadFileToStringArray(Rows, *FPaths::ConvertRelativePathToFull(TablePath)))
+			{
+				Say(FString::Printf(TEXT("error: could not read the binding table at %s"), *TablePath));
+				Leave(2);
+			}
+			for (const FString& Row : Rows)
+			{
+				TArray<FString> Fields;
+				// Three fields however many are empty, which is why the tabs are kept: a script
+				// binding's Godot column is empty and a ClassDB binding's script column is.
+				Row.ParseIntoArray(Fields, TEXT("\t"), /*InCullEmpty*/ false);
+				if (Fields.Num() != 3 || Fields[0].IsEmpty())
+				{
+					continue;
+				}
+				GodotVerse::FBindingClass Binding;
+				Binding.VerseClass = FUtf8String(Fields[0]);
+				Binding.GodotClass = FUtf8String(Fields[1]);
+				Binding.ScriptClass = FUtf8String(Fields[2]);
+				BindingClasses.Add(MoveTemp(Binding));
+			}
+		}
+
+		GodotVerse::SetBindings(FUtf8String(BindingsSource), MoveTemp(BindingClasses));
 	}
 
 	Say(TEXT("verse_cook: compiling"));

@@ -17,7 +17,7 @@ namespace {
 /// Bumped when the shape below changes in a way a reader of the old shape would misread. The
 /// cooker and the runtime host are built together and shipped together, so this is a tripwire
 /// against a stale cook in a game directory rather than a compatibility mechanism.
-constexpr int32 SidecarVersion = 7;
+constexpr int32 SidecarVersion = 8;
 
 FString Utf8ToFString(const FUtf8String& Value)
 {
@@ -515,6 +515,31 @@ AUTORTFM_DISABLE bool GodotVerse::WriteClassSidecar(const FString& Path,
     }
     Root->SetArrayField(TEXT("packages"), PackageList);
 
+    // The class-to-binding table (R-INT-11). The *editor* enumerated it -- from ClassDB and from
+    // Godot's global class list, neither of which a cook or an exported game has -- so it travels
+    // in the sidecar beside the packages it describes. Without it a handle crosses as its nearest
+    // mirrored ancestor and every cast to a binding declines, which is a wrong answer rather than
+    // an error. Version 8 is this field.
+    TArray<TSharedPtr<FJsonValue>> BindingList;
+    for (const GodotVerse::FBindingClass& Binding : GodotVerse::GetBindingClasses())
+    {
+        TSharedRef<FJsonObject> Row = MakeShared<FJsonObject>();
+        Row->SetStringField(TEXT("verse"), Utf8ToFString(Binding.VerseClass));
+        // Exactly one of the two keys is set, and which one decides how a handle is matched: a
+        // ClassDB name is what GetClassOf answers, and a script's global name is what
+        // GetScriptClassOf does, because GetClassOf answers the script's native base.
+        if (!Binding.GodotClass.IsEmpty())
+        {
+            Row->SetStringField(TEXT("godot"), Utf8ToFString(Binding.GodotClass));
+        }
+        if (!Binding.ScriptClass.IsEmpty())
+        {
+            Row->SetStringField(TEXT("script"), Utf8ToFString(Binding.ScriptClass));
+        }
+        BindingList.Add(MakeShared<FJsonValueObject>(Row));
+    }
+    Root->SetArrayField(TEXT("bindings"), BindingList);
+
     // Collected here rather than in the snapshot: it describes the *mirror*, which does not change
     // between analyses, and walking 1036 classes is not something an editor's per-keystroke
     // analysis should pay for. The cook takes one of these, once.
@@ -683,12 +708,44 @@ AUTORTFM_DISABLE bool GodotVerse::ReadCookedManifest(const FString& Path, TArray
     return true;
 }
 
-AUTORTFM_DISABLE bool GodotVerse::LoadClassSidecar(const FString& Path, FUtf8String& OutError)
+AUTORTFM_DISABLE bool GodotVerse::LoadClassSidecar(const FString& Path, FUtf8StringView BindingsPackage,
+    FUtf8String& OutError)
 {
     TSharedPtr<FJsonObject> Root;
     if (!ParseSidecar(Path, Root, OutError))
     {
         return false;
+    }
+
+    // The binding table before the classes, because the caller has already mounted the package it
+    // names and a cast can be asked for the moment the first script runs. A cook with no addons and
+    // no `class_name` scripts writes an empty array, and an empty table is the right answer to
+    // every question it is asked.
+    const TArray<TSharedPtr<FJsonValue>>* BindingRows = nullptr;
+    if (Root->TryGetArrayField(TEXT("bindings"), BindingRows))
+    {
+        TArray<FBindingClass> Bindings;
+        for (const TSharedPtr<FJsonValue>& Row : *BindingRows)
+        {
+            const TSharedPtr<FJsonObject> Entry = Row->AsObject();
+            if (!Entry.IsValid())
+            {
+                continue;
+            }
+            FBindingClass Binding;
+            Binding.VerseClass = FStringToUtf8(Entry->GetStringField(TEXT("verse")));
+            FString Named;
+            if (Entry->TryGetStringField(TEXT("godot"), Named))
+            {
+                Binding.GodotClass = FStringToUtf8(Named);
+            }
+            if (Entry->TryGetStringField(TEXT("script"), Named))
+            {
+                Binding.ScriptClass = FStringToUtf8(Named);
+            }
+            Bindings.Add(MoveTemp(Binding));
+        }
+        GodotVerse::AdoptCookedBindings(MoveTemp(Bindings), BindingsPackage);
     }
 
     const TSharedPtr<FJsonObject>* EngineSignals = nullptr;

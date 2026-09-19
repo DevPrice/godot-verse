@@ -146,11 +146,41 @@ void VerseExportPlugin::_export_begin(const PackedStringArray &p_features, bool 
 		file->store_string(String(bindings.source.c_str()));
 	}
 
+	// And the table that keys it, which is not recoverable from the Verse: a binding's class name
+	// says nothing about whether it stands for a ClassDB class or for a script's `class_name`, and
+	// those are matched against two different callbacks. The cooker writes these rows into the
+	// sidecar, which is how an exported game keys a crossing handle on a binding (R-INT-11).
+	//
+	// One row per line, `verse<TAB>godot<TAB>script`, with exactly one of the last two filled: a
+	// format with no quoting rules, over three identifiers that can carry none of the characters
+	// that would need them.
+	String table_path;
+	if (!bindings.classes.empty()) {
+		PackedStringArray rows;
+		for (const VerseBindingClass &binding : bindings.classes) {
+			rows.push_back(String(binding.verse_class.c_str()) + String("\t") +
+					String(binding.godot_class.c_str()) + String("\t") +
+					String(binding.script_class.c_str()));
+		}
+		table_path = work + String(".bindings.tsv");
+		Ref<FileAccess> file = FileAccess::open(table_path, FileAccess::WRITE);
+		if (file.is_null()) {
+			refused = true;
+			temp_dir = String();
+			say(EditorExportPlatform::EXPORT_MESSAGE_ERROR, String("Could not write ") + table_path);
+			return;
+		}
+		file->store_string(String("\n").join(rows) + String("\n"));
+	}
+
 	PackedStringArray args;
 	args.push_back(manifest);
 	args.push_back(work);
 	if (!bindings_path.is_empty()) {
 		args.push_back(String("-bindings=") + bindings_path);
+	}
+	if (!table_path.is_empty()) {
+		args.push_back(String("-binding-classes=") + table_path);
 	}
 
 	Array output;
