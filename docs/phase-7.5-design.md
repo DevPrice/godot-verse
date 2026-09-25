@@ -1,0 +1,354 @@
+# Phase 7.5 design: a Verse VM for the web
+
+This phase builds an interpreter that runs Verse in a Godot web export. It answers R-PLAT-3 and
+OQ-4 by construction rather than by argument. `verse-on-web.md` is the scoping record this starts
+from: it closes running the UE host on wasm and extracting VerseVM, and leaves one path open, a
+second execution path. This design takes that path, with one change the scoping record did not
+assume: the interpreter runs **Epic's own VerseVM bytecode**, not an IR of ours.
+
+Written 2026-09-24, before any of the work. Like every phase document, it ends with a section
+written after the work (§14), which is where to look for what this body got wrong.
+
+## 1. Requirements
+
+These were settled in an interview with the project owner, and each is a decision rather than a
+default.
+
+| # | Requirement |
+| --- | --- |
+| W-1 | The cooker emits VerseVM bytecode, compiled by Epic's own backend, serialized by us into our own container. The interpreter executes that bytecode. |
+| W-2 | The interpreter builds natively (Windows, into the GDExtension) and as wasm32. A project setting chooses it over the UE runtime host on desktop, so the existing export layer is its conformance suite. |
+| W-3 | **Exit:** `dodge-the-creeps` plays in headless Chrome, and `tests/integration` passes on the interpreter in both the Windows export and the web export, every skip counted and justified. |
+| W-4 | The web build is **nothreads** (`web_dlink_nothreads_*`), so a host needs no COOP/COEP headers. Proving that a GDExtension loads there without them is the first spike. |
+| W-5 | Chrome is the only automated browser. Firefox and Safari are by-hand checks, recorded and not gating. |
+| W-6 | No performance bar. Everything is measured with `host_bench`-style numbers beside the UE host's and recorded; nothing is gated on them. |
+| W-7 | **Clean room** (§3). The interpreter is written without its authors reading VerseVM's source. |
+
+Consequences of W-1 that are accepted rather than solved:
+
+- **A web export ships Epic compiler output**, including the compiled `/Verse.org` library code the
+  program reaches. `verse-on-web.md` §5.5's "no UE-derived bytes" benefit is therefore not claimed.
+  The clean room (W-7) is about the interpreter's source, not the program it runs.
+- **The bytecode is pinned to the engine commit** (`203d764`). A UE bump now includes re-checking the
+  op set against the spec (§6.4), the way it already includes regenerating the mirror.
+
+## 2. Shape
+
+```
+                         author's machine (UE checkout)                     player's machine
+  .verse ──► verse_cook.exe ───────────────────────────────►  verse_data/  ──►  godot_verse (native or wasm)
+             │ uLang → IR → Epic's bytecode backend              program.vbc        │
+             │ (unchanged: CompileProject)                       verse_classes.json │ vm/ (clean room)
+             └─ NEW: VbcWriter walks the linked program ──────►                     │   loader, heap, GC,
+                (dirty room, host/Private/HostVbc*.cpp)                             │   interpreter, tasks,
+                                                                                    │   stdlib natives
+                                                                                    └─ src/verse_vm_host.cpp
+                                                                                        vh_* over vm/, and
+                                                                                        the 39 Godot natives
+```
+
+Four pieces, three of them new:
+
+1. **The cooker's writer** (new, dirty room). After `CompileProject` returns (`CookMain.cpp:301`), the
+   whole program is linked in memory. `HostVbcWriter` walks every package reachable from the
+   project, re-encodes every procedure op by op, and writes `program.vbc` beside the sidecar. It does
+   not replace the IoStore cook: the UE runtime host keeps working, and a cook produces both.
+2. **The sidecar** (existing, version 8, unchanged unless a reader proves it must change). It already
+   carries everything the class-describing reads need, and the declared types the VM erases.
+3. **`vm/`** (new, clean room). A godot-cpp-free C++20 library, in the tradition of the lexer and the
+   module map: it loads a `.vbc`, owns a heap and a precise collector, interprets, runs tasks, and
+   implements the Verse-library natives. It knows nothing about Godot except through a native-binding
+   table its embedder fills.
+4. **`src/verse_vm_host.cpp`** (new, clean room). The runtime subset of the `vh_*` ABI implemented
+   over `vm/`, plus the 39 natives of `Godot.native.verse` implemented over the same
+   `vh_godot_api` callbacks the UE host uses. `VerseHostLibrary` gets a second way to fill its
+   function pointers: assigned directly instead of resolved with `GetProcAddress`. Nothing else in
+   `src/` changes for execution.
+
+### 2.1 Why the seam is where it is
+
+`src/`'s only contact with the host is `VerseHostLibrary`'s function pointers, typed by the ABI
+header's `_fn` typedefs. A statically linked implementation of the same C functions slots in without
+touching `verse_script_instance.cpp`, `verse_value.cpp`, `verse_callable.cpp` or anything else that
+marshals values. That buys the whole consumer half — `Variant` ⇄ `vh_value`, the reference table,
+script instances, placeholders, signals on the Godot side — for free, and it means a defect is either
+in `vm/`, in `verse_vm_host.cpp`, or in something the UE host shares, which is a short list.
+
+The runtime subset is exactly what a `WITH_VERSE_COMPILER=0` host answers today: the 21 execution
+and class-describing entry points. The 12 compiler entry points answer `VH_ERR_UNSUPPORTED`, as
+they already do in a runtime host.
+
+### 2.2 What does not change
+
+The editor, analysis, completion, hover, the debugger, the profiler, and every compile-time
+behaviour stay on the UE host. The interpreter is an **export runtime**. In a Windows editor session
+nothing loads it; an export chooses it (§9).
+
+## 3. The clean room
+
+The wall, as chosen:
+
+| Room | Who | May read | Writes |
+| --- | --- | --- | --- |
+| Dirty | cooker-writer agents, spec agents | anything, VerseVM's `.cpp` files included | `host/Private/HostVbc*`, `docs/web-vm/spec/`, `docs/web-vm/ops.json` |
+| Clean | interpreter agents | `docs/web-vm/`, this repo's `src/`, `vm/`, `include/`, `host/Verse/*.verse`, `docs/` | `vm/`, `src/verse_vm_*`, `tests/vm_*` |
+| Lead | me | everything a clean agent may, plus `host/` (our code); **no VerseVM source** | this document, the task list, reviews |
+
+Rules that make the wall real:
+
+- **The spec is prose, tables and interoperability facts.** Op names, operand lists, encodings,
+  value kinds and observable behaviour are in. Code, pseudo-code, quoted comments and descriptions of
+  how Epic's interpreter is organized are out. Every spec section is reviewed by the lead for copied
+  expression **before** a clean agent may read it, and the review is recorded in the section's
+  header.
+- **`host/Private/` is out of bounds for the clean room**, although it is our code: it is written
+  against VerseVM's API, and reading it teaches VerseVM's structure. What a clean agent needs from it
+  (the natives' contracts, the sidecar's fields) is restated in the spec.
+- **Every spawn prompt states the room** and the reading rule. A clean agent that finds it needs a
+  fact the spec lacks asks for a spec addition; it does not go looking.
+- **`docs/web-vm/cleanroom-log.md`** records, per task, which room did it and what was read. It is the
+  evidence, and it is appended to rather than rewritten.
+
+The differential harness (§10.2) is how the clean room learns behaviour the spec got wrong: it
+observes the UE runtime host's output, which is behaviour rather than source.
+
+## 4. What the dirty-room survey established
+
+A dirty-room survey (2026-09-24) mapped the bytecode in prose. Its findings that shape this design,
+restated as requirements on the interpreter:
+
+- **114 opcodes; about 90 matter.** Ten are inline-cache forms the compiler never emits and the
+  cooker never serializes. Four more are never emitted at this commit. A handful (persistence,
+  live-variable `await`, `batch`, `LoadImport`) are unreachable from a Godot script.
+- **It is a unification-based, lenient dataflow VM.** Results are *unified* into destination
+  registers, and an op meeting an unbound logic variable parks rather than blocks. This, not
+  concurrency, is the hardest part (§7.1).
+- **Rollback is not in the bytecode.** Epic's VM undoes heap writes through AutoRTFM. The interpreter
+  keeps an explicit undo log (§7.2).
+- **Frames are heap-allocated, and a Verse-to-Verse call never recurses on the native stack.** That
+  is what makes a nothreads wasm build straightforward: a suspended task is data.
+- **The op stream in memory is 64-bit C++ structs with embedded pointers**, so the writer re-encodes
+  every op; nothing is copied as bytes.
+- **Most of the program is data built at compile time**: classes, archetypes and closures are cells,
+  reached from constant pools, forming a cyclic graph. Cross-package references are already resolved
+  to cells. The loader resolves a graph, not names.
+- **Initialization is eager and linker-generated**: a package procedure per unit and a global
+  initializer task, both of which the writer must capture.
+- **The Verse-library native surface a game reaches is about 25 functions** plus about 8 VM
+  intrinsics, on top of the 39 Godot natives.
+
+## 5. The container: `program.vbc`
+
+Our format, owned by this phase and specified in `docs/web-vm/format.md` — written by the lead, since
+it is ours, from the op schema in `ops.json`. Its properties:
+
+- **One cell table per program**, every cell addressed by index, forward references allowed, so the
+  cyclic graph serializes without ordering tricks.
+- **Procedures are re-encoded**: opcode, then each operand in the schema's order, with registers,
+  constant indices, operand-pool ranges and labels as integers, and every immediate as a cell index.
+  Labels become op indices within the procedure rather than self-relative byte offsets.
+- **Source locations carried** (op index → line, plus the file path once per procedure), because a
+  runtime error names a line.
+- **Natives by decorated name only**; the loader binds them.
+- **Packages as named roots**: the definitions table, the package procedure and the global
+  initializer procedure.
+- **Little-endian, varint-heavy, versioned**, with the build stamp the sidecar already carries, so a
+  stale `.vbc` is refused with a sentence, not a crash.
+- **A dumper** (`tools/vbc_dump.py`) prints any `.vbc` as text. It is how a cook is reviewed and how
+  the writer and the loader are held to one format.
+
+`ops.json` is the machine-readable op schema — name, number, operand roles and kinds — produced by the
+dirty room from the op definitions. Both the writer's encoder and the interpreter's decoder are
+generated from it (`tools/gen_vbc_ops.py`), which is the one way the two rooms share a fact without
+sharing code.
+
+## 6. The spec: `docs/web-vm/spec/`
+
+Written by dirty-room agents, reviewed by the lead, read by the clean room. One file per area, each
+headed with its review status:
+
+| File | Covers |
+| --- | --- |
+| `values.md` | value kinds, ints (bignum, rational), floats (NaN, -0, printing), chars and strings, arrays, maps, options, tuples, equality's four answers |
+| `unification.md` | placeholders, unify-into-destination, parking and re-execution, the effect token, lenient completion |
+| `failure.md` | full and fast failure contexts, the trail, what is undone, runtime errors and their rollback |
+| `calls.md` | procedures, registers 0 and 1, argument adaptation, named parameters and defaults, closures, scopes, `(super:)` |
+| `objects.md` | classes, archetypes, layout and the override rule, construction protocol, fields, interfaces, the native-bound and native-representation flags |
+| `tasks.md` | tasks, the task ops, `spawn`/`branch`/`sync`/`race`/`rush`, semaphores, cancellation, unwind edges and `defer`, terminate versus cancel |
+| `modules.md` | packages, module ops, the package procedure, the global initializer, the sentinel |
+| `natives.md` | the native calling convention's five outcomes, every `$BuiltIn` intrinsic, every Verse-library native a game reaches, `event(t)`, `task(t)`, `Sleep` |
+| `godot-natives.md` | the 39 natives of `Godot.native.verse` and what each asks of `vh_godot_api`, the `variant` lanes, which writes defer to commit — restated from our own host so the clean room need not read `host/Private` |
+| `sidecar.md` | every field of `verse_classes.json` version 8 and which `vh_class_*` read answers from it. Our format, so the lead writes it from `HostSidecar.cpp`; no dirty agent is involved |
+| `ops.md` | every op: operands, semantics, failure and parking behaviour, which spec section it leans on |
+
+### 6.1 Three facts to measure before they are written
+
+The survey flagged three disagreements between Epic's source and this repo's measurements. Each is
+settled with `tests/verse_probe` or `tests/cooked_probe` before its spec line is written:
+
+1. NaN against NaN under `<=` and `>=` — the source says true, `CLAUDE.md` says it fails.
+2. Whether integer `Mod[]` floors or truncates.
+3. Whether interpolated `ToString(float)` prints `1.000000` or the shortest round-trip form.
+
+### 6.2 Spec by behaviour, where it can be
+
+A spec line that can be checked by running something cites the probe that checks it. The spec is
+where the clean room learns *what*; the probe is where anyone can confirm it.
+
+### 6.3 Leniency is specified in full and implemented in stages
+
+`unification.md` describes parking completely. §7.1 decides how much of it the interpreter builds
+first.
+
+### 6.4 Re-checking on an engine bump
+
+`ops.json` is regenerated from the op definitions at the new commit and diffed. A changed op is a
+spec change and a clean-room task; an unchanged diff means the bump costs this phase nothing.
+
+## 7. The interpreter
+
+`vm/` is organized by the spec's sections, not by Epic's. Its decisions:
+
+### 7.1 Unification and leniency, staged
+
+Placeholders, union-find binding and unify-into-destination are built in full from the start,
+because the compiler binds ordinary definitions through them. **Parking** — an op meeting an unbound
+placeholder at run time — is built in stages:
+
+1. **Stage 1:** a runtime park is a fatal runtime error naming the op and line, and a counter. The
+   writer also reports, per procedure, which ops *could* park, so the scale is known before it is
+   paid for.
+2. **Stage 2**, only if the suite or the yardstick parks: parking and re-execution within a failure
+   context, then lenient completion.
+
+Whether stage 2 is needed is a measurement, and the task list has a task that takes it.
+
+### 7.2 Transactions: an undo log
+
+Every mutation — var, field, mutable array element and append, map insert with its count, task and
+semaphore state — writes an undo record while a transaction is open. A failure context opens a nested
+log; success merges it into its parent; failure replays it backwards. The trail is the same log.
+A runtime error unwinds to VM entry. Godot-side effects keep the protocol the UE host already has:
+writes defer to commit, and the two immediate exceptions (`VhSignalEmit`, `VhRefSet`) stay immediate.
+
+### 7.3 Values and heap
+
+Our own value representation, chosen for wasm32: a tagged 64-bit word with small ints, doubles,
+chars and 32-bit cell pointers inline, and cells for everything else. Bignums are our own (§11 lists
+it as a risk). A **precise** mark-sweep collector, which is possible because we own every root:
+package roots, live tasks and their frames, instance and callback handles held by the host, and an
+explicit root stack for natives mid-call. Collection runs from `vh_tick` and `vh_collect_garbage`,
+never mid-op. Releasing a `godot_ref` or a minted `vh_object` peer on sweep follows the rule the UE
+host follows: only what was recorded as minted.
+
+### 7.4 Dispatch
+
+A `switch` loop over decoded ops. No tail-call threading, no computed goto on wasm. It is the
+portable choice and W-6 sets no bar that argues otherwise.
+
+### 7.5 Tasks without threads
+
+A task is a heap object holding its frame chain and resume point, so suspension is returning to the
+scheduler loop. `Sleep` resumes from `vh_tick` on a monotonic clock, as the UE host's does. `event(t)`
+resumes awaiters synchronously in FIFO order, as the spec will say.
+
+## 8. The Godot half: `src/verse_vm_host.cpp`
+
+- The 21 runtime entry points over `vm/`, with `vh_init` taking the cooked directory as today.
+- The class-describing reads served from the sidecar, reimplemented in `src/` against the JSON
+  (the UE host's reader is in `host/Private` and out of the clean room's bounds; `sidecar.md` is
+  what the clean room reads instead).
+- File access through Godot's `FileAccess`, so `verse_data` reads the same from a directory beside an
+  executable and from inside a `.pck`. `vm/` takes byte buffers and never opens a file.
+- The 39 Godot natives over `vh_godot_api`. `VariantFromWire`/`VariantToWire`'s lane rules are
+  restated in the spec from `GodotMathLayout.gen.h`, which is generated and readable by both rooms.
+- `verse_host.cpp` gains a static path: when the build carries the VM and the backend is `vm`,
+  `VerseHostLibrary` is filled from `verse_vm_host`'s functions instead of a DLL.
+
+## 9. Choosing the backend
+
+- **Build:** `scons ... verse_vm=yes` compiles `vm/` into the library. Web implies it; the loader path
+  is compiled out on web, where `LoadLibraryExW` does not exist.
+- **Run:** a project setting, `verse/runtime/backend` = `host` (default) or `vm`, read by
+  `VerseRuntime` in an exported game. An editor session always uses the host.
+- **Export:** the export plugin cooks exactly as today and ships `program.vbc` in `verse_data`. With
+  `vm`, it does not ship `verse_host_runtime.dll` or `tbbmalloc.dll`. For the **Web** platform it
+  requires `vm`, and `web` leaves `UNREACHABLE_PLATFORMS`. On web, `verse_data` goes into the `.pck`
+  rather than beside an executable, which is the one new path rule `verse_export_paths` gains.
+
+## 10. Testing
+
+### 10.1 Layers
+
+| Layer | New or changed |
+| --- | --- |
+| units | `vm/`'s own unit tests: bignum, float printing, maps, equality, the undo log. godot-cpp-free, like the others. |
+| abi | `vbc` case: cook `tests/host_smoke`, assert `program.vbc` loads, dumps and names every native. |
+| **vm** (new) | the differential harness, §10.2. |
+| export | runs twice: host backend (511 passed, 0 failed, 11 skipped, as today) and vm backend, asserting its own named counts. |
+| **web** (new) | exports `tests/integration` for Web, serves it on localhost, runs it in headless Chrome with its own `--user-data-dir`, reads the summary line from the console log, asserts named counts. Skips with the reason when Chrome or the template is absent. |
+
+`dodge-the-creeps` stays out of `run_tests.py`, as it is today. Its web run is a by-hand yardstick
+with a script that performs it (`tools/run_dtc_web.py`), and the exit bar is that script passing.
+
+### 10.2 The differential harness
+
+`tests/vm_conformance/` holds small `.verse` fixtures, one behaviour each, grouped by spec section.
+`tools/run_vm_conformance.py` cooks them once, runs every fixture's zero-argument methods on the UE
+runtime host (`cooked_probe`) and on the interpreter (`vm_probe`, a new instrument with the same
+stub Godot API), and diffs the printed transcripts. **A difference is a defect in one of them, and
+the UE host is the reference.** This is the loop the clean room works in: it observes behaviour
+without reading source, and it turns every surprise into a fixture.
+
+### 10.3 Counting
+
+Every layer prints one line per case and exits non-zero on failure, as the repo already requires.
+A case the interpreter cannot run yet is a **skip with a reason**, counted, never a missing line.
+
+## 11. Risks, largest first
+
+1. **Leniency is needed early.** If ordinary scripts park at run time, stage 2 of §7.1 moves to the
+   front and the schedule moves with it. The writer's per-procedure report measures this in M2.
+2. **The nothreads web template cannot load a GDExtension without COOP/COEP.** Then W-4 is wrong and
+   the fallback is the threads template with headers, which changes what the exit bar can say. M0
+   measures this first because everything else is wasted if it fails.
+3. **The Emscripten version.** Godot 4.7-stable's templates were built with Emscripten 4.0.11 and
+   this machine has 6.0.0; a side module must match its main module closely enough to link. M0 pins
+   it.
+4. **Spec accuracy under the wall.** A wrong spec line costs a clean agent a day. The differential
+   harness is the mitigation, and the spec cites probes wherever it can.
+5. **The mirror's size in the container.** 57,000 generated lines of Verse becomes a lot of bytecode.
+   `--classes-file` is the mitigation; the size is measured in M2.
+6. **Bignums and float printing** are small, easy to get subtly wrong, and user-visible in every
+   `Print`.
+
+## 12. Milestones
+
+Each has an exit that a command checks. The task list, `docs/web-vm/tasks.md`, breaks them down.
+
+| | Milestone | Exit |
+| --- | --- | --- |
+| M0 | Web toolchain proven | A GDExtension built with the pinned Emscripten prints from `_ready` in a nothreads web export in headless Chrome, with no COOP/COEP headers. |
+| M1 | Spec and format | `ops.json` generated; every spec file written and reviewed; `format.md` written; the three facts of §6.1 measured. |
+| M2 | Cooker writes `.vbc` | The cooker writes `program.vbc` for `host_smoke`, `tests/integration` and `dodge-the-creeps`; `vbc_dump` reads all three; the park-risk report and the size are recorded. |
+| M3 | Sequential VM | `vm_probe` runs every non-concurrent conformance fixture identically to `cooked_probe`. |
+| M4 | Concurrent VM | Tasks, `race`/`sync`/`rush`/`branch`/`spawn`, `defer`, events and `Sleep` fixtures agree. |
+| M5 | Windows export on the VM | The export layer passes on the vm backend with named counts. |
+| M6 | Web | The web layer passes with named counts, and `tools/run_dtc_web.py` passes. |
+| M7 | Close | §14 written; `spec.md` R-PLAT-3 and OQ-4 updated; `roadmap.md` Phase 7.5 marked; `CLAUDE.md` gains the map entries. |
+
+M3 and M1's later spec sections overlap: the clean room starts on `values.md` and `calls.md` while
+`tasks.md` is still being written.
+
+## 13. Out of scope, by decision
+
+- The debugger and profiler on the interpreter. An exported game has neither today.
+- Firefox and Safari automation.
+- Performance work beyond measuring it.
+- The threads web template, unless M0 forces it.
+- Mobile. The interpreter is platform-independent and should reach Android and iOS, but proving it
+  is another phase.
+
+## 14. After the work
+
+Not yet written.
