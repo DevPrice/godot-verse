@@ -74,7 +74,8 @@ public:
 	// A host-built object (spec/objects.md §7.11): NewObject with no archetype entries, the
 	// constructor with (marker, uninitialized, uninitialized), then the deferred setters and the
 	// blocks. The object adopts p_handle when its vh_object block asks (godot-natives.md §4.1).
-	Outcome construct(const ClassCell *p_class, int64_t p_handle, Value &r_object);
+	// Without p_run_blocks it stops after the setters, as a class default object does (§8.3).
+	Outcome construct(const ClassCell *p_class, int64_t p_handle, Value &r_object, bool p_run_blocks = true);
 
 	// The method p_name resolves to on p_object, bound to it, or false when the layout has no
 	// method of that name.
@@ -94,6 +95,9 @@ public:
 	const RaisedError &error() const { return raised; }
 	uint64_t park_count = 0;
 
+	// godot-natives.md §4.2: set while a reading device constructs a class default object, during
+	// which neither a peer nor a default container may be minted.
+	bool mint_suppressed = false;
 	// godot-natives.md §4.1's pending adoption: consumed by the one object it names.
 	const Cell *adopting_object = nullptr;
 	int64_t adopting_handle = 0;
@@ -205,6 +209,11 @@ private:
 
 	Step type_test(Value p_type, Value p_value, bool &r_admits);
 	Step load_field(Value p_object, const NameCell *p_name, Value &r_result);
+	Value accessor_reference(Value p_object, const AccessorCell *p_accessor, const AccessorRefCell *p_extended, Value p_step);
+	Step accessor_callee(Value p_reference, bool p_setter, Value p_value, Value &r_function, std::vector<Value> &r_arguments);
+	Step accessor_call(Value p_reference, bool p_setter, Value p_value, uint32_t p_dest);
+	Step native_store(Value p_value);
+	Step unify_native_object(Value p_token, Value p_object);
 	ObjectCell *object_operand(Value p_value);
 	Value bind(Value p_function, Value p_receiver);
 };

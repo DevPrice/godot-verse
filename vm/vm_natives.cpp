@@ -245,7 +245,7 @@ Outcome adopt_or_mint_native(NativeCall &r_call) {
 		return Outcome::Ok;
 	}
 	const std::string name = mint_class_name(*interpreter, cell_as<ObjectCell>(object)->object_class);
-	if (name.empty() || interpreter->godot.InstantiateClass == nullptr) {
+	if (interpreter->mint_suppressed || name.empty() || interpreter->godot.InstantiateClass == nullptr) {
 		r_call.result = Value::from_int32(0);
 		return Outcome::Ok;
 	}

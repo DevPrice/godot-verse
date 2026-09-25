@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -56,6 +57,13 @@ bool class_inherits(const ClassCell *p_class, const ClassCell *p_ancestor);
 // Whether an archetype entry's value is a method: a function awaiting a receiver, on an entry with
 // no declared type (§3.3).
 bool is_method_entry(const ArchetypeEntry &p_entry);
+
+// A decorated field name without its leading `(<scope>:)` qualifier (§1), which may itself nest
+// parentheses: `(/user@localhost/player:)Speed` is `Speed`.
+std::string_view unqualified_name(std::string_view p_name);
+
+// The first slot of p_layout, in visit order, whose unqualified name is p_name, or null.
+const LayoutField *find_slot_by_unqualified_name(const ClassLayout &p_layout, std::string_view p_name);
 
 class Layouts {
 public:

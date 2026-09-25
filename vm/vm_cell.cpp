@@ -78,6 +78,10 @@ const char *cell_kind_name(CellKind p_kind) {
 			return "task";
 		case CellKind::NativeObject:
 			return "native object";
+		case CellKind::AccessorRef:
+			return "accessor reference";
+		case CellKind::SetterChain:
+			return "construction token";
 	}
 	return "unknown";
 }

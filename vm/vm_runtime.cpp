@@ -4,6 +4,7 @@
 
 #include "../src/verse_api_classes.h"
 #include "vm_file_reader.h"
+#include "vm_marshal.h"
 
 namespace vm {
 
@@ -175,6 +176,83 @@ void Runtime::report_raised(const RaisedError &p_raised) const {
 	error.Frames = frames.empty() ? nullptr : frames.data();
 	error.FrameCount = int32_t(frames.size());
 	on_runtime_error(runtime_error_ctx, &error);
+}
+
+HostArena::HostArena() {
+	Alloc = &HostArena::allocate;
+}
+
+void *HostArena::allocate(vh_arena *p_self, size_t p_size, size_t p_align) {
+	HostArena *arena = static_cast<HostArena *>(p_self);
+	if (p_align == 0) {
+		p_align = 1;
+	}
+	arena->blocks.push_back(std::make_unique<unsigned char[]>(p_size + p_align));
+	const uintptr_t start = reinterpret_cast<uintptr_t>(arena->blocks.back().get());
+	return reinterpret_cast<void *>((start + p_align - 1) / p_align * p_align);
+}
+
+int32_t Runtime::default_field(const char *p_class, const char *p_name, const vh_value **r_value) {
+	if (r_value != nullptr) {
+		*r_value = nullptr;
+	}
+	if (p_class == nullptr || p_name == nullptr || r_value == nullptr) {
+		return VH_ERR_ARGUMENT;
+	}
+	const SidecarClass *entry = find(p_class);
+	const ClassIndexEntry *index = program.find_class(ClassOrigin::Script, p_class);
+	if (entry == nullptr || index == nullptr) {
+		return VH_ERR_NOT_FOUND;
+	}
+	const SidecarMemberType *type = nullptr;
+	for (const std::pair<std::string, SidecarMemberType> &member : entry->member_types) {
+		if (member.first == p_name) {
+			type = &member.second;
+			break;
+		}
+	}
+	if (type == nullptr) {
+		return VH_ERR_NOT_FOUND;
+	}
+
+	interpreter.begin_entry();
+	Value object;
+	RootScope root(heap, &object);
+	// VhAdoptOrMint answers no peer when the host cannot instantiate one; hiding the callback keeps
+	// that true for every object a member default builds, whatever the native reads of the flag.
+	const auto instantiate = interpreter.godot.InstantiateClass;
+	interpreter.godot.InstantiateClass = nullptr;
+	interpreter.mint_suppressed = true;
+	const Outcome outcome = interpreter.construct(index->class_cell, 0, object, false);
+	interpreter.mint_suppressed = false;
+	interpreter.godot.InstantiateClass = instantiate;
+	if (outcome != Outcome::Ok) {
+		interpreter.end_entry(false);
+		if (outcome != Outcome::Fail && !interpreter.in_entry()) {
+			report_raised(interpreter.error());
+		}
+		return outcome == Outcome::Yield ? VH_ERR_UNSUPPORTED : VH_ERR_RUNTIME;
+	}
+
+	const ObjectCell *instance = cell_as<ObjectCell>(object);
+	const LayoutField *field = find_slot_by_unqualified_name(*instance->layout, p_name);
+	if (field == nullptr) {
+		interpreter.end_entry(false);
+		return VH_ERR_NOT_FOUND;
+	}
+	Value value = follow(instance->field_values[field->slot]);
+	if (is_cell_kind(value, CellKind::Ref)) {
+		value = follow(cell_as<RefCell>(value)->content);
+	}
+	default_arena.reset();
+	std::string why;
+	const bool carried = value_to_wire(value, type->described.type, type->described.tag, &default_arena, default_answer, why);
+	interpreter.end_entry(false);
+	if (!carried) {
+		return VH_ERR_UNSUPPORTED;
+	}
+	*r_value = &default_answer;
+	return VH_OK;
 }
 
 const char *mirrored_godot_name(std::string_view p_verse_name) {

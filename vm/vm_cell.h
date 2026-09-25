@@ -52,6 +52,8 @@ enum class CellKind : uint8_t {
 	Frame,
 	Task,
 	NativeObject,
+	AccessorRef,
+	SetterChain,
 };
 
 const char *cell_kind_name(CellKind p_kind);
@@ -574,6 +576,9 @@ struct RefCell : Cell {
 	Value content;
 	Value domain = Value::uninitialized();
 	bool hidden = false;
+	// The variable of a `<native>` member: every write converts to native storage (spec/objects.md
+	// §9.2).
+	bool native = false;
 	Value live_task = Value::uninitialized();
 	std::vector<const Cell *> awaiting_tasks;
 
@@ -601,6 +606,11 @@ struct FrameCell : Cell {
 	FrameCell *caller = nullptr;
 	uint32_t return_pc = 0;
 	uint32_t return_register = kNoRegister;
+	// The UnifyNativeObject at `setters_pc` has run the first `setters_run` setters of the chain
+	// `setters_token`; each returns to the op, which runs the next (spec/objects.md §7.8).
+	uint32_t setters_pc = kNoRegister;
+	size_t setters_run = 0;
+	Value setters_token;
 
 	FrameCell() :
 			Cell(CellKind::Frame) {}
@@ -608,6 +618,7 @@ struct FrameCell : Cell {
 		r_visitor.visit(procedure);
 		r_visitor.visit(registers);
 		r_visitor.visit(caller);
+		r_visitor.visit(setters_token);
 	}
 };
 
@@ -632,6 +643,37 @@ struct TaskCell : Cell {
 	void visit_references(CellVisitor &r_visitor) const override {
 		r_visitor.visit(parent);
 		r_visitor.visit(frame);
+	}
+};
+
+// spec/objects.md §16: a receiver and the accessor its member holds, plus one argument per step of
+// a deeper path (`T.A[0].B`). Reading it calls the getter; writing it, the setter.
+struct AccessorRefCell : Cell {
+	Value object;
+	const AccessorCell *accessor = nullptr;
+	std::vector<Value> path;
+
+	AccessorRefCell() :
+			Cell(CellKind::AccessorRef) {}
+	void visit_references(CellVisitor &r_visitor) const override {
+		r_visitor.visit(object);
+		r_visitor.visit(accessor);
+		r_visitor.visit(path);
+	}
+};
+
+// The construction token once InitializeVar has deferred a setter (spec/objects.md §7.6): each
+// accessor reference with the value it is to be set to, in the order they were deferred. Immutable;
+// deferring another makes a longer chain.
+struct SetterChainCell : Cell {
+	std::vector<Value> references;
+	std::vector<Value> values;
+
+	SetterChainCell() :
+			Cell(CellKind::SetterChain) {}
+	void visit_references(CellVisitor &r_visitor) const override {
+		r_visitor.visit(references);
+		r_visitor.visit(values);
 	}
 };
 

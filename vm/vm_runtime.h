@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -19,6 +20,21 @@ namespace vm {
 
 // The Godot name of the mirrored class p_verse_name, from src/verse_api_classes.h, or null.
 const char *mirrored_godot_name(std::string_view p_verse_name);
+
+// A vh_arena whose allocations live until the next reset(): the storage a read answering into
+// host-owned memory builds its answer in.
+class HostArena : public vh_arena {
+public:
+	HostArena();
+	HostArena(const HostArena &) = delete;
+	HostArena &operator=(const HostArena &) = delete;
+	void reset() { blocks.clear(); }
+
+private:
+	std::vector<std::unique_ptr<unsigned char[]>> blocks;
+
+	static void *allocate(vh_arena *p_self, size_t p_size, size_t p_align);
+};
 
 class Runtime {
 public:
@@ -57,8 +73,13 @@ public:
 	int32_t rpc_list(const char *p_name, const vh_rpc_desc **r_rpcs, int32_t *r_count);
 	int32_t static_list(const char *p_name, const vh_static_desc **r_statics, int32_t *r_count);
 	int32_t export_list(const char *p_name, const vh_export_desc **r_exports, int32_t *r_count);
+	// spec/sidecar.md: a transient instance built with minting suppressed and without its blocks,
+	// read and dropped. Nothing is stored between calls but the answer.
+	int32_t default_field(const char *p_class, const char *p_name, const vh_value **r_value);
 
 private:
+	HostArena default_arena;
+	vh_value default_answer = {};
 	std::string base_type_answer;
 	std::vector<vh_method_desc> method_descs;
 	std::vector<vh_param_desc> method_params;

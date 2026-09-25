@@ -25,15 +25,9 @@ namespace {
 
 constexpr int32_t kNotBooted = VH_ERR_STATE;
 constexpr int32_t kCompilerOnly = VH_ERR_UNSUPPORTED;
-// Entry points a later task implements (T3.6 defaults), after vh_init.
-constexpr int32_t kNotYet = VH_ERR_UNSUPPORTED;
 
 // The ABI is a set of free functions over one runtime, so this is the one piece of global state.
 vm::Runtime *g_runtime = nullptr;
-
-int32_t not_booted_or_not_yet() {
-	return g_runtime == nullptr ? kNotBooted : kNotYet;
-}
 
 template <typename Desc>
 int32_t refuse_list(const Desc **r_out, int32_t *r_count) {
@@ -389,12 +383,13 @@ int32_t vh_instance_get_field(vh_instance *Instance, const char *NameUtf8, const
 }
 
 int32_t vh_class_default_field(const char *ClassNameUtf8, const char *NameUtf8, const vh_value **OutValue) {
-	(void)ClassNameUtf8;
-	(void)NameUtf8;
-	if (OutValue != nullptr) {
-		*OutValue = nullptr;
+	if (g_runtime == nullptr) {
+		if (OutValue != nullptr) {
+			*OutValue = nullptr;
+		}
+		return kNotBooted;
 	}
-	return not_booted_or_not_yet();
+	return g_runtime->default_field(ClassNameUtf8, NameUtf8, OutValue);
 }
 
 int32_t vh_instance_set_field(vh_instance *Instance, const char *NameUtf8, const vh_value *Value) {

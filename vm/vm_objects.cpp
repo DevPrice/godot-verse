@@ -54,6 +54,30 @@ bool is_method_entry(const ArchetypeEntry &p_entry) {
 			cell_as<FunctionCell>(p_entry.value)->self.is_uninitialized();
 }
 
+std::string_view unqualified_name(std::string_view p_name) {
+	if (p_name.empty() || p_name[0] != '(') {
+		return p_name;
+	}
+	int depth = 0;
+	for (size_t index = 0; index < p_name.size(); ++index) {
+		if (p_name[index] == '(') {
+			++depth;
+		} else if (p_name[index] == ')' && --depth == 0) {
+			return p_name.substr(index + 1);
+		}
+	}
+	return p_name;
+}
+
+const LayoutField *find_slot_by_unqualified_name(const ClassLayout &p_layout, std::string_view p_name) {
+	for (const LayoutField &field : p_layout.fields) {
+		if (field.kind == FieldKind::Slot && unqualified_name(field.name->text) == p_name) {
+			return &field;
+		}
+	}
+	return nullptr;
+}
+
 const ClassLayout &Layouts::get(const ClassCell *p_class) {
 	std::unique_ptr<ClassLayout> &layout = layouts[p_class];
 	if (layout != nullptr) {

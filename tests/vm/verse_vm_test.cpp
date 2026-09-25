@@ -1192,7 +1192,7 @@ std::vector<uint8_t> BuildProgram(const ProgramShape &p_shape) {
 	b.uv(p_shape.generation);
 
 	const char *strings[kSidCount] = { "task", "accessor", "task_class", "accessor_enumerator", "GodotScripts_1", "/user@localhost", "(/user@localhost/x:)Race",
-		"C:/x.verse", "(/Verse.org/Verse/(/Verse.org/Verse:)Sqrt(:float):)Native", "(/Verse.org/Verse:)Sqrt(:float)", "script_class", "node2d", "" };
+		"C:/x.verse", "(/Verse.org/Verse/(/Verse.org/Verse:)NoSuchNative(:float):)Native", "(/Verse.org/Verse:)NoSuchNative(:float)", "script_class", "node2d", "" };
 	b.uv(kSidCount);
 	for (const char *text : strings) {
 		b.str(text);
@@ -1361,7 +1361,7 @@ void LoaderCases(Cases &r_cases) {
 			native != nullptr && !native->bound && program.native_count == 1 && program.unbound_native_count == 1 &&
 					native->positional_count == 1 && native->implementation(native_call) == Outcome::Error &&
 					native_call.error.diagnostic == "ErrRuntime_NativeInternal" &&
-					native_call.error.message == "The native function (/Verse.org/Verse/(/Verse.org/Verse:)Sqrt(:float):)Native is not implemented by this runtime.");
+					native_call.error.message == "The native function (/Verse.org/Verse/(/Verse.org/Verse:)NoSuchNative(:float):)Native is not implemented by this runtime.");
 
 	const NativeProcedureCell *missing = program.missing_procedure != nullptr ? static_cast<const NativeProcedureCell *>(program.missing_procedure->callee) : nullptr;
 	NativeCall missing_call(heap);
@@ -2252,12 +2252,358 @@ void UndoLogCases(Cases &r_cases) {
 	interpreter.minted_peers.clear();
 }
 
+// A class whose body archetype holds p_entries, with no constructor or blocks of its own.
+ClassCell *MakeClass(Heap &r_heap, ClassKind p_kind, std::vector<const ClassCell *> p_inherited, std::vector<ArchetypeEntry> p_entries) {
+	ClassCell *made = r_heap.make<ClassCell>();
+	ArchetypeCell *body = r_heap.make<ArchetypeCell>();
+	made->class_kind = p_kind;
+	made->archetype = body;
+	made->inherited = std::move(p_inherited);
+	body->owner = made;
+	if (!made->inherited.empty() && made->inherited[0]->class_kind != ClassKind::Interface) {
+		body->next = made->inherited[0]->archetype;
+	}
+	body->entries = std::move(p_entries);
+	return made;
+}
+
+void CastCases(Cases &r_cases) {
+	Heap heap;
+	Program program;
+	Interpreter interpreter(heap, program);
+	using vbc::VbcOp;
+
+	ClassCell *iface = MakeClass(heap, ClassKind::Interface, {}, {});
+	ClassCell *base = MakeClass(heap, ClassKind::Class, {}, {});
+	ClassCell *derived = MakeClass(heap, ClassKind::Class, { base, iface }, {});
+	ClassCell *point = MakeClass(heap, ClassKind::Struct, {}, {});
+	const Value base_object = Value::from_cell(interpreter.layouts.new_object(heap, interpreter.layouts.get(base)));
+	const Value derived_object = Value::from_cell(interpreter.layouts.new_object(heap, interpreter.layouts.get(derived)));
+	const Value point_object = Value::from_cell(interpreter.layouts.new_object(heap, interpreter.layouts.get(point)));
+
+	const auto bounded = [&](bool p_float, Value p_lower, Value p_upper) {
+		BoundedTypeCell *type = heap.make<BoundedTypeCell>(p_float);
+		type->lower = p_lower;
+		type->upper = p_upper;
+		return Value::from_cell(type);
+	};
+	// TypeCastFastFail, then "ok" with the value or "fails" at OnFailure.
+	const auto cast = [&](Value p_type, Value p_value) {
+		Asm code(heap, "Cast", 5, 0);
+		code.Op(VbcOp::TypeCastFastFail, { W(2), W(3), W(code.K(p_type)), W(code.K(p_value)), W(3) });
+		code.Op(VbcOp::NewArray, { W(4), L({ code.K(Str(heap, "ok")), R(2) }) });
+		code.Op(VbcOp::Return, { W(R(4)) });
+		code.Op(VbcOp::Return, { W(code.K(Str(heap, "fails"))) });
+		return Invoked(interpreter, code.Function(heap.false_value()), {});
+	};
+	const auto full_cast = [&](Value p_type, Value p_value) {
+		Asm code(heap, "FullCast", 4, 0);
+		code.Op(VbcOp::Call, { W(2), W(code.K(p_type)), L({ code.K(p_value) }), L({}), L({}), W(0) });
+		code.Op(VbcOp::Return, { W(R(2)) });
+		return Invoked(interpreter, code.Function(heap.false_value()), {});
+	};
+	const Value class_type = Value::from_cell(base);
+	r_cases.check("objects §13: a class admits its own objects and its subclasses', never a superclass's",
+			cast(class_type, derived_object).find("\"ok\"") == 1 && cast(Value::from_cell(derived), base_object) == "\"fails\"" &&
+					cast(class_type, base_object).find("\"ok\"") == 1);
+	r_cases.check("objects §13: an interface admits an object whose class inherits it, and nothing else",
+			cast(Value::from_cell(iface), derived_object).find("\"ok\"") == 1 && cast(Value::from_cell(iface), base_object) == "\"fails\"" &&
+					cast(Value::from_cell(iface), Int(heap, 3)) == "\"fails\"");
+	r_cases.check("objects §13, ops TypeCastFastFail: a cast to a struct is outside the contract",
+			cast(Value::from_cell(point), point_object).find("VM invariant violated: a cast to a struct") != std::string::npos);
+
+	const Value digit = bounded(false, Int(heap, 0), Int(heap, 9));
+	r_cases.check("values §13 int type: 0 and 9 pass, -1 and 10 fail", cast(digit, Int(heap, 0)) == "[\"ok\",0]" && cast(digit, Int(heap, 9)) == "[\"ok\",9]" &&
+			cast(digit, Int(heap, -1)) == "\"fails\"" && cast(digit, Int(heap, 10)) == "\"fails\"");
+	r_cases.check("values §13 int type: a rational with denominator 1 passes as itself; 7/2 and a float fail",
+			cast(digit, Div(heap, Int(heap, 6), Int(heap, 3))) == "[\"ok\",2/1]" && cast(digit, Div(heap, Int(heap, 7), Int(heap, 2))) == "\"fails\"" &&
+					cast(digit, F(1.0)) == "\"fails\"");
+	const Value natural = bounded(false, Int(heap, 0), Value::uninitialized());
+	r_cases.check("values §13 int type: an uninitialized bound is unbounded, at any size",
+			cast(natural, Pow2(heap, 70)) == "[\"ok\",1180591620717411303424]" && cast(natural, Neg(heap, Pow2(heap, 70))) == "\"fails\"" &&
+					cast(digit, Pow2(heap, 70)) == "\"fails\"");
+
+	const Value percent = bounded(true, F(0.0), F(1.0));
+	r_cases.check("ops TypeCastFastFail float type: 0.5, 0.0, -0.0 and 1.0 pass; 2.0, -1.0, NaN and Inf fail",
+			cast(percent, F(0.5)).find("ok") != std::string::npos && cast(percent, F(-0.0)).find("ok") != std::string::npos &&
+					cast(percent, F(1.0)).find("ok") != std::string::npos && cast(percent, F(2.0)) == "\"fails\"" && cast(percent, F(-1.0)) == "\"fails\"" &&
+					cast(percent, F(NAN)) == "\"fails\"" && cast(percent, F(HUGE_VAL)) == "\"fails\"");
+	const Value unbounded = bounded(true, F(-HUGE_VAL), F(NAN));
+	const Value to_infinity = bounded(true, F(-HUGE_VAL), F(HUGE_VAL));
+	r_cases.check("values §13 float type: NaN only when the lower bound is -Inf and the upper NaN",
+			cast(unbounded, F(NAN)).find("ok") != std::string::npos && cast(to_infinity, F(NAN)) == "\"fails\"" &&
+					cast(to_infinity, F(HUGE_VAL)).find("ok") != std::string::npos && cast(unbounded, Int(heap, 1)) == "\"fails\"");
+	r_cases.check("values §13 float type: bounds left uninitialized read as unbounded",
+			cast(bounded(true, Value::uninitialized(), Value::uninitialized()), F(NAN)).find("ok") != std::string::npos);
+
+	SimpleTypeCell *any = heap.make<SimpleTypeCell>();
+	SimpleTypeCell *logic = heap.make<SimpleTypeCell>();
+	logic->code = 3;
+	TupleTypeCell *tuple = heap.make<TupleTypeCell>();
+	ElementTypeCell *option = heap.make<ElementTypeCell>(CellKind::OptionType);
+	r_cases.check("values §13: `any` admits everything", cast(Value::from_cell(any), Str(heap, "x")) == "[\"ok\",\"x\"]" &&
+			cast(Value::from_cell(any), derived_object).find("ok") != std::string::npos);
+	r_cases.check("values §13: every other type cell is outside the contract",
+			cast(Value::from_cell(tuple), Int(heap, 1)).find("VM invariant violated: a cast to a tuple type") != std::string::npos &&
+					cast(Value::from_cell(logic), heap.true_value()).find("VM invariant violated: a cast to a simple type") != std::string::npos &&
+					cast(Value::from_cell(option), heap.false_value()).find("VM invariant violated: a cast to a option type") != std::string::npos &&
+					cast(Int(heap, 3), Int(heap, 3)).find("a value that is not a type") != std::string::npos);
+	r_cases.check("calls §4.1: Call on a type is the same test in a full context, failing the context",
+			full_cast(digit, Int(heap, 7)) == "7" && full_cast(digit, Int(heap, 15)) == "<fail>" && full_cast(Value::from_cell(iface), derived_object) != "<fail>");
+}
+
+std::vector<std::string> g_events;
+
+Outcome NoteNative(NativeCall &r_call) {
+	g_events.push_back(Show(follow(r_call.arguments[0])));
+	r_call.result = r_call.heap.false_value();
+	return Outcome::Ok;
+}
+
+void AccessorCases(Cases &r_cases) {
+	Heap heap;
+	Program program;
+	EnumeratorCell *accessor_enumerator = heap.make<EnumeratorCell>();
+	program.accessor_enumerator = accessor_enumerator;
+	Interpreter interpreter(heap, program);
+	using vbc::VbcOp;
+	const Value note = NativeFunction(heap, "Note", 1, &NoteNative);
+	const Value marker = Int(heap, 12774014);
+	RefCell *store = heap.make<RefCell>(Int(heap, 0));
+	const NameCell *level = heap.intern("(/test/prop:)Level");
+	const NameCell *other = heap.intern("(/test/prop:)Other");
+	const NameCell *getter = heap.intern("(/test/prop:)LevelGetter(:accessor)");
+	const NameCell *setter = heap.intern("(/test/prop:)LevelSetter(:accessor,:int)");
+	const NameCell *deep_setter = heap.intern("(/test/prop:)LevelSetter(:accessor,:int,:int)");
+	SimpleTypeCell *any = heap.make<SimpleTypeCell>();
+
+	// The getter answers the store, or -1 if its first argument is not the accessor enumerator.
+	Asm get(heap, "LevelGetter", 7, 1);
+	get.Op(VbcOp::EqFastFail, { W(3), W(4), W(R(2)), W(get.K(Value::from_cell(accessor_enumerator))), W(3) });
+	get.Op(VbcOp::Call, { W(5), W(get.K(note)), L({ get.K(Str(heap, "get")) }), L({}), L({}), W(0) });
+	get.Op(VbcOp::Jump, { W(4) });
+	get.Op(VbcOp::Return, { W(get.K(Int(heap, -1))) });
+	get.Op(VbcOp::RefGet, { W(6), W(get.K(Value::from_cell(store))) });
+	get.Op(VbcOp::Return, { W(R(6)) });
+	Asm set(heap, "LevelSetter", 5, 2);
+	set.Op(VbcOp::Call, { W(4), W(set.K(note)), L({ R(3) }), L({}), L({}), W(0) });
+	set.Op(VbcOp::RefSet, { W(set.K(Value::from_cell(store))), W(R(3)) });
+	set.Op(VbcOp::Return, { W(set.K(heap.false_value())) });
+	Asm deep(heap, "DeepSetter", 7, 3);
+	deep.Op(VbcOp::NewArray, { W(5), L({ deep.K(Str(heap, "step")), R(3), R(4) }) });
+	deep.Op(VbcOp::Call, { W(6), W(deep.K(note)), L({ R(5) }), L({}), L({}), W(0) });
+	deep.Op(VbcOp::Return, { W(deep.K(heap.false_value())) });
+
+	AccessorCell *accessor = heap.make<AccessorCell>();
+	accessor->getters = { getter };
+	accessor->setters = { setter, deep_setter };
+	ClassCell *prop = MakeClass(heap, ClassKind::Class, {}, {
+		ArchetypeEntry{ level, nullptr, Value::from_cell(any), Value::from_cell(accessor), 0 },
+		ArchetypeEntry{ other, nullptr, Value::from_cell(any), Value::uninitialized(), 0 },
+		ArchetypeEntry{ getter, nullptr, Value::uninitialized(), get.Function(), 0 },
+		ArchetypeEntry{ setter, nullptr, Value::uninitialized(), set.Function(), 0 },
+		ArchetypeEntry{ deep_setter, nullptr, Value::uninitialized(), deep.Function(), 0 },
+	});
+	// The constructor: Level's CreateField (and with p_defers its InitializeVar, which the compiler
+	// emits only for an archetype that sets the member), then Other's initializer noting "other".
+	const auto constructor_body = [&](bool p_defers) {
+		Asm code(heap, "PropConstructor", 8, 3);
+		code.Op(VbcOp::CreateField, { W(5), W(R(2)), W(R(0)), W(code.C(Value::from_cell(level))), W(0) });
+		if (p_defers) {
+			code.Op(VbcOp::InitializeVar, { W(7), W(R(2)), W(R(0)), W(code.C(Value::from_cell(level))), W(code.K(Int(heap, 3))), W(kAbsentOperand), W(1) });
+		}
+		const size_t create_other = code.procedure->ops.size();
+		code.Op(VbcOp::CreateField, { W(5), W(R(2)), W(R(0)), W(code.C(Value::from_cell(other))), W(0) });
+		code.Op(VbcOp::Call, { W(6), W(code.K(note)), L({ code.K(Str(heap, "other")) }), L({}), L({}), W(0) });
+		code.Op(VbcOp::UnifyField, { W(R(0)), W(code.C(Value::from_cell(other))), W(code.K(Int(heap, 1))) });
+		code.Op(VbcOp::Return, { W(R(p_defers ? 7 : 2)) });
+		const auto on_failure = [&](size_t p_op, size_t p_label) {
+			code.procedure->operand_words[code.procedure->ops[p_op].operands + 4] = uint32_t(p_label);
+		};
+		on_failure(0, create_other);
+		on_failure(create_other, code.procedure->ops.size() - 1);
+		return code.Function();
+	};
+	Asm blocks(heap, "PropBlocks", 4, 0);
+	blocks.Op(VbcOp::Call, { W(2), W(blocks.K(note)), L({ blocks.K(Str(heap, "block")) }), L({}), L({}), W(0) });
+	blocks.Op(VbcOp::Return, { W(blocks.K(heap.false_value())) });
+	prop->constructor = cell_as<FunctionCell>(constructor_body(false));
+	prop->blocks = cell_as<FunctionCell>(blocks.Function());
+
+	ObjectCell *object = interpreter.layouts.new_object(heap, interpreter.layouts.get(prop));
+	const Value object_value = Value::from_cell(object);
+	const LayoutField *level_field = interpreter.layouts.get(prop).find(level);
+	r_cases.check("objects §4.4, §16: an accessor entry is an accessor in the layout, not a slot or a constant",
+			level_field != nullptr && level_field->kind == FieldKind::Accessor);
+
+	Asm read(heap, "ReadLevel", 6, 0);
+	read.Op(VbcOp::LoadField, { W(2), W(read.K(object_value)), W(read.C(Value::from_cell(level))) });
+	read.Op(VbcOp::RefGet, { W(3), W(R(2)) });
+	read.Op(VbcOp::Freeze, { W(4), W(R(3)) });
+	read.Op(VbcOp::Return, { W(R(4)) });
+	store->content = Int(heap, 41);
+	g_events.clear();
+	r_cases.check("objects §16, ops RefGet/Freeze: LoadField answers a reference, RefGet passes it, Freeze calls the getter with the accessor enumerator",
+			Invoked(interpreter, read.Function(heap.false_value()), {}) == "41" && g_events == std::vector<std::string>{ "\"get\"" });
+
+	Asm write(heap, "WriteLevel", 6, 0);
+	write.Op(VbcOp::LoadField, { W(2), W(write.K(object_value)), W(write.C(Value::from_cell(level))) });
+	write.Op(VbcOp::RefCallDomain, { W(3), W(R(2)), W(write.K(Int(heap, 5))) });
+	write.Op(VbcOp::Melt, { W(4), W(R(3)) });
+	write.Op(VbcOp::RefSet, { W(R(2)), W(R(4)) });
+	write.Op(VbcOp::FreezeIfAccessor, { W(5), W(R(2)) });
+	write.Op(VbcOp::Return, { W(R(5)) });
+	g_events.clear();
+	r_cases.check("objects §16, ops RefSet/FreezeIfAccessor: a write calls the setter with the value, a FreezeIfAccessor the getter",
+			Invoked(interpreter, write.Function(heap.false_value()), {}) == "5" && g_events == std::vector<std::string>{ "5", "\"get\"" });
+
+	Asm field_write(heap, "SetFieldLevel", 4, 0);
+	field_write.Op(VbcOp::SetField, { W(field_write.K(object_value)), W(field_write.C(Value::from_cell(level))), W(field_write.K(Int(heap, 6))) });
+	field_write.Op(VbcOp::Return, { W(field_write.K(heap.false_value())) });
+	g_events.clear();
+	Invoked(interpreter, field_write.Function(heap.false_value()), {});
+	r_cases.check("objects §7.7: SetField of an accessor member calls the setter", g_events == std::vector<std::string>{ "6" } && Show(store->content) == "6");
+
+	Asm path(heap, "DeepWrite", 6, 0);
+	path.Op(VbcOp::LoadField, { W(2), W(path.K(object_value)), W(path.C(Value::from_cell(level))) });
+	path.Op(VbcOp::Call, { W(3), W(R(2)), L({ path.K(Int(heap, 7)) }), L({}), L({}), W(0) });
+	path.Op(VbcOp::RefSet, { W(R(3)), W(path.K(Int(heap, 9))) });
+	path.Op(VbcOp::CallSet, { W(R(2)), W(path.K(Int(heap, 8))), W(path.K(Int(heap, 10))) });
+	path.Op(VbcOp::Return, { W(path.K(heap.false_value())) });
+	g_events.clear();
+	Invoked(interpreter, path.Function(heap.false_value()), {});
+	r_cases.check("ops §15.1 item 7, CallSet: Call on an accessor reference and CallSet through one extend its path; the setter taking n parameters is at index n - 2",
+			g_events == std::vector<std::string>{ "[\"step\",7,9]", "[\"step\",8,10]" });
+
+	// prop{Level := 9, Other := 1}: Level's setter is deferred past Other's initializer, and runs
+	// before the blocks.
+	ArchetypeCell *expression = heap.make<ArchetypeCell>();
+	expression->entries.push_back(ArchetypeEntry{ level, nullptr, Value::uninitialized(), Value::uninitialized(), 0 });
+	expression->entries.push_back(ArchetypeEntry{ other, nullptr, Value::uninitialized(), Value::uninitialized(), 0 });
+	Asm make(heap, "MakeProp", 10, 0);
+	const uint32_t level_name = make.C(Value::from_cell(level));
+	const uint32_t other_name = make.C(Value::from_cell(other));
+	make.Op(VbcOp::NewObject, { W(2), W(make.K(Value::from_cell(expression))), W(make.K(Value::from_cell(prop))) });
+	make.Op(VbcOp::CreateField, { W(3), W(make.K(marker)), W(R(2)), W(level_name), W(2) });
+	make.Op(VbcOp::InitializeVar, { W(4), W(make.K(marker)), W(R(2)), W(level_name), W(make.K(Int(heap, 9))), W(kAbsentOperand), W(1) });
+	make.Op(VbcOp::CreateField, { W(3), W(R(4)), W(R(2)), W(other_name), W(6) });
+	make.Op(VbcOp::Call, { W(5), W(make.K(note)), L({ make.K(Str(heap, "archetype other")) }), L({}), L({}), W(0) });
+	make.Op(VbcOp::UnifyField, { W(R(2)), W(other_name), W(make.K(Int(heap, 1))) });
+	make.Op(VbcOp::CallWithSelf, { W(6), W(make.K(Value::from_cell(prop->constructor))), W(R(2)),
+			L({ R(4), make.K(Value::uninitialized()), make.K(Value::uninitialized()) }), L({}), L({}), W(0) });
+	make.Op(VbcOp::UnifyNativeObject, { W(R(6)), W(R(2)) });
+	make.Op(VbcOp::Call, { W(7), W(make.K(note)), L({ make.K(Str(heap, "done")) }), L({}), L({}), W(0) });
+	make.Op(VbcOp::Return, { W(make.K(heap.false_value())) });
+	g_events.clear();
+	Invoked(interpreter, make.Function(heap.false_value()), {});
+	r_cases.check("objects §7.6, §7.8: InitializeVar defers an accessor's setter; UnifyNativeObject runs it after every initializer and before the blocks",
+			g_events == std::vector<std::string>{ "\"archetype other\"", "9", "\"block\"", "\"done\"" });
+
+	ClassCell *deferring = MakeClass(heap, ClassKind::Class, {}, prop->archetype->entries);
+	deferring->constructor = cell_as<FunctionCell>(constructor_body(true));
+	deferring->blocks = prop->blocks;
+	g_events.clear();
+	interpreter.begin_entry();
+	Value built;
+	const Outcome outcome = interpreter.construct(deferring, 0, built);
+	interpreter.end_entry(outcome == Outcome::Ok);
+	r_cases.check("objects §7.11: a host-built object runs the setters its constructor deferred, then its blocks",
+			outcome == Outcome::Ok && g_events == std::vector<std::string>{ "\"other\"", "3", "\"block\"" });
+	g_events.clear();
+	interpreter.begin_entry();
+	const Outcome unblocked = interpreter.construct(deferring, 0, built, false);
+	interpreter.end_entry(unblocked == Outcome::Ok);
+	r_cases.check("objects §8.3: a class default object runs the deferred setters and no blocks",
+			unblocked == Outcome::Ok && g_events == std::vector<std::string>{ "\"other\"", "3" });
+}
+
+void NativeFieldCases(Cases &r_cases) {
+	Heap heap;
+	Program program;
+	Interpreter interpreter(heap, program);
+	using vbc::VbcOp;
+	SimpleTypeCell *any = heap.make<SimpleTypeCell>();
+	const NameCell *lane = heap.intern("(/test/box:)I0");
+	const NameCell *handle = heap.intern("(/test/box:)Handle");
+	const NameCell *plain = heap.intern("(/test/box:)Plain");
+	ClassCell *box = MakeClass(heap, ClassKind::Struct, {}, {
+		ArchetypeEntry{ lane, nullptr, Value::from_cell(any), Value::uninitialized(), 1 },
+		ArchetypeEntry{ handle, nullptr, Value::from_cell(any), Value::uninitialized(), 1 | 32 },
+		ArchetypeEntry{ plain, nullptr, Value::from_cell(any), Value::uninitialized(), 0 },
+	});
+	const auto store = [&](const NameCell *p_name, Value p_value) {
+		ObjectCell *object = interpreter.layouts.new_object(heap, interpreter.layouts.get(box));
+		Asm code(heap, "Store", 4, 0);
+		const uint32_t name = code.C(Value::from_cell(p_name));
+		code.Op(VbcOp::CreateField, { W(2), W(code.K(Int(heap, 12774014))), W(code.K(Value::from_cell(object))), W(name), W(3) });
+		code.Op(VbcOp::UnifyField, { W(code.K(Value::from_cell(object))), W(name), W(code.K(p_value)) });
+		code.Op(VbcOp::LoadField, { W(3), W(code.K(Value::from_cell(object))), W(name) });
+		code.Op(VbcOp::Return, { W(R(3)) });
+		return Invoked(interpreter, code.Function(heap.false_value()), {});
+	};
+	const std::string exceeds =
+			"<error> ErrRuntime_GeneratedNativeInternal: An internal runtime error occurred in (generated) native code that was called from Verse. There is no other information available. (Value exceeds the range of a 64 bit integer.)";
+	r_cases.check("objects §9.2: an int that fits in 64 bits stores in a native field and reads back", store(lane, Sub(heap, Pow2(heap, 63), Int(heap, 1))) == "9223372036854775807" &&
+			store(lane, Neg(heap, Pow2(heap, 63))) == "-9223372036854775808");
+	r_cases.check("objects §9.2: storing 2^70 into a native int field raises the 64-bit range error", store(lane, Pow2(heap, 70)) == exceeds && store(lane, Pow2(heap, 63)) == exceeds);
+	r_cases.check("objects §9.2: a field without the native flag holds any int", store(plain, Pow2(heap, 70)) == "1180591620717411303424");
+	r_cases.check("objects §9.2: float, string and logic always fit", store(lane, F(-0.5)) == "-0.500000" && store(lane, Str(heap, "s")) == "\"s\"" && store(lane, heap.true_value()) == "true");
+
+	// A native `var`: InitializeVar converts, and so does every later RefSet through the variable.
+	const auto var_store = [&](Value p_initial, Value p_later) {
+		ObjectCell *object = interpreter.layouts.new_object(heap, interpreter.layouts.get(box));
+		Asm code(heap, "VarStore", 6, 0);
+		const uint32_t name = code.C(Value::from_cell(handle));
+		code.Op(VbcOp::InitializeVar, { W(2), W(code.K(Int(heap, 12774014))), W(code.K(Value::from_cell(object))), W(name), W(code.K(p_initial)), W(kAbsentOperand), W(1) });
+		code.Op(VbcOp::LoadField, { W(3), W(code.K(Value::from_cell(object))), W(name) });
+		code.Op(VbcOp::RefSet, { W(R(3)), W(code.K(p_later)) });
+		code.Op(VbcOp::RefGet, { W(4), W(R(3)) });
+		code.Op(VbcOp::Return, { W(R(4)) });
+		return Invoked(interpreter, code.Function(heap.false_value()), {});
+	};
+	r_cases.check("objects §9.2: a native var converts on initialization and on every write",
+			var_store(Int(heap, 1), Int(heap, 2)) == "2" && var_store(Pow2(heap, 64), Int(heap, 2)) == exceeds && var_store(Int(heap, 1), Pow2(heap, 64)) == exceeds);
+}
+
+void StructConstantCases(Cases &r_cases) {
+	Heap heap;
+	Program program;
+	Interpreter interpreter(heap, program);
+	SimpleTypeCell *any = heap.make<SimpleTypeCell>();
+	const NameCell *x = heap.intern("(/test/pair:)X");
+	const NameCell *y = heap.intern("(/test/pair:)Y");
+	ClassCell *pair = MakeClass(heap, ClassKind::Struct, {}, {
+		ArchetypeEntry{ x, nullptr, Value::from_cell(any), Value::uninitialized(), 0 },
+		ArchetypeEntry{ y, nullptr, Value::uninitialized(), Int(heap, 5), 0 },
+	});
+	const ClassLayout &layout = interpreter.layouts.get(pair);
+	ObjectCell *laid_out = interpreter.layouts.new_object(heap, layout);
+	laid_out->field_values[layout.find(x)->slot] = Int(heap, 1);
+	const auto stored = [&](int64_t p_y) {
+		ObjectCell *object = heap.make<ObjectCell>();
+		object->object_class = pair;
+		object->layout = &layout;
+		object->field_names = { x, y };
+		object->field_values = { Int(heap, 1), Int(heap, p_y) };
+		return Value::from_cell(object);
+	};
+	r_cases.check("objects §10.2: a field one struct holds as its class's constant equals the same value held in a slot, either way round",
+			layout.find(y)->kind == FieldKind::Constant && Compare(Value::from_cell(laid_out), stored(5)) == Equality::Eq &&
+					Compare(stored(5), Value::from_cell(laid_out)) == Equality::Eq);
+	r_cases.check("objects §10.2: and differs from another value in a slot", Compare(Value::from_cell(laid_out), stored(6)) == Equality::Neq &&
+			Compare(stored(6), Value::from_cell(laid_out)) == Equality::Neq);
+}
+
 bool RunInterpreterCases() {
 	Cases cases;
 	CallCases(cases);
 	FailureAndEffectCases(cases);
 	ConstructionCases(cases);
 	UndoLogCases(cases);
+	CastCases(cases);
+	AccessorCases(cases);
+	NativeFieldCases(cases);
+	StructConstantCases(cases);
 	return cases.all_ok;
 }
 
@@ -2314,6 +2660,8 @@ int main(int argc, char **argv) {
 	if (argc >= 3 && std::strcmp(argv[1], "--vbc") == 0) {
 		return DumpProgram(argv[2], argc >= 4 ? argv[3] : nullptr);
 	}
+	// Unbuffered, so a case that never returns is the line after the last one printed.
+	setvbuf(stdout, nullptr, _IONBF, 0);
 	bool AllOk = true;
 	AllOk &= Step("uv round trips", TestUvRoundTrip());
 	AllOk &= Step("uv matches the textbook 300 encoding", TestUvKnownEncoding());

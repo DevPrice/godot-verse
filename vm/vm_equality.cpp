@@ -4,6 +4,7 @@
 
 #include "vm_cell.h"
 #include "vm_number.h"
+#include "vm_objects.h"
 
 namespace vm {
 
@@ -67,21 +68,36 @@ uint64_t hash_int(const BigInt &p_value) {
 	return hash;
 }
 
-Equality struct_equal(const ObjectCell *p_left, const ObjectCell *p_right, PlaceholderMeeter *p_meeter) {
-	if (p_left->field_names.size() != p_right->field_names.size()) {
-		return Equality::Neq;
+// What p_object holds for p_name: its slot, or else its layout's constant.
+bool field_value(const ObjectCell *p_object, const NameCell *p_name, Value &r_value) {
+	for (size_t i = 0; i < p_object->field_names.size(); ++i) {
+		if (p_object->field_names[i] == p_name) {
+			r_value = read_slot(p_object->field_values[i]);
+			return true;
+		}
 	}
-	for (size_t i = 0; i < p_left->field_names.size(); ++i) {
-		size_t match = 0;
-		while (match < p_right->field_names.size() && p_right->field_names[match] != p_left->field_names[i]) {
-			++match;
-		}
-		if (match == p_right->field_names.size()) {
-			return Equality::Neq;
-		}
-		const Equality field = values_equal(read_slot(p_left->field_values[i]), read_slot(p_right->field_values[match]), p_meeter);
-		if (field != Equality::Eq) {
-			return field;
+	const LayoutField *field = p_object->layout != nullptr ? p_object->layout->find(p_name) : nullptr;
+	if (field == nullptr || field->kind != FieldKind::Constant) {
+		return false;
+	}
+	r_value = field->value;
+	return true;
+}
+
+// spec/objects.md §10.2: field by field and by name, whether each side holds the field in a slot or
+// as its class's constant. A name neither side stores is a constant of the one class both share.
+Equality struct_equal(const ObjectCell *p_left, const ObjectCell *p_right, PlaceholderMeeter *p_meeter) {
+	for (const ObjectCell *named : { p_left, p_right }) {
+		for (const NameCell *name : named->field_names) {
+			Value left;
+			Value right;
+			if (!field_value(p_left, name, left) || !field_value(p_right, name, right)) {
+				return Equality::Neq;
+			}
+			const Equality field = values_equal(left, right, p_meeter);
+			if (field != Equality::Eq) {
+				return field;
+			}
 		}
 	}
 	return Equality::Eq;

@@ -23,6 +23,9 @@ const char *const kGlobalVariableDescription = "Allocating a global var is not y
 // spec/objects.md §7.1: the construction token before any setter has been deferred.
 constexpr int32_t kConstructionMarker = 12774014;
 
+// spec/objects.md §3.3's entry flag for a `<native>` member.
+constexpr uint8_t kEntryNative = 1;
+
 int32_t line_of(const ProcedureCell *p_procedure, uint32_t p_op) {
 	int32_t line = 0;
 	uint32_t best = 0;
@@ -125,6 +128,12 @@ bool is_whole(Value p_value) {
 	}
 	const BigInt &denominator = cell_as<RationalCell>(p_value)->denominator;
 	return denominator.limbs.size() == 1 && denominator.limbs[0] == 1 && !denominator.negative;
+}
+
+// A bound of a float type that is uninitialized is taken as unbounded, though a float type's
+// bounds are always written (spec/values.md §13).
+double float_bound(Value p_bound, double p_unbounded) {
+	return p_bound.is_float() ? p_bound.as_float() : p_unbounded;
 }
 
 } // namespace
@@ -652,6 +661,10 @@ Interpreter::Step Interpreter::call(Value p_callee, Value p_self, bool p_with_se
 	if (r_arguments.size() != 1) {
 		return invariant("a non-function callee given other than one argument");
 	}
+	// spec/ops.md §15.1 item 7: the step need not be concrete.
+	if (is_cell_kind(p_callee, CellKind::AccessorRef)) {
+		return unify_register(p_dest, accessor_reference(Value(), nullptr, cell_as<AccessorRefCell>(p_callee), r_arguments[0]));
+	}
 	const Value argument = follow(r_arguments[0]);
 	if (is_unbound(argument)) {
 		return park();
@@ -706,12 +719,12 @@ Interpreter::Step Interpreter::type_test(Value p_type, Value p_value, bool &r_ad
 		}
 		case CellKind::FloatType: {
 			const BoundedTypeCell *type = cell_as<BoundedTypeCell>(p_type);
-			if (!p_value.is_float() || !type->lower.is_float() || !type->upper.is_float()) {
+			if (!p_value.is_float()) {
 				return Step::Next;
 			}
 			const double value = p_value.as_float();
-			const double lower = type->lower.as_float();
-			const double upper = type->upper.as_float();
+			const double lower = float_bound(type->lower, -HUGE_VAL);
+			const double upper = float_bound(type->upper, std::nan(""));
 			if (std::isnan(value)) {
 				r_admits = lower == -HUGE_VAL && std::isnan(upper);
 			} else {
@@ -753,12 +766,16 @@ Value Interpreter::bind(Value p_function, Value p_receiver) {
 
 // spec/objects.md §6.
 Interpreter::Step Interpreter::load_field(Value p_object, const NameCell *p_name, Value &r_result) {
+	if (is_cell_kind(p_object, CellKind::AccessorRef)) {
+		r_result = accessor_reference(Value(), nullptr, cell_as<AccessorRefCell>(p_object), make_string(heap, unqualified_name(p_name->text)));
+		return Step::Next;
+	}
 	ObjectCell *object = object_operand(p_object);
 	if (object == nullptr) {
 		if (is_cell_kind(p_object, CellKind::Object)) {
 			return invariant("a field read from an object with no class");
 		}
-		return not_yet(std::string("LoadField from a ") + (p_object.is_cell() ? cell_kind_name(p_object.as_cell()->kind) : "value") + " (T3.6)");
+		return invariant(std::string("LoadField from a ") + (p_object.is_cell() ? cell_kind_name(p_object.as_cell()->kind) : "value that is not a cell"));
 	}
 	const LayoutField *field = object->layout->find(p_name);
 	if (field == nullptr) {
@@ -781,9 +798,115 @@ Interpreter::Step Interpreter::load_field(Value p_object, const NameCell *p_name
 			}
 			return Step::Next;
 		case FieldKind::Accessor:
-			break;
+			r_result = accessor_reference(Value::from_cell(object), cell_as<AccessorCell>(field->value), nullptr, Value());
+			return Step::Next;
 	}
-	return not_yet("an accessor member (T3.6)");
+	return invariant("a layout field of no known kind");
+}
+
+Value Interpreter::accessor_reference(Value p_object, const AccessorCell *p_accessor, const AccessorRefCell *p_extended, Value p_step) {
+	AccessorRefCell *reference = heap.make<AccessorRefCell>();
+	if (p_extended != nullptr) {
+		reference->object = p_extended->object;
+		reference->accessor = p_extended->accessor;
+		reference->path = p_extended->path;
+		reference->path.push_back(p_step);
+	} else {
+		reference->object = p_object;
+		reference->accessor = p_accessor;
+	}
+	return Value::from_cell(reference);
+}
+
+// spec/objects.md §16: a getter taking n parameters is at getter index n - 1 and a setter at setter
+// index n - 2, and the accessor enumerator is always the first argument, so both are indexed by
+// the path's length.
+Interpreter::Step Interpreter::accessor_callee(Value p_reference, bool p_setter, Value p_value, Value &r_function, std::vector<Value> &r_arguments) {
+	const AccessorRefCell *reference = cell_as<AccessorRefCell>(p_reference);
+	const std::vector<const NameCell *> &names = p_setter ? reference->accessor->setters : reference->accessor->getters;
+	const size_t index = reference->path.size();
+	if (index >= names.size() || names[index] == nullptr) {
+		return invariant(std::string("an accessor with no ") + (p_setter ? "setter" : "getter") + " for a path of " + std::to_string(index) + " step(s)");
+	}
+	if (program.accessor_enumerator == nullptr) {
+		return invariant("an accessor call in a program with no accessor enumerator");
+	}
+	const Value receiver = follow(reference->object);
+	if (is_unbound(receiver)) {
+		return park();
+	}
+	if (!resolve_method(receiver, names[index], r_function)) {
+		return invariant("an accessor naming " + names[index]->text + ", which is not a method of its receiver");
+	}
+	r_arguments.clear();
+	r_arguments.push_back(Value::from_cell(program.accessor_enumerator));
+	for (Value step : reference->path) {
+		r_arguments.push_back(step);
+	}
+	if (p_setter) {
+		r_arguments.push_back(p_value);
+	}
+	return Step::Next;
+}
+
+Interpreter::Step Interpreter::accessor_call(Value p_reference, bool p_setter, Value p_value, uint32_t p_dest) {
+	Value function;
+	std::vector<Value> arguments;
+	const Step prepared = accessor_callee(p_reference, p_setter, p_value, function, arguments);
+	if (prepared != Step::Next) {
+		return prepared;
+	}
+	return call(function, Value(), false, arguments, {}, p_dest);
+}
+
+// spec/objects.md §9.2: of the native storage types, only int64 can refuse a Verse value.
+Interpreter::Step Interpreter::native_store(Value p_value) {
+	if (!is_int(p_value)) {
+		return Step::Next;
+	}
+	int64_t stored = 0;
+	RuntimeError error;
+	if (int_to_int64(p_value, stored, error) != Outcome::Ok) {
+		return raise(error, nullptr);
+	}
+	return Step::Next;
+}
+
+// spec/objects.md §7.8. Each deferred setter returns to this op, which then runs the next, so a
+// setter is an ordinary Verse call on a heap frame; the blocks function is entered last and
+// returns past it.
+Interpreter::Step Interpreter::unify_native_object(Value p_token, Value p_object) {
+	ObjectCell *object = object_operand(p_object);
+	if (object == nullptr) {
+		return invariant("UnifyNativeObject on something that is not an object");
+	}
+	if (is_cell_kind(p_token, CellKind::SetterChain)) {
+		const SetterChainCell *chain = cell_as<SetterChainCell>(p_token);
+		const bool resuming = frame->setters_pc == pc && frame->setters_token.same(p_token);
+		const size_t next = resuming ? frame->setters_run : 0;
+		if (next < chain->references.size()) {
+			Value function;
+			std::vector<Value> arguments;
+			const Step prepared = accessor_callee(chain->references[next], true, chain->values[next], function, arguments);
+			if (prepared != Step::Next) {
+				return prepared;
+			}
+			frame->setters_pc = pc;
+			frame->setters_run = next + 1;
+			frame->setters_token = p_token;
+			return enter(cell_as<FunctionCell>(function), cell_as<FunctionCell>(function)->self, arguments, {}, frame, pc, kNoRegister);
+		}
+		frame->setters_pc = kNoRegister;
+		frame->setters_token = Value();
+	} else if (!is_int(p_token)) {
+		return invariant("a construction token that is neither the marker nor a chain of deferred setters");
+	}
+	const ClassCell *actual = object->object_class;
+	if (actual->class_kind != ClassKind::Class || actual->blocks == nullptr) {
+		return Step::Next;
+	}
+	std::vector<Value> none;
+	return enter(actual->blocks, p_object, none, {}, frame, pc + 1, kNoRegister);
 }
 
 bool Interpreter::resolve_method(Value p_object, const NameCell *p_name, Value &r_function) {
@@ -841,7 +964,7 @@ Outcome Interpreter::invoke(Value p_function, Value p_self, const std::vector<Va
 	return run(entry, r_result);
 }
 
-Outcome Interpreter::construct(const ClassCell *p_class, int64_t p_handle, Value &r_object) {
+Outcome Interpreter::construct(const ClassCell *p_class, int64_t p_handle, Value &r_object, bool p_run_blocks) {
 	ObjectCell *object = layouts.new_object(heap, layouts.get(p_class));
 	r_object = Value::from_cell(object);
 	RootScope root(heap, &r_object);
@@ -849,18 +972,37 @@ Outcome Interpreter::construct(const ClassCell *p_class, int64_t p_handle, Value
 	adopting_handle = p_handle;
 
 	Value token = Value::from_int32(kConstructionMarker);
+	RootScope token_root(heap, &token);
 	Outcome outcome = Outcome::Ok;
 	if (p_class->constructor != nullptr) {
 		const std::vector<Value> arguments = { Value::from_int32(kConstructionMarker), Value::uninitialized(), Value::uninitialized() };
 		outcome = invoke(Value::from_cell(p_class->constructor), r_object, arguments, {}, token);
 	}
 	token = follow(token);
-	if (outcome == Outcome::Ok && !is_int(token)) {
+	if (outcome == Outcome::Ok && is_cell_kind(token, CellKind::SetterChain)) {
+		const SetterChainCell *chain = cell_as<SetterChainCell>(token);
+		for (size_t index = 0; index < chain->references.size() && outcome == Outcome::Ok; ++index) {
+			Value function;
+			std::vector<Value> arguments;
+			FrameCell *const saved_frame = frame;
+			frame = nullptr;
+			const Step prepared = accessor_callee(chain->references[index], true, chain->values[index], function, arguments);
+			frame = saved_frame;
+			if (prepared != Step::Next) {
+				outcome = stop_outcome;
+				break;
+			}
+			Value ignored;
+			outcome = invoke(function, Value(), arguments, {}, ignored);
+		}
+	} else if (outcome == Outcome::Ok && !is_int(token)) {
+		FrameCell *const saved_frame = frame;
 		frame = nullptr;
-		not_yet("a deferred accessor setter (T3.6)");
+		invariant("a constructor answering a construction token that is neither the marker nor a chain of deferred setters");
+		frame = saved_frame;
 		outcome = stop_outcome;
 	}
-	if (outcome == Outcome::Ok && p_class->class_kind == ClassKind::Class && p_class->blocks != nullptr) {
+	if (outcome == Outcome::Ok && p_run_blocks && p_class->class_kind == ClassKind::Class && p_class->blocks != nullptr) {
 		Value ignored;
 		outcome = invoke(Value::from_cell(p_class->blocks), r_object, {}, {}, ignored);
 	}
@@ -1253,8 +1395,11 @@ Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_
 			if (is_unbound(ref)) {
 				return park();
 			}
+			if (is_cell_kind(ref, CellKind::AccessorRef)) {
+				return unify_register(w[0], ref);
+			}
 			if (!is_cell_kind(ref, CellKind::Ref)) {
-				return not_yet("a reference that is not a Verse variable (T3.6)");
+				return invariant(std::string("RefGet of a ") + (ref.is_cell() ? cell_kind_name(ref.as_cell()->kind) : "value that is not a reference"));
 			}
 			const Value content = cell_as<RefCell>(ref)->content;
 			if (content.is_empty()) {
@@ -1267,12 +1412,21 @@ Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_
 			if (is_unbound(ref)) {
 				return park();
 			}
+			const Value value = read(w[1]);
+			if (is_cell_kind(ref, CellKind::AccessorRef)) {
+				return accessor_call(ref, true, value, kNoRegister);
+			}
 			if (!is_cell_kind(ref, CellKind::Ref)) {
-				return not_yet("a write through a reference that is not a Verse variable (T3.6)");
+				return invariant(std::string("RefSet of a ") + (ref.is_cell() ? cell_kind_name(ref.as_cell()->kind) : "value that is not a reference"));
 			}
 			// T4.3 cancels the live task and resumes awaiters.
-			const Value value = read(w[1]);
 			RefCell *variable = cell_as<RefCell>(ref);
+			if (variable->native) {
+				const Step stored = native_store(value);
+				if (stored != Step::Next) {
+					return stored;
+				}
+			}
 			record_slot(variable->content);
 			variable->content = value;
 			return Step::Next;
@@ -1295,6 +1449,9 @@ Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_
 			const Value value = read(w[1]);
 			if (is_unbound(value)) {
 				return park();
+			}
+			if (is_cell_kind(value, CellKind::AccessorRef)) {
+				return accessor_call(value, false, Value(), w[0]);
 			}
 			if (VbcOp(p_op.opcode) == VbcOp::FreezeIfAccessor) {
 				return unify_register(w[0], value);
@@ -1324,10 +1481,13 @@ Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_
 		case VbcOp::CallSet: {
 			const Value container = read(w[0]);
 			const Value index = read(w[1]);
+			const Value value = read(w[2]);
+			if (is_cell_kind(container, CellKind::AccessorRef)) {
+				return accessor_call(accessor_reference(Value(), nullptr, cell_as<AccessorRefCell>(container), index), true, value, kNoRegister);
+			}
 			if (is_unbound(container) || is_unbound(index)) {
 				return park();
 			}
-			const Value value = read(w[2]);
 			// T4.3 writes through a hidden variable.
 			if (is_cell_kind(container, CellKind::MutableArray)) {
 				Value old;
@@ -1356,7 +1516,7 @@ Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_
 				}
 				return unify_outcome(outcome, kNoRegister, Value());
 			}
-			return not_yet(std::string("CallSet on a ") + (container.is_cell() ? cell_kind_name(container.as_cell()->kind) : "value") + " (T3.6)");
+			return invariant(std::string("CallSet on a ") + (container.is_cell() ? cell_kind_name(container.as_cell()->kind) : "value that is not a cell"));
 		}
 		case VbcOp::NewArray:
 		case VbcOp::NewMutableArray: {
@@ -1547,33 +1707,47 @@ Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_
 		}
 		case VbcOp::UnifyField:
 		case VbcOp::SetField: {
+			const bool set = VbcOp(p_op.opcode) == VbcOp::SetField;
 			const Value value = read(w[0]);
 			if (is_unbound(value)) {
 				return park();
 			}
+			const NameCell *name = cell_as<NameCell>(constant(w[1]));
+			const Value replacement = read(w[2]);
+			if (set && is_cell_kind(value, CellKind::AccessorRef)) {
+				const Value step = make_string(heap, unqualified_name(name->text));
+				return accessor_call(accessor_reference(Value(), nullptr, cell_as<AccessorRefCell>(value), step), true, replacement, kNoRegister);
+			}
 			ObjectCell *object = object_operand(value);
 			if (object == nullptr) {
-				return not_yet("a field write on something that is not an object (T3.6)");
+				return invariant("a field write on something that is not an object");
 			}
-			const NameCell *name = cell_as<NameCell>(constant(w[1]));
 			const LayoutField *field = object->layout->find(name);
+			if (set && field != nullptr && field->kind == FieldKind::Accessor) {
+				return accessor_call(accessor_reference(value, cell_as<AccessorCell>(field->value), nullptr, Value()), true, replacement, kNoRegister);
+			}
 			if (field == nullptr || field->kind != FieldKind::Slot) {
 				return invariant("a field write to " + name->text + ", which is not a slot of the object");
 			}
+			if ((field->entry_flags & kEntryNative) != 0) {
+				const Step stored = native_store(replacement);
+				if (stored != Step::Next) {
+					return stored;
+				}
+			}
 			Value &slot = object->field_values[field->slot];
-			if (VbcOp(p_op.opcode) == VbcOp::SetField) {
-				const Value replacement = read(w[2]);
+			if (set) {
 				Value &target = is_cell_kind(slot, CellKind::Ref) ? cell_as<RefCell>(slot)->content : slot;
 				record_slot(target);
 				target = replacement;
 				return Step::Next;
 			}
-			return unify_slot(slot, read(w[2]));
+			return unify_slot(slot, replacement);
 		}
 		case VbcOp::InitializeVar: {
 			const Value token = read(w[1]);
 			const Value value = read(w[2]);
-			if (is_unbound(value)) {
+			if (is_unbound(token) || is_unbound(value)) {
 				return park();
 			}
 			const NameCell *name = cell_as<NameCell>(constant(w[3]));
@@ -1592,13 +1766,30 @@ Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_
 			if (field == nullptr || field->kind == FieldKind::Constant) {
 				return invariant("InitializeVar of " + name->text + ", which is not a slot of the object");
 			}
+			const Value initial = read(w[4]);
 			if (field->kind == FieldKind::Accessor) {
-				return not_yet("a deferred accessor setter (T3.6)");
+				SetterChainCell *chain = heap.make<SetterChainCell>();
+				if (is_cell_kind(token, CellKind::SetterChain)) {
+					chain->references = cell_as<SetterChainCell>(token)->references;
+					chain->values = cell_as<SetterChainCell>(token)->values;
+				} else if (!is_int(token)) {
+					return invariant("a construction token that is neither the marker nor a chain of deferred setters");
+				}
+				chain->references.push_back(accessor_reference(Value::from_cell(object), cell_as<AccessorCell>(field->value), nullptr, Value()));
+				chain->values.push_back(initial);
+				return unify_register(w[0], Value::from_cell(chain));
 			}
-			RefCell *ref = heap.make<RefCell>(read(w[4]));
+			RefCell *ref = heap.make<RefCell>(initial);
 			const Value domain = read(w[5]);
 			if (!domain.is_uninitialized()) {
 				ref->domain = domain;
+			}
+			if ((field->entry_flags & kEntryNative) != 0) {
+				ref->native = true;
+				const Step stored = native_store(initial);
+				if (stored != Step::Next) {
+					return stored;
+				}
 			}
 			const Step stored = unify_slot(object->field_values[field->slot], Value::from_cell(ref));
 			if (stored != Step::Next) {
@@ -1612,19 +1803,7 @@ Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_
 			if (is_unbound(token) || is_unbound(value)) {
 				return park();
 			}
-			if (!is_int(token)) {
-				return not_yet("a deferred accessor setter (T3.6)");
-			}
-			ObjectCell *object = object_operand(value);
-			if (object == nullptr) {
-				return invariant("UnifyNativeObject on something that is not an object");
-			}
-			const ClassCell *actual = object->object_class;
-			if (actual->class_kind != ClassKind::Class || actual->blocks == nullptr) {
-				return Step::Next;
-			}
-			std::vector<Value> none;
-			return enter(actual->blocks, value, none, {}, frame, pc + 1, kNoRegister);
+			return unify_native_object(token, value);
 		}
 		case VbcOp::UnwrapNativeConstructorWrapper: {
 			const Value value = read(w[1]);
