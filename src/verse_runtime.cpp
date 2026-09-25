@@ -42,11 +42,91 @@
 #include <godot_cpp/variant/utility_functions.hpp>
 #include <godot_cpp/templates/hash_map.hpp>
 
+#include <atomic>
+#include <chrono>
 #include <vector>
 
 using namespace godot;
 
 namespace {
+
+// Where a frame's time went, for the verse/verse_ms and verse/godot_ms monitors. Each interval is
+// charged to the innermost of Verse (a call into the host, or its tick) and Godot (a callback the
+// host made), so the Godot work a script asked for is not counted as Verse and a signal handler Godot
+// ran inside that work is not counted as Godot. Off until one of the two monitors is first read, so a
+// game nobody is measuring does not pay two clock reads per crossing.
+enum FrameBucket : uint8_t {
+	FRAME_OTHER,
+	FRAME_VERSE,
+	FRAME_GODOT,
+	FRAME_BUCKETS,
+};
+
+std::atomic<bool> frame_split_enabled = false;
+
+struct FrameSplit {
+	std::chrono::steady_clock::time_point mark;
+	FrameBucket current = FRAME_OTHER;
+	double seconds[FRAME_BUCKETS] = {};
+	double published_ms[FRAME_BUCKETS] = {};
+};
+
+FrameSplit &frame_split() {
+	thread_local FrameSplit split;
+	return split;
+}
+
+void frame_split_charge(FrameSplit &r_split) {
+	const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+	if (r_split.mark.time_since_epoch().count() != 0) {
+		r_split.seconds[r_split.current] += std::chrono::duration<double>(now - r_split.mark).count();
+	}
+	r_split.mark = now;
+}
+
+class FrameSplitScope {
+	FrameBucket previous = FRAME_OTHER;
+	bool active = false;
+
+public:
+	explicit FrameSplitScope(FrameBucket p_bucket) {
+		if (!frame_split_enabled.load(std::memory_order_relaxed)) {
+			return;
+		}
+		FrameSplit &split = frame_split();
+		frame_split_charge(split);
+		previous = split.current;
+		split.current = p_bucket;
+		active = true;
+	}
+	~FrameSplitScope() {
+		if (!active) {
+			return;
+		}
+		FrameSplit &split = frame_split();
+		frame_split_charge(split);
+		split.current = previous;
+	}
+	FrameSplitScope(const FrameSplitScope &) = delete;
+	FrameSplitScope &operator=(const FrameSplitScope &) = delete;
+};
+
+void frame_split_publish() {
+	if (!frame_split_enabled.load(std::memory_order_relaxed)) {
+		return;
+	}
+	FrameSplit &split = frame_split();
+	frame_split_charge(split);
+	for (int bucket = 0; bucket < FRAME_BUCKETS; ++bucket) {
+		split.published_ms[bucket] = split.seconds[bucket] * 1000.0;
+		split.seconds[bucket] = 0.0;
+	}
+}
+
+double frame_split_read_ms(FrameBucket p_bucket) {
+	frame_split_enabled.store(true, std::memory_order_relaxed);
+	return frame_split().published_ms[p_bucket];
+}
 
 #ifdef VERSE_VM_STATIC
 // vm/'s file-reader hook (vm/vm_file_reader.h), installed before vh_init on the vm backend. Every
@@ -93,6 +173,8 @@ void VerseRuntime::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("_monitor_sleeping_tasks"), &VerseRuntime::_monitor_sleeping_tasks);
 	ClassDB::bind_method(D_METHOD("_monitor_analysis_wait_ms"), &VerseRuntime::_monitor_analysis_wait_ms);
 	ClassDB::bind_method(D_METHOD("_monitor_instance_tasks"), &VerseRuntime::_monitor_instance_tasks);
+	ClassDB::bind_method(D_METHOD("_monitor_verse_ms"), &VerseRuntime::_monitor_verse_ms);
+	ClassDB::bind_method(D_METHOD("_monitor_godot_ms"), &VerseRuntime::_monitor_godot_ms);
 	ClassDB::bind_method(D_METHOD("build_project"), &VerseRuntime::build_project);
 }
 
@@ -818,6 +900,7 @@ Variant VerseRuntime::instance_field(vh_instance *p_instance, const String &p_na
 		return Variant();
 	}
 	const vh_value *value = nullptr;
+	const FrameSplitScope split(FRAME_VERSE);
 	if (host.InstanceGetField(p_instance, p_name.utf8().get_data(), &value) != VH_OK || value == nullptr) {
 		return Variant();
 	}
@@ -851,6 +934,7 @@ bool VerseRuntime::set_instance_field(vh_instance *p_instance, const String &p_n
 		return false;
 	}
 
+	const FrameSplitScope split(FRAME_VERSE);
 	return host.InstanceSetField(p_instance, p_name.utf8().get_data(), &value) == VH_OK;
 }
 
@@ -884,12 +968,14 @@ vh_instance *VerseRuntime::instantiate(const String &p_class_name, int64_t p_obj
 		return nullptr;
 	}
 	vh_instance *instance = nullptr;
+	const FrameSplitScope split(FRAME_VERSE);
 	host.Instantiate(p_class_name.utf8().get_data(), p_object_id, &instance);
 	return instance;
 }
 
 void VerseRuntime::release_instance(vh_instance *p_instance) {
 	if (p_instance != nullptr && host.ReleaseInstance != nullptr) {
+		const FrameSplitScope split(FRAME_VERSE);
 		host.ReleaseInstance(p_instance);
 	}
 }
@@ -913,6 +999,7 @@ int32_t VerseRuntime::call_instance(vh_instance *p_instance,
 
 	// The arena outlives the call and nothing else: every string and container the arguments point
 	// at is allocated from it, and the host has copied whatever it needed by the time this returns.
+	const FrameSplitScope split(FRAME_VERSE);
 	VerseArena arena;
 	std::vector<vh_value> wire;
 	wire.resize((size_t)p_arg_count);
@@ -937,6 +1024,7 @@ int32_t VerseRuntime::invoke_callback(int64_t p_callback_id, const Variant **p_a
 		return VH_ERR_STATE;
 	}
 
+	const FrameSplitScope split(FRAME_VERSE);
 	VerseArena arena;
 	std::vector<vh_value> wire;
 	wire.resize((size_t)p_arg_count);
@@ -1131,6 +1219,7 @@ Vector<VerseRpcInfo> VerseRuntime::class_rpcs(const String &p_class_name) const 
 // commit": a handler runs before emit_signal returns, so "emit, then read what the handler changed"
 // behaves the way a Godot author expects.
 int32_t VerseRuntime::api_emit_signal(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count) {
+	const FrameSplitScope split(FRAME_GODOT);
 	Object *obj = UtilityFunctions::instance_from_id(p_handle);
 	if (obj == nullptr) {
 		return VH_CALL_DEAD_OBJECT;
@@ -1148,6 +1237,7 @@ int32_t VerseRuntime::api_emit_signal(void *p_ctx, vh_handle p_handle, const cha
 }
 
 int32_t VerseRuntime::api_connect_signal(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_target, int32_t p_flags) {
+	const FrameSplitScope split(FRAME_GODOT);
 	Object *obj = UtilityFunctions::instance_from_id(p_handle);
 	if (obj == nullptr || p_target == nullptr) {
 		return VH_CALL_DEAD_OBJECT;
@@ -1162,6 +1252,7 @@ int32_t VerseRuntime::api_connect_signal(void *p_ctx, vh_handle p_handle, const 
 }
 
 int32_t VerseRuntime::api_disconnect_signal(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_target) {
+	const FrameSplitScope split(FRAME_GODOT);
 	Object *obj = UtilityFunctions::instance_from_id(p_handle);
 	if (obj == nullptr || p_target == nullptr) {
 		// A freed owner has already dropped every connection it had, so there is nothing to
@@ -1220,6 +1311,7 @@ int64_t VerseRuntime::api_make_signal_ref(void *p_ctx, vh_handle p_handle, const
 // reaching a static without an instance, and it is what GDScript's `Tween.interpolate_value(...)`
 // resolves to.
 int32_t VerseRuntime::api_call_static(void *p_ctx, const char *p_class_utf8, int32_t p_class_len, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count, vh_arena *p_arena, vh_value *r_value) {
+	const FrameSplitScope split(FRAME_GODOT);
 	if (r_value == nullptr) {
 		return VH_CALL_BAD_VALUE;
 	}
@@ -1250,6 +1342,7 @@ int32_t VerseRuntime::api_call_static(void *p_ctx, const char *p_class_utf8, int
 // rather than through a binding, because godot-cpp exposes each one as a free function and the
 // bridge needs them by name.
 int32_t VerseRuntime::api_call_utility(void *p_ctx, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count, vh_arena *p_arena, vh_value *r_value) {
+	const FrameSplitScope split(FRAME_GODOT);
 	if (r_value == nullptr) {
 		return VH_CALL_BAD_VALUE;
 	}
@@ -1340,7 +1433,11 @@ void VerseRuntime::tick(double p_budget_seconds) {
 
 	vh_tick_stats stats = {};
 	stats.StructSize = sizeof(stats);
-	host.Tick(p_budget_seconds, &stats);
+	{
+		const FrameSplitScope split(FRAME_VERSE);
+		host.Tick(p_budget_seconds, &stats);
+	}
+	frame_split_publish();
 
 	// R-ASYNC-6. A budget nobody can see the effect of is a number nobody can set, so what the pump
 	// did is both readable as a custom monitor and said out loud when it runs out of time.
@@ -1384,6 +1481,18 @@ void VerseRuntime::register_monitors() {
 	// _Process makes sixty tasks a second on one node, and no other number here separates that
 	// from sixty nodes with one task each.
 	perf->add_custom_monitor("verse/instance_tasks", Callable(this, "_monitor_instance_tasks"));
+	// The previous frame, tick to tick, split by who was running: Verse, or Godot doing what Verse
+	// asked. Reading either starts the clock, so the first read answers 0.
+	perf->add_custom_monitor("verse/verse_ms", Callable(this, "_monitor_verse_ms"));
+	perf->add_custom_monitor("verse/godot_ms", Callable(this, "_monitor_godot_ms"));
+}
+
+double VerseRuntime::_monitor_verse_ms() const {
+	return frame_split_read_ms(FRAME_VERSE);
+}
+
+double VerseRuntime::_monitor_godot_ms() const {
+	return frame_split_read_ms(FRAME_GODOT);
 }
 
 double VerseRuntime::_monitor_queued_jobs() const {
@@ -1415,6 +1524,7 @@ vh_bool VerseRuntime::api_is_valid(void *p_ctx, vh_handle p_handle) {
 }
 
 int32_t VerseRuntime::api_get_property(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, vh_arena *p_arena, vh_value *r_value) {
+	const FrameSplitScope split(FRAME_GODOT);
 	if (r_value == nullptr) {
 		return VH_CALL_BAD_VALUE;
 	}
@@ -1435,6 +1545,7 @@ int32_t VerseRuntime::api_get_property(void *p_ctx, vh_handle p_handle, const ch
 }
 
 int32_t VerseRuntime::api_set_property(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_value) {
+	const FrameSplitScope split(FRAME_GODOT);
 	if (p_value == nullptr) {
 		return VH_CALL_BAD_VALUE;
 	}
@@ -1450,6 +1561,7 @@ int32_t VerseRuntime::api_set_property(void *p_ctx, vh_handle p_handle, const ch
 }
 
 int32_t VerseRuntime::api_call_method(void *p_ctx, vh_handle p_handle, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count, vh_arena *p_arena, vh_value *r_value) {
+	const FrameSplitScope split(FRAME_GODOT);
 	Object *obj = UtilityFunctions::instance_from_id(p_handle);
 	if (obj == nullptr) {
 		return VH_CALL_DEAD_OBJECT;
@@ -1498,6 +1610,7 @@ static Ref<Script> script_for_global_class(const StringName &p_class_name) {
 }
 
 vh_handle VerseRuntime::api_instantiate_class(void *p_ctx, const char *p_class_utf8, int32_t p_class_len) {
+	const FrameSplitScope split(FRAME_GODOT);
 	const StringName class_name(String::utf8(p_class_utf8, p_class_len));
 
 	ClassDBSingleton *class_db = ClassDBSingleton::get_singleton();
@@ -1611,6 +1724,7 @@ int64_t VerseRuntime::api_new_ref(void *p_ctx, int32_t p_variant_tag) {
 }
 
 int32_t VerseRuntime::api_ref_get(void *p_ctx, int64_t p_ref, const vh_value *p_key, vh_arena *p_arena, vh_value *r_value) {
+	const FrameSplitScope split(FRAME_GODOT);
 	const Variant *found = verse_ref_table().find(p_ref);
 	if (found == nullptr || p_key == nullptr) {
 		return VH_CALL_DEAD_OBJECT;
@@ -1631,6 +1745,7 @@ int32_t VerseRuntime::api_ref_get(void *p_ctx, int64_t p_ref, const vh_value *p_
 }
 
 int32_t VerseRuntime::api_ref_set(void *p_ctx, int64_t p_ref, const vh_value *p_key, const vh_value *p_value) {
+	const FrameSplitScope split(FRAME_GODOT);
 	VerseRefTable &table = verse_ref_table();
 	const Variant *found = table.find(p_ref);
 	if (found == nullptr || p_key == nullptr || p_value == nullptr) {
@@ -1680,6 +1795,7 @@ int32_t VerseRuntime::api_ref_size(void *p_ctx, int64_t p_ref, int64_t *r_size) 
 }
 
 int32_t VerseRuntime::api_ref_contents(void *p_ctx, int64_t p_ref, vh_arena *p_arena, vh_value *r_value) {
+	const FrameSplitScope split(FRAME_GODOT);
 	const Variant *found = verse_ref_table().find(p_ref);
 	if (found == nullptr) {
 		return VH_CALL_DEAD_OBJECT;
@@ -1710,6 +1826,7 @@ int32_t VerseRuntime::api_ref_contents(void *p_ctx, int64_t p_ref, vh_arena *p_a
 }
 
 int32_t VerseRuntime::api_invoke_callable(void *p_ctx, int64_t p_ref, const vh_value *p_args, int32_t p_arg_count, vh_arena *p_arena, vh_value *r_value) {
+	const FrameSplitScope split(FRAME_GODOT);
 	const Variant *found = verse_ref_table().find(p_ref);
 	if (found == nullptr || found->get_type() != Variant::CALLABLE) {
 		return VH_CALL_DEAD_OBJECT;
@@ -1745,6 +1862,7 @@ int32_t VerseRuntime::api_invoke_callable(void *p_ctx, int64_t p_ref, const vh_v
 // makes an unknown name an ordinary error rather than a crash -- the alternative, a per-type table
 // of bindings, would have to be rewritten for every Godot release.
 int32_t VerseRuntime::api_ref_call(void *p_ctx, int64_t p_ref, const char *p_name_utf8, int32_t p_name_len, const vh_value *p_args, int32_t p_arg_count, vh_arena *p_arena, vh_value *r_value) {
+	const FrameSplitScope split(FRAME_GODOT);
 	const Variant *found = verse_ref_table().find(p_ref);
 	if (found == nullptr) {
 		return VH_CALL_DEAD_OBJECT;

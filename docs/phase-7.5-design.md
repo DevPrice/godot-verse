@@ -443,7 +443,7 @@ built (T3.10 dropped with that evidence).
 | Windows release library, the VM's share | ~565 KiB |
 | `vh_init` on a cook | ~250 ms native, against the UE runtime host's ~420 ms; ~95 ms on web |
 | a collection, idle, `/O2` | 0.01 ms; ~1 ms after 65,536 dead cells |
-| `dodge-the-creeps` on web | 1.5× slower than real time at a fixed 60 fps — a correctness pass, not yet a playable one |
+| `dodge-the-creeps` on web | 60 fps, with Verse 0.11 ms of each 16.6 ms frame (`vm-performance.md` §3.1). This row first said "1.5× slower than real time", which was Chrome's startup divided by the game's length |
 
 ### 14.5 Defects this phase found in the existing UE path
 
@@ -465,8 +465,9 @@ interpreter's source is what the wall was for.
 
 ### 14.7 Left open
 
-- **Speed.** Nothing was optimized (W-6). The browser runs `dodge-the-creeps` at two-thirds of real
-  time; making it playable is measurement and work this phase did not do.
+- **Speed.** Nothing was optimized (W-6). Measured since, in `vm-performance.md`: the game is
+  playable at 60 fps on the web, and running Verse the interpreter is 3–5× slower than the UE host
+  while entering it costs a fifth as much. That document ranks what to do about the first.
 - **Firefox and Safari** were never run, automated or by hand (W-5 made them by-hand checks).
 - **Not implemented:** `vh_run_main` on the interpreter; `typed_array` and `typed_dictionary`
   *parameters*, which the sidecar cannot tell from `godot_array`; `classifiable_subset`'s

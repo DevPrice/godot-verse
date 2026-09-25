@@ -386,6 +386,11 @@ reviewed files of `docs/web-vm/spec/` alone. Keep it that way — do not bring V
   whoever makes a task runnable runs it on its own stack, in `web-vm/spec/tasks.md` §4.3's order.
 - The collector is precise, never runs inside an entry, and treats the loaded program as a
   permanent generation (`Heap::tenure`), so a pause costs what it frees.
+- **`docs/vm-performance.md` is its speed**: the instruments (`tools/run_vm_bench.py`,
+  `cooked_probe --bench --sample`, the `verse/verse_ms` and `verse/godot_ms` monitors), what they
+  measured, and the ranked list of what to change. Running Verse it is 3–5× slower than the UE host
+  and entering it costs a fifth as much, so a game made of short entries runs faster on it; its
+  WebAssembly build is faster than its MSVC one.
 
 ## Commands
 
@@ -414,6 +419,8 @@ reviewed files of `docs/web-vm/spec/` alone. Keep it that way — do not bring V
     python tools/gen_vbc_ops.py           # validate docs/web-vm/ops.json; --digest, --emit-cpp
     python tools/emsdk_env.py -- scons platform=web arch=wasm32 threads=no target=template_release
     python tools/run_dtc_web.py           # dodge-the-creeps on the interpreter in headless Chrome
+    python tools/run_dtc_frames.py        # its frame times, exported for Windows on each backend
+    python tools/run_vm_bench.py          # vm/ against the UE host on one cook; --wasm, --wasm-profile
 
 `tools/build_host.py` needs a UE source checkout with the Verse toolchain — `--engine`, or
 `UE_ROOT`. Building the host and running the tests are fine to do unprompted, and so is **headless**

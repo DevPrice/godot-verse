@@ -76,14 +76,13 @@ WEB_LAUNCH_TIMEOUT = 300.0
 # --disable-render-loop stops the render server from running at all, which stops it from computing
 # visibility the same way headless does, and reproduces the native runs' checks exactly across
 # repeated exports.
-GAME_ARGS = ["--fixed-fps", "60", "--disable-render-loop", "--", "--verse-check"]
+GAME_ARGS = ["--fixed-fps", "60", "--disable-render-loop", "--", "--verse-check", "--verse-frame-times"]
 
-# 349 frames at a fixed 60 fps is checks.gd's own game-time length (`step()` returns true at frame
-# 349) -- 5.82 s of simulated time, decoupled from wall clock by --fixed-fps. How long the browser
-# actually took to reach it is the only signal available for whether the interpreter keeps up at
-# 60 fps in wasm; it cannot fail the run, because --fixed-fps is what makes the checks pass or fail
-# the same way regardless of how long a frame really took.
-DTC_SIMULATED_SECONDS = 349 / 60.0
+# checks.gd's own timing line, printed before its last: each frame's wall time and how much of it was
+# Verse and Godot-on-Verse's-behalf, measured inside the page (docs/vm-performance.md §1.3). The
+# process's own wall time is not a frame rate -- it is mostly Chrome starting and the engine and
+# extension downloading and compiling -- and under --fixed-fps the loop runs flat out anyway.
+FRAME_TIMES_LINE = re.compile(r"^frame_times: ")
 
 
 def main() -> int:
@@ -243,10 +242,11 @@ def main() -> int:
                     ok = False
                     print(f"[dtc-web] {final_line}: FAIL")
 
-            slower = elapsed / DTC_SIMULATED_SECONDS if DTC_SIMULATED_SECONDS else 0.0
-            print(f"[dtc-web] browser wall-clock time: {elapsed:.1f} s for {DTC_SIMULATED_SECONDS:.2f} s "
-                  f"of simulated game time at a fixed 60 fps ({slower:.1f}x) -- --fixed-fps makes the "
-                  "checks above pass or fail the same way regardless of this number")
+            frame_times = [unwrap_console_line(line.strip()) for line in console_output.splitlines()]
+            frame_times = [line for line in frame_times if FRAME_TIMES_LINE.match(line)]
+            if frame_times:
+                print(f"[dtc-web] {frame_times[-1]}")
+            print(f"[dtc-web] {elapsed:.1f} s from launching Chrome to its exit, startup included")
 
             print()
             print(f"[dtc-web] {'PASS' if ok else 'FAIL'}: {checks_seen} check lines, "

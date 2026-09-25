@@ -21,6 +21,48 @@ var mobs_seen := 0
 var moved_x := 0.0
 var failures := 0
 
+# `-- --verse-frame-times` adds one `frame_times:` line before the last, from each frame's wall time
+# and the verse/verse_ms and verse/godot_ms monitors (docs/vm-performance.md). Under --fixed-fps
+# the loop runs flat out, so the gap between two steps is what a frame really cost.
+var timing := OS.get_cmdline_user_args().has("--verse-frame-times")
+var last_usec := 0
+var frame_ms: Array[float] = []
+var verse_ms: Array[float] = []
+var godot_ms: Array[float] = []
+
+func record_frame() -> void:
+	var now := Time.get_ticks_usec()
+	if last_usec != 0:
+		frame_ms.append((now - last_usec) / 1000.0)
+		if Performance.has_custom_monitor(&"verse/verse_ms"):
+			verse_ms.append(Performance.get_custom_monitor(&"verse/verse_ms"))
+			godot_ms.append(Performance.get_custom_monitor(&"verse/godot_ms"))
+	last_usec = now
+
+func percentile(values: Array[float], fraction: float) -> float:
+	if values.is_empty():
+		return 0.0
+	var sorted := values.duplicate()
+	sorted.sort()
+	return sorted[mini(int(fraction * sorted.size()), sorted.size() - 1)]
+
+func mean(values: Array[float]) -> float:
+	if values.is_empty():
+		return 0.0
+	var total := 0.0
+	for value in values:
+		total += value
+	return total / values.size()
+
+func print_frame_times() -> void:
+	# Past the first 10 frames, which load the scene and warm every cache.
+	var frames := frame_ms.slice(10)
+	var verse := verse_ms.slice(10)
+	var godot := godot_ms.slice(10)
+	print("frame_times: frames=%d frame_median_ms=%.3f frame_p95_ms=%.3f frame_max_ms=%.3f frame_mean_ms=%.3f verse_mean_ms=%.3f verse_max_ms=%.3f godot_mean_ms=%.3f godot_max_ms=%.3f" % [
+		frames.size(), percentile(frames, 0.5), percentile(frames, 0.95), percentile(frames, 1.0), mean(frames),
+		mean(verse), percentile(verse, 1.0), mean(godot), percentile(godot, 1.0)])
+
 func check(name: String, ok: bool, detail := "") -> void:
 	print(("ok   " if ok else "FAIL ") + name + ("" if detail == "" else "  -- " + detail))
 	if not ok:
@@ -48,6 +90,8 @@ func begin() -> void:
 
 func step() -> bool:
 	frame += 1
+	if timing:
+		record_frame()
 	match frame:
 		1:
 			# Late by one frame here, and so is a GDScript _ready: a MainLoop script adds its
@@ -143,6 +187,8 @@ func step() -> bool:
 				str(mobs_seen) + " cleared to " + str(tree.get_nodes_in_group("mobs").size()))
 			check("the player is back at the start position", player.visible
 				and player.position == Vector2(240, 450), str(player.position))
+			if timing:
+				print_frame_times()
 			print("headless_check: " + ("all checks passed" if failures == 0
 				else str(failures) + " checks FAILED"))
 	return frame >= 349

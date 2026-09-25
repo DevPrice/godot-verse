@@ -13,6 +13,10 @@ GDExtension: nothing there should carry dllexport-equivalent visibility (§9).
 /EHs-c- and /GR- on the DLL build are the clean-room's exception/RTTI discipline (no exceptions,
 no RTTI, so the interpreter reports errors through return values on both build targets); the test
 binary and the wasm object compile do not need to match that exactly, but the DLL does.
+
+Both are optimized the way what ships is -- a template_release build is /O2 on Windows and -O3 on
+the web -- because run_vm_conformance.py and cooked_probe's bench mode time this DLL, and a /Od
+build measured nothing an exported game runs. The DLL carries a PDB for a sampling profiler.
 """
 
 import argparse
@@ -70,9 +74,10 @@ def build_dll(repo: Path) -> int:
 
     cl_cmd = (
         f'call "{vcvars64}" && '
-        f'cl /std:c++20 /EHs-c- /GR- /D VERSE_HOST_IMPLEMENTATION '
+        f'cl /std:c++20 /EHs-c- /GR- /O2 /DNDEBUG /Zi /D VERSE_HOST_IMPLEMENTATION '
         f'/I"{include_dir}" /I"{vm_dir}" {source_args} '
-        f'/LD /Fe"{out_dll}" /Fo"{out_dir}\\\\"'
+        f'/LD /Fe"{out_dll}" /Fo"{out_dir}\\\\" /Fd"{out_dir / "verse_vm_objects.pdb"}" '
+        f'/link /DEBUG /OPT:REF /OPT:ICF'
     )
     print(f"[build_verse_vm] running: {cl_cmd}")
     result = subprocess.run(cl_cmd, shell=True, cwd=str(repo))
@@ -105,6 +110,7 @@ def build_wasm(repo: Path) -> int:
             "--",
             "em++",
             "-std=c++20",
+            "-O3",
             "-fno-exceptions",
             "-fno-rtti",
             f"-I{include_dir}",

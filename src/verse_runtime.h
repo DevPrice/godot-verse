@@ -149,6 +149,8 @@ public:
 	double _monitor_sleeping_tasks() const;
 	double _monitor_analysis_wait_ms() const;
 	double _monitor_instance_tasks() const;
+	double _monitor_verse_ms() const;
+	double _monitor_godot_ms() const;
 
 	// Verse's compilation unit is the package, not the file, so every .verse file in the project
 	// is built together -- a build is always of the whole project. Each successful call publishes
