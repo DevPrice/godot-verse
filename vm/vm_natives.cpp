@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 #include <random>
@@ -471,10 +472,8 @@ bool find_field(Value p_object, const char *p_name, Value &r_value) {
 	return false;
 }
 
-// The real class of a library type this file did not write (message, diagnostic, the
-// localizable_value subclasses, cubic_bezier_capture_internal): searched by its package-definitions
-// decorated path (format.md §7) rather than fabricated, so a script's own field access on the
-// result -- or a class check against it -- sees the class the rest of the program does.
+} // namespace
+
 const ClassCell *find_library_class(const Program &p_program, std::string_view p_decorated_path) {
 	for (const PackageCell *package : p_program.packages) {
 		for (const PackageDefinition &definition : package->definitions) {
@@ -485,6 +484,8 @@ const ClassCell *find_library_class(const Program &p_program, std::string_view p
 	}
 	return nullptr;
 }
+
+namespace {
 
 // Sets a slot the way CreateField+UnifyField would for a native-built object that never runs the
 // real construction protocol (spec/objects.md §7): the interpreter's own LoadField refuses an
@@ -994,8 +995,13 @@ Outcome is_of_type_native(NativeCall &r_call) {
 	if (unbound_argument(r_call)) {
 		return Outcome::Park;
 	}
-	const ClassCell *query_type = class_of_type_value(argument(r_call, 0));
-	const ClassCell *dynamic_type = class_of_type_value(r_call.self);
+	// A module-level extension method (spec/natives.md §3.3): the instance is the first argument
+	// and Self is false. Measured through classifiable_subset's Contains, which is bytecode over it.
+	if (r_call.argument_count != 2) {
+		return Outcome::Invalid;
+	}
+	const ClassCell *query_type = class_of_type_value(argument(r_call, 1));
+	const ClassCell *dynamic_type = class_of_type_value(argument(r_call, 0));
 	if (query_type == nullptr || dynamic_type == nullptr || !class_inherits(dynamic_type, query_type)) {
 		return Outcome::Fail;
 	}
@@ -1041,6 +1047,313 @@ Outcome cubic_bezier_native(NativeCall &r_call) {
 	}
 	r_call.result = bound;
 	return Outcome::Ok;
+}
+
+// spec/natives.md §5.10. A parametric library class may be recorded under its type function's
+// name rather than its own, the function answering the class as a constant.
+const ClassCell *library_type(const Program &p_program, std::string_view p_path) {
+	if (const ClassCell *direct = find_library_class(p_program, p_path)) {
+		return direct;
+	}
+	for (const PackageCell *package : p_program.packages) {
+		for (const PackageDefinition &definition : package->definitions) {
+			if (definition.path == nullptr || !is_cell_kind(definition.value, CellKind::Function)) {
+				continue;
+			}
+			const std::string &path = definition.path->text;
+			if (path.size() <= p_path.size() || path.compare(0, p_path.size(), p_path) != 0 || path[p_path.size()] != '(') {
+				continue;
+			}
+			const Cell *callee = cell_as<FunctionCell>(definition.value)->callee;
+			if (callee == nullptr || callee->kind != CellKind::Procedure) {
+				continue;
+			}
+			const ProcedureCell *procedure = static_cast<const ProcedureCell *>(callee);
+			for (Value constant : procedure->constants) {
+				if (is_cell_kind(follow(constant), CellKind::Class)) {
+					return cell_as<ClassCell>(follow(constant));
+				}
+			}
+		}
+	}
+	return nullptr;
+}
+
+struct SubsetVarState : NativeState {
+	static constexpr uint32_t kTag = kSubsetVarStateTag;
+
+	Value current;
+
+	SubsetVarState() :
+			NativeState(kTag) {}
+	void visit_references(CellVisitor &r_visitor) const override { r_visitor.visit(current); }
+};
+
+struct SubsetEntries {
+	std::vector<Value> keys;
+	std::vector<Value> elements;
+};
+
+bool subset_entries(Value p_set, SubsetEntries &r_entries) {
+	Value elements;
+	if (!find_field(p_set, "Elements", elements)) {
+		return false;
+	}
+	if (is_cell_kind(elements, CellKind::False)) {
+		return true;
+	}
+	if (!is_cell_kind(elements, CellKind::Map) && !is_cell_kind(elements, CellKind::MutableMap)) {
+		return false;
+	}
+	for (const MapEntry &entry : cell_as<MapCell>(elements)->entries) {
+		r_entries.keys.push_back(entry.key);
+		r_entries.elements.push_back(read_slot(entry.value));
+	}
+	return true;
+}
+
+Value new_object_of(Interpreter &r_interpreter, Heap &r_heap, const char *p_path) {
+	const ClassCell *type = library_type(r_interpreter.program, p_path);
+	if (type == nullptr) {
+		return Value::empty();
+	}
+	return Value::from_cell(r_interpreter.layouts.new_object(r_heap, r_interpreter.layouts.get(type)));
+}
+
+Value make_subset(Interpreter &r_interpreter, Heap &r_heap, const SubsetEntries &p_entries) {
+	const ClassCell *type = library_type(r_interpreter.program, "(/Verse.org/Verse:)classifiable_subset");
+	Value elements;
+	if (type == nullptr || make_map(r_heap, p_entries.keys, p_entries.elements, elements) != Outcome::Ok) {
+		return Value::empty();
+	}
+	const ClassLayout &layout = r_interpreter.layouts.get(type);
+	ObjectCell *object = r_interpreter.layouts.new_object(r_heap, layout);
+	set_layout_field(object, layout, "Elements", elements);
+	return Value::from_cell(object);
+}
+
+// A new set holding the array's elements, each under a fresh key.
+Outcome subset_from_array(NativeCall &r_call, Value p_array, Value &r_set) {
+	int64_t length = 0;
+	if (value_length(p_array, length) != Outcome::Ok) {
+		return Outcome::Invalid;
+	}
+	SubsetEntries entries;
+	for (int64_t index = 0; index < length; ++index) {
+		Value element;
+		if (array_index(p_array, make_int(r_call.heap, index), element) != Outcome::Ok) {
+			return Outcome::Invalid;
+		}
+		const Value key = new_object_of(*r_call.interpreter, r_call.heap, "(/Verse.org/Verse:)classifiable_subset_key");
+		if (key.is_empty()) {
+			return Outcome::Invalid;
+		}
+		entries.keys.push_back(key);
+		entries.elements.push_back(element);
+	}
+	r_set = make_subset(*r_call.interpreter, r_call.heap, entries);
+	return r_set.is_empty() ? Outcome::Invalid : Outcome::Ok;
+}
+
+SubsetVarState *subset_var(Value p_value) {
+	const Value value = follow(p_value);
+	return is_cell_kind(value, CellKind::Object) ? cell_as<ObjectCell>(value)->state<SubsetVarState>() : nullptr;
+}
+
+// The var's current set, an empty one for a var no native made.
+Value subset_current(NativeCall &r_call, SubsetVarState *r_state) {
+	if (r_state->current.is_empty()) {
+		r_state->current = make_subset(*r_call.interpreter, r_call.heap, SubsetEntries());
+	}
+	return r_state->current;
+}
+
+// Every write here is transactional (§3.8): an enclosing failure puts the old set back.
+void subset_replace(NativeCall &r_call, SubsetVarState *r_state, Value p_set) {
+	const Value old = r_state->current;
+	r_state->current = p_set;
+	r_call.interpreter->compensate([r_state, old] { r_state->current = old; });
+}
+
+size_t key_position(const SubsetEntries &p_entries, Value p_key) {
+	for (size_t index = 0; index < p_entries.keys.size(); ++index) {
+		if (p_entries.keys[index].same(p_key)) {
+			return index;
+		}
+	}
+	return p_entries.keys.size();
+}
+
+Outcome make_classifiable_subset_native(NativeCall &r_call) {
+	if (unbound_argument(r_call)) {
+		return Outcome::Park;
+	}
+	if (r_call.interpreter == nullptr) {
+		return Outcome::Invalid;
+	}
+	return subset_from_array(r_call, argument(r_call, 0), r_call.result);
+}
+
+Outcome subset_concat_native(NativeCall &r_call) {
+	if (unbound_argument(r_call)) {
+		return Outcome::Park;
+	}
+	SubsetEntries left;
+	SubsetEntries right;
+	if (r_call.interpreter == nullptr || !subset_entries(argument(r_call, 0), left) || !subset_entries(argument(r_call, 1), right)) {
+		return Outcome::Invalid;
+	}
+	for (size_t index = 0; index < right.keys.size(); ++index) {
+		const size_t position = key_position(left, right.keys[index]);
+		if (position < left.keys.size()) {
+			left.elements[position] = right.elements[index];
+		} else {
+			left.keys.push_back(right.keys[index]);
+			left.elements.push_back(right.elements[index]);
+		}
+	}
+	r_call.result = make_subset(*r_call.interpreter, r_call.heap, left);
+	return r_call.result.is_empty() ? Outcome::Invalid : Outcome::Ok;
+}
+
+Outcome subset_filter_by_type_native(NativeCall &r_call) {
+	if (unbound_argument(r_call)) {
+		return Outcome::Park;
+	}
+	SubsetEntries all;
+	const ClassCell *type = class_of_type_value(argument(r_call, 1));
+	if (r_call.interpreter == nullptr || type == nullptr || !subset_entries(argument(r_call, 0), all)) {
+		return Outcome::Invalid;
+	}
+	SubsetEntries kept;
+	for (size_t index = 0; index < all.keys.size(); ++index) {
+		const Value element = follow(all.elements[index]);
+		if (is_cell_kind(element, CellKind::Object) && class_inherits(cell_as<ObjectCell>(element)->object_class, type)) {
+			kept.keys.push_back(all.keys[index]);
+			kept.elements.push_back(all.elements[index]);
+		}
+	}
+	r_call.result = make_subset(*r_call.interpreter, r_call.heap, kept);
+	return r_call.result.is_empty() ? Outcome::Invalid : Outcome::Ok;
+}
+
+Outcome make_classifiable_subset_var_native(NativeCall &r_call) {
+	if (unbound_argument(r_call)) {
+		return Outcome::Park;
+	}
+	if (r_call.interpreter == nullptr) {
+		return Outcome::Invalid;
+	}
+	Value set;
+	const Outcome made = subset_from_array(r_call, argument(r_call, 0), set);
+	if (made != Outcome::Ok) {
+		return made;
+	}
+	const Value var = new_object_of(*r_call.interpreter, r_call.heap, "(/Verse.org/Verse:)classifiable_subset_var");
+	if (var.is_empty()) {
+		return Outcome::Invalid;
+	}
+	subset_var(var)->current = set;
+	r_call.result = var;
+	return Outcome::Ok;
+}
+
+Outcome subset_var_add_native(NativeCall &r_call) {
+	if (unbound_argument(r_call)) {
+		return Outcome::Park;
+	}
+	SubsetVarState *state = subset_var(argument(r_call, 0));
+	SubsetEntries entries;
+	if (state == nullptr || r_call.interpreter == nullptr || !subset_entries(subset_current(r_call, state), entries)) {
+		return Outcome::Invalid;
+	}
+	const Value key = new_object_of(*r_call.interpreter, r_call.heap, "(/Verse.org/Verse:)classifiable_subset_key");
+	if (key.is_empty()) {
+		return Outcome::Invalid;
+	}
+	entries.keys.push_back(key);
+	entries.elements.push_back(argument(r_call, 1));
+	const Value set = make_subset(*r_call.interpreter, r_call.heap, entries);
+	if (set.is_empty()) {
+		return Outcome::Invalid;
+	}
+	subset_replace(r_call, state, set);
+	r_call.result = key;
+	return Outcome::Ok;
+}
+
+Outcome subset_var_remove_native(NativeCall &r_call) {
+	if (unbound_argument(r_call)) {
+		return Outcome::Park;
+	}
+	SubsetVarState *state = subset_var(argument(r_call, 0));
+	SubsetEntries entries;
+	if (state == nullptr || r_call.interpreter == nullptr || !subset_entries(subset_current(r_call, state), entries)) {
+		return Outcome::Invalid;
+	}
+	const size_t position = key_position(entries, argument(r_call, 1));
+	if (position == entries.keys.size()) {
+		return Outcome::Fail;
+	}
+	entries.keys.erase(entries.keys.begin() + ptrdiff_t(position));
+	entries.elements.erase(entries.elements.begin() + ptrdiff_t(position));
+	const Value set = make_subset(*r_call.interpreter, r_call.heap, entries);
+	if (set.is_empty()) {
+		return Outcome::Invalid;
+	}
+	subset_replace(r_call, state, set);
+	r_call.result = r_call.heap.false_value();
+	return Outcome::Ok;
+}
+
+Outcome subset_var_read_native(NativeCall &r_call) {
+	SubsetVarState *state = subset_var(r_call.self);
+	if (state == nullptr || r_call.interpreter == nullptr) {
+		return Outcome::Invalid;
+	}
+	r_call.result = subset_current(r_call, state);
+	return r_call.result.is_empty() ? Outcome::Invalid : Outcome::Ok;
+}
+
+Outcome subset_var_write_native(NativeCall &r_call) {
+	if (unbound_argument(r_call)) {
+		return Outcome::Park;
+	}
+	SubsetVarState *state = subset_var(r_call.self);
+	if (state == nullptr || r_call.interpreter == nullptr) {
+		return Outcome::Invalid;
+	}
+	subset_replace(r_call, state, argument(r_call, 0));
+	r_call.result = r_call.heap.false_value();
+	return Outcome::Ok;
+}
+
+// §5.10 leaves the text to the implementation: the reference's embeds Unreal object paths.
+Outcome subset_get_diagnostic_native(NativeCall &r_call) {
+	SubsetEntries entries;
+	if (r_call.interpreter == nullptr || !subset_entries(r_call.self, entries)) {
+		return Outcome::Invalid;
+	}
+	std::string text = "classifiable_subset{";
+	for (const Value &element : entries.elements) {
+		std::string rendered;
+		const Outcome outcome = diagnostic_render(r_call.interpreter, r_call.heap, element, rendered, r_call.error);
+		if (outcome != Outcome::Ok) {
+			return outcome;
+		}
+		text += "{" + rendered + "}";
+	}
+	text += "}";
+	r_call.result = make_diagnostic(*r_call.interpreter, r_call.heap, text);
+	return r_call.result.is_empty() ? Outcome::Invalid : Outcome::Ok;
+}
+
+Outcome subset_key_get_diagnostic_native(NativeCall &r_call) {
+	if (r_call.interpreter == nullptr) {
+		return Outcome::Invalid;
+	}
+	r_call.result = make_diagnostic(*r_call.interpreter, r_call.heap, "classifiable_subset_key");
+	return r_call.result.is_empty() ? Outcome::Invalid : Outcome::Ok;
 }
 
 constexpr NativeBinding kNatives[] = {
@@ -1097,6 +1410,16 @@ constexpr NativeBinding kNatives[] = {
 	{ "(/Verse.org/Verse/(/Verse.org/Verse:)GetCastableFinalSuperClassFromType(:base_type,:sub_type where base_type,sub_type):)Native", &get_castable_final_super_class_from_type_native },
 	{ "(/Verse.org/Verse/(/Verse.org/Verse:)operator'.IsOfType'(:t,:query_type where t,query_type):)Native", &is_of_type_native },
 	{ "(/Verse.org/Verse/(/Verse.org/Verse:)CanCallerAccessEpicInternal_Impl:)Native", &can_caller_access_epic_internal_native },
+	{ "(/Verse.org/Verse/(/Verse.org/Verse:)MakeClassifiableSubset(:[]t where t):)Native", &make_classifiable_subset_native },
+	{ "(/Verse.org/Verse/(/Verse.org/Verse:)operator'+'(:(/Verse.org/Verse:)classifiable_subset(t),:(/Verse.org/Verse:)classifiable_subset(t) where t):)Native", &subset_concat_native },
+	{ "(/Verse.org/Verse/(/Verse.org/Verse:)operator'.FilterByType'(:(/Verse.org/Verse:)classifiable_subset(t),:element_type where t,k,element_type):)Native", &subset_filter_by_type_native },
+	{ "(/Verse.org/Verse/(/Verse.org/Verse:)MakeClassifiableSubsetVar(:[]t where t):)Native", &make_classifiable_subset_var_native },
+	{ "(/Verse.org/Verse/(/Verse.org/Verse:)operator'.Add'(:(/Verse.org/Verse:)classifiable_subset_var(t),:t where t):)Native", &subset_var_add_native },
+	{ "(/Verse.org/Verse/(/Verse.org/Verse:)operator'.Remove'(:(/Verse.org/Verse:)classifiable_subset_var(t),:(/Verse.org/Verse:)classifiable_subset_key(t) where t):)Native", &subset_var_remove_native },
+	{ "(/Verse.org/Verse/classifiable_subset_var/(/Verse.org/Verse/classifiable_subset_var:)Read:)Native", &subset_var_read_native },
+	{ "(/Verse.org/Verse/classifiable_subset_var/(/Verse.org/Verse/classifiable_subset_var:)Write(:(/Verse.org/Verse:)classifiable_subset(element_type)):)Native", &subset_var_write_native },
+	{ "(/Verse.org/Verse/classifiable_subset/(/Verse.org/Verse/diagnosable:)GetDiagnostic:)Native", &subset_get_diagnostic_native },
+	{ "(/Verse.org/Verse/classifiable_subset_key/(/Verse.org/Verse/diagnosable:)GetDiagnostic:)Native", &subset_key_get_diagnostic_native },
 	{ "(/Verse.org/Random/(/Verse.org/Random:)GetRandomFloat(:float,:float):)Native", &get_random_float_native },
 	{ "(/Verse.org/Random/(/Verse.org/Random:)GetRandomInt(:int,:int):)Native", &get_random_int_native },
 	{ "(/Verse.org/Verse/Easing/(/Verse.org/Verse/Easing:)CubicBezierInterpInternal(:float,:float,:float,:float,:float):)Native", &cubic_bezier_interp_native },

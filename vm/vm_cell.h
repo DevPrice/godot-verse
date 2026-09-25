@@ -144,11 +144,9 @@ struct ArrayCell : Cell {
 	void set(size_t p_index, Value p_value);
 	void append(Value p_value);
 	void truncate(size_t p_length);
+	void spread_to_values();
 
 	void visit_references(CellVisitor &r_visitor) const override { r_visitor.visit(values); }
-
-private:
-	void spread_to_values();
 };
 
 struct MapEntry {
@@ -456,6 +454,13 @@ struct ModuleCell : Cell {
 
 struct ClassLayout;
 
+// NativeState::tag, one per concrete type across vm/.
+enum NativeStateTag : uint32_t {
+	kEventStateTag = 1,
+	kSubscriptionStateTag = 2,
+	kSubsetVarStateTag = 3,
+};
+
 // What a native class keeps of an object beyond its Verse fields -- an event's awaiters, a
 // classifiable_subset_var's current set (spec/natives.md §5.10, §7). Invisible to Verse: equality,
 // freezing and the layout never see it; the collector visits it with its object and it dies with
@@ -603,6 +608,17 @@ struct PlaceholderCell : Cell {
 	}
 };
 
+struct TaskCell;
+struct FrameCell;
+
+// A task that read a variable while it had an await point (spec/tasks.md §5.7): a write resumes it
+// only if it is still suspended at that point, which is the op index `pc` in `frame`.
+struct AwaitRegistration {
+	TaskCell *task = nullptr;
+	FrameCell *frame = nullptr;
+	uint32_t pc = 0;
+};
+
 // A variable (spec/ops.md §8.3): the cell a `var` holds its content in. A hidden one stands in an
 // array element, map value or object field that an awaiting task read (spec/ops.md §3.1), and every
 // read of that slot reads through it.
@@ -613,19 +629,13 @@ struct RefCell : Cell {
 	// The variable of a `<native>` member: every write converts to native storage (spec/objects.md
 	// §9.2).
 	bool native = false;
+	// spec/ops.md §3.2: the task whose cancellation ends the live binding that last wrote this.
 	Value live_task = Value::uninitialized();
-	std::vector<const Cell *> awaiting_tasks;
+	std::vector<AwaitRegistration> awaiting;
 
 	explicit RefCell(Value p_content) :
 			Cell(CellKind::Ref), content(p_content) {}
-	void visit_references(CellVisitor &r_visitor) const override {
-		r_visitor.visit(content);
-		r_visitor.visit(domain);
-		r_visitor.visit(live_task);
-		for (const Cell *task : awaiting_tasks) {
-			r_visitor.visit(task);
-		}
-	}
+	void visit_references(CellVisitor &r_visitor) const override;
 };
 
 constexpr uint32_t kNoRegister = 0xFFFFFFFFu;
@@ -700,8 +710,12 @@ struct TaskCell : Cell {
 	std::vector<TaskHook> defer_hooks;
 	std::vector<TaskHook> finish_hooks;
 	ContentScopeCell *group = nullptr;
-	// The scope active when a native suspended the task (§8.1), which its completion runs under.
+	// The scope active when the task suspended (§8.1), which its resumption runs under.
 	ContentScopeCell *captured_scope = nullptr;
+	// §5.7's await state: the await point is (await_frame, await_pc), kNoRegister when none.
+	bool await_initializing = false;
+	uint32_t await_pc = kNoRegister;
+	FrameCell *await_frame = nullptr;
 
 	TaskCell() :
 			Cell(CellKind::Task) {}

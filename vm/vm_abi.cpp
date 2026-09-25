@@ -5,6 +5,7 @@
 // 0, having no status to refuse through.
 #include "verse_host_abi.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstring>
 #include <string>
@@ -159,19 +160,24 @@ void vh_shutdown(void) {
 	g_runtime = nullptr;
 }
 
+// The budget governs queued work, and this runtime queues none: a due sleeper is not subject to it
+// (godot-natives.md §10), so JobsPending and Overran are always zero.
 void vh_tick(double BudgetSeconds, vh_tick_stats *OutStats) {
 	(void)BudgetSeconds;
+	vh_tick_stats stats = {};
+	if (g_runtime != nullptr) {
+		g_runtime->tick(stats);
+	}
 	if (OutStats == nullptr) {
 		return;
 	}
-	// "Filled up to its own StructSize" is the real ABI's contract; honouring it here means never
-	// writing past what an older consumer reserved.
+	// Filled up to the consumer's own StructSize; one smaller than the v6.0 struct is left alone.
 	const int32_t requested = OutStats->StructSize;
-	const int32_t clamped = (requested > 0 && requested <= static_cast<int32_t>(sizeof(vh_tick_stats)))
-			? requested
-			: static_cast<int32_t>(sizeof(vh_tick_stats));
-	std::memset(OutStats, 0, static_cast<size_t>(clamped));
-	OutStats->StructSize = requested;
+	if (requested < int32_t(offsetof(vh_tick_stats, AnalysisWaits))) {
+		return;
+	}
+	stats.StructSize = requested;
+	std::memcpy(OutStats, &stats, size_t(requested) < sizeof(stats) ? size_t(requested) : sizeof(stats));
 }
 
 void vh_collect_garbage(void) {
@@ -257,6 +263,7 @@ int32_t vh_instantiate(const char *ClassNameUtf8, vh_handle Handle, vh_instance 
 	}
 	instance->handle = Handle;
 	instance->sidecar_class = g_runtime->sidecar.find_class(ClassNameUtf8);
+	g_runtime->instance_scopes.push_back(&instance->scope);
 	*OutInstance = instance;
 	return VH_OK;
 }
@@ -278,6 +285,8 @@ void vh_release_instance(vh_instance *Instance) {
 		}
 		g_runtime->heap.remove_handle_root(&Instance->object);
 		g_runtime->heap.remove_handle_root(&Instance->scope);
+		std::vector<const vm::Value *> &scopes = g_runtime->instance_scopes;
+		scopes.erase(std::remove(scopes.begin(), scopes.end(), &Instance->scope), scopes.end());
 	}
 	delete Instance;
 }

@@ -148,7 +148,7 @@ std::string RaisedError::message_line() const {
 }
 
 Interpreter::Interpreter(Heap &r_heap, const Program &p_program) :
-		heap(r_heap), program(p_program) {}
+		heap(r_heap), program(p_program), clock(&monotonic_seconds) {}
 
 Interpreter::Registers Interpreter::save_registers() {
 	return Registers{ frame, pc, task, run_base };
@@ -170,6 +170,8 @@ void Interpreter::begin_entry() {
 		raised = RaisedError();
 		unwinding = Outcome::Ok;
 		raise_scope = nullptr;
+		batch_depth = 0;
+		batched.clear();
 	}
 	entry_marks.push_back(marks());
 }
@@ -711,14 +713,14 @@ Interpreter::Step Interpreter::call(Value p_callee, Value p_self, bool p_with_se
 	if (is_unbound(argument)) {
 		return park();
 	}
-	if (is_array_value(p_callee)) {
+	if (is_array_value(p_callee) || is_map_value(p_callee)) {
 		Value element;
-		const Outcome outcome = array_index(p_callee, argument, element);
-		return unify_outcome(outcome, p_dest, read_slot(element));
-	}
-	if (is_map_value(p_callee)) {
-		Value element;
-		const Outcome outcome = map_lookup(p_callee, argument, element);
+		const Outcome outcome = is_array_value(p_callee) ? array_index(p_callee, argument, element) : map_lookup(p_callee, argument, element);
+		if (outcome == Outcome::Ok && awaiting()) {
+			if (Value *slot = element_slot(p_callee, argument, true)) {
+				register_slot(*slot);
+			}
+		}
 		return unify_outcome(outcome, p_dest, read_slot(element));
 	}
 	if (is_type_cell(p_callee)) {
@@ -836,6 +838,11 @@ Interpreter::Step Interpreter::load_field(Value p_object, const NameCell *p_name
 			Value &slot = object->field_values[field->slot];
 			if (slot.is_empty()) {
 				slot = Value::from_cell(heap.make<PlaceholderCell>());
+			}
+			// A `var` member's slot holds the variable itself, which RefGet registers with.
+			const bool variable = is_cell_kind(slot, CellKind::Ref) && !cell_as<RefCell>(slot)->hidden;
+			if (awaiting() && !variable && (field->entry_flags & kEntryNative) == 0 && !is_unbound(follow(read_slot(slot)))) {
+				register_slot(slot);
 			}
 			r_result = follow(read_slot(slot));
 			return Step::Next;
@@ -1261,6 +1268,11 @@ Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_
 				pc = w[4];
 				return Step::Jumped;
 			}
+			if (outcome == Outcome::Ok && awaiting()) {
+				if (Value *slot = element_slot(array, index, true)) {
+					register_slot(*slot);
+				}
+			}
 			return unify_outcome(outcome, w[0], read_slot(element));
 		}
 		case VbcOp::TypeCastFastFail: {
@@ -1358,7 +1370,7 @@ Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_
 		case VbcOp::EndTask:
 			return end_task(w);
 		case VbcOp::Yield:
-			return suspend(w[0], kNoRegister);
+			return suspend(w[0], kNoRegister, active_scope);
 		case VbcOp::NewSemaphore:
 			return unify_register(w[0], Value::from_cell(heap.make<SemaphoreCell>()));
 		case VbcOp::WaitSemaphore:
@@ -1368,14 +1380,16 @@ Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_
 			run_hooks(task->defer_hooks, task, true);
 			return land(frame, pc + 1);
 		case VbcOp::BeginAwait:
+			return begin_await();
 		case VbcOp::AwaitSuccess:
+			return await_success();
 		case VbcOp::EndAwait:
+			return end_await();
 		case VbcOp::BeginBatch:
+			++batch_depth;
+			return Step::Next;
 		case VbcOp::EndBatch:
-		case VbcOp::RefSetLive:
-		case VbcOp::CallSetLive:
-		case VbcOp::SetFieldLive:
-			return not_yet("await, batch and live variables (T4.3)");
+			return end_batch();
 
 		case VbcOp::Call:
 		case VbcOp::CallWithSelf: {
@@ -1463,25 +1477,32 @@ Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_
 			if (!is_cell_kind(ref, CellKind::Ref)) {
 				return invariant(std::string("RefGet of a ") + (ref.is_cell() ? cell_kind_name(ref.as_cell()->kind) : "value that is not a reference"));
 			}
-			const Value content = cell_as<RefCell>(ref)->content;
-			if (content.is_empty()) {
+			RefCell *variable = cell_as<RefCell>(ref);
+			if (variable->content.is_empty()) {
 				return invariant("a read of a variable nothing has written");
 			}
-			return unify_register(w[0], content);
+			register_await(variable);
+			return unify_register(w[0], variable->content);
 		}
-		case VbcOp::RefSet: {
+		case VbcOp::RefSet:
+		case VbcOp::RefSetLive: {
 			const Value ref = read(w[0]);
 			if (is_unbound(ref)) {
 				return park();
 			}
 			const Value value = read(w[1]);
-			if (is_cell_kind(ref, CellKind::AccessorRef)) {
+			TaskCell *live = nullptr;
+			if (VbcOp(p_op.opcode) == VbcOp::RefSetLive) {
+				const Step read_task = live_task_operand(w[2], live);
+				if (read_task != Step::Next) {
+					return read_task;
+				}
+			} else if (is_cell_kind(ref, CellKind::AccessorRef)) {
 				return accessor_call(ref, true, value, kNoRegister);
 			}
 			if (!is_cell_kind(ref, CellKind::Ref)) {
 				return invariant(std::string("RefSet of a ") + (ref.is_cell() ? cell_kind_name(ref.as_cell()->kind) : "value that is not a reference"));
 			}
-			// T4.3 cancels the live task and resumes awaiters.
 			RefCell *variable = cell_as<RefCell>(ref);
 			if (variable->native) {
 				const Step stored = native_store(value);
@@ -1489,9 +1510,7 @@ Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_
 					return stored;
 				}
 			}
-			record_slot(variable->content);
-			variable->content = value;
-			return Step::Next;
+			return write_variable(variable, value, live);
 		}
 		case VbcOp::RefCallDomain: {
 			const Value ref = read(w[1]);
@@ -1540,45 +1559,24 @@ Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_
 			const Outcome outcome = value_length(container, length);
 			return unify_outcome(outcome, w[0], make_int(heap, length));
 		}
-		case VbcOp::CallSet: {
+		case VbcOp::CallSet:
+		case VbcOp::CallSetLive: {
 			const Value container = read(w[0]);
 			const Value index = read(w[1]);
 			const Value value = read(w[2]);
-			if (is_cell_kind(container, CellKind::AccessorRef)) {
+			TaskCell *live = nullptr;
+			if (VbcOp(p_op.opcode) == VbcOp::CallSetLive) {
+				const Step read_task = live_task_operand(w[3], live);
+				if (read_task != Step::Next) {
+					return read_task;
+				}
+			} else if (is_cell_kind(container, CellKind::AccessorRef)) {
 				return accessor_call(accessor_reference(Value(), nullptr, cell_as<AccessorRefCell>(container), index), true, value, kNoRegister);
 			}
 			if (is_unbound(container) || is_unbound(index)) {
 				return park();
 			}
-			// T4.3 writes through a hidden variable.
-			if (is_cell_kind(container, CellKind::MutableArray)) {
-				Value old;
-				const Outcome outcome = array_set(container, index, value, old);
-				if (outcome == Outcome::Ok) {
-					UndoRecord entry;
-					entry.kind = UndoRecord::Kind::ArrayElement;
-					entry.cell = container.as_cell();
-					entry.key = index;
-					entry.old = old;
-					record(entry);
-				}
-				return unify_outcome(outcome, kNoRegister, Value());
-			}
-			if (is_cell_kind(container, CellKind::MutableMap)) {
-				bool inserted = false;
-				Value old;
-				const Outcome outcome = map_set(container, index, value, inserted, old);
-				if (outcome == Outcome::Ok) {
-					UndoRecord entry;
-					entry.kind = inserted ? UndoRecord::Kind::MapInsert : UndoRecord::Kind::MapValue;
-					entry.cell = container.as_cell();
-					entry.key = index;
-					entry.old = old;
-					record(entry);
-				}
-				return unify_outcome(outcome, kNoRegister, Value());
-			}
-			return invariant(std::string("CallSet on a ") + (container.is_cell() ? cell_kind_name(container.as_cell()->kind) : "value that is not a cell"));
+			return element_write(container, index, value, live);
 		}
 		case VbcOp::NewArray:
 		case VbcOp::NewMutableArray: {
@@ -1768,14 +1766,22 @@ Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_
 			return Step::Jumped;
 		}
 		case VbcOp::UnifyField:
-		case VbcOp::SetField: {
-			const bool set = VbcOp(p_op.opcode) == VbcOp::SetField;
+		case VbcOp::SetField:
+		case VbcOp::SetFieldLive: {
+			const bool set = VbcOp(p_op.opcode) != VbcOp::UnifyField;
 			const Value value = read(w[0]);
 			if (is_unbound(value)) {
 				return park();
 			}
 			const NameCell *name = cell_as<NameCell>(constant(w[1]));
 			const Value replacement = read(w[2]);
+			TaskCell *live = nullptr;
+			if (VbcOp(p_op.opcode) == VbcOp::SetFieldLive) {
+				const Step read_task = live_task_operand(w[3], live);
+				if (read_task != Step::Next) {
+					return read_task;
+				}
+			}
 			if (set && is_cell_kind(value, CellKind::AccessorRef)) {
 				const Value step = make_string(heap, unqualified_name(name->text));
 				return accessor_call(accessor_reference(Value(), nullptr, cell_as<AccessorRefCell>(value), step), true, replacement, kNoRegister);
@@ -1799,9 +1805,11 @@ Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_
 			}
 			Value &slot = object->field_values[field->slot];
 			if (set) {
-				Value &target = is_cell_kind(slot, CellKind::Ref) ? cell_as<RefCell>(slot)->content : slot;
-				record_slot(target);
-				target = replacement;
+				if (is_cell_kind(slot, CellKind::Ref)) {
+					return write_variable(cell_as<RefCell>(slot), replacement, live);
+				}
+				record_slot(slot);
+				slot = replacement;
 				return Step::Next;
 			}
 			return unify_slot(slot, replacement);

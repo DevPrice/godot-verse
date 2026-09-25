@@ -54,6 +54,13 @@ public:
 
 	// The content scope of everything that is not a call into a script instance (spec/tasks.md §8.1).
 	Value project_scope;
+	// The scope slot of every instance the host holds, which vh_tick_stats' PeakInstanceTasks is
+	// counted over.
+	std::vector<const Value *> instance_scopes;
+
+	// vh_tick's work (godot-natives.md §10): every sleeper due now, earliest first, each resumed in a
+	// VM entry of its own, whatever the budget. Fills every field of r_stats but StructSize.
+	void tick(vh_tick_stats &r_stats);
 
 	// Makes r_scope's content scope the active one for an entry, first replacing it with a fresh one
 	// when it is missing or terminated: a terminated scope is never revived (CLAUDE.md, R-ASYNC-4).

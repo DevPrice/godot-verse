@@ -526,6 +526,31 @@ Outcome array_set(Value p_container, Value p_index, Value p_value, Value &r_old)
 	return Outcome::Ok;
 }
 
+Value *element_slot(Value p_container, Value p_key, bool p_spread) {
+	p_container = follow(p_container);
+	p_key = follow(p_key);
+	if (is_cell_kind(p_container, CellKind::MutableArray)) {
+		ArrayCell *array = cell_as<ArrayCell>(p_container);
+		size_t position = 0;
+		if (!small_index(p_key, array->length(), position)) {
+			return nullptr;
+		}
+		if (array->storage == ArrayCell::Storage::Char8) {
+			if (!p_spread) {
+				return nullptr;
+			}
+			array->spread_to_values();
+		}
+		return &array->values[position];
+	}
+	if (is_cell_kind(p_container, CellKind::MutableMap) && !is_unbound_placeholder(p_key)) {
+		MapCell *map = cell_as<MapCell>(p_container);
+		const int64_t position = map_find(map, p_key, hash_key(p_key));
+		return position < 0 ? nullptr : &map->entries[size_t(position)].value;
+	}
+	return nullptr;
+}
+
 Outcome make_map(Heap &r_heap, const std::vector<Value> &p_keys, const std::vector<Value> &p_values, Value &r_result) {
 	return build_map(r_heap, p_keys, p_values, false, r_result);
 }

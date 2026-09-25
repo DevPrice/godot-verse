@@ -13,6 +13,13 @@
 namespace vm {
 
 class Interpreter;
+struct Program;
+
+// The real class of a library type a native builds an object of (a message, a diagnostic, an
+// event_subscription), found by its package-definitions decorated path (format.md §7) rather than
+// fabricated, so a script's field access on the result, or a class check against it, sees the
+// class the rest of the program does. Null when the program has no such definition.
+const ClassCell *find_library_class(const Program &p_program, std::string_view p_decorated_path);
 
 // One call of a native: its Self and its positional arguments already adapted to the native's
 // count (spec/natives.md §3.3, §3.4). An implementation answers Ok with `result`, Fail, or Error

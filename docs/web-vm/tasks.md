@@ -70,7 +70,7 @@ Status: `todo`, `doing`, `done`, `dropped` (with a reason).
 | --- | --- | --- | --- | --- | --- |
 | T4.1 | Tasks and the task ops; `spawn`, `branch`, `sync`, `race`, `rush`; semaphores; and hidden per-object native state, which `event(t)`, `task(t)` and `classifiable_subset_var` all need (T3.8 left `classifiable_subset`'s ten natives unbound for want of it) | clean / opus | T1.7, T3.6 | concurrency fixtures pass | done: every tasks_basic fixture not needing event(t) or Sleep; those are T4.3's |
 | T4.2 | Cancellation, unwind edges, `defer`, terminate | clean / opus | T4.1 | cancellation fixtures pass | done with T4.1 |
-| T4.3 | `event(t)`, `task(t)`, `Sleep` and its tick; live-variable `await` and `batch`, including element, map-value and field registration, and `set live` bindings (`MoveNonComparable`, `RefSetLive`, `CallSetLive`, `SetFieldLive` — `spec/ops.md` §3) | clean / opus | T4.1 | event, sleep and live-variable fixtures pass | todo |
+| T4.3 | `event(t)`, `task(t)`, `Sleep` and its tick; live-variable `await` and `batch`, including element, map-value and field registration, and `set live` bindings (`MoveNonComparable`, `RefSetLive`, `CallSetLive`, `SetFieldLive` — `spec/ops.md` §3) | clean / opus | T4.1 | event, sleep and live-variable fixtures pass | done |
 
 **M4 exit:** `run_vm_conformance.py` agrees on every fixture.
 

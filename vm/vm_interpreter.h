@@ -37,6 +37,9 @@ struct RaisedError {
 	std::string message_line() const;
 };
 
+// Seconds on a monotonic clock, what Interpreter::clock answers unless a test replaces it.
+double monotonic_seconds();
+
 struct NamedArgument {
 	const NameCell *name = nullptr;
 	Value value;
@@ -86,8 +89,22 @@ public:
 	// captured scope was terminated or it is no longer Active. Error propagates the raise.
 	Outcome complete(TaskCell *p_task, Value p_value);
 
-	// The natives of `task(t)` (spec/natives.md §8), by binding key, or null.
+	// The natives of `task(t)` and `event(t)` (spec/natives.md §7, §8) and `Sleep`
+	// (godot-natives.md §10), by binding key, or null.
 	static NativeFn task_native(std::string_view p_binding_key);
+
+	// godot-natives.md §10: a task suspended in Sleep until `deadline` on `clock`. A sleeper that was
+	// cancelled stays here until it is due, and its wake then does nothing (spec/tasks.md §11.1).
+	struct Sleeper {
+		TaskCell *task = nullptr;
+		double deadline = 0.0;
+	};
+	std::vector<Sleeper> sleepers;
+	// Monotonic seconds, blind to Godot's time scale and pause; a test substitutes its own.
+	double (*clock)() = nullptr;
+	// Removes every sleeper due at p_now and answers them earliest deadline first, ties in the order
+	// they began to sleep.
+	std::vector<TaskCell *> take_due_sleepers(double p_now);
 
 	// A host-built object (spec/objects.md §7.11): NewObject with no archetype entries, the
 	// constructor with (marker, uninitialized, uninitialized), then the deferred setters and the
@@ -199,6 +216,10 @@ private:
 	std::vector<Marks> entry_marks;
 	RaisedError raised;
 	uint32_t module_top_level = 0;
+	// spec/tasks.md §5.7: open batch levels, and the variables written under them whose awaiting
+	// tasks the outermost EndBatch resumes.
+	uint32_t batch_depth = 0;
+	std::vector<RefCell *> batched;
 
 	// What a nested drive saves of the run it interrupts and puts back.
 	struct Registers {
@@ -250,6 +271,29 @@ private:
 	Outcome resume_nested(TaskCell *p_task);
 	void run_hooks(std::vector<TaskHook> &r_hooks, TaskCell *p_task, bool p_newest_first);
 	void terminate(TaskCell *p_task);
+
+	// spec/tasks.md §5.7 and spec/ops.md §3, in vm_tasks.cpp. A slot read while the current task has
+	// an await point is put in a hidden variable the task is registered with; a write to a variable
+	// ends the live binding it does not belong to and resumes its registered tasks, or, inside a
+	// batch, defers them to the outermost EndBatch.
+	Step begin_await();
+	Step await_success();
+	Step end_await();
+	Step end_batch();
+	bool awaiting() const;
+	void register_await(RefCell *r_variable);
+	void register_slot(Value &r_slot);
+	Step write_variable(RefCell *r_variable, Value p_value, TaskCell *p_live);
+	Step resume_awaiters(std::vector<AwaitRegistration> &r_registrations);
+	// CallSet and CallSetLive on a mutable array or map; p_live is null for CallSet.
+	Step element_write(Value p_container, Value p_index, Value p_value, TaskCell *p_live);
+	Step live_task_operand(uint32_t p_word, TaskCell *&r_task);
+
+	static Outcome event_await(NativeCall &r_call);
+	static Outcome event_signal(NativeCall &r_call);
+	static Outcome event_subscribe(NativeCall &r_call);
+	static Outcome subscription_cancel(NativeCall &r_call);
+	static Outcome sleep(NativeCall &r_call);
 
 	static Outcome task_query(NativeCall &r_call, TaskCell *&r_task);
 	static Outcome task_active(NativeCall &r_call);

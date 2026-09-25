@@ -1,8 +1,11 @@
 #include "vm_interpreter.h"
 
 #include <algorithm>
+#include <chrono>
+#include <cstddef>
 
 #include "vm_natives.h"
+#include "vm_values.h"
 
 // spec/tasks.md: tasks, the task ops, cancellation, termination and the natives of task(t). There is
 // no scheduler queue (design §7.5): starting, suspending and finishing move control inside the
@@ -38,7 +41,69 @@ Outcome answer(NativeCall &r_call, bool p_holds) {
 
 using Phase = TaskCell::Phase;
 
+// spec/natives.md §7: an event's awaiters, oldest first, and its subscriptions in the order they
+// were made -- one conforming order among the any that §7.3 allows.
+struct EventState : NativeState {
+	static constexpr uint32_t kTag = kEventStateTag;
+
+	struct Subscription {
+		Value callback;
+		ContentScopeCell *scope = nullptr;
+		ObjectCell *handle = nullptr;
+	};
+
+	std::vector<TaskCell *> awaiters;
+	std::vector<Subscription> subscriptions;
+
+	EventState() :
+			NativeState(kTag) {}
+	void visit_references(CellVisitor &r_visitor) const override {
+		for (const TaskCell *awaiter : awaiters) {
+			r_visitor.visit(awaiter);
+		}
+		for (const Subscription &subscription : subscriptions) {
+			r_visitor.visit(subscription.callback);
+			r_visitor.visit(subscription.scope);
+			r_visitor.visit(subscription.handle);
+		}
+	}
+};
+
+// An event_subscription's binding: null once cancelled or cleaned up.
+struct SubscriptionState : NativeState {
+	static constexpr uint32_t kTag = kSubscriptionStateTag;
+
+	ObjectCell *event = nullptr;
+
+	SubscriptionState() :
+			NativeState(kTag) {}
+	void visit_references(CellVisitor &r_visitor) const override { r_visitor.visit(event); }
+};
+
+template <typename T>
+T *state_of(Value p_self) {
+	const Value self = follow(p_self);
+	return is_cell_kind(self, CellKind::Object) ? cell_as<ObjectCell>(self)->state<T>() : nullptr;
+}
+
+void leave_event(TaskCell *p_task, Cell *p_event) {
+	remove_task(static_cast<ObjectCell *>(p_event)->state<EventState>()->awaiters, p_task);
+}
+
+size_t subscription_index(const EventState *p_state, const ObjectCell *p_handle) {
+	for (size_t index = 0; index < p_state->subscriptions.size(); ++index) {
+		if (p_state->subscriptions[index].handle == p_handle) {
+			return index;
+		}
+	}
+	return p_state->subscriptions.size();
+}
+
 } // namespace
+
+double monotonic_seconds() {
+	return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
 
 TaskCell *Interpreter::new_task(TaskCell *p_parent) {
 	TaskCell *created = heap.make<TaskCell>();
@@ -664,6 +729,332 @@ Outcome Interpreter::task_cancel(NativeCall &r_call) {
 	return Outcome::Yield;
 }
 
+// §5.7: the op after BeginAwait is the await point, where the failed condition's Yield returns.
+Interpreter::Step Interpreter::begin_await() {
+	if (task == nullptr || task->await_initializing || task->await_pc != kNoRegister) {
+		return invariant("BeginAwait with an await already open");
+	}
+	task->await_initializing = true;
+	task->await_pc = pc + 1;
+	task->await_frame = frame;
+	return Step::Next;
+}
+
+Interpreter::Step Interpreter::await_success() {
+	if (task == nullptr) {
+		return invariant("AwaitSuccess outside any task");
+	}
+	if (task->await_initializing) {
+		return Step::Fail;
+	}
+	task->await_pc = kNoRegister;
+	task->await_frame = nullptr;
+	return Step::Next;
+}
+
+Interpreter::Step Interpreter::end_await() {
+	if (task == nullptr || task->await_pc == kNoRegister) {
+		return invariant("EndAwait with no await open");
+	}
+	task->await_initializing = false;
+	task->await_pc = kNoRegister;
+	task->await_frame = nullptr;
+	return Step::Next;
+}
+
+Interpreter::Step Interpreter::end_batch() {
+	if (batch_depth == 0) {
+		return invariant("EndBatch with no batch open");
+	}
+	if (--batch_depth > 0) {
+		return Step::Next;
+	}
+	std::vector<RefCell *> written;
+	written.swap(batched);
+	std::vector<AwaitRegistration> registrations;
+	for (RefCell *variable : written) {
+		registrations.insert(registrations.end(), variable->awaiting.begin(), variable->awaiting.end());
+		variable->awaiting.clear();
+	}
+	return resume_awaiters(registrations);
+}
+
+bool Interpreter::awaiting() const {
+	return task != nullptr && task->await_pc != kNoRegister;
+}
+
+void Interpreter::register_await(RefCell *r_variable) {
+	if (!awaiting()) {
+		return;
+	}
+	for (const AwaitRegistration &registration : r_variable->awaiting) {
+		if (registration.task == task && registration.frame == task->await_frame && registration.pc == task->await_pc) {
+			return;
+		}
+	}
+	r_variable->awaiting.push_back(AwaitRegistration{ task, task->await_frame, task->await_pc });
+}
+
+// spec/ops.md §3.1: the replacement is not a transaction write, so it is never undone.
+void Interpreter::register_slot(Value &r_slot) {
+	RefCell *hidden = nullptr;
+	if (is_cell_kind(r_slot, CellKind::Ref) && cell_as<RefCell>(r_slot)->hidden) {
+		hidden = cell_as<RefCell>(r_slot);
+	} else {
+		hidden = heap.make<RefCell>(r_slot);
+		hidden->hidden = true;
+		r_slot = Value::from_cell(hidden);
+	}
+	register_await(hidden);
+}
+
+// spec/ops.md §3.2 and RefSet: the live task goes first, as a cancel nothing waits for; then the
+// content is replaced; then the registered tasks run, each to its next stop, before the write
+// completes.
+Interpreter::Step Interpreter::write_variable(RefCell *r_variable, Value p_value, TaskCell *p_live) {
+	TaskCell *const bound = is_cell_kind(r_variable->live_task, CellKind::Task) ? cell_as<TaskCell>(r_variable->live_task) : nullptr;
+	if (bound != p_live) {
+		record_slot(r_variable->live_task);
+		r_variable->live_task = p_live != nullptr ? Value::from_cell(p_live) : Value::uninitialized();
+		if (bound != nullptr && request_cancel(bound) == Cancel::Error) {
+			return Step::Stop;
+		}
+	}
+	record_slot(r_variable->content);
+	r_variable->content = p_value;
+	if (r_variable->awaiting.empty()) {
+		return Step::Next;
+	}
+	if (batch_depth > 0) {
+		if (std::find(batched.begin(), batched.end(), r_variable) == batched.end()) {
+			batched.push_back(r_variable);
+		}
+		return Step::Next;
+	}
+	std::vector<AwaitRegistration> registrations;
+	registrations.swap(r_variable->awaiting);
+	return resume_awaiters(registrations);
+}
+
+// A registration lapses unless its task is still suspended exactly at the await point it read
+// under; one that holds resumes there with the point re-armed, so this evaluation's AwaitSuccess
+// can pass. A task registered several times runs once. The order among them is the reference's
+// open question (spec/tasks.md §14 Q5); this is registration order.
+Interpreter::Step Interpreter::resume_awaiters(std::vector<AwaitRegistration> &r_registrations) {
+	std::vector<TaskCell *> resumed;
+	for (const AwaitRegistration &registration : r_registrations) {
+		TaskCell *const awaiter = registration.task;
+		if (awaiter->running || awaiter->finished || awaiter->phase != Phase::Active || awaiter->resume_frame != registration.frame ||
+				awaiter->resume_pc != registration.pc || std::find(resumed.begin(), resumed.end(), awaiter) != resumed.end()) {
+			continue;
+		}
+		resumed.push_back(awaiter);
+		awaiter->await_initializing = false;
+		awaiter->await_pc = registration.pc;
+		awaiter->await_frame = registration.frame;
+		if (complete(awaiter, Value()) != Outcome::Ok) {
+			return Step::Stop;
+		}
+	}
+	return Step::Next;
+}
+
+Interpreter::Step Interpreter::element_write(Value p_container, Value p_index, Value p_value, TaskCell *p_live) {
+	if (Value *slot = element_slot(p_container, p_index, false)) {
+		if (is_cell_kind(*slot, CellKind::Ref) && cell_as<RefCell>(*slot)->hidden) {
+			return write_variable(cell_as<RefCell>(*slot), p_value, p_live);
+		}
+	}
+	// spec/ops.md §3.2: an element in no hidden variable records no live task.
+	if (is_cell_kind(p_container, CellKind::MutableArray)) {
+		Value old;
+		const Outcome outcome = array_set(p_container, p_index, p_value, old);
+		if (outcome == Outcome::Ok) {
+			UndoRecord entry;
+			entry.kind = UndoRecord::Kind::ArrayElement;
+			entry.cell = p_container.as_cell();
+			entry.key = p_index;
+			entry.old = old;
+			record(entry);
+		}
+		return unify_outcome(outcome, kNoRegister, Value());
+	}
+	if (is_cell_kind(p_container, CellKind::MutableMap)) {
+		bool inserted = false;
+		Value old;
+		const Outcome outcome = map_set(p_container, p_index, p_value, inserted, old);
+		if (outcome == Outcome::Ok) {
+			UndoRecord entry;
+			entry.kind = inserted ? UndoRecord::Kind::MapInsert : UndoRecord::Kind::MapValue;
+			entry.cell = p_container.as_cell();
+			entry.key = p_index;
+			entry.old = old;
+			record(entry);
+		}
+		return unify_outcome(outcome, kNoRegister, Value());
+	}
+	return invariant(std::string("CallSet on a ") + (p_container.is_cell() ? cell_kind_name(p_container.as_cell()->kind) : "value that is not a cell"));
+}
+
+Interpreter::Step Interpreter::live_task_operand(uint32_t p_word, TaskCell *&r_task) {
+	const Value value = read(p_word);
+	if (!is_cell_kind(value, CellKind::Task)) {
+		return invariant("a live write whose Task is not a task");
+	}
+	r_task = cell_as<TaskCell>(value);
+	return Step::Next;
+}
+
+std::vector<TaskCell *> Interpreter::take_due_sleepers(double p_now) {
+	std::vector<Sleeper> due;
+	std::vector<Sleeper> waiting;
+	for (const Sleeper &sleeper : sleepers) {
+		(sleeper.deadline <= p_now ? due : waiting).push_back(sleeper);
+	}
+	sleepers.swap(waiting);
+	std::stable_sort(due.begin(), due.end(), [](const Sleeper &p_left, const Sleeper &p_right) { return p_left.deadline < p_right.deadline; });
+	std::vector<TaskCell *> tasks;
+	for (const Sleeper &sleeper : due) {
+		tasks.push_back(sleeper.task);
+	}
+	return tasks;
+}
+
+// spec/natives.md §7.1.
+Outcome Interpreter::event_await(NativeCall &r_call) {
+	EventState *state = state_of<EventState>(r_call.self);
+	TaskCell *waiter = r_call.interpreter != nullptr ? r_call.interpreter->task : nullptr;
+	if (state == nullptr || waiter == nullptr) {
+		return Outcome::Invalid;
+	}
+	state->awaiters.push_back(waiter);
+	waiter->defer_hooks.push_back(TaskHook{ &leave_event, follow(r_call.self).as_cell() });
+	return Outcome::Yield;
+}
+
+// spec/natives.md §7.2: the awaiters as one batch taken up front, each run to its next stop; a
+// member cancelled before its turn is no longer Active, so completing it does nothing. Then the
+// subscriptions as they stand now, each under its own scope and in its own transaction. A raise
+// in either stops the Signal, which the call op then reports.
+Outcome Interpreter::event_signal(NativeCall &r_call) {
+	if (unbound_argument(r_call)) {
+		return Outcome::Park;
+	}
+	EventState *state = state_of<EventState>(r_call.self);
+	if (state == nullptr || r_call.interpreter == nullptr) {
+		return Outcome::Invalid;
+	}
+	Interpreter &interpreter = *r_call.interpreter;
+	const Value payload = argument(r_call, 0);
+	r_call.result = r_call.heap.false_value();
+	std::vector<TaskCell *> batch;
+	batch.swap(state->awaiters);
+	for (TaskCell *awaiter : batch) {
+		if (interpreter.complete(awaiter, payload) != Outcome::Ok) {
+			return Outcome::Ok;
+		}
+	}
+	const std::vector<EventState::Subscription> subscriptions = state->subscriptions;
+	for (const EventState::Subscription &subscription : subscriptions) {
+		const size_t index = subscription_index(state, subscription.handle);
+		if (index == state->subscriptions.size()) {
+			continue;
+		}
+		if (subscription.scope != nullptr && subscription.scope->terminated) {
+			state->subscriptions.erase(state->subscriptions.begin() + ptrdiff_t(index));
+			subscription.handle->state<SubscriptionState>()->event = nullptr;
+			continue;
+		}
+		ContentScopeCell *const saved_scope = interpreter.active_scope;
+		interpreter.active_scope = subscription.scope;
+		interpreter.begin_entry();
+		Value ignored;
+		const Outcome outcome = interpreter.invoke(subscription.callback, Value(), { payload }, {}, ignored);
+		interpreter.end_entry(outcome == Outcome::Ok);
+		interpreter.active_scope = saved_scope;
+		if (interpreter.unwinding != Outcome::Ok) {
+			return Outcome::Ok;
+		}
+	}
+	return Outcome::Ok;
+}
+
+// spec/natives.md §7.3: owned by the script instance's scope, and undone with a failing transaction.
+Outcome Interpreter::event_subscribe(NativeCall &r_call) {
+	if (unbound_argument(r_call)) {
+		return Outcome::Park;
+	}
+	EventState *state = state_of<EventState>(r_call.self);
+	if (state == nullptr || r_call.interpreter == nullptr) {
+		return Outcome::Invalid;
+	}
+	Interpreter &interpreter = *r_call.interpreter;
+	const ClassCell *subscription_class = find_library_class(interpreter.program, "(/Verse.org/Verse:)event_subscription");
+	if (subscription_class == nullptr) {
+		return Outcome::Invalid;
+	}
+	ObjectCell *handle = interpreter.layouts.new_object(r_call.heap, interpreter.layouts.get(subscription_class));
+	ObjectCell *event = cell_as<ObjectCell>(follow(r_call.self));
+	handle->state<SubscriptionState>()->event = event;
+	state->subscriptions.push_back(EventState::Subscription{ argument(r_call, 0), interpreter.active_scope, handle });
+	interpreter.compensate([state, handle] {
+		const size_t index = subscription_index(state, handle);
+		if (index < state->subscriptions.size()) {
+			state->subscriptions.erase(state->subscriptions.begin() + ptrdiff_t(index));
+		}
+		handle->state<SubscriptionState>()->event = nullptr;
+	});
+	r_call.result = Value::from_cell(handle);
+	return Outcome::Ok;
+}
+
+Outcome Interpreter::subscription_cancel(NativeCall &r_call) {
+	SubscriptionState *binding = state_of<SubscriptionState>(r_call.self);
+	if (binding == nullptr || r_call.interpreter == nullptr) {
+		return Outcome::Invalid;
+	}
+	r_call.result = r_call.heap.false_value();
+	ObjectCell *const event = binding->event;
+	if (event == nullptr) {
+		return Outcome::Ok;
+	}
+	EventState *state = event->state<EventState>();
+	ObjectCell *handle = cell_as<ObjectCell>(follow(r_call.self));
+	const size_t index = subscription_index(state, handle);
+	binding->event = nullptr;
+	if (index == state->subscriptions.size()) {
+		return Outcome::Ok;
+	}
+	const EventState::Subscription removed = state->subscriptions[index];
+	state->subscriptions.erase(state->subscriptions.begin() + ptrdiff_t(index));
+	r_call.interpreter->compensate([state, binding, event, removed, index] {
+		state->subscriptions.insert(state->subscriptions.begin() + ptrdiff_t(std::min(index, state->subscriptions.size())), removed);
+		binding->event = event;
+	});
+	return Outcome::Ok;
+}
+
+// godot-natives.md §10: below zero is no suspension at all; zero and above wait for the tick.
+Outcome Interpreter::sleep(NativeCall &r_call) {
+	if (unbound_argument(r_call)) {
+		return Outcome::Park;
+	}
+	const Value seconds = argument(r_call, 0);
+	if (!seconds.is_float() || r_call.interpreter == nullptr) {
+		return Outcome::Invalid;
+	}
+	r_call.result = r_call.heap.false_value();
+	if (seconds.as_float() < 0.0) {
+		return Outcome::Ok;
+	}
+	Interpreter &interpreter = *r_call.interpreter;
+	if (interpreter.task == nullptr) {
+		return Outcome::Invalid;
+	}
+	interpreter.sleepers.push_back(Sleeper{ interpreter.task, interpreter.clock() + seconds.as_float() });
+	return Outcome::Yield;
+}
+
 NativeFn Interpreter::task_native(std::string_view p_binding_key) {
 	struct Binding {
 		const char *key;
@@ -680,6 +1071,12 @@ NativeFn Interpreter::task_native(std::string_view p_binding_key) {
 		{ "(/Verse.org/Concurrency/task/(/Verse.org/Concurrency/task:)Interrupted:)Native", &Interpreter::task_interrupted },
 		{ "(/Verse.org/Concurrency/task/Await:)Native", &Interpreter::task_await },
 		{ "(/Verse.org/Concurrency/task/Cancel:)Native", &Interpreter::task_cancel },
+		{ "(/Verse.org/Verse/event/Await:)Native", &Interpreter::event_await },
+		{ "(/Verse.org/Verse/event/(/Verse.org/Verse/signalable:)Signal(:payload):)Native", &Interpreter::event_signal },
+		{ "(/Verse.org/Verse/subscribable_event_intrnl/(/Verse.org/Verse/signalable:)Signal(:payload):)Native", &Interpreter::event_signal },
+		{ "(/Verse.org/Verse/subscribable_event_intrnl/(/Verse.org/Verse/subscribable:)Subscribe(:t->void):)Native", &Interpreter::event_subscribe },
+		{ "(/Verse.org/Verse/event_subscription/(/Verse.org/Verse/cancelable:)Cancel:)Native", &Interpreter::subscription_cancel },
+		{ "(/Godot.org/Godot/Sleep(:float):)Native", &Interpreter::sleep },
 	};
 	for (const Binding &binding : kBindings) {
 		if (p_binding_key == binding.key) {

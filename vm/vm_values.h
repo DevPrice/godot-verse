@@ -48,6 +48,11 @@ Outcome array_fast_append(Heap &r_heap, Value p_left, Value p_right, Value &r_pa
 // held, for the undo log.
 Outcome array_set(Value p_container, Value p_index, Value p_value, Value &r_old);
 
+// Where a mutable array's element or a mutable map's value is stored, which is where a hidden
+// variable stands (spec/ops.md §3.1); null when there is no such element or entry. A packed string
+// element has a slot only once p_spread unpacks the string, and nothing packed is ever a variable.
+Value *element_slot(Value p_container, Value p_key, bool p_spread);
+
 // NewMap: a repeated key takes the last value and the last position (spec/values.md §8.1).
 Outcome make_map(Heap &r_heap, const std::vector<Value> &p_keys, const std::vector<Value> &p_values, Value &r_result);
 // ConcatenateMaps: as a literal listing the left's entries then the right's.

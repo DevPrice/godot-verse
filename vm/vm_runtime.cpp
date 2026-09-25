@@ -185,6 +185,33 @@ void Runtime::activate_scope(Value &r_scope) {
 	interpreter.active_scope = cell_as<ContentScopeCell>(r_scope);
 }
 
+// A raise in one sleeper rolls back and reports that sleeper's run alone (godot-natives.md §10's
+// nested transaction); the rest still wake.
+void Runtime::tick(vh_tick_stats &r_stats) {
+	const double started = monotonic_seconds();
+	if (!interpreter.in_entry()) {
+		for (TaskCell *sleeper : interpreter.take_due_sleepers(interpreter.clock())) {
+			interpreter.begin_entry();
+			const Outcome outcome = interpreter.complete(sleeper, heap.false_value());
+			interpreter.end_entry(outcome == Outcome::Ok);
+			if (outcome != Outcome::Ok) {
+				report_raised(interpreter.error());
+			}
+			++r_stats.JobsRun;
+		}
+	}
+	r_stats.Sleeping = int32_t(interpreter.sleepers.size());
+	for (const Value *scope : instance_scopes) {
+		if (is_cell_kind(*scope, CellKind::ContentScope)) {
+			const ContentScopeCell *cell = cell_as<ContentScopeCell>(*scope);
+			if (!cell->terminated && int32_t(cell->group.size()) > r_stats.PeakInstanceTasks) {
+				r_stats.PeakInstanceTasks = int32_t(cell->group.size());
+			}
+		}
+	}
+	r_stats.ElapsedSeconds = monotonic_seconds() - started;
+}
+
 HostArena::HostArena() {
 	Alloc = &HostArena::allocate;
 }

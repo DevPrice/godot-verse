@@ -167,6 +167,17 @@ void TaskCell::visit_references(CellVisitor &r_visitor) const {
 	}
 	r_visitor.visit(group);
 	r_visitor.visit(captured_scope);
+	r_visitor.visit(await_frame);
+}
+
+void RefCell::visit_references(CellVisitor &r_visitor) const {
+	r_visitor.visit(content);
+	r_visitor.visit(domain);
+	r_visitor.visit(live_task);
+	for (const AwaitRegistration &registration : awaiting) {
+		r_visitor.visit(registration.task);
+		r_visitor.visit(registration.frame);
+	}
 }
 
 void EnumerationCell::visit_references(CellVisitor &r_visitor) const {

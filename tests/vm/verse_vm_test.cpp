@@ -1818,7 +1818,7 @@ void FailureAndEffectCases(Cases &r_cases) {
 	r_cases.check("unification §3.3: an equal second Move succeeds and leaves the register", Invoked(interpreter, unify.Function(heap.false_value()), {}) == "[1,2]");
 
 	Asm yields(heap, "Yields", 3, 0);
-	yields.Op(VbcOp::BeginAwait, {});
+	yields.Op(VbcOp::NewClass, {});
 	r_cases.check("ops §0: an op a later task implements answers the not-yet outcome",
 			Invoked(interpreter, yields.Function(heap.false_value()), {}).find("<not yet>") == 0);
 }
@@ -2869,6 +2869,262 @@ void TaskCases(Cases &r_cases) {
 	g_waiting.clear();
 }
 
+double g_now = 0.0;
+std::string g_runtime_error;
+
+double FakeClock() {
+	return g_now;
+}
+
+void CaptureRuntimeError(void *, const vh_runtime_error *p_error) {
+	g_runtime_error.assign(p_error->MessageUtf8, size_t(p_error->MessageLen));
+}
+
+// spec/natives.md §7, godot-natives.md §10 and spec/tasks.md §5.7 with the real natives: event(t)
+// on a bare object (its awaiters live in native state), Sleep woken by Runtime::tick on a clock
+// this test moves, and await, batch and live writes over hand-written bytecode shaped the way the
+// compiler shapes them (tests/vm_conformance/tasks_live.verse has the compiled forms).
+void AwaitEventSleepCases(Cases &r_cases) {
+	Runtime runtime;
+	Heap &heap = runtime.heap;
+	Interpreter &interpreter = runtime.interpreter;
+	interpreter.clock = &FakeClock;
+	runtime.on_runtime_error = &CaptureRuntimeError;
+	using vbc::VbcOp;
+	const uint32_t none = kAbsentOperand;
+	const Value no = heap.false_value();
+	const Value log = NativeFunction(heap, "Log", 1, &LogNative);
+	const Value await = NativeProcedure(heap, "(/Verse.org/Verse/event/Await:)Native", 0);
+	const Value signal = NativeProcedure(heap, "(/Verse.org/Verse/event/(/Verse.org/Verse/signalable:)Signal(:payload):)Native", 1);
+	const Value cancel = NativeProcedure(heap, "(/Verse.org/Concurrency/task/Cancel:)Native", 0);
+	const Value sleep = NativeFunction(heap, "Sleep", 1, native_implementation("(/Godot.org/Godot/Sleep(:float):)Native"));
+	const Value err = NativeFunction(heap, "Err", 1, native_implementation("(/Verse.org/Verse/(/Verse.org/Verse:)Err(:[]char):)Native"));
+	const auto Log = [&](Asm &r_code, uint32_t p_scratch, int64_t p_value) {
+		r_code.Op(VbcOp::Call, { W(p_scratch), W(r_code.K(log)), L({ r_code.K(Int(heap, p_value)) }), L({}), L({}), W(0) });
+	};
+	const auto Sleep = [&](Asm &r_code, uint32_t p_dest, double p_seconds) {
+		r_code.Op(VbcOp::Call, { W(p_dest), W(r_code.K(sleep)), L({ r_code.K(F(p_seconds)) }), L({}), L({}), W(1) });
+	};
+	const auto EndTask = [&](Asm &r_code) {
+		r_code.Op(VbcOp::EndTask, { W(none), W(none), W(r_code.K(no)), W(none), W(none) });
+	};
+	const auto Spawn = [&](Asm &r_body) {
+		Asm code(heap, "Spawn", 3, 0);
+		code.Op(VbcOp::CallTask, { W(2), W(none), W(code.K(r_body.Function(no))), L({}) });
+		code.Op(VbcOp::Return, { W(R(2)) });
+		Value task;
+		InvokeValue(interpreter, code.Function(no), task);
+		return task;
+	};
+	Value result;
+	g_log.clear();
+
+	ObjectCell *event = heap.make<ObjectCell>();
+	const Value event_value = Value::from_cell(event);
+	const auto Signal = [&](int64_t p_value) {
+		Asm code(heap, "Signaler", 4, 0);
+		code.Op(VbcOp::CallWithSelf, { W(2), W(code.K(signal)), W(code.K(event_value)), L({ code.K(Int(heap, p_value)) }), L({}), L({}), W(0) });
+		Log(code, 3, 99);
+		code.Op(VbcOp::Return, { W(code.K(no)) });
+		InvokeValue(interpreter, code.Function(no), result);
+	};
+	Asm reawaiter(heap, "Reawaiter", 4, 0);
+	reawaiter.Op(VbcOp::ResetNonTrailed, { W(2), W(0) });
+	reawaiter.Op(VbcOp::CallWithSelf, { W(2), W(reawaiter.K(await)), W(reawaiter.K(event_value)), L({}), L({}), L({}), W(1) });
+	reawaiter.Op(VbcOp::Call, { W(3), W(reawaiter.K(log)), L({ R(2) }), L({}), L({}), W(0) });
+	reawaiter.Op(VbcOp::ResetNonTrailed, { W(3), W(0) });
+	reawaiter.Op(VbcOp::Jump, { W(0) });
+	Spawn(reawaiter);
+	Spawn(reawaiter);
+	Signal(1);
+	r_cases.check("natives §7.2 D2: Signal resumes each awaiter once, oldest first, each to its next stop; one that awaits again waits for the next",
+			Logged({ 1, 1, 99 }));
+	Signal(2);
+	r_cases.check("natives §7.2: the next Signal finds the awaiters the last one's resumptions added", Logged({ 2, 2, 99 }));
+
+	// Sleep: Log 1; Sleep(0); Log 2; Sleep(5); Log 3.
+	g_now = 100.0;
+	Asm sleeper(heap, "Sleeper", 6, 0);
+	Log(sleeper, 5, 1);
+	Sleep(sleeper, 2, 0.0);
+	Log(sleeper, 5, 2);
+	Sleep(sleeper, 3, 5.0);
+	Log(sleeper, 5, 3);
+	EndTask(sleeper);
+	Spawn(sleeper);
+	vh_tick_stats stats = {};
+	r_cases.check("godot-natives §10: Sleep(0.0) suspends", Logged({ 1 }) && interpreter.sleepers.size() == 1);
+	runtime.tick(stats);
+	r_cases.check("godot-natives §10: a due sleeper wakes at the tick, and one that sleeps again is not woken by the same tick",
+			Logged({ 2 }) && stats.JobsRun == 1 && stats.Sleeping == 1);
+	g_now = 104.5;
+	stats = {};
+	runtime.tick(stats);
+	r_cases.check("godot-natives §10: a sleeper whose deadline has not passed stays asleep", Logged({}) && stats.JobsRun == 0 && stats.Sleeping == 1);
+	g_now = 1000.0;
+	stats = {};
+	runtime.tick(stats);
+	r_cases.check("godot-natives §10: a long gap wakes it once", Logged({ 3 }) && stats.JobsRun == 1 && stats.Sleeping == 0);
+
+	Asm negative(heap, "Negative", 4, 0);
+	Log(negative, 3, 7);
+	Sleep(negative, 2, -1.0);
+	Log(negative, 3, 8);
+	negative.Op(VbcOp::Return, { W(negative.K(no)) });
+	r_cases.check("spec/tasks.md §11.1 S2: Sleep of a negative duration does not suspend",
+			Invoked(interpreter, negative.Function(no), {}) == "false" && Logged({ 7, 8 }) && interpreter.sleepers.empty());
+
+	g_now = 0.0;
+	const auto Napper = [&](double p_seconds, int64_t p_id) {
+		Asm code(heap, "Napper", 4, 0);
+		Sleep(code, 2, p_seconds);
+		Log(code, 3, p_id);
+		EndTask(code);
+		Spawn(code);
+	};
+	Napper(3.0, 31);
+	Napper(1.0, 11);
+	g_now = 10.0;
+	stats = {};
+	runtime.tick(stats);
+	r_cases.check("godot-natives §10: sleepers due in one tick wake earliest deadline first", Logged({ 11, 31 }) && stats.JobsRun == 2);
+
+	// Sleep(1); on cancellation the landing pad logs 41 and ends the task.
+	Asm cancelled(heap, "CancelledSleeper", 4, 0);
+	Sleep(cancelled, 2, 1.0);
+	EndTask(cancelled);
+	Log(cancelled, 3, 41);
+	cancelled.Op(VbcOp::Jump, { W(1) });
+	cancelled.procedure->unwind_edges.push_back(UnwindEdge{ 0, 0, 2 });
+	Asm canceler(heap, "SleepCanceler", 5, 0);
+	canceler.Op(VbcOp::CallTask, { W(2), W(none), W(canceler.K(cancelled.Function(no))), L({}) });
+	canceler.Op(VbcOp::CallWithSelf, { W(3), W(canceler.K(cancel)), W(R(2)), L({}), L({}), L({}), W(1) });
+	Log(canceler, 4, 9);
+	canceler.Op(VbcOp::Return, { W(canceler.K(no)) });
+	Invoked(interpreter, canceler.Function(no), {});
+	r_cases.check("spec/tasks.md §11.1 S1: cancelling a sleeper unwinds it at once; its wake stays counted until due",
+			Logged({ 41, 9 }) && interpreter.sleepers.size() == 1);
+	g_now = 20.0;
+	stats = {};
+	runtime.tick(stats);
+	r_cases.check("spec/tasks.md §11.1 S1: the cancelled sleeper's wake does nothing", Logged({}) && stats.Sleeping == 0);
+
+	Asm raiser(heap, "SleepThenRaise", 4, 0);
+	Sleep(raiser, 2, 0.0);
+	raiser.Op(VbcOp::Call, { W(3), W(raiser.K(err)), L({ raiser.K(Str(heap, "woke")) }), L({}), L({}), W(0) });
+	EndTask(raiser);
+	Spawn(raiser);
+	Napper(0.0, 77);
+	g_runtime_error.clear();
+	stats = {};
+	runtime.tick(stats);
+	r_cases.check("godot-natives §10: a raise in one sleeper is reported and the others still wake",
+			g_runtime_error.find("User Message: 'woke'") != std::string::npos && Logged({ 77 }) && stats.JobsRun == 2);
+
+	// await{Ref > Threshold}; Log Id -- the compiled shape: a failure context over the condition,
+	// AwaitSuccess, and on failure EndAwait and a Yield back to the await point.
+	const auto Awaiter = [&](bool p_element, int64_t p_threshold, int64_t p_id) {
+		Asm code(heap, "Awaiter", 6, 1);
+		code.Op(VbcOp::BeginAwait, {});
+		code.Op(VbcOp::BeginFailureContext, { W(9), W(0) });
+		code.Op(VbcOp::ResetNonTrailed, { W(3), W(0) });
+		if (p_element) {
+			code.Op(VbcOp::Call, { W(3), W(R(2)), L({ code.K(Int(heap, 0)) }), L({}), L({}), W(0) });
+		} else {
+			code.Op(VbcOp::RefGet, { W(3), W(R(2)) });
+		}
+		code.Op(VbcOp::ResetNonTrailed, { W(4), W(0) });
+		code.Op(VbcOp::Gt, { W(4), W(R(3)), W(code.K(Int(heap, p_threshold))) });
+		code.Op(VbcOp::AwaitSuccess, {});
+		code.Op(VbcOp::EndFailureContext, { W(11), W(0) });
+		code.Op(VbcOp::Jump, { W(11) });
+		code.Op(VbcOp::EndAwait, {});
+		code.Op(VbcOp::Yield, { W(1) });
+		Log(code, 5, p_id);
+		EndTask(code);
+		return code.Function(no);
+	};
+	Asm vars(heap, "AwaitVars", 5, 0);
+	vars.Op(VbcOp::NewRef, { W(2), W(none) });
+	vars.Op(VbcOp::RefSet, { W(R(2)), W(vars.K(Int(heap, 0))) });
+	vars.Op(VbcOp::CallTask, { W(3), W(none), W(vars.K(Awaiter(false, 2, 71))), L({ R(2) }) });
+	vars.Op(VbcOp::CallTask, { W(4), W(none), W(vars.K(Awaiter(false, 10, 72))), L({ R(2) }) });
+	vars.Op(VbcOp::Return, { W(R(2)) });
+	Value variable;
+	InvokeValue(interpreter, vars.Function(no), variable);
+	Asm write(heap, "Write", 5, 2);
+	write.Op(VbcOp::RefSet, { W(R(2)), W(R(3)) });
+	Log(write, 4, 99);
+	write.Op(VbcOp::Return, { W(write.K(no)) });
+	const Value write_fn = write.Function(no);
+	r_cases.check("tasks §5.7 F1: an await's first evaluation always fails, so it waits", Logged({}));
+	Invoked(interpreter, write_fn, { variable, Int(heap, 1) });
+	r_cases.check("tasks §5.7 F2: a write re-evaluates each registered await; still false, it waits again", Logged({ 99 }));
+	Invoked(interpreter, write_fn, { variable, Int(heap, 3) });
+	r_cases.check("tasks §5.7 F3: a write that makes the condition true resumes the task inside the write", Logged({ 71, 99 }));
+	Asm batch(heap, "Batch", 4, 1);
+	batch.Op(VbcOp::BeginBatch, {});
+	batch.Op(VbcOp::RefSet, { W(R(2)), W(batch.K(Int(heap, 11))) });
+	Log(batch, 3, 50);
+	batch.Op(VbcOp::RefSet, { W(R(2)), W(batch.K(Int(heap, 12))) });
+	batch.Op(VbcOp::EndBatch, {});
+	Log(batch, 3, 99);
+	batch.Op(VbcOp::Return, { W(batch.K(no)) });
+	Invoked(interpreter, batch.Function(no), { variable });
+	r_cases.check("tasks §5.7 F5: writes inside a batch resume their awaiters once, at the outermost EndBatch", Logged({ 50, 72, 99 }));
+
+	Asm elements(heap, "AwaitElement", 4, 0);
+	elements.Op(VbcOp::NewMutableArray, { W(2), L({ elements.K(Int(heap, 0)), elements.K(Int(heap, 0)) }) });
+	elements.Op(VbcOp::CallTask, { W(3), W(none), W(elements.K(Awaiter(true, 2, 81))), L({ R(2) }) });
+	elements.Op(VbcOp::Return, { W(R(2)) });
+	Value array;
+	InvokeValue(interpreter, elements.Function(no), array);
+	Asm set_element(heap, "SetElement", 6, 3);
+	set_element.Op(VbcOp::CallSet, { W(R(2)), W(R(3)), W(R(4)) });
+	Log(set_element, 5, 99);
+	set_element.Op(VbcOp::Return, { W(set_element.K(no)) });
+	Invoked(interpreter, set_element.Function(no), { array, Int(heap, 1), Int(heap, 9) });
+	r_cases.check("ops §3.1 A02: a write to another element does not wake an element's awaiter", Logged({ 99 }));
+	Invoked(interpreter, set_element.Function(no), { array, Int(heap, 0), Int(heap, 3) });
+	Value element;
+	r_cases.check("ops §3.1 A03: an element read under an await registers the element, and CallSet on it wakes the awaiter",
+			Logged({ 81, 99 }) && array_index(array, Int(heap, 0), element) == Outcome::Ok && Show(element) == "3");
+	Value frozen;
+	r_cases.check("ops §3.1: freezing reads through the hidden variable an element now stands in",
+			freeze(heap, array, frozen) == Outcome::Ok && Show(frozen) == "[3,9]" && is_cell_kind(cell_as<ArrayCell>(array)->get(0), CellKind::Ref));
+
+	// Live writes: tasks parked on a second event, whose cancellation logs 60 + id.
+	ObjectCell *parking = heap.make<ObjectCell>();
+	const auto Parked = [&](int64_t p_id) {
+		Asm code(heap, "Parked", 4, 0);
+		code.Op(VbcOp::CallWithSelf, { W(2), W(code.K(await)), W(code.K(Value::from_cell(parking))), L({}), L({}), L({}), W(1) });
+		EndTask(code);
+		Log(code, 3, 60 + p_id);
+		code.Op(VbcOp::Jump, { W(1) });
+		code.procedure->unwind_edges.push_back(UnwindEdge{ 0, 0, 2 });
+		return cell_as<TaskCell>(Spawn(code));
+	};
+	TaskCell *first = Parked(1);
+	TaskCell *second = Parked(2);
+	Asm live(heap, "LiveWrite", 6, 3);
+	live.Op(VbcOp::RefSetLive, { W(R(2)), W(R(3)), W(R(4)) });
+	Log(live, 5, 99);
+	live.Op(VbcOp::Return, { W(live.K(no)) });
+	const Value live_fn = live.Function(no);
+	Invoked(interpreter, live_fn, { variable, Int(heap, 1), Value::from_cell(first) });
+	Invoked(interpreter, live_fn, { variable, Int(heap, 2), Value::from_cell(first) });
+	r_cases.check("ops §3.2: a live write makes its Task the variable's live task; the same task again cancels nothing",
+			Logged({ 99, 99 }) && cell_as<RefCell>(variable)->live_task.same(Value::from_cell(first)) && first->phase == TaskCell::Phase::Active);
+	Invoked(interpreter, live_fn, { variable, Int(heap, 3), Value::from_cell(second) });
+	r_cases.check("ops §3.2: a live write by another task cancels the variable's live task first",
+			Logged({ 61, 99 }) && first->phase == TaskCell::Phase::Canceled && cell_as<RefCell>(variable)->live_task.same(Value::from_cell(second)));
+	Invoked(interpreter, write_fn, { variable, Int(heap, 4) });
+	r_cases.check("ops §3.2 L03: an ordinary write ends the binding by cancelling the live task",
+			Logged({ 62, 99 }) && second->phase == TaskCell::Phase::Canceled && cell_as<RefCell>(variable)->live_task.is_uninitialized() &&
+					Show(cell_as<RefCell>(variable)->content) == "4");
+	g_now = 0.0;
+}
+
 bool RunInterpreterCases() {
 	Cases cases;
 	CallCases(cases);
@@ -2880,6 +3136,7 @@ bool RunInterpreterCases() {
 	NativeFieldCases(cases);
 	StructConstantCases(cases);
 	TaskCases(cases);
+	AwaitEventSleepCases(cases);
 	return cases.all_ok;
 }
 
