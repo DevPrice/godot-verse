@@ -973,6 +973,7 @@ private:
 			case 26: {
 				ObjectCell *object = heap.make<ObjectCell>();
 				cells[p_index] = object;
+				program.value_objects.push_back(object);
 				if (!read_pointer(object->object_class, kind_bit(CellKind::Class)) || !read_count(count)) {
 					return false;
 				}

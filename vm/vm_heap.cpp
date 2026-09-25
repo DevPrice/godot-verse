@@ -56,6 +56,11 @@ const NameCell *Heap::intern(std::string_view p_text) {
 	return name;
 }
 
+const NameCell *Heap::find_interned(std::string_view p_text) const {
+	const auto found = interned.find(std::string(p_text));
+	return found == interned.end() ? nullptr : found->second;
+}
+
 size_t Heap::collect() {
 	Marker marker;
 	marker.visit(false_value());
@@ -68,6 +73,9 @@ size_t Heap::collect() {
 		marker.visit(root);
 	}
 	for (const Value *slot : root_slots) {
+		marker.visit(*slot);
+	}
+	for (const Value *slot : handle_roots) {
 		marker.visit(*slot);
 	}
 	marker.drain();

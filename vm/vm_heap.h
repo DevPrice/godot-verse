@@ -4,6 +4,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -37,6 +38,8 @@ public:
 	Value logic(bool p_value) const { return p_value ? true_value() : false_value(); }
 
 	const NameCell *intern(std::string_view p_text);
+	// The interned name for p_text, or null when none exists, without making one.
+	const NameCell *find_interned(std::string_view p_text) const;
 
 	// A root for a Value that lives outside the heap -- a native's local mid-call, a register file
 	// the host is holding. Push and pop in stack order.
@@ -45,6 +48,10 @@ public:
 
 	// Roots that live as long as the program: package cells and whatever else a loader pins.
 	void add_permanent_root(Value p_value) { permanent_roots.push_back(p_value); }
+
+	// A root whose lifetime is not stack-ordered: an instance the host holds (design §7.3).
+	void add_handle_root(const Value *p_slot) { handle_roots.insert(p_slot); }
+	void remove_handle_root(const Value *p_slot) { handle_roots.erase(p_slot); }
 
 	// Marks from every root and frees what was not reached. Answers the number of cells freed.
 	// Never call it mid-op: a Value held only in a C++ local is not a root.
@@ -60,6 +67,7 @@ private:
 	std::unordered_map<std::string, const NameCell *> interned;
 	std::vector<const Value *> root_slots;
 	std::vector<Value> permanent_roots;
+	std::unordered_set<const Value *> handle_roots;
 };
 
 class RootScope {

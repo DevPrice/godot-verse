@@ -10,6 +10,7 @@
 #include "vm_equality.h"
 #include "vm_file_reader.h"
 #include "vm_heap.h"
+#include "vm_interpreter.h"
 #include "vm_json.h"
 #include "vm_loader.h"
 #include "vm_natives.h"
@@ -1525,6 +1526,409 @@ void BootCases(Cases &r_cases) {
 	vm_set_file_reader(nullptr);
 }
 
+// An operand as the loader decodes it: one word, or a variadic list (vm_cell.h, ProcedureCell).
+struct Operand {
+	bool list = false;
+	std::vector<uint32_t> items;
+};
+
+Operand W(uint32_t p_word) {
+	return Operand{ false, { p_word } };
+}
+
+Operand L(std::initializer_list<uint32_t> p_items) {
+	return Operand{ true, std::vector<uint32_t>(p_items) };
+}
+
+// A register read as a `value` operand.
+uint32_t R(uint32_t p_register) {
+	return p_register << 1;
+}
+
+// A procedure written op by op.
+class Asm {
+public:
+	Heap &heap;
+	ProcedureCell *procedure;
+
+	Asm(Heap &r_heap, const char *p_name, uint32_t p_registers, uint32_t p_positional) :
+			heap(r_heap), procedure(r_heap.make<ProcedureCell>()) {
+		procedure->name = heap.intern(p_name);
+		procedure->file = "mem/test.verse";
+		procedure->register_count = p_registers;
+		procedure->positional_count = p_positional;
+	}
+
+	// A constant read as a `value` operand.
+	uint32_t K(Value p_value) {
+		procedure->constants.push_back(p_value);
+		return (uint32_t(procedure->constants.size() - 1) << 1) | 1;
+	}
+
+	// A constant named by an immediate operand.
+	uint32_t C(Value p_value) {
+		procedure->constants.push_back(p_value);
+		return uint32_t(procedure->constants.size() - 1);
+	}
+
+	void Op(vbc::VbcOp p_op, std::initializer_list<Operand> p_operands) {
+		std::vector<uint32_t> &words = procedure->operand_words;
+		const size_t base = words.size();
+		procedure->ops.push_back(DecodedOp{ uint16_t(p_op), uint32_t(base) });
+		words.resize(base + p_operands.size());
+		size_t slot = 0;
+		for (const Operand &operand : p_operands) {
+			if (operand.list) {
+				words[base + slot] = uint32_t(words.size());
+				words.push_back(uint32_t(operand.items.size()));
+				words.insert(words.end(), operand.items.begin(), operand.items.end());
+			} else {
+				words[base + slot] = operand.items[0];
+			}
+			++slot;
+		}
+	}
+
+	void Named(const char *p_name, uint32_t p_register) {
+		procedure->named_parameters.push_back(NamedParameter{ heap.intern(p_name), p_register });
+	}
+
+	Value Function(Value p_self = Value::uninitialized()) {
+		FunctionCell *function = heap.make<FunctionCell>();
+		function->callee = procedure;
+		function->self = p_self;
+		return Value::from_cell(function);
+	}
+};
+
+std::vector<int64_t> g_log;
+std::vector<std::string> g_printed;
+
+Outcome LogNative(NativeCall &r_call) {
+	g_log.push_back(int_value(follow(r_call.arguments[0])).to_int64());
+	r_call.result = r_call.heap.false_value();
+	return Outcome::Ok;
+}
+
+void CapturePrint(void *, const char *p_utf8, int32_t p_len) {
+	g_printed.emplace_back(p_utf8, size_t(p_len));
+}
+
+Value NativeFunction(Heap &r_heap, const char *p_name, uint32_t p_count, NativeFn p_implementation) {
+	NativeProcedureCell *native = r_heap.make<NativeProcedureCell>();
+	native->binding_key = r_heap.intern(p_name);
+	native->decorated_name = r_heap.intern(p_name);
+	native->positional_count = p_count;
+	native->implementation = p_implementation;
+	native->bound = true;
+	FunctionCell *function = r_heap.make<FunctionCell>();
+	function->callee = native;
+	function->self = r_heap.false_value();
+	return Value::from_cell(function);
+}
+
+std::string Invoked(Interpreter &r_interpreter, Value p_function, std::vector<Value> p_arguments, std::vector<NamedArgument> p_named = {}) {
+	r_interpreter.begin_entry();
+	Value result;
+	const Outcome outcome = r_interpreter.invoke(p_function, Value::uninitialized(), p_arguments, p_named, result);
+	r_interpreter.end_entry(outcome == Outcome::Ok);
+	switch (outcome) {
+		case Outcome::Ok:
+			return Show(result);
+		case Outcome::Fail:
+			return "<fail>";
+		case Outcome::Yield:
+			return "<not yet>";
+		default:
+			return "<error> " + r_interpreter.error().message_line();
+	}
+}
+
+void CallCases(Cases &r_cases) {
+	Heap heap;
+	Program program;
+	Interpreter interpreter(heap, program);
+	using vbc::VbcOp;
+
+	// Two(A, B) = A * 10 + B.
+	Asm two(heap, "Two", 6, 2);
+	two.Op(VbcOp::Mul, { W(4), W(R(2)), W(two.K(Int(heap, 10))) });
+	two.Op(VbcOp::Add, { W(5), W(R(4)), W(R(3)) });
+	two.Op(VbcOp::Return, { W(R(5)) });
+	const Value two_fn = two.Function(heap.false_value());
+	r_cases.check("calls §3: A = P passes each argument", Invoked(interpreter, two_fn, { Int(heap, 3), Int(heap, 5) }) == "35");
+	r_cases.check("calls §3: A = 1, P = 2 unpacks a tuple", Invoked(interpreter, two_fn, { Arr(heap, { Int(heap, 7), Int(heap, 8) }) }) == "78");
+	r_cases.check("calls §3: a tuple of the wrong length is an invariant violation",
+			Invoked(interpreter, two_fn, { Arr(heap, { Int(heap, 7) }) }).find("VM invariant violated") != std::string::npos);
+	r_cases.check("calls §3: A = 3, P = 2 is an invariant violation",
+			Invoked(interpreter, two_fn, { Int(heap, 1), Int(heap, 2), Int(heap, 3) }).find("VM invariant violated") != std::string::npos);
+
+	// One(T) = T(0) * 10 + T(1), indexing its one tuple parameter.
+	Asm one(heap, "One", 7, 1);
+	one.Op(VbcOp::Call, { W(3), W(R(2)), L({ one.K(Int(heap, 0)) }), L({}), L({}), W(0) });
+	one.Op(VbcOp::Call, { W(4), W(R(2)), L({ one.K(Int(heap, 1)) }), L({}), L({}), W(0) });
+	one.Op(VbcOp::Mul, { W(5), W(R(3)), W(one.K(Int(heap, 10))) });
+	one.Op(VbcOp::Add, { W(6), W(R(5)), W(R(4)) });
+	one.Op(VbcOp::Return, { W(R(6)) });
+	const Value one_fn = one.Function(heap.false_value());
+	r_cases.check("calls §3: P = 1, A = 2 boxes the arguments into one tuple", Invoked(interpreter, one_fn, { Int(heap, 3), Int(heap, 5) }) == "35");
+	r_cases.check("calls §4.1: indexing a tuple past its end fails the call", Invoked(interpreter, one_fn, { Arr(heap, { Int(heap, 3) }) }) == "<fail>");
+
+	// Length(T) of a tuple parameter given no arguments at all.
+	Asm empty(heap, "Empty", 4, 1);
+	empty.Op(VbcOp::Length, { W(3), W(R(2)) });
+	empty.Op(VbcOp::Return, { W(R(3)) });
+	r_cases.check("calls §3: P = 1, A = 0 passes the empty tuple", Invoked(interpreter, empty.Function(heap.false_value()), {}) == "0");
+
+	// Named(?X, ?Y = 7) = X * 10 + Y: the default is the callee's own code, after JumpIfInitialized.
+	Asm named(heap, "Named", 6, 0);
+	named.Named("X", 2);
+	named.Named("Y", 3);
+	named.Op(VbcOp::JumpIfInitialized, { W(R(3)), W(3) });
+	named.Op(VbcOp::Reset, { W(3), W(0) });
+	named.Op(VbcOp::Move, { W(3), W(named.K(Int(heap, 7))) });
+	named.Op(VbcOp::Mul, { W(4), W(R(2)), W(named.K(Int(heap, 10))) });
+	named.Op(VbcOp::Add, { W(5), W(R(4)), W(R(3)) });
+	named.Op(VbcOp::Return, { W(R(5)) });
+	const Value named_fn = named.Function(heap.false_value());
+	r_cases.check("calls §5.2: named arguments match by name whatever their order",
+			Invoked(interpreter, named_fn, {}, { NamedArgument{ heap.intern("Y"), Int(heap, 5) }, NamedArgument{ heap.intern("X"), Int(heap, 6) } }) == "65");
+	r_cases.check("calls §5.3-5.4: an unsupplied named parameter is uninitialized and takes its default",
+			Invoked(interpreter, named_fn, {}, { NamedArgument{ heap.intern("X"), Int(heap, 6) } }) == "67");
+	r_cases.check("calls §5.2: a named argument matching no parameter is ignored",
+			Invoked(interpreter, named_fn, {}, { NamedArgument{ heap.intern("X"), Int(heap, 1) }, NamedArgument{ heap.intern("Z"), Int(heap, 9) } }) == "17");
+
+	// Outer() calls Two(4, 2) through a Call op into a destination that already holds 42, then 43.
+	Asm outer(heap, "Outer", 4, 0);
+	const uint32_t two_k = outer.K(two_fn);
+	outer.Op(VbcOp::Move, { W(2), W(outer.K(Int(heap, 42))) });
+	outer.Op(VbcOp::Call, { W(2), W(two_k), L({ outer.K(Int(heap, 4)), outer.K(Int(heap, 2)) }), L({}), L({}), W(0) });
+	outer.Op(VbcOp::Move, { W(3), W(outer.K(Int(heap, 43))) });
+	outer.Op(VbcOp::Call, { W(3), W(two_k), L({ outer.K(Int(heap, 4)), outer.K(Int(heap, 2)) }), L({}), L({}), W(0) });
+	outer.Op(VbcOp::Return, { W(R(3)) });
+	r_cases.check("calls §5.6: a result is unified into Dest, and a mismatch fails in the caller",
+			Invoked(interpreter, outer.Function(heap.false_value()), {}) == "<fail>");
+
+	// Sum(N) = if (N <= 0) then 0 else N + Sum(N - 1), 100000 deep.
+	Asm sum(heap, "Sum", 8, 1);
+	const Value sum_fn = sum.Function(heap.false_value());
+	sum.Op(VbcOp::GtFastFail, { W(3), W(4), W(R(2)), W(sum.K(Int(heap, 0))), W(2) });
+	sum.Op(VbcOp::Jump, { W(3) });
+	sum.Op(VbcOp::Return, { W(sum.K(Int(heap, 0))) });
+	sum.Op(VbcOp::Sub, { W(5), W(R(2)), W(sum.K(Int(heap, 1))) });
+	sum.Op(VbcOp::Call, { W(6), W(sum.K(sum_fn)), L({ R(5) }), L({}), L({}), W(0) });
+	sum.Op(VbcOp::Add, { W(7), W(R(2)), W(R(6)) });
+	sum.Op(VbcOp::Return, { W(R(7)) });
+	r_cases.check("calls §9: 100000 nested Verse calls run on heap frames, not the native stack",
+			Invoked(interpreter, sum_fn, { Int(heap, 100000) }) == "5000050000");
+
+	// A closure reading a capture two scopes out, and CallWithSelf's receiver in register 0.
+	Asm inner(heap, "Inner", 5, 0);
+	inner.Op(VbcOp::LoadParentScope, { W(2), W(R(1)) });
+	inner.Op(VbcOp::LoadCapture, { W(3), W(R(2)), W(1) });
+	inner.Op(VbcOp::Add, { W(4), W(R(3)), W(R(0)) });
+	inner.Op(VbcOp::Return, { W(R(4)) });
+	Asm maker(heap, "Maker", 6, 0);
+	maker.Op(VbcOp::NewScope, { W(2), W(maker.K(heap.false_value())), L({ maker.K(Int(heap, 1)), maker.K(Int(heap, 30)) }) });
+	maker.Op(VbcOp::NewScope, { W(3), W(R(2)), L({}) });
+	maker.Op(VbcOp::NewFunction, { W(4), W(maker.K(Value::from_cell(inner.procedure))), W(kAbsentOperand), W(R(3)) });
+	maker.Op(VbcOp::CallWithSelf, { W(5), W(R(4)), W(maker.K(Int(heap, 12))), L({}), L({}), L({}), W(0) });
+	maker.Op(VbcOp::Return, { W(R(5)) });
+	r_cases.check("calls §7: a closure reaches its capture through LoadParentScope and LoadCapture; CallWithSelf binds Self",
+			Invoked(interpreter, maker.Function(heap.false_value()), {}) == "42");
+	Asm bound(heap, "Bound", 4, 0);
+	bound.Op(VbcOp::NewFunction, { W(2), W(bound.K(Value::from_cell(inner.procedure))), W(bound.K(Int(heap, 1))), W(bound.K(heap.false_value())) });
+	bound.Op(VbcOp::CallWithSelf, { W(3), W(R(2)), W(bound.K(Int(heap, 2))), L({}), L({}), L({}), W(0) });
+	bound.Op(VbcOp::Return, { W(R(3)) });
+	r_cases.check("calls §4.2: CallWithSelf on a function that has a receiver is an invariant violation",
+			Invoked(interpreter, bound.Function(heap.false_value()), {}).find("already has a receiver") != std::string::npos);
+}
+
+void FailureAndEffectCases(Cases &r_cases) {
+	Heap heap;
+	Program program;
+	Interpreter interpreter(heap, program);
+	interpreter.godot.Print = &CapturePrint;
+	using vbc::VbcOp;
+	const Value print = NativeFunction(heap, "Print", 1, native_implementation("(/Godot.org/Godot/(/Godot.org/Godot:)Print(:[]char):)Native"));
+	const Value err = NativeFunction(heap, "Err", 1, native_implementation("(/Verse.org/Verse/(/Verse.org/Verse:)Err(:[]char):)Native"));
+
+	// Print "a"; a full context printing "lost" then failing; Print "b"; then the tail.
+	const auto body = [&](bool p_fail_at_end, bool p_raise_at_end) {
+		Asm code(heap, "Effects", 6, 0);
+		const uint32_t print_k = code.K(print);
+		code.Op(VbcOp::Call, { W(2), W(print_k), L({ code.K(Str(heap, "a")) }), L({}), L({}), W(0) });
+		code.Op(VbcOp::BeginFailureContext, { W(5), W(0) });
+		code.Op(VbcOp::Call, { W(3), W(print_k), L({ code.K(Str(heap, "lost")) }), L({}), L({}), W(0) });
+		code.Op(VbcOp::Query, { W(4), W(code.K(heap.false_value())) });
+		code.Op(VbcOp::EndFailureContext, { W(5), W(0) });
+		code.Op(VbcOp::Call, { W(2), W(print_k), L({ code.K(Str(heap, "b")) }), L({}), L({}), W(0) });
+		if (p_raise_at_end) {
+			code.Op(VbcOp::Call, { W(3), W(code.K(err)), L({ code.K(Str(heap, "boom")) }), L({}), L({}), W(0) });
+		}
+		if (p_fail_at_end) {
+			code.Op(VbcOp::Query, { W(4), W(code.K(heap.false_value())) });
+		}
+		code.Op(VbcOp::Return, { W(code.K(heap.false_value())) });
+		return code.Function(heap.false_value());
+	};
+	g_printed.clear();
+	Invoked(interpreter, body(false, false), {});
+	r_cases.check("failure §7, §11: deferred Prints run in order at the root commit; a failed context's are dropped",
+			g_printed == std::vector<std::string>{ "a", "b" });
+	g_printed.clear();
+	r_cases.check("failure §4: failing the root context declines the entry and drops every deferred Print",
+			Invoked(interpreter, body(true, false), {}) == "<fail>" && g_printed.empty());
+	g_printed.clear();
+	const std::string raised = Invoked(interpreter, body(false, true), {});
+	r_cases.check("failure §9.2: a raise drops every deferred Print and renders its message line",
+			g_printed.empty() && raised == "<error> ErrorRequested: A runtime error was explicitly raised from user code. (User Message: 'boom')");
+	r_cases.check("failure §9.2: a native's raise puts the native first in the frames, then the Verse frame",
+			interpreter.error().frames.size() == 2 && interpreter.error().frames[0].path == "[native]" && interpreter.error().frames[1].function == "Effects");
+
+	Asm fast(heap, "Fast", 5, 1);
+	fast.Op(VbcOp::LtFastFail, { W(3), W(4), W(R(2)), W(fast.K(Int(heap, 10))), W(3) });
+	fast.Op(VbcOp::EndFastFailureContext, { W(4), W(R(4)), W(3) });
+	fast.Op(VbcOp::Return, { W(fast.K(Str(heap, "small"))) });
+	fast.Op(VbcOp::Return, { W(fast.K(Str(heap, "big"))) });
+	const Value fast_fn = fast.Function(heap.false_value());
+	r_cases.check("failure §5: a fast-fail op falls through on success and jumps to OnFailure on failure, leaving the indicator fresh",
+			Invoked(interpreter, fast_fn, { Int(heap, 3) }) == "\"small\"" && Invoked(interpreter, fast_fn, { Int(heap, 30) }) == "\"big\"");
+
+	Asm parks(heap, "Parks", 5, 0);
+	parks.Op(VbcOp::Add, { W(3), W(R(2)), W(parks.K(Int(heap, 1))) });
+	parks.Op(VbcOp::Return, { W(R(3)) });
+	const uint64_t before = interpreter.park_count;
+	r_cases.check("unification §11.3: reading a register nothing wrote is the stage-1 park error, counted",
+			Invoked(interpreter, parks.Function(heap.false_value()), {}).find("Stage-1 interpreter cannot wait: Add in Parks") != std::string::npos &&
+					interpreter.park_count == before + 1);
+
+	Asm unify(heap, "Unify", 4, 0);
+	unify.Op(VbcOp::Move, { W(2), W(unify.K(Arr(heap, { Int(heap, 1), Int(heap, 2) }))) });
+	unify.Op(VbcOp::Move, { W(2), W(unify.K(Arr(heap, { Int(heap, 1), Int(heap, 2) }))) });
+	unify.Op(VbcOp::Move, { W(2), W(unify.K(Arr(heap, { Int(heap, 1), Int(heap, 3) }))) });
+	unify.Op(VbcOp::Return, { W(R(2)) });
+	r_cases.check("unification §3.3: a second Move into a filled register compares, and not equal fails",
+			Invoked(interpreter, unify.Function(heap.false_value()), {}) == "<fail>");
+	unify.procedure->ops.erase(unify.procedure->ops.begin() + 2);
+	r_cases.check("unification §3.3: an equal second Move succeeds and leaves the register", Invoked(interpreter, unify.Function(heap.false_value()), {}) == "[1,2]");
+
+	Asm yields(heap, "Yields", 3, 0);
+	yields.Op(VbcOp::SelfTask, { W(2) });
+	r_cases.check("tasks §4.4: a task op the entry task cannot run yet answers the not-yet outcome",
+			Invoked(interpreter, yields.Function(heap.false_value()), {}).find("<not yet>") == 0);
+}
+
+void ConstructionCases(Cases &r_cases) {
+	Heap heap;
+	Program program;
+	Interpreter interpreter(heap, program);
+	using vbc::VbcOp;
+	const Value log = NativeFunction(heap, "Log", 1, &LogNative);
+	const NameCell *x = heap.intern("(/test/base:)X");
+	const NameCell *describe = heap.intern("(/test/base:)Describe");
+	SimpleTypeCell *any = heap.make<SimpleTypeCell>();
+	const Value marker = Int(heap, 12774014);
+
+	ClassCell *base = heap.make<ClassCell>();
+	ClassCell *derived = heap.make<ClassCell>();
+	ArchetypeCell *base_body = heap.make<ArchetypeCell>();
+	ArchetypeCell *derived_body = heap.make<ArchetypeCell>();
+	base->archetype = base_body;
+	derived->archetype = derived_body;
+	derived->inherited.push_back(base);
+	base_body->owner = base;
+	derived_body->owner = derived;
+	derived_body->next = base_body;
+
+	Asm base_describe(heap, "BaseDescribe", 2, 0);
+	base_describe.Op(VbcOp::Return, { W(base_describe.K(Str(heap, "base"))) });
+	Asm derived_describe(heap, "DerivedDescribe", 2, 0);
+	derived_describe.Op(VbcOp::Return, { W(derived_describe.K(Str(heap, "derived"))) });
+	base_body->entries.push_back(ArchetypeEntry{ x, nullptr, Value::from_cell(any), Value::uninitialized(), 0 });
+	base_body->entries.push_back(ArchetypeEntry{ describe, nullptr, Value::uninitialized(), base_describe.Function(), 0 });
+	derived_body->entries.push_back(ArchetypeEntry{ x, nullptr, Value::from_cell(any), Value::uninitialized(), 0 });
+	derived_body->entries.push_back(ArchetypeEntry{ describe, nullptr, Value::uninitialized(), derived_describe.Function(), 0 });
+
+	// Each class body: CreateField X; log the class's number; UnifyField X; then the superclass step.
+	const auto constructor = [&](const char *p_name, int64_t p_value, Value p_super) {
+		Asm code(heap, p_name, 9, 3);
+		const uint32_t name = code.C(Value::from_cell(x));
+		code.Op(VbcOp::CreateField, { W(5), W(R(2)), W(R(0)), W(name), W(4) });
+		code.Op(VbcOp::Call, { W(6), W(code.K(log)), L({ code.K(Int(heap, p_value)) }), L({}), L({}), W(0) });
+		code.Op(VbcOp::UnifyField, { W(R(0)), W(name), W(code.K(Int(heap, p_value))) });
+		code.Op(VbcOp::Jump, { W(4) });
+		if (p_super.is_uninitialized()) {
+			code.Op(VbcOp::Return, { W(R(2)) });
+		} else {
+			code.Op(VbcOp::CallWithSelf, { W(7), W(code.K(p_super)), W(R(0)), L({ R(2), R(3), code.K(Value::uninitialized()) }), L({}), L({}), W(0) });
+			code.Op(VbcOp::Return, { W(R(7)) });
+		}
+		return code.Function();
+	};
+	const auto blocks = [&](const char *p_name, int64_t p_value, Value p_super) {
+		Asm code(heap, p_name, 5, 0);
+		if (!p_super.is_uninitialized()) {
+			code.Op(VbcOp::CallWithSelf, { W(2), W(code.K(p_super)), W(R(0)), L({}), L({}), L({}), W(0) });
+		}
+		code.Op(VbcOp::Call, { W(3), W(code.K(log)), L({ code.K(Int(heap, p_value)) }), L({}), L({}), W(0) });
+		code.Op(VbcOp::Return, { W(code.K(heap.false_value())) });
+		return code.Function();
+	};
+	const Value base_constructor = constructor("BaseConstructor", 1, Value::uninitialized());
+	const Value base_blocks = blocks("BaseBlocks", 10, Value::uninitialized());
+	base->constructor = cell_as<FunctionCell>(base_constructor);
+	base->blocks = cell_as<FunctionCell>(base_blocks);
+	derived->constructor = cell_as<FunctionCell>(constructor("DerivedConstructor", 2, base_constructor));
+	derived->blocks = cell_as<FunctionCell>(blocks("DerivedBlocks", 20, base_blocks));
+
+	const ClassLayout &layout = interpreter.layouts.get(derived);
+	const LayoutField *x_field = layout.find(x);
+	const LayoutField *describe_field = layout.find(describe);
+	r_cases.check("objects §4.2-4.3: the subclass's entry is seen first; a data member is a slot, a method a constant",
+			x_field != nullptr && x_field->kind == FieldKind::Slot && describe_field != nullptr && describe_field->kind == FieldKind::Constant &&
+					cell_as<FunctionCell>(describe_field->value)->callee == derived_describe.procedure && layout.slot_names.size() == 1);
+
+	g_log.clear();
+	interpreter.begin_entry();
+	Value object;
+	const Outcome built = interpreter.construct(derived, 0, object);
+	interpreter.end_entry(built == Outcome::Ok);
+	const ObjectCell *made = built == Outcome::Ok ? cell_as<ObjectCell>(object) : nullptr;
+	r_cases.check("objects §7.2, §7.4, §7.9: subclass initializer first, the base's skipped by CreateField, then blocks base-first",
+			made != nullptr && g_log == std::vector<int64_t>{ 2, 10, 20 } && Show(made->field_values[x_field->slot]) == "2");
+	Value method;
+	r_cases.check("calls §6: a method resolves to the override, bound to the object",
+			made != nullptr && interpreter.resolve_method(object, describe, method) && cell_as<FunctionCell>(method)->self.same(object) &&
+					Invoked(interpreter, method, {}) == "\"derived\"");
+
+	// derived{X := 7}: the archetype's initializer runs before any class body, so both jump.
+	ArchetypeCell *expression = heap.make<ArchetypeCell>();
+	expression->entries.push_back(ArchetypeEntry{ x, nullptr, Value::uninitialized(), Value::uninitialized(), 0 });
+	Asm make(heap, "Make", 8, 0);
+	const uint32_t name = make.C(Value::from_cell(x));
+	make.Op(VbcOp::NewObject, { W(2), W(make.K(Value::from_cell(expression))), W(make.K(Value::from_cell(derived))) });
+	make.Op(VbcOp::CreateField, { W(3), W(make.K(marker)), W(R(2)), W(name), W(3) });
+	make.Op(VbcOp::UnifyField, { W(R(2)), W(name), W(make.K(Int(heap, 7))) });
+	make.Op(VbcOp::CallWithSelf, { W(4), W(make.K(Value::from_cell(derived->constructor))), W(R(2)),
+			L({ make.K(marker), make.K(Value::uninitialized()), make.K(Value::uninitialized()) }), L({}), L({}), W(0) });
+	make.Op(VbcOp::UnifyNativeObject, { W(R(4)), W(R(2)) });
+	make.Op(VbcOp::UnwrapNativeConstructorWrapper, { W(5), W(R(2)) });
+	make.Op(VbcOp::LoadField, { W(6), W(R(5)), W(name) });
+	make.Op(VbcOp::Return, { W(R(6)) });
+	g_log.clear();
+	r_cases.check("objects §4.2, §7.1: an archetype-supplied field wins, and UnifyNativeObject runs the blocks once",
+			Invoked(interpreter, make.Function(heap.false_value()), {}) == "7" && g_log == std::vector<int64_t>{ 10, 20 });
+}
+
+bool RunInterpreterCases() {
+	Cases cases;
+	CallCases(cases);
+	FailureAndEffectCases(cases);
+	ConstructionCases(cases);
+	return cases.all_ok;
+}
+
 bool RunLoaderCases() {
 	Cases cases;
 	JsonCases(cases);
@@ -1593,5 +1997,6 @@ int main(int argc, char **argv) {
 	AllOk &= Step("a reader that has failed stays failed", TestFailureIsSticky());
 	AllOk &= RunValueCases();
 	AllOk &= RunLoaderCases();
+	AllOk &= RunInterpreterCases();
 	return AllOk ? 0 : 1;
 }

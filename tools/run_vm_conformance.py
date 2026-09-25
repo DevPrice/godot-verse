@@ -72,10 +72,13 @@ def normalize(text: str) -> str:
     vh_host_kind answers a different constant for a runtime host and for this interpreter
     (design §9's `verse/runtime/backend`); GetLastError is a Windows code that means nothing once
     LoadLibraryW already failed one way or the other; a bare pointer value never repeats between
-    two different processes.
+    two different processes. A `LogVerseRuntime:` line is the UE host's engine log echoing a
+    runtime error that the `[error]` lines already carry; the interpreter has no engine log.
     """
     out_lines = []
     for line in text.splitlines():
+        if line.startswith("LogVerseRuntime:"):
+            continue
         if _HOST_KIND_RE.match(line):
             line = "[probe] vh_host_kind = <normalized>"
         elif _GETLASTERROR_RE.match(line):
@@ -231,7 +234,7 @@ def do_compare(only: str | None, sequential: bool) -> int:
             skip_count += 1
             continue
 
-        expected_text = (EXPECTED_DIR / f"{class_name}.txt").read_text(encoding="utf-8")
+        expected_text = normalize((EXPECTED_DIR / f"{class_name}.txt").read_text(encoding="utf-8"))
         _expected_preamble, expected_blocks = parse_transcript(expected_text)
         _, actual_transcript = run_cooked_probe(VM_DLL, COOK_CACHE_DIR, class_name)
         actual_preamble, actual_blocks = parse_transcript(actual_transcript)

@@ -192,6 +192,8 @@ Outcome melt_value(Heap &r_heap, Value p_value, Value &r_result) {
 			ObjectCell *copy = r_heap.make<ObjectCell>();
 			copy->object_class = source->object_class;
 			copy->field_names = source->field_names;
+			copy->layout = source->layout;
+			copy->created = source->created;
 			for (Value field : source->field_values) {
 				Value melted;
 				const Outcome outcome = melt_value(r_heap, field, melted);
@@ -277,6 +279,8 @@ Outcome freeze_value(Heap &r_heap, Value p_value, Value &r_result) {
 			ObjectCell *copy = r_heap.make<ObjectCell>();
 			copy->object_class = source->object_class;
 			copy->field_names = source->field_names;
+			copy->layout = source->layout;
+			copy->created = source->created;
 			for (Value field : source->field_values) {
 				Value frozen;
 				const Outcome outcome = freeze_value(r_heap, field, frozen);

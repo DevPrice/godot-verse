@@ -8,14 +8,24 @@
 #include <cstddef>
 #include <cstring>
 #include <string>
+#include <vector>
 
+#include "vm_marshal.h"
 #include "vm_runtime.h"
+
+// One live script object the host holds. Its object is a root for as long as the host holds it
+// (design §7.3).
+struct vh_instance {
+	vm::Value object;
+	vh_handle handle = 0;
+	const vm::SidecarClass *sidecar_class = nullptr;
+};
 
 namespace {
 
 constexpr int32_t kNotBooted = VH_ERR_STATE;
 constexpr int32_t kCompilerOnly = VH_ERR_UNSUPPORTED;
-// Entry points a later task implements (T3.4 execution, T3.6 defaults), after vh_init.
+// Entry points a later task implements (T3.6 defaults), after vh_init.
 constexpr int32_t kNotYet = VH_ERR_UNSUPPORTED;
 
 // The ABI is a set of free functions over one runtime, so this is the one piece of global state.
@@ -34,6 +44,42 @@ int32_t refuse_list(const Desc **r_out, int32_t *r_count) {
 		*r_count = 0;
 	}
 	return kNotBooted;
+}
+
+// Ends the VM entry an execution entry point began, committing only a normal completion, and
+// answers its status. A raise is reported first; so is a suspension or another operation this
+// runtime cannot perform yet, which answers VH_ERR_UNSUPPORTED because the script did nothing
+// wrong.
+int32_t entry_status(vm::Outcome p_outcome) {
+	vm::Interpreter &interpreter = g_runtime->interpreter;
+	switch (p_outcome) {
+		case vm::Outcome::Ok:
+			interpreter.end_entry(true);
+			return VH_OK;
+		case vm::Outcome::Fail:
+			interpreter.end_entry(false);
+			return VH_ERR_FAILED;
+		case vm::Outcome::Yield:
+			interpreter.end_entry(false);
+			g_runtime->report_raised(interpreter.error());
+			return VH_ERR_UNSUPPORTED;
+		default:
+			interpreter.end_entry(false);
+			g_runtime->report_raised(interpreter.error());
+			return VH_ERR_RUNTIME;
+	}
+}
+
+const vm::SidecarMethod *find_method(const vm::SidecarClass *p_class, const char *p_decorated) {
+	if (p_class == nullptr) {
+		return nullptr;
+	}
+	for (const vm::SidecarMethod &method : p_class->methods) {
+		if (method.decorated == p_decorated) {
+			return &method;
+		}
+	}
+	return nullptr;
 }
 
 // What vh_init reads of a descriptor, copied so every field past the consumer's StructSize reads
@@ -76,6 +122,7 @@ int32_t vh_init(const vh_init_desc *Desc) {
 
 	vm::Runtime *runtime = new vm::Runtime();
 	runtime->godot = desc.Godot;
+	runtime->interpreter.godot = desc.Godot;
 	runtime->on_diagnostic = desc.OnDiagnostic;
 	runtime->diagnostic_ctx = desc.DiagnosticCtx;
 	runtime->on_runtime_error = desc.OnRuntimeError;
@@ -170,16 +217,45 @@ vh_bool vh_has_class(const char *ClassNameUtf8) {
 }
 
 int32_t vh_instantiate(const char *ClassNameUtf8, vh_handle Handle, vh_instance **OutInstance) {
-	(void)ClassNameUtf8;
-	(void)Handle;
 	if (OutInstance != nullptr) {
 		*OutInstance = nullptr;
 	}
-	return not_booted_or_not_yet();
+	if (g_runtime == nullptr) {
+		return kNotBooted;
+	}
+	if (ClassNameUtf8 == nullptr || OutInstance == nullptr) {
+		return VH_ERR_ARGUMENT;
+	}
+	const vm::ClassIndexEntry *entry = g_runtime->program.find_class(vm::ClassOrigin::Script, ClassNameUtf8);
+	if (entry == nullptr || !g_runtime->has_class(ClassNameUtf8)) {
+		return VH_ERR_NOT_FOUND;
+	}
+	vm::Interpreter &interpreter = g_runtime->interpreter;
+	interpreter.begin_entry();
+	vm::Value object;
+	vm::RootScope root(g_runtime->heap, &object);
+	const vm::Outcome outcome = interpreter.construct(entry->class_cell, Handle, object);
+	const int32_t status = entry_status(outcome);
+	if (status != VH_OK) {
+		return status;
+	}
+	vh_instance *instance = new vh_instance();
+	instance->object = object;
+	instance->handle = Handle;
+	instance->sidecar_class = g_runtime->sidecar.find_class(ClassNameUtf8);
+	g_runtime->heap.add_handle_root(&instance->object);
+	*OutInstance = instance;
+	return VH_OK;
 }
 
 void vh_release_instance(vh_instance *Instance) {
-	(void)Instance;
+	if (Instance == nullptr) {
+		return;
+	}
+	if (g_runtime != nullptr) {
+		g_runtime->heap.remove_handle_root(&Instance->object);
+	}
+	delete Instance;
 }
 
 int32_t vh_class_method_list(const char *ClassNameUtf8, const vh_method_desc **OutMethods, int32_t *OutCount) {
@@ -219,13 +295,67 @@ vh_bool vh_instance_has_function(vh_instance *Instance, const char *DecoratedNam
 }
 
 int32_t vh_instance_call(vh_instance *Instance, const char *DecoratedName, const vh_value *Args, int32_t ArgCount, vh_arena *Arena, vh_value *OutResult) {
-	(void)Instance;
-	(void)DecoratedName;
-	(void)Args;
-	(void)ArgCount;
-	(void)Arena;
-	(void)OutResult; // a failed call writes no result, matching the real ABI's own rule
-	return kNotBooted;
+	if (g_runtime == nullptr) {
+		return kNotBooted;
+	}
+	if (Instance == nullptr || DecoratedName == nullptr || ArgCount < 0 || (ArgCount > 0 && Args == nullptr)) {
+		return VH_ERR_ARGUMENT;
+	}
+	vm::Heap &heap = g_runtime->heap;
+	vm::Interpreter &interpreter = g_runtime->interpreter;
+	const vm::NameCell *name = heap.find_interned(DecoratedName);
+	vm::Value function;
+	if (name == nullptr || !interpreter.resolve_method(Instance->object, name, function)) {
+		return VH_ERR_NOT_FOUND;
+	}
+	vm::RootScope function_root(heap, &function);
+	const vm::SidecarMethod *method = find_method(Instance->sidecar_class, DecoratedName);
+	if (method != nullptr && (ArgCount < method->required || size_t(ArgCount) > method->params.size())) {
+		return VH_ERR_ARGUMENT;
+	}
+
+	// Arguments past the procedure's positional ones are its named parameters, in declaration
+	// order (spec/calls.md §8).
+	const vm::Cell *callee = vm::cell_as<vm::FunctionCell>(function)->callee;
+	const uint32_t positional_count = callee->kind == vm::CellKind::Procedure
+			? static_cast<const vm::ProcedureCell *>(callee)->positional_count
+			: static_cast<const vm::NativeProcedureCell *>(callee)->positional_count;
+	std::vector<vm::Value> positional;
+	std::vector<vm::NamedArgument> named;
+	for (int32_t index = 0; index < ArgCount; ++index) {
+		const int32_t declared = method != nullptr ? method->params[size_t(index)].type : Args[index].Type;
+		vm::Value value;
+		if (!vm::wire_to_value(heap, Args[index], declared, value)) {
+			return VH_ERR_ARGUMENT;
+		}
+		if (uint32_t(index) < positional_count || method == nullptr) {
+			positional.push_back(value);
+		} else {
+			named.push_back(vm::NamedArgument{ heap.intern(method->params[size_t(index)].name), value });
+		}
+	}
+
+	interpreter.begin_entry();
+	vm::Value result;
+	vm::RootScope result_root(heap, &result);
+	const vm::Outcome outcome = interpreter.invoke(function, Instance->object, positional, named, result);
+	if (outcome == vm::Outcome::Ok && OutResult != nullptr && Arena != nullptr) {
+		std::string why;
+		vh_value wire = {};
+		const int32_t result_type = method != nullptr ? method->result : VH_TYPE_VOID;
+		const int32_t result_tag = method != nullptr ? method->result_tag : 0;
+		if (!vm::value_to_wire(result, result_type, result_tag, Arena, wire, why)) {
+			interpreter.end_entry(false);
+			vm::RaisedError raised;
+			raised.error.diagnostic = "ErrRuntime_Internal";
+			raised.error.description = "An internal runtime error occurred. There is no other information available.";
+			raised.error.message = std::string("The result of ") + DecoratedName + " could not be handed to the host: " + why + ".";
+			g_runtime->report_raised(raised);
+			return VH_ERR_RUNTIME;
+		}
+		*OutResult = wire;
+	}
+	return entry_status(outcome);
 }
 
 int32_t vh_callback_invoke(int64_t CallbackId, const vh_value *Args, int32_t ArgCount, vh_arena *Arena, vh_value *OutResult) {

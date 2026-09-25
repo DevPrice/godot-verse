@@ -40,6 +40,8 @@ struct Program {
 	const EnumeratorCell *accessor_enumerator = nullptr;
 
 	std::vector<ClassIndexEntry> classes;
+	// Every value object in the file, which the interpreter lays out before anything reads one.
+	std::vector<ObjectCell *> value_objects;
 
 	size_t cell_count = 0;
 	size_t procedure_count = 0;

@@ -2,24 +2,30 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
 #include "verse_host_abi.h"
 #include "vm_heap.h"
+#include "vm_interpreter.h"
 #include "vm_loader.h"
 #include "vm_sidecar.h"
 
-// The one runtime object the vh_* entry points act on: the loaded program, the sidecar, what the
-// consumer handed vh_init, and the storage each class read's answer lives in until that entry
-// point is called again (include/verse_host_abi.h).
+// The one runtime object the vh_* entry points act on: the loaded program, the sidecar, the
+// interpreter, what the consumer handed vh_init, and the storage each class read's answer lives in
+// until that entry point is called again (include/verse_host_abi.h).
 namespace vm {
+
+// The Godot name of the mirrored class p_verse_name, from src/verse_api_classes.h, or null.
+const char *mirrored_godot_name(std::string_view p_verse_name);
 
 class Runtime {
 public:
 	Heap heap;
 	Program program;
 	Sidecar sidecar;
+	Interpreter interpreter{ heap, program };
 	std::string sidecar_path;
 	std::string program_path;
 
@@ -38,6 +44,10 @@ public:
 	// Reports a refusal the way a runtime host reports one: an error diagnostic with no location,
 	// or, failing that, a runtime error with no frames.
 	void report_error(const std::string &p_message) const;
+
+	// Hands a runtime error to OnRuntimeError with its frames, or, with no such callback, folds its
+	// message line into an error diagnostic (include/verse_host_abi.h, vh_init_desc).
+	void report_raised(const RaisedError &p_raised) const;
 
 	bool has_class(const char *p_name) const;
 	bool is_abstract(const char *p_name) const;

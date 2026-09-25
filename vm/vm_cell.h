@@ -333,6 +333,7 @@ enum class ClassKind : uint8_t {
 struct ClassCell : Cell {
 	static constexpr uint32_t FLAG_NATIVE_REPRESENTATION = 1;
 	static constexpr uint32_t FLAG_UNIQUE = 2048;
+	static constexpr uint32_t FLAG_EMULATE_CASE_INSENSITIVE_OVERRIDES = 4096;
 
 	ClassKind class_kind = ClassKind::Class;
 	uint32_t flags = 0;
@@ -448,13 +449,18 @@ struct ModuleCell : Cell {
 	}
 };
 
+struct ClassLayout;
+
 // A struct value or a VM-level class instance: format.md's `value object`, and what NewObject makes.
-// Fields are the object's slots by name; the layout rule that decides which names are slots and
-// which are the class's constants is objects.md §4's, built by T3.6.
+// Fields are the object's slots, in its layout's slot order (vm_objects.h); `created` is
+// CreateField's per-slot mark. A value object the loader built has no layout until
+// lay_out_value_object gives it one, and its fields are the file's.
 struct ObjectCell : Cell {
 	const ClassCell *object_class = nullptr;
 	std::vector<const NameCell *> field_names;
 	std::vector<Value> field_values;
+	const ClassLayout *layout = nullptr;
+	std::vector<bool> created;
 
 	ObjectCell() :
 			Cell(CellKind::Object) {}
@@ -580,6 +586,52 @@ struct RefCell : Cell {
 		for (const Cell *task : awaiting_tasks) {
 			r_visitor.visit(task);
 		}
+	}
+};
+
+constexpr uint32_t kNoRegister = 0xFFFFFFFFu;
+
+// One activation of a procedure (spec/calls.md §2), on the heap so a Verse call never recurses on
+// the native stack. An empty register is fresh. `return_pc` and `return_register` are where the
+// caller continues and what its result is unified into: kNoRegister discards it, and a frame with
+// no caller returns to whoever started the run.
+struct FrameCell : Cell {
+	const ProcedureCell *procedure = nullptr;
+	std::vector<Value> registers;
+	FrameCell *caller = nullptr;
+	uint32_t return_pc = 0;
+	uint32_t return_register = kNoRegister;
+
+	FrameCell() :
+			Cell(CellKind::Frame) {}
+	void visit_references(CellVisitor &r_visitor) const override {
+		r_visitor.visit(procedure);
+		r_visitor.visit(registers);
+		r_visitor.visit(caller);
+	}
+};
+
+// spec/tasks.md §2, as much of it as an entry task needs: a root task with an empty yield-to point,
+// holding the frame it is running. T4.1 gives it the rest.
+struct TaskCell : Cell {
+	enum class Phase : uint8_t {
+		Active,
+		CancelRequested,
+		CancelStarted,
+		CancelUnwind,
+		Canceled,
+	};
+
+	Phase phase = Phase::Active;
+	bool running = true;
+	const TaskCell *parent = nullptr;
+	FrameCell *frame = nullptr;
+
+	TaskCell() :
+			Cell(CellKind::Task) {}
+	void visit_references(CellVisitor &r_visitor) const override {
+		r_visitor.visit(parent);
+		r_visitor.visit(frame);
 	}
 };
 

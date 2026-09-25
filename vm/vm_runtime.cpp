@@ -125,6 +125,11 @@ int32_t Runtime::boot(const std::string &p_cooked_dir, std::string &r_error) {
 		r_error = program_path + " and " + sidecar_path + " were written by different cooks. Export the project again.";
 		return VH_ERR_INIT;
 	}
+	interpreter.sidecar = &sidecar;
+	interpreter.mirrored_godot_name = &mirrored_godot_name;
+	for (ObjectCell *object : program.value_objects) {
+		interpreter.layouts.lay_out_value_object(object);
+	}
 	return VH_OK;
 }
 
@@ -143,6 +148,42 @@ void Runtime::report_error(const std::string &p_message) const {
 		runtime_error.MessageLen = int32_t(p_message.size());
 		on_runtime_error(runtime_error_ctx, &runtime_error);
 	}
+}
+
+void Runtime::report_raised(const RaisedError &p_raised) const {
+	const std::string line = p_raised.message_line();
+	if (on_runtime_error == nullptr) {
+		if (on_diagnostic != nullptr) {
+			report_error(line);
+		}
+		return;
+	}
+	std::vector<vh_stack_frame> frames;
+	frames.reserve(p_raised.frames.size());
+	for (const ErrorFrame &source : p_raised.frames) {
+		vh_stack_frame frame = {};
+		frame.FunctionUtf8 = source.function.c_str();
+		frame.FunctionLen = int32_t(source.function.size());
+		frame.PathUtf8 = source.path.c_str();
+		frame.PathLen = int32_t(source.path.size());
+		frame.Line = source.line;
+		frames.push_back(frame);
+	}
+	vh_runtime_error error = {};
+	error.MessageUtf8 = line.c_str();
+	error.MessageLen = int32_t(line.size());
+	error.Frames = frames.empty() ? nullptr : frames.data();
+	error.FrameCount = int32_t(frames.size());
+	on_runtime_error(runtime_error_ctx, &error);
+}
+
+const char *mirrored_godot_name(std::string_view p_verse_name) {
+	for (const verse_api::class_mapping &mapping : verse_api::classes) {
+		if (p_verse_name == mapping.verse_name) {
+			return mapping.godot_name;
+		}
+	}
+	return nullptr;
 }
 
 const SidecarClass *Runtime::find(const char *p_name) const {

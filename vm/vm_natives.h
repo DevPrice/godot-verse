@@ -12,11 +12,14 @@
 // the implementation this table names for its key, or to the stand-in.
 namespace vm {
 
+class Interpreter;
+
 // One call of a native: its Self and its positional arguments already adapted to the native's
 // count (spec/natives.md §3.3, §3.4). An implementation answers Ok with `result`, Fail, or Error
-// with `error` filled.
+// with `error` filled. `interpreter` is the running one, null when a test calls a native bare.
 struct NativeCall {
 	Heap &heap;
+	Interpreter *interpreter = nullptr;
 	const NativeProcedureCell *procedure = nullptr;
 	Value self;
 	const Value *arguments = nullptr;
