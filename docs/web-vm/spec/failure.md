@@ -566,3 +566,16 @@ Which natives use which pattern is `godot-natives.md` §7 and §8.
 5. **Task and batch state rows of §6.1** are stated from source and delegated to `tasks.md`; no
    fixture here writes task state inside a failing context (a `spawn` inside a condition was not
    tried).
+
+### 12.1 The lead's answers
+
+- **Q2 is implemented as written** (T3.5): a raise in a nested entry rolls back the outer entry,
+  its frames run inner, then `[native]`, then outer, and it is reported to the host once, by the
+  outermost entry.
+- **Q3 is fixed** in the UE host (T5.7): the provider is bound after Solaris starts, so frames are
+  real in the editor host and present in a cooked one.
+- **A nested entry that declines** answers `VH_ERR_FAILED` to the native that entered it and undoes
+  only its own writes; the outer entry continues. The native decides what the decline means.
+- **Within a runtime error's rollback**, each transaction replays its undo log and then runs its
+  compensations, innermost transaction first, so a compensation in an inner context still sees the
+  outer context's writes in place (§7, §9.3).

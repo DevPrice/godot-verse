@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <functional>
 #include <limits>
 #include <map>
 #include <string>
@@ -1921,11 +1922,342 @@ void ConstructionCases(Cases &r_cases) {
 			Invoked(interpreter, make.Function(heap.false_value()), {}) == "7" && g_log == std::vector<int64_t>{ 10, 20 });
 }
 
+RefCell *g_watched = nullptr;
+Value g_reentered;
+
+// Registers a compensation that logs its number times ten plus what g_watched holds when it runs.
+Outcome CompensateNative(NativeCall &r_call) {
+	const int64_t number = int_value(follow(r_call.arguments[0])).to_int64();
+	r_call.interpreter->compensate([number] { g_log.push_back(number * 10 + int_value(follow(g_watched->content)).to_int64()); });
+	r_call.result = r_call.heap.false_value();
+	return Outcome::Ok;
+}
+
+// A native that calls back into Verse, as a Godot callback would: a nested entry whose outcome the
+// native ignores, answering the host's status rather than the Verse one.
+Outcome ReenterNative(NativeCall &r_call) {
+	Interpreter &interpreter = *r_call.interpreter;
+	interpreter.begin_entry();
+	Value result;
+	const Outcome outcome = interpreter.invoke(g_reentered, Value::uninitialized(), {}, {}, result);
+	interpreter.end_entry(outcome == Outcome::Ok);
+	r_call.result = r_call.heap.false_value();
+	return Outcome::Ok;
+}
+
+std::vector<std::pair<int64_t, int>> g_released;
+
+void CaptureRelease(void *, vh_handle p_handle, vh_bool p_discard) {
+	g_released.emplace_back(int64_t(p_handle), int(p_discard));
+}
+
+// Stands in for VhAdoptOrMint's minting branch: handle 42, minted for the argument.
+Outcome MintNative(NativeCall &r_call) {
+	r_call.interpreter->record_mint(42, follow(r_call.arguments[0]).as_cell());
+	r_call.result = Value::from_int32(42);
+	return Outcome::Ok;
+}
+
+void PatchLabel(Asm &r_code, size_t p_op, uint32_t p_label) {
+	r_code.procedure->operand_words[r_code.procedure->ops[p_op].operands] = p_label;
+}
+
+// Opens a full context, runs p_body in it, fails it or not, and returns false after it.
+Value InContext(Heap &r_heap, const char *p_name, bool p_fail, const std::function<void(Asm &)> &p_body) {
+	using vbc::VbcOp;
+	Asm code(r_heap, p_name, 8, 0);
+	code.Op(VbcOp::BeginFailureContext, { W(0), W(0) });
+	p_body(code);
+	if (p_fail) {
+		code.Op(VbcOp::Query, { W(7), W(code.K(r_heap.false_value())) });
+	}
+	code.Op(VbcOp::EndFailureContext, { W(0), W(0) });
+	PatchLabel(code, 0, uint32_t(code.procedure->ops.size()));
+	code.Op(VbcOp::Return, { W(code.K(r_heap.false_value())) });
+	return code.Function(r_heap.false_value());
+}
+
+void UndoLogCases(Cases &r_cases) {
+	Heap heap;
+	Program program;
+	Interpreter interpreter(heap, program);
+	using vbc::VbcOp;
+	const Value compensate = NativeFunction(heap, "Compensate", 1, &CompensateNative);
+	const Value reenter = NativeFunction(heap, "Reenter", 0, &ReenterNative);
+	const Value err = NativeFunction(heap, "Err", 1, native_implementation("(/Verse.org/Verse/(/Verse.org/Verse:)Err(:[]char):)Native"));
+	const auto content = [](const RefCell *p_var) { return Show(p_var->content); };
+	const auto var_of = [&](int64_t p_value) { return heap.make<RefCell>(Int(heap, p_value)); };
+
+	RefCell *var = var_of(0);
+	const auto set_var = [&](Asm &r_code) { r_code.Op(VbcOp::RefSet, { W(r_code.K(Value::from_cell(var))), W(r_code.K(Int(heap, 1))) }); };
+	Invoked(interpreter, InContext(heap, "RefSetFails", true, set_var), {});
+	const bool undone = content(var) == "0";
+	Invoked(interpreter, InContext(heap, "RefSetSucceeds", false, set_var), {});
+	r_cases.check("failure §6.1: RefSet in a failed context is undone, in a committed one kept", undone && content(var) == "1");
+
+	ClassCell *point = heap.make<ClassCell>();
+	ArchetypeCell *point_body = heap.make<ArchetypeCell>();
+	point->archetype = point_body;
+	point_body->owner = point;
+	SimpleTypeCell *any = heap.make<SimpleTypeCell>();
+	const NameCell *x = heap.intern("(/test/point:)X");
+	const NameCell *v = heap.intern("(/test/point:)V");
+	point_body->entries.push_back(ArchetypeEntry{ x, nullptr, Value::from_cell(any), Value::uninitialized(), 0 });
+	point_body->entries.push_back(ArchetypeEntry{ v, nullptr, Value::from_cell(any), Value::uninitialized(), 0 });
+	const ClassLayout &point_layout = interpreter.layouts.get(point);
+	ObjectCell *object = interpreter.layouts.new_object(heap, point_layout);
+	RefCell *field_var = var_of(0);
+	object->field_values[point_layout.find(x)->slot] = Int(heap, 0);
+	object->field_values[point_layout.find(v)->slot] = Value::from_cell(field_var);
+	Invoked(interpreter, InContext(heap, "SetFields", true, [&](Asm &r_code) {
+		r_code.Op(VbcOp::SetField, { W(r_code.K(Value::from_cell(object))), W(r_code.C(Value::from_cell(x))), W(r_code.K(Int(heap, 5))) });
+		r_code.Op(VbcOp::SetField, { W(r_code.K(Value::from_cell(object))), W(r_code.C(Value::from_cell(v))), W(r_code.K(Int(heap, 6))) });
+	}),
+			{});
+	r_cases.check("failure §6.1: SetField of a plain field and of a var field are undone",
+			Show(object->field_values[point_layout.find(x)->slot]) == "0" && content(field_var) == "0" &&
+					object->field_values[point_layout.find(v)->slot].same(Value::from_cell(field_var)));
+
+	const auto numbers = [&] { return make_array(heap, { Int(heap, 1), Int(heap, 2), Int(heap, 3) }, true); };
+	const Value elements = numbers();
+	Invoked(interpreter, InContext(heap, "CallSetArray", true, [&](Asm &r_code) {
+		r_code.Op(VbcOp::CallSet, { W(r_code.K(elements)), W(r_code.K(Int(heap, 0))), W(r_code.K(Int(heap, 9))) });
+		r_code.Op(VbcOp::CallSet, { W(r_code.K(elements)), W(r_code.K(Int(heap, 0))), W(r_code.K(Int(heap, 8))) });
+	}),
+			{});
+	r_cases.check("failure §6.1: CallSet of a mutable array element written twice restores the first value", Show(elements) == "[1,2,3]");
+
+	const Value appended = numbers();
+	const Value collected = numbers();
+	const auto array_add = [&](Value p_array, uint32_t p_transactional) {
+		return [&, p_array, p_transactional](Asm &r_code) {
+			r_code.Op(VbcOp::ArrayAdd, { W(2), W(r_code.K(p_array)), W(r_code.K(Int(heap, 4))), W(p_transactional) });
+		};
+	};
+	Invoked(interpreter, InContext(heap, "ArrayAddTransactional", true, array_add(appended, 1)), {});
+	Invoked(interpreter, InContext(heap, "ArrayAddCollecting", true, array_add(collected, 0)), {});
+	r_cases.check("failure §6.1: ArrayAdd is undone when bTransactional, and not recorded otherwise",
+			Show(appended) == "[1,2,3]" && Show(collected) == "[1,2,3,4]");
+
+	const Value fast = numbers();
+	Invoked(interpreter, InContext(heap, "FastAppend", true, [&](Asm &r_code) {
+		r_code.Op(VbcOp::FastAppendToArray, { W(r_code.K(fast)), W(r_code.K(Arr(heap, { Int(heap, 4), Int(heap, 5) }))) });
+	}),
+			{});
+	r_cases.check("failure §6.1: FastAppendToArray is undone to the old length", Show(fast) == "[1,2,3]");
+
+	const Value frozen = numbers();
+	Invoked(interpreter, InContext(heap, "MakeImmutable", true, [&](Asm &r_code) {
+		r_code.Op(VbcOp::InPlaceMakeImmutable, { W(2), W(r_code.K(frozen)) });
+	}),
+			{});
+	r_cases.check("failure §6.1: InPlaceMakeImmutable is undone to a mutable array", is_cell_kind(frozen, CellKind::MutableArray));
+
+	Value letters = Value::uninitialized();
+	melt(heap, MakeMap(heap, { Int(heap, 1), Int(heap, 2) }, { Str(heap, "a"), Str(heap, "b") }), letters);
+	Invoked(interpreter, InContext(heap, "CallSetMap", true, [&](Asm &r_code) {
+		r_code.Op(VbcOp::CallSet, { W(r_code.K(letters)), W(r_code.K(Int(heap, 1))), W(r_code.K(Str(heap, "A"))) });
+		r_code.Op(VbcOp::CallSet, { W(r_code.K(letters)), W(r_code.K(Int(heap, 3))), W(r_code.K(Str(heap, "c"))) });
+		r_code.Op(VbcOp::CallSet, { W(r_code.K(letters)), W(r_code.K(Int(heap, 0))), W(r_code.K(Str(heap, "z"))) });
+		r_code.Op(VbcOp::CallSet, { W(r_code.K(letters)), W(r_code.K(Int(heap, 1))), W(r_code.K(Str(heap, "Z"))) });
+	}),
+			{});
+	Value missing;
+	r_cases.check("failure §6.1: map inserts and replaces are undone, the count, the order and the index with them",
+			Show(letters) == "{1=>\"a\",2=>\"b\"}" && Fails(map_lookup(letters, Int(heap, 3), missing)) && Fails(map_lookup(letters, Int(heap, 0), missing)));
+
+	// 0 Move r2 <- 5, then a failed context that resets r2 and trails 7 into it, then returns r2.
+	Asm reset(heap, "Reset", 8, 0);
+	reset.Op(VbcOp::Move, { W(2), W(reset.K(Int(heap, 5))) });
+	reset.Op(VbcOp::BeginFailureContext, { W(6), W(0) });
+	reset.Op(VbcOp::Reset, { W(2), W(0) });
+	reset.Op(VbcOp::MoveTrailed, { W(2), W(reset.K(Int(heap, 7))) });
+	reset.Op(VbcOp::Query, { W(3), W(reset.K(heap.false_value())) });
+	reset.Op(VbcOp::EndFailureContext, { W(6), W(0) });
+	reset.Op(VbcOp::Return, { W(R(2)) });
+	r_cases.check("failure §6.2: Reset and MoveTrailed in a failed context are undone", Invoked(interpreter, reset.Function(heap.false_value()), {}) == "5");
+
+	// A failed context that writes r2, then Move r2 <- 8 afterwards: 8 only if r2 is fresh again.
+	const auto rewrite = [&](const char *p_name, const std::function<void(Asm &)> &p_write) {
+		Asm code(heap, p_name, 8, 0);
+		code.Op(VbcOp::Move, { W(2), W(code.K(Int(heap, 5))) });
+		code.Op(VbcOp::BeginFailureContext, { W(0), W(0) });
+		p_write(code);
+		code.Op(VbcOp::Query, { W(3), W(code.K(heap.false_value())) });
+		code.Op(VbcOp::EndFailureContext, { W(0), W(0) });
+		PatchLabel(code, 1, uint32_t(code.procedure->ops.size()));
+		code.Op(VbcOp::Move, { W(2), W(code.K(Int(heap, 8))) });
+		code.Op(VbcOp::Return, { W(R(2)) });
+		return Invoked(interpreter, code.Function(heap.false_value()), {});
+	};
+	r_cases.check("unification §4: ResetNonTrailed is not recorded, so the register stays fresh",
+			rewrite("ResetNonTrailed", [&](Asm &r_code) { r_code.Op(VbcOp::ResetNonTrailed, { W(2), W(0) }); }) == "8");
+
+	Asm seven(heap, "Seven", 2, 0);
+	seven.Op(VbcOp::ReturnTrailed, { W(seven.K(Int(heap, 7))) });
+	Asm plain_seven(heap, "PlainSeven", 2, 0);
+	plain_seven.Op(VbcOp::Return, { W(plain_seven.K(Int(heap, 7))) });
+	const auto call_into_fresh = [&](const char *p_name, Value p_callee) {
+		Asm code(heap, p_name, 8, 0);
+		code.Op(VbcOp::BeginFailureContext, { W(0), W(0) });
+		code.Op(VbcOp::Call, { W(2), W(code.K(p_callee)), L({}), L({}), L({}), W(0) });
+		code.Op(VbcOp::Query, { W(3), W(code.K(heap.false_value())) });
+		code.Op(VbcOp::EndFailureContext, { W(0), W(0) });
+		PatchLabel(code, 0, uint32_t(code.procedure->ops.size()));
+		code.Op(VbcOp::Move, { W(2), W(code.K(Int(heap, 9))) });
+		code.Op(VbcOp::Return, { W(R(2)) });
+		return Invoked(interpreter, code.Function(heap.false_value()), {});
+	};
+	r_cases.check("failure §6.2: ReturnTrailed's store into the caller's register is undone; Return's is not",
+			call_into_fresh("CallsTrailed", seven.Function(heap.false_value())) == "9" && call_into_fresh("CallsPlain", plain_seven.Function(heap.false_value())) == "<fail>");
+
+	// r4 reads r2 and r5 reads r3, making both placeholders; Move r2 <- r3 links them in the context.
+	Asm link(heap, "Link", 8, 0);
+	link.Op(VbcOp::Move, { W(4), W(R(2)) });
+	link.Op(VbcOp::Move, { W(5), W(R(3)) });
+	link.Op(VbcOp::BeginFailureContext, { W(6), W(0) });
+	link.Op(VbcOp::Move, { W(2), W(R(3)) });
+	link.Op(VbcOp::Query, { W(6), W(link.K(heap.false_value())) });
+	link.Op(VbcOp::EndFailureContext, { W(0), W(0) });
+	link.Op(VbcOp::Move, { W(3), W(link.K(Int(heap, 1))) });
+	link.Op(VbcOp::Move, { W(2), W(link.K(Int(heap, 2))) });
+	link.Op(VbcOp::Return, { W(R(2)) });
+	PatchLabel(link, 2, 6);
+	r_cases.check("unification §2.4: a placeholder link made in a failed context is undone", Invoked(interpreter, link.Function(heap.false_value()), {}) == "2");
+
+	// F writes Y = 1; G, inside it, writes Y = 2 and commits; F fails.
+	RefCell *y = var_of(0);
+	Asm nested(heap, "Nested", 8, 0);
+	nested.Op(VbcOp::BeginFailureContext, { W(7), W(0) });
+	nested.Op(VbcOp::RefSet, { W(nested.K(Value::from_cell(y))), W(nested.K(Int(heap, 1))) });
+	nested.Op(VbcOp::BeginFailureContext, { W(5), W(1) });
+	nested.Op(VbcOp::RefSet, { W(nested.K(Value::from_cell(y))), W(nested.K(Int(heap, 2))) });
+	nested.Op(VbcOp::EndFailureContext, { W(5), W(1) });
+	nested.Op(VbcOp::Query, { W(3), W(nested.K(heap.false_value())) });
+	nested.Op(VbcOp::EndFailureContext, { W(7), W(0) });
+	nested.Op(VbcOp::Return, { W(nested.K(heap.false_value())) });
+	Invoked(interpreter, nested.Function(heap.false_value()), {});
+	const bool merged = content(y) == "0";
+	// F writes Y = 1; G writes Y = 2 and fails; F commits.
+	Asm inner_fails(heap, "InnerFails", 8, 0);
+	inner_fails.Op(VbcOp::BeginFailureContext, { W(7), W(0) });
+	inner_fails.Op(VbcOp::RefSet, { W(inner_fails.K(Value::from_cell(y))), W(inner_fails.K(Int(heap, 1))) });
+	inner_fails.Op(VbcOp::BeginFailureContext, { W(6), W(1) });
+	inner_fails.Op(VbcOp::RefSet, { W(inner_fails.K(Value::from_cell(y))), W(inner_fails.K(Int(heap, 2))) });
+	inner_fails.Op(VbcOp::Query, { W(3), W(inner_fails.K(heap.false_value())) });
+	inner_fails.Op(VbcOp::EndFailureContext, { W(6), W(1) });
+	inner_fails.Op(VbcOp::EndFailureContext, { W(7), W(0) });
+	inner_fails.Op(VbcOp::Return, { W(inner_fails.K(heap.false_value())) });
+	Invoked(interpreter, inner_fails.Function(heap.false_value()), {});
+	r_cases.check("failure §7 (Nesting): a committed child's writes are undone with its failed parent; a failed child's alone under a committed parent",
+			merged && content(y) == "1");
+
+	// F writes Z = 5 and registers compensation 1; G registers 2 and commits; F fails.
+	RefCell *z = var_of(0);
+	g_watched = z;
+	Asm compensated(heap, "Compensated", 8, 0);
+	compensated.Op(VbcOp::BeginFailureContext, { W(8), W(0) });
+	compensated.Op(VbcOp::RefSet, { W(compensated.K(Value::from_cell(z))), W(compensated.K(Int(heap, 5))) });
+	compensated.Op(VbcOp::Call, { W(2), W(compensated.K(compensate)), L({ compensated.K(Int(heap, 1)) }), L({}), L({}), W(0) });
+	compensated.Op(VbcOp::BeginFailureContext, { W(6), W(1) });
+	compensated.Op(VbcOp::Call, { W(3), W(compensated.K(compensate)), L({ compensated.K(Int(heap, 2)) }), L({}), L({}), W(0) });
+	compensated.Op(VbcOp::EndFailureContext, { W(6), W(1) });
+	compensated.Op(VbcOp::Query, { W(4), W(compensated.K(heap.false_value())) });
+	compensated.Op(VbcOp::EndFailureContext, { W(8), W(0) });
+	compensated.Op(VbcOp::Return, { W(compensated.K(heap.false_value())) });
+	g_log.clear();
+	Invoked(interpreter, compensated.Function(heap.false_value()), {});
+	r_cases.check("failure §7: an abort replays the log, then runs compensations newest first, a committed child's included",
+			g_log == std::vector<int64_t>{ 20, 10 } && content(z) == "0");
+
+	Asm kept(heap, "Kept", 4, 0);
+	kept.Op(VbcOp::Call, { W(2), W(kept.K(compensate)), L({ kept.K(Int(heap, 3)) }), L({}), L({}), W(0) });
+	kept.Op(VbcOp::Return, { W(kept.K(heap.false_value())) });
+	g_log.clear();
+	Invoked(interpreter, kept.Function(heap.false_value()), {});
+	r_cases.check("failure §7: the root commit discards compensations unrun", g_log.empty());
+	kept.procedure->ops.pop_back();
+	kept.Op(VbcOp::Query, { W(3), W(kept.K(heap.false_value())) });
+	kept.Op(VbcOp::Return, { W(kept.K(heap.false_value())) });
+	r_cases.check("failure §4: a root that declines runs its compensations", Invoked(interpreter, kept.Function(heap.false_value()), {}) == "<fail>" && g_log == std::vector<int64_t>{ 30 });
+
+	// Root writes W = 1 and registers 1; F writes W = 2, registers 2 and raises.
+	RefCell *w = var_of(0);
+	g_watched = w;
+	Asm raises(heap, "Raises", 8, 0);
+	raises.Op(VbcOp::RefSet, { W(raises.K(Value::from_cell(w))), W(raises.K(Int(heap, 1))) });
+	raises.Op(VbcOp::Call, { W(2), W(raises.K(compensate)), L({ raises.K(Int(heap, 1)) }), L({}), L({}), W(0) });
+	raises.Op(VbcOp::BeginFailureContext, { W(7), W(0) });
+	raises.Op(VbcOp::RefSet, { W(raises.K(Value::from_cell(w))), W(raises.K(Int(heap, 2))) });
+	raises.Op(VbcOp::Call, { W(3), W(raises.K(compensate)), L({ raises.K(Int(heap, 2)) }), L({}), L({}), W(0) });
+	raises.Op(VbcOp::Call, { W(4), W(raises.K(err)), L({ raises.K(Str(heap, "boom")) }), L({}), L({}), W(0) });
+	raises.Op(VbcOp::EndFailureContext, { W(7), W(0) });
+	raises.Op(VbcOp::Return, { W(raises.K(heap.false_value())) });
+	g_log.clear();
+	const std::string raised = Invoked(interpreter, raises.Function(heap.false_value()), {});
+	r_cases.check("failure §9.3: a raise inside a context is not caught by it and rolls back to the entry, innermost transaction first, each log before its compensations",
+			raised.find("<error> ErrorRequested") == 0 && content(w) == "0" && g_log == std::vector<int64_t>{ 21, 10 });
+
+	// Outer writes W = 1, calls a native that re-enters Verse, then writes W = 4.
+	RefCell *second = var_of(0);
+	Asm outer(heap, "Outer", 4, 0);
+	outer.Op(VbcOp::RefSet, { W(outer.K(Value::from_cell(w))), W(outer.K(Int(heap, 1))) });
+	outer.Op(VbcOp::Call, { W(2), W(outer.K(reenter)), L({}), L({}), L({}), W(0) });
+	outer.Op(VbcOp::RefSet, { W(outer.K(Value::from_cell(w))), W(outer.K(Int(heap, 4))) });
+	outer.Op(VbcOp::Return, { W(outer.K(heap.false_value())) });
+	const Value outer_fn = outer.Function(heap.false_value());
+
+	Asm inner_raise(heap, "InnerRaise", 4, 0);
+	inner_raise.Op(VbcOp::RefSet, { W(inner_raise.K(Value::from_cell(second))), W(inner_raise.K(Int(heap, 3))) });
+	inner_raise.Op(VbcOp::Call, { W(2), W(inner_raise.K(err)), L({ inner_raise.K(Str(heap, "inner")) }), L({}), L({}), W(0) });
+	inner_raise.Op(VbcOp::Return, { W(inner_raise.K(heap.false_value())) });
+	g_reentered = inner_raise.Function(heap.false_value());
+	const std::string nested_raise = Invoked(interpreter, outer_fn, {});
+	const std::vector<ErrorFrame> &frames = interpreter.error().frames;
+	r_cases.check("failure §9.3: a raise in a nested entry rolls back the outer entry too, and stops it at the native",
+			nested_raise.find("(User Message: 'inner')") != std::string::npos && content(w) == "0" && content(second) == "0");
+	r_cases.check("failure §9.2: a nested raise's frames run through the re-entering native into the outer entry",
+			frames.size() == 4 && frames[0].path == "[native]" && frames[1].function == "InnerRaise" && frames[2].function == "Reenter" &&
+					frames[3].function == "Outer");
+
+	Asm inner_decline(heap, "InnerDecline", 4, 0);
+	inner_decline.Op(VbcOp::RefSet, { W(inner_decline.K(Value::from_cell(second))), W(inner_decline.K(Int(heap, 7))) });
+	inner_decline.Op(VbcOp::Query, { W(2), W(inner_decline.K(heap.false_value())) });
+	inner_decline.Op(VbcOp::Return, { W(inner_decline.K(heap.false_value())) });
+	g_reentered = inner_decline.Function(heap.false_value());
+	r_cases.check("failure §4: a nested entry that declines undoes only its own writes; the outer entry goes on and commits",
+			Invoked(interpreter, outer_fn, {}) == "false" && content(w) == "4" && content(second) == "0");
+
+	Asm inner_commit(heap, "InnerCommit", 4, 0);
+	inner_commit.Op(VbcOp::RefSet, { W(inner_commit.K(Value::from_cell(second))), W(inner_commit.K(Int(heap, 7))) });
+	inner_commit.Op(VbcOp::Return, { W(inner_commit.K(heap.false_value())) });
+	g_reentered = inner_commit.Function(heap.false_value());
+	Invoked(interpreter, InContext(heap, "ReenterThenFail", true, [&](Asm &r_code) {
+		r_code.Op(VbcOp::Call, { W(2), W(r_code.K(reenter)), L({}), L({}), L({}), W(0) });
+	}),
+			{});
+	r_cases.check("failure §7: a nested entry that commits joins the context its native was called in, and fails with it", content(second) == "0");
+
+	interpreter.godot.ReleaseObject = &CaptureRelease;
+	const Value mint = NativeFunction(heap, "Mint", 1, &MintNative);
+	const Value peer_object = make_array(heap, {}, true);
+	const auto mints = [&](Asm &r_code) { r_code.Op(VbcOp::Call, { W(2), W(r_code.K(mint)), L({ r_code.K(peer_object) }), L({}), L({}), W(0) }); };
+	g_released.clear();
+	Invoked(interpreter, InContext(heap, "MintFails", true, mints), {});
+	const bool discarded = interpreter.minted_peers.count(42) == 0 && g_released == std::vector<std::pair<int64_t, int>>{ { 42, 1 } };
+	g_released.clear();
+	Invoked(interpreter, InContext(heap, "MintSucceeds", false, mints), {});
+	r_cases.check("godot-natives §4.4, §8.12: a mint in an aborted transaction is discarded at once; a committed one keeps its row",
+			discarded && g_released.empty() && interpreter.minted_peers.count(42) == 1);
+	interpreter.minted_peers.clear();
+}
+
 bool RunInterpreterCases() {
 	Cases cases;
 	CallCases(cases);
 	FailureAndEffectCases(cases);
 	ConstructionCases(cases);
+	UndoLogCases(cases);
 	return cases.all_ok;
 }
 

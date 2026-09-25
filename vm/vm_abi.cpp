@@ -65,7 +65,11 @@ int32_t entry_status(vm::Outcome p_outcome) {
 			return VH_ERR_UNSUPPORTED;
 		default:
 			interpreter.end_entry(false);
-			g_runtime->report_raised(interpreter.error());
+			// A nested entry's raise also stops the outer one, whose frames include the inner
+			// frames; reporting it here as well would report it twice.
+			if (!interpreter.in_entry()) {
+				g_runtime->report_raised(interpreter.error());
+			}
 			return VH_ERR_RUNTIME;
 	}
 }

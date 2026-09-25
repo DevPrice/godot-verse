@@ -58,15 +58,23 @@ void bind_placeholder(Value p_placeholder, Value p_value) {
 	placeholder->target = p_value;
 }
 
-// spec/unification.md §3.1: a comparison meeting an unbound placeholder binds it and goes on.
+// spec/unification.md §3.1: a comparison meeting an unbound placeholder binds it and goes on. A link
+// between two unbound ones is kept for the undo log (§2.4); a binding is not (§2.3).
 class Binder : public PlaceholderMeeter {
 public:
+	std::vector<PlaceholderCell *> linked;
+
 	Equality meet(Value p_left, Value p_right) override {
-		if (is_unbound_placeholder(p_left)) {
-			bind_placeholder(p_left, p_right);
-		} else {
-			bind_placeholder(p_right, p_left);
+		const bool left_unbound = is_unbound_placeholder(p_left);
+		const Value placeholder = left_unbound ? p_left : p_right;
+		const Value other = left_unbound ? p_right : p_left;
+		if (placeholder.same(other)) {
+			return Equality::Eq;
 		}
+		if (is_unbound_placeholder(other)) {
+			linked.push_back(cell_as<PlaceholderCell>(placeholder));
+		}
+		bind_placeholder(placeholder, other);
 		return Equality::Eq;
 	}
 };
@@ -146,9 +154,14 @@ void Interpreter::set_frame(FrameCell *p_frame) {
 void Interpreter::begin_entry() {
 	if (entry_tasks.empty()) {
 		effects.clear();
+		compensations.clear();
+		undo_log.clear();
 		contexts.clear();
+		entry_marks.clear();
 		raised = RaisedError();
+		unwinding = Outcome::Ok;
 	}
+	entry_marks.push_back(marks());
 	TaskCell *task = heap.make<TaskCell>();
 	entry_tasks.push_back(Value::from_cell(task));
 	heap.add_handle_root(&entry_tasks.back());
@@ -158,6 +171,10 @@ void Interpreter::end_entry(bool p_commit) {
 	if (entry_tasks.empty()) {
 		return;
 	}
+	if (!p_commit) {
+		abort_to(entry_marks.back());
+	}
+	entry_marks.pop_back();
 	heap.remove_handle_root(&entry_tasks.back());
 	entry_tasks.pop_back();
 	if (!entry_tasks.empty()) {
@@ -166,7 +183,8 @@ void Interpreter::end_entry(bool p_commit) {
 	std::vector<std::function<void()>> pending;
 	pending.swap(effects);
 	contexts.clear();
-	// T3.5: the root commit discards the undo log; an abort replays it first.
+	undo_log.clear();
+	compensations.clear();
 	if (p_commit) {
 		for (const std::function<void()> &effect : pending) {
 			effect();
@@ -176,6 +194,110 @@ void Interpreter::end_entry(bool p_commit) {
 
 void Interpreter::defer(std::function<void()> p_effect) {
 	effects.push_back(std::move(p_effect));
+}
+
+void Interpreter::compensate(std::function<void()> p_action) {
+	compensations.push_back(std::move(p_action));
+}
+
+void Interpreter::record_mint(int64_t p_handle, const Cell *p_object) {
+	minted_peers[p_handle] = p_object;
+	compensate([this, p_handle, p_object] {
+		const auto row = minted_peers.find(p_handle);
+		if (row == minted_peers.end() || row->second != p_object) {
+			return;
+		}
+		minted_peers.erase(row);
+		if (godot.ReleaseObject != nullptr) {
+			godot.ReleaseObject(godot.Ctx, p_handle, 1);
+		}
+	});
+}
+
+Interpreter::Marks Interpreter::marks() const {
+	Marks current;
+	current.undo = undo_log.size();
+	current.effects = effects.size();
+	current.compensations = compensations.size();
+	return current;
+}
+
+void Interpreter::record_slot(Value &r_slot) {
+	UndoRecord entry;
+	entry.kind = UndoRecord::Kind::Slot;
+	entry.slot = &r_slot;
+	entry.old = r_slot;
+	undo_log.push_back(entry);
+}
+
+void Interpreter::record(const UndoRecord &p_record) {
+	undo_log.push_back(p_record);
+}
+
+void Interpreter::record_link(PlaceholderCell *p_placeholder) {
+	UndoRecord entry;
+	entry.kind = UndoRecord::Kind::PlaceholderLink;
+	entry.cell = p_placeholder;
+	undo_log.push_back(entry);
+}
+
+// spec/failure.md §7's abort: the log replayed newest first, so a slot written twice ends with the
+// oldest value; the deferred effects dropped; then the compensations, newest first.
+void Interpreter::abort_to(const Marks &p_marks) {
+	while (undo_log.size() > p_marks.undo) {
+		const UndoRecord entry = undo_log.back();
+		undo_log.pop_back();
+		switch (entry.kind) {
+			case UndoRecord::Kind::Slot:
+				*entry.slot = entry.old;
+				break;
+			case UndoRecord::Kind::ArrayElement: {
+				Value ignored;
+				array_set(Value::from_cell(entry.cell), entry.key, entry.old, ignored);
+				break;
+			}
+			case UndoRecord::Kind::ArrayLength:
+				static_cast<ArrayCell *>(entry.cell)->truncate(entry.length);
+				break;
+			case UndoRecord::Kind::ArrayMutable:
+				entry.cell->kind = CellKind::MutableArray;
+				break;
+			case UndoRecord::Kind::MapValue: {
+				bool inserted = false;
+				Value ignored;
+				map_set(Value::from_cell(entry.cell), entry.key, entry.old, inserted, ignored);
+				break;
+			}
+			case UndoRecord::Kind::MapInsert:
+				map_remove_last(Value::from_cell(entry.cell));
+				break;
+			case UndoRecord::Kind::PlaceholderLink: {
+				PlaceholderCell *placeholder = static_cast<PlaceholderCell *>(entry.cell);
+				placeholder->state = PlaceholderCell::State::Unbound;
+				placeholder->target = Value();
+				break;
+			}
+		}
+	}
+	if (effects.size() > p_marks.effects) {
+		effects.resize(p_marks.effects);
+	}
+	while (compensations.size() > p_marks.compensations) {
+		const std::function<void()> action = std::move(compensations.back());
+		compensations.pop_back();
+		action();
+	}
+}
+
+// Every context the run opened aborts, innermost first, then the run's own root share
+// (spec/failure.md §9.3 step 1).
+void Interpreter::abort_run(size_t p_base, const Marks &p_marks) {
+	while (contexts.size() > p_base) {
+		const Marks context = contexts.back().marks;
+		contexts.pop_back();
+		abort_to(context);
+	}
+	abort_to(p_marks);
 }
 
 Value Interpreter::constant(uint32_t p_index) const {
@@ -214,12 +336,19 @@ Interpreter::Step Interpreter::unify_slot(Value &r_slot, Value p_value) {
 	const Value current = follow(r_slot);
 	if (is_unbound(current)) {
 		if (!current.same(p_value)) {
+			if (is_unbound(p_value)) {
+				record_link(cell_as<PlaceholderCell>(current));
+			}
 			bind_placeholder(current, p_value);
 		}
 		return Step::Next;
 	}
 	Binder binder;
-	switch (values_equal(current, p_value, &binder)) {
+	const Equality answer = values_equal(current, p_value, &binder);
+	for (PlaceholderCell *linked : binder.linked) {
+		record_link(linked);
+	}
+	switch (answer) {
 		case Equality::Eq:
 			return Step::Next;
 		case Equality::Neq:
@@ -255,6 +384,13 @@ Interpreter::Step Interpreter::unify_outcome(Outcome p_outcome, uint32_t p_regis
 
 void Interpreter::capture_frames(const NativeProcedureCell *p_native) {
 	raised.frames.clear();
+	append_frames(p_native);
+}
+
+// The native (if any) and then the Verse frames from the current one out, after whatever frames are
+// already there: a raise in a nested entry continues through the native that entered it
+// (spec/failure.md §9.2).
+void Interpreter::append_frames(const NativeProcedureCell *p_native) {
 	if (p_native != nullptr) {
 		ErrorFrame native;
 		native.function = p_native->decorated_name != nullptr ? p_native->decorated_name->text : std::string();
@@ -279,8 +415,7 @@ Interpreter::Step Interpreter::park() {
 	raised.error.description = kInternalDescription;
 	raised.error.message = "Stage-1 interpreter cannot wait: " + location_of(frame, pc) + " needs a value that is not yet known";
 	capture_frames(nullptr);
-	stop_outcome = Outcome::Error;
-	return Step::Stop;
+	return stop(Outcome::Error);
 }
 
 // spec/failure.md §9.4.
@@ -289,14 +424,18 @@ Interpreter::Step Interpreter::invariant(const std::string &p_what) {
 	raised.error.description = kInternalDescription;
 	raised.error.message = "VM invariant violated: " + p_what + " at " + location_of(frame, pc);
 	capture_frames(nullptr);
-	stop_outcome = Outcome::Error;
-	return Step::Stop;
+	return stop(Outcome::Error);
 }
 
 Interpreter::Step Interpreter::raise(const RuntimeError &p_error, const NativeProcedureCell *p_native) {
 	raised.error = p_error;
 	capture_frames(p_native);
-	stop_outcome = Outcome::Error;
+	return stop(Outcome::Error);
+}
+
+Interpreter::Step Interpreter::stop(Outcome p_outcome) {
+	stop_outcome = p_outcome;
+	unwinding = p_outcome;
 	return Step::Stop;
 }
 
@@ -307,8 +446,7 @@ Interpreter::Step Interpreter::not_yet(const std::string &p_what) {
 	raised.error.description = kInternalDescription;
 	raised.error.message = "This runtime cannot run " + p_what + " yet: " + location_of(frame, pc);
 	capture_frames(nullptr);
-	stop_outcome = Outcome::Yield;
-	return Step::Stop;
+	return stop(Outcome::Yield);
 }
 
 bool Interpreter::unwind_failure() {
@@ -317,8 +455,7 @@ bool Interpreter::unwind_failure() {
 	}
 	const FailureContext context = contexts.back();
 	contexts.pop_back();
-	// T3.5: replay this context's undo records here, before anything else runs.
-	effects.resize(context.effects_mark);
+	abort_to(context.marks);
 	set_frame(context.frame);
 	pc = context.on_failure;
 	return true;
@@ -328,7 +465,7 @@ Outcome Interpreter::run(FrameCell *p_entry, Value &r_result) {
 	FrameCell *const saved_frame = frame;
 	const uint32_t saved_pc = pc;
 	const size_t saved_base = run_base;
-	const size_t effects_mark = effects.size();
+	const Marks run_marks = marks();
 	run_base = contexts.size();
 	set_frame(p_entry);
 	pc = 0;
@@ -354,7 +491,6 @@ Outcome Interpreter::run(FrameCell *p_entry, Value &r_result) {
 			if (unwind_failure()) {
 				continue;
 			}
-			effects.resize(effects_mark);
 			outcome = Outcome::Fail;
 			break;
 		}
@@ -365,6 +501,9 @@ Outcome Interpreter::run(FrameCell *p_entry, Value &r_result) {
 		}
 		outcome = stop_outcome;
 		break;
+	}
+	if (outcome != Outcome::Ok) {
+		abort_run(run_base, run_marks);
 	}
 	contexts.resize(run_base);
 	run_base = saved_base;
@@ -420,6 +559,10 @@ Interpreter::Step Interpreter::call_native(const NativeProcedureCell *p_native, 
 	call.arguments = r_arguments.data();
 	call.argument_count = uint32_t(r_arguments.size());
 	const Outcome outcome = p_native->implementation(call);
+	if (unwinding != Outcome::Ok) {
+		append_frames(p_native);
+		return stop(unwinding);
+	}
 	switch (outcome) {
 		case Outcome::Ok:
 			native_result = call.result;
@@ -674,6 +817,7 @@ Outcome Interpreter::invoke(Value p_function, Value p_self, const std::vector<Va
 	pc = 0;
 
 	if (function->callee != nullptr && function->callee->kind == CellKind::NativeProcedure) {
+		const Marks native_marks = marks();
 		const Step step = is_unbound(follow(self))
 				? park()
 				: call_native(static_cast<const NativeProcedureCell *>(function->callee), follow(self), arguments, kNoRegister);
@@ -683,6 +827,7 @@ Outcome Interpreter::invoke(Value p_function, Value p_self, const std::vector<Va
 			r_result = native_result;
 			return Outcome::Ok;
 		}
+		abort_to(native_marks);
 		return step == Step::Fail ? Outcome::Fail : stop_outcome;
 	}
 
@@ -783,21 +928,36 @@ Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_
 			return Step::Next;
 
 		case VbcOp::Move:
-		case VbcOp::MoveTrailed:
-			// T3.5: MoveTrailed records a store into a fresh Dest.
 			return unify_register(w[0], read(w[1]));
+		case VbcOp::MoveTrailed: {
+			const Value source = read(w[1]);
+			Value &slot = frame->registers[w[0]];
+			if (slot.is_empty()) {
+				record_slot(slot);
+			}
+			return unify_slot(slot, source);
+		}
 		case VbcOp::MoveNonComparable: {
 			const Value source = read(w[1]);
 			Value &slot = frame->registers[w[0]];
+			if (slot.is_empty()) {
+				record_slot(slot);
+			}
 			if (slot.is_empty() || is_unbound(follow(slot))) {
 				return unify_slot(slot, source);
 			}
 			Binder binder;
-			return values_equal(follow(slot), source, &binder) == Equality::Eq ? Step::Next : Step::Fail;
+			const Equality answer = values_equal(follow(slot), source, &binder);
+			for (PlaceholderCell *linked : binder.linked) {
+				record_link(linked);
+			}
+			return answer == Equality::Eq ? Step::Next : Step::Fail;
 		}
 		case VbcOp::Reset:
+			record_slot(frame->registers[w[0]]);
+			frame->registers[w[0]] = Value::empty();
+			return Step::Next;
 		case VbcOp::ResetNonTrailed:
-			// T3.5: Reset records the register's old content.
 			frame->registers[w[0]] = Value::empty();
 			return Step::Next;
 
@@ -968,18 +1128,24 @@ Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_
 			if (is_unbound(left) || is_unbound(right)) {
 				return park();
 			}
+			const size_t length = is_cell_kind(left, CellKind::MutableArray) ? cell_as<ArrayCell>(left)->length() : 0;
 			Value parked;
-			// T3.5: each append is recorded.
-			return unify_outcome(array_fast_append(heap, left, right, parked), kNoRegister, Value());
+			const Outcome outcome = array_fast_append(heap, left, right, parked);
+			if (outcome == Outcome::Ok) {
+				UndoRecord entry;
+				entry.kind = UndoRecord::Kind::ArrayLength;
+				entry.cell = left.as_cell();
+				entry.length = length;
+				record(entry);
+			}
+			return unify_outcome(outcome, kNoRegister, Value());
 		}
 
 		case VbcOp::BeginFailureContext: {
-			// T3.5: a context owns its undo log from here; without one a failure undoes nothing but
-			// the deferred effects queued inside it.
 			FailureContext context;
 			context.frame = frame;
 			context.on_failure = w[0];
-			context.effects_mark = effects.size();
+			context.marks = marks();
 			contexts.push_back(context);
 			return Step::Next;
 		}
@@ -1046,12 +1212,17 @@ Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_
 		}
 		case VbcOp::Return:
 		case VbcOp::ReturnTrailed: {
-			// T3.5: ReturnTrailed records both of its stores.
 			const Value value = read(w[0]);
 			FrameCell *const done = frame;
 			if (done->caller == nullptr) {
 				run_result = value;
 				return Step::Finished;
+			}
+			// The return-token store is not modelled: the token is always the done value in stage 1
+			// (spec/unification.md §11.3).
+			if (VbcOp(p_op.opcode) == VbcOp::ReturnTrailed && done->return_register != kNoRegister &&
+					done->caller->registers[done->return_register].is_empty()) {
+				record_slot(done->caller->registers[done->return_register]);
 			}
 			set_frame(done->caller);
 			pc = done->return_pc;
@@ -1099,8 +1270,11 @@ Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_
 			if (!is_cell_kind(ref, CellKind::Ref)) {
 				return not_yet("a write through a reference that is not a Verse variable (T3.6)");
 			}
-			// T3.5 records the old content; T4.3 cancels the live task and resumes awaiters.
-			cell_as<RefCell>(ref)->content = read(w[1]);
+			// T4.3 cancels the live task and resumes awaiters.
+			const Value value = read(w[1]);
+			RefCell *variable = cell_as<RefCell>(ref);
+			record_slot(variable->content);
+			variable->content = value;
 			return Step::Next;
 		}
 		case VbcOp::RefCallDomain: {
@@ -1154,15 +1328,33 @@ Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_
 				return park();
 			}
 			const Value value = read(w[2]);
-			// T3.5 records what each write replaced; T4.3 writes through a hidden variable.
+			// T4.3 writes through a hidden variable.
 			if (is_cell_kind(container, CellKind::MutableArray)) {
 				Value old;
-				return unify_outcome(array_set(container, index, value, old), kNoRegister, Value());
+				const Outcome outcome = array_set(container, index, value, old);
+				if (outcome == Outcome::Ok) {
+					UndoRecord entry;
+					entry.kind = UndoRecord::Kind::ArrayElement;
+					entry.cell = container.as_cell();
+					entry.key = index;
+					entry.old = old;
+					record(entry);
+				}
+				return unify_outcome(outcome, kNoRegister, Value());
 			}
 			if (is_cell_kind(container, CellKind::MutableMap)) {
 				bool inserted = false;
 				Value old;
-				return unify_outcome(map_set(container, index, value, inserted, old), kNoRegister, Value());
+				const Outcome outcome = map_set(container, index, value, inserted, old);
+				if (outcome == Outcome::Ok) {
+					UndoRecord entry;
+					entry.kind = inserted ? UndoRecord::Kind::MapInsert : UndoRecord::Kind::MapValue;
+					entry.cell = container.as_cell();
+					entry.key = index;
+					entry.old = old;
+					record(entry);
+				}
+				return unify_outcome(outcome, kNoRegister, Value());
 			}
 			return not_yet(std::string("CallSet on a ") + (container.is_cell() ? cell_kind_name(container.as_cell()->kind) : "value") + " (T3.6)");
 		}
@@ -1181,8 +1373,15 @@ Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_
 			if (is_unbound(container)) {
 				return park();
 			}
-			// T3.5: recorded when bTransactional (w[3]) is set.
+			const size_t length = is_cell_kind(container, CellKind::MutableArray) ? cell_as<ArrayCell>(container)->length() : 0;
 			const Outcome outcome = array_append(container, read(w[2]));
+			if (outcome == Outcome::Ok && w[3] != 0) {
+				UndoRecord entry;
+				entry.kind = UndoRecord::Kind::ArrayLength;
+				entry.cell = container.as_cell();
+				entry.length = length;
+				record(entry);
+			}
 			return unify_outcome(outcome, w[0], container);
 		}
 		case VbcOp::InPlaceMakeImmutable: {
@@ -1190,8 +1389,14 @@ Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_
 			if (is_unbound(container)) {
 				return park();
 			}
-			// T3.5: recorded.
-			return unify_outcome(array_make_immutable(container), w[0], container);
+			const Outcome outcome = array_make_immutable(container);
+			if (outcome == Outcome::Ok) {
+				UndoRecord entry;
+				entry.kind = UndoRecord::Kind::ArrayMutable;
+				entry.cell = container.as_cell();
+				record(entry);
+			}
+			return unify_outcome(outcome, w[0], container);
 		}
 		case VbcOp::NewOption:
 			return unify_register(w[0], make_option(heap, read(w[1])));
@@ -1357,12 +1562,10 @@ Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_
 			}
 			Value &slot = object->field_values[field->slot];
 			if (VbcOp(p_op.opcode) == VbcOp::SetField) {
-				// T3.5 records what is replaced.
-				if (is_cell_kind(slot, CellKind::Ref)) {
-					cell_as<RefCell>(slot)->content = read(w[2]);
-				} else {
-					slot = read(w[2]);
-				}
+				const Value replacement = read(w[2]);
+				Value &target = is_cell_kind(slot, CellKind::Ref) ? cell_as<RefCell>(slot)->content : slot;
+				record_slot(target);
+				target = replacement;
 				return Step::Next;
 			}
 			return unify_slot(slot, read(w[2]));

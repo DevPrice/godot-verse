@@ -53,9 +53,10 @@ public:
 	vh_godot_api godot = {};
 
 	// A VM entry (spec/failure.md §1): a root full failure context and a fresh entry task
-	// (spec/tasks.md §4.4). Every run between begin_entry and end_entry shares the root, so the
-	// deferred effects of all of them run, in order, at an outermost end_entry(true) and are
-	// dropped by an end_entry(false). Entries nest when a native calls back into Verse.
+	// (spec/tasks.md §4.4). Entries nest when a native calls back into Verse, and a nested one is a
+	// transaction inside whatever context the native was called in: end_entry(false) at any depth
+	// rolls back what that entry did, and only an outermost end_entry(true) commits -- running the
+	// deferred effects of every run in it, in order.
 	void begin_entry();
 	void end_entry(bool p_commit);
 	// The collector must not run while this is true: an op's operands, a call's arguments and a
@@ -83,6 +84,12 @@ public:
 
 	// Queues an outside effect for the root commit (spec/failure.md §11, the defer pattern).
 	void defer(std::function<void()> p_effect);
+	// Registers the undo of an outside effect already performed (spec/failure.md §11, the
+	// compensate pattern): run if the current transaction, or an ancestor it merged into, aborts,
+	// after the undo log is replayed and most recent first; dropped at the root commit.
+	void compensate(std::function<void()> p_action);
+	// godot-natives.md §4.4 and §8.12: records a minted peer and registers its discard on abort.
+	void record_mint(int64_t p_handle, const Cell *p_object);
 
 	const RaisedError &error() const { return raised; }
 	uint64_t park_count = 0;
@@ -105,10 +112,39 @@ private:
 		Finished,
 	};
 
+	// Where a transaction's share of the three flat logs begins (spec/failure.md §7). A commit into
+	// the parent leaves its records where they are; an abort truncates to the marks.
+	struct Marks {
+		size_t undo = 0;
+		size_t effects = 0;
+		size_t compensations = 0;
+	};
+
 	struct FailureContext {
 		FrameCell *frame = nullptr;
 		uint32_t on_failure = 0;
-		size_t effects_mark = 0;
+		Marks marks;
+	};
+
+	// spec/failure.md §6: what one write replaced. The logs are empty outside an entry, which is the
+	// only time the collector runs, so the cells named here need no rooting.
+	struct UndoRecord {
+		enum class Kind : uint8_t {
+			Slot,
+			ArrayElement,
+			ArrayLength,
+			ArrayMutable,
+			MapValue,
+			MapInsert,
+			PlaceholderLink,
+		};
+
+		Kind kind = Kind::Slot;
+		Value *slot = nullptr;
+		Cell *cell = nullptr;
+		Value key;
+		Value old;
+		size_t length = 0;
 	};
 
 	FrameCell *frame = nullptr;
@@ -117,18 +153,34 @@ private:
 	Value run_result;
 	Value native_result;
 	Outcome stop_outcome = Outcome::Ok;
+	// Error or Yield once anything in the outermost entry has stopped that way: a native a nested
+	// entry returned through stops too, because the whole entry rolls back (spec/failure.md §9.3).
+	Outcome unwinding = Outcome::Ok;
 	std::vector<FailureContext> contexts;
+	std::vector<UndoRecord> undo_log;
 	std::vector<std::function<void()>> effects;
+	std::vector<std::function<void()>> compensations;
 	std::deque<Value> entry_tasks;
+	std::vector<Marks> entry_marks;
 	RaisedError raised;
 	uint32_t module_top_level = 0;
 
 	TaskCell *current_task() const;
 	void set_frame(FrameCell *p_frame);
 
+	Marks marks() const;
+	// T4.1: a spawn inside a failure context records its task state through these (design §7.2).
+	void record_slot(Value &r_slot);
+	void record(const UndoRecord &p_record);
+	void record_link(PlaceholderCell *p_placeholder);
+	void abort_to(const Marks &p_marks);
+	void abort_run(size_t p_base, const Marks &p_marks);
+
 	Outcome run(FrameCell *p_entry, Value &r_result);
 	Step execute(const DecodedOp &p_op, const uint32_t *p_words);
 	bool unwind_failure();
+	Step stop(Outcome p_outcome);
+	void append_frames(const NativeProcedureCell *p_native);
 
 	Value read(uint32_t p_word);
 	uint32_t variadic_count(uint32_t p_word) const;
