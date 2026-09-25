@@ -107,7 +107,9 @@ Two consequences an implementer can get wrong:
 A `value` operand may be *absent*: neither a register nor a constant. It reads as uninitialized.
 The compiler produces absent operands in places `ops.json` does not mark optional — `NewFunction`'s
 `Self` and `ParentScope` in compiler-generated helper procedures are the ones this file depends on,
-and `BeginTask`'s `Parent` is another. `format.md` §5.1 encodes it as `0`.
+and `BeginTask`'s `Parent` is another. `format.md` §5.1 encodes it as `0`. The writer's cooks also
+found `CallTask`'s `Parent`, `EndTask`'s `Which` and, twice in `tests/integration`, `Move`'s
+`Source` absent, so a reader must accept an absent `value` operand in any op.
 
 ## 3. Argument adaptation
 

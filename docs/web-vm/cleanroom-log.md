@@ -18,3 +18,4 @@ is `docs/phase-7.5-design.md` §3.
 | 2026-09-24 | T1.10 | dirty | this repo's host/Private (our own code) | godot-natives.md; lead reviewed |
 | 2026-09-24 | T1.11, T1.12 | lead | this repo's HostSidecar.cpp and HostScript.cpp writers; ops.json; spec prose | sidecar.md, format.md; no VerseVM source |
 | 2026-09-24 | M0 | neutral | this repo, godot-cpp, Godot's own web platform files | no VerseVM source |
+| 2026-09-24 | T2.1 | dirty | VerseVM procedure, bytecode, emitter, interpreter (unwind, frames, handshake), cell headers, codegen plugin and assembler, Solaris VNI JIT; this repo's host/Private; spec/objects.md; format.md; ops.json | host/Private/HostVbcWriter.*, HostVbcOps.gen.h, tools/gen_vbc_writer.py; format proposals to the lead in prose |

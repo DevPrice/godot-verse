@@ -28,7 +28,7 @@ All multi-byte values are little-endian.
 header
 string table        list<str>
 cell table          list<cell>
-packages            list<package>
+packages            list<ref>          the package cells, as roots
 well-known          list<(sid role, ref)>
 class index         list<class entry>
 end marker          u8 = 0xE5
@@ -102,14 +102,14 @@ the loader allocates every cell before filling any.
 | 19 | `enumeration` | `sid` name, `list<ref>` enumerators in order |
 | 20 | `enumerator` | `ref` enumeration, `sid` name, `uv` ordinal |
 | 21–23 | reserved | unions. The feature is behind a compiler setting this project never enables (`spec/objects.md` §15), so version 1 has no union kinds and the writer refuses one by name |
-| 24 | `package` | §7 |
+| 24 | `package` | §7. A package is a cell because ops reference packages as immediates; the top-level packages list names the roots |
 | 25 | `module` | `sid` verse path, `sid` name |
-| 26 | `value object` | `ref` class, `list<(sid field name, value)>` — a struct or class instance held as global data |
+| 26 | `value object` | `ref` class, `list<(sid field name, value)>` — a struct or class instance held as global data. The class may be native-represented: every cook reaches one such module-level object, `(/Verse.org/Simulation:)editable_empty_message` of class `message`, so refusing them would refuse every cook. The fields are the object's slot fields, not the class's constants |
 | 27 | `int type` | `value` lower bound or uninitialized, `value` upper bound or uninitialized |
 | 28 | `float type` | as `int type`, with floats |
 | 29 | `tuple type` | `list<value>` element types |
 | 30 | `map type` | `value` key type, `value` value type |
-| 31 | `simple type` | `u8`: 0 any, 1 void, 2 comparable, 3 logic, 4 rational, 5 char, 6 char32, 7 range, 8 type, 10 generator, 11 weak_map, 13 reference, 15 concrete, 16 castable, 17 function, 18 persistable, 19 false. Codes 9, 12 and 14 are unused: those types carry an element type and are kinds 33–35 |
+| 31 | `simple type` | `u8` code: 0 any, 1 void, 2 comparable, 3 logic, 4 rational, 5 char, 6 char32, 7 range, 8 type, 10 generator, 11 weak_map, 13 reference, 15 concrete, 16 castable, 17 function, 18 persistable, 19 false. Five codes are built from other types and are followed by their components as values: 8 `type` (1), 10 `generator` (1), 11 `weak_map` (2: key, value), 15 `concrete` (1), 16 `castable` (1). Codes 9, 12 and 14 are unused: those types are kinds 33–35 |
 | 32 | `accessor` | `list<sid>` getter names, `list<sid>` setter names; a getter taking *n* parameters is at index *n*−1, a setter taking *n* at index *n*−2, and the empty string marks an absent slot. The names are decorated method names of the same class (`spec/objects.md` §16) |
 | 33 | `array type` | `value` element type |
 | 34 | `option type` | `value` element type |
@@ -186,14 +186,17 @@ from, and a reader treats an inline-cache opcode as a malformed file.
 | relative path | `sid` |
 | base name | `sid` |
 | attributes | `u8` present; if present, `list<value>` attributes, then `list<uv>` attribute indices (one more index than there are attribute groups) |
-| inherited | `list<ref>`: the superclass first if there is one, then interfaces. A built-in superclass is omitted |
+| inherited | `list<ref>`: the superclass first if there is one, then interfaces, verbatim |
 | archetype | `ref` |
 | constructor | `ref` (a function). Its parent scope is the class scope, so the class needs no separate field for it |
 | blocks | `ref`, present exactly when kind is class; 0 otherwise |
 | native bound | `u8` |
 
-`flags` are the final, derived flags (`spec/objects.md` §2.2). The writer refuses a class with a
-native type attached.
+`flags` are the final, derived flags (`spec/objects.md` §2.2). At engine commit `203d764` every
+class and struct carries flag 4096 (`EmulateCaseInsensitiveOverrides`), script classes included,
+because the compiler's version gate that would clear it never opens; only interfaces lack it. The
+writer refuses a class whose engine type is not Verse-generated (an `@import_as` type); every
+other class has an engine type of its own after linking, and that is not written.
 
 **Archetype:**
 

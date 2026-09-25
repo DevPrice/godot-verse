@@ -787,6 +787,10 @@ instantiated with an archetype that supplies exactly the listed fields (§4.1), 
 created, and take struct-ness from the class's kind. A value object of a native-represented class
 cannot be written as this kind; none is expected in a linked program (no module-level constant in
 `host/Verse` is an instance), and the writer should refuse one if met.
+**Corrected by the lead from the writer's cooks (T2.1):** every cook reaches one,
+`(/Verse.org/Simulation:)editable_empty_message`, of the native-represented class `message`. It is
+written as a `value object` with its slot fields, and the loader builds it as described above;
+native representation changes nothing observable about it (§9.1).
 
 **§4 kinds 21–23 (union, union variant, union variant tag).** Fields are §15's: union = package,
 relative path, name, `list<ref>` variants; union variant = `ref` tag, `value` payload; union variant
@@ -814,6 +818,10 @@ to find the `accessor` enumerator (§14): either a well-known entry in the file 
 3. **Delegation to a non-immediate base** (§4.1) is taken on the compiler's word.
 4. **`EmulateCaseInsensitiveOverrides` on `/Godot.org/Godot`.** Expected clear for script packages;
    the writer should report whether any class in a cooked program carries flag 4096.
+   **Answered by the writer's cooks (T2.1):** every class and struct carries it, script classes
+   included — the compiler's version gate that would clear it never opens at `203d764`. Only
+   interfaces lack it. So the flag's effect on the layout rule (§4.4) applies to every class.
+   Question 1 is answered by the same cooks: no `NewClass` op in any of the three.
 5. **The `LoadField` "transparent reference" case.** When a slot holds a reference the reference VM
    marks transparent, `LoadField` answers the referenced value and caches it back into the slot. No
    Godot-reachable source that creates one was identified; `values.md` or `tasks.md` (live
