@@ -95,7 +95,7 @@ Status: `todo`, `doing`, `done`, `dropped` (with a reason).
 | T6.1 | Web build with the VM; `web` leaves `UNREACHABLE_PLATFORMS` and requires the vm backend; `verse_data` inside the `.pck` | clean / sonnet | T0.4, T5.5 | a Web export of `tests/integration` completes | done |
 | T6.2 | The web layer in `run_tests.py`, over `run_web.py` | neutral / sonnet | T0.2, T6.1 | the layer runs and skips with a reason when Chrome is absent | done: it fails today, on a boot that never passes Godot's own startup lines on web (T6.3) |
 | T6.3 | Fix until the web layer is green, with named counts | clean / opus | T6.2 | `run_tests.py --only web` passes | done: 517 passed, 0 failed, 13 skipped in headless Chrome |
-| T6.4 | `tools/run_dtc_web.py`: export `dodge-the-creeps` for Web, run its checks in headless Chrome | neutral / sonnet | T6.3 | all 30 checks pass | todo |
+| T6.4 | `tools/run_dtc_web.py`: export `dodge-the-creeps` for Web, run its checks in headless Chrome | neutral / sonnet | T6.3 | all 30 checks pass | done |
 
 ## M7 — close
 
