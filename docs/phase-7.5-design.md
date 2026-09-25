@@ -96,7 +96,7 @@ The wall, as chosen:
 | Room | Who | May read | Writes |
 | --- | --- | --- | --- |
 | Dirty | cooker-writer agents, spec agents | anything, VerseVM's `.cpp` files included | `host/Private/HostVbc*`, `docs/web-vm/spec/`, `docs/web-vm/ops.json` |
-| Clean | interpreter agents | the **reviewed** files of `docs/web-vm/spec/`, the rest of `docs/`, this repo's `src/`, `vm/`, `include/`, `tests/`, `tools/` except `gen_vbc_writer.py`, `host/Verse/*.verse`, `host/Private/GodotMathLayout.gen.h` | `vm/`, `src/verse_vm_*`, `tests/vm_*`, `tools/*vm*`, `tools/*vbc*` |
+| Clean | interpreter agents | this document, `docs/web-vm/` (only the **reviewed** files of its `spec/`), `CLAUDE.md`'s Commands, Tests, Instruments, Generated files and Conventions sections only, this repo's `src/`, `vm/`, `include/`, `tests/`, `tools/` except `gen_vbc_writer.py`, `host/Verse/*.verse`, `host/Private/GodotMathLayout.gen.h` | `vm/`, `src/verse_vm_*`, `tests/vm_*`, `tools/*vm*`, `tools/*vbc*` |
 | Lead | me | everything a clean agent may, plus `host/` (our code); **no VerseVM source** | this document, the task list, reviews |
 
 Rules that make the wall real:
