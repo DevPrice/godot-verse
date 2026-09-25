@@ -40,6 +40,7 @@ void initialize_gdextension_types(const ModuleInitializationLevel p_level) {
 
 		verse_runtime_singleton = memnew(VerseRuntime);
 		Engine::get_singleton()->register_singleton("VerseRuntime", verse_runtime_singleton);
+		VerseRuntime::register_backend_settings();
 
 		// The language before the loader: ResourceLoader hands a freshly loaded VerseScript to
 		// VerseScript::compile(), which reports diagnostics through the language singleton.

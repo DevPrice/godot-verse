@@ -100,6 +100,39 @@ VerseRuntime::~VerseRuntime() {
 	unload_host();
 }
 
+// host (the UE compiler/runtime host, dynamically loaded) or vm (vm/'s interpreter, statically
+// linked into this library by `scons verse_vm=yes`) -- read only in an exported game. An editor
+// session always uses the host (phase-7.5-design.md §9).
+// Web gets its own default through a `.web` feature override, the way Godot defaults
+// `rendering/renderer/rendering_method.web` to gl_compatibility: the UE host is a native DLL a
+// browser cannot load. `web` rather than `wasm32` because the constraint is the platform, not the
+// architecture. Only an override read resolves it -- get_setting_with_override in load_host, and
+// EditorExportPreset::get_project_setting in the export plugin.
+// Registered when the extension initializes rather than when a host loads: a headless
+// `--export-release` can reach the export plugin without loading one, and an unregistered default
+// reads as null there, which refused every Web export of a project that had not.
+void VerseRuntime::register_backend_settings() {
+	ProjectSettings *settings = ProjectSettings::get_singleton();
+	if (settings == nullptr) {
+		return;
+	}
+	const String backend_setting_name = "verse/runtime/backend";
+	const String backend_web_setting_name = backend_setting_name + String(".web");
+	const String backend_defaults[][2] = { { backend_setting_name, "host" }, { backend_web_setting_name, "vm" } };
+	for (const auto &[name, default_value] : backend_defaults) {
+		if (!settings->has_setting(name)) {
+			settings->set_setting(name, default_value);
+		}
+		settings->set_initial_value(name, default_value);
+		Dictionary backend_property_info;
+		backend_property_info["name"] = name;
+		backend_property_info["type"] = (int64_t)Variant::STRING;
+		backend_property_info["hint"] = (int64_t)PROPERTY_HINT_ENUM;
+		backend_property_info["hint_string"] = String("host,vm");
+		settings->add_property_info(backend_property_info);
+	}
+}
+
 PackedStringArray VerseRuntime::modules_declaring(const String &p_name) const {
 	PackedStringArray modules;
 	if (!host.is_loaded() || host.ResolveUnknownName == nullptr) {
@@ -174,31 +207,8 @@ Error VerseRuntime::load_host() {
 
 	const bool enable_debugger = settings->get_setting(debugger_setting_name);
 
-	// host (the UE compiler/runtime host, dynamically loaded) or vm (vm/'s interpreter, statically
-	// linked into this library by `scons verse_vm=yes`) -- read only below, for an exported game.
-	// An editor session always uses the host (phase-7.5-design.md §9): the branch that reads this
-	// setting is the same one that already only runs when data_dir_for_this_build() says this is
-	// an export.
-	// Web gets its own default through a `.web` feature override, the way Godot defaults
-	// `rendering/renderer/rendering_method.web` to gl_compatibility: the UE host is a native DLL a
-	// browser cannot load. `web` rather than `wasm32` because the constraint is the platform, not
-	// the architecture. Only an override read resolves it -- get_setting_with_override here, and
-	// EditorExportPreset::get_project_setting in the export plugin.
+	register_backend_settings();
 	const String backend_setting_name = "verse/runtime/backend";
-	const String backend_web_setting_name = backend_setting_name + String(".web");
-	const String backend_defaults[][2] = { { backend_setting_name, "host" }, { backend_web_setting_name, "vm" } };
-	for (const auto &[name, default_value] : backend_defaults) {
-		if (!settings->has_setting(name)) {
-			settings->set_setting(name, default_value);
-		}
-		settings->set_initial_value(name, default_value);
-		Dictionary backend_property_info;
-		backend_property_info["name"] = name;
-		backend_property_info["type"] = (int64_t)Variant::STRING;
-		backend_property_info["hint"] = (int64_t)PROPERTY_HINT_ENUM;
-		backend_property_info["hint_string"] = String("host,vm");
-		settings->add_property_info(backend_property_info);
-	}
 
 	// An exported game derives all three paths from where it is running and reads no setting at
 	// all (D8): they name one machine, which is meaningless anywhere else. The data directory is

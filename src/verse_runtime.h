@@ -113,6 +113,10 @@ public:
 	// so the next one does: the editor when its Play session ends, anything else at its next start.
 	static godot::String take_fatal_record();
 
+	// `verse/runtime/backend` and its `.web` override, with their defaults. At extension init, so an
+	// export that never loads a host still reads them.
+	static void register_backend_settings();
+
 	// Loads the host from wherever verse_host_paths resolves it -- the environment, then the
 	// user's EditorSettings, then the legacy project settings (R-DIST-12) -- with
 	// verse/host/enable_debugger, which is the one of the four that is genuinely per project,
