@@ -7,6 +7,7 @@
 
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/editor_export_platform.hpp>
+#include <godot_cpp/classes/editor_export_plugin.hpp>
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/os.hpp>
@@ -18,9 +19,10 @@ using namespace godot;
 
 namespace {
 
-// The platforms this bridge does not reach. Mobile is deferred with no design and web is Phase
-// 7.5; both fail here rather than producing a game that cannot load its own scripts (R-PLAT-4).
-const char *UNREACHABLE_PLATFORMS[] = { "android", "ios", "web" };
+// The platforms this bridge does not reach. Mobile is deferred with no design; web left this list
+// in Phase 7.5 (docs/phase-7.5-design.md §9) and is refused separately below, on the vm backend
+// alone (T6.1) -- refusing here would say "not reachable" about a platform that is.
+const char *UNREACHABLE_PLATFORMS[] = { "android", "ios" };
 
 // gdextension.py writes [dependencies] last (RUNTIME_HOST_FILES, scanned from bin/ at build
 // time), so cutting the text off at its heading drops exactly the runtime host and tbbmalloc.dll
@@ -31,6 +33,30 @@ const char *DEPENDENCIES_MARKER = "[dependencies]";
 String without_gdextension_dependencies(const String &p_text) {
 	const int index = p_text.find(DEPENDENCIES_MARKER);
 	return index < 0 ? p_text : p_text.substr(0, index);
+}
+
+// Web has no "beside the executable" for add_shared_object to copy a directory into -- there is no
+// filesystem there at all until the .pck is mounted -- so verse_data ships inside the .pck instead,
+// at the res:// path VerseRuntime::load_host and verse_paths::data_dir_for_this_build already agree
+// on (design §9). add_file is the one lever an EditorExportPlugin has into the pack; recursing by
+// hand is the price of using it for a whole directory instead of one resource.
+void add_directory_to_pack(EditorExportPlugin *p_plugin, const String &p_abs_dir, const String &p_res_dir) {
+	Ref<DirAccess> dir = DirAccess::open(p_abs_dir);
+	if (dir.is_null()) {
+		return;
+	}
+	const PackedStringArray files = dir->get_files();
+	for (int64_t i = 0; i < files.size(); i++) {
+		Ref<FileAccess> reader = FileAccess::open(p_abs_dir.path_join(files[i]), FileAccess::READ);
+		if (reader.is_null()) {
+			continue;
+		}
+		p_plugin->add_file(p_res_dir.path_join(files[i]), reader->get_buffer(reader->get_length()), false);
+	}
+	const PackedStringArray subdirs = dir->get_directories();
+	for (int64_t i = 0; i < subdirs.size(); i++) {
+		add_directory_to_pack(p_plugin, p_abs_dir.path_join(subdirs[i]), p_res_dir.path_join(subdirs[i]));
+	}
 }
 
 } // namespace
@@ -109,6 +135,20 @@ void VerseExportPlugin::_export_begin(const PackedStringArray &p_features, bool 
 		refused = true;
 		say(EditorExportPlatform::EXPORT_MESSAGE_ERROR,
 				"Verse cannot tell which platform this export is for; no platform feature tag was set.");
+		return;
+	}
+
+	// Web has no host DLL to load at all -- verse_host.cpp compiles LoadLibraryExW out on that
+	// platform -- so the vm backend is the only one that can run there (design §9). Refusing here,
+	// before the cook, is what turns a silent "runtime/backend" default of "host" into a sentence
+	// instead of a game that fails this same way at vh_init, after the cook already ran.
+	if (platform_tag == "web" && backend != "vm") {
+		refused = true;
+		say(EditorExportPlatform::EXPORT_MESSAGE_ERROR,
+				String("Verse needs the vm backend on Web: set `verse/runtime/backend` to \"vm\" in "
+					   "Project Settings. This project's setting is ") +
+						(backend.is_empty() ? String("\"host\" (the default)") : String("\"") + backend + String("\"")) +
+						String(", and the UE host is a native DLL a browser cannot load."));
 		return;
 	}
 
@@ -256,10 +296,14 @@ void VerseExportPlugin::_export_begin(const PackedStringArray &p_features, bool 
 		return;
 	}
 
-	// A directory, copied recursively beside the executable after the PCK
-	// (editor_export_platform_pc.cpp:230-256). On macOS it goes inside the bundle instead, which
-	// is where godotsharp_dirs.cpp looks for .NET's.
-	add_shared_object(work, PackedStringArray(), platform_tag == "macos" ? String("Contents/Resources") : String());
+	if (platform_tag == "web") {
+		add_directory_to_pack(this, work, String("res://").path_join(verse_paths::DATA_DIR_NAME));
+	} else {
+		// A directory, copied recursively beside the executable after the PCK
+		// (editor_export_platform_pc.cpp:230-256). On macOS it goes inside the bundle instead, which
+		// is where godotsharp_dirs.cpp looks for .NET's.
+		add_shared_object(work, PackedStringArray(), platform_tag == "macos" ? String("Contents/Resources") : String());
+	}
 }
 
 void VerseExportPlugin::_export_file(const String &p_path, const String &p_type, const PackedStringArray &p_features) {

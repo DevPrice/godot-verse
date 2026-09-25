@@ -12,7 +12,10 @@
 //     beside the executable, the way .NET puts `data_<csproj>_<platform>_<arch>` there;
 //   - strips every `.verse` to a one-byte stub, so the scene's `ext_resource path=` still
 //     resolves and the source does not ship (D10, C#'s ExportPlugin.cs:120-153);
-//   - refuses a platform this bridge does not reach, with a sentence (R-PLAT-4).
+//   - refuses a platform this bridge does not reach, with a sentence (R-PLAT-4);
+//   - and, on Web, refuses `verse/runtime/backend != "vm"` and ships `verse_data` inside the `.pck`
+//     at `res://verse_data` rather than beside an executable that does not exist there
+//     (docs/phase-7.5-design.md §9, T6.1).
 //
 // The cook is a subprocess rather than a second engine in this one: two FEngineLoops in one
 // process has never been tried and has no reason to be, and a subprocess's stdout is the export
