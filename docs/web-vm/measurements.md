@@ -35,7 +35,7 @@ struct carries flag 4096.
 
 ## Collection pauses over a tenured program (T3.11, 2026-09-25)
 
-`verse_vm_test --gc-bench scratch/vm_conformance_cook/program.vbc`: the conformance cook, 169,049
+`verse_vm_test --gc-bench bin/vm_conformance_cook/program.vbc`: the conformance cook, 169,049
 live cells after loading (everything the loader made, not only the file's 97k), collected
 with nothing else live -- idle, then after bursts of dead strings. "Untenured" is T3.9's collector
 as it was: every collection marks the whole program. "Tenured" is after `Heap::tenure()`, which

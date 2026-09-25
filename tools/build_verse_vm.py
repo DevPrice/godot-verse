@@ -2,7 +2,7 @@
 """Builds vm/ two ways: bin/verse_vm.dll (MSVC), or wasm32 objects (--wasm, em++).
 
     python tools/build_verse_vm.py            # bin/verse_vm.dll, exporting vh_*
-    python tools/build_verse_vm.py --wasm      # every vm/*.cpp -> scratch/obj/*.o, no link
+    python tools/build_verse_vm.py --wasm      # every vm/*.cpp -> bin/vm_wasm_obj/*.o, no link
 
 The DLL is built with VERSE_HOST_IMPLEMENTATION defined, which is what makes
 include/verse_host_abi.h's VH_API macro export the vh_* functions under the exact names the header
@@ -87,7 +87,7 @@ def build_dll(repo: Path) -> int:
 def build_wasm(repo: Path) -> int:
     vm_dir = repo / "vm"
     include_dir = repo / "include"
-    obj_dir = repo / "scratch" / "obj"
+    obj_dir = repo / "bin" / "vm_wasm_obj"
 
     sources = vm_sources(repo)
     if not sources:

@@ -36,7 +36,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 FIXTURES_DIR = REPO / "tests" / "vm_conformance"
 EXPECTED_DIR = FIXTURES_DIR / "expected"
-COOK_CACHE_DIR = REPO / "scratch" / "vm_conformance_cook"
+COOK_CACHE_DIR = REPO / "bin" / "vm_conformance_cook"
 COOKED_PROBE = REPO / "bin" / "cooked_probe.exe"
 VM_DLL = REPO / "bin" / "verse_vm.dll"
 
