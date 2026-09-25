@@ -1310,10 +1310,13 @@ it is not in `run_tests.py`.
   way. Keep arithmetic on one line or bind a term at a time.
 - **Verse's float `=` is reflexive for NaN**, unlike IEEE and unlike C: both `X = X` and `X <> X`
   answer "equal", so the usual NaN test never fires. What does distinguish NaN is that it is
-  *unordered* — it fails `<=` and `>=` against everything, itself included.
+  *unordered* against every other value — `NaN <= 1.0` and `NaN >= 1.0` both fail. Against itself
+  `<=` and `>=` succeed, because each holds when `=` does (`docs/web-vm/facts.md`).
 - **Float division is total** and answers `Inf`/`-Inf`/`NaN` exactly as C does; **integer division
-  is `Quotient`, which floors**, where C and Godot truncate toward zero — so `Quotient[-3, 2]` is -2
-  where Godot's `-3 / 2` is -1. `GodotMath`'s `TruncatedQuotient` is the bridge.
+  is `Quotient`, which is Euclidean** — `Mod` is always in `[0, |B|)` — where C and Godot truncate
+  toward zero. So `Quotient[-3, 2]` is -2 where Godot's `-3 / 2` is -1, and `Quotient[7, -2]` is -3,
+  not the -4 flooring would give (`docs/web-vm/facts.md`). `GodotMath`'s `TruncatedQuotient` is the
+  bridge.
 - **There is no `ToFloat`.** `X * 1.0` is the int-to-float conversion, and it works on a value and
   not only on a literal. `Floor`, `Ceil` and `Round` are `<decides>` and answer an `int`, so a
   float-valued floor is `if (V := Floor[X]) then V * 1.0 else X` — which is also the shape that
