@@ -31,7 +31,7 @@ Status: `todo`, `doing`, `done`, `dropped` (with a reason).
 | T1.5 | `spec/failure.md` and `spec/unification.md` | dirty / opus | T1.1 | lead review recorded | done |
 | T1.6 | `spec/objects.md` | dirty / opus | T1.1 | lead review recorded | done |
 | T1.7 | `spec/tasks.md` | dirty / opus | T1.1 | lead review recorded | done |
-| T1.8 | `spec/natives.md` | dirty / opus | T1.1 | lead review recorded | todo |
+| T1.8 | `spec/natives.md` | dirty / opus | T1.1 | lead review recorded | done |
 | T1.9 | `spec/ops.md`: every op ops.json marks as emitted | dirty / opus | T1.3–T1.8 | `tools/check_spec.py` finds every emitted op documented; lead review recorded | todo |
 | T1.10 | `spec/godot-natives.md`: the 46 Godot natives, the `variant` lanes, defer-to-commit | dirty / sonnet | — | every `<native>` in `Godot.native.verse` has a row; lead review recorded | done |
 | T1.11 | `spec/sidecar.md` | lead | — | every field `WriteClassSidecar` writes has a row | done |

@@ -93,7 +93,7 @@ the loader allocates every cell before filling any.
 | 10 | `heap int` | `u8` sign (0 non-negative, 1 negative), `list<u8>` magnitude, little-endian bytes |
 | 11 | `rational` | `value` numerator, `value` denominator (each an int or a heap int) |
 | 12 | `procedure` | §5 |
-| 13 | `native procedure` | `sid` decorated name, `uv` positional-parameter count |
+| 13 | `native procedure` | `sid` binding key (`(`*scope*`/`*decorated name*`:)Native`, `spec/natives.md` §3.2 — what the loader binds by, since the name alone is ambiguous), `sid` decorated name (what call stacks show), `uv` positional-parameter count |
 | 14 | `function` | `ref` procedure or native procedure, `value` self, `ref` parent scope (0 for none). Self has three states that behave differently (`spec/calls.md` §6): uninitialized for a method not yet bound to an object, the `false` cell for a function that takes no receiver, or the receiver itself |
 | 15 | `scope` | `ref` parent scope (0 for none), `list<value>` captures |
 | 16 | `class` | §6 |

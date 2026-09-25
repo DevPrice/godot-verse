@@ -142,8 +142,10 @@ restated as requirements on the interpreter:
   package procedure and the global initializer, so the `.vbc` is a snapshot of the initialized
   program and a loader runs no Verse at all. This body first said the writer must capture the
   initializers for a loader to run; `spec/modules.md` §2 is why that would fail.
-- **The Verse-library native surface a game reaches is about 25 functions** plus about 8 VM
-  intrinsics, on top of the 46 Godot natives.
+- **The Verse-library native surface a game reaches is about 70 natives** plus 10 VM intrinsics, on
+  top of the 46 Godot natives — not the 25 the survey estimated, because a script package is
+  `InternalUser` and so reaches `epic_internal` natives too (`spec/natives.md` §2). About 50 more are
+  nameable and out of contract; they bind to a stand-in that raises.
 
 ## 5. The container: `program.vbc`
 
@@ -157,9 +159,10 @@ it is ours, from the op schema in `ops.json`. Its properties:
   Labels become op indices within the procedure rather than self-relative byte offsets.
 - **Source locations carried** (op index → line, plus the file path once per procedure), because a
   runtime error names a line.
-- **Natives by decorated name only**; the loader binds them.
-- **Packages as named roots**: the definitions table, the package procedure and the global
-  initializer procedure.
+- **Natives by binding key**, the package-definition key, because a name alone is ambiguous
+  (`event.Await` and `task.Await`); the loader binds them.
+- **Packages as named roots**, each with its definitions table. No initializer is carried, because
+  none runs at load (§4).
 - **Little-endian, varint-heavy, versioned**, with the build stamp the sidecar already carries, so a
   stale `.vbc` is refused with a sentence, not a crash.
 - **A dumper** (`tools/vbc_dump.py`) prints any `.vbc` as text. It is how a cook is reviewed and how
@@ -184,7 +187,7 @@ headed with its review status:
 | `objects.md` | classes, archetypes, layout and the override rule, construction protocol, fields, interfaces, the native-bound and native-representation flags |
 | `tasks.md` | tasks, the task ops, `spawn`/`branch`/`sync`/`race`/`rush`, semaphores, cancellation, unwind edges and `defer`, terminate versus cancel |
 | `modules.md` | packages, module ops, the package procedure, the global initializer, the sentinel |
-| `natives.md` | the native calling convention's five outcomes, every `$BuiltIn` intrinsic, every Verse-library native a game reaches, `event(t)`, `task(t)`, `Sleep` |
+| `natives.md` | the native calling convention's five outcomes, every `$BuiltIn` intrinsic, every Verse-library native a game reaches, `event(t)`, `task(t)`. `Sleep` is a Godot native and is `godot-natives.md`'s |
 | `godot-natives.md` | the 46 natives of `Godot.native.verse` and what each asks of `vh_godot_api`, the `variant` lanes, which writes defer to commit — restated from our own host so the clean room need not read `host/Private` |
 | `sidecar.md` | every field of `verse_classes.json` version 8 and which `vh_class_*` read answers from it. Our format, so the lead writes it from `HostSidecar.cpp`; no dirty agent is involved |
 | `ops.md` | every op: operands, semantics, failure and parking behaviour, which spec section it leans on |
