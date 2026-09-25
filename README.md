@@ -71,8 +71,8 @@ finds an `emsdk-4.0.11` checkout beside this repository, or the one `VERSE_EMSDK
 
 The Web build doesn't need threads, so a host that can't set cross-origin isolation headers can
 serve it. It runs slower than a native build: `dodge-the-creeps` runs at about two-thirds of real time
-in Chrome. A Web export ships Verse code compiled by Epic's own compiler, so the redistribution
-limits above still apply to it.
+in Chrome. A Web export ships Verse code compiled by Epic's own compiler, so Epic's terms still apply
+to it. See [Licensing](#licensing).
 
 ## What a script looks like
 
@@ -180,6 +180,14 @@ licensing, not from this project, and the MIT grant above doesn't change it.
 
 You also can't redistribute binaries built from Unreal Engine source to anyone who doesn't hold
 their own license, which is why nothing here ships prebuilt.
+
+The interpreter behind the `vm` backend and every Web export is different in one way and the same
+in another. It contains no Unreal Engine source: it was written in a clean room from this
+repository's own specification (`docs/web-vm/`), so it is covered by the MIT grant alone. But the
+program it runs, `program.vbc`, is compiled by Epic's Verse compiler, and most of it is Epic's own
+Verse library code in compiled form. So a game on the `vm` backend ships no Unreal Engine binary,
+and it still ships Epic's compiler output. Treat it as subject to Epic's terms too, until Epic
+releases the Verse toolchain under a license that says otherwise.
 
 ## Design notes
 
