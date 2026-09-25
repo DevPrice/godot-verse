@@ -33,7 +33,7 @@ Status: `todo`, `doing`, `done`, `dropped` (with a reason).
 | T1.7 | `spec/tasks.md` | dirty / opus | T1.1 | lead review recorded | todo |
 | T1.8 | `spec/natives.md` | dirty / opus | T1.1 | lead review recorded | todo |
 | T1.9 | `spec/ops.md`: every op ops.json marks as emitted | dirty / opus | T1.3–T1.8 | `tools/check_spec.py` finds every emitted op documented; lead review recorded | todo |
-| T1.10 | `spec/godot-natives.md`: the 39 Godot natives, the `variant` lanes, defer-to-commit | dirty / sonnet | — | every `<native>` in `Godot.native.verse` has a row; lead review recorded | todo |
+| T1.10 | `spec/godot-natives.md`: the 46 Godot natives, the `variant` lanes, defer-to-commit | dirty / sonnet | — | every `<native>` in `Godot.native.verse` has a row; lead review recorded | done |
 | T1.11 | `spec/sidecar.md` | lead | — | every field `WriteClassSidecar` writes has a row | done |
 | T1.12 | `docs/web-vm/format.md`: the `.vbc` container | lead | T1.1 | reviewed against ops.json and the cell list of design §4 | done; union cells provisional until T2.1 |
 
@@ -79,7 +79,7 @@ Status: `todo`, `doing`, `done`, `dropped` (with a reason).
 | ID | Task | Room / model | Depends | Check | Status |
 | --- | --- | --- | --- | --- | --- |
 | T5.1 | `src/verse_vm_host.cpp`: the runtime `vh_*` subset over `vm/`, the sidecar reader, `FileAccess`-based loading | clean / opus | T1.11, M4 | a headless run of a one-script project on the vm backend prints from `_Ready` | todo |
-| T5.2 | The 39 Godot natives | clean / opus | T1.10, T5.1 | integration cases touching each native pass | todo |
+| T5.2 | The 46 Godot natives | clean / opus | T1.10, T5.1 | integration cases touching each native pass | todo |
 | T5.3 | Backend selection: `scons verse_vm=yes`, `verse/runtime/backend`, the static fill of `VerseHostLibrary` | clean / sonnet | T5.1 | both backends run from one release build | todo |
 | T5.4 | Export plugin: ships `program.vbc`; omits the host DLL and `tbbmalloc.dll` on the vm backend | clean / sonnet | T5.3 | an export on the vm backend has no DLL beside the executable | todo |
 | T5.5 | Export layer runs on both backends with named counts; fix until green | clean / opus | T5.2, T5.4 | `run_tests.py --only export` passes on both | todo |

@@ -44,7 +44,7 @@ Consequences of W-1 that are accepted rather than solved:
                                                                                     │   stdlib natives
                                                                                     └─ src/verse_vm_host.cpp
                                                                                         vh_* over vm/, and
-                                                                                        the 39 Godot natives
+                                                                                        the 46 Godot natives
 ```
 
 Four pieces, three of them new:
@@ -60,7 +60,7 @@ Four pieces, three of them new:
    implements the Verse-library natives. It knows nothing about Godot except through a native-binding
    table its embedder fills.
 4. **`src/verse_vm_host.cpp`** (new, clean room). The runtime subset of the `vh_*` ABI implemented
-   over `vm/`, plus the 39 natives of `Godot.native.verse` implemented over the same
+   over `vm/`, plus the 46 natives of `Godot.native.verse` implemented over the same
    `vh_godot_api` callbacks the UE host uses. `VerseHostLibrary` gets a second way to fill its
    function pointers: assigned directly instead of resolved with `GetProcAddress`. Nothing else in
    `src/` changes for execution.
@@ -135,7 +135,7 @@ restated as requirements on the interpreter:
 - **Initialization is eager and linker-generated**: a package procedure per unit and a global
   initializer task, both of which the writer must capture.
 - **The Verse-library native surface a game reaches is about 25 functions** plus about 8 VM
-  intrinsics, on top of the 39 Godot natives.
+  intrinsics, on top of the 46 Godot natives.
 
 ## 5. The container: `program.vbc`
 
@@ -177,7 +177,7 @@ headed with its review status:
 | `tasks.md` | tasks, the task ops, `spawn`/`branch`/`sync`/`race`/`rush`, semaphores, cancellation, unwind edges and `defer`, terminate versus cancel |
 | `modules.md` | packages, module ops, the package procedure, the global initializer, the sentinel |
 | `natives.md` | the native calling convention's five outcomes, every `$BuiltIn` intrinsic, every Verse-library native a game reaches, `event(t)`, `task(t)`, `Sleep` |
-| `godot-natives.md` | the 39 natives of `Godot.native.verse` and what each asks of `vh_godot_api`, the `variant` lanes, which writes defer to commit — restated from our own host so the clean room need not read `host/Private` |
+| `godot-natives.md` | the 46 natives of `Godot.native.verse` and what each asks of `vh_godot_api`, the `variant` lanes, which writes defer to commit — restated from our own host so the clean room need not read `host/Private` |
 | `sidecar.md` | every field of `verse_classes.json` version 8 and which `vh_class_*` read answers from it. Our format, so the lead writes it from `HostSidecar.cpp`; no dirty agent is involved |
 | `ops.md` | every op: operands, semantics, failure and parking behaviour, which spec section it leans on |
 
@@ -260,7 +260,7 @@ resumes awaiters synchronously in FIFO order, as the spec will say.
   what the clean room reads instead).
 - File access through Godot's `FileAccess`, so `verse_data` reads the same from a directory beside an
   executable and from inside a `.pck`. `vm/` takes byte buffers and never opens a file.
-- The 39 Godot natives over `vh_godot_api`. `VariantFromWire`/`VariantToWire`'s lane rules are
+- The 46 Godot natives over `vh_godot_api`. `VariantFromWire`/`VariantToWire`'s lane rules are
   restated in the spec from `GodotMathLayout.gen.h`, which is generated and readable by both rooms.
 - `verse_host.cpp` gains a static path: when the build carries the VM and the backend is `vm`,
   `VerseHostLibrary` is filled from `verse_vm_host`'s functions instead of a DLL.
