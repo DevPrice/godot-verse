@@ -41,10 +41,10 @@ Status: `todo`, `doing`, `done`, `dropped` (with a reason).
 
 | ID | Task | Room / model | Depends | Check | Status |
 | --- | --- | --- | --- | --- | --- |
-| T2.1 | `host/Private/HostVbcWriter.{h,cpp}`, called from `CookMain` after `CompileProject`; `program.vbc` beside the sidecar | dirty / opus | T1.1, T1.12 | a cook of `tests/host_smoke` writes `program.vbc`; the cooker exits 0 | todo |
+| T2.1 | `host/Private/HostVbcWriter.{h,cpp}`, called from `CookMain` after `CompileProject`; `program.vbc` beside the sidecar | dirty / opus | T1.1, T1.12 | a cook of `tests/host_smoke` writes `program.vbc`; the cooker exits 0 | done |
 | T2.2 | `tools/vbc_dump.py`, from `format.md` alone | clean / sonnet | T1.12 | dumps T2.1's output with no unknown op and every cell index resolving | todo |
 | T2.3 | `run_tests.py` abi layer: a `vbc` case over the `host_smoke` cook | neutral / sonnet | T2.1, T2.2 | `run_tests.py --only abi` passes | todo |
-| T2.4 | The writer's park-risk report and the `.vbc` sizes for `tests/integration` and `dodge-the-creeps`, recorded in design §14 notes | dirty / sonnet | T2.1 | numbers recorded | todo |
+| T2.4 | The writer's park-risk report and the `.vbc` sizes for `tests/integration` and `dodge-the-creeps`, recorded in design §14 notes | dirty / sonnet | T2.1 | numbers recorded in `measurements.md` | done |
 
 ## M3 — sequential VM
 
@@ -81,7 +81,7 @@ Status: `todo`, `doing`, `done`, `dropped` (with a reason).
 | T5.1 | The rest of the runtime `vh_*` subset in `vm/` (fields, callbacks, `vh_tick`, statics, exports, signals, garbage collection), and the file reader `src/` sets over `FileAccess` | clean / opus | T1.11, M4 | a headless run of a one-script project on the vm backend prints from `_Ready` | todo |
 | T5.2 | The other 45 Godot natives | clean / opus | T1.10, T5.1 | integration cases touching each native pass | todo |
 | T5.3 | Backend selection: `scons verse_vm=yes`, `verse/runtime/backend`, the static fill of `VerseHostLibrary` | clean / sonnet | T5.1 | both backends run from one release build | todo |
-| T5.4 | Export plugin: ships `program.vbc`; omits the host DLL and `tbbmalloc.dll` on the vm backend | clean / sonnet | T5.3 | an export on the vm backend has no DLL beside the executable | todo |
+| T5.4 | Export plugin: ships `program.vbc`; omits the host DLL and `tbbmalloc.dll` on the vm backend | clean / sonnet | T5.3 | an export on the vm backend has no DLL beside the executable, and ships no `program.vbc.report.txt` (the writer puts it in the cook directory) | todo |
 | T5.5 | Export layer runs on both backends with named counts; fix until green | clean / opus | T5.2, T5.4 | `run_tests.py --only export` passes on both | todo |
 | T5.7 | Fix the UE host's runtime-error frames (`spec/failure.md` findings): every frame list begins with a bogus frame (path `Callstack`, function `follows:`), because Solaris's formatter adds a "Callstack follows:" header that the frame splitter reads as a frame; and, from source, a cooked runtime host may deliver no frames at all. Until fixed, the differential harness compares a runtime error's message line only | dirty / sonnet | — | a runtime error in the editor host and in an export shows only real frames; a host_smoke case asserts it | todo |
 | T5.6 | Measure `spec/objects.md` §18 Q2 on the UE host: an integration case with two nodes of one script declaring `Items:godot_array = godot_array{}`, appending to one and reading the other's length, in the editor run and in the export. If the export shares one array or holds a dead reference, that is an existing defect: record it in `by-hand-findings.md` style and fix it on the UE side | neutral / sonnet | — | the case exists and its result is recorded; the vm backend matches the corrected behaviour | todo |
