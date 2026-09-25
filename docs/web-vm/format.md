@@ -101,9 +101,7 @@ the loader allocates every cell before filling any.
 | 18 | `access specifier` | `u8` access level, `list<sid>` scope paths |
 | 19 | `enumeration` | `sid` name, `list<ref>` enumerators in order |
 | 20 | `enumerator` | `ref` enumeration, `sid` name, `uv` ordinal |
-| 21 | `union` | fields confirmed by T2.1 |
-| 22 | `union variant` | fields confirmed by T2.1 |
-| 23 | `union variant tag` | fields confirmed by T2.1 |
+| 21–23 | reserved | unions. The feature is behind a compiler setting this project never enables (`spec/objects.md` §15), so version 1 has no union kinds and the writer refuses one by name |
 | 24 | `package` | §7 |
 | 25 | `module` | `sid` verse path, `sid` name |
 | 26 | `value object` | `ref` class, `list<(sid field name, value)>` — a struct or class instance held as global data |
@@ -111,7 +109,11 @@ the loader allocates every cell before filling any.
 | 28 | `float type` | as `int type`, with floats |
 | 29 | `tuple type` | `list<value>` element types |
 | 30 | `map type` | `value` key type, `value` value type |
-| 31 | `simple type` | `u8`: 0 any, 1 void, 2 comparable, 3 logic, 4 rational, 5 char, 6 char32, 7 range, 8 type, 9 array, 10 generator, 11 weak_map, 12 pointer, 13 reference, 14 option, 15 concrete, 16 castable, 17 function, 18 persistable, 19 false |
+| 31 | `simple type` | `u8`: 0 any, 1 void, 2 comparable, 3 logic, 4 rational, 5 char, 6 char32, 7 range, 8 type, 10 generator, 11 weak_map, 13 reference, 15 concrete, 16 castable, 17 function, 18 persistable, 19 false. Codes 9, 12 and 14 are unused: those types carry an element type and are kinds 33–35 |
+| 32 | `accessor` | `list<sid>` getter names, `list<sid>` setter names; a getter taking *n* parameters is at index *n*−1, a setter taking *n* at index *n*−2, and the empty string marks an absent slot. The names are decorated method names of the same class (`spec/objects.md` §16) |
+| 33 | `array type` | `value` element type |
+| 34 | `option type` | `value` element type |
+| 35 | `pointer type` | `value` element type |
 
 Kinds the survey lists as rare in globals (native struct, ref, accessor, task) are not in version 1.
 The writer refuses a program that holds one, naming it, and the kind is added when a fixture needs
@@ -183,24 +185,28 @@ from, and a reader treats an inline-cache opcode as a malformed file.
 | package | `ref` |
 | relative path | `sid` |
 | base name | `sid` |
-| attributes | `list<value>`, then `list<uv>` attribute indices |
-| inherited | `list<ref>`: the superclass first if there is one, then interfaces |
+| attributes | `u8` present; if present, `list<value>` attributes, then `list<uv>` attribute indices (one more index than there are attribute groups) |
+| inherited | `list<ref>`: the superclass first if there is one, then interfaces. A built-in superclass is omitted |
 | archetype | `ref` |
-| constructor | `ref` (a function) |
-| blocks | `ref` or 0 |
+| constructor | `ref` (a function). Its parent scope is the class scope, so the class needs no separate field for it |
+| blocks | `ref`, present exactly when kind is class; 0 otherwise |
 | native bound | `u8` |
+
+`flags` are the final, derived flags (`spec/objects.md` §2.2). The writer refuses a class with a
+native type attached.
 
 **Archetype:**
 
 | Field | Encoding |
 | --- | --- |
-| class | `ref` |
+| class | `ref`, or 0 for an instantiation-expression archetype |
 | next | `ref` the superclass's archetype, or 0 |
 | entries | `list<entry>` |
 
 An **entry** is `sid` name, `ref` access specifier or 0, `value` type (uninitialized for none), `value`
-(uninitialized when the constructor initializes it), and `uv` flags (bit 0 `var`, bit 1 native
-representation; further bits as T2.1 confirms).
+(uninitialized when the constructor initializes it; may be an `accessor` cell), and `u8` flags:
+the engine's eight entry-flag bits verbatim. The ones the interpreter reads are 1 (native
+representation), 2 (has a default value) and 32 (`var`); `spec/objects.md` §3.3 defines all eight.
 
 ## 7. Packages, and why nothing runs at load
 
@@ -216,7 +222,9 @@ program's order. Each module entry is a `module` cell; each module-level object 
 cell of its Verse class.
 
 **Well-known definitions:** `list<(sid role, ref)>`, so a loader never matches decorated keys.
-Version 1 roles: `task_class`, the class of `/Verse.org/Verse`'s task objects (`spec/tasks.md`).
+Version 1 roles: `task_class`, the class of `/Verse.org/Verse`'s task objects (`spec/tasks.md`),
+and `accessor_enumerator`, the one enumerator of `/Verse.org/Verse`'s `accessor` enumeration, which
+every getter and setter call receives (`spec/objects.md` §14, §16).
 A reader refuses a file missing a role it needs.
 
 The built-in package is not written; the loader supplies it (`spec/modules.md` §2), including the
