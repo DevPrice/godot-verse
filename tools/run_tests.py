@@ -1056,7 +1056,7 @@ EXPORT_VM_ABSENT = ["verse_host_runtime.dll", "tbbmalloc.dll"]
 # _launch_export's 600 s: T4.3 (event(t)/task(t)/Sleep) is not built yet, so a case that awaits one
 # hangs the game rather than failing it, and the whole suite should not pay ten minutes for that on
 # every run. 90 s is comfortably past where the run above prints its last "[integration]" line.
-EXPORT_VM_LAUNCH_TIMEOUT = 90
+EXPORT_VM_LAUNCH_TIMEOUT = 600
 
 
 def _vm_backend_project(base_project: Path) -> Path:
@@ -1165,24 +1165,38 @@ def run_export_vm(results: Results, engine: Path | None, godot: Path | None) -> 
                     [str(out), "--headless", "--fixed-fps", "60", "--", "--verse-check"],
                     capture_output=True, text=True, errors="replace", timeout=EXPORT_VM_LAUNCH_TIMEOUT)
                 launch_output = (launched.stdout or "") + (launched.stderr or "")
-                print(f"[export-vm] the exported game exited {launched.returncode}")
+                if launched.returncode == 0:
+                    print("[export-vm] the exported game exited 0: ok")
+                else:
+                    ok = False
+                    print(f"[export-vm] the exported game exited {launched.returncode}, not 0: FAIL")
             except subprocess.TimeoutExpired as timeout_error:
                 stdout = timeout_error.stdout or b""
                 stderr = timeout_error.stderr or b""
                 launch_output = (stdout.decode("utf-8", "replace") if isinstance(stdout, bytes) else stdout) + \
                     (stderr.decode("utf-8", "replace") if isinstance(stderr, bytes) else stderr)
-                print(f"[export-vm] the exported game did not exit within {EXPORT_VM_LAUNCH_TIMEOUT} s "
-                      "-- T4.3's tasks and events are not built yet, so a case awaiting one hangs the "
-                      "game rather than failing it; killed it")
+                ok = False
+                print(f"[export-vm] the exported game did not exit within {EXPORT_VM_LAUNCH_TIMEOUT} s: FAIL")
 
+            # The same named counts the host backend must report: the interpreter is held to the
+            # UE host's answer, case for case.
             summary = [line for line in launch_output.splitlines() if "[integration]" in line and "passed, " in line]
-            if summary:
-                print(f"[export-vm] the exported game said: {summary[-1].strip()}")
-            else:
-                print("[export-vm] the exported game reported no summary line -- not a failure here, "
-                      "T5.1/T5.2 are not done; its last output:")
+            match = re.search(r"(\d+) passed, (\d+) failed, (\d+) skipped", summary[-1]) if summary else None
+            if match is None:
+                ok = False
+                print("[export-vm] the exported game reported no summary line: FAIL -- its last output:")
                 for line in [line for line in launch_output.splitlines() if line.strip()][-8:]:
                     print(f"[export-vm]   {line.strip()}")
+            else:
+                print(f"[export-vm] the exported game said: {summary[-1].strip()}")
+                for name, got, want in (("passed", int(match.group(1)), EXPORT_EXPECTED_PASSES),
+                                        ("failed", int(match.group(2)), 0),
+                                        ("skipped", int(match.group(3)), EXPORT_EXPECTED_SKIPS)):
+                    if got == want:
+                        print(f"[export-vm] {name} {got}: ok")
+                    else:
+                        ok = False
+                        print(f"[export-vm] {name} {got}, expected {want}: FAIL")
 
             results.record("export-vm", ok)
     finally:
@@ -1302,10 +1316,17 @@ threads/emscripten_pool_size=8
 threads/godot_pool_size=4
 """
 
-# How long to wait for the browser to print the summary line. Generous, like export-vm's 90 s, for
-# the same reason: T5.1/T5.2 are not done, so a case awaiting a task or an event can hang the game
-# rather than fail it, and this layer is not the one that pays for fixing that (T6.3 is).
-WEB_LAUNCH_TIMEOUT = 90.0
+# How long to wait for the browser to print the summary line. Generous, because a case awaiting a
+# task or an event the interpreter does not yet deliver hangs the game rather than failing it.
+WEB_LAUNCH_TIMEOUT = 300.0
+
+# The exported desktop run's arguments (_launch_export) less `--headless`, which a browser page has
+# no use for. run_web.py writes them into the served page's GODOT_CONFIG.
+WEB_GAME_ARGS = ["--fixed-fps", "60", "--", "--verse-check"]
+# The export layer's counts, less R-ASYNC-8's two thread cases: a nothreads build runs a pool task
+# on the calling thread, so test_cases.gd skips them there.
+WEB_EXPECTED_PASSES = EXPORT_EXPECTED_PASSES - 2
+WEB_EXPECTED_SKIPS = EXPORT_EXPECTED_SKIPS + 2
 
 
 def _web_backend_project(base_project: Path) -> Path:
@@ -1477,10 +1498,14 @@ def run_web(results: Results, engine: Path | None, godot: Path | None) -> None:
 
             print(f"[web] launching {out.name} in headless Chrome")
             try:
+                # _launch_export's command line, handed over the only way a Web export takes one:
+                # without `--verse-check` the autoload does nothing and the game idles with no
+                # output at all, which is what this layer read as "never boots" until T6.3.
                 launched = subprocess.run(
                     [sys.executable, str(REPO / "tools" / "run_web.py"), str(beside),
                      "--until", r"\d+ passed, \d+ failed, \d+ skipped",
-                     "--timeout", str(WEB_LAUNCH_TIMEOUT)],
+                     "--timeout", str(WEB_LAUNCH_TIMEOUT)]
+                    + [f"--godot-arg={arg}" for arg in WEB_GAME_ARGS],
                     capture_output=True, text=True, errors="replace", timeout=WEB_LAUNCH_TIMEOUT + 30)
                 console_output = (launched.stdout or "") + (launched.stderr or "")
             except subprocess.TimeoutExpired as timeout_error:
@@ -1494,24 +1519,22 @@ def run_web(results: Results, engine: Path | None, godot: Path | None) -> None:
             # echoes the --until regex text and would otherwise match this same substring search.
             summary = [line for line in console_output.splitlines()
                       if "passed, " in line and "skipped" in line and "run_web.py:" not in line]
-            if summary:
-                print(f"[web] the browser said: {summary[-1].strip()}")
-            else:
-                print("[web] the browser reported no summary line -- not a failure here, T6.3 is "
-                      "what makes the counts a requirement; its last console lines:")
+            match = re.search(r"(\d+) passed, (\d+) failed, (\d+) skipped", summary[-1]) if summary else None
+            if match is None:
+                ok = False
+                print("[web] the browser reported no summary line: FAIL -- its last console lines:")
                 for line in [line for line in console_output.splitlines() if line.strip()][-12:]:
                     print(f"[web]   {line.strip()}")
-
-            # The gate is the export mechanics and the game booting, both asserted above -- proof
-            # that vh_init succeeded is the first case's line, not the final summary, because
-            # T5.1/T5.2 leave most of the interpreter's runtime subset unbuilt and a run that never
-            # reaches its last case must not read as this layer failing (T6.3's job, not T6.2's).
-            if any("[integration]" in line for line in console_output.splitlines()):
-                print("[web] the game booted and ran at least one case: ok")
             else:
-                ok = False
-                print("[web] the game booted and ran at least one case: FAIL -- no [integration] "
-                      "line reached the console")
+                print(f"[web] the browser said: {summary[-1].strip()}")
+                for name, got, want in (("passed", int(match.group(1)), WEB_EXPECTED_PASSES),
+                                        ("failed", int(match.group(2)), 0),
+                                        ("skipped", int(match.group(3)), WEB_EXPECTED_SKIPS)):
+                    if got == want:
+                        print(f"[web] {name} {got}: ok")
+                    else:
+                        ok = False
+                        print(f"[web] {name} {got}, expected {want}: FAIL")
 
             results.record("web", ok)
     finally:

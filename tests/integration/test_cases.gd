@@ -1627,16 +1627,23 @@ func begin() -> void:
 	# than a `check`: proceeding would be a logged callstack followed by undefined behaviour. So
 	# the host compares the thread it was initialised on and answers VH_ERR_THREAD having run
 	# nothing, which reaches GDScript as an invalid call.
-	_thread_answer = "not started"
-	var task_id := WorkerThreadPool.add_task(_call_verse_off_thread.bind(node))
-	WorkerThreadPool.wait_for_task_completion(task_id)
-	_check_eq("the worker task ran", _thread_answer != "not started", true)
-	# What the refusal looks like from GDScript depends on the build, and the assertion must not:
-	# in a debug build the invalid call aborts the statement, leaving "ran" behind, and in an export
-	# template it answers null and carries on. Either way the Verse method did not run, which is the
-	# claim -- and the one thing it could never be is 7.
-	var answered: bool = typeof(_thread_answer) == TYPE_INT and _thread_answer == 7
-	_check_eq("but the Verse method it called did not", answered, false)
+	# A build without threads runs a pool task on the calling thread, so there is no other thread to
+	# call from and the call is served; comparing its int answer with a String is then a GDScript
+	# error that silently ends a release template's run.
+	if OS.has_feature("threads"):
+		_thread_answer = "not started"
+		var task_id := WorkerThreadPool.add_task(_call_verse_off_thread.bind(node))
+		WorkerThreadPool.wait_for_task_completion(task_id)
+		_check_eq("the worker task ran", typeof(_thread_answer) != TYPE_STRING or _thread_answer != "not started", true)
+		# What the refusal looks like from GDScript depends on the build, and the assertion must not:
+		# in a debug build the invalid call aborts the statement, leaving "ran" behind, and in an
+		# export template it answers null and carries on. Either way the Verse method did not run,
+		# which is the claim -- and the one thing it could never be is 7.
+		var answered: bool = typeof(_thread_answer) == TYPE_INT and _thread_answer == 7
+		_check_eq("but the Verse method it called did not", answered, false)
+	else:
+		_skip("the worker task ran", "a build without threads runs a pool task on the calling thread")
+		_skip("but the Verse method it called did not", "a build without threads runs a pool task on the calling thread")
 	_check_eq("and the main thread still works afterwards", node.call("EchoInt", 3), 3)
 
 	# --- R-INT-4 / R-SIG-3: a Verse function as a Godot Callable --------------------------------

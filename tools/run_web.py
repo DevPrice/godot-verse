@@ -13,11 +13,13 @@ client needed. Exits 0 the moment a line matches --until, non-zero on
 Usage:
     python tools/run_web.py <directory> --until SENTINEL --timeout 30
     python tools/run_web.py <directory> --until SENTINEL --timeout 30 --coop-coep
+    python tools/run_web.py <directory> --until SENTINEL --godot-arg=-- --godot-arg=--verse-check
 """
 
 import argparse
 import functools
 import http.server
+import json
 import os
 import queue
 import re
@@ -34,8 +36,40 @@ DEFAULT_USER_DATA_ROOT = "C:/Users/Devin/AppData/Local/Temp/verse-web-chrome"
 CONSOLE_LINE = re.compile(r":(?:INFO|WARNING|ERROR|VERBOSE\d*):CONSOLE:\d+\] (.*)$")
 
 
-def make_handler(directory, coop_coep):
+GODOT_CONFIG_LINE = re.compile(r"(const GODOT_CONFIG = )(\{.*\})(;)")
+
+
+def page_with_godot_args(page_bytes, godot_args):
+    """The export's page with `godot_args` as the engine's command line.
+
+    A Web export has no command line: Godot's shell hands the engine GODOT_CONFIG's `args`, which
+    the export writes as `[]`, so OS.get_cmdline_user_args() in the game answers nothing unless the
+    served page says otherwise. The file on disk is left alone.
+    """
+    text = page_bytes.decode("utf-8")
+    match = GODOT_CONFIG_LINE.search(text)
+    if match is None:
+        raise ValueError("the page has no `const GODOT_CONFIG = {...};` line to put arguments in")
+    config = json.loads(match.group(2))
+    config["args"] = list(godot_args)
+    text = text[:match.start(2)] + json.dumps(config) + text[match.end(2):]
+    return text.encode("utf-8")
+
+
+def make_handler(directory, coop_coep, page, godot_args):
     class Handler(http.server.SimpleHTTPRequestHandler):
+        def do_GET(self):
+            if godot_args and self.path.split("?", 1)[0].lstrip("/") == page:
+                body = page_with_godot_args(
+                    open(os.path.join(directory, page), "rb").read(), godot_args)
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            super().do_GET()
+
         def end_headers(self):
             if coop_coep:
                 self.send_header("Cross-Origin-Opener-Policy", "same-origin")
@@ -48,9 +82,9 @@ def make_handler(directory, coop_coep):
     return functools.partial(Handler, directory=directory)
 
 
-def start_server(directory, port, coop_coep):
+def start_server(directory, port, coop_coep, page, godot_args):
     server = http.server.ThreadingHTTPServer(
-        ("127.0.0.1", port), make_handler(directory, coop_coep)
+        ("127.0.0.1", port), make_handler(directory, coop_coep, page, godot_args)
     )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -111,6 +145,11 @@ def main(argv):
         "--chrome-arg", action="append", default=[], help="extra chrome flag, may repeat"
     )
     parser.add_argument(
+        "--godot-arg", action="append", default=[],
+        help="an argument for the game's command line, may repeat; spell one that begins with a "
+             "dash as --godot-arg=--flag",
+    )
+    parser.add_argument(
         "--verbose", action="store_true", help="also print chrome's non-console log lines, to stderr"
     )
     args = parser.parse_args(argv)
@@ -123,7 +162,14 @@ def main(argv):
         print(f"run_web.py: no chrome at {args.chrome}", file=sys.stderr)
         return 2
 
-    server, server_thread = start_server(directory, args.port, args.coop_coep)
+    if args.godot_arg:
+        try:
+            page_with_godot_args(open(os.path.join(directory, args.page), "rb").read(), args.godot_arg)
+        except (OSError, ValueError) as error:
+            print(f"run_web.py: cannot pass --godot-arg: {error}", file=sys.stderr)
+            return 2
+
+    server, server_thread = start_server(directory, args.port, args.coop_coep, args.page, args.godot_arg)
     port = server.server_address[1]
     url = f"http://127.0.0.1:{port}/{args.page}"
 
