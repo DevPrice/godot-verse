@@ -1,21 +1,12 @@
 using { /Godot.org/Godot }
 using { /Verse.org/Concurrency }
 
-# spec/tasks.md: spawn, race, sync, rush, branch, defer, cancellation (structural, through an
-# enclosing task's end -- see below), event(t). "concurrent": tools/run_vm_conformance.py skips
-# this file under --sequential. State is coordinated with event(int) fields (synchronous Signal)
-# rather than Sleep, so no vh_tick pump is needed between calls -- cooked_probe does not tick, and
-# it does not need to for any of this.
-#
-# No method of a task(t) VALUE is called here (no .Await(), .Cancel(), no phase query): every one
-# crashes verse_host_runtime.dll (SIGSEGV) at this engine build, though every one runs fine
-# against verse_host.dll (the editor host) through tests/verse_probe. Confirmed down to the
-# smallest repro: `T := spawn{Body()}` then `T.Active[]` alone, in the same call, already
-# segfaults the runtime host. Reported to the lead; excluded here because a fixture that crashes
-# the reference cannot be recorded at all, the same reason values.md/tasks.md's own crash cases
-# are excluded. Cancellation is still exercised structurally instead: a `branch`'s body is a
-# child of its enclosing task, so the enclosing task's own end cancels it with no method call on
-# any task value (tasks.md §6.3, the E group below).
+# spec/tasks.md: spawn, race, sync, rush, branch, defer, cancellation (structurally, through an
+# enclosing task's end, and directly, through Cancel), event(t), and the methods of a task(t)
+# value -- the eight phase queries, Cancel and Await (the H group). "concurrent":
+# tools/run_vm_conformance.py skips this file under --sequential. State is coordinated with
+# event(int) fields (synchronous Signal) rather than Sleep, so no vh_tick pump is needed between
+# calls -- cooked_probe does not tick, and it does not need to for any of this.
 
 TasksArm(Name:string, Ev:event(int))<suspends>:int =
 	defer:
@@ -31,6 +22,16 @@ TasksImm(Name:string, V:int)<suspends>:int =
 	Print("  {Name} runs to end")
 	V
 
+TasksPhases(Name:string, T:task(int)):void =
+	if (T.Active[]) then Print("  {Name} Active") else Print("  {Name} not Active")
+	if (T.Completed[]) then Print("  {Name} Completed") else Print("  {Name} not Completed")
+	if (T.Canceling[]) then Print("  {Name} Canceling") else Print("  {Name} not Canceling")
+	if (T.Canceled[]) then Print("  {Name} Canceled") else Print("  {Name} not Canceled")
+	if (T.Unsettled[]) then Print("  {Name} Unsettled") else Print("  {Name} not Unsettled")
+	if (T.Settled[]) then Print("  {Name} Settled") else Print("  {Name} not Settled")
+	if (T.Uninterrupted[]) then Print("  {Name} Uninterrupted") else Print("  {Name} not Uninterrupted")
+	if (T.Interrupted[]) then Print("  {Name} Interrupted") else Print("  {Name} not Interrupted")
+
 tasks_basic := class(object):
 
 	EvA:event(int) = event(int){}
@@ -44,6 +45,9 @@ tasks_basic := class(object):
 	EvE1:event(int) = event(int){}
 	EvF:event(int) = event(int){}
 	EvG:event(int) = event(int){}
+	EvH1:event(int) = event(int){}
+	EvH3:event(int) = event(int){}
+	EvH5:event(int) = event(int){}
 
 	# --- spawn: runs the body at once, up to its first suspension ---------------------------
 
@@ -176,3 +180,56 @@ tasks_basic := class(object):
 			Sleep(-1.0)
 			Print("  after Sleep(-1.0)")
 		spawn{SleepBody()}
+
+	# --- task(t) values: the phase queries, Cancel and Await --------------------------------
+
+	H1_PhasesOfSuspended<public>():void =
+		Print("H1 start")
+		T := spawn{TasksArm("h1", EvH1)}
+		TasksPhases("H1", T)
+		Print("H1 end")
+
+	H2_PhasesOfCompleted<public>():void =
+		Print("H2 start")
+		T := spawn{TasksImm("h2", 7)}
+		TasksPhases("H2", T)
+		Print("H2 end")
+
+	H3Driver()<suspends>:void =
+		T := spawn{TasksArm("h3", EvH3)}
+		Print("  H3 cancel")
+		T.Cancel()
+		Print("  H3 cancel returned")
+		TasksPhases("H3", T)
+
+	H3_Cancel<public>():void =
+		Print("H3 start")
+		spawn{H3Driver()}
+		Print("H3 after spawn")
+
+	H4Driver()<suspends>:void =
+		T := spawn{TasksImm("h4", 8)}
+		V := T.Await()
+		Print("  H4 awaited {V}")
+
+	H4_AwaitCompleted<public>():void =
+		Print("H4 start")
+		spawn{H4Driver()}
+		Print("H4 after spawn")
+
+	H5Driver()<suspends>:void =
+		T := spawn{TasksArm("h5", EvH5)}
+		Print("  H5 awaiting")
+		V := T.Await()
+		Print("  H5 awaited {V}")
+		TasksPhases("H5", T)
+
+	H5_AwaitSuspended<public>():void =
+		Print("H5 start")
+		spawn{H5Driver()}
+		Print("H5 after spawn")
+
+	H6_SignalAwaited<public>():void =
+		Print("H6 signal")
+		EvH5.Signal(12)
+		Print("H6 signal returned")

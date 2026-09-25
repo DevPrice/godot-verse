@@ -6376,7 +6376,7 @@ AUTORTFM_DISABLE bool GetClassStaticsLive(FUtf8StringView ClassName,
             FUtf8String DeclaredIn;
             FillLocation(*Function, DeclaredIn, Desc.Line, Desc.Column);
             OutStatics.Add(MoveTemp(Desc));
-            OutValues.AddDefaulted();
+            OutValues.AddZeroed();
             OutStorage.AddDefaulted();
         }
 
@@ -6389,7 +6389,9 @@ AUTORTFM_DISABLE bool GetClassStaticsLive(FUtf8StringView ClassName,
             FillLocation(*Member, DeclaredIn, Desc.Line, Desc.Column);
 
             const int32 Slot = OutStatics.Add(MoveTemp(Desc));
-            OutValues.AddDefaulted();
+            // Zeroed, not defaulted: ValueToWire writes only the lanes the value fills, so an int
+            // or a string left its VariantTag as whatever the heap held, and the cook wrote that.
+            OutValues.AddZeroed();
             OutStorage.AddDefaulted();
 
             // The value, read out of the published package rather than evaluated: a module's

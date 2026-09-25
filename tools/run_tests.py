@@ -188,7 +188,22 @@ def run_abi(results: Results, engine: Path | None, do_build: bool) -> None:
 # Classes tests/host_smoke's fixtures declare under their own file's name, and so the classes a
 # cook of them must put in the sidecar. hello.verse is not among them: it holds `Main` and no class
 # at all, which is R-LANG-6's library file and is exactly what should *not* appear.
-COOK_EXPECTED_CLASSES = ["debug_probe", "exports", "tasks"]
+COOK_EXPECTED_CLASSES = ["debug_probe", "exports", "statics_values", "task_values", "tasks"]
+
+# What task_values prints through a runtime host, in the order the probe calls it. Every method of
+# a task value was a jump to address 0 there and nowhere else (T5.8), so the lines are the proof
+# that each one ran; "[probe] done" is the proof that the process survived to say so.
+RUNTIME_TASK_LINES = [
+    "[verse] task_values: active",
+    "[verse] task_values: not completed",
+    "[verse] task_values: completed",
+    "[verse] task_values: settled",
+    "[verse] task_values: canceled",
+    "[verse] task_values: awaited 5",
+    "[verse] task_values: awaiting",
+    "[verse] task_values: awaited held 9",
+    "[probe] done",
+]
 
 # What HostSidecar.cpp is writing. Asserted rather than ignored because the sidecar is the one
 # cooked artifact a human reads, and a version nobody bumped is how a reader-writer pair drifts.
@@ -275,9 +290,86 @@ def run_cook(results: Results, engine: Path) -> None:
             results.record("verse_cook", False)
             return
         ok = _check_sidecar(sidecar, COOK_EXPECTED_CLASSES, "verse_cook") and ok
+        ok = _check_static_tags(sidecar, "statics_values", "verse_cook") and ok
         ok = _check_vbc(out_dir / "program.vbc", "verse_cook") and ok
 
         results.record("verse_cook", ok)
+
+        _run_cooked_task_values(results, engine, out_dir)
+
+
+def _check_static_tags(path: Path, class_name: str, name: str) -> bool:
+    """A statics constant's value carries the tag the host wrote, which for a plain float, string
+    or int is none -- VH_VARIANT_NIL. Anything else is the heap the descriptor was built on (T5.7c)."""
+    sidecar = json.loads(path.read_text(encoding="utf-8"))
+    members = (sidecar.get("classes", {}).get(class_name, {}).get("statics") or {}).get("members", [])
+    constants = [m for m in members if not m.get("isFunction")]
+    if len(constants) != 3:
+        print(f"[{name}] {class_name} records 3 statics constants: FAIL -- it has {len(constants)}")
+        return False
+    ok = True
+    for member in constants:
+        tag = member.get("value", {}).get("tag")
+        verdict = "ok" if tag == 0 else "FAIL"
+        ok = ok and tag == 0
+        print(f"[{name}] {class_name}.{member.get('name')}'s value carries tag {tag}: {verdict}")
+    return ok
+
+
+def _run_cooked_task_values(results: Results, engine: Path, cooked: Path) -> None:
+    """Runs task_values through the runtime host, which is the only host T5.8 and T5.7b showed in."""
+    runtime_host = engine / "Engine" / "Binaries" / "Win64" / "verse_host_runtime.dll"
+    probe = REPO / "bin" / "cooked_probe.exe"
+    if not runtime_host.is_file():
+        results.skip("runtime host", f"{runtime_host} not built -- run tools/build_host.py "
+                     "--target VerseHostRuntime")
+        return
+    if not probe.is_file():
+        results.skip("runtime host", "bin/cooked_probe.exe not built -- run tools/build_cooked_probe.py")
+        return
+
+    print("[run_tests] --- runtime host ---")
+    completed = subprocess.run(
+        [str(probe), str(runtime_host), str(cooked), str(cooked / "Cooked"), "task_values", "--frames"],
+        cwd=str(REPO / "bin"), capture_output=True, text=True, errors="replace")
+    output = (completed.stdout or "") + (completed.stderr or "")
+    sys.stdout.write(output)
+    lines = output.splitlines()
+
+    ok = completed.returncode == 0
+    print(f"[runtime host] cooked_probe exited {completed.returncode}: {'ok' if ok else 'FAIL'}")
+
+    # In order, because a line printed by the wrong call is as wrong as a missing one.
+    at = 0
+    for expected in RUNTIME_TASK_LINES:
+        found = next((i for i in range(at, len(lines)) if lines[i] == expected), None)
+        if found is None:
+            ok = False
+            print(f"[runtime host] said {expected!r} in order: FAIL")
+        else:
+            at = found + 1
+            print(f"[runtime host] said {expected!r}: ok")
+
+    # T5.7: a runtime host delivered the message alone, and an editor host's first frame was the
+    # formatter's "Callstack follows:" header.
+    frames = [line for line in lines if line.startswith("[frame] ")]
+    if frames:
+        print(f"[runtime host] Raise's error carries {len(frames)} frame(s): ok")
+    else:
+        ok = False
+        print("[runtime host] Raise's error carries frames: FAIL")
+    if any("task_values.verse" in f and "Raise" in f for f in frames):
+        print("[runtime host] a frame names Raise in task_values.verse: ok")
+    else:
+        ok = False
+        print("[runtime host] a frame names Raise in task_values.verse: FAIL")
+    if any("Callstack" in f or "follows:" in f for f in frames):
+        ok = False
+        print("[runtime host] no frame is a formatter's header: FAIL")
+    else:
+        print("[runtime host] no frame is a formatter's header: ok")
+
+    results.record("runtime host", ok)
 
 
 def _check_vbc(path: Path, name: str) -> bool:

@@ -2,7 +2,7 @@
 [probe] vh_host_kind = <normalized>
 [probe] vh_init: ok
 [probe] vh_has_class: ok
-[probe] tasks_basic has 21 method(s)
+[probe] tasks_basic has 30 method(s)
 [probe] vh_instantiate: ok
 [probe] calling (/user@localhost/tasks_basic:)A1_Spawn
 [verse] A1 before spawn
@@ -91,5 +91,76 @@
 [probe] calling (/user@localhost/tasks_basic:)SleepNegativeDoesNotSuspend
 [verse]   before Sleep(-1.0)
 [verse]   after Sleep(-1.0)
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_basic:)H1_PhasesOfSuspended
+[verse] H1 start
+[verse]   h1 start
+[verse]   H1 Active
+[verse]   H1 not Completed
+[verse]   H1 not Canceling
+[verse]   H1 not Canceled
+[verse]   H1 Unsettled
+[verse]   H1 not Settled
+[verse]   H1 Uninterrupted
+[verse]   H1 not Interrupted
+[verse] H1 end
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_basic:)H2_PhasesOfCompleted
+[verse] H2 start
+[verse]   h2 runs to end
+[verse]   h2 defer
+[verse]   H2 not Active
+[verse]   H2 Completed
+[verse]   H2 not Canceling
+[verse]   H2 not Canceled
+[verse]   H2 not Unsettled
+[verse]   H2 Settled
+[verse]   H2 Uninterrupted
+[verse]   H2 not Interrupted
+[verse] H2 end
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_basic:)H3_Cancel
+[verse] H3 start
+[verse]   h3 start
+[verse]   H3 cancel
+[verse]   h3 defer
+[verse]   H3 cancel returned
+[verse]   H3 not Active
+[verse]   H3 not Completed
+[verse]   H3 not Canceling
+[verse]   H3 Canceled
+[verse]   H3 not Unsettled
+[verse]   H3 Settled
+[verse]   H3 not Uninterrupted
+[verse]   H3 Interrupted
+[verse] H3 after spawn
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_basic:)H4_AwaitCompleted
+[verse] H4 start
+[verse]   h4 runs to end
+[verse]   h4 defer
+[verse]   H4 awaited 8
+[verse] H4 after spawn
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_basic:)H5_AwaitSuspended
+[verse] H5 start
+[verse]   h5 start
+[verse]   H5 awaiting
+[verse] H5 after spawn
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_basic:)H6_SignalAwaited
+[verse] H6 signal
+[verse]   h5 end
+[verse]   h5 defer
+[verse]   H5 awaited 12
+[verse]   H5 not Active
+[verse]   H5 Completed
+[verse]   H5 not Canceling
+[verse]   H5 not Canceled
+[verse]   H5 not Unsettled
+[verse]   H5 Settled
+[verse]   H5 Uninterrupted
+[verse]   H5 not Interrupted
+[verse] H6 signal returned
 [probe]   -> 0 (VH_OK)
 [probe] done

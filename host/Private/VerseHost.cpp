@@ -30,6 +30,14 @@ namespace {
 FString GEngineDirOverride;
 Verse::SocketDebugger::FDebuggerScope GDebuggerScope;
 
+/// The last raise's callstack, keyed by the text the provider returned for it; see InitHost.
+struct FPendingRuntimeError
+{
+    FString Text;
+    FString Callstack;
+};
+TOptional<FPendingRuntimeError> GPendingRuntimeError;
+
 using GodotVerse::GetHost;
 
 FUtf8StringView Cstr(const char* Text)
@@ -216,16 +224,9 @@ VH_ATTR int32_t InitHost(const vh_init_desc* Desc, bool bEngineAlreadyBooted)
     // yet. OnVerseRuntimeError is broadcast after that abort, and carries only the string the
     // provider returned.
     //
-    // So the provider appends the callstack to the message in a shape the reporter can split back
-    // apart, and the reporter does the splitting. Carrying it in a variable between the two looked
-    // simpler and was not: the provider does not run for every raise the reporter sees, and a stale
-    // stack attached to the wrong error is worse than no stack at all.
-    FVerseRuntimeErrorDelegates::RuntimeErrorTextProvider.BindLambda(
-        [](const Verse::ERuntimeDiagnostic Diagnostic, const FText& MessageText, const FString& Callstack) {
-            const FString Formatted = Verse::AsFormattedString(Diagnostic, MessageText);
-            return Callstack.IsEmpty() ? Formatted : Formatted + TEXT("\n") + Callstack;
-        });
-
+    // So the provider, bound below once Solaris has started, records the callstack beside the text
+    // it returned, and the reporter takes that callstack only when the text it was handed is that
+    // same text -- which is what keeps a stack from being attached to a different raise.
     FVerseRuntimeErrorDelegates::OnVerseRuntimeError.AddLambda(
         [](const Verse::ERuntimeDiagnostic Diagnostic, const FText& MessageText, const FString& RuntimeErrorText) {
             // UE terminates the active content scope immediately after this delegate returns,
@@ -236,15 +237,12 @@ VH_ATTR int32_t InitHost(const vh_init_desc* Desc, bool bEngineAlreadyBooted)
 
             const FUtf8String Message(Verse::AsFormattedString(Diagnostic, MessageText));
 
-            // Everything after the first line is the callstack the provider appended; a raise with
-            // no frames renders as the message alone and splits to nothing, which is the right
-            // answer rather than a missing one.
             FString Callstack;
-            int32 FirstBreak = INDEX_NONE;
-            if (RuntimeErrorText.FindChar(TEXT('\n'), FirstBreak))
+            if (GPendingRuntimeError.IsSet() && GPendingRuntimeError->Text.Equals(RuntimeErrorText, ESearchCase::CaseSensitive))
             {
-                Callstack = RuntimeErrorText.Mid(FirstBreak + 1);
+                Callstack = GPendingRuntimeError->Callstack;
             }
+            GPendingRuntimeError.Reset();
             GodotVerse::ReportRuntimeError(FUtf8StringView(Message), Callstack);
         });
 
@@ -301,6 +299,24 @@ VH_ATTR int32_t InitHost(const vh_init_desc* Desc, bool bEngineAlreadyBooted)
 
     // Loading Solaris initializes the uLang system params for UE integration.
     ISolarisModule::Get();
+
+    // After Solaris, because FSolarisModule::StartupModule binds its own provider over whatever is
+    // there (SolarisModule.cpp:488). This one used to be bound first and so was replaced, and the
+    // reporter split Solaris's text instead: in an editor host its "Callstack follows:" header
+    // reached Godot as a frame, and a runtime host -- no WITH_VERSE_COMPILER -- renders the message
+    // alone, so an exported game's errors carried no frames (SolarisModule.cpp:1128-1169, 3571-3582).
+    //
+    // Solaris's provider is wrapped rather than replaced, because its text is also what its own
+    // OnVerseRuntimeError handler logs: the stack is taken from the VM's rendering, which reaches
+    // the provider in both hosts, and the text returned is still Solaris's.
+    const FVerseRuntimeErrorTextProvider SolarisProvider = FVerseRuntimeErrorDelegates::RuntimeErrorTextProvider;
+    FVerseRuntimeErrorDelegates::RuntimeErrorTextProvider.BindLambda(
+        [SolarisProvider](const Verse::ERuntimeDiagnostic Diagnostic, const FText& MessageText, const FString& Callstack) {
+            FString Text = SolarisProvider.IsBound() ? SolarisProvider.Execute(Diagnostic, MessageText, Callstack)
+                                                     : Verse::AsFormattedString(Diagnostic, MessageText);
+            GPendingRuntimeError.Emplace(FPendingRuntimeError{Text, Callstack});
+            return Text;
+        });
 
     if (Desc->EnableDebugger)
     {

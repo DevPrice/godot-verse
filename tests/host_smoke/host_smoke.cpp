@@ -140,6 +140,7 @@ static std::string LastRuntimeErrorPath;
 static int LastRuntimeErrorLine = 0;
 static std::string LastRuntimeErrorFunction;
 static std::string LastRuntimeErrorStack;
+static std::string FirstRuntimeErrorFrame;
 
 /* A no-argument call that wants no result, which is what every lifecycle method is. */
 static int32_t CallVoid(vh_instance_call_fn Call, vh_instance* Instance, const char* DecoratedName)
@@ -153,13 +154,19 @@ static void SmokeOnRuntimeError(void*, const vh_runtime_error* Error)
 	LastRuntimeErrorPath.clear();
 	LastRuntimeErrorFunction.clear();
 	LastRuntimeErrorStack.clear();
+	FirstRuntimeErrorFrame.clear();
 	LastRuntimeErrorLine = 0;
 	for (int32_t Index = 0; Index < Error->FrameCount; ++Index)
 	{
 		const vh_stack_frame& Frame = Error->Frames[Index];
+		const size_t Start = LastRuntimeErrorStack.size();
 		LastRuntimeErrorStack.append(Frame.PathUtf8, static_cast<size_t>(Frame.PathLen));
 		LastRuntimeErrorStack.append(" ");
 		LastRuntimeErrorStack.append(Frame.FunctionUtf8, static_cast<size_t>(Frame.FunctionLen));
+		if (Index == 0)
+		{
+			FirstRuntimeErrorFrame = LastRuntimeErrorStack.substr(Start);
+		}
 		LastRuntimeErrorStack.append("\n");
 
 		/* The innermost frame carrying a location is where the error was raised, which for a call
@@ -2987,6 +2994,14 @@ int main(int argc, char** argv)
 				 LastRuntimeErrorStack.find("TouchTarget") != std::string::npos);
 			Step("and the file that method is declared in",
 				 LastRuntimeErrorStack.find("exports.verse") != std::string::npos);
+			// T5.7: Solaris's formatter heads its stack with "Callstack follows:", which the host
+			// split as a frame with path `Callstack` and function `follows:` -- first, every time.
+			printf("[smoke] first frame: %s\n", FirstRuntimeErrorFrame.c_str());
+			Step("and no frame is a formatter's header",
+				 LastRuntimeErrorStack.find("Callstack") == std::string::npos
+					 && LastRuntimeErrorStack.find("follows:") == std::string::npos);
+			Step("so the first frame is the VM's own",
+				 !FirstRuntimeErrorFrame.empty() && FirstRuntimeErrorFrame.rfind("Callstack", 0) != 0);
 
 			// --- R-DIAG-3 / R-ASYNC-4: the raise stops the call that raised, and nothing else ---
 			//
