@@ -61,11 +61,31 @@ const NameCell *Heap::find_interned(std::string_view p_text) const {
 	return found == interned.end() ? nullptr : found->second;
 }
 
+bool Heap::owns(const Cell *p_cell) const {
+	for (const Cell *cell = first_allocated; cell != nullptr; cell = cell->next_allocated) {
+		if (cell == p_cell) {
+			return true;
+		}
+	}
+	return false;
+}
+
+void Heap::remove_root_source(RootSource *p_source) {
+	for (size_t index = 0; index < root_sources.size(); ++index) {
+		if (root_sources[index] == p_source) {
+			root_sources.erase(root_sources.begin() + ptrdiff_t(index));
+			return;
+		}
+	}
+}
+
 size_t Heap::collect() {
 	Marker marker;
 	marker.visit(false_value());
 	marker.visit(true_value());
-	// Interned names are held strongly: a field name must stay the same cell for the program's life.
+	// Interned names are held strongly. Names compare by cell identity -- layouts, named arguments
+	// and the host's method lookup key on the pointer -- and every name is the program's own text or
+	// one of a handful a native asks for, so the table cannot grow with what a script does.
 	for (const auto &entry : interned) {
 		marker.visit(entry.second);
 	}
@@ -78,7 +98,13 @@ size_t Heap::collect() {
 	for (const Value *slot : handle_roots) {
 		marker.visit(*slot);
 	}
+	for (const RootSource *source : root_sources) {
+		source->visit_roots(marker);
+	}
 	marker.drain();
+	for (RootSource *source : root_sources) {
+		source->sweep_weak();
+	}
 
 	size_t freed = 0;
 	Cell **link = &first_allocated;
@@ -94,6 +120,13 @@ size_t Heap::collect() {
 		}
 	}
 	cell_count -= freed;
+	live_after_collect = cell_count;
+	allocated_since_collect = 0;
+	++collections;
+	const std::vector<RootSource *> sources = root_sources;
+	for (RootSource *source : sources) {
+		source->after_collect();
+	}
 	return freed;
 }
 

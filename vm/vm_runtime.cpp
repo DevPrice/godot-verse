@@ -131,7 +131,25 @@ int32_t Runtime::boot(const std::string &p_cooked_dir, std::string &r_error) {
 	for (ObjectCell *object : program.value_objects) {
 		interpreter.layouts.lay_out_value_object(object);
 	}
+	// Not roots: a value object nothing in the program names is garbage, and would dangle here.
+	program.value_objects.clear();
 	return VH_OK;
+}
+
+Runtime::Runtime() {
+	heap.add_handle_root(&project_scope);
+}
+
+Runtime::~Runtime() {
+	heap.remove_handle_root(&project_scope);
+}
+
+bool Runtime::collect_garbage() {
+	if (interpreter.in_entry()) {
+		return false;
+	}
+	heap.collect();
+	return true;
 }
 
 void Runtime::report_error(const std::string &p_message) const {
@@ -200,6 +218,9 @@ void Runtime::tick(vh_tick_stats &r_stats) {
 			++r_stats.JobsRun;
 		}
 	}
+	if (heap.wants_collection()) {
+		collect_garbage();
+	}
 	r_stats.Sleeping = int32_t(interpreter.sleepers.size());
 	for (const Value *scope : instance_scopes) {
 		if (is_cell_kind(*scope, CellKind::ContentScope)) {
@@ -249,7 +270,6 @@ int32_t Runtime::default_field(const char *p_class, const char *p_name, const vh
 		return VH_ERR_NOT_FOUND;
 	}
 
-	heap.add_handle_root(&project_scope);
 	activate_scope(project_scope);
 	interpreter.begin_entry();
 	Value object;

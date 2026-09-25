@@ -38,6 +38,11 @@ private:
 
 class Runtime {
 public:
+	Runtime();
+	~Runtime();
+	Runtime(const Runtime &) = delete;
+	Runtime &operator=(const Runtime &) = delete;
+
 	Heap heap;
 	Program program;
 	Sidecar sidecar;
@@ -59,8 +64,16 @@ public:
 	std::vector<const Value *> instance_scopes;
 
 	// vh_tick's work (godot-natives.md §10): every sleeper due now, earliest first, each resumed in a
-	// VM entry of its own, whatever the budget. Fills every field of r_stats but StructSize.
+	// VM entry of its own, whatever the budget; then a collection, when the heap wants one. Fills
+	// every field of r_stats but StructSize.
 	void tick(vh_tick_stats &r_stats);
+
+	// A full collection (design §7.3), or nothing while an entry is running: a Value an op or a
+	// native holds in a C++ local is no root. Answers whether it collected.
+	bool collect_garbage();
+	// Set from VERSE_VM_GC_STRESS at vh_init: collect after every entry the host makes, so a missing
+	// root shows up as a wrong answer or a crash at the next call rather than eventually.
+	bool gc_stress = false;
 
 	// Makes r_scope's content scope the active one for an entry, first replacing it with a fresh one
 	// when it is missing or terminated: a terminated scope is never revived (CLAUDE.md, R-ASYNC-4).

@@ -1,11 +1,9 @@
 #include "vm_natives.h"
 
-#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
-#include <random>
 #include <string>
 #include <utility>
 #include <vector>
@@ -354,25 +352,12 @@ Outcome weak_map_native(NativeCall &r_call) {
 	return Outcome::Ok;
 }
 
-// spec/natives.md §5.6, §11.1 Q2: frozen at first use rather than at vh_init, since this file has
-// no init hook to freeze it at (Runtime::boot, vm_runtime.cpp, is where that would belong once this
-// is routed there). One process-lifetime sample matches the observable contract either way: this
-// host runs no engine frame to refresh it against.
-double frozen_epoch_seconds() {
-	static const double epoch = std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
-	return epoch;
-}
-
 Outcome get_seconds_since_epoch_native(NativeCall &r_call) {
-	r_call.result = Value::from_float(frozen_epoch_seconds());
+	if (r_call.interpreter == nullptr) {
+		return Outcome::Invalid;
+	}
+	r_call.result = Value::from_float(r_call.interpreter->epoch_seconds);
 	return Outcome::Ok;
-}
-
-// spec/natives.md §6: seeded from OS entropy at first use, not reproducible, and its advance is not
-// undone by a failing transaction (§3.8) -- which a plain local variable already gives for free.
-std::mt19937_64 &random_generator() {
-	static std::mt19937_64 generator(std::random_device{}());
-	return generator;
 }
 
 // spec/natives.md §5.11 and §6 share this rule for the NaN/Inf edges: p if p<q else q, and p if
@@ -401,6 +386,9 @@ Outcome get_random_int_native(NativeCall &r_call) {
 	if (low > high) {
 		std::swap(low, high);
 	}
+	if (r_call.interpreter == nullptr) {
+		return Outcome::Invalid;
+	}
 	const uint64_t range = uint64_t(high) - uint64_t(low);
 	uint64_t mask = range;
 	mask |= mask >> 1;
@@ -411,7 +399,7 @@ Outcome get_random_int_native(NativeCall &r_call) {
 	mask |= mask >> 32;
 	uint64_t draw;
 	do {
-		draw = random_generator()();
+		draw = r_call.interpreter->random();
 	} while ((draw & mask) > range);
 	r_call.result = make_int(r_call.heap, int64_t(uint64_t(low) + (draw & mask)));
 	return Outcome::Ok;
@@ -435,7 +423,10 @@ Outcome get_random_float_native(NativeCall &r_call) {
 	if (low > high) {
 		std::swap(low, high);
 	}
-	const uint64_t draw = random_generator()();
+	if (r_call.interpreter == nullptr) {
+		return Outcome::Invalid;
+	}
+	const uint64_t draw = r_call.interpreter->random();
 	const double t = double(draw >> 11) * (1.0 / 9007199254740992.0); // 2^-53
 	const double v = ((1.0 - t) * low) + (t * high);
 	r_call.result = Value::from_float(verse_max(verse_min(v, high), low));
@@ -1009,10 +1000,25 @@ Outcome is_of_type_native(NativeCall &r_call) {
 	return Outcome::Ok;
 }
 
-// spec/natives.md §5.9: without a call-stack walk exposed to a native, this answers what the one
-// measured case does -- an ordinary script method the embedder invoked. See the report.
+// format.md §5's procedure flag bit 0.
+constexpr uint32_t kProcedureCanAccessEpicInternal = 1;
+
+// spec/natives.md §5.9: three frames up from this native -- past the bytecode
+// CanCallerAccessEpicInternal, past its caller -- to that caller's caller. Native code there,
+// the embedder's entry included, may; a procedure may if its flag says so; no frame there may not.
 Outcome can_caller_access_epic_internal_native(NativeCall &r_call) {
-	r_call.result = r_call.heap.logic(true);
+	if (r_call.interpreter == nullptr) {
+		return Outcome::Invalid;
+	}
+	std::vector<StackFrame> frames;
+	r_call.interpreter->stack_frames(frames, 3);
+	bool may = false;
+	if (frames.size() == 3) {
+		may = (frames[2].frame->procedure->flags & kProcedureCanAccessEpicInternal) != 0;
+	} else if (frames.size() == 2) {
+		may = true;
+	}
+	r_call.result = r_call.heap.logic(may);
 	return Outcome::Ok;
 }
 

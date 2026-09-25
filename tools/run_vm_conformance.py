@@ -13,6 +13,7 @@ line by line (method by method) after normalizing what legitimately differs betw
                                                         # checkout needed
     python tools/run_vm_conformance.py --sequential     # skip fixtures marked concurrent (tasks_*.verse)
     python tools/run_vm_conformance.py --only tasks     # only classes whose name contains "tasks"
+    python tools/run_vm_conformance.py --gc-stress      # verse_vm.dll collects after every entry
 
 A fixture file's class is its own name (values_ints.verse declares class values_ints), and every
 fixture in this directory is cooked as one project, so the class list is the file list. A file
@@ -40,6 +41,9 @@ COOKED_PROBE = REPO / "bin" / "cooked_probe.exe"
 VM_DLL = REPO / "bin" / "verse_vm.dll"
 
 CONCURRENT_PREFIX = "tasks_"
+
+# Read by verse_vm.dll at vh_init: collect after every entry the host makes (vm/vm_abi.cpp).
+GC_STRESS_VARIABLE = "VERSE_VM_GC_STRESS"
 
 
 def find_engine(explicit: str | None) -> Path | None:
@@ -120,9 +124,14 @@ def parse_transcript(text: str) -> tuple[list[str], dict[str, MethodBlock]]:
 
 # --------------------------------------------------------------------------------- running a dll --
 
-def run_cooked_probe(dll: Path, cooked_dir: Path, class_name: str) -> tuple[int, str]:
+def run_cooked_probe(dll: Path, cooked_dir: Path, class_name: str,
+                     gc_stress: bool = False) -> tuple[int, str]:
     argv = [str(COOKED_PROBE), str(dll), str(cooked_dir), str(cooked_dir / "Cooked"), class_name]
-    completed = subprocess.run(argv, capture_output=True, text=True, errors="replace")
+    env = dict(os.environ)
+    env.pop(GC_STRESS_VARIABLE, None)
+    if gc_stress:
+        env[GC_STRESS_VARIABLE] = "1"
+    completed = subprocess.run(argv, capture_output=True, text=True, errors="replace", env=env)
     return completed.returncode, normalize((completed.stdout or "") + (completed.stderr or ""))
 
 
@@ -204,7 +213,7 @@ def diff_blocks(expected: MethodBlock, actual: MethodBlock | None, preamble: lis
     return None
 
 
-def do_compare(only: str | None, sequential: bool) -> int:
+def do_compare(only: str | None, sequential: bool, gc_stress: bool) -> int:
     if not EXPECTED_DIR.is_dir() or not any(EXPECTED_DIR.glob("*.txt")):
         print(f"[run_vm_conformance] no recorded transcripts under {EXPECTED_DIR} -- run "
               "tools/run_vm_conformance.py --record first (needs a UE checkout)")
@@ -236,7 +245,7 @@ def do_compare(only: str | None, sequential: bool) -> int:
 
         expected_text = normalize((EXPECTED_DIR / f"{class_name}.txt").read_text(encoding="utf-8"))
         _expected_preamble, expected_blocks = parse_transcript(expected_text)
-        _, actual_transcript = run_cooked_probe(VM_DLL, COOK_CACHE_DIR, class_name)
+        _, actual_transcript = run_cooked_probe(VM_DLL, COOK_CACHE_DIR, class_name, gc_stress)
         actual_preamble, actual_blocks = parse_transcript(actual_transcript)
 
         for method_name, expected_block in expected_blocks.items():
@@ -256,7 +265,8 @@ def do_compare(only: str | None, sequential: bool) -> int:
                   "the recorded transcript never called")
             diff_count += 1
 
-    print(f"[run_vm_conformance] {ok_count} ok, {diff_count} DIFF, {skip_count} class(es) skipped")
+    stress = ", collecting after every entry" if gc_stress else ""
+    print(f"[run_vm_conformance] {ok_count} ok, {diff_count} DIFF, {skip_count} class(es) skipped{stress}")
     return 0 if diff_count == 0 else 1
 
 
@@ -268,6 +278,9 @@ def main() -> None:
     parser.add_argument("--sequential", action="store_true",
                          help="skip fixtures marked concurrent (tasks_*.verse)")
     parser.add_argument("--only", help="only classes whose name contains this substring")
+    parser.add_argument("--gc-stress", action="store_true",
+                         help=f"run verse_vm.dll with {GC_STRESS_VARIABLE}=1, a full collection "
+                              "after every vh_instantiate and vh_instance_call")
     parser.add_argument("--engine", help="the Unreal checkout (default: UE_ROOT, then ../UnrealEngine); "
                                           "--record only")
     args = parser.parse_args()
@@ -279,7 +292,7 @@ def main() -> None:
             sys.exit(1)
         sys.exit(do_record(engine, args.only))
     else:
-        sys.exit(do_compare(args.only, args.sequential))
+        sys.exit(do_compare(args.only, args.sequential, args.gc_stress))
 
 
 if __name__ == "__main__":

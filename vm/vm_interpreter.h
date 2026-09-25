@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <random>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -39,15 +40,29 @@ struct RaisedError {
 
 // Seconds on a monotonic clock, what Interpreter::clock answers unless a test replaces it.
 double monotonic_seconds();
+// Unix time in seconds, with a fraction.
+double wall_clock_seconds();
 
 struct NamedArgument {
 	const NameCell *name = nullptr;
 	Value value;
 };
 
-class Interpreter {
+// A Verse frame of the running call stack and the op it is at.
+struct StackFrame {
+	const FrameCell *frame = nullptr;
+	uint32_t op = 0;
+};
+
+// Its roots are what it holds between entries (design §7.3): the sleepers, the layouts, and the
+// registers of an entry the host is inside. Everything an entry holds only in C++ locals is not a
+// root, which is why the collector must never run while in_entry() is true.
+class Interpreter : public RootSource {
 public:
 	Interpreter(Heap &r_heap, const Program &p_program);
+	~Interpreter() override;
+	Interpreter(const Interpreter &) = delete;
+	Interpreter &operator=(const Interpreter &) = delete;
 
 	Heap &heap;
 	const Program &program;
@@ -142,7 +157,30 @@ public:
 	// The Godot name of a mirrored class, from the generated table; null answers no mint.
 	const char *(*mirrored_godot_name)(std::string_view p_verse_name) = nullptr;
 
+	// godot-natives.md §3.2, §8.29: p_object, a godot_ref, now owns the claim on p_ref, which the
+	// sweep that finds it unreachable hands back through ReleaseRef, once. Ref 0 names nothing.
+	void adopt_ref(const Cell *p_object, int64_t p_ref);
+	std::unordered_map<const Cell *, int64_t> adopted_refs;
+
+	// spec/natives.md §5.6: one sample, taken when the runtime starts.
+	double epoch_seconds = 0.0;
+	// spec/natives.md §6: seeded from the OS once; a failing transaction does not undo a draw.
+	std::mt19937_64 random;
+
+	// The Verse frames of the running call stack, innermost first, at most p_limit of them: the
+	// current task's frames, then those of the task it yields to, as spec/failure.md §9.2 walks them.
+	// Past the last is native code -- the embedder's entry, or a native that entered the VM.
+	void stack_frames(std::vector<StackFrame> &r_frames, size_t p_limit) const;
+
+	void visit_roots(CellVisitor &r_visitor) const override;
+	void sweep_weak() override;
+	void after_collect() override;
+
 private:
+	// Releases the sweep found due, made once the heap is consistent: the embedder may call back in.
+	std::vector<int64_t> released_peers;
+	std::vector<int64_t> released_refs;
+
 	// Idle: control passed to an empty yield-to point, so the drive that was running is done.
 	enum class Step : uint8_t {
 		Next,

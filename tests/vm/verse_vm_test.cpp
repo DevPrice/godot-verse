@@ -2887,6 +2887,8 @@ void CaptureRuntimeError(void *, const vh_runtime_error *p_error) {
 void AwaitEventSleepCases(Cases &r_cases) {
 	Runtime runtime;
 	Heap &heap = runtime.heap;
+	// This case holds its cells in C++ locals, which are no roots, so the tick must not collect.
+	heap.min_collect_trigger = SIZE_MAX;
 	Interpreter &interpreter = runtime.interpreter;
 	interpreter.clock = &FakeClock;
 	runtime.on_runtime_error = &CaptureRuntimeError;
@@ -3125,6 +3127,399 @@ void AwaitEventSleepCases(Cases &r_cases) {
 	g_now = 0.0;
 }
 
+std::vector<int64_t> g_released_refs;
+
+void CaptureReleaseRef(void *, int64_t p_ref) {
+	g_released_refs.push_back(p_ref);
+}
+
+Outcome ChurnNative(NativeCall &r_call) {
+	for (int64_t index = 0; index < 200; ++index) {
+		make_array(r_call.heap, { Int(r_call.heap, index), Str(r_call.heap, "churn") }, false);
+	}
+	r_call.result = r_call.heap.false_value();
+	return Outcome::Ok;
+}
+
+vh_handle MintHandle(void *, const char *, int32_t) {
+	return 77;
+}
+
+const char *MirroredName(std::string_view) {
+	return "Node2D";
+}
+
+// What the collector cases share: a Runtime whose procedures are pinned the way a loaded program's
+// are, so the only unrooted cells are the ones a case means to drop. `inst` is an immutable
+// [event, counter variable] pair, the shape an instance's fields give a method.
+struct GcRig {
+	Runtime runtime;
+	Heap &heap = runtime.heap;
+	Interpreter &interpreter = runtime.interpreter;
+	Value no = heap.false_value();
+	Value log;
+	Value churn;
+	Value await;
+	Value signal;
+	Value sleep;
+	Value listener;
+	Value napper;
+	Value fire;
+	Value read;
+
+	GcRig() {
+		using vbc::VbcOp;
+		const uint32_t none = kAbsentOperand;
+		interpreter.clock = &FakeClock;
+		log = Pin(NativeFunction(heap, "Log", 1, &LogNative));
+		churn = Pin(NativeFunction(heap, "Churn", 0, &ChurnNative));
+		await = Pin(NativeProcedure(heap, "(/Verse.org/Verse/event/Await:)Native", 0));
+		signal = Pin(NativeProcedure(heap, "(/Verse.org/Verse/event/(/Verse.org/Verse/signalable:)Signal(:payload):)Native", 1));
+		sleep = Pin(NativeFunction(heap, "Sleep", 1, native_implementation("(/Godot.org/Godot/Sleep(:float):)Native")));
+
+		// Listener(Inst): loop { V := Inst[0].Await(); Inst[1] += V; Log(Inst[1]) }.
+		Asm body(heap, "Listener", 9, 1);
+		for (uint32_t reg = 3; reg <= 8; ++reg) {
+			body.Op(VbcOp::ResetNonTrailed, { W(reg), W(0) });
+		}
+		body.Op(VbcOp::Call, { W(3), W(R(2)), L({ body.K(Int(heap, 0)) }), L({}), L({}), W(0) });
+		body.Op(VbcOp::CallWithSelf, { W(4), W(body.K(await)), W(R(3)), L({}), L({}), L({}), W(1) });
+		body.Op(VbcOp::Call, { W(5), W(R(2)), L({ body.K(Int(heap, 1)) }), L({}), L({}), W(0) });
+		body.Op(VbcOp::RefGet, { W(6), W(R(5)) });
+		body.Op(VbcOp::Add, { W(7), W(R(6)), W(R(4)) });
+		body.Op(VbcOp::RefSet, { W(R(5)), W(R(7)) });
+		body.Op(VbcOp::Call, { W(8), W(body.K(log)), L({ R(7) }), L({}), L({}), W(0) });
+		body.Op(VbcOp::Jump, { W(0) });
+		listener = Starter(body.Function(no));
+
+		// Napper(Inst): Sleep(1.0); Inst[1] += 100; Log(Inst[1]).
+		Asm nap(heap, "Napper", 8, 1);
+		nap.Op(VbcOp::Call, { W(3), W(nap.K(sleep)), L({ nap.K(F(1.0)) }), L({}), L({}), W(1) });
+		nap.Op(VbcOp::Call, { W(4), W(R(2)), L({ nap.K(Int(heap, 1)) }), L({}), L({}), W(0) });
+		nap.Op(VbcOp::RefGet, { W(5), W(R(4)) });
+		nap.Op(VbcOp::Add, { W(6), W(R(5)), W(nap.K(Int(heap, 100))) });
+		nap.Op(VbcOp::RefSet, { W(R(4)), W(R(6)) });
+		nap.Op(VbcOp::Call, { W(7), W(nap.K(log)), L({ R(6) }), L({}), L({}), W(0) });
+		nap.Op(VbcOp::EndTask, { W(none), W(none), W(nap.K(no)), W(none), W(none) });
+		napper = Starter(nap.Function(no));
+
+		// Fire(Inst, V): Churn(); Inst[0].Signal(V).
+		Asm fires(heap, "Fire", 7, 2);
+		fires.Op(VbcOp::Call, { W(6), W(fires.K(churn)), L({}), L({}), L({}), W(0) });
+		fires.Op(VbcOp::Call, { W(4), W(R(2)), L({ fires.K(Int(heap, 0)) }), L({}), L({}), W(0) });
+		fires.Op(VbcOp::CallWithSelf, { W(5), W(fires.K(signal)), W(R(4)), L({ R(3) }), L({}), L({}), W(0) });
+		fires.Op(VbcOp::Return, { W(fires.K(no)) });
+		fire = Pin(fires.Function(no));
+
+		// Read(Inst): Log(Inst[1]).
+		Asm reads(heap, "Read", 6, 1);
+		reads.Op(VbcOp::Call, { W(3), W(R(2)), L({ reads.K(Int(heap, 1)) }), L({}), L({}), W(0) });
+		reads.Op(VbcOp::RefGet, { W(4), W(R(3)) });
+		reads.Op(VbcOp::Call, { W(5), W(reads.K(log)), L({ R(4) }), L({}), L({}), W(0) });
+		reads.Op(VbcOp::Return, { W(reads.K(no)) });
+		read = Pin(reads.Function(no));
+	}
+
+	Value Pin(Value p_value) {
+		heap.add_permanent_root(p_value);
+		return p_value;
+	}
+
+	// Spawn(Inst): answers the task running p_body(Inst).
+	Value Starter(Value p_body) {
+		using vbc::VbcOp;
+		Asm code(heap, "Spawn", 4, 1);
+		code.Op(VbcOp::CallTask, { W(3), W(kAbsentOperand), W(code.K(p_body)), L({ R(2) }) });
+		code.Op(VbcOp::Return, { W(R(3)) });
+		return Pin(code.Function(no));
+	}
+
+	Value Inst(ObjectCell *p_event, RefCell *p_counter) {
+		return Arr(heap, { Value::from_cell(p_event), Value::from_cell(p_counter) });
+	}
+
+	// A call into p_scope, as vh_instance_call makes one; p_scope null is no scope at all.
+	Value Enter(Value p_function, std::vector<Value> p_arguments, Value *p_scope = nullptr) {
+		if (p_scope != nullptr) {
+			runtime.activate_scope(*p_scope);
+		}
+		interpreter.begin_entry();
+		Value result;
+		const Outcome outcome = interpreter.invoke(p_function, Value::uninitialized(), p_arguments, {}, result);
+		interpreter.end_entry(outcome == Outcome::Ok || outcome == Outcome::Yield);
+		interpreter.active_scope = nullptr;
+		return outcome == Outcome::Ok ? result : Value();
+	}
+};
+
+// Design §7.3: each root kind keeps what it holds, and nothing else is kept.
+void CollectorCases(Cases &r_cases) {
+	using vbc::VbcOp;
+	g_log.clear();
+	g_now = 0.0;
+	{
+		GcRig rig;
+		Value scope;
+		rig.heap.add_handle_root(&scope);
+		ObjectCell *event = rig.heap.make<ObjectCell>();
+		RefCell *counter = rig.heap.make<RefCell>(Int(rig.heap, 0));
+		const Value task = rig.Enter(rig.listener, { rig.Inst(event, counter) }, &scope);
+		const bool suspended = is_cell_kind(task, CellKind::Task) && cell_as<TaskCell>(task)->resume_frame != nullptr;
+		const FrameCell *frame = suspended ? cell_as<TaskCell>(task)->resume_frame : nullptr;
+		rig.Enter(rig.churn, {});
+		const size_t freed = rig.heap.collect();
+		const bool kept = rig.heap.owns(task.as_cell()) && rig.heap.owns(frame) && rig.heap.owns(event) && rig.heap.owns(counter);
+		rig.Enter(rig.fire, { rig.Inst(event, counter), Int(rig.heap, 5) });
+		r_cases.check("gc: a suspended task held only by its content scope's group keeps its frame and what the frame holds; the rest is freed",
+				suspended && freed >= 400 && kept && Logged({ 5 }));
+
+		ObjectCell *lost_event = rig.heap.make<ObjectCell>();
+		const Value lost = rig.Enter(rig.listener, { rig.Inst(lost_event, rig.heap.make<RefCell>(Int(rig.heap, 0))) });
+		rig.heap.collect();
+		r_cases.check("gc: a suspended task in no group, awaiting an event nothing reaches, is collected with the event",
+				is_cell_kind(lost, CellKind::Task) && !rig.heap.owns(lost.as_cell()) && !rig.heap.owns(lost_event));
+	}
+	{
+		GcRig rig;
+		RefCell *counter = rig.heap.make<RefCell>(Int(rig.heap, 7));
+		const Value task = rig.Enter(rig.napper, { rig.Inst(rig.heap.make<ObjectCell>(), counter) });
+		rig.heap.collect();
+		const bool kept = is_cell_kind(task, CellKind::Task) && rig.heap.owns(task.as_cell()) && rig.heap.owns(counter) && rig.interpreter.sleepers.size() == 1;
+		g_now = 2.0;
+		vh_tick_stats stats = {};
+		rig.runtime.tick(stats);
+		r_cases.check("gc: a sleeper, reached only from the sleeper list, survives and wakes with its frame", kept && stats.JobsRun == 1 && Logged({ 107 }));
+		g_now = 0.0;
+	}
+	{
+		GcRig rig;
+		const uint32_t none = kAbsentOperand;
+		// await{Ref > 2}; Log 71 -- the compiled shape AwaitEventSleepCases describes.
+		Asm awaiter(rig.heap, "Awaiter", 6, 1);
+		awaiter.Op(VbcOp::BeginAwait, {});
+		awaiter.Op(VbcOp::BeginFailureContext, { W(9), W(0) });
+		awaiter.Op(VbcOp::ResetNonTrailed, { W(3), W(0) });
+		awaiter.Op(VbcOp::RefGet, { W(3), W(R(2)) });
+		awaiter.Op(VbcOp::ResetNonTrailed, { W(4), W(0) });
+		awaiter.Op(VbcOp::Gt, { W(4), W(R(3)), W(awaiter.K(Int(rig.heap, 2))) });
+		awaiter.Op(VbcOp::AwaitSuccess, {});
+		awaiter.Op(VbcOp::EndFailureContext, { W(11), W(0) });
+		awaiter.Op(VbcOp::Jump, { W(11) });
+		awaiter.Op(VbcOp::EndAwait, {});
+		awaiter.Op(VbcOp::Yield, { W(1) });
+		awaiter.Op(VbcOp::Call, { W(5), W(awaiter.K(rig.log)), L({ awaiter.K(Int(rig.heap, 71)) }), L({}), L({}), W(0) });
+		awaiter.Op(VbcOp::EndTask, { W(none), W(none), W(awaiter.K(rig.no)), W(none), W(none) });
+		Asm vars(rig.heap, "AwaitVars", 4, 0);
+		vars.Op(VbcOp::NewRef, { W(2), W(none) });
+		vars.Op(VbcOp::RefSet, { W(R(2)), W(vars.K(Int(rig.heap, 0))) });
+		vars.Op(VbcOp::CallTask, { W(3), W(none), W(vars.K(awaiter.Function(rig.no))), L({ R(2) }) });
+		vars.Op(VbcOp::Return, { W(R(2)) });
+		Asm write(rig.heap, "Write", 4, 2);
+		write.Op(VbcOp::RefSet, { W(R(2)), W(R(3)) });
+		write.Op(VbcOp::Return, { W(write.K(rig.no)) });
+		const Value write_fn = rig.Pin(write.Function(rig.no));
+		Value variable = rig.Enter(rig.Pin(vars.Function(rig.no)), {});
+		rig.heap.add_handle_root(&variable);
+		const bool registered = is_cell_kind(variable, CellKind::Ref) && cell_as<RefCell>(variable)->awaiting.size() == 1;
+		const TaskCell *task = registered ? cell_as<RefCell>(variable)->awaiting[0].task : nullptr;
+		const FrameCell *frame = registered ? cell_as<RefCell>(variable)->awaiting[0].frame : nullptr;
+		rig.heap.collect();
+		const bool kept = registered && rig.heap.owns(task) && rig.heap.owns(frame);
+		rig.Enter(write_fn, { variable, Int(rig.heap, 3) });
+		r_cases.check("gc: a task reached only through an await registration survives, and the write it waits for resumes it", kept && Logged({ 71 }));
+		rig.heap.remove_handle_root(&variable);
+	}
+	{
+		GcRig rig;
+		Value object;
+		Value scope;
+		rig.heap.add_handle_root(&object);
+		rig.heap.add_handle_root(&scope);
+		ObjectCell *instance = rig.heap.make<ObjectCell>();
+		object = Value::from_cell(instance);
+		ObjectCell *event = rig.heap.make<ObjectCell>();
+		RefCell *counter = rig.heap.make<RefCell>(Int(rig.heap, 0));
+		const Value fields = rig.Inst(event, counter);
+		instance->field_values.push_back(fields);
+		const Value task = rig.Enter(rig.listener, { fields }, &scope);
+		rig.heap.collect();
+		const bool held = rig.heap.owns(instance) && rig.heap.owns(task.as_cell()) && rig.heap.owns(fields.as_cell());
+		rig.interpreter.terminate_scope(cell_as<ContentScopeCell>(scope));
+		rig.heap.remove_handle_root(&object);
+		rig.heap.remove_handle_root(&scope);
+		rig.heap.collect();
+		r_cases.check("gc: a released instance -- both handle roots dropped, its scope terminated -- is collected with its tasks and fields",
+				held && !rig.heap.owns(instance) && !rig.heap.owns(task.as_cell()) && !rig.heap.owns(fields.as_cell()) && !rig.heap.owns(event) &&
+						!rig.heap.owns(counter));
+	}
+	{
+		GcRig rig;
+		rig.interpreter.godot.ReleaseRef = &CaptureReleaseRef;
+		g_released_refs.clear();
+		Value wrapper = Value::from_cell(rig.heap.make<ObjectCell>());
+		RootScope root(rig.heap, &wrapper);
+		rig.interpreter.adopt_ref(wrapper.as_cell(), 42);
+		rig.interpreter.adopt_ref(rig.heap.make<ObjectCell>(), 0);
+		rig.heap.collect();
+		const bool held = g_released_refs.empty() && rig.interpreter.adopted_refs.size() == 1;
+		wrapper = Value();
+		rig.heap.collect();
+		rig.heap.collect();
+		r_cases.check("godot-natives §3.2: a collected godot_ref hands its id to ReleaseRef exactly once; a live one and Ref 0 release nothing",
+				held && g_released_refs == std::vector<int64_t>{ 42 } && rig.interpreter.adopted_refs.empty());
+	}
+	{
+		GcRig rig;
+		ClassCell *node2d = MakeClass(rig.heap, ClassKind::Class, {}, {});
+		rig.Pin(Value::from_cell(node2d));
+		rig.runtime.program.classes.push_back(ClassIndexEntry{ ClassOrigin::Mirrored, rig.heap.intern("node2d"), node2d });
+		rig.runtime.program.classes_by_cell.emplace(node2d, 0);
+		rig.interpreter.mirrored_godot_name = &MirroredName;
+		rig.interpreter.godot.InstantiateClass = &MintHandle;
+		rig.interpreter.godot.ReleaseObject = &CaptureRelease;
+		const NativeFn adopt_or_mint = native_implementation("(/Godot.org/Godot/(/Godot.org/Godot:)VhAdoptOrMint(:(/Godot.org/Godot:)vh_object):)Native");
+		const auto Peer = [&](ObjectCell *p_object) {
+			const Value self = Value::from_cell(p_object);
+			NativeCall call(rig.heap);
+			call.interpreter = &rig.interpreter;
+			call.arguments = &self;
+			call.argument_count = 1;
+			rig.interpreter.begin_entry();
+			const Outcome outcome = adopt_or_mint(call);
+			rig.interpreter.end_entry(outcome == Outcome::Ok);
+			return outcome == Outcome::Ok ? int_value(call.result).to_int64() : -1;
+		};
+		ObjectCell *minted = rig.heap.make<ObjectCell>();
+		minted->object_class = node2d;
+		ObjectCell *adopted = rig.heap.make<ObjectCell>();
+		adopted->object_class = node2d;
+		rig.interpreter.adopting_object = adopted;
+		rig.interpreter.adopting_handle = 5;
+		const int64_t adopted_handle = Peer(adopted);
+		const int64_t minted_handle = Peer(minted);
+		Value held = Value::from_cell(minted);
+		RootScope root(rig.heap, &held);
+		g_released.clear();
+		rig.heap.collect();
+		const bool live = g_released.empty() && rig.interpreter.minted_peers.count(77) == 1 && !rig.heap.owns(adopted);
+		r_cases.check("godot-natives §4.4: an adopted peer's object is collected and releases nothing -- the scene owns it", adopted_handle == 5 && live);
+		held = Value();
+		rig.heap.collect();
+		r_cases.check("godot-natives §4.4: a collected minting object removes its row and calls ReleaseObject once, not as a discard",
+				minted_handle == 77 && g_released == std::vector<std::pair<int64_t, int>>{ { 77, 0 } } && rig.interpreter.minted_peers.empty());
+	}
+	{
+		GcRig rig;
+		rig.interpreter.begin_entry();
+		const bool refused = !rig.runtime.collect_garbage();
+		rig.interpreter.end_entry(true);
+		r_cases.check("design §7.3: no collection while an entry is running; one outside it collects", refused && rig.runtime.collect_garbage());
+		rig.heap.min_collect_trigger = 100;
+		const size_t before = rig.heap.collection_count();
+		vh_tick_stats stats = {};
+		rig.runtime.tick(stats);
+		const bool idle = rig.heap.collection_count() == before;
+		rig.Enter(rig.churn, {});
+		rig.Enter(rig.churn, {});
+		rig.runtime.tick(stats);
+		r_cases.check("design §7.3: vh_tick collects once enough has been allocated since the last collection, and not before",
+				idle && rig.heap.collection_count() == before + 1);
+	}
+	{
+		GcRig rig;
+		// Wrapper() = CanCallerAccessEpicInternal_Impl(); Caller() = Wrapper(); Outer() = Caller().
+		const Value impl = rig.Pin(NativeFunction(rig.heap, "(/Verse.org/Verse:)CanCallerAccessEpicInternal_Impl", 0,
+				native_implementation("(/Verse.org/Verse/(/Verse.org/Verse:)CanCallerAccessEpicInternal_Impl:)Native")));
+		const auto Calls = [&](const char *p_name, Value p_callee, uint32_t p_flags) {
+			Asm code(rig.heap, p_name, 3, 0);
+			code.procedure->flags = p_flags;
+			code.Op(VbcOp::Call, { W(2), W(code.K(p_callee)), L({}), L({}), L({}), W(0) });
+			code.Op(VbcOp::Return, { W(R(2)) });
+			return rig.Pin(code.Function(rig.no));
+		};
+		const Value wrapper = Calls("CanCallerAccessEpicInternal", impl, 1);
+		const Value caller = Calls("Caller", wrapper, 1);
+		const auto Answer = [&](Value p_function) {
+			const Value result = rig.Enter(p_function, {});
+			return is_cell_kind(result, CellKind::True) ? "true" : is_cell_kind(result, CellKind::False) ? "false" : "?";
+		};
+		r_cases.check("natives §5.9: the frame three up from the native decides -- the entry's native code may, a procedure by its flag",
+				std::string(Answer(caller)) == "true" && std::string(Answer(Calls("Plain", caller, 0))) == "false" &&
+						std::string(Answer(Calls("Internal", caller, 1))) == "true");
+		r_cases.check("natives §5.9: with no frame three up, the answer is false", std::string(Answer(wrapper)) == "false");
+	}
+	{
+		GcRig rig;
+		const NativeFn epoch = native_implementation("(/Verse.org/Verse/(/Verse.org/Verse:)GetSecondsSinceEpoch:)Native");
+		const NativeFn random_int = native_implementation("(/Verse.org/Random/(/Verse.org/Random:)GetRandomInt(:int,:int):)Native");
+		NativeCall first(rig.heap);
+		first.interpreter = &rig.interpreter;
+		NativeCall second(rig.heap);
+		second.interpreter = &rig.interpreter;
+		NativeCall bare(rig.heap);
+		r_cases.check("natives §5.6: GetSecondsSinceEpoch answers the runtime's one sample, every call",
+				epoch(first) == Outcome::Ok && epoch(second) == Outcome::Ok && first.result.same(second.result) &&
+						first.result.as_float() == rig.interpreter.epoch_seconds && epoch(bare) == Outcome::Invalid);
+		std::mt19937_64 expected = rig.interpreter.random;
+		const Value bounds[] = { Int(rig.heap, 0), Int(rig.heap, 1023) };
+		NativeCall draw(rig.heap);
+		draw.interpreter = &rig.interpreter;
+		draw.arguments = bounds;
+		draw.argument_count = 2;
+		r_cases.check("natives §6: GetRandomInt draws from the runtime's own generator",
+				random_int(draw) == Outcome::Ok && int_value(draw.result).to_int64() == int64_t(expected() & 1023));
+	}
+}
+
+// The conformance workload's shape -- a listener task, a sleeper, signals, churn -- run with a full
+// collection after every entry and without one. The two logs must agree.
+std::vector<int64_t> GcWorkload(bool p_collect) {
+	GcRig rig;
+	rig.heap.min_collect_trigger = p_collect ? 1 : SIZE_MAX;
+	g_log.clear();
+	g_now = 0.0;
+	Value scope;
+	Value inst;
+	rig.heap.add_handle_root(&scope);
+	rig.heap.add_handle_root(&inst);
+	inst = rig.Inst(rig.heap.make<ObjectCell>(), rig.heap.make<RefCell>(Int(rig.heap, 0)));
+	const auto Entry = [&](Value p_function, std::vector<Value> p_arguments) {
+		rig.Enter(p_function, p_arguments, &scope);
+		if (p_collect) {
+			rig.runtime.collect_garbage();
+		}
+	};
+	Entry(rig.listener, { inst });
+	Entry(rig.napper, { inst });
+	for (int64_t value = 1; value <= 5; ++value) {
+		Entry(rig.fire, { inst, Int(rig.heap, value) });
+		Entry(rig.churn, {});
+	}
+	g_now = 2.0;
+	vh_tick_stats stats = {};
+	rig.runtime.tick(stats);
+	Entry(rig.fire, { inst, Int(rig.heap, 10) });
+	Entry(rig.read, { inst });
+	g_now = 0.0;
+	std::vector<int64_t> logged;
+	logged.swap(g_log);
+	if (p_collect) {
+		logged.push_back(int64_t(rig.heap.collection_count() >= 14 ? 1 : 0));
+	}
+	return logged;
+}
+
+void CollectorStressCases(Cases &r_cases) {
+	const std::vector<int64_t> plain = GcWorkload(false);
+	std::vector<int64_t> stressed = GcWorkload(true);
+	const bool collected = !stressed.empty() && stressed.back() == 1;
+	if (!stressed.empty()) {
+		stressed.pop_back();
+	}
+	r_cases.check("gc stress: a workload collecting after every entry and at every tick logs what it logs with no collection",
+			collected && plain == stressed && plain == std::vector<int64_t>{ 1, 3, 6, 10, 15, 115, 125, 125 });
+}
+
 bool RunInterpreterCases() {
 	Cases cases;
 	CallCases(cases);
@@ -3137,6 +3532,8 @@ bool RunInterpreterCases() {
 	StructConstantCases(cases);
 	TaskCases(cases);
 	AwaitEventSleepCases(cases);
+	CollectorCases(cases);
+	CollectorStressCases(cases);
 	return cases.all_ok;
 }
 
@@ -3187,11 +3584,48 @@ int DumpProgram(const char *p_path, const char *p_procedure) {
 	return 0;
 }
 
+// `verse_vm_test --gc-bench <program.vbc>`: what a full collection costs over a real cook, idle and
+// after a burst of garbage -- the numbers Heap::min_collect_trigger was chosen from.
+int CollectorBench(const char *p_path) {
+	std::vector<uint8_t> bytes;
+	if (!vm_default_file_reader(p_path, bytes)) {
+		printf("cannot read %s\n", p_path);
+		return 1;
+	}
+	Heap heap;
+	Program program;
+	std::string error;
+	if (!load_program(heap, bytes.data(), bytes.size(), p_path, program, error)) {
+		printf("%s\n", error.c_str());
+		return 1;
+	}
+	const auto Timed = [&]() {
+		const double started = monotonic_seconds();
+		const size_t freed = heap.collect();
+		return std::make_pair(freed, (monotonic_seconds() - started) * 1000.0);
+	};
+	const auto first = Timed();
+	printf("first collection: %zu freed, %zu live, %.2f ms\n", first.first, heap.live_cell_count(), first.second);
+	const auto idle = Timed();
+	printf("idle collection: %zu freed, %.2f ms\n", idle.first, idle.second);
+	for (const size_t garbage : { size_t(16384), size_t(65536), size_t(262144) }) {
+		for (size_t index = 0; index < garbage; ++index) {
+			Str(heap, "garbage");
+		}
+		const auto burst = Timed();
+		printf("after %zu garbage cells: %zu freed, %.2f ms\n", garbage, burst.first, burst.second);
+	}
+	return 0;
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
 	if (argc >= 3 && std::strcmp(argv[1], "--vbc") == 0) {
 		return DumpProgram(argv[2], argc >= 4 ? argv[3] : nullptr);
+	}
+	if (argc >= 3 && std::strcmp(argv[1], "--gc-bench") == 0) {
+		return CollectorBench(argv[2]);
 	}
 	// Unbuffered, so a case that never returns is the line after the last one printed.
 	setvbuf(stdout, nullptr, _IONBF, 0);

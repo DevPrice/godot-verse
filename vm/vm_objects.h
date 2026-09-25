@@ -76,6 +76,11 @@ public:
 	// every other slot the class body's value, all of them created (§17, kind 26).
 	void lay_out_value_object(ObjectCell *r_object);
 
+	// Every layout is kept for the program's life, keyed by its class, so its class and what it
+	// copied out of the archetypes are roots: a class freed under a layout would hand its address,
+	// and so its layout, to the next class allocated there.
+	void visit_references(CellVisitor &r_visitor) const;
+
 private:
 	std::unordered_map<const ClassCell *, std::unique_ptr<ClassLayout>> layouts;
 };

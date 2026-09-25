@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <utility>
 
 #include "vbc_ops.gen.h"
@@ -148,7 +149,80 @@ std::string RaisedError::message_line() const {
 }
 
 Interpreter::Interpreter(Heap &r_heap, const Program &p_program) :
-		heap(r_heap), program(p_program), clock(&monotonic_seconds) {}
+		heap(r_heap),
+		program(p_program),
+		clock(&monotonic_seconds),
+		epoch_seconds(wall_clock_seconds()),
+		random(std::random_device{}()) {
+	heap.add_root_source(this);
+}
+
+Interpreter::~Interpreter() {
+	heap.remove_root_source(this);
+}
+
+void Interpreter::visit_roots(CellVisitor &r_visitor) const {
+	r_visitor.visit(frame);
+	r_visitor.visit(task);
+	r_visitor.visit(native_result);
+	r_visitor.visit(active_scope);
+	r_visitor.visit(raise_scope);
+	r_visitor.visit(adopting_object);
+	for (const Sleeper &sleeper : sleepers) {
+		r_visitor.visit(sleeper.task);
+	}
+	for (const RefCell *variable : batched) {
+		r_visitor.visit(variable);
+	}
+	for (const FailureContext &context : contexts) {
+		r_visitor.visit(context.frame);
+	}
+	layouts.visit_references(r_visitor);
+}
+
+// godot-natives.md §4.4: a row goes with the object recorded as having minted it, and nothing
+// else; an adopted object has no row, so the scene keeps what it owns.
+void Interpreter::sweep_weak() {
+	for (auto row = minted_peers.begin(); row != minted_peers.end();) {
+		if (row->second->marked) {
+			++row;
+			continue;
+		}
+		released_peers.push_back(row->first);
+		row = minted_peers.erase(row);
+	}
+	for (auto row = adopted_refs.begin(); row != adopted_refs.end();) {
+		if (row->first->marked) {
+			++row;
+			continue;
+		}
+		released_refs.push_back(row->second);
+		row = adopted_refs.erase(row);
+	}
+}
+
+void Interpreter::after_collect() {
+	std::vector<int64_t> peers;
+	peers.swap(released_peers);
+	std::vector<int64_t> refs;
+	refs.swap(released_refs);
+	for (int64_t handle : peers) {
+		if (godot.ReleaseObject != nullptr) {
+			godot.ReleaseObject(godot.Ctx, handle, 0);
+		}
+	}
+	for (int64_t ref : refs) {
+		if (godot.ReleaseRef != nullptr) {
+			godot.ReleaseRef(godot.Ctx, ref);
+		}
+	}
+}
+
+void Interpreter::adopt_ref(const Cell *p_object, int64_t p_ref) {
+	if (p_ref != 0) {
+		adopted_refs[p_object] = p_ref;
+	}
+}
 
 Interpreter::Registers Interpreter::save_registers() {
 	return Registers{ frame, pc, task, run_base };
@@ -410,23 +484,35 @@ void Interpreter::append_frames(const NativeProcedureCell *p_native) {
 		native.path = "[native]";
 		raised.frames.push_back(native);
 	}
-	// spec/failure.md §9.2: past the task's own frames into the task that started it, whose frame an
-	// inline task shares -- so a frame already listed ends the walk.
-	std::vector<const FrameCell *> listed;
+	std::vector<StackFrame> frames;
+	stack_frames(frames, SIZE_MAX);
+	for (const StackFrame &walked : frames) {
+		ErrorFrame entry;
+		entry.function = walked.frame->procedure->name != nullptr ? walked.frame->procedure->name->text : std::string();
+		entry.path = walked.frame->procedure->file;
+		entry.line = line_of(walked.frame->procedure, walked.op);
+		raised.frames.push_back(entry);
+	}
+}
+
+// spec/failure.md §9.2: past the task's own frames into the task that started it, whose frame an
+// inline task shares -- so a frame already listed ends the walk.
+void Interpreter::stack_frames(std::vector<StackFrame> &r_frames, size_t p_limit) const {
+	const size_t base = r_frames.size();
 	const TaskCell *owner = task;
 	uint32_t op = pc;
 	const FrameCell *current = frame;
 	while (current != nullptr) {
 		for (const FrameCell *walked = current; walked != nullptr; walked = walked->caller) {
-			if (std::find(listed.begin(), listed.end(), walked) != listed.end()) {
+			if (r_frames.size() - base >= p_limit) {
 				return;
 			}
-			listed.push_back(walked);
-			ErrorFrame entry;
-			entry.function = walked->procedure->name != nullptr ? walked->procedure->name->text : std::string();
-			entry.path = walked->procedure->file;
-			entry.line = line_of(walked->procedure, op);
-			raised.frames.push_back(entry);
+			for (size_t index = base; index < r_frames.size(); ++index) {
+				if (r_frames[index].frame == walked) {
+					return;
+				}
+			}
+			r_frames.push_back(StackFrame{ walked, op });
 			op = walked->return_pc > 0 ? walked->return_pc - 1 : 0;
 		}
 		current = nullptr;

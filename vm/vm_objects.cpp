@@ -136,6 +136,17 @@ ObjectCell *Layouts::new_object(Heap &r_heap, const ClassLayout &p_layout) {
 	return object;
 }
 
+void Layouts::visit_references(CellVisitor &r_visitor) const {
+	for (const auto &entry : layouts) {
+		r_visitor.visit(entry.first);
+		for (const LayoutField &field : entry.second->fields) {
+			r_visitor.visit(field.name);
+			r_visitor.visit(field.value);
+			r_visitor.visit(field.type);
+		}
+	}
+}
+
 void Layouts::lay_out_value_object(ObjectCell *r_object) {
 	if (r_object->layout != nullptr || r_object->object_class == nullptr) {
 		return;

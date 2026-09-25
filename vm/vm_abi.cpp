@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -111,6 +112,28 @@ vh_init_desc copy_descriptor(const vh_init_desc &p_desc) {
 	return copy;
 }
 
+bool gc_stress_requested() {
+	const char *const name = "VERSE_VM_GC_STRESS";
+#ifdef _MSC_VER
+	char *value = nullptr;
+	size_t length = 0;
+	const bool set = _dupenv_s(&value, &length, name) == 0 && value != nullptr && value[0] != '\0' && value[0] != '0';
+	std::free(value);
+	return set;
+#else
+	const char *value = std::getenv(name);
+	return value != nullptr && value[0] != '\0' && value[0] != '0';
+#endif
+}
+
+// The stress mode's collection after an entry the host made. A nested entry -- Godot calling back
+// in from inside a native -- is still inside the outer one, which collect_garbage declines.
+void collect_after_entry() {
+	if (g_runtime->gc_stress) {
+		g_runtime->collect_garbage();
+	}
+}
+
 } // namespace
 
 int32_t vh_abi_version(void) {
@@ -138,6 +161,7 @@ int32_t vh_init(const vh_init_desc *Desc) {
 	runtime->diagnostic_ctx = desc.DiagnosticCtx;
 	runtime->on_runtime_error = desc.OnRuntimeError;
 	runtime->runtime_error_ctx = desc.RuntimeErrorCtx;
+	runtime->gc_stress = gc_stress_requested();
 
 	std::string error;
 	int32_t status = VH_ERR_INIT;
@@ -181,6 +205,9 @@ void vh_tick(double BudgetSeconds, vh_tick_stats *OutStats) {
 }
 
 void vh_collect_garbage(void) {
+	if (g_runtime != nullptr) {
+		g_runtime->collect_garbage();
+	}
 }
 
 int32_t vh_set_bindings(const char *SourceUtf8, int32_t SourceLen, const vh_binding_class *Classes, int32_t ClassCount) {
@@ -259,12 +286,14 @@ int32_t vh_instantiate(const char *ClassNameUtf8, vh_handle Handle, vh_instance 
 		g_runtime->heap.remove_handle_root(&instance->object);
 		g_runtime->heap.remove_handle_root(&instance->scope);
 		delete instance;
+		collect_after_entry();
 		return status;
 	}
 	instance->handle = Handle;
 	instance->sidecar_class = g_runtime->sidecar.find_class(ClassNameUtf8);
 	g_runtime->instance_scopes.push_back(&instance->scope);
 	*OutInstance = instance;
+	collect_after_entry();
 	return VH_OK;
 }
 
@@ -386,11 +415,14 @@ int32_t vh_instance_call(vh_instance *Instance, const char *DecoratedName, const
 			raised.error.description = "An internal runtime error occurred. There is no other information available.";
 			raised.error.message = std::string("The result of ") + DecoratedName + " could not be handed to the host: " + why + ".";
 			g_runtime->report_raised(raised);
+			collect_after_entry();
 			return VH_ERR_RUNTIME;
 		}
 		*OutResult = wire;
 	}
-	return entry_status(outcome);
+	const int32_t status = entry_status(outcome);
+	collect_after_entry();
+	return status;
 }
 
 int32_t vh_callback_invoke(int64_t CallbackId, const vh_value *Args, int32_t ArgCount, vh_arena *Arena, vh_value *OutResult) {

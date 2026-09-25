@@ -105,6 +105,10 @@ double monotonic_seconds() {
 	return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
+double wall_clock_seconds() {
+	return std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
 TaskCell *Interpreter::new_task(TaskCell *p_parent) {
 	TaskCell *created = heap.make<TaskCell>();
 	created->parent = p_parent;
