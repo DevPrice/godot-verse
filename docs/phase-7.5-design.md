@@ -41,10 +41,11 @@ Consequences of W-1 that are accepted rather than solved:
              │ (unchanged: CompileProject)                       verse_classes.json │ vm/ (clean room)
              └─ NEW: VbcWriter walks the linked program ──────►                     │   loader, heap, GC,
                 (dirty room, host/Private/HostVbc*.cpp)                             │   interpreter, tasks,
-                                                                                    │   stdlib natives
-                                                                                    └─ src/verse_vm_host.cpp
-                                                                                        vh_* over vm/, and
-                                                                                        the 46 Godot natives
+                                                                                    │   stdlib natives,
+                                                                                    │   vh_* and the 46
+                                                                                    │   Godot natives
+                                                                                    └─ src/: file bytes and
+                                                                                        backend selection
 ```
 
 Four pieces, three of them new:
@@ -57,13 +58,17 @@ Four pieces, three of them new:
    carries everything the class-describing reads need, and the declared types the VM erases.
 3. **`vm/`** (new, clean room). A godot-cpp-free C++20 library, in the tradition of the lexer and the
    module map: it loads a `.vbc`, owns a heap and a precise collector, interprets, runs tasks, and
-   implements the Verse-library natives. It knows nothing about Godot except through a native-binding
-   table its embedder fills.
-4. **`src/verse_vm_host.cpp`** (new, clean room). The runtime subset of the `vh_*` ABI implemented
-   over `vm/`, plus the 46 natives of `Godot.native.verse` implemented over the same
-   `vh_godot_api` callbacks the UE host uses. `VerseHostLibrary` gets a second way to fill its
-   function pointers: assigned directly instead of resolved with `GetProcAddress`. Nothing else in
-   `src/` changes for execution.
+   implements the Verse-library natives. It also implements the runtime subset of the `vh_*` ABI
+   and the 46 natives of `Godot.native.verse`, because both speak only plain C — the ABI header and
+   the `vh_godot_api` callbacks — and need nothing from godot-cpp. It builds two ways:
+   - **`bin/verse_vm.dll`**, exporting the `vh_*` functions. It is a drop-in for
+     `verse_host_runtime.dll`, so `tests/cooked_probe` runs against either **unchanged**, and the
+     differential harness (§10.2) is one probe binary pointed at two DLLs.
+   - **statically**, into the GDExtension, for the vm backend and for web.
+4. **`src/`** (small changes, clean room). `VerseHostLibrary` gets a second way to fill its function
+   pointers: assigned directly from `vm/`'s functions instead of resolved with `GetProcAddress`. The
+   one thing `vm/` cannot do for itself is read a file out of a `.pck`, so `src/` hands it a reader
+   over Godot's `FileAccess` before `vh_init`. Nothing else in `src/` changes for execution.
 
 ### 2.1 Why the seam is where it is
 
@@ -72,7 +77,7 @@ header's `_fn` typedefs. A statically linked implementation of the same C functi
 touching `verse_script_instance.cpp`, `verse_value.cpp`, `verse_callable.cpp` or anything else that
 marshals values. That buys the whole consumer half — `Variant` ⇄ `vh_value`, the reference table,
 script instances, placeholders, signals on the Godot side — for free, and it means a defect is either
-in `vm/`, in `verse_vm_host.cpp`, or in something the UE host shares, which is a short list.
+in `vm/` or in something the UE host shares, which is a short list.
 
 The runtime subset is exactly what a `WITH_VERSE_COMPILER=0` host answers today: the 21 execution
 and class-describing entry points. The 12 compiler entry points answer `VH_ERR_UNSUPPORTED`, as
@@ -91,7 +96,7 @@ The wall, as chosen:
 | Room | Who | May read | Writes |
 | --- | --- | --- | --- |
 | Dirty | cooker-writer agents, spec agents | anything, VerseVM's `.cpp` files included | `host/Private/HostVbc*`, `docs/web-vm/spec/`, `docs/web-vm/ops.json` |
-| Clean | interpreter agents | `docs/web-vm/`, this repo's `src/`, `vm/`, `include/`, `host/Verse/*.verse`, `docs/` | `vm/`, `src/verse_vm_*`, `tests/vm_*` |
+| Clean | interpreter agents | the **reviewed** files of `docs/web-vm/spec/`, the rest of `docs/`, this repo's `src/`, `vm/`, `include/`, `tests/`, `tools/` except `gen_vbc_writer.py`, `host/Verse/*.verse`, `host/Private/GodotMathLayout.gen.h` | `vm/`, `src/verse_vm_*`, `tests/vm_*`, `tools/*vm*`, `tools/*vbc*` |
 | Lead | me | everything a clean agent may, plus `host/` (our code); **no VerseVM source** | this document, the task list, reviews |
 
 Rules that make the wall real:
@@ -254,18 +259,19 @@ A task is a heap object holding its frame chain and resume point, so suspension 
 scheduler loop. `Sleep` resumes from `vh_tick` on a monotonic clock, as the UE host's does. `event(t)`
 resumes awaiters synchronously in FIFO order, as the spec will say.
 
-## 8. The Godot half: `src/verse_vm_host.cpp`
+## 8. The ABI half, in `vm/`
 
-- The 21 runtime entry points over `vm/`, with `vh_init` taking the cooked directory as today.
-- The class-describing reads served from the sidecar, reimplemented in `src/` against the JSON
-  (the UE host's reader is in `host/Private` and out of the clean room's bounds; `sidecar.md` is
-  what the clean room reads instead).
-- File access through Godot's `FileAccess`, so `verse_data` reads the same from a directory beside an
-  executable and from inside a `.pck`. `vm/` takes byte buffers and never opens a file.
+- The runtime entry points over the interpreter, with `vh_init` taking the cooked directory as today.
+- The class-describing reads served from the sidecar, reimplemented against the JSON (the UE host's
+  reader is in `host/Private` and out of the clean room's bounds; `sidecar.md` is what the clean
+  room reads instead).
 - The 46 Godot natives over `vh_godot_api`. `VariantFromWire`/`VariantToWire`'s lane rules are
   restated in the spec from `GodotMathLayout.gen.h`, which is generated and readable by both rooms.
+- Files are read through a reader the embedder may set before `vh_init`; the default uses the C
+  library. The DLL build uses the default. The GDExtension sets one over `FileAccess`, so
+  `verse_data` reads the same from a directory beside an executable and from inside a `.pck`.
 - `verse_host.cpp` gains a static path: when the build carries the VM and the backend is `vm`,
-  `VerseHostLibrary` is filled from `verse_vm_host`'s functions instead of a DLL.
+  `VerseHostLibrary` is filled from `vm/`'s functions instead of a DLL.
 
 ## 9. Choosing the backend
 
@@ -297,8 +303,8 @@ with a script that performs it (`tools/run_dtc_web.py`), and the exit bar is tha
 
 `tests/vm_conformance/` holds small `.verse` fixtures, one behaviour each, grouped by spec section.
 `tools/run_vm_conformance.py` cooks them once, runs every fixture's zero-argument methods on the UE
-runtime host (`cooked_probe`) and on the interpreter (`vm_probe`, a new instrument with the same
-stub Godot API), and diffs the printed transcripts. **A difference is a defect in one of them, and
+runtime host and on the interpreter — `tests/cooked_probe` pointed first at
+`verse_host_runtime.dll` and then at `verse_vm.dll` — and diffs the printed transcripts. **A difference is a defect in one of them, and
 the UE host is the reference.** This is the loop the clean room works in: it observes behaviour
 without reading source, and it turns every surprise into a fixture.
 
@@ -333,7 +339,7 @@ Each has an exit that a command checks. The task list, `docs/web-vm/tasks.md`, b
 | M0 | Web toolchain proven | A GDExtension built with the pinned Emscripten prints from `_ready` in a nothreads web export in headless Chrome, with no COOP/COEP headers. |
 | M1 | Spec and format | `ops.json` generated; every spec file written and reviewed; `format.md` written; the three facts of §6.1 measured. |
 | M2 | Cooker writes `.vbc` | The cooker writes `program.vbc` for `host_smoke`, `tests/integration` and `dodge-the-creeps`; `vbc_dump` reads all three; the park-risk report and the size are recorded. |
-| M3 | Sequential VM | `vm_probe` runs every non-concurrent conformance fixture identically to `cooked_probe`. |
+| M3 | Sequential VM | `cooked_probe` on `verse_vm.dll` prints the same transcript as on the UE runtime host for every non-concurrent conformance fixture. |
 | M4 | Concurrent VM | Tasks, `race`/`sync`/`rush`/`branch`/`spawn`, `defer`, events and `Sleep` fixtures agree. |
 | M5 | Windows export on the VM | The export layer passes on the vm backend with named counts. |
 | M6 | Web | The web layer passes with named counts, and `tools/run_dtc_web.py` passes. |

@@ -50,10 +50,10 @@ Status: `todo`, `doing`, `done`, `dropped` (with a reason).
 
 | ID | Task | Room / model | Depends | Check | Status |
 | --- | --- | --- | --- | --- | --- |
-| T3.0 | `tests/vm_conformance/` fixtures and `tools/run_vm_conformance.py`: cook once, run each fixture on `cooked_probe` and `vm_probe`, diff transcripts; records the UE host's transcripts as expected output | clean / sonnet | T2.1 | runs against `cooked_probe` alone and records every expected transcript | todo |
-| T3.1 | `vm/` skeleton, `tools/build_vm_probe.py`, `tools/build_vm_test.py`, the SCons component | clean / sonnet | T1.12 | both binaries build natively; `vm/` builds under `em++` | todo |
+| T3.0 | `tests/vm_conformance/` fixtures and `tools/run_vm_conformance.py`: cook once, run `tests/cooked_probe` on each fixture against `verse_host_runtime.dll` and against `verse_vm.dll`, diff transcripts; the UE host's transcripts are recorded as expected output | clean / sonnet | T2.1 | runs against the UE runtime host alone and records every expected transcript | todo |
+| T3.1 | `vm/` skeleton; `tools/build_verse_vm.py` (the DLL exporting `vh_*`); `tools/build_vm_test.py` (unit tests); the decoder tables generated from `ops.json` by `tools/gen_vbc_ops.py`; an `em++` compile of `vm/` | clean / sonnet | T1.12 | the DLL and the test binary build natively; `vm/` compiles under `em++`; `vh_abi_version` answers through `cooked_probe` | todo |
 | T3.2 | Values: ints with bignum and rational, floats and their printing, chars, strings, arrays, maps, options, equality | clean / opus | T1.3, T3.1 | `verse_vm_test` value cases pass | todo |
-| T3.3 | Loader: `.vbc` into cells, natives bound by name, missing natives reported | clean / sonnet | T3.1, T2.2 | `vm_probe --load-only` loads all three cooks | todo |
+| T3.3 | Loader and ABI shell: `.vbc` into cells, natives bound by name, unbound natives stand in and raise; the sidecar reader; `vh_init`, `vh_has_class`, `vh_class_method_list`, `vh_instantiate`, `vh_instance_call`, `vh_release_instance`; the `Print` native | clean / opus | T1.11, T3.1, T2.2 | `vh_init` loads all three cooks; `vh_class_method_list` answers what the UE runtime host answers for every `host_smoke` class | todo |
 | T3.4 | Interpreter core: moves, control flow, arithmetic, calls, closures, scopes, fast failure | clean / opus | T1.4, T3.2, T3.3 | the conformance fixtures for these pass | todo |
 | T3.5 | Failure contexts and the undo log; runtime errors unwind to entry | clean / opus | T1.5, T3.4 | failure fixtures pass; undo-log unit cases pass | todo |
 | T3.6 | Objects, classes, construction, fields, overrides, interfaces, module initialization | clean / opus | T1.6, T3.4 | object and module fixtures pass | todo |
@@ -78,8 +78,8 @@ Status: `todo`, `doing`, `done`, `dropped` (with a reason).
 
 | ID | Task | Room / model | Depends | Check | Status |
 | --- | --- | --- | --- | --- | --- |
-| T5.1 | `src/verse_vm_host.cpp`: the runtime `vh_*` subset over `vm/`, the sidecar reader, `FileAccess`-based loading | clean / opus | T1.11, M4 | a headless run of a one-script project on the vm backend prints from `_Ready` | todo |
-| T5.2 | The 46 Godot natives | clean / opus | T1.10, T5.1 | integration cases touching each native pass | todo |
+| T5.1 | The rest of the runtime `vh_*` subset in `vm/` (fields, callbacks, `vh_tick`, statics, exports, signals, garbage collection), and the file reader `src/` sets over `FileAccess` | clean / opus | T1.11, M4 | a headless run of a one-script project on the vm backend prints from `_Ready` | todo |
+| T5.2 | The other 45 Godot natives | clean / opus | T1.10, T5.1 | integration cases touching each native pass | todo |
 | T5.3 | Backend selection: `scons verse_vm=yes`, `verse/runtime/backend`, the static fill of `VerseHostLibrary` | clean / sonnet | T5.1 | both backends run from one release build | todo |
 | T5.4 | Export plugin: ships `program.vbc`; omits the host DLL and `tbbmalloc.dll` on the vm backend | clean / sonnet | T5.3 | an export on the vm backend has no DLL beside the executable | todo |
 | T5.5 | Export layer runs on both backends with named counts; fix until green | clean / opus | T5.2, T5.4 | `run_tests.py --only export` passes on both | todo |
