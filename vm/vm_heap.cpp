@@ -29,6 +29,44 @@ public:
 	}
 };
 
+// An allowlist, so a kind added later is remembered until someone shows it cannot change.
+bool is_immutable_after_creation(CellKind p_kind) {
+	switch (p_kind) {
+		case CellKind::False:
+		case CellKind::True:
+		case CellKind::BuiltinPackage:
+		case CellKind::Name:
+		case CellKind::Array:
+		case CellKind::Map:
+		case CellKind::Option:
+		case CellKind::HeapInt:
+		case CellKind::Rational:
+		case CellKind::Procedure:
+		case CellKind::NativeProcedure:
+		case CellKind::Function:
+		case CellKind::Scope:
+		case CellKind::Class:
+		case CellKind::Archetype:
+		case CellKind::AccessSpecifier:
+		case CellKind::Enumeration:
+		case CellKind::Enumerator:
+		case CellKind::Package:
+		case CellKind::Module:
+		case CellKind::IntType:
+		case CellKind::FloatType:
+		case CellKind::TupleType:
+		case CellKind::MapType:
+		case CellKind::SimpleType:
+		case CellKind::Accessor:
+		case CellKind::ArrayType:
+		case CellKind::OptionType:
+		case CellKind::PointerType:
+			return true;
+		default:
+			return false;
+	}
+}
+
 } // namespace
 
 Heap::Heap() {
@@ -53,6 +91,7 @@ const NameCell *Heap::intern(std::string_view p_text) {
 	}
 	const NameCell *name = make<NameCell>(key);
 	interned.emplace(std::move(key), name);
+	untenured_names.push_back(name);
 	return name;
 }
 
@@ -86,8 +125,11 @@ size_t Heap::collect() {
 	// Interned names are held strongly. Names compare by cell identity -- layouts, named arguments
 	// and the host's method lookup key on the pointer -- and every name is the program's own text or
 	// one of a handful a native asks for, so the table cannot grow with what a script does.
-	for (const auto &entry : interned) {
-		marker.visit(entry.second);
+	for (const NameCell *name : untenured_names) {
+		marker.visit(name);
+	}
+	for (const Cell *cell : remembered) {
+		cell->visit_references(marker);
 	}
 	for (Value root : permanent_roots) {
 		marker.visit(root);
@@ -108,7 +150,7 @@ size_t Heap::collect() {
 
 	size_t freed = 0;
 	Cell **link = &first_allocated;
-	while (*link != nullptr) {
+	while (*link != first_tenured) {
 		Cell *cell = *link;
 		if (cell->marked) {
 			cell->marked = false;
@@ -120,7 +162,7 @@ size_t Heap::collect() {
 		}
 	}
 	cell_count -= freed;
-	live_after_collect = cell_count;
+	live_after_collect = cell_count - tenured_count;
 	allocated_since_collect = 0;
 	++collections;
 	const std::vector<RootSource *> sources = root_sources;
@@ -128,6 +170,21 @@ size_t Heap::collect() {
 		source->after_collect();
 	}
 	return freed;
+}
+
+void Heap::tenure() {
+	collect();
+	for (Cell *cell = first_allocated; cell != first_tenured; cell = cell->next_allocated) {
+		cell->marked = true;
+		cell->tenured = true;
+		++tenured_count;
+		if (!is_immutable_after_creation(cell->kind)) {
+			remembered.push_back(cell);
+		}
+	}
+	first_tenured = first_allocated;
+	untenured_names.clear();
+	live_after_collect = 0;
 }
 
 } // namespace vm

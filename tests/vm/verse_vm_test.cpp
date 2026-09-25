@@ -1066,6 +1066,40 @@ void HeapCases(Cases &r_cases) {
 	r_cases.check("heap: collect frees the unreachable, cycles included, and keeps the rooted", freed == 102 && heap.live_cell_count() == before + 4 && Show(Index(kept, Int(heap, 0))) == "\"x\"");
 	heap.add_permanent_root(Value::from_cell(heap.intern("kept name")));
 	r_cases.check("heap: a second collect with nothing new frees nothing", heap.collect() == 0);
+
+	Heap tenured;
+	const Value program = Arr(tenured, { Str(tenured, "loaded"), make_option(tenured, Pow2(tenured, 40)) });
+	tenured.add_permanent_root(program);
+	const Value table = Arr(tenured, {}, true);
+	tenured.add_permanent_root(table);
+	ObjectCell *global = tenured.make<ObjectCell>();
+	tenured.add_permanent_root(Value::from_cell(global));
+	for (int i = 0; i < 10; ++i) {
+		Str(tenured, "garbage");
+	}
+	const size_t loaded = tenured.live_cell_count() - 10;
+	tenured.tenure();
+	r_cases.check("gc tenure: tenuring collects first, and every survivor is tenured; only the mutable array and the object are remembered",
+			tenured.live_cell_count() == loaded && tenured.tenured_cell_count() == loaded && tenured.remembered_cell_count() == 2 &&
+					program.as_cell()->tenured && program.as_cell()->marked);
+	for (int i = 0; i < 100; ++i) {
+		Str(tenured, "garbage");
+	}
+	r_cases.check("gc tenure: a collection frees exactly the garbage made since, and keeps the tenured program",
+			tenured.collect() == 100 && tenured.live_cell_count() == loaded && Show(Index(program, Int(tenured, 0))) == "\"loaded\"");
+	const Value in_table = Str(tenured, "in a tenured mutable array");
+	cell_as<ArrayCell>(table)->append(in_table);
+	const Value in_field = Str(tenured, "in a tenured object's field");
+	global->field_values.push_back(in_field);
+	const NameCell *late = tenured.intern("a name interned after tenure");
+	tenured.collect();
+	tenured.collect();
+	r_cases.check("gc tenure: an untenured cell reached only from a remembered tenured cell, or a name interned since, survives",
+			tenured.owns(in_table.as_cell()) && tenured.owns(in_field.as_cell()) && tenured.owns(late) &&
+					tenured.find_interned("a name interned after tenure") == late && !late->marked);
+	cell_as<ArrayCell>(table)->truncate(0);
+	global->field_values.clear();
+	r_cases.check("gc tenure: once the remembered cell lets go, the untenured cell is garbage again", tenured.collect() == 2);
 }
 
 bool RunValueCases() {
@@ -3469,11 +3503,53 @@ void CollectorCases(Cases &r_cases) {
 		r_cases.check("natives §6: GetRandomInt draws from the runtime's own generator",
 				random_int(draw) == Outcome::Ok && int_value(draw.result).to_int64() == int64_t(expected() & 1023));
 	}
+	{
+		GcRig rig;
+		ObjectCell *event = rig.heap.make<ObjectCell>();
+		RefCell *counter = rig.heap.make<RefCell>(Int(rig.heap, 0));
+		const Value inst = rig.Pin(rig.Inst(event, counter));
+		rig.heap.tenure();
+		g_log.clear();
+		const Value task = rig.Enter(rig.listener, { inst });
+		rig.Enter(rig.churn, {});
+		const size_t freed = rig.heap.collect();
+		const bool kept = is_cell_kind(task, CellKind::Task) && rig.heap.owns(task.as_cell()) && !task.as_cell()->tenured;
+		rig.Enter(rig.fire, { inst, Int(rig.heap, 4) });
+		r_cases.check("gc tenure: a task reached only through a tenured event's awaiters survives, and the event's Signal resumes it",
+				freed >= 400 && kept && Logged({ 4 }));
+	}
+	{
+		GcRig rig;
+		rig.interpreter.godot.ReleaseRef = &CaptureReleaseRef;
+		g_released_refs.clear();
+		ObjectCell *wrapper = rig.heap.make<ObjectCell>();
+		rig.Pin(Value::from_cell(wrapper));
+		rig.heap.tenure();
+		rig.interpreter.adopt_ref(wrapper, 8);
+		rig.heap.collect();
+		r_cases.check("gc tenure: a weak table's sweep reads a tenured cell as live", g_released_refs.empty() && rig.interpreter.adopted_refs.size() == 1);
+	}
+	{
+		auto rig = std::make_unique<GcRig>();
+		rig->interpreter.godot.ReleaseRef = &CaptureReleaseRef;
+		rig->interpreter.godot.ReleaseObject = &CaptureRelease;
+		g_released_refs.clear();
+		g_released.clear();
+		Value peer = Value::from_cell(rig->heap.make<ObjectCell>());
+		rig->heap.add_handle_root(&peer);
+		rig->interpreter.minted_peers[77] = peer.as_cell();
+		rig->interpreter.adopt_ref(peer.as_cell(), 9);
+		rig.reset();
+		r_cases.check("vh_shutdown: tearing the runtime down releases no peer and no ref the consumer has already dropped",
+				g_released.empty() && g_released_refs.empty());
+	}
 }
 
 // The conformance workload's shape -- a listener task, a sleeper, signals, churn -- run with a full
 // collection after every entry and without one. The two logs must agree.
-std::vector<int64_t> GcWorkload(bool p_collect) {
+// With p_tenure the instance -- its event and its variable -- is tenured with the procedures, so
+// everything the run hangs off them is reached only through the remembered set.
+std::vector<int64_t> GcWorkload(bool p_collect, bool p_tenure = false) {
 	GcRig rig;
 	rig.heap.min_collect_trigger = p_collect ? 1 : SIZE_MAX;
 	g_log.clear();
@@ -3483,6 +3559,9 @@ std::vector<int64_t> GcWorkload(bool p_collect) {
 	rig.heap.add_handle_root(&scope);
 	rig.heap.add_handle_root(&inst);
 	inst = rig.Inst(rig.heap.make<ObjectCell>(), rig.heap.make<RefCell>(Int(rig.heap, 0)));
+	if (p_tenure) {
+		rig.heap.tenure();
+	}
 	const auto Entry = [&](Value p_function, std::vector<Value> p_arguments) {
 		rig.Enter(p_function, p_arguments, &scope);
 		if (p_collect) {
@@ -3518,6 +3597,12 @@ void CollectorStressCases(Cases &r_cases) {
 	}
 	r_cases.check("gc stress: a workload collecting after every entry and at every tick logs what it logs with no collection",
 			collected && plain == stressed && plain == std::vector<int64_t>{ 1, 3, 6, 10, 15, 115, 125, 125 });
+	std::vector<int64_t> tenured = GcWorkload(true, true);
+	const bool tenured_collected = !tenured.empty() && tenured.back() == 1;
+	if (!tenured.empty()) {
+		tenured.pop_back();
+	}
+	r_cases.check("gc stress: the same workload over a tenured instance logs the same", tenured_collected && tenured == plain);
 }
 
 bool RunInterpreterCases() {
@@ -3584,8 +3669,9 @@ int DumpProgram(const char *p_path, const char *p_procedure) {
 	return 0;
 }
 
-// `verse_vm_test --gc-bench <program.vbc>`: what a full collection costs over a real cook, idle and
-// after a burst of garbage -- the numbers Heap::min_collect_trigger was chosen from.
+// `verse_vm_test --gc-bench <program.vbc>`: what a collection costs over a real cook, idle and after
+// a burst of garbage, with the program untenured and then tenured as Runtime::boot leaves it -- the
+// numbers Heap::min_collect_trigger was chosen from.
 int CollectorBench(const char *p_path) {
 	std::vector<uint8_t> bytes;
 	if (!vm_default_file_reader(p_path, bytes)) {
@@ -3604,17 +3690,25 @@ int CollectorBench(const char *p_path) {
 		const size_t freed = heap.collect();
 		return std::make_pair(freed, (monotonic_seconds() - started) * 1000.0);
 	};
+	const auto Bursts = [&](const char *p_label) {
+		const auto idle = Timed();
+		printf("%s: idle collection: %zu freed, %.2f ms\n", p_label, idle.first, idle.second);
+		for (const size_t garbage : { size_t(16384), size_t(65536), size_t(262144) }) {
+			for (size_t index = 0; index < garbage; ++index) {
+				Str(heap, "garbage");
+			}
+			const auto burst = Timed();
+			printf("%s: after %zu garbage cells: %zu freed, %.2f ms\n", p_label, garbage, burst.first, burst.second);
+		}
+	};
 	const auto first = Timed();
 	printf("first collection: %zu freed, %zu live, %.2f ms\n", first.first, heap.live_cell_count(), first.second);
-	const auto idle = Timed();
-	printf("idle collection: %zu freed, %.2f ms\n", idle.first, idle.second);
-	for (const size_t garbage : { size_t(16384), size_t(65536), size_t(262144) }) {
-		for (size_t index = 0; index < garbage; ++index) {
-			Str(heap, "garbage");
-		}
-		const auto burst = Timed();
-		printf("after %zu garbage cells: %zu freed, %.2f ms\n", garbage, burst.first, burst.second);
-	}
+	Bursts("untenured");
+	const double started = monotonic_seconds();
+	heap.tenure();
+	printf("tenure: %zu tenured, %zu remembered, %.2f ms\n", heap.tenured_cell_count(), heap.remembered_cell_count(),
+			(monotonic_seconds() - started) * 1000.0);
+	Bursts("tenured");
 	return 0;
 }
 

@@ -81,7 +81,9 @@ public:
 
 struct Cell {
 	CellKind kind;
+	// A tenured cell (Heap::tenure) reads marked from then on, so a weak table's sweep keeps it.
 	bool marked = false;
+	bool tenured = false;
 	Cell *next_allocated = nullptr;
 
 	explicit Cell(CellKind p_kind) :

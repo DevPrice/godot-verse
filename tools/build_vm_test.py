@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
-"""Compiles the vm/ unit tests with MSVC. No godot-cpp, no SCons, like the lexer test beside it."""
+"""Compiles the vm/ unit tests with MSVC. No godot-cpp, no SCons, like the lexer test beside it.
 
+    python tools/build_vm_test.py             # bin/verse_vm_test.exe, unoptimized
+    python tools/build_vm_test.py --release   # bin/verse_vm_test_release.exe, /O2
+"""
+
+import argparse
 import subprocess
 import sys
 from pathlib import Path
@@ -35,14 +40,25 @@ def find_vcvars64() -> Path:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--release",
+        action="store_true",
+        help="build bin/verse_vm_test_release.exe with /O2, for --gc-bench numbers an optimized build sees",
+    )
+    args = parser.parse_args()
+
     vcvars64 = find_vcvars64()
 
     repo = repo_root()
     vm_dir = repo / "vm"
     include_dir = repo / "include"
     test_src = repo / "tests" / "vm" / "verse_vm_test.cpp"
-    out_dir = repo / "bin"
-    out_exe = out_dir / "verse_vm_test.exe"
+    # The release objects get a directory of their own: both builds name every object after its
+    # source, and sharing bin/ would let one build link the other's.
+    out_dir = repo / "bin" / "vm_test_release" if args.release else repo / "bin"
+    out_exe = repo / "bin" / ("verse_vm_test_release.exe" if args.release else "verse_vm_test.exe")
+    optimize = "/O2 /DNDEBUG " if args.release else ""
 
     vm_sources = sorted(vm_dir.glob("*.cpp"))
     if not test_src.exists() or not vm_sources:
@@ -54,7 +70,7 @@ def main() -> None:
 
     cl_cmd = (
         f'call "{vcvars64}" && '
-        f'cl /std:c++20 /EHsc /Zi /I"{vm_dir}" /I"{include_dir}" {source_args} '
+        f'cl /std:c++20 /EHsc /Zi {optimize}/I"{vm_dir}" /I"{include_dir}" {source_args} '
         f'/Fe"{out_exe}" /Fo"{out_dir}\\\\"'
     )
     print(f"[build_vm_test] running: {cl_cmd}")

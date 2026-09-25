@@ -136,6 +136,7 @@ int32_t Runtime::boot(const std::string &p_cooked_dir, std::string &r_error) {
 	interpreter.bridge = &bridge;
 	bridge.bind_program();
 	bridge.report_error = [this](const std::string &p_message) { report_error(p_message); };
+	heap.tenure();
 	return VH_OK;
 }
 

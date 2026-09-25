@@ -205,6 +205,10 @@ int32_t vh_init(const vh_init_desc *Desc) {
 	return VH_OK;
 }
 
+// Frees the heap without a collection, so no ReleaseObject or ReleaseRef reaches the consumer for
+// a peer or ref still live. The consumer drops its whole ref table and minted-peer table before it
+// calls this (src/verse_runtime.cpp, unload_host) and answers a release naming either with nothing,
+// so a release here would be a callback per live object into a consumer tearing down, for no effect.
 void vh_shutdown(void) {
 	delete g_runtime;
 	g_runtime = nullptr;

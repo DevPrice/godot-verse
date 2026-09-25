@@ -138,6 +138,11 @@ ObjectCell *Layouts::new_object(Heap &r_heap, const ClassLayout &p_layout) {
 
 void Layouts::visit_references(CellVisitor &r_visitor) const {
 	for (const auto &entry : layouts) {
+		// Everything a layout holds is copied out of its class's archetypes, which a tenured class
+		// took into the tenured generation with it.
+		if (entry.first->tenured) {
+			continue;
+		}
 		r_visitor.visit(entry.first);
 		for (const LayoutField &field : entry.second->fields) {
 			r_visitor.visit(field.name);

@@ -71,27 +71,50 @@ public:
 	void remove_root_source(RootSource *p_source);
 
 	// Marks from every root and frees what was not reached. Answers the number of cells freed.
-	// Never call it mid-op: a Value held only in a C++ local is not a root.
+	// Never call it mid-op: a Value held only in a C++ local is not a root. A tenured cell is
+	// neither marked nor swept, so the cost is the untenured survivors plus the garbage.
 	size_t collect();
 
+	// Collects, then makes every surviving cell permanent: never marked, never swept, never freed
+	// before the heap is. For the loaded program (spec/modules.md §5: module data is immutable), so
+	// the cells it makes stop costing every collection a walk of the whole mirror.
+	//
+	// What makes skipping them sound is that a tenured cell can gain a reference to an untenured one
+	// only if it can change after load, and only a few kinds can: an object (a field, a hidden
+	// variable register_slot puts in one, the placeholder LoadField leaves in an empty slot, its
+	// native state), a mutable array or map, and the run-time kinds a tenure after boot may catch --
+	// a variable, a placeholder, a task, a frame, a content scope. Those stay in `remembered` and
+	// have their references visited at every collection; every other kind is written only by the
+	// loader or by the op that makes it (is_immutable_after_creation). Tenure outside an entry,
+	// with nothing on the undo log: a rolled-back freeze is the one write that makes an array
+	// mutable again.
+	void tenure();
+
 	// Whether enough has been allocated since the last collection to make another worth its cost:
-	// as many cells as survived it, and never fewer than `min_collect_trigger`. Collecting when the
-	// heap has doubled keeps the collector's share of the work constant however large the heap.
+	// as many cells as survived it untenured, and never fewer than `min_collect_trigger`.
+	// Collecting when the untenured heap has doubled keeps the collector's share of the work
+	// constant however large it grows.
 	bool wants_collection() const {
 		return allocated_since_collect >= (live_after_collect > min_collect_trigger ? live_after_collect : min_collect_trigger);
 	}
-	// Over the conformance cook's 169k live cells, an unoptimized build spends 14 ms on an idle
-	// collection and 19 ms on one after 65536 dead cells (`verse_vm_test --gc-bench`): marking the
-	// program dominates, so a floor well below the program's size would buy pauses and free little.
+	// With the conformance cook's 169k cells tenured, a collection costs what it frees: 65536 dead
+	// cells take about 2 ms unoptimized and 1.2 ms at /O2, an idle one 0.02 ms
+	// (`verse_vm_test --gc-bench`, docs/web-vm/measurements.md).
 	size_t min_collect_trigger = 65536;
 
 	size_t live_cell_count() const { return cell_count; }
+	size_t tenured_cell_count() const { return tenured_count; }
+	size_t remembered_cell_count() const { return remembered.size(); }
 	size_t collection_count() const { return collections; }
 	// Whether p_cell is a live cell of this heap. Walks every cell: for tests and assertions.
 	bool owns(const Cell *p_cell) const;
 
 private:
+	// Cells are listed newest first, so the tenured ones are the list's tail from first_tenured on.
 	Cell *first_allocated = nullptr;
+	Cell *first_tenured = nullptr;
+	size_t tenured_count = 0;
+	std::vector<const Cell *> remembered;
 	size_t cell_count = 0;
 	size_t allocated_since_collect = 0;
 	size_t live_after_collect = 0;
@@ -100,6 +123,8 @@ private:
 	LogicCell *false_cell = nullptr;
 	LogicCell *true_cell = nullptr;
 	std::unordered_map<std::string, const NameCell *> interned;
+	// The names interned since the last tenure: only these need marking.
+	std::vector<const NameCell *> untenured_names;
 	std::vector<const Value *> root_slots;
 	std::vector<Value> permanent_roots;
 	std::unordered_set<const Value *> handle_roots;
