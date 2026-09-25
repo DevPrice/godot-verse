@@ -1,0 +1,27 @@
+#pragma once
+
+#include <cstdint>
+#include <string>
+
+namespace vm {
+
+// What a value operation answers. Fail is Verse failure (spec/failure.md), not an error. Error is a
+// Verse runtime error, described in a RuntimeError. Park means the operation met an unbound
+// placeholder it must wait on, which it hands back in place of a result (spec/unification.md §6).
+// Invalid means the operands are outside the contract (spec/values.md §15): a malformed program,
+// which the interpreter reports naming the op and line.
+enum class Outcome : uint8_t {
+	Ok,
+	Fail,
+	Error,
+	Park,
+	Invalid,
+};
+
+struct RuntimeError {
+	std::string diagnostic;
+	std::string description;
+	std::string message;
+};
+
+} // namespace vm

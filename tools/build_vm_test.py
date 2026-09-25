@@ -38,22 +38,23 @@ def main() -> None:
     vcvars64 = find_vcvars64()
 
     repo = repo_root()
-    reader_src = repo / "vm" / "vbc_reader.cpp"
-    test_src = repo / "tests" / "vm" / "verse_vm_test.cpp"
     vm_dir = repo / "vm"
+    include_dir = repo / "include"
+    test_src = repo / "tests" / "vm" / "verse_vm_test.cpp"
     out_dir = repo / "bin"
     out_exe = out_dir / "verse_vm_test.exe"
 
-    for path in (reader_src, test_src):
-        if not path.exists():
-            print(f"error: {path} does not exist", file=sys.stderr)
-            sys.exit(1)
+    vm_sources = sorted(vm_dir.glob("*.cpp"))
+    if not test_src.exists() or not vm_sources:
+        print(f"error: {test_src} or vm/*.cpp is missing", file=sys.stderr)
+        sys.exit(1)
 
     out_dir.mkdir(parents=True, exist_ok=True)
+    source_args = " ".join(f'"{s}"' for s in [*vm_sources, test_src])
 
     cl_cmd = (
         f'call "{vcvars64}" && '
-        f'cl /std:c++20 /EHsc /Zi /I"{vm_dir}" "{reader_src}" "{test_src}" '
+        f'cl /std:c++20 /EHsc /Zi /I"{vm_dir}" /I"{include_dir}" {source_args} '
         f'/Fe"{out_exe}" /Fo"{out_dir}\\\\"'
     )
     print(f"[build_vm_test] running: {cl_cmd}")
