@@ -1743,6 +1743,124 @@ description.
 
 ---
 
+## B42. A container-typed member default is not per instance, in two different ways · **fixed, measured**
+
+Found by T5.6 (`docs/web-vm/tasks.md`), which exists to ask exactly this: does `var Items:godot_array
+= godot_array{}` on a script class give each node its own Array, do every two nodes of that script
+share one, or does a node hold a dead reference? All three prior claims that a container mints fresh
+— `ref_block_probe.verse`, and `tests/integration`'s `MadeArray`/`MadeArrayFilled` — measured the
+archetype called directly, in a function body or at the top of an expression. Nobody had measured the
+*other* place `godot_array{}` can appear: as a class's own declared default, evaluated with no
+archetype override at all, which is exactly what a host-built node gets. `container_default_probe.verse`
+and `test_cases.gd`'s T5.6 section are the first fixture and case to ask.
+
+**The editor answers "they share one."** Two nodes of `container_default_probe`, and a third made
+after the first was written to, all read and write through the *same* Godot Array: appending to the
+first node's `Items` is visible on the second's and on the third's, which is a real cross-instance
+aliasing bug, not merely surprising API surface — every node using this spelling silently shares
+mutable state with every other node of that script.
+
+**The export answers "dead reference," which is the other bad outcome T5.6 named.** The identical
+case, exported and run in the cooked runtime host, does not share anything: `Items.Length()` and
+`Items.AddInt(...)` both raise `ErrRuntime_NativeInternal`, *"Sized a Godot container that names
+nothing... one has to come back from Godot"* — the exact sentence a `Ref` of 0 produced before
+Phase 4b's `VhRefNewDefault` existed. So the two runs disagree with each other as well as with the
+correct answer: the editor shares a live array, the cooked host holds a dead one.
+
+**Why the editor shares, precisely — this took an incorrect first theory to pin down.** The obvious
+guess is that the whole `godot_array` wrapper object is shared: one Verse cell, handed to every
+instance. That is wrong. A host-side fix was written to test it — `GodotVerse::Instantiate` walking a
+freshly built instance's own shape (`UVerseClass::GetShapeForLoadField`, the same walk
+`HostDebug.cpp`'s `ReadMembers` uses), finding every `godot_ref`-derived field, and replacing it with
+a freshly `NewObject`'d wrapper of the same class — and instrumenting it showed each of the three
+nodes' `Items` fields already held **three different wrapper objects** (three different C++
+pointers) before the fix ever ran. The wrapper is not what is shared.
+
+What *is* shared is the integer inside it. `godot_array`'s own field, `Ref<override>:int =
+VhRefNewDefault(TagArray)`, is itself a data-member default — the same construct T5.6 is about, one
+level down. Reading it back after the fix's replacement, all three of the *freshly constructed*
+wrapper objects reported the identical `Ref` (3), proving that building a `godot_array` through a
+bare C++ `NewObject` call reaches `Ref` by copying the class default object's value rather than by
+re-running `VhRefNewDefault`. That is uLang's own "CDO trickery" — the phrase is from
+`SemanticAnalyzer.cpp`, quoted and independently exercised in
+`tests/verse_probe/default_cdo_probe.verse`, which found the same thing for a data-member default
+that reads a sibling field and concluded the whole route was unusable for `vh_object` peer minting.
+`godot_array` uses the same construct for a different reason (V3564 leaves no other legal shape for a
+converging native call in a default), and it is unaffected in the ordinary case — evaluating
+`godot_array{}` as an expression inside a *function body* (what `MadeArray()` and every existing test
+does) reliably re-invokes `VhRefNewDefault` and gives every call its own `Ref`, confirmed by calling
+`MadeArray()` twice from GDScript and mutating one result without the other changing. Only a class's
+own *declared default* — evaluated with no archetype override, which is what `vh_instantiate` always
+builds — takes the CDO-cached path instead of the per-call one.
+
+**One cause, and it explains both runs.** A host-built instance never evaluates its member defaults.
+`NewObject` initialises the new object by *copying* them off the script class's default object, and a
+wrapper the default expression built there is instanced into the new object as a subobject of it --
+which is why every node had a wrapper of its own. But the class default's wrapper was itself built
+while a class default was being constructed, and a wrapper built that way takes `Ref` off *its own*
+class's default object rather than running `VhRefNewDefault`. So the id every copy carries is
+`godot_array`'s class default's id -- the same for every `godot_array` member of every script class,
+not merely for every node of one. Instrumented, `godot_array`, `dictionary` and `typed_array(int)`
+members read ids 3, 4 and 1 on all three nodes, each equal to its wrapper class's own default.
+
+The export's dead reference is the same copy. A cooked game loads its class defaults rather than
+building them, and the cooker built them with no Godot to mint against, so the wrapper class's
+default -- and so every copy of it -- holds 0. Nothing about the sidecar or the cook needed to change.
+
+It was worse than sharing. The copied id was never *claimed* by the wrapper holding it, and a
+wrapper's collection releases one claim, so each node collected took a claim that belonged to the
+class default -- and the export-defaults reading device, built the same way, did the same once per
+analysis.
+
+**The fix: the adopt step claims the instance's containers** (`ClaimDefaultContainers` in
+`HostScript.cpp`, called from `AdoptOrMintPeer`). The adopt branch is where the host learns it is
+constructing an object it built, and `vh_object`'s own block is the first to run, so no block clause
+of the script sees the copied id. Every `godot_ref` subobject of the new instance, nested ones
+included, is decided by what its default was:
+
+- **still its wrapper class's own default id**: the member's default was a fresh container
+  (`godot_array{}`, `dictionary{}`, `typed_array(t){...}`, `MakeArray()`), so the instance gets a
+  fresh Godot container of the kind the class mints -- Array or Dictionary, read off the wrapper's
+  class.
+- **any other id**: the default named a container that already existed, so the instance keeps it --
+  shared, as the default said -- and takes a claim of its own, which is what balances the copy's
+  release.
+- **under `FSuppressMintScope`**: 0, which is what `VhRefNewDefault` answers there, so the reading
+  device neither mints nor releases anything. It is built off the game thread, where the reference
+  table cannot be asked for a claim either, and a container is refused for export, so no read of
+  it is lost.
+
+The minted or claimed id belongs to the wrapper and is released by the ordinary
+`godot_ref::BeginDestroy` rule. The write is made open, so an aborted construction still leaves the
+wrapper owning what it was given.
+
+**Why a patch after construction rather than evaluating the defaults per instance.** The engine does
+have a construction that evaluates every default -- it is what `godot_array{}` in a function body
+goes through -- but it is the interpreter's own sequence of allocate, run the constructor with its
+field-creation protocol, unify, run the blocks, unwrap, and nothing outside the interpreter drives
+it. Reproducing it from the host would re-evaluate *every* member default of every scripted node on
+a path neither host has ever run, including the ones that mint Godot objects, in both the editor and
+the cooked host at once. The patch is confined to reference ids, runs at the one point the host
+already owns, and leaves every other default exactly as it was.
+
+**What it does not cover, recorded.** A default that *fills* a fresh container -- a helper that
+builds one and appends to it -- gets a fresh **empty** one per node, because the host mints rather
+than re-evaluating. It was already broken worse: the fill went into the wrapper class's shared
+container, and in an export into nothing at all. A member *object's* own block clause (`Helper:helper
+= helper{}` where `helper` holds a container and reads it in a `block:`) runs while the instance is
+still being built and sees the copied id for the length of that block; the member itself is fixed
+before any code of the instance's runs.
+
+**Tested in both runs.** `container_default_probe.verse` now declares all three minting kinds --
+`godot_array`, `dictionary` and `typed_array(int)` -- and `test_cases.gd`'s T5.6 section asserts that
+two nodes and a third made later each start empty and that a write to one reaches no other, for each
+kind. All eight cases pass in the editor and in the exported game: 572 passed and 5 skipped in the
+editor, 519 passed and 11 skipped exported. The "existing container is kept and claimed" branch is
+reasoned from the engine rather than exercised: no default a script can write names a container
+that outlives the class default's construction in *both* runs, because the cooker cannot make one.
+
+---
+
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks

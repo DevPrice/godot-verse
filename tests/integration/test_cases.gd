@@ -309,6 +309,54 @@ func begin() -> void:
 	_check("a bare dictionary{} arrives as a Dictionary",
 			made_dict is Dictionary and (made_dict as Dictionary).get("hp") == 3)
 
+	# --- T5.6: a container-typed *data-member default*, on two nodes of one script -------------
+	#
+	# MadeArray above answers this for the bare archetype spelling, which runs through the
+	# class's block: clause on every construction. `var Items:godot_array = godot_array{}` is a
+	# different path -- a host-built object reaches it through the class's per-instance default
+	# rather than through that clause -- and nothing had measured whether the UE host computes
+	# that default once per class (which would make every node share one Array) or once per
+	# instance (the correct behaviour).
+	var container_script: Script = load("res://scripts/container_default_probe.verse")
+	_check("container_default_probe.verse compiles",
+			container_script != null and container_script.can_instantiate())
+	if container_script != null:
+		var container_a := Node2D.new()
+		container_a.set_script(container_script)
+		tree.root.add_child(container_a)
+		var container_b := Node2D.new()
+		container_b.set_script(container_script)
+		tree.root.add_child(container_b)
+
+		_check_eq("a fresh container-typed default starts empty", container_a.call("ItemCount"), 0)
+		_check_eq("and so does a second node's", container_b.call("ItemCount"), 0)
+		container_a.call("AppendValue", 1)
+		_check_eq("appending to one node's array reaches only that node's",
+				container_a.call("ItemCount"), 1)
+		_check_eq("a sibling node's array is untouched, not a dead reference either",
+				container_b.call("ItemCount"), 0)
+		container_a.call("PutEntry", "hp", 3)
+		_check_eq("a dictionary default is per node too",
+				[container_a.call("EntryCount"), container_b.call("EntryCount")], [1, 0])
+		container_a.call("AddNumber", 7)
+		_check_eq("and so is a typed_array default",
+				[container_a.call("NumberCount"), container_b.call("NumberCount")], [1, 0])
+
+		# A third node, made after the first two and after the first's array already holds a
+		# value -- which is what a default cached once per class, rather than recomputed per
+		# instance, would fail.
+		var container_c := Node2D.new()
+		container_c.set_script(container_script)
+		tree.root.add_child(container_c)
+		_check_eq("a node made later still gets its own empty array, not the first node's filled one",
+				container_c.call("ItemCount"), 0)
+
+		tree.root.remove_child(container_a)
+		container_a.free()
+		tree.root.remove_child(container_b)
+		container_b.free()
+		tree.root.remove_child(container_c)
+		container_c.free()
 
 	# --- packed arrays ------------------------------------------------------------------------
 	#

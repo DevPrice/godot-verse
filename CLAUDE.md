@@ -69,7 +69,7 @@ Three documents are not phase records and are the ones to read before adding a f
   removed.
 - **`docs/by-hand-findings.md`** — what the by-hand editor sessions found, because everything from
   `EngineDebugger` and the editor UI inward has no automated test and never will. B1–B9, B15–B18,
-  B20, B22–B35, B37 and B39–B41 are defects, all fixed, and B36 is reported rather than closed; B12 is a Verse fact; B13 a latency finding; B14 the
+  B20, B22–B35, B37 and B39–B42 are defects, all fixed, and B36 is reported rather than closed; B12 is a Verse fact; B13 a latency finding; B14 the
   sandboxed export run. **B30 is the one to read before calling `ResourceLoader` from anything a
   resource load can reach**: Godot answers a cyclic load `ERR_BUSY` and a null `Ref` silently, so
   the only thing printed is the asking side's own sentence — which names the resource *asked for*
@@ -420,7 +420,7 @@ has only built has never called `_validate` and the map is empty. **The gutter i
 by-hand** — the build copy proves the sentence and the line, not that the editor draws either.
 
 **export** — exports `tests/integration` headless, asserts the *tree* it produced, then **launches
-it** and asserts what its cases reported: 511 passed, 0 failed, 11 skipped, with the counts named in
+it** and asserts what its cases reported: 519 passed, 0 failed, 11 skipped, with the counts named in
 `run_tests.py` so a case that stops running in an export reads as a failure rather than as a shorter
 log. It is the only layer that exercises the cooked path end to end; everything else compiles at
 startup. It needs more staged than the other layers do, because what it is exporting *is* them —

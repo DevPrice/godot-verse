@@ -808,9 +808,9 @@ EXPORT_EXPECTED_CLASSES = ["marshal", "signals", "left/widget"]
 # other way round -- only an exported game has autoloads at all, because `--script` replaces the
 # main loop before Godot sets one up -- so they are skips in the editor run and passes here. The two
 # runs therefore report different totals from one set of lines, and neither is a function of the
-# other: the in-editor run prints 564 passed and 5 skipped against the numbers below. Adding a case
+# other: the in-editor run prints 572 passed and 5 skipped against the numbers below. Adding a case
 # means changing this line, which is the point of it.
-EXPORT_EXPECTED_PASSES = 511
+EXPORT_EXPECTED_PASSES = 519
 EXPORT_EXPECTED_SKIPS = 11
 
 
