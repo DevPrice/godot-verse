@@ -1,6 +1,8 @@
 #include "verse_runtime.h"
 
+#ifdef _WIN32
 #include <windows.h>
+#endif
 
 #include "verse_callable.h"
 #include "verse_export_paths.h"
@@ -182,6 +184,7 @@ namespace {
 //
 // Restoring it is safe: UE derives its own paths from FPlatformProcess::BaseDir(), not from the
 // working directory, and everything this bridge hands the host is an absolute path.
+#ifdef _WIN32
 struct FScopedWorkingDirectory {
 	FScopedWorkingDirectory() {
 		length = GetCurrentDirectoryW(MAX_PATH, saved);
@@ -195,6 +198,12 @@ struct FScopedWorkingDirectory {
 	wchar_t saved[MAX_PATH] = {};
 	DWORD length = 0;
 };
+#else
+// The host this restores around is Windows-only (verse_host.cpp); nothing on another platform
+// moves the working directory the way loading it does.
+struct FScopedWorkingDirectory {
+};
+#endif
 
 } // namespace
 

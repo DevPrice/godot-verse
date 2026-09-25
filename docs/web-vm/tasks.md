@@ -15,10 +15,10 @@ Status: `todo`, `doing`, `done`, `dropped` (with a reason).
 
 | ID | Task | Room / model | Depends | Check | Status |
 | --- | --- | --- | --- | --- | --- |
-| T0.1 | Install Emscripten 4.0.11 beside the existing SDK (`emsdk install 4.0.11`), and record how to activate it | neutral / sonnet | — | `emcc --version` under the activated SDK prints 4.0.11 | todo |
-| T0.2 | `tools/run_web.py`: serve a directory on localhost with **no** COOP/COEP headers, run headless Chrome with its own `--user-data-dir` outside the repo, capture console output, stop Chrome by PID, exit on a sentinel line or a timeout | neutral / sonnet | — | runs against a static page that `console.log`s a sentinel and exits 0; exits non-zero on timeout | todo |
-| T0.3 | `tests/web_smoke/`: a minimal godot-cpp GDExtension and Godot project that prints a sentinel from `_ready`, exported with `web_dlink_nothreads_release` | neutral / sonnet | T0.1, T0.2 | `run_web.py` on the export sees the sentinel, served without COOP/COEP | todo |
-| T0.4 | `scons platform=web arch=wasm32 threads=no` builds godot-verse with the host loader compiled out on web | neutral / sonnet | T0.1 | the build succeeds and `gdextension.py` lists the web library | todo |
+| T0.1 | Install Emscripten 4.0.11 beside the existing SDK (`emsdk install 4.0.11`), and record how to activate it | neutral / sonnet | — | `emcc --version` under the activated SDK prints 4.0.11 | done |
+| T0.2 | `tools/run_web.py`: serve a directory on localhost with **no** COOP/COEP headers, run headless Chrome with its own `--user-data-dir` outside the repo, capture console output, stop Chrome by PID, exit on a sentinel line or a timeout | neutral / sonnet | — | runs against a static page that `console.log`s a sentinel and exits 0; exits non-zero on timeout | done |
+| T0.3 | `tests/web_smoke/`: a minimal godot-cpp GDExtension and Godot project that prints a sentinel from `_ready`, exported with `web_dlink_nothreads_release` | neutral / sonnet | T0.1, T0.2 | `run_web.py` on the export sees the sentinel, served without COOP/COEP | done |
+| T0.4 | `scons platform=web arch=wasm32 threads=no` builds godot-verse with the host loader compiled out on web | neutral / sonnet | T0.1 | the build succeeds and `gdextension.py` lists the web library | done |
 
 ## M1 — spec and format
 
