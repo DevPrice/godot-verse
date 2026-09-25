@@ -189,7 +189,7 @@ the compiler never reads those after the region fails.
 
 | Op | Test (the op waits first on the operands `unification.md` §6.1 names) | `Dest` on success |
 | --- | --- | --- |
-| `LtFastFail`, `LteFastFail`, `GtFastFail`, `GteFastFail` | the relation between `Lhs` and `Rhs`: two integers, two floats (IEEE: every relation with NaN is false), or a rational with an integer or rational (the integer taken as a rational). Other kinds are a VM invariant violation | `Lhs` |
+| `LtFastFail`, `LteFastFail`, `GtFastFail`, `GteFastFail` | the relation between `Lhs` and `Rhs`: two integers, two floats (as `values.md` §3.3: NaN is unordered against every other value, and `NaN <= NaN` and `NaN >= NaN` succeed), or a rational with an integer or rational (the integer taken as a rational). Other kinds are a VM invariant violation | `Lhs` |
 | `EqFastFail` | equality (`values.md`) answers *equal*; any other answer fails | `Lhs` |
 | `NeqFastFail` | equality answers *not equal*; any other answer fails | `Lhs` |
 | `ArrayIndexFastFail` | `Array` is an array or a mutable array, and `Index` is an integer in 0 … 2³²−1 below its length. The value `false` (which is also the empty option, `format.md` §3) as `Array` fails. Any other kind is an invariant violation | the element |

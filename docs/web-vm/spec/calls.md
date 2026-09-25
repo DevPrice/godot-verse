@@ -1,6 +1,6 @@
 # Calls, frames and closures
 
-Status: reviewed by the lead 2026-09-24. Room: dirty. Sources read: `docs/phase-7.5-design.md`,
+Status: reviewed by the lead 2026-09-24; `ops.md` §15.1 overrides this file where they disagree. Room: dirty. Sources read: `docs/phase-7.5-design.md`,
 `docs/web-vm/format.md`, `docs/web-vm/ops.json`; UE `Engine/Source/Runtime/CoreUObject/{Public,Private}/VerseVM`
 (the interpreter, frames, functions, scopes, procedures, intrinsics, runtime-error table),
 `Engine/Plugins/VerseVM/Source/VerseVMCodeGen/Private/VVMCodeGenerator.cpp` (parameter and closure

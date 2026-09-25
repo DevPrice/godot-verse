@@ -1,6 +1,6 @@
 # Packages, modules and initialization
 
-Status: reviewed by the lead 2026-09-24. Room: dirty. Sources read: `docs/phase-7.5-design.md`,
+Status: reviewed by the lead 2026-09-24; `ops.md` §15.1 overrides this file where they disagree. Room: dirty. Sources read: `docs/phase-7.5-design.md`,
 `docs/web-vm/format.md`, `docs/web-vm/ops.json`, `docs/web-vm/spec/sidecar.md`; UE
 `Engine/Plugins/VerseVM/Source/VerseVMCodeGen/Private/{VVMAssembler.cpp,VVMCodeGenerator.cpp}`
 (package, module and initializer emission, and the order the assembler runs them in),

@@ -1,6 +1,6 @@
 # Classes, archetypes and objects
 
-Status: reviewed by the lead 2026-09-24. Room: dirty. Sources read: `Engine/Source/Runtime/CoreUObject/
+Status: reviewed by the lead 2026-09-24; `ops.md` §15.1 overrides this file where they disagree. Room: dirty. Sources read: `Engine/Source/Runtime/CoreUObject/
 {Public,Private}/VerseVM/` — `VVMClass.h`, `VVMClass.cpp`, `Inline/VVMClassInline.h`,
 `VVMNamedType.h`, `VVMObject.cpp`, `Inline/VVMObjectInline.h`, `VVMValueObject.cpp`,
 `Inline/VVMValueObjectInline.h`, `Inline/VVMNativeConstructorWrapperInline.h`, `VVMVerseClass.cpp`

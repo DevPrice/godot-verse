@@ -1,6 +1,6 @@
 # Unification, placeholders and parking
 
-Status: reviewed by the lead 2026-09-24. Room: dirty. Sources read: `docs/phase-7.5-design.md`,
+Status: reviewed by the lead 2026-09-24; `ops.md` §15.1 overrides this file where they disagree. Room: dirty. Sources read: `docs/phase-7.5-design.md`,
 `docs/web-vm/format.md`, `docs/web-vm/ops.json`, `docs/web-vm/facts.md`, `docs/web-vm/spec/calls.md`;
 UE `Engine/Source/Runtime/CoreUObject/{Public,Private}/VerseVM` (the interpreter, placeholders, rest
 values, frames, suspensions, failure and fast-failure contexts, the transaction and trail header,

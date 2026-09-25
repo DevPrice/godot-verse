@@ -1,6 +1,6 @@
 # Tasks, structured concurrency and cancellation
 
-Status: reviewed by the lead 2026-09-24. Room: dirty. Sources read: VerseVM's task, task-group,
+Status: reviewed by the lead 2026-09-24; `ops.md` §15.1 overrides this file where they disagree. Room: dirty. Sources read: VerseVM's task, task-group,
 interpreter, bytecode-emitter, bytecode-analysis, ref, enter-VM and runtime-error sources under
 `Engine/Source/Runtime/CoreUObject/{Public,Private}/VerseVM`; the code generator under
 `Engine/Plugins/VerseVM/Source/VerseVMCodeGen`; the native-coroutine header (`VVMCoroutine.h`);

@@ -135,12 +135,12 @@ string; the interpreter never constructs one.
 
 **An unbound native.** In Epic's VM a native procedure whose implementation was never bound is
 called through a null pointer: the process dies with no message (`CLAUDE.md`, "The cooked path").
-There is no reference text to match. The interpreter must refuse at **load** time instead: a
-program containing a native procedure whose key the interpreter has no implementation for, and that
-is not in §9's out-of-contract list, is refused with a sentence naming the key and the file. A key
-in §9's list binds to a stub that raises, when called, the runtime error
-`ErrRuntime_NativeInternal` with the message `Native <key> is not supported by this runtime.` — our
-text, not Epic's.
+There is no reference text to match. **The lead's rule (§11.1 Q6, and `modules.md` §6):** a load
+never refuses a file for an unbound native, because a `.vbc` carries every native of every reachable
+package. Every native procedure whose key the interpreter has no implementation for — in §9's list
+or not — binds to a stand-in that, when called, raises the runtime error `ErrRuntime_NativeInternal`
+with the message `The native function <binding key> is not implemented by this runtime.` — our text,
+not Epic's.
 
 ### 3.3 `Self`
 

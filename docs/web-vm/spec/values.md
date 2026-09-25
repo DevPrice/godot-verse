@@ -1,6 +1,6 @@
 # Values
 
-Status: reviewed by the lead 2026-09-24. Room: dirty. Sources read: `docs/phase-7.5-design.md`,
+Status: reviewed by the lead 2026-09-24; `ops.md` §15.1 overrides this file where they disagree. Room: dirty. Sources read: `docs/phase-7.5-design.md`,
 `docs/web-vm/format.md`, `docs/web-vm/ops.json`, `docs/web-vm/facts.md`; VerseVM runtime headers and
 sources under `Engine/Source/Runtime/CoreUObject/{Public,Private}/VerseVM` (value encoding, float,
 int, heap int, rational, array, mutable array, map, option, false/true, value object, native struct,
@@ -579,9 +579,9 @@ consequences a hash table must honour:
 
 The last row is a reference defect: the reference hashes `false` by identity and an empty array by
 contents, so the two land in different places although equality calls them equal. Whether the
-lookup would succeed on a chance collision is §16 Q2. **An implementation must treat `false` and an
-empty array as different map keys** (and, by extension, as different from an empty map key if one
-ever arose) while §11 keeps them equal.
+lookup would succeed on a chance collision is §16 Q2. **The lead decided the other way (§16.1):
+equal values are one key, so `false`, `""`, an empty array and an empty map are one map key.** No
+fixture depends on it.
 
 ## 9. Options and logic
 

@@ -131,7 +131,7 @@ it.
 | named parameters | `list<(sid name, uv register)>` |
 | constants | `list<value>` |
 | ops | `list<op>` |
-| unwind edges | `list<(uv first op, uv last op, uv landing op)>`, sorted, non-overlapping. A frame is covered when `first <= i <= last`, where `i` is the index of the op the frame is **stopped in**: the op that suspended it, or, for a frame further out, the call op it is waiting in — never the op it will resume at. The writer computes `first` and `last` so that this test agrees with the reference VM's own coverage test on every op |
+| unwind edges | `list<(uv first op, uv last op, uv landing op)>`, sorted, non-overlapping. A frame is covered when `first <= i <= last`, where `i` is **the index of the op the frame will resume at, minus one**. For every op but `Yield` that is the op the frame is stopped in (the op that suspended it, or the call op an outer frame waits in); for a frame stopped in `Yield` it is the op before its `ResumeOffset`. This is the reference VM's own rule (`spec/tasks.md` §7.3), and the writer derives `first` and `last` from it |
 | locations | `list<(uv op index, uv line)>`, sorted by op index; an op's line is the last entry at or before it; line 0 means none |
 | register names | `list<(uv register, sid name, uv first op, uv last op)>` |
 
@@ -248,4 +248,6 @@ cell:
 
 Each refusal is a sentence naming the file, never a crash: wrong magic; another format version; an
 `ops.json` digest other than the reader's own; a `ref` out of range; an opcode out of range or an
-inline-cache opcode; a truncated file; a missing end marker.
+inline-cache opcode; one of the six opcodes version 1 does not implement — `Mod`, `MutableAdd`,
+`NewMutableArrayWithCapacity` (never emitted, and computing a value whose convention is known only
+from source) and the three union ops (`spec/ops.md` §13); a truncated file; a missing end marker.

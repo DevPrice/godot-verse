@@ -32,7 +32,7 @@ Status: `todo`, `doing`, `done`, `dropped` (with a reason).
 | T1.6 | `spec/objects.md` | dirty / opus | T1.1 | lead review recorded | done |
 | T1.7 | `spec/tasks.md` | dirty / opus | T1.1 | lead review recorded | done |
 | T1.8 | `spec/natives.md` | dirty / opus | T1.1 | lead review recorded | done |
-| T1.9 | `spec/ops.md`: every op ops.json marks as emitted | dirty / opus | T1.3–T1.8 | `tools/check_spec.py` finds every emitted op documented; lead review recorded | todo |
+| T1.9 | `spec/ops.md`: every op ops.json marks as emitted | dirty / opus | T1.3–T1.8 | `tools/check_spec.py` finds every emitted op documented; lead review recorded | done |
 | T1.10 | `spec/godot-natives.md`: the 46 Godot natives, the `variant` lanes, defer-to-commit | dirty / sonnet | — | every `<native>` in `Godot.native.verse` has a row; lead review recorded | done |
 | T1.11 | `spec/sidecar.md` | lead | — | every field `WriteClassSidecar` writes has a row | done |
 | T1.12 | `docs/web-vm/format.md`: the `.vbc` container | lead | T1.1 | reviewed against ops.json and the cell list of design §4 | done; union cells provisional until T2.1 |
@@ -70,7 +70,7 @@ Status: `todo`, `doing`, `done`, `dropped` (with a reason).
 | --- | --- | --- | --- | --- | --- |
 | T4.1 | Tasks and the task ops; `spawn`, `branch`, `sync`, `race`, `rush`; semaphores | clean / opus | T1.7, T3.6 | concurrency fixtures pass | todo |
 | T4.2 | Cancellation, unwind edges, `defer`, terminate | clean / opus | T4.1 | cancellation fixtures pass | todo |
-| T4.3 | `event(t)`, `task(t)`, `Sleep` and its tick | clean / opus | T4.1 | event and sleep fixtures pass | todo |
+| T4.3 | `event(t)`, `task(t)`, `Sleep` and its tick; live-variable `await` and `batch`, including element, map-value and field registration, and `set live` bindings (`MoveNonComparable`, `RefSetLive`, `CallSetLive`, `SetFieldLive` — `spec/ops.md` §3) | clean / opus | T4.1 | event, sleep and live-variable fixtures pass | todo |
 
 **M4 exit:** `run_vm_conformance.py` agrees on every fixture.
 
