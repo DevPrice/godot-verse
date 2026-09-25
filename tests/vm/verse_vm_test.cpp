@@ -1,20 +1,31 @@
-// Standalone driver for vm/: the .vbc primitive reader (format.md §1) and the values
-// (spec/values.md). No Godot and no godot-cpp, like the lexer and module-map tests beside it. A
-// value case's name cites the spec table or section it checks.
+// Standalone driver for vm/: the .vbc primitive reader (format.md §1), the values
+// (spec/values.md), the JSON reader, the loader's refusals (format.md §9) and the sidecar reader
+// (spec/sidecar.md). No Godot and no godot-cpp, like the lexer and module-map tests beside it. A
+// case's name cites the spec table or section it checks.
+#include "vbc_ops.gen.h"
 #include "vbc_reader.h"
+#include "verse_host_abi.h"
 #include "vm_bigint.h"
 #include "vm_cell.h"
 #include "vm_equality.h"
+#include "vm_file_reader.h"
 #include "vm_heap.h"
+#include "vm_json.h"
+#include "vm_loader.h"
+#include "vm_natives.h"
 #include "vm_number.h"
+#include "vm_runtime.h"
 #include "vm_values.h"
 
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <limits>
+#include <map>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -1073,9 +1084,500 @@ bool RunValueCases() {
 	return cases.all_ok;
 }
 
+bool Parses(std::string_view p_text, JsonValue &r_value) {
+	std::string error;
+	return json_parse(p_text, r_value, error) && error.empty();
+}
+
+bool Refused(std::string_view p_text) {
+	JsonValue value;
+	std::string error;
+	return !json_parse(p_text, value, error) && error.find("at byte") != std::string::npos;
+}
+
+void JsonCases(Cases &r_cases) {
+	JsonValue value;
+	r_cases.check("json: an object of every kind parses, keys in document order",
+			Parses(" {\"a\": [1, -2.5e3, true, false, null], \"b\": {\"c\": \"d\"}, \"e\": []} \r\n", value) && value.is_object() &&
+					value.keys.size() == 3 && value.keys[0] == "a" && value.find("a")->items.size() == 5 &&
+					value.find("a")->items[1].number == -2500.0 && value.find("a")->items[2].boolean &&
+					value.find("a")->items[4].is_null() && value.find("b")->find("c")->text == "d" && value.find("e")->items.empty());
+	r_cases.check("json: escapes decode, \\u to UTF-8 and a surrogate pair to one code point",
+			Parses("\"q\\\" b\\\\ s\\/ \\b\\f\\n\\r\\t \\u00e9 \\ud83d\\ude00\"", value) &&
+					value.text == "q\" b\\ s/ \b\f\n\r\t \xC3\xA9 \xF0\x9F\x98\x80");
+	r_cases.check("json: raw UTF-8 in a string passes through", Parses("\"\xE2\x82\xAC\"", value) && value.text == "\xE2\x82\xAC");
+	r_cases.check("json: a number keeps its lexeme, so an int64 reads exactly",
+			Parses("[9007199254740993, -0, 3, 3.0, 9223372036854775808]", value) && value.items[0].text == "9007199254740993" && [&] {
+				int64_t number = 0;
+				return json_to_int64(value.items[0], number) && number == 9007199254740993LL && json_to_int64(value.items[1], number) &&
+						number == 0 && !json_to_int64(value.items[3], number) && !json_to_int64(value.items[4], number);
+			}());
+	r_cases.check("json: a repeated key is kept and find answers the first",
+			Parses("{\"k\": 1, \"k\": 2}", value) && value.keys.size() == 2 && value.find("k")->number == 1.0);
+	r_cases.check("json: a trailing comma is refused", Refused("[1, 2,]") && Refused("{\"a\": 1,}"));
+	r_cases.check("json: a comment is refused", Refused("[1] // x") && Refused("/* x */ 1"));
+	r_cases.check("json: a leading zero, a bare sign, a dangling point or exponent are refused",
+			Refused("01") && Refused("-") && Refused("1.") && Refused("1e") && Refused(".5") && Refused("+1"));
+	r_cases.check("json: NaN, Infinity, single quotes and a misspelt literal are refused",
+			Refused("NaN") && Refused("Infinity") && Refused("'a'") && Refused("tru") && Refused("nul"));
+	r_cases.check("json: a control character in a string is refused", Refused("\"a\tb\"") && Refused("\"a\nb\""));
+	r_cases.check("json: invalid UTF-8 is refused: an overlong form, a stray continuation, a surrogate, a truncated sequence",
+			Refused("\"\xC0\x80\"") && Refused("\"\x80\"") && Refused("\"\xED\xA0\x80\"") && Refused("\"\xE2\x82\""));
+	r_cases.check("json: an unpaired surrogate escape is refused", Refused("\"\\ud800\"") && Refused("\"\\udc00\"") && Refused("\"\\ud800\\u0041\""));
+	r_cases.check("json: an unknown escape and a short \\u are refused", Refused("\"\\x41\"") && Refused("\"\\u12\""));
+	r_cases.check("json: text after the value, an empty document and an unterminated one are refused",
+			Refused("{} x") && Refused("") && Refused("   ") && Refused("[1") && Refused("{\"a\"") && Refused("\"abc"));
+	r_cases.check("json: a missing colon or a non-string key is refused", Refused("{\"a\" 1}") && Refused("{1: 2}"));
+	r_cases.check("json: nesting past the limit is refused rather than recursing without bound",
+			Refused(std::string(300, '[') + std::string(300, ']')) && Parses(std::string(100, '[') + std::string(100, ']'), value));
+}
+
+// A .vbc written by hand, one field at a time, in format.md's order.
+class VbcBuilder {
+public:
+	std::vector<uint8_t> bytes;
+
+	void u8(uint8_t p_value) { bytes.push_back(p_value); }
+	void uv(uint64_t p_value) { AppendUv(bytes, p_value); }
+	void sv(int64_t p_value) { AppendSv(bytes, p_value); }
+	void str(std::string_view p_text) {
+		uv(p_text.size());
+		bytes.insert(bytes.end(), p_text.begin(), p_text.end());
+	}
+};
+
+struct ProgramShape {
+	const char *magic = "VBC1";
+	uint64_t version = 1;
+	uint64_t abi = VH_ABI_VERSION;
+	std::string digest = vbc::kVbcOpsSchemaDigest;
+	std::string host_id = "d78f612c313953e9";
+	uint64_t generation = 1;
+	uint64_t package_ref = 4;
+	bool accessor_role = true;
+	std::vector<uint64_t> extra_opcodes;
+};
+
+enum : uint64_t {
+	kSidTask,
+	kSidAccessor,
+	kSidTaskRole,
+	kSidAccessorRole,
+	kSidPackage,
+	kSidRoot,
+	kSidProcedure,
+	kSidFile,
+	kSidNativeKey,
+	kSidNativeName,
+	kSidScriptClass,
+	kSidNode2d,
+	kSidEmpty,
+	kSidCount,
+};
+
+// Seven cells: 0 a script class whose superclass is 6, 1 an enumeration of 2, 3 a package defining
+// 4, 4 a procedure, 5 a native procedure, 6 a mirrored class `node2d`.
+std::vector<uint8_t> BuildProgram(const ProgramShape &p_shape) {
+	VbcBuilder b;
+	for (int i = 0; i < 4; ++i) {
+		b.u8(uint8_t(p_shape.magic[i]));
+	}
+	b.uv(p_shape.version);
+	b.uv(p_shape.abi);
+	b.str(p_shape.host_id);
+	b.str("203d764");
+	b.str(p_shape.digest);
+	b.uv(p_shape.generation);
+
+	const char *strings[kSidCount] = { "task", "accessor", "task_class", "accessor_enumerator", "GodotScripts_1", "/user@localhost", "(/user@localhost/x:)Race",
+		"C:/x.verse", "(/Verse.org/Verse/(/Verse.org/Verse:)Sqrt(:float):)Native", "(/Verse.org/Verse:)Sqrt(:float)", "script_class", "node2d", "" };
+	b.uv(kSidCount);
+	for (const char *text : strings) {
+		b.str(text);
+	}
+
+	b.uv(7);
+	const auto class_cell = [&](uint64_t p_name, bool p_inherits) {
+		b.u8(16);
+		b.u8(0);
+		b.uv(4096);
+		b.uv(4);
+		b.uv(kSidEmpty);
+		b.uv(p_name);
+		b.u8(0);
+		b.uv(p_inherits ? 1 : 0);
+		if (p_inherits) {
+			b.uv(7);
+		}
+		b.uv(0);
+		b.uv(0);
+		b.uv(0);
+		b.u8(0);
+	};
+	class_cell(kSidTask, true);
+
+	b.u8(19);
+	b.uv(kSidAccessor);
+	b.uv(1);
+	b.uv(3);
+
+	b.u8(20);
+	b.uv(2);
+	b.uv(kSidAccessor);
+	b.uv(0);
+
+	b.u8(24);
+	b.uv(kSidPackage);
+	b.uv(kSidRoot);
+	b.uv(2);
+	b.uv(kSidProcedure);
+	b.u8(5);
+	b.uv(5);
+	b.uv(kSidNativeKey);
+	b.u8(5);
+	b.uv(6);
+
+	b.u8(12);
+	b.uv(kSidProcedure);
+	b.uv(kSidFile);
+	b.uv(0);
+	b.uv(2);
+	b.uv(0);
+	b.uv(0);
+	b.uv(1);
+	b.u8(1);
+	b.sv(7);
+	b.uv(2 + p_shape.extra_opcodes.size());
+	// EndTask: Write r0 present, Switch absent, Value c0, Which r1, Signal absent. The two optional
+	// registers are the operands whose u8 present flag a reader must never skip (format.md §5.1).
+	b.uv(uint64_t(vbc::VbcOp::EndTask));
+	b.u8(1);
+	b.uv(0);
+	b.u8(0);
+	b.uv(1 + ((0 << 1) | 1));
+	b.uv(1 + (1 << 1));
+	b.u8(0);
+	for (uint64_t opcode : p_shape.extra_opcodes) {
+		b.uv(opcode);
+	}
+	b.uv(uint64_t(vbc::VbcOp::Return));
+	b.uv(1 + ((0 << 1) | 1));
+	b.uv(0);
+	b.uv(1);
+	b.uv(1);
+	b.uv(12);
+	b.uv(0);
+
+	b.u8(13);
+	b.uv(kSidNativeKey);
+	b.uv(kSidNativeName);
+	b.uv(1);
+
+	class_cell(kSidNode2d, false);
+
+	b.uv(1);
+	b.uv(p_shape.package_ref);
+
+	b.uv(p_shape.accessor_role ? 2 : 1);
+	b.uv(kSidTaskRole);
+	b.uv(1);
+	if (p_shape.accessor_role) {
+		b.uv(kSidAccessorRole);
+		b.uv(3);
+	}
+
+	b.uv(2);
+	b.u8(0);
+	b.uv(kSidScriptClass);
+	b.uv(1);
+	b.u8(1);
+	b.uv(kSidNode2d);
+	b.uv(7);
+
+	b.u8(0xE5);
+	return b.bytes;
+}
+
+bool LoadRefused(const std::vector<uint8_t> &p_bytes, const char *p_phrase) {
+	Heap heap;
+	Program program;
+	std::string error;
+	const bool loaded = load_program(heap, p_bytes.data(), p_bytes.size(), "mem/program.vbc", program, error);
+	return !loaded && error.rfind("mem/program.vbc ", 0) == 0 && error.find(p_phrase) != std::string::npos;
+}
+
+std::vector<uint8_t> WithExtraOp(uint64_t p_opcode) {
+	ProgramShape shape;
+	shape.extra_opcodes.push_back(p_opcode);
+	return BuildProgram(shape);
+}
+
+void LoaderCases(Cases &r_cases) {
+	const std::vector<uint8_t> good = BuildProgram(ProgramShape());
+	Heap heap;
+	Program program;
+	std::string error;
+	const bool loaded = load_program(heap, good.data(), good.size(), "mem/program.vbc", program, error);
+	r_cases.check("loader: a hand-built program loads", loaded && error.empty());
+	if (!loaded) {
+		printf("[verse_vm_test]   %s\n", error.c_str());
+		return;
+	}
+
+	const PackageCell *package = program.packages.size() == 1 ? program.packages[0] : nullptr;
+	const ProcedureCell *procedure = package != nullptr && !package->definitions.empty() && package->definitions[0].value.is_cell()
+			? cell_as<ProcedureCell>(package->definitions[0].value)
+			: nullptr;
+	r_cases.check("format §7: the package list names the package, its first definition a procedure",
+			procedure != nullptr && procedure->kind == CellKind::Procedure && package->name->text == "GodotScripts_1");
+	r_cases.check("format §5.1: every optional operand is a present flag then the operand, whatever its kind",
+			procedure != nullptr && procedure->ops.size() == 2 && procedure->ops[0].opcode == uint16_t(vbc::VbcOp::EndTask) && [&] {
+				const uint32_t *words = procedure->operand_words.data() + procedure->ops[0].operands;
+				return words[0] == 0 && words[1] == kAbsentOperand && words[2] == 1 && words[3] == 2 && words[4] == kAbsentOperand;
+			}());
+	r_cases.check("loader: a constant operand indexes the constant pool, whose cells and ints are values",
+			procedure != nullptr && procedure->constants.size() == 1 && procedure->constants[0].same(Value::from_int32(7)) &&
+					procedure->ops[1].opcode == uint16_t(vbc::VbcOp::Return) && procedure->operand_words[procedure->ops[1].operands] == 1 &&
+					procedure->lines.size() == 1 && procedure->lines[0].line == 12);
+
+	const ClassIndexEntry *script = program.find_class(ClassOrigin::Script, "script_class");
+	const ClassIndexEntry *mirrored = program.find_class(ClassOrigin::Mirrored, "node2d");
+	r_cases.check("format §8: the class index finds a class by origin and name, forward references resolved",
+			script != nullptr && mirrored != nullptr && script->class_cell->inherited.size() == 1 &&
+					script->class_cell->inherited[0] == mirrored->class_cell && script->class_cell->package == package &&
+					program.entry_for(mirrored->class_cell) == mirrored && program.find_class(ClassOrigin::Mirrored, "script_class") == nullptr);
+	r_cases.check("format §7: the well-known roles are found",
+			program.task_class == script->class_cell && program.accessor_enumerator != nullptr &&
+					program.accessor_enumerator->enumeration->enumerators[0] == program.accessor_enumerator);
+
+	const NativeProcedureCell *native = package != nullptr && package->definitions.size() == 2 && is_cell_kind(package->definitions[1].value, CellKind::NativeProcedure)
+			? cell_as<NativeProcedureCell>(package->definitions[1].value)
+			: nullptr;
+	NativeCall native_call(heap);
+	native_call.procedure = native;
+	r_cases.check("natives §3.2: a native with no implementation loads bound to the stand-in, which raises naming its key",
+			native != nullptr && !native->bound && program.native_count == 1 && program.unbound_native_count == 1 &&
+					native->positional_count == 1 && native->implementation(native_call) == Outcome::Error &&
+					native_call.error.diagnostic == "ErrRuntime_NativeInternal" &&
+					native_call.error.message == "The native function (/Verse.org/Verse/(/Verse.org/Verse:)Sqrt(:float):)Native is not implemented by this runtime.");
+
+	const NativeProcedureCell *missing = program.missing_procedure != nullptr ? static_cast<const NativeProcedureCell *>(program.missing_procedure->callee) : nullptr;
+	NativeCall missing_call(heap);
+	missing_call.procedure = missing;
+	r_cases.check("calls §10.1: the built-in package holds the missing-procedure function, which raises",
+			missing != nullptr && program.builtin_package != nullptr && program.builtin_package->definitions.size() == 1 &&
+					program.missing_procedure->self.same(heap.false_value()) && missing->implementation(missing_call) == Outcome::Error &&
+					missing_call.error.diagnostic == "ErrRuntime_InvalidFunctionCall" &&
+					missing_call.error.message == "Attempted to call an uninitialized function.");
+
+	std::vector<uint8_t> bytes = good;
+	bytes[0] = 'X';
+	r_cases.check("format §9: wrong magic is refused naming the file", LoadRefused(bytes, "does not begin with VBC1"));
+	ProgramShape shape;
+	shape.version = 2;
+	r_cases.check("format §9: another format version is refused naming both", LoadRefused(BuildProgram(shape), "is format version 2; this runtime reads version 1"));
+	shape = ProgramShape();
+	shape.digest = "0123";
+	r_cases.check("format §9: another op-schema digest is refused", LoadRefused(BuildProgram(shape), "another Verse op set (schema 0123)"));
+	shape = ProgramShape();
+	shape.package_ref = 99;
+	r_cases.check("format §9: a ref out of range is refused", LoadRefused(BuildProgram(shape), "cell reference 99"));
+	shape = ProgramShape();
+	shape.package_ref = 1;
+	r_cases.check("loader: a ref to a cell of the wrong kind is refused", LoadRefused(BuildProgram(shape), "names a class cell"));
+	r_cases.check("format §9: an opcode out of range is refused", LoadRefused(WithExtraOp(uint64_t(vbc::kVbcOpCount)), "opcode 114"));
+	r_cases.check("format §9: an inline-cache opcode is refused", LoadRefused(WithExtraOp(uint64_t(vbc::VbcOp::LoadFieldICOffset)), "inline-cache op LoadFieldICOffset"));
+	bool all_refused = true;
+	for (vbc::VbcOp op : { vbc::VbcOp::Mod, vbc::VbcOp::MutableAdd, vbc::VbcOp::NewMutableArrayWithCapacity, vbc::VbcOp::NewUnionVariant,
+				 vbc::VbcOp::GetUnionVariantPayload, vbc::VbcOp::GetUnionVariantTag }) {
+		all_refused &= LoadRefused(WithExtraOp(uint64_t(op)), (std::string("uses the op ") + vbc::kVbcOps[uint64_t(op)].name).c_str());
+	}
+	r_cases.check("format §9: the six unimplemented opcodes are refused by name", all_refused);
+	bytes = good;
+	bytes.resize(bytes.size() / 2);
+	r_cases.check("format §9: a truncated file is refused", LoadRefused(bytes, "truncated"));
+	bytes = good;
+	bytes.back() = 0;
+	r_cases.check("format §9: a missing end marker is refused", LoadRefused(bytes, "end marker is missing"));
+	bytes = good;
+	bytes.push_back(0);
+	r_cases.check("loader: bytes after the end marker are refused", LoadRefused(bytes, "follow the end marker"));
+	shape = ProgramShape();
+	shape.accessor_role = false;
+	r_cases.check("format §7: a missing well-known role is refused", LoadRefused(BuildProgram(shape), "names no accessor_enumerator definition"));
+}
+
+std::map<std::string, std::string> g_files;
+
+bool MemoryReader(const char *p_path, std::vector<uint8_t> &r_out) {
+	const auto found = g_files.find(p_path);
+	if (found == g_files.end()) {
+		return false;
+	}
+	r_out.assign(found->second.begin(), found->second.end());
+	return true;
+}
+
+std::string SidecarText(int p_version, int p_abi, const char *p_host_id) {
+	return std::string("{\"version\": ") + std::to_string(p_version) + ", \"abi\": " + std::to_string(p_abi) + ", \"hostId\": \"" + p_host_id +
+			"\", \"engineCommit\": \"203d764\", \"generation\": 1, \"packages\": [\"/x\"],"
+			" \"bindings\": [{\"verse\": \"mob\", \"script\": \"Mob\"}],"
+			" \"engineSignals\": {\"shapes\": [], \"keys\": {}},"
+			" \"classes\": {\"script_class\": {\"abstract\": true, \"published\": true, \"exportsHarvested\": true,"
+			" \"methods\": [{\"name\": \"Fire\", \"decorated\": \"(/user@localhost/script_class:)Fire(:int,:float)\","
+			" \"params\": [{\"name\": \"A\", \"type\": 2, \"tag\": 2, \"default\": false, \"class\": \"\", \"classKind\": 0},"
+			" {\"name\": \"B\", \"type\": 3, \"tag\": 3, \"default\": true, \"class\": \"timer\", \"classKind\": 1}],"
+			" \"required\": 1, \"result\": 0, \"resultTag\": 0, \"resultClass\": \"\", \"resultClassKind\": 0, \"canFail\": true,"
+			" \"suspends\": false, \"virtual\": \"_ready\", \"line\": 3, \"column\": 4}],"
+			" \"signals\": [], \"rpcs\": [], \"exports\": [],"
+			" \"statics\": {\"members\": [{\"name\": \"Pair\", \"isFunction\": false, \"line\": 1, \"column\": 2,"
+			" \"value\": {\"type\": 8, \"tag\": 0, \"v\": [{\"type\": 2, \"tag\": 2, \"v\": \"-9223372036854775808\"}, {\"type\": 9, \"tag\": 0, \"v\": {\"type\": 5, \"tag\": 4, \"v\": \"s\"}}]}}]}},"
+			" \"hidden\": {\"abstract\": false, \"published\": false, \"exportsHarvested\": true, \"methods\": [], \"signals\": [], \"rpcs\": [], \"exports\": []}}}";
+}
+
+int32_t Boot(std::string &r_error) {
+	Runtime runtime;
+	r_error.clear();
+	return runtime.boot("mem/Cooked", r_error);
+}
+
+std::string g_diagnostic;
+
+void CaptureDiagnostic(void *, const vh_diagnostic *p_diagnostic) {
+	g_diagnostic.assign(p_diagnostic->MessageUtf8, size_t(p_diagnostic->MessageLen));
+}
+
+void BootCases(Cases &r_cases) {
+	vm_set_file_reader(&MemoryReader);
+	const std::vector<uint8_t> program = BuildProgram(ProgramShape());
+	const std::string program_text(program.begin(), program.end());
+	std::string error;
+
+	g_files.clear();
+	r_cases.check("sidecar: a missing sidecar is refused with its sentence",
+			Boot(error) == VH_ERR_INIT && error == "Verse data not found at mem/Cooked/verse_classes.json. The export is incomplete; export the project again.");
+	g_files["mem/verse_classes.json"] = "{\"version\": 8,}";
+	r_cases.check("sidecar: invalid JSON is refused with its sentence", Boot(error) == VH_ERR_INIT && error == "mem/verse_classes.json is not valid JSON");
+	g_files["mem/verse_classes.json"] = SidecarText(7, VH_ABI_VERSION, "d78f612c313953e9");
+	r_cases.check("sidecar: another version is refused with its sentence",
+			Boot(error) == VH_ERR_INIT && error == "mem/verse_classes.json was written by sidecar version 7; this host reads version 8. Re-export the project.");
+	g_files["mem/verse_classes.json"] = SidecarText(8, 11000, "abcdef0123");
+	r_cases.check("sidecar: another abi is refused with the stamp sentence",
+			Boot(error) == VH_ERR_INIT && error.find("cooked by a different build of godot-verse (cooked 11000/abcdef0, host 12000/verse_vm)") != std::string::npos);
+	g_files["mem/verse_classes.json"] = "{\"version\": 8, \"abi\": 12000}";
+	r_cases.check("sidecar: a missing field is refused naming the file", Boot(error) == VH_ERR_INIT && error.rfind("mem/verse_classes.json is not a valid class sidecar: ", 0) == 0);
+	g_files["mem/verse_classes.json"] = SidecarText(8, VH_ABI_VERSION, "d78f612c313953e9");
+	r_cases.check("loader: a missing program.vbc is refused with the missing-data sentence",
+			Boot(error) == VH_ERR_INIT && error == "Verse data not found at mem/program.vbc. The export is incomplete; export the project again.");
+	g_files["mem/program.vbc"] = program_text;
+	g_files["mem/verse_classes.json"] = SidecarText(8, VH_ABI_VERSION, "0000000");
+	r_cases.check("loader: a program.vbc from another cook than the sidecar is refused", Boot(error) == VH_ERR_INIT && error.find("were written by different cooks") != std::string::npos);
+	g_files["mem/verse_classes.json"] = SidecarText(8, VH_ABI_VERSION, "d78f612c313953e9");
+
+	Runtime runtime;
+	error.clear();
+	r_cases.check("runtime: boot finds both files beside the cooked directory", runtime.boot("mem/Cooked", error) == VH_OK && error.empty());
+	const vh_method_desc *methods = nullptr;
+	int32_t count = -1;
+	r_cases.check("sidecar: vh_class_method_list's rows, parameters in order, strings NUL-terminated",
+			runtime.method_list("script_class", &methods, &count) == VH_OK && count == 1 && methods[0].ParamCount == 2 &&
+					std::string(methods[0].DecoratedUtf8) == "(/user@localhost/script_class:)Fire(:int,:float)" && methods[0].RequiredParamCount == 1 &&
+					methods[0].CanFail == 1 && std::string(methods[0].GodotVirtualUtf8, size_t(methods[0].GodotVirtualLen)) == "_ready" &&
+					methods[0].Params[1].HasDefault == 1 && std::string(methods[0].Params[1].ClassUtf8) == "timer" && methods[0].Params[1].ClassKind == 1);
+	const vh_static_desc *statics = nullptr;
+	r_cases.check("sidecar: a static's value nests, an int from its decimal string",
+			runtime.static_list("script_class", &statics, &count) == VH_OK && count == 1 && statics[0].Value.Type == VH_TYPE_TUPLE &&
+					statics[0].Value.Seq.Count == 2 && statics[0].Value.Seq.Items[0].Int == INT64_MIN &&
+					statics[0].Value.Seq.Items[1].Option != nullptr &&
+					std::string(statics[0].Value.Seq.Items[1].Option->String.Utf8, size_t(statics[0].Value.Seq.Items[1].Option->String.Len)) == "s");
+	const char *base = nullptr;
+	r_cases.check("runtime: vh_class_base_type walks to the mirrored superclass and answers its Godot name",
+			runtime.base_type("script_class", &base) == VH_OK && std::string(base) == "Node2D");
+	r_cases.check("runtime: an unpublished class is listed but has no class and no base type",
+			!runtime.has_class("hidden") && runtime.base_type("hidden", &base) == VH_ERR_NOT_FOUND &&
+					runtime.method_list("hidden", &methods, &count) == VH_OK && count == 0);
+	r_cases.check("runtime: an unknown class is not found, with its list emptied",
+			runtime.method_list("nope", &methods, &count) == VH_ERR_NOT_FOUND && methods == nullptr && count == 0 && !runtime.is_abstract("nope") &&
+					runtime.is_abstract("script_class"));
+
+	vh_init_desc desc = {};
+	desc.StructSize = sizeof(desc);
+	desc.AbiVersion = VH_ABI_VERSION;
+	desc.Godot.StructSize = int32_t(offsetof(vh_godot_api, IsValid));
+	desc.OnDiagnostic = &CaptureDiagnostic;
+	desc.CookedDirUtf8 = "mem/Cooked";
+	r_cases.check("abi: vh_init boots, vh_has_class answers, a second vh_init is VH_ERR_STATE",
+			vh_init(&desc) == VH_OK && vh_has_class("script_class") == 1 && vh_has_class("hidden") == 0 && vh_init(&desc) == VH_ERR_STATE);
+	vh_shutdown();
+	r_cases.check("abi: after vh_shutdown the class reads answer VH_ERR_STATE", vh_class_method_list("script_class", &methods, &count) == VH_ERR_STATE && count == 0);
+	desc.AbiVersion = (VH_ABI_VERSION_MAJOR + 1) * 1000;
+	r_cases.check("abi: another major is VH_ERR_ABI", vh_init(&desc) == VH_ERR_ABI);
+	desc.AbiVersion = VH_ABI_VERSION;
+	desc.StructSize = int32_t(offsetof(vh_init_desc, CookedDirUtf8));
+	g_diagnostic.clear();
+	r_cases.check("abi: a descriptor too short to carry CookedDirUtf8 is refused with a sentence, not read past",
+			vh_init(&desc) == VH_ERR_INIT && g_diagnostic.find("no cooked directory") != std::string::npos);
+	desc.StructSize = sizeof(desc);
+	g_files.erase("mem/program.vbc");
+	g_diagnostic.clear();
+	r_cases.check("abi: a refusal is a status and an error diagnostic carrying the sentence",
+			vh_init(&desc) == VH_ERR_INIT && g_diagnostic == "Verse data not found at mem/program.vbc. The export is incomplete; export the project again.");
+	vm_set_file_reader(nullptr);
+}
+
+bool RunLoaderCases() {
+	Cases cases;
+	JsonCases(cases);
+	LoaderCases(cases);
+	BootCases(cases);
+	return cases.all_ok;
+}
+
+// `verse_vm_test --vbc <program.vbc> [procedure substring]`: loads a real cook and prints what it
+// holds, and the op names of every procedure whose name contains the substring -- the loader's
+// side of tools/vbc_dump.py --proc.
+int DumpProgram(const char *p_path, const char *p_procedure) {
+	std::vector<uint8_t> bytes;
+	if (!vm_default_file_reader(p_path, bytes)) {
+		printf("cannot read %s\n", p_path);
+		return 1;
+	}
+	Heap heap;
+	Program program;
+	std::string error;
+	if (!load_program(heap, bytes.data(), bytes.size(), p_path, program, error)) {
+		printf("%s\n", error.c_str());
+		return 1;
+	}
+	printf("cells %zu procedures %zu ops %zu natives %zu unbound %zu classes %zu packages %zu\n", program.cell_count, program.procedure_count,
+			program.op_count, program.native_count, program.unbound_native_count, program.classes.size(), program.packages.size());
+	if (p_procedure == nullptr) {
+		return 0;
+	}
+	for (const PackageCell *package : program.packages) {
+		for (const PackageDefinition &definition : package->definitions) {
+			if (!is_cell_kind(definition.value, CellKind::Procedure)) {
+				continue;
+			}
+			const ProcedureCell *procedure = cell_as<ProcedureCell>(definition.value);
+			if (procedure->name->text.find(p_procedure) == std::string::npos) {
+				continue;
+			}
+			printf("procedure %s: %zu ops\n", procedure->name->text.c_str(), procedure->ops.size());
+			for (size_t index = 0; index < procedure->ops.size(); ++index) {
+				printf("  %5zu %s\n", index, vbc::kVbcOps[procedure->ops[index].opcode].name);
+			}
+		}
+	}
+	return 0;
+}
+
 } // namespace
 
-int main() {
+int main(int argc, char **argv) {
+	if (argc >= 3 && std::strcmp(argv[1], "--vbc") == 0) {
+		return DumpProgram(argv[2], argc >= 4 ? argv[3] : nullptr);
+	}
 	bool AllOk = true;
 	AllOk &= Step("uv round trips", TestUvRoundTrip());
 	AllOk &= Step("uv matches the textbook 300 encoding", TestUvKnownEncoding());
@@ -1090,5 +1592,6 @@ int main() {
 	AllOk &= Step("ref decodes as a uv", TestRefIsUv());
 	AllOk &= Step("a reader that has failed stays failed", TestFailureIsSticky());
 	AllOk &= RunValueCases();
+	AllOk &= RunLoaderCases();
 	return AllOk ? 0 : 1;
 }

@@ -64,12 +64,28 @@ Deduplicated: `shapes` is an array of payload shapes, and `keys` maps `"<verse c
 | `statics` | object, optional | `vh_class_static_list` |
 | `types` | object, optional | declared types, used by every call and field access |
 
+**Where the files are.** The cooker writes `verse_classes.json` and `program.vbc` in `verse_data`
+itself, while the consumer hands `vh_init` `verse_data/Cooked` as `CookedDirUtf8`, which is where the
+UE host's IoStore container is. A reader looks in `CookedDirUtf8` first and then its parent.
+
+**The interpreter's own refusals** (the UE host has no equivalents, so these texts are ours):
+
+| Case | Sentence |
+| --- | --- |
+| `abi` differs | `This game's Verse data was cooked by a different build of godot-verse (cooked <abi>/<hostId7>, host <abi>/verse_vm). Export the project again.` |
+| the `.vbc` and the sidecar name different generations | `<dir>: program.vbc and verse_classes.json were written by different cooks. Export the project again.` |
+| valid JSON that is not a version-8 sidecar | `<path> is not a valid class sidecar: <what>.` |
+
 Two class reads are **not** answered from the sidecar:
 
 - **`vh_class_default_field`** — an export's default is generated code. The host builds a transient
   instance of the class with peer minting suppressed (no Godot object is created for it or for any
   member whose initializer would mint one) and reads the field. Nothing is stored.
-- **`vh_class_base_type`** — answered from the loaded program's class graph.
+- **`vh_class_base_type`** — answered from the loaded program's class graph, as the UE runtime host
+  answers it (measured by `tests/class_reads_probe`): a mirrored superclass in **Godot's** spelling
+  (`Node2D`, through `src/verse_api_classes.h`); a binding superclass as its `bindings` row's
+  `godot` or `script` name; and `VH_ERR_NOT_FOUND` for a class that is not `published`, although
+  every list read still answers that class's rows with `VH_OK`.
 
 ### Method
 

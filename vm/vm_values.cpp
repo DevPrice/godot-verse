@@ -593,6 +593,13 @@ void map_remove_last(Value p_map) {
 	rebuild_index(map);
 }
 
+void map_reindex(MapCell *r_map) {
+	for (MapEntry &entry : r_map->entries) {
+		entry.hash = hash_key(entry.key);
+	}
+	rebuild_index(r_map);
+}
+
 Outcome map_key_at(Value p_map, Value p_index, Value &r_result) {
 	p_map = follow(p_map);
 	size_t position = 0;

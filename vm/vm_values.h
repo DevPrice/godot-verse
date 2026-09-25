@@ -58,6 +58,9 @@ Outcome map_lookup(Value p_map, Value p_key, Value &r_result);
 // undoing an insert is map_remove_last.
 Outcome map_set(Value p_map, Value p_key, Value p_value, bool &r_inserted, Value &r_old);
 void map_remove_last(Value p_map);
+// Hashes every entry and builds the index, for a map whose entries were written directly: the
+// loader's, whose keys are not concrete until every cell is filled.
+void map_reindex(MapCell *r_map);
 // MapKey and MapValue.
 Outcome map_key_at(Value p_map, Value p_index, Value &r_result);
 Outcome map_value_at(Value p_map, Value p_index, Value &r_result);

@@ -1,0 +1,68 @@
+#pragma once
+
+#include <cstdint>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+#include "verse_host_abi.h"
+#include "vm_heap.h"
+#include "vm_loader.h"
+#include "vm_sidecar.h"
+
+// The one runtime object the vh_* entry points act on: the loaded program, the sidecar, what the
+// consumer handed vh_init, and the storage each class read's answer lives in until that entry
+// point is called again (include/verse_host_abi.h).
+namespace vm {
+
+class Runtime {
+public:
+	Heap heap;
+	Program program;
+	Sidecar sidecar;
+	std::string sidecar_path;
+	std::string program_path;
+
+	// Copied out of vh_init_desc, the callback table zeroed past the consumer's StructSize.
+	vh_godot_api godot = {};
+	vh_diagnostic_fn on_diagnostic = nullptr;
+	void *diagnostic_ctx = nullptr;
+	vh_runtime_error_fn on_runtime_error = nullptr;
+	void *runtime_error_ctx = nullptr;
+
+	// Reads verse_classes.json and program.vbc from p_cooked_dir, or from its parent: an export
+	// hands vh_init `verse_data/Cooked`, and the cooker writes both files in `verse_data`. VH_OK, or
+	// VH_ERR_INIT with r_error the sentence to report.
+	int32_t boot(const std::string &p_cooked_dir, std::string &r_error);
+
+	// Reports a refusal the way a runtime host reports one: an error diagnostic with no location,
+	// or, failing that, a runtime error with no frames.
+	void report_error(const std::string &p_message) const;
+
+	bool has_class(const char *p_name) const;
+	bool is_abstract(const char *p_name) const;
+	int32_t base_type(const char *p_name, const char **r_utf8);
+	int32_t method_list(const char *p_name, const vh_method_desc **r_methods, int32_t *r_count);
+	int32_t signal_list(const char *p_name, const vh_signal_desc **r_signals, int32_t *r_count);
+	int32_t rpc_list(const char *p_name, const vh_rpc_desc **r_rpcs, int32_t *r_count);
+	int32_t static_list(const char *p_name, const vh_static_desc **r_statics, int32_t *r_count);
+	int32_t export_list(const char *p_name, const vh_export_desc **r_exports, int32_t *r_count);
+
+private:
+	std::string base_type_answer;
+	std::vector<vh_method_desc> method_descs;
+	std::vector<vh_param_desc> method_params;
+	std::vector<vh_signal_desc> signal_descs;
+	std::vector<vh_param_desc> signal_args;
+	std::vector<vh_rpc_desc> rpc_descs;
+	std::vector<vh_static_desc> static_descs;
+	std::vector<std::vector<vh_value>> static_value_blocks;
+	std::vector<vh_export_desc> export_descs;
+	std::unordered_map<std::string, const char *> godot_names;
+
+	const SidecarClass *find(const char *p_name) const;
+	const char *godot_name_for(const std::string &p_verse_name);
+	void fill_value(const SidecarValue &p_value, vh_value &r_value);
+};
+
+} // namespace vm

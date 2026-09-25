@@ -5,13 +5,54 @@
 // 0, having no status to refuse through.
 #include "verse_host_abi.h"
 
+#include <cstddef>
 #include <cstring>
+#include <string>
+
+#include "vm_runtime.h"
 
 namespace {
 
-constexpr int32_t kBootFailed = VH_ERR_INIT;
 constexpr int32_t kNotBooted = VH_ERR_STATE;
 constexpr int32_t kCompilerOnly = VH_ERR_UNSUPPORTED;
+// Entry points a later task implements (T3.4 execution, T3.6 defaults), after vh_init.
+constexpr int32_t kNotYet = VH_ERR_UNSUPPORTED;
+
+// The ABI is a set of free functions over one runtime, so this is the one piece of global state.
+vm::Runtime *g_runtime = nullptr;
+
+int32_t not_booted_or_not_yet() {
+	return g_runtime == nullptr ? kNotBooted : kNotYet;
+}
+
+template <typename Desc>
+int32_t refuse_list(const Desc **r_out, int32_t *r_count) {
+	if (r_out != nullptr) {
+		*r_out = nullptr;
+	}
+	if (r_count != nullptr) {
+		*r_count = 0;
+	}
+	return kNotBooted;
+}
+
+// What vh_init reads of a descriptor, copied so every field past the consumer's StructSize reads
+// as zero rather than as whatever followed the consumer's shorter struct -- the descriptor's own
+// and the callback table's alike (include/verse_host_abi.h, CLAUDE.md on minors).
+vh_init_desc copy_descriptor(const vh_init_desc &p_desc) {
+	vh_init_desc copy = {};
+	const size_t desc_size = size_t(p_desc.StructSize) < sizeof(vh_init_desc) ? size_t(p_desc.StructSize) : sizeof(vh_init_desc);
+	std::memcpy(&copy, &p_desc, desc_size);
+	const size_t godot_offset = offsetof(vh_init_desc, Godot);
+	if (desc_size < godot_offset + sizeof(int32_t)) {
+		std::memset(&copy.Godot, 0, sizeof(copy.Godot));
+		return copy;
+	}
+	const int32_t godot_size = copy.Godot.StructSize;
+	const size_t kept = godot_size <= 0 ? 0 : (size_t(godot_size) < sizeof(vh_godot_api) ? size_t(godot_size) : sizeof(vh_godot_api));
+	std::memset(reinterpret_cast<unsigned char *>(&copy.Godot) + kept, 0, sizeof(vh_godot_api) - kept);
+	return copy;
+}
 
 } // namespace
 
@@ -24,11 +65,41 @@ int32_t vh_host_kind(void) {
 }
 
 int32_t vh_init(const vh_init_desc *Desc) {
-	(void)Desc;
-	return kBootFailed;
+	if (g_runtime != nullptr) {
+		return VH_ERR_STATE;
+	}
+	if (Desc == nullptr || Desc->StructSize < int32_t(offsetof(vh_init_desc, AbiVersion) + sizeof(int32_t)) ||
+			Desc->AbiVersion / 1000 != VH_ABI_VERSION_MAJOR) {
+		return VH_ERR_ABI;
+	}
+	const vh_init_desc desc = copy_descriptor(*Desc);
+
+	vm::Runtime *runtime = new vm::Runtime();
+	runtime->godot = desc.Godot;
+	runtime->on_diagnostic = desc.OnDiagnostic;
+	runtime->diagnostic_ctx = desc.DiagnosticCtx;
+	runtime->on_runtime_error = desc.OnRuntimeError;
+	runtime->runtime_error_ctx = desc.RuntimeErrorCtx;
+
+	std::string error;
+	int32_t status = VH_ERR_INIT;
+	if (desc.CookedDirUtf8 == nullptr) {
+		error = "This runtime runs cooked Verse only, and vh_init was given no cooked directory.";
+	} else {
+		status = runtime->boot(desc.CookedDirUtf8, error);
+	}
+	if (status != VH_OK) {
+		runtime->report_error(error);
+		delete runtime;
+		return status;
+	}
+	g_runtime = runtime;
+	return VH_OK;
 }
 
 void vh_shutdown(void) {
+	delete g_runtime;
+	g_runtime = nullptr;
 }
 
 void vh_tick(double BudgetSeconds, vh_tick_stats *OutStats) {
@@ -95,8 +166,7 @@ int32_t vh_run_main(const char *const *Args, int32_t ArgCount, int64_t *OutExitC
 }
 
 vh_bool vh_has_class(const char *ClassNameUtf8) {
-	(void)ClassNameUtf8;
-	return 0;
+	return g_runtime != nullptr && g_runtime->has_class(ClassNameUtf8) ? 1 : 0;
 }
 
 int32_t vh_instantiate(const char *ClassNameUtf8, vh_handle Handle, vh_instance **OutInstance) {
@@ -105,7 +175,7 @@ int32_t vh_instantiate(const char *ClassNameUtf8, vh_handle Handle, vh_instance 
 	if (OutInstance != nullptr) {
 		*OutInstance = nullptr;
 	}
-	return kNotBooted;
+	return not_booted_or_not_yet();
 }
 
 void vh_release_instance(vh_instance *Instance) {
@@ -113,60 +183,33 @@ void vh_release_instance(vh_instance *Instance) {
 }
 
 int32_t vh_class_method_list(const char *ClassNameUtf8, const vh_method_desc **OutMethods, int32_t *OutCount) {
-	(void)ClassNameUtf8;
-	if (OutMethods != nullptr) {
-		*OutMethods = nullptr;
-	}
-	if (OutCount != nullptr) {
-		*OutCount = 0;
-	}
-	return kNotBooted;
+	return g_runtime == nullptr ? refuse_list(OutMethods, OutCount) : g_runtime->method_list(ClassNameUtf8, OutMethods, OutCount);
 }
 
 int32_t vh_class_signal_list(const char *ClassNameUtf8, const vh_signal_desc **OutSignals, int32_t *OutCount) {
-	(void)ClassNameUtf8;
-	if (OutSignals != nullptr) {
-		*OutSignals = nullptr;
-	}
-	if (OutCount != nullptr) {
-		*OutCount = 0;
-	}
-	return kNotBooted;
+	return g_runtime == nullptr ? refuse_list(OutSignals, OutCount) : g_runtime->signal_list(ClassNameUtf8, OutSignals, OutCount);
 }
 
 int32_t vh_class_rpc_list(const char *ClassNameUtf8, const vh_rpc_desc **OutRpcs, int32_t *OutCount) {
-	(void)ClassNameUtf8;
-	if (OutRpcs != nullptr) {
-		*OutRpcs = nullptr;
-	}
-	if (OutCount != nullptr) {
-		*OutCount = 0;
-	}
-	return kNotBooted;
+	return g_runtime == nullptr ? refuse_list(OutRpcs, OutCount) : g_runtime->rpc_list(ClassNameUtf8, OutRpcs, OutCount);
 }
 
 int32_t vh_class_static_list(const char *ClassNameUtf8, const vh_static_desc **OutStatics, int32_t *OutCount) {
-	(void)ClassNameUtf8;
-	if (OutStatics != nullptr) {
-		*OutStatics = nullptr;
-	}
-	if (OutCount != nullptr) {
-		*OutCount = 0;
-	}
-	return kNotBooted;
+	return g_runtime == nullptr ? refuse_list(OutStatics, OutCount) : g_runtime->static_list(ClassNameUtf8, OutStatics, OutCount);
 }
 
 vh_bool vh_class_is_abstract(const char *ClassNameUtf8) {
-	(void)ClassNameUtf8;
-	return 0;
+	return g_runtime != nullptr && g_runtime->is_abstract(ClassNameUtf8) ? 1 : 0;
 }
 
 int32_t vh_class_base_type(const char *ClassNameUtf8, const char **OutUtf8) {
-	(void)ClassNameUtf8;
-	if (OutUtf8 != nullptr) {
-		*OutUtf8 = nullptr;
+	if (g_runtime == nullptr) {
+		if (OutUtf8 != nullptr) {
+			*OutUtf8 = nullptr;
+		}
+		return kNotBooted;
 	}
-	return kNotBooted;
+	return g_runtime->base_type(ClassNameUtf8, OutUtf8);
 }
 
 vh_bool vh_instance_has_function(vh_instance *Instance, const char *DecoratedName) {
@@ -199,14 +242,7 @@ void vh_callback_release(int64_t CallbackId) {
 }
 
 int32_t vh_class_export_list(const char *ClassNameUtf8, const vh_export_desc **OutExports, int32_t *OutCount) {
-	(void)ClassNameUtf8;
-	if (OutExports != nullptr) {
-		*OutExports = nullptr;
-	}
-	if (OutCount != nullptr) {
-		*OutCount = 0;
-	}
-	return kNotBooted;
+	return g_runtime == nullptr ? refuse_list(OutExports, OutCount) : g_runtime->export_list(ClassNameUtf8, OutExports, OutCount);
 }
 
 int32_t vh_instance_get_field(vh_instance *Instance, const char *NameUtf8, const vh_value **OutValue) {
@@ -224,7 +260,7 @@ int32_t vh_class_default_field(const char *ClassNameUtf8, const char *NameUtf8, 
 	if (OutValue != nullptr) {
 		*OutValue = nullptr;
 	}
-	return kNotBooted;
+	return not_booted_or_not_yet();
 }
 
 int32_t vh_instance_set_field(vh_instance *Instance, const char *NameUtf8, const vh_value *Value) {

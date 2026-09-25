@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "vm_bigint.h"
+#include "vm_status.h"
 #include "vm_value.h"
 
 namespace vm {
@@ -221,7 +222,29 @@ struct RegisterName {
 	uint32_t last_op = 0;
 };
 
-// format.md §5's fields. The decoded op stream is the loader's (T3.3) to add.
+struct DecodedOp {
+	uint16_t opcode = 0;
+	uint32_t operands = 0;
+};
+
+// An absent operand, in any slot: an optional one not written, a `value` or cell operand the
+// compiler left out.
+constexpr uint32_t kAbsentOperand = 0xFFFFFFFFu;
+
+// format.md §5. The op stream is decoded once, at load, for a switch loop to execute: op i's
+// operands are the words starting at operand_words[ops[i].operands], one word per operand ops.json
+// lists for its opcode with cache operands left out, in the schema's order, so operand k of a
+// known opcode is one index away. A word is, by the operand's kind:
+//   register            the register index
+//   value               register r as r << 1, constant c as (c << 1) | 1
+//   value_imm, cell:*   a constant index: the loader appends each to `constants`
+//   label               an op index, below ops.size()
+//   bool, i32, u32, failure_context_id, enum:*   the number itself, an i32 as its bit pattern
+//   live_range, asset_path   the index of two more words: first and last op (each at most
+//                       ops.size(); (ops.size(), 0) is the empty range), or two constant indices
+//                       of name cells, package then asset
+//   variadic            the index of a count followed by that many words of the element's kind
+// An operand the file leaves absent is kAbsentOperand, whatever its kind.
 struct ProcedureCell : Cell {
 	const NameCell *name = nullptr;
 	std::string file;
@@ -230,6 +253,8 @@ struct ProcedureCell : Cell {
 	uint32_t positional_count = 0;
 	std::vector<NamedParameter> named_parameters;
 	std::vector<Value> constants;
+	std::vector<DecodedOp> ops;
+	std::vector<uint32_t> operand_words;
 	std::vector<UnwindEdge> unwind_edges;
 	std::vector<LineEntry> lines;
 	std::vector<RegisterName> register_names;
@@ -248,11 +273,17 @@ struct ProcedureCell : Cell {
 	}
 };
 
+struct NativeCall;
+typedef Outcome (*NativeFn)(NativeCall &r_call);
+
+// `bound` is false for a native this runtime has no implementation of: `implementation` is then
+// the stand-in that raises (spec/natives.md §3.2).
 struct NativeProcedureCell : Cell {
 	const NameCell *binding_key = nullptr;
 	const NameCell *decorated_name = nullptr;
 	uint32_t positional_count = 0;
-	const void *binding = nullptr;
+	NativeFn implementation = nullptr;
+	bool bound = false;
 
 	NativeProcedureCell() :
 			Cell(CellKind::NativeProcedure) {}

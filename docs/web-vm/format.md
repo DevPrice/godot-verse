@@ -253,4 +253,6 @@ Each refusal is a sentence naming the file, never a crash: wrong magic; another 
 `ops.json` digest other than the reader's own; a `ref` out of range; an opcode out of range or an
 inline-cache opcode; one of the six opcodes version 1 does not implement — `Mod`, `MutableAdd`,
 `NewMutableArrayWithCapacity` (never emitted, and computing a value whose convention is known only
-from source) and the three union ops (`spec/ops.md` §13); a truncated file; a missing end marker.
+from source) and the three union ops (`spec/ops.md` §13); a truncated file; a missing end marker;
+bytes after it; a `ref` to a cell of the wrong kind for its field; and a register, constant, label,
+live range, unwind edge or location out of its procedure's range.
