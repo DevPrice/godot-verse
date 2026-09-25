@@ -22,6 +22,7 @@
 namespace vm {
 
 struct Sidecar;
+class GodotBridge;
 
 struct ErrorFrame {
 	std::string function;
@@ -68,6 +69,7 @@ public:
 	const Program &program;
 	const Sidecar *sidecar = nullptr;
 	vh_godot_api godot = {};
+	GodotBridge *bridge = nullptr;
 
 	// A VM entry (spec/failure.md §1): a root full failure context. Entries nest when a native calls
 	// back into Verse, and a nested one is a transaction inside whatever context the native was
@@ -103,6 +105,9 @@ public:
 	// p_value, and so does everything it resumes, before this returns. Nothing happens when its
 	// captured scope was terminated or it is no longer Active. Error propagates the raise.
 	Outcome complete(TaskCell *p_task, Value p_value);
+	// An event(t)'s Signal made from outside Verse (spec/natives.md §7.2): its awaiters resume, then
+	// its subscribers run, before this returns.
+	Outcome signal_event(Value p_event, Value p_payload);
 
 	// The natives of `task(t)` and `event(t)` (spec/natives.md §7, §8) and `Sleep`
 	// (godot-natives.md §10), by binding key, or null.

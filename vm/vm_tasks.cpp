@@ -944,18 +944,26 @@ Outcome Interpreter::event_signal(NativeCall &r_call) {
 	if (unbound_argument(r_call)) {
 		return Outcome::Park;
 	}
-	EventState *state = state_of<EventState>(r_call.self);
-	if (state == nullptr || r_call.interpreter == nullptr) {
+	if (state_of<EventState>(r_call.self) == nullptr || r_call.interpreter == nullptr) {
 		return Outcome::Invalid;
 	}
-	Interpreter &interpreter = *r_call.interpreter;
-	const Value payload = argument(r_call, 0);
 	r_call.result = r_call.heap.false_value();
+	return r_call.interpreter->signal_event(r_call.self, argument(r_call, 0));
+}
+
+Outcome Interpreter::signal_event(Value p_event, Value p_payload) {
+	EventState *state = state_of<EventState>(p_event);
+	if (state == nullptr) {
+		return Outcome::Invalid;
+	}
+	Interpreter &interpreter = *this;
+	const Value payload = p_payload;
 	std::vector<TaskCell *> batch;
 	batch.swap(state->awaiters);
 	for (TaskCell *awaiter : batch) {
-		if (interpreter.complete(awaiter, payload) != Outcome::Ok) {
-			return Outcome::Ok;
+		const Outcome resumed = interpreter.complete(awaiter, payload);
+		if (resumed != Outcome::Ok) {
+			return resumed;
 		}
 	}
 	const std::vector<EventState::Subscription> subscriptions = state->subscriptions;
@@ -977,7 +985,7 @@ Outcome Interpreter::event_signal(NativeCall &r_call) {
 		interpreter.end_entry(outcome == Outcome::Ok);
 		interpreter.active_scope = saved_scope;
 		if (interpreter.unwinding != Outcome::Ok) {
-			return Outcome::Ok;
+			return interpreter.unwinding;
 		}
 	}
 	return Outcome::Ok;

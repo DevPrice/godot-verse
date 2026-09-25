@@ -13,18 +13,9 @@
 #include <vector>
 
 #include "vm_marshal.h"
+#include "vm_objects.h"
 #include "vm_runtime.h"
-
-// One live script object the host holds. Its object is a root for as long as the host holds it
-// (design §7.3).
-struct vh_instance {
-	vm::Value object;
-	// The instance's content scope (spec/tasks.md §8.1): made at vh_instantiate, active for every
-	// call into it, replaced after a raise terminated it, terminated at vh_release_instance.
-	vm::Value scope;
-	vh_handle handle = 0;
-	const vm::SidecarClass *sidecar_class = nullptr;
-};
+#include "vm_values.h"
 
 namespace {
 
@@ -93,6 +84,41 @@ const vm::SidecarMethod *find_method(const vm::SidecarClass *p_class, const char
 	}
 	return nullptr;
 }
+
+const vm::SidecarMemberType *find_member_type(const vm::SidecarClass *p_class, const char *p_name) {
+	if (p_class == nullptr || p_name == nullptr) {
+		return nullptr;
+	}
+	for (const std::pair<std::string, vm::SidecarMemberType> &member : p_class->member_types) {
+		if (member.first == p_name) {
+			return &member.second;
+		}
+	}
+	return nullptr;
+}
+
+const vm::ClassCell *superclass_of(const vm::ClassCell *p_class) {
+	if (p_class == nullptr || p_class->inherited.empty()) {
+		return nullptr;
+	}
+	const vm::ClassCell *first = p_class->inherited.front();
+	return first != nullptr && first->class_kind != vm::ClassKind::Interface ? first : nullptr;
+}
+
+const vm::Cell *callee_of(const vm::LayoutField *p_field) {
+	if (p_field == nullptr || p_field->kind != vm::FieldKind::Constant || !vm::is_cell_kind(p_field->value, vm::CellKind::Function)) {
+		return nullptr;
+	}
+	return vm::cell_as<vm::FunctionCell>(p_field->value)->callee;
+}
+
+// Which of the runtime's result arenas a call answers into when the consumer hands none.
+struct CallDepth {
+	size_t depth;
+	CallDepth() :
+			depth(g_runtime->call_depth++) {}
+	~CallDepth() { --g_runtime->call_depth; }
+};
 
 // What vh_init reads of a descriptor, copied so every field past the consumer's StructSize reads
 // as zero rather than as whatever followed the consumer's shorter struct -- the descriptor's own
@@ -189,7 +215,7 @@ void vh_shutdown(void) {
 void vh_tick(double BudgetSeconds, vh_tick_stats *OutStats) {
 	(void)BudgetSeconds;
 	vh_tick_stats stats = {};
-	if (g_runtime != nullptr) {
+	if (g_runtime != nullptr && g_runtime->on_init_thread()) {
 		g_runtime->tick(stats);
 	}
 	if (OutStats == nullptr) {
@@ -269,6 +295,10 @@ int32_t vh_instantiate(const char *ClassNameUtf8, vh_handle Handle, vh_instance 
 	if (ClassNameUtf8 == nullptr || OutInstance == nullptr) {
 		return VH_ERR_ARGUMENT;
 	}
+	if (!g_runtime->on_init_thread()) {
+		g_runtime->refuse_thread(std::string("Instantiating ") + ClassNameUtf8);
+		return VH_ERR_THREAD;
+	}
 	const vm::ClassIndexEntry *entry = g_runtime->program.find_class(vm::ClassOrigin::Script, ClassNameUtf8);
 	if (entry == nullptr || !g_runtime->has_class(ClassNameUtf8)) {
 		return VH_ERR_NOT_FOUND;
@@ -292,6 +322,8 @@ int32_t vh_instantiate(const char *ClassNameUtf8, vh_handle Handle, vh_instance 
 	instance->handle = Handle;
 	instance->sidecar_class = g_runtime->sidecar.find_class(ClassNameUtf8);
 	g_runtime->instance_scopes.push_back(&instance->scope);
+	g_runtime->bridge.register_instance(instance);
+	g_runtime->bridge.bind_instance_signals(instance);
 	*OutInstance = instance;
 	collect_after_entry();
 	return VH_OK;
@@ -312,6 +344,8 @@ void vh_release_instance(vh_instance *Instance) {
 				interpreter.terminate_scope(scope);
 			}
 		}
+		g_runtime->bridge.release_instance_signals(Instance);
+		g_runtime->bridge.forget_instance(Instance);
 		g_runtime->heap.remove_handle_root(&Instance->object);
 		g_runtime->heap.remove_handle_root(&Instance->scope);
 		std::vector<const vm::Value *> &scopes = g_runtime->instance_scopes;
@@ -350,15 +384,39 @@ int32_t vh_class_base_type(const char *ClassNameUtf8, const char **OutUtf8) {
 	return g_runtime->base_type(ClassNameUtf8, OutUtf8);
 }
 
+// godot-natives.md §11.1: implemented unless the nearest class above the script's own that is not
+// a script class resolves the name to the same body.
 vh_bool vh_instance_has_function(vh_instance *Instance, const char *DecoratedName) {
-	(void)Instance;
-	(void)DecoratedName;
-	return 0;
+	if (g_runtime == nullptr || Instance == nullptr || DecoratedName == nullptr) {
+		return 0;
+	}
+	const vm::NameCell *name = g_runtime->heap.find_interned(DecoratedName);
+	if (name == nullptr || !vm::is_cell_kind(Instance->object, vm::CellKind::Object)) {
+		return 0;
+	}
+	const vm::ObjectCell *object = vm::cell_as<vm::ObjectCell>(Instance->object);
+	const vm::Cell *own = object->layout != nullptr ? callee_of(object->layout->find(name)) : nullptr;
+	if (own == nullptr) {
+		return 0;
+	}
+	vm::Interpreter &interpreter = g_runtime->interpreter;
+	for (const vm::ClassCell *current = superclass_of(object->object_class); current != nullptr; current = superclass_of(current)) {
+		const vm::ClassIndexEntry *entry = g_runtime->program.entry_for(current);
+		if (entry != nullptr && entry->origin == vm::ClassOrigin::Script) {
+			continue;
+		}
+		return callee_of(interpreter.layouts.get(current).find(name)) == own ? 0 : 1;
+	}
+	return 1;
 }
 
 int32_t vh_instance_call(vh_instance *Instance, const char *DecoratedName, const vh_value *Args, int32_t ArgCount, vh_arena *Arena, vh_value *OutResult) {
 	if (g_runtime == nullptr) {
 		return kNotBooted;
+	}
+	if (!g_runtime->on_init_thread()) {
+		g_runtime->refuse_thread(DecoratedName != nullptr ? DecoratedName : "A method");
+		return VH_ERR_THREAD;
 	}
 	if (Instance == nullptr || DecoratedName == nullptr || ArgCount < 0 || (ArgCount > 0 && Args == nullptr)) {
 		return VH_ERR_ARGUMENT;
@@ -375,40 +433,61 @@ int32_t vh_instance_call(vh_instance *Instance, const char *DecoratedName, const
 	if (method != nullptr && (ArgCount < method->required || size_t(ArgCount) > method->params.size())) {
 		return VH_ERR_ARGUMENT;
 	}
-
-	// Arguments past the procedure's positional ones are its named parameters, in declaration
-	// order (spec/calls.md §8).
-	const vm::Cell *callee = vm::cell_as<vm::FunctionCell>(function)->callee;
-	const uint32_t positional_count = callee->kind == vm::CellKind::Procedure
-			? static_cast<const vm::ProcedureCell *>(callee)->positional_count
-			: static_cast<const vm::NativeProcedureCell *>(callee)->positional_count;
-	std::vector<vm::Value> positional;
-	std::vector<vm::NamedArgument> named;
-	for (int32_t index = 0; index < ArgCount; ++index) {
-		const int32_t declared = method != nullptr ? method->params[size_t(index)].type : Args[index].Type;
-		vm::Value value;
-		if (!vm::wire_to_value(heap, Args[index], declared, value)) {
-			return VH_ERR_ARGUMENT;
-		}
-		if (uint32_t(index) < positional_count || method == nullptr) {
-			positional.push_back(value);
-		} else {
-			named.push_back(vm::NamedArgument{ heap.intern(method->params[size_t(index)].name), value });
-		}
-	}
+	Instance->sealed = true;
+	vm::GodotBridge &bridge = g_runtime->bridge;
+	bridge.ensure_event_connections(Instance);
+	const CallDepth call_depth;
 
 	const ScopeRestore restore{ interpreter, interpreter.active_scope };
 	g_runtime->activate_scope(Instance->scope);
 	interpreter.begin_entry();
+
+	// Arguments past the procedure's positional ones are its named parameters, in declaration
+	// order (spec/calls.md §8). Converting one may build the object a handle names, which is Verse.
+	const vm::SidecarMethodTypes *types = bridge.method_types(DecoratedName);
+	const vm::Cell *callee = vm::cell_as<vm::FunctionCell>(function)->callee;
+	const uint32_t positional_count = callee->kind == vm::CellKind::Procedure
+			? static_cast<const vm::ProcedureCell *>(callee)->positional_count
+			: static_cast<const vm::NativeProcedureCell *>(callee)->positional_count;
+	std::vector<vm::Value> converted;
+	std::string why;
+	bool shaped = true;
+	if (types != nullptr && types->params.size() >= size_t(ArgCount)) {
+		shaped = bridge.wire_to_arguments(types, Args, ArgCount, false, converted, why);
+	} else {
+		for (int32_t index = 0; index < ArgCount && shaped; ++index) {
+			const int32_t declared = method != nullptr ? method->params[size_t(index)].type : Args[index].Type;
+			vm::Value value;
+			shaped = vm::wire_to_value(heap, Args[index], declared, value);
+			converted.push_back(value);
+		}
+	}
+	if (!shaped) {
+		interpreter.end_entry(false);
+		return VH_ERR_ARGUMENT;
+	}
+	std::vector<vm::Value> positional;
+	std::vector<vm::NamedArgument> named;
+	for (size_t index = 0; index < converted.size(); ++index) {
+		if (uint32_t(index) < positional_count || method == nullptr) {
+			positional.push_back(converted[index]);
+		} else {
+			named.push_back(vm::NamedArgument{ heap.intern(method->params[index].name), converted[index] });
+		}
+	}
+
 	vm::Value result;
 	vm::RootScope result_root(heap, &result);
 	const vm::Outcome outcome = interpreter.invoke(function, Instance->object, positional, named, result);
-	if (outcome == vm::Outcome::Ok && OutResult != nullptr && Arena != nullptr) {
-		std::string why;
+	if (outcome == vm::Outcome::Ok && OutResult != nullptr) {
+		vh_arena *arena = Arena != nullptr ? Arena : &g_runtime->result_arena(call_depth.depth);
 		vh_value wire = {};
 		const int32_t result_type = method != nullptr ? method->result : VH_TYPE_VOID;
 		const int32_t result_tag = method != nullptr ? method->result_tag : 0;
-		if (!vm::value_to_wire(result, result_type, result_tag, Arena, wire, why)) {
+		const bool carried = types != nullptr && result_type != VH_TYPE_VOID
+				? bridge.member_to_wire(result, types->result, arena, wire, why)
+				: vm::value_to_wire(result, result_type, result_tag, arena, wire, why);
+		if (!carried) {
 			interpreter.end_entry(false);
 			vm::RaisedError raised;
 			raised.error.diagnostic = "ErrRuntime_Internal";
@@ -425,17 +504,69 @@ int32_t vh_instance_call(vh_instance *Instance, const char *DecoratedName, const
 	return status;
 }
 
+// godot-natives.md §9.5: a method call, or a wait or an event resumed, each in an entry of its own.
 int32_t vh_callback_invoke(int64_t CallbackId, const vh_value *Args, int32_t ArgCount, vh_arena *Arena, vh_value *OutResult) {
-	(void)CallbackId;
-	(void)Args;
-	(void)ArgCount;
-	(void)Arena;
-	(void)OutResult;
-	return kNotBooted;
+	if (g_runtime == nullptr) {
+		return kNotBooted;
+	}
+	if (!g_runtime->on_init_thread()) {
+		g_runtime->refuse_thread("A Verse callback");
+		return VH_ERR_THREAD;
+	}
+	if (ArgCount < 0 || (ArgCount > 0 && Args == nullptr)) {
+		return VH_ERR_ARGUMENT;
+	}
+	vm::GodotBridge &bridge = g_runtime->bridge;
+	vm::Interpreter &interpreter = g_runtime->interpreter;
+	vh_instance *owner = nullptr;
+	if (!bridge.callback_owner(CallbackId, owner)) {
+		return VH_ERR_NOT_FOUND;
+	}
+	const CallDepth call_depth;
+	const ScopeRestore restore{ interpreter, interpreter.active_scope };
+	g_runtime->activate_scope(owner != nullptr ? owner->scope : g_runtime->project_scope);
+	interpreter.begin_entry();
+	vm::GodotBridge::CallbackTarget target;
+	bridge.resolve_callback(CallbackId, Args, ArgCount, target);
+	vm::RootScope function_root(g_runtime->heap, &target.function);
+	vm::RootScope event_root(g_runtime->heap, &target.event);
+	vm::RootScope payload_root(g_runtime->heap, &target.payload);
+	vm::Outcome outcome = vm::Outcome::Ok;
+	vm::Value result;
+	vm::RootScope result_root(g_runtime->heap, &result);
+	switch (target.delivery) {
+		case vm::GodotBridge::Delivery::NotFound:
+			interpreter.end_entry(false);
+			return VH_ERR_NOT_FOUND;
+		case vm::GodotBridge::Delivery::BadArguments:
+			interpreter.end_entry(false);
+			return VH_ERR_ARGUMENT;
+		case vm::GodotBridge::Delivery::Noop:
+			break;
+		case vm::GodotBridge::Delivery::Signal:
+			outcome = interpreter.signal_event(target.event, target.payload);
+			break;
+		case vm::GodotBridge::Delivery::Call:
+			outcome = interpreter.invoke(target.function, vm::Value(), target.arguments, {}, result);
+			if (outcome == vm::Outcome::Ok && OutResult != nullptr && target.types != nullptr) {
+				vh_arena *arena = Arena != nullptr ? Arena : &g_runtime->result_arena(call_depth.depth);
+				vh_value wire = {};
+				std::string why;
+				if (target.types->result.described.type != VH_TYPE_VOID && bridge.member_to_wire(result, target.types->result, arena, wire, why)) {
+					*OutResult = wire;
+				}
+			}
+			break;
+	}
+	const int32_t status = entry_status(outcome);
+	collect_after_entry();
+	return status;
 }
 
 void vh_callback_release(int64_t CallbackId) {
-	(void)CallbackId;
+	if (g_runtime != nullptr) {
+		g_runtime->bridge.release_callback(CallbackId);
+	}
 }
 
 int32_t vh_class_export_list(const char *ClassNameUtf8, const vh_export_desc **OutExports, int32_t *OutCount) {
@@ -443,12 +574,28 @@ int32_t vh_class_export_list(const char *ClassNameUtf8, const vh_export_desc **O
 }
 
 int32_t vh_instance_get_field(vh_instance *Instance, const char *NameUtf8, const vh_value **OutValue) {
-	(void)Instance;
-	(void)NameUtf8;
 	if (OutValue != nullptr) {
 		*OutValue = nullptr;
 	}
-	return kNotBooted;
+	if (g_runtime == nullptr) {
+		return kNotBooted;
+	}
+	if (Instance == nullptr || NameUtf8 == nullptr || OutValue == nullptr) {
+		return VH_ERR_ARGUMENT;
+	}
+	const vm::SidecarMemberType *type = find_member_type(Instance->sidecar_class, NameUtf8);
+	vm::GodotBridge &bridge = g_runtime->bridge;
+	const vm::Value value = bridge.field_value(Instance->object, NameUtf8);
+	if (type == nullptr || value.is_empty() || vm::is_unbound_placeholder(value)) {
+		return VH_ERR_NOT_FOUND;
+	}
+	g_runtime->field_arena.reset();
+	std::string why;
+	if (!bridge.member_to_wire(value, *type, &g_runtime->field_arena, g_runtime->field_answer, why)) {
+		return VH_ERR_NOT_FOUND;
+	}
+	*OutValue = &g_runtime->field_answer;
+	return VH_OK;
 }
 
 int32_t vh_class_default_field(const char *ClassNameUtf8, const char *NameUtf8, const vh_value **OutValue) {
@@ -461,26 +608,143 @@ int32_t vh_class_default_field(const char *ClassNameUtf8, const char *NameUtf8, 
 	return g_runtime->default_field(ClassNameUtf8, NameUtf8, OutValue);
 }
 
+namespace {
+
+// The slot a member write lands in, or null for a member that is absent, a shape constant, or a
+// non-var one the first call has sealed (include/verse_host_abi.h, vh_instance_set_field).
+vm::Value *writable_slot(vh_instance *p_instance, const char *p_name, const vm::SidecarMemberType *&r_type) {
+	r_type = find_member_type(p_instance->sidecar_class, p_name);
+	if (r_type == nullptr || (p_instance->sealed && !r_type->is_var) || !vm::is_cell_kind(p_instance->object, vm::CellKind::Object)) {
+		return nullptr;
+	}
+	return g_runtime->bridge.field_slot(vm::cell_as<vm::ObjectCell>(p_instance->object), p_name);
+}
+
+// A `var` holds its content melted, which every read of it freezes again (spec/values.md §7).
+void store(vm::Value &r_slot, vm::Value p_value) {
+	vm::Value held = vm::read_slot(r_slot);
+	if (!vm::is_cell_kind(held, vm::CellKind::Ref)) {
+		held = r_slot;
+	}
+	if (vm::is_cell_kind(held, vm::CellKind::Ref)) {
+		vm::Value melted = p_value;
+		vm::melt(g_runtime->heap, p_value, melted);
+		vm::cell_as<vm::RefCell>(held)->content = melted;
+		return;
+	}
+	r_slot = p_value;
+}
+
+} // namespace
+
 int32_t vh_instance_set_field(vh_instance *Instance, const char *NameUtf8, const vh_value *Value) {
-	(void)Instance;
-	(void)NameUtf8;
-	(void)Value;
-	return kNotBooted;
+	if (g_runtime == nullptr) {
+		return kNotBooted;
+	}
+	if (Instance == nullptr || NameUtf8 == nullptr || Value == nullptr) {
+		return VH_ERR_ARGUMENT;
+	}
+	if (!g_runtime->on_init_thread()) {
+		return VH_ERR_THREAD;
+	}
+	const vm::SidecarMemberType *type = nullptr;
+	vm::Value *slot = writable_slot(Instance, NameUtf8, type);
+	if (slot == nullptr) {
+		return VH_ERR_NOT_FOUND;
+	}
+	vm::Interpreter &interpreter = g_runtime->interpreter;
+	const ScopeRestore restore{ interpreter, interpreter.active_scope };
+	g_runtime->activate_scope(Instance->scope);
+	interpreter.begin_entry();
+	vm::Value value;
+	vm::RootScope value_root(g_runtime->heap, &value);
+	std::string why;
+	if (!g_runtime->bridge.wire_to_member(*Value, *type, value, why)) {
+		interpreter.end_entry(false);
+		return VH_ERR_ARGUMENT;
+	}
+	store(*slot, value);
+	const int32_t status = entry_status(vm::Outcome::Ok);
+	collect_after_entry();
+	return status;
 }
 
 int32_t vh_instance_set_field_instance(vh_instance *Instance, const char *NameUtf8, vh_instance *Value) {
-	(void)Instance;
-	(void)NameUtf8;
-	(void)Value;
-	return kNotBooted;
+	if (g_runtime == nullptr) {
+		return kNotBooted;
+	}
+	if (Instance == nullptr || NameUtf8 == nullptr) {
+		return VH_ERR_ARGUMENT;
+	}
+	const vm::SidecarMemberType *type = nullptr;
+	vm::Value *slot = writable_slot(Instance, NameUtf8, type);
+	if (slot == nullptr || !type->has_ref) {
+		return VH_ERR_NOT_FOUND;
+	}
+	vm::Heap &heap = g_runtime->heap;
+	if (Value == nullptr) {
+		if (!type->ref_option) {
+			return VH_ERR_NOT_FOUND;
+		}
+		store(*slot, heap.false_value());
+		return VH_OK;
+	}
+	const vm::ClassIndexEntry *declared = g_runtime->program.find_class(
+			type->ref_origin == 2 ? vm::ClassOrigin::Script : type->ref_origin == 1 ? vm::ClassOrigin::Mirrored : vm::ClassOrigin::Binding, type->ref);
+	if (!vm::is_cell_kind(Value->object, vm::CellKind::Object) ||
+			(declared != nullptr && !vm::class_inherits(vm::cell_as<vm::ObjectCell>(Value->object)->object_class, declared->class_cell))) {
+		return VH_ERR_NOT_FOUND;
+	}
+	store(*slot, type->ref_option ? vm::make_option(heap, Value->object) : Value->object);
+	return VH_OK;
 }
 
+// R-NODE-10: the class's ToString extension method, a module-level function taking the receiver
+// and the call's own (empty) argument tuple.
 int32_t vh_instance_to_string(vh_instance *Instance, const vh_value **OutValue) {
-	(void)Instance;
 	if (OutValue != nullptr) {
 		*OutValue = nullptr;
 	}
-	return kNotBooted;
+	if (g_runtime == nullptr) {
+		return kNotBooted;
+	}
+	if (Instance == nullptr || OutValue == nullptr) {
+		return VH_ERR_ARGUMENT;
+	}
+	if (!g_runtime->on_init_thread()) {
+		return VH_ERR_THREAD;
+	}
+	if (Instance->sidecar_class == nullptr || Instance->sidecar_class->to_string.empty()) {
+		return VH_ERR_NOT_FOUND;
+	}
+	vm::Value function = g_runtime->bridge.definition(Instance->sidecar_class->to_string);
+	if (!vm::is_cell_kind(function, vm::CellKind::Function)) {
+		return VH_ERR_NOT_FOUND;
+	}
+	vm::Interpreter &interpreter = g_runtime->interpreter;
+	vm::Heap &heap = g_runtime->heap;
+	const ScopeRestore restore{ interpreter, interpreter.active_scope };
+	g_runtime->activate_scope(Instance->scope);
+	interpreter.begin_entry();
+	vm::Value result;
+	vm::RootScope result_root(heap, &result);
+	const std::vector<vm::Value> arguments = { Instance->object, vm::make_array(heap, {}, false) };
+	const vm::Outcome outcome = interpreter.invoke(function, vm::Value(), arguments, {}, result);
+	std::string text;
+	const bool is_text = outcome == vm::Outcome::Ok && vm::string_bytes(vm::follow(result), text);
+	const int32_t status = entry_status(outcome);
+	collect_after_entry();
+	if (status != VH_OK || !is_text) {
+		return status != VH_OK ? status : VH_ERR_NOT_FOUND;
+	}
+	g_runtime->string_arena.reset();
+	g_runtime->string_answer = vh_value{};
+	std::string why;
+	if (!vm::value_to_wire(vm::make_string(heap, text), VH_TYPE_STRING, VH_VARIANT_STRING, &g_runtime->string_arena, g_runtime->string_answer, why)) {
+		return VH_ERR_NOT_FOUND;
+	}
+	*OutValue = &g_runtime->string_answer;
+	return VH_OK;
 }
 
 int32_t vh_lookup_symbol(const char *PathUtf8, int32_t Line, int32_t Column, const vh_lookup_desc **OutResult) {

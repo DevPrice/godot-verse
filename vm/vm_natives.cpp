@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "vm_godot.h"
 #include "vm_interpreter.h"
 #include "vm_loader.h"
 #include "vm_math.h"
@@ -1442,6 +1443,9 @@ NativeFn native_implementation(std::string_view p_binding_key) {
 		if (p_binding_key == binding.key) {
 			return binding.implementation;
 		}
+	}
+	if (const NativeFn godot = godot_native(p_binding_key)) {
+		return godot;
 	}
 	return Interpreter::task_native(p_binding_key);
 }

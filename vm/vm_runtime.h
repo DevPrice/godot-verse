@@ -6,8 +6,12 @@
 #include <string_view>
 #include <unordered_map>
 #include <vector>
+#if !defined(__EMSCRIPTEN__) || defined(__EMSCRIPTEN_PTHREADS__)
+#include <thread>
+#endif
 
 #include "verse_host_abi.h"
+#include "vm_godot.h"
 #include "vm_heap.h"
 #include "vm_interpreter.h"
 #include "vm_loader.h"
@@ -47,6 +51,7 @@ public:
 	Program program;
 	Sidecar sidecar;
 	Interpreter interpreter{ heap, program };
+	GodotBridge bridge{ interpreter, sidecar };
 	std::string sidecar_path;
 	std::string program_path;
 
@@ -74,6 +79,12 @@ public:
 	// Set from VERSE_VM_GC_STRESS at vh_init: collect after every entry the host makes, so a missing
 	// root shows up as a wrong answer or a crash at the next call rather than eventually.
 	bool gc_stress = false;
+
+	// Whether the caller is on the thread that called vh_init, which every entry point that runs
+	// Verse must be (include/verse_host_abi.h, VH_ERR_THREAD). A build with no threads has one.
+	bool on_init_thread() const;
+	// Says, once per call refused, that p_what was called from another thread and did not run.
+	void refuse_thread(const std::string &p_what) const;
 
 	// Makes r_scope's content scope the active one for an entry, first replacing it with a fresh one
 	// when it is missing or terminated: a terminated scope is never revived (CLAUDE.md, R-ASYNC-4).
@@ -105,7 +116,22 @@ public:
 	// read and dropped. Nothing is stored between calls but the answer.
 	int32_t default_field(const char *p_class, const char *p_name, const vh_value **r_value);
 
+	// Where a call's result is written when the consumer hands no arena: one arena per nesting
+	// depth, so a call Godot makes from inside another does not overwrite the outer call's answer
+	// before the consumer has read it.
+	HostArena &result_arena(size_t p_depth);
+	size_t call_depth = 0;
+	// vh_instance_get_field's and vh_instance_to_string's answers, each valid until its next call.
+	HostArena field_arena;
+	vh_value field_answer = {};
+	HostArena string_arena;
+	vh_value string_answer = {};
+
 private:
+#if !defined(__EMSCRIPTEN__) || defined(__EMSCRIPTEN_PTHREADS__)
+	std::thread::id init_thread = std::this_thread::get_id();
+#endif
+	std::vector<std::unique_ptr<HostArena>> result_arenas;
 	HostArena default_arena;
 	vh_value default_answer = {};
 	std::string base_type_answer;

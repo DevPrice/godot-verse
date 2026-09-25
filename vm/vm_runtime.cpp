@@ -133,7 +133,30 @@ int32_t Runtime::boot(const std::string &p_cooked_dir, std::string &r_error) {
 	}
 	// Not roots: a value object nothing in the program names is garbage, and would dangle here.
 	program.value_objects.clear();
+	interpreter.bridge = &bridge;
+	bridge.bind_program();
+	bridge.report_error = [this](const std::string &p_message) { report_error(p_message); };
 	return VH_OK;
+}
+
+bool Runtime::on_init_thread() const {
+#if !defined(__EMSCRIPTEN__) || defined(__EMSCRIPTEN_PTHREADS__)
+	return std::this_thread::get_id() == init_thread;
+#else
+	return true;
+#endif
+}
+
+void Runtime::refuse_thread(const std::string &p_what) const {
+	report_error(p_what + " was called from a thread other than the one Verse runs on, so it did not run. Call it from the main thread.");
+}
+
+HostArena &Runtime::result_arena(size_t p_depth) {
+	while (result_arenas.size() <= p_depth) {
+		result_arenas.push_back(std::make_unique<HostArena>());
+	}
+	result_arenas[p_depth]->reset();
+	return *result_arenas[p_depth];
 }
 
 Runtime::Runtime() {
@@ -302,7 +325,7 @@ int32_t Runtime::default_field(const char *p_class, const char *p_name, const vh
 	}
 	default_arena.reset();
 	std::string why;
-	const bool carried = value_to_wire(value, type->described.type, type->described.tag, &default_arena, default_answer, why);
+	const bool carried = bridge.member_to_wire(value, *type, &default_arena, default_answer, why);
 	interpreter.end_entry(false);
 	if (!carried) {
 		return VH_ERR_UNSUPPORTED;

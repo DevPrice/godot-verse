@@ -1109,6 +1109,10 @@ Outcome Interpreter::construct(const ClassCell *p_class, int64_t p_handle, Value
 	ObjectCell *object = layouts.new_object(heap, layouts.get(p_class));
 	r_object = Value::from_cell(object);
 	RootScope root(heap, &r_object);
+	// A wrapper built while another object is under construction -- a handle crossing in from a
+	// member's initializer -- must hand the outer object its own pending adoption back.
+	const Cell *const outer_object = adopting_object;
+	const int64_t outer_handle = adopting_handle;
 	adopting_object = object;
 	adopting_handle = p_handle;
 
@@ -1147,8 +1151,8 @@ Outcome Interpreter::construct(const ClassCell *p_class, int64_t p_handle, Value
 		Value ignored;
 		outcome = invoke(Value::from_cell(p_class->blocks), r_object, {}, {}, ignored);
 	}
-	adopting_object = nullptr;
-	adopting_handle = 0;
+	adopting_object = outer_object;
+	adopting_handle = outer_handle;
 	return outcome;
 }
 
