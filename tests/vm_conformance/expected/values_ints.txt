@@ -1,0 +1,53 @@
+[probe] LoadLibraryW: ok
+[probe] vh_host_kind = <normalized>
+[probe] vh_init: ok
+[probe] vh_has_class: ok
+[probe] values_ints has 11 method(s)
+[probe] vh_instantiate: ok
+[probe] calling (/user@localhost/values_ints:)IntArith
+[verse] Add=5 Sub=5 Mul=20 Neg=-7
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_ints:)IntOverflowNoWrap
+[verse] gt max: yes
+[verse] lt zero: no
+[verse] sum gt max: yes
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_ints:)IntHeapRoundTrip
+[verse] (2^63-1)+1-1=9223372036854775807
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_ints:)IntMinLiteral
+[verse] min=-9223372036854775808
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_ints:)IntNegOfMin
+LogVerseRuntime: Error: Value exceeds the range of a 64 bit integer.. This build does not have the Verse compiler runtime bundled with it, so no other information is available.
+[error] ErrRuntime_GeneratedNativeInternal: An internal runtime error occurred in (generated) native code that was called from Verse. There is no other information available. (Value exceeds the range of a 64 bit integer.)
+[probe]   -> 6 (VH_ERR_RUNTIME)
+[probe] calling (/user@localhost/values_ints:)IntBelowMinPrints
+LogVerseRuntime: Error: Value exceeds the range of a 64 bit integer.. This build does not have the Verse compiler runtime bundled with it, so no other information is available.
+[error] ErrRuntime_GeneratedNativeInternal: An internal runtime error occurred in (generated) native code that was called from Verse. There is no other information available. (Value exceeds the range of a 64 bit integer.)
+[probe]   -> 6 (VH_ERR_RUNTIME)
+[probe] calling (/user@localhost/values_ints:)IntOverflowToStringRaises
+LogVerseRuntime: Error: Value exceeds the range of a 64 bit integer.. This build does not have the Verse compiler runtime bundled with it, so no other information is available.
+[error] ErrRuntime_GeneratedNativeInternal: An internal runtime error occurred in (generated) native code that was called from Verse. There is no other information available. (Value exceeds the range of a 64 bit integer.)
+[probe]   -> 6 (VH_ERR_RUNTIME)
+[probe] calling (/user@localhost/values_ints:)IntBigMultiplyExceeds
+[verse] 2^64 gt max: yes
+[verse] 2^64/2^32 back: 4294967296
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_ints:)IntRationalFloorCeil
+[verse] 7/2 floor=3 ceil=4
+[verse] -7/2 floor=-4 ceil=-3
+[verse] 7/-2 floor=-4 ceil=-3
+[verse] -7/-2 floor=3 ceil=4
+[verse] 6/3 floor=2 ceil=2
+[verse] Floor(5)=5 Ceil(-5)=-5
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_ints:)IntRationalEquality
+[verse] -1/-2 = 1/2: yes
+[verse] 14/4 = 7/2: yes
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_ints:)IntDivByZeroFails
+[verse] 7/0 fails
+[verse] 0/0 fails
+[probe]   -> 0 (VH_OK)
+[probe] done

@@ -1,0 +1,51 @@
+[probe] LoadLibraryW: ok
+[probe] vh_host_kind = <normalized>
+[probe] vh_init: ok
+[probe] vh_has_class: ok
+[probe] values_arrays has 10 method(s)
+[probe] vh_instantiate: ok
+[probe] calling (/user@localhost/values_arrays:)ArrayLengthAndIndex
+[verse] Length=3
+[verse] A[0]=10
+[verse] A[3] fails
+[verse] A[-1] fails
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_arrays:)ArrayIndexHugeFails
+[verse] A[2^63] fails
+[verse] A[2^32] fails
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_arrays:)ArrayConcat
+[verse] (A+[40]).Length=4
+[verse] false + [1,2]: Length=2
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_arrays:)ArrayEquality
+[verse] [1,2]=[1,2]: yes
+[verse] [1,2]=[2,1]: no
+[verse] empty=empty: yes
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_arrays:)ArrayFor
+[verse] squares.Length=4
+[verse] Squares[3]=16
+[verse] filtered.Length=3
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_arrays:)ArrayAsFalse
+[verse] false-as-array Length=0
+[verse] F[0] fails
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_arrays:)ArrayValueSemantics
+[verse] after set A[0]: B[0]=1 A[0]=9
+[verse] after +=: A.Length=5 B.Length=3
+[verse] C.Length=6 A.Length=5
+[verse] set A[10] fails
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_arrays:)ArrayNestedCopy
+[verse] N[0][1]=2 M[0][1]=7
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_arrays:)MixedElementArray
+[verse] mixed.Length=3
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_arrays:)StringOrArrayFalse
+[verse] false+array: 0-elem absorbed on left too
+[verse] [1,2]+false Length=2
+[probe]   -> 0 (VH_OK)
+[probe] done

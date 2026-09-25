@@ -1,0 +1,19 @@
+[probe] LoadLibraryW: ok
+[probe] vh_host_kind = <normalized>
+[probe] vh_init: ok
+[probe] vh_has_class: ok
+[probe] godot_print has 4 method(s)
+[probe] vh_instantiate: ok
+[probe] calling (/user@localhost/godot_print:)PrintBasic
+[verse] hello
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/godot_print:)PrintEmpty
+[verse] 
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/godot_print:)PrintUnicode
+[verse] hÃ©llo wÃ¶rld
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/godot_print:)PrintInterpolated
+[verse] x=2 y=6.000000
+[probe]   -> 0 (VH_OK)
+[probe] done

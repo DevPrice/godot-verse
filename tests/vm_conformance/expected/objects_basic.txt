@@ -1,0 +1,71 @@
+[probe] LoadLibraryW: ok
+[probe] vh_host_kind = <normalized>
+[probe] vh_init: ok
+[probe] vh_has_class: ok
+[probe] objects_basic has 12 method(s)
+[verse]   base block: Name=base X=1 Count=0
+[verse]   objects_basic block
+[probe] vh_instantiate: ok
+[probe] calling (/user@localhost/objects_basic:)OverrideAndArchetypeWins
+[verse]   base block: Name=base X=1 Count=0
+[verse]   base block: Name=derived X=2 Count=0
+[verse]   derived block: Count=1 Extra=5
+[verse] base.X=1 derived.X=2
+[verse]   base block: Name=derived X=7 Count=0
+[verse]   derived block: Count=1 Extra=5
+[verse]   base block: Name=base X=8 Count=0
+[verse] derived(X:=7).X=7 base(X:=8).X=8
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/objects_basic:)ArchetypeOrderAndBlocks
+[verse] archetype start
+[verse]   eval Extra
+[verse]   eval X
+[verse]   base block: Name=derived X=3 Count=0
+[verse]   derived block: Count=1 Extra=6
+[verse] Count=11 X=3 Extra=6 Name=derived
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/objects_basic:)VirtualDispatchAndSuper
+[verse]   base block: Name=derived X=2 Count=0
+[verse]   derived block: Count=1 Extra=5
+[verse] derived.Describe then base.Describe(derived) / base
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/objects_basic:)StructCopySemantics
+[verse] P.X=9 Q.X=1
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/objects_basic:)UniqueEquality
+[verse] self=eq: yes twin=ne: no
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/objects_basic:)ClassAndInterfaceCasts
+[verse]   base block: Name=derived X=2 Count=0
+[verse]   derived block: Count=1 Extra=5
+[verse] derived[D] succeeds
+[verse]   base block: Name=base X=1 Count=0
+[verse] iface[Both] succeeds
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/objects_basic:)EnumIdentity
+[verse] Red=Red: yes Red=Green: no
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/objects_basic:)ConstructorDelegation
+[verse] MakeDerived(4) start
+[verse]   MakeDerived body N=4
+[verse]   eval MakeDerived Extra
+[verse]   MakeBase body N=40
+[verse]   base block: Name=derived X=2 Count=0
+[verse]   derived block: Count=1 Extra=5
+[verse] X=2 Extra=5
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/objects_basic:)HostBuiltMemberDefaultOrder
+[verse] Held.Count=1 HostBlockRuns=1
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/objects_basic:)InterfaceDefaultReachesImplementor
+[verse]   base block: Name=base X=1 Count=0
+[verse] both.Tag=4 both.IfaceName Tag=4
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/objects_basic:)ConstrainedIntTypeCast
+[verse] small[7]=7
+[verse] small[15] fails
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/objects_basic:)DeclaredBeforeSuperclass
+[verse] late derived: late derived
+[probe]   -> 0 (VH_OK)
+[probe] done

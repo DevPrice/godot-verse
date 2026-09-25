@@ -1,0 +1,72 @@
+[probe] LoadLibraryW: ok
+[probe] vh_host_kind = <normalized>
+[probe] vh_init: ok
+[probe] vh_has_class: ok
+[probe] values_maps_options_tuples has 9 method(s)
+[probe] vh_instantiate: ok
+[probe] calling (/user@localhost/values_maps_options_tuples:)MapLiteralOrder
+[verse] Length=3
+[verse] order 3 => c
+[verse] order 1 => a
+[verse] order 2 => b
+[verse] M[1]=a
+[verse] M[9] fails
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_maps_options_tuples:)MapDuplicateKeyOrder
+[verse] dup literal Length=2
+[verse] dup order 2 => y
+[verse] dup order 1 => z
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_maps_options_tuples:)MapSetInPlace
+[verse] after set order 1 => A
+[verse] after set order 2 => b
+[verse] after set order 3 => c
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_maps_options_tuples:)MapConcat
+[verse] concat order 1 => a
+[verse] concat order 2 => B
+[verse] concat order 3 => c
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_maps_options_tuples:)MapEquality
+[verse] same order eq: yes
+[verse] other order eq: no
+[verse] empty=empty: yes
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_maps_options_tuples:)MapKeyIdentity
+[verse] 0.0/-0.0 map Length=1
+[verse] string key via char array=1
+[verse] heap int key=big
+[verse] tuple key=t
+[verse] enum key=2
+[verse] struct key=s
+[verse] option key=o1
+[verse] unique key same=u
+[verse] unique key other fails
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_maps_options_tuples:)Options
+[verse] O?=5
+[verse] N? fails
+[verse] false=N: yes
+[verse] opt5=opt5: yes
+[verse] opt5=opt6: no
+[verse] opt-opt5<>opt-false: yes
+[verse] opt-false? succeeds, inner?=no
+[verse] opt of failure = false: yes
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_maps_options_tuples:)Logic
+[verse] true?=yes
+[verse] false?=no
+[verse] true=true: yes
+[verse] true<>false: yes
+[verse] opt-false=opt-false: yes
+[verse] opt-true<>opt-false: yes
+[verse] opt-false? succeeds, value?=no
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_maps_options_tuples:)Tuples
+[verse] T(0)=1 T(1)=2.500000 T(2)=s
+[verse] (1,2)=(1,2): yes
+[verse] (1,2)=(1,3): no
+[verse] tuple as array Length=2
+[verse] tuple=same array: yes
+[probe]   -> 0 (VH_OK)
+[probe] done

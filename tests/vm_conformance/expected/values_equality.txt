@@ -1,0 +1,31 @@
+[probe] LoadLibraryW: ok
+[probe] vh_host_kind = <normalized>
+[probe] vh_init: ok
+[probe] vh_has_class: ok
+[probe] values_equality has 6 method(s)
+[probe] vh_instantiate: ok
+[probe] calling (/user@localhost/values_equality:)IntVsFloat
+[verse] 1=1.0: no
+[verse] 1<>1.0: yes
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_equality:)IntVsRational
+[verse] 4/2=2: yes
+[verse] 3/2=1: no
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_equality:)EmptyContainersCrossKind
+[verse] ""=[]: yes
+[verse] []=map: yes
+[verse] false=[]: yes
+[verse] false=map: yes
+[verse] false="": yes
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_equality:)StructFieldNaNEquality
+[verse] struct with NaN field: eq=yes
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_equality:)StructLayoutIndependence
+[verse] default vs explicit struct: eq=yes
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_equality:)CharVsChar32
+[verse] 'a' char vs char32 same codepoint: no
+[probe]   -> 0 (VH_OK)
+[probe] done

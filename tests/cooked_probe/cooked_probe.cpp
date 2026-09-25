@@ -75,6 +75,29 @@ static bool Step(const char* Name, bool Ok)
 	return Ok;
 }
 
+// Named alongside the code so a transcript reads without include/verse_host_abi.h open beside it;
+// the differential harness (tools/run_vm_conformance.py) diffs this line as-is between hosts.
+static const char* StatusName(int32_t Status)
+{
+	switch (Status)
+	{
+		case VH_OK: return "VH_OK";
+		case VH_ERR_ABI: return "VH_ERR_ABI";
+		case VH_ERR_STATE: return "VH_ERR_STATE";
+		case VH_ERR_INIT: return "VH_ERR_INIT";
+		case VH_ERR_COMPILE: return "VH_ERR_COMPILE";
+		case VH_ERR_NOT_FOUND: return "VH_ERR_NOT_FOUND";
+		case VH_ERR_RUNTIME: return "VH_ERR_RUNTIME";
+		case VH_ERR_ARGUMENT: return "VH_ERR_ARGUMENT";
+		case VH_ERR_FAILED: return "VH_ERR_FAILED";
+		case VH_ERR_HALTED: return "VH_ERR_HALTED";
+		case VH_ERR_THREAD: return "VH_ERR_THREAD";
+		case VH_ERR_STOPPED: return "VH_ERR_STOPPED";
+		case VH_ERR_UNSUPPORTED: return "VH_ERR_UNSUPPORTED";
+		default: return "?";
+	}
+}
+
 template <typename Fn>
 static Fn Resolve(HMODULE Module, const char* Name)
 {
@@ -179,7 +202,7 @@ int main(int argc, char** argv)
 			vh_value Result{};
 			const int32_t CallStatus =
 				InstanceCallFn(Instance, Name.c_str(), nullptr, 0, &Arena, &Result);
-			printf("[probe]   -> %d\n", CallStatus);
+			printf("[probe]   -> %d (%s)\n", CallStatus, StatusName(CallStatus));
 		}
 		ReleaseInstanceFn(Instance);
 	}

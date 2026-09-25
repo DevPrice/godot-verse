@@ -1,0 +1,95 @@
+[probe] LoadLibraryW: ok
+[probe] vh_host_kind = <normalized>
+[probe] vh_init: ok
+[probe] vh_has_class: ok
+[probe] tasks_basic has 21 method(s)
+[probe] vh_instantiate: ok
+[probe] calling (/user@localhost/tasks_basic:)A1_Spawn
+[verse] A1 before spawn
+[verse]   A body start
+[verse] A1 after spawn
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_basic:)A2_Signal
+[verse] A2 before signal
+[verse]   A body resumed
+[verse] A2 after signal
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_basic:)B1_FirstArmImmediateWins
+[verse] B1 start
+[verse]   b1-arm1 runs to end
+[verse]   b1-arm1 defer
+[verse]   B1 race result 10
+[verse] B1 after spawn
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_basic:)B2_Start
+[verse] B2 start
+[verse]   b2-arm1 start
+[verse]   b2-arm2 start
+[verse] B2 after spawn
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_basic:)B2_SignalArm1
+[verse] B2 signal arm1
+[verse]   b2-arm1 end
+[verse]   b2-arm1 defer
+[verse]   b2-arm2 defer
+[verse]   B2 race result 20
+[verse] B2 signal returned
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_basic:)C1_Start
+[verse] C1 start
+[verse]   c-arm1 runs to end
+[verse]   c-arm1 defer
+[verse]   c-arm2 start
+[verse]   c-arm3 runs to end
+[verse]   c-arm3 defer
+[verse] C1 after spawn
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_basic:)C1_Signal
+[verse] C1 signal
+[verse]   c-arm2 end
+[verse]   c-arm2 defer
+[verse]   C1 sync result 1 2 3
+[verse] C1 signal returned
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_basic:)D1_Start
+[verse] D1 start
+[verse]   d-arm1 start
+[verse]   d-arm2 start
+[verse] D1 after spawn
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_basic:)D1_SignalArm1
+[verse] D1 signal arm1
+[verse]   d-arm1 end
+[verse]   d-arm1 defer
+[verse]   D1 rush result 41
+[verse] D1 signal returned
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_basic:)D1_SignalArm2
+[verse] D1 signal arm2
+[verse]   d-arm2 end
+[verse]   d-arm2 defer
+[verse] D1 signal returned
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_basic:)D1_ReleaseDriver
+[verse] D1 release driver
+[verse]   D1 driver end
+[verse] D1 release returned
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_basic:)E1_Start
+[verse] E1 start
+[verse]   e-branch start
+[verse]   E after branch
+[verse] E1 after spawn
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_basic:)E2_SignalDriver
+[verse] E2 signal driver
+[verse]   E driver end
+[verse]   E driver defer
+[verse]   e-branch defer
+[verse] E2 signal returned
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_basic:)SleepNegativeDoesNotSuspend
+[verse]   before Sleep(-1.0)
+[verse]   after Sleep(-1.0)
+[probe]   -> 0 (VH_OK)
+[probe] done
