@@ -34,6 +34,29 @@ A build compiles the whole project, and it happens on Play rather than on save. 
 Godot compiles the project and runs the edited code. Saving refreshes diagnostics and completion
 only. To build without a run, click **Project > Tools > Build Verse**.
 
+### When a script raises an error
+
+A Verse runtime error, such as `Err("...")` or an integer overflow, works like a GDScript runtime
+error: Godot reports it with the file, the line, and the Verse call stack, the call that raised it
+stops, and the game keeps running.
+
+One difference matters. Every call Godot makes into Verse runs as a transaction, so when a call
+raises, **everything it changed before the error is undone**. GDScript keeps those changes. The
+exceptions are the Godot methods that can't be undone, which
+[`docs/nonatomic-methods.md`](docs/nonatomic-methods.md) lists.
+
+The undo can make an error repeat. In this `_Process`, the counter never gets past the value that
+fails, because each failing call undoes its own increment:
+
+```verse
+_Process<override>(Delta:float):void =
+    set Frames += 1
+    if (Frames = 2):
+        Err("fails at frame 2, and then at every frame after it")
+```
+
+If a change has to survive an error, make it in a call that can't raise.
+
 ### What isn't supported
 
 These limits are the ones worth knowing before you start. Each one names what blocks it.

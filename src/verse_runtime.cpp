@@ -1923,6 +1923,12 @@ void VerseRuntime::on_runtime_error(void *p_ctx, const vh_runtime_error *p_error
 		}
 		UtilityFunctions::print(line);
 	}
+	// Unlike GDScript, where writes made before an error stay made. Without this, an error in
+	// _Process that undoes the very write that would have stopped it reads as a bridge fault.
+	UtilityFunctions::print(
+			"    (The call that raised this was rolled back, so what it changed before the error is undone, "
+			"except by the Godot methods listed in docs/nonatomic-methods.md. An error in a function Godot "
+			"calls every frame can repeat for that reason.)");
 }
 
 vh_handle VerseRuntime::api_get_singleton(void *p_ctx, const char *p_name_utf8, int32_t p_name_len) {

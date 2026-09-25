@@ -525,6 +525,9 @@ def run_integration(results: Results, engine: Path | None, godot: Path | None) -
             # throttles. Asserted here rather than in the project because the thing being tested is
             # what reaches the output log, and a script cannot read that.
             "stack trace(s) from this error were dropped",
+            # The note that a raise rolls back its call, printed with each stack. GDScript keeps
+            # writes made before an error, so an author needs telling that this does not.
+            "The call that raised this was rolled back",
             # Everything refresh_script_warnings produces, which reached no log until it got a
             # second reporter and so was asserted nowhere -- a `_validate` warning goes to the
             # editor's gutter and stops there. One line per category rather than per sentence, and
@@ -550,6 +553,10 @@ def run_integration(results: Results, engine: Path | None, godot: Path | None) -
             # `extends_binding.verse` compiles, so nothing but this sentence says it is wrong.
             "which is the generated binding for a class a *script* declares",
         ],
+        # The bridge reports every Verse runtime error itself, rate limited. Unreal's own echo of
+        # the same error, stack and all on every repeat, is silenced in vh_init's -LogCmds; the
+        # raises test_main.gd makes on purpose are what would print one if it came back.
+        refute_all=["LogVerseRuntime:"],
     )
 
 

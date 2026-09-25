@@ -262,8 +262,11 @@ VH_ATTR int32_t InitHost(const vh_init_desc* Desc, bool bEngineAlreadyBooted)
     GIsEditor = true;
 #endif
 
+    // LogVerseRuntime is Fatal-only because GodotVerse::ReportRuntimeError already hands Godot every
+    // runtime error, rate limited; the VM's own log line repeated each one, whole stack included,
+    // on every raise.
     if (!bEngineAlreadyBooted
-        && GEngineLoop.PreInit(TEXT("-NOCONSOLE -AssetGatherAll=0 -LogCmds=\"global Warning\"")) != 0)
+        && GEngineLoop.PreInit(TEXT("-NOCONSOLE -AssetGatherAll=0 -LogCmds=\"global Warning, LogVerseRuntime Fatal\"")) != 0)
     {
         GodotVerse::ReportError(UTF8TEXT("Failed to initialize the engine (PreInit failed)."));
         return VH_ERR_INIT;
