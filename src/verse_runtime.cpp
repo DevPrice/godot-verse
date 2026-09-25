@@ -11,6 +11,11 @@
 #include "verse_script_language.h"
 #include "verse_value.h"
 
+#ifdef VERSE_VM_STATIC
+#include "vm_file_reader.h"
+#include <godot_cpp/classes/file_access.hpp>
+#endif
+
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/classes/os.hpp>
@@ -39,6 +44,23 @@
 using namespace godot;
 
 namespace {
+
+#ifdef VERSE_VM_STATIC
+// vm/'s file-reader hook (vm/vm_file_reader.h), installed before vh_init on the vm backend. Every
+// path vm/ asks for is one this side joined onto the cooked directory handed to vh_init
+// (verse_export_paths::data_dir_for_this_build), so it is already either an absolute OS path or,
+// on Web, a res:// one -- FileAccess::open resolves both, the second straight into the mounted
+// .pck (design §9).
+bool godot_vm_file_reader(const char *p_path, std::vector<uint8_t> &r_out) {
+	Ref<FileAccess> file = FileAccess::open(String::utf8(p_path), FileAccess::READ);
+	if (file.is_null()) {
+		return false;
+	}
+	const uint64_t length = file->get_length();
+	r_out.resize((size_t)length);
+	return length == 0 || file->get_buffer(r_out.data(), length) == length;
+}
+#endif
 
 // The peers a Verse script minted that are this side's to keep alive (R-NODE-3).
 //
@@ -69,6 +91,9 @@ void VerseRuntime::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("_monitor_analysis_wait_ms"), &VerseRuntime::_monitor_analysis_wait_ms);
 	ClassDB::bind_method(D_METHOD("_monitor_instance_tasks"), &VerseRuntime::_monitor_instance_tasks);
 	ClassDB::bind_method(D_METHOD("build_project"), &VerseRuntime::build_project);
+#ifdef VERSE_VM_STATIC
+	ClassDB::bind_method(D_METHOD("debug_check_vm_backend"), &VerseRuntime::debug_check_vm_backend);
+#endif
 }
 
 VerseRuntime::~VerseRuntime() {
@@ -92,6 +117,18 @@ PackedStringArray VerseRuntime::modules_declaring(const String &p_name) const {
 	}
 	return modules;
 }
+
+#ifdef VERSE_VM_STATIC
+Dictionary VerseRuntime::debug_check_vm_backend() {
+	VerseHostLibrary probe;
+	Dictionary result;
+	result["loaded"] = probe.load_static();
+	result["all_pointers_assigned"] = probe.all_pointers_assigned();
+	result["host_kind"] = probe.host_kind();
+	probe.unload();
+	return result;
+}
+#endif
 
 Error VerseRuntime::build_project() {
 	// Delegated rather than done here, because which files are in the project is a question about
@@ -149,12 +186,44 @@ Error VerseRuntime::load_host() {
 
 	const bool enable_debugger = settings->get_setting(debugger_setting_name);
 
+	// host (the UE compiler/runtime host, dynamically loaded) or vm (vm/'s interpreter, statically
+	// linked into this library by `scons verse_vm=yes`) -- read only below, for an exported game.
+	// An editor session always uses the host (phase-7.5-design.md §9): the branch that reads this
+	// setting is the same one that already only runs when data_dir_for_this_build() says this is
+	// an export.
+	const String backend_setting_name = "verse/runtime/backend";
+	const String backend_default = "host";
+	if (!settings->has_setting(backend_setting_name)) {
+		settings->set_setting(backend_setting_name, backend_default);
+	}
+	settings->set_initial_value(backend_setting_name, backend_default);
+	Dictionary backend_property_info;
+	backend_property_info["name"] = backend_setting_name;
+	backend_property_info["type"] = (int64_t)Variant::STRING;
+	backend_property_info["hint"] = (int64_t)PROPERTY_HINT_ENUM;
+	backend_property_info["hint_string"] = String("host,vm");
+	settings->add_property_info(backend_property_info);
+
 	// An exported game derives all three paths from where it is running and reads no setting at
 	// all (D8): they name one machine, which is meaningless anywhere else. The data directory is
 	// beside the executable and is its own engine directory (D7) -- UE takes any directory with a
 	// Binaries/ child as GForeignEngineDir.
 	const String data_dir = verse_paths::data_dir_for_this_build();
 	if (!data_dir.is_empty()) {
+#ifdef VERSE_VM_STATIC
+		const String backend = String(settings->get_setting(backend_setting_name)).strip_edges();
+		// Web has no loader for a host DLL at all (verse_host.cpp compiles that path out under
+		// #ifdef _WIN32), so it uses vm whatever the setting says -- there being only one backend
+		// to speak of on that platform is exactly why the export plugin will refuse to ship
+		// anything else there (T5.4/T6.1).
+		if (backend == "vm" || OS::get_singleton()->has_feature("web")) {
+			return load_host_internal(String("<the built-in interpreter>"), String(), enable_debugger, data_dir.path_join("Cooked"), true);
+		}
+#else
+		if (String(settings->get_setting(backend_setting_name)).strip_edges() == "vm") {
+			UtilityFunctions::push_warning("VerseRuntime: verse/runtime/backend is 'vm', but this build has no interpreter compiled in (build with `scons verse_vm=yes`); using the host instead.");
+		}
+#endif
 		const String dll_path = OS::get_singleton()->get_executable_path().get_base_dir().path_join(RUNTIME_HOST_FILENAME);
 		return load_host_internal(dll_path, data_dir.path_join("Engine"), enable_debugger, data_dir.path_join("Cooked"));
 	}
@@ -231,7 +300,7 @@ void VerseRuntime::refuse_to_start(const String &p_why) {
 	}
 }
 
-Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p_engine_dir, bool p_enable_debugger, const String &p_cooked_dir) {
+Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p_engine_dir, bool p_enable_debugger, const String &p_cooked_dir, bool p_use_vm_backend) {
 	const FScopedWorkingDirectory restore_working_directory;
 
 	// vh_init gets one attempt per process, whatever it answers. It boots FEngineLoop, and the
@@ -239,7 +308,8 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 	// engine resident, and a second vh_init runs PreInit again: "Delayed Startup phase
 	// StartOfEnginePreInit has already run", an appError that takes the game down with it.
 	// build_project() asks per script, so without this a refusal an exported game is meant to
-	// survive -- a stamp mismatch, say -- became a crash on the second script.
+	// survive -- a stamp mismatch, say -- became a crash on the second script. vm/'s vh_init has
+	// no such landmine, but one refusal path for both backends is simpler than two.
 	if (host_init_refused) {
 		return FAILED;
 	}
@@ -248,7 +318,16 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 	}
 
 	String error_message;
-	if (!host.load(p_dll_path, error_message)) {
+	bool host_loaded = false;
+#ifdef VERSE_VM_STATIC
+	if (p_use_vm_backend) {
+		host_loaded = host.load_static();
+	} else
+#endif
+	{
+		host_loaded = host.load(p_dll_path, error_message);
+	}
+	if (!host_loaded) {
 		UtilityFunctions::push_error(String("VerseRuntime: failed to load host library: ") + error_message);
 		refuse_to_start(String("Verse could not load ") + p_dll_path + String(": ") + error_message);
 		return ERR_CANT_OPEN;
@@ -319,6 +398,17 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 	init_desc.RuntimeErrorCtx = this;
 	init_desc.EnableDebugger = p_enable_debugger ? 1 : 0;
 	init_desc.CookedDirUtf8 = p_cooked_dir.is_empty() ? nullptr : cooked_dir_utf8.get_data();
+
+#ifdef VERSE_VM_STATIC
+	// vm/ cannot read a `.pck` itself (vm/vm_file_reader.h) -- that is the one thing it needs from
+	// whichever consumer links it in -- so before it reads anything, this installs a reader over
+	// Godot's own FileAccess. res:// then resolves the same way whether verse_data is a loose
+	// directory beside the executable or, on Web, packed inside the .pck (design §9,
+	// verse_export_paths::data_dir_for_this_build).
+	if (p_use_vm_backend) {
+		vm_set_file_reader(&godot_vm_file_reader);
+	}
+#endif
 
 	const int32_t status = host.Init(&init_desc);
 	if (status != VH_OK) {

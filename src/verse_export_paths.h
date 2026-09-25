@@ -40,8 +40,12 @@ extern const char *DATA_DIR_NAME;
 // OS::get_safe_dir_name would, since that is not bound for extensions.
 godot::String cache_dir_name(const godot::String &p_app, const godot::String &p_platform, const godot::String &p_arch);
 
-// Absolute path to that directory beside the running executable, or "" outside an exported
-// build. Nothing here checks that it exists -- a missing one is a diagnostic vh_init owes.
+// Where this build's verse_data is, or "" outside an exported build. Beside the running
+// executable everywhere except Web, where there is no directory beside anything to look in and
+// verse_data ships inside the .pck instead (phase-7.5-design.md §9); there this answers a res://
+// path, which resolves once the pack is mounted -- before any script runs -- and which the vm
+// backend's Godot-FileAccess file reader (verse_runtime.cpp) reads exactly like a loose directory.
+// Nothing here checks that it exists -- a missing one is a diagnostic vh_init owes.
 godot::String data_dir_for_this_build();
 
 } // namespace verse_paths

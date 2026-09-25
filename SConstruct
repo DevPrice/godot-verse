@@ -3,6 +3,8 @@ import os
 import subprocess
 import sys
 
+from SCons.Variables import BoolVariable
+
 from methods import print_error, print_warning
 from gdextension import generate as generate_gdextension, library_filename, verify_shlib_affixes
 
@@ -12,6 +14,8 @@ customs = ["custom.py"]
 customs = [os.path.abspath(path) for path in customs]
 
 opts = Variables(customs, ARGUMENTS)
+opts.Add(BoolVariable(
+    "verse_vm", "Compile vm/ into the library and enable the vm backend (implied by platform=web)", False))
 opts.Update(localEnv)
 
 Help(opts.GenerateHelpText(localEnv))
@@ -41,6 +45,20 @@ else:
 
 env.Append(CPPPATH=["src/", "include/"])
 sources = Glob("src/*.cpp")
+
+# vm/ is the clean-room interpreter (docs/phase-7.5-design.md §2, §9): a godot-cpp-free library
+# that also implements the runtime subset of the vh_* ABI. Web cannot LoadLibraryExW a host DLL at
+# all (verse_host.cpp compiles that path out under #ifdef _WIN32), so it always needs vm/ built in;
+# everywhere else it is opt-in with verse_vm=yes. VERSE_VM_STATIC is what lets src/ fill
+# VerseHostLibrary directly from vm/'s functions instead of resolving them with GetProcAddress
+# (src/verse_host.cpp's load_static). VERSE_HOST_IMPLEMENTATION is deliberately never defined here:
+# that would export the vh_* symbols from this library with dllexport, which only
+# tools/build_verse_vm.py's standalone DLL wants.
+verse_vm = bool(env["verse_vm"]) or env["platform"] == "web"
+if verse_vm:
+    env.Append(CPPPATH=["vm/"])
+    env.Append(CPPDEFINES=["VERSE_VM_STATIC"])
+    sources += Glob("vm/*.cpp")
 
 libname = "godot-verse"
 addondir = "addons"

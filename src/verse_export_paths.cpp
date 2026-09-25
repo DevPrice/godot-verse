@@ -79,6 +79,14 @@ String verse_paths::data_dir_for_this_build() {
 	if (!OS::get_singleton()->has_feature("template")) {
 		return String();
 	}
+	// A Web export has no filesystem beside an executable to look in, and there is no dependency
+	// mechanism that could place verse_data there even if it did -- it ships inside the .pck
+	// (phase-7.5-design.md §9), which Godot has already mounted onto res:// by the time any script
+	// runs. Every other platform keeps the loose directory beside the executable, exactly as the
+	// runtime host expects it.
+	if (OS::get_singleton()->has_feature("web")) {
+		return String("res://").path_join(DATA_DIR_NAME);
+	}
 	// On macOS the executable is inside Contents/MacOS and the directory is exported into
 	// Contents/Resources, so this is not the answer there -- but OS::get_bundle_resource_dir is
 	// not bound for extensions, and macOS is blocked on hardware anyway (phase-7-design.md §10).

@@ -121,6 +121,15 @@ public:
 	void unload_host();
 	bool is_host_loaded() const;
 
+#ifdef VERSE_VM_STATIC
+	// docs/web-vm/tasks.md T5.3's check, bound for a headless GDScript run: fills a throwaway
+	// VerseHostLibrary the way the vm backend would and reports on it, without disturbing whatever
+	// this instance's own `host` is doing and without booting anything -- there is no cooked
+	// directory to boot against until the export plugin ships one (T5.4). Not meant for anything
+	// but that check.
+	godot::Dictionary debug_check_vm_backend();
+#endif
+
 	// False for the runtime host an exported game ships. Everything that compiles, analyses,
 	// completes or looks a symbol up answers ERR_UNAVAILABLE there, so the caller's question
 	// is whether to ask at all rather than what the answer was.
@@ -369,7 +378,12 @@ private:
 	// rarely rather than once per frame.
 	int64_t overrun_frames = 0;
 
-	godot::Error load_host_internal(const godot::String &p_dll_path, const godot::String &p_engine_dir, bool p_enable_debugger, const godot::String &p_cooked_dir);
+	// p_use_vm_backend picks host.load_static() over host.load(p_dll_path, ...) -- only possible
+	// when this library was built with VERSE_VM_STATIC (`scons verse_vm=yes`), and only chosen by
+	// load_host() below, per verse/runtime/backend. p_dll_path is then a label for diagnostics
+	// rather than a path: load_static() cannot fail the way a missing or mismatched DLL can, and
+	// nothing here needs to open anything by that name.
+	godot::Error load_host_internal(const godot::String &p_dll_path, const godot::String &p_engine_dir, bool p_enable_debugger, const godot::String &p_cooked_dir, bool p_use_vm_backend = false);
 
 	// Says why and closes the game, in an exported build only (D6). A no-op in the editor.
 	void refuse_to_start(const godot::String &p_why);

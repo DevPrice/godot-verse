@@ -27,6 +27,21 @@ public:
 	// host has no compiler and does not export them, so they stay null and their callers
 	// answer ERR_UNAVAILABLE.
 	bool load(const godot::String &dll_path, godot::String &out_error);
+
+#ifdef VERSE_VM_STATIC
+	// Fills every function pointer directly from vm/'s functions, compiled statically into this
+	// library by `scons verse_vm=yes` (docs/phase-7.5-design.md §8). No module is loaded -- the
+	// pointers name code already linked into this DLL -- so this cannot fail the way load() can,
+	// and unload() clearing them back to null is all a matching teardown needs.
+	bool load_static();
+
+	// docs/web-vm/tasks.md T5.3's own check: every pointer load_static() should have set, so a
+	// forgotten one is a false here rather than a segfault the first time something calls through
+	// it -- there being no cooked directory for the vm backend to boot against yet (T5.4), this is
+	// what stands in for running it end to end.
+	bool all_pointers_assigned() const;
+#endif
+
 	void unload();
 	bool is_loaded() const;
 
