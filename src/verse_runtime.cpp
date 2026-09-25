@@ -176,18 +176,26 @@ Error VerseRuntime::load_host() {
 	// An editor session always uses the host (phase-7.5-design.md §9): the branch that reads this
 	// setting is the same one that already only runs when data_dir_for_this_build() says this is
 	// an export.
+	// Web gets its own default through a `.web` feature override, the way Godot defaults
+	// `rendering/renderer/rendering_method.web` to gl_compatibility: the UE host is a native DLL a
+	// browser cannot load. `web` rather than `wasm32` because the constraint is the platform, not
+	// the architecture. Only an override read resolves it -- get_setting_with_override here, and
+	// EditorExportPreset::get_project_setting in the export plugin.
 	const String backend_setting_name = "verse/runtime/backend";
-	const String backend_default = "host";
-	if (!settings->has_setting(backend_setting_name)) {
-		settings->set_setting(backend_setting_name, backend_default);
+	const String backend_web_setting_name = backend_setting_name + String(".web");
+	const String backend_defaults[][2] = { { backend_setting_name, "host" }, { backend_web_setting_name, "vm" } };
+	for (const auto &[name, default_value] : backend_defaults) {
+		if (!settings->has_setting(name)) {
+			settings->set_setting(name, default_value);
+		}
+		settings->set_initial_value(name, default_value);
+		Dictionary backend_property_info;
+		backend_property_info["name"] = name;
+		backend_property_info["type"] = (int64_t)Variant::STRING;
+		backend_property_info["hint"] = (int64_t)PROPERTY_HINT_ENUM;
+		backend_property_info["hint_string"] = String("host,vm");
+		settings->add_property_info(backend_property_info);
 	}
-	settings->set_initial_value(backend_setting_name, backend_default);
-	Dictionary backend_property_info;
-	backend_property_info["name"] = backend_setting_name;
-	backend_property_info["type"] = (int64_t)Variant::STRING;
-	backend_property_info["hint"] = (int64_t)PROPERTY_HINT_ENUM;
-	backend_property_info["hint_string"] = String("host,vm");
-	settings->add_property_info(backend_property_info);
 
 	// An exported game derives all three paths from where it is running and reads no setting at
 	// all (D8): they name one machine, which is meaningless anywhere else. The data directory is
@@ -195,18 +203,23 @@ Error VerseRuntime::load_host() {
 	// Binaries/ child as GForeignEngineDir.
 	const String data_dir = verse_paths::data_dir_for_this_build();
 	if (!data_dir.is_empty()) {
+		const String backend = String(settings->get_setting_with_override(backend_setting_name)).strip_edges();
 #ifdef VERSE_VM_STATIC
-		const String backend = String(settings->get_setting(backend_setting_name)).strip_edges();
-		// Web has no loader for a host DLL at all (verse_host.cpp compiles that path out under
-		// #ifdef _WIN32), so it uses vm whatever the setting says, as the export plugin does.
-		if (backend == "vm" || OS::get_singleton()->has_feature("web")) {
+		if (backend == "vm") {
 			return load_host_internal(String("<the built-in interpreter>"), String(), enable_debugger, data_dir.path_join("Cooked"), true);
 		}
 #else
-		if (String(settings->get_setting(backend_setting_name)).strip_edges() == "vm") {
+		if (backend == "vm") {
 			UtilityFunctions::push_warning("VerseRuntime: verse/runtime/backend is 'vm', but this build has no interpreter compiled in (build with `scons verse_vm=yes`); using the host instead.");
 		}
 #endif
+		if (OS::get_singleton()->has_feature("web")) {
+			if (!host_init_refused) {
+				host_init_refused = true;
+				refuse_to_start(String("Verse needs the vm backend on Web, and this game was exported with verse/runtime/backend.web set to \"") + backend + String("\": the UE host is a native DLL a browser cannot load."));
+			}
+			return ERR_UNAVAILABLE;
+		}
 		const String dll_path = OS::get_singleton()->get_executable_path().get_base_dir().path_join(RUNTIME_HOST_FILENAME);
 		return load_host_internal(dll_path, data_dir.path_join("Engine"), enable_debugger, data_dir.path_join("Cooked"));
 	}

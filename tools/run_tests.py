@@ -1336,9 +1336,9 @@ def _web_backend_project(base_project: Path) -> Path:
     """A throwaway copy of base_project with a Web preset appended.
 
     tests/integration's checked-in export_presets.cfg carries only "Windows Desktop" (CLAUDE.md's
-    export_presets.cfg rule), and Web needs its own preset to export against at all. The copy leaves
-    `verse/runtime/backend` at its default of "host" on purpose: Web always runs the interpreter,
-    and a copy that set it would stop proving that. Thrown away with its temp directory by this
+    export_presets.cfg rule), and Web needs its own preset to export against at all. The copy sets
+    no `verse/runtime/backend*` on purpose: the `.web` override VerseRuntime registers defaults Web
+    to "vm", and a copy that set it would stop proving that. Thrown away with its temp directory by this
     function's caller, exactly as _vm_backend_project's copy is.
     """
     work = Path(tempfile.mkdtemp(prefix="verse_export_web_"))
@@ -1386,6 +1386,30 @@ def stage_extension_web(project: Path) -> str | None:
     (godot_dir / "extension_list.cfg").write_text(
         'res://addons/godot-verse/godot-verse.gdextension\n', encoding="utf-8")
     return None
+
+
+def _check_web_refuses_host(godot: Path, project: Path) -> bool:
+    """Overrides `verse/runtime/backend.web` to "host" in the throwaway project and exports again.
+
+    R-PLAT-4: the plugin must say why rather than ship a game that cannot boot. The refusal comes
+    before the cook, so this costs a Godot start and nothing else. Run last, because it edits the
+    project the main export ran against.
+    """
+    with open(project / "project.godot", "a", encoding="utf-8") as f:
+        f.write('\n[verse]\n\nruntime/backend.web="host"\n')
+    with tempfile.TemporaryDirectory(prefix="verse_export_web_host_") as work_str:
+        completed = subprocess.run(
+            [str(godot), "--headless", "--path", str(project),
+             "--export-release", "Web", str(Path(work_str) / "index.html")],
+            capture_output=True, text=True, errors="replace")
+    output = (completed.stdout or "") + (completed.stderr or "")
+    if "Verse needs the vm backend on Web" in output:
+        print("[web] a Web export with backend.web=\"host\" is refused: ok")
+        return True
+    print("[web] a Web export with backend.web=\"host\" is refused: FAIL -- its last lines:")
+    for line in [line for line in output.splitlines() if line.strip()][-12:]:
+        print(f"[web]   {line.strip()}")
+    return False
 
 
 def run_web(results: Results, engine: Path | None, godot: Path | None) -> None:
@@ -1537,6 +1561,7 @@ def run_web(results: Results, engine: Path | None, godot: Path | None) -> None:
                         ok = False
                         print(f"[web] {name} {got}, expected {want}: FAIL")
 
+            ok = _check_web_refuses_host(godot, project) and ok
             results.record("web", ok)
     finally:
         shutil.rmtree(project.parent, ignore_errors=True)

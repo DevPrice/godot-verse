@@ -21,7 +21,7 @@ using namespace godot;
 namespace {
 
 // The platforms this bridge does not reach. Mobile is deferred with no design; web left this list
-// in Phase 7.5 (docs/phase-7.5-design.md §9), where it always exports on the interpreter.
+// in Phase 7.5 (docs/phase-7.5-design.md §9), and exports only on the interpreter.
 const char *UNREACHABLE_PLATFORMS[] = { "android", "ios" };
 
 // gdextension.py writes [dependencies] last (RUNTIME_HOST_FILES, scanned from bin/ at build
@@ -128,12 +128,21 @@ void VerseExportPlugin::_export_begin(const PackedStringArray &p_features, bool 
 	// setting, and Godot reads that section itself rather than asking this plugin. Rewriting the
 	// file for the length of this export, and putting it back in _export_end, is the only lever an
 	// EditorExportPlugin has over a dependency Godot itself declared.
-	// Web always runs the interpreter, whatever the setting says, the way a Web export always gets the
-	// Compatibility renderer: the UE host is a native DLL a browser cannot load, so there is nothing
-	// else it could mean, and VerseRuntime::load_host makes the same choice in the running game.
-	const String backend = String(ProjectSettings::get_singleton()->get_setting("verse/runtime/backend", String("host"))).strip_edges();
-	const bool uses_vm = backend == "vm" || p_features.has("web");
-	if (uses_vm) {
+	// The preset's reading, not ProjectSettings', so the `.web` override VerseRuntime registers (vm)
+	// applies to a Web export made from a Windows editor.
+	const Ref<EditorExportPreset> preset = get_export_preset();
+	const String backend = String(preset.is_valid()
+					? preset->get_project_setting("verse/runtime/backend")
+					: ProjectSettings::get_singleton()->get_setting("verse/runtime/backend", String("host")))
+								   .strip_edges();
+	if (p_features.has("web") && backend != "vm") {
+		refused = true;
+		say(EditorExportPlatform::EXPORT_MESSAGE_ERROR,
+				String("Verse needs the vm backend on Web, and this preset reads verse/runtime/backend as \"") + backend +
+						String("\": the UE host is a native DLL a browser cannot load. Set verse/runtime/backend.web to \"vm\" in Project Settings, or remove the override that changed it."));
+		return;
+	}
+	if (backend == "vm") {
 		const String gdextension_path = String("res://addons/godot-verse/godot-verse.gdextension");
 		Ref<FileAccess> reader = FileAccess::open(gdextension_path, FileAccess::READ);
 		if (reader.is_valid()) {
@@ -322,7 +331,6 @@ void VerseExportPlugin::_export_begin(const PackedStringArray &p_features, bool 
 	// pack without them looks every script up under the wrong module and attaches none -- silently.
 	// A preset whose non-resource filter lists `*.vmodule` already carries them, and adding one
 	// twice would ship it twice, so only the rest are added.
-	const Ref<EditorExportPreset> preset = get_export_preset();
 	const String include_filter = preset.is_valid() ? preset->get_include_filter() : String();
 	PackedStringArray markers;
 	collect_vmodules("res://", markers);

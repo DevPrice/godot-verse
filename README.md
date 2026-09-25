@@ -55,8 +55,10 @@ Blocked on Epic licensing the Verse toolchain for redistribution:
 ### Web export
 
 A Web export runs your Verse on a second runtime: an interpreter of Verse's compiled bytecode that
-the extension carries, because the Unreal host can't be built for the web. A Web export always uses
-it, so there is nothing to set. To use it in a Windows export too, which then ships no Unreal binary,
+the extension carries, because the Unreal host can't be built for the web. A Web export uses
+it by default: **Project Settings > Verse > Runtime > Backend** has a Web override set to `vm`, the
+way Godot defaults Web to the Compatibility renderer. If that override is `host`, the Web export
+fails with an error. To use the interpreter in a Windows export too, which then ships no Unreal binary,
 set **Project Settings > Verse > Runtime > Backend** to `vm`.
 
 A Web preset needs **Extensions Support** on and **Thread Support** off.

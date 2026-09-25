@@ -364,7 +364,11 @@ reviewed files of `docs/web-vm/spec/` alone. Keep it that way — do not bring V
   (`scons verse_vm=yes`; a Windows release build and every web build carry it). `src/` fills
   `VerseHostLibrary` from it with `load_static` and hands it a file reader over `FileAccess`.
 - **`verse/runtime/backend`** (`host` or `vm`) picks it in an exported game; an editor session always
-  uses the host, and Web always uses `vm` whatever it says. On the vm backend the export ships no UE binary, and on Web
+  uses the host. Its `.web` feature override defaults to `vm`, the way Godot defaults
+  `rendering_method.web`, and a Web export or run that resolves it to `host` is refused. **Read it
+  through an override** — `get_setting_with_override` in the game, `EditorExportPreset::
+  get_project_setting` in the export plugin, which is what resolves a Web preset's features from a
+  Windows editor — or `.web` is invisible. On the vm backend the export ships no UE binary, and on Web
   `verse_data` lives inside the `.pck`.
 - Frames are on the heap, so a Verse call never recurses in C++, but **there is no scheduler**:
   whoever makes a task runnable runs it on its own stack, in `web-vm/spec/tasks.md` §4.3's order.
