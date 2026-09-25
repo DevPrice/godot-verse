@@ -34,12 +34,6 @@ public:
 	// pointers name code already linked into this DLL -- so this cannot fail the way load() can,
 	// and unload() clearing them back to null is all a matching teardown needs.
 	bool load_static();
-
-	// docs/web-vm/tasks.md T5.3's own check: every pointer load_static() should have set, so a
-	// forgotten one is a false here rather than a segfault the first time something calls through
-	// it -- there being no cooked directory for the vm backend to boot against yet (T5.4), this is
-	// what stands in for running it end to end.
-	bool all_pointers_assigned() const;
 #endif
 
 	void unload();

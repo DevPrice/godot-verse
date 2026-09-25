@@ -61,7 +61,7 @@ Status: `todo`, `doing`, `done`, `dropped` (with a reason).
 | T3.8 | `$BuiltIn` intrinsics and the non-concurrent Verse-library natives | clean / sonnet | T1.8, T3.4 | native fixtures pass | done |
 | T3.9 | Precise collector, run after M4 so it roots suspended tasks; and move the process-lifetime state T3.8 had to leave as function-local statics in `vm_natives.cpp` (`GetSecondsSinceEpoch`'s frozen sample, the random generator) onto the `Runtime` a native can reach, and give `NativeCall` a frame walk so `CanCallerAccessEpicInternal` stops answering a hardcoded `true` | clean / opus | T4.3 | a GC-stress fixture agrees; unit cases pass; no mutable global in `vm/` but the one `Runtime` | done: `run_vm_conformance.py --gc-stress` 190/190; the one other global is the file reader the ABI sets before `vh_init`. `VhAdoptRef` (T5.2) must call `Interpreter::adopt_ref` |
 | T3.11 | Treat the loaded program's cells as a permanent generation the collector never re-marks: T3.9 measured a 14 ms stop-the-world pause per collection (unoptimized) that is almost all re-marking the mirror, a visible hitch at 60 fps on web. Also decide whether `vh_shutdown` releases still-live peers and refs | clean / opus | T3.9 | `--gc-bench` shows a collection's cost scaling with garbage, not with program size; conformance 190/190 under `--gc-stress` | done: idle 11 ms to 0.02 ms (measurements.md) |
-| T3.10 | Leniency stage 2, **only if** T2.4 or a later run shows a runtime park | clean / opus | T3.7 | the parking fixtures pass | todo |
+| T3.10 | Leniency stage 2, **only if** T2.4 or a later run shows a runtime park | clean / opus | T3.7 | the parking fixtures pass | dropped: nothing parked at run time across the 190 conformance methods, the 519 export cases on the vm backend, the 517 web cases or dodge-the-creeps' 30 checks, so stage 1's error was never raised |
 
 **M3 exit:** `run_vm_conformance.py --sequential` agrees on every fixture.
 
@@ -101,6 +101,6 @@ Status: `todo`, `doing`, `done`, `dropped` (with a reason).
 
 | ID | Task | Room / model | Depends | Check | Status |
 | --- | --- | --- | --- | --- | --- |
-| T7.1 | Design §14, written after the work | lead | M6 | written | todo |
-| T7.2 | `spec.md` R-PLAT-3 and OQ-4, `roadmap.md` Phase 7.5, `CLAUDE.md` map entries | lead | T7.1 | updated | todo |
-| T7.3 | Full `run_tests.py`, all layers | lead | T7.2 | green, every skip with a reason | todo |
+| T7.1 | Design §14, written after the work | lead | M6 | written | done |
+| T7.2 | `spec.md` R-PLAT-3 and OQ-4, `roadmap.md` Phase 7.5, `CLAUDE.md` map entries | lead | T7.1 | updated | done |
+| T7.3 | Full `run_tests.py`, all layers | lead | T7.2 | green, every skip with a reason | done: 16 passed, 0 failed, 0 skipped |

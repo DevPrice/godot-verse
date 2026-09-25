@@ -290,15 +290,18 @@ analysis pipeline, the game may need only the VM (R-DIST-11).
   *Known unknowns:* binary size of a monolithic UE Program target, and whether VerseVM's execution
   strategy is compatible with iOS's prohibition on JIT. Recorded as **OQ-3** — which OQ-2 has
   narrowed to the **runtime** host, carrying no compiler.
-- **R-PLAT-3 (SHOULD, blocked)** Web export runs Verse. This is the stated ideal and it is
-  currently not known to be reachable: UBT has no wasm Program target, and Godot's web export is a
-  constrained single-threaded-by-default wasm environment. OQ-2 removed the third obstacle — the
-  runtime host reads `.uasset`, not `.verse`, so it does not need a filesystem full of sources —
-  but the first two stand. Blocked on **OQ-4**, and deferred to **Phase 7.5** by decision
-  (`phase-7-design.md` D16).
+- **R-PLAT-3 (SHOULD)** Web export runs Verse. Status: **done** (Phase 7.5), on a second execution
+  path: a clean-room interpreter of VerseVM bytecode (`vm/`) that the cooker feeds a `program.vbc`
+  and the GDExtension carries statically, because the UE host itself cannot be wasm32
+  (`verse-on-web.md`). A Web export requires `verse/runtime/backend=vm` and ships no UE binary.
+  Measured: `tests/integration` passes 517 of its cases in headless Chrome with 0 failed and 13
+  skipped, and `dodge-the-creeps` passes its 30 checks (`phase-7.5-design.md` §14). The web build is
+  nothreads, so no COOP/COEP headers are needed; the game runs at about two-thirds of real time,
+  which nothing was optimized for.
 - **R-PLAT-4 (MUST)** A platform that is not supported fails at export time with a clear message,
   not at game startup on a user's device. Status: **done** (Phase 7a) — `VerseExportPlugin::
-  _export_begin` refuses `android`, `ios` and `web` with one sentence naming the platform. It also
+  _export_begin` refuses `android` and `ios` with one sentence naming the platform, and refuses
+  `web` unless the project chooses the vm backend (Phase 7.5). It also
   withholds the data directory, because `add_message(EXPORT_MESSAGE_ERROR)` reports without
   aborting the export (measured, `phase-7-design.md` §13.4), so the sentence at export time is
   what the author reads and a game that will not load is what they get if they ignore it.
@@ -2779,7 +2782,7 @@ A closed question keeps its row so that the reason it is closed is not lost.
 | **OQ-1** | When, if ever, is the Verse compiler toolchain licensed such that binaries built from it may be redistributed? No ETA is known. | R-DIST-6, R-DIST-7, R-QUAL-4 | Track Epic's announcements. Design so the answer changes packaging only, never architecture. |
 | **OQ-2** ✅ | Does an exported game ship the compiler and `.verse` sources, or precompiled Verse and a runtime-only host? | R-DIST-8, R-DIST-11, R-PLAT-2, R-PLAT-3 | **Closed: precompiled Verse and a runtime-only host.** See §14.1. |
 | **OQ-3** | Is a monolithic UE Program target viable on Android and iOS — binary size, and whether VerseVM requires JIT that iOS forbids? | R-PLAT-2 | Attempt a UBT Program build for Android first; it is the permissive platform and answers the size question. Narrowed by OQ-2: the question is only about the **runtime** host, which carries no compiler. |
-| **OQ-4** | Is Verse on wasm reachable at all? UBT has no wasm Program target; Godot's web export is constrained wasm. | R-PLAT-3 | Narrowed by OQ-2 — a web target would need only the runtime host, not Solaris — but still blocked on UBT having no wasm Program target at all. **Phase 7.5's question** (`roadmap.md`), by decision in Phase 7's planning: Phase 7 builds the runtime host, which is the only binary a web build would ever need, and answers nothing else here. |
+| **OQ-4** ✅ | Is Verse on wasm reachable at all? UBT has no wasm Program target; Godot's web export is constrained wasm. | R-PLAT-3 | **Closed: yes, but not by running VerseVM there.** The UE host cannot be wasm32 (it asserts 64-bit pointers), and VerseVM cannot be extracted (`verse-on-web.md`). Phase 7.5 built a second execution path instead: the cooker serializes Epic's own bytecode into `program.vbc`, and a clean-room interpreter in `vm/` runs it natively and as wasm32, byte-identical to the UE host on the conformance suite (`phase-7.5-design.md` §14). |
 | **OQ-5** ✅ | How does a project escape the single flat `/user@localhost` scope, so it can have modules, subdirectories and shared library code? | R-LANG-6 | **Closed: submodules within the one user package, built from the project's directory tree.** See §14.1. |
 | **OQ-6** | What is the correct interaction between Verse's task model and Godot's threading — `WorkerThreadPool`, threaded loading, calls into Verse off the main thread? **Half of it is already answered by the engine, against us:** VerseVM's top-level entry asserts `IsInGameThread()` (`VVMEnterVMInline.h`) with the comment "Verse bytecode and AutoRTFM transactions must run on the game thread", so the question is not *whether* Verse can run on a worker thread — it cannot — but what a call from one should *do*. A mutex is not an answer: the assertion is thread identity, not mutual exclusion. | R-ASYNC-7, and now R-ASYNC-8 | Its own scoping document, which must choose between three tiers: **refuse** (R-ASYNC-8, which Phase 4 builds, because it converts corruption into a message); **marshal and block**, whose deadlock is concrete — the game thread is routinely inside Verse calling out into Godot, and anything on that path that waits on the worker hangs both; or **marshal and defer**, which cannot return a value and is Godot's own `call_deferred` bargain. Until it exists, §7 must not adopt a design that assumes single-threaded forever. **Phase 5 forecloses nothing and adds one fact worth carrying in**: resumption is event-driven rather than scheduled — a task resumes synchronously inside the call that signals it, measured — so there is no scheduler whose thread affinity would have to be redesigned, only the pump, which already runs where `_frame` does. |
 | **OQ-7** | Build our own LSP over `verse_host_abi.h`, or get `uLangLSP` into a linkable target? | R-TOOL-10 | Low priority — Godot's editor is primary (§9). |

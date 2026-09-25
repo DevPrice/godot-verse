@@ -91,9 +91,6 @@ void VerseRuntime::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("_monitor_analysis_wait_ms"), &VerseRuntime::_monitor_analysis_wait_ms);
 	ClassDB::bind_method(D_METHOD("_monitor_instance_tasks"), &VerseRuntime::_monitor_instance_tasks);
 	ClassDB::bind_method(D_METHOD("build_project"), &VerseRuntime::build_project);
-#ifdef VERSE_VM_STATIC
-	ClassDB::bind_method(D_METHOD("debug_check_vm_backend"), &VerseRuntime::debug_check_vm_backend);
-#endif
 }
 
 VerseRuntime::~VerseRuntime() {
@@ -117,18 +114,6 @@ PackedStringArray VerseRuntime::modules_declaring(const String &p_name) const {
 	}
 	return modules;
 }
-
-#ifdef VERSE_VM_STATIC
-Dictionary VerseRuntime::debug_check_vm_backend() {
-	VerseHostLibrary probe;
-	Dictionary result;
-	result["loaded"] = probe.load_static();
-	result["all_pointers_assigned"] = probe.all_pointers_assigned();
-	result["host_kind"] = probe.host_kind();
-	probe.unload();
-	return result;
-}
-#endif
 
 Error VerseRuntime::build_project() {
 	// Delegated rather than done here, because which files are in the project is a question about

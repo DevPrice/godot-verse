@@ -887,14 +887,18 @@ proves the loading, and only one that calls something proves the calling.**
 
 ## Phase 7.5 — Web
 
-**Why a phase of its own.** R-PLAT-3 is SHOULD and blocked on **OQ-4**: UBT has no wasm Program
-target, and Godot's web export is a constrained, single-threaded-by-default wasm environment.
-Phase 7 removes nothing from that list and adds one thing to it — the runtime host now exists as a
-target whose module set is the smallest Verse can run in, which is the only binary a web build would
-ever need to reach. No design yet, by decision; when it is written it starts from OQ-4's row in
-`spec.md` §14 and Phase 7's §2 S-2 (the runtime host's measured module set and size).
+**Built; exit met.** OQ-4 is closed and R-PLAT-3 is done.
+[`phase-7.5-design.md`](phase-7.5-design.md) is the design, and its **§14 is the part to read**:
+where the body was wrong, what only a browser showed, the numbers, and the defects it found in the
+existing UE path. `verse-on-web.md` is why the answer is a second execution path rather than the UE
+host on wasm. The work is a clean-room interpreter of Epic's VerseVM bytecode (`vm/`), fed by a
+`program.vbc` the cooker writes and specified in `web-vm/spec/`; `web-vm/cleanroom-log.md` is the
+record of how the wall held. `web-vm/tasks.md` is the task list it was executed from.
 
-**Exit:** OQ-4 answered in `spec.md`, either way.
+**Exit:** `tests/integration` passes on the interpreter in a Windows export (519/0/11, the host
+backend's own counts) and in headless Chrome (517/0/13); `dodge-the-creeps` passes its 30 checks in
+headless Chrome (`tools/run_dtc_web.py`); the conformance suite agrees with the UE host on 190 of
+190 methods.
 
 ---
 

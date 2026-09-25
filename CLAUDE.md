@@ -347,6 +347,30 @@ never called, because teardown segfaults past where a cook has already written.
 can never reach (`phase-7-design.md` §13.2). What helps is Shipping — 72.7 MB against Development's
 112.4 — and an export still ships the Development host, because the `.gdextension` names one file.
 
+### `vm/` — the second execution path (Phase 7.5)
+
+A clean-room interpreter of Epic's VerseVM bytecode, which is how Verse runs on the web, where the UE
+host cannot (it asserts 64-bit pointers; `verse-on-web.md`). `phase-7.5-design.md` is the design and
+its §14 the record; `docs/web-vm/` holds the spec, the container format, the task list and the
+clean-room log. **The wall is real: `vm/` was written without reading VerseVM's source, from the
+reviewed files of `docs/web-vm/spec/` alone. Keep it that way — do not bring VerseVM knowledge into
+`vm/`, and route a question the spec cannot answer to a spec change** (`phase-7.5-design.md` §3).
+
+- The cooker writes `program.vbc` beside the sidecar (`host/Private/HostVbcWriter.*`, the encoder
+  generated from `docs/web-vm/ops.json`). It is a snapshot **after** initialization, so a loader
+  runs no Verse (`web-vm/spec/modules.md` §2).
+- `vm/` is godot-cpp-free and implements the runtime `vh_*` subset itself, so it builds two ways:
+  `bin/verse_vm.dll`, a drop-in for `verse_host_runtime.dll`, and statically into the GDExtension
+  (`scons verse_vm=yes`; a Windows release build and every web build carry it). `src/` fills
+  `VerseHostLibrary` from it with `load_static` and hands it a file reader over `FileAccess`.
+- **`verse/runtime/backend`** (`host` or `vm`) picks it in an exported game; an editor session always
+  uses the host, and Web requires `vm`. On the vm backend the export ships no UE binary, and on Web
+  `verse_data` lives inside the `.pck`.
+- Frames are on the heap, so a Verse call never recurses in C++, but **there is no scheduler**:
+  whoever makes a task runnable runs it on its own stack, in `web-vm/spec/tasks.md` §4.3's order.
+- The collector is precise, never runs inside an entry, and treats the loaded program as a
+  permanent generation (`Heap::tenure`), so a pause costs what it frees.
+
 ## Commands
 
     python tools/build_host.py            # stages host/ into the UE tree, runs UBT
@@ -366,6 +390,13 @@ can never reach (`phase-7-design.md` §13.2). What helps is Shipping — 72.7 MB
     python tools/build_bench.py           # host benchmark (timings, not pass/fail)
     python tools/build_verse_probe.py     # the Verse probe (asks the compiler a question)
     python tools/build_cooked_probe.py    # the cooked probe (asks a runtime host what an export sees)
+    python tools/build_verse_vm.py        # bin/verse_vm.dll, the interpreter; --wasm compiles vm/ with em++
+    python tools/build_vm_test.py         # vm/'s unit tests; --release builds the /O2 bench binary
+    python tools/run_vm_conformance.py    # vm/ against recorded UE-host transcripts; --record, --gc-stress
+    python tools/vbc_dump.py <program.vbc> # read a .vbc; --check, --proc, --class
+    python tools/gen_vbc_ops.py           # validate docs/web-vm/ops.json; --digest, --emit-cpp
+    python tools/emsdk_env.py -- scons platform=web arch=wasm32 threads=no target=template_release
+    python tools/run_dtc_web.py           # dodge-the-creeps on the interpreter in headless Chrome
 
 `tools/build_host.py` needs a UE source checkout with the Verse toolchain — `--engine`, or
 `UE_ROOT`. Building the host and running the tests are fine to do unprompted, and so is **headless**
@@ -384,15 +415,22 @@ executable. If a future engine drop provides one, that script finds and execs it
 
 ### Tests
 
-    python tools/run_tests.py                    # all four layers; the one command (R-QUAL-3)
-    python tools/run_tests.py --only units       # or units / abi / integration / export
+    python tools/run_tests.py                    # every layer; the one command (R-QUAL-3)
+    python tools/run_tests.py --only units       # or units / abi / integration / export / web
     python tools/run_tests.py --build            # rebuild the test binaries first
 
-**units** — lexer, class-declaration scanner, module map, doc-markup converter, signature parser, generator. No
-Godot, no UE.
+**units** — lexer, class-declaration scanner, module map, doc-markup converter, signature parser,
+generator, and `vm/`'s own cases (`verse_vm_test`). No Godot, no UE.
 
 **abi** — `host_smoke`, the whole C ABI with no Godot, plus a `verse_cook` case that cooks
-`tests/host_smoke`'s fixtures and asserts the packages, the container and the sidecar.
+`tests/host_smoke`'s fixtures and asserts the packages, the container, the sidecar and the
+`program.vbc` (read by the clean-room `tools/vbc_dump.py`, which shares no code with the writer),
+and a runtime-host case that runs `task(t)` methods and a raise through `cooked_probe`.
+
+**The interpreter's differential harness is not a layer.** `tools/run_vm_conformance.py` runs
+`tests/cooked_probe` over `tests/vm_conformance`'s fixtures against `bin/verse_vm.dll` and diffs the
+transcripts recorded from the UE runtime host (`--record`); `--gc-stress` collects after every
+entry. It needs no UE checkout unless recording.
 
 **integration** — three headless Godot projects. `tests/integration` for behaviour;
 `tests/coverage_diagnostic` for the R-SCN-2 diagnostics, which is its own project because its one
@@ -418,6 +456,14 @@ export rejections (R-EXP-2), the signal rejections (R-SIG-1) and B19 Stage C's "
 assertable in the integration layer. It refreshes the map before reading it, because a session that
 has only built has never called `_validate` and the map is empty. **The gutter itself is still
 by-hand** — the build copy proves the sentence and the line, not that the editor draws either.
+
+**export-vm** and **web** are the same `tests/integration` on the interpreter: a throwaway copy of
+the project with `verse/runtime/backend="vm"` (a committed `project.godot` is never touched;
+`override.cfg` is ignored while exporting), exported for Windows and asserted at the host backend's
+own 519/0/11, and exported for Web and run in headless Chrome through `tools/run_web.py`, asserted
+at 517/0/13 — R-ASYNC-8's two thread cases skip in a build without threads. **A Web export's page
+passes the engine no command line**, so `run_web.py --godot-arg` rewrites its `GODOT_CONFIG`; without
+it the test driver's `--verse-check` gate never opens and the game sits idle, which reads as a hang.
 
 **export** — exports `tests/integration` headless, asserts the *tree* it produced, then **launches
 it** and asserts what its cases reported: 519 passed, 0 failed, 11 skipped, with the counts named in

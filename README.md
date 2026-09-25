@@ -52,9 +52,17 @@ Blocked on Epic licensing the Verse toolchain for redistribution:
 - Prebuilt host binaries, on any platform
 - Continuous integration, because a hosted runner can't hold a licensed Unreal Engine checkout
 
-Blocked on Unreal's own tooling:
+### Web export
 
-- Web export. The Unreal Build Tool has no wasm target to build a runtime host against
+A Web export runs your Verse on a second runtime: an interpreter of Verse's compiled bytecode that
+the extension carries, because the Unreal host can't be built for the web. To export for Web, set
+**Project Settings > Verse > Runtime > Backend** to `vm`. The same setting lets a Windows export use
+the interpreter too, which then ships no Unreal binary.
+
+The Web build doesn't need threads, so a host that can't set cross-origin isolation headers can
+serve it. It doesn't run at full speed yet: `dodge-the-creeps` runs at about two-thirds of real time
+in Chrome. A Web export ships Verse code compiled by Epic's own compiler, so the redistribution
+limits above still apply to it.
 
 ## What a script looks like
 

@@ -121,15 +121,6 @@ public:
 	void unload_host();
 	bool is_host_loaded() const;
 
-#ifdef VERSE_VM_STATIC
-	// docs/web-vm/tasks.md T5.3's check, bound for a headless GDScript run: fills a throwaway
-	// VerseHostLibrary the way the vm backend would and reports on it, without disturbing whatever
-	// this instance's own `host` is doing and without booting anything -- there is no cooked
-	// directory to boot against until the export plugin ships one (T5.4). Not meant for anything
-	// but that check.
-	godot::Dictionary debug_check_vm_backend();
-#endif
-
 	// False for the runtime host an exported game ships. Everything that compiles, analyses,
 	// completes or looks a symbol up answers ERR_UNAVAILABLE there, so the caller's question
 	// is whether to ask at all rather than what the answer was.

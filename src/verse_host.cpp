@@ -231,23 +231,6 @@ bool VerseHostLibrary::load_static() {
 	loaded = true;
 	return true;
 }
-
-bool VerseHostLibrary::all_pointers_assigned() const {
-	return AbiVersion != nullptr && HostKind != nullptr && Init != nullptr && Shutdown != nullptr &&
-			Tick != nullptr && CompileProject != nullptr && SetBindings != nullptr &&
-			ResolveUnknownName != nullptr && CheckProject != nullptr && CheckProjectBegin != nullptr &&
-			CheckProjectPoll != nullptr && CheckProjectBusy != nullptr && HasClass != nullptr &&
-			Instantiate != nullptr && ReleaseInstance != nullptr && InstanceHasFunction != nullptr &&
-			InstanceCall != nullptr && CallbackInvoke != nullptr && CallbackRelease != nullptr &&
-			ClassMethodList != nullptr && ClassSignalList != nullptr && ClassRpcList != nullptr &&
-			ClassStaticList != nullptr && ClassIsAbstract != nullptr && ClassBaseType != nullptr &&
-			ClassExportList != nullptr && InstanceGetField != nullptr && ClassDefaultField != nullptr &&
-			InstanceSetField != nullptr && InstanceSetFieldInstance != nullptr && InstanceToString != nullptr &&
-			LookupSymbol != nullptr && CompleteSymbol != nullptr && ClassMembers != nullptr &&
-			ClassOverrideCandidates != nullptr && SignatureAt != nullptr && DebugSetEnabled != nullptr &&
-			DebugStackCount != nullptr && DebugStackFrame != nullptr && DebugStackValues != nullptr &&
-			ProfilingSetEnabled != nullptr && ProfilingRead != nullptr;
-}
 #endif
 
 int32_t VerseHostLibrary::host_kind() const {

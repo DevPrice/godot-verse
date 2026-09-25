@@ -376,4 +376,93 @@ M3 and M1's later spec sections overlap: the clean room starts on `values.md` an
 
 ## 14. After the work
 
-Not yet written.
+Written 2026-09-25, when every milestone's exit was met. The body above has been corrected in place
+where it was wrong, each correction saying so; this section is the record of what changed and what
+the numbers came to.
+
+### 14.1 What the exit bar measured
+
+| Check | Result |
+| --- | --- |
+| `tests/vm_conformance` against the UE runtime host | 190 of 190 methods byte-identical, 17 classes, concurrency included; the same with a collection forced after every entry |
+| `tests/integration` exported for Windows on the vm backend | 519 passed, 0 failed, 11 skipped — the host backend's own counts |
+| `tests/integration` exported for Web, in headless Chrome | 517 passed, 0 failed, 13 skipped — the two extra skips are R-ASYNC-8's thread cases, which a build without threads cannot pose |
+| `dodge-the-creeps` exported for Web, in headless Chrome | 30 of 30 checks (`tools/run_dtc_web.py`) |
+| `vm/` unit cases | all pass (`verse_vm_test`) |
+
+No fixture, export case or yardstick check ever parked at run time, so §7.1's stage 2 was never
+built (T3.10 dropped with that evidence).
+
+### 14.2 Where this body was wrong
+
+- **A loader runs no Verse** (§4, §5). The cooker sees the program *after* initialization, so the
+  `.vbc` is a snapshot; re-running initialization would fail. `spec/modules.md` §2 found it before
+  any loader was written.
+- **There is no scheduler loop** (§7.5). Whoever makes a task runnable runs it on its own native
+  stack, in a fixed order; queueing would have reordered every measured table.
+- **The native surface is about 70 Verse-library natives, not 25** (§4), because a script package
+  reaches `epic_internal` natives; and a native binds by its package-definition key, not its name,
+  since `event.Await` and `task.Await` share one. The Godot surface is 46 natives, not 39.
+- **The ABI layer belongs in `vm/`** (§2, §8). It speaks only plain C, so `vm/` builds as
+  `verse_vm.dll`, a drop-in for the runtime host, and the unchanged `tests/cooked_probe` became the
+  differential harness. The planned `vm_probe` was never needed.
+- **Live-variable `await`, `batch` and `set live` are reachable** from a script package (§4), and
+  element, map-value and field reads register for `await` (`spec/ops.md` §15.1).
+- **The collector cannot re-mark the program** (§7.3). A stop-the-world pass over the loaded mirror
+  cost ~11 ms per collection unoptimized; the loaded program is now a permanent generation (T3.11),
+  and an idle collection costs 0.02 ms.
+- **The web boot "hang" was a missing command line** (§10). A Web export's page passes the engine
+  no arguments, so the test driver's gate never opened; `run_web.py --godot-arg` supplies them.
+
+### 14.3 What only a browser showed
+
+- A build without threads runs a `WorkerThreadPool` task on the calling thread, so R-ASYNC-8's
+  off-thread refusal cannot be posed there; `test_cases.gd` skips those two cases on such builds.
+- Chrome renders, so a `VisibleOnScreenNotifier2D` fires for real, where Godot's `--headless`
+  never computes visibility. `dodge-the-creeps`' checks were written for headless, so the web
+  runner passes `--disable-render-loop` to restore those conditions.
+- Godot offers an export plugin no way to withhold a `.gdextension`'s `[dependencies]`, so on the
+  vm backend the plugin rewrites that file for the length of an export and restores it after.
+  An export that dies in between leaves the section out until the next build regenerates it.
+- The Emscripten risk (§11 risk 3) did not bite: a 4.0.11 side module links into the 4.7.2
+  template's 4.0.20 main module.
+
+### 14.4 Numbers
+
+| Measure | Value |
+| --- | --- |
+| `program.vbc`, each of three projects | ~11 MB, almost all standard library and mirror (`web-vm/measurements.md`) |
+| web library with the VM | 5.0 MB (`godot-verse.nothreads.wasm`) |
+| Windows release library, the VM's share | ~565 KiB |
+| `vh_init` on a cook | ~250 ms native, against the UE runtime host's ~420 ms; ~95 ms on web |
+| a collection, idle, `/O2` | 0.01 ms; ~1 ms after 65,536 dead cells |
+| `dodge-the-creeps` on web | 1.5× slower than real time at a fixed 60 fps — a correctness pass, not yet a playable one |
+
+### 14.5 Defects this phase found in the existing UE path
+
+All fixed on this branch, and all present on `master` before it: **B42**, where every scripted node
+shared one Godot container per container member default, and held a dead reference in an export;
+every method of a `task(t)` value crashing the runtime host; runtime-error frames that began with a
+bogus frame in the editor and were missing in an export; and an uninitialised tag written into the
+sidecar for every static value.
+
+### 14.6 The clean room, as it actually held
+
+`web-vm/cleanroom-log.md` is the record. Three gaps are in it, each logged when found. The clean
+room was first allowed all of `docs/` and `CLAUDE.md`, which describe the UE host in Epic's terms;
+the list was narrowed. Claude Code loads `CLAUDE.md` into every agent regardless, which no reading
+list can prevent; the project owner decided to accept and log it. And one dirty report named Epic's
+task-binding internals to the lead. None of it concerns how Epic's interpreter executes bytecode,
+and no clean task's output shows it used. A web export ships Epic compiler output (§1); the
+interpreter's source is what the wall was for.
+
+### 14.7 Left open
+
+- **Speed.** Nothing was optimized (W-6). The browser runs `dodge-the-creeps` at two-thirds of real
+  time; making it playable is measurement and work this phase did not do.
+- **Firefox and Safari** were never run, automated or by hand (W-5 made them by-hand checks).
+- **Not implemented:** `vh_run_main` on the interpreter; `typed_array` and `typed_dictionary`
+  *parameters*, which the sidecar cannot tell from `godot_array`; `classifiable_subset`'s
+  `GetDiagnostic` text, which is a placeholder.
+- **Wording that is ours**, where the reference had none: the unbound-native stand-in, the
+  interpreter's refusal sentences, the `VH_ERR_THREAD` sentence and the signal-reject sentences.
