@@ -74,7 +74,3 @@ start_game={
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
-
-[verse]
-
-runtime/backend="vm"
