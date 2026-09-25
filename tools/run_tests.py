@@ -270,7 +270,8 @@ def run_cook(results: Results, engine: Path) -> None:
         # `sources.txt` is here because everything in this directory ships: the plugin stopped
         # writing the manifest inside it, but a cache directory from before that fix kept one, and
         # kept shipping the author's absolute paths with it.
-        for unwanted in ("_loose", "Cooked/global.utoc", "Engine/Content", "sources.txt"):
+        for unwanted in ("_loose", "Cooked/global.utoc", "Engine/Content", "sources.txt",
+                         "program.vbc.report.txt"):
             if (out_dir / unwanted).exists():
                 ok = False
                 print(f"[verse_cook] shipped {unwanted}, which is an intermediate: FAIL")
@@ -790,10 +791,11 @@ EXPORT_DATA_FILES = [
     "Cooked/verse_scripts.ucas",
     "Engine/Binaries",
     "verse_classes.json",
+    "program.vbc",
 ]
 # Everything the shipped data directory is allowed to hold at its top level. The export copies the
 # cooker's cache directory whole, so anything else in it is shipped too.
-EXPORT_DATA_DIR_ENTRIES = {"Cooked", "Engine", "verse_classes.json"}
+EXPORT_DATA_DIR_ENTRIES = {"Cooked", "Engine", "verse_classes.json", "program.vbc"}
 # Three of the project's own classes, one of them in a module -- the module prefix is half of a
 # class's name, and it is what the kept `.vmodule` markers decide.
 EXPORT_EXPECTED_CLASSES = ["marshal", "signals", "left/widget"]

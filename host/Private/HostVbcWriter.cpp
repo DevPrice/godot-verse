@@ -1727,7 +1727,9 @@ AUTORTFM_DISABLE bool GodotVerse::WriteProgramVbc(const FString& OutDir, int32 G
 		OutError = FUtf8String(FString::Printf(TEXT("could not write %s"), *Path));
 		return false;
 	}
-	const FString ReportPath = FPaths::Combine(OutDir, TEXT("program.vbc.report.txt"));
+	// Beside the data directory rather than in it: the export plugin ships that directory whole.
+	FString ReportPath = FPaths::Combine(OutDir, TEXT(".."), TEXT("program.vbc.report.txt"));
+	FPaths::CollapseRelativeDirectories(ReportPath);
 	if (!FFileHelper::SaveStringToFile(Report, *ReportPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
 	{
 		OutError = FUtf8String(FString::Printf(TEXT("could not write %s"), *ReportPath));
