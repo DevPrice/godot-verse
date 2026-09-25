@@ -298,7 +298,7 @@ String VerseRuntime::take_fatal_record() {
 	if (!FileAccess::file_exists(path)) {
 		return String();
 	}
-	const String record = FileAccess::get_file_as_string(path);
+	const String record = FileAccess::get_file_as_string(path).strip_edges();
 	DirAccess::remove_absolute(path);
 	return record;
 }

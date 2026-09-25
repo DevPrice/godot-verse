@@ -35,7 +35,7 @@ void RecordFatal()
     const FString Text = FString::Printf(
         TEXT("Verse host fatal error. This is a failure inside the Verse bridge or Unreal Engine, not in a ")
         TEXT("script, and the process ended.\n\n%s"),
-        GErrorHist);
+        GErrorHist).TrimEnd();
     if (!GFatalLogPath.IsEmpty())
     {
         FFileHelper::SaveStringToFile(Text, *GFatalLogPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
