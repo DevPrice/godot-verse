@@ -38,5 +38,13 @@ private:
 	// does not strip sources out of an export that was never going to work.
 	bool refused = false;
 
+	// The .gdextension this export rewrote to drop [dependencies], and what to put back in
+	// _export_end -- empty when this export used the host backend and nothing was touched. See
+	// _export_begin: the file is generated from what tools/build_host.py staged, not from any
+	// project's `verse/runtime/backend`, so a vm-backend export has to withhold the runtime host
+	// and tbbmalloc.dll for itself rather than have the library declare them conditionally.
+	godot::String rewritten_gdextension_path;
+	godot::String rewritten_gdextension_original;
+
 	void say(int p_message_type, const godot::String &p_message);
 };

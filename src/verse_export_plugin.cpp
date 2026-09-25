@@ -22,6 +22,17 @@ namespace {
 // 7.5; both fail here rather than producing a game that cannot load its own scripts (R-PLAT-4).
 const char *UNREACHABLE_PLATFORMS[] = { "android", "ios", "web" };
 
+// gdextension.py writes [dependencies] last (RUNTIME_HOST_FILES, scanned from bin/ at build
+// time), so cutting the text off at its heading drops exactly the runtime host and tbbmalloc.dll
+// and nothing else the file declares. If a future dependency belongs there whatever the backend,
+// this needs to parse the section rather than truncate it.
+const char *DEPENDENCIES_MARKER = "[dependencies]";
+
+String without_gdextension_dependencies(const String &p_text) {
+	const int index = p_text.find(DEPENDENCIES_MARKER);
+	return index < 0 ? p_text : p_text.substr(0, index);
+}
+
 } // namespace
 
 void VerseExportPlugin::_bind_methods() {}
@@ -51,6 +62,35 @@ void VerseExportPlugin::_export_begin(const PackedStringArray &p_features, bool 
 	const PackedStringArray sources = language->find_verse_sources("res://");
 	if (sources.is_empty()) {
 		return; // A project with no Verse exports exactly as it did before this plugin existed.
+	}
+
+	// The vm backend boots no host DLL to load either of these beside (phase-7.5-design.md §9,
+	// T5.4), so an export on it withholds both -- but the .gdextension's [dependencies] section
+	// that puts them there is generated from what is staged in bin/, not from this project's
+	// setting, and Godot reads that section itself rather than asking this plugin. Rewriting the
+	// file for the length of this export, and putting it back in _export_end, is the only lever an
+	// EditorExportPlugin has over a dependency Godot itself declared.
+	const String backend = String(ProjectSettings::get_singleton()->get_setting("verse/runtime/backend", String("host"))).strip_edges();
+	if (backend == "vm") {
+		const String gdextension_path = String("res://addons/godot-verse/godot-verse.gdextension");
+		Ref<FileAccess> reader = FileAccess::open(gdextension_path, FileAccess::READ);
+		if (reader.is_valid()) {
+			const String original = reader->get_as_text();
+			reader.unref();
+			const String stripped = without_gdextension_dependencies(original);
+			if (stripped.length() != original.length()) {
+				Ref<FileAccess> writer = FileAccess::open(gdextension_path, FileAccess::WRITE);
+				if (writer.is_valid()) {
+					writer->store_string(stripped);
+					writer.unref();
+					rewritten_gdextension_path = gdextension_path;
+					rewritten_gdextension_original = original;
+				} else {
+					say(EditorExportPlatform::EXPORT_MESSAGE_WARNING,
+							String("Could not rewrite ") + gdextension_path + String(" to drop the host DLL for the vm backend; the export will carry it anyway."));
+				}
+			}
+		}
 	}
 
 	for (const char *platform : UNREACHABLE_PLATFORMS) {
@@ -250,6 +290,14 @@ void VerseExportPlugin::_export_end() {
 	if (!temp_dir.is_empty()) {
 		DirAccess::remove_absolute(temp_dir);
 		temp_dir = String();
+	}
+	if (!rewritten_gdextension_path.is_empty()) {
+		Ref<FileAccess> writer = FileAccess::open(rewritten_gdextension_path, FileAccess::WRITE);
+		if (writer.is_valid()) {
+			writer->store_string(rewritten_gdextension_original);
+		}
+		rewritten_gdextension_path = String();
+		rewritten_gdextension_original = String();
 	}
 	refused = false;
 }

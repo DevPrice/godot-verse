@@ -1041,6 +1041,147 @@ def _check_pck(pck: Path, project: Path) -> bool:
     return ok
 
 
+# What a vm-backend export must never ship beside its executable -- the host DLL and its one
+# non-system import, which nothing on that backend loads (docs/phase-7.5-design.md §9, T5.4).
+EXPORT_VM_ABSENT = ["verse_host_runtime.dll", "tbbmalloc.dll"]
+
+# How long to wait on the launched vm-backend game before giving up on it. Far short of
+# _launch_export's 600 s: T4.3 (event(t)/task(t)/Sleep) is not built yet, so a case that awaits one
+# hangs the game rather than failing it, and the whole suite should not pay ten minutes for that on
+# every run. 90 s is comfortably past where the run above prints its last "[integration]" line.
+EXPORT_VM_LAUNCH_TIMEOUT = 90
+
+
+def _vm_backend_project(base_project: Path) -> Path:
+    """A throwaway copy of base_project with `verse/runtime/backend` forced to "vm".
+
+    Not an override.cfg: measured against this exact project, Godot does not honor override.cfg
+    while it is running as the editor, which is what `--export-release` does -- only while running
+    as the game, which is a process this function's caller has not started yet. A copy's
+    project.godot is not the checked-in file CLAUDE.md's "Tests" section means by an editor-owned
+    project file; it is thrown away with its temp directory by this function's caller.
+    """
+    work = Path(tempfile.mkdtemp(prefix="verse_export_vm_"))
+    project = work / base_project.name
+    shutil.copytree(base_project, project, ignore=shutil.ignore_patterns(".godot", "addons"))
+    with open(project / "project.godot", "a", encoding="utf-8") as f:
+        f.write('\n[verse]\n\nruntime/backend="vm"\n')
+    return project
+
+
+def run_export_vm(results: Results, engine: Path | None, godot: Path | None) -> None:
+    """The same tests/integration export, forced onto the vm backend in a throwaway project copy.
+
+    T5.4's own check is that the exported game ships neither host DLL -- asserted here. What the
+    launched game then does is T5.1/T5.2's, not built yet, so its counts are printed rather than
+    asserted and the run is recorded under its own name: a vm-backend regression must never hide
+    the host-backend "export" result going red, and a vm-backend improvement must not be required
+    to turn this one green before it is real (docs/web-vm/tasks.md T5.4, T5.5).
+    """
+    base_project = REPO / "tests" / "integration"
+    if godot is None:
+        results.skip("export-vm", "no Godot binary -- set GODOT or pass --godot")
+        return
+    if engine is None:
+        results.skip("export-vm", "no Unreal checkout -- set UE_ROOT or pass --engine")
+        return
+    if not (base_project / "export_presets.cfg").is_file():
+        results.skip("export-vm", "tests/integration has no export_presets.cfg")
+        return
+
+    cooker = engine / "Engine" / "Binaries" / "Win64" / "verse_cook.exe"
+    if not cooker.is_file():
+        results.skip("export-vm", f"{cooker} not built -- run tools/build_host.py --target VerseHostCooker")
+        return
+
+    addon_bin = REPO / "demo" / "addons" / "godot-verse" / "bin" / "windows-x86_64"
+    if not (addon_bin / "godot-verse.dll").is_file():
+        results.skip("export-vm", "the release GDExtension is not built -- run `scons target=template_release`")
+        return
+
+    template = _export_template(godot)
+    if template is None:
+        results.skip("export-vm", "the Windows release export template for this Godot is not installed")
+        return
+
+    project = _vm_backend_project(base_project)
+    try:
+        why = stage_extension(project, for_export=True)
+        if why is not None:
+            results.skip("export-vm", why)
+            return
+
+        print("[run_tests] --- export-vm ---")
+        with tempfile.TemporaryDirectory(prefix="verse_export_vm_out_") as work_str:
+            out = Path(work_str) / "game.exe"
+            completed = subprocess.run(
+                [str(godot), "--headless", "--path", str(project),
+                 "--export-release", "Windows Desktop", str(out)],
+                capture_output=True, text=True, errors="replace")
+
+            if completed.returncode != 0 or not out.is_file():
+                sys.stdout.write(completed.stdout or "")
+                sys.stdout.write(completed.stderr or "")
+                print(f"[export-vm] godot --export-release exited {completed.returncode}: FAIL")
+                results.record("export-vm", False)
+                return
+            print("[export-vm] the export produced a game: ok")
+
+            output = (completed.stdout or "") + (completed.stderr or "")
+            verse_errors = [line for line in output.splitlines() if "ERROR: Verse:" in line]
+            ok = True
+            if verse_errors:
+                ok = False
+                for line in verse_errors:
+                    print(f"[export-vm] the plugin reported an error: FAIL -- {line.strip()}")
+            else:
+                print("[export-vm] the Verse export plugin reported no errors: ok")
+
+            beside = out.parent
+            for name in EXPORT_VM_ABSENT:
+                if (beside / name).exists():
+                    ok = False
+                    print(f"[export-vm] {name} is beside the executable, but the vm backend should ship neither: FAIL")
+                else:
+                    print(f"[export-vm] {name} is not shipped: ok")
+
+            data = beside / EXPORT_DATA_DIR
+            if data.is_dir():
+                print("[export-vm] the data directory is beside the executable: ok")
+            else:
+                ok = False
+                print(f"[export-vm] the data directory {EXPORT_DATA_DIR!r} is beside the executable: FAIL")
+
+            print(f"[export-vm] launching {out.name}")
+            try:
+                launched = subprocess.run(
+                    [str(out), "--headless", "--fixed-fps", "60", "--", "--verse-check"],
+                    capture_output=True, text=True, errors="replace", timeout=EXPORT_VM_LAUNCH_TIMEOUT)
+                launch_output = (launched.stdout or "") + (launched.stderr or "")
+                print(f"[export-vm] the exported game exited {launched.returncode}")
+            except subprocess.TimeoutExpired as timeout_error:
+                stdout = timeout_error.stdout or b""
+                stderr = timeout_error.stderr or b""
+                launch_output = (stdout.decode("utf-8", "replace") if isinstance(stdout, bytes) else stdout) + \
+                    (stderr.decode("utf-8", "replace") if isinstance(stderr, bytes) else stderr)
+                print(f"[export-vm] the exported game did not exit within {EXPORT_VM_LAUNCH_TIMEOUT} s "
+                      "-- T4.3's tasks and events are not built yet, so a case awaiting one hangs the "
+                      "game rather than failing it; killed it")
+
+            summary = [line for line in launch_output.splitlines() if "[integration]" in line and "passed, " in line]
+            if summary:
+                print(f"[export-vm] the exported game said: {summary[-1].strip()}")
+            else:
+                print("[export-vm] the exported game reported no summary line -- not a failure here, "
+                      "T5.1/T5.2 are not done; its last output:")
+                for line in [line for line in launch_output.splitlines() if line.strip()][-8:]:
+                    print(f"[export-vm]   {line.strip()}")
+
+            results.record("export-vm", ok)
+    finally:
+        shutil.rmtree(project.parent, ignore_errors=True)
+
+
 def _export_template(godot: Path) -> Path | None:
     """The Windows release template matching this Godot, or None.
 
@@ -1096,6 +1237,7 @@ def main() -> None:
         run_binding_cycle(results, engine, godot)
     if args.only in (None, "export"):
         run_export(results, engine, godot)
+        run_export_vm(results, engine, godot)
 
     print()
     print(f"[run_tests] {results.passed} passed, {results.failed} failed, {len(results.skipped)} skipped")

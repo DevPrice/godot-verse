@@ -15,7 +15,8 @@ customs = [os.path.abspath(path) for path in customs]
 
 opts = Variables(customs, ARGUMENTS)
 opts.Add(BoolVariable(
-    "verse_vm", "Compile vm/ into the library and enable the vm backend (implied by platform=web)", False))
+    "verse_vm", "Compile vm/ into the library and enable the vm backend "
+    "(implied by platform=web, and by platform=windows target=template_release)", False))
 opts.Update(localEnv)
 
 Help(opts.GenerateHelpText(localEnv))
@@ -54,7 +55,16 @@ sources = Glob("src/*.cpp")
 # (src/verse_host.cpp's load_static). VERSE_HOST_IMPLEMENTATION is deliberately never defined here:
 # that would export the vh_* symbols from this library with dllexport, which only
 # tools/build_verse_vm.py's standalone DLL wants.
-verse_vm = bool(env["verse_vm"]) or env["platform"] == "web"
+#
+# Windows' template_release carries it too, on by default rather than opt-in there: it costs
+# ~565 KiB as of T5.4 (measured: 2,969,600 bytes without it, 3,548,160 with -- vm/ is still
+# growing, so treat the delta as approximate) and changes nothing about the host backend, which
+# VERSE_VM_STATIC only sits beside -- verse_host.cpp's DLL loader is not compiled out on Windows
+# the way it is on web. One release build this way carries both backends (T5.3), so
+# `scons target=template_release` alone is enough for an export to choose either at
+# `verse/runtime/backend`, and the export layer's default host-backend run needs nothing extra.
+verse_vm = bool(env["verse_vm"]) or env["platform"] == "web" or \
+    (env["platform"] == "windows" and env["target"] == "template_release")
 if verse_vm:
     env.Append(CPPPATH=["vm/"])
     env.Append(CPPDEFINES=["VERSE_VM_STATIC"])
