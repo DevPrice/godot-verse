@@ -216,7 +216,12 @@ Equality values_equal(Value p_left, Value p_right, PlaceholderMeeter *p_meeter) 
 			if (integer.is_int32() || other.is_int32()) {
 				return Equality::Neq;
 			}
-			return big_compare(int_value(integer), int_value(other)) == 0 ? Equality::Eq : Equality::Neq;
+			const HeapIntCell *left_int = cell_as<HeapIntCell>(integer);
+			const HeapIntCell *right_int = cell_as<HeapIntCell>(other);
+			if (!left_int->is_wide || !right_int->is_wide) {
+				return !left_int->is_wide && !right_int->is_wide && left_int->narrow == right_int->narrow ? Equality::Eq : Equality::Neq;
+			}
+			return big_compare(left_int->wide, right_int->wide) == 0 ? Equality::Eq : Equality::Neq;
 		}
 		if (is_rational(other)) {
 			const RationalCell *rational = cell_as<RationalCell>(other);
@@ -270,8 +275,10 @@ uint64_t hash_key(Value p_value) {
 	}
 	const Cell *cell = p_value.as_cell();
 	switch (cell->kind) {
-		case CellKind::HeapInt:
-			return hash_int(static_cast<const HeapIntCell *>(cell)->value);
+		case CellKind::HeapInt: {
+			const HeapIntCell *integer = static_cast<const HeapIntCell *>(cell);
+			return integer->is_wide ? hash_int(integer->wide) : combine(SEED_INT, uint64_t(integer->narrow));
+		}
 		case CellKind::Rational: {
 			const RationalCell *rational = static_cast<const RationalCell *>(cell);
 			if (rational->denominator.limbs.size() == 1 && rational->denominator.limbs[0] == 1) {

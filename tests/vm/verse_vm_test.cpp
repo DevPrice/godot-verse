@@ -343,6 +343,73 @@ void EncodingCases(Cases &r_cases) {
 	r_cases.check("heap: interning answers one cell per contents", heap.intern("X") == heap.intern(std::string("X")) && heap.intern("X") != heap.intern("Y"));
 }
 
+Value Bits(Heap &r_heap, const char *p_name, std::initializer_list<Value> p_arguments) {
+	const std::vector<Value> arguments(p_arguments);
+	NativeCall call(r_heap);
+	call.arguments = arguments.data();
+	call.argument_count = uint32_t(arguments.size());
+	const NativeFn native = native_implementation(std::string("(/Verse.org/Verse/(/Verse.org/Verse:)") + p_name + ":)Native");
+	return native(call) == Outcome::Ok ? call.result : Value::uninitialized();
+}
+
+bool IsWideHeapInt(Value p_value) {
+	return is_cell_kind(p_value, CellKind::HeapInt) && cell_as<HeapIntCell>(p_value)->is_wide;
+}
+
+bool IsNarrowHeapInt(Value p_value) {
+	return is_cell_kind(p_value, CellKind::HeapInt) && !cell_as<HeapIntCell>(p_value)->is_wide;
+}
+
+void Int64Cases(Cases &r_cases) {
+	Heap heap;
+	const Value max64 = Int(heap, INT64_MAX);
+	const Value min64 = Int(heap, INT64_MIN);
+	const Value two31 = Int(heap, int64_t(1) << 31);
+	r_cases.check("int64: 2^31 from int64, from a BigInt and from int32 max + 1 are one value with one hash",
+			IsNarrowHeapInt(two31) && Equal(two31, Pow2(heap, 31)) && Equal(two31, Add(heap, Int(heap, INT32_MAX), Int(heap, 1))) && IsNarrowHeapInt(Pow2(heap, 31)));
+	r_cases.check("int64: -2^31 - 1 is a heap int and -2^31 an immediate",
+			IsNarrowHeapInt(Int(heap, int64_t(INT32_MIN) - 1)) && Int(heap, INT32_MIN).is_int32() && Sub(heap, Int(heap, int64_t(INT32_MIN) - 1), Int(heap, -1)).is_int32());
+	r_cases.check("int64: 2^62 + 2^62 overflows into a wide 2^63", IsWideHeapInt(Add(heap, Pow2(heap, 62), Pow2(heap, 62))) && Equal(Add(heap, Pow2(heap, 62), Pow2(heap, 62)), Pow2(heap, 63)));
+	r_cases.check("int64: 2^63 - 1 from a wide 2^63 is narrow and equals int64 max", IsNarrowHeapInt(Sub(heap, Pow2(heap, 63), Int(heap, 1))) && Equal(Sub(heap, Pow2(heap, 63), Int(heap, 1)), max64));
+	r_cases.check("int64: int64 min - 1 overflows and + 1 comes back narrow",
+			IsWideHeapInt(Sub(heap, min64, Int(heap, 1))) && IsNarrowHeapInt(Add(heap, Sub(heap, min64, Int(heap, 1)), Int(heap, 1))) && Equal(Add(heap, Sub(heap, min64, Int(heap, 1)), Int(heap, 1)), min64));
+	r_cases.check("int64: int64 min - int64 max overflows to -(2^64 - 1)", Show(Sub(heap, min64, max64)) == "-18446744073709551615");
+	r_cases.check("int64: 2^32 * 2^31 overflows to 2^63, -2^32 * 2^31 is int64 min",
+			IsWideHeapInt(Mul(heap, Pow2(heap, 32), two31)) && Equal(Mul(heap, Pow2(heap, 32), two31), Pow2(heap, 63)) && IsNarrowHeapInt(Mul(heap, Int(heap, -(int64_t(1) << 32)), two31)) && Equal(Mul(heap, Int(heap, -(int64_t(1) << 32)), two31), min64));
+	r_cases.check("int64: 3037000500^2 overflows exactly", Show(Mul(heap, Int(heap, 3037000500), Int(heap, 3037000500))) == "9223372037000250000");
+	r_cases.check("int64: 3037000499^2 stays narrow", IsNarrowHeapInt(Mul(heap, Int(heap, 3037000499), Int(heap, 3037000499))) && Show(Mul(heap, Int(heap, 3037000499), Int(heap, 3037000499))) == "9223372030926249001");
+	r_cases.check("int64: int64 min * -1 and -1 * int64 min are wide 2^63", Equal(Mul(heap, min64, Int(heap, -1)), Pow2(heap, 63)) && Equal(Mul(heap, Int(heap, -1), min64), Pow2(heap, 63)));
+	r_cases.check("int64: Neg of int64 min is wide, Neg of -2^40 narrow", IsWideHeapInt(Neg(heap, min64)) && Show(Neg(heap, Int(heap, -(int64_t(1) << 40)))) == "1099511627776");
+	r_cases.check("int64: ordering across immediate, narrow and wide",
+			Holds(OrderOp::Lt, Int(heap, -(int64_t(1) << 40)), Int(heap, 5)) && Holds(OrderOp::Gt, Int(heap, 3000000000), Int(heap, 2000000000)) &&
+					Holds(OrderOp::Lt, max64, Pow2(heap, 63)) && Holds(OrderOp::Gt, min64, Sub(heap, min64, Int(heap, 1))) && Holds(OrderOp::Lte, max64, max64) && !Holds(OrderOp::Lt, max64, max64));
+	r_cases.check("int64: a narrow and a wide heap int are never equal", Compare(max64, Pow2(heap, 63)) == Equality::Neq && Compare(Pow2(heap, 63), max64) == Equality::Neq);
+	r_cases.check("int64: 5000000000 reached two ways is one map key",
+			Equal(Int(heap, 5000000000), Add(heap, Pow2(heap, 32), Int(heap, 705032704))) &&
+					Show(Lookup(MakeMap(heap, { Int(heap, 5000000000) }, { Int(heap, 7) }), Add(heap, Pow2(heap, 32), Int(heap, 705032704)))) == Show(Int(heap, 7)));
+	r_cases.check("int64: printing and float conversion of narrow values",
+			IntText(Int(heap, -5000000000)) == "-5000000000" && IntText(min64) == "-9223372036854775808" && int_to_float(max64) == 9223372036854775808.0 &&
+					int_to_float(Int(heap, (int64_t(1) << 53) + 1)) == 9007199254740992.0 && int_to_float(Int(heap, (int64_t(1) << 53) + 3)) == 9007199254740996.0);
+
+	r_cases.check("natives §4 int64: BitAnd/BitOr/BitXor of negative 64-bit operands",
+			Show(Bits(heap, "BitAnd", { Int(heap, -1), Int(heap, int64_t(1) << 40) })) == "1099511627776" &&
+					Show(Bits(heap, "BitOr", { Int(heap, -(int64_t(1) << 40)), Int(heap, 1) })) == "-1099511627775" &&
+					Show(Bits(heap, "BitXor", { Int(heap, -1), Int(heap, 5000000000) })) == "-5000000001" &&
+					Show(Bits(heap, "BitAnd", { Int(heap, -5000000000), Int(heap, -3) })) == "-5000000000");
+	r_cases.check("natives §4 int64: the ends of int64 combine to immediates and each other",
+			Equal(Bits(heap, "BitAnd", { min64, Int(heap, -1) }), min64) && Bits(heap, "BitXor", { min64, max64 }).is_int32() && Show(Bits(heap, "BitXor", { min64, max64 })) == "-1" &&
+					Bits(heap, "BitAnd", { min64, max64 }).is_int32() && Show(Bits(heap, "BitAnd", { min64, max64 })) == "0" &&
+					Show(Bits(heap, "BitOr", { Int(heap, 3000000000), Int(heap, -4000000000) })) == Show(Int(heap, int64_t(3000000000) | int64_t(-4000000000))));
+	r_cases.check("natives §4 int64: BitNot at both ends and in between",
+			Equal(Bits(heap, "BitNot", { max64 }), min64) && Equal(Bits(heap, "BitNot", { min64 }), max64) && Show(Bits(heap, "BitNot", { Int(heap, 5000000000) })) == "-5000000001" &&
+					Show(Bits(heap, "BitNot", { Int(heap, INT32_MIN) })) == "2147483647");
+	r_cases.check("natives §4 wide: an operand beyond int64 takes the exact path",
+			Show(Bits(heap, "BitAnd", { Add(heap, Pow2(heap, 64), Int(heap, 5)), Int(heap, -1) })) == "18446744073709551621" &&
+					Show(Bits(heap, "BitAnd", { Sub(heap, Pow2(heap, 64), Int(heap, 1)), Int(heap, -(int64_t(1) << 40)) })) == "18446742974197923840" &&
+					Show(Bits(heap, "BitOr", { Neg(heap, Pow2(heap, 64)), max64 })) == "-9223372036854775809" &&
+					Show(Bits(heap, "BitNot", { Pow2(heap, 63) })) == "-9223372036854775809");
+}
+
 void IntegerCases(Cases &r_cases) {
 	Heap heap;
 	const Value int32_max = Int(heap, INT32_MAX);
@@ -1106,6 +1173,7 @@ bool RunValueCases() {
 	Cases cases;
 	EncodingCases(cases);
 	IntegerCases(cases);
+	Int64Cases(cases);
 	RationalCases(cases);
 	EuclideanCases(cases);
 	FloatPrintCases(cases);

@@ -185,12 +185,26 @@ struct OptionCell : Cell {
 };
 
 // Only for integers outside int32: every result that fits is an immediate again, so an int32
-// immediate and a heap int are never equal.
+// immediate and a heap int are never equal. Likewise a value that fits int64 is always `narrow`
+// and `wide` is used only beyond it, so each integer has exactly one representation.
 struct HeapIntCell : Cell {
-	BigInt value;
+	int64_t narrow = 0;
+	bool is_wide = false;
+	BigInt wide;
 
+	explicit HeapIntCell(int64_t p_value) :
+			Cell(CellKind::HeapInt), narrow(p_value) {}
 	explicit HeapIntCell(BigInt p_value) :
-			Cell(CellKind::HeapInt), value(std::move(p_value)) {}
+			Cell(CellKind::HeapInt) {
+		if (p_value.fits_int64()) {
+			narrow = p_value.to_int64();
+		} else {
+			is_wide = true;
+			wide = std::move(p_value);
+		}
+	}
+	BigInt value() const { return is_wide ? wide : BigInt::from_int64(narrow); }
+	bool fits_int32() const { return !is_wide && narrow >= INT32_MIN && narrow <= INT32_MAX; }
 	void visit_references(CellVisitor &) const override {}
 };
 

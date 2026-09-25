@@ -19,6 +19,8 @@ Value make_int(Heap &r_heap, int64_t p_value);
 Value make_int(Heap &r_heap, const BigInt &p_value);
 // p_value must be an integer.
 BigInt int_value(Value p_value);
+// False for anything but an integer inside int64; unlike int_to_int64 it never raises.
+bool int_as_int64(Value p_value, int64_t &r_value);
 
 // Lowest terms, positive denominator. p_denominator must not be zero.
 Value make_rational(Heap &r_heap, const BigInt &p_numerator, const BigInt &p_denominator);

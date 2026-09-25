@@ -138,6 +138,15 @@ Outcome bitwise_native(NativeCall &r_call, BitOp p_op) {
 	if (!is_int(left) || !is_int(right)) {
 		return Outcome::Invalid;
 	}
+	// int64's two's complement is the infinite one truncated, and AND/OR/XOR of two values that
+	// sign-extend from bit 63 sign-extends from bit 63 too, so the result is exact.
+	int64_t left64 = 0;
+	int64_t right64 = 0;
+	if (int_as_int64(left, left64) && int_as_int64(right, right64)) {
+		const int64_t combined = p_op == BitOp::And ? (left64 & right64) : (p_op == BitOp::Or ? (left64 | right64) : (left64 ^ right64));
+		r_call.result = make_int(r_call.heap, combined);
+		return Outcome::Ok;
+	}
 	r_call.result = make_int(r_call.heap, bitwise_op(p_op, int_value(left), int_value(right)));
 	return Outcome::Ok;
 }
@@ -156,6 +165,11 @@ Outcome bit_not_native(NativeCall &r_call) {
 	const Value value = argument(r_call, 0);
 	if (!is_int(value)) {
 		return Outcome::Invalid;
+	}
+	int64_t value64 = 0;
+	if (int_as_int64(value, value64)) {
+		r_call.result = make_int(r_call.heap, ~value64);
+		return Outcome::Ok;
 	}
 	r_call.result = make_int(r_call.heap, big_sub(big_neg(int_value(value)), BigInt::from_int64(1)));
 	return Outcome::Ok;

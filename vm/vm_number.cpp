@@ -2,6 +2,9 @@
 
 #include <cmath>
 #include <cstring>
+#if defined(_MSC_VER) && !defined(__clang__)
+#include <intrin.h>
+#endif
 
 #include "vm_cell.h"
 #include "vm_values.h"
@@ -50,6 +53,30 @@ bool as_fraction_pair(Value p_left, Value p_right, Fraction &r_left, Fraction &r
 
 bool both_int32(Value p_left, Value p_right) {
 	return p_left.is_int32() && p_right.is_int32();
+}
+
+bool both_int64(Value p_left, Value p_right, int64_t &r_left, int64_t &r_right) {
+	return int_as_int64(p_left, r_left) && int_as_int64(p_right, r_right);
+}
+
+bool add_overflows(int64_t p_left, int64_t p_right, int64_t &r_result) {
+	r_result = int64_t(uint64_t(p_left) + uint64_t(p_right));
+	return ((p_left ^ r_result) & (p_right ^ r_result)) < 0;
+}
+
+bool sub_overflows(int64_t p_left, int64_t p_right, int64_t &r_result) {
+	r_result = int64_t(uint64_t(p_left) - uint64_t(p_right));
+	return ((p_left ^ p_right) & (p_left ^ r_result)) < 0;
+}
+
+bool mul_overflows(int64_t p_left, int64_t p_right, int64_t &r_result) {
+#if defined(_MSC_VER) && !defined(__clang__)
+	int64_t high = 0;
+	r_result = _mul128(p_left, p_right, &high);
+	return high != (r_result >> 63);
+#else
+	return __builtin_mul_overflow(p_left, p_right, &r_result);
+#endif
 }
 
 bool both_int(Value p_left, Value p_right) {
@@ -117,7 +144,7 @@ Value make_int(Heap &r_heap, int64_t p_value) {
 	if (p_value >= INT32_MIN && p_value <= INT32_MAX) {
 		return Value::from_int32(int32_t(p_value));
 	}
-	return Value::from_cell(r_heap.make<HeapIntCell>(BigInt::from_int64(p_value)));
+	return Value::from_cell(r_heap.make<HeapIntCell>(p_value));
 }
 
 Value make_int(Heap &r_heap, const BigInt &p_value) {
@@ -131,7 +158,23 @@ BigInt int_value(Value p_value) {
 	if (p_value.is_int32()) {
 		return BigInt::from_int64(p_value.as_int32());
 	}
-	return cell_as<HeapIntCell>(p_value)->value;
+	return cell_as<HeapIntCell>(p_value)->value();
+}
+
+bool int_as_int64(Value p_value, int64_t &r_value) {
+	if (p_value.is_int32()) {
+		r_value = p_value.as_int32();
+		return true;
+	}
+	if (!is_cell_kind(p_value, CellKind::HeapInt)) {
+		return false;
+	}
+	const HeapIntCell *cell = cell_as<HeapIntCell>(p_value);
+	if (cell->is_wide) {
+		return false;
+	}
+	r_value = cell->narrow;
+	return true;
 }
 
 Value make_rational(Heap &r_heap, const BigInt &p_numerator, const BigInt &p_denominator) {
@@ -151,6 +194,13 @@ Value make_rational(Heap &r_heap, const BigInt &p_numerator, const BigInt &p_den
 Outcome value_add(Heap &r_heap, Value p_left, Value p_right, Value &r_result) {
 	if (both_int32(p_left, p_right)) {
 		r_result = make_int(r_heap, int64_t(p_left.as_int32()) + p_right.as_int32());
+		return Outcome::Ok;
+	}
+	int64_t left64 = 0;
+	int64_t right64 = 0;
+	int64_t result64 = 0;
+	if (both_int64(p_left, p_right, left64, right64) && !add_overflows(left64, right64, result64)) {
+		r_result = make_int(r_heap, result64);
 		return Outcome::Ok;
 	}
 	if (both_int(p_left, p_right)) {
@@ -176,6 +226,13 @@ Outcome value_sub(Heap &r_heap, Value p_left, Value p_right, Value &r_result) {
 		r_result = make_int(r_heap, int64_t(p_left.as_int32()) - p_right.as_int32());
 		return Outcome::Ok;
 	}
+	int64_t left64 = 0;
+	int64_t right64 = 0;
+	int64_t result64 = 0;
+	if (both_int64(p_left, p_right, left64, right64) && !sub_overflows(left64, right64, result64)) {
+		r_result = make_int(r_heap, result64);
+		return Outcome::Ok;
+	}
 	if (both_int(p_left, p_right)) {
 		r_result = make_int(r_heap, big_sub(int_value(p_left), int_value(p_right)));
 		return Outcome::Ok;
@@ -197,6 +254,13 @@ Outcome value_sub(Heap &r_heap, Value p_left, Value p_right, Value &r_result) {
 Outcome value_mul(Heap &r_heap, Value p_left, Value p_right, Value &r_result) {
 	if (both_int32(p_left, p_right)) {
 		r_result = make_int(r_heap, int64_t(p_left.as_int32()) * p_right.as_int32());
+		return Outcome::Ok;
+	}
+	int64_t left64 = 0;
+	int64_t right64 = 0;
+	int64_t result64 = 0;
+	if (both_int64(p_left, p_right, left64, right64) && !mul_overflows(left64, right64, result64)) {
+		r_result = make_int(r_heap, result64);
 		return Outcome::Ok;
 	}
 	if (both_int(p_left, p_right)) {
@@ -246,6 +310,11 @@ Outcome value_div(Heap &r_heap, Value p_left, Value p_right, Value &r_result) {
 Outcome value_neg(Heap &r_heap, Value p_operand, Value &r_result) {
 	if (p_operand.is_int32()) {
 		r_result = make_int(r_heap, -int64_t(p_operand.as_int32()));
+		return Outcome::Ok;
+	}
+	int64_t operand64 = 0;
+	if (int_as_int64(p_operand, operand64) && operand64 != INT64_MIN) {
+		r_result = make_int(r_heap, -operand64);
 		return Outcome::Ok;
 	}
 	if (is_int(p_operand)) {
@@ -305,8 +374,10 @@ Outcome value_order(OrderOp p_op, Value p_left, Value p_right, bool &r_holds) {
 	}
 
 	int order = 0;
-	if (both_int32(p_left, p_right)) {
-		order = p_left.as_int32() < p_right.as_int32() ? -1 : (p_left.as_int32() > p_right.as_int32() ? 1 : 0);
+	int64_t left64 = 0;
+	int64_t right64 = 0;
+	if (both_int64(p_left, p_right, left64, right64)) {
+		order = left64 < right64 ? -1 : (left64 > right64 ? 1 : 0);
 	} else if (both_int(p_left, p_right)) {
 		order = big_compare(int_value(p_left), int_value(p_right));
 	} else {
@@ -342,12 +413,12 @@ Outcome int_to_int64(Value p_value, int64_t &r_result, RuntimeError &r_error) {
 	if (!is_int(p_value)) {
 		return Outcome::Invalid;
 	}
-	const BigInt &value = cell_as<HeapIntCell>(p_value)->value;
-	if (!value.fits_int64()) {
+	const HeapIntCell *cell = cell_as<HeapIntCell>(p_value);
+	if (cell->is_wide) {
 		set_range_error(r_error);
 		return Outcome::Error;
 	}
-	r_result = value.to_int64();
+	r_result = cell->narrow;
 	return Outcome::Ok;
 }
 
@@ -375,7 +446,8 @@ double int_to_float(Value p_value) {
 	if (p_value.is_int32()) {
 		return double(p_value.as_int32());
 	}
-	return big_to_double(cell_as<HeapIntCell>(p_value)->value);
+	const HeapIntCell *cell = cell_as<HeapIntCell>(p_value);
+	return cell->is_wide ? big_to_double(cell->wide) : double(cell->narrow);
 }
 
 Outcome float_to_int(Heap &r_heap, double p_value, FloatRounding p_rounding, Value &r_result, RuntimeError &r_error) {
@@ -426,7 +498,7 @@ Outcome int_to_string(Value p_value, std::string &r_text, RuntimeError &r_error)
 	int64_t value = 0;
 	const Outcome outcome = int_to_int64(p_value, value, r_error);
 	if (outcome == Outcome::Ok) {
-		r_text = big_to_decimal(BigInt::from_int64(value));
+		r_text = std::to_string(value);
 	}
 	return outcome;
 }

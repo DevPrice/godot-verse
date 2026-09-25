@@ -1152,9 +1152,9 @@ private:
 			values[index] = Value::from_cell(cell);
 			if (cell->kind == CellKind::HeapInt) {
 				// An integer that fits int32 is always an immediate (vm_cell.h, HeapIntCell).
-				const BigInt &number = static_cast<HeapIntCell *>(cell)->value;
-				if (number.fits_int32()) {
-					values[index] = Value::from_int32(number.to_int32());
+				const HeapIntCell *number = static_cast<HeapIntCell *>(cell);
+				if (number->fits_int32()) {
+					values[index] = Value::from_int32(int32_t(number->narrow));
 				}
 			}
 		}
