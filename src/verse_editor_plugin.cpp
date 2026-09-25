@@ -41,6 +41,15 @@ void VerseEditorPlugin::_enter_tree() {
 	module_menu.instantiate();
 	add_context_menu_plugin(EditorContextMenuPlugin::CONTEXT_SLOT_FILESYSTEM, module_menu);
 
+#ifdef TOOLS_ENABLED
+	// "Convert to Verse" on a `.gd`, in the dock and on the script editor's list. One instance per
+	// slot, because a plugin is registered against one.
+	convert_menu.instantiate();
+	add_context_menu_plugin(EditorContextMenuPlugin::CONTEXT_SLOT_FILESYSTEM, convert_menu);
+	convert_menu_script_editor.instantiate();
+	add_context_menu_plugin(EditorContextMenuPlugin::CONTEXT_SLOT_SCRIPT_EDITOR, convert_menu_script_editor);
+#endif
+
 	// An export cooks the project and strips the sources; without this one an exported game ships
 	// .verse files it has no compiler to read (R-DIST-9 .. R-DIST-11).
 	export_plugin.instantiate();
@@ -58,6 +67,12 @@ void VerseEditorPlugin::_exit_tree() {
 		callable_mp(this, &VerseEditorPlugin::widen_completion_prefixes).unbind(1));
 	remove_export_plugin(export_plugin);
 	export_plugin.unref();
+#ifdef TOOLS_ENABLED
+	remove_context_menu_plugin(convert_menu_script_editor);
+	convert_menu_script_editor.unref();
+	remove_context_menu_plugin(convert_menu);
+	convert_menu.unref();
+#endif
 	remove_context_menu_plugin(module_menu);
 	module_menu.unref();
 	remove_tool_menu_item(BUILD_MENU_ITEM);

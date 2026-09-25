@@ -1,0 +1,42 @@
+using { /Godot.org/Godot }
+
+hud := class(canvas_layer):
+
+	# Notifies `Main` node that the button has been pressed
+	@export_signal
+	StartGame:event() = event(){}
+
+	ShowMessage(Text:string)<transacts>:void =
+		if (MessageLabelFound := GetNode["MessageLabel"], MessageLabelNode := label[MessageLabelFound]):
+			MessageLabelNode.SetText(Text)
+			MessageLabelNode.Show()
+		if (MessageTimerFound := GetNode["MessageTimer"], MessageTimerNode := timer[MessageTimerFound]):
+			MessageTimerNode.Start()
+
+	ShowGameOver()<suspends>:void =
+		ShowMessage("Game Over")
+		# Wait until the MessageTimer has counted down.
+		if (MessageTimerFound := GetNode["MessageTimer"], MessageTimerNode := timer[MessageTimerFound]):
+			MessageTimerNode.Timeout().Await()
+
+		if (MessageLabelFound := GetNode["MessageLabel"], MessageLabelNode := label[MessageLabelFound]):
+			MessageLabelNode.SetText("Dodge the\nCreeps")
+			MessageLabelNode.Show()
+		# Make a one-shot timer and wait for it to finish.
+		if (Tree := GetTree[]):
+			Tree.CreateTimer(1.0).Timeout().Await()
+		if (StartButtonFound := GetNode["StartButton"], StartButtonNode := button[StartButtonFound]):
+			StartButtonNode.Show()
+
+	UpdateScore(Score:int)<transacts>:void =
+		if (ScoreLabelFound := GetNode["ScoreLabel"], ScoreLabelNode := label[ScoreLabelFound]):
+			ScoreLabelNode.SetText("{Score}")
+
+	OnStartButtonPressed()<transacts>:void =
+		if (StartButtonFound := GetNode["StartButton"], StartButtonNode := button[StartButtonFound]):
+			StartButtonNode.Hide()
+		StartGame.Emit(())
+
+	OnMessageTimerTimeout()<transacts>:void =
+		if (MessageLabelFound := GetNode["MessageLabel"], MessageLabelNode := label[MessageLabelFound]):
+			MessageLabelNode.Hide()

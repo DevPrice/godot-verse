@@ -1,0 +1,8 @@
+stem containers
+25 note `value` has no type and nothing in the file says what it is, so it is a `variant`
+rename method add_item -> AddItem
+rename method count_of -> CountOf
+rename method summary -> Summary
+rename method kind_of -> KindOf
+rename property inventory -> Inventory
+rename property labels -> Labels

@@ -1,0 +1,9 @@
+stem hud
+24 note `score` has no type and nothing in the file says what it is, so it is a `variant`
+25 TODO a `variant` in a string: Verse has no `ToString` for it; read it as its own type first
+rename signal start_game -> StartGame
+rename method show_message -> ShowMessage
+rename method show_game_over -> ShowGameOver
+rename method update_score -> UpdateScore
+rename method _on_start_button_pressed -> OnStartButtonPressed
+rename method _on_message_timer_timeout -> OnMessageTimerTimeout

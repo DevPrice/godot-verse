@@ -1,0 +1,175 @@
+using { /Godot.org/Godot }
+
+# A tour of what the converter translates.
+feature_tour_state := enum:
+	Idle
+	Running
+	Jumping
+
+@global_class
+@tool
+@icon("res://icon.svg")
+feature_tour := class(node2d):
+
+	@export_signal
+	HealthChanged:event(int) = event(int){}
+	@export_signal
+	Died:event() = event(){}
+	@export_signal
+	Scored:event(tuple(int, float)) = event(tuple(int, float)){}
+
+	MaxHealth:int = 100
+	Gravity:float = 9.8
+	var Mob:?packed_scene = false
+
+	@export
+	var Speed:float = 200.0
+	@export
+	var Level:type{_X:int where 0 <= _X, _X <= 10} = 1
+	@export_file("*.json")
+	@export
+	var ConfigPath:string = ""
+	@export_multiline
+	@export
+	var Description:string = "Tour"
+
+	@export_group("Colours")
+	@export
+	var Tint:color = color{R := 1.0, G := 0.5, B := 0.25}
+	@export
+	var Target:?node2d = false
+	@export
+	var SizeKind:int = 0
+
+	var Sprite:?sprite2d = false
+	var Label:?label = false
+	var Timer:?timer = false
+
+	var State:feature_tour_state = feature_tour_state.Idle
+	var Health:int = 100
+	var Velocity:vector2 = Vector2Statics.Zero
+	var Names:[]string = array{}
+	var Scores:[string]int = map{"a" => 1, "b" => 2}
+	var SpareTimer:timer = timer{}
+	var Untyped:?variant = false
+
+	_Ready<override>():void =
+		if (MobLoaded := GetResourceLoader().Load["res://mob.tscn", "", resource_loader_cache_mode.Reuse], MobResource := packed_scene[MobLoaded]):
+			set Mob = option{MobResource}
+		if (SpriteFound := GetNode["Sprite"], SpriteNode := sprite2d[SpriteFound]):
+			set Sprite = option{SpriteNode}
+		if (LabelFound := GetNode["UI/Label"], LabelNode := label[LabelFound]):
+			set Label = option{LabelNode}
+		if (TimerFound := GetNode["Timer"], TimerNode := timer[TimerFound]):
+			set Timer = option{TimerNode}
+		AddChild(SpareTimer, false, node_internal_mode.Disabled)
+		Died.Subscribe(OnDied)
+		Scored.Subscribe(ReadyLambda1)
+		if (TimerValue := Timer?):
+			TimerValue.Timeout().Subscribe(OnTimerTimeout)
+		if (GetEngine().IsEditorHint[]):
+			return
+		StartMoving(3)
+
+	_PhysicsProcess<override>(Delta:float):void =
+		set Velocity = vector2{X := Velocity.X, Y := Velocity.Y + Gravity * Delta}
+		set Position += Velocity * Delta
+		if (Position.Y > 600.0, State <> feature_tour_state.Jumping):
+			set Position = vector2{X := Position.X, Y := 600.0}
+			set Velocity = vector2{X := Velocity.X, Y := 0.0}
+		if (State = feature_tour_state.Idle):
+			if (SpriteValue := Sprite?):
+				set SpriteValue.Modulate = Tint
+		else if ((State = feature_tour_state.Running) or (State = feature_tour_state.Jumping)):
+			set Rotation += Delta
+
+	_Input<override>(Event:input_event):void =
+		if (EventInputEventKey := input_event_key[Event], EventInputEventKey.Pressed?):
+			if (EventInputEventKey.Keycode = key.KeySpace):
+				Jump()
+
+	HasPointValue(Point:vector2)<transacts>:logic =
+		return logic{Point.Length() < 10.0}
+
+	Jump(?Height:float = 2.5)<transacts>:void =
+		if (State = feature_tour_state.Jumping):
+			return
+		set State = feature_tour_state.Jumping
+		set Velocity = vector2{X := Velocity.X, Y := -Height * 100.0}
+
+	StartMoving(Times:int)<transacts>:void =
+		for (I := 0..Times - 1):
+			set Names += array{"step {I}"}
+		for (N : Names):
+			Print(N)
+		for (Key -> KeyValue : Scores):
+			Print(Key)
+		var Countdown:int = 3
+		loop:
+			if (Countdown > 0):
+				set Countdown -= 1
+			else:
+				break
+		Average := if (QuotientValue := TruncatedQuotient[TotalScore(), 2]) then QuotientValue else 0
+		Ratio := if (Remainder := Mod[7, 3]) then Remainder else 0
+		Power := Pow(2.0, 3.0)
+		Flags := BitOr(1, 4)
+		Print("average: {Average} ratio: {Ratio} power: {Power} flags: {Flags}")
+
+	TotalScore()<transacts>:int =
+		var Total:int = 0
+		for (Key -> KeyValue : Scores):
+			if (Score := Scores[Key]):
+				set Total += Score
+		return Total
+
+	Describe()<transacts>:string =
+		Parts := "health {Health}/{MaxHealth}"
+		return if (Health > 0) then Parts else "dead"
+
+	TakeDamage(Amount:int)<transacts>:void =
+		SetHealth(Health - Amount)
+		if (Health = 0):
+			Died.Emit(())
+		Scored.Emit((Amount, 1.5))
+
+	FindTarget()<transacts>:vector2 =
+		if (TargetValue := Target?):
+			return TargetValue.GlobalPosition
+		return Vector2Statics.Zero
+
+	Spawn()<transacts>:void =
+		MobLocal := if (MobValue := Mob?) then option{MobValue.Instantiate[packed_scene_gen_edit_state.Disabled]} else false
+		if (MobLocalValue := MobLocal?):
+			AddChild(MobLocalValue, false, node_internal_mode.Disabled)
+
+	WaitABit()<suspends>:void =
+		if (Tree := GetTree[]):
+			Tree.CreateTimer(0.5).Timeout().Await()
+		if (LabelValue := Label?):
+			LabelValue.SetText("done")
+
+	OnDied()<transacts>:void =
+		QueueFree()
+
+	OnTimerTimeout():void =
+		spawn{WaitABit()}
+
+	SetHealth(Value:int)<transacts>:void =
+		set Health = Clamp(Value, 0, MaxHealth)
+		HealthChanged.Emit(Health)
+
+	# Was a lambda on line 46. Verse has no anonymous or nested functions yet.
+	ReadyLambda1(Points:int, Bonus:float)<transacts>:void =
+		Print("scored {Points} with {Bonus}")
+
+# `Helper`, an inner class of `FeatureTour`: a class of its own here. Only the class named after the file can go on a node, so this one is made with `feature_tour_helper{}` and never attached.
+feature_tour_helper := class(ref_counted):
+
+	var Count:int = 0
+
+	Bump()<transacts>:void =
+		set Count += 1
+
+FeatureTourDouble(Value:int)<transacts>:int =
+	return Value * 2
