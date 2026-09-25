@@ -178,6 +178,13 @@ void Runtime::report_raised(const RaisedError &p_raised) const {
 	on_runtime_error(runtime_error_ctx, &error);
 }
 
+void Runtime::activate_scope(Value &r_scope) {
+	if (!is_cell_kind(r_scope, CellKind::ContentScope) || cell_as<ContentScopeCell>(r_scope)->terminated) {
+		r_scope = Value::from_cell(interpreter.make_scope());
+	}
+	interpreter.active_scope = cell_as<ContentScopeCell>(r_scope);
+}
+
 HostArena::HostArena() {
 	Alloc = &HostArena::allocate;
 }
@@ -215,6 +222,8 @@ int32_t Runtime::default_field(const char *p_class, const char *p_name, const vh
 		return VH_ERR_NOT_FOUND;
 	}
 
+	heap.add_handle_root(&project_scope);
+	activate_scope(project_scope);
 	interpreter.begin_entry();
 	Value object;
 	RootScope root(heap, &object);
@@ -231,7 +240,7 @@ int32_t Runtime::default_field(const char *p_class, const char *p_name, const vh
 		if (outcome != Outcome::Fail && !interpreter.in_entry()) {
 			report_raised(interpreter.error());
 		}
-		return outcome == Outcome::Yield ? VH_ERR_UNSUPPORTED : VH_ERR_RUNTIME;
+		return outcome == Outcome::Unsupported ? VH_ERR_UNSUPPORTED : VH_ERR_RUNTIME;
 	}
 
 	const ObjectCell *instance = cell_as<ObjectCell>(object);

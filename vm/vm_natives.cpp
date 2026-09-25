@@ -1114,7 +1114,7 @@ NativeFn native_implementation(std::string_view p_binding_key) {
 			return binding.implementation;
 		}
 	}
-	return nullptr;
+	return Interpreter::task_native(p_binding_key);
 }
 
 Outcome native_not_implemented(NativeCall &r_call) {

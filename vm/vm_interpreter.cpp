@@ -1,5 +1,6 @@
 #include "vm_interpreter.h"
 
+#include <algorithm>
 #include <cmath>
 #include <utility>
 
@@ -149,44 +150,39 @@ std::string RaisedError::message_line() const {
 Interpreter::Interpreter(Heap &r_heap, const Program &p_program) :
 		heap(r_heap), program(p_program) {}
 
-TaskCell *Interpreter::current_task() const {
-	return entry_tasks.empty() ? nullptr : cell_as<TaskCell>(entry_tasks.back());
+Interpreter::Registers Interpreter::save_registers() {
+	return Registers{ frame, pc, task, run_base };
 }
 
-void Interpreter::set_frame(FrameCell *p_frame) {
-	frame = p_frame;
-	if (TaskCell *task = current_task()) {
-		task->frame = p_frame;
-	}
+void Interpreter::restore_registers(const Registers &p_saved) {
+	frame = p_saved.frame;
+	pc = p_saved.pc;
+	task = p_saved.task;
+	run_base = p_saved.run_base;
 }
 
 void Interpreter::begin_entry() {
-	if (entry_tasks.empty()) {
+	if (entry_marks.empty()) {
 		effects.clear();
 		compensations.clear();
 		undo_log.clear();
 		contexts.clear();
-		entry_marks.clear();
 		raised = RaisedError();
 		unwinding = Outcome::Ok;
+		raise_scope = nullptr;
 	}
 	entry_marks.push_back(marks());
-	TaskCell *task = heap.make<TaskCell>();
-	entry_tasks.push_back(Value::from_cell(task));
-	heap.add_handle_root(&entry_tasks.back());
 }
 
 void Interpreter::end_entry(bool p_commit) {
-	if (entry_tasks.empty()) {
+	if (entry_marks.empty()) {
 		return;
 	}
 	if (!p_commit) {
 		abort_to(entry_marks.back());
 	}
 	entry_marks.pop_back();
-	heap.remove_handle_root(&entry_tasks.back());
-	entry_tasks.pop_back();
-	if (!entry_tasks.empty()) {
+	if (!entry_marks.empty()) {
 		return;
 	}
 	std::vector<std::function<void()>> pending;
@@ -198,6 +194,12 @@ void Interpreter::end_entry(bool p_commit) {
 		for (const std::function<void()> &effect : pending) {
 			effect();
 		}
+	}
+	// spec/tasks.md §8.2: after the rollback, which is when the transaction it happened in ends.
+	if (unwinding == Outcome::Error && raise_scope != nullptr) {
+		ContentScopeCell *scope = raise_scope;
+		raise_scope = nullptr;
+		terminate_scope(scope);
 	}
 }
 
@@ -406,14 +408,31 @@ void Interpreter::append_frames(const NativeProcedureCell *p_native) {
 		native.path = "[native]";
 		raised.frames.push_back(native);
 	}
+	// spec/failure.md §9.2: past the task's own frames into the task that started it, whose frame an
+	// inline task shares -- so a frame already listed ends the walk.
+	std::vector<const FrameCell *> listed;
+	const TaskCell *owner = task;
 	uint32_t op = pc;
-	for (const FrameCell *current = frame; current != nullptr; current = current->caller) {
-		ErrorFrame entry;
-		entry.function = current->procedure->name != nullptr ? current->procedure->name->text : std::string();
-		entry.path = current->procedure->file;
-		entry.line = line_of(current->procedure, op);
-		raised.frames.push_back(entry);
-		op = current->return_pc > 0 ? current->return_pc - 1 : 0;
+	const FrameCell *current = frame;
+	while (current != nullptr) {
+		for (const FrameCell *walked = current; walked != nullptr; walked = walked->caller) {
+			if (std::find(listed.begin(), listed.end(), walked) != listed.end()) {
+				return;
+			}
+			listed.push_back(walked);
+			ErrorFrame entry;
+			entry.function = walked->procedure->name != nullptr ? walked->procedure->name->text : std::string();
+			entry.path = walked->procedure->file;
+			entry.line = line_of(walked->procedure, op);
+			raised.frames.push_back(entry);
+			op = walked->return_pc > 0 ? walked->return_pc - 1 : 0;
+		}
+		current = nullptr;
+		while (owner != nullptr && current == nullptr) {
+			current = owner->yield_frame;
+			op = owner->yield_pc > 0 ? owner->yield_pc - 1 : 0;
+			owner = owner->yield_task;
+		}
 	}
 }
 
@@ -444,18 +463,21 @@ Interpreter::Step Interpreter::raise(const RuntimeError &p_error, const NativePr
 
 Interpreter::Step Interpreter::stop(Outcome p_outcome) {
 	stop_outcome = p_outcome;
+	if (p_outcome == Outcome::Error && unwinding != Outcome::Error) {
+		raise_scope = active_scope;
+	}
 	unwinding = p_outcome;
 	return Step::Stop;
 }
 
 // Something the bytecode may do that a later task implements: reported like a runtime error, and
-// answered as Yield so the host can say "not supported" rather than "your script failed".
+// answered as Unsupported so the host can say "not supported" rather than "your script failed".
 Interpreter::Step Interpreter::not_yet(const std::string &p_what) {
 	raised.error.diagnostic = kInternal;
 	raised.error.description = kInternalDescription;
 	raised.error.message = "This runtime cannot run " + p_what + " yet: " + location_of(frame, pc);
 	capture_frames(nullptr);
-	return stop(Outcome::Yield);
+	return stop(Outcome::Unsupported);
 }
 
 bool Interpreter::unwind_failure() {
@@ -471,54 +493,57 @@ bool Interpreter::unwind_failure() {
 }
 
 Outcome Interpreter::run(FrameCell *p_entry, Value &r_result) {
-	FrameCell *const saved_frame = frame;
-	const uint32_t saved_pc = pc;
-	const size_t saved_base = run_base;
+	const Registers saved = save_registers();
 	const Marks run_marks = marks();
 	run_base = contexts.size();
+	TaskCell *entry = heap.make<TaskCell>();
+	entry->entry = true;
+	Value entry_value = Value::from_cell(entry);
+	RootScope entry_root(heap, &entry_value);
+	task = entry;
 	set_frame(p_entry);
 	pc = 0;
 
-	Outcome outcome = Outcome::Ok;
+	Outcome outcome = drive();
+	if (outcome == Outcome::Ok) {
+		if (entry->has_result) {
+			r_result = entry->result;
+		} else {
+			outcome = Outcome::Yield;
+		}
+	} else {
+		abort_run(run_base, run_marks);
+	}
+	contexts.resize(run_base);
+	restore_registers(saved);
+	return outcome;
+}
+
+Outcome Interpreter::drive() {
 	for (;;) {
 		const ProcedureCell *procedure = frame->procedure;
 		if (pc >= procedure->ops.size()) {
 			invariant("execution ran past the last op");
-			outcome = stop_outcome;
-			break;
+			return stop_outcome;
 		}
 		const DecodedOp &op = procedure->ops[pc];
-		const Step step = execute(op, procedure->operand_words.data() + op.operands);
-		if (step == Step::Next) {
-			++pc;
-			continue;
+		switch (execute(op, procedure->operand_words.data() + op.operands)) {
+			case Step::Next:
+				++pc;
+				break;
+			case Step::Jumped:
+				break;
+			case Step::Idle:
+				return Outcome::Ok;
+			case Step::Fail:
+				if (!unwind_failure()) {
+					return Outcome::Fail;
+				}
+				break;
+			case Step::Stop:
+				return stop_outcome;
 		}
-		if (step == Step::Jumped) {
-			continue;
-		}
-		if (step == Step::Fail) {
-			if (unwind_failure()) {
-				continue;
-			}
-			outcome = Outcome::Fail;
-			break;
-		}
-		if (step == Step::Finished) {
-			r_result = run_result;
-			run_result = Value();
-			break;
-		}
-		outcome = stop_outcome;
-		break;
 	}
-	if (outcome != Outcome::Ok) {
-		abort_run(run_base, run_marks);
-	}
-	contexts.resize(run_base);
-	run_base = saved_base;
-	set_frame(saved_frame);
-	pc = saved_pc;
-	return outcome;
 }
 
 Interpreter::Step Interpreter::adapt(std::vector<Value> &r_arguments, uint32_t p_count) {
@@ -561,6 +586,8 @@ Interpreter::Step Interpreter::call_native(const NativeProcedureCell *p_native, 
 	if (adapted != Step::Next) {
 		return adapted;
 	}
+	const bool may_yield = callee_may_yield;
+	callee_may_yield = false;
 	NativeCall call(heap);
 	call.interpreter = this;
 	call.procedure = p_native;
@@ -583,7 +610,11 @@ Interpreter::Step Interpreter::call_native(const NativeProcedureCell *p_native, 
 		case Outcome::Park:
 			return park();
 		case Outcome::Yield:
-			return not_yet("a native that suspends its task (T4.1)");
+			if (task == nullptr || !may_yield) {
+				return invariant("a native suspending at a call whose bCalleeYields is false");
+			}
+			return suspend(pc + 1, p_dest, active_scope);
+		case Outcome::Unsupported:
 		case Outcome::Invalid:
 			break;
 	}
@@ -592,6 +623,21 @@ Interpreter::Step Interpreter::call_native(const NativeProcedureCell *p_native, 
 
 Interpreter::Step Interpreter::enter(const FunctionCell *p_function, Value p_self, std::vector<Value> &r_arguments,
 		const std::vector<NamedArgument> &p_named, FrameCell *p_caller, uint32_t p_return_pc, uint32_t p_return_register) {
+	FrameCell *callee = nullptr;
+	const Step made = make_frame(p_function, p_self, r_arguments, p_named, callee);
+	if (made != Step::Next) {
+		return made;
+	}
+	callee->caller = p_caller;
+	callee->return_pc = p_return_pc;
+	callee->return_register = p_return_register;
+	set_frame(callee);
+	pc = 0;
+	return Step::Jumped;
+}
+
+Interpreter::Step Interpreter::make_frame(const FunctionCell *p_function, Value p_self, std::vector<Value> &r_arguments,
+		const std::vector<NamedArgument> &p_named, FrameCell *&r_frame) {
 	const ProcedureCell *procedure = static_cast<const ProcedureCell *>(p_function->callee);
 	const Step adapted = adapt(r_arguments, procedure->positional_count);
 	if (adapted != Step::Next) {
@@ -620,12 +666,8 @@ Interpreter::Step Interpreter::enter(const FunctionCell *p_function, Value p_sel
 		}
 		callee->registers[parameter.register_index] = value;
 	}
-	callee->caller = p_caller;
-	callee->return_pc = p_return_pc;
-	callee->return_register = p_return_register;
-	set_frame(callee);
-	pc = 0;
-	return Step::Jumped;
+	r_frame = callee;
+	return Step::Next;
 }
 
 Interpreter::Step Interpreter::call(Value p_callee, Value p_self, bool p_with_self, std::vector<Value> &r_arguments,
@@ -768,6 +810,14 @@ Value Interpreter::bind(Value p_function, Value p_receiver) {
 Interpreter::Step Interpreter::load_field(Value p_object, const NameCell *p_name, Value &r_result) {
 	if (is_cell_kind(p_object, CellKind::AccessorRef)) {
 		r_result = accessor_reference(Value(), nullptr, cell_as<AccessorRefCell>(p_object), make_string(heap, unqualified_name(p_name->text)));
+		return Step::Next;
+	}
+	if (is_cell_kind(p_object, CellKind::Task)) {
+		const LayoutField *method = program.task_class != nullptr ? layouts.get(program.task_class).find(p_name) : nullptr;
+		if (method == nullptr || method->kind != FieldKind::Constant || !is_cell_kind(method->value, CellKind::Function)) {
+			return invariant("a field " + p_name->text + " of a task, which the task class has no method of");
+		}
+		r_result = bind(method->value, p_object);
 		return Step::Next;
 	}
 	ObjectCell *object = object_operand(p_object);
@@ -934,18 +984,17 @@ Outcome Interpreter::invoke(Value p_function, Value p_self, const std::vector<Va
 	const Value self = function->self.is_uninitialized() ? p_self : function->self;
 	std::vector<Value> arguments = p_arguments;
 
-	FrameCell *const saved_frame = frame;
-	const uint32_t saved_pc = pc;
+	const Registers saved = save_registers();
 	frame = nullptr;
 	pc = 0;
+	task = nullptr;
 
 	if (function->callee != nullptr && function->callee->kind == CellKind::NativeProcedure) {
 		const Marks native_marks = marks();
 		const Step step = is_unbound(follow(self))
 				? park()
 				: call_native(static_cast<const NativeProcedureCell *>(function->callee), follow(self), arguments, kNoRegister);
-		set_frame(saved_frame);
-		pc = saved_pc;
+		restore_registers(saved);
 		if (step == Step::Next) {
 			r_result = native_result;
 			return Outcome::Ok;
@@ -954,11 +1003,10 @@ Outcome Interpreter::invoke(Value p_function, Value p_self, const std::vector<Va
 		return step == Step::Fail ? Outcome::Fail : stop_outcome;
 	}
 
-	const Step step = enter(function, self, arguments, p_named, nullptr, 0, kNoRegister);
-	FrameCell *const entry = frame;
-	set_frame(saved_frame);
-	pc = saved_pc;
-	if (step != Step::Jumped) {
+	FrameCell *entry = nullptr;
+	const Step step = make_frame(function, self, arguments, p_named, entry);
+	restore_registers(saved);
+	if (step != Step::Next) {
 		return step == Step::Fail ? Outcome::Fail : stop_outcome;
 	}
 	return run(entry, r_result);
@@ -1299,14 +1347,26 @@ Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_
 			return Step::Next;
 
 		case VbcOp::SelfTask:
+			if (task == nullptr) {
+				return invariant("SelfTask outside a task");
+			}
+			return unify_register(w[0], Value::from_cell(task));
 		case VbcOp::BeginTask:
+			return begin_task(w);
 		case VbcOp::CallTask:
+			return call_task(w);
 		case VbcOp::EndTask:
+			return end_task(w);
 		case VbcOp::Yield:
+			return suspend(w[0], kNoRegister);
 		case VbcOp::NewSemaphore:
+			return unify_register(w[0], Value::from_cell(heap.make<SemaphoreCell>()));
 		case VbcOp::WaitSemaphore:
+			return wait_semaphore(w);
 		case VbcOp::ResumeUnwind:
-			return not_yet("tasks (T4.1)");
+			// spec/tasks.md §5.8: hooks attached since unwinding began run too.
+			run_hooks(task->defer_hooks, task, true);
+			return land(frame, pc + 1);
 		case VbcOp::BeginAwait:
 		case VbcOp::AwaitSuccess:
 		case VbcOp::EndAwait:
@@ -1350,15 +1410,17 @@ Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_
 				argument.value = read(variadic_items(w[4 + base])[index]);
 				named.push_back(argument);
 			}
-			return call(callee, self, with_self, arguments, named, w[0]);
+			callee_may_yield = w[5 + base] != 0;
+			const Step step = call(callee, self, with_self, arguments, named, w[0]);
+			callee_may_yield = false;
+			return step;
 		}
 		case VbcOp::Return:
 		case VbcOp::ReturnTrailed: {
 			const Value value = read(w[0]);
 			FrameCell *const done = frame;
 			if (done->caller == nullptr) {
-				run_result = value;
-				return Step::Finished;
+				return finish_entry_task(value);
 			}
 			// The return-token store is not modelled: the token is always the done value in stage 1
 			// (spec/unification.md §11.3).

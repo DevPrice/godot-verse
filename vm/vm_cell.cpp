@@ -1,5 +1,7 @@
 #include "vm_cell.h"
 
+#include <initializer_list>
+
 namespace vm {
 
 const char *cell_kind_name(CellKind p_kind) {
@@ -82,6 +84,10 @@ const char *cell_kind_name(CellKind p_kind) {
 			return "accessor reference";
 		case CellKind::SetterChain:
 			return "construction token";
+		case CellKind::Semaphore:
+			return "semaphore";
+		case CellKind::ContentScope:
+			return "content scope";
 	}
 	return "unknown";
 }
@@ -141,6 +147,26 @@ void ClassCell::visit_references(CellVisitor &r_visitor) const {
 	r_visitor.visit(archetype);
 	r_visitor.visit(constructor);
 	r_visitor.visit(blocks);
+}
+
+void TaskCell::visit_references(CellVisitor &r_visitor) const {
+	r_visitor.visit(result);
+	r_visitor.visit(parent);
+	for (const std::vector<TaskCell *> *list : { &children, &awaiters, &cancelers }) {
+		for (const TaskCell *task : *list) {
+			r_visitor.visit(task);
+		}
+	}
+	r_visitor.visit(resume_frame);
+	r_visitor.visit(yield_task);
+	r_visitor.visit(yield_frame);
+	for (const std::vector<TaskHook> *hooks : { &defer_hooks, &finish_hooks }) {
+		for (const TaskHook &hook : *hooks) {
+			r_visitor.visit(hook.target);
+		}
+	}
+	r_visitor.visit(group);
+	r_visitor.visit(captured_scope);
 }
 
 void EnumerationCell::visit_references(CellVisitor &r_visitor) const {

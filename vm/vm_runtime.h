@@ -52,6 +52,14 @@ public:
 	vh_runtime_error_fn on_runtime_error = nullptr;
 	void *runtime_error_ctx = nullptr;
 
+	// The content scope of everything that is not a call into a script instance (spec/tasks.md §8.1).
+	Value project_scope;
+
+	// Makes r_scope's content scope the active one for an entry, first replacing it with a fresh one
+	// when it is missing or terminated: a terminated scope is never revived (CLAUDE.md, R-ASYNC-4).
+	// r_scope must be a heap root.
+	void activate_scope(Value &r_scope);
+
 	// Reads verse_classes.json and program.vbc from p_cooked_dir, or from its parent: an export
 	// hands vh_init `verse_data/Cooked`, and the cooker writes both files in `verse_data`. VH_OK, or
 	// VH_ERR_INIT with r_error the sentence to report.

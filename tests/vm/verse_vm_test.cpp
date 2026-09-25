@@ -18,6 +18,7 @@
 #include "vm_runtime.h"
 #include "vm_values.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -1639,6 +1640,8 @@ std::string Invoked(Interpreter &r_interpreter, Value p_function, std::vector<Va
 		case Outcome::Fail:
 			return "<fail>";
 		case Outcome::Yield:
+			return "<suspended>";
+		case Outcome::Unsupported:
 			return "<not yet>";
 		default:
 			return "<error> " + r_interpreter.error().message_line();
@@ -1815,8 +1818,8 @@ void FailureAndEffectCases(Cases &r_cases) {
 	r_cases.check("unification §3.3: an equal second Move succeeds and leaves the register", Invoked(interpreter, unify.Function(heap.false_value()), {}) == "[1,2]");
 
 	Asm yields(heap, "Yields", 3, 0);
-	yields.Op(VbcOp::SelfTask, { W(2) });
-	r_cases.check("tasks §4.4: a task op the entry task cannot run yet answers the not-yet outcome",
+	yields.Op(VbcOp::BeginAwait, {});
+	r_cases.check("ops §0: an op a later task implements answers the not-yet outcome",
 			Invoked(interpreter, yields.Function(heap.false_value()), {}).find("<not yet>") == 0);
 }
 
@@ -2594,6 +2597,278 @@ void StructConstantCases(Cases &r_cases) {
 			Compare(stored(6), Value::from_cell(laid_out)) == Equality::Neq);
 }
 
+// Stand-ins for event(t)'s Await and Signal (T4.3): Wait(K) suspends the calling task under key K,
+// with a hook that takes it off again; Signal(K, V) completes every task waiting under K, oldest
+// first, each running to its next stop before the next.
+std::map<int64_t, std::vector<TaskCell *>> g_waiting;
+
+void LeaveWaiting(TaskCell *p_task, Cell *) {
+	for (auto &entry : g_waiting) {
+		entry.second.erase(std::remove(entry.second.begin(), entry.second.end(), p_task), entry.second.end());
+	}
+}
+
+Outcome WaitNative(NativeCall &r_call) {
+	TaskCell *waiter = r_call.interpreter->current_task();
+	g_waiting[int_value(follow(r_call.arguments[0])).to_int64()].push_back(waiter);
+	waiter->defer_hooks.push_back(TaskHook{ &LeaveWaiting, nullptr });
+	return Outcome::Yield;
+}
+
+Outcome SignalNative(NativeCall &r_call) {
+	std::vector<TaskCell *> batch;
+	batch.swap(g_waiting[int_value(follow(r_call.arguments[0])).to_int64()]);
+	for (TaskCell *waiter : batch) {
+		if (r_call.interpreter->complete(waiter, follow(r_call.arguments[1])) != Outcome::Ok) {
+			break;
+		}
+	}
+	r_call.result = r_call.heap.false_value();
+	return Outcome::Ok;
+}
+
+Value NativeProcedure(Heap &r_heap, const char *p_key, uint32_t p_count) {
+	NativeProcedureCell *native = r_heap.make<NativeProcedureCell>();
+	native->binding_key = r_heap.intern(p_key);
+	native->decorated_name = r_heap.intern(p_key);
+	native->positional_count = p_count;
+	native->implementation = native_implementation(p_key);
+	native->bound = native->implementation != nullptr;
+	return Value::from_cell(native);
+}
+
+Outcome InvokeValue(Interpreter &r_interpreter, Value p_function, Value &r_result) {
+	r_interpreter.begin_entry();
+	const Outcome outcome = r_interpreter.invoke(p_function, Value::uninitialized(), {}, {}, r_result);
+	r_interpreter.end_entry(outcome == Outcome::Ok || outcome == Outcome::Yield);
+	return outcome;
+}
+
+bool Logged(std::initializer_list<int64_t> p_expected) {
+	const bool same = g_log == std::vector<int64_t>(p_expected);
+	if (!same) {
+		printf("    log:");
+		for (int64_t entry : g_log) {
+			printf(" %lld", static_cast<long long>(entry));
+		}
+		printf("\n");
+	}
+	g_log.clear();
+	return same;
+}
+
+void TaskCases(Cases &r_cases) {
+	Heap heap;
+	Program program;
+	Interpreter interpreter(heap, program);
+	using vbc::VbcOp;
+	const Value log = NativeFunction(heap, "Log", 1, &LogNative);
+	const Value wait = NativeFunction(heap, "Wait", 1, &WaitNative);
+	const Value signal = NativeFunction(heap, "Signal", 2, &SignalNative);
+	const Value await = NativeProcedure(heap, "(/Verse.org/Concurrency/task/Await:)Native", 0);
+	const Value cancel = NativeProcedure(heap, "(/Verse.org/Concurrency/task/Cancel:)Native", 0);
+	const auto Log = [&](Asm &r_code, uint32_t p_scratch, int64_t p_value) {
+		r_code.Op(VbcOp::Call, { W(p_scratch), W(r_code.K(log)), L({ r_code.K(Int(heap, p_value)) }), L({}), L({}), W(0) });
+	};
+	const auto Wait = [&](Asm &r_code, uint32_t p_dest, int64_t p_key) {
+		r_code.Op(VbcOp::Call, { W(p_dest), W(r_code.K(wait)), L({ r_code.K(Int(heap, p_key)) }), L({}), L({}), W(1) });
+	};
+	const auto EndTask = [&](Asm &r_code, uint32_t p_write, uint32_t p_switch, uint32_t p_value, uint32_t p_which, uint32_t p_signal) {
+		r_code.Op(VbcOp::EndTask, { W(p_write), W(p_switch), W(p_value), W(p_which), W(p_signal) });
+	};
+	const auto Signaler = [&](int64_t p_key, int64_t p_value) {
+		Asm code(heap, "Signaler", 4, 0);
+		code.Op(VbcOp::Call, { W(2), W(code.K(signal)), L({ code.K(Int(heap, p_key)), code.K(Int(heap, p_value)) }), L({}), L({}), W(0) });
+		Log(code, 3, 99);
+		code.Op(VbcOp::Return, { W(code.K(heap.false_value())) });
+		return code.Function(heap.false_value());
+	};
+	const uint32_t none = kAbsentOperand;
+	g_log.clear();
+	g_waiting.clear();
+
+	// TBody: Log 1; Wait(5); Log 50; EndTask 6. Two awaiters log 71 and 72 after T.Await().
+	Asm body(heap, "TBody", 4, 0);
+	Log(body, 3, 1);
+	Wait(body, 2, 5);
+	Log(body, 3, 50);
+	EndTask(body, none, none, body.K(Int(heap, 6)), none, none);
+	body.procedure->unwind_edges.push_back(UnwindEdge{ 0, 2, 3 });
+	const auto Awaiter = [&](int64_t p_id) {
+		Asm code(heap, "Awaiter", 5, 1);
+		code.Op(VbcOp::CallWithSelf, { W(3), W(code.K(await)), W(R(2)), L({}), L({}), L({}), W(1) });
+		Log(code, 4, p_id);
+		EndTask(code, none, none, R(3), none, none);
+		code.procedure->unwind_edges.push_back(UnwindEdge{ 0, 1, 2 });
+		return code.Function(heap.false_value());
+	};
+	Asm spawner(heap, "Spawner", 8, 0);
+	Log(spawner, 5, 0);
+	spawner.Op(VbcOp::CallTask, { W(2), W(none), W(spawner.K(body.Function(heap.false_value()))), L({}) });
+	Log(spawner, 5, 3);
+	spawner.Op(VbcOp::CallTask, { W(3), W(none), W(spawner.K(Awaiter(71))), L({ R(2) }) });
+	spawner.Op(VbcOp::CallTask, { W(4), W(none), W(spawner.K(Awaiter(72))), L({ R(2) }) });
+	spawner.Op(VbcOp::Return, { W(spawner.K(heap.false_value())) });
+	Value result;
+	r_cases.check("tasks §6.4: a spawned body runs at once until it suspends, then the op after the spawn runs",
+			InvokeValue(interpreter, spawner.Function(heap.false_value()), result) == Outcome::Ok && Logged({ 0, 1, 3 }) && g_waiting[5].size() == 1);
+	TaskCell *spawned = g_waiting[5].empty() ? nullptr : g_waiting[5][0];
+	InvokeValue(interpreter, Signaler(5, 0), result);
+	r_cases.check("tasks §4.3, §5.4 step 8: a finishing task resumes its awaiters oldest first, each to its next stop, before its yield-to point",
+			Logged({ 50, 71, 72, 99 }) && spawned != nullptr && spawned->has_result && spawned->finished && spawned->phase == TaskCell::Phase::Active);
+
+	// Two arms end at once; the first EndTask's writes win, and WaitSemaphore after both signals
+	// does not suspend.
+	Asm first(heap, "FirstWins", 10, 0);
+	first.Op(VbcOp::NewSemaphore, { W(2) });
+	first.Op(VbcOp::Move, { W(3), W(none) });
+	first.Op(VbcOp::Move, { W(4), W(none) });
+	first.Op(VbcOp::SelfTask, { W(5) });
+	first.Op(VbcOp::BeginTask, { W(6), W(R(5)), W(1), W(6) });
+	EndTask(first, 3, 4, first.K(Int(heap, 10)), first.K(Int(heap, 0)), R(2));
+	first.Op(VbcOp::BeginTask, { W(7), W(R(5)), W(1), W(8) });
+	EndTask(first, 3, 4, first.K(Int(heap, 20)), first.K(Int(heap, 1)), R(2));
+	first.Op(VbcOp::WaitSemaphore, { W(R(2)), W(2) });
+	first.Op(VbcOp::NewArray, { W(8), L({ R(3), R(4) }) });
+	first.Op(VbcOp::Return, { W(R(8)) });
+	r_cases.check("tasks §5.4 step 2.3: EndTask's Write and Switch are first-writer-wins; §5.6: a wait already signalled does not suspend",
+			Invoked(interpreter, first.Function(heap.false_value()), {}) == "[10,0]");
+
+	// race{Arm 1; Arm 2; Arm 3} as §6.3 compiles it, the wrapper a root task; each arm logs i,
+	// waits under 10 + i, logs 20 + i, and has a defer logging 100 + i.
+	Asm race(heap, "Race", 14, 0);
+	race.Op(VbcOp::NewSemaphore, { W(2) });
+	race.Op(VbcOp::Move, { W(3), W(none) });
+	race.Op(VbcOp::BeginTask, { W(9), W(none), W(1), W(33) });
+	race.Op(VbcOp::SelfTask, { W(4) });
+	for (uint32_t arm = 1; arm <= 3; ++arm) {
+		const uint32_t start = uint32_t(race.procedure->ops.size());
+		race.Op(VbcOp::JumpIfInitialized, { W(R(3)), W(31) });
+		race.Op(VbcOp::BeginTask, { W(4 + arm), W(R(4)), W(1), W(start + 9) });
+		Log(race, 8, arm);
+		Wait(race, 10 + arm, 10 + arm);
+		Log(race, 8, 20 + arm);
+		Log(race, 8, 100 + arm);
+		EndTask(race, 3, none, race.K(Int(heap, arm)), none, R(2));
+		Log(race, 8, 100 + arm);
+		race.Op(VbcOp::Jump, { W(start + 6) });
+		race.procedure->unwind_edges.push_back(UnwindEdge{ start + 2, start + 3, start + 7 });
+	}
+	race.Op(VbcOp::WaitSemaphore, { W(R(2)), W(1) });
+	EndTask(race, none, none, race.K(heap.false_value()), none, none);
+	race.Op(VbcOp::Return, { W(race.K(heap.false_value())) });
+	InvokeValue(interpreter, race.Function(heap.false_value()), result);
+	r_cases.check("tasks §6.5 B3_Start: every arm starts in source order and runs to its first suspension", Logged({ 1, 2, 3 }));
+	InvokeValue(interpreter, Signaler(12, 0), result);
+	r_cases.check("tasks §6.5 B3_SignalMiddle: the winner's end and defer, then the losers cancelled newest first, before the signaller continues",
+			Logged({ 22, 102, 103, 101, 99 }) && g_waiting[11].empty() && g_waiting[13].empty());
+
+	// F2_Cancel: a task suspended two frames down, each frame with defers, cancelled from outside.
+	Asm inner(heap, "FInner", 4, 0);
+	Wait(inner, 2, 7);
+	inner.Op(VbcOp::Return, { W(inner.K(heap.false_value())) });
+	Log(inner, 3, 3);
+	Log(inner, 3, 2);
+	inner.Op(VbcOp::ResumeUnwind, {});
+	inner.procedure->unwind_edges.push_back(UnwindEdge{ 0, 0, 2 });
+	Asm outer(heap, "FOuter", 4, 0);
+	outer.Op(VbcOp::Call, { W(2), W(outer.K(inner.Function(heap.false_value()))), L({}), L({}), L({}), W(1) });
+	outer.Op(VbcOp::Return, { W(outer.K(heap.false_value())) });
+	Log(outer, 3, 1);
+	outer.Op(VbcOp::ResumeUnwind, {});
+	outer.procedure->unwind_edges.push_back(UnwindEdge{ 0, 0, 2 });
+	Asm cancelled(heap, "CancelledBody", 3, 0);
+	cancelled.Op(VbcOp::Call, { W(2), W(cancelled.K(outer.Function(heap.false_value()))), L({}), L({}), L({}), W(1) });
+	EndTask(cancelled, none, none, cancelled.K(heap.false_value()), none, none);
+	cancelled.procedure->unwind_edges.push_back(UnwindEdge{ 0, 0, 1 });
+	Asm canceler(heap, "Canceler", 6, 0);
+	canceler.Op(VbcOp::CallTask, { W(2), W(none), W(canceler.K(cancelled.Function(heap.false_value()))), L({}) });
+	Log(canceler, 3, 0);
+	canceler.Op(VbcOp::CallWithSelf, { W(4), W(canceler.K(cancel)), W(R(2)), L({}), L({}), L({}), W(1) });
+	Log(canceler, 3, 9);
+	canceler.Op(VbcOp::Return, { W(R(2)) });
+	const Outcome cancel_outcome = InvokeValue(interpreter, canceler.Function(heap.false_value()), result);
+	r_cases.check("tasks §7.4 F2_Cancel: Cancel unwinds a suspended task synchronously, defers innermost first across frames, then returns",
+			cancel_outcome == Outcome::Ok && Logged({ 0, 3, 2, 1, 9 }) && g_waiting[7].empty());
+	const auto Query = [&](const char *p_name) {
+		NativeCall call(heap);
+		call.self = result;
+		return Interpreter::task_native(std::string("(/Verse.org/Concurrency/task/(/Verse.org/Concurrency/task:)") + p_name + ":)Native")(call) == Outcome::Ok;
+	};
+	r_cases.check("tasks §3 F2_Cancel: a cancelled task answers Canceled, Settled and Interrupted, never Completed or Active",
+			is_cell_kind(result, CellKind::Task) && Query("Canceled") && Query("Settled") && Query("Interrupted") && !Query("Completed") &&
+					!Query("Active") && !Query("Canceling") && !Query("Unsettled") && !Query("Uninterrupted"));
+
+	// H2_Signal: a child cancels its running parent; the parent carries on to its next suspension
+	// point, where it unwinds the child (still waiting in Cancel) and then itself.
+	Asm child(heap, "ChildBody", 5, 1);
+	child.Op(VbcOp::CallWithSelf, { W(3), W(child.K(cancel)), W(R(2)), L({}), L({}), L({}), W(1) });
+	Log(child, 4, 300);
+	EndTask(child, none, none, child.K(heap.false_value()), none, none);
+	Log(child, 4, 200);
+	child.Op(VbcOp::Jump, { W(2) });
+	child.procedure->unwind_edges.push_back(UnwindEdge{ 0, 1, 3 });
+	Asm parent(heap, "ParentBody", 6, 0);
+	parent.Op(VbcOp::SelfTask, { W(2) });
+	parent.Op(VbcOp::CallTask, { W(3), W(R(2)), W(parent.K(child.Function(heap.false_value()))), L({ R(2) }) });
+	Log(parent, 4, 5);
+	Wait(parent, 5, 3);
+	EndTask(parent, none, none, parent.K(heap.false_value()), none, none);
+	Log(parent, 4, 100);
+	parent.Op(VbcOp::Jump, { W(4) });
+	parent.procedure->unwind_edges.push_back(UnwindEdge{ 0, 3, 5 });
+	Asm starter(heap, "Starter", 3, 0);
+	starter.Op(VbcOp::CallTask, { W(2), W(none), W(starter.K(parent.Function(heap.false_value()))), L({}) });
+	starter.Op(VbcOp::Return, { W(R(2)) });
+	InvokeValue(interpreter, starter.Function(heap.false_value()), result);
+	r_cases.check("tasks §7.5 H2_Signal: a running target carries on to its next suspension point; the descendant's Cancel never returns",
+			Logged({ 5, 200, 100 }) && g_waiting[3].empty() && is_cell_kind(result, CellKind::Task) &&
+					cell_as<TaskCell>(result)->phase == TaskCell::Phase::Canceled);
+
+	// A spawned task in a scope that is then terminated: no defer, hooks run, never resumed.
+	Asm sleeper(heap, "SleeperBody", 4, 0);
+	Wait(sleeper, 2, 8);
+	EndTask(sleeper, none, none, sleeper.K(heap.false_value()), none, none);
+	Log(sleeper, 3, 555);
+	sleeper.Op(VbcOp::Jump, { W(1) });
+	sleeper.procedure->unwind_edges.push_back(UnwindEdge{ 0, 0, 2 });
+	Asm spawn_sleeper(heap, "SpawnSleeper", 3, 0);
+	spawn_sleeper.Op(VbcOp::CallTask, { W(2), W(none), W(spawn_sleeper.K(sleeper.Function(heap.false_value()))), L({}) });
+	spawn_sleeper.Op(VbcOp::Return, { W(R(2)) });
+	ContentScopeCell *scope = interpreter.make_scope();
+	interpreter.active_scope = scope;
+	InvokeValue(interpreter, spawn_sleeper.Function(heap.false_value()), result);
+	const bool grouped = scope->group.size() == 1 && g_waiting[8].size() == 1;
+	interpreter.terminate_scope(scope);
+	r_cases.check("tasks §8.2-8.3: terminating a scope cancels its root tasks without running a defer, and runs their native hooks",
+			grouped && scope->terminated && scope->group.empty() && g_waiting[8].empty() && Logged({}) &&
+					cell_as<TaskCell>(result)->phase == TaskCell::Phase::Canceled && cell_as<TaskCell>(result)->finished);
+
+	// A raise terminates the active scope, and the task suspended under it is never resumed.
+	const Value err = NativeFunction(heap, "Err", 1, native_implementation("(/Verse.org/Verse/(/Verse.org/Verse:)Err(:[]char):)Native"));
+	ContentScopeCell *raising = interpreter.make_scope();
+	interpreter.active_scope = raising;
+	InvokeValue(interpreter, spawn_sleeper.Function(heap.false_value()), result);
+	TaskCell *doomed = cell_as<TaskCell>(result);
+	Asm raiser(heap, "Raiser", 3, 0);
+	raiser.Op(VbcOp::Call, { W(2), W(raiser.K(err)), L({ raiser.K(Str(heap, "boom")) }), L({}), L({}), W(0) });
+	raiser.Op(VbcOp::Return, { W(raiser.K(heap.false_value())) });
+	const Outcome raised = InvokeValue(interpreter, raiser.Function(heap.false_value()), result);
+	r_cases.check("tasks §8.4 R2_Raise: a raise terminates the active scope; its suspended task is canceled with no defer",
+			raised == Outcome::Error && raising->terminated && doomed->phase == TaskCell::Phase::Canceled && g_waiting[8].empty() && Logged({}));
+	interpreter.active_scope = nullptr;
+
+	// §4.4: an entry whose own task suspends answers Yield with no result.
+	Asm suspends(heap, "Suspends", 3, 0);
+	Wait(suspends, 2, 9);
+	suspends.Op(VbcOp::Return, { W(R(2)) });
+	r_cases.check("tasks §4.4: an entry function that suspends answers the suspended outcome, with no result",
+			Invoked(interpreter, suspends.Function(heap.false_value()), {}) == "<suspended>" && g_waiting[9].size() == 1);
+	InvokeValue(interpreter, Signaler(9, 4), result);
+	r_cases.check("tasks §11: completing the entry task's suspension runs it on to its Return", Logged({ 99 }) && g_waiting[9].empty());
+	g_waiting.clear();
+}
+
 bool RunInterpreterCases() {
 	Cases cases;
 	CallCases(cases);
@@ -2604,6 +2879,7 @@ bool RunInterpreterCases() {
 	AccessorCases(cases);
 	NativeFieldCases(cases);
 	StructConstantCases(cases);
+	TaskCases(cases);
 	return cases.all_ok;
 }
 

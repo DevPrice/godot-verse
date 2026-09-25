@@ -183,6 +183,9 @@ Equality cell_equal(Value p_left, Value p_right, PlaceholderMeeter *p_meeter) {
 			}
 			return Equality::Undecidable;
 		}
+		case CellKind::Task:
+		case CellKind::Semaphore:
+			return Equality::Neq;
 		default:
 			return Equality::Undecidable;
 	}

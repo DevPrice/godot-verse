@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <deque>
 #include <functional>
 #include <string>
 #include <string_view>
@@ -52,24 +51,43 @@ public:
 	const Sidecar *sidecar = nullptr;
 	vh_godot_api godot = {};
 
-	// A VM entry (spec/failure.md §1): a root full failure context and a fresh entry task
-	// (spec/tasks.md §4.4). Entries nest when a native calls back into Verse, and a nested one is a
-	// transaction inside whatever context the native was called in: end_entry(false) at any depth
-	// rolls back what that entry did, and only an outermost end_entry(true) commits -- running the
-	// deferred effects of every run in it, in order.
+	// A VM entry (spec/failure.md §1): a root full failure context. Entries nest when a native calls
+	// back into Verse, and a nested one is a transaction inside whatever context the native was
+	// called in: end_entry(false) at any depth rolls back what that entry did, and only an outermost
+	// end_entry(true) commits -- running the deferred effects of every run in it, in order. An
+	// outermost end_entry after a raise terminates the content scope that was active where it was
+	// raised (spec/tasks.md §8.4).
 	void begin_entry();
 	void end_entry(bool p_commit);
 	// The collector must not run while this is true: an op's operands, a call's arguments and a
-	// native's result live in C++ locals between allocations. Only the entry tasks, which hold the
-	// frames, are rooted.
-	bool in_entry() const { return !entry_tasks.empty(); }
+	// native's result live in C++ locals between allocations.
+	bool in_entry() const { return !entry_marks.empty(); }
 
-	// Calls p_function to completion (spec/calls.md §8). An unbound function is entered with
-	// p_self as its receiver. Ok leaves the result in r_result; Fail is the root context failing;
-	// Error and Yield leave error() describing what stopped the run -- Yield is a suspension this
-	// runtime cannot perform yet.
+	// Calls p_function in a fresh entry task (spec/calls.md §8, spec/tasks.md §4.4). An unbound
+	// function is entered with p_self as its receiver. Ok leaves the result in r_result; Yield is
+	// the entry task suspending, with no result; Fail is the root context failing; Error and
+	// Unsupported leave error() describing what stopped the run.
 	Outcome invoke(Value p_function, Value p_self, const std::vector<Value> &p_arguments,
 			const std::vector<NamedArgument> &p_named, Value &r_result);
+
+	// spec/tasks.md §8.1. Root tasks started while a scope is active join its group; a native's
+	// suspension captures it. Null is no scope: nothing joins a group.
+	ContentScopeCell *active_scope = nullptr;
+	ContentScopeCell *make_scope();
+	// §8.2: terminates every root task in the group and marks the scope terminated. Not undoable,
+	// and never called mid-run.
+	void terminate_scope(ContentScopeCell *p_scope);
+
+	// The task whose ops are executing, or null outside a run. A native that answers Yield suspends
+	// it, having first recorded it wherever its completion will come from.
+	TaskCell *current_task() const { return task; }
+	// A native completing a call it suspended (spec/tasks.md §11): p_task resumes synchronously with
+	// p_value, and so does everything it resumes, before this returns. Nothing happens when its
+	// captured scope was terminated or it is no longer Active. Error propagates the raise.
+	Outcome complete(TaskCell *p_task, Value p_value);
+
+	// The natives of `task(t)` (spec/natives.md §8), by binding key, or null.
+	static NativeFn task_native(std::string_view p_binding_key);
 
 	// A host-built object (spec/objects.md §7.11): NewObject with no archetype entries, the
 	// constructor with (marker, uninitialized, uninitialized), then the deferred setters and the
@@ -108,12 +126,21 @@ public:
 	const char *(*mirrored_godot_name)(std::string_view p_verse_name) = nullptr;
 
 private:
+	// Idle: control passed to an empty yield-to point, so the drive that was running is done.
 	enum class Step : uint8_t {
 		Next,
 		Jumped,
 		Fail,
 		Stop,
-		Finished,
+		Idle,
+	};
+
+	// spec/tasks.md §7.1: Done when the target is settled or was unwound now; Wait when it cannot be
+	// unwound yet; Error when unwinding it raised.
+	enum class Cancel : uint8_t {
+		Done,
+		Wait,
+		Error,
 	};
 
 	// Where a transaction's share of the three flat logs begins (spec/failure.md §7). A commit into
@@ -153,27 +180,39 @@ private:
 
 	FrameCell *frame = nullptr;
 	uint32_t pc = 0;
+	TaskCell *task = nullptr;
 	size_t run_base = 0;
-	Value run_result;
 	Value native_result;
 	Outcome stop_outcome = Outcome::Ok;
-	// Error or Yield once anything in the outermost entry has stopped that way: a native a nested
-	// entry returned through stops too, because the whole entry rolls back (spec/failure.md §9.3).
+	// Error or Unsupported once anything in the outermost entry has stopped that way: a native a
+	// nested entry returned through stops too, because the whole entry rolls back
+	// (spec/failure.md §9.3).
 	Outcome unwinding = Outcome::Ok;
+	// The scope active at the first raise of the outermost entry, which its end terminates.
+	ContentScopeCell *raise_scope = nullptr;
+	// The bCalleeYields of the Call op now calling a native (spec/calls.md §4.4).
+	bool callee_may_yield = false;
 	std::vector<FailureContext> contexts;
 	std::vector<UndoRecord> undo_log;
 	std::vector<std::function<void()>> effects;
 	std::vector<std::function<void()>> compensations;
-	std::deque<Value> entry_tasks;
 	std::vector<Marks> entry_marks;
 	RaisedError raised;
 	uint32_t module_top_level = 0;
 
-	TaskCell *current_task() const;
-	void set_frame(FrameCell *p_frame);
+	// What a nested drive saves of the run it interrupts and puts back.
+	struct Registers {
+		FrameCell *frame;
+		uint32_t pc;
+		TaskCell *task;
+		size_t run_base;
+	};
+	Registers save_registers();
+	void restore_registers(const Registers &p_saved);
+
+	void set_frame(FrameCell *p_frame) { frame = p_frame; }
 
 	Marks marks() const;
-	// T4.1: a spawn inside a failure context records its task state through these (design §7.2).
 	void record_slot(Value &r_slot);
 	void record(const UndoRecord &p_record);
 	void record_link(PlaceholderCell *p_placeholder);
@@ -181,10 +220,48 @@ private:
 	void abort_run(size_t p_base, const Marks &p_marks);
 
 	Outcome run(FrameCell *p_entry, Value &r_result);
+	// Executes the current task from frame/pc until control reaches an empty yield-to point (Ok),
+	// or a failure no context catches, or a raise.
+	Outcome drive();
 	Step execute(const DecodedOp &p_op, const uint32_t *p_words);
 	bool unwind_failure();
 	Step stop(Outcome p_outcome);
 	void append_frames(const NativeProcedureCell *p_native);
+
+	// spec/tasks.md, in vm_tasks.cpp.
+	TaskCell *new_task(TaskCell *p_parent);
+	void join_group(TaskCell *p_task);
+	static void leave_group(TaskCell *p_task);
+	Step task_operand(uint32_t p_word, TaskCell *&r_task);
+	Step begin_task(const uint32_t *p_words);
+	Step call_task(const uint32_t *p_words);
+	Step end_task(const uint32_t *p_words);
+	Step wait_semaphore(const uint32_t *p_words);
+	Step finish_entry_task(Value p_result);
+	Step finish(TaskCell *p_task, std::vector<TaskCell *> &r_resume, Value p_resume_value, TaskCell *p_signaled);
+	Step suspend(uint32_t p_resume_pc, uint32_t p_slot, ContentScopeCell *p_captured = nullptr);
+	Step transfer(TaskCell *p_from);
+	Step continue_task();
+	Step begin_unwind(TaskCell *p_task);
+	Step land(FrameCell *p_frame, uint32_t p_position);
+	Cancel cancel_children(TaskCell *p_task);
+	Cancel request_cancel(TaskCell *p_task);
+	Outcome unwind_nested(TaskCell *p_task);
+	Outcome resume_nested(TaskCell *p_task);
+	void run_hooks(std::vector<TaskHook> &r_hooks, TaskCell *p_task, bool p_newest_first);
+	void terminate(TaskCell *p_task);
+
+	static Outcome task_query(NativeCall &r_call, TaskCell *&r_task);
+	static Outcome task_active(NativeCall &r_call);
+	static Outcome task_completed(NativeCall &r_call);
+	static Outcome task_canceling(NativeCall &r_call);
+	static Outcome task_canceled(NativeCall &r_call);
+	static Outcome task_unsettled(NativeCall &r_call);
+	static Outcome task_settled(NativeCall &r_call);
+	static Outcome task_uninterrupted(NativeCall &r_call);
+	static Outcome task_interrupted(NativeCall &r_call);
+	static Outcome task_await(NativeCall &r_call);
+	static Outcome task_cancel(NativeCall &r_call);
 
 	Value read(uint32_t p_word);
 	uint32_t variadic_count(uint32_t p_word) const;
@@ -203,6 +280,8 @@ private:
 	Step call(Value p_callee, Value p_self, bool p_with_self, std::vector<Value> &r_arguments,
 			const std::vector<NamedArgument> &p_named, uint32_t p_dest);
 	Step call_native(const NativeProcedureCell *p_native, Value p_self, std::vector<Value> &r_arguments, uint32_t p_dest);
+	Step make_frame(const FunctionCell *p_function, Value p_self, std::vector<Value> &r_arguments,
+			const std::vector<NamedArgument> &p_named, FrameCell *&r_frame);
 	Step enter(const FunctionCell *p_function, Value p_self, std::vector<Value> &r_arguments,
 			const std::vector<NamedArgument> &p_named, FrameCell *p_caller, uint32_t p_return_pc, uint32_t p_return_register);
 	Step adapt(std::vector<Value> &r_arguments, uint32_t p_count);

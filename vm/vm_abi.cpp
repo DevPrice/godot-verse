@@ -17,6 +17,9 @@
 // (design §7.3).
 struct vh_instance {
 	vm::Value object;
+	// The instance's content scope (spec/tasks.md §8.1): made at vh_instantiate, active for every
+	// call into it, replaced after a raise terminated it, terminated at vh_release_instance.
+	vm::Value scope;
 	vh_handle handle = 0;
 	const vm::SidecarClass *sidecar_class = nullptr;
 };
@@ -41,19 +44,20 @@ int32_t refuse_list(const Desc **r_out, int32_t *r_count) {
 }
 
 // Ends the VM entry an execution entry point began, committing only a normal completion, and
-// answers its status. A raise is reported first; so is a suspension or another operation this
-// runtime cannot perform yet, which answers VH_ERR_UNSUPPORTED because the script did nothing
-// wrong.
+// answers its status. A suspended entry task is a success with no result (spec/tasks.md §4.4). A
+// raise is reported first; so is an operation this runtime cannot perform yet, which answers
+// VH_ERR_UNSUPPORTED because the script did nothing wrong.
 int32_t entry_status(vm::Outcome p_outcome) {
 	vm::Interpreter &interpreter = g_runtime->interpreter;
 	switch (p_outcome) {
 		case vm::Outcome::Ok:
+		case vm::Outcome::Yield:
 			interpreter.end_entry(true);
 			return VH_OK;
 		case vm::Outcome::Fail:
 			interpreter.end_entry(false);
 			return VH_ERR_FAILED;
-		case vm::Outcome::Yield:
+		case vm::Outcome::Unsupported:
 			interpreter.end_entry(false);
 			g_runtime->report_raised(interpreter.error());
 			return VH_ERR_UNSUPPORTED;
@@ -67,6 +71,14 @@ int32_t entry_status(vm::Outcome p_outcome) {
 			return VH_ERR_RUNTIME;
 	}
 }
+
+// An entry made while another is running -- Godot calling back into a script from inside a native
+// -- hands the outer entry its own scope back.
+struct ScopeRestore {
+	vm::Interpreter &interpreter;
+	vm::ContentScopeCell *saved;
+	~ScopeRestore() { interpreter.active_scope = saved; }
+};
 
 const vm::SidecarMethod *find_method(const vm::SidecarClass *p_class, const char *p_decorated) {
 	if (p_class == nullptr) {
@@ -229,19 +241,22 @@ int32_t vh_instantiate(const char *ClassNameUtf8, vh_handle Handle, vh_instance 
 		return VH_ERR_NOT_FOUND;
 	}
 	vm::Interpreter &interpreter = g_runtime->interpreter;
+	vh_instance *instance = new vh_instance();
+	g_runtime->heap.add_handle_root(&instance->object);
+	g_runtime->heap.add_handle_root(&instance->scope);
+	const ScopeRestore restore{ interpreter, interpreter.active_scope };
+	g_runtime->activate_scope(instance->scope);
 	interpreter.begin_entry();
-	vm::Value object;
-	vm::RootScope root(g_runtime->heap, &object);
-	const vm::Outcome outcome = interpreter.construct(entry->class_cell, Handle, object);
+	const vm::Outcome outcome = interpreter.construct(entry->class_cell, Handle, instance->object);
 	const int32_t status = entry_status(outcome);
 	if (status != VH_OK) {
+		g_runtime->heap.remove_handle_root(&instance->object);
+		g_runtime->heap.remove_handle_root(&instance->scope);
+		delete instance;
 		return status;
 	}
-	vh_instance *instance = new vh_instance();
-	instance->object = object;
 	instance->handle = Handle;
 	instance->sidecar_class = g_runtime->sidecar.find_class(ClassNameUtf8);
-	g_runtime->heap.add_handle_root(&instance->object);
 	*OutInstance = instance;
 	return VH_OK;
 }
@@ -251,7 +266,18 @@ void vh_release_instance(vh_instance *Instance) {
 		return;
 	}
 	if (g_runtime != nullptr) {
+		vm::Interpreter &interpreter = g_runtime->interpreter;
+		if (vm::is_cell_kind(Instance->scope, vm::CellKind::ContentScope)) {
+			vm::ContentScopeCell *scope = vm::cell_as<vm::ContentScopeCell>(Instance->scope);
+			// spec/tasks.md §8.2: termination inside an open transaction happens when it commits.
+			if (interpreter.in_entry()) {
+				interpreter.defer([&interpreter, scope] { interpreter.terminate_scope(scope); });
+			} else {
+				interpreter.terminate_scope(scope);
+			}
+		}
 		g_runtime->heap.remove_handle_root(&Instance->object);
+		g_runtime->heap.remove_handle_root(&Instance->scope);
 	}
 	delete Instance;
 }
@@ -333,6 +359,8 @@ int32_t vh_instance_call(vh_instance *Instance, const char *DecoratedName, const
 		}
 	}
 
+	const ScopeRestore restore{ interpreter, interpreter.active_scope };
+	g_runtime->activate_scope(Instance->scope);
 	interpreter.begin_entry();
 	vm::Value result;
 	vm::RootScope result_root(heap, &result);

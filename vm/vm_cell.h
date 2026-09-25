@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -54,6 +55,8 @@ enum class CellKind : uint8_t {
 	NativeObject,
 	AccessorRef,
 	SetterChain,
+	Semaphore,
+	ContentScope,
 };
 
 const char *cell_kind_name(CellKind p_kind);
@@ -453,6 +456,21 @@ struct ModuleCell : Cell {
 
 struct ClassLayout;
 
+// What a native class keeps of an object beyond its Verse fields -- an event's awaiters, a
+// classifiable_subset_var's current set (spec/natives.md §5.10, §7). Invisible to Verse: equality,
+// freezing and the layout never see it; the collector visits it with its object and it dies with
+// it. `tag` names the concrete type, since there is no RTTI to ask.
+struct NativeState {
+	const uint32_t tag;
+
+	explicit NativeState(uint32_t p_tag) :
+			tag(p_tag) {}
+	NativeState(const NativeState &) = delete;
+	NativeState &operator=(const NativeState &) = delete;
+	virtual ~NativeState() = default;
+	virtual void visit_references(CellVisitor &r_visitor) const = 0;
+};
+
 // A struct value or a VM-level class instance: format.md's `value object`, and what NewObject makes.
 // Fields are the object's slots, in its layout's slot order (vm_objects.h); `created` is
 // CreateField's per-slot mark. A value object the loader built has no layout until
@@ -463,16 +481,32 @@ struct ObjectCell : Cell {
 	std::vector<Value> field_values;
 	const ClassLayout *layout = nullptr;
 	std::vector<bool> created;
+	std::unique_ptr<NativeState> native_state;
 
 	ObjectCell() :
 			Cell(CellKind::Object) {}
 	bool is_struct() const { return object_class != nullptr && object_class->class_kind == ClassKind::Struct; }
+
+	// The object's native state of type T (which declares `static constexpr uint32_t kTag` and a
+	// default constructor), made on first use. Null only when the object already holds state of
+	// another type, which a native reached through the wrong class would be.
+	template <typename T>
+	T *state() {
+		if (native_state == nullptr) {
+			native_state = std::make_unique<T>();
+		}
+		return native_state->tag == T::kTag ? static_cast<T *>(native_state.get()) : nullptr;
+	}
+
 	void visit_references(CellVisitor &r_visitor) const override {
 		r_visitor.visit(object_class);
 		for (const NameCell *name : field_names) {
 			r_visitor.visit(name);
 		}
 		r_visitor.visit(field_values);
+		if (native_state != nullptr) {
+			native_state->visit_references(r_visitor);
+		}
 	}
 };
 
@@ -622,8 +656,21 @@ struct FrameCell : Cell {
 	}
 };
 
-// spec/tasks.md §2, as much of it as an entry task needs: a root task with an empty yield-to point,
-// holding the frame it is running. T4.1 gives it the rest.
+struct TaskCell;
+struct ContentScopeCell;
+
+// A native's callback on a task (spec/tasks.md §2): a function and the one cell it acts on -- the
+// list the task sits on, say -- so a hook is data the collector can visit.
+typedef void (*TaskHookFn)(TaskCell *p_task, Cell *p_target);
+
+struct TaskHook {
+	TaskHookFn run = nullptr;
+	Cell *target = nullptr;
+};
+
+// spec/tasks.md §2. The Verse value of a `task(t)` is the cell itself: its methods are the task class's
+// (Program::task_class), bound to it. A resume frame of null with `finished` set is §5.4 step 7's
+// finished resume point; `yield_task` null is an empty yield-to point.
 struct TaskCell : Cell {
 	enum class Phase : uint8_t {
 		Active,
@@ -635,14 +682,54 @@ struct TaskCell : Cell {
 
 	Phase phase = Phase::Active;
 	bool running = true;
-	const TaskCell *parent = nullptr;
-	FrameCell *frame = nullptr;
+	// An entry task (§4.4), whose root frame ends in Return rather than EndTask.
+	bool entry = false;
+	bool finished = false;
+	bool has_result = false;
+	Value result;
+	TaskCell *parent = nullptr;
+	std::vector<TaskCell *> children;
+	std::vector<TaskCell *> awaiters;
+	std::vector<TaskCell *> cancelers;
+	FrameCell *resume_frame = nullptr;
+	uint32_t resume_pc = 0;
+	uint32_t resume_slot = kNoRegister;
+	TaskCell *yield_task = nullptr;
+	FrameCell *yield_frame = nullptr;
+	uint32_t yield_pc = 0;
+	std::vector<TaskHook> defer_hooks;
+	std::vector<TaskHook> finish_hooks;
+	ContentScopeCell *group = nullptr;
+	// The scope active when a native suspended the task (§8.1), which its completion runs under.
+	ContentScopeCell *captured_scope = nullptr;
 
 	TaskCell() :
 			Cell(CellKind::Task) {}
+	void visit_references(CellVisitor &r_visitor) const override;
+};
+
+// spec/tasks.md §5.6.
+struct SemaphoreCell : Cell {
+	int64_t count = 0;
+	TaskCell *waiter = nullptr;
+
+	SemaphoreCell() :
+			Cell(CellKind::Semaphore) {}
+	void visit_references(CellVisitor &r_visitor) const override { r_visitor.visit(waiter); }
+};
+
+// spec/tasks.md §8.1: the embedder's content scope, with the task group of the root tasks started
+// while it was active. The group holds its tasks strongly (§14 Q7 allows it: only memory differs).
+struct ContentScopeCell : Cell {
+	bool terminated = false;
+	std::vector<TaskCell *> group;
+
+	ContentScopeCell() :
+			Cell(CellKind::ContentScope) {}
 	void visit_references(CellVisitor &r_visitor) const override {
-		r_visitor.visit(parent);
-		r_visitor.visit(frame);
+		for (const TaskCell *task : group) {
+			r_visitor.visit(task);
+		}
 	}
 };
 
