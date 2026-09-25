@@ -11,6 +11,12 @@
 #include "vm_number.h"
 #include "vm_values.h"
 
+#if defined(_MSC_VER)
+#define VM_NOINLINE __declspec(noinline)
+#else
+#define VM_NOINLINE __attribute__((noinline))
+#endif
+
 namespace vm {
 
 namespace {
@@ -568,7 +574,7 @@ Interpreter::Step Interpreter::not_yet(const std::string &p_what) {
 	return stop(Outcome::Unsupported);
 }
 
-bool Interpreter::unwind_failure() {
+VM_NOINLINE bool Interpreter::unwind_failure() {
 	if (contexts.size() <= run_base) {
 		return false;
 	}
@@ -607,15 +613,266 @@ Outcome Interpreter::run(FrameCell *p_entry, Value &r_result) {
 	return outcome;
 }
 
+VM_NOINLINE Outcome Interpreter::past_last_op() {
+	invariant("execution ran past the last op");
+	return stop_outcome;
+}
+
+// The ops below are the common cases of `execute`'s, done without leaving this function; any case
+// that is not common -- an allocation, an unbound or empty operand, a destination already holding
+// something, a raise -- breaks out before it has changed anything, and `execute` does the op from
+// the start. Only `execute`, the step handling after it, and Return change the frame, so the
+// cached procedure and registers are re-read after each of them; `pc` is written back before any
+// of them, since everything reached from `execute` reads the member.
 Outcome Interpreter::drive() {
 	for (;;) {
-		const ProcedureCell *procedure = frame->procedure;
-		if (pc >= procedure->ops.size()) {
-			invariant("execution ran past the last op");
-			return stop_outcome;
+		FrameCell *const current = frame;
+		const ProcedureCell *const procedure = current->procedure;
+		const DecodedOp *const ops = procedure->ops.data();
+		const uint32_t op_count = uint32_t(procedure->ops.size());
+		const uint32_t *const words = procedure->operand_words.data();
+		const Value *const constants = procedure->constants.data();
+		Value *const registers = current->registers.data();
+
+		// An absent operand and an empty register take the slow path, where `read` answers them.
+		const auto operand = [constants, registers](uint32_t p_word, Value &r_value) -> bool {
+			if ((p_word & 1) != 0) {
+				if (p_word == kAbsentOperand) {
+					return false;
+				}
+				r_value = follow(constants[p_word >> 1]);
+				return true;
+			}
+			const Value slot = registers[p_word >> 1];
+			if (slot.is_empty()) {
+				return false;
+			}
+			r_value = follow(slot);
+			return true;
+		};
+		// unify_register's case of a destination nothing has written, or none at all.
+		const auto writable = [registers](uint32_t p_register) -> bool {
+			return p_register == kNoRegister || registers[p_register].is_empty();
+		};
+		const auto store = [registers](uint32_t p_register, Value p_value) {
+			if (p_register != kNoRegister) {
+				registers[p_register] = p_value;
+			}
+		};
+
+		uint32_t at = pc;
+		Step step;
+		for (;;) {
+			if (at >= op_count) {
+				pc = at;
+				return past_last_op();
+			}
+			const DecodedOp op = ops[at];
+			const uint32_t *const w = words + op.operands;
+			switch (VbcOp(op.opcode)) {
+				case VbcOp::ResetNonTrailed:
+					registers[w[0]] = Value::empty();
+					++at;
+					continue;
+				case VbcOp::Reset:
+					record_slot(registers[w[0]]);
+					registers[w[0]] = Value::empty();
+					++at;
+					continue;
+				case VbcOp::Tracepoint:
+				case VbcOp::EndFastFailureContext:
+					++at;
+					continue;
+				case VbcOp::Jump:
+					at = w[0];
+					continue;
+				case VbcOp::Move: {
+					Value source;
+					if (!operand(w[1], source) || !writable(w[0])) {
+						break;
+					}
+					store(w[0], source);
+					++at;
+					continue;
+				}
+				case VbcOp::Add:
+				case VbcOp::Sub:
+				case VbcOp::Mul:
+				case VbcOp::Div: {
+					Value left;
+					Value right;
+					if (!operand(w[1], left) || !operand(w[2], right) || !writable(w[0])) {
+						break;
+					}
+					Value result;
+					if (left.is_int32() && right.is_int32() && VbcOp(op.opcode) != VbcOp::Div) {
+						const int64_t a = left.as_int32();
+						const int64_t b = right.as_int32();
+						const int64_t wide = VbcOp(op.opcode) == VbcOp::Add ? a + b : VbcOp(op.opcode) == VbcOp::Sub ? a - b : a * b;
+						if (wide < INT32_MIN || wide > INT32_MAX) {
+							break;
+						}
+						result = Value::from_int32(int32_t(wide));
+					} else if (left.is_float() && right.is_float()) {
+						const double a = left.as_float();
+						const double b = right.as_float();
+						switch (VbcOp(op.opcode)) {
+							case VbcOp::Add:
+								result = Value::from_float(a + b);
+								break;
+							case VbcOp::Sub:
+								result = Value::from_float(a - b);
+								break;
+							case VbcOp::Mul:
+								result = Value::from_float(a * b);
+								break;
+							default:
+								// spec/values.md §3.1: a divisor of -0 divides as +0.
+								result = Value::from_float(a / (b == 0.0 ? 0.0 : b));
+								break;
+						}
+					} else {
+						break;
+					}
+					store(w[0], result);
+					++at;
+					continue;
+				}
+				case VbcOp::LtFastFail:
+				case VbcOp::LteFastFail:
+				case VbcOp::GtFastFail:
+				case VbcOp::GteFastFail:
+				case VbcOp::Lt:
+				case VbcOp::Lte:
+				case VbcOp::Gt:
+				case VbcOp::Gte: {
+					const bool fast = op.opcode <= uint16_t(VbcOp::GteFastFail);
+					Value left;
+					Value right;
+					if (!operand(w[fast ? 2 : 1], left) || !operand(w[fast ? 3 : 2], right)) {
+						break;
+					}
+					int order;
+					if (left.is_int32() && right.is_int32()) {
+						order = left.as_int32() < right.as_int32() ? -1 : (left.as_int32() > right.as_int32() ? 1 : 0);
+					} else if (left.is_float() && right.is_float() && !std::isnan(left.as_float()) && !std::isnan(right.as_float())) {
+						order = left.as_float() < right.as_float() ? -1 : (left.as_float() > right.as_float() ? 1 : 0);
+					} else {
+						break;
+					}
+					bool holds;
+					switch (VbcOp(op.opcode)) {
+						case VbcOp::LtFastFail:
+						case VbcOp::Lt:
+							holds = order < 0;
+							break;
+						case VbcOp::LteFastFail:
+						case VbcOp::Lte:
+							holds = order <= 0;
+							break;
+						case VbcOp::GtFastFail:
+						case VbcOp::Gt:
+							holds = order > 0;
+							break;
+						default:
+							holds = order >= 0;
+							break;
+					}
+					if (!holds) {
+						if (fast) {
+							at = w[4];
+							continue;
+						}
+						pc = at;
+						step = Step::Fail;
+						goto stepped;
+					}
+					if (!writable(w[0])) {
+						break;
+					}
+					store(w[0], left);
+					++at;
+					continue;
+				}
+				case VbcOp::RefGet: {
+					Value ref;
+					if (!operand(w[1], ref) || !is_cell_kind(ref, CellKind::Ref) || awaiting() || !writable(w[0])) {
+						break;
+					}
+					const Value content = cell_as<RefCell>(ref)->content;
+					if (content.is_empty()) {
+						break;
+					}
+					store(w[0], follow(content));
+					++at;
+					continue;
+				}
+				case VbcOp::RefSet: {
+					Value ref;
+					Value value;
+					if (!operand(w[0], ref) || !is_cell_kind(ref, CellKind::Ref) || !operand(w[1], value)) {
+						break;
+					}
+					RefCell *variable = cell_as<RefCell>(ref);
+					if (variable->native || is_cell_kind(variable->live_task, CellKind::Task) || !variable->awaiting.empty()) {
+						break;
+					}
+					record_slot(variable->content);
+					variable->content = value;
+					++at;
+					continue;
+				}
+				case VbcOp::RefCallDomain: {
+					Value ref;
+					Value argument;
+					if (!operand(w[1], ref) || !is_cell_kind(ref, CellKind::Ref) || !cell_as<RefCell>(ref)->domain.is_uninitialized() ||
+							!operand(w[2], argument) || !writable(w[0])) {
+						break;
+					}
+					store(w[0], argument);
+					++at;
+					continue;
+				}
+				case VbcOp::Freeze:
+				case VbcOp::FreezeIfAccessor:
+				case VbcOp::Melt: {
+					// Freezing or melting anything but a cell answers it as it is.
+					Value value;
+					if (!operand(w[1], value) || value.is_cell() || !writable(w[0])) {
+						break;
+					}
+					store(w[0], value);
+					++at;
+					continue;
+				}
+				case VbcOp::Return: {
+					Value value;
+					FrameCell *const caller = current->caller;
+					if (caller == nullptr || !operand(w[0], value)) {
+						break;
+					}
+					const uint32_t destination = current->return_register;
+					if (destination != kNoRegister) {
+						Value &slot = caller->registers[destination];
+						if (!slot.is_empty()) {
+							break;
+						}
+						slot = value;
+					}
+					set_frame(caller);
+					pc = current->return_pc;
+					step = Step::Jumped;
+					goto stepped;
+				}
+				default:
+					break;
+			}
+			pc = at;
+			step = execute(op, w);
+			break;
 		}
-		const DecodedOp &op = procedure->ops[pc];
-		switch (execute(op, procedure->operand_words.data() + op.operands)) {
+	stepped:
+		switch (step) {
 			case Step::Next:
 				++pc;
 				break;
@@ -1156,7 +1413,9 @@ Outcome Interpreter::construct(const ClassCell *p_class, int64_t p_handle, Value
 	return outcome;
 }
 
-Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_words) {
+// Kept out of `drive` so that its frame -- the std::string and std::vector locals of the rarer ops --
+// stays out of the loop's, which would otherwise spill it and carry a /GS stack-cookie check.
+VM_NOINLINE Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const uint32_t *p_words) {
 	const uint32_t *const w = p_words;
 	switch (VbcOp(p_op.opcode)) {
 		case VbcOp::Add:

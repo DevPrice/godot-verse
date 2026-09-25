@@ -287,6 +287,7 @@ private:
 	// Executes the current task from frame/pc until control reaches an empty yield-to point (Ok),
 	// or a failure no context catches, or a raise.
 	Outcome drive();
+	Outcome past_last_op();
 	Step execute(const DecodedOp &p_op, const uint32_t *p_words);
 	bool unwind_failure();
 	Step stop(Outcome p_outcome);
