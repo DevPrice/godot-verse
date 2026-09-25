@@ -34,6 +34,7 @@
 #include "VerseString.h"
 #include "VerseTask.h"
 #include "UObject/StrongObjectPtr.h"
+#include "UObject/UObjectHash.h"
 #include "VerseVM/Inline/VVMRefInline.h"
 #include "VerseVM/Inline/VVMValueInline.h"
 #include "VerseVM/Inline/VVMValueObjectInline.h"
@@ -4714,6 +4715,98 @@ AUTORTFM_DISABLE UClass* MirroredClassForHandle(int64 Handle)
     return Found;
 }
 
+/// The Godot container a wrapper class's own `Ref` default mints -- an Array for `godot_array` and
+/// every `typed_array(t)`, a Dictionary for `dictionary` and every `typed_dictionary(k, v)` -- or 0
+/// for a wrapper whose default names nothing, which is `callable` and `signal_ref`.
+///
+/// Keyed on the package and the base name, the test GodotPeerClassFor makes, because a parametric
+/// instantiation is a class of its own with nothing else in common with its siblings.
+AUTORTFM_DISABLE int32 MintedContainerTag(const UClass* Class)
+{
+    for (const UClass* Cursor = Class; Cursor; Cursor = Cursor->GetSuperClass())
+    {
+        const UVerseClass* const VerseClass = Cast<UVerseClass>(Cursor);
+        const Verse::VClass* const VClass = VerseClass ? VerseClass->Class.Get() : nullptr;
+        if (!VClass
+            || !VClass->GetPackage().GetRootPath().AsStringView().Equals(FUtf8StringView(GodotVersePath)))
+        {
+            continue;
+        }
+        const FUtf8StringView Name = VClass->GetBaseName().AsStringView();
+        if (Name.Equals(UTF8TEXT("godot_array")) || Name.StartsWith(UTF8TEXT("typed_array")))
+        {
+            return VH_VARIANT_ARRAY;
+        }
+        if (Name.Equals(UTF8TEXT("dictionary")) || Name.StartsWith(UTF8TEXT("typed_dictionary")))
+        {
+            return VH_VARIANT_DICTIONARY;
+        }
+    }
+    return 0;
+}
+
+/// Gives each container an object's member defaults hold a reference id of its own (B42).
+///
+/// NewObject does not evaluate a class's member defaults. It copies them off the class default
+/// object, and a wrapper that default expression built is instanced into the new object as a
+/// subobject of it: a fresh wrapper holding the *same* id. Worse, that id is not even the class
+/// default's own -- a wrapper built while a class default is being constructed takes `Ref` off its
+/// own class's default object rather than running `VhRefNewDefault` -- so every scripted node shared
+/// one Godot Array with every other, and in a cooked game, whose defaults the cooker read with no
+/// Godot to mint against, held the dead reference 0.
+///
+/// Decided per wrapper by what its default was:
+///
+///  - still its own class's default id: the member's default was a fresh container (`godot_array{}`,
+///    `MakeNodeArray()`), so this object gets a fresh one, as evaluating it would have given it.
+///  - any other id: the default named a container that already existed, which is shared by
+///    design, so the copy keeps it and takes a claim of its own -- without which its collection
+///    released a claim it never held.
+///  - under FSuppressMintScope, 0, which is what `VhRefNewDefault` answers there, and which leaves
+///    the reading device nothing to release. That instance is built off the game thread, where the
+///    reference table cannot be asked for anything.
+///
+/// The minted or retained id is the wrapper's to release, by the godot_ref::BeginDestroy rule.
+/// Nothing compensates on abort, and nothing needs to: the write is open, so the wrapper keeps the
+/// id whatever the construction's transaction does and releases it when it is collected.
+///
+/// Must run before any block clause reads a member, which is why AdoptOrMintPeer's adopt branch
+/// calls it: vh_object's own block is the first to run. A member *object's* block runs earlier
+/// still, while the instance is being built, and sees the copied id for the length of that block.
+AUTORTFM_DISABLE void ClaimDefaultContainers(UObject* Object, bool bSuppressed)
+{
+    GodotVerse::FHostState& Host = GodotVerse::GetHost();
+    ForEachObjectWithOuter(
+        Object,
+        [&](UObject* Subobject) {
+            verse::godot_ref* const Wrapper = Cast<verse::godot_ref>(Subobject);
+            if (!Wrapper)
+            {
+                return;
+            }
+            if (bSuppressed)
+            {
+                Wrapper->Ref.Init(0, Wrapper);
+                return;
+            }
+
+            const int64 Held = Wrapper->Ref.Get();
+            const verse::godot_ref* const ClassDefault =
+                Cast<verse::godot_ref>(Wrapper->GetClass()->GetDefaultObject(/*bCreateIfNeeded*/ false));
+            const bool bIsClassDefault = !ClassDefault || Held == ClassDefault->Ref.Get();
+            const int32 Tag = MintedContainerTag(Wrapper->GetClass());
+            if (Tag != 0 && bIsClassDefault)
+            {
+                Wrapper->Ref.Init(Host.Godot.NewRef ? Host.Godot.NewRef(Host.Godot.Ctx, Tag) : 0, Wrapper);
+            }
+            else if (Held != 0)
+            {
+                Wrapper->Ref.Init(Host.Godot.RetainRef ? Host.Godot.RetainRef(Host.Godot.Ctx, Held) : 0, Wrapper);
+            }
+        },
+        EGetObjectsFlags::IncludeNestedObjects);
+}
+
 } // namespace
 
 AUTORTFM_DISABLE UClass* GodotVerse::MirroredClassFor(FUtf8StringView GodotClassName)
@@ -4795,11 +4888,13 @@ AUTORTFM_DISABLE int64 GodotVerse::AdoptOrMintPeer(verse::vh_object* Self, const
     if (GAdopt.bActive && GAdopt.Class == Self->GetClass())
     {
         GAdopt.bActive = false;
+        ClaimDefaultContainers(Self, GSuppressMintDepth > 0);
         return GAdopt.Handle;
     }
 
     if (GSuppressMintDepth > 0)
     {
+        ClaimDefaultContainers(Self, /*bSuppressed*/ true);
         return 0;
     }
 
@@ -6376,7 +6471,7 @@ AUTORTFM_DISABLE bool GetClassStaticsLive(FUtf8StringView ClassName,
             FUtf8String DeclaredIn;
             FillLocation(*Function, DeclaredIn, Desc.Line, Desc.Column);
             OutStatics.Add(MoveTemp(Desc));
-            OutValues.AddDefaulted();
+            OutValues.AddZeroed();
             OutStorage.AddDefaulted();
         }
 
@@ -6389,7 +6484,9 @@ AUTORTFM_DISABLE bool GetClassStaticsLive(FUtf8StringView ClassName,
             FillLocation(*Member, DeclaredIn, Desc.Line, Desc.Column);
 
             const int32 Slot = OutStatics.Add(MoveTemp(Desc));
-            OutValues.AddDefaulted();
+            // Zeroed, not defaulted: ValueToWire writes only the lanes the value fills, so an int
+            // or a string left its VariantTag as whatever the heap held, and the cook wrote that.
+            OutValues.AddZeroed();
             OutStorage.AddDefaulted();
 
             // The value, read out of the published package rather than evaluated: a module's

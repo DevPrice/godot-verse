@@ -1,0 +1,32 @@
+[probe] LoadLibraryW: ok
+[probe] vh_host_kind = <normalized>
+[probe] vh_init: ok
+[probe] vh_has_class: ok
+[probe] natives_subset has 6 method(s)
+[probe] vh_instantiate: ok
+[probe] calling (/user@localhost/natives_subset:)S1_Make
+[verse]   plain: has no special
+[verse]   mixed: has a special
+[verse]   mixed: has all
+[verse]   plain: has none
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/natives_subset:)S2_FilterByType
+[verse]   filtered: has a special
+[verse]   filtered plain: empty
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/natives_subset:)S3_Concatenate
+[verse]   left: has no special
+[verse]   left + right: has a special
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/natives_subset:)S4_Var
+[verse]   var: has no special
+[verse]   after add: has a special
+[verse]   removed
+[verse]   after remove: has no special
+[verse]   second remove fails
+[verse]   after write: has a special
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/natives_subset:)S5_FailedAddRollsBack
+[verse]   after failed add: has no special
+[probe]   -> 0 (VH_OK)
+[probe] done

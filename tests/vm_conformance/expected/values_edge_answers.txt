@@ -1,0 +1,19 @@
+[probe] LoadLibraryW: ok
+[probe] vh_host_kind = <normalized>
+[probe] vh_init: ok
+[probe] vh_has_class: ok
+[probe] values_edge_answers has 3 method(s)
+[probe] vh_instantiate: ok
+[probe] calling (/user@localhost/values_edge_answers:)ChainedComparison
+[verse] 1<2<2: no
+[verse] 1<2<3: yes
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_edge_answers:)ModRangeVsZeroDivisor
+LogVerseRuntime: Error: Value exceeds the range of a 64 bit integer.. This build does not have the Verse compiler runtime bundled with it, so no other information is available.
+[error] ErrRuntime_GeneratedNativeInternal: An internal runtime error occurred in (generated) native code that was called from Verse. There is no other information available. (Value exceeds the range of a 64 bit integer.)
+[probe]   -> 6 (VH_ERR_RUNTIME)
+[probe] calling (/user@localhost/values_edge_answers:)QuotientRangeVsZeroDivisor
+LogVerseRuntime: Error: Value exceeds the range of a 64 bit integer.. This build does not have the Verse compiler runtime bundled with it, so no other information is available.
+[error] ErrRuntime_GeneratedNativeInternal: An internal runtime error occurred in (generated) native code that was called from Verse. There is no other information available. (Value exceeds the range of a 64 bit integer.)
+[probe]   -> 6 (VH_ERR_RUNTIME)
+[probe] done

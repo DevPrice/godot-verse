@@ -1,0 +1,102 @@
+[probe] LoadLibraryW: ok
+[probe] vh_host_kind = <normalized>
+[probe] vh_init: ok
+[probe] vh_has_class: ok
+[probe] natives_math has 16 method(s)
+[probe] vh_instantiate: ok
+[probe] calling (/user@localhost/natives_math:)AbsIntFloat
+[verse] Abs(-5)=5
+[verse] Abs(-2.5)=2.500000
+[verse] Abs(min) gt max: yes
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/natives_math:)BitOps
+[verse] BitAnd(12,10)=8
+[verse] BitOr(12,10)=14
+[verse] BitXor(-1,5)=-6
+[verse] BitNot(0)=-1
+[verse] BitAnd(-1,2^63)=2^63: yes
+[verse] BitXor(2^63,2^63)=0
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/natives_math:)QuotientModEdges
+[verse] Mod[7,2]=1 Quotient[7,2]=3
+[verse] Mod[-7,2]=1 Quotient[-7,2]=-4
+[verse] Mod[7,-2]=1 Quotient[7,-2]=-3
+[verse] Mod[-7,-2]=1 Quotient[-7,-2]=4
+[verse] Mod[7,0] fails
+[verse] Quotient[7,0] fails
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/natives_math:)QuotientOverflowRaises
+LogVerseRuntime: Error: Integer overflow encountered.. This build does not have the Verse compiler runtime bundled with it, so no other information is available.
+[error] ErrRuntime_IntegerOverflow: Integer overflow encountered. (Integer overflow encountered.)
+[probe]   -> 6 (VH_ERR_RUNTIME)
+[probe] calling (/user@localhost/natives_math:)ClampInt
+[verse] Clamp(5,10,0)=5
+[verse] Clamp(-5,10,0)=0
+[verse] Clamp(15,10,0)=10
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/natives_math:)JoinStrings
+[verse] Join(a,b,c)=a, b, c
+[verse] Join(empty)=
+[verse] Join(one)=a
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/natives_math:)Char32ToString
+[verse] Ã©=Ã©
+[verse] emoji=ðŸ˜€
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/natives_math:)SqrtAndTrig
+[verse] Sqrt(-1)=NaN
+[verse] Sqrt(Inf)=Inf
+[verse] Sin(Inf)=NaN
+[verse] Cos(Inf)=NaN
+[verse] Tan(Inf)=NaN
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/natives_math:)ArcTrig
+[verse] ArcSin(2.0)=1.570796
+[verse] ArcSin(-2.0)=-1.570796
+[verse] ArcCos(2.0)=0.000000
+[verse] ArcSin(NaN)=1.570796
+[verse] ArcCos(NaN)=0.000000
+[verse] ArcTan(0.0,0.0)=0.000000
+[verse] ArcTan(0.0,-1.0)=3.141593
+[verse] ArcTan(NaN,0.0)=NaN
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/natives_math:)HyperbolicAndPow
+[verse] ArSinh(Inf)=Inf
+[verse] ArTanh(1.0)=Inf
+[verse] ArCosh(0.5)=NaN
+[verse] ArTanh(2.0)=NaN
+[verse] Pow(0,0)=1.000000
+[verse] Pow(-2,3)=-8.000000
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/natives_math:)ExpLnLerp
+[verse] Exp(1000)=Inf
+[verse] Exp(-1000)=0.000000
+[verse] Ln(0)=-Inf
+[verse] Ln(-1)=NaN
+[verse] Lerp(0,1,2)=2.000000
+[verse] Lerp(0,Inf,0)=NaN
+[verse] Lerp(1,2,NaN)=NaN
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/natives_math:)Diagnostics
+[verse] diag(42)=42
+[verse] diag(1.5)=1.5
+[verse] diag(true)=true
+[verse] diag(opt1)=option{1}
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/natives_math:)LocalizeBasic
+[verse] Localize(Hello)=Hello
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/natives_math:)CanAccessEpicInternal
+[verse] CanCallerAccessEpicInternal=yes
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/natives_math:)RandomEdgeCases
+[verse] GetRandomInt(5,5)=5
+[verse] GetRandomFloat(2.0,2.0)=2.000000
+[verse] GetRandomFloat(-Inf,Inf)=Inf
+[verse] GetRandomFloat(0.0,NaN)=0.000000
+[verse] GetRandomFloat(NaN,1.0)=NaN
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/natives_math:)EpochIsStableWithinProcess
+[verse] epoch stable: yes
+[probe]   -> 0 (VH_OK)
+[probe] done

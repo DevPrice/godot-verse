@@ -309,6 +309,54 @@ func begin() -> void:
 	_check("a bare dictionary{} arrives as a Dictionary",
 			made_dict is Dictionary and (made_dict as Dictionary).get("hp") == 3)
 
+	# --- T5.6: a container-typed *data-member default*, on two nodes of one script -------------
+	#
+	# MadeArray above answers this for the bare archetype spelling, which runs through the
+	# class's block: clause on every construction. `var Items:godot_array = godot_array{}` is a
+	# different path -- a host-built object reaches it through the class's per-instance default
+	# rather than through that clause -- and nothing had measured whether the UE host computes
+	# that default once per class (which would make every node share one Array) or once per
+	# instance (the correct behaviour).
+	var container_script: Script = load("res://scripts/container_default_probe.verse")
+	_check("container_default_probe.verse compiles",
+			container_script != null and container_script.can_instantiate())
+	if container_script != null:
+		var container_a := Node2D.new()
+		container_a.set_script(container_script)
+		tree.root.add_child(container_a)
+		var container_b := Node2D.new()
+		container_b.set_script(container_script)
+		tree.root.add_child(container_b)
+
+		_check_eq("a fresh container-typed default starts empty", container_a.call("ItemCount"), 0)
+		_check_eq("and so does a second node's", container_b.call("ItemCount"), 0)
+		container_a.call("AppendValue", 1)
+		_check_eq("appending to one node's array reaches only that node's",
+				container_a.call("ItemCount"), 1)
+		_check_eq("a sibling node's array is untouched, not a dead reference either",
+				container_b.call("ItemCount"), 0)
+		container_a.call("PutEntry", "hp", 3)
+		_check_eq("a dictionary default is per node too",
+				[container_a.call("EntryCount"), container_b.call("EntryCount")], [1, 0])
+		container_a.call("AddNumber", 7)
+		_check_eq("and so is a typed_array default",
+				[container_a.call("NumberCount"), container_b.call("NumberCount")], [1, 0])
+
+		# A third node, made after the first two and after the first's array already holds a
+		# value -- which is what a default cached once per class, rather than recomputed per
+		# instance, would fail.
+		var container_c := Node2D.new()
+		container_c.set_script(container_script)
+		tree.root.add_child(container_c)
+		_check_eq("a node made later still gets its own empty array, not the first node's filled one",
+				container_c.call("ItemCount"), 0)
+
+		tree.root.remove_child(container_a)
+		container_a.free()
+		tree.root.remove_child(container_b)
+		container_b.free()
+		tree.root.remove_child(container_c)
+		container_c.free()
 
 	# --- packed arrays ------------------------------------------------------------------------
 	#
@@ -1579,16 +1627,23 @@ func begin() -> void:
 	# than a `check`: proceeding would be a logged callstack followed by undefined behaviour. So
 	# the host compares the thread it was initialised on and answers VH_ERR_THREAD having run
 	# nothing, which reaches GDScript as an invalid call.
-	_thread_answer = "not started"
-	var task_id := WorkerThreadPool.add_task(_call_verse_off_thread.bind(node))
-	WorkerThreadPool.wait_for_task_completion(task_id)
-	_check_eq("the worker task ran", _thread_answer != "not started", true)
-	# What the refusal looks like from GDScript depends on the build, and the assertion must not:
-	# in a debug build the invalid call aborts the statement, leaving "ran" behind, and in an export
-	# template it answers null and carries on. Either way the Verse method did not run, which is the
-	# claim -- and the one thing it could never be is 7.
-	var answered: bool = typeof(_thread_answer) == TYPE_INT and _thread_answer == 7
-	_check_eq("but the Verse method it called did not", answered, false)
+	# A build without threads runs a pool task on the calling thread, so there is no other thread to
+	# call from and the call is served; comparing its int answer with a String is then a GDScript
+	# error that silently ends a release template's run.
+	if OS.has_feature("threads"):
+		_thread_answer = "not started"
+		var task_id := WorkerThreadPool.add_task(_call_verse_off_thread.bind(node))
+		WorkerThreadPool.wait_for_task_completion(task_id)
+		_check_eq("the worker task ran", typeof(_thread_answer) != TYPE_STRING or _thread_answer != "not started", true)
+		# What the refusal looks like from GDScript depends on the build, and the assertion must not:
+		# in a debug build the invalid call aborts the statement, leaving "ran" behind, and in an
+		# export template it answers null and carries on. Either way the Verse method did not run,
+		# which is the claim -- and the one thing it could never be is 7.
+		var answered: bool = typeof(_thread_answer) == TYPE_INT and _thread_answer == 7
+		_check_eq("but the Verse method it called did not", answered, false)
+	else:
+		_skip("the worker task ran", "a build without threads runs a pool task on the calling thread")
+		_skip("but the Verse method it called did not", "a build without threads runs a pool task on the calling thread")
 	_check_eq("and the main thread still works afterwards", node.call("EchoInt", 3), 3)
 
 	# --- R-INT-4 / R-SIG-3: a Verse function as a Godot Callable --------------------------------

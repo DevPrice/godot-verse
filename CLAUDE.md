@@ -52,6 +52,7 @@ not a description of what exists.
 | `phase-6-design.md` | §13 | the step debugger and the profiler |
 | `phase-7-design.md` | §13 (§14 not built, §15 exit) | the three UBT targets, the cooker, the export plugin |
 | `phase-7b-design.md` | §13 (§14, §15) | an exported game runs its Verse |
+| `phase-7.5-design.md` | §14 | `vm/`, the clean-room interpreter; Verse on the web |
 
 Three documents are not phase records and are the ones to read before adding a feature:
 
@@ -69,7 +70,7 @@ Three documents are not phase records and are the ones to read before adding a f
   removed.
 - **`docs/by-hand-findings.md`** — what the by-hand editor sessions found, because everything from
   `EngineDebugger` and the editor UI inward has no automated test and never will. B1–B9, B15–B18,
-  B20, B22–B35, B37 and B39–B41 are defects, all fixed, and B36 is reported rather than closed; B12 is a Verse fact; B13 a latency finding; B14 the
+  B20, B22–B35, B37 and B39–B42 are defects, all fixed, and B36 is reported rather than closed; B12 is a Verse fact; B13 a latency finding; B14 the
   sandboxed export run. **B30 is the one to read before calling `ResourceLoader` from anything a
   resource load can reach**: Godot answers a cyclic load `ERR_BUSY` and a null `Ref` silently, so
   the only thing printed is the asking side's own sentence — which names the resource *asked for*
@@ -347,6 +348,34 @@ never called, because teardown segfaults past where a cook has already written.
 can never reach (`phase-7-design.md` §13.2). What helps is Shipping — 72.7 MB against Development's
 112.4 — and an export still ships the Development host, because the `.gdextension` names one file.
 
+### `vm/` — the second execution path (Phase 7.5)
+
+A clean-room interpreter of Epic's VerseVM bytecode, which is how Verse runs on the web, where the UE
+host cannot (it asserts 64-bit pointers; `verse-on-web.md`). `phase-7.5-design.md` is the design and
+its §14 the record; `docs/web-vm/` holds the spec, the container format, the task list and the
+clean-room log. **The wall is real: `vm/` was written without reading VerseVM's source, from the
+reviewed files of `docs/web-vm/spec/` alone. Keep it that way — do not bring VerseVM knowledge into
+`vm/`, and route a question the spec cannot answer to a spec change** (`phase-7.5-design.md` §3).
+
+- The cooker writes `program.vbc` beside the sidecar (`host/Private/HostVbcWriter.*`, the encoder
+  generated from `docs/web-vm/ops.json`). It is a snapshot **after** initialization, so a loader
+  runs no Verse (`web-vm/spec/modules.md` §2).
+- `vm/` is godot-cpp-free and implements the runtime `vh_*` subset itself, so it builds two ways:
+  `bin/verse_vm.dll`, a drop-in for `verse_host_runtime.dll`, and statically into the GDExtension
+  (`scons verse_vm=yes`; a Windows release build and every web build carry it). `src/` fills
+  `VerseHostLibrary` from it with `load_static` and hands it a file reader over `FileAccess`.
+- **`verse/runtime/backend`** (`host` or `vm`) picks it in an exported game; an editor session always
+  uses the host. Its `.web` feature override defaults to `vm`, the way Godot defaults
+  `rendering_method.web`, and a Web export or run that resolves it to `host` is refused. **Read it
+  through an override** — `get_setting_with_override` in the game, `EditorExportPreset::
+  get_project_setting` in the export plugin, which is what resolves a Web preset's features from a
+  Windows editor — or `.web` is invisible. On the vm backend the export ships no UE binary, and on Web
+  `verse_data` lives inside the `.pck`.
+- Frames are on the heap, so a Verse call never recurses in C++, but **there is no scheduler**:
+  whoever makes a task runnable runs it on its own stack, in `web-vm/spec/tasks.md` §4.3's order.
+- The collector is precise, never runs inside an entry, and treats the loaded program as a
+  permanent generation (`Heap::tenure`), so a pause costs what it frees.
+
 ## Commands
 
     python tools/build_host.py            # stages host/ into the UE tree, runs UBT
@@ -366,6 +395,13 @@ can never reach (`phase-7-design.md` §13.2). What helps is Shipping — 72.7 MB
     python tools/build_bench.py           # host benchmark (timings, not pass/fail)
     python tools/build_verse_probe.py     # the Verse probe (asks the compiler a question)
     python tools/build_cooked_probe.py    # the cooked probe (asks a runtime host what an export sees)
+    python tools/build_verse_vm.py        # bin/verse_vm.dll, the interpreter; --wasm compiles vm/ with em++
+    python tools/build_vm_test.py         # vm/'s unit tests; --release builds the /O2 bench binary
+    python tools/run_vm_conformance.py    # vm/ against recorded UE-host transcripts; --record, --gc-stress
+    python tools/vbc_dump.py <program.vbc> # read a .vbc; --check, --proc, --class
+    python tools/gen_vbc_ops.py           # validate docs/web-vm/ops.json; --digest, --emit-cpp
+    python tools/emsdk_env.py -- scons platform=web arch=wasm32 threads=no target=template_release
+    python tools/run_dtc_web.py           # dodge-the-creeps on the interpreter in headless Chrome
 
 `tools/build_host.py` needs a UE source checkout with the Verse toolchain — `--engine`, or
 `UE_ROOT`. Building the host and running the tests are fine to do unprompted, and so is **headless**
@@ -384,15 +420,22 @@ executable. If a future engine drop provides one, that script finds and execs it
 
 ### Tests
 
-    python tools/run_tests.py                    # all four layers; the one command (R-QUAL-3)
-    python tools/run_tests.py --only units       # or units / abi / integration / export
+    python tools/run_tests.py                    # every layer; the one command (R-QUAL-3)
+    python tools/run_tests.py --only units       # or units / abi / integration / export / web
     python tools/run_tests.py --build            # rebuild the test binaries first
 
-**units** — lexer, class-declaration scanner, module map, doc-markup converter, signature parser, generator. No
-Godot, no UE.
+**units** — lexer, class-declaration scanner, module map, doc-markup converter, signature parser,
+generator, and `vm/`'s own cases (`verse_vm_test`). No Godot, no UE.
 
 **abi** — `host_smoke`, the whole C ABI with no Godot, plus a `verse_cook` case that cooks
-`tests/host_smoke`'s fixtures and asserts the packages, the container and the sidecar.
+`tests/host_smoke`'s fixtures and asserts the packages, the container, the sidecar and the
+`program.vbc` (read by the clean-room `tools/vbc_dump.py`, which shares no code with the writer),
+and a runtime-host case that runs `task(t)` methods and a raise through `cooked_probe`.
+
+**The interpreter's differential harness is not a layer.** `tools/run_vm_conformance.py` runs
+`tests/cooked_probe` over `tests/vm_conformance`'s fixtures against `bin/verse_vm.dll` and diffs the
+transcripts recorded from the UE runtime host (`--record`); `--gc-stress` collects after every
+entry. It needs no UE checkout unless recording.
 
 **integration** — three headless Godot projects. `tests/integration` for behaviour;
 `tests/coverage_diagnostic` for the R-SCN-2 diagnostics, which is its own project because its one
@@ -419,8 +462,18 @@ assertable in the integration layer. It refreshes the map before reading it, bec
 has only built has never called `_validate` and the map is empty. **The gutter itself is still
 by-hand** — the build copy proves the sentence and the line, not that the editor draws either.
 
+**export-vm** and **web** are the same `tests/integration` on the interpreter, each from a
+throwaway copy of the project (a committed `project.godot` is never touched; `override.cfg` is
+ignored while exporting). export-vm's copy sets `verse/runtime/backend="vm"`, is exported for
+Windows and asserted at the host backend's own 519/0/11. web's copy sets **nothing**, so it proves
+the `.web` override's default; it is exported for Web, run in headless Chrome through
+`tools/run_web.py` and asserted at 517/0/13 — R-ASYNC-8's two thread cases skip in a build without
+threads — and then exported once more with `backend.web="host"` to assert the refusal. **A Web export's page
+passes the engine no command line**, so `run_web.py --godot-arg` rewrites its `GODOT_CONFIG`; without
+it the test driver's `--verse-check` gate never opens and the game sits idle, which reads as a hang.
+
 **export** — exports `tests/integration` headless, asserts the *tree* it produced, then **launches
-it** and asserts what its cases reported: 511 passed, 0 failed, 11 skipped, with the counts named in
+it** and asserts what its cases reported: 519 passed, 0 failed, 11 skipped, with the counts named in
 `run_tests.py` so a case that stops running in an export reads as a failure rather than as a shorter
 log. It is the only layer that exercises the cooked path end to end; everything else compiles at
 startup. It needs more staged than the other layers do, because what it is exporting *is* them —
@@ -534,6 +587,8 @@ the editor and `export_check.gd` as an autoload in an export.
 | `host/Private/GodotClassNames.gen.h` | `tools/gen_verse_api.py` | same — every Godot class and the mirrored Verse class an object of it crosses as, which is what R-SCN-6's cast is built on. Every class, not only the emitted ones: a `--classes-file` build still has to make a handle cross as *something*, so each row names its nearest emitted ancestor |
 | `docs/nonatomic-methods.md` | `tools/gen_verse_api.py` | same — R-AUD-3's list. Written by the pass that writes the mirror, so it cannot drift |
 | `src/verse_keywords.h` | `tools/gen_verse_keywords.py` | the UE compiler's `ReservedSymbols.inl` |
+| `host/Private/HostVbcOps.gen.h` | `tools/gen_vbc_writer.py` | `docs/web-vm/ops.json` — the cooker's per-op `.vbc` encoder, each op's size, may-park table and the schema digest the file is stamped with. `static_assert`s every opcode number against the engine's, so an engine bump that moved the op set fails to compile rather than writing a wrong file. `--check` reports a stale header |
+| `vm/vbc_ops.gen.h` | `tools/gen_vbc_ops.py --emit-cpp` | same — the interpreter's half of the same op schema: an enum class of opcodes, and per-op constexpr tables (name, emitted, may-park, yields, operand roles/kinds) the decoder reads instead of hand-maintaining a mirror of `ops.json`. Carries the same schema digest `HostVbcOps.gen.h` does, so a `.vbc` stamped by one engine commit and read on another is refused rather than misread |
 | `bin/host_build_id.gen.h` | `tools/build_host.py` | the staged host sources themselves — a digest of `host/` plus the ABI header, and the engine commit beside it — staged into the host's `Private/` and baked into every host binary, so a cooked sidecar and the host reading it can be told apart. A digest rather than `HEAD` so a doc commit does not invalidate three binaries. Not committed |
 
 **What the mirror is**, since no single file shows it: all 1036 Godot classes as a Verse class
@@ -1310,10 +1365,13 @@ it is not in `run_tests.py`.
   way. Keep arithmetic on one line or bind a term at a time.
 - **Verse's float `=` is reflexive for NaN**, unlike IEEE and unlike C: both `X = X` and `X <> X`
   answer "equal", so the usual NaN test never fires. What does distinguish NaN is that it is
-  *unordered* — it fails `<=` and `>=` against everything, itself included.
+  *unordered* against every other value — `NaN <= 1.0` and `NaN >= 1.0` both fail. Against itself
+  `<=` and `>=` succeed, because each holds when `=` does (`docs/web-vm/facts.md`).
 - **Float division is total** and answers `Inf`/`-Inf`/`NaN` exactly as C does; **integer division
-  is `Quotient`, which floors**, where C and Godot truncate toward zero — so `Quotient[-3, 2]` is -2
-  where Godot's `-3 / 2` is -1. `GodotMath`'s `TruncatedQuotient` is the bridge.
+  is `Quotient`, which is Euclidean** — `Mod` is always in `[0, |B|)` — where C and Godot truncate
+  toward zero. So `Quotient[-3, 2]` is -2 where Godot's `-3 / 2` is -1, and `Quotient[7, -2]` is -3,
+  not the -4 flooring would give (`docs/web-vm/facts.md`). `GodotMath`'s `TruncatedQuotient` is the
+  bridge.
 - **There is no `ToFloat`.** `X * 1.0` is the int-to-float conversion, and it works on a value and
   not only on a literal. `Floor`, `Ceil` and `Round` are `<decides>` and answer an `int`, so a
   float-valued floor is `if (V := Floor[X]) then V * 1.0 else X` — which is also the shape that

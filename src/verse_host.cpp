@@ -175,6 +175,64 @@ bool VerseHostLibrary::load(const String &p_dll_path, String &r_error) {
 #endif
 }
 
+#ifdef VERSE_VM_STATIC
+bool VerseHostLibrary::load_static() {
+	if (loaded) {
+		unload();
+	}
+
+	// Every entry point vm/'s vh_abi.cpp defines, required and optional alike: unlike a DLL that
+	// might predate one of these, vm/ is built from the same include/verse_host_abi.h this file
+	// is, so there is nothing here for it to be missing. The twelve compiler-side ones are real
+	// functions too, answering VH_ERR_UNSUPPORTED, exactly as a WITH_VERSE_COMPILER=0 UE host does.
+	AbiVersion = &vh_abi_version;
+	HostKind = &vh_host_kind;
+	Init = &vh_init;
+	Shutdown = &vh_shutdown;
+	Tick = &vh_tick;
+	CompileProject = &vh_compile_project;
+	SetBindings = &vh_set_bindings;
+	ResolveUnknownName = &vh_resolve_unknown_name;
+	CheckProject = &vh_check_project;
+	CheckProjectBegin = &vh_check_project_begin;
+	CheckProjectPoll = &vh_check_project_poll;
+	CheckProjectBusy = &vh_check_project_busy;
+	HasClass = &vh_has_class;
+	Instantiate = &vh_instantiate;
+	ReleaseInstance = &vh_release_instance;
+	InstanceHasFunction = &vh_instance_has_function;
+	InstanceCall = &vh_instance_call;
+	CallbackInvoke = &vh_callback_invoke;
+	CallbackRelease = &vh_callback_release;
+	ClassMethodList = &vh_class_method_list;
+	ClassSignalList = &vh_class_signal_list;
+	ClassRpcList = &vh_class_rpc_list;
+	ClassStaticList = &vh_class_static_list;
+	ClassIsAbstract = &vh_class_is_abstract;
+	ClassBaseType = &vh_class_base_type;
+	ClassExportList = &vh_class_export_list;
+	InstanceGetField = &vh_instance_get_field;
+	ClassDefaultField = &vh_class_default_field;
+	InstanceSetField = &vh_instance_set_field;
+	InstanceSetFieldInstance = &vh_instance_set_field_instance;
+	InstanceToString = &vh_instance_to_string;
+	LookupSymbol = &vh_lookup_symbol;
+	CompleteSymbol = &vh_complete_symbol;
+	ClassMembers = &vh_class_members;
+	ClassOverrideCandidates = &vh_class_override_candidates;
+	SignatureAt = &vh_signature_at;
+	DebugSetEnabled = &vh_debug_set_enabled;
+	DebugStackCount = &vh_debug_stack_count;
+	DebugStackFrame = &vh_debug_stack_frame;
+	DebugStackValues = &vh_debug_stack_values;
+	ProfilingSetEnabled = &vh_profiling_set_enabled;
+	ProfilingRead = &vh_profiling_read;
+
+	loaded = true;
+	return true;
+}
+#endif
+
 int32_t VerseHostLibrary::host_kind() const {
 	// Every host before ABI 8.2 was the editor host, and none of them exports vh_host_kind.
 	return HostKind ? HostKind() : (int32_t)VH_HOST_EDITOR;

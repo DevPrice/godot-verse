@@ -8,6 +8,9 @@ compatibility_minimum = "4.7"
 VerseScript = "verse.svg"
 
 [libraries]
+web.wasm32.single.nothreads.debug = "./bin/web-wasm32/godot-verse.debug.nothreads.wasm"
+web.wasm32.single.nothreads.release = "./bin/web-wasm32/godot-verse.nothreads.wasm"
+
 windows.x86_64.single.editor = "./bin/windows-x86_64/godot-verse.editor.dll"
 windows.x86_64.single.debug = "./bin/windows-x86_64/godot-verse.debug.dll"
 windows.x86_64.single.release = "./bin/windows-x86_64/godot-verse.dll"

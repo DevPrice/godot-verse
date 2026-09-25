@@ -21,7 +21,12 @@
 #include "UObject/Package.h"
 #include "UObject/TopLevelAssetPath.h"
 #include "UObject/UObjectGlobals.h"
+#include "VerseVM/Inline/VVMClassInline.h"
+#include "VerseVM/Inline/VVMValueInline.h"
+#include "VerseVM/VVMClass.h"
+#include "VerseVM/VVMContext.h"
 #include "VerseVM/VVMGlobalProgram.h"
+#include "VerseVM/VVMTask.h"
 #include "VerseVM/VVMPackage.h"
 #include "VerseVM/VVMPackageName.h"
 #include "VerseVM/VVMProgram.h"
@@ -244,6 +249,49 @@ AUTORTFM_DISABLE void RebindVniModuleNatives()
     }
 }
 
+/// Binds `/Verse.org/Concurrency`'s `task` class the way a build does, which a cooked load never
+/// does.
+///
+/// Every method of a task value is a class-scoped native whose thunk is not serialised, and the
+/// task class is also where a spawned task's VTask gets its emergent type. The one place either is
+/// set is `VTask::BindStruct`, and its one caller is the assembler, once per build
+/// (VerseVMCodeGen/Private/VVMAssembler.cpp:237-250); without a build there is only VM startup's
+/// `BindStructTrivial` (VVMVerse.cpp:52), which leaves every task shapeless and every thunk null.
+/// So `T.Active[]`, `T.Cancel()` and `T.Await()` on a `spawn` result were a jump to address 0 in
+/// an exported game and nowhere else.
+///
+/// The class is keyed the way the code generator keys a parametric class's inner class -- its
+/// function's scope name under the enclosing module (VVMCodeGenerator.cpp:98-121) -- and it lives
+/// in whichever VNI package carries `/Verse.org/Concurrency`, so every package is asked.
+AUTORTFM_DISABLE bool BindCookedTaskClass()
+{
+    if (!Verse::GlobalProgram)
+    {
+        return false;
+    }
+
+    const FUtf8StringView TaskClassName = UTF8TEXT("(/Verse.org/Concurrency:)task");
+    const uint32 PackageCount = Verse::GlobalProgram->NumPackages();
+    for (uint32 Index = 0; Index < PackageCount; ++Index)
+    {
+        Verse::VPackage& VersePackage = Verse::GlobalProgram->GetPackage(Index);
+        const Verse::VValue Definition = VersePackage.LookupDefinition(TaskClassName);
+        if (Definition.IsUninitialized())
+        {
+            continue;
+        }
+        Verse::VClass* TaskClass = Definition.Follow().DynamicCast<Verse::VClass>();
+        if (!TaskClass)
+        {
+            continue;
+        }
+        Verse::FAllocationContext Context = Verse::FAllocationContextPromise{};
+        Verse::VTask::BindStruct(Context, *TaskClass);
+        return true;
+    }
+    return false;
+}
+
 } // namespace
 
 AUTORTFM_DISABLE bool GodotVerse::RegisterCookedMountPoints(const FString& CookedDir, FUtf8String& OutError)
@@ -375,6 +423,12 @@ AUTORTFM_DISABLE bool GodotVerse::LoadCookedProject(const FString& CookedDir, FU
     AdoptCookedGeneration(FUtf8String(ScriptPackageName), Generation);
 
     RebindVniModuleNatives();
+    if (!BindCookedTaskClass())
+    {
+        OutError = UTF8TEXT("the cooked standard library carries no /Verse.org/Concurrency task class, "
+                            "so no spawned task could be queried, cancelled or awaited");
+        return false;
+    }
 
     FUtf8String SidecarError;
     if (!LoadClassSidecar(SidecarPathFor(CookedDir), FUtf8String(BindingsPackageName), SidecarError))

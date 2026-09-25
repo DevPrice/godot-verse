@@ -3,12 +3,15 @@
 // cooked path is ten seconds away rather than a two-minute export and a game that dies with a
 // stack and no output.
 //
-// It is the cooked-path twin of tests/verse_probe, and like it is deliberately not in
-// run_tests.py: it asserts nothing and has no expected output. What it answers is "does this
-// actually run", which is a reading rather than a test.
+// It is the cooked-path twin of tests/verse_probe, and like it asserts nothing and has no expected
+// output of its own: what it answers is "does this actually run". The callers that assert are
+// tools/run_vm_conformance.py, which diffs its transcripts, and tools/run_tests.py's cook case,
+// which reads its output for the lines a runtime host must print.
 //
 //   bin/cooked_probe.exe <engine>/Engine/Binaries/Win64/verse_host_runtime.dll
-//       <cooked data dir> <cooked data dir>/Cooked [class]
+//       <cooked data dir> <cooked data dir>/Cooked [class [--frames]]
+//
+// --frames prints each runtime error's frames, one `[frame] path | function | line` per frame.
 //
 // The second argument is the *data* directory an export ships -- it is the host's engine directory
 // too (7a D7) -- and the third is the directory the containers are in, which is what
@@ -52,9 +55,23 @@ static void ProbeOnDiagnostic(void*, const vh_diagnostic* D)
 	printf("[diag] %.*s\n", D->MessageLen, D->MessageUtf8);
 }
 
+// Off by default: tools/run_vm_conformance.py diffs a transcript line for line against an
+// interpreter that reports frames its own way, so only a caller that asks gets them.
+static bool GPrintFrames = false;
+
 static void ProbeOnRuntimeError(void*, const vh_runtime_error* E)
 {
 	printf("[error] %.*s\n", E->MessageLen, E->MessageUtf8);
+	if (!GPrintFrames)
+	{
+		return;
+	}
+	printf("[error] %d frame(s)\n", E->FrameCount);
+	for (int32_t Index = 0; Index < E->FrameCount; ++Index)
+	{
+		const vh_stack_frame& F = E->Frames[Index];
+		printf("[frame] %.*s | %.*s | %d\n", F.PathLen, F.PathUtf8, F.FunctionLen, F.FunctionUtf8, F.Line);
+	}
 }
 
 // A bump allocator over one static block, which is all a probe needs.
@@ -73,6 +90,29 @@ static bool Step(const char* Name, bool Ok)
 {
 	printf("[probe] %s: %s\n", Name, Ok ? "ok" : "FAIL");
 	return Ok;
+}
+
+// Named alongside the code so a transcript reads without include/verse_host_abi.h open beside it;
+// the differential harness (tools/run_vm_conformance.py) diffs this line as-is between hosts.
+static const char* StatusName(int32_t Status)
+{
+	switch (Status)
+	{
+		case VH_OK: return "VH_OK";
+		case VH_ERR_ABI: return "VH_ERR_ABI";
+		case VH_ERR_STATE: return "VH_ERR_STATE";
+		case VH_ERR_INIT: return "VH_ERR_INIT";
+		case VH_ERR_COMPILE: return "VH_ERR_COMPILE";
+		case VH_ERR_NOT_FOUND: return "VH_ERR_NOT_FOUND";
+		case VH_ERR_RUNTIME: return "VH_ERR_RUNTIME";
+		case VH_ERR_ARGUMENT: return "VH_ERR_ARGUMENT";
+		case VH_ERR_FAILED: return "VH_ERR_FAILED";
+		case VH_ERR_HALTED: return "VH_ERR_HALTED";
+		case VH_ERR_THREAD: return "VH_ERR_THREAD";
+		case VH_ERR_STOPPED: return "VH_ERR_STOPPED";
+		case VH_ERR_UNSUPPORTED: return "VH_ERR_UNSUPPORTED";
+		default: return "?";
+	}
 }
 
 template <typename Fn>
@@ -99,6 +139,7 @@ int main(int argc, char** argv)
 	const std::string EngineDir = argv[2];
 	const std::string CookedDir = argv[3];
 	const char* ClassName = argc > 4 ? argv[4] : "exports";
+	GPrintFrames = argc > 5 && std::strcmp(argv[5], "--frames") == 0;
 
 	const std::wstring DllPathW(DllPath.begin(), DllPath.end());
 	HMODULE Module = LoadLibraryExW(DllPathW.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
@@ -179,7 +220,7 @@ int main(int argc, char** argv)
 			vh_value Result{};
 			const int32_t CallStatus =
 				InstanceCallFn(Instance, Name.c_str(), nullptr, 0, &Arena, &Result);
-			printf("[probe]   -> %d\n", CallStatus);
+			printf("[probe]   -> %d (%s)\n", CallStatus, StatusName(CallStatus));
 		}
 		ReleaseInstanceFn(Instance);
 	}

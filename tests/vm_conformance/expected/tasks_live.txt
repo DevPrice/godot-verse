@@ -1,0 +1,177 @@
+[probe] LoadLibraryW: ok
+[probe] vh_host_kind = <normalized>
+[probe] vh_init: ok
+[probe] vh_has_class: ok
+[probe] tasks_live has 54 method(s)
+[probe] vh_instantiate: ok
+[probe] calling (/user@localhost/tasks_live:)F1_AwaitStart
+[verse] F1 start
+[verse]   aw start, Counter = 0
+[verse] F1 end
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)F2_Set1
+[verse] F2 set 1
+[verse] F2 end
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)F3_Set3
+[verse] F3 set 3
+[verse]   aw resumed, Counter = 3
+[verse] F3 end
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)F4_BatchStart
+[verse] F4 start
+[verse]   aw2 start
+[verse] F4 end
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)F5_Batch
+[verse] F5 batch
+[verse]   f5 inside batch after set
+[verse]   aw2 resumed, Counter = 12
+[verse] F5 end
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)F6_AwaitTrueAtStart
+[verse] F6 start
+[verse]   aw3 start, Counter = 12
+[verse] F6 end
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)F7_SetSame
+[verse] F7 set to the same value
+[verse]   aw3 resumed, Counter = 12
+[verse] F7 end
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)A1_AwaitElement
+[verse] A1 spawned
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)A2_WriteOtherElement
+[verse] A2 wrote Elems[1]
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)A3_WriteElement
+[verse]   elem awaiter resumed, Elems[0] = 3
+[verse] A3 wrote Elems[0]
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)M1_AwaitMapValue
+[verse] M1 spawned
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)M2_InsertOtherKey
+[verse] M2 inserted b
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)M3_WriteKey
+[verse]   map awaiter resumed, a = 9
+[verse] M3 wrote a
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)L1_Bind
+[verse] L1 bound: Dst = 1
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)L2_WriteSource
+[verse] L2 Src = 5: Dst = 5
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)L3_OverwriteBound
+[verse] L3 Dst set to 100: Dst = 100
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)L4_WriteSourceAgain
+[verse] L4 Src = 7: Dst = 100
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)L5_BindElement
+[verse] L5 Arr[1] = 7
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)L6_WriteSourceForElement
+[verse] L6 Src = 9: Arr[1] = 9
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)L7_OverwriteBoundElement
+[verse] L7 Arr[1] set to 100: Arr[1] = 100
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)L8_WriteSourceAgainForElement
+[verse] L8 Src = 11: Arr[1] = 11
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)D1_Start
+[verse] D1 start
+[verse] D1 end
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)D2_SignalOnce
+[verse] D2 signal 1
+[verse]   k1 got 1
+[verse]   k2 got 1
+[verse] D2 signal 1 returned
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)D3_SignalAgain
+[verse] D3 signal 3
+[verse]   k1 got 3
+[verse]   k2 got 3
+[verse] D3 signal 3 returned
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)D4_SignalNobody
+[verse] D4 signal 4
+[verse] D4 signal 4 returned
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)D5_Nested
+[verse] D5 start
+[verse] D5 signal
+[verse]   n1 got 1, signalling again
+[verse]   n1 nested signal returned
+[verse]   n2 got 1
+[verse]   n3 got 1
+[verse] D5 signal returned
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)D6_Late
+[verse] D6 signal
+[verse] D6 signal returned
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)D7_CancelDuringSignal
+[verse] D7 start
+[verse]   c2 start
+[verse]   c3 start
+[verse] D7 signal
+[verse]   c1 got 9, cancelling c2
+[verse]   c2 defer
+[verse]   c1 cancel returned
+[verse]   c3 end
+[verse]   c3 defer
+[verse] D7 signal returned
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)U1_Subscribe
+[verse] U1 subscribed
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)U2_Signal
+[verse] U2 signal
+[verse]   sub awaiter got 1
+[verse]   sub got 1
+[verse] U2 signal returned
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)U3_CancelTwice
+[verse] U3 cancelled
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)U4_SignalAfterCancel
+[verse] U4 signal
+[verse] U4 signal returned
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)S1_SleepZeroSuspends
+[verse] S1 start
+[verse]   s0 before Sleep(0.0)
+[verse] S1 end
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)S2_CancelSleeper
+[verse] S2 start
+[verse]   s2 sleeping
+[verse]   S2 cancel
+[verse]   s2 defer
+[verse]   S2 cancel returned
+[verse] S2 end
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)S3_RaceSleepAgainstEvent
+[verse] S3 start
+[verse]   s3 event arm start
+[verse] S3 end
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)S4_SignalRace
+[verse] S4 signal
+[verse]   s3 event arm end
+[verse]   s3 event arm defer
+[verse]   s3 sleep arm defer
+[verse]   S3 race result 2
+[verse] S4 signal returned
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/tasks_live:)S5_SleepNegativeInRace
+[verse]   S5 race result 1
+[verse] S5 end
+[probe]   -> 0 (VH_OK)
+[probe] done

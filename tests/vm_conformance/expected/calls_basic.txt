@@ -1,0 +1,48 @@
+[probe] LoadLibraryW: ok
+[probe] vh_host_kind = <normalized>
+[probe] vh_init: ok
+[probe] vh_has_class: ok
+[probe] calls_basic has 11 method(s)
+[probe] vh_instantiate: ok
+[probe] calling (/user@localhost/calls_basic:)TupleBoxing
+[verse] TakesTuple(3,5)=35
+[verse] TakesTwo(U)=78
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/calls_basic:)NestedParameters
+[verse] Nested(1,(2,3))=123
+[verse] Nested(1,P)=123
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/calls_basic:)NamedAndDefaults
+[verse] TwoNamed(?Y:=5,?X:=6)=65
+[verse] TwoNamed(default)=0
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/calls_basic:)DefaultFromEarlier
+[verse] DefaultFromEarlier(3)=306
+[verse] DefaultFromEarlier(3,?B:=9)=309
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/calls_basic:)EvaluationOrder
+[verse] start
+[verse]   eval a
+[verse]   eval b
+[verse]   eval c
+[verse] sum=6
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/calls_basic:)MethodDispatch
+[verse] dispatch through base-typed var=derived
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/calls_basic:)MethodValueKeepsReceiver
+[verse] bound method value=derived
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/calls_basic:)SuperSkipsALevel
+[verse] leaf.Describe()=leaf+derived
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/calls_basic:)ExtensionMethodCall
+[verse] 5.Twice()=10
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/calls_basic:)ClosureCapture
+[verse] closure AddBase(5)=15
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/calls_basic:)RecursionModestDepth
+[verse] recursion sum(1..1000)=500500
+[probe]   -> 0 (VH_OK)
+[probe] done

@@ -15,6 +15,7 @@
 #include "HostCook.h"
 #include "HostScript.h"
 #include "HostSidecar.h"
+#include "HostVbcWriter.h"
 #include "LaunchEngineLoop.h"
 #include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
@@ -333,10 +334,19 @@ AUTORTFM_DISABLE INT32_MAIN_INT32_ARGC_TCHAR_ARGV()
 		IFileManager::Get().DeleteDirectory(*FPaths::Combine(OutDir, Owned),
 		                                    /*RequireExists*/ false, /*Tree*/ true);
 	}
-	for (const TCHAR* Owned : {TEXT("verse_classes.json"), TEXT("sources.txt")})
+	for (const TCHAR* Owned : {TEXT("verse_classes.json"), TEXT("sources.txt"), TEXT("program.vbc"), TEXT("program.vbc.report.txt")})
 	{
 		IFileManager::Get().Delete(*FPaths::Combine(OutDir, Owned), /*RequireExists*/ false);
 	}
+
+	FString VbcSummary;
+	FUtf8String VbcError;
+	if (!GodotVerse::WriteProgramVbc(OutDir, Generation, VbcSummary, VbcError))
+	{
+		Say(FString::Printf(TEXT("error: %s"), *FString(VbcError)));
+		Leave(2);
+	}
+	Say(FString::Printf(TEXT("verse_cook: %s"), *VbcSummary));
 
 	Say(FString::Printf(TEXT("verse_cook: compiled generation %d; cooking"), Generation));
 	FUtf8String CookError;

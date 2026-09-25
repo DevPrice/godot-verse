@@ -1,0 +1,16 @@
+[probe] LoadLibraryW: ok
+[probe] vh_host_kind = <normalized>
+[probe] vh_init: ok
+[probe] vh_has_class: ok
+[probe] modules_basic has 3 method(s)
+[probe] vh_instantiate: ok
+[probe] calling (/user@localhost/modules_basic:)ReadModuleData
+[verse] FirstData=41 SecondData=42
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/modules_basic:)ReadComputesObjectData
+[verse] Held=9 Label=held
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/modules_basic:)ModuleDataIsStableAcrossReads
+[verse] stable: yes
+[probe]   -> 0 (VH_OK)
+[probe] done

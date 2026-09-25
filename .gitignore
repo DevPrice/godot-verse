@@ -14,6 +14,7 @@ __pycache__/
 # build outputs
 bin/
 build/
+scratch/
 demo/addons/*/bin/
 dodge-the-creeps/addons/*/bin/
 addons/*/bin/

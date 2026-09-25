@@ -1,0 +1,96 @@
+[probe] LoadLibraryW: ok
+[probe] vh_host_kind = <normalized>
+[probe] vh_init: ok
+[probe] vh_has_class: ok
+[probe] objects_more has 11 method(s)
+[probe] vh_instantiate: ok
+[probe] calling (/user@localhost/objects_more:)ClassCasts
+[verse] leaf[leaf] ok
+[verse] mid[leaf] ok
+[verse] leaf[mid] fails
+[verse] thing[leaf] fails
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/objects_more:)InterfaceCasts
+[verse] named[thing] ok: thing Size=3
+[verse] sized[thing] ok: 3
+[verse] named[leaf] fails
+[verse] sized[other] ok: other then named.Name(other)
+[verse] thing[other] fails
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/objects_more:)CastInFullContext
+[verse] 0: mid
+[verse] 1: not mid
+[verse] 2: mid
+[verse] 3: not mid
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/objects_more:)FloatCasts
+[verse] percent[0.500000] ok
+[verse] percent[0.000000] ok
+[verse] percent[0.000000] ok
+[verse] percent[1.000000] ok
+[verse] percent[2.000000] fails
+[verse] percent[-1.000000] fails
+[verse] percent[Inf] fails
+[verse] percent[NaN] fails
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/objects_more:)IntCasts
+[verse] digit[-1] fails
+[verse] digit[0] ok
+[verse] digit[9] ok
+[verse] digit[10] fails
+[verse] natural[2^70] ok
+[verse] natural[-2^70] fails
+[verse] digit[2^70] fails
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/objects_more:)InterfaceMembers
+[verse] thing: Label=named Size=3 Name=named.Name(named) Title=thing Size=3 Describe=base
+[verse] other: Label=other Size=3 Name=other then named.Name(other) Title=other Size=3
+[verse] as named: other then named.Name(other) other Size=3
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/objects_more:)SuperCalls
+[verse] leaf then base
+[verse] leaf then mid then base greets you
+[verse] leaf then mid then base greets again
+[verse] leaf then mid then base greets later
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/objects_more:)AccessorReadWrite
+[verse]   prop block Stored=0 Other=0
+[verse]   get Level -> 0
+[verse] read Level=0
+[verse]   set Level <- 5
+[verse]   get Level -> 5
+[verse] after set Level=5 Stored=5
+[verse]   get Level -> 5
+[verse]   set Level <- 7
+[verse]   get Level -> 7
+[verse] after += Level=7
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/objects_more:)AccessorDeferredSetter
+[verse] archetype start
+[verse]   eval Level
+[verse]   eval Other
+[verse]   set Level <- 9
+[verse]   prop block Stored=9 Other=1
+[verse] Stored=9 Other=1
+[verse] child start
+[verse]   eval child Level
+[verse]   eval child Extra
+[verse]   set Level <- 7
+[verse]   prop block Stored=7 Other=0
+[verse]   child block Stored=7
+[verse] child Stored=7 Extra=5
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/objects_more:)StructEquality
+[verse] default=partial: yes default=full: yes default=other: no
+[verse] nested equal: yes nested differ: no
+[verse] signed zero fields: yes
+[verse] map by struct key: 1
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/objects_more:)NativeFields
+[verse] I0 round trip 4611686018427387904
+[verse] I0 min -9223372036854775808
+[verse] F0 -2.500000
+[verse] Text text
+[verse] variant equality: yes no
+[probe]   -> 0 (VH_OK)
+[probe] done

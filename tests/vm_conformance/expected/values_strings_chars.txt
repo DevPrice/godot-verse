@@ -1,0 +1,40 @@
+[probe] LoadLibraryW: ok
+[probe] vh_host_kind = <normalized>
+[probe] vh_init: ok
+[probe] vh_has_class: ok
+[probe] values_strings_chars has 7 method(s)
+[probe] vh_instantiate: ok
+[probe] calling (/user@localhost/values_strings_chars:)CharBasics
+[verse] ToString('a')=a interp=a
+[verse] 'a'='a': yes
+[verse] 'a'<>'b': yes
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_strings_chars:)Char32Basics
+[verse] char32 ToString=Ã© interp=Ã©
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_strings_chars:)StringLengthAndIndex
+[verse] Length=6
+[verse] S[0]=h
+[verse] abc[3] fails
+[verse] empty.Length=0
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_strings_chars:)StringConcatAndEquality
+[verse] ab+cd=abcd
+[verse] ab=ab: yes
+[verse] ab<>abc: yes
+[verse] array a,b = ab: yes
+[verse] built from chars=xy
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_strings_chars:)StringFalseAsEmpty
+[verse] false-as-string Length=0
+[verse] false = empty string: yes
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_strings_chars:)StringInterpolation
+[verse] char literal interp=z!
+[verse] nested interp=in1ner
+[verse] empty interp=
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/values_strings_chars:)CharVsString
+[verse] 'a' = "a" via comparable: no
+[probe]   -> 0 (VH_OK)
+[probe] done

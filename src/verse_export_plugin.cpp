@@ -7,6 +7,8 @@
 
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/editor_export_platform.hpp>
+#include <godot_cpp/classes/editor_export_plugin.hpp>
+#include <godot_cpp/classes/editor_export_preset.hpp>
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/os.hpp>
@@ -18,9 +20,76 @@ using namespace godot;
 
 namespace {
 
-// The platforms this bridge does not reach. Mobile is deferred with no design and web is Phase
-// 7.5; both fail here rather than producing a game that cannot load its own scripts (R-PLAT-4).
-const char *UNREACHABLE_PLATFORMS[] = { "android", "ios", "web" };
+// The platforms this bridge does not reach. Mobile is deferred with no design; web left this list
+// in Phase 7.5 (docs/phase-7.5-design.md §9), and exports only on the interpreter.
+const char *UNREACHABLE_PLATFORMS[] = { "android", "ios" };
+
+// gdextension.py writes [dependencies] last (RUNTIME_HOST_FILES, scanned from bin/ at build
+// time), so cutting the text off at its heading drops exactly the runtime host and tbbmalloc.dll
+// and nothing else the file declares. If a future dependency belongs there whatever the backend,
+// this needs to parse the section rather than truncate it.
+const char *DEPENDENCIES_MARKER = "[dependencies]";
+
+String without_gdextension_dependencies(const String &p_text) {
+	const int index = p_text.find(DEPENDENCIES_MARKER);
+	return index < 0 ? p_text : p_text.substr(0, index);
+}
+
+// Web has no "beside the executable" for add_shared_object to copy a directory into -- there is no
+// filesystem there at all until the .pck is mounted -- so verse_data ships inside the .pck instead,
+// at the res:// path VerseRuntime::load_host and verse_paths::data_dir_for_this_build already agree
+// on (design §9). add_file is the one lever an EditorExportPlugin has into the pack; recursing by
+// hand is the price of using it for a whole directory instead of one resource.
+void add_directory_to_pack(EditorExportPlugin *p_plugin, const String &p_abs_dir, const String &p_res_dir) {
+	Ref<DirAccess> dir = DirAccess::open(p_abs_dir);
+	if (dir.is_null()) {
+		return;
+	}
+	const PackedStringArray files = dir->get_files();
+	for (int64_t i = 0; i < files.size(); i++) {
+		Ref<FileAccess> reader = FileAccess::open(p_abs_dir.path_join(files[i]), FileAccess::READ);
+		if (reader.is_null()) {
+			continue;
+		}
+		p_plugin->add_file(p_res_dir.path_join(files[i]), reader->get_buffer(reader->get_length()), false);
+	}
+	const PackedStringArray subdirs = dir->get_directories();
+	for (int64_t i = 0; i < subdirs.size(); i++) {
+		add_directory_to_pack(p_plugin, p_abs_dir.path_join(subdirs[i]), p_res_dir.path_join(subdirs[i]));
+	}
+}
+
+// Matches the way Godot applies a preset's include filter: comma-separated globs, each tried against
+// the res:// path and against the file name.
+bool include_filter_matches(const String &p_filter, const String &p_path) {
+	const PackedStringArray patterns = p_filter.split(",", false);
+	for (int64_t i = 0; i < patterns.size(); i++) {
+		const String pattern = patterns[i].strip_edges();
+		if (!pattern.is_empty() && (p_path.matchn(pattern) || p_path.get_file().matchn(pattern))) {
+			return true;
+		}
+	}
+	return false;
+}
+
+void collect_vmodules(const String &p_dir, PackedStringArray &r_paths) {
+	Ref<DirAccess> dir = DirAccess::open(p_dir);
+	if (dir.is_null()) {
+		return;
+	}
+	const PackedStringArray files = dir->get_files();
+	for (int64_t i = 0; i < files.size(); i++) {
+		if (files[i].ends_with(".vmodule")) {
+			r_paths.push_back(p_dir.path_join(files[i]));
+		}
+	}
+	const PackedStringArray subdirs = dir->get_directories();
+	for (int64_t i = 0; i < subdirs.size(); i++) {
+		if (!subdirs[i].begins_with(".")) {
+			collect_vmodules(p_dir.path_join(subdirs[i]), r_paths);
+		}
+	}
+}
 
 } // namespace
 
@@ -51,6 +120,48 @@ void VerseExportPlugin::_export_begin(const PackedStringArray &p_features, bool 
 	const PackedStringArray sources = language->find_verse_sources("res://");
 	if (sources.is_empty()) {
 		return; // A project with no Verse exports exactly as it did before this plugin existed.
+	}
+
+	// The vm backend boots no host DLL to load either of these beside (phase-7.5-design.md §9,
+	// T5.4), so an export on it withholds both -- but the .gdextension's [dependencies] section
+	// that puts them there is generated from what is staged in bin/, not from this project's
+	// setting, and Godot reads that section itself rather than asking this plugin. Rewriting the
+	// file for the length of this export, and putting it back in _export_end, is the only lever an
+	// EditorExportPlugin has over a dependency Godot itself declared.
+	// The preset's reading, not ProjectSettings', so the `.web` override VerseRuntime registers (vm)
+	// applies to a Web export made from a Windows editor.
+	const Ref<EditorExportPreset> preset = get_export_preset();
+	const String backend = String(preset.is_valid()
+					? preset->get_project_setting("verse/runtime/backend")
+					: ProjectSettings::get_singleton()->get_setting("verse/runtime/backend", String("host")))
+								   .strip_edges();
+	if (p_features.has("web") && backend != "vm") {
+		refused = true;
+		say(EditorExportPlatform::EXPORT_MESSAGE_ERROR,
+				String("Verse needs the vm backend on Web, and this preset reads verse/runtime/backend as \"") + backend +
+						String("\": the UE host is a native DLL a browser cannot load. Set verse/runtime/backend.web to \"vm\" in Project Settings, or remove the override that changed it."));
+		return;
+	}
+	if (backend == "vm") {
+		const String gdextension_path = String("res://addons/godot-verse/godot-verse.gdextension");
+		Ref<FileAccess> reader = FileAccess::open(gdextension_path, FileAccess::READ);
+		if (reader.is_valid()) {
+			const String original = reader->get_as_text();
+			reader.unref();
+			const String stripped = without_gdextension_dependencies(original);
+			if (stripped.length() != original.length()) {
+				Ref<FileAccess> writer = FileAccess::open(gdextension_path, FileAccess::WRITE);
+				if (writer.is_valid()) {
+					writer->store_string(stripped);
+					writer.unref();
+					rewritten_gdextension_path = gdextension_path;
+					rewritten_gdextension_original = original;
+				} else {
+					say(EditorExportPlatform::EXPORT_MESSAGE_WARNING,
+							String("Could not rewrite ") + gdextension_path + String(" to drop the host DLL for the vm backend; the export will carry it anyway."));
+				}
+			}
+		}
 	}
 
 	for (const char *platform : UNREACHABLE_PLATFORMS) {
@@ -216,10 +327,27 @@ void VerseExportPlugin::_export_begin(const PackedStringArray &p_features, bool 
 		return;
 	}
 
-	// A directory, copied recursively beside the executable after the PCK
-	// (editor_export_platform_pc.cpp:230-256). On macOS it goes inside the bundle instead, which
-	// is where godotsharp_dirs.cpp looks for .NET's.
-	add_shared_object(work, PackedStringArray(), platform_tag == "macos" ? String("Contents/Resources") : String());
+	// The markers name half of every class, and the cook just compiled the project with them, so a
+	// pack without them looks every script up under the wrong module and attaches none -- silently.
+	// A preset whose non-resource filter lists `*.vmodule` already carries them, and adding one
+	// twice would ship it twice, so only the rest are added.
+	const String include_filter = preset.is_valid() ? preset->get_include_filter() : String();
+	PackedStringArray markers;
+	collect_vmodules("res://", markers);
+	for (int64_t i = 0; i < markers.size(); i++) {
+		if (!include_filter_matches(include_filter, markers[i])) {
+			add_file(markers[i], FileAccess::get_file_as_bytes(markers[i]), false);
+		}
+	}
+
+	if (platform_tag == "web") {
+		add_directory_to_pack(this, work, String("res://").path_join(verse_paths::DATA_DIR_NAME));
+	} else {
+		// A directory, copied recursively beside the executable after the PCK
+		// (editor_export_platform_pc.cpp:230-256). On macOS it goes inside the bundle instead, which
+		// is where godotsharp_dirs.cpp looks for .NET's.
+		add_shared_object(work, PackedStringArray(), platform_tag == "macos" ? String("Contents/Resources") : String());
+	}
 }
 
 void VerseExportPlugin::_export_file(const String &p_path, const String &p_type, const PackedStringArray &p_features) {
@@ -239,17 +367,23 @@ void VerseExportPlugin::_export_file(const String &p_path, const String &p_type,
 		return;
 	}
 
-	// A `.vmodule` is deliberately *not* touched here. The markers decide which module each script
-	// is in and so half of every class's name, so they have to ship -- but what ships them is the
-	// preset's `include_filter="*.vmodule"`, which carries them as plain files. Re-adding one with
-	// add_file and then skip() takes it back out again: measured, and it cost the export layer two
-	// missing markers.
+	// A `.vmodule` is deliberately *not* touched here: _export_begin adds the ones the preset's filter
+	// does not carry. Re-adding one here with add_file and then skip() takes it back out again:
+	// measured, and it cost the export layer two missing markers.
 }
 
 void VerseExportPlugin::_export_end() {
 	if (!temp_dir.is_empty()) {
 		DirAccess::remove_absolute(temp_dir);
 		temp_dir = String();
+	}
+	if (!rewritten_gdextension_path.is_empty()) {
+		Ref<FileAccess> writer = FileAccess::open(rewritten_gdextension_path, FileAccess::WRITE);
+		if (writer.is_valid()) {
+			writer->store_string(rewritten_gdextension_original);
+		}
+		rewritten_gdextension_path = String();
+		rewritten_gdextension_original = String();
 	}
 	refused = false;
 }

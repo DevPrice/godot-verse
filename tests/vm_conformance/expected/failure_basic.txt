@@ -1,0 +1,54 @@
+[probe] LoadLibraryW: ok
+[probe] vh_host_kind = <normalized>
+[probe] vh_init: ok
+[probe] vh_has_class: ok
+[probe] failure_basic has 15 method(s)
+[probe] vh_instantiate: ok
+[probe] calling (/user@localhost/failure_basic:)VarOnFailure
+[verse] after failing condition, X=0
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/failure_basic:)VarOnSuccess
+[verse] after succeeding condition, X=1
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/failure_basic:)NestedCommitThenOuterSucceeds
+[verse] outer succeeded, Y=2
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/failure_basic:)NestedCommitThenOuterFails
+[verse] outer failed, Y=0
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/failure_basic:)FailureAcrossCall
+[verse] after failed call, Counter=0
+[verse] after succeeding call, Counter=1
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/failure_basic:)ArrayAppendRollback
+[verse] after failed append, Length=3
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/failure_basic:)MapInsertRollback
+[verse] after failed insert, Length=1
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/failure_basic:)MapReplaceRollback
+[verse] after failed replace, M[1]=10
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/failure_basic:)DeferredEffectsOrder
+[verse] before
+[verse] inside a condition that succeeds
+[verse] still inside
+[verse] after
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/failure_basic:)DeclinesAtTop
+[probe]   -> 8 (VH_ERR_FAILED)
+[probe] calling (/user@localhost/failure_basic:)DeclinesAtTopAfter
+[verse] Survivor=0
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/failure_basic:)RuntimeErrorWrites
+LogVerseRuntime: Error: User Message: 'probe runtime error'. This build does not have the Verse compiler runtime bundled with it, so no other information is available.
+[error] ErrorRequested: A runtime error was explicitly raised from user code. (User Message: 'probe runtime error')
+[probe]   -> 6 (VH_ERR_RUNTIME)
+[probe] calling (/user@localhost/failure_basic:)RuntimeErrorAfter
+[verse] Survivor=0
+[probe]   -> 0 (VH_OK)
+[probe] calling (/user@localhost/failure_basic:)RuntimeErrorEmptyMessage
+LogVerseRuntime: Error: User Message: ''. This build does not have the Verse compiler runtime bundled with it, so no other information is available.
+[error] ErrorRequested: A runtime error was explicitly raised from user code. (User Message: '')
+[probe]   -> 6 (VH_ERR_RUNTIME)
+[probe] done

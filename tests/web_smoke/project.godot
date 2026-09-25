@@ -1,0 +1,10 @@
+; M0/T0.3: the smallest project that proves the pinned Emscripten build loads in a
+; nothreads web export. Not run by tools/run_tests.py.
+
+config_version=5
+
+[application]
+
+config/name="web_smoke"
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.3")

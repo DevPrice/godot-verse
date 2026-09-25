@@ -27,6 +27,15 @@ public:
 	// host has no compiler and does not export them, so they stay null and their callers
 	// answer ERR_UNAVAILABLE.
 	bool load(const godot::String &dll_path, godot::String &out_error);
+
+#ifdef VERSE_VM_STATIC
+	// Fills every function pointer directly from vm/'s functions, compiled statically into this
+	// library by `scons verse_vm=yes` (docs/phase-7.5-design.md §8). No module is loaded -- the
+	// pointers name code already linked into this DLL -- so this cannot fail the way load() can,
+	// and unload() clearing them back to null is all a matching teardown needs.
+	bool load_static();
+#endif
+
 	void unload();
 	bool is_loaded() const;
 

@@ -299,6 +299,7 @@ public:
 
 	// R-DIAG-4. Installs or removes the Verse debugger; false when Epic's own socket debugger
 	// holds the VM's single debugger slot, which is what verse/host/enable_debugger asks for.
+	// True on the interpreter backend, which has no debugger to install.
 	bool debug_set_enabled(bool p_enabled);
 
 	// The three stopped-stack reads, all defined only while the host has a stop stashed -- which is
@@ -369,7 +370,12 @@ private:
 	// rarely rather than once per frame.
 	int64_t overrun_frames = 0;
 
-	godot::Error load_host_internal(const godot::String &p_dll_path, const godot::String &p_engine_dir, bool p_enable_debugger, const godot::String &p_cooked_dir);
+	// p_use_vm_backend picks host.load_static() over host.load(p_dll_path, ...) -- only possible
+	// when this library was built with VERSE_VM_STATIC (`scons verse_vm=yes`), and only chosen by
+	// load_host() below, per verse/runtime/backend. p_dll_path is then a label for diagnostics
+	// rather than a path: load_static() cannot fail the way a missing or mismatched DLL can, and
+	// nothing here needs to open anything by that name.
+	godot::Error load_host_internal(const godot::String &p_dll_path, const godot::String &p_engine_dir, bool p_enable_debugger, const godot::String &p_cooked_dir, bool p_use_vm_backend = false);
 
 	// Says why and closes the game, in an exported build only (D6). A no-op in the editor.
 	void refuse_to_start(const godot::String &p_why);

@@ -1,0 +1,1785 @@
+{
+  "engine_commit": "203d764",
+  "opcode_width_bits": 16,
+  "operand_roles": {
+    "use": "reads a value operand (register or constant)",
+    "immediate": "a VM value embedded in the op itself rather than read from a register or constant",
+    "unify_def": "a destination register the op's result is unified into",
+    "clobber_def": "a destination register the op overwrites without unification",
+    "const": "plain data embedded in the op; not a VM value",
+    "jump": "a branch target within the same procedure"
+  },
+  "operand_kinds": {
+    "register": "a register index (u32); absent when optional and not supplied",
+    "value": "a register index or a constant-pool index (register-or-constant); absent when optional and not supplied",
+    "value_imm": "an embedded VM value of any kind (cell or scalar)",
+    "cell:VUniqueString": "an embedded reference to a VUniqueString cell",
+    "cell:VPackage": "an embedded reference to a VPackage cell",
+    "cell:VArray": "an embedded reference to a VArray cell",
+    "cell:VArchetype": "an embedded reference to a VArchetype cell",
+    "cell:VProcedure": "an embedded reference to a VProcedure cell; null when optional and not supplied",
+    "label": "a branch target within the same procedure",
+    "bool": "a boolean",
+    "i32": "a signed 32-bit integer",
+    "u32": "an unsigned 32-bit integer",
+    "u64": "an unsigned 64-bit integer",
+    "live_range": "a pair of u32 (Begin, End) positions in the procedure's op stream",
+    "failure_context_id": "a u32 identifying a failure context within its procedure",
+    "asset_path": "a top-level asset path: package name and asset name",
+    "class_ref_ic": "inline-cache reference to a VClass cell; null in any emitted or serialized op",
+    "enum:ClassKind": "an 8-bit value of enum ClassKind",
+    "enum:ClassFlags": "a 16-bit bitmask of enum ClassFlags"
+  },
+  "enums": {
+    "ClassKind": [
+      "Class",
+      "Struct",
+      "Interface"
+    ],
+    "ClassFlags": [
+      {"name": "None", "value": 0},
+      {"name": "NativeRepresentation", "value": 1},
+      {"name": "NativeStructWithObjectReferences", "value": 2},
+      {"name": "Concrete", "value": 4},
+      {"name": "FinalSuper", "value": 8},
+      {"name": "ExplicitlyCastable", "value": 16},
+      {"name": "Parametric", "value": 32},
+      {"name": "UniversallyAccessible", "value": 64},
+      {"name": "EpicInternal", "value": 128},
+      {"name": "Predicts", "value": 256},
+      {"name": "PersonaConstructible", "value": 512},
+      {"name": "CustomAttribute", "value": 1024},
+      {"name": "Unique", "value": 2048},
+      {"name": "EmulateCaseInsensitiveOverrides", "value": 4096},
+      {"name": "Deprecated", "value": 16384}
+    ]
+  },
+  "cell_types": [
+    "VArchetype",
+    "VArray",
+    "VPackage",
+    "VProcedure",
+    "VUniqueString"
+  ],
+  "capture_flags": {
+    "incoming_effect_token": "a parked op also saves the effect token in force when it began executing",
+    "return_effect_token": "a parked op also saves the effect token it must produce when it completes",
+    "batched_refs": "a parked op also saves the current batch of pending reference writes"
+  },
+  "ops": [
+    {
+      "number": 0,
+      "name": "Add",
+      "category": "arith",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "LeftSource", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "RightSource", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 1,
+      "name": "Sub",
+      "category": "arith",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "LeftSource", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "RightSource", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 2,
+      "name": "Mul",
+      "category": "arith",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "LeftSource", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "RightSource", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 3,
+      "name": "Div",
+      "category": "arith",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "LeftSource", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "RightSource", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 4,
+      "name": "Mod",
+      "category": "arith",
+      "emitted": false,
+      "emitted_note": "no emitter in the compiler backend at this commit",
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "LeftSource", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "RightSource", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 5,
+      "name": "CanFastAppendToArrayFastFail",
+      "category": "container",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "LeniencyIndicator", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Ref", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "MaybeMutableArray", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "OnFailure", "role": "jump", "kind": "label", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 6,
+      "name": "FastAppendToArray",
+      "category": "container",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "return_effect_token"
+      ],
+      "operands": [
+        {"name": "LeftSource", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "RightSource", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 7,
+      "name": "MutableAdd",
+      "category": "container",
+      "emitted": false,
+      "emitted_note": "no emitter in the compiler backend at this commit",
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "LeftSource", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "RightSource", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 8,
+      "name": "Neg",
+      "category": "arith",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Source", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 9,
+      "name": "Query",
+      "category": "failure",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Source", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 10,
+      "name": "Err",
+      "category": "move_control",
+      "emitted": false,
+      "emitted_note": "not emitted by the compiler backend; used only in VM-internal procedures and sentinels, never in a compiled program",
+      "may_park": false,
+      "yields": false,
+      "captures": [],
+      "operands": []
+    },
+    {
+      "number": 11,
+      "name": "Tracepoint",
+      "category": "debug",
+      "emitted": false,
+      "emitted_note": "no emitter in the compiler backend at this commit",
+      "may_park": false,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Name", "role": "immediate", "kind": "cell:VUniqueString", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 12,
+      "name": "Move",
+      "category": "move_control",
+      "emitted": true,
+      "may_park": false,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Source", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 13,
+      "name": "MoveTrailed",
+      "category": "move_control",
+      "emitted": true,
+      "may_park": false,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Source", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 14,
+      "name": "MoveNonComparable",
+      "category": "move_control",
+      "emitted": true,
+      "may_park": false,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Source", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 15,
+      "name": "Reset",
+      "category": "move_control",
+      "emitted": true,
+      "may_park": false,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "clobber_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "LiveRange", "role": "const", "kind": "live_range", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 16,
+      "name": "ResetNonTrailed",
+      "category": "move_control",
+      "emitted": true,
+      "emitted_note": "produced by the emitter's post-pass from Reset (same layout); may appear in a compiled program",
+      "may_park": false,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "clobber_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "LiveRange", "role": "const", "kind": "live_range", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 17,
+      "name": "Jump",
+      "category": "move_control",
+      "emitted": true,
+      "may_park": false,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "JumpOffset", "role": "jump", "kind": "label", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 18,
+      "name": "JumpIfInitialized",
+      "category": "move_control",
+      "emitted": true,
+      "may_park": false,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Source", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "JumpOffset", "role": "jump", "kind": "label", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 19,
+      "name": "Switch",
+      "category": "move_control",
+      "emitted": true,
+      "may_park": false,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Which", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "JumpOffsets", "role": "jump", "kind": "label", "variadic": true, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 20,
+      "name": "LtFastFail",
+      "category": "failure",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "LeniencyIndicator", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Lhs", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Rhs", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "OnFailure", "role": "jump", "kind": "label", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 21,
+      "name": "LteFastFail",
+      "category": "failure",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "LeniencyIndicator", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Lhs", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Rhs", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "OnFailure", "role": "jump", "kind": "label", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 22,
+      "name": "GtFastFail",
+      "category": "failure",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "LeniencyIndicator", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Lhs", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Rhs", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "OnFailure", "role": "jump", "kind": "label", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 23,
+      "name": "GteFastFail",
+      "category": "failure",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "LeniencyIndicator", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Lhs", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Rhs", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "OnFailure", "role": "jump", "kind": "label", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 24,
+      "name": "EqFastFail",
+      "category": "failure",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "LeniencyIndicator", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Lhs", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Rhs", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "OnFailure", "role": "jump", "kind": "label", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 25,
+      "name": "NeqFastFail",
+      "category": "failure",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "LeniencyIndicator", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Lhs", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Rhs", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "OnFailure", "role": "jump", "kind": "label", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 26,
+      "name": "ArrayIndexFastFail",
+      "category": "failure",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "LeniencyIndicator", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Array", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Index", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "OnFailure", "role": "jump", "kind": "label", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 27,
+      "name": "TypeCastFastFail",
+      "category": "failure",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "LeniencyIndicator", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Type", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Value", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "OnFailure", "role": "jump", "kind": "label", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 28,
+      "name": "QueryFastFail",
+      "category": "failure",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "LeniencyIndicator", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Source", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "OnFailure", "role": "jump", "kind": "label", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 29,
+      "name": "EndFastFailureContext",
+      "category": "failure",
+      "emitted": true,
+      "may_park": false,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "OuterLeniencyIndicator", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "LeniencyIndicator", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "OnDone", "role": "jump", "kind": "label", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 30,
+      "name": "BeginFailureContext",
+      "category": "failure",
+      "emitted": true,
+      "may_park": false,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "OnFailure", "role": "jump", "kind": "label", "variadic": false, "optional": false, "cache": false},
+        {"name": "Id", "role": "const", "kind": "failure_context_id", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 31,
+      "name": "EndFailureContext",
+      "category": "failure",
+      "emitted": true,
+      "may_park": false,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Done", "role": "jump", "kind": "label", "variadic": false, "optional": false, "cache": false},
+        {"name": "Id", "role": "const", "kind": "failure_context_id", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 32,
+      "name": "SelfTask",
+      "category": "task",
+      "emitted": true,
+      "may_park": false,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 33,
+      "name": "BeginTask",
+      "category": "task",
+      "emitted": true,
+      "may_park": false,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Parent", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "bAddToTaskGroup", "role": "const", "kind": "bool", "variadic": false, "optional": false, "cache": false},
+        {"name": "OnYield", "role": "jump", "kind": "label", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 34,
+      "name": "CallTask",
+      "category": "task",
+      "emitted": true,
+      "may_park": false,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Parent", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Callee", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Arguments", "role": "use", "kind": "value", "variadic": true, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 35,
+      "name": "EndTask",
+      "category": "task",
+      "emitted": true,
+      "may_park": false,
+      "yields": true,
+      "captures": [],
+      "operands": [
+        {"name": "Write", "role": "clobber_def", "kind": "register", "variadic": false, "optional": true, "cache": false},
+        {"name": "Switch", "role": "clobber_def", "kind": "register", "variadic": false, "optional": true, "cache": false},
+        {"name": "Value", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Which", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Signal", "role": "use", "kind": "value", "variadic": false, "optional": true, "cache": false}
+      ]
+    },
+    {
+      "number": 36,
+      "name": "BeginAwait",
+      "category": "task",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "return_effect_token"
+      ],
+      "operands": []
+    },
+    {
+      "number": 37,
+      "name": "AwaitSuccess",
+      "category": "task",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "return_effect_token"
+      ],
+      "operands": []
+    },
+    {
+      "number": 38,
+      "name": "EndAwait",
+      "category": "task",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "return_effect_token"
+      ],
+      "operands": []
+    },
+    {
+      "number": 39,
+      "name": "BeginBatch",
+      "category": "task",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "return_effect_token",
+        "batched_refs"
+      ],
+      "operands": []
+    },
+    {
+      "number": 40,
+      "name": "EndBatch",
+      "category": "task",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "return_effect_token",
+        "batched_refs"
+      ],
+      "operands": []
+    },
+    {
+      "number": 41,
+      "name": "Yield",
+      "category": "task",
+      "emitted": true,
+      "may_park": false,
+      "yields": true,
+      "captures": [],
+      "operands": [
+        {"name": "ResumeOffset", "role": "jump", "kind": "label", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 42,
+      "name": "NewSemaphore",
+      "category": "task",
+      "emitted": true,
+      "may_park": false,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 43,
+      "name": "WaitSemaphore",
+      "category": "task",
+      "emitted": true,
+      "may_park": false,
+      "yields": true,
+      "captures": [],
+      "operands": [
+        {"name": "Source", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Count", "role": "const", "kind": "i32", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 44,
+      "name": "Call",
+      "category": "call",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "incoming_effect_token",
+        "return_effect_token",
+        "batched_refs"
+      ],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Callee", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Arguments", "role": "use", "kind": "value", "variadic": true, "optional": false, "cache": false},
+        {"name": "NamedArguments", "role": "immediate", "kind": "cell:VUniqueString", "variadic": true, "optional": false, "cache": false},
+        {"name": "NamedArgumentValues", "role": "use", "kind": "value", "variadic": true, "optional": false, "cache": false},
+        {"name": "bCalleeYields", "role": "const", "kind": "bool", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 45,
+      "name": "CallWithSelf",
+      "category": "call",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "incoming_effect_token",
+        "return_effect_token",
+        "batched_refs"
+      ],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Callee", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Self", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Arguments", "role": "use", "kind": "value", "variadic": true, "optional": false, "cache": false},
+        {"name": "NamedArguments", "role": "immediate", "kind": "cell:VUniqueString", "variadic": true, "optional": false, "cache": false},
+        {"name": "NamedArgumentValues", "role": "use", "kind": "value", "variadic": true, "optional": false, "cache": false},
+        {"name": "bCalleeYields", "role": "const", "kind": "bool", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 46,
+      "name": "Return",
+      "category": "call",
+      "emitted": true,
+      "may_park": false,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Value", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 47,
+      "name": "ReturnTrailed",
+      "category": "call",
+      "emitted": true,
+      "may_park": false,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Value", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 48,
+      "name": "ResumeUnwind",
+      "category": "call",
+      "emitted": true,
+      "may_park": false,
+      "yields": false,
+      "captures": [],
+      "operands": []
+    },
+    {
+      "number": 49,
+      "name": "NewRef",
+      "category": "ref",
+      "emitted": true,
+      "may_park": false,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Domain", "role": "use", "kind": "value", "variadic": false, "optional": true, "cache": false}
+      ]
+    },
+    {
+      "number": 50,
+      "name": "NewPersistentOrSessionWeakMapRef",
+      "category": "ref",
+      "emitted": true,
+      "may_park": false,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 51,
+      "name": "RefGet",
+      "category": "ref",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "return_effect_token"
+      ],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Ref", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 52,
+      "name": "RefSet",
+      "category": "ref",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "incoming_effect_token",
+        "return_effect_token",
+        "batched_refs"
+      ],
+      "operands": [
+        {"name": "Ref", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Value", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 53,
+      "name": "RefSetLive",
+      "category": "ref",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "incoming_effect_token",
+        "return_effect_token",
+        "batched_refs"
+      ],
+      "operands": [
+        {"name": "Ref", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Value", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Task", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 54,
+      "name": "RefCallDomain",
+      "category": "ref",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "incoming_effect_token",
+        "return_effect_token",
+        "batched_refs"
+      ],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Ref", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Argument", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 55,
+      "name": "Freeze",
+      "category": "ref",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "incoming_effect_token",
+        "return_effect_token",
+        "batched_refs"
+      ],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Value", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 56,
+      "name": "FreezeIfAccessor",
+      "category": "ref",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "incoming_effect_token",
+        "return_effect_token",
+        "batched_refs"
+      ],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Value", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 57,
+      "name": "Melt",
+      "category": "ref",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Value", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 58,
+      "name": "Length",
+      "category": "container",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Container", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 59,
+      "name": "LengthWithEffects",
+      "category": "container",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "incoming_effect_token",
+        "return_effect_token"
+      ],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Container", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 60,
+      "name": "CallSet",
+      "category": "container",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "incoming_effect_token",
+        "return_effect_token",
+        "batched_refs"
+      ],
+      "operands": [
+        {"name": "Container", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Index", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "ValueToSet", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 61,
+      "name": "CallSetLive",
+      "category": "container",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "incoming_effect_token",
+        "return_effect_token",
+        "batched_refs"
+      ],
+      "operands": [
+        {"name": "Container", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Index", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "ValueToSet", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Task", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 62,
+      "name": "NewArray",
+      "category": "container",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Values", "role": "use", "kind": "value", "variadic": true, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 63,
+      "name": "NewMutableArray",
+      "category": "container",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Values", "role": "use", "kind": "value", "variadic": true, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 64,
+      "name": "NewMutableArrayWithCapacity",
+      "category": "container",
+      "emitted": false,
+      "emitted_note": "no emitter in the compiler backend at this commit",
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Size", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 65,
+      "name": "ArrayAdd",
+      "category": "container",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Container", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "ValueToAdd", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "bTransactional", "role": "const", "kind": "bool", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 66,
+      "name": "InPlaceMakeImmutable",
+      "category": "container",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Container", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 67,
+      "name": "NewOption",
+      "category": "container",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Value", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 68,
+      "name": "NewUnionVariant",
+      "category": "container",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Tag", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Payload", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 69,
+      "name": "GetUnionVariantPayload",
+      "category": "container",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Source", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 70,
+      "name": "GetUnionVariantTag",
+      "category": "container",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Source", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 71,
+      "name": "NewMap",
+      "category": "container",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Keys", "role": "use", "kind": "value", "variadic": true, "optional": false, "cache": false},
+        {"name": "Values", "role": "use", "kind": "value", "variadic": true, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 72,
+      "name": "MapKey",
+      "category": "container",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Map", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Index", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 73,
+      "name": "MapValue",
+      "category": "container",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Map", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Index", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 74,
+      "name": "NewClass",
+      "category": "object",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "ClassDest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "ArchetypeDest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "ConstructorDest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "BlocksDest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Package", "role": "immediate", "kind": "cell:VPackage", "variadic": false, "optional": false, "cache": false},
+        {"name": "RelativePath", "role": "immediate", "kind": "cell:VArray", "variadic": false, "optional": false, "cache": false},
+        {"name": "ClassName", "role": "immediate", "kind": "cell:VArray", "variadic": false, "optional": false, "cache": false},
+        {"name": "AttributeIndices", "role": "immediate", "kind": "value_imm", "variadic": true, "optional": false, "cache": false},
+        {"name": "Attributes", "role": "use", "kind": "value", "variadic": true, "optional": false, "cache": false},
+        {"name": "ImportStruct", "role": "immediate", "kind": "value_imm", "variadic": false, "optional": true, "cache": false},
+        {"name": "Inherited", "role": "use", "kind": "value", "variadic": true, "optional": false, "cache": false},
+        {"name": "Archetype", "role": "immediate", "kind": "cell:VArchetype", "variadic": false, "optional": false, "cache": false},
+        {"name": "ConstructorBody", "role": "immediate", "kind": "cell:VProcedure", "variadic": false, "optional": true, "cache": false},
+        {"name": "Blocks", "role": "immediate", "kind": "cell:VProcedure", "variadic": false, "optional": true, "cache": false},
+        {"name": "bNativeBound", "role": "const", "kind": "bool", "variadic": false, "optional": false, "cache": false},
+        {"name": "ClassKind", "role": "const", "kind": "enum:ClassKind", "variadic": false, "optional": false, "cache": false},
+        {"name": "Flags", "role": "const", "kind": "enum:ClassFlags", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 75,
+      "name": "BindNativeClass",
+      "category": "native_module",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Class", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "bImported", "role": "const", "kind": "bool", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 76,
+      "name": "ConstructNativeDefaultObject",
+      "category": "native_module",
+      "emitted": true,
+      "may_park": false,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Class", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 77,
+      "name": "LoadImport",
+      "category": "native_module",
+      "emitted": true,
+      "may_park": false,
+      "yields": true,
+      "captures": [],
+      "operands": [
+        {"name": "Class", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "ImportPath", "role": "const", "kind": "asset_path", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 78,
+      "name": "JumpIfDefaultSubObject",
+      "category": "native_module",
+      "emitted": true,
+      "may_park": false,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Object", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "OnDefaultSubObject", "role": "jump", "kind": "label", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 79,
+      "name": "BeginModule",
+      "category": "native_module",
+      "emitted": true,
+      "may_park": false,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Package", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "ModuleName", "role": "immediate", "kind": "cell:VUniqueString", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 80,
+      "name": "EndModule",
+      "category": "native_module",
+      "emitted": true,
+      "may_park": false,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Module", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 81,
+      "name": "EndModuleData",
+      "category": "native_module",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "FieldName", "role": "immediate", "kind": "cell:VUniqueString", "variadic": false, "optional": false, "cache": false},
+        {"name": "Value", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 82,
+      "name": "NewObject",
+      "category": "object",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "incoming_effect_token",
+        "return_effect_token",
+        "batched_refs"
+      ],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Archetype", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Class", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "CachedClass", "role": "const", "kind": "class_ref_ic", "variadic": false, "optional": false, "cache": true},
+        {"name": "EmergentTypeOffset", "role": "const", "kind": "u32", "variadic": false, "optional": false, "cache": true}
+      ]
+    },
+    {
+      "number": 83,
+      "name": "NewObjectICClass",
+      "category": "inline_cache",
+      "emitted": false,
+      "emitted_note": "runtime inline-cache rewrite of NewObject; reverted to NewObject when serialized, never in a cooked program",
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "incoming_effect_token",
+        "return_effect_token",
+        "batched_refs"
+      ],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Archetype", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Class", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "CachedClass", "role": "const", "kind": "class_ref_ic", "variadic": false, "optional": false, "cache": true},
+        {"name": "EmergentTypeOffset", "role": "const", "kind": "u32", "variadic": false, "optional": false, "cache": true}
+      ]
+    },
+    {
+      "number": 84,
+      "name": "LoadField",
+      "category": "object",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Object", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Name", "role": "immediate", "kind": "cell:VUniqueString", "variadic": false, "optional": false, "cache": false},
+        {"name": "EmergentTypeOffset", "role": "const", "kind": "u32", "variadic": false, "optional": false, "cache": true},
+        {"name": "ICPayload", "role": "const", "kind": "u64", "variadic": false, "optional": false, "cache": true}
+      ]
+    },
+    {
+      "number": 85,
+      "name": "LoadFieldICOffset",
+      "category": "inline_cache",
+      "emitted": false,
+      "emitted_note": "runtime inline-cache rewrite of LoadField; reverted to LoadField when serialized, never in a cooked program",
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Object", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Name", "role": "immediate", "kind": "cell:VUniqueString", "variadic": false, "optional": false, "cache": false},
+        {"name": "EmergentTypeOffset", "role": "const", "kind": "u32", "variadic": false, "optional": false, "cache": true},
+        {"name": "ICPayload", "role": "const", "kind": "u64", "variadic": false, "optional": false, "cache": true}
+      ]
+    },
+    {
+      "number": 86,
+      "name": "LoadFieldICConstant",
+      "category": "inline_cache",
+      "emitted": false,
+      "emitted_note": "runtime inline-cache rewrite of LoadField; reverted to LoadField when serialized, never in a cooked program",
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Object", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Name", "role": "immediate", "kind": "cell:VUniqueString", "variadic": false, "optional": false, "cache": false},
+        {"name": "EmergentTypeOffset", "role": "const", "kind": "u32", "variadic": false, "optional": false, "cache": true},
+        {"name": "ICPayload", "role": "const", "kind": "u64", "variadic": false, "optional": false, "cache": true}
+      ]
+    },
+    {
+      "number": 87,
+      "name": "LoadFieldICFunction",
+      "category": "inline_cache",
+      "emitted": false,
+      "emitted_note": "runtime inline-cache rewrite of LoadField; reverted to LoadField when serialized, never in a cooked program",
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Object", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Name", "role": "immediate", "kind": "cell:VUniqueString", "variadic": false, "optional": false, "cache": false},
+        {"name": "EmergentTypeOffset", "role": "const", "kind": "u32", "variadic": false, "optional": false, "cache": true},
+        {"name": "ICPayload", "role": "const", "kind": "u64", "variadic": false, "optional": false, "cache": true}
+      ]
+    },
+    {
+      "number": 88,
+      "name": "LoadFieldICNativeFunction",
+      "category": "inline_cache",
+      "emitted": false,
+      "emitted_note": "runtime inline-cache rewrite of LoadField; reverted to LoadField when serialized, never in a cooked program",
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Object", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Name", "role": "immediate", "kind": "cell:VUniqueString", "variadic": false, "optional": false, "cache": false},
+        {"name": "EmergentTypeOffset", "role": "const", "kind": "u32", "variadic": false, "optional": false, "cache": true},
+        {"name": "ICPayload", "role": "const", "kind": "u64", "variadic": false, "optional": false, "cache": true}
+      ]
+    },
+    {
+      "number": 89,
+      "name": "LoadFieldICAccessor",
+      "category": "inline_cache",
+      "emitted": false,
+      "emitted_note": "runtime inline-cache rewrite of LoadField; reverted to LoadField when serialized, never in a cooked program",
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Object", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Name", "role": "immediate", "kind": "cell:VUniqueString", "variadic": false, "optional": false, "cache": false},
+        {"name": "EmergentTypeOffset", "role": "const", "kind": "u32", "variadic": false, "optional": false, "cache": true},
+        {"name": "ICPayload", "role": "const", "kind": "u64", "variadic": false, "optional": false, "cache": true}
+      ]
+    },
+    {
+      "number": 90,
+      "name": "LoadFieldFromSuper",
+      "category": "object",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Scope", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Self", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Name", "role": "immediate", "kind": "cell:VUniqueString", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 91,
+      "name": "CreateField",
+      "category": "object",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "return_effect_token"
+      ],
+      "operands": [
+        {"name": "LeniencyIndicator", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Token", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Object", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Name", "role": "immediate", "kind": "cell:VUniqueString", "variadic": false, "optional": false, "cache": false},
+        {"name": "OnFailure", "role": "jump", "kind": "label", "variadic": false, "optional": false, "cache": false},
+        {"name": "SourceEmergentTypeOffset", "role": "const", "kind": "u32", "variadic": false, "optional": false, "cache": true},
+        {"name": "FieldIndex", "role": "const", "kind": "u32", "variadic": false, "optional": false, "cache": true},
+        {"name": "NextEmergentTypeOffset", "role": "const", "kind": "u32", "variadic": false, "optional": false, "cache": true}
+      ]
+    },
+    {
+      "number": 92,
+      "name": "CreateFieldICValueObjectConstant",
+      "category": "inline_cache",
+      "emitted": false,
+      "emitted_note": "runtime inline-cache rewrite of CreateField; reverted to CreateField when serialized, never in a cooked program",
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "return_effect_token"
+      ],
+      "operands": [
+        {"name": "LeniencyIndicator", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Token", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Object", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Name", "role": "immediate", "kind": "cell:VUniqueString", "variadic": false, "optional": false, "cache": false},
+        {"name": "OnFailure", "role": "jump", "kind": "label", "variadic": false, "optional": false, "cache": false},
+        {"name": "SourceEmergentTypeOffset", "role": "const", "kind": "u32", "variadic": false, "optional": false, "cache": true},
+        {"name": "FieldIndex", "role": "const", "kind": "u32", "variadic": false, "optional": false, "cache": true},
+        {"name": "NextEmergentTypeOffset", "role": "const", "kind": "u32", "variadic": false, "optional": false, "cache": true}
+      ]
+    },
+    {
+      "number": 93,
+      "name": "CreateFieldICValueObjectField",
+      "category": "inline_cache",
+      "emitted": false,
+      "emitted_note": "runtime inline-cache rewrite of CreateField; reverted to CreateField when serialized, never in a cooked program",
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "return_effect_token"
+      ],
+      "operands": [
+        {"name": "LeniencyIndicator", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Token", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Object", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Name", "role": "immediate", "kind": "cell:VUniqueString", "variadic": false, "optional": false, "cache": false},
+        {"name": "OnFailure", "role": "jump", "kind": "label", "variadic": false, "optional": false, "cache": false},
+        {"name": "SourceEmergentTypeOffset", "role": "const", "kind": "u32", "variadic": false, "optional": false, "cache": true},
+        {"name": "FieldIndex", "role": "const", "kind": "u32", "variadic": false, "optional": false, "cache": true},
+        {"name": "NextEmergentTypeOffset", "role": "const", "kind": "u32", "variadic": false, "optional": false, "cache": true}
+      ]
+    },
+    {
+      "number": 94,
+      "name": "CreateFieldICNativeStruct",
+      "category": "inline_cache",
+      "emitted": false,
+      "emitted_note": "runtime inline-cache rewrite of CreateField; reverted to CreateField when serialized, never in a cooked program",
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "return_effect_token"
+      ],
+      "operands": [
+        {"name": "LeniencyIndicator", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Token", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Object", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Name", "role": "immediate", "kind": "cell:VUniqueString", "variadic": false, "optional": false, "cache": false},
+        {"name": "OnFailure", "role": "jump", "kind": "label", "variadic": false, "optional": false, "cache": false},
+        {"name": "SourceEmergentTypeOffset", "role": "const", "kind": "u32", "variadic": false, "optional": false, "cache": true},
+        {"name": "FieldIndex", "role": "const", "kind": "u32", "variadic": false, "optional": false, "cache": true},
+        {"name": "NextEmergentTypeOffset", "role": "const", "kind": "u32", "variadic": false, "optional": false, "cache": true}
+      ]
+    },
+    {
+      "number": 95,
+      "name": "CreateFieldICUObject",
+      "category": "inline_cache",
+      "emitted": false,
+      "emitted_note": "runtime inline-cache rewrite of CreateField; reverted to CreateField when serialized, never in a cooked program",
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "return_effect_token"
+      ],
+      "operands": [
+        {"name": "LeniencyIndicator", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Token", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Object", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Name", "role": "immediate", "kind": "cell:VUniqueString", "variadic": false, "optional": false, "cache": false},
+        {"name": "OnFailure", "role": "jump", "kind": "label", "variadic": false, "optional": false, "cache": false},
+        {"name": "SourceEmergentTypeOffset", "role": "const", "kind": "u32", "variadic": false, "optional": false, "cache": true},
+        {"name": "FieldIndex", "role": "const", "kind": "u32", "variadic": false, "optional": false, "cache": true},
+        {"name": "NextEmergentTypeOffset", "role": "const", "kind": "u32", "variadic": false, "optional": false, "cache": true}
+      ]
+    },
+    {
+      "number": 96,
+      "name": "UnifyField",
+      "category": "object",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "return_effect_token"
+      ],
+      "operands": [
+        {"name": "Object", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Name", "role": "immediate", "kind": "cell:VUniqueString", "variadic": false, "optional": false, "cache": false},
+        {"name": "Value", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 97,
+      "name": "InitializeVar",
+      "category": "object",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "incoming_effect_token",
+        "return_effect_token",
+        "batched_refs"
+      ],
+      "operands": [
+        {"name": "TokenDest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Token", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Object", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Name", "role": "immediate", "kind": "cell:VUniqueString", "variadic": false, "optional": false, "cache": false},
+        {"name": "Value", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "ValueDomain", "role": "use", "kind": "value", "variadic": false, "optional": true, "cache": false},
+        {"name": "bCheckIfVariableAllocationIsAllowed", "role": "const", "kind": "bool", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 98,
+      "name": "SetField",
+      "category": "object",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "incoming_effect_token",
+        "return_effect_token",
+        "batched_refs"
+      ],
+      "operands": [
+        {"name": "Object", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Name", "role": "immediate", "kind": "cell:VUniqueString", "variadic": false, "optional": false, "cache": false},
+        {"name": "Value", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 99,
+      "name": "SetFieldLive",
+      "category": "object",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "incoming_effect_token",
+        "return_effect_token",
+        "batched_refs"
+      ],
+      "operands": [
+        {"name": "Object", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Name", "role": "immediate", "kind": "cell:VUniqueString", "variadic": false, "optional": false, "cache": false},
+        {"name": "Value", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Task", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 100,
+      "name": "UnifyNativeObject",
+      "category": "native_module",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [
+        "incoming_effect_token",
+        "return_effect_token",
+        "batched_refs"
+      ],
+      "operands": [
+        {"name": "Token", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Object", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 101,
+      "name": "UnwrapNativeConstructorWrapper",
+      "category": "native_module",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Object", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 102,
+      "name": "NewScope",
+      "category": "call",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "ParentScope", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Captures", "role": "use", "kind": "value", "variadic": true, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 103,
+      "name": "NewFunction",
+      "category": "call",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Procedure", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Self", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "ParentScope", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 104,
+      "name": "LoadParentScope",
+      "category": "call",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Scope", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 105,
+      "name": "LoadCapture",
+      "category": "call",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Scope", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "Index", "role": "const", "kind": "u32", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 106,
+      "name": "BeginProfileBlock",
+      "category": "debug",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 107,
+      "name": "EndProfileBlock",
+      "category": "debug",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "WallTimeStart", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "UserTag", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "SnippetPath", "role": "immediate", "kind": "cell:VUniqueString", "variadic": false, "optional": false, "cache": false},
+        {"name": "BeginRow", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "BeginColumn", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "EndRow", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "EndColumn", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 108,
+      "name": "LoadConstructor",
+      "category": "object",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "Class", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 109,
+      "name": "Neq",
+      "category": "arith",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "LeftSource", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "RightSource", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 110,
+      "name": "Lt",
+      "category": "arith",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "LeftSource", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "RightSource", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 111,
+      "name": "Lte",
+      "category": "arith",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "LeftSource", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "RightSource", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 112,
+      "name": "Gt",
+      "category": "arith",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "LeftSource", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "RightSource", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    },
+    {
+      "number": 113,
+      "name": "Gte",
+      "category": "arith",
+      "emitted": true,
+      "may_park": true,
+      "yields": false,
+      "captures": [],
+      "operands": [
+        {"name": "Dest", "role": "unify_def", "kind": "register", "variadic": false, "optional": false, "cache": false},
+        {"name": "LeftSource", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false},
+        {"name": "RightSource", "role": "use", "kind": "value", "variadic": false, "optional": false, "cache": false}
+      ]
+    }
+  ]
+}

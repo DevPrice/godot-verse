@@ -22,7 +22,7 @@ SHLIB_AFFIXES = {
     "android": ("lib", ".so"),
     "macos": ("lib", ".dylib"),
     "ios": ("lib", ".dylib"),
-    "web": ("lib", ".wasm"),
+    "web": ("", ".wasm"),
 }
 
 # scons target -> the Godot feature tag (and filename infix) for it
