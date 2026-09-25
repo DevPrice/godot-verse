@@ -124,7 +124,8 @@ restated as requirements on the interpreter:
 
 - **114 opcodes; about 90 matter.** Ten are inline-cache forms the compiler never emits and the
   cooker never serializes. Four more are never emitted at this commit. A handful (persistence,
-  live-variable `await`, `batch`, `LoadImport`) are unreachable from a Godot script.
+  `LoadImport`) are unreachable from a Godot script. Live-variable `await` and `batch` are not: they
+  compile in a script package (`spec/tasks.md` §5.7), so they are specified and implemented, if late.
 - **It is a unification-based, lenient dataflow VM.** Results are *unified* into destination
   registers, and an op meeting an unbound logic variable parks rather than blocks. This, not
   concurrency, is the hardest part (§7.1).
@@ -232,8 +233,11 @@ Whether stage 2 is needed is a measurement, and the task list has a task that ta
 
 ### 7.2 Transactions: an undo log
 
-Every mutation — var, field, mutable array element and append, map insert with its count, task and
-semaphore state — writes an undo record while a transaction is open. A failure context opens a nested
+Every mutation — var, field, mutable array element and append (`ArrayAdd` only when its
+`bTransactional` flag says so), `FastAppendToArray`, `InPlaceMakeImmutable`, map insert with its
+count — writes an undo record while a transaction is open. Task state is not transactional except
+for a `spawn` inside a failure context (`spec/tasks.md` §12); joining or leaving a task group and
+termination are never undone. A failure context opens a nested
 log; success merges it into its parent; failure replays it backwards. The trail is the same log.
 A runtime error unwinds to VM entry. Godot-side effects keep the protocol the UE host already has:
 writes defer to commit, and the two immediate exceptions (`VhSignalEmit`, `VhRefSet`) stay immediate.
@@ -255,9 +259,16 @@ portable choice and W-6 sets no bar that argues otherwise.
 
 ### 7.5 Tasks without threads
 
-A task is a heap object holding its frame chain and resume point, so suspension is returning to the
-scheduler loop. `Sleep` resumes from `vh_tick` on a monotonic clock, as the UE host's does. `event(t)`
-resumes awaiters synchronously in FIFO order, as the spec will say.
+A task is a heap object holding its frame chain and resume point, so a suspended task is data and
+needs no native stack. There is **no scheduler queue**, though: whoever makes a task runnable — an
+`EndTask`, an `event(t)` `Signal`, a synchronous `Cancel`, a write that wakes an `await`, a native
+completing a call — runs it on its own native stack until it stops, and resumptions happen in the
+fixed order `spec/tasks.md` §4.3 gives. An interpreter that queued them instead would reorder every
+table in that spec. So the native stack deepens with *resumption* nesting, not with Verse call depth.
+`Sleep` resumes from `vh_tick` on a monotonic clock, as the UE host's does.
+
+This body first said suspension was "returning to the scheduler loop"; `spec/tasks.md` §4 measured
+otherwise.
 
 ## 8. The ABI half, in `vm/`
 

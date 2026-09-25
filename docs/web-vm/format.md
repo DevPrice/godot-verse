@@ -131,7 +131,7 @@ it.
 | named parameters | `list<(sid name, uv register)>` |
 | constants | `list<value>` |
 | ops | `list<op>` |
-| unwind edges | `list<(uv first op, uv last op, uv landing op)>`, sorted, non-overlapping; an op is covered when `first <= index <= last` |
+| unwind edges | `list<(uv first op, uv last op, uv landing op)>`, sorted, non-overlapping. A frame is covered when `first <= i <= last`, where `i` is the index of the op the frame is **stopped in**: the op that suspended it, or, for a frame further out, the call op it is waiting in — never the op it will resume at. The writer computes `first` and `last` so that this test agrees with the reference VM's own coverage test on every op |
 | locations | `list<(uv op index, uv line)>`, sorted by op index; an op's line is the last entry at or before it; line 0 means none |
 | register names | `list<(uv register, sid name, uv first op, uv last op)>` |
 
