@@ -21,8 +21,7 @@ using namespace godot;
 namespace {
 
 // The platforms this bridge does not reach. Mobile is deferred with no design; web left this list
-// in Phase 7.5 (docs/phase-7.5-design.md §9) and is refused separately below, on the vm backend
-// alone (T6.1) -- refusing here would say "not reachable" about a platform that is.
+// in Phase 7.5 (docs/phase-7.5-design.md §9), where it always exports on the interpreter.
 const char *UNREACHABLE_PLATFORMS[] = { "android", "ios" };
 
 // gdextension.py writes [dependencies] last (RUNTIME_HOST_FILES, scanned from bin/ at build
@@ -129,8 +128,12 @@ void VerseExportPlugin::_export_begin(const PackedStringArray &p_features, bool 
 	// setting, and Godot reads that section itself rather than asking this plugin. Rewriting the
 	// file for the length of this export, and putting it back in _export_end, is the only lever an
 	// EditorExportPlugin has over a dependency Godot itself declared.
+	// Web always runs the interpreter, whatever the setting says, the way a Web export always gets the
+	// Compatibility renderer: the UE host is a native DLL a browser cannot load, so there is nothing
+	// else it could mean, and VerseRuntime::load_host makes the same choice in the running game.
 	const String backend = String(ProjectSettings::get_singleton()->get_setting("verse/runtime/backend", String("host"))).strip_edges();
-	if (backend == "vm") {
+	const bool uses_vm = backend == "vm" || p_features.has("web");
+	if (uses_vm) {
 		const String gdextension_path = String("res://addons/godot-verse/godot-verse.gdextension");
 		Ref<FileAccess> reader = FileAccess::open(gdextension_path, FileAccess::READ);
 		if (reader.is_valid()) {
@@ -168,20 +171,6 @@ void VerseExportPlugin::_export_begin(const PackedStringArray &p_features, bool 
 		refused = true;
 		say(EditorExportPlatform::EXPORT_MESSAGE_ERROR,
 				"Verse cannot tell which platform this export is for; no platform feature tag was set.");
-		return;
-	}
-
-	// Web has no host DLL to load at all -- verse_host.cpp compiles LoadLibraryExW out on that
-	// platform -- so the vm backend is the only one that can run there (design §9). Refusing here,
-	// before the cook, is what turns a silent "runtime/backend" default of "host" into a sentence
-	// instead of a game that fails this same way at vh_init, after the cook already ran.
-	if (platform_tag == "web" && backend != "vm") {
-		refused = true;
-		say(EditorExportPlatform::EXPORT_MESSAGE_ERROR,
-				String("Verse needs the vm backend on Web: set `verse/runtime/backend` to \"vm\" in "
-					   "Project Settings. This project's setting is ") +
-						(backend.is_empty() ? String("\"host\" (the default)") : String("\"") + backend + String("\"")) +
-						String(", and the UE host is a native DLL a browser cannot load."));
 		return;
 	}
 

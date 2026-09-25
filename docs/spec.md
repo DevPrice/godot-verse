@@ -293,15 +293,15 @@ analysis pipeline, the game may need only the VM (R-DIST-11).
 - **R-PLAT-3 (SHOULD)** Web export runs Verse. Status: **done** (Phase 7.5), on a second execution
   path: a clean-room interpreter of VerseVM bytecode (`vm/`) that the cooker feeds a `program.vbc`
   and the GDExtension carries statically, because the UE host itself cannot be wasm32
-  (`verse-on-web.md`). A Web export requires `verse/runtime/backend=vm` and ships no UE binary.
+  (`verse-on-web.md`). A Web export always uses it, whatever `verse/runtime/backend` says, and ships no UE binary.
   Measured: `tests/integration` passes 517 of its cases in headless Chrome with 0 failed and 13
   skipped, and `dodge-the-creeps` passes its 30 checks (`phase-7.5-design.md` §14). The web build is
   nothreads, so no COOP/COEP headers are needed; the game runs at about two-thirds of real time,
   which nothing was optimized for.
 - **R-PLAT-4 (MUST)** A platform that is not supported fails at export time with a clear message,
   not at game startup on a user's device. Status: **done** (Phase 7a) — `VerseExportPlugin::
-  _export_begin` refuses `android` and `ios` with one sentence naming the platform, and refuses
-  `web` unless the project chooses the vm backend (Phase 7.5). It also
+  _export_begin` refuses `android` and `ios` with one sentence naming the platform; `web` always
+  exports on the interpreter (Phase 7.5). It also
   withholds the data directory, because `add_message(EXPORT_MESSAGE_ERROR)` reports without
   aborting the export (measured, `phase-7-design.md` §13.4), so the sentence at export time is
   what the author reads and a game that will not load is what they get if they ignore it.

@@ -55,9 +55,11 @@ Blocked on Epic licensing the Verse toolchain for redistribution:
 ### Web export
 
 A Web export runs your Verse on a second runtime: an interpreter of Verse's compiled bytecode that
-the extension carries, because the Unreal host can't be built for the web. To export for Web, set
-**Project Settings > Verse > Runtime > Backend** to `vm`. The same setting lets a Windows export use
-the interpreter too, which then ships no Unreal binary.
+the extension carries, because the Unreal host can't be built for the web. A Web export always uses
+it, so there is nothing to set. To use it in a Windows export too, which then ships no Unreal binary,
+set **Project Settings > Verse > Runtime > Backend** to `vm`.
+
+A Web preset needs **Extensions Support** on and **Thread Support** off.
 
 The Web build doesn't need threads, so a host that can't set cross-origin isolation headers can
 serve it. It doesn't run at full speed yet: `dodge-the-creeps` runs at about two-thirds of real time

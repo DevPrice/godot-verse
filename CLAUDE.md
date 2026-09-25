@@ -364,7 +364,7 @@ reviewed files of `docs/web-vm/spec/` alone. Keep it that way — do not bring V
   (`scons verse_vm=yes`; a Windows release build and every web build carry it). `src/` fills
   `VerseHostLibrary` from it with `load_static` and hands it a file reader over `FileAccess`.
 - **`verse/runtime/backend`** (`host` or `vm`) picks it in an exported game; an editor session always
-  uses the host, and Web requires `vm`. On the vm backend the export ships no UE binary, and on Web
+  uses the host, and Web always uses `vm` whatever it says. On the vm backend the export ships no UE binary, and on Web
   `verse_data` lives inside the `.pck`.
 - Frames are on the heap, so a Verse call never recurses in C++, but **there is no scheduler**:
   whoever makes a task runnable runs it on its own stack, in `web-vm/spec/tasks.md` §4.3's order.

@@ -1333,19 +1333,17 @@ WEB_EXPECTED_SKIPS = EXPORT_EXPECTED_SKIPS + 2
 
 
 def _web_backend_project(base_project: Path) -> Path:
-    """A throwaway copy of base_project forced onto the vm backend, with a Web preset appended.
+    """A throwaway copy of base_project with a Web preset appended.
 
-    Combines what _vm_backend_project does to project.godot with a Web preset appended to the
-    copy's own export_presets.cfg -- tests/integration's checked-in one carries only "Windows
-    Desktop" (CLAUDE.md's export_presets.cfg rule), and Web needs its own preset to export against
-    at all. Thrown away with its temp directory by this function's caller, exactly as
-    _vm_backend_project's copy is.
+    tests/integration's checked-in export_presets.cfg carries only "Windows Desktop" (CLAUDE.md's
+    export_presets.cfg rule), and Web needs its own preset to export against at all. The copy leaves
+    `verse/runtime/backend` at its default of "host" on purpose: Web always runs the interpreter,
+    and a copy that set it would stop proving that. Thrown away with its temp directory by this
+    function's caller, exactly as _vm_backend_project's copy is.
     """
     work = Path(tempfile.mkdtemp(prefix="verse_export_web_"))
     project = work / base_project.name
     shutil.copytree(base_project, project, ignore=shutil.ignore_patterns(".godot", "addons"))
-    with open(project / "project.godot", "a", encoding="utf-8") as f:
-        f.write('\n[verse]\n\nruntime/backend="vm"\n')
     with open(project / "export_presets.cfg", "a", encoding="utf-8") as f:
         f.write(WEB_PRESET_TEXT)
     return project

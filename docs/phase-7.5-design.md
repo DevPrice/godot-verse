@@ -297,8 +297,10 @@ otherwise.
 - **Run:** a project setting, `verse/runtime/backend` = `host` (default) or `vm`, read by
   `VerseRuntime` in an exported game. An editor session always uses the host.
 - **Export:** the export plugin cooks exactly as today and ships `program.vbc` in `verse_data`. With
-  `vm`, it does not ship `verse_host_runtime.dll` or `tbbmalloc.dll`. For the **Web** platform it
-  requires `vm`, and `web` leaves `UNREACHABLE_PLATFORMS`. On web, `verse_data` goes into the `.pck`
+  `vm`, it does not ship `verse_host_runtime.dll` or `tbbmalloc.dll`. A **Web** export always uses
+  `vm`, whatever the setting says, the way it always gets the Compatibility renderer, and `web`
+  leaves `UNREACHABLE_PLATFORMS`. (This body first had the plugin refuse a Web export whose setting
+  was `host`; that made every author set a value that can only be one thing.) On web, `verse_data` goes into the `.pck`
   rather than beside an executable, which is the one new path rule `verse_export_paths` gains.
 
 ## 10. Testing

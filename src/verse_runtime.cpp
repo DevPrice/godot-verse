@@ -198,9 +198,7 @@ Error VerseRuntime::load_host() {
 #ifdef VERSE_VM_STATIC
 		const String backend = String(settings->get_setting(backend_setting_name)).strip_edges();
 		// Web has no loader for a host DLL at all (verse_host.cpp compiles that path out under
-		// #ifdef _WIN32), so it uses vm whatever the setting says -- there being only one backend
-		// to speak of on that platform is exactly why the export plugin will refuse to ship
-		// anything else there (T5.4/T6.1).
+		// #ifdef _WIN32), so it uses vm whatever the setting says, as the export plugin does.
 		if (backend == "vm" || OS::get_singleton()->has_feature("web")) {
 			return load_host_internal(String("<the built-in interpreter>"), String(), enable_debugger, data_dir.path_join("Cooked"), true);
 		}
