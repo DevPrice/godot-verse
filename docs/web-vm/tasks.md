@@ -24,7 +24,7 @@ Status: `todo`, `doing`, `done`, `dropped` (with a reason).
 
 | ID | Task | Room / model | Depends | Check | Status |
 | --- | --- | --- | --- | --- | --- |
-| T1.1 | `docs/web-vm/ops.json`: every opcode's name, number, operand roles and kinds, and whether the compiler emits it at `203d764`. `tools/gen_vbc_ops.py` validates it | dirty / opus | — | 114 entries; the validator passes | todo |
+| T1.1 | `docs/web-vm/ops.json`: every opcode's name, number, operand roles and kinds, and whether the compiler emits it at `203d764`. `tools/gen_vbc_ops.py` validates it | dirty / opus | — | 114 entries; the validator passes | done |
 | T1.2 | Measure the three facts of design §6.1 with `tests/verse_probe` or `tests/cooked_probe`; fixtures kept in `tests/verse_probe/` | dirty / sonnet | — | each fact has a fixture and a recorded output | todo |
 | T1.3 | `spec/values.md` | dirty / opus | T1.2 | lead review recorded in its header | todo |
 | T1.4 | `spec/calls.md` and `spec/modules.md` | dirty / opus | T1.1 | lead review recorded | todo |
@@ -34,8 +34,8 @@ Status: `todo`, `doing`, `done`, `dropped` (with a reason).
 | T1.8 | `spec/natives.md` | dirty / opus | T1.1 | lead review recorded | todo |
 | T1.9 | `spec/ops.md`: every op ops.json marks as emitted | dirty / opus | T1.3–T1.8 | `tools/check_spec.py` finds every emitted op documented; lead review recorded | todo |
 | T1.10 | `spec/godot-natives.md`: the 39 Godot natives, the `variant` lanes, defer-to-commit | dirty / sonnet | — | every `<native>` in `Godot.native.verse` has a row; lead review recorded | todo |
-| T1.11 | `spec/sidecar.md` | lead | — | every field `WriteClassSidecar` writes has a row | todo |
-| T1.12 | `docs/web-vm/format.md`: the `.vbc` container | lead | T1.1 | reviewed against ops.json and the cell list of design §4 | todo |
+| T1.11 | `spec/sidecar.md` | lead | — | every field `WriteClassSidecar` writes has a row | done |
+| T1.12 | `docs/web-vm/format.md`: the `.vbc` container | lead | T1.1 | reviewed against ops.json and the cell list of design §4 | done; union cells provisional until T2.1 |
 
 ## M2 — the cooker writes `.vbc`
 
