@@ -776,7 +776,8 @@ What 7a fixes:
   `.gdextension` `[dependencies]` row; `.verse` sources are stripped to one-byte stubs the way C#
   strips `.cs`, and `.vmodule` markers are kept by hand because a module is half of a class's name.
   `verse/host/dll_path` and `engine_dir` are editor-only.
-- **R-PLAT-4** — an export to Android, iOS or web fails at export with a sentence. §13.4 records
+- **R-PLAT-4** — an export to Android, iOS or web fails at export with a sentence (web left the
+  list in Phase 7.5, below). §13.4 records
   why the plugin also withholds the data directory: `add_message(EXPORT_MESSAGE_ERROR)` reports but
   does not abort.
 - **Godot 4.7 official** is the editor and the templates. godot-cpp is on the commit that carries

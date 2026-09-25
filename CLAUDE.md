@@ -52,6 +52,7 @@ not a description of what exists.
 | `phase-6-design.md` | §13 | the step debugger and the profiler |
 | `phase-7-design.md` | §13 (§14 not built, §15 exit) | the three UBT targets, the cooker, the export plugin |
 | `phase-7b-design.md` | §13 (§14, §15) | an exported game runs its Verse |
+| `phase-7.5-design.md` | §14 | `vm/`, the clean-room interpreter; Verse on the web |
 
 Three documents are not phase records and are the ones to read before adding a feature:
 
@@ -461,11 +462,13 @@ assertable in the integration layer. It refreshes the map before reading it, bec
 has only built has never called `_validate` and the map is empty. **The gutter itself is still
 by-hand** — the build copy proves the sentence and the line, not that the editor draws either.
 
-**export-vm** and **web** are the same `tests/integration` on the interpreter: a throwaway copy of
-the project with `verse/runtime/backend="vm"` (a committed `project.godot` is never touched;
-`override.cfg` is ignored while exporting), exported for Windows and asserted at the host backend's
-own 519/0/11, and exported for Web and run in headless Chrome through `tools/run_web.py`, asserted
-at 517/0/13 — R-ASYNC-8's two thread cases skip in a build without threads. **A Web export's page
+**export-vm** and **web** are the same `tests/integration` on the interpreter, each from a
+throwaway copy of the project (a committed `project.godot` is never touched; `override.cfg` is
+ignored while exporting). export-vm's copy sets `verse/runtime/backend="vm"`, is exported for
+Windows and asserted at the host backend's own 519/0/11. web's copy sets **nothing**, so it proves
+the `.web` override's default; it is exported for Web, run in headless Chrome through
+`tools/run_web.py` and asserted at 517/0/13 — R-ASYNC-8's two thread cases skip in a build without
+threads — and then exported once more with `backend.web="host"` to assert the refusal. **A Web export's page
 passes the engine no command line**, so `run_web.py --godot-arg` rewrites its `GODOT_CONFIG`; without
 it the test driver's `--verse-check` gate never opens and the game sits idle, which reads as a hang.
 

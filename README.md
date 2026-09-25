@@ -26,7 +26,7 @@ disagree, the spec is correct.
 | Signals and concurrency | Signals are typed members. `Await` works on any Godot signal. `spawn`, `Sleep`, and `race` each get a task scope tied to the script instance |
 | Engine surface | All 1036 Godot classes and their enums are mirrored |
 | Project and editor | Hot reload on Play, modules through `.vmodule`, `@tool` scripts, imports the editor writes for you, syntax highlighting, live diagnostics, completion, symbol lookup, and a step debugger |
-| Export | On Windows, the export dialog produces a runnable game with no manual copying, and the exported game runs its Verse |
+| Export | On Windows and Web, the export dialog produces a runnable game with no manual copying, and the exported game runs its Verse. See [Web export](#web-export) |
 
 ### When a build happens
 
@@ -63,8 +63,14 @@ set **Project Settings > Verse > Runtime > Backend** to `vm`.
 
 A Web preset needs **Extensions Support** on and **Thread Support** off.
 
+To build the Web libraries, install Emscripten 4.0.11 and build both variants. `tools/emsdk_env.py`
+finds an `emsdk-4.0.11` checkout beside this repository, or the one `VERSE_EMSDK` names:
+
+    python tools/emsdk_env.py -- scons platform=web arch=wasm32 threads=no target=template_release
+    python tools/emsdk_env.py -- scons platform=web arch=wasm32 threads=no target=template_debug
+
 The Web build doesn't need threads, so a host that can't set cross-origin isolation headers can
-serve it. It doesn't run at full speed yet: `dodge-the-creeps` runs at about two-thirds of real time
+serve it. It runs slower than a native build: `dodge-the-creeps` runs at about two-thirds of real time
 in Chrome. A Web export ships Verse code compiled by Epic's own compiler, so the redistribution
 limits above still apply to it.
 
@@ -159,7 +165,8 @@ The host path lives in Editor Settings rather than in the project because it nam
 environment takes precedence over both settings, which is how the test harness points a headless
 Godot at a checkout without writing to a file.
 
-To run the tests — the unit layer, the C ABI, two headless Godot projects, and an export check:
+To run the tests — the unit layer, the C ABI, three headless Godot projects, and export checks on
+Windows and Web:
 
     python tools/run_tests.py
 
