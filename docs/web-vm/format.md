@@ -29,8 +29,7 @@ header
 string table        list<str>
 cell table          list<cell>
 packages            list<package>
-units               list<unit>
-initializer         ref
+well-known          list<(sid role, ref)>
 class index         list<class entry>
 end marker          u8 = 0xE5
 ```
@@ -71,7 +70,9 @@ entry, a package definition, an array element.
 Larger integers are `heap int` cells. `false`, `true` and the empty option are the `false` and
 `true` cells (§4); the empty option **is** the `false` cell.
 
-A placeholder is not a value: a linked program has none, and the writer refuses to write one.
+A placeholder is not a value. The file is the program **after** initialization (§7), so a bound
+placeholder is an indirection the writer follows to its value, and an unbound one is a cook error
+naming where it was found.
 
 ## 4. Cells
 
@@ -93,7 +94,7 @@ the loader allocates every cell before filling any.
 | 11 | `rational` | `value` numerator, `value` denominator (each an int or a heap int) |
 | 12 | `procedure` | §5 |
 | 13 | `native procedure` | `sid` decorated name, `uv` positional-parameter count |
-| 14 | `function` | `ref` procedure or native procedure, `value` self (uninitialized for none), `ref` parent scope (0 for none) |
+| 14 | `function` | `ref` procedure or native procedure, `value` self, `ref` parent scope (0 for none). Self has three states that behave differently (`spec/calls.md` §6): uninitialized for a method not yet bound to an object, the `false` cell for a function that takes no receiver, or the receiver itself |
 | 15 | `scope` | `ref` parent scope (0 for none), `list<value>` captures |
 | 16 | `class` | §6 |
 | 17 | `archetype` | §6 |
@@ -143,7 +144,7 @@ schema's order, encoded by its `kind`:
 | Operand kind | Encoding |
 | --- | --- |
 | `register` | `uv` register index |
-| `value` | `uv`: `index << 1` for a register, `index << 1 \| 1` for a constant-pool index |
+| `value` | `uv`: `0` for absent; otherwise `1 + (index << 1)` for a register and `1 + (index << 1 \| 1)` for a constant-pool index. The compiler leaves some operands absent that `ops.json` does not mark optional (`NewFunction`'s self and parent scope, `BeginTask`'s parent), and an absent operand reads as uninitialized |
 | `value_imm` | a value (§3) |
 | `cell:VUniqueString` | `ref` to a `name` cell |
 | `cell:VArray` | `ref` to an `array` cell |
@@ -201,16 +202,25 @@ An **entry** is `sid` name, `ref` access specifier or 0, `value` type (uninitial
 (uninitialized when the constructor initializes it), and `uv` flags (bit 0 `var`, bit 1 native
 representation; further bits as T2.1 confirms).
 
-## 7. Packages, units and the initializer
+## 7. Packages, and why nothing runs at load
 
-**Package:** `sid` name, `sid` root path, `list<(sid decorated path, value)>` definitions.
+**The file is a snapshot of a program whose initialization has already run.** Compiling runs every
+package procedure and the global initializer, and the writer walks the program afterwards, so every
+definitions-table entry holds its final value and every module-level object exists with its fields.
+A loader reconstitutes the cells, binds natives and runs **no** Verse: re-running initialization
+would build a second class and fail to unify it with the first (`spec/modules.md` §2). The UE runtime
+host, which is the differential reference, loads a cook the same way.
 
-**Unit:** one compilation unit, in dependency order: `list<ref>` its packages, then `ref` its package
-procedure. Loading runs every unit's package procedure in order — after binding the natives its
-packages declare — and each must answer the integer 42.
+**Package:** `sid` name, `sid` root path, `list<(sid decorated path, value)>` definitions, in the
+program's order. Each module entry is a `module` cell; each module-level object is a `value object`
+cell of its Verse class.
 
-**Initializer:** the linker-generated global initializer procedure, run once as a task after every
-unit.
+**Well-known definitions:** `list<(sid role, ref)>`, so a loader never matches decorated keys.
+Version 1 roles: `task_class`, the class of `/Verse.org/Verse`'s task objects (`spec/tasks.md`).
+A reader refuses a file missing a role it needs.
+
+The built-in package is not written; the loader supplies it (`spec/modules.md` §2), including the
+missing-procedure function.
 
 ## 8. Class index
 

@@ -132,8 +132,10 @@ restated as requirements on the interpreter:
 - **Most of the program is data built at compile time**: classes, archetypes and closures are cells,
   reached from constant pools, forming a cyclic graph. Cross-package references are already resolved
   to cells. The loader resolves a graph, not names.
-- **Initialization is eager and linker-generated**: a package procedure per unit and a global
-  initializer task, both of which the writer must capture.
+- **Initialization has already run by the time the writer sees the program.** Compiling runs every
+  package procedure and the global initializer, so the `.vbc` is a snapshot of the initialized
+  program and a loader runs no Verse at all. This body first said the writer must capture the
+  initializers for a loader to run; `spec/modules.md` §2 is why that would fail.
 - **The Verse-library native surface a game reaches is about 25 functions** plus about 8 VM
   intrinsics, on top of the 46 Godot natives.
 
