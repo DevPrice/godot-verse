@@ -1,0 +1,2 @@
+Player=player|Area2D|res://player.gd
+HUD=hud|CanvasLayer|res://hud.gd

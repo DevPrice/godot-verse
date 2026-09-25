@@ -4,7 +4,7 @@
 R-QUAL-3. The three layers R-QUAL-1 names, in the order a failure is cheapest to read, plus `web`
 (phase-7.5-design.md §10.1), which runs the vm-backend export a step further, in a browser:
 
-  units        the lexer and the class-declaration scanner, which need neither Godot nor UE
+  units        the lexer, the class-declaration scanner and the GDScript converter, which need neither Godot nor UE
   abi          host_smoke, which drives the whole C ABI with no Godot, and the cooker
   integration  a headless Godot with Verse scripts attached, asserting on behaviour
   export       a headless Godot export, asserting on the tree it produced
@@ -147,6 +147,7 @@ def run_units(results: Results, do_build: bool) -> None:
         ("verse_doc_markup_test.exe", "build_doc_markup_test.py"),
         ("verse_signature_test.exe", "build_signature_test.py"),
         ("verse_vm_test.exe", "build_vm_test.py"),
+        ("verse_gd_convert_test.exe", "build_gd_convert_test.py"),
     ):
         if do_build and not build(builder):
             results.record(binary, False)

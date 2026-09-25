@@ -2265,6 +2265,17 @@ external editor is secondary.
   reported and left to the author, because two modules declaring one name is legal and only the
   author knows which was meant. Insert only: nothing is ever removed, because removing a line the
   author may have written by hand is a different and worse promise.
+- **R-TOOL-13 (SHOULD)** A GDScript file converts to Verse from the editor: "Convert to Verse" on
+  one `.gd` or several, in the FileSystem dock or the script editor's script list, replaces each with
+  a Verse equivalent, **deterministically** — the output is a function of the file, the scenes that
+  say what its `$` paths are, and the project's other script classes. What cannot be translated
+  faithfully is marked `# TODO(convert):` over the GDScript it replaced rather than refused, and
+  listed; the one refusal is a file that does not parse. The scenes and resources that use the
+  script are rewritten to its new member names in the same undoable action, and other GDScripts
+  whose receiver type is written down are offered a second one. Status: **part** — the converter
+  is built and asserted in the units layer (`tests/verse_gd_convert`, Dodge the Creeps' four scripts
+  among the goldens); the editor half has not been run, and the Verse it writes has not been through
+  the compiler. `docs/gdscript-conversion.md`.
   **The buffer unknown is closed**: `ScriptEditor::get_current_editor()->get_base_editor()` reaches
   the active `CodeEdit` from a GDExtension, and the insertion happens from `_frame` rather than
   from inside the validate that found the name. The **fallback ships as well as the mechanism**

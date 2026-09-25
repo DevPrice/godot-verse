@@ -1,0 +1,38 @@
+stem feature_tour, registered as FeatureTour
+24 TODO `@export_enum` became a plain `@export`: the inspector hint it gives has no Verse attribute yet
+31 TODO `health`'s accessors became `SetHealth`: this file calls them, but a value Godot writes -- the inspector, a scene, an animation -- goes straight to `Health` and skips them
+74 note `_has_point` became `HasPointValue`: `HasPoint` is already a name Verse or the Godot mirror defines, and Verse refuses a member that shadows one
+96 note `%` became `Mod[...]`, which is never negative where GDScript's `%` takes the sign of the left side
+149 note the inner class `Helper` became the top-level class `feature_tour_helper`
+rename signal health_changed -> HealthChanged
+rename signal died -> Died
+rename signal scored -> Scored
+rename method _has_point -> HasPointValue
+rename method jump -> Jump
+rename method start_moving -> StartMoving
+rename method total_score -> TotalScore
+rename method describe -> Describe
+rename method take_damage -> TakeDamage
+rename method find_target -> FindTarget
+rename method spawn -> Spawn
+rename method wait_a_bit -> WaitABit
+rename method _on_died -> OnDied
+rename method _on_timer_timeout -> OnTimerTimeout
+rename property MOB -> Mob
+rename property speed -> Speed
+rename property level -> Level
+rename property config_path -> ConfigPath
+rename property description -> Description
+rename property tint -> Tint
+rename property target -> Target
+rename property size_kind -> SizeKind
+rename property sprite -> Sprite
+rename property label -> Label
+rename property timer -> Timer
+rename property state -> State
+rename property health -> Health
+rename property velocity -> Velocity
+rename property names -> Names
+rename property scores -> Scores
+rename property spare_timer -> SpareTimer
+rename property untyped -> Untyped

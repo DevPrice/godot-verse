@@ -1,5 +1,8 @@
 #pragma once
 
+#ifdef TOOLS_ENABLED
+#include "verse_convert_menu.h"
+#endif
 #include "verse_export_plugin.h"
 #include "verse_module_menu.h"
 #include "verse_syntax_highlighter.h"
@@ -38,5 +41,11 @@ private:
 
 	godot::Ref<VerseSyntaxHighlighter> highlighter;
 	godot::Ref<VerseModuleMenu> module_menu;
+	// Two registrations of one plugin: the FileSystem dock's context menu and the script editor's
+	// script list, which is where a GDScript is right-clicked (docs/gdscript-conversion.md).
+#ifdef TOOLS_ENABLED
+	godot::Ref<VerseConvertMenu> convert_menu;
+	godot::Ref<VerseConvertMenu> convert_menu_script_editor;
+#endif
 	godot::Ref<VerseExportPlugin> export_plugin;
 };

@@ -1,0 +1,11 @@
+stem main
+36 note `position` is not a member the mirror knows, so it is written with `Set`
+40 note `rotation` is not a member the mirror knows, so it is written with `Set`
+44 note `linear_velocity` is not a member the mirror knows, so it is written with `Set`
+rename method game_over -> GameOver
+rename method new_game -> NewGame
+rename method _on_mob_timer_timeout -> OnMobTimerTimeout
+rename method _on_score_timer_timeout -> OnScoreTimerTimeout
+rename method _on_start_timer_timeout -> OnStartTimerTimeout
+rename property mob_scene -> MobScene
+rename property score -> Score

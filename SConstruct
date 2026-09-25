@@ -46,6 +46,10 @@ else:
 
 env.Append(CPPPATH=["src/", "include/"])
 sources = Glob("src/*.cpp")
+# "Convert to Verse" is editor-only and carries a 3 MB table of the mirror (verse_gd_api.gen.h), so
+# an export template -- which has no editor to offer it in -- is built without it.
+if env["target"] != "editor":
+    sources = [s for s in sources if not s.name.startswith(("verse_gd_", "verse_convert_menu"))]
 
 # vm/ is the clean-room interpreter (docs/phase-7.5-design.md §2, §9): a godot-cpp-free library
 # that also implements the runtime subset of the vh_* ABI. Web cannot LoadLibraryExW a host DLL at

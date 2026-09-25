@@ -1,0 +1,16 @@
+stem main
+9 note `show_game_over` on `hud` is assumed to be spelled `ShowGameOver`, as a converted script or its generated binding spells it
+17 note `start` on `player` is assumed to be spelled `Start`, as a converted script or its generated binding spells it
+19 note `update_score` on `hud` is assumed to be spelled `UpdateScore`, as a converted script or its generated binding spells it
+20 note `show_message` on `hud` is assumed to be spelled `ShowMessage`, as a converted script or its generated binding spells it
+36 note `position` is not a member the mirror knows, so it is written with `Set`
+40 note `rotation` is not a member the mirror knows, so it is written with `Set`
+44 note `linear_velocity` is not a member the mirror knows, so it is written with `Set`
+52 note `update_score` on `hud` is assumed to be spelled `UpdateScore`, as a converted script or its generated binding spells it
+rename method game_over -> GameOver
+rename method new_game -> NewGame
+rename method _on_mob_timer_timeout -> OnMobTimerTimeout
+rename method _on_score_timer_timeout -> OnScoreTimerTimeout
+rename method _on_start_timer_timeout -> OnStartTimerTimeout
+rename property mob_scene -> MobScene
+rename property score -> Score

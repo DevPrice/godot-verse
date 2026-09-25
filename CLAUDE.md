@@ -193,6 +193,11 @@ Three documents are not phase records and are the ones to read before adding a f
   script's documentation once per session and off the game thread, where every ABI read is refused.
   Its "What is still open" section is where the remaining by-hand checks live.
 
+**`docs/gdscript-conversion.md`** is "Convert to Verse" (R-TOOL-13): the requirements as the owner
+settled them, every GDScript construct and what it becomes, and the five Verse spellings the
+converter writes that no fixture here has compiled. Read it before changing what the converter
+emits — and note that its editor half has never been run.
+
 `docs/nonatomic-methods.md` is generated — R-AUD-3's list of the 1132 emitted methods whose
 `<transacts>` promises a rollback the bridge cannot perform.
 
@@ -268,6 +273,9 @@ compiler-side entry points answer `VH_ERR_UNSUPPORTED` in a runtime host.
 | `verse_export_plugin.{h,cpp}` | editor-only: runs `verse_cook.exe` over the project, strips every `.verse` to a one-byte stub so `ext_resource path=` still resolves, and refuses a platform this bridge does not reach |
 | `verse_export_paths.{h,cpp}` | the one rule for where a game's cooked Verse lives — `verse_data` beside the executable — shared by the export plugin that creates it and the runtime that finds it |
 | `verse_module_menu.{h,cpp}` | editor-only: "Make Verse Module" in the FileSystem dock, because Godot's dock cannot create an empty file |
+| `verse_gd_syntax.{h,cpp}` | GDScript's lexer and parser, for the converter: GDExtension cannot reach Godot's own. The seventh godot-cpp-free unit |
+| `verse_gd_convert.{h,cpp}`, `verse_gd_resources.cpp` | "Convert to Verse" (R-TOOL-13): GDScript to Verse, a batch in rounds, the `.tscn`/`.tres` rewrite and the caller rewrite. Pure; every mirror spelling comes from `verse_gd_api.gen.h`. Built into the editor library only (SConstruct) |
+| `verse_convert_menu.{h,cpp}` | editor-only: the menu item in the dock and the script list, reading the project, one undoable file-set action, and the callers dialog |
 | `verse_syntax_highlighter.*`, `verse_editor_plugin.*` | editor-only (`TOOLS_ENABLED`) |
 
 `VerseScriptLanguage` overrides only the virtuals it actually answers — godot-cpp binds a virtual
@@ -392,6 +400,7 @@ reviewed files of `docs/web-vm/spec/` alone. Keep it that way — do not bring V
     python tools/build_module_map_test.py # module-map test binary
     python tools/build_doc_markup_test.py # doc-markup converter test binary
     python tools/build_signature_test.py  # signature parser test binary
+    python tools/build_gd_convert_test.py # GDScript converter test binary (MSVC, or g++/clang elsewhere)
     python tools/build_bench.py           # host benchmark (timings, not pass/fail)
     python tools/build_verse_probe.py     # the Verse probe (asks the compiler a question)
     python tools/build_cooked_probe.py    # the cooked probe (asks a runtime host what an export sees)
@@ -425,7 +434,9 @@ executable. If a future engine drop provides one, that script finds and execs it
     python tools/run_tests.py --build            # rebuild the test binaries first
 
 **units** — lexer, class-declaration scanner, module map, doc-markup converter, signature parser,
-generator, and `vm/`'s own cases (`verse_vm_test`). No Godot, no UE.
+the GDScript converter, generator, and `vm/`'s own cases (`verse_vm_test`). No Godot, no UE. The
+converter's goldens are whole files (`tests/verse_gd_convert/fixtures/*.expected`);
+`bin/verse_gd_convert_test.exe --update` rewrites them, and the diff is the review.
 
 **abi** — `host_smoke`, the whole C ABI with no Godot, plus a `verse_cook` case that cooks
 `tests/host_smoke`'s fixtures and asserts the packages, the container, the sidecar and the
@@ -521,6 +532,7 @@ The binaries still run standalone, which is what to reach for when bisecting one
     bin/verse_module_map_test.exe
     bin/verse_doc_markup_test.exe
     bin/verse_signature_test.exe
+    bin/verse_gd_convert_test.exe
     python tests/verse_api_gen/test_gen_verse_api.py
 
 ### Instruments, which are not tests
@@ -586,6 +598,7 @@ the editor and `export_check.gd` as an autoload in an export.
 | `src/verse_api_skipped.h` | `tools/gen_verse_api.py` | same — every Godot member the mirror does not carry under its own name, and why, which is what `_validate` turns into a sentence (R-SCN-2) |
 | `host/Private/GodotClassNames.gen.h` | `tools/gen_verse_api.py` | same — every Godot class and the mirrored Verse class an object of it crosses as, which is what R-SCN-6's cast is built on. Every class, not only the emitted ones: a `--classes-file` build still has to make a handle cross as *something*, so each row names its nearest emitted ancestor |
 | `docs/nonatomic-methods.md` | `tools/gen_verse_api.py` | same — R-AUD-3's list. Written by the pass that writes the mirror, so it cannot drift |
+| `src/verse_gd_api.gen.h` | `tools/gen_verse_api.py` | same — how every Godot name is spelled in the mirror and in which shape (value, failable, test), for the GDScript converter. Recorded where each member is emitted |
 | `src/verse_keywords.h` | `tools/gen_verse_keywords.py` | the UE compiler's `ReservedSymbols.inl` |
 | `host/Private/HostVbcOps.gen.h` | `tools/gen_vbc_writer.py` | `docs/web-vm/ops.json` — the cooker's per-op `.vbc` encoder, each op's size, may-park table and the schema digest the file is stamped with. `static_assert`s every opcode number against the engine's, so an engine bump that moved the op set fails to compile rather than writing a wrong file. `--check` reports a stale header |
 | `vm/vbc_ops.gen.h` | `tools/gen_vbc_ops.py --emit-cpp` | same — the interpreter's half of the same op schema: an enum class of opcodes, and per-op constexpr tables (name, emitted, may-park, yields, operand roles/kinds) the decoder reads instead of hand-maintaining a mirror of `ops.json`. Carries the same schema digest `HostVbcOps.gen.h` does, so a `.vbc` stamped by one engine commit and read on another is refused rather than misread |

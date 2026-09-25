@@ -1,0 +1,2 @@
+stem mob
+rename method _on_visible_on_screen_notifier_2d_screen_exited -> OnVisibleOnScreenNotifier2dScreenExited

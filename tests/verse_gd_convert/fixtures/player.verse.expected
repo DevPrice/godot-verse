@@ -1,0 +1,63 @@
+using { /Godot.org/Godot }
+
+player := class(area2d):
+
+	@export_signal
+	Hit:event() = event(){}
+
+	@export
+	var Speed:int = 400 # How fast the player will move (pixels/sec).
+	var ScreenSize:vector2 = vector2{} # Size of the game window.
+
+	_Ready<override>():void =
+		set ScreenSize = GetViewportRect().Size
+		Hide()
+
+	_Process<override>(Delta:float):void =
+		var Velocity:vector2 = Vector2Statics.Zero # The player's movement vector.
+		if (GetInputSingleton().IsActionPressed["move_right"]):
+			set Velocity = vector2{X := Velocity.X + 1.0, Y := Velocity.Y}
+		if (GetInputSingleton().IsActionPressed["move_left"]):
+			set Velocity = vector2{X := Velocity.X - 1.0, Y := Velocity.Y}
+		if (GetInputSingleton().IsActionPressed["move_down"]):
+			set Velocity = vector2{X := Velocity.X, Y := Velocity.Y + 1.0}
+		if (GetInputSingleton().IsActionPressed["move_up"]):
+			set Velocity = vector2{X := Velocity.X, Y := Velocity.Y - 1.0}
+
+		if (Velocity.Length() > 0.0):
+			set Velocity = Velocity.Normalized() * (Speed * 1.0)
+			if (AnimatedSprite2DFound := GetNode["AnimatedSprite2D"], AnimatedSprite2DNode := animated_sprite2d[AnimatedSprite2DFound]):
+				AnimatedSprite2DNode.Play()
+		else:
+			if (AnimatedSprite2DFound := GetNode["AnimatedSprite2D"], AnimatedSprite2DNode := animated_sprite2d[AnimatedSprite2DFound]):
+				AnimatedSprite2DNode.Stop()
+
+		set Position += Velocity * Delta
+		set Position = Position.Clamp(Vector2Statics.Zero, ScreenSize)
+
+		if (Velocity.X <> 0.0):
+			if (AnimatedSprite2DFound := GetNode["AnimatedSprite2D"], AnimatedSprite2DNode := animated_sprite2d[AnimatedSprite2DFound]):
+				AnimatedSprite2DNode.SetAnimation("right")
+				set AnimatedSprite2DNode.FlipV = false
+			if (TrailFound := GetNode["Trail"], TrailNode := gpu_particles2d[TrailFound]):
+				set TrailNode.Rotation = 0.0
+			if (AnimatedSprite2DFound := GetNode["AnimatedSprite2D"], AnimatedSprite2DNode := animated_sprite2d[AnimatedSprite2DFound]):
+				set AnimatedSprite2DNode.FlipH = logic{Velocity.X < 0.0}
+		else if (Velocity.Y <> 0.0):
+			if (AnimatedSprite2DFound := GetNode["AnimatedSprite2D"], AnimatedSprite2DNode := animated_sprite2d[AnimatedSprite2DFound]):
+				AnimatedSprite2DNode.SetAnimation("up")
+			set Rotation = if (Velocity.Y > 0.0) then MathPi else 0.0
+
+	Start(Pos:vector2)<transacts>:void =
+		set Position = Pos
+		set Rotation = 0.0
+		Show()
+		if (CollisionShape2DFound := GetNode["CollisionShape2D"], CollisionShape2DNode := collision_shape2d[CollisionShape2DFound]):
+			set CollisionShape2DNode.Disabled = false
+
+	OnBodyEntered(Body:variant)<transacts>:void =
+		Hide() # Player disappears after being hit.
+		Hit.Emit(())
+		# Must be deferred as we can't change physics properties on a physics callback.
+		if (CollisionShape2DFound := GetNode["CollisionShape2D"], CollisionShape2DNode := collision_shape2d[CollisionShape2DFound]):
+			CollisionShape2DNode.SetDeferred("disabled", VariantBool(true))

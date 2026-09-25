@@ -768,6 +768,7 @@ def collect_enums(api: dict) -> dict:
 
         names, stripped = enumerator_names([value["name"] for value in kept])
         key = f"{owner}.{godot_enum['name']}" if owner else godot_enum["name"]
+        ENUM_GODOT_NAMES[key] = [value["name"] for value in kept]
         verse_name = enum_verse_name(owner, godot_enum["name"])
         if verse_name in collected:
             raise ValueError(f"two Godot enums both spell themselves {verse_name}")
@@ -1548,6 +1549,11 @@ class Coverage:
         # performing it, so it has no inverse to register. Rows are
         # (godot class, godot method, verse class, verse method, return type).
         self.nonatomic = []
+        # verse_gd_api.gen.h's member table, for the GDScript converter: one ConvertRow per name a
+        # GDScript body can reach -- method, property, signal, constant, static, utility, enum
+        # value. Appended where each is emitted, for `doc_map`'s reason: recomputed afterwards it
+        # could spell a member differently from the mirror that actually carries it.
+        self.convert_rows = []
 
     def skip(self, reason: str, member: "SkippedMember | None" = None):
         self.skip_reasons[reason] += 1
@@ -2033,6 +2039,8 @@ def emit_utility_functions(api: dict, resolver: TypeResolver, coverage: Coverage
             else:
                 reason, detail = "utility_not_dispatched", ""
             coverage.skip(reason, SkippedMember("", verse_name, "@GlobalScope", name, reason, detail))
+            if name in UTILITY_VERSE_SPELLINGS:
+                coverage.convert_rows.append(convert_row_for_spelled_utility(utility, resolver))
             continue
 
         params = []
@@ -2071,6 +2079,11 @@ def emit_utility_functions(api: dict, resolver: TypeResolver, coverage: Coverage
         # @GlobalScope is where Godot documents a function belonging to no class, and is where
         # GDScript sends a click on `randf_range`. The module is the owner the compiler reports.
         coverage.doc_map.append(("GodotStatics", verse_name, "@GlobalScope", name, "method"))
+        coverage.convert_rows.append(ConvertRow(
+            "@GlobalScope", name, f"GodotStatics.{verse_name}", "", "utility",
+            "void" if info is None else "decides" if info.unpack_decides else "value",
+            info.verse_type if info else "", encode_params(params, utility.get("arguments") or [],
+                                                           resolver)))
         coverage.utilities_emitted += 1
     return blocks
 
@@ -2138,6 +2151,14 @@ def emit_static_methods(api: dict, emit_order: list, resolver: TypeResolver,
                              f" = {info.unpack_fn}({call})")
             coverage.doc_map.append((statics_module_name(godot_class), verse_name,
                                      godot_class, method["name"], "method"))
+            shape = lines[-1].split("(", 1)[1]
+            shape = ("void" if info is None else "predicate" if ":void =" in shape
+                     else "decides" if "<decides>" in shape else "value")
+            coverage.convert_rows.append(ConvertRow(
+                godot_class, method["name"], f"{statics_module_name(godot_class)}.{verse_name}", "",
+                "static_method", shape,
+                "" if info is None or shape == "predicate" else info.verse_type,
+                encode_params(params, method.get("arguments") or [], resolver)))
             coverage.statics_emitted += 1
         if lines:
             blocks.append((godot_class, lines))
@@ -2190,6 +2211,9 @@ def emit_statics_module(godot_class: str, constants: list, resolver: TypeResolve
             lines.append(f"    {name}<public>:int = {constant['value']}")
             coverage.doc_map.append((statics_module_name(godot_class), name,
                                      godot_class, constant["name"], "constant"))
+            coverage.convert_rows.append(ConvertRow(
+                godot_class, constant["name"], f"{statics_module_name(godot_class)}.{name}", "",
+                "constant", "value", "int"))
             continue
         info = resolver.classify(godot_type)
         literal = verse_default_literal(info.verse_type, constant.get("value")) if info else None
@@ -2203,6 +2227,9 @@ def emit_statics_module(godot_class: str, constants: list, resolver: TypeResolve
         lines.append(f"    {name}<public>:{info.verse_type} = {literal}")
         coverage.doc_map.append((statics_module_name(godot_class), name,
                                  godot_class, constant["name"], "constant"))
+        coverage.convert_rows.append(ConvertRow(
+            godot_class, constant["name"], f"{statics_module_name(godot_class)}.{name}", "",
+            "constant", "value", info.verse_type))
 
     if not lines:
         return ""
@@ -2729,6 +2756,9 @@ def generate(api: dict, requested: list, coverage: Coverage, enums: dict):
             used |= names
             all_member_names |= names
             emitted_lines.extend(emit_property(cp, locals_for_accessors))
+            coverage.convert_rows.append(ConvertRow(
+                name, cp.godot_name, cp.verse_name, "", "property", "value",
+                cp.type_info.verse_type))
             method_map.append((name, verse_class_name(name), cp.godot_name, cp.verse_name,
                                False, "property"))
             coverage.properties_emitted += 1
@@ -2741,6 +2771,8 @@ def generate(api: dict, requested: list, coverage: Coverage, enums: dict):
             used.add(cm.verse_name)
             all_member_names.add(cm.verse_name)
             emitted_lines.append(emit_method(cm))
+            coverage.convert_rows.append(convert_row_for_method(
+                name, cm, methods_by_name.get(cm.godot_name, {}), resolver))
             method_map.append((name, verse_class_name(name), cm.godot_name, cm.verse_name,
                                cm.default_body is not None, "method"))
             coverage.methods_emitted += 1
@@ -2766,11 +2798,25 @@ def generate(api: dict, requested: list, coverage: Coverage, enums: dict):
             used.add(signal_name)
             all_member_names.add(signal_name)
             emitted_lines.append(line)
+            coverage.convert_rows.append(ConvertRow(
+                name, sig["name"], signal_name, "", "signal", "value",
+                line.split(":signal(", 1)[1].split(") =", 1)[0]))
             # A signal accessor is a Verse *function*, so nothing about the Verse side says the
             # thing it names is a signal -- and Godot documents a signal on a page of its own.
             # Without this row `Timeout()` hovered as a local with its function type in it.
             coverage.doc_map.append((verse_class_name(name), signal_name, name, sig["name"], "signal"))
             coverage.signals_emitted += 1
+
+        emitted_properties = {cp.godot_name for cp in properties if cp.verse_name in used}
+        for p in classes_by_name[name].get("properties", []):
+            if p["name"] in emitted_properties or p.get("index") is not None:
+                continue
+            getter, setter = p.get("getter") or "", p.get("setter") or ""
+            if getter and verse_method_name(getter) in used:
+                coverage.convert_rows.append(ConvertRow(
+                    name, p["name"], getter,
+                    setter if setter and verse_method_name(setter) in used else "",
+                    "accessor_property", "value", ""))
 
         inherited_names[name] = used
         coverage.classes_emitted += 1
@@ -3829,6 +3875,312 @@ def format_report(coverage: Coverage, class_count_requested: int) -> str:
     return "\n".join(lines) + "\n"
 
 
+# --- The GDScript converter's table (src/verse_gd_api.gen.h) ------------------------------------
+#
+# `src/verse_gd_convert.cpp` turns GDScript into Verse without Godot and without the host, so it
+# cannot ask either how the mirror spells `is_action_pressed` -- and the answer is not derivable
+# from the name: it is `IsActionPressed[...]` because the method is a predicate, `GetNode[...]`
+# because it was renamed and answers an object, `Position` because the pair became a property,
+# `GetText()` because a string property could not. Every one of those decisions is made in this
+# file, so the rows are recorded where each is made and the converter reads them rather than
+# re-deriving them.
+
+CONVERT_HEADER_PATH = "src/verse_gd_api.gen.h"
+
+ConvertRow = namedtuple(
+    "ConvertRow",
+    ["godot_class", "godot_name", "verse", "extra", "kind", "shape", "result", "params"],
+    defaults=("",))
+
+# Filled by collect_enums: the Godot spelling of each kept enumerator, in the order its Verse name
+# was derived. The mirror needs only the Verse names; the converter reads the Godot ones.
+ENUM_GODOT_NAMES = {}
+# The collected enums by Verse name, so a parameter's default can be spelled as an enumerator.
+ENUMS_BY_VERSE_NAME = {}
+
+# Verse's own spellings answer an int where Godot's answer a float; UTILITY_VERSE_SPELLINGS says so
+# in its comment, and the converter needs the type to know when a result needs `* 1.0`.
+SPELLED_UTILITY_INT_RESULTS = {"floor", "floori", "ceil", "ceili", "round", "roundi", "posmod"}
+
+
+def godot_default_fill(p, arg) -> str:
+    """The Verse spelling of Godot's default for a parameter Verse makes the caller pass.
+
+    classify_method keeps a Verse default only when it has a literal *and* nothing required follows
+    it, so `AddChild(Node, false, node_internal_mode.Disabled)` is what a GDScript `add_child(n)`
+    has to become. Empty when Godot had no default either, or it has no spelling here.
+    """
+    raw = arg.get("default_value")
+    if raw is None:
+        return ""
+    verse_type = p.type_info.verse_type
+    literal = verse_default_literal(verse_type, raw)
+    if literal is not None:
+        return literal
+    if p.optional and raw == "null":
+        return "false"
+    info = ENUMS_BY_VERSE_NAME.get(verse_type)
+    if info is not None and re.fullmatch(r"-?\d+", raw):
+        for enumerator, value in info.values:
+            if value == int(raw):
+                return f"{verse_type}.{enumerator}"
+    return ""
+
+
+def encode_params(params, args, resolver) -> str:
+    """`Name:type` per parameter, `;`-joined; `?Name:type` when Verse's is optional (so it must be
+    passed by name), and `Name:type=fill` when Verse requires what Godot defaulted."""
+    parts = []
+    for p, arg in zip(params, args):
+        if p.default is not None:
+            parts.append(f"?{p.verse_name}:{param_type(p)}")
+            continue
+        fill = godot_default_fill(p, arg)
+        parts.append(f"{p.verse_name}:{param_type(p)}" + (f"={fill}" if fill else ""))
+    return ";".join(parts)
+
+
+def convert_row_for_method(godot_class: str, cm, m: dict, resolver) -> "ConvertRow":
+    is_virtual = cm.default_body is not None
+    ti = cm.return_type
+    answers_object = ti is not None and ti.pack_fn == "VhFromObject"
+    if cm.is_predicate:
+        shape, result = "predicate", ""
+    elif cm.is_void:
+        shape, result = "void", ""
+    elif is_virtual:
+        shape, result = "value", (f"?{ti.verse_type}" if cm.return_optional else ti.verse_type)
+    elif answers_object:
+        shape, result = ("value" if cm.return_required else "decides"), ti.verse_type
+    else:
+        shape, result = ("decides" if ti.unpack_decides else "value"), ti.verse_type
+    return ConvertRow(godot_class, cm.godot_name, cm.verse_name, "vararg" if cm.is_vararg else "",
+                      "virtual" if is_virtual else "method", shape, result,
+                      encode_params(cm.params, m.get("arguments") or [], resolver))
+
+
+def convert_row_for_spelled_utility(utility: dict, resolver) -> "ConvertRow":
+    name = utility["name"]
+    spelling = UTILITY_VERSE_SPELLINGS[name]
+    verse = re.split(r"[\[(]", spelling, maxsplit=1)[0]
+    return_type = utility.get("return_type")
+    if return_type is None:
+        result = ""
+    elif name in SPELLED_UTILITY_INT_RESULTS:
+        result = "int"
+    elif return_type == "Variant":
+        # abs, clamp, min, max, lerp...: the type of the arguments, which only the call site knows.
+        result = "*"
+    else:
+        info = resolver.classify(return_type)
+        result = info.verse_type if info else ""
+    shape = "void" if return_type is None else "decides" if "[" in spelling else "value"
+    if shape == "decides" and result == "bool":
+        shape = "predicate"
+    if result == "logic" and "[" in spelling:
+        shape, result = "predicate", ""
+    return ConvertRow("@GlobalScope", name, verse, "", "utility", shape, result)
+
+
+MATH_CONVERT_RE = re.compile(
+    r"^\(\s*\w+\s*:\s*(\w+)\s*\)\.(\w+)<public>((?:<\w+>)*)\((.*)\)((?:<\w+>)*):([\w\[\]?]+)\s*=")
+
+
+def split_top_level(text: str, separator: str = ",") -> list:
+    parts, depth, current = [], 0, ""
+    for c in text:
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        if c == separator and depth == 0:
+            parts.append(current.strip())
+            current = ""
+            continue
+        current += c
+    if current.strip():
+        parts.append(current.strip())
+    return parts
+
+
+def math_convert_rows(api: dict, math_source: Path) -> list:
+    """The hand-written math methods, read out of GodotMath the way read_math_written reads them,
+    plus the struct fields in MATH_LAYOUT."""
+    rows = []
+    by_verse = {verse_class_name(b["name"]): b for b in api.get("builtin_classes", [])
+                if b["name"] in MATH_LAYOUT}
+    seen = set()
+    if math_source.exists():
+        for line in math_source.read_text(encoding="utf-8").splitlines():
+            m = MATH_CONVERT_RE.match(line)
+            if not m:
+                continue
+            verse_type, verse_name, _, params, effects, result = m.groups()
+            builtin = by_verse.get(verse_type)
+            if builtin is None:
+                continue
+            godot = next((bm["name"] for bm in builtin.get("methods", []) or []
+                          if verse_method_name(bm["name"]) == verse_name), None)
+            if godot is None or (builtin["name"], godot) in seen:
+                continue
+            seen.add((builtin["name"], godot))
+            encoded = ";".join(part.split("=", 1)[0].strip() for part in split_top_level(params))
+            if "<decides>" in effects:
+                shape = "predicate" if result == "void" else "decides"
+            else:
+                shape = "void" if result == "void" else "value"
+            rows.append(ConvertRow(builtin["name"], godot, verse_name, "", "method", shape,
+                                   "" if result == "void" else result, encoded))
+    for godot_type, fields in MATH_LAYOUT.items():
+        for field, field_type in fields:
+            rows.append(ConvertRow(godot_type, field, verse_method_name(field), "", "field", "value",
+                                   verse_builtin_type_name(field_type)))
+    return rows
+
+
+def enum_convert_rows(enums: dict) -> list:
+    rows = []
+    for key, info in enums.items():
+        owner, name = key.split(".", 1) if "." in key else ("@GlobalScope", key)
+        rows.append(ConvertRow(owner, name, info.verse_name, "", "enum", "value", info.verse_name))
+        # `Variant.Type` and `Variant.Operator` are global enums with a dotted name, and GDScript
+        # reaches their values bare -- `TYPE_INT`, `OP_ADD` -- the way it reaches `KEY_SPACE`.
+        value_owner = "@GlobalScope" if owner == "Variant" else owner
+        for godot_name, (verse_name, _) in zip(ENUM_GODOT_NAMES.get(key, []), info.values):
+            rows.append(ConvertRow(value_owner, godot_name, f"{info.verse_name}.{verse_name}", "",
+                                   "enum_value", "value", info.verse_name))
+    return rows
+
+
+CONVERT_HEADER_TEMPLATE = """#pragma once
+
+// Generated by tools/gen_verse_api.py from godot-cpp/gdextension/extension_api-4-7.json
+// ({version}). Do not edit by hand.
+//
+// What src/verse_gd_convert.cpp needs to know about the mirror to turn GDScript into Verse: how
+// each Godot name is spelled there, and in which *shape* -- a predicate is `IsActionPressed[...]`
+// and a test, an object result is `GetParent[]` and a failure context, a property is `Position`
+// and a `set`. None of that is derivable from Godot's name, and all of it is decided in
+// gen_verse_api.py, which is why it is recorded there as each member is emitted.
+//
+// No godot-cpp dependency, so the converter stays a unit a test binary links without Godot.
+
+namespace verse_gd_api {{
+
+enum class kind : unsigned char {{
+	method, // a member function; `params` and `shape` say how to call it
+	virtual_method, // Godot's `_ready`: an `<override>`, never a call
+	property, // a `var` on the mirrored class: `X.Position`, `set X.Position = ...`
+	accessor_property, // a property left as its pair: `verse` is the getter's Godot name, `extra` the setter's
+	signal, // an accessor answering `signal(result)`: `Timer.Timeout()`
+	constant, // `verse` is the qualified spelling: `Vector2Statics.Zero`
+	static_method, // `verse` is qualified: `TweenStatics.InterpolateValue`
+	utility, // an @GlobalScope function: `GodotStatics.RandfRange`, or Verse's own `Clamp`
+	enum_type, // `Node.ProcessMode` -> `node_process_mode`
+	enum_value, // `PROCESS_MODE_ALWAYS` -> `node_process_mode.Always`
+	field, // a math struct's field: `Vector2.x` -> `X`
+}};
+
+enum class shape : unsigned char {{
+	value, // `F(...)`, answers `result`
+	decides, // `F[...]`, answers `result` or fails
+	predicate, // `F[...]`, `<decides>:void`: a test, with no value
+	none, // `F(...)`, answers nothing
+}};
+
+// Sorted by (godot_class, godot_name, kind), so a lookup is a binary search and a walk up the
+// class chain. `params` is `;`-joined `Name:type`, with `?Name:type` for a parameter Verse makes
+// optional (and so must be passed by name) and `Name:type=fill` where Verse requires a value Godot
+// defaulted -- `fill` is that default, spelled in Verse.
+struct member {{
+	const char *godot_class;
+	const char *godot_name;
+	const char *verse;
+	const char *extra;
+	kind what;
+	shape form;
+	const char *result;
+	const char *params;
+}};
+
+inline constexpr member members[] = {{
+{members}
+}};
+
+// Every Godot class, the Verse class it is (or crosses as), its Godot parent, and -- for a
+// singleton -- the module-level accessor and whether that accessor is `<decides>`. The sixteen
+// math types are here with no parent, and `fields` holds their constructor order.
+struct class_row {{
+	const char *godot_name;
+	const char *verse_name;
+	const char *parent;
+	const char *singleton_accessor;
+	bool singleton_decides;
+	const char *fields;
+}};
+
+inline constexpr class_row classes[] = {{
+{classes}
+}};
+
+// Every name Verse or the mirror defines at module scope that a *local* or a member would be
+// ambiguous with rather than shadow (CLAUDE.md, "Modules and names"): VERSE_STDLIB_NAMES, which is
+// the generator's own list for the same hazard in generated code.
+inline constexpr const char *module_scope_names[] = {{
+{stdlib}
+}};
+
+}} // namespace verse_gd_api
+"""
+
+
+def c_string(text: str) -> str:
+    return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def render_convert_header(api: dict, emit_order: list, coverage: "Coverage", enums: dict,
+                          member_names: set, math_source: Path) -> str:
+    rows = list(coverage.convert_rows) + enum_convert_rows(enums) + math_convert_rows(api, math_source)
+    kinds = {"method": "method", "virtual": "virtual_method", "property": "property",
+             "accessor_property": "accessor_property", "signal": "signal", "constant": "constant",
+             "static_method": "static_method", "utility": "utility", "enum": "enum_type",
+             "enum_value": "enum_value", "field": "field"}
+    shapes = {"value": "value", "decides": "decides", "predicate": "predicate", "void": "none"}
+    keyed = {}
+    for row in rows:
+        keyed.setdefault((row.godot_class, row.godot_name, kinds[row.kind]), row)
+    members = "\n".join(
+        f"\t{{ {c_string(r.godot_class)}, {c_string(r.godot_name)}, {c_string(r.verse)}, "
+        f"{c_string(r.extra)}, kind::{k[2]}, shape::{shapes[r.shape]}, {c_string(r.result)}, "
+        f"{c_string(r.params)} }},"
+        for k, r in sorted(keyed.items(), key=lambda item: item[0]))
+
+    emitted = set(emit_order)
+    parents = {c["name"]: c.get("inherits") or "" for c in api["classes"]}
+    singletons = {s["name"] for s in api.get("singletons", [])}
+    editor_only = {c["name"] for c in api.get("classes", []) if c.get("api_type") == "editor"}
+    class_rows = []
+    for name in sorted(parents):
+        cur = name
+        while cur and cur not in emitted:
+            cur = parents.get(cur)
+        accessor = (singleton_accessor_name(name, member_names)
+                    if name in singletons and name in emitted else "")
+        class_rows.append(
+            f"\t{{ {c_string(name)}, {c_string(verse_class_name(cur) if cur else 'object')}, "
+            f"{c_string(parents[name])}, {c_string(accessor)}, "
+            f"{'true' if accessor and name in editor_only else 'false'}, \"\" }},")
+    for godot_type, fields in MATH_LAYOUT.items():
+        spelled = ";".join(f"{verse_method_name(f)}:{verse_builtin_type_name(t)}" for f, t in fields)
+        class_rows.append(f"\t{{ {c_string(godot_type)}, {c_string(verse_class_name(godot_type))}, "
+                          f'"", "", false, {c_string(spelled)} }},')
+    class_rows.sort()
+    return CONVERT_HEADER_TEMPLATE.format(
+        version=api["header"]["version_full_name"], members=members,
+        classes="\n".join(class_rows),
+        stdlib="\n".join(f"\t{c_string(n)}," for n in sorted(VERSE_STDLIB_NAMES)))
+
+
 RESERVED_WORDS = set()
 
 
@@ -3849,6 +4201,8 @@ def main() -> int:
                         help="Where to write the R-AUD-3 appendix of non-atomic methods")
     parser.add_argument("--math-source", default=MATH_SOURCE_PATH,
                         help="The hand-written math file whose definitions decide what is *not* skipped")
+    parser.add_argument("--convert-header", default=CONVERT_HEADER_PATH,
+                        help="Where to write the GDScript converter's table")
     parser.add_argument("--report", default=None, help="Write the coverage report here instead of stdout")
     parser.add_argument("--keywords", default=KEYWORDS_HEADER)
     args = parser.parse_args()
@@ -3869,6 +4223,7 @@ def main() -> int:
     check_variant_lanes(api)
     enums = collect_enums(api)
     check_enum_names(enums, api)
+    ENUMS_BY_VERSE_NAME.update({info.verse_name: info for info in enums.values()})
 
     if args.classes_file is None:
         requested = [c["name"] for c in api["classes"]]
@@ -3920,6 +4275,13 @@ def main() -> int:
     nonatomic_path.write_text(
         render_nonatomic(api, coverage, build_parent_map(api["classes"]),
                          {c["name"] for c in api["classes"]}),
+        encoding="utf-8", newline="\n")
+
+    convert_path = resolve(root, args.convert_header)
+    convert_path.parent.mkdir(parents=True, exist_ok=True)
+    convert_path.write_text(
+        render_convert_header(api, emit_order, coverage, enums, member_names,
+                              resolve(root, args.math_source)),
         encoding="utf-8", newline="\n")
 
     report = format_report(coverage, len(class_blocks))

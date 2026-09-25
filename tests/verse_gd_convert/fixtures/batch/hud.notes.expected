@@ -1,0 +1,9 @@
+stem hud
+6 note `text` is a `string` because that is what every other converted file passes it
+24 note `score` is a `int` because that is what every other converted file passes it
+rename signal start_game -> StartGame
+rename method show_message -> ShowMessage
+rename method show_game_over -> ShowGameOver
+rename method update_score -> UpdateScore
+rename method _on_start_button_pressed -> OnStartButtonPressed
+rename method _on_message_timer_timeout -> OnMessageTimerTimeout

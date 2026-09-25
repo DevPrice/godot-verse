@@ -1,0 +1,8 @@
+stem player
+43 note `pos` is a `vector2` because that is what every other converted file passes it
+50 note `_body` has no type and nothing in the file says what it is, so it is a `variant`
+rename signal hit -> Hit
+rename method start -> Start
+rename method _on_body_entered -> OnBodyEntered
+rename property speed -> Speed
+rename property screen_size -> ScreenSize

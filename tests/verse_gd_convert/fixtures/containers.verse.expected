@@ -1,0 +1,24 @@
+using { /Godot.org/Godot }
+
+containers := class(node):
+
+	# Godot's Dictionary and the conversions GDScript spells as constructors.
+	var Inventory:dictionary = dictionary{}
+	var Labels:dictionary = dictionary{}
+
+	AddItem(Item:string, Count:int)<transacts>:void =
+		Inventory.SetInt(Item, Count)
+		Labels.SetString(Item, "x{Count}")
+
+	CountOf(Item:string)<transacts>:int =
+		if (Inventory.GetVariant[Item]):
+			return if (Entry := Inventory.GetInt[Item]) then Entry else 0
+		return 0
+
+	Summary()<transacts>:string =
+		Names := array{"a", "b"}
+		Tag := "items"
+		return if (Name := Names[0]) then "{Tag}: {Inventory.Length()} kinds, first {Name}" else ""
+
+	KindOf(Value:variant)<transacts>:logic =
+		return logic{VariantKind(Value) = variant_type.TypeInt}

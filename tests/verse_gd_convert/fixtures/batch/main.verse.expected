@@ -1,0 +1,68 @@
+using { /Godot.org/Godot }
+
+main := class(node):
+
+	@export
+	var MobScene:?packed_scene = false
+	var Score:int = 0
+
+	GameOver():void =
+		if (ScoreTimerFound := GetNode["ScoreTimer"], ScoreTimerNode := timer[ScoreTimerFound]):
+			ScoreTimerNode.Stop()
+		if (MobTimerFound := GetNode["MobTimer"], MobTimerNode := timer[MobTimerFound]):
+			MobTimerNode.Stop()
+		if (HUDFound := GetNode["HUD"], HUDNode := hud[HUDFound]):
+			spawn{HUDNode.ShowGameOver()}
+		if (MusicFound := GetNode["Music"], MusicNode := audio_stream_player[MusicFound]):
+			MusicNode.Stop()
+		if (DeathSoundFound := GetNode["DeathSound"], DeathSoundNode := audio_stream_player[DeathSoundFound]):
+			DeathSoundNode.Play()
+
+	NewGame()<transacts>:void =
+		if (Tree := GetTree[]):
+			Tree.CallGroup("mobs", "queue_free")
+		set Score = 0
+		if (PlayerFound := GetNode["Player"], PlayerNode := player[PlayerFound], StartPositionFound := GetNode["StartPosition"], StartPositionNode := marker2d[StartPositionFound]):
+			PlayerNode.Start(StartPositionNode.Position)
+		if (StartTimerFound := GetNode["StartTimer"], StartTimerNode := timer[StartTimerFound]):
+			StartTimerNode.Start()
+		if (HUDFound := GetNode["HUD"], HUDNode := hud[HUDFound]):
+			HUDNode.UpdateScore(Score)
+			HUDNode.ShowMessage("Get Ready")
+		if (MusicFound := GetNode["Music"], MusicNode := audio_stream_player[MusicFound]):
+			MusicNode.Play()
+
+	OnMobTimerTimeout()<transacts>:void =
+		# Create a new instance of the Mob scene.
+		var Mob:?node = if (MobSceneValue := MobScene?) then option{MobSceneValue.Instantiate[packed_scene_gen_edit_state.Disabled]} else false
+		# Choose a random location on Path2D.
+		var MobSpawnLocation:?path_follow2d = if (MobSpawnLocationFound := GetNode["MobPath/MobSpawnLocation"], MobSpawnLocationNode := path_follow2d[MobSpawnLocationFound]) then option{MobSpawnLocationNode} else false
+		if (MobSpawnLocationValue := MobSpawnLocation?):
+			set MobSpawnLocationValue.ProgressRatio = GodotStatics.Randf()
+		# Set the mob's direction perpendicular to the path direction.
+		var Direction:float = if (MobSpawnLocationValue := MobSpawnLocation?) then MobSpawnLocationValue.Rotation + MathPi / 2.0 else 0.0
+		# Set the mob's position to a random location.
+		if (MobSpawnLocationValue := MobSpawnLocation?, MobValue := Mob?):
+			MobValue.Set("position", VariantVector2(MobSpawnLocationValue.Position))
+		# Add some randomness to the direction.
+		set Direction += GodotStatics.RandfRange(-MathPi / 4.0, MathPi / 4.0)
+		if (MobValue := Mob?):
+			MobValue.Set("rotation", VariantFloat(Direction))
+		# Choose the velocity for the mob.
+		Velocity := vector2{X := GodotStatics.RandfRange(150.0, 250.0), Y := 0.0}
+		if (MobValue := Mob?):
+			MobValue.Set("linear_velocity", VariantVector2(Velocity.Rotated(Direction)))
+		# Spawn the mob by adding it to the Main scene.
+		if (MobValue := Mob?):
+			AddChild(MobValue, false, node_internal_mode.Disabled)
+
+	OnScoreTimerTimeout()<transacts>:void =
+		set Score += 1
+		if (HUDFound := GetNode["HUD"], HUDNode := hud[HUDFound]):
+			HUDNode.UpdateScore(Score)
+
+	OnStartTimerTimeout()<transacts>:void =
+		if (MobTimerFound := GetNode["MobTimer"], MobTimerNode := timer[MobTimerFound]):
+			MobTimerNode.Start()
+		if (ScoreTimerFound := GetNode["ScoreTimer"], ScoreTimerNode := timer[ScoreTimerFound]):
+			ScoreTimerNode.Start()

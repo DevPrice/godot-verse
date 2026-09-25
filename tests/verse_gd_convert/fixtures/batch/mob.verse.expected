@@ -1,0 +1,13 @@
+using { /Godot.org/Godot }
+
+mob := class(rigid_body2d):
+
+	_Ready<override>():void =
+		MobTypes := if (AnimatedSprite2DFound := GetNode["AnimatedSprite2D"], AnimatedSprite2DNode := animated_sprite2d[AnimatedSprite2DFound], Value := AnimatedSprite2DNode.GetSpriteFrames[]) then Value.GetAnimationNames() else array{}
+		if (AnimatedSprite2DFound := GetNode["AnimatedSprite2D"], AnimatedSprite2DNode := animated_sprite2d[AnimatedSprite2DFound], Value := MobTypes[GodotStatics.RandiRange(0, MobTypes.Length - 1)]):
+			AnimatedSprite2DNode.SetAnimation(Value)
+		if (AnimatedSprite2DFound := GetNode["AnimatedSprite2D"], AnimatedSprite2DNode := animated_sprite2d[AnimatedSprite2DFound]):
+			AnimatedSprite2DNode.Play()
+
+	OnVisibleOnScreenNotifier2dScreenExited()<transacts>:void =
+		QueueFree()

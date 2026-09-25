@@ -1,0 +1,10 @@
+Player=Player
+HUD=HUD
+StartPosition=Marker2D
+MobPath=Path2D
+MobPath/MobSpawnLocation=PathFollow2D
+MobTimer=Timer
+ScoreTimer=Timer
+StartTimer=Timer
+Music=AudioStreamPlayer
+DeathSound=AudioStreamPlayer
