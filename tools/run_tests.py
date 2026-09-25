@@ -275,8 +275,31 @@ def run_cook(results: Results, engine: Path) -> None:
             results.record("verse_cook", False)
             return
         ok = _check_sidecar(sidecar, COOK_EXPECTED_CLASSES, "verse_cook") and ok
+        ok = _check_vbc(out_dir / "program.vbc", "verse_cook") and ok
 
         results.record("verse_cook", ok)
+
+
+def _check_vbc(path: Path, name: str) -> bool:
+    """The cook's .vbc reads end to end with the clean-room reader, which shares no code with the
+    cooker's writer -- so a pass means the two agree on the format, not just that one is consistent."""
+    if not path.is_file():
+        print(f"[{name}] wrote {path.name}: FAIL")
+        return False
+    sys.path.insert(0, str(REPO / "tools"))
+    import vbc_dump  # noqa: E402
+    try:
+        program = vbc_dump.load_program(path)
+    except vbc_dump.VbcError as error:
+        print(f"[{name}] {path.name} reads: FAIL ({error})")
+        return False
+    problems = vbc_dump.validate(program, path.name)
+    for problem in problems[:20]:
+        print(f"[{name}] {problem}")
+    ok = not problems
+    print(f"[{name}] {path.name} holds {len(program.cells)} cells and validates: "
+          f"{'ok' if ok else 'FAIL'}")
+    return ok
 
 
 def _check_sidecar(path: Path, expected_classes: list[str], name: str) -> bool:

@@ -43,7 +43,7 @@ Status: `todo`, `doing`, `done`, `dropped` (with a reason).
 | --- | --- | --- | --- | --- | --- |
 | T2.1 | `host/Private/HostVbcWriter.{h,cpp}`, called from `CookMain` after `CompileProject`; `program.vbc` beside the sidecar | dirty / opus | T1.1, T1.12 | a cook of `tests/host_smoke` writes `program.vbc`; the cooker exits 0 | done |
 | T2.2 | `tools/vbc_dump.py`, from `format.md` alone | clean / sonnet | T1.12 | dumps T2.1's output with no unknown op and every cell index resolving | done |
-| T2.3 | `run_tests.py` abi layer: a `vbc` case over the `host_smoke` cook | neutral / sonnet | T2.1, T2.2 | `run_tests.py --only abi` passes | todo |
+| T2.3 | `run_tests.py` abi layer: a `vbc` case over the `host_smoke` cook | neutral / sonnet | T2.1, T2.2 | `run_tests.py --only abi` passes | done |
 | T2.4 | The writer's park-risk report and the `.vbc` sizes for `tests/integration` and `dodge-the-creeps`, recorded in design §14 notes | dirty / sonnet | T2.1 | numbers recorded in `measurements.md` | done |
 
 ## M3 — sequential VM
