@@ -57,7 +57,7 @@ Status: `todo`, `doing`, `done`, `dropped` (with a reason).
 | T3.4 | Interpreter core: moves, control flow, arithmetic, calls, closures, scopes, fast failure; the construction protocol (`NewObject`, the constructor, `CreateField`, `UnifyField`, `InitializeVar`, `UnifyNativeObject`, blocks); `vh_instantiate`, `vh_instance_call`, `vh_release_instance` and the `Print` native, so a fixture runs end to end | clean / opus | T1.4, T3.2, T3.3 | the conformance fixtures for these pass | done |
 | T3.5 | Failure contexts and the undo log; runtime errors unwind to entry | clean / opus | T1.5, T3.4 | failure fixtures pass; undo-log unit cases pass | done |
 | T3.6 | The rest of objects: casts, interfaces, accessors, native fields, `LoadFieldFromSuper`, struct equality with class constants, `vh_class_default_field` | clean / opus | T1.6, T3.4 | object and module fixtures pass | todo |
-| T3.7 | Unification and placeholders, stage 1: a runtime park is an error naming op and line | clean / opus | T1.5, T3.4 | unification fixtures pass | todo |
+| T3.7 | Unification and placeholders, stage 1: a runtime park is an error naming op and line | clean / opus | T1.5, T3.4 | unification fixtures pass | done in T3.4: unify-into-destination and the counted park error, with unit cases; no conformance fixture parks |
 | T3.8 | `$BuiltIn` intrinsics and the non-concurrent Verse-library natives | clean / sonnet | T1.8, T3.4 | native fixtures pass | todo |
 | T3.9 | Precise collector | clean / opus | T3.6 | a GC-stress fixture agrees; unit cases pass | todo |
 | T3.10 | Leniency stage 2, **only if** T2.4 or a later run shows a runtime park | clean / opus | T3.7 | the parking fixtures pass | todo |
