@@ -28,7 +28,7 @@ Status: `todo`, `doing`, `done`, `dropped` (with a reason).
 | T1.2 | Measure the three facts of design §6.1 with `tests/verse_probe` or `tests/cooked_probe`; fixtures kept in `tests/verse_probe/` | dirty / sonnet | — | each fact has a fixture and a recorded output | done |
 | T1.3 | `spec/values.md` | dirty / opus | T1.2 | lead review recorded in its header | done |
 | T1.4 | `spec/calls.md` and `spec/modules.md` | dirty / opus | T1.1 | lead review recorded | done |
-| T1.5 | `spec/failure.md` and `spec/unification.md` | dirty / opus | T1.1 | lead review recorded | todo |
+| T1.5 | `spec/failure.md` and `spec/unification.md` | dirty / opus | T1.1 | lead review recorded | done |
 | T1.6 | `spec/objects.md` | dirty / opus | T1.1 | lead review recorded | done |
 | T1.7 | `spec/tasks.md` | dirty / opus | T1.1 | lead review recorded | done |
 | T1.8 | `spec/natives.md` | dirty / opus | T1.1 | lead review recorded | todo |
@@ -83,6 +83,7 @@ Status: `todo`, `doing`, `done`, `dropped` (with a reason).
 | T5.3 | Backend selection: `scons verse_vm=yes`, `verse/runtime/backend`, the static fill of `VerseHostLibrary` | clean / sonnet | T5.1 | both backends run from one release build | todo |
 | T5.4 | Export plugin: ships `program.vbc`; omits the host DLL and `tbbmalloc.dll` on the vm backend | clean / sonnet | T5.3 | an export on the vm backend has no DLL beside the executable | todo |
 | T5.5 | Export layer runs on both backends with named counts; fix until green | clean / opus | T5.2, T5.4 | `run_tests.py --only export` passes on both | todo |
+| T5.7 | Fix the UE host's runtime-error frames (`spec/failure.md` findings): every frame list begins with a bogus frame (path `Callstack`, function `follows:`), because Solaris's formatter adds a "Callstack follows:" header that the frame splitter reads as a frame; and, from source, a cooked runtime host may deliver no frames at all. Until fixed, the differential harness compares a runtime error's message line only | dirty / sonnet | — | a runtime error in the editor host and in an export shows only real frames; a host_smoke case asserts it | todo |
 | T5.6 | Measure `spec/objects.md` §18 Q2 on the UE host: an integration case with two nodes of one script declaring `Items:godot_array = godot_array{}`, appending to one and reading the other's length, in the editor run and in the export. If the export shares one array or holds a dead reference, that is an existing defect: record it in `by-hand-findings.md` style and fix it on the UE side | neutral / sonnet | — | the case exists and its result is recorded; the vm backend matches the corrected behaviour | todo |
 
 ## M6 — web

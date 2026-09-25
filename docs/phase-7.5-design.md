@@ -235,12 +235,15 @@ Whether stage 2 is needed is a measurement, and the task list has a task that ta
 
 Every mutation — var, field, mutable array element and append (`ArrayAdd` only when its
 `bTransactional` flag says so), `FastAppendToArray`, `InPlaceMakeImmutable`, map insert with its
-count — writes an undo record while a transaction is open. Task state is not transactional except
+count — writes an undo record while a transaction is open, and so does every trailed register write
+(`Reset`, `MoveTrailed`, `ReturnTrailed`, `EndTask`'s first-wins writes, a task's resume slot) and
+every placeholder link (`spec/failure.md` §6). Task state is not transactional except
 for a `spawn` inside a failure context (`spec/tasks.md` §12); joining or leaving a task group and
 termination are never undone. A failure context opens a nested
 log; success merges it into its parent; failure replays it backwards. The trail is the same log.
-A runtime error unwinds to VM entry. Godot-side effects keep the protocol the UE host already has:
-writes defer to commit, and the two immediate exceptions (`VhSignalEmit`, `VhRefSet`) stay immediate.
+A runtime error unwinds to the outermost VM entry. Godot-side effects keep the protocol the UE host
+already has: writes defer to the **root** commit at the end of the VM entry, not to each failure
+context's commit, and the two immediate exceptions (`VhSignalEmit`, `VhRefSet`) stay immediate.
 
 ### 7.3 Values and heap
 
