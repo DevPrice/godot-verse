@@ -58,8 +58,8 @@ Status: `todo`, `doing`, `done`, `dropped` (with a reason).
 | T3.5 | Failure contexts and the undo log; runtime errors unwind to entry | clean / opus | T1.5, T3.4 | failure fixtures pass; undo-log unit cases pass | done |
 | T3.6 | The rest of objects: casts, interfaces, accessors, native fields, `LoadFieldFromSuper`, struct equality with class constants, `vh_class_default_field` | clean / opus | T1.6, T3.4 | object and module fixtures pass | todo |
 | T3.7 | Unification and placeholders, stage 1: a runtime park is an error naming op and line | clean / opus | T1.5, T3.4 | unification fixtures pass | done in T3.4: unify-into-destination and the counted park error, with unit cases; no conformance fixture parks |
-| T3.8 | `$BuiltIn` intrinsics and the non-concurrent Verse-library natives | clean / sonnet | T1.8, T3.4 | native fixtures pass | todo |
-| T3.9 | Precise collector | clean / opus | T3.6 | a GC-stress fixture agrees; unit cases pass | todo |
+| T3.8 | `$BuiltIn` intrinsics and the non-concurrent Verse-library natives | clean / sonnet | T1.8, T3.4 | native fixtures pass | done |
+| T3.9 | Precise collector; and move the process-lifetime state T3.8 had to leave as function-local statics in `vm_natives.cpp` (`GetSecondsSinceEpoch`'s frozen sample, the random generator) onto the `Runtime` a native can reach, and give `NativeCall` a frame walk so `CanCallerAccessEpicInternal` stops answering a hardcoded `true` | clean / opus | T3.6 | a GC-stress fixture agrees; unit cases pass; no mutable global in `vm/` but the one `Runtime` | todo |
 | T3.10 | Leniency stage 2, **only if** T2.4 or a later run shows a runtime park | clean / opus | T3.7 | the parking fixtures pass | todo |
 
 **M3 exit:** `run_vm_conformance.py --sequential` agrees on every fixture.
@@ -68,7 +68,7 @@ Status: `todo`, `doing`, `done`, `dropped` (with a reason).
 
 | ID | Task | Room / model | Depends | Check | Status |
 | --- | --- | --- | --- | --- | --- |
-| T4.1 | Tasks and the task ops; `spawn`, `branch`, `sync`, `race`, `rush`; semaphores | clean / opus | T1.7, T3.6 | concurrency fixtures pass | todo |
+| T4.1 | Tasks and the task ops; `spawn`, `branch`, `sync`, `race`, `rush`; semaphores; and hidden per-object native state, which `event(t)`, `task(t)` and `classifiable_subset_var` all need (T3.8 left `classifiable_subset`'s ten natives unbound for want of it) | clean / opus | T1.7, T3.6 | concurrency fixtures pass | todo |
 | T4.2 | Cancellation, unwind edges, `defer`, terminate | clean / opus | T4.1 | cancellation fixtures pass | todo |
 | T4.3 | `event(t)`, `task(t)`, `Sleep` and its tick; live-variable `await` and `batch`, including element, map-value and field registration, and `set live` bindings (`MoveNonComparable`, `RefSetLive`, `CallSetLive`, `SetFieldLive` — `spec/ops.md` §3) | clean / opus | T4.1 | event, sleep and live-variable fixtures pass | todo |
 

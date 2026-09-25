@@ -209,7 +209,9 @@ other class has an engine type of its own after linking, and that is not written
 | next | `ref` the superclass's archetype, or 0 |
 | entries | `list<entry>` |
 
-An **entry** is `sid` name, `ref` access specifier or 0, `value` type (uninitialized for none), `value`
+An **entry** is `sid` name — qualified like a decorated name, so `message`'s `DefaultText` is
+`(/Verse.org/Verse/message:)DefaultText`, and code that looks a field up by its bare name must
+compare the part after the last `:)` — then `ref` access specifier or 0, `value` type (uninitialized for none), `value`
 (uninitialized when the constructor initializes it; may be an `accessor` cell), and `u8` flags:
 the engine's eight entry-flag bits verbatim. The ones the interpreter reads are 1 (native
 representation), 2 (has a default value) and 32 (`var`); `spec/objects.md` §3.3 defines all eight.

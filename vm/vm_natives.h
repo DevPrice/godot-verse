@@ -31,6 +31,12 @@ struct NativeCall {
 			heap(r_heap) {}
 };
 
+// The argument already followed through placeholders (spec/natives.md §3.4, §3.6).
+Value argument(const NativeCall &p_call, uint32_t p_index);
+// True (with the placeholder left in r_call.result, for the caller to answer Outcome::Park) when
+// any argument is not yet concrete. Shared by every native in vm_natives.cpp and vm_math.cpp.
+bool unbound_argument(NativeCall &r_call);
+
 // The implementation for p_binding_key, or null when this runtime has none.
 NativeFn native_implementation(std::string_view p_binding_key);
 
