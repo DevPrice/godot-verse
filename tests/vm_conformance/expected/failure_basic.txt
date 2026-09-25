@@ -41,14 +41,12 @@
 [verse] Survivor=0
 [probe]   -> 0 (VH_OK)
 [probe] calling (/user@localhost/failure_basic:)RuntimeErrorWrites
-LogVerseRuntime: Error: User Message: 'probe runtime error'. This build does not have the Verse compiler runtime bundled with it, so no other information is available.
 [error] ErrorRequested: A runtime error was explicitly raised from user code. (User Message: 'probe runtime error')
 [probe]   -> 6 (VH_ERR_RUNTIME)
 [probe] calling (/user@localhost/failure_basic:)RuntimeErrorAfter
 [verse] Survivor=0
 [probe]   -> 0 (VH_OK)
 [probe] calling (/user@localhost/failure_basic:)RuntimeErrorEmptyMessage
-LogVerseRuntime: Error: User Message: ''. This build does not have the Verse compiler runtime bundled with it, so no other information is available.
 [error] ErrorRequested: A runtime error was explicitly raised from user code. (User Message: '')
 [probe]   -> 6 (VH_ERR_RUNTIME)
 [probe] done

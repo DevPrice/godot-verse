@@ -85,7 +85,6 @@
 [verse] Round[NaN] fails
 [probe]   -> 0 (VH_OK)
 [probe] calling (/user@localhost/values_floats:)FloatToIntTooBigRaises
-LogVerseRuntime: Error: The value 10000000000000000000.000000 cannot be converted to an integer because it does not fall inside the representable range of a Verse integer.. This build does not have the Verse compiler runtime bundled with it, so no other information is available.
 [error] ErrRuntime_IntegerBoundsExceeded: A value does not fall inside the representable range of a Verse integer. (The value 10000000000000000000.000000 cannot be converted to an integer because it does not fall inside the representable range of a Verse integer.)
 [probe]   -> 6 (VH_ERR_RUNTIME)
 [probe] done

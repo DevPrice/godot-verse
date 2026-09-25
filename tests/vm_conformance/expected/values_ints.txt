@@ -19,15 +19,12 @@
 [verse] min=-9223372036854775808
 [probe]   -> 0 (VH_OK)
 [probe] calling (/user@localhost/values_ints:)IntNegOfMin
-LogVerseRuntime: Error: Value exceeds the range of a 64 bit integer.. This build does not have the Verse compiler runtime bundled with it, so no other information is available.
 [error] ErrRuntime_GeneratedNativeInternal: An internal runtime error occurred in (generated) native code that was called from Verse. There is no other information available. (Value exceeds the range of a 64 bit integer.)
 [probe]   -> 6 (VH_ERR_RUNTIME)
 [probe] calling (/user@localhost/values_ints:)IntBelowMinPrints
-LogVerseRuntime: Error: Value exceeds the range of a 64 bit integer.. This build does not have the Verse compiler runtime bundled with it, so no other information is available.
 [error] ErrRuntime_GeneratedNativeInternal: An internal runtime error occurred in (generated) native code that was called from Verse. There is no other information available. (Value exceeds the range of a 64 bit integer.)
 [probe]   -> 6 (VH_ERR_RUNTIME)
 [probe] calling (/user@localhost/values_ints:)IntOverflowToStringRaises
-LogVerseRuntime: Error: Value exceeds the range of a 64 bit integer.. This build does not have the Verse compiler runtime bundled with it, so no other information is available.
 [error] ErrRuntime_GeneratedNativeInternal: An internal runtime error occurred in (generated) native code that was called from Verse. There is no other information available. (Value exceeds the range of a 64 bit integer.)
 [probe]   -> 6 (VH_ERR_RUNTIME)
 [probe] calling (/user@localhost/values_ints:)IntBigMultiplyExceeds

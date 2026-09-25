@@ -26,7 +26,6 @@
 [verse] Quotient[7,0] fails
 [probe]   -> 0 (VH_OK)
 [probe] calling (/user@localhost/natives_math:)QuotientOverflowRaises
-LogVerseRuntime: Error: Integer overflow encountered.. This build does not have the Verse compiler runtime bundled with it, so no other information is available.
 [error] ErrRuntime_IntegerOverflow: Integer overflow encountered. (Integer overflow encountered.)
 [probe]   -> 6 (VH_ERR_RUNTIME)
 [probe] calling (/user@localhost/natives_math:)ClampInt
