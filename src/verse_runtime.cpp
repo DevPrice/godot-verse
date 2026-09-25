@@ -16,7 +16,10 @@
 #include <godot_cpp/classes/file_access.hpp>
 #endif
 
+#include <godot_cpp/classes/dir_access.hpp>
+#include <godot_cpp/classes/display_server.hpp>
 #include <godot_cpp/classes/engine.hpp>
+#include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/classes/performance.hpp>
@@ -280,6 +283,26 @@ struct FScopedWorkingDirectory {
 // `template` is the tag every export template carries and no editor build does. `OS::alert` is a
 // blocking dialog on a desktop build and a printed line when there is no display, so a headless run
 // still says it and still leaves.
+namespace {
+
+// In user://logs because that is where Godot keeps a run's log, and the editor and the game it runs
+// resolve user:// to the same directory, which is what lets the editor read what its game left.
+String fatal_record_path() {
+	return ProjectSettings::get_singleton()->globalize_path("user://logs/verse_crash.log");
+}
+
+} // namespace
+
+String VerseRuntime::take_fatal_record() {
+	const String path = fatal_record_path();
+	if (!FileAccess::file_exists(path)) {
+		return String();
+	}
+	const String record = FileAccess::get_file_as_string(path);
+	DirAccess::remove_absolute(path);
+	return record;
+}
+
 void VerseRuntime::refuse_to_start(const String &p_why) {
 	if (!OS::get_singleton()->has_feature("template")) {
 		return;
@@ -379,9 +402,17 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 	godot_api.InstantiateClass = &VerseRuntime::api_instantiate_class;
 	godot_api.ReleaseObject = &VerseRuntime::api_release_object;
 
-	// Both only need to stay alive for the duration of host.Init below.
+	const String previous_fatal = take_fatal_record();
+	if (!previous_fatal.is_empty()) {
+		UtilityFunctions::push_error(String("The previous run ended in a Verse host fatal error. What it recorded:\n") + previous_fatal);
+	}
+	const String fatal_log_path = fatal_record_path();
+	DirAccess::make_dir_recursive_absolute(fatal_log_path.get_base_dir());
+
+	// All three only need to stay alive for the duration of host.Init below.
 	const CharString engine_dir_utf8 = p_engine_dir.is_empty() ? CharString() : p_engine_dir.utf8();
 	const CharString cooked_dir_utf8 = p_cooked_dir.is_empty() ? CharString() : p_cooked_dir.utf8();
+	const CharString fatal_log_path_utf8 = fatal_log_path.utf8();
 
 	init_desc = vh_init_desc{};
 	init_desc.StructSize = sizeof(vh_init_desc);
@@ -394,6 +425,11 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 	init_desc.RuntimeErrorCtx = this;
 	init_desc.EnableDebugger = p_enable_debugger ? 1 : 0;
 	init_desc.CookedDirUtf8 = p_cooked_dir.is_empty() ? nullptr : cooked_dir_utf8.get_data();
+	init_desc.FatalLogPathUtf8 = fatal_log_path_utf8.get_data();
+	init_desc.ShowFatalDialog = OS::get_singleton()->has_feature("template") &&
+					DisplayServer::get_singleton() != nullptr && DisplayServer::get_singleton()->get_name() != "headless"
+			? 1
+			: 0;
 
 #ifdef VERSE_VM_STATIC
 	// vm/ cannot read a `.pck` itself (vm/vm_file_reader.h) -- that is the one thing it needs from
@@ -406,7 +442,20 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 	}
 #endif
 
+	// The host arms VERSE_HOST_TEST_FATAL during vh_init, and the one check that needs it set in the
+	// editor's environment is of the game Play starts (by-hand-findings.md B43). Hidden from the
+	// editor's own host and restored, so the game still inherits it and the editor survives.
+	const String test_fatal_variable = "VERSE_HOST_TEST_FATAL";
+	const String test_fatal = Engine::get_singleton()->is_editor_hint()
+			? OS::get_singleton()->get_environment(test_fatal_variable)
+			: String();
+	if (!test_fatal.is_empty()) {
+		OS::get_singleton()->unset_environment(test_fatal_variable);
+	}
 	const int32_t status = host.Init(&init_desc);
+	if (!test_fatal.is_empty()) {
+		OS::get_singleton()->set_environment(test_fatal_variable, test_fatal);
+	}
 	if (status != VH_OK) {
 		UtilityFunctions::push_error(String("VerseRuntime: vh_init failed with status ") + String::num_int64(status));
 		host_init_refused = true;

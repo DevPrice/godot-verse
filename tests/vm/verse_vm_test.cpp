@@ -1500,8 +1500,8 @@ void BootCases(Cases &r_cases) {
 			Boot(error) == VH_ERR_INIT && error == "mem/verse_classes.json was written by sidecar version 7; this host reads version 8. Re-export the project.");
 	g_files["mem/verse_classes.json"] = SidecarText(8, 11000, "abcdef0123");
 	r_cases.check("sidecar: another abi is refused with the stamp sentence",
-			Boot(error) == VH_ERR_INIT && error.find("cooked by a different build of godot-verse (cooked 11000/abcdef0, host 12000/verse_vm)") != std::string::npos);
-	g_files["mem/verse_classes.json"] = "{\"version\": 8, \"abi\": 12000}";
+			Boot(error) == VH_ERR_INIT && error.find("cooked by a different build of godot-verse (cooked 11000/abcdef0, host " + std::to_string(VH_ABI_VERSION) + "/verse_vm)") != std::string::npos);
+	g_files["mem/verse_classes.json"] = "{\"version\": 8, \"abi\": " + std::to_string(VH_ABI_VERSION) + "}";
 	r_cases.check("sidecar: a missing field is refused naming the file", Boot(error) == VH_ERR_INIT && error.rfind("mem/verse_classes.json is not a valid class sidecar: ", 0) == 0);
 	g_files["mem/verse_classes.json"] = SidecarText(8, VH_ABI_VERSION, "d78f612c313953e9");
 	r_cases.check("loader: a missing program.vbc is refused with the missing-data sentence",

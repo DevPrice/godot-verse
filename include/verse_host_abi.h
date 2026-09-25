@@ -43,7 +43,7 @@ extern "C" {
  * different toolchains and nothing links them.
  */
 #define VH_ABI_VERSION_MAJOR 12
-#define VH_ABI_VERSION_MINOR 0
+#define VH_ABI_VERSION_MINOR 1
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
 typedef int32_t vh_bool;
@@ -614,6 +614,18 @@ typedef struct vh_init_desc
 	 * cooked project: an editor host expects that, and a runtime host answers VH_ERR_INIT,
 	 * because with no compiler a project it was not handed is one it can never have. */
 	const char* CookedDirUtf8;
+
+	/* Added at ABI v12.1, read only when StructSize covers them.
+	 *
+	 * Absolute utf8 path of the file a fatal error inside the host -- a failed check, not a Verse
+	 * runtime error -- is written to before the process ends: the message and, for a failed check,
+	 * the native stack. The host overwrites it; reading and removing it is the consumer's. NULL
+	 * writes no file. A host with no such errors to record (the interpreter) ignores both fields. */
+	const char* FatalLogPathUtf8;
+	/* Nonzero also shows a fatal error in a native dialog before the process ends. For an exported
+	 * game with a display; never for an editor, whose own window stays up, or a headless run, where
+	 * nobody could dismiss it. */
+	vh_bool ShowFatalDialog;
 } vh_init_desc;
 
 #if defined(_WIN32)

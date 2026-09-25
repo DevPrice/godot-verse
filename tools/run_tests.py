@@ -489,6 +489,53 @@ def stage_extension(project: Path, for_export: bool = False) -> str | None:
     return None
 
 
+# Where Godot keeps tests/integration's user:// on Windows, from its config/name. The host writes a
+# fatal error's record into logs/ there (vh_init_desc's FatalLogPathUtf8).
+INTEGRATION_CRASH_LOG = (Path(os.environ.get("APPDATA", "")) / "Godot" / "app_userdata" /
+                         "godot-verse integration tests" / "logs" / "verse_crash.log")
+
+
+def run_host_fatal(results: Results, godot: Path, project: Path) -> None:
+    """Makes the host fail on purpose, both ways it can, and checks what each leaves behind.
+
+    No script can cause a host fatal error, so VERSE_HOST_TEST_FATAL (HostFatal.cpp) is what
+    triggers one, at the first vh_tick. A native crash is Godot's own crash handler's to report,
+    because the host installs no exception filter, and the recorder must not claim it. A failed
+    check is the case the recorder exists for: Unreal reports it to console output only and exits
+    with code 3, and the file is the only record that survives. Leaves that file in place on
+    purpose -- the integration run after this one is what checks it is reported and removed.
+    """
+    print("[run_tests] --- host_fatal ---")
+    INTEGRATION_CRASH_LOG.unlink(missing_ok=True)
+    ok = True
+    for kind in ("access_violation", "check"):
+        completed = subprocess.run(
+            [str(godot), "--headless", "--path", str(project),
+             "--script", "res://test_main.gd", "--quit-after", "600"],
+            env=dict(os.environ, VERSE_HOST_TEST_FATAL=kind),
+            capture_output=True, text=True, errors="replace", timeout=600)
+        output = (completed.stdout or "") + (completed.stderr or "")
+        if completed.returncode == 0:
+            ok = False
+            print(f"[run_tests] host_fatal: {kind} exited 0, so the failure never happened: FAIL")
+            continue
+        if kind == "access_violation":
+            if "CrashHandlerException" in output and not INTEGRATION_CRASH_LOG.exists():
+                print("[run_tests] host_fatal: a native crash is left to Godot's crash handler: ok")
+            else:
+                ok = False
+                print("[run_tests] host_fatal: a native crash was not Godot's crash handler's alone: FAIL")
+        else:
+            record = INTEGRATION_CRASH_LOG.read_text(encoding="utf-8") if INTEGRATION_CRASH_LOG.exists() else ""
+            if ("VERSE_HOST_TEST_FATAL=check asked for a failed check." in record
+                    and "GodotVerse::FireTestFatal()" in record):
+                print("[run_tests] host_fatal: a failed check leaves its message and stack in verse_crash.log: ok")
+            else:
+                ok = False
+                print(f"[run_tests] host_fatal: {INTEGRATION_CRASH_LOG} holds no message and stack: FAIL")
+    results.record("host_fatal", ok)
+
+
 def run_integration(results: Results, engine: Path | None, godot: Path | None) -> None:
     project = REPO / "tests" / "integration"
     if not (project / "project.godot").is_file():
@@ -505,6 +552,10 @@ def run_integration(results: Results, engine: Path | None, godot: Path | None) -
     if why is not None:
         results.skip("integration", why)
         return
+
+    run_host_fatal(results, godot, project)
+    reports_fatal = (["The previous run ended in a Verse host fatal error"]
+                     if INTEGRATION_CRASH_LOG.exists() else [])
 
     # --headless opens no window. --quit-after bounds a hang: the script quits on its own, and a
     # run that has not is a failure worth seeing rather than one to wait out.
@@ -552,12 +603,17 @@ def run_integration(results: Results, engine: Path | None, godot: Path | None) -
             # inheritance case that cannot work, and the only one the compiler is happy with:
             # `extends_binding.verse` compiles, so nothing but this sentence says it is wrong.
             "which is the generated binding for a class a *script* declares",
-        ],
+        ] + reports_fatal,
         # The bridge reports every Verse runtime error itself, rate limited. Unreal's own echo of
         # the same error, stack and all on every repeat, is silenced in vh_init's -LogCmds; the
         # raises test_main.gd makes on purpose are what would print one if it came back.
         refute_all=["LogVerseRuntime:"],
     )
+    if reports_fatal:
+        cleared = not INTEGRATION_CRASH_LOG.exists()
+        print(f"[run_tests] host_fatal: the next start removes the record it reported: "
+              f"{'ok' if cleared else 'FAIL'}")
+        results.record("host_fatal_cleared", cleared)
 
 
 # What the editor must say when a script names a member the mirror deliberately does not carry.

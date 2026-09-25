@@ -1859,6 +1859,33 @@ editor, 519 passed and 11 skipped exported. The "existing container is kept and 
 reasoned from the engine rather than exercised: no default a script can write names a container
 that outlives the class default's construction in *both* runs, because the cooker cannot make one.
 
+## B43. A game launched from the editor ended twice with nothing recorded · **evidence path fixed; cause open**
+
+Found while testing "Convert to Verse" in `demo/` on 2026-09-25: two Play runs ended during startup,
+around the converted script's `_Ready`, and a third run a few seconds later worked with, by the
+author's account, no change to the code. Each run's Godot log stops mid-run with no reason, and
+there was no `CrashHandlerException`, no Windows Error Reporting event and no crash dump.
+
+**Why nothing was recorded, measured with a switch that fails on purpose** (`VERSE_HOST_TEST_FATAL`,
+read by `HostFatal.cpp`). A *native* crash in the host is caught by Godot's own crash handler, which
+logs a backtrace: `NOINITCRASHREPORTER=1` keeps Unreal from installing an exception filter, so
+Godot's stays. A *failed check* is not a crash to Windows. It reaches `FWindowsErrorOutputDevice`,
+which writes the message and a symbolised stack to Unreal's own output devices -- console output, in a
+host built with `ALLOW_LOG_FILE=0` and booted with `-NOCONSOLE` -- and terminates with code 3. That
+matches both runs exactly, so both were almost certainly failed checks inside the host.
+
+**The fix is a record, not a recovery.** A failed check means the engine's own invariant broke, so
+the process still ends. Before it does, `FCoreDelegates::OnHandleSystemError` writes the message and
+stack from `GErrorHist` to `user://logs/verse_crash.log` (ABI 12.1's `FatalLogPathUtf8`), and an
+exported game with a display also shows it in a dialog. The process that failed cannot report
+anything, so the next one does: the editor pushes it as an error when its Play session ends, and any
+other process when it next loads the host. `run_tests.py`'s `host_fatal` step triggers both kinds of
+failure and asserts where each is recorded, and the integration run after it asserts the record is
+reported and removed.
+
+**What is open.** The cause: the next occurrence will say what failed. And the editor's half of the
+report, which only a Play session can reach -- see "A host fatal error during Play" below.
+
 ---
 
 ## What is still open
@@ -2246,6 +2273,19 @@ Help**, or ctrl+click the class name): the same text must render the same way un
 the class's brief under its name must be the comment's first paragraph alone. A `[b]` written in a
 comment must render bold, and `Items[i]` in a sentence must render as written rather than in
 italics.
+
+### A host fatal error during Play · **owed**
+
+B43's record is asserted headless: the file is written, and the next start reports and removes it.
+What no headless run can reach is the editor noticing that its Play session ended, which is
+`VerseEditorPlugin::_process` watching `EditorInterface::is_playing_scene()`.
+
+**To check it:** set `VERSE_HOST_TEST_FATAL=check` in the environment the editor is started from, open
+`demo/`, and press **Play**. The game must close at once, and the editor's Output panel must show
+"The game ended in a Verse host fatal error:" with the failed check's message and a stack naming
+`GodotVerse::FireTestFatal()`. Press **Play** again without the variable set, and nothing about the
+fatal error may print a second time. The variable reaches the game because the editor passes its own
+environment to the process it starts.
 
 ### And when one of these is looked at again
 

@@ -31,7 +31,13 @@ public:
 	// the project on every Ctrl+S.
 	bool _build() override;
 
+	// Watches for a Play session ending, so a fatal error the game's host recorded before it died is
+	// shown here: the game cannot report it, and this is the window the author is looking at.
+	void _process(double p_delta) override;
+
 private:
+	bool was_playing = false;
+
 	void build_from_menu();
 
 	// Godot raises the completion popup on its own from a table of trigger characters, and

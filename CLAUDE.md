@@ -211,7 +211,7 @@ emits — and note that its editor half has never been run.
 `include/verse_host_abi.h` is the only thing that crosses. Plain C — the two sides cannot share a
 C++ ABI. It is staged into the host's `Public/` by `build_host.py`, so both compile the same file.
 
-**`VH_ABI_VERSION` is 12.0.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
+**`VH_ABI_VERSION` is 12.1.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
 a major bump is a layout or meaning change and both sides must be rebuilt; a minor bump adds
 something an older consumer can ignore behind a `StructSize` check. A change to the header means
 bumping it and rebuilding **both** sides — the mismatch surfaces at `vh_init`, not at compile time.
@@ -226,6 +226,8 @@ as corruption rather than as a refusal. 9.0 added `IsNamed` there for that reaso
 analysis-only program behind it, so the three position entry points answer `VH_ERR_STATE` after
 a build until a consumer asks for an analysis. An older consumer would have read that as "no
 such symbol" and drawn nothing, silently.
+**12.1 is where a host fatal error is recorded**: `vh_init_desc` grew `FatalLogPathUtf8` and
+`ShowFatalDialog` (`by-hand-findings.md` B43).
 **12.0 is what a parameter says about the class it declares**: `vh_param_desc` grew
 `ClassUtf8` and a `ClassKind` beside it, and `vh_method_desc` the same pair for its result, so
 a consumer can tell Godot that `Fire(Target:timer)` takes a **Timer** rather than an Object.
@@ -293,7 +295,8 @@ Adding an override you do not implement changes behaviour.
 `Private/` is the ABI implementation. `VerseHost.cpp` is the entry surface; `HostRuntime`,
 `HostScript` and `HostEventLoop` are compile/analyse/run, class shape, and the task pump;
 `HostDebug` is the `Verse::FDebugger` and the profiler's accumulators, and nothing else in the host
-knows either exists; `GodotBindings` and `GodotClasses` are the native Verse surface. The cooked
+knows either exists; `HostFatal` records a fatal error before the process ends; `GodotBindings`
+and `GodotClasses` are the native Verse surface. The cooked
 path is `HostCook`/`HostCookWriter` (cooker only, behind `VH_HOST_KIND == VH_HOST_KIND_COOKER`),
 `CookMain.cpp` (the cooker's `main`), `HostCooked` (mount points and load, in the runtime host) and
 `HostSidecar` (the analysis snapshot serialised, which is what a host with no semantic program reads
@@ -1157,6 +1160,15 @@ it is not in `run_tests.py`.
   sentence, then `SceneTree::quit(1)`. Every script in such a game is dead, so a window that opens
   and does not respond is a worse answer than no window. Editor builds only log it — an editor with a
   broken host is still an editor.
+- **A failed check inside the host is not a crash to anyone but Unreal.** It reaches
+  `FWindowsErrorOutputDevice`, which reports to console output only — there is no log file and no
+  crash reporter — and terminates with code 3; Godot's crash handler never sees it, though it does
+  see a native crash, because `NOINITCRASHREPORTER` leaves Godot's exception filter in place.
+  `HostFatal.cpp` writes the report to `user://logs/verse_crash.log` from `OnHandleSystemError`,
+  and the next process reports it: the editor when Play ends, anything else when it loads the
+  host. `VERSE_HOST_TEST_FATAL=check|access_violation` fails on purpose at the first `vh_tick`,
+  and the consumer hides it from an editor's own host so a Play session can be tested
+  (`by-hand-findings.md` B43).
 - **Godot never creates the destination directory of an export**; it must already exist, or
   `prepare_template` answers *"The given export path doesn't exist"*
   (`editor_export_platform_pc.cpp:156`). That message also means the working-directory trap above.

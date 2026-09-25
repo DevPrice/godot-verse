@@ -108,6 +108,11 @@ public:
 	VerseRuntime() = default;
 	~VerseRuntime() override;
 
+	// What a fatal error inside the host recorded before the process ended (vh_init_desc's
+	// FatalLogPathUtf8), removed as it is read, or empty. The process that failed cannot report it,
+	// so the next one does: the editor when its Play session ends, anything else at its next start.
+	static godot::String take_fatal_record();
+
 	// Loads the host from wherever verse_host_paths resolves it -- the environment, then the
 	// user's EditorSettings, then the legacy project settings (R-DIST-12) -- with
 	// verse/host/enable_debugger, which is the one of the four that is genuinely per project,

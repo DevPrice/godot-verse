@@ -11,6 +11,7 @@
 #include "HostCooked.h"
 #include "HostDebug.h"
 #include "HostEventLoop.h"
+#include "HostFatal.h"
 #include "HostRuntime.h"
 #include "HostScript.h"
 #include "ISolarisModule.h"
@@ -211,6 +212,12 @@ VH_ATTR int32_t InitHost(const vh_init_desc* Desc, bool bEngineAlreadyBooted)
                          sizeof(vh_godot_api) - static_cast<size_t>(Host.Godot.StructSize));
     }
 
+    // First, so a failed check anywhere in the boot below is recorded too.
+    if (Desc->StructSize >= static_cast<int32_t>(offsetof(vh_init_desc, ShowFatalDialog) + sizeof(vh_bool)))
+    {
+        GodotVerse::InstallFatalRecorder(Desc->FatalLogPathUtf8, Desc->ShowFatalDialog != 0);
+    }
+
     Host.OnDiagnostic = Desc->OnDiagnostic;
     Host.DiagnosticCtx = Desc->DiagnosticCtx;
     Host.OnRuntimeError = Desc->OnRuntimeError;
@@ -343,6 +350,7 @@ VH_ATTR int32_t InitHost(const vh_init_desc* Desc, bool bEngineAlreadyBooted)
         }
     }
 
+    GodotVerse::ArmTestFatal();
     Host.bInitialized = true;
     return VH_OK;
 }
@@ -427,6 +435,8 @@ extern "C" void vh_tick(double BudgetSeconds, vh_tick_stats* OutStats)
     {
         return;
     }
+
+    GodotVerse::FireTestFatal();
 
     // Taken before the early return below, so a frame skipped for an analysis still hands over the
     // accounting of the waits that happened during it rather than folding them into the next one.

@@ -1,6 +1,7 @@
 #include "verse_editor_plugin.h"
 
 #include "verse_host_paths.h"
+#include "verse_runtime.h"
 #include "verse_script.h"
 #include "verse_script_language.h"
 
@@ -60,6 +61,19 @@ void VerseEditorPlugin::_enter_tree() {
 	// is what widen_completion_prefixes needs: it reads the editor that is on screen.
 	EditorInterface::get_singleton()->get_script_editor()->connect("editor_script_changed",
 		callable_mp(this, &VerseEditorPlugin::widen_completion_prefixes).unbind(1));
+
+	set_process(true);
+}
+
+void VerseEditorPlugin::_process(double p_delta) {
+	const bool playing = EditorInterface::get_singleton()->is_playing_scene();
+	if (was_playing && !playing) {
+		const String record = VerseRuntime::take_fatal_record();
+		if (!record.is_empty()) {
+			UtilityFunctions::push_error(String("The game ended in a Verse host fatal error:\n") + record);
+		}
+	}
+	was_playing = playing;
 }
 
 void VerseEditorPlugin::_exit_tree() {
