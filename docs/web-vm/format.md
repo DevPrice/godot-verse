@@ -85,7 +85,7 @@ the loader allocates every cell before filling any.
 | 2 | `true` | — (the loader's own singleton) |
 | 3 | `builtin package` | — (the intrinsics package; the loader supplies it) |
 | 4 | `name` | `sid` — an interned string as a value |
-| 5 | `array` | `u8` element kind (0 empty, 1 value, 2 int32, 3 char8, 4 char32), then the elements: `list<value>`, `list<sv>`, `str` (the raw bytes), or `list<uv>` |
+| 5 | `array` | `u8` element kind (0 empty, 1 value, 2 int32, 3 char8, 4 char32), then the elements: `list<value>` for 0 and 1 (for 0 it is the empty list), `list<sv>` for 2, `str` of the raw bytes for 3, `list<uv>` for 4 |
 | 6 | `mutable array` | as `array` |
 | 7 | `map` | `list<(value key, value)>`, in insertion order |
 | 8 | `mutable map` | as `map` |
@@ -154,7 +154,7 @@ schema's order, encoded by its `kind`:
 | `cell:VArchetype` | `ref` to an `archetype` cell |
 | `cell:VProcedure` | `ref` to a `procedure` cell |
 | `label` | `uv` op index |
-| `live_range` | `uv` first op index, `uv` last op index |
+| `live_range` | `uv` first op index, `uv` last op index, each in `[0, op count]`. `(op count, 0)` — first after last — is the empty range |
 | `failure_context_id` | `uv` |
 | `asset_path` | `sid` package name, `sid` asset name |
 | `bool` | `u8` |
@@ -163,8 +163,11 @@ schema's order, encoded by its `kind`:
 | `enum:ClassKind`, `enum:ClassFlags` | `uv` |
 
 Then two modifiers, applied in this order. A **variadic** operand is `list<>` of its element encoding.
-An **optional** operand is a `u8` present flag, then the operand if present; an optional `ref` is
-also allowed to be the `ref` 0.
+An operand `ops.json` marks **optional** is always a `u8` present flag, then the operand if present —
+whatever its kind, and even when the kind has an absent encoding of its own. `EndTask`'s `Write` and
+`Switch` are the optional registers this decides; a reader that skips the flag misreads every
+`race`. An operand not marked optional never has the flag, and may still be absent through its
+kind's own encoding (`value` 0, `ref` 0).
 
 The 31 cache operands (`ops.json`'s `cache: true`) are runtime state, and a freshly compiled program
 has nothing meaningful in them, so they are not written. A reader that wants the slots for its own
@@ -189,7 +192,7 @@ from, and a reader treats an inline-cache opcode as a malformed file.
 | inherited | `list<ref>`: the superclass first if there is one, then interfaces, verbatim |
 | archetype | `ref` |
 | constructor | `ref` (a function). Its parent scope is the class scope, so the class needs no separate field for it |
-| blocks | `ref`, present exactly when kind is class; 0 otherwise |
+| blocks | `ref`, always written: the blocks function when kind is class, 0 otherwise |
 | native bound | `u8` |
 
 `flags` are the final, derived flags (`spec/objects.md` §2.2). At engine commit `203d764` every

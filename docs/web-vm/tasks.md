@@ -42,7 +42,7 @@ Status: `todo`, `doing`, `done`, `dropped` (with a reason).
 | ID | Task | Room / model | Depends | Check | Status |
 | --- | --- | --- | --- | --- | --- |
 | T2.1 | `host/Private/HostVbcWriter.{h,cpp}`, called from `CookMain` after `CompileProject`; `program.vbc` beside the sidecar | dirty / opus | T1.1, T1.12 | a cook of `tests/host_smoke` writes `program.vbc`; the cooker exits 0 | done |
-| T2.2 | `tools/vbc_dump.py`, from `format.md` alone | clean / sonnet | T1.12 | dumps T2.1's output with no unknown op and every cell index resolving | todo |
+| T2.2 | `tools/vbc_dump.py`, from `format.md` alone | clean / sonnet | T1.12 | dumps T2.1's output with no unknown op and every cell index resolving | done |
 | T2.3 | `run_tests.py` abi layer: a `vbc` case over the `host_smoke` cook | neutral / sonnet | T2.1, T2.2 | `run_tests.py --only abi` passes | todo |
 | T2.4 | The writer's park-risk report and the `.vbc` sizes for `tests/integration` and `dodge-the-creeps`, recorded in design §14 notes | dirty / sonnet | T2.1 | numbers recorded in `measurements.md` | done |
 
@@ -53,8 +53,8 @@ Status: `todo`, `doing`, `done`, `dropped` (with a reason).
 | T3.0 | `tests/vm_conformance/` fixtures and `tools/run_vm_conformance.py`: cook once, run `tests/cooked_probe` on each fixture against `verse_host_runtime.dll` and against `verse_vm.dll`, diff transcripts; the UE host's transcripts are recorded as expected output | clean / sonnet | T2.1 | runs against the UE runtime host alone and records every expected transcript | todo |
 | T3.1 | `vm/` skeleton; `tools/build_verse_vm.py` (the DLL exporting `vh_*`); `tools/build_vm_test.py` (unit tests); the decoder tables generated from `ops.json` by `tools/gen_vbc_ops.py`; an `em++` compile of `vm/` | clean / sonnet | T1.12 | the DLL and the test binary build natively; `vm/` compiles under `em++`; `vh_abi_version` answers through `cooked_probe` | done |
 | T3.2 | Values: ints with bignum and rational, floats and their printing, chars, strings, arrays, maps, options, equality | clean / opus | T1.3, T3.1 | `verse_vm_test` value cases pass | done |
-| T3.3 | Loader and ABI shell: `.vbc` into cells, natives bound by name, unbound natives stand in and raise; the sidecar reader; `vh_init`, `vh_has_class`, `vh_class_method_list`, `vh_instantiate`, `vh_instance_call`, `vh_release_instance`; the `Print` native | clean / opus | T1.11, T3.1, T2.2 | `vh_init` loads all three cooks; `vh_class_method_list` answers what the UE runtime host answers for every `host_smoke` class | todo |
-| T3.4 | Interpreter core: moves, control flow, arithmetic, calls, closures, scopes, fast failure | clean / opus | T1.4, T3.2, T3.3 | the conformance fixtures for these pass | todo |
+| T3.3 | Loader and ABI shell: `.vbc` into cells, natives bound by key, unbound natives stand in and raise; the sidecar reader; `vh_init`, `vh_shutdown`, `vh_has_class` and every class-describing read the sidecar answers | clean / opus | T1.11, T3.2 | `vh_init` loads all three cooks; every class read answers what the UE runtime host answers, for every `host_smoke` and `tests/integration` class | todo |
+| T3.4 | Interpreter core: moves, control flow, arithmetic, calls, closures, scopes, fast failure; `vh_instantiate`, `vh_instance_call`, `vh_release_instance` and the `Print` native, so a fixture runs end to end | clean / opus | T1.4, T3.2, T3.3 | the conformance fixtures for these pass | todo |
 | T3.5 | Failure contexts and the undo log; runtime errors unwind to entry | clean / opus | T1.5, T3.4 | failure fixtures pass; undo-log unit cases pass | todo |
 | T3.6 | Objects, classes, construction, fields, overrides, interfaces, module initialization | clean / opus | T1.6, T3.4 | object and module fixtures pass | todo |
 | T3.7 | Unification and placeholders, stage 1: a runtime park is an error naming op and line | clean / opus | T1.5, T3.4 | unification fixtures pass | todo |
