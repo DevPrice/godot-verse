@@ -8,6 +8,7 @@
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/editor_export_platform.hpp>
 #include <godot_cpp/classes/editor_export_plugin.hpp>
+#include <godot_cpp/classes/editor_export_preset.hpp>
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/os.hpp>
@@ -56,6 +57,38 @@ void add_directory_to_pack(EditorExportPlugin *p_plugin, const String &p_abs_dir
 	const PackedStringArray subdirs = dir->get_directories();
 	for (int64_t i = 0; i < subdirs.size(); i++) {
 		add_directory_to_pack(p_plugin, p_abs_dir.path_join(subdirs[i]), p_res_dir.path_join(subdirs[i]));
+	}
+}
+
+// Matches the way Godot applies a preset's include filter: comma-separated globs, each tried against
+// the res:// path and against the file name.
+bool include_filter_matches(const String &p_filter, const String &p_path) {
+	const PackedStringArray patterns = p_filter.split(",", false);
+	for (int64_t i = 0; i < patterns.size(); i++) {
+		const String pattern = patterns[i].strip_edges();
+		if (!pattern.is_empty() && (p_path.matchn(pattern) || p_path.get_file().matchn(pattern))) {
+			return true;
+		}
+	}
+	return false;
+}
+
+void collect_vmodules(const String &p_dir, PackedStringArray &r_paths) {
+	Ref<DirAccess> dir = DirAccess::open(p_dir);
+	if (dir.is_null()) {
+		return;
+	}
+	const PackedStringArray files = dir->get_files();
+	for (int64_t i = 0; i < files.size(); i++) {
+		if (files[i].ends_with(".vmodule")) {
+			r_paths.push_back(p_dir.path_join(files[i]));
+		}
+	}
+	const PackedStringArray subdirs = dir->get_directories();
+	for (int64_t i = 0; i < subdirs.size(); i++) {
+		if (!subdirs[i].begins_with(".")) {
+			collect_vmodules(p_dir.path_join(subdirs[i]), r_paths);
+		}
 	}
 }
 
@@ -296,6 +329,20 @@ void VerseExportPlugin::_export_begin(const PackedStringArray &p_features, bool 
 		return;
 	}
 
+	// The markers name half of every class, and the cook just compiled the project with them, so a
+	// pack without them looks every script up under the wrong module and attaches none -- silently.
+	// A preset whose non-resource filter lists `*.vmodule` already carries them, and adding one
+	// twice would ship it twice, so only the rest are added.
+	const Ref<EditorExportPreset> preset = get_export_preset();
+	const String include_filter = preset.is_valid() ? preset->get_include_filter() : String();
+	PackedStringArray markers;
+	collect_vmodules("res://", markers);
+	for (int64_t i = 0; i < markers.size(); i++) {
+		if (!include_filter_matches(include_filter, markers[i])) {
+			add_file(markers[i], FileAccess::get_file_as_bytes(markers[i]), false);
+		}
+	}
+
 	if (platform_tag == "web") {
 		add_directory_to_pack(this, work, String("res://").path_join(verse_paths::DATA_DIR_NAME));
 	} else {
@@ -323,11 +370,9 @@ void VerseExportPlugin::_export_file(const String &p_path, const String &p_type,
 		return;
 	}
 
-	// A `.vmodule` is deliberately *not* touched here. The markers decide which module each script
-	// is in and so half of every class's name, so they have to ship -- but what ships them is the
-	// preset's `include_filter="*.vmodule"`, which carries them as plain files. Re-adding one with
-	// add_file and then skip() takes it back out again: measured, and it cost the export layer two
-	// missing markers.
+	// A `.vmodule` is deliberately *not* touched here: _export_begin adds the ones the preset's filter
+	// does not carry. Re-adding one here with add_file and then skip() takes it back out again:
+	// measured, and it cost the export layer two missing markers.
 }
 
 void VerseExportPlugin::_export_end() {

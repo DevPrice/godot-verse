@@ -299,6 +299,7 @@ public:
 
 	// R-DIAG-4. Installs or removes the Verse debugger; false when Epic's own socket debugger
 	// holds the VM's single debugger slot, which is what verse/host/enable_debugger asks for.
+	// True on the interpreter backend, which has no debugger to install.
 	bool debug_set_enabled(bool p_enabled);
 
 	// The three stopped-stack reads, all defined only while the host has a stop stashed -- which is

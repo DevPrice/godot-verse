@@ -1269,7 +1269,9 @@ WEB_EXPORT_REQUIRED = ["index.html", "index.pck"]
 # the checked-in one (CLAUDE.md: the editor rewrites and strips comments from both files, so what
 # is committed stays minimal). variant/extensions_support is what lets a Web export load a
 # GDExtension at all; variant/thread_support=false matches the nothreads library this layer builds
-# and requires (T0.1's dlink_nothreads template).
+# and requires (T0.1's dlink_nothreads template). Its include_filter is deliberately empty, as a
+# freshly added preset's is: the export plugin must ship the `.vmodule` markers itself, and an
+# empty filter is what proves it does, where "Windows Desktop"'s `*.vmodule` covers the other path.
 WEB_PRESET_TEXT = """
 [preset.1]
 
@@ -1280,7 +1282,7 @@ advanced_options=false
 dedicated_server=false
 custom_features=""
 export_filter="all_resources"
-include_filter="*.vmodule"
+include_filter=""
 exclude_filter=""
 export_path=""
 encryption_include_filters=""

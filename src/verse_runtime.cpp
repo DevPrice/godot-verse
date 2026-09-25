@@ -1714,7 +1714,10 @@ bool VerseRuntime::debug_set_enabled(bool p_enabled) {
 	if (!host.is_loaded()) {
 		return false;
 	}
-	return host.DebugSetEnabled(p_enabled ? 1 : 0) == VH_OK;
+	const int32_t status = host.DebugSetEnabled(p_enabled ? 1 : 0);
+	// The interpreter backend has no debugger, so there is nothing to attach and nothing to warn
+	// about; only the UE host's refusal means Epic's socket debugger holds the slot.
+	return status == VH_OK || status == VH_ERR_UNSUPPORTED;
 }
 
 int32_t VerseRuntime::debug_stack_count() const {

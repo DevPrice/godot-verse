@@ -822,7 +822,7 @@ int32_t vh_signature_at(const char *PathUtf8, const char *SourceUtf8, int32_t Li
 
 int32_t vh_debug_set_enabled(vh_bool Enabled) {
 	(void)Enabled;
-	return kNotBooted;
+	return VH_ERR_UNSUPPORTED;
 }
 
 int32_t vh_debug_stack_count(int32_t *OutCount) {
