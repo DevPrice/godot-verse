@@ -103,7 +103,6 @@ jobs:
         with:
           ndk-version: ${{ env.NDK_VERSION }}
           link-to-sdk: true
-          local-cache: true
       - if: matrix.config.platform == 'android'
         run: echo "SCONS_ARGS=$SCONS_ARGS ndk_version=${{ steps.ndk.outputs.ndk-full-version }}" >> "$GITHUB_ENV"
       - if: matrix.config.platform == 'web'
