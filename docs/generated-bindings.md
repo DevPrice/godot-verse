@@ -100,7 +100,7 @@ Taken in the requirements interview, with the reason each rests on.
 | Volume | Bind everything, then digest the package | Binding classes are re-analyzed from source per keystroke where the mirror is read from its digest. Phase 2 measured 60 classes at 158 ms and 1022 at 850 ms, so the digest is what makes "bind everything" affordable. |
 | Package | Its own Verse package: `using { /Godot.org/Bindings }` | A digest is made of a package, so separateness is what the volume decision rests on. A collision with a mirrored name is spelled `(/Godot.org/Bindings:)timer` — verbose, unambiguous, and nothing is ever refused for its name. |
 | Classification rules | `gen_verse_api.py`'s, exactly | `<decides>` for object returns, `<decides>:void` for predicates, `logic` for the 306 that answer a value, `<reads>` where Godot says `is_const` and the method answers something, properties as writable members except where a nested struct or container forces a getter/setter pair. |
-| Where those rules live | Ported to C++, with a differential test | The units layer runs the C++ classifier over the mirrored classes and asserts it reproduces `GodotClasses.native.verse`. Drift is caught by a test rather than prevented by structure, which is how `CONST_OVERRIDES` and the skip table are already kept honest. |
+| Where those rules live | Ported to C++, with a differential test | The units layer's `verse_bindings_test` runs the C++ *naming* rules -- class, member, constant and enum names, `enumerator_names`, container property types, the predicate rule -- against vectors `gen_verse_api.py` writes from the same `extension_api.json` (§10.9). Drift in a name is caught by a test rather than by inspection. What no test still covers is the *shape* rules beside them -- `<decides>`, `<reads>`, the getter/setter split -- because those are read off ClassDB and a script at runtime rather than from the dump, which the units layer cannot reach; the integration layer's real-compiler build is what stands in for that half (§10.9). |
 | Enums, constants, statics | All three, matching the mirror | A third-party physics class is unusable without its enums. Costs what `phase-2-design.md` §3.1 measured for the mirror's 793, now per project. |
 | Signals | Typed `signal(t)` from the start | A binding signal should be indistinguishable from `Timer.Timeout()`. Needs `BindEngineSignal` taught about non-mirror packages and the shapes recorded in the sidecar. |
 | Construction | Yes for both, by the Godot spelling | A ClassDB class mints through `ClassDB.instantiate(name)`; a script class mints its base and then `set_script`, which `spec.md:442` already names as the Godot spelling for R-INT-1. |
@@ -546,13 +546,32 @@ with it every binding in the project (B35). Every method, property and signal is
 whole mirrored ancestry (`verse_api::methods`, keyed by declaring class) before it is emitted, and a
 collision drops that member rather than the package.
 
-**The differential test §4 promised is not built.** It would run the C++ classifier over the mirrored
-classes and assert it reproduces `GodotClasses.native.verse`, and the C++ side cannot read
-`extension_api.json`: there is no JSON parser on that side of the repository. What stands in for it
-is the integration layer, where the whole generated package is compiled by the real Verse compiler on
-every run — a wrong classification is a build failure, not a silent drift — plus the assertions that
-call through each of the five member kinds. The gap is that the *mirror's* rules and the bindings'
-can still drift apart without a test saying so.
+**The differential test §4 promised is built for the naming half, and not for the rest.** A full
+version -- the C++ classifier run over the mirrored classes, asserting it reproduces
+`GodotClasses.native.verse` whole -- still cannot exist: the C++ side has no JSON parser, so it
+cannot read `extension_api.json` at all, and half of what the classifier decides (`<decides>` for
+an object return, `<reads>` from `is_const`, the getter/setter split) is read off ClassDB and a
+script's own reflection at runtime, which is a different data source from the dump the mirror reads
+build-time, not merely a format the C++ side cannot parse.
+
+What *is* shared between the two sides is text -- `split_pascal`, the class/member/constant/enum
+naming, `enumerator_names`, `CONTAINER_PROPERTY_TYPES`, the predicate regex -- and that half needs
+no JSON parser to test, because it is a pure function of a string. `tools/gen_verse_api.py` writes
+one (rule, input, expected) line per case to `tests/verse_bindings/naming_vectors.txt` from the same
+`extension_api.json` it already reads, and `verse_bindings_test` (the units layer) runs each line
+through the matching `src/verse_bindings.cpp` function. It found two real divergences the day it was
+built: `verse_binding_enumerator_names` had no `VERSE_STDLIB_NAMES`/reserved-word guard, so a
+GDScript-style `MODE_MIN, MODE_MAX` stripped to the colliding `Min`/`Max` (222 of the mirror's own
+766 enums hit the same gap in practice, once the vectors were built from real data rather than
+guessed at); and `verse_binding_property_is_member` did not exclude `callable`/`signal_ref` the way
+`CONTAINER_PROPERTY_TYPES` does, though nothing can reach that case today, since the generator has
+no reader for either type as a property yet. Both are fixed.
+
+What still cannot be tested this way is the *shape* half above. The integration layer, where the
+whole generated package is compiled by the real Verse compiler on every run, stands in for that: a
+wrong classification is a build failure there, not a silent drift, plus the assertions that call
+through each of the five member kinds. The gap that remains is narrower than §4 first described --
+a shared *name* cannot drift unnoticed any more, and a shared *shape* rule still can.
 
 ## 11. What the editor says about a binding
 
