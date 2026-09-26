@@ -551,8 +551,10 @@ def stage_extension(project: Path, for_export: bool = False) -> str | None:
             if not source.is_file():
                 return f"{name} is not staged in demo/addons -- see the export layer's prerequisites"
             shutil.copy2(source, target_dir / name)
-        generate_gdextension(str(project / "addons" / "godot-verse"),
-                             str(REPO / "godot-verse.gdextension.in"))
+    # Generated on every staging, not only an export's: the file is not committed, so a checkout
+    # that has never exported would otherwise have no extension to load at all.
+    generate_gdextension(str(project / "addons" / "godot-verse"),
+                         str(REPO / "godot-verse.gdextension.in"))
 
     # Outside the editor, Godot loads extensions from this list rather than by scanning -- and the
     # editor is what normally writes it. Writing it here is what lets the test project be run

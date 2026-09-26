@@ -200,15 +200,15 @@ def write_build_id(engine: Path, repo: Path, staged: dict[str, Path]) -> Path:
     return path
 
 
-def run_ubt(engine: Path, target: str, config: str, clean: bool) -> None:
+def run_ubt(engine: Path, target: str, config: str) -> None:
     build_bat = engine / "Engine" / "Build" / "BatchFiles" / "Build.bat"
     if not build_bat.exists():
         print(f"error: Build.bat not found at {build_bat}", file=sys.stderr)
         sys.exit(1)
 
+    # No -Clean even under --clean: UBT's -Clean deletes the outputs and builds nothing. A freshly
+    # staged tree carries new mtimes, so an ordinary build recompiles all of it.
     cmd = [str(build_bat), target, "Win64", config]
-    if clean:
-        cmd.append("-Clean")
 
     print(f"[build_host] running: {' '.join(cmd)}")
     result = subprocess.run(cmd, cwd=str(engine))
@@ -359,7 +359,7 @@ def main() -> None:
         print(f"[build_host] stage-only, done in {elapsed:.1f}s")
         return
 
-    run_ubt(engine, args.target, args.config, args.clean)
+    run_ubt(engine, args.target, args.config)
     if args.target in TARGET_BINARIES:
         collect_outputs(engine, repo, args.config, args.target)
     else:
