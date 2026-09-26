@@ -410,6 +410,7 @@ reviewed files of `docs/web-vm/spec/` alone. Keep it that way — do not bring V
     python tools/build_module_map_test.py # module-map test binary
     python tools/build_doc_markup_test.py # doc-markup converter test binary
     python tools/build_signature_test.py  # signature parser test binary
+    python tools/build_bindings_test.py   # naming-rule differential test, against tools/gen_verse_api.py's vectors
     python tools/build_gd_convert_test.py # GDScript converter test binary
     python tools/build_bench.py           # host benchmark (timings, not pass/fail)
     python tools/build_verse_probe.py     # the Verse probe (asks the compiler a question)
@@ -458,11 +459,20 @@ comparison cannot tell the two apart — so a check inside a loop names its row.
 FAIL fails its suite even when the binary exits 0.
 
 **units** — lexer, class-declaration scanner, module map, doc-markup converter, signature parser,
-the GDScript converter, generator, and `vm/`'s own cases (`verse_vm_test`). No Godot, no UE. Every
-`build_*_test.py` compiles through `tools/unit_build.py`: MSVC on Windows, `$CXX`, g++ or clang++
-elsewhere, and the binary is named `.exe` everywhere because that is what `run_tests.py` runs. The
-converter's goldens are whole files (`tests/verse_gd_convert/fixtures/*.expected`);
-`bin/verse_gd_convert_test.exe --update` rewrites them, and the diff is the review.
+the naming-rule differential test, the GDScript converter, generator, and `vm/`'s own cases
+(`verse_vm_test`). No Godot, no UE. Every `build_*_test.py` compiles through `tools/unit_build.py`:
+MSVC on Windows, `$CXX`, g++ or clang++ elsewhere, and the binary is named `.exe` everywhere because
+that is what `run_tests.py` runs. The converter's goldens are whole files
+(`tests/verse_gd_convert/fixtures/*.expected`); `bin/verse_gd_convert_test.exe --update` rewrites
+them, and the diff is the review.
+
+**`verse_bindings_test`** reads `tests/verse_bindings/naming_vectors.txt` -- (rule, input, expected)
+lines `gen_verse_api.py` writes from `extension_api.json` for every naming rule `src/verse_bindings.cpp`
+ports from this file's own (class, member, constant and enum names, `enumerator_names`, container
+property types, the predicate rule) -- and runs each through the matching C++ function. It is the
+differential test `docs/generated-bindings.md` §4 promised and §10.9 found never built: the C++ side
+has no JSON parser, so it cannot read `extension_api.json` itself, and the flat vectors file is what
+stands in for one.
 
 **abi** — `host_smoke`, the whole C ABI with no Godot, plus a `verse_cook` case that cooks
 `tests/host_smoke`'s fixtures and asserts the packages, the container, the sidecar and the
@@ -586,6 +596,7 @@ The binaries still run standalone, which is what to reach for when bisecting one
     bin/verse_module_map_test.exe
     bin/verse_doc_markup_test.exe
     bin/verse_signature_test.exe
+    bin/verse_bindings_test.exe [naming_vectors.txt path]  # defaults to tests/verse_bindings/naming_vectors.txt
     bin/verse_gd_convert_test.exe
     python tests/verse_api_gen/test_gen_verse_api.py
     python tests/test_records/test_test_records.py
@@ -653,7 +664,8 @@ the editor and `export_check.gd` as an autoload in an export.
 | `src/verse_api_skipped.h` | `tools/gen_verse_api.py` | same — every Godot member the mirror does not carry under its own name, and why, which is what `_validate` turns into a sentence (R-SCN-2) |
 | `host/Private/GodotClassNames.gen.h` | `tools/gen_verse_api.py` | same — every Godot class and the mirrored Verse class an object of it crosses as, which is what R-SCN-6's cast is built on. Every class, not only the emitted ones: a `--classes-file` build still has to make a handle cross as *something*, so each row names its nearest emitted ancestor |
 | `docs/nonatomic-methods.md` | `tools/gen_verse_api.py` | same — R-AUD-3's list. Written by the pass that writes the mirror, so it cannot drift |
-| `src/verse_gd_api.gen.h` | `tools/gen_verse_api.py` | same — how every Godot name is spelled in the mirror and in which shape (value, failable, test), for the GDScript converter. Recorded where each member is emitted |
+| `src/verse_gd_api.gen.h` | `tools/gen_verse_api.py` | same — how every Godot name is spelled in the mirror and in which shape (value, failable, test), for the GDScript converter. Recorded where each member is emitted. Its `module_scope_names` (`VERSE_STDLIB_NAMES`) is also read by `src/verse_bindings.cpp`, so the bindings' enumerator-stripping guard is single-sourced from the same list |
+| `tests/verse_bindings/naming_vectors.txt` | `tools/gen_verse_api.py` | same — one (rule, input, expected) line per case for every naming rule `src/verse_bindings.cpp` ports from this file, read by `verse_bindings_test` (docs/generated-bindings.md §4, §10.9) |
 | `src/verse_keywords.h` | `tools/gen_verse_keywords.py` | the UE compiler's `ReservedSymbols.inl` |
 | `host/Private/HostVbcOps.gen.h` | `tools/gen_vbc_writer.py` | `docs/web-vm/ops.json` — the cooker's per-op `.vbc` encoder, each op's size, may-park table and the schema digest the file is stamped with. `static_assert`s every opcode number against the engine's, so an engine bump that moved the op set fails to compile rather than writing a wrong file. `--check` reports a stale header |
 | `vm/vbc_ops.gen.h` | `tools/gen_vbc_ops.py --emit-cpp` | same — the interpreter's half of the same op schema: an enum class of opcodes, and per-op constexpr tables (name, emitted, may-park, yields, operand roles/kinds) the decoder reads instead of hand-maintaining a mirror of `ops.json`. Carries the same schema digest `HostVbcOps.gen.h` does, so a `.vbc` stamped by one engine commit and read on another is refused rather than misread |
