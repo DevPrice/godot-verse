@@ -497,6 +497,12 @@ static bool Step(const char* Name, bool Result)
 	return Result;
 }
 
+// A step inside a loop names its row: run_tests.py keys results by step name and refuses a repeat.
+static bool Step(const std::string& Name, bool Result)
+{
+	return Step(Name.c_str(), Result);
+}
+
 template <typename Fn>
 static Fn Resolve(HMODULE Module, const char* Name, bool* Ok)
 {
@@ -779,7 +785,7 @@ int main(int argc, char** argv)
 							   Lookup->Line == DeclRow && Lookup->Column == DeclColumn)
 						&& LookupOk;
 				LookupOk = Step("it points into exports.verse", Text(Lookup->PathUtf8, Lookup->PathLen) == ExportsPathUtf8) && LookupOk;
-				LookupOk = Step("Speed is not a var", Lookup->IsVar == 0) && LookupOk;
+				LookupOk = Step("Speed looks up as not a var", Lookup->IsVar == 0) && LookupOk;
 				LookupOk = Step("Speed's type reads as float", Text(Lookup->TypeUtf8, Lookup->TypeLen) == "float") && LookupOk;
 				LookupOk = Step("Speed is a data definition", Lookup->Kind == VH_LOOKUP_DATA) && LookupOk;
 				LookupOk = Step("Speed's owner is the class it was declared in",
@@ -1019,7 +1025,7 @@ int main(int argc, char** argv)
 				for (const Global& G : Globals)
 				{
 					const size_t At = G.Source->find(G.Needle);
-					if (!Step("located the global's call site", At != std::string::npos))
+					if (!Step(std::string("located the call site of ") + G.Needle, At != std::string::npos))
 					{
 						LookupOk = false;
 						continue;
@@ -1035,7 +1041,7 @@ int main(int argc, char** argv)
 								   Resolved && Found->Kind == VH_LOOKUP_FUNCTION
 									   && fs::path(DeclaredIn).filename().string() == G.File)
 							&& LookupOk;
-					LookupOk = Step("owned by that file rather than by a class", !Owner.empty() && Owner == DeclaredIn) && LookupOk;
+					LookupOk = Step(std::string(G.Needle) + " is owned by that file rather than by a class", !Owner.empty() && Owner == DeclaredIn) && LookupOk;
 				}
 			}
 
@@ -1060,7 +1066,7 @@ int main(int argc, char** argv)
 				for (const Spot& S : Spots)
 				{
 					const size_t At = ExportsSource.find(S.Needle);
-					if (!Step("located the fixture spot", At != std::string::npos)) { LookupOk = false; continue; }
+					if (!Step(std::string("located the fixture spot for '") + S.What + "'", At != std::string::npos)) { LookupOk = false; continue; }
 					int32_t Row = 0;
 					int32_t Column = 0;
 					RowColumnOf(ExportsSource, At + S.Offset, Row, Column);
@@ -1325,7 +1331,7 @@ int main(int argc, char** argv)
 					// The instantiation is per receiver and not a free pass: `signal(t)`'s own
 					// extension methods are not event(t)'s, and nothing declared for a different
 					// parametric class may ride in behind the two that match.
-					CompleteOk = Step("but not vector2's Length", Offers(Items, Count, "Length") == nullptr) && CompleteOk;
+					CompleteOk = Step("but not vector2's Length on an event", Offers(Items, Count, "Length") == nullptr) && CompleteOk;
 				}
 				else
 				{
@@ -1405,9 +1411,9 @@ int main(int argc, char** argv)
 						CompleteSymbolFn(ExportsPathUtf8.c_str(), ModeTyping.c_str(), RecvRow, RecvColumn,
 										 VH_COMPLETE_MEMBERS, &Items, &Count) == VH_OK))
 				{
-					CompleteOk = Step("it offers Idle", Offers(Items, Count, "Idle") != nullptr) && CompleteOk;
-					CompleteOk = Step("Walking", Offers(Items, Count, "Walking") != nullptr) && CompleteOk;
-					CompleteOk = Step("and Running", Offers(Items, Count, "Running") != nullptr) && CompleteOk;
+					CompleteOk = Step("the value offers Idle", Offers(Items, Count, "Idle") != nullptr) && CompleteOk;
+					CompleteOk = Step("the value offers Walking", Offers(Items, Count, "Walking") != nullptr) && CompleteOk;
+					CompleteOk = Step("and the value offers Running", Offers(Items, Count, "Running") != nullptr) && CompleteOk;
 					// No extension method matches an enum's type, so a value's enumerators are still
 					// the whole list -- unlike vector2 above, where the math surface joined it.
 					CompleteOk = Step("and nothing else", Count == 3) && CompleteOk;
@@ -1523,7 +1529,7 @@ int main(int argc, char** argv)
 										 VH_COMPLETE_SCOPE, &Items, &Count) == VH_OK))
 				{
 					CompleteOk = Step("it offers the enclosing class' own method", Offers(Items, Count, "Probe") != nullptr) && CompleteOk;
-					CompleteOk = Step("an inherited property", Offers(Items, Count, "Position") != nullptr) && CompleteOk;
+					CompleteOk = Step("an inherited property inside the condition", Offers(Items, Count, "Position") != nullptr) && CompleteOk;
 					CompleteOk = Step("and Print, the same as anywhere else",
 									 Offers(Items, Count, "Print") != nullptr)
 							  && CompleteOk;
@@ -1790,7 +1796,7 @@ int main(int argc, char** argv)
 					// Not narrowed by what the specifier is about to be attached to: at the moment
 					// the question is asked the declaration is half written, exactly as for `@`.
 					CompleteOk = Step("and an effect, at a data member", Offers(Items, Count, "transacts") != nullptr) && CompleteOk;
-					CompleteOk = Step("but no name from the enclosing scope", Offers(Items, Count, "Print") == nullptr) && CompleteOk;
+					CompleteOk = Step("but no name from the enclosing scope at a specifier", Offers(Items, Count, "Print") == nullptr) && CompleteOk;
 					// The bridge's own attributes are in both lists, and that is not an oversight
 					// here: `@attribscope_data` says where `export` may be applied, not which of
 					// the two forms it takes, and an attribute declaring neither form is one the
@@ -1839,7 +1845,7 @@ int main(int argc, char** argv)
 			for (const SNarrowed& N : Narrowed)
 			{
 				const size_t At = ExportsSource.find(N.Find);
-				CompleteOk = Step("located the fixture's anchor", At != std::string::npos) && CompleteOk;
+				CompleteOk = Step(std::string("located the fixture's anchor for ") + N.Label, At != std::string::npos) && CompleteOk;
 				if (At == std::string::npos)
 				{
 					CompleteOk = false;
@@ -1860,9 +1866,9 @@ int main(int argc, char** argv)
 						CompleteSymbolFn(ExportsPathUtf8.c_str(), Typing.c_str(), Row, Column,
 										 N.Mode, &Items, &Count) == VH_OK))
 				{
-					CompleteOk = Step("  it offers what belongs there", Offers(Items, Count, N.Offered) != nullptr) && CompleteOk;
+					CompleteOk = Step(std::string("  it offers what belongs at ") + N.Label, Offers(Items, Count, N.Offered) != nullptr) && CompleteOk;
 					CompleteOk = Step(N.WhyRefused, Offers(Items, Count, N.Refused) == nullptr) && CompleteOk;
-					CompleteOk = Step("  and nothing from the enclosing scope", Offers(Items, Count, "Print") == nullptr) && CompleteOk;
+					CompleteOk = Step(std::string("  and nothing from the enclosing scope at ") + N.Label, Offers(Items, Count, "Print") == nullptr) && CompleteOk;
 				}
 				else
 				{
@@ -2333,7 +2339,7 @@ int main(int argc, char** argv)
 	ExportsOk = Step("Speed is a float", SpeedExport && SpeedExport->Type == VH_TYPE_FLOAT) && ExportsOk;
 	ExportsOk = Step("Label is a string", FindExport("Label") && FindExport("Label")->Type == VH_TYPE_STRING) && ExportsOk;
 	ExportsOk = Step("Enabled is a var logic", EnabledExport && EnabledExport->Type == VH_TYPE_LOGIC && EnabledExport->IsVar != 0) && ExportsOk;
-	ExportsOk = Step("Speed is not a var", SpeedExport && SpeedExport->IsVar == 0) && ExportsOk;
+	ExportsOk = Step("Speed exports as not a var", SpeedExport && SpeedExport->IsVar == 0) && ExportsOk;
 	ExportsOk = Step("Scale is a var float", ScaleExport && ScaleExport->Type == VH_TYPE_FLOAT && ScaleExport->IsVar != 0) && ExportsOk;
 	// The whole point of the attribute: an unmarked member stays out of the inspector.
 	Step("unmarked Hidden is not exported", FindExport("Hidden") == nullptr);

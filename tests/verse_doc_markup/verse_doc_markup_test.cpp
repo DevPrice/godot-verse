@@ -204,7 +204,7 @@ bool TestCommentAbove()
 				"\t<#\n\t\tFirst line.\n\t\tSecond line.\n\t#>\n\tFoo():int = 1\n", 4, "First line.\nSecond line.")
 		&& ExpectAbove("a block's closing line is not a `>`",
 				"<# One.\n   Two. #>\nFoo():int = 1\n", 2, "One.\nTwo.")
-		&& ExpectAbove("a blank line inside a block stays inside it",
+		&& ExpectAbove("a blank line inside a block comment stays inside it",
 				"<#\nFirst.\n\nSecond.\n#>\nFoo():int = 1\n", 5, "First.\n\nSecond.")
 		&& ExpectAbove("an indented comment contributes its body",
 				"\t<#>\n\t\tThe doc.\n\t\tIts second line.\n\tFoo():int = 1\n", 3, "The doc.\nIts second line.")

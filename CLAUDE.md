@@ -444,7 +444,18 @@ executable. If a future engine drop provides one, that script finds and execs it
 
     python tools/run_tests.py                    # every layer; the one command (R-QUAL-3)
     python tools/run_tests.py --only units       # or units / abi / integration / export / web / web-threads
+    python tools/run_tests.py --only units,abi   # or several, comma-separated
     python tools/run_tests.py --build            # rebuild the test binaries first
+
+**Every case is a record.** `run_tests.py` parses each driver's one-line-per-case output
+(`tools/test_records.py`; its self-test is `tests/test_records/`, in the units layer) and writes one
+JSON object per case to **`bin/test_results.jsonl`**, overwritten by each run: `layer`, `suite` (the
+binary or run), `case`, `status` (`pass`/`fail`/`skip`), `detail`, and `got`/`expected` where a
+FAIL line says them. Each suite's verdict is a record too (`kind` `suite`), and so is each failure
+of the harness's own (`kind` `harness`). The run's last lines name every failing case by layer and
+case name. **A case name printed twice in one suite is a harness failure**, because a name-keyed
+comparison cannot tell the two apart — so a check inside a loop names its row. A case line saying
+FAIL fails its suite even when the binary exits 0.
 
 **units** — lexer, class-declaration scanner, module map, doc-markup converter, signature parser,
 the GDScript converter, generator, and `vm/`'s own cases (`verse_vm_test`). No Godot, no UE. Every
@@ -491,23 +502,34 @@ by-hand** — the build copy proves the sentence and the line, not that the edit
 **export-vm** and **web** are the same `tests/integration` on the interpreter, each from a
 throwaway copy of the project (a committed `project.godot` is never touched; `override.cfg` is
 ignored while exporting). export-vm's copy sets `verse/runtime/backend="vm"`, is exported for
-Windows and asserted at the host backend's own 519/0/11. web's copy sets **nothing**, so it proves
-the `.web` override's default; it is exported for Web, run in headless Chrome through
-`tools/run_web.py` and asserted at 517/0/13 — R-ASYNC-8's two thread cases skip in a build without
-threads — and then exported once more with `backend.web="host"` to assert the refusal.
+Windows and held to the editor run's case list exactly as the export layer is. web's copy sets
+**nothing**, so it proves the `.web` override's default; it is exported for Web, run in headless
+Chrome through `tools/run_web.py` and held to the same list, where R-ASYNC-8's two thread cases may
+also skip with `NO_THREADS_WHY` — a build without threads has no other thread — and then exported
+once more with `backend.web="host"` to assert the refusal. (Observed at 2026-09: 517 passed, 0
+failed, 13 skipped.)
 **web-threads** is the web layer's own code with the threads library (`godot-verse.wasm`, built
 `threads=yes`), `variant/thread_support=true` and the `web_dlink_release` template, served with
 `run_web.py --coop-coep` — without the headers the page is not cross-origin isolated and cannot
-start a worker. It is asserted at the export layer's full 519/0/11, because R-ASYNC-8's two cases
-run there and the off-thread call has to be refused; the refusal export is the web layer's alone.
+start a worker. It is held to the list with no thread allowance, because R-ASYNC-8's two cases run
+there and the off-thread call has to be refused; the refusal export is the web layer's alone.
 Each layer stages only its own library, so the copy's `.gdextension` has one web row. **A Web export's page
 passes the engine no command line**, so `run_web.py --godot-arg` rewrites its `GODOT_CONFIG`; without
 it the test driver's `--verse-check` gate never opens and the game sits idle, which reads as a hang.
 
 **export** — exports `tests/integration` headless, asserts the *tree* it produced, then **launches
-it** and asserts what its cases reported: 519 passed, 0 failed, 11 skipped, with the counts named in
-`run_tests.py` so a case that stops running in an export reads as a failure rather than as a shorter
-log. It is the only layer that exercises the cooked path end to end; everything else compiles at
+it** and holds what its cases reported to **the editor run's own case list**, so a case that stops
+running in an export reads as a failure, by name, rather than as a shorter log. Every case the
+editor run printed must be printed by the export too, passing or skipped with a reason
+`test_cases.gd` marks editor-only (`EDITOR_ONLY`, or a reason beginning `editor only: `); a case the
+export prints and the editor did not fails as well. A block the export replaces with one skip is
+bracketed in the editor run by `_begin_editor_only(title)`/`_end_editor_only()`, and that one skip,
+named `title`, stands for every case inside it — the hover section is the one. The per-layer line
+to read is `[export] held to the editor run's N cases: ...`. The list comes from the integration
+layer when it ran in the same invocation, and otherwise **the editor integration project is run
+first** (its cases only, without host_fatal or the log assertions), so `--only export` is still
+compared rather than trusted. Adding a case needs no edit to `run_tests.py`. (Observed at 2026-09:
+577 editor cases, 519 passed, 0 failed, 11 skipped in the export.) It is the only layer that exercises the cooked path end to end; everything else compiles at
 startup. It needs more staged than the other layers do, because what it is exporting *is* them —
 `godot-verse.dll` (`scons target=template_release`), `verse_host_runtime.dll`
 (`build_host.py --target VerseHostRuntime`) and `tbbmalloc.dll` in `demo/addons` — and skips itself
@@ -549,7 +571,7 @@ shape in GDScript, and split the way `dodge-the-creeps` is: **`tests/integration
 the library** — one line per case, a `tree`, `begin()` and `step()` — and the two drivers are
 `test_main.gd` (a `SceneTree`, in the editor) and `export_check.gd` (an autoload, in an export). One
 set of lines, so the two runs cannot disagree about what passing means. A case that cannot run in an
-export sets `editor` false and is **printed as a skip and counted**, never dropped.
+export sets `editor` false and is **printed as a skip under its own name**, never dropped.
 
 **An autoload is the only way to drive an exported game**: `--script` is inside `TOOLS_ENABLED`, so
 an export template has none. Both autoloads must `set_process(false)` first — declaring `_process`
@@ -566,6 +588,7 @@ The binaries still run standalone, which is what to reach for when bisecting one
     bin/verse_signature_test.exe
     bin/verse_gd_convert_test.exe
     python tests/verse_api_gen/test_gen_verse_api.py
+    python tests/test_records/test_test_records.py
 
 ### Instruments, which are not tests
 

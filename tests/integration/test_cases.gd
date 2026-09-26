@@ -174,12 +174,29 @@ func _check(name: String, ok: bool) -> void:
 		print("[integration] %s: FAIL" % name)
 
 
+# run_tests.py holds every exported run to the editor run's own case list, and a skip there passes
+# only when its reason begins with EDITOR_ONLY -- or, on the nothreads web build, is NO_THREADS_WHY.
+# Both strings are read by tools/test_records.py; change them together.
+const EDITOR_ONLY := "editor only"
+const NO_THREADS_WHY := "a build without threads runs a pool task on the calling thread"
+
+
 # A case that cannot run where it is being run, for a reason this suite knows in advance. It is
-# counted rather than dropped, and the count is asserted: a case that quietly stops running in an
-# export would otherwise read as a shorter log and nothing else.
-func _skip(name: String, why := "editor only") -> void:
+# printed rather than dropped, and run_tests.py matches it by name against the editor run: a case
+# that quietly stops running in an export would otherwise read as a shorter log and nothing else.
+func _skip(name: String, why := EDITOR_ONLY) -> void:
 	_skipped += 1
 	print("[integration] %s: skip -- %s" % [name, why])
+
+
+# Brackets a block the editor runs and an export replaces with one `_skip(title)`, so run_tests.py
+# can tell which of the editor run's cases that single skip stands for.
+func _begin_editor_only(title: String) -> void:
+	print("[integration] begin editor-only section: %s" % title)
+
+
+func _end_editor_only() -> void:
+	print("[integration] end editor-only section")
 
 
 # For a *computed* float, where exact equality is the wrong question: Verse's float is 64-bit and
@@ -1009,8 +1026,8 @@ func begin() -> void:
 						skin.get("hint_string", ""),
 						String(palette.get_global_name()) if palette != null else "")
 			else:
-				_skip("and it is the very name the class registers under",
-						"get_global_name reads the source text, which an export strips to a stub")
+				_skip("and it is the very name the class registers under", EDITOR_ONLY
+						+ ": get_global_name reads the source text, which an export strips to a stub")
 
 	# --- R-EXP-5: @tool ------------------------------------------------------------------------
 	#
@@ -1026,7 +1043,7 @@ func begin() -> void:
 		# stub (7a D10), so there is no `@tool` left to find -- and nothing is lost by it: what the
 		# flag decides is whether the editor hands out a real instance or a placeholder, and an
 		# exported game is never `is_editor_hint()`.
-		_skip("and reports itself a tool script", "the source is a stub in an export")
+		_skip("and reports itself a tool script", EDITOR_ONLY + ": the source is a stub in an export")
 	elif tool_script != null:
 		_check("and reports itself a tool script", tool_script.is_tool())
 	var plain_script: Script = load("res://scripts/marshal.verse")
@@ -1438,7 +1455,7 @@ func begin() -> void:
 		_check_eq("a `<protected>` one does too", _signal_points, 4)
 		emitter_node.connect("Own", _on_verse_scored)
 		emitter_node.call("EmitOwn", 5)
-		_check_eq("and a `<private>` one", _signal_points, 5)
+		_check_eq("and a `<private>` one emits too", _signal_points, 5)
 		emitter_node.connect("Quiet", _on_verse_scored)
 		emitter_node.call("EmitQuiet", 6)
 		_check_eq("and a `<private>` signal(t)", _signal_points, 6)
@@ -1642,8 +1659,8 @@ func begin() -> void:
 		var answered: bool = typeof(_thread_answer) == TYPE_INT and _thread_answer == 7
 		_check_eq("but the Verse method it called did not", answered, false)
 	else:
-		_skip("the worker task ran", "a build without threads runs a pool task on the calling thread")
-		_skip("but the Verse method it called did not", "a build without threads runs a pool task on the calling thread")
+		_skip("the worker task ran", NO_THREADS_WHY)
+		_skip("but the Verse method it called did not", NO_THREADS_WHY)
 	_check_eq("and the main thread still works afterwards", node.call("EchoInt", 3), 3)
 
 	# --- R-INT-4 / R-SIG-3: a Verse function as a Godot Callable --------------------------------
@@ -2185,6 +2202,7 @@ func begin() -> void:
 	# commits; what matters here is that the label and the documentation page are the ones GDScript
 	# would give for the same code.
 	if editor:
+		_begin_editor_only("the script editor's hover tooltip")
 		var hovers: Array = _verse_language().call("probe_hover", "res://scripts/hover_probe.verse")
 		_check("hover_probe.verse answers hovers", not hovers.is_empty())
 
@@ -2407,8 +2425,9 @@ func begin() -> void:
 					refined.append(String(option["insert_text"]))
 				_check("and the analysis keeps them rather than replacing them",
 						refined.has("Hit(") and refined.size() > opened.size())
+		_end_editor_only()
 	else:
-		_skip("the script editor's hover tooltip", "no analysis in an exported game")
+		_skip("the script editor's hover tooltip", EDITOR_ONLY + ": no analysis in an exported game")
 
 	var tx_script: Script = load("res://scripts/transactions.verse")
 	_check("transactions.verse compiles", tx_script != null and tx_script.can_instantiate())

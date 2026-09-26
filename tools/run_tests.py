@@ -16,7 +16,12 @@ checkout still gets the unit layer -- and a skip is reported as a skip, never as
 
   python tools/run_tests.py                 # everything that can run here
   python tools/run_tests.py --only export   # one layer
+  python tools/run_tests.py --only units,abi  # or several
   python tools/run_tests.py --build         # rebuild the test binaries first
+
+Every case a driver prints becomes a record in bin/test_results.jsonl (tools/test_records.py), the
+last lines name each failing case by layer, and an exported run is held to the editor integration
+run's own case list -- which is run first when the integration layer is not among those asked for.
 
 Environment: UE_ROOT names the Unreal checkout (or --engine), GODOT names the Godot binary (or
 --godot). Both are also guessed from the usual places. UE_ROOT is exported into every Godot this
@@ -27,7 +32,6 @@ into a project.godot any more (R-DIST-12).
 import argparse
 import json
 import os
-import re
 import shutil
 import struct
 import subprocess
@@ -37,7 +41,9 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
+sys.path.insert(0, str(REPO / "tools"))
 from gdextension import generate as generate_gdextension  # noqa: E402
+import test_records  # noqa: E402
 
 # Where a Godot binary tends to be when nobody has said. Deliberately short: a guess that finds the
 # wrong Godot is worse than no guess, because the tests would then report on a build nobody meant.
@@ -47,11 +53,41 @@ GODOT_GUESSES = [
 ]
 
 
+# One JSON object per line: every case a driver printed, every suite's verdict (`kind` "suite"), and
+# every failure of the harness's own (`kind` "harness": a repeated case name, a case an exported run
+# lost). Overwritten by each run.
+RESULTS_FILE = REPO / "bin" / "test_results.jsonl"
+
+
 class Results:
-    def __init__(self) -> None:
+    def __init__(self, path: Path | None = None) -> None:
         self.passed = 0
         self.failed = 0
         self.skipped: list[str] = []
+        # Which layer the suites being run belong to; main() sets it before each.
+        self.layer = ""
+        self.records: list[test_records.Case] = []
+        # The editor run of tests/integration, which every exported run is held to. None until it
+        # has run to its summary line in this invocation.
+        self.integration_cases: list[test_records.Case] | None = None
+        self.integration_attempted = False
+        self.harness_failed = 0
+        self.last_output = ""
+        self._path = path
+        if path is not None:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("", encoding="utf-8")
+
+    def add(self, case: test_records.Case) -> None:
+        self.records.append(case)
+        if self._path is not None:
+            with open(self._path, "a", encoding="utf-8") as out:
+                out.write(json.dumps(case.to_json()) + "\n")
+
+    def harness_failure(self, suite: str, case: str, why: str) -> None:
+        print(f"[run_tests] {suite}: {case}: FAIL -- {why}")
+        self.harness_failed += 1
+        self.add(test_records.Case(self.layer, suite, case, test_records.FAIL, why, kind="harness"))
 
     def record(self, name: str, ok: bool) -> None:
         if ok:
@@ -60,10 +96,23 @@ class Results:
         else:
             self.failed += 1
             print(f"[run_tests] {name}: FAIL")
+        self.add(test_records.Case(self.layer, name, name, test_records.PASS if ok else test_records.FAIL,
+                                   kind="suite"))
 
     def skip(self, name: str, why: str) -> None:
         self.skipped.append(f"{name} ({why})")
         print(f"[run_tests] {name}: SKIP -- {why}")
+        self.add(test_records.Case(self.layer, name, name, test_records.SKIP, why, kind="suite"))
+
+    def take_cases(self, suite: str, output: str, tag: str) -> list[test_records.Case]:
+        """Records every case `output` printed under `tag`; a repeated name is a harness failure."""
+        cases = test_records.parse_cases(output, self.layer, suite, tag)
+        for case in cases:
+            self.add(case)
+        for name in test_records.duplicates(cases):
+            self.harness_failure(suite, name, "this case name is printed more than once, so it "
+                                              "cannot be told apart in a comparison")
+        return cases
 
 
 def find_engine(explicit: str | None) -> Path | None:
@@ -89,10 +138,28 @@ def find_godot(explicit: str | None) -> Path | None:
     return None
 
 
+def stream(argv: list[str], cwd: Path | None = None) -> tuple[int, str]:
+    """Runs argv with stdout and stderr merged, echoing each line as it arrives, and returns the
+    exit code and everything it printed."""
+    lines: list[str] = []
+    with subprocess.Popen(argv, cwd=str(cwd or REPO), stdout=subprocess.PIPE,
+                          stderr=subprocess.STDOUT, text=True, errors="replace") as process:
+        assert process.stdout is not None
+        for line in process.stdout:
+            sys.stdout.write(line)
+            sys.stdout.flush()
+            lines.append(line)
+    return process.returncode, "".join(lines)
+
+
 def run(name: str, argv: list[str], results: Results, cwd: Path | None = None,
         require_line: str | None = None, require_all: list[str] | None = None,
-        refute_all: list[str] | None = None) -> bool:
+        refute_all: list[str] | None = None, cases: str | None = None) -> bool:
     """Runs a test binary, echoing its own per-case lines. Exit code decides pass or fail.
+
+    `cases` is the tag the binary prints its case lines under (`test_records.PLAIN` for the
+    tag-less format), and every one becomes a record. A case line saying FAIL fails the run even
+    when the binary exits 0 -- which host_smoke once did for a whole session.
 
     `require_line` is for a runner that can exit 0 without having finished. Godot is one: an
     unhandled GDScript error aborts _init, so `quit(1)` is never reached and the process leaves with
@@ -106,30 +173,31 @@ def run(name: str, argv: list[str], results: Results, cwd: Path | None = None,
     it was given.
     """
     print(f"[run_tests] --- {name} ---")
-    if require_line is None and require_all is None and refute_all is None:
-        completed = subprocess.run(argv, cwd=str(cwd or REPO))
-        ok = completed.returncode == 0
-    else:
-        completed = subprocess.run(argv, cwd=str(cwd or REPO), capture_output=True, text=True,
-                                   errors="replace")
-        output = (completed.stdout or "") + (completed.stderr or "")
-        sys.stdout.write(output)
-        ok = completed.returncode == 0
-        if ok and require_line is not None and require_line not in output:
+    returncode, output = stream(argv, cwd)
+    results.last_output = output
+    ok = returncode == 0
+    if ok and require_line is not None and require_line not in output:
+        ok = False
+        print(f"[run_tests] {name}: exited 0 without printing {require_line!r} -- it stopped early")
+    for expected in require_all or []:
+        if expected in output:
+            print(f"[run_tests] {name}: said {expected!r}")
+        else:
             ok = False
-            print(f"[run_tests] {name}: exited 0 without printing {require_line!r} -- it stopped early")
-        for expected in require_all or []:
-            if expected in output:
-                print(f"[run_tests] {name}: said {expected!r}")
-            else:
-                ok = False
-                print(f"[run_tests] {name}: never said {expected!r}")
-        for unwanted in refute_all or []:
-            if unwanted in output:
-                ok = False
-                print(f"[run_tests] {name}: said {unwanted!r}, which it must not")
-            else:
-                print(f"[run_tests] {name}: never said {unwanted!r}")
+            print(f"[run_tests] {name}: never said {expected!r}")
+    for unwanted in refute_all or []:
+        if unwanted in output:
+            ok = False
+            print(f"[run_tests] {name}: said {unwanted!r}, which it must not")
+        else:
+            print(f"[run_tests] {name}: never said {unwanted!r}")
+    if cases is not None:
+        before = len(results.records)
+        parsed = results.take_cases(name, output, cases)
+        if any(case.status == test_records.FAIL for case in parsed):
+            ok = False
+        if any(record.kind == "harness" for record in results.records[before:]):
+            ok = False
     results.record(name, ok)
     return ok
 
@@ -156,13 +224,16 @@ def run_units(results: Results, do_build: bool) -> None:
         if not path.is_file():
             results.skip(binary, f"not built -- run tools/{builder}")
             continue
-        run(binary, [str(path)], results)
+        run(binary, [str(path)], results, cases=binary.removesuffix(".exe"))
 
     generator = REPO / "tests" / "verse_api_gen" / "test_gen_verse_api.py"
     if generator.is_file():
-        run("test_gen_verse_api.py", [sys.executable, str(generator)], results)
+        run("test_gen_verse_api.py", [sys.executable, str(generator)], results, cases=test_records.PLAIN)
     else:
         results.skip("test_gen_verse_api.py", f"{generator} is missing")
+
+    records_test = REPO / "tests" / "test_records" / "test_test_records.py"
+    run("test_test_records.py", [sys.executable, str(records_test)], results, cases="test_records")
 
 
 def run_abi(results: Results, engine: Path | None, do_build: bool) -> None:
@@ -187,7 +258,8 @@ def run_abi(results: Results, engine: Path | None, do_build: bool) -> None:
     # The host must be loaded from the engine tree, never from bin/: VNI records each Verse
     # package's source directory relative to the loaded module, so a copy elsewhere compiles
     # against an empty package set and every identifier is unknown.
-    run("host_smoke", [str(smoke), str(host_dll), str(engine / "Engine"), str(REPO)], results)
+    run("host_smoke", [str(smoke), str(host_dll), str(engine / "Engine"), str(REPO)], results,
+        cases="smoke")
 
     run_cook(results, engine)
 
@@ -538,6 +610,49 @@ def run_host_fatal(results: Results, godot: Path, project: Path) -> None:
     results.record("host_fatal", ok)
 
 
+def _integration_argv(godot: Path, project: Path) -> list[str]:
+    # --headless opens no window. --quit-after bounds a hang: the script quits on its own, and a
+    # run that has not is a failure worth seeing rather than one to wait out.
+    return [str(godot), "--headless", "--path", str(project), "--script", "res://test_main.gd",
+            "--quit-after", "600"]
+
+
+def _keep_integration_reference(results: Results) -> None:
+    """Keeps the editor run's cases as what every exported run is held to -- but only a run that
+    reached its summary line, and whose case lines add up to it, is a whole list."""
+    results.integration_attempted = True
+    cases = [record for record in results.records
+             if record.suite == "integration" and record.kind == "case"]
+    counts = test_records.summary_counts(results.last_output, "integration")
+    tally = tuple(sum(1 for case in cases if case.status == status)
+                  for status in (test_records.PASS, test_records.FAIL, test_records.SKIP))
+    if counts is None:
+        print("[run_tests] integration: no summary line, so there is no case list to hold an export to")
+    elif counts != tally:
+        results.harness_failure("integration", "case lines agree with the summary",
+                                f"the summary says {counts} (passed, failed, skipped) and the case "
+                                f"lines add up to {tally}")
+    else:
+        results.integration_cases = cases
+
+
+def ensure_integration_reference(results: Results, engine: Path | None, godot: Path | None) -> None:
+    """Runs the editor integration project when an exported layer needs its case list and nothing
+    in this invocation has produced one -- `--only export`, say. Only the project itself: the
+    host_fatal runs and the log assertions are the integration layer's, not the reference's."""
+    if results.integration_attempted or godot is None or engine is None:
+        return
+    project = REPO / "tests" / "integration"
+    if not (project / "project.godot").is_file() or stage_extension(project) is not None:
+        return
+    layer = results.layer
+    results.layer = "integration"
+    run("integration", _integration_argv(godot, project), results, require_line="passed, ",
+        cases="integration")
+    results.layer = layer
+    _keep_integration_reference(results)
+
+
 def run_integration(results: Results, engine: Path | None, godot: Path | None) -> None:
     project = REPO / "tests" / "integration"
     if not (project / "project.godot").is_file():
@@ -559,19 +674,12 @@ def run_integration(results: Results, engine: Path | None, godot: Path | None) -
     reports_fatal = (["The previous run ended in a Verse host fatal error"]
                      if INTEGRATION_CRASH_LOG.exists() else [])
 
-    # --headless opens no window. --quit-after bounds a hang: the script quits on its own, and a
-    # run that has not is a failure worth seeing rather than one to wait out.
     run(
         "integration",
-        [
-            str(godot),
-            "--headless",
-            "--path", str(project),
-            "--script", "res://test_main.gd",
-            "--quit-after", "600",
-        ],
+        _integration_argv(godot, project),
         results,
         require_line="passed, ",
+        cases="integration",
         require_all=[
             # R-DIAG-3. test_main.gd raises the same error twelve times in one frame; the bridge
             # prints one stack and says how many it dropped, in the wording Godot uses for its own
@@ -611,6 +719,7 @@ def run_integration(results: Results, engine: Path | None, godot: Path | None) -
         # raises test_main.gd makes on purpose are what would print one if it came back.
         refute_all=["LogVerseRuntime:"],
     )
+    _keep_integration_reference(results)
     if reports_fatal:
         cleared = not INTEGRATION_CRASH_LOG.exists()
         print(f"[run_tests] host_fatal: the next start removes the record it reported: "
@@ -870,20 +979,48 @@ EXPORT_DATA_DIR_ENTRIES = {"Cooked", "Engine", "verse_classes.json", "program.vb
 # class's name, and it is what the kept `.vmodule` markers decide.
 EXPORT_EXPECTED_CLASSES = ["marshal", "signals", "left/widget"]
 
-# What the exported run must report, named rather than inferred (7b D5): a case that stops running
-# in an export has to read as a failure and not as a shorter log. The twenty skips are
-# test_cases.gd's `editor` blocks -- the second generation, the reload, `is_tool` off a stripped
-# source, `get_global_name`, which is read off the same stripped source, and the hover tooltip,
-# which needs an analysis a runtime host has no compiler to produce. The cases over a
-# binding are no longer among them: the sidecar carries the class-to-binding table since
-# R-INT-11, so an export keys a handle on a binding and every one of them runs. The five R-EXP-7 cases run the
-# other way round -- only an exported game has autoloads at all, because `--script` replaces the
-# main loop before Godot sets one up -- so they are skips in the editor run and passes here. The two
-# runs therefore report different totals from one set of lines, and neither is a function of the
-# other: the in-editor run prints 572 passed and 5 skipped against the numbers below. Adding a case
-# means changing this line, which is the point of it.
-EXPORT_EXPECTED_PASSES = 519
-EXPORT_EXPECTED_SKIPS = 11
+def check_exported_cases(results: Results, layer: str, output: str,
+                         allowed_reasons: tuple[str, ...] = ()) -> bool:
+    """Holds an exported run of tests/integration to the editor run's own case list (7b D5: a case
+    that stops running in an export has to read as a failure and not as a shorter log).
+
+    Every case the editor run printed must be printed here, passing or skipped for a reason
+    test_cases.gd marks editor-only -- the second generation, the reload, `is_tool` and
+    `get_global_name` off a stripped source, and the hover section, which needs an analysis a
+    runtime host has no compiler to produce -- and nothing may be printed that the editor run did
+    not. The five R-EXP-7 cases go the other way round, skips in the editor and passes here,
+    because only an exported game has autoloads. Adding a case needs no edit here.
+    """
+    cases = results.take_cases(layer, output, "integration")
+    ok = not test_records.duplicates(cases)
+
+    counts = test_records.summary_counts(output, "integration")
+    tally = tuple(sum(1 for case in cases if case.status == status)
+                  for status in (test_records.PASS, test_records.FAIL, test_records.SKIP))
+    if counts is None:
+        print(f"[{layer}] the exported run printed no summary line: FAIL")
+        return False
+    if counts != tally:
+        results.harness_failure(layer, "case lines agree with the summary",
+                                f"the summary says {counts} (passed, failed, skipped) and the case "
+                                f"lines add up to {tally}")
+        ok = False
+
+    if results.integration_cases is None:
+        results.harness_failure(layer, "compared with the editor run",
+                                "the editor integration run produced no whole case list")
+        return False
+
+    comparison = test_records.compare_to_reference(results.integration_cases, cases, allowed_reasons)
+    for name, why in comparison.problems:
+        results.harness_failure(layer, name, why)
+    ok = ok and not comparison.problems and not comparison.failed
+    print(f"[{layer}] held to the editor run's {len(results.integration_cases)} cases: "
+          f"{comparison.passed} passed, {comparison.skipped} skipped as allowed, "
+          f"{comparison.by_section} inside {comparison.sections} editor-only section(s), "
+          f"{len(comparison.failed)} failed, {len(comparison.problems)} missing or unexpected: "
+          f"{'ok' if ok else 'FAIL'}")
+    return ok
 
 
 def run_export(results: Results, engine: Path | None, godot: Path | None) -> None:
@@ -998,12 +1135,12 @@ def run_export(results: Results, engine: Path | None, godot: Path | None) -> Non
         # R-DIST-11's other half, asserted rather than assumed.
         ok = _check_pck(out.with_suffix(".pck"), project) and ok
 
-        ok = _launch_export(out) and ok
+        ok = _launch_export(results, out) and ok
 
         results.record("export", ok)
 
 
-def _launch_export(exe: Path) -> bool:
+def _launch_export(results: Results, exe: Path) -> bool:
     """Runs the exported game and asserts what its cases reported.
 
     This is the only thing in the suite that exercises the cooked path end to end: the same
@@ -1031,11 +1168,6 @@ def _launch_export(exe: Path) -> bool:
         return False
 
     print(f"[export] the exported game said: {summary[-1].strip()}")
-    match = re.search(r"(\d+) passed, (\d+) failed, (\d+) skipped", summary[-1])
-    if match is None:
-        print("[export] the summary line does not parse: FAIL")
-        return False
-    passed, failed, skipped = (int(group) for group in match.groups())
 
     ok = True
     if completed.returncode != 0:
@@ -1046,15 +1178,8 @@ def _launch_export(exe: Path) -> bool:
     else:
         print("[export] the exported game exited 0: ok")
 
-    for name, got, want in (("passed", passed, EXPORT_EXPECTED_PASSES),
-                            ("failed", failed, 0),
-                            ("skipped", skipped, EXPORT_EXPECTED_SKIPS)):
-        if got == want:
-            print(f"[export] the exported run {name} {got}: ok")
-        else:
-            print(f"[export] the exported run {name} {got}, expected {want}: FAIL")
-            ok = False
-    if not ok and failed:
+    if not check_exported_cases(results, "export", output):
+        ok = False
         for line in output.splitlines():
             if ": FAIL" in line:
                 print(f"[export]   {line.strip()}")
@@ -1245,25 +1370,17 @@ def run_export_vm(results: Results, engine: Path | None, godot: Path | None) -> 
                 ok = False
                 print(f"[export-vm] the exported game did not exit within {EXPORT_VM_LAUNCH_TIMEOUT} s: FAIL")
 
-            # The same named counts the host backend must report: the interpreter is held to the
-            # UE host's answer, case for case.
+            # The editor run's case list, as the host backend is held to: the interpreter answers
+            # for the UE host's cases, case for case.
             summary = [line for line in launch_output.splitlines() if "[integration]" in line and "passed, " in line]
-            match = re.search(r"(\d+) passed, (\d+) failed, (\d+) skipped", summary[-1]) if summary else None
-            if match is None:
+            if not summary:
                 ok = False
                 print("[export-vm] the exported game reported no summary line: FAIL -- its last output:")
                 for line in [line for line in launch_output.splitlines() if line.strip()][-8:]:
                     print(f"[export-vm]   {line.strip()}")
             else:
                 print(f"[export-vm] the exported game said: {summary[-1].strip()}")
-                for name, got, want in (("passed", int(match.group(1)), EXPORT_EXPECTED_PASSES),
-                                        ("failed", int(match.group(2)), 0),
-                                        ("skipped", int(match.group(3)), EXPORT_EXPECTED_SKIPS)):
-                    if got == want:
-                        print(f"[export-vm] {name} {got}: ok")
-                    else:
-                        ok = False
-                        print(f"[export-vm] {name} {got}, expected {want}: FAIL")
+                ok = check_exported_cases(results, "export-vm", launch_output) and ok
 
             results.record("export-vm", ok)
     finally:
@@ -1392,11 +1509,6 @@ WEB_LAUNCH_TIMEOUT = 300.0
 # The exported desktop run's arguments (_launch_export) less `--headless`, which a browser page has
 # no use for. run_web.py writes them into the served page's GODOT_CONFIG.
 WEB_GAME_ARGS = ["--fixed-fps", "60", "--", "--verse-check"]
-# The export layer's counts, less R-ASYNC-8's two thread cases: a nothreads build runs a pool task
-# on the calling thread, so test_cases.gd skips them there. A threads build poses them, and is held
-# to the export layer's own counts.
-WEB_EXPECTED_PASSES = EXPORT_EXPECTED_PASSES - 2
-WEB_EXPECTED_SKIPS = EXPORT_EXPECTED_SKIPS + 2
 
 
 def _web_layer(threads: bool) -> str:
@@ -1533,9 +1645,6 @@ def run_web(results: Results, engine: Path | None, godot: Path | None, threads: 
                             "for this Godot is not installed")
         return
 
-    expected_passes = EXPORT_EXPECTED_PASSES if threads else WEB_EXPECTED_PASSES
-    expected_skips = EXPORT_EXPECTED_SKIPS if threads else WEB_EXPECTED_SKIPS
-
     project = _web_backend_project(base_project, threads)
     try:
         why = stage_extension_web(project, threads)
@@ -1629,22 +1738,17 @@ def run_web(results: Results, engine: Path | None, godot: Path | None, threads: 
             # echoes the --until regex text and would otherwise match this same substring search.
             summary = [line for line in console_output.splitlines()
                       if "passed, " in line and "skipped" in line and "run_web.py:" not in line]
-            match = re.search(r"(\d+) passed, (\d+) failed, (\d+) skipped", summary[-1]) if summary else None
-            if match is None:
+            if not summary:
                 ok = False
                 print(f"[{layer}] the browser reported no summary line: FAIL -- its last console lines:")
                 for line in [line for line in console_output.splitlines() if line.strip()][-12:]:
                     print(f"[{layer}]   {line.strip()}")
             else:
                 print(f"[{layer}] the browser said: {summary[-1].strip()}")
-                for name, got, want in (("passed", int(match.group(1)), expected_passes),
-                                        ("failed", int(match.group(2)), 0),
-                                        ("skipped", int(match.group(3)), expected_skips)):
-                    if got == want:
-                        print(f"[{layer}] {name} {got}: ok")
-                    else:
-                        ok = False
-                        print(f"[{layer}] {name} {got}, expected {want}: FAIL")
+                # A nothreads build runs a pool task on the calling thread, so R-ASYNC-8's two
+                # cases skip there; a threads build poses them and is held to the export's list.
+                allowed = () if threads else (test_records.NO_THREADS_WHY,)
+                ok = check_exported_cases(results, layer, console_output, allowed) and ok
 
             if not threads:
                 ok = _check_web_refuses_host(godot, project) and ok
@@ -1653,10 +1757,22 @@ def run_web(results: Results, engine: Path | None, godot: Path | None, threads: 
         shutil.rmtree(project.parent, ignore_errors=True)
 
 
+LAYERS = ["units", "abi", "integration", "export", "web", "web-threads"]
+
+
+def _layer_list(text: str) -> list[str]:
+    layers = [layer.strip() for layer in text.split(",") if layer.strip()]
+    unknown = [layer for layer in layers if layer not in LAYERS]
+    if unknown or not layers:
+        raise argparse.ArgumentTypeError(f"unknown layer(s) {', '.join(unknown) or text!r}; "
+                                         f"choose from {', '.join(LAYERS)}")
+    return layers
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--only", choices=["units", "abi", "integration", "export", "web", "web-threads"],
-                        help="run one layer")
+    parser.add_argument("--only", type=_layer_list,
+                        help=f"run these layers, comma-separated: {', '.join(LAYERS)}")
     parser.add_argument("--build", action="store_true", help="rebuild the test binaries first")
     parser.add_argument("--engine", help="the Unreal checkout (default: UE_ROOT, then ../UnrealEngine)")
     parser.add_argument("--godot", help="the Godot binary (default: GODOT, then PATH)")
@@ -1667,7 +1783,8 @@ def main() -> None:
 
     engine = find_engine(args.engine)
     godot = find_godot(args.godot)
-    results = Results()
+    results = Results(RESULTS_FILE)
+    only = args.only or LAYERS
 
     # How every Godot this script launches finds the host, the cooker and the engine directory:
     # the settings used to be rewritten into each project.godot before every run, which committed
@@ -1676,29 +1793,57 @@ def main() -> None:
     if engine is not None:
         os.environ["UE_ROOT"] = str(engine)
 
-    if args.only in (None, "units"):
+    if "units" in only:
+        results.layer = "units"
         run_units(results, args.build)
-    if args.only in (None, "abi"):
+    if "abi" in only:
+        results.layer = "abi"
         run_abi(results, engine, args.build)
-    if args.only in (None, "integration"):
+    if "integration" in only:
+        results.layer = "integration"
         run_integration(results, engine, godot)
         run_coverage_diagnostic(results, engine, godot)
         run_binding_cycle(results, engine, godot)
-    if args.only in (None, "export"):
+    # Every exported run is compared with the editor run's case list, so a run without the
+    # integration layer makes one first rather than trusting a count written down by hand.
+    if any(layer in only for layer in ("export", "web", "web-threads")):
+        ensure_integration_reference(results, engine, godot)
+    if "export" in only:
+        results.layer = "export"
         run_export(results, engine, godot)
+        results.layer = "export-vm"
         run_export_vm(results, engine, godot)
-    if args.only in (None, "web"):
+    if "web" in only:
+        results.layer = "web"
         run_web(results, engine, godot)
-    if args.only in (None, "web-threads"):
+    if "web-threads" in only:
+        results.layer = "web-threads"
         run_web(results, engine, godot, threads=True)
 
+    cases = [record for record in results.records if record.kind == "case"]
+    failing = [record for record in results.records
+               if record.kind != "suite" and record.status == test_records.FAIL]
     print()
     print(f"[run_tests] {results.passed} passed, {results.failed} failed, {len(results.skipped)} skipped")
+    print(f"[run_tests] cases: {sum(1 for c in cases if c.status == test_records.PASS)} passed, "
+          f"{sum(1 for c in cases if c.status == test_records.FAIL)} failed, "
+          f"{sum(1 for c in cases if c.status == test_records.SKIP)} skipped; "
+          f"{len(results.records)} records in {RESULTS_FILE.relative_to(REPO).as_posix()}")
+    for record in failing:
+        detail = f" -- {record.detail}" if record.detail else ""
+        print(f"[run_tests]   failed: {record.layer} / {record.suite}: {record.case}{detail}")
+    named = {(record.layer, record.suite) for record in failing}
+    for record in results.records:
+        if (record.kind == "suite" and record.status == test_records.FAIL
+                and (record.layer, record.suite) not in named):
+            print(f"[run_tests]   failed: {record.layer} / {record.suite}, on a check of its own "
+                  "rather than a case -- its FAIL line is above")
     for skipped in results.skipped:
         print(f"[run_tests]   skipped: {skipped}")
     if args.fail_on_skip and results.skipped:
         print("[run_tests] --fail-on-skip: a skip is a failure in this run")
-    sys.exit(1 if results.failed or (args.fail_on_skip and results.skipped) else 0)
+    failed = results.failed or results.harness_failed
+    sys.exit(1 if failed or (args.fail_on_skip and results.skipped) else 0)
 
 
 if __name__ == "__main__":
