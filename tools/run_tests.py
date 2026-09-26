@@ -6,6 +6,7 @@ R-QUAL-3. The three layers R-QUAL-1 names, in the order a failure is cheapest to
 
   units        the lexer, the class-declaration scanner and the GDScript converter, which need neither Godot nor UE
   abi          host_smoke, which drives the whole C ABI with no Godot, and the cooker
+  contract     re-derives gen_verse_keywords.py's and audit_const_overrides.py's hand tables against a UE or Godot source checkout and fails on a difference (docs/architecture-review.md item 4 step 5)
   integration  a headless Godot with Verse scripts attached, asserting on behaviour
   export       a headless Godot export, asserting on the tree it produced
   web          a Web export on the vm backend (nothreads), run in headless Chrome
@@ -1764,7 +1765,7 @@ def run_web(results: Results, engine: Path | None, godot: Path | None, threads: 
         shutil.rmtree(project.parent, ignore_errors=True)
 
 
-LAYERS = ["units", "abi", "integration", "export", "web", "web-threads"]
+LAYERS = ["units", "abi", "contract", "integration", "export", "web", "web-threads"]
 
 
 def _layer_list(text: str) -> list[str]:
@@ -1774,6 +1775,32 @@ def _layer_list(text: str) -> list[str]:
         raise argparse.ArgumentTypeError(f"unknown layer(s) {', '.join(unknown) or text!r}; "
                                          f"choose from {', '.join(LAYERS)}")
     return layers
+
+
+def run_contract(results: Results, engine: Path | None) -> None:
+    """docs/architecture-review.md item 4 step 5: the tables gen_verse_keywords.py and
+    audit_const_overrides.py hand-maintain, re-derived from their stated engine or Godot source and
+    checked against what is committed, rather than trusted to still match a source tree that moved
+    on. Each case is skipped, not failed, when its input is absent, because neither a UE checkout
+    nor a Godot *source* checkout is otherwise needed to run this script at all. Later work adds
+    asserted `tests/verse_probe` fixtures to this layer beside these two.
+    """
+    if engine is None:
+        results.skip("gen_verse_keywords --check", "no Unreal checkout -- set UE_ROOT or pass --engine")
+    else:
+        run("gen_verse_keywords --check",
+            [sys.executable, str(REPO / "tools" / "gen_verse_keywords.py"),
+             "--engine-root", str(engine), "--check"],
+            results)
+
+    godot_src = REPO.parent / "godot"
+    if not (godot_src / "core").is_dir():
+        results.skip("audit_const_overrides --check", f"{godot_src} is not a Godot source checkout")
+    else:
+        run("audit_const_overrides --check",
+            [sys.executable, str(REPO / "tools" / "audit_const_overrides.py"),
+             "--godot", str(godot_src), "--check"],
+            results)
 
 
 def main() -> None:
@@ -1806,6 +1833,9 @@ def main() -> None:
     if "abi" in only:
         results.layer = "abi"
         run_abi(results, engine, args.build)
+    if "contract" in only:
+        results.layer = "contract"
+        run_contract(results, engine)
     if "integration" in only:
         results.layer = "integration"
         run_integration(results, engine, godot)

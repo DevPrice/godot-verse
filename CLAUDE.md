@@ -448,7 +448,7 @@ executable. If a future engine drop provides one, that script finds and execs it
 ### Tests
 
     python tools/run_tests.py                    # every layer; the one command (R-QUAL-3)
-    python tools/run_tests.py --only units       # or units / abi / integration / export / web / web-threads
+    python tools/run_tests.py --only units       # or units / abi / contract / integration / export / web / web-threads
     python tools/run_tests.py --only units,abi   # or several, comma-separated
     python tools/run_tests.py --build            # rebuild the test binaries first
 
@@ -487,6 +487,15 @@ and a runtime-host case that runs `task(t)` methods and a raise through `cooked_
 `tests/cooked_probe` over `tests/vm_conformance`'s fixtures against `bin/verse_vm.dll` and diffs the
 transcripts recorded from the UE runtime host (`--record`); `--gc-stress` collects after every
 entry. It needs no UE checkout unless recording.
+
+**contract** — re-derives what two generators otherwise trust a pasted table to still match:
+`gen_verse_keywords.py --check` against a UE checkout's `ReservedSymbols.inl` and `VerseGrammar.h`,
+and `audit_const_overrides.py --check` against a Godot *source* checkout's `../godot`, each skipped
+when its input is absent (`docs/architecture-review.md` item 4 step 5). `gen_verse_api.py` itself
+fails at generation time on any hand table row — `CONST_OVERRIDES`, `PREDICATE_EXTRA`,
+`METHOD_RENAMES` and the rest — that no longer names anything in `extension_api.json`, which
+`tests/verse_api_gen` exercises directly rather than through this layer. Later work adds asserted
+`tests/verse_probe` fixtures here beside the two `--check` runs.
 
 **integration** — three headless Godot projects. `tests/integration` for behaviour;
 `tests/coverage_diagnostic` for the R-SCN-2 diagnostics, which is its own project because its one
