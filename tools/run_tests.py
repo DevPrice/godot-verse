@@ -714,6 +714,10 @@ def run_integration(results: Results, engine: Path | None, godot: Path | None) -
             # inheritance case that cannot work, and the only one the compiler is happy with:
             # `extends_binding.verse` compiles, so nothing but this sentence says it is wrong.
             "which is the generated binding for a class a *script* declares",
+            # R-EXP-3, ABI 12.2: an `@export` typed as a generated-binding class, refused with its
+            # own reason (VH_EXPORT_BINDING_CLASS_UNSUPPORTED) rather than the generic sentence
+            # every other unsupported type gets (architecture-review.md).
+            "and `@export` cannot carry a GDScript class reached through a generated binding yet",
         ] + reports_fatal,
         # The bridge reports every Verse runtime error itself, rate limited. Unreal's own echo of
         # the same error, stack and all on every repeat, is silenced in vh_init's -LogCmds; the

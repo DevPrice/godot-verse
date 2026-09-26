@@ -118,3 +118,12 @@ bindings := class(node2d):
 	AskSetMode<public>(N:node2d)<transacts>:void =
 		if (M := mob[N]):
 			set M.Mode = mob_state.Done
+
+	# ABI 12.2. `@export` cannot carry a member typed as a binding class -- `mob` resolves at
+	# neither the mirror's verse path nor the project's, which used to read as the same generic
+	# "no Godot type" sentence a truly unsupported value gets. It is refused with its own reason
+	# instead, naming `mob`'s nearest native ancestor (the mirrored class it derives from) as
+	# what to export in its place. Asserted in run_tests.py, because `_validate`'s gutter reaches
+	# no log of its own (see "A `_validate` warning" in CLAUDE.md).
+	@export
+	var SomeMob<public>:?mob = false

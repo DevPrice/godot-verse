@@ -4926,6 +4926,19 @@ static String export_rejection_message(const Dictionary &p_entry) {
 					+ String(", which is neither a node nor a resource, so the inspector has nothing ")
 					+ String("to draw for it. Derive ") + class_name
 					+ String(" from a Godot class the inspector can pick one of.");
+		case VH_EXPORT_BINDING_CLASS_UNSUPPORTED: {
+			// Refused on purpose rather than folded into the generic sentence below: this member's
+			// type is a GDScript class, reached through a generated binding rather than through the
+			// mirror or the project's own @global_class, and @export cannot carry one of those yet
+			// (docs/generated-bindings.md). NativeClassOf has already walked the binding's own
+			// superclass chain for the nearest class the inspector *can* draw, so name it when there
+			// is one to name.
+			const String native_class = p_entry["native_class"];
+			return name + String(" refers to ") + class_name
+					+ String(", which is a GDScript class, and `@export` cannot carry a GDScript ")
+					+ String("class reached through a generated binding yet.")
+					+ (native_class.is_empty() ? String() : String(" Export its native base class `") + native_class + String("` instead."));
+		}
 		default:
 			return name + String(" has a type godot-verse cannot carry to the inspector yet, so it is not exported.");
 	}
@@ -4941,6 +4954,8 @@ static String export_rejection_code(int64_t p_reject) {
 			return String("SCRIPT_CLASS_EXPORT_NOT_GLOBAL");
 		case VH_EXPORT_HINT_WRONG_TYPE:
 			return String("EXPORT_HINT_WRONG_TYPE");
+		case VH_EXPORT_BINDING_CLASS_UNSUPPORTED:
+			return String("EXPORT_BINDING_CLASS_UNSUPPORTED");
 		default:
 			return String("EXPORT_TYPE_UNSUPPORTED");
 	}

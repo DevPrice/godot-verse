@@ -211,7 +211,7 @@ emits — and note that its editor half has never been run.
 `include/verse_host_abi.h` is the only thing that crosses. Plain C — the two sides cannot share a
 C++ ABI. It is staged into the host's `Public/` by `build_host.py`, so both compile the same file.
 
-**`VH_ABI_VERSION` is 12.1.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
+**`VH_ABI_VERSION` is 12.2.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
 a major bump is a layout or meaning change and both sides must be rebuilt; a minor bump adds
 something an older consumer can ignore behind a `StructSize` check. A change to the header means
 bumping it and rebuilding **both** sides — the mismatch surfaces at `vh_init`, not at compile time.
@@ -226,6 +226,10 @@ as corruption rather than as a refusal. 9.0 added `IsNamed` there for that reaso
 analysis-only program behind it, so the three position entry points answer `VH_ERR_STATE` after
 a build until a consumer asks for an analysis. An older consumer would have read that as "no
 such symbol" and drawn nothing, silently.
+**12.2 is where `@export` learned to name a generated-binding class as its own reason.**
+`vh_export_reject` grew `VH_EXPORT_BINDING_CLASS_UNSUPPORTED`, appended rather than folding that
+case into `VH_EXPORT_UNSUPPORTED_TYPE`, so an older consumer reads it as the generic sentence
+that reason already had and a current one can say which of the two this member actually is.
 **12.1 is where a host fatal error is recorded**: `vh_init_desc` grew `FatalLogPathUtf8` and
 `ShowFatalDialog` (`by-hand-findings.md` B43).
 **12.0 is what a parameter says about the class it declares**: `vh_param_desc` grew

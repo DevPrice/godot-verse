@@ -1015,6 +1015,18 @@ method with its arguments (R-SIG-4), which is what let the Dodge the Creeps port
   present when the script runs. Status: **done**.
 - **R-EXP-3 (MUST)** A member that cannot be exported is reported with a reason, at the member,
   not silently dropped. Status: **done**.
+
+  **A member typed as a generated-binding class (R-INT-7) is refused on purpose, with its own
+  reason.** ClassOriginOf knows Mirrored and Script; a binding resolves at neither verse path, so
+  it fell into the same `VH_EXPORT_UNSUPPORTED_TYPE` a genuinely unrepresentable value gets, with
+  no way for the author to tell "not exportable" from "not exportable *yet, and here is why*".
+  ABI 12.2 gives it `VH_EXPORT_BINDING_CLASS_UNSUPPORTED` instead: the inspector has no ClassDB
+  name to filter a picker by and the bindings package has no module a scene reference could
+  resolve against, so the member is refused rather than exported wrong — and the message names
+  the binding's nearest native ancestor to export instead, when `NativeClassOf` finds one.
+  Support for exporting a binding class directly is deferred, not ruled out; it needs the inspector
+  to resolve a picker against a *script* class the editor did not compile, which nothing here does
+  yet (`docs/generated-bindings.md`).
 - **R-EXP-4 (MUST)** The inspector reflects a change to a script's exports without restarting the
   editor; a changed *default value* lands at the next build, per §10's trigger. Status: **done**,
   and the clause above is a restatement rather than the original — which said a changed default

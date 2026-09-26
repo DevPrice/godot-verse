@@ -2759,6 +2759,21 @@ AUTORTFM_DISABLE EClassOrigin ClassOriginOf(const uLang::CClass& Class, const uL
     return EClassOrigin::Other;
 }
 
+/// Whether an Other-origin class is one of the generated bindings' own, rather than some other
+/// class ClassOriginOf cannot place (a nested class; one left behind by a retired generation).
+/// `ClassOriginOf` already answers Other for both -- DeclaredReferenceClass's default case reaches
+/// FindBindingClass on exactly that assumption -- so this is the same resolution test one more
+/// verse path over: the bindings package is generated as a single unmodularized snippet
+/// (FindBindingClass's own comment), so a binding class's qualified name is its bare name, which is
+/// what QualifiedNameOf already falls back to for a class outside the project's own package.
+AUTORTFM_DISABLE bool IsBindingClass(const uLang::CClass& Class, const uLang::CSemanticProgram& Program)
+{
+    const FUtf8String Path = FUtf8String(BindingsVersePath) + UTF8TEXT("/") + QualifiedNameOf(Class);
+    return Program.FindDefinitionByVersePath<uLang::CClass>(
+               FULangConversionUtils::FUtf8StringViewToULangStringView(Path))
+        == &Class;
+}
+
 /// A mirrored struct whose value can cross, and the fields the Godot type is built from.
 ///
 /// Order is Godot's, not the declaration's: the wire carries a tuple of numbers and the consumer
@@ -3050,7 +3065,23 @@ AUTORTFM_DISABLE void DescribeExportType(const uLang::CTypeBase* Type, const uLa
             return;
         }
 
-        OutDesc.Reject = Origin == EClassOrigin::Mirrored ? VH_EXPORT_OK : VH_EXPORT_UNSUPPORTED_TYPE;
+        if (Origin == EClassOrigin::Mirrored)
+        {
+            OutDesc.Reject = VH_EXPORT_OK;
+        }
+        else if (IsBindingClass(*Class, Program))
+        {
+            // Its own reason rather than VH_EXPORT_UNSUPPORTED_TYPE's generic one: the inspector
+            // has no picker for a generated-binding class, but *why* differs from an unsupported
+            // value type, and NativeClassOf above has already found the native base to suggest
+            // exporting instead, when the binding's chain reaches one. Out of scope to lift this
+            // by design (docs/generated-bindings.md); support is deferred, not refused for good.
+            OutDesc.Reject = VH_EXPORT_BINDING_CLASS_UNSUPPORTED;
+        }
+        else
+        {
+            OutDesc.Reject = VH_EXPORT_UNSUPPORTED_TYPE;
+        }
         return;
     }
 

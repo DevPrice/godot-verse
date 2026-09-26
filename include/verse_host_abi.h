@@ -43,7 +43,7 @@ extern "C" {
  * different toolchains and nothing links them.
  */
 #define VH_ABI_VERSION_MAJOR 12
-#define VH_ABI_VERSION_MINOR 1
+#define VH_ABI_VERSION_MINOR 2
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
 typedef int32_t vh_bool;
@@ -1419,7 +1419,16 @@ typedef enum vh_export_reject
 	 *
 	 * Hint still carries the attribute the author wrote, which is what the consumer's message
 	 * names -- vh_export_desc has no reject detail and adding one would be a layout change. */
-	VH_EXPORT_HINT_WRONG_TYPE
+	VH_EXPORT_HINT_WRONG_TYPE,
+
+	/* v12.2: a generated binding class -- the mirror of a GDScript `class_name` that
+	 * `verse_bindings_gen.cpp` emits into the bindings package, rather than a class
+	 * `/Godot.org/Godot` mirrors or the project's own `@global_class`. The inspector has no
+	 * picker for it: ClassDB was never told this name, and the bindings package has no module a
+	 * scene reference could be filtered by either. Refused with its own reason on purpose rather
+	 * than folded into VH_EXPORT_UNSUPPORTED_TYPE, so the consumer can tell the two apart and say
+	 * which one this is -- support is deferred, not planned away (docs/generated-bindings.md). */
+	VH_EXPORT_BINDING_CLASS_UNSUPPORTED
 } vh_export_reject;
 
 /* One data member of a script's class carrying `@export`. */
