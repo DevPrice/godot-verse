@@ -70,8 +70,8 @@ struct RuleTally {
 };
 
 void report(const RuleTally &p_tally) {
-	printf("[verse_bindings_test] %s: %s (%d/%d)\n", p_tally.name, p_tally.failed == 0 ? "ok" : "FAIL",
-			p_tally.total - p_tally.failed, p_tally.total);
+	printf("[verse_bindings_test] %s (%d/%d rows): %s\n", p_tally.name, p_tally.total - p_tally.failed,
+			p_tally.total, p_tally.failed == 0 ? "ok" : "FAIL");
 }
 
 void step(RuleTally &r_tally, const std::string &p_input, const std::string &p_got, const std::string &p_want) {
