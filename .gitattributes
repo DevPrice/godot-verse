@@ -1,3 +1,14 @@
 # Golden files are compared byte for byte, and git's Windows default (core.autocrlf=true) would
 # check them out with CRLF.
 * text=auto eol=lf
+
+host/Verse/GodotClasses.native.verse linguist-generated
+host/Private/GodotClassNames.gen.h linguist-generated
+host/Private/GodotMathLayout.gen.h linguist-generated
+host/Private/HostVbcOps.gen.h linguist-generated
+src/verse_api_classes.h linguist-generated
+src/verse_api_skipped.h linguist-generated
+src/verse_gd_api.gen.h linguist-generated
+src/verse_keywords.h linguist-generated
+vm/vbc_ops.gen.h linguist-generated
+docs/nonatomic-methods.md linguist-generated
