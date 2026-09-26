@@ -496,7 +496,11 @@ void describe_from_script(const Ref<Script> &p_script, const VerseBindingRoster 
 	for (int64_t i = 0; i < methods.size(); i++) {
 		const Dictionary method = methods[i];
 		const String name = method.get("name", String());
-		if (name.is_empty() || name.begins_with("_") || inherited.count(utf8_of(name)) > 0 ||
+		// An `@` name is the method GDScript compiles an inline `set(value):` or `get:` body into
+		// (`@speed_setter`). The property is the member, and Verse reads a leading `@` as an
+		// attribute, which refuses the whole bindings package.
+		if (name.is_empty() || name.begins_with("_") || name.begins_with("@") ||
+				inherited.count(utf8_of(name)) > 0 ||
 				p_inherited.count(verse_binding_member_name(utf8_of(name))) > 0) {
 			continue;
 		}

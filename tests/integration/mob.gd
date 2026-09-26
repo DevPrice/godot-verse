@@ -25,6 +25,13 @@ enum State { IDLE, BUSY, DONE }
 var speed: float = 1.5
 var tag: String = "m"
 var mode: State = State.IDLE
+# An inline accessor compiles to a method named `@armor_setter`, which a binding emitting it
+# spelled as an attribute and so refused every Verse script in the project.
+var armor: int = 0:
+	set(value):
+		armor = value
+# A struct-typed member needs field-named accessor overloads, without which the package is refused.
+var heading: Vector2 = Vector2.ZERO
 
 
 static func spawn_cost(n: int) -> int:

@@ -4297,6 +4297,13 @@ Error VerseScriptLanguage::build_project() {
 	}
 
 	const PackedStringArray sources = find_verse_sources("res://");
+	// A project with the addon installed and no Verse yet has nothing to publish, and the host
+	// refuses an empty list as VH_ERR_ABI -- which failed every Play with no diagnostic to say why.
+	if (sources.is_empty()) {
+		project_built = true;
+		project_build_status = OK;
+		return OK;
+	}
 	PackedStringArray globalized;
 	PackedStringArray modules;
 	ProjectSettings *settings = ProjectSettings::get_singleton();

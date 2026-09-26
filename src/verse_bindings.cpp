@@ -219,6 +219,66 @@ FReader reader_for(const std::string &p_type) {
 	return { nullptr, nullptr };
 }
 
+/// The fields of a struct `reader_for` reads, or empty for any other type. All three are flat, so
+/// each can be a `var` member; `gen_verse_api.py`'s FLAT_MATH_STRUCTS is the same table.
+const std::vector<std::string> &struct_fields(const std::string &p_type) {
+	static const std::vector<std::string> none;
+	static const std::vector<std::string> xy = { "X", "Y" };
+	static const std::vector<std::string> xyz = { "X", "Y", "Z" };
+	static const std::vector<std::string> rgba = { "R", "G", "B", "A" };
+	if (p_type == "vector2") {
+		return xy;
+	}
+	if (p_type == "vector3") {
+		return xyz;
+	}
+	if (p_type == "color") {
+		return rgba;
+	}
+	return none;
+}
+
+/// The field-named accessor overloads Verse demands of a struct-typed `var` (glitch 3671), so that
+/// `set M.Offset.X = 1.0` could resolve. Nothing reaches them, because a Verse struct cannot hold a
+/// `var`; without them the whole bindings package is refused. The mirror's emit_var_property
+/// writes the same pair.
+void emit_field_accessors(std::string &r_out, const std::string &p_name, const VerseBindingProperty &p_property,
+		const std::string &p_get_body) {
+	const std::vector<std::string> &fields = struct_fields(p_property.type);
+	if (fields.empty()) {
+		return;
+	}
+	const std::string current = "\t\tCurrent := " + p_get_body;
+	const std::string last = fields.back();
+
+	r_out += "\t" + p_name + "Getter<epic_internal>(Accessor:accessor, Field:string)<transacts>:float =\n";
+	r_out += current + "\t\t";
+	for (size_t i = 0; i + 1 < fields.size(); i++) {
+		r_out += "if (Field = \"" + fields[i] + "\") then Current." + fields[i] + " else ";
+	}
+	r_out += "Current." + last + "\n";
+
+	r_out += "\t" + p_name +
+			"Setter<epic_internal>(Accessor:accessor, Field:string, Value:float)<transacts>:void =\n";
+	r_out += current;
+	for (size_t i = 0; i < fields.size(); i++) {
+		if (i + 1 == fields.size()) {
+			r_out += "\t\telse:\n";
+		} else {
+			r_out += std::string("\t\t") + (i > 0 ? "else " : "") + "if (Field = \"" + fields[i] + "\"):\n";
+		}
+		std::string members;
+		for (const std::string &field : fields) {
+			if (!members.empty()) {
+				members += ", ";
+			}
+			members += field + " := " + (field == fields[i] ? "Value" : "Current." + field);
+		}
+		r_out += "\t\t\tSet(\"" + p_property.godot_name + "\", " + builder_for(p_property.type) + "(" +
+				p_property.type + "{" + members + "}))\n";
+	}
+}
+
 /// One method's declaration and body, at `p_indent`, over a call the caller has already spelled.
 ///
 /// Shared by a class's own methods and by its `...Statics` module, which differ in how the call is
@@ -529,6 +589,7 @@ std::string verse_emit_binding_class(const VerseBindingClass &p_class, const Ver
 					property.type + " =\n\t\t" + get_body;
 			out += "\t" + name + "Setter<epic_internal>(Accessor:accessor, Value:" + property.type +
 					")<transacts>:void =\n\t\t" + set_body;
+			emit_field_accessors(out, name, property, get_body);
 			continue;
 		}
 
