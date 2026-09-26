@@ -72,18 +72,16 @@ jobs:
           python-version: "3.13"
       - run: python -m pip install scons==${{ env.SCONS_VERSION }}
       - id: keys
-        run: |
-          "godot-cpp=$(git rev-parse HEAD:godot-cpp)" >> $env:GITHUB_OUTPUT
-          "image=$env:ImageVersion" >> $env:GITHUB_OUTPUT
-      # godot-cpp turns SCONS_CACHE into a CacheDir, which is content-addressed on each command
-      # line and its inputs but not on the compiler binary: the runner image and the emsdk version
-      # are in the key for that reason.
+        run: '"godot-cpp=$(git rev-parse HEAD:godot-cpp)" >> $env:GITHUB_OUTPUT'
+      # The runner image is deliberately not in the key: it changes weekly, and SCons already makes
+      # each command's executable an implicit dependency, so a new cl.exe misses the cache on its
+      # own. emcc is a wrapper script that does not change between releases, hence its version.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.SCONS_CACHE }}
-          key: scons-${{ matrix.name }}-${{ steps.keys.outputs.image }}-emsdk${{ env.EMSCRIPTEN_VERSION }}-${{ steps.keys.outputs.godot-cpp }}-${{ hashFiles('SConstruct', 'src/**', 'vm/**', 'include/**') }}
+          key: scons-${{ matrix.name }}-emsdk${{ env.EMSCRIPTEN_VERSION }}-${{ steps.keys.outputs.godot-cpp }}-${{ hashFiles('SConstruct', 'src/**', 'vm/**', 'include/**') }}
           restore-keys: |
-            scons-${{ matrix.name }}-${{ steps.keys.outputs.image }}-emsdk${{ env.EMSCRIPTEN_VERSION }}-${{ steps.keys.outputs.godot-cpp }}-
+            scons-${{ matrix.name }}-emsdk${{ env.EMSCRIPTEN_VERSION }}-${{ steps.keys.outputs.godot-cpp }}-
       - if: matrix.web
         uses: mymindstorm/setup-emsdk@4528d102f7230f0e7b276855c01ea1159be0e984 # v16
         with:
