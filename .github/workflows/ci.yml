@@ -116,18 +116,29 @@ jobs:
       # The runner image is deliberately not in the key: it changes weekly, and SCons already makes
       # each command's executable an implicit dependency, so a new compiler misses the cache on its
       # own. emcc is a wrapper script that does not change between releases, hence its version.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.SCONS_CACHE }}
           key: scons-${{ env.BUILD }}-emsdk${{ env.EMSCRIPTEN_VERSION }}-${{ steps.keys.outputs.godot-cpp }}-${{ hashFiles('SConstruct', 'gdextension.py', 'src/**', 'vm/**', 'include/**') }}
           restore-keys: |
             scons-${{ env.BUILD }}-emsdk${{ env.EMSCRIPTEN_VERSION }}-${{ steps.keys.outputs.godot-cpp }}-
-      - if: matrix.config.platform != 'web'
-        run: scons $SCONS_ARGS
-      - if: matrix.config.platform == 'web'
-        run: python tools/emsdk_env.py -- scons $SCONS_ARGS
+      # -k: a file that fails on one compiler must not hide the rest of that compiler's errors.
+      - id: build
+        if: matrix.config.platform != 'web'
+        run: scons -k $SCONS_ARGS
+      - id: build-web
+        if: matrix.config.platform == 'web'
+        run: python tools/emsdk_env.py -- scons -k $SCONS_ARGS
         env:
           VERSE_EMSDK: ${{ env.EMSDK }}
+      # Saved even when the build fails, so a job red on one file does not recompile everything else
+      # on the next push.
+      - if: always() && steps.cache.outputs.cache-hit != 'true' && (steps.build.outcome == 'success' || steps.build.outcome == 'failure' || steps.build-web.outcome == 'success' || steps.build-web.outcome == 'failure')
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.SCONS_CACHE }}
+          key: ${{ steps.cache.outputs.cache-primary-key }}
       # godot-cpp falls back to MinGW when SCons cannot find MSVC, which would pass while testing
       # a compiler no release is built with; only MSVC names its library .lib.
       - if: matrix.config.platform == 'windows'
