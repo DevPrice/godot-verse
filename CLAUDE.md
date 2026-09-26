@@ -388,8 +388,8 @@ reviewed files of `docs/web-vm/spec/` alone. Keep it that way — do not bring V
   permanent generation (`Heap::tenure`), so a pause costs what it frees.
 - **`docs/vm-performance.md` is its speed**: the instruments (`tools/run_vm_bench.py`,
   `cooked_probe --bench --sample`, the `verse/verse_ms` and `verse/godot_ms` monitors), what they
-  measured, and the ranked list of what to change. After §4's first three rows it runs Verse faster
-  than the UE host on fourteen of fifteen workloads, and entering it costs a fifth as much. The
+  measured, and the ranked list of what to change. After §4's rows 1, 2, 3 and 5 it runs Verse
+  faster than the UE host on all fifteen workloads, and entering it costs a fifth as much. The
   dispatch loop's fast cases (`drive`) must bail before changing anything, so `execute` can run the
   whole op instead; cells come from `Heap`'s slabs, not the system heap.
 

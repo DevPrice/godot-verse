@@ -73,7 +73,12 @@ const std::vector<const NameCell *> &object_field_names(const ObjectCell *p_obje
 
 class Layouts {
 public:
+	Layouts();
+
 	const ClassLayout &get(const ClassCell *p_class);
+
+	// Unique for the process, never 0: what a procedure's field sites are stamped with.
+	uint64_t id() const { return layouts_id; }
 
 	// A new object of p_layout's class, every slot fresh and uncreated (§7.1 NewObject).
 	ObjectCell *new_object(Heap &r_heap, const ClassLayout &p_layout);
@@ -88,6 +93,7 @@ public:
 	void visit_references(CellVisitor &r_visitor) const;
 
 private:
+	uint64_t layouts_id = 0;
 	std::unordered_map<const ClassCell *, std::unique_ptr<ClassLayout>> layouts;
 };
 

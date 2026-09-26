@@ -289,6 +289,7 @@ private:
 	Outcome drive();
 	Outcome past_last_op();
 	Step execute(const DecodedOp &p_op, const uint32_t *p_words);
+	uint32_t field_site_op(const DecodedOp &p_op, const uint32_t *p_words, uint32_t p_at);
 	bool unwind_failure();
 	Step stop(Outcome p_outcome);
 	void append_frames(const NativeProcedureCell *p_native);
@@ -378,7 +379,13 @@ private:
 	Step adapt(const Value *&r_arguments, uint32_t &r_count, uint32_t p_parameters, std::vector<Value> &r_spill);
 
 	Step type_test(Value p_type, Value p_value, bool &r_admits);
-	Step load_field(Value p_object, const NameCell *p_name, Value &r_result);
+	// The current op's field site. Only a field op may use its own: the site is keyed by op, not by
+	// name, so another op's lookups through it would answer that op's name.
+	FieldSite &field_site();
+	// p_object's layout's field named p_name, answered from r_site when it last saw this layout, and
+	// refilled when not. p_object must be laid out.
+	const LayoutField *site_field(FieldSite &r_site, const ObjectCell *p_object, const NameCell *p_name);
+	Step load_field(Value p_object, const NameCell *p_name, FieldSite &r_site, Value &r_result);
 	Value accessor_reference(Value p_object, const AccessorCell *p_accessor, const AccessorRefCell *p_extended, Value p_step);
 	Step accessor_callee(Value p_reference, bool p_setter, Value p_value, Value &r_function, std::vector<Value> &r_arguments);
 	Step accessor_call(Value p_reference, bool p_setter, Value p_value, uint32_t p_dest);

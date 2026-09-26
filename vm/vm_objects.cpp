@@ -1,5 +1,6 @@
 #include "vm_objects.h"
 
+#include <atomic>
 #include <string>
 
 namespace vm {
@@ -76,6 +77,11 @@ const LayoutField *find_slot_by_unqualified_name(const ClassLayout &p_layout, st
 		}
 	}
 	return nullptr;
+}
+
+Layouts::Layouts() {
+	static std::atomic<uint64_t> next_id{ 1 };
+	layouts_id = next_id.fetch_add(1, std::memory_order_relaxed);
 }
 
 const ClassLayout &Layouts::get(const ClassCell *p_class) {

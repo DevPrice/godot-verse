@@ -34,6 +34,9 @@ constexpr int32_t kConstructionMarker = 12774014;
 // spec/objects.md §3.3's entry flag for a `<native>` member.
 constexpr uint8_t kEntryNative = 1;
 
+// Interpreter::field_site_op's answer when `execute` has to run the op; never an op index.
+constexpr uint32_t kNotFast = 0xFFFFFFFFu;
+
 int32_t line_of(const ProcedureCell *p_procedure, uint32_t p_op) {
 	int32_t line = 0;
 	uint32_t best = 0;
@@ -618,6 +621,124 @@ VM_NOINLINE Outcome Interpreter::past_last_op() {
 	return stop_outcome;
 }
 
+// drive's fast cases of the field ops, answering the next op's index, or kNotFast having changed
+// nothing. Out of line because inlined they cost `drive` its registers: under MSVC, workloads with
+// no field op in them ran 15-25% slower with these cases in the switch.
+VM_NOINLINE uint32_t Interpreter::field_site_op(const DecodedOp &p_op, const uint32_t *p_words, uint32_t p_at) {
+	const ProcedureCell *procedure = frame->procedure;
+	if (procedure->field_sites_owner != layouts.id()) {
+		return kNotFast;
+	}
+	const FieldSite &site = procedure->field_sites[p_at];
+	const Value *const constants = procedure->constants.data();
+	Value *const registers = frame->registers.data();
+	const auto operand = [constants, registers](uint32_t p_word, Value &r_value) -> bool {
+		if ((p_word & 1) != 0) {
+			if (p_word == kAbsentOperand) {
+				return false;
+			}
+			r_value = follow(constants[p_word >> 1]);
+			return true;
+		}
+		const Value slot = registers[p_word >> 1];
+		if (slot.is_empty()) {
+			return false;
+		}
+		r_value = follow(slot);
+		return true;
+	};
+	const auto site_object = [&site](Value p_value) -> ObjectCell * {
+		if (!is_cell_kind(p_value, CellKind::Object)) {
+			return nullptr;
+		}
+		ObjectCell *object = cell_as<ObjectCell>(p_value);
+		return site.layout != nullptr && site.layout == object->layout ? object : nullptr;
+	};
+	const uint32_t *const w = p_words;
+	switch (VbcOp(p_op.opcode)) {
+		case VbcOp::LoadField: {
+			Value source;
+			if (!operand(w[1], source) || (w[0] != kNoRegister && !registers[w[0]].is_empty())) {
+				return kNotFast;
+			}
+			const ObjectCell *object = site_object(source);
+			if (object == nullptr) {
+				return kNotFast;
+			}
+			const LayoutField *field = site.field;
+			Value result;
+			if (field->kind == FieldKind::Slot) {
+				// An empty slot gets a placeholder, and a read while awaiting may register.
+				const Value slot = object->field_values[field->slot];
+				if (slot.is_empty() || awaiting()) {
+					return kNotFast;
+				}
+				result = follow(read_slot(slot));
+			} else if (field->kind == FieldKind::Constant &&
+					!(is_cell_kind(field->value, CellKind::Function) && cell_as<FunctionCell>(field->value)->self.is_uninitialized())) {
+				result = follow(field->value);
+			} else {
+				return kNotFast;
+			}
+			if (w[0] != kNoRegister) {
+				registers[w[0]] = result;
+			}
+			return p_at + 1;
+		}
+		case VbcOp::CreateField: {
+			Value token;
+			Value target;
+			if (!operand(w[1], token) || is_unbound(token) || !operand(w[2], target)) {
+				return kNotFast;
+			}
+			ObjectCell *object = site_object(target);
+			if (object == nullptr) {
+				return kNotFast;
+			}
+			const LayoutField *field = site.field;
+			if (field->kind != FieldKind::Constant && !object->created[field->slot]) {
+				object->created.set(field->slot);
+				return p_at + 1;
+			}
+			return w[4];
+		}
+		case VbcOp::UnifyField:
+		case VbcOp::SetField: {
+			Value target;
+			Value replacement;
+			if (!operand(w[0], target) || !operand(w[2], replacement)) {
+				return kNotFast;
+			}
+			ObjectCell *object = site_object(target);
+			if (object == nullptr) {
+				return kNotFast;
+			}
+			const LayoutField *field = site.field;
+			// native_store can refuse only an int too wide for 64 bits.
+			const bool native_refusable = (field->entry_flags & kEntryNative) != 0 && is_int(replacement) && !replacement.is_int32();
+			if (field->kind != FieldKind::Slot || native_refusable) {
+				return kNotFast;
+			}
+			Value &slot = object->field_values[field->slot];
+			if (VbcOp(p_op.opcode) == VbcOp::UnifyField) {
+				// unify_slot's case of a slot nothing has written, which it does not log.
+				if (!slot.is_empty()) {
+					return kNotFast;
+				}
+			} else {
+				if (is_cell_kind(slot, CellKind::Ref)) {
+					return kNotFast;
+				}
+				record_slot(slot);
+			}
+			slot = replacement;
+			return p_at + 1;
+		}
+		default:
+			return kNotFast;
+	}
+}
+
 // The ops below are the common cases of `execute`'s, done without leaving this function; any case
 // that is not common -- an allocation, an unbound or empty operand, a destination already holding
 // something, a raise -- breaks out before it has changed anything, and `execute` does the op from
@@ -843,6 +964,17 @@ Outcome Interpreter::drive() {
 					}
 					store(w[0], value);
 					++at;
+					continue;
+				}
+				case VbcOp::LoadField:
+				case VbcOp::CreateField:
+				case VbcOp::UnifyField:
+				case VbcOp::SetField: {
+					const uint32_t next = field_site_op(op, w, at);
+					if (next == kNotFast) {
+						break;
+					}
+					at = next;
 					continue;
 				}
 				case VbcOp::Return: {
@@ -1156,8 +1288,29 @@ Value Interpreter::bind(Value p_function, Value p_receiver) {
 	return Value::from_cell(bound);
 }
 
+FieldSite &Interpreter::field_site() {
+	const ProcedureCell *procedure = frame->procedure;
+	if (procedure->field_sites_owner != layouts.id()) {
+		procedure->field_sites.assign(procedure->ops.size(), FieldSite{});
+		procedure->field_sites_owner = layouts.id();
+	}
+	return procedure->field_sites[pc];
+}
+
+const LayoutField *Interpreter::site_field(FieldSite &r_site, const ObjectCell *p_object, const NameCell *p_name) {
+	if (r_site.layout == p_object->layout) {
+		return r_site.field;
+	}
+	const LayoutField *field = p_object->layout->find(p_name);
+	if (field != nullptr) {
+		r_site.layout = p_object->layout;
+		r_site.field = field;
+	}
+	return field;
+}
+
 // spec/objects.md §6.
-Interpreter::Step Interpreter::load_field(Value p_object, const NameCell *p_name, Value &r_result) {
+Interpreter::Step Interpreter::load_field(Value p_object, const NameCell *p_name, FieldSite &r_site, Value &r_result) {
 	if (is_cell_kind(p_object, CellKind::AccessorRef)) {
 		r_result = accessor_reference(Value(), nullptr, cell_as<AccessorRefCell>(p_object), make_string(heap, unqualified_name(p_name->text)));
 		return Step::Next;
@@ -1177,7 +1330,7 @@ Interpreter::Step Interpreter::load_field(Value p_object, const NameCell *p_name
 		}
 		return invariant(std::string("LoadField from a ") + (p_object.is_cell() ? cell_kind_name(p_object.as_cell()->kind) : "value that is not a cell"));
 	}
-	const LayoutField *field = object->layout->find(p_name);
+	const LayoutField *field = site_field(r_site, object, p_name);
 	if (field == nullptr) {
 		return invariant("a field " + p_name->text + " the object's layout does not have");
 	}
@@ -2071,7 +2224,7 @@ VM_NOINLINE Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const 
 			}
 			const Value name = constant(w[2]);
 			Value result;
-			const Step step = load_field(object, cell_as<NameCell>(name), result);
+			const Step step = load_field(object, cell_as<NameCell>(name), field_site(), result);
 			return step == Step::Next ? unify_register(w[0], result) : step;
 		}
 		case VbcOp::LoadFieldFromSuper: {
@@ -2115,7 +2268,7 @@ VM_NOINLINE Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const 
 				return invariant("CreateField on something that is not an object");
 			}
 			const NameCell *name = cell_as<NameCell>(constant(w[3]));
-			const LayoutField *field = object->layout->find(name);
+			const LayoutField *field = site_field(field_site(), object, name);
 			if (field == nullptr) {
 				return invariant("CreateField of a name " + name->text + " the object's layout does not have");
 			}
@@ -2151,7 +2304,7 @@ VM_NOINLINE Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const 
 			if (object == nullptr) {
 				return invariant("a field write on something that is not an object");
 			}
-			const LayoutField *field = object->layout->find(name);
+			const LayoutField *field = site_field(field_site(), object, name);
 			if (set && field != nullptr && field->kind == FieldKind::Accessor) {
 				return accessor_call(accessor_reference(value, cell_as<AccessorCell>(field->value), nullptr, Value()), true, replacement, kNoRegister);
 			}
@@ -2193,7 +2346,7 @@ VM_NOINLINE Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const 
 			if (object == nullptr) {
 				return invariant("InitializeVar on something that is not an object");
 			}
-			const LayoutField *field = object->layout->find(name);
+			const LayoutField *field = site_field(field_site(), object, name);
 			if (field == nullptr || field->kind == FieldKind::Constant) {
 				return invariant("InitializeVar of " + name->text + ", which is not a slot of the object");
 			}

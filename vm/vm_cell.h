@@ -386,6 +386,16 @@ struct DecodedOp {
 // compiler left out.
 constexpr uint32_t kAbsentOperand = 0xFFFFFFFFu;
 
+struct ClassLayout;
+struct LayoutField;
+
+// What a field op last resolved its name to: `field` is `layout`'s entry for the op's name. Holds no
+// cell -- a layout lives, and roots its class, as long as the Layouts that made it (vm_objects.h).
+struct FieldSite {
+	const ClassLayout *layout = nullptr;
+	const LayoutField *field = nullptr;
+};
+
 // format.md §5. The op stream is decoded once, at load, for a switch loop to execute: op i's
 // operands are the words starting at operand_words[ops[i].operands], one word per operand ops.json
 // lists for its opcode with cache operands left out, in the schema's order, so operand k of a
@@ -413,6 +423,11 @@ struct ProcedureCell : Cell {
 	std::vector<UnwindEdge> unwind_edges;
 	std::vector<LineEntry> lines;
 	std::vector<RegisterName> register_names;
+	// One per op, made on the first field op that misses, and valid only while `field_sites_owner` is
+	// the Layouts::id of the interpreter running it: a layout another one made may be freed, and its
+	// address reused by one of this one's.
+	mutable std::vector<FieldSite> field_sites;
+	mutable uint64_t field_sites_owner = 0;
 
 	ProcedureCell() :
 			Cell(CellKind::Procedure) {}

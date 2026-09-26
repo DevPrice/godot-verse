@@ -2670,6 +2670,118 @@ void NativeFieldCases(Cases &r_cases) {
 			var_store(Int(heap, 1), Int(heap, 2)) == "2" && var_store(Pow2(heap, 64), Int(heap, 2)) == exceeds && var_store(Int(heap, 1), Pow2(heap, 64)) == exceeds);
 }
 
+// §4 row 5 of docs/vm-performance.md: a field op remembers the layout it last resolved its name in.
+void FieldSiteCases(Cases &r_cases) {
+	Heap heap;
+	Program program;
+	Interpreter interpreter(heap, program);
+	using vbc::VbcOp;
+	SimpleTypeCell *any = heap.make<SimpleTypeCell>();
+	const NameCell *a = heap.intern("(/test/left:)A");
+	const NameCell *x = heap.intern("(/test/shared:)X");
+	const NameCell *k = heap.intern("(/test/right:)K");
+	// X is left's second slot and right's first, so one site sees it at two indices.
+	ClassCell *left = MakeClass(heap, ClassKind::Class, {}, {
+		ArchetypeEntry{ a, nullptr, Value::from_cell(any), Value::uninitialized(), 0 },
+		ArchetypeEntry{ x, nullptr, Value::from_cell(any), Value::uninitialized(), 0 },
+	});
+	ClassCell *right = MakeClass(heap, ClassKind::Class, {}, {
+		ArchetypeEntry{ x, nullptr, Value::from_cell(any), Value::uninitialized(), 0 },
+		ArchetypeEntry{ k, nullptr, Value::uninitialized(), Int(heap, 99), 0 },
+	});
+	const ClassLayout &left_layout = interpreter.layouts.get(left);
+	const ClassLayout &right_layout = interpreter.layouts.get(right);
+	const auto object_of = [&](const ClassLayout &p_layout, int64_t p_x) {
+		ObjectCell *object = interpreter.layouts.new_object(heap, p_layout);
+		for (const LayoutField &field : p_layout.fields) {
+			if (field.kind == FieldKind::Slot) {
+				object->field_values[field.slot] = Int(heap, field.name == x ? p_x : -1);
+			}
+		}
+		return object;
+	};
+	ObjectCell *left_object = object_of(left_layout, 10);
+	ObjectCell *right_object = object_of(right_layout, 20);
+	const Value left_value = Value::from_cell(left_object);
+	const Value right_value = Value::from_cell(right_object);
+
+	Asm read(heap, "ReadX", 4, 1);
+	read.Op(VbcOp::LoadField, { W(3), W(R(2)), W(read.C(Value::from_cell(x))) });
+	read.Op(VbcOp::Return, { W(R(3)) });
+	const Value read_fn = read.Function(heap.false_value());
+	const std::vector<FieldSite> &sites = read.procedure->field_sites;
+	const std::string first = Invoked(interpreter, read_fn, { left_value });
+	const bool filled = sites.size() == 2 && sites[0].layout == &left_layout && sites[0].field == left_layout.find(x);
+	r_cases.check("field sites: a miss resolves the name and fills the op's site", first == "10" && filled);
+
+	// Pointing the site at A proves a second read is answered from it rather than looked up again.
+	FieldSite &site = read.procedure->field_sites[0];
+	site.field = left_layout.find(a);
+	const std::string poisoned = Invoked(interpreter, read_fn, { left_value });
+	site.field = left_layout.find(x);
+	r_cases.check("field sites: a hit indexes the slot the site remembers", poisoned == "-1" && Invoked(interpreter, read_fn, { left_value }) == "10");
+
+	const std::string other = Invoked(interpreter, read_fn, { right_value });
+	const bool refilled = sites[0].layout == &right_layout && sites[0].field == right_layout.find(x);
+	r_cases.check("field sites: another layout at the same site misses, finds X at its own slot, and refills",
+			other == "20" && refilled && Invoked(interpreter, read_fn, { left_value }) == "10" && sites[0].layout == &left_layout);
+
+	Asm constant(heap, "ReadK", 4, 1);
+	constant.Op(VbcOp::LoadField, { W(3), W(R(2)), W(constant.C(Value::from_cell(k))) });
+	constant.Op(VbcOp::Return, { W(R(3)) });
+	const Value constant_fn = constant.Function(heap.false_value());
+	r_cases.check("field sites: a constant member reads the same on a miss and on a hit",
+			Invoked(interpreter, constant_fn, { right_value }) == "99" && Invoked(interpreter, constant_fn, { right_value }) == "99");
+
+	Asm write(heap, "WriteX", 4, 2);
+	write.Op(VbcOp::SetField, { W(R(2)), W(write.C(Value::from_cell(x))), W(R(3)) });
+	write.Op(VbcOp::Return, { W(R(3)) });
+	const Value write_fn = write.Function(heap.false_value());
+	Invoked(interpreter, write_fn, { left_value, Int(heap, 11) });
+	Invoked(interpreter, write_fn, { left_value, Int(heap, 12) });
+	const std::string left_after = Show(left_object->field_values[left_layout.find(x)->slot]);
+	Invoked(interpreter, write_fn, { right_value, Int(heap, 21) });
+	Invoked(interpreter, write_fn, { right_value, Int(heap, 22) });
+	r_cases.check("field sites: SetField stores through the site, on a hit and after a refill",
+			left_after == "12" && Show(right_object->field_values[right_layout.find(x)->slot]) == "22" &&
+					Show(left_object->field_values[left_layout.find(a)->slot]) == "-1" && write.procedure->field_sites[0].layout == &right_layout);
+
+	// The same SetField twice in a context that fails: the second is a hit, and both are undone.
+	Asm undone(heap, "WriteXFails", 5, 2);
+	undone.Op(VbcOp::BeginFailureContext, { W(0), W(0) });
+	undone.Op(VbcOp::SetField, { W(R(2)), W(undone.C(Value::from_cell(x))), W(R(3)) });
+	undone.Op(VbcOp::Query, { W(4), W(undone.K(heap.false_value())) });
+	undone.Op(VbcOp::EndFailureContext, { W(0), W(0) });
+	PatchLabel(undone, 0, uint32_t(undone.procedure->ops.size()));
+	undone.Op(VbcOp::Return, { W(undone.K(heap.false_value())) });
+	const Value undone_fn = undone.Function(heap.false_value());
+	Invoked(interpreter, undone_fn, { left_value, Int(heap, 13) });
+	const bool warmed = undone.procedure->field_sites[1].layout == &left_layout;
+	Invoked(interpreter, undone_fn, { left_value, Int(heap, 14) });
+	r_cases.check("field sites: a store through a site is undone when its context fails", warmed && Show(left_object->field_values[left_layout.find(x)->slot]) == "12");
+
+	const NameCell *lane = heap.intern("(/test/lanes:)I0");
+	ClassCell *lanes = MakeClass(heap, ClassKind::Struct, {}, { ArchetypeEntry{ lane, nullptr, Value::from_cell(any), Value::uninitialized(), 1 } });
+	ObjectCell *boxed = interpreter.layouts.new_object(heap, interpreter.layouts.get(lanes));
+	boxed->field_values[0] = Int(heap, 0);
+	Asm narrow(heap, "WriteLane", 4, 2);
+	narrow.Op(VbcOp::SetField, { W(R(2)), W(narrow.C(Value::from_cell(lane))), W(R(3)) });
+	narrow.Op(VbcOp::Return, { W(R(3)) });
+	const Value narrow_fn = narrow.Function(heap.false_value());
+	const std::string small = Invoked(interpreter, narrow_fn, { Value::from_cell(boxed), Int(heap, 5) });
+	const std::string wide = Invoked(interpreter, narrow_fn, { Value::from_cell(boxed), Pow2(heap, 70) });
+	r_cases.check("field sites: a native field written through a filled site still refuses an int wider than 64 bits",
+			small == "5" && wide.find("Value exceeds the range of a 64 bit integer") != std::string::npos && Show(boxed->field_values[0]) == "5");
+
+	// A second interpreter's layouts are other objects, so the sites the first filled are not its.
+	Interpreter second(heap, program);
+	ObjectCell *second_object = second.layouts.new_object(heap, second.layouts.get(right));
+	second_object->field_values[second.layouts.get(right).find(x)->slot] = Int(heap, 30);
+	const std::string seen = Invoked(second, read_fn, { Value::from_cell(second_object) });
+	r_cases.check("field sites: a procedure run by another interpreter drops the sites the first one filled",
+			seen == "30" && read.procedure->field_sites_owner == second.layouts.id() && sites[0].layout == &second.layouts.get(right));
+}
+
 void StructConstantCases(Cases &r_cases) {
 	Heap heap;
 	Program program;
@@ -3683,6 +3795,7 @@ bool RunInterpreterCases() {
 	CastCases(cases);
 	AccessorCases(cases);
 	NativeFieldCases(cases);
+	FieldSiteCases(cases);
 	StructConstantCases(cases);
 	TaskCases(cases);
 	AwaitEventSleepCases(cases);

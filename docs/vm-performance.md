@@ -11,8 +11,8 @@ no slowdown, which is what started this.
 
 This document is how the interpreter is measured now, what the code made obvious before anything
 was measured, what the measurements came to, the ranking that follows from them, and — in §5 — where
-it stands after the first three rows of that ranking were built. §5 is the current state; §3 is the
-interpreter as Phase 7.5 left it.
+it stands after rows 1, 2, 3 and 5 of that ranking were built. §5 is the current state, and §5.4 its
+latest step; §3 is the interpreter as Phase 7.5 left it.
 
 ## 1. How it is measured
 
@@ -216,3 +216,39 @@ and `load_field` — is now the largest single cost after dispatch: 16% of `Meth
 change worth making. After it, `GodotWrites` still pays for each deferred Godot write's shared
 pointer and `std::function` (`RtlAllocateHeap` at 8%), and a method load still makes a bound
 `FunctionCell` that only a liveness proof could remove — both small.
+
+### 5.4 The field cache
+
+§4 row 5 was built the same day, by a clean-room agent (`web-vm/cleanroom-log.md` P4). Each
+procedure carries one cache entry per op, made on the first field op that misses: the layout the op
+last saw and that layout's field for the op's name. An object of the same layout skips
+`ClassLayout::find`; another layout refills the entry. Six ops resolve through it in `execute`, and
+`drive` has a hit path for `LoadField`, `CreateField`, `SetField` and `UnifyField` that bails, as
+every fast case must, before changing anything. That hit path is out of line (`field_site_op`):
+inlined into `drive`'s switch, it cost workloads with no field op 15–25% under MSVC. An entry holds
+no cell, because a layout lives as long as the `Layouts` that made it and roots its class; the
+entries are stamped with that `Layouts`' process-unique id, so a procedure another interpreter
+filled is refilled rather than trusted.
+
+Call plus tick, median of 20; "before" is §5.1's "after":
+
+| Workload | vm before | vm after | wasm before | wasm after | ue | vm/ue |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `MethodCalls` | 9,656 | 8,830 | 12,600 | 11,050 | 12,232 | 0.72× |
+| `SelfFields` | 5,059 | 4,243 | 6,534 | 4,835 | 9,139 | 0.46× |
+| `ObjectCreation` | 25,227 | 24,455 | 29,380 | 26,206 | 30,770 | 0.79× |
+| `VectorMath` | 67,108 | 53,720 | 66,780 | 53,984 | 61,591 | 0.87× |
+| `GodotReads` | 8,226 | 6,791 | 9,431 | 7,315 | 12,158 | 0.56× |
+| `GodotWrites` | 29,292 | 19,805 | 27,949 | 15,538 | 67,235 | 0.29× |
+
+The workloads with no field access are unchanged: a same-session A/B at 50 calls put `IntArith` at
+4.1 ms on both sides and `FunctionCalls` at 5.8–6.0 ms against 6.5. **The interpreter now runs
+Verse faster than the UE host on all fifteen workloads**, natively and as WebAssembly.
+`ClassLayout::find` is gone from the sampler's profile; `field_site_op` is 4–8% where fields are
+used.
+
+`dodge-the-creeps`: on the Windows interpreter export, Verse is 0.023–0.026 ms per frame, down from
+0.030; on the web it is 0.074 ms, down from 0.093. The UE host is unchanged at 0.088.
+
+This closes the performance work for now. §4 rows 4 and 6 stay unbuilt for the reasons §5 gives,
+and §5.3's two remaining costs are small.
