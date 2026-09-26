@@ -19,6 +19,7 @@
 #include "vm_values.h"
 
 #include <algorithm>
+#include <clocale>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -379,6 +380,17 @@ void Int64Cases(Cases &r_cases) {
 	r_cases.check("int64: 3037000500^2 overflows exactly", Show(Mul(heap, Int(heap, 3037000500), Int(heap, 3037000500))) == "9223372037000250000");
 	r_cases.check("int64: 3037000499^2 stays narrow", IsNarrowHeapInt(Mul(heap, Int(heap, 3037000499), Int(heap, 3037000499))) && Show(Mul(heap, Int(heap, 3037000499), Int(heap, 3037000499))) == "9223372030926249001");
 	r_cases.check("int64: int64 min * -1 and -1 * int64 min are wide 2^63", Equal(Mul(heap, min64, Int(heap, -1)), Pow2(heap, 63)) && Equal(Mul(heap, Int(heap, -1), min64), Pow2(heap, 63)));
+	r_cases.check("int64: products landing on the int64 ends stay narrow, one past them is wide",
+			IsNarrowHeapInt(Mul(heap, Int(heap, -(int64_t(1) << 62)), Int(heap, 2))) && Equal(Mul(heap, Int(heap, -(int64_t(1) << 62)), Int(heap, 2)), min64) &&
+					Equal(Mul(heap, Int(heap, 2), Int(heap, -(int64_t(1) << 62))), min64) && IsWideHeapInt(Mul(heap, Pow2(heap, 62), Int(heap, 2))) &&
+					Equal(Mul(heap, max64, Int(heap, -1)), Add(heap, min64, Int(heap, 1))) && Equal(Mul(heap, min64, Int(heap, 1)), min64) &&
+					Equal(Mul(heap, Int(heap, 1), min64), min64) && Show(Mul(heap, min64, Int(heap, 0))) == "0" && Show(Mul(heap, Int(heap, 0), min64)) == "0" &&
+					Show(Mul(heap, Int(heap, 3037000500), Int(heap, -3037000500))) == "-9223372037000250000" &&
+					Show(Mul(heap, Int(heap, -3037000500), Int(heap, -3037000500))) == "9223372037000250000" &&
+					Show(Mul(heap, min64, Int(heap, 2))) == "-18446744073709551616" && Show(Mul(heap, Int(heap, -2), min64)) == "18446744073709551616" &&
+					Show(Mul(heap, Int(heap, 4294967296), Int(heap, 4294967295))) == "18446744069414584320" &&
+					Show(Mul(heap, Int(heap, 2147483648), Int(heap, -4294967296))) == "-9223372036854775808" &&
+					IsNarrowHeapInt(Mul(heap, Int(heap, 2147483648), Int(heap, -4294967296))));
 	r_cases.check("int64: Neg of int64 min is wide, Neg of -2^40 narrow", IsWideHeapInt(Neg(heap, min64)) && Show(Neg(heap, Int(heap, -(int64_t(1) << 40)))) == "1099511627776");
 	r_cases.check("int64: ordering across immediate, narrow and wide",
 			Holds(OrderOp::Lt, Int(heap, -(int64_t(1) << 40)), Int(heap, 5)) && Holds(OrderOp::Gt, Int(heap, 3000000000), Int(heap, 2000000000)) &&
@@ -1217,6 +1229,24 @@ void JsonCases(Cases &r_cases) {
 				return json_to_int64(value.items[0], number) && number == 9007199254740993LL && json_to_int64(value.items[1], number) &&
 						number == 0 && !json_to_int64(value.items[3], number) && !json_to_int64(value.items[4], number);
 			}());
+	r_cases.check("json: a number reads correctly rounded, at the ends of binary64 and between two doubles",
+			Parses("[0.1, 9007199254740993, 1.00000000000000011102230246251565404236316680908203125, 1.00000000000000011102230246251565404236316680908203126, "
+				   "4.9e-324, 2.2250738585072011e-308, 1.7976931348623157e308, -0, 1E2, 5e-1]",
+					value) &&
+					value.items[0].number == 0.1 && value.items[1].number == 9007199254740992.0 && value.items[2].number == 1.0 &&
+					value.items[3].number == 1.0000000000000002 && value.items[4].number == std::numeric_limits<double>::denorm_min() &&
+					value.items[5].number == 2.2250738585072009e-308 && value.items[6].number == std::numeric_limits<double>::max() &&
+					value.items[7].number == 0.0 && std::signbit(value.items[7].number) && value.items[8].number == 100.0 && value.items[9].number == 0.5);
+	r_cases.check("json: a number past binary64's largest reads as infinity of its sign",
+			Parses("[1e309, -1.7976931348623159e308]", value) && value.items[0].number == HUGE_VAL && value.items[1].number == -HUGE_VAL);
+	{
+		const std::string previous = setlocale(LC_ALL, nullptr);
+		const bool comma = setlocale(LC_ALL, "de-DE") != nullptr || setlocale(LC_ALL, "de_DE.UTF-8") != nullptr || setlocale(LC_ALL, "fr_FR.UTF-8") != nullptr;
+		const bool parsed = Parses("[1.5, 2.5e-1]", value) && value.items[0].number == 1.5 && value.items[1].number == 0.25;
+		setlocale(LC_ALL, previous.c_str());
+		printf("[verse_vm_test] json: comma-decimal locale %s\n", comma ? "set" : "unavailable here");
+		r_cases.check("json: a number reads the same under a comma-decimal C locale", parsed);
+	}
 	r_cases.check("json: a repeated key is kept and find answers the first",
 			Parses("{\"k\": 1, \"k\": 2}", value) && value.keys.size() == 2 && value.find("k")->number == 1.0);
 	r_cases.check("json: a trailing comma is refused", Refused("[1, 2,]") && Refused("{\"a\": 1,}"));
