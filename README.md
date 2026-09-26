@@ -1,52 +1,55 @@
 # Godot Verse
 
-Epic's [Verse](https://dev.epicgames.com/documentation/en-us/uefn/verse-language-reference) as a
-scripting language for Godot 4, as a GDExtension.
+Godot Verse is a GDExtension that adds Epic's
+[Verse](https://dev.epicgames.com/documentation/en-us/uefn/verse-language-reference) to Godot 4 as a
+scripting language.
 
-The goal is a first-class language, not a demo. Anything you can express about a Godot project in
-GDScript, you can express in Verse, and Verse's own features work, with concurrency, failure contexts,
-and parametric types included. Godot's model stays Godot's: a Node is a Node, a Signal is a Signal,
-and a Resource is a Resource. Write Verse here if you develop in Godot and want a stronger language
-than GDScript, or if you just want to play with the language.
+The goal is a first-class language, not a demonstration. Anything you can express about a Godot
+project in GDScript, you can express in Verse, and Verse's own features work, including concurrency,
+failure contexts, and parametric types. Godot's model doesn't change: a Node is a Node, a Signal is
+a Signal, and a Resource is a Resource. Use Godot Verse if you develop in Godot and want a stronger
+language than GDScript, or if you want to experiment with Verse.
 
-## Status: experimental
+## Project status
 
-Don't build a game on this. It's a research build, so expect a compiler crash, a rough diagnostic,
-or an untested corner of the ABI.
+Godot Verse is experimental. Don't build a game with it. It's a research build, so expect compiler
+crashes, unclear diagnostics, and parts of the ABI that no test covers.
 
-[`docs/spec.md`](docs/spec.md) carries the per-requirement status. Where this file and the spec
-disagree, the spec is correct.
+For the status of each requirement, see [`docs/spec.md`](docs/spec.md). If this file and the
+specification disagree, the specification is correct.
 
-### What works
+### Supported features
 
-| Feature | Status |
+| Area | What works |
 | --- | --- |
-| Scripting | A `.verse` file attaches to a node the way a GDScript does. Every Godot virtual runs, spelled the way Godot spells it (`_Ready`, `_Process`, and the rest). `@export` properties appear in the inspector. `helper{}` makes an object that isn't a node, with Godot's own three lifetimes |
-| Interop | Every `Variant` type crosses in both directions, containers by reference. GDScript can call any method a script defines. A runtime error names a file, a line, and a Verse call stack |
-| Signals and concurrency | Signals are typed members. `Await` works on any Godot signal. `spawn`, `Sleep`, and `race` each get a task scope tied to the script instance |
-| Engine surface | All 1036 Godot classes and their enums are mirrored |
-| Project and editor | Hot reload on Play, modules through `.vmodule`, `@tool` scripts, imports the editor writes for you, syntax highlighting, live diagnostics, completion, symbol lookup, and a step debugger |
-| Export | On Windows and Web, the export dialog produces a runnable game with no manual copying, and the exported game runs its Verse. See [Web export](#web-export) |
+| Scripting | You attach a `.verse` file to a node the same way you attach a GDScript. Every Godot virtual method runs, spelled the way Godot spells it: `_Ready`, `_Process`, and the rest. `@export` properties appear in the inspector. `helper{}` creates an object that isn't a node, with Godot's three lifetimes. |
+| Interoperability | Every `Variant` type crosses in both directions, and containers cross by reference. GDScript can call any method that a Verse script defines. A runtime error reports a file, a line, and a Verse call stack. |
+| Signals and concurrency | Signals are typed members. `Await` works on any Godot signal. `spawn`, `Sleep`, and `race` each get a task scope that's tied to the script instance. |
+| Engine API | All 1036 Godot classes and their enums are mirrored in Verse. |
+| Project and editor | Hot reload when you run the project, modules through `.vmodule` files, `@tool` scripts, imports that the editor writes for you, syntax highlighting, live diagnostics, code completion, symbol lookup, and a step debugger. |
+| Export | On Windows and Web, the export dialog produces a runnable game with no manual copying, and the exported game runs its Verse code. For details, see [Web export](#web-export). |
 
 ### When a build happens
 
-A build compiles the whole project, and it happens on Play rather than on save. Press Play, and
-Godot compiles the project and runs the edited code. Saving refreshes diagnostics and completion
-only. To build without a run, click **Project > Tools > Build Verse**.
+A build compiles the whole project. It happens when you run the project, not when you save a file.
+When you click **Play**, Godot compiles the project and runs the edited code. Saving a file only
+refreshes diagnostics and code completion.
 
-### When a script raises an error
+To build without running the project, click **Project > Tools > Build Verse**.
 
-A Verse runtime error, such as `Err("...")` or an integer overflow, works like a GDScript runtime
-error: Godot reports it with the file, the line, and the Verse call stack, the call that raised it
+### How runtime errors behave
+
+A Verse runtime error, such as `Err("...")` or an integer overflow, behaves like a GDScript runtime
+error. Godot reports the file, the line, and the Verse call stack. The call that raised the error
 stops, and the game keeps running.
 
-One difference matters. Every call Godot makes into Verse runs as a transaction, so when a call
-raises, **everything it changed before the error is undone**. GDScript keeps those changes. The
-exceptions are the Godot methods that can't be undone, which
+One difference matters: every call that Godot makes into Verse runs as a transaction. If a call
+raises an error, **the extension undoes everything that the call changed before the error**.
+GDScript keeps those changes. The exceptions are Godot methods that can't be undone, which
 [`docs/nonatomic-methods.md`](docs/nonatomic-methods.md) lists.
 
-The undo can make an error repeat. In this `_Process`, the counter never gets past the value that
-fails, because each failing call undoes its own increment:
+Because of this undo, an error can repeat. In the following `_Process` method, the counter never
+gets past the value that fails, because each failing call undoes its own increment:
 
 ```verse
 _Process<override>(Delta:float):void =
@@ -55,49 +58,65 @@ _Process<override>(Delta:float):void =
         Err("fails at frame 2, and then at every frame after it")
 ```
 
-If a change has to survive an error, make it in a call that can't raise.
+If a change must survive an error, make the change in a call that can't raise one.
 
-### What isn't supported
+### Limitations
 
-These limits are the ones worth knowing before you start. Each one names what blocks it.
+Know these limitations before you start. Each one names what blocks it.
 
-Not built yet:
+The following aren't built yet:
 
-- Linux and macOS, for both the editor and exported games
-- Android and iOS exported games
+- Linux and macOS, for both the editor and exported games.
+- Android and iOS exported games.
 - Parts of the editor's data model: custom Resources, autoloads, and the rest of the `@export`
-  surface
+  surface.
 
-Blocked on Epic licensing the Verse toolchain for redistribution:
+The following are blocked until Epic licenses the Verse toolchain for redistribution:
 
-- A download-and-unzip addon install. To build, you need your own Unreal Engine source checkout
-  and Visual Studio, and you can't redistribute the host DLL that build produces
-- Prebuilt host binaries, on any platform
-- Continuous integration, because a hosted runner can't hold a licensed Unreal Engine checkout
+- An addon that you download and unzip to install. To build the extension, you need your own
+  Unreal Engine source checkout and Visual Studio, and you can't redistribute the host DLL that the
+  build produces.
+- Prebuilt host binaries, on any platform.
+- Continuous integration, because a hosted runner can't hold a licensed Unreal Engine checkout.
 
 ### Web export
 
-A Web export runs your Verse on a second runtime: an interpreter of Verse's compiled bytecode that
-the extension carries, because the Unreal host can't be built for the web. A Web export uses
-it by default: **Project Settings > Verse > Runtime > Backend** has a Web override set to `vm`, the
-way Godot defaults Web to the Compatibility renderer. If that override is `host`, the Web export
-fails with an error. To use the interpreter in a Windows export too, which then ships no Unreal binary,
-set **Project Settings > Verse > Runtime > Backend** to `vm`.
+The Unreal host can't be built for the web, so a Web export runs your Verse code on a second
+runtime: an interpreter of Verse's compiled bytecode that the extension carries.
 
-A Web preset needs **Extensions Support** on and **Thread Support** off.
+Web exports use the interpreter by default. The **Project Settings > Verse > Runtime > Backend**
+setting has a Web override set to `vm`, in the same way that Godot defaults Web to the
+Compatibility renderer. If you change that override to `host`, the Web export fails with an error.
 
-To build the Web libraries, install Emscripten 4.0.11 and build both variants. `tools/emsdk_env.py`
-finds an `emsdk-4.0.11` checkout beside this repository, or the one `VERSE_EMSDK` names:
+To use the interpreter in a Windows export too, set **Project Settings > Verse > Runtime > Backend**
+to `vm`. A Windows export that uses the interpreter ships no Unreal binary.
 
-    python tools/emsdk_env.py -- scons platform=web arch=wasm32 threads=no target=template_release
-    python tools/emsdk_env.py -- scons platform=web arch=wasm32 threads=no target=template_debug
+In your Web export preset, turn on **Extensions Support** and turn off **Thread Support**.
 
-The Web build doesn't need threads, so a host that can't set cross-origin isolation headers can
-serve it. It runs slower than a native build: `dodge-the-creeps` runs at about two-thirds of real time
-in Chrome. A Web export ships Verse code compiled by Epic's own compiler, so Epic's terms still apply
-to it. See [Licensing](#licensing).
+To build the Web libraries, do the following:
 
-## What a script looks like
+1. Install Emscripten 4.0.11. `tools/emsdk_env.py` finds an `emsdk-4.0.11` checkout next to this
+   repository, or the checkout that the `VERSE_EMSDK` environment variable names.
+2. Build the release variant:
+
+   ```sh
+   python tools/emsdk_env.py -- scons platform=web arch=wasm32 threads=no target=template_release
+   ```
+
+3. Build the debug variant:
+
+   ```sh
+   python tools/emsdk_env.py -- scons platform=web arch=wasm32 threads=no target=template_debug
+   ```
+
+The Web build doesn't use threads, so a server that can't set cross-origin isolation headers can
+serve it. It runs slower than a native build: `dodge-the-creeps` runs at about two-thirds of real
+time in Chrome.
+
+A Web export ships Verse code that Epic's compiler produced, so Epic's terms still apply to it. For
+details, see [Licensing](#licensing).
+
+## Example script
 
 ```verse
 using { /Godot.org/Godot }
@@ -123,105 +142,128 @@ mover := class(node2d):
         set Position = vector2{X := Position.X + Delta * Speed, Y := Position.Y}
 ```
 
-To attach the script, select a node, click **Attach Script**, and choose Verse as the language. The
-template Godot writes names the class after the file, which is the only shape a script has. If a
-`.verse` file defines no class named after itself, Godot reports it as a file that failed to
-compile.
+To attach a script, select a node, click **Attach Script**, and then select **Verse** as the
+language. The template that Godot writes names the class after the file, which is the only shape a
+script can have. If a `.verse` file doesn't define a class named after itself, Godot reports that the
+file failed to compile.
 
-`@global_class` also registers the PascalCase name with Godot, so `Mover` appears in **Create New
-Node** and GDScript can name it as a type.
+`@global_class` also registers the PascalCase name with Godot. In this example, `Mover` appears in
+the **Create New Node** dialog, and GDScript can use it as a type.
 
-Godot's API is mirrored as a Verse class hierarchy under `/Godot.org/Godot`, with properties as
-writable members — `set Position = …` — rather than as get and set pairs.
+The `/Godot.org/Godot` package mirrors Godot's API as a Verse class hierarchy. Properties are
+writable members, such as `set Position = …`, rather than pairs of get and set methods.
 
 ### Modules
 
-Each top-level name must be unique within its module. A directory becomes a module by carrying a
-`<name>.vmodule` file. The marker is explicit rather than implied, because `res://` is an asset tree
-whose directory names were chosen for sprites. A project with no markers holds every file in one
-root module, which is what a small project wants. Whatever the module layout, naming the class after
-the file is still what makes the class attachable to a node.
+Each top-level name must be unique within its module. To make a directory a module, add a
+`<name>.vmodule` file to it. The marker is explicit because `res://` is an asset tree, and its
+directory names were chosen to organize assets, not code. In a project with no markers, every file
+is in one root module, which suits a small project. Whatever the module layout, a class must still
+be named after its file to be attachable to a node.
 
 ## Build the extension
 
-Before you start, install the following:
+This section describes how to build the extension on Windows.
 
-- An **Unreal Engine source checkout** with the Verse toolchain. Access requires a GitHub account
-  linked to an Epic account. This project is developed against Epic's main branch, which reports
-  version 6.0.
+### Before you begin
+
+Install the following:
+
+- An **Unreal Engine source checkout** that includes the Verse toolchain. To access the source, you
+  need a GitHub account that's linked to an Epic account. This project is developed against Epic's
+  main branch, which reports version 6.0.
 - **Visual Studio 2022** with the C++ workload.
 - **Godot 4.7** or later.
 - **Python 3** with **SCons**.
 
-Read [Licensing](#licensing) before you ship anything you build here.
+Before you ship anything that you build from this repository, read [Licensing](#licensing).
 
-To build:
+### Build and run
 
-1. Point the `UE_ROOT` environment variable at your engine checkout.
-2. Build the host. This stages `host/` into the engine tree and runs the Unreal Build Tool.
+1. Set the `UE_ROOT` environment variable to the path of your Unreal Engine checkout.
+2. Build the host. The script stages `host/` into the engine tree and runs the Unreal Build Tool.
 
-       python tools/build_host.py
+   ```sh
+   python tools/build_host.py
+   ```
 
-3. Build the GDExtension into `demo/addons/godot-verse/bin`.
+3. Build the GDExtension. The build writes it to `demo/addons/godot-verse/bin`.
 
-       scons target=editor
+   ```sh
+   scons target=editor
+   ```
 
-4. Tell Godot where your checkout is. In **Editor Settings > Verse > Host**, set `engine_dir` to the
-   path of the checkout:
+4. In Godot, open **Editor Settings > Verse > Host**, and set `engine_dir` to the path of your
+   Unreal Engine checkout:
 
-       verse/host/engine_dir    …/UnrealEngine
+   ```none
+   verse/host/engine_dir    …/UnrealEngine
+   ```
 
-   Set this once per machine. `verse/host/dll_path` and `verse/host/cooker_path` derive from
-   `engine_dir`, so set them only if your build put those files somewhere else.
+   You set this once per computer. `verse/host/dll_path` and `verse/host/cooker_path` are derived
+   from `engine_dir`, so set them only if your build puts those files somewhere else.
 
-5. Run the demo project, or copy `demo/addons/godot-verse/` into a project of your own. There's
-   nothing to set per project.
+5. Run the demo project:
 
-       godot --path demo
+   ```sh
+   godot --path demo
+   ```
 
-Godot must load the host from the engine tree's `Engine/Binaries/Win64`. The Verse compiler reads
-each package's sources at run time, relative to the loaded module, so a copy anywhere else compiles
-against an empty package set.
+   To use the extension in your own project instead, copy `demo/addons/godot-verse/` into it. The
+   extension has no per-project settings.
 
-The host path lives in Editor Settings rather than in the project because it names one machine. A
-`project.godot` that carries it puts your local state in everyone else's clone. `UE_ROOT` in the
-environment takes precedence over both settings, which is how the test harness points a headless
-Godot at a checkout without writing to a file.
+Godot must load the host from the engine tree's `Engine/Binaries/Win64` directory. At runtime, the
+Verse compiler reads each package's source files relative to the loaded module, so a copy of the
+host anywhere else compiles against an empty package set.
 
-To run the tests — the unit layer, the C ABI, three headless Godot projects, and export checks on
-Windows and Web:
+The host path is an editor setting rather than a project setting because it's specific to one
+computer. If `project.godot` stored it, your local path would appear in everyone else's clone. The
+`UE_ROOT` environment variable takes precedence over both settings, which lets the test harness
+point a headless Godot at a checkout without writing to a file.
 
-    python tools/run_tests.py
+### Run the tests
+
+The test suite covers the unit layer, the C ABI, three headless Godot projects, and export checks
+on Windows and Web. To run it, use the following command:
+
+```sh
+python tools/run_tests.py
+```
 
 ## Licensing
 
-This repository's own source is [MIT](LICENSE). That covers what is written here and nothing else.
+This repository's own source code is licensed under the [MIT License](LICENSE). The license covers
+the code in this repository and nothing else.
 
-The Verse host is built from Unreal Engine source and links it, so **a game you ship with it is
-subject to Epic's Unreal Engine EULA, royalties included.** That follows from the engine's
-licensing, not from this project, and the MIT grant above doesn't change it.
+The Verse host is built from Unreal Engine source code and links it, so **a game that you ship with
+the host is subject to Epic's Unreal Engine EULA, including royalties.** This requirement comes from
+the engine's license, not from this project, and the MIT License doesn't change it.
 
-You also can't redistribute binaries built from Unreal Engine source to anyone who doesn't hold
-their own license, which is why nothing here ships prebuilt.
+You also can't redistribute binaries built from Unreal Engine source code to anyone who doesn't hold
+their own license. For this reason, this repository doesn't include prebuilt binaries.
 
-The interpreter behind the `vm` backend and every Web export is different in one way and the same
-in another. It contains no Unreal Engine source: it was written in a clean room from this
-repository's own specification (`docs/web-vm/`), so it is covered by the MIT grant alone. But the
-program it runs, `program.vbc`, is compiled by Epic's Verse compiler, and most of it is Epic's own
-Verse library code in compiled form. So a game on the `vm` backend ships no Unreal Engine binary,
-and it still ships Epic's compiler output. Treat it as subject to Epic's terms too, until Epic
-releases the Verse toolchain under a license that says otherwise.
+The interpreter that the `vm` backend and every Web export use differs from the host in one way and
+matches it in another:
 
-## Design notes
+- **It contains no Unreal Engine source code.** It was written in a clean room from this
+  repository's own specification in `docs/web-vm/`, so the MIT License alone covers it.
+- **The program that it runs is Epic's compiler output.** `program.vbc` is compiled by Epic's Verse
+  compiler, and most of it is Epic's own Verse library code in compiled form.
 
-- [`docs/spec.md`](docs/spec.md) — what the finished software must do, numbered, with
-  per-requirement status. §14 holds the open questions.
-- [`docs/roadmap.md`](docs/roadmap.md) — those requirements sequenced into phases.
-- [`docs/abi-v2-design.md`](docs/abi-v2-design.md) — the C ABI between the two DLLs, and the spikes
-  that settled its shape.
-- [`docs/phase-0-spikes.md`](docs/phase-0-spikes.md) — hot reload, the export pipeline, and why the
+A game on the `vm` backend ships no Unreal Engine binary, but it still ships Epic's compiler output.
+Treat it as subject to Epic's terms until Epic releases the Verse toolchain under a license that
+says otherwise.
+
+## Design documentation
+
+- [`docs/spec.md`](docs/spec.md): the numbered requirements for the finished software, with the
+  status of each. Section 14 lists the open questions.
+- [`docs/roadmap.md`](docs/roadmap.md): the requirements, sequenced into phases.
+- [`docs/abi-v2-design.md`](docs/abi-v2-design.md): the C ABI between the two DLLs, and the
+  experiments that settled its shape.
+- [`docs/phase-0-spikes.md`](docs/phase-0-spikes.md): hot reload, the export pipeline, and why the
   scope is flat.
 - [`docs/property-export.md`](docs/property-export.md) and
-  [`docs/editor-tooling.md`](docs/editor-tooling.md) — the research behind `@export` and behind the
-  debugger and LSP story.
-- [`CLAUDE.md`](CLAUDE.md) — the map of the source tree and the working rules.
+  [`docs/editor-tooling.md`](docs/editor-tooling.md): the research behind `@export`, the debugger,
+  and the language server.
+- [`CLAUDE.md`](CLAUDE.md): a map of the source tree and the working rules for contributors.
