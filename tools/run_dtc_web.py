@@ -16,10 +16,11 @@ check lines itself and requires all 30, zero of them "FAIL", and the final line 
 passed".
 
     python tools/run_dtc_web.py
+    python tools/run_dtc_web.py --threads     # the threads library and template, with COOP/COEP
     python tools/run_dtc_web.py --engine <UE checkout> --godot <godot binary>
 
-Skipped, with a reason and exit 0, when Chrome, the built web library or the Web dlink/nothreads
-export template is absent -- the same three things T6.2 gates on.
+Skipped, with a reason and exit 0, when Chrome, the built web library or the matching Web dlink
+export template is absent -- the same three things the `web` and `web-threads` layers gate on.
 """
 
 import argparse
@@ -89,7 +90,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--engine", help="the Unreal checkout (default: UE_ROOT, then ../UnrealEngine)")
     parser.add_argument("--godot", help="the Godot binary (default: GODOT, then PATH)")
+    parser.add_argument("--threads", action="store_true",
+                        help="export with thread support and serve with COOP/COEP")
     args = parser.parse_args()
+    threads = args.threads
 
     engine = run_tests.find_engine(args.engine)
     godot = run_tests.find_godot(args.godot)
@@ -112,28 +116,29 @@ def main() -> int:
         print(f"[dtc-web] SKIP -- {cooker} not built; run tools/build_host.py --target VerseHostCooker")
         return 0
 
-    web_lib = REPO / "demo" / "addons" / "godot-verse" / "bin" / "web-wasm32" / "godot-verse.nothreads.wasm"
-    if not web_lib.is_file():
-        print("[dtc-web] SKIP -- the web library is not built; run `python tools/emsdk_env.py -- "
-              "scons platform=web arch=wasm32 threads=no target=template_release`")
+    if not run_tests._web_library(threads).is_file():
+        print(f"[dtc-web] SKIP -- {run_tests._web_library_missing(threads)}")
         return 0
 
     if not run_tests.WEB_CHROME_PATH.is_file():
         print(f"[dtc-web] SKIP -- no Chrome at {run_tests.WEB_CHROME_PATH}")
         return 0
 
-    template = run_tests._web_export_template(godot)
+    template = run_tests._web_export_template(godot, threads)
     if template is None:
-        print("[dtc-web] SKIP -- the Web dlink/nothreads release export template for this Godot is not installed")
+        print(f"[dtc-web] SKIP -- the Web dlink{'' if threads else '/nothreads'} release export "
+              "template for this Godot is not installed")
         return 0
 
     # A throwaway copy, exactly as run_tests.py's own web layer uses one: dodge-the-creeps'
     # project.godot and export_presets.cfg are editor-owned (CLAUDE.md) and never take the
-    # `[verse] runtime/backend="vm"` line or the Web preset this needs.
-    project = run_tests._web_backend_project(base_project)
+    # `[verse] runtime/backend="vm"` line or the Web preset this needs. The appended preset
+    # reuses the committed one's section name, and a later key in a section Godot has read
+    # already wins, so the copy's thread_support is the one this run asked for.
+    project = run_tests._web_backend_project(base_project, threads)
     ok = True
     try:
-        why = run_tests.stage_extension_web(project)
+        why = run_tests.stage_extension_web(project, threads)
         if why is not None:
             print(f"[dtc-web] SKIP -- {why}")
             return 0
@@ -194,6 +199,7 @@ def main() -> int:
                     [sys.executable, str(REPO / "tools" / "run_web.py"), str(beside),
                      "--until", r"headless_check: ",
                      "--timeout", str(WEB_LAUNCH_TIMEOUT)]
+                    + (["--coop-coep"] if threads else [])
                     + [f"--godot-arg={arg}" for arg in GAME_ARGS],
                     capture_output=True, text=True, errors="replace", timeout=WEB_LAUNCH_TIMEOUT + 30)
                 console_output = (launched.stdout or "") + (launched.stderr or "")

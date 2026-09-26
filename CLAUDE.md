@@ -419,7 +419,8 @@ reviewed files of `docs/web-vm/spec/` alone. Keep it that way — do not bring V
     python tools/vbc_dump.py <program.vbc> # read a .vbc; --check, --proc, --class
     python tools/gen_vbc_ops.py           # validate docs/web-vm/ops.json; --digest, --emit-cpp
     python tools/emsdk_env.py -- scons platform=web arch=wasm32 threads=no target=template_release
-    python tools/run_dtc_web.py           # dodge-the-creeps on the interpreter in headless Chrome
+    python tools/emsdk_env.py -- scons platform=web arch=wasm32 threads=yes target=template_release
+    python tools/run_dtc_web.py           # dodge-the-creeps on the interpreter in headless Chrome; --threads
     python tools/run_dtc_frames.py        # its frame times, exported for Windows on each backend
     python tools/run_vm_bench.py          # vm/ against the UE host on one cook; --wasm, --wasm-profile
 
@@ -441,7 +442,7 @@ executable. If a future engine drop provides one, that script finds and execs it
 ### Tests
 
     python tools/run_tests.py                    # every layer; the one command (R-QUAL-3)
-    python tools/run_tests.py --only units       # or units / abi / integration / export / web
+    python tools/run_tests.py --only units       # or units / abi / integration / export / web / web-threads
     python tools/run_tests.py --build            # rebuild the test binaries first
 
 **units** — lexer, class-declaration scanner, module map, doc-markup converter, signature parser,
@@ -490,7 +491,13 @@ ignored while exporting). export-vm's copy sets `verse/runtime/backend="vm"`, is
 Windows and asserted at the host backend's own 519/0/11. web's copy sets **nothing**, so it proves
 the `.web` override's default; it is exported for Web, run in headless Chrome through
 `tools/run_web.py` and asserted at 517/0/13 — R-ASYNC-8's two thread cases skip in a build without
-threads — and then exported once more with `backend.web="host"` to assert the refusal. **A Web export's page
+threads — and then exported once more with `backend.web="host"` to assert the refusal.
+**web-threads** is the web layer's own code with the threads library (`godot-verse.wasm`, built
+`threads=yes`), `variant/thread_support=true` and the `web_dlink_release` template, served with
+`run_web.py --coop-coep` — without the headers the page is not cross-origin isolated and cannot
+start a worker. It is asserted at the export layer's full 519/0/11, because R-ASYNC-8's two cases
+run there and the off-thread call has to be refused; the refusal export is the web layer's alone.
+Each layer stages only its own library, so the copy's `.gdextension` has one web row. **A Web export's page
 passes the engine no command line**, so `run_web.py --godot-arg` rewrites its `GODOT_CONFIG`; without
 it the test driver's `--verse-check` gate never opens and the game sits idle, which reads as a hang.
 

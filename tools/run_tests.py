@@ -8,8 +8,8 @@ R-QUAL-3. The three layers R-QUAL-1 names, in the order a failure is cheapest to
   abi          host_smoke, which drives the whole C ABI with no Godot, and the cooker
   integration  a headless Godot with Verse scripts attached, asserting on behaviour
   export       a headless Godot export, asserting on the tree it produced
-  web          a Web export on the vm backend, run in headless Chrome; gated on the export
-               mechanics and the game booting, not yet on the counts it reports (T6.3)
+  web          a Web export on the vm backend (nothreads), run in headless Chrome
+  web-threads  the same with the threads library and template, served with COOP/COEP
 
 Each layer is skipped rather than failed when what it needs is absent -- a contributor without a UE
 checkout still gets the unit layer -- and a skip is reported as a skip, never as a pass.
@@ -1302,18 +1302,18 @@ def _export_template(godot: Path) -> Path | None:
     return template if template.is_file() else None
 
 
-def _web_export_template(godot: Path) -> Path | None:
+def _web_export_template(godot: Path, threads: bool = False) -> Path | None:
     """The Web release template matching this Godot, or None.
 
-    `dlink` is the variant that supports loading a GDExtension at all (godot-verse.nothreads.wasm
-    as a side module); `nothreads` matches the preset's `variant/thread_support=false` and the
-    library `tools/emsdk_env.py`'s scons line above builds (`threads=no`). A mismatched pair exports
-    a Web build Godot cannot load the extension into, silently.
+    `dlink` is the variant that supports loading a GDExtension at all (the library as a side
+    module); `nothreads` or not has to match the preset's `variant/thread_support` and the library
+    staged beside it (`threads=no` or `threads=yes`). A mismatched pair exports a Web build Godot
+    cannot load the extension into, silently.
     """
     template_dir = _export_template_dir(godot)
     if template_dir is None:
         return None
-    template = template_dir / "web_dlink_nothreads_release.zip"
+    template = template_dir / ("web_dlink_release.zip" if threads else "web_dlink_nothreads_release.zip")
     return template if template.is_file() else None
 
 
@@ -1332,8 +1332,8 @@ WEB_EXPORT_REQUIRED = ["index.html", "index.pck"]
 # way _vm_backend_project appends `verse/runtime/backend` to a copy's project.godot rather than to
 # the checked-in one (CLAUDE.md: the editor rewrites and strips comments from both files, so what
 # is committed stays minimal). variant/extensions_support is what lets a Web export load a
-# GDExtension at all; variant/thread_support=false matches the nothreads library this layer builds
-# and requires (T0.1's dlink_nothreads template). Its include_filter is deliberately empty, as a
+# GDExtension at all; variant/thread_support is filled in by _web_backend_project to match the
+# library and template the layer requires. Its include_filter is deliberately empty, as a
 # freshly added preset's is: the export plugin must ship the `.vmodule` markers itself, and an
 # empty filter is what proves it does, where "Windows Desktop"'s `*.vmodule` covers the other path.
 WEB_PRESET_TEXT = """
@@ -1361,7 +1361,7 @@ script_export_mode=2
 custom_template/debug=""
 custom_template/release=""
 variant/extensions_support=true
-variant/thread_support=false
+variant/thread_support=THREAD_SUPPORT
 vram_texture_compression/for_desktop=true
 vram_texture_compression/for_mobile=false
 html/export_icon=false
@@ -1391,12 +1391,27 @@ WEB_LAUNCH_TIMEOUT = 300.0
 # no use for. run_web.py writes them into the served page's GODOT_CONFIG.
 WEB_GAME_ARGS = ["--fixed-fps", "60", "--", "--verse-check"]
 # The export layer's counts, less R-ASYNC-8's two thread cases: a nothreads build runs a pool task
-# on the calling thread, so test_cases.gd skips them there.
+# on the calling thread, so test_cases.gd skips them there. A threads build poses them, and is held
+# to the export layer's own counts.
 WEB_EXPECTED_PASSES = EXPORT_EXPECTED_PASSES - 2
 WEB_EXPECTED_SKIPS = EXPORT_EXPECTED_SKIPS + 2
 
 
-def _web_backend_project(base_project: Path) -> Path:
+def _web_layer(threads: bool) -> str:
+    return "web-threads" if threads else "web"
+
+
+def _web_library(threads: bool) -> Path:
+    name = "godot-verse.wasm" if threads else "godot-verse.nothreads.wasm"
+    return REPO / "demo" / "addons" / "godot-verse" / "bin" / "web-wasm32" / name
+
+
+def _web_library_missing(threads: bool) -> str:
+    return ("the web library is not built -- run `python tools/emsdk_env.py -- scons "
+            f"platform=web arch=wasm32 threads={'yes' if threads else 'no'} target=template_release`")
+
+
+def _web_backend_project(base_project: Path, threads: bool = False) -> Path:
     """A throwaway copy of base_project with a Web preset appended.
 
     tests/integration's checked-in export_presets.cfg carries only "Windows Desktop" (CLAUDE.md's
@@ -1409,19 +1424,20 @@ def _web_backend_project(base_project: Path) -> Path:
     project = work / base_project.name
     shutil.copytree(base_project, project, ignore=shutil.ignore_patterns(".godot", "addons"))
     with open(project / "export_presets.cfg", "a", encoding="utf-8") as f:
-        f.write(WEB_PRESET_TEXT)
+        f.write(WEB_PRESET_TEXT.replace("THREAD_SUPPORT", "true" if threads else "false"))
     return project
 
 
-def stage_extension_web(project: Path) -> str | None:
+def stage_extension_web(project: Path, threads: bool = False) -> str | None:
     """Stages the GDExtension for a Web export: the Windows editor library the exporting process
     itself runs as, plus the Web library the export ships.
 
     Not stage_extension(for_export=True): that stages Windows's release library and the runtime
     host beside it, which a Web export needs none of and which would give generate_gdextension no
-    reason to write a `web.wasm32.single.nothreads.release` row at all -- the exporting Godot is
-    still the Windows editor binary either way, so it still needs its own editor library staged to
-    run build_project() and invoke the cooker.
+    reason to write a web row at all -- the exporting Godot is still the Windows editor binary
+    either way, so it still needs its own editor library staged to run build_project() and invoke
+    the cooker. Only the one Web library `threads` names is staged, so the generated
+    `.gdextension` carries one web row and a preset of the other variant exports none.
     """
     source_dir = REPO / "demo" / "addons" / "godot-verse" / "bin" / "windows-x86_64"
     editor_dll = source_dir / "godot-verse.editor.dll"
@@ -1434,10 +1450,9 @@ def stage_extension_web(project: Path) -> str | None:
         shutil.copy2(editor_dll, editor_target / editor_dll.name)
     shutil.copy2(editor_dll, editor_target / "godot-verse.debug.dll")
 
-    web_lib = REPO / "demo" / "addons" / "godot-verse" / "bin" / "web-wasm32" / "godot-verse.nothreads.wasm"
+    web_lib = _web_library(threads)
     if not web_lib.is_file():
-        return ("the web library is not built -- run `python tools/emsdk_env.py -- scons "
-                 "platform=web arch=wasm32 threads=no target=template_release`")
+        return _web_library_missing(threads)
     web_target = project / "addons" / "godot-verse" / "bin" / "web-wasm32"
     web_target.mkdir(parents=True, exist_ok=True)
     shutil.copy2(web_lib, web_target / web_lib.name)
@@ -1476,54 +1491,57 @@ def _check_web_refuses_host(godot: Path, project: Path) -> bool:
     return False
 
 
-def run_web(results: Results, engine: Path | None, godot: Path | None) -> None:
+def run_web(results: Results, engine: Path | None, godot: Path | None, threads: bool = False) -> None:
     """Exports tests/integration for Web on the vm backend and runs it in headless Chrome.
 
-    T6.2. Gated on the export mechanics and the game *booting* -- vh_init succeeding, which the
-    first case tests/integration prints proves -- not on the counts test_cases.gd reports, which
-    T6.3 makes a requirement once T5.1/T5.2 give the interpreter the rest of the runtime `vh_*`
-    subset a Godot-hosted game needs (docs/web-vm/tasks.md T6.1/T6.2, phase-7.5-design.md §9/§10.1).
+    `threads` picks the variant: the `web` layer is the nothreads library and template, served
+    without COOP/COEP, and the `web-threads` layer the threads pair, served with them -- a threads
+    page is not cross-origin isolated without the headers, and has no SharedArrayBuffer to start
+    its workers on. Only the nothreads layer re-exports to assert the backend.web="host" refusal,
+    which comes before anything the variant decides.
     """
+    layer = _web_layer(threads)
     base_project = REPO / "tests" / "integration"
     if godot is None:
-        results.skip("web", "no Godot binary -- set GODOT or pass --godot")
+        results.skip(layer, "no Godot binary -- set GODOT or pass --godot")
         return
     if engine is None:
-        results.skip("web", "no Unreal checkout -- set UE_ROOT or pass --engine")
+        results.skip(layer, "no Unreal checkout -- set UE_ROOT or pass --engine")
         return
     if not (base_project / "project.godot").is_file():
-        results.skip("web", "tests/integration is not a Godot project")
+        results.skip(layer, "tests/integration is not a Godot project")
         return
 
     cooker = engine / "Engine" / "Binaries" / "Win64" / "verse_cook.exe"
     if not cooker.is_file():
-        results.skip("web", f"{cooker} not built -- run tools/build_host.py --target VerseHostCooker")
+        results.skip(layer, f"{cooker} not built -- run tools/build_host.py --target VerseHostCooker")
         return
 
-    web_lib = REPO / "demo" / "addons" / "godot-verse" / "bin" / "web-wasm32" / "godot-verse.nothreads.wasm"
-    if not web_lib.is_file():
-        results.skip("web", "the web library is not built -- run `python tools/emsdk_env.py -- "
-                             "scons platform=web arch=wasm32 threads=no target=template_release`")
+    if not _web_library(threads).is_file():
+        results.skip(layer, _web_library_missing(threads))
         return
 
     if not WEB_CHROME_PATH.is_file():
-        results.skip("web", f"no Chrome at {WEB_CHROME_PATH}")
+        results.skip(layer, f"no Chrome at {WEB_CHROME_PATH}")
         return
 
-    template = _web_export_template(godot)
+    template = _web_export_template(godot, threads)
     if template is None:
-        results.skip("web", "the Web dlink/nothreads release export template for this Godot is "
-                             "not installed")
+        results.skip(layer, f"the Web dlink{'' if threads else '/nothreads'} release export template "
+                            "for this Godot is not installed")
         return
 
-    project = _web_backend_project(base_project)
+    expected_passes = EXPORT_EXPECTED_PASSES if threads else WEB_EXPECTED_PASSES
+    expected_skips = EXPORT_EXPECTED_SKIPS if threads else WEB_EXPECTED_SKIPS
+
+    project = _web_backend_project(base_project, threads)
     try:
-        why = stage_extension_web(project)
+        why = stage_extension_web(project, threads)
         if why is not None:
-            results.skip("web", why)
+            results.skip(layer, why)
             return
 
-        print("[run_tests] --- web ---")
+        print(f"[run_tests] --- {layer} ---")
         with tempfile.TemporaryDirectory(prefix="verse_export_web_out_") as work_str:
             out = Path(work_str) / "index.html"
             completed = subprocess.run(
@@ -1534,10 +1552,10 @@ def run_web(results: Results, engine: Path | None, godot: Path | None) -> None:
             if completed.returncode != 0 or not out.is_file():
                 sys.stdout.write(completed.stdout or "")
                 sys.stdout.write(completed.stderr or "")
-                print(f"[web] godot --export-release exited {completed.returncode}: FAIL")
-                results.record("web", False)
+                print(f"[{layer}] godot --export-release exited {completed.returncode}: FAIL")
+                results.record(layer, False)
                 return
-            print("[web] the export produced index.html: ok")
+            print(f"[{layer}] the export produced index.html: ok")
 
             output = (completed.stdout or "") + (completed.stderr or "")
             verse_errors = [line for line in output.splitlines() if "ERROR: Verse:" in line]
@@ -1545,47 +1563,47 @@ def run_web(results: Results, engine: Path | None, godot: Path | None) -> None:
             if verse_errors:
                 ok = False
                 for line in verse_errors:
-                    print(f"[web] the plugin reported an error: FAIL -- {line.strip()}")
+                    print(f"[{layer}] the plugin reported an error: FAIL -- {line.strip()}")
             else:
-                print("[web] the Verse export plugin reported no errors: ok")
+                print(f"[{layer}] the Verse export plugin reported no errors: ok")
 
             beside = out.parent
             for name in WEB_EXPORT_REQUIRED:
                 if (beside / name).is_file():
-                    print(f"[web] {name} is in the export tree: ok")
+                    print(f"[{layer}] {name} is in the export tree: ok")
                 else:
                     ok = False
-                    print(f"[web] {name} is in the export tree: FAIL")
+                    print(f"[{layer}] {name} is in the export tree: FAIL")
 
             if list(beside.glob("*.wasm")):
-                print("[web] a .wasm module is in the export tree: ok")
+                print(f"[{layer}] a .wasm module is in the export tree: ok")
             else:
                 ok = False
-                print("[web] a .wasm module is in the export tree: FAIL")
+                print(f"[{layer}] a .wasm module is in the export tree: FAIL")
 
             for name in EXPORT_VM_ABSENT:
                 if (beside / name).exists():
                     ok = False
-                    print(f"[web] {name} shipped, but a Web export should carry no host DLL: FAIL")
+                    print(f"[{layer}] {name} shipped, but a Web export should carry no host DLL: FAIL")
                 else:
-                    print(f"[web] {name} is not shipped: ok")
+                    print(f"[{layer}] {name} is not shipped: ok")
 
             pck = beside / "index.pck"
-            ok = _check_pck(pck, project, name="web") and ok
+            ok = _check_pck(pck, project, name=layer) and ok
             if pck.is_file():
                 try:
                     pck_files = read_pck(pck)
                     if "res://verse_data/verse_classes.json" in pck_files:
-                        print("[web] verse_data is inside the .pck (res://verse_data): ok")
+                        print(f"[{layer}] verse_data is inside the .pck (res://verse_data): ok")
                     else:
                         ok = False
-                        print("[web] verse_data is inside the .pck: FAIL -- "
+                        print(f"[{layer}] verse_data is inside the .pck: FAIL -- "
                               f"found {sorted(n for n in pck_files if 'verse_data' in n)}")
                 except (OSError, ValueError, struct.error) as error:
                     ok = False
-                    print(f"[web] index.pck parses: FAIL -- {error}")
+                    print(f"[{layer}] index.pck parses: FAIL -- {error}")
 
-            print(f"[web] launching {out.name} in headless Chrome")
+            print(f"[{layer}] launching {out.name} in headless Chrome")
             try:
                 # _launch_export's command line, handed over the only way a Web export takes one:
                 # without `--verse-check` the autoload does nothing and the game idles with no
@@ -1594,6 +1612,7 @@ def run_web(results: Results, engine: Path | None, godot: Path | None) -> None:
                     [sys.executable, str(REPO / "tools" / "run_web.py"), str(beside),
                      "--until", r"\d+ passed, \d+ failed, \d+ skipped",
                      "--timeout", str(WEB_LAUNCH_TIMEOUT)]
+                    + (["--coop-coep"] if threads else [])
                     + [f"--godot-arg={arg}" for arg in WEB_GAME_ARGS],
                     capture_output=True, text=True, errors="replace", timeout=WEB_LAUNCH_TIMEOUT + 30)
                 console_output = (launched.stdout or "") + (launched.stderr or "")
@@ -1602,7 +1621,7 @@ def run_web(results: Results, engine: Path | None, godot: Path | None) -> None:
                 stderr = timeout_error.stderr or ""
                 console_output = (stdout if isinstance(stdout, str) else stdout.decode("utf-8", "replace")) + \
                     (stderr if isinstance(stderr, str) else stderr.decode("utf-8", "replace"))
-                print(f"[web] run_web.py did not exit within {WEB_LAUNCH_TIMEOUT + 30:.0f} s -- killed it")
+                print(f"[{layer}] run_web.py did not exit within {WEB_LAUNCH_TIMEOUT + 30:.0f} s -- killed it")
 
             # Excludes run_web.py's own "timed out after ... waiting for '<pattern>'" line, which
             # echoes the --until regex text and would otherwise match this same substring search.
@@ -1611,29 +1630,30 @@ def run_web(results: Results, engine: Path | None, godot: Path | None) -> None:
             match = re.search(r"(\d+) passed, (\d+) failed, (\d+) skipped", summary[-1]) if summary else None
             if match is None:
                 ok = False
-                print("[web] the browser reported no summary line: FAIL -- its last console lines:")
+                print(f"[{layer}] the browser reported no summary line: FAIL -- its last console lines:")
                 for line in [line for line in console_output.splitlines() if line.strip()][-12:]:
-                    print(f"[web]   {line.strip()}")
+                    print(f"[{layer}]   {line.strip()}")
             else:
-                print(f"[web] the browser said: {summary[-1].strip()}")
-                for name, got, want in (("passed", int(match.group(1)), WEB_EXPECTED_PASSES),
+                print(f"[{layer}] the browser said: {summary[-1].strip()}")
+                for name, got, want in (("passed", int(match.group(1)), expected_passes),
                                         ("failed", int(match.group(2)), 0),
-                                        ("skipped", int(match.group(3)), WEB_EXPECTED_SKIPS)):
+                                        ("skipped", int(match.group(3)), expected_skips)):
                     if got == want:
-                        print(f"[web] {name} {got}: ok")
+                        print(f"[{layer}] {name} {got}: ok")
                     else:
                         ok = False
-                        print(f"[web] {name} {got}, expected {want}: FAIL")
+                        print(f"[{layer}] {name} {got}, expected {want}: FAIL")
 
-            ok = _check_web_refuses_host(godot, project) and ok
-            results.record("web", ok)
+            if not threads:
+                ok = _check_web_refuses_host(godot, project) and ok
+            results.record(layer, ok)
     finally:
         shutil.rmtree(project.parent, ignore_errors=True)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--only", choices=["units", "abi", "integration", "export", "web"],
+    parser.add_argument("--only", choices=["units", "abi", "integration", "export", "web", "web-threads"],
                         help="run one layer")
     parser.add_argument("--build", action="store_true", help="rebuild the test binaries first")
     parser.add_argument("--engine", help="the Unreal checkout (default: UE_ROOT, then ../UnrealEngine)")
@@ -1664,6 +1684,8 @@ def main() -> None:
         run_export_vm(results, engine, godot)
     if args.only in (None, "web"):
         run_web(results, engine, godot)
+    if args.only in (None, "web-threads"):
+        run_web(results, engine, godot, threads=True)
 
     print()
     print(f"[run_tests] {results.passed} passed, {results.failed} failed, {len(results.skipped)} skipped")

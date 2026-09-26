@@ -474,3 +474,30 @@ interpreter's source is what the wall was for.
   `GetDiagnostic` text, which is a placeholder.
 - **Wording that is ours**, where the reference had none: the unbound-native stand-in, the
   interpreter's refusal sentences, the `VH_ERR_THREAD` sentence and the signal-reject sentences.
+
+### 14.8 Threads on the web
+
+Added 2026-09-25, after the exit. §13 left the threads template out unless M0 forced it; it did not,
+and threads is now a second supported web configuration beside W-4's nothreads one.
+
+- **It needed nothing but the build flag.** `scons platform=web threads=yes` builds
+  `godot-verse.wasm` with godot-cpp's own `-sUSE_PTHREADS=1 -sSIDE_MODULE=1`; em++ 4.0.11 warns
+  that a side module with pthreads is experimental, and it links. No change to `SConstruct`, `src/`
+  or `vm/` was needed. The module, `thread_local`s included (`verse_runtime.cpp`,
+  `verse_resource_format.cpp`, `vm_godot.cpp`), loads into 4.7.2's `web_dlink_release` template,
+  which reports "Emscripten 4.0.20, multi-threaded, GDExtension support". Only the main thread and
+  R-ASYNC-8's refused call ever run bridge code, so no test shows a `thread_local` read from a
+  worker.
+- **The page must be cross-origin isolated**, so it is served with COOP/COEP
+  (`run_web.py --coop-coep`). Nothing else about the export differs, and the export plugin needed no
+  change: it reads the `web` feature, never `nothreads`.
+- **R-ASYNC-8 is posed on the web for the first time.** A pool task runs on a real worker, the
+  interpreter's thread check (`on_init_thread`, under `__EMSCRIPTEN_PTHREADS__`) refuses it with the
+  `VH_ERR_THREAD` sentence, and `tests/integration` reaches the export layer's own 519/0/11 — the
+  `web-threads` layer in `run_tests.py`.
+- `dodge-the-creeps` passes 30 of 30 (`run_dtc_web.py --threads`) at the same frame times as
+  nothreads: median 16.60 ms, Verse 0.098 ms mean per frame against nothreads' 0.092.
+- Sizes: `godot-verse.wasm` 5,294,336 bytes against `godot-verse.nothreads.wasm`'s 5,247,324
+  (+0.9%).
+- The two variants compile `src/` and `vm/` to the same object paths, so switching `threads=`
+  recompiles both; SCons relinks only when the objects' content changed.
