@@ -34,6 +34,22 @@ jobs:
           python-version: "3.13"
       - run: python tools/run_tests.py --only units --build --fail-on-skip
 
+  # src/verse_keywords.h is generated too, but from the UE compiler's sources, which a runner
+  # cannot have; it is an input here rather than something checked.
+  generated:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - run: python tools/gen_verse_api.py --report /dev/null
+      - run: python tools/gen_vbc_ops.py --emit-cpp vm/vbc_ops.gen.h
+      - run: python tools/gen_vbc_writer.py
+      - run: git diff --exit-code --stat
+
   vm:
     runs-on: windows-latest
     steps:
