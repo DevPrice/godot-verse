@@ -10,8 +10,9 @@ game running at exactly real time, because in a browser the frame is paced to th
 no slowdown, which is what started this.
 
 This document is how the interpreter is measured now, what the code made obvious before anything
-was measured, what the measurements came to, and the ranking that follows from them. §3 and §4 are
-the part to read.
+was measured, what the measurements came to, the ranking that follows from them, and — in §5 — where
+it stands after the first three rows of that ranking were built. §5 is the current state; §3 is the
+interpreter as Phase 7.5 left it.
 
 ## 1. How it is measured
 
@@ -162,3 +163,56 @@ profile points there — none here does.
 Everything in rows 1–5 is inside `vm/`, so it is done the way Phase 7.5 was: from the spec, with the
 UE tree closed. Every one of them is a generic interpreter technique; none needs to know how Epic's
 VerseVM does it.
+
+## 5. After the work
+
+Rows 1, 2 and 3 of §4 were built on 2026-09-25, each by a clean-room agent and each its own commit:
+`46a5a49` (integers), `4623ad0` (the dispatch loop) and `bdffbd7` (allocation: a slab heap, a
+frame and an object each in one allocation, arguments on the stack, pooled bridge arenas). Rows 4, 5
+and 6 were not: row 4 risks rollback for 5%, row 5 was 3–5%, and row 6 would take stack hardening
+out of a binary that ships. Measured on the same machine as §3.
+
+### 5.1 The workloads
+
+Median microseconds of the call plus the tick after it, 20 timed calls. "Before" is §3.2.
+
+| Workload | vm before | vm after | speedup | wasm after | ue | vm/ue after |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `Empty` | 0.4 | 0.3 | — | 1.6 | 1.9 | 0.2× |
+| `IntArith` | 28,047 | 4,209 | 6.7× | 5,527 | 7,682 | 0.55× |
+| `Int64Arith` | 35,832 | 7,181 | 5.0× | 9,271 | 8,995 | 0.80× |
+| `FloatArith` | 22,125 | 3,659 | 6.0× | 5,191 | 6,595 | 0.55× |
+| `FunctionCalls` | 37,383 | 6,742 | 5.5× | 8,417 | 10,123 | 0.67× |
+| `MethodCalls` | 52,119 | 9,656 | 5.4× | 12,600 | 12,367 | 0.78× |
+| `SelfFields` | 26,287 | 5,059 | 5.2× | 6,534 | 8,208 | 0.62× |
+| `ObjectCreation` | 124,286 | 25,227 | 4.9× | 29,380 | 31,621 | 0.80× |
+| `VectorMath` | 301,301 | 67,108 | 4.5× | 66,780 | 60,123 | 1.12× |
+| `Bitwise` | 10,209 | 652 | 15.7× | 932 | 912 | 0.71× |
+| `Strings` | 4,832 | 1,142 | 4.2× | 1,845 | 7,332 | 0.16× |
+| `Arrays` | 3,107 | 1,442 | 2.2× | 1,542 | 3,399 | 0.42× |
+| `Maps` | 3,863 | 1,180 | 3.3× | 1,265 | 2,356 | 0.50× |
+| `GodotReads` | 21,750 | 8,226 | 2.6× | 9,431 | 11,875 | 0.69× |
+| `GodotWrites` | 49,872 | 29,292 | 1.7× | 27,949 | 73,025 | 0.40× |
+
+**The interpreter now runs Verse faster than the UE host on fourteen of the fifteen workloads**,
+where it was 3–5× slower; `VectorMath` is the one left, at 1.1×. The native build is ahead of the
+WebAssembly one again, by 1.0–1.6×, which is the order one would expect. `verse_vm_test --gc-bench`:
+a sweep of 65,536 dead cells fell from 1.8 ms to 0.23, of 262,144 from 8.2 ms to 0.87.
+
+### 5.2 `dodge-the-creeps`
+
+| Where | Median frame | Verse per frame, mean / max |
+| --- | ---: | ---: |
+| Windows export, UE host | 0.087 ms | 0.087 / 0.35 ms |
+| Windows export, interpreter | 0.033 ms (was 0.044) | 0.030 / 0.49 ms (was 0.049 / 0.45) |
+| Web export, headless Chrome | 16.6 ms, display-paced | 0.093 / 0.7 ms (was 0.11 / 0.7) |
+
+### 5.3 What is left
+
+The native profile after all three: `IntArith` is 99% `drive`, so arithmetic is now the dispatch
+loop itself and nothing around it. Where objects are involved, field lookup — `ClassLayout::find`
+and `load_field` — is now the largest single cost after dispatch: 16% of `MethodCalls`, 13% of
+`VectorMath`, 12% of `GodotWrites`. That promotes §4 row 5, the per-site field cache, to the next
+change worth making. After it, `GodotWrites` still pays for each deferred Godot write's shared
+pointer and `std::function` (`RtlAllocateHeap` at 8%), and a method load still makes a bound
+`FunctionCell` that only a liveness proof could remove — both small.
