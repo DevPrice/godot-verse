@@ -14,7 +14,7 @@ concurrency:
 
 env:
   EMSCRIPTEN_VERSION: 4.0.11
-  SCONS_VERSION: 4.9.1
+  SCONS_VERSION: 4.11.1
 
 jobs:
   units:
@@ -94,5 +94,9 @@ jobs:
         run: '"VERSE_EMSDK=$env:EMSDK" >> $env:GITHUB_ENV'
       - if: ${{ !matrix.web }}
         run: scons ${{ matrix.args }}
+      # godot-cpp falls back to MinGW when SCons cannot find MSVC, which would pass while testing
+      # a compiler no release is built with; only MSVC names its library .lib.
+      - if: ${{ !matrix.web }}
+        run: if (-not (Test-Path godot-cpp/bin/*.lib)) { throw "godot-cpp was not built with MSVC" }
       - if: matrix.web
         run: python tools/emsdk_env.py -- scons ${{ matrix.args }}

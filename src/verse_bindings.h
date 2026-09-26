@@ -1,6 +1,7 @@
 #ifndef VERSE_BINDINGS_H
 #define VERSE_BINDINGS_H
 
+#include <cstdint>
 #include <map>
 #include <set>
 #include <string>
