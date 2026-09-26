@@ -14,11 +14,17 @@ concurrency:
 
 env:
   EMSCRIPTEN_VERSION: 4.0.11
+  NDK_VERSION: r28b
   SCONS_VERSION: 4.11.1
 
 jobs:
   units:
-    runs-on: windows-latest
+    name: units (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -45,24 +51,42 @@ jobs:
       - run: python tools/build_verse_vm.py --wasm
 
   gdextension:
-    name: gdextension (${{ matrix.name }})
-    runs-on: windows-latest
+    name: ${{ matrix.config.platform }}-${{ matrix.config.arch }}${{ matrix.config.threads == 'no' && '-nothreads' || '' }} ${{ matrix.target }}
+    runs-on: ${{ matrix.config.os }}
     strategy:
       fail-fast: false
       matrix:
+        config:
+          - { platform: linux, arch: x86_64, os: ubuntu-latest }
+          - { platform: linux, arch: x86_32, os: ubuntu-latest }
+          - { platform: windows, arch: x86_64, os: windows-latest }
+          - { platform: windows, arch: x86_32, os: windows-latest }
+          - { platform: windows, arch: arm64, os: windows-latest }
+          - { platform: macos, arch: universal, os: macos-latest }
+          - { platform: android, arch: x86_64, os: ubuntu-latest }
+          - { platform: android, arch: x86_32, os: ubuntu-latest }
+          - { platform: android, arch: arm64, os: ubuntu-latest }
+          - { platform: android, arch: arm32, os: ubuntu-latest }
+          - { platform: ios, arch: arm64, os: macos-latest }
+          - { platform: web, arch: wasm32, os: ubuntu-latest, threads: "no" }
+          - { platform: web, arch: wasm32, os: ubuntu-latest, threads: "yes" }
+        target: [template_debug, template_release]
         include:
-          - name: editor
-            args: target=editor
-          - name: template_release
-            args: target=template_release
-          - name: web-nothreads
-            args: platform=web arch=wasm32 threads=no target=template_release
-            web: true
-          - name: web-threads
-            args: platform=web arch=wasm32 threads=yes target=template_release
-            web: true
+          - config: { platform: windows, arch: x86_64, os: windows-latest }
+            target: editor
+          - config: { platform: windows, arch: arm64, os: windows-11-arm }
+            target: editor
+          - config: { platform: linux, arch: x86_64, os: ubuntu-latest }
+            target: editor
+          - config: { platform: macos, arch: universal, os: macos-latest }
+            target: editor
     env:
       SCONS_CACHE: ${{ github.workspace }}/.scons-cache
+      BUILD: ${{ matrix.config.platform }}-${{ matrix.config.arch }}${{ matrix.config.threads == 'no' && '-nothreads' || '' }}-${{ matrix.target }}
+      SCONS_ARGS: platform=${{ matrix.config.platform }} arch=${{ matrix.config.arch }} target=${{ matrix.target }}${{ matrix.config.threads && format(' threads={0}', matrix.config.threads) || '' }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -71,30 +95,42 @@ jobs:
         with:
           python-version: "3.13"
       - run: python -m pip install scons==${{ env.SCONS_VERSION }}
-      - id: keys
-        run: '"godot-cpp=$(git rev-parse HEAD:godot-cpp)" >> $env:GITHUB_OUTPUT'
-      # The runner image is deliberately not in the key: it changes weekly, and SCons already makes
-      # each command's executable an implicit dependency, so a new cl.exe misses the cache on its
-      # own. emcc is a wrapper script that does not change between releases, hence its version.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - if: matrix.config.platform == 'linux' && matrix.config.arch == 'x86_32'
+        run: sudo apt-get update && sudo apt-get install -y g++-multilib
+      - if: matrix.config.platform == 'android'
+        id: ndk
+        uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779 # v1.6.0
         with:
-          path: ${{ env.SCONS_CACHE }}
-          key: scons-${{ matrix.name }}-emsdk${{ env.EMSCRIPTEN_VERSION }}-${{ steps.keys.outputs.godot-cpp }}-${{ hashFiles('SConstruct', 'src/**', 'vm/**', 'include/**') }}
-          restore-keys: |
-            scons-${{ matrix.name }}-emsdk${{ env.EMSCRIPTEN_VERSION }}-${{ steps.keys.outputs.godot-cpp }}-
-      - if: matrix.web
+          ndk-version: ${{ env.NDK_VERSION }}
+          link-to-sdk: true
+          local-cache: true
+      - if: matrix.config.platform == 'android'
+        run: echo "SCONS_ARGS=$SCONS_ARGS ndk_version=${{ steps.ndk.outputs.ndk-full-version }}" >> "$GITHUB_ENV"
+      - if: matrix.config.platform == 'web'
         uses: mymindstorm/setup-emsdk@4528d102f7230f0e7b276855c01ea1159be0e984 # v16
         with:
           version: ${{ env.EMSCRIPTEN_VERSION }}
           actions-cache-folder: .emsdk-cache
           cache-key: emsdk-${{ env.EMSCRIPTEN_VERSION }}-${{ runner.os }}-${{ runner.arch }}
-      - if: matrix.web
-        run: '"VERSE_EMSDK=$env:EMSDK" >> $env:GITHUB_ENV'
-      - if: ${{ !matrix.web }}
-        run: scons ${{ matrix.args }}
+      - id: keys
+        run: echo "godot-cpp=$(git rev-parse HEAD:godot-cpp)" >> "$GITHUB_OUTPUT"
+      # The runner image is deliberately not in the key: it changes weekly, and SCons already makes
+      # each command's executable an implicit dependency, so a new compiler misses the cache on its
+      # own. emcc is a wrapper script that does not change between releases, hence its version.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.SCONS_CACHE }}
+          key: scons-${{ env.BUILD }}-emsdk${{ env.EMSCRIPTEN_VERSION }}-${{ steps.keys.outputs.godot-cpp }}-${{ hashFiles('SConstruct', 'gdextension.py', 'src/**', 'vm/**', 'include/**') }}
+          restore-keys: |
+            scons-${{ env.BUILD }}-emsdk${{ env.EMSCRIPTEN_VERSION }}-${{ steps.keys.outputs.godot-cpp }}-
+      - if: matrix.config.platform != 'web'
+        run: scons $SCONS_ARGS
+      - if: matrix.config.platform == 'web'
+        run: python tools/emsdk_env.py -- scons $SCONS_ARGS
+        env:
+          VERSE_EMSDK: ${{ env.EMSDK }}
       # godot-cpp falls back to MinGW when SCons cannot find MSVC, which would pass while testing
       # a compiler no release is built with; only MSVC names its library .lib.
-      - if: ${{ !matrix.web }}
-        run: if (-not (Test-Path godot-cpp/bin/*.lib)) { throw "godot-cpp was not built with MSVC" }
-      - if: matrix.web
-        run: python tools/emsdk_env.py -- scons ${{ matrix.args }}
+      - if: matrix.config.platform == 'windows'
+        shell: pwsh
+        run: if (-not (Test-Path godot-cpp/bin/*.${{ matrix.config.arch }}.lib)) { throw "godot-cpp was not built with MSVC" }
