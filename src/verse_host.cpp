@@ -42,6 +42,7 @@ void VerseHostLibrary::clear_function_pointers() {
 	Shutdown = nullptr;
 	Tick = nullptr;
 	CompileProject = nullptr;
+	SetBindings = nullptr;
 	ResolveUnknownName = nullptr;
 	CheckProject = nullptr;
 	CheckProjectBegin = nullptr;
