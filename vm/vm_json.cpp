@@ -1,8 +1,14 @@
 #include "vm_json.h"
 
+#include <cerrno>
 #include <charconv>
+#include <clocale>
 #include <cmath>
+#include <cstdlib>
 #include <utility>
+#if defined(__APPLE__)
+#include <xlocale.h>
+#endif
 
 namespace vm {
 
@@ -10,6 +16,54 @@ namespace {
 
 // Deep enough for any sidecar, shallow enough that a hostile file cannot exhaust the native stack.
 constexpr int kMaxDepth = 256;
+
+// Android's libc++ deletes the floating-point from_chars and Apple's gates it on iOS 26, so both
+// take strtod. It must not see a comma-decimal locale the app set: Bionic has no such locale, and
+// elsewhere the C locale is named explicitly. Defining VM_JSON_STRTOD tests this path anywhere.
+#if defined(__ANDROID__) || defined(__APPLE__)
+#define VM_JSON_STRTOD
+#endif
+
+#if !defined(VM_JSON_STRTOD)
+
+// A magnitude past binary64 is result_out_of_range; the lexeme is kept either way.
+bool parse_double(const std::string &p_lexeme, double &r_value) {
+	const char *end = p_lexeme.data() + p_lexeme.size();
+	const std::from_chars_result result = std::from_chars(p_lexeme.data(), end, r_value);
+	if (result.ec == std::errc::result_out_of_range) {
+		r_value = p_lexeme[0] == '-' ? -HUGE_VAL : HUGE_VAL;
+		return true;
+	}
+	return result.ec == std::errc() && result.ptr == end;
+}
+
+#else
+
+double strtod_c(const char *p_text, char **r_end) {
+#if defined(__ANDROID__)
+	return std::strtod(p_text, r_end);
+#elif defined(_WIN32)
+	static const _locale_t c_locale = _create_locale(LC_ALL, "C");
+	return _strtod_l(p_text, r_end, c_locale);
+#else
+	static const locale_t c_locale = newlocale(LC_ALL_MASK, "C", locale_t(0));
+	return strtod_l(p_text, r_end, c_locale);
+#endif
+}
+
+// from_chars's result_out_of_range is a nonzero lexeme rounding to zero or infinity; strtod may also
+// flag a subnormal it returned, which from_chars accepts.
+bool parse_double(const std::string &p_lexeme, double &r_value) {
+	char *end = nullptr;
+	errno = 0;
+	r_value = strtod_c(p_lexeme.c_str(), &end);
+	if (errno == ERANGE && (r_value == 0.0 || std::isinf(r_value))) {
+		r_value = p_lexeme[0] == '-' ? -HUGE_VAL : HUGE_VAL;
+	}
+	return end == p_lexeme.data() + p_lexeme.size();
+}
+
+#endif
 
 class Parser {
 public:
@@ -379,11 +433,7 @@ private:
 		}
 		r_value.kind = JsonValue::Kind::Number;
 		r_value.text = std::string(text.substr(start, at - start));
-		const std::from_chars_result result = std::from_chars(text.data() + start, text.data() + at, r_value.number);
-		// A magnitude past binary64 is result_out_of_range; the lexeme is kept either way.
-		if (result.ec == std::errc::result_out_of_range) {
-			r_value.number = text[start] == '-' ? -HUGE_VAL : HUGE_VAL;
-		} else if (result.ec != std::errc() || result.ptr != text.data() + at) {
+		if (!parse_double(r_value.text, r_value.number)) {
 			return fail("invalid number");
 		}
 		offset = at;

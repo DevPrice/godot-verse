@@ -70,12 +70,24 @@ bool sub_overflows(int64_t p_left, int64_t p_right, int64_t &r_result) {
 }
 
 bool mul_overflows(int64_t p_left, int64_t p_right, int64_t &r_result) {
-#if defined(_MSC_VER) && !defined(__clang__)
+#if defined(__GNUC__) || defined(__clang__)
+	return __builtin_mul_overflow(p_left, p_right, &r_result);
+#elif defined(_M_X64)
 	int64_t high = 0;
 	r_result = _mul128(p_left, p_right, &high);
 	return high != (r_result >> 63);
+#elif defined(_M_ARM64)
+	r_result = int64_t(uint64_t(p_left) * uint64_t(p_right));
+	return __mulh(p_left, p_right) != (r_result >> 63);
 #else
-	return __builtin_mul_overflow(p_left, p_right, &r_result);
+	r_result = int64_t(uint64_t(p_left) * uint64_t(p_right));
+	if (p_left == 0) {
+		return false;
+	}
+	if (p_left == -1) {
+		return p_right == INT64_MIN;
+	}
+	return r_result / p_left != p_right;
 #endif
 }
 
