@@ -670,7 +670,7 @@ the editor and `export_check.gd` as an autoload in an export.
 | `docs/nonatomic-methods.md` | `tools/gen_verse_api.py` | same — R-AUD-3's list. Written by the pass that writes the mirror, so it cannot drift |
 | `src/verse_gd_api.gen.h` | `tools/gen_verse_api.py` | same — how every Godot name is spelled in the mirror and in which shape (value, failable, test), for the GDScript converter. Recorded where each member is emitted. Its `module_scope_names` (`VERSE_STDLIB_NAMES`) is also read by `src/verse_bindings.cpp`, so the bindings' enumerator-stripping guard is single-sourced from the same list |
 | `tests/verse_bindings/naming_vectors.txt` | `tools/gen_verse_api.py` | same — one (rule, input, expected) line per case for every naming rule `src/verse_bindings.cpp` ports from this file, read by `verse_bindings_test` (docs/generated-bindings.md §4, §10.9) |
-| `src/verse_keywords.h` | `tools/gen_verse_keywords.py` | the UE compiler's `ReservedSymbols.inl` |
+| `src/verse_keywords.h` | `tools/gen_verse_keywords.py` | the UE compiler's `ReservedSymbols.inl` and `VerseGrammar.h`. `--check` reports a stale header |
 | `host/Private/HostVbcOps.gen.h` | `tools/gen_vbc_writer.py` | `docs/web-vm/ops.json` — the cooker's per-op `.vbc` encoder, each op's size, may-park table and the schema digest the file is stamped with. `static_assert`s every opcode number against the engine's, so an engine bump that moved the op set fails to compile rather than writing a wrong file. `--check` reports a stale header |
 | `vm/vbc_ops.gen.h` | `tools/gen_vbc_ops.py --emit-cpp` | same — the interpreter's half of the same op schema: an enum class of opcodes, and per-op constexpr tables (name, emitted, may-park, yields, operand roles/kinds) the decoder reads instead of hand-maintaining a mirror of `ops.json`. Carries the same schema digest `HostVbcOps.gen.h` does, so a `.vbc` stamped by one engine commit and read on another is refused rather than misread |
 | `bin/host_build_id.gen.h` | `tools/build_host.py` | the staged host sources themselves — a digest of `host/` plus the ABI header, and the engine commit beside it — staged into the host's `Private/` and baked into every host binary, so a cooked sidecar and the host reading it can be told apart. A digest rather than `HEAD` so a doc commit does not invalidate three binaries. Not committed |
@@ -725,8 +725,10 @@ ten element types against four key types is not a list to maintain by hand.
 `CONST_OVERRIDES` in `gen_verse_api.py` is where Godot's `is_const` flag is missing rather than too
 broad, and nothing in it was judged: `tools/audit_const_overrides.py` reads the rows out of a Godot
 *source* checkout and takes a method only when its body is exactly `return <member>;`. Run it by
-hand against a newer Godot to revise the list; it needs `../godot`, which nothing else here does, so
-it is not in `run_tests.py`.
+hand with no `--check` against a newer Godot to revise the list; it needs `../godot`, which nothing
+else here does, so the revising run is not in `run_tests.py`. `--check` — which fails on any
+difference from `CONST_OVERRIDES` rather than printing rows to paste in — is, as the `contract`
+layer, and is skipped there when `../godot` is absent.
 
 ## Constraints that break things silently
 

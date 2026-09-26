@@ -12,6 +12,11 @@ needs a **Godot source checkout** that nothing else here requires:
 
 It prints rows ready to paste into `CONST_OVERRIDES`, and reports on stderr what it rejected.
 
+`--check` runs the same audit and instead fails on any difference from `gen_verse_api.py`'s
+`CONST_OVERRIDES` -- a row the audit now accepts that the table lacks, or a table row the audit no
+longer accepts -- which is what `tools/run_tests.py`'s `contract` layer calls when `../godot`
+exists (docs/architecture-review.md item 4 step 5).
+
 **The bar is deliberately strict, and the direction is deliberately one-sided.** A wrong `<reads>`
 claims more than it should and would let a mutation escape a rollback the label promised; a
 conservative `<transacts>` merely claims less than it could, which costs an author nothing but a
@@ -65,19 +70,13 @@ def read_tree(godot: Path):
     return cpp, headers
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--godot", default=str(REPO.parent / "godot"),
-                        help="A Godot *source* checkout (default: ../godot)")
-    parser.add_argument("--api", default=str(EXTENSION_API))
-    args = parser.parse_args()
-
-    godot = Path(args.godot)
-    if not (godot / "core").is_dir():
-        print(f"[audit] {godot} is not a Godot source checkout -- pass --godot", file=sys.stderr)
-        return 2
-
-    api = json.loads(Path(args.api).read_text(encoding="utf-8"))
+def compute_accepted(godot: Path, api: dict):
+    """Returns (kept, rejected, candidate_count): kept is (class, method, expr) for every
+    candidate the strict bar (see the module docstring) accepts, rejected is
+    (class, method, why) for the ones a trivial body was found for and refused, and
+    candidate_count is every non-const answering method the dump offered, whether or not a
+    trivial body was even found for it.
+    """
     candidates = [(c["name"], m["name"])
                   for c in api["classes"]
                   for m in (c.get("methods") or [])
@@ -107,11 +106,60 @@ def main() -> int:
             rejected.append((godot_class, method, "the name is declared virtual somewhere"))
         else:
             kept.append((godot_class, method, expr))
+    return kept, rejected, len(candidates)
+
+
+def check_against_const_overrides(kept) -> int:
+    """`--check`: docs/architecture-review.md item 4 step 5 -- re-run the audit and fail on any
+    difference from gen_verse_api.py's CONST_OVERRIDES, in either direction, rather than trusting
+    that the 127 rows pasted in from a past run are still exactly what today's engine would accept.
+    """
+    sys.path.insert(0, str(REPO / "tools"))
+    import gen_verse_api as g
+
+    audited = {(godot_class, method) for godot_class, method, _ in kept}
+    table = set(g.CONST_OVERRIDES)
+
+    missing_from_table = sorted(audited - table)
+    missing_from_audit = sorted(table - audited)
+    if not missing_from_table and not missing_from_audit:
+        print(f"[audit] --check: CONST_OVERRIDES matches ({len(table)} rows)", file=sys.stderr)
+        return 0
+
+    for godot_class, method in missing_from_table:
+        print(f"[audit] --check: {godot_class}.{method} is accepted but has no CONST_OVERRIDES row",
+              file=sys.stderr)
+    for godot_class, method in missing_from_audit:
+        print(f"[audit] --check: CONST_OVERRIDES row {godot_class}.{method} is no longer accepted",
+              file=sys.stderr)
+    return 1
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--godot", default=str(REPO.parent / "godot"),
+                        help="A Godot *source* checkout (default: ../godot)")
+    parser.add_argument("--api", default=str(EXTENSION_API))
+    parser.add_argument("--check", action="store_true",
+                        help="Compare the audit against gen_verse_api.py's CONST_OVERRIDES "
+                             "and fail on any difference, instead of printing rows to paste in")
+    args = parser.parse_args()
+
+    godot = Path(args.godot)
+    if not (godot / "core").is_dir():
+        print(f"[audit] {godot} is not a Godot source checkout -- pass --godot", file=sys.stderr)
+        return 2
+
+    api = json.loads(Path(args.api).read_text(encoding="utf-8"))
+    kept, rejected, candidate_count = compute_accepted(godot, api)
 
     print(f"[audit] {len(kept)} accepted, {len(rejected)} rejected, "
-          f"out of {len(candidates)} non-const answering methods", file=sys.stderr)
+          f"out of {candidate_count} non-const answering methods", file=sys.stderr)
     for godot_class, method, why in sorted(rejected):
         print(f"[audit]   rejected {godot_class}.{method}: {why}", file=sys.stderr)
+
+    if args.check:
+        return check_against_const_overrides(kept)
 
     for godot_class, method, expr in sorted(kept):
         print(f'    ("{godot_class}", "{method}"),  # return {expr};')
