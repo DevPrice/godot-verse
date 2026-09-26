@@ -1570,6 +1570,43 @@ def test_fmod_keeps_its_own_spelling():
     check("posmod keeps Verse's own", g.UTILITY_VERSE_SPELLINGS["posmod"], "Mod[X, Y]")
 
 
+def test_hand_tables_report_a_row_that_matches_nothing():
+    """check_hand_tables is what would say a CONST_OVERRIDES, PREDICATE_EXTRA, METHOD_RENAMES,
+    METHOD_DISPLACED, PREDICATE_EXCLUDE, FREE_FUNCTION_REPLACEMENTS, PROPERTY_RENAMES or
+    VERSE_AMBIGUOUS_MEMBER_NAMES row had stopped naming anything real, the way a renamed or removed
+    Godot class would leave it (docs/architecture-review.md item 4 step 5). Plants one bogus row,
+    confirms it is reported, then restores the module's real table so nothing else in this process
+    sees the plant.
+    """
+    import json
+
+    api = json.loads((REPO_ROOT / "godot-cpp" / "gdextension" / "extension_api-4-7.json")
+                     .read_text(encoding="utf-8"))
+
+    check_true("today's hand tables all match something real", g.check_hand_tables(api) == [])
+
+    original = g.CONST_OVERRIDES
+    try:
+        g.CONST_OVERRIDES = original | {("NoSuchClass", "no_such_method")}
+        problems = g.check_hand_tables(api)
+        check_true("a planted (class, method) row naming nothing real is reported",
+                   any(p.startswith("CONST_OVERRIDES: NoSuchClass.no_such_method")
+                       for p in problems))
+    finally:
+        g.CONST_OVERRIDES = original
+
+    original = g.PROPERTY_RENAMES
+    try:
+        g.PROPERTY_RENAMES = dict(original, NoSuchProperty="Whatever")
+        problems = g.check_hand_tables(api)
+        check_true("a planted flat-name row naming nothing real is reported",
+                   any("PROPERTY_RENAMES" in p and "NoSuchProperty" in p for p in problems))
+    finally:
+        g.PROPERTY_RENAMES = original
+
+    check_true("restoring the real tables leaves nothing reported", g.check_hand_tables(api) == [])
+
+
 def main():
     test_class_names()
     test_method_names()
@@ -1592,6 +1629,7 @@ def main():
     test_a_written_math_method_is_documented()
     test_a_hand_written_global_is_documented()
     test_fmod_keeps_its_own_spelling()
+    test_hand_tables_report_a_row_that_matches_nothing()
     test_enumerator_names_strip_their_shared_prefix()
     test_enums_drop_sentinels_and_aliases()
     test_a_property_takes_its_enum_from_the_getter()

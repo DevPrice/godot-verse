@@ -14,6 +14,7 @@ Epic's own libraries disambiguate their two `vector3` types.
 import argparse
 import json
 import re
+import sys
 from collections import Counter, defaultdict, namedtuple
 from pathlib import Path
 
@@ -1566,6 +1567,11 @@ class Coverage:
         # value. Appended where each is emitted, for `doc_map`'s reason: recomputed afterwards it
         # could spell a member differently from the mirror that actually carries it.
         self.convert_rows = []
+        # Set by record_math_skips, and asserted by render_skipped_header: the math skips (367
+        # methods, 261 operators) are the largest slice of skipped_members, and nothing but call
+        # order keeps them in it. Without the flag a reordered main() would render the header one
+        # pass early and silently drop them, the way they were silently missing before R-SCN-2.
+        self.math_skips_recorded = False
 
     def skip(self, reason: str, member: "SkippedMember | None" = None):
         self.skip_reasons[reason] += 1
@@ -1801,6 +1807,68 @@ CONST_OVERRIDES = frozenset([
     ("VisibleOnScreenEnabler3D", "get_enable_node_path"),  # return enable_node_path;
     ("XMLParser", "get_node_type"),  # return node_type;
 ])
+
+
+def check_hand_tables(api: dict) -> list[str]:
+    """Every hand-maintained table above keyed on a Godot name, checked against what `api` actually
+    declares. A Godot class or method gets renamed or removed and the row that named it keeps
+    compiling -- it just stops matching anything, silently (docs/architecture-review.md item 4
+    step 5). This is a structural check, not a trace of which branch a run took: `CONST_OVERRIDES`
+    row for a getter a property has since superseded is still a real Godot method and is not a
+    problem, exactly as its own header comment says most of the table is.
+
+    Returns one message per row that names nothing real; empty means every row still does.
+    """
+    classes_by_name = {c["name"]: c for c in api["classes"]}
+
+    def method_info(godot_class: str, method_name: str) -> dict | None:
+        c = classes_by_name.get(godot_class)
+        if c is None:
+            return None
+        return next((m for m in (c.get("methods") or []) if m["name"] == method_name), None)
+
+    def property_verse_names(godot_class: str) -> set:
+        c = classes_by_name.get(godot_class)
+        if c is None:
+            return set()
+        return {pascal_member_name(p["name"]) for p in (c.get("properties") or [])}
+
+    problems = []
+
+    def check_method_tables(table_name: str, keys) -> None:
+        for godot_class, method in sorted(keys):
+            if method_info(godot_class, method) is None:
+                problems.append(f"{table_name}: {godot_class}.{method} does not exist in the API")
+
+    check_method_tables("METHOD_RENAMES", METHOD_RENAMES)
+    check_method_tables("METHOD_DISPLACED", METHOD_DISPLACED)
+    check_method_tables("PREDICATE_EXCLUDE", PREDICATE_EXCLUDE)
+    check_method_tables("CONST_OVERRIDES", CONST_OVERRIDES)
+    check_method_tables("FREE_FUNCTION_REPLACEMENTS", FREE_FUNCTION_REPLACEMENTS)
+
+    for godot_class, method in sorted(PREDICATE_EXTRA):
+        info = method_info(godot_class, method)
+        if info is None:
+            problems.append(f"PREDICATE_EXTRA: {godot_class}.{method} does not exist in the API")
+        elif (info.get("return_value") or {}).get("type") != "bool":
+            problems.append(f"PREDICATE_EXTRA: {godot_class}.{method} no longer returns bool")
+
+    all_property_names = set()
+    all_method_names = set()
+    for c in api["classes"]:
+        all_property_names |= property_verse_names(c["name"])
+        all_method_names |= {verse_method_name(m["name"]) for m in (c.get("methods") or [])}
+
+    for name in sorted(PROPERTY_RENAMES):
+        if name not in all_property_names:
+            problems.append(f"PROPERTY_RENAMES: no Godot property maps to '{name}' any more")
+
+    for name in sorted(VERSE_AMBIGUOUS_MEMBER_NAMES):
+        if name not in all_property_names and name not in all_method_names:
+            problems.append(
+                f"VERSE_AMBIGUOUS_MEMBER_NAMES: no Godot member maps to '{name}' any more")
+
+    return problems
 
 
 def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members: set,
@@ -3425,10 +3493,18 @@ def render_nonatomic(api: dict, coverage: "Coverage", parent_map: dict, class_na
     return text
 
 
-def render_skipped_header(api: dict, skipped: list) -> str:
-    """One row per skipped member, sorted so a diff of the header reads as a diff of the API."""
+def render_skipped_header(api: dict, coverage: Coverage) -> str:
+    """One row per skipped member, sorted so a diff of the header reads as a diff of the API.
+
+    Requires record_math_skips to have already run: the math skips are the largest slice of
+    coverage.skipped_members, and coverage.math_skips_recorded is the data dependency that says so
+    rather than leaving the ordering to whoever calls the two of them.
+    """
+    assert coverage.math_skips_recorded, (
+        "render_skipped_header needs record_math_skips to have run first, or the math skips "
+        "(367 methods, 261 operators) are silently missing from the header")
     rows = sorted({(s.verse_class, s.verse_name, s.godot_class, s.godot_name, s.reason, s.detail)
-                   for s in skipped})
+                   for s in coverage.skipped_members})
     entries = "\n".join(
         '\t{ "%s", "%s", "%s", "%s", "%s", "%s" },' % row for row in rows)
     return SKIPPED_HEADER_TEMPLATE.format(
@@ -3704,6 +3780,8 @@ def record_math_skips(api: dict, coverage: Coverage, math_source: Path):
             coverage.skip("math_not_written", SkippedMember(
                 verse_class, f"operator'{symbol}'", godot_class, symbol, "math_operator_not_written",
                 detail))
+
+    coverage.math_skips_recorded = True
 
 
 def verse_builtin_type_name(godot_type: str | None) -> str | None:
@@ -4369,6 +4447,14 @@ def main() -> int:
 
     api = load_api(api_path)
 
+    # Before anything is generated: a hand table's row is a claim about this exact API, and a
+    # stale claim should stop the build rather than quietly generate as if the row were not there.
+    hand_table_problems = check_hand_tables(api)
+    if hand_table_problems:
+        for problem in hand_table_problems:
+            print(f"[gen_verse_api] error: {problem}", file=sys.stderr)
+        return 1
+
     # Before generation rather than during rendering: a typed array of objects is spelled with a
     # Variant::Type *number*, so resolving one needs the numbers, and TypeResolver runs first.
     check_variant_lanes(api)
@@ -4418,7 +4504,7 @@ def main() -> int:
 
     skipped_path = resolve(root, args.skipped_header)
     skipped_path.parent.mkdir(parents=True, exist_ok=True)
-    skipped_path.write_text(render_skipped_header(api, coverage.skipped_members),
+    skipped_path.write_text(render_skipped_header(api, coverage),
                             encoding="utf-8", newline="\n")
 
     nonatomic_path = resolve(root, args.nonatomic)
