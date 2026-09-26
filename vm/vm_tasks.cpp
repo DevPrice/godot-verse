@@ -195,7 +195,7 @@ Interpreter::Step Interpreter::call_task(const uint32_t *p_words) {
 		arguments.push_back(read(variadic_items(p_words[3])[index]));
 	}
 	FrameCell *body = nullptr;
-	const Step made = make_frame(function, function->self, arguments, {}, body);
+	const Step made = make_frame(function, function->self, arguments.data(), uint32_t(arguments.size()), {}, body);
 	if (made != Step::Next) {
 		return made;
 	}

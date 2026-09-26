@@ -26,16 +26,24 @@ namespace vm {
 const char *mirrored_godot_name(std::string_view p_verse_name);
 
 // A vh_arena whose allocations live until the next reset(): the storage a read answering into
-// host-owned memory builds its answer in.
+// host-owned memory builds its answer in. It bumps through blocks that double from small, and a
+// reset keeps the largest ordinary one, so an arena reused for like answers stops allocating.
 class HostArena : public vh_arena {
 public:
 	HostArena();
 	HostArena(const HostArena &) = delete;
 	HostArena &operator=(const HostArena &) = delete;
-	void reset() { blocks.clear(); }
+	void reset();
 
 private:
-	std::vector<std::unique_ptr<unsigned char[]>> blocks;
+	static constexpr size_t kMinBlockSize = 256;
+	static constexpr size_t kMaxBlockSize = 4096;
+	struct Block {
+		std::unique_ptr<unsigned char[]> bytes;
+		size_t size = 0;
+	};
+	std::vector<Block> blocks;
+	size_t used = 0;
 
 	static void *allocate(vh_arena *p_self, size_t p_size, size_t p_align);
 };

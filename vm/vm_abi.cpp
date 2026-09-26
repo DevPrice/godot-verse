@@ -470,19 +470,17 @@ int32_t vh_instance_call(vh_instance *Instance, const char *DecoratedName, const
 		interpreter.end_entry(false);
 		return VH_ERR_ARGUMENT;
 	}
-	std::vector<vm::Value> positional;
 	std::vector<vm::NamedArgument> named;
-	for (size_t index = 0; index < converted.size(); ++index) {
-		if (uint32_t(index) < positional_count || method == nullptr) {
-			positional.push_back(converted[index]);
-		} else {
+	if (method != nullptr && converted.size() > positional_count) {
+		for (size_t index = positional_count; index < converted.size(); ++index) {
 			named.push_back(vm::NamedArgument{ heap.intern(method->params[index].name), converted[index] });
 		}
+		converted.resize(positional_count);
 	}
 
 	vm::Value result;
 	vm::RootScope result_root(heap, &result);
-	const vm::Outcome outcome = interpreter.invoke(function, Instance->object, positional, named, result);
+	const vm::Outcome outcome = interpreter.invoke(function, Instance->object, converted, named, result);
 	if (outcome == vm::Outcome::Ok && OutResult != nullptr) {
 		vh_arena *arena = Arena != nullptr ? Arena : &g_runtime->result_arena(call_depth.depth);
 		vh_value wire = {};

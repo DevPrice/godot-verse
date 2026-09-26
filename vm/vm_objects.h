@@ -65,6 +65,12 @@ std::string_view unqualified_name(std::string_view p_name);
 // The first slot of p_layout, in visit order, whose unqualified name is p_name, or null.
 const LayoutField *find_slot_by_unqualified_name(const ClassLayout &p_layout, std::string_view p_name);
 
+// An object of no class yet with p_slots fresh, uncreated slots, in one allocation.
+ObjectCell *make_object(Heap &r_heap, size_t p_slots);
+
+// p_object's field names, index for index with its field_values.
+const std::vector<const NameCell *> &object_field_names(const ObjectCell *p_object);
+
 class Layouts {
 public:
 	const ClassLayout &get(const ClassCell *p_class);

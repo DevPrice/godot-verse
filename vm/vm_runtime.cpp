@@ -1,6 +1,8 @@
 #include "vm_runtime.h"
 
+#include <cstring>
 #include <string_view>
+#include <utility>
 
 #include "../src/verse_api_classes.h"
 #include "vm_file_reader.h"
@@ -261,14 +263,59 @@ HostArena::HostArena() {
 	Alloc = &HostArena::allocate;
 }
 
+void HostArena::reset() {
+	size_t kept = blocks.size();
+	for (size_t index = 0; index < blocks.size(); ++index) {
+		if (blocks[index].size <= kMaxBlockSize && (kept == blocks.size() || blocks[index].size > blocks[kept].size)) {
+			kept = index;
+		}
+	}
+	if (kept == blocks.size()) {
+		blocks.clear();
+	} else {
+		if (kept != 0) {
+			std::swap(blocks[0], blocks[kept]);
+		}
+		blocks.resize(1);
+	}
+	used = 0;
+}
+
 void *HostArena::allocate(vh_arena *p_self, size_t p_size, size_t p_align) {
 	HostArena *arena = static_cast<HostArena *>(p_self);
 	if (p_align == 0) {
 		p_align = 1;
 	}
-	arena->blocks.push_back(std::make_unique<unsigned char[]>(p_size + p_align));
-	const uintptr_t start = reinterpret_cast<uintptr_t>(arena->blocks.back().get());
-	return reinterpret_cast<void *>((start + p_align - 1) / p_align * p_align);
+	const auto fit = [arena, p_size, p_align]() -> void * {
+		const Block &block = arena->blocks.back();
+		const uintptr_t start = reinterpret_cast<uintptr_t>(block.bytes.get());
+		const uintptr_t aligned = (start + arena->used + p_align - 1) / p_align * p_align;
+		if (aligned + p_size > start + block.size) {
+			return nullptr;
+		}
+		arena->used = aligned + p_size - start;
+		// Every allocation reads as zeroes, as each did when it was a block of its own.
+		std::memset(reinterpret_cast<void *>(aligned), 0, p_size);
+		return reinterpret_cast<void *>(aligned);
+	};
+	if (!arena->blocks.empty()) {
+		if (void *memory = fit()) {
+			return memory;
+		}
+	}
+	size_t size = arena->blocks.empty() ? kMinBlockSize : arena->blocks.back().size * 2;
+	if (size > kMaxBlockSize) {
+		size = kMaxBlockSize;
+	}
+	if (size < p_size + p_align) {
+		size = p_size + p_align;
+	}
+	Block block;
+	block.bytes.reset(new unsigned char[size]);
+	block.size = size;
+	arena->blocks.push_back(std::move(block));
+	arena->used = 0;
+	return fit();
 }
 
 int32_t Runtime::default_field(const char *p_class, const char *p_name, const vh_value **r_value) {

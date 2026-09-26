@@ -891,9 +891,9 @@ Outcome Interpreter::drive() {
 	}
 }
 
-Interpreter::Step Interpreter::adapt(std::vector<Value> &r_arguments, uint32_t p_count) {
-	const size_t given = r_arguments.size();
-	if (given == p_count) {
+Interpreter::Step Interpreter::adapt(const Value *&r_arguments, uint32_t &r_count, uint32_t p_parameters, std::vector<Value> &r_spill) {
+	const uint32_t given = r_count;
+	if (given == p_parameters) {
 		return Step::Next;
 	}
 	// spec/calls.md §3, first matching row.
@@ -902,32 +902,36 @@ Interpreter::Step Interpreter::adapt(std::vector<Value> &r_arguments, uint32_t p
 		if (is_unbound(tuple)) {
 			return park();
 		}
-		if (is_cell_kind(tuple, CellKind::False) && p_count == 0) {
-			r_arguments.clear();
+		if (is_cell_kind(tuple, CellKind::False) && p_parameters == 0) {
+			r_count = 0;
 			return Step::Next;
 		}
-		if (!is_array_value(tuple) || cell_as<ArrayCell>(tuple)->length() != p_count) {
+		if (!is_array_value(tuple) || cell_as<ArrayCell>(tuple)->length() != p_parameters) {
 			return invariant("a tuple argument whose length is not the callee's parameter count");
 		}
 		const ArrayCell *array = cell_as<ArrayCell>(tuple);
-		std::vector<Value> elements;
-		elements.reserve(p_count);
+		r_spill.clear();
+		r_spill.reserve(p_parameters);
 		for (size_t index = 0; index < array->length(); ++index) {
-			elements.push_back(array->get(index));
+			r_spill.push_back(array->get(index));
 		}
-		r_arguments = std::move(elements);
+		r_arguments = r_spill.data();
+		r_count = p_parameters;
 		return Step::Next;
 	}
-	if (p_count == 1) {
-		const Value tuple = make_array(heap, r_arguments, false);
-		r_arguments.assign(1, tuple);
+	if (p_parameters == 1) {
+		const Value tuple = make_array(heap, std::vector<Value>(r_arguments, r_arguments + given), false);
+		r_spill.assign(1, tuple);
+		r_arguments = r_spill.data();
+		r_count = 1;
 		return Step::Next;
 	}
 	return invariant("an argument count the callee's parameter count cannot be reconciled with");
 }
 
-Interpreter::Step Interpreter::call_native(const NativeProcedureCell *p_native, Value p_self, std::vector<Value> &r_arguments, uint32_t p_dest) {
-	const Step adapted = adapt(r_arguments, p_native->positional_count);
+Interpreter::Step Interpreter::call_native(const NativeProcedureCell *p_native, Value p_self, const Value *p_arguments, uint32_t p_count, uint32_t p_dest) {
+	std::vector<Value> spill;
+	const Step adapted = adapt(p_arguments, p_count, p_native->positional_count, spill);
 	if (adapted != Step::Next) {
 		return adapted;
 	}
@@ -937,8 +941,8 @@ Interpreter::Step Interpreter::call_native(const NativeProcedureCell *p_native, 
 	call.interpreter = this;
 	call.procedure = p_native;
 	call.self = p_self;
-	call.arguments = r_arguments.data();
-	call.argument_count = uint32_t(r_arguments.size());
+	call.arguments = p_arguments;
+	call.argument_count = p_count;
 	const Outcome outcome = p_native->implementation(call);
 	if (unwinding != Outcome::Ok) {
 		append_frames(p_native);
@@ -966,10 +970,10 @@ Interpreter::Step Interpreter::call_native(const NativeProcedureCell *p_native, 
 	return invariant("arguments outside the contract of the native " + (p_native->decorated_name != nullptr ? p_native->decorated_name->text : std::string()));
 }
 
-Interpreter::Step Interpreter::enter(const FunctionCell *p_function, Value p_self, std::vector<Value> &r_arguments,
+Interpreter::Step Interpreter::enter(const FunctionCell *p_function, Value p_self, const Value *p_arguments, uint32_t p_count,
 		const std::vector<NamedArgument> &p_named, FrameCell *p_caller, uint32_t p_return_pc, uint32_t p_return_register) {
 	FrameCell *callee = nullptr;
-	const Step made = make_frame(p_function, p_self, r_arguments, p_named, callee);
+	const Step made = make_frame(p_function, p_self, p_arguments, p_count, p_named, callee);
 	if (made != Step::Next) {
 		return made;
 	}
@@ -981,23 +985,24 @@ Interpreter::Step Interpreter::enter(const FunctionCell *p_function, Value p_sel
 	return Step::Jumped;
 }
 
-Interpreter::Step Interpreter::make_frame(const FunctionCell *p_function, Value p_self, std::vector<Value> &r_arguments,
+Interpreter::Step Interpreter::make_frame(const FunctionCell *p_function, Value p_self, const Value *p_arguments, uint32_t p_count,
 		const std::vector<NamedArgument> &p_named, FrameCell *&r_frame) {
 	const ProcedureCell *procedure = static_cast<const ProcedureCell *>(p_function->callee);
-	const Step adapted = adapt(r_arguments, procedure->positional_count);
+	std::vector<Value> spill;
+	const Step adapted = adapt(p_arguments, p_count, procedure->positional_count, spill);
 	if (adapted != Step::Next) {
 		return adapted;
 	}
 	if (procedure->register_count < 2 + procedure->positional_count) {
 		return invariant("a procedure with fewer registers than its parameters need");
 	}
-	FrameCell *callee = heap.make<FrameCell>();
+	FrameCell *callee = heap.make_with_room<FrameCell>(procedure->register_count);
 	callee->procedure = procedure;
-	callee->registers.assign(procedure->register_count, Value::empty());
+	callee->registers.use_room(Heap::room_of(callee), procedure->register_count);
 	callee->registers[0] = p_self;
 	callee->registers[1] = p_function->parent != nullptr ? Value::from_cell(p_function->parent) : heap.false_value();
 	for (uint32_t index = 0; index < procedure->positional_count; ++index) {
-		callee->registers[2 + index] = r_arguments[index];
+		callee->registers[2 + index] = p_arguments[index];
 	}
 	// spec/calls.md §5.2: by interned-name identity, the first match wins, an unmatched parameter
 	// receives uninitialized.
@@ -1015,7 +1020,7 @@ Interpreter::Step Interpreter::make_frame(const FunctionCell *p_function, Value 
 	return Step::Next;
 }
 
-Interpreter::Step Interpreter::call(Value p_callee, Value p_self, bool p_with_self, std::vector<Value> &r_arguments,
+Interpreter::Step Interpreter::call(Value p_callee, Value p_self, bool p_with_self, const Value *p_arguments, uint32_t p_count,
 		const std::vector<NamedArgument> &p_named, uint32_t p_dest) {
 	if (is_cell_kind(p_callee, CellKind::Function)) {
 		const FunctionCell *function = cell_as<FunctionCell>(p_callee);
@@ -1031,28 +1036,28 @@ Interpreter::Step Interpreter::call(Value p_callee, Value p_self, bool p_with_se
 			if (is_unbound(self)) {
 				return park();
 			}
-			return call_native(static_cast<const NativeProcedureCell *>(function->callee), self, r_arguments, p_dest);
+			return call_native(static_cast<const NativeProcedureCell *>(function->callee), self, p_arguments, p_count, p_dest);
 		}
 		if (function->callee == nullptr || function->callee->kind != CellKind::Procedure) {
 			return invariant("a function with no procedure");
 		}
-		return enter(function, self, r_arguments, p_named, frame, pc + 1, p_dest);
+		return enter(function, self, p_arguments, p_count, p_named, frame, pc + 1, p_dest);
 	}
 	if (p_with_self) {
 		if (is_cell_kind(p_callee, CellKind::NativeProcedure)) {
-			return call_native(cell_as<NativeProcedureCell>(p_callee), p_self, r_arguments, p_dest);
+			return call_native(cell_as<NativeProcedureCell>(p_callee), p_self, p_arguments, p_count, p_dest);
 		}
 		return invariant("a CallWithSelf callee that is neither a function nor a native procedure");
 	}
 
-	if (r_arguments.size() != 1) {
+	if (p_count != 1) {
 		return invariant("a non-function callee given other than one argument");
 	}
 	// spec/ops.md §15.1 item 7: the step need not be concrete.
 	if (is_cell_kind(p_callee, CellKind::AccessorRef)) {
-		return unify_register(p_dest, accessor_reference(Value(), nullptr, cell_as<AccessorRefCell>(p_callee), r_arguments[0]));
+		return unify_register(p_dest, accessor_reference(Value(), nullptr, cell_as<AccessorRefCell>(p_callee), p_arguments[0]));
 	}
-	const Value argument = follow(r_arguments[0]);
+	const Value argument = follow(p_arguments[0]);
 	if (is_unbound(argument)) {
 		return park();
 	}
@@ -1256,7 +1261,7 @@ Interpreter::Step Interpreter::accessor_call(Value p_reference, bool p_setter, V
 	if (prepared != Step::Next) {
 		return prepared;
 	}
-	return call(function, Value(), false, arguments, {}, p_dest);
+	return call(function, Value(), false, arguments.data(), uint32_t(arguments.size()), {}, p_dest);
 }
 
 // spec/objects.md §9.2: of the native storage types, only int64 can refuse a Verse value.
@@ -1294,7 +1299,8 @@ Interpreter::Step Interpreter::unify_native_object(Value p_token, Value p_object
 			frame->setters_pc = pc;
 			frame->setters_run = next + 1;
 			frame->setters_token = p_token;
-			return enter(cell_as<FunctionCell>(function), cell_as<FunctionCell>(function)->self, arguments, {}, frame, pc, kNoRegister);
+			return enter(cell_as<FunctionCell>(function), cell_as<FunctionCell>(function)->self, arguments.data(), uint32_t(arguments.size()), {}, frame, pc,
+					kNoRegister);
 		}
 		frame->setters_pc = kNoRegister;
 		frame->setters_token = Value();
@@ -1305,8 +1311,7 @@ Interpreter::Step Interpreter::unify_native_object(Value p_token, Value p_object
 	if (actual->class_kind != ClassKind::Class || actual->blocks == nullptr) {
 		return Step::Next;
 	}
-	std::vector<Value> none;
-	return enter(actual->blocks, p_object, none, {}, frame, pc + 1, kNoRegister);
+	return enter(actual->blocks, p_object, nullptr, 0, {}, frame, pc + 1, kNoRegister);
 }
 
 bool Interpreter::resolve_method(Value p_object, const NameCell *p_name, Value &r_function) {
@@ -1332,7 +1337,8 @@ Outcome Interpreter::invoke(Value p_function, Value p_self, const std::vector<Va
 	}
 	const FunctionCell *function = cell_as<FunctionCell>(callee);
 	const Value self = function->self.is_uninitialized() ? p_self : function->self;
-	std::vector<Value> arguments = p_arguments;
+	const Value *const arguments = p_arguments.data();
+	const uint32_t count = uint32_t(p_arguments.size());
 
 	const Registers saved = save_registers();
 	frame = nullptr;
@@ -1343,7 +1349,7 @@ Outcome Interpreter::invoke(Value p_function, Value p_self, const std::vector<Va
 		const Marks native_marks = marks();
 		const Step step = is_unbound(follow(self))
 				? park()
-				: call_native(static_cast<const NativeProcedureCell *>(function->callee), follow(self), arguments, kNoRegister);
+				: call_native(static_cast<const NativeProcedureCell *>(function->callee), follow(self), arguments, count, kNoRegister);
 		restore_registers(saved);
 		if (step == Step::Next) {
 			r_result = native_result;
@@ -1354,7 +1360,7 @@ Outcome Interpreter::invoke(Value p_function, Value p_self, const std::vector<Va
 	}
 
 	FrameCell *entry = nullptr;
-	const Step step = make_frame(function, self, arguments, p_named, entry);
+	const Step step = make_frame(function, self, arguments, count, p_named, entry);
 	restore_registers(saved);
 	if (step != Step::Next) {
 		return step == Step::Fail ? Outcome::Fail : stop_outcome;
@@ -1755,17 +1761,24 @@ VM_NOINLINE Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const 
 					return park();
 				}
 			}
-			std::vector<Value> arguments;
+			constexpr uint32_t kInlineArguments = 8;
+			Value inline_arguments[kInlineArguments];
+			std::vector<Value> spilled;
 			const uint32_t count = variadic_count(w[2 + base]);
-			arguments.reserve(count);
+			Value *arguments = inline_arguments;
+			if (count > kInlineArguments) {
+				spilled.resize(count);
+				arguments = spilled.data();
+			}
 			for (uint32_t index = 0; index < count; ++index) {
-				arguments.push_back(read(variadic_items(w[2 + base])[index]));
+				arguments[index] = read(variadic_items(w[2 + base])[index]);
 			}
 			std::vector<NamedArgument> named;
 			const uint32_t named_count = variadic_count(w[3 + base]);
 			if (named_count != variadic_count(w[4 + base])) {
 				return invariant("named arguments and their values of different lengths");
 			}
+			named.reserve(named_count);
 			for (uint32_t index = 0; index < named_count; ++index) {
 				NamedArgument argument;
 				const Value name = constant(variadic_items(w[3 + base])[index]);
@@ -1774,7 +1787,7 @@ VM_NOINLINE Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const 
 				named.push_back(argument);
 			}
 			callee_may_yield = w[5 + base] != 0;
-			const Step step = call(callee, self, with_self, arguments, named, w[0]);
+			const Step step = call(callee, self, with_self, arguments, count, named, w[0]);
 			callee_may_yield = false;
 			return step;
 		}
@@ -1869,8 +1882,7 @@ VM_NOINLINE Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const 
 			const Value argument = read(w[2]);
 			if (is_cell_kind(ref, CellKind::Ref) && !cell_as<RefCell>(ref)->domain.is_uninitialized()) {
 				const Value domain = follow(cell_as<RefCell>(ref)->domain);
-				std::vector<Value> arguments = { argument };
-				return call(domain, Value(), false, arguments, {}, w[0]);
+				return call(domain, Value(), false, &argument, 1, {}, w[0]);
 			}
 			return unify_register(w[0], argument);
 		}
@@ -2108,7 +2120,7 @@ VM_NOINLINE Interpreter::Step Interpreter::execute(const DecodedOp &p_op, const 
 				return invariant("CreateField of a name " + name->text + " the object's layout does not have");
 			}
 			if (field->kind != FieldKind::Constant && !object->created[field->slot]) {
-				object->created[field->slot] = true;
+				object->created.set(field->slot);
 				return Step::Next;
 			}
 			pc = w[4];

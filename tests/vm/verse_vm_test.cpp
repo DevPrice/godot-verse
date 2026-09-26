@@ -3377,9 +3377,10 @@ void CollectorCases(Cases &r_cases) {
 
 		ObjectCell *lost_event = rig.heap.make<ObjectCell>();
 		const Value lost = rig.Enter(rig.listener, { rig.Inst(lost_event, rig.heap.make<RefCell>(Int(rig.heap, 0))) });
+		const bool lost_is_task = is_cell_kind(lost, CellKind::Task);
 		rig.heap.collect();
 		r_cases.check("gc: a suspended task in no group, awaiting an event nothing reaches, is collected with the event",
-				is_cell_kind(lost, CellKind::Task) && !rig.heap.owns(lost.as_cell()) && !rig.heap.owns(lost_event));
+				lost_is_task && !rig.heap.owns(lost.as_cell()) && !rig.heap.owns(lost_event));
 	}
 	{
 		GcRig rig;

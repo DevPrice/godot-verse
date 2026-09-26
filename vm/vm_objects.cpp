@@ -126,13 +126,21 @@ const ClassLayout &Layouts::get(const ClassCell *p_class) {
 	return *layout;
 }
 
+ObjectCell *make_object(Heap &r_heap, size_t p_slots) {
+	ObjectCell *object = r_heap.make_with_room<ObjectCell>(p_slots);
+	object->field_values.use_room(Heap::room_of(object), uint32_t(p_slots));
+	object->created.assign(p_slots, false);
+	return object;
+}
+
+const std::vector<const NameCell *> &object_field_names(const ObjectCell *p_object) {
+	return p_object->field_names.empty() && p_object->layout != nullptr ? p_object->layout->slot_names : p_object->field_names;
+}
+
 ObjectCell *Layouts::new_object(Heap &r_heap, const ClassLayout &p_layout) {
-	ObjectCell *object = r_heap.make<ObjectCell>();
+	ObjectCell *object = make_object(r_heap, p_layout.slot_names.size());
 	object->object_class = p_layout.layout_class;
 	object->layout = &p_layout;
-	object->field_names = p_layout.slot_names;
-	object->field_values.assign(p_layout.slot_names.size(), Value::empty());
-	object->created.assign(p_layout.slot_names.size(), false);
 	return object;
 }
 
@@ -170,8 +178,8 @@ void Layouts::lay_out_value_object(ObjectCell *r_object) {
 		}
 	}
 	r_object->layout = &layout;
-	r_object->field_names = layout.slot_names;
-	r_object->field_values = std::move(values);
+	r_object->field_names.clear();
+	r_object->field_values = values;
 	r_object->created.assign(layout.slot_names.size(), true);
 }
 

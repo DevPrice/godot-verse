@@ -1,7 +1,9 @@
 #pragma once
 
 #include <cstdint>
+#include <initializer_list>
 #include <memory>
+#include <new>
 #include <string>
 #include <utility>
 #include <vector>
@@ -61,6 +63,131 @@ enum class CellKind : uint8_t {
 
 const char *cell_kind_name(CellKind p_kind);
 
+// A cell's run of Values: in the room its cell was allocated with (Heap::make_with_room), or, once
+// it outgrows that or when the cell had none, in storage of its own. Pointers into it stay valid
+// until it grows.
+class ValueArray {
+public:
+	ValueArray() = default;
+	ValueArray(const ValueArray &) = delete;
+	ValueArray &operator=(const ValueArray &) = delete;
+	~ValueArray() {
+		if (owned) {
+			::operator delete(items);
+		}
+	}
+
+	ValueArray &operator=(std::initializer_list<Value> p_values) {
+		copy_from(p_values.begin(), p_values.size());
+		return *this;
+	}
+	ValueArray &operator=(const std::vector<Value> &p_values) {
+		copy_from(p_values.data(), p_values.size());
+		return *this;
+	}
+
+	// p_storage, room for p_capacity Values that lives as long as this array, becomes its storage,
+	// holding p_capacity empty Values.
+	void use_room(Value *p_storage, uint32_t p_capacity) {
+		for (uint32_t index = 0; index < p_capacity; ++index) {
+			new (p_storage + index) Value();
+		}
+		items = p_storage;
+		count = p_capacity;
+		capacity = p_capacity;
+	}
+
+	size_t size() const { return count; }
+	bool empty() const { return count == 0; }
+	Value *data() { return items; }
+	const Value *data() const { return items; }
+	Value &operator[](size_t p_index) { return items[p_index]; }
+	const Value &operator[](size_t p_index) const { return items[p_index]; }
+	Value *begin() { return items; }
+	Value *end() { return items + count; }
+	const Value *begin() const { return items; }
+	const Value *end() const { return items + count; }
+
+	void clear() { count = 0; }
+	void push_back(Value p_value) {
+		reserve(size_t(count) + 1);
+		items[count++] = p_value;
+	}
+	void resize(size_t p_count) { assign_tail(p_count, Value::empty()); }
+	void assign(size_t p_count, Value p_value) {
+		count = 0;
+		assign_tail(p_count, p_value);
+	}
+	void reserve(size_t p_capacity) {
+		if (p_capacity <= capacity) {
+			return;
+		}
+		size_t grown = size_t(capacity) * 2;
+		if (grown < p_capacity) {
+			grown = p_capacity < 4 ? 4 : p_capacity;
+		}
+		Value *moved = static_cast<Value *>(::operator new(grown * sizeof(Value)));
+		for (uint32_t index = 0; index < count; ++index) {
+			new (moved + index) Value(items[index]);
+		}
+		if (owned) {
+			::operator delete(items);
+		}
+		items = moved;
+		capacity = uint32_t(grown);
+		owned = true;
+	}
+
+private:
+	Value *items = nullptr;
+	uint32_t count = 0;
+	uint32_t capacity = 0;
+	bool owned = false;
+
+	void assign_tail(size_t p_count, Value p_value) {
+		reserve(p_count);
+		for (size_t index = count; index < p_count; ++index) {
+			new (items + index) Value(p_value);
+		}
+		count = uint32_t(p_count);
+	}
+	void copy_from(const Value *p_values, size_t p_count) {
+		count = 0;
+		reserve(p_count);
+		for (size_t index = 0; index < p_count; ++index) {
+			new (items + index) Value(p_values[index]);
+		}
+		count = uint32_t(p_count);
+	}
+};
+
+// CreateField's per-slot marks (spec/objects.md §7.3): a word for up to 64 slots, a vector past it.
+class SlotMarks {
+public:
+	bool operator[](size_t p_index) const {
+		return large.empty() ? ((small >> p_index) & 1) != 0 : bool(large[p_index]);
+	}
+	void set(size_t p_index) {
+		if (large.empty()) {
+			small |= uint64_t(1) << p_index;
+		} else {
+			large[p_index] = true;
+		}
+	}
+	void assign(size_t p_count, bool p_value) {
+		if (p_count <= 64) {
+			large.clear();
+			small = p_value ? (p_count == 64 ? ~uint64_t(0) : (uint64_t(1) << p_count) - 1) : 0;
+		} else {
+			large.assign(p_count, p_value);
+		}
+	}
+
+private:
+	uint64_t small = 0;
+	std::vector<bool> large;
+};
+
 // What a collector hands every cell: each Value and each cell pointer the cell holds. The heap
 // never moves a cell, so both are passed by value.
 class CellVisitor {
@@ -77,6 +204,11 @@ public:
 			visit(value);
 		}
 	}
+	void visit(const ValueArray &p_values) {
+		for (Value value : p_values) {
+			visit(value);
+		}
+	}
 };
 
 struct Cell {
@@ -84,6 +216,10 @@ struct Cell {
 	// A tenured cell (Heap::tenure) reads marked from then on, so a weak table's sweep keeps it.
 	bool marked = false;
 	bool tenured = false;
+	// Where the heap got the cell's memory: its own business.
+	static constexpr uint32_t kUnpooled = 0xFFFFFFFFu;
+	uint8_t size_class = 0;
+	uint32_t slab = kUnpooled;
 	Cell *next_allocated = nullptr;
 
 	explicit Cell(CellKind p_kind) :
@@ -495,13 +631,15 @@ struct NativeState {
 // A struct value or a VM-level class instance: format.md's `value object`, and what NewObject makes.
 // Fields are the object's slots, in its layout's slot order (vm_objects.h); `created` is
 // CreateField's per-slot mark. A value object the loader built has no layout until
-// lay_out_value_object gives it one, and its fields are the file's.
+// lay_out_value_object gives it one, and its fields are the file's. A laid-out object leaves
+// `field_names` empty and its layout's slot names stand for them, so read the names through
+// object_field_names (vm_objects.h).
 struct ObjectCell : Cell {
 	const ClassCell *object_class = nullptr;
 	std::vector<const NameCell *> field_names;
-	std::vector<Value> field_values;
+	ValueArray field_values;
 	const ClassLayout *layout = nullptr;
-	std::vector<bool> created;
+	SlotMarks created;
 	std::unique_ptr<NativeState> native_state;
 
 	ObjectCell() :
@@ -662,7 +800,7 @@ constexpr uint32_t kNoRegister = 0xFFFFFFFFu;
 // no caller returns to whoever started the run.
 struct FrameCell : Cell {
 	const ProcedureCell *procedure = nullptr;
-	std::vector<Value> registers;
+	ValueArray registers;
 	FrameCell *caller = nullptr;
 	uint32_t return_pc = 0;
 	uint32_t return_register = kNoRegister;

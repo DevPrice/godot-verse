@@ -5,6 +5,7 @@
 #include "vm_cell.h"
 #include "vm_equality.h"
 #include "vm_number.h"
+#include "vm_objects.h"
 
 namespace vm {
 
@@ -189,19 +190,19 @@ Outcome melt_value(Heap &r_heap, Value p_value, Value &r_result) {
 			if (!source->is_struct()) {
 				break;
 			}
-			ObjectCell *copy = r_heap.make<ObjectCell>();
+			ObjectCell *copy = make_object(r_heap, source->field_values.size());
 			copy->object_class = source->object_class;
 			copy->field_names = source->field_names;
 			copy->layout = source->layout;
 			copy->created = source->created;
-			for (Value field : source->field_values) {
+			for (size_t index = 0; index < source->field_values.size(); ++index) {
 				Value melted;
-				const Outcome outcome = melt_value(r_heap, field, melted);
+				const Outcome outcome = melt_value(r_heap, source->field_values[index], melted);
 				if (outcome != Outcome::Ok) {
 					r_result = melted;
 					return outcome;
 				}
-				copy->field_values.push_back(melted);
+				copy->field_values[index] = melted;
 			}
 			r_result = Value::from_cell(copy);
 			return Outcome::Ok;
@@ -276,18 +277,18 @@ Outcome freeze_value(Heap &r_heap, Value p_value, Value &r_result) {
 			if (!source->is_struct()) {
 				break;
 			}
-			ObjectCell *copy = r_heap.make<ObjectCell>();
+			ObjectCell *copy = make_object(r_heap, source->field_values.size());
 			copy->object_class = source->object_class;
 			copy->field_names = source->field_names;
 			copy->layout = source->layout;
 			copy->created = source->created;
-			for (Value field : source->field_values) {
+			for (size_t index = 0; index < source->field_values.size(); ++index) {
 				Value frozen;
-				const Outcome outcome = freeze_value(r_heap, field, frozen);
+				const Outcome outcome = freeze_value(r_heap, source->field_values[index], frozen);
 				if (outcome != Outcome::Ok) {
 					return outcome;
 				}
-				copy->field_values.push_back(frozen);
+				copy->field_values[index] = frozen;
 			}
 			r_result = Value::from_cell(copy);
 			return Outcome::Ok;

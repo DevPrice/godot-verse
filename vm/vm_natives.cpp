@@ -455,8 +455,9 @@ bool find_field(Value p_object, const char *p_name, Value &r_value) {
 		return false;
 	}
 	const ObjectCell *cell = cell_as<ObjectCell>(object);
-	for (size_t index = 0; index < cell->field_names.size(); ++index) {
-		if (cell->field_names[index] != nullptr && field_name_matches(cell->field_names[index]->text, p_name)) {
+	const std::vector<const NameCell *> &names = object_field_names(cell);
+	for (size_t index = 0; index < names.size(); ++index) {
+		if (names[index] != nullptr && field_name_matches(names[index]->text, p_name)) {
 			r_value = follow(read_slot(cell->field_values[index]));
 			return true;
 		}
@@ -488,7 +489,7 @@ void set_layout_field(ObjectCell *r_object, const ClassLayout &p_layout, const c
 	for (const LayoutField &field : p_layout.fields) {
 		if (field.kind != FieldKind::Constant && field.name != nullptr && field_name_matches(field.name->text, p_name)) {
 			r_object->field_values[field.slot] = p_value;
-			r_object->created[field.slot] = true;
+			r_object->created.set(field.slot);
 			return;
 		}
 	}

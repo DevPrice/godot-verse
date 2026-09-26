@@ -197,15 +197,30 @@ std::string reject_reason(int32_t p_reject, const std::string &p_detail) {
 	}
 }
 
+// The arenas of the Godot calls in flight, one per nesting level and kept once made, so a call
+// reuses the storage of the last call at its depth.
+thread_local std::vector<std::unique_ptr<HostArena>> t_call_arenas;
+thread_local size_t t_call_depth = 0;
+
 class ScopedArena {
 public:
-	ScopedArena() :
-			arena(std::make_unique<HostArena>()) {}
-	vh_arena *get() { return arena.get(); }
+	ScopedArena() {
+		if (t_call_arenas.size() == t_call_depth) {
+			t_call_arenas.push_back(std::make_unique<HostArena>());
+		}
+		arena = t_call_arenas[t_call_depth++].get();
+	}
+	~ScopedArena() {
+		arena->reset();
+		--t_call_depth;
+	}
+	ScopedArena(const ScopedArena &) = delete;
+	ScopedArena &operator=(const ScopedArena &) = delete;
+	vh_arena *get() { return arena; }
 	HostArena &host() { return *arena; }
 
 private:
-	std::unique_ptr<HostArena> arena;
+	HostArena *arena = nullptr;
 };
 
 // Wire arguments that outlive the native that built them, for a write deferred to commit.
@@ -238,6 +253,7 @@ void GodotBridge::visit_roots(CellVisitor &r_visitor) const {
 	for (const auto &entry : awaits) {
 		r_visitor.visit(entry.second.signal);
 	}
+	r_visitor.visit(empty_text);
 }
 
 void GodotBridge::bind_program() {
@@ -313,7 +329,7 @@ Value GodotBridge::definition(const std::string &p_path) const {
 }
 
 const SidecarMethodTypes *GodotBridge::method_types(std::string_view p_decorated) const {
-	const auto found = types_by_method.find(std::string(p_decorated));
+	const auto found = types_by_method.find(p_decorated);
 	return found == types_by_method.end() ? nullptr : found->second;
 }
 
@@ -392,7 +408,7 @@ Value GodotBridge::make_variant(const VariantLanes &p_lanes) {
 	const auto set = [object](int32_t p_slot, Value p_value) {
 		if (p_slot >= 0) {
 			object->field_values[size_t(p_slot)] = p_value;
-			object->created[size_t(p_slot)] = true;
+			object->created.set(size_t(p_slot));
 		}
 	};
 	set(variant_slots[0], make_int(heap, p_lanes.tag));
@@ -403,7 +419,14 @@ Value GodotBridge::make_variant(const VariantLanes &p_lanes) {
 	for (int32_t index = 0; index < 16; ++index) {
 		set(variant_slots[6 + index], Value::from_float(p_lanes.f[index]));
 	}
-	set(variant_slots[kLaneText], make_string(heap, p_lanes.text));
+	if (p_lanes.text.empty()) {
+		if (empty_text.is_empty()) {
+			empty_text = make_string(heap, {});
+		}
+		set(variant_slots[kLaneText], empty_text);
+	} else {
+		set(variant_slots[kLaneText], make_string(heap, p_lanes.text));
+	}
 	return Value::from_cell(object);
 }
 
@@ -658,7 +681,7 @@ Value GodotBridge::struct_from_leaves(int32_t p_tag, const std::vector<double> &
 			return Value::empty();
 		}
 		*slot = value;
-		object->created[size_t(slot - object->field_values.data())] = true;
+		object->created.set(size_t(slot - object->field_values.data()));
 	}
 	return Value::from_cell(object);
 }
@@ -719,7 +742,7 @@ Value GodotBridge::wrap_reference(int64_t p_tag, int64_t p_ref) {
 	ObjectCell *object = interpreter.layouts.new_object(heap, interpreter.layouts.get(wrapper));
 	for (size_t index = 0; index < object->field_values.size(); ++index) {
 		object->field_values[index] = Value::from_int32(0);
-		object->created[index] = true;
+		object->created.set(index);
 	}
 	Value *slot = field_slot(object, "Ref");
 	if (slot == nullptr) {
@@ -815,7 +838,7 @@ bool GodotBridge::user_struct_from_fields(const SidecarMemberType &p_type, const
 		for (const LayoutField &entry : layout.fields) {
 			if (entry.kind == FieldKind::Slot && entry.name != nullptr && entry.name->text == p_type.field_keys[index]) {
 				object->field_values[entry.slot] = field;
-				object->created[entry.slot] = true;
+				object->created.set(entry.slot);
 				stored = true;
 				break;
 			}
@@ -827,15 +850,15 @@ bool GodotBridge::user_struct_from_fields(const SidecarMemberType &p_type, const
 				return false;
 			}
 			*slot = field;
-			object->created[size_t(slot - object->field_values.data())] = true;
+			object->created.set(size_t(slot - object->field_values.data()));
 		}
 	}
 	for (size_t index = 0; index < object->field_values.size(); ++index) {
 		if (!object->created[index]) {
-			const LayoutField *entry = layout.find(object->field_names[index]);
+			const LayoutField *entry = layout.find(object_field_names(object)[index]);
 			if (entry != nullptr && !entry->value.is_uninitialized()) {
 				object->field_values[index] = entry->value;
-				object->created[index] = true;
+				object->created.set(index);
 			}
 		}
 	}
@@ -887,7 +910,7 @@ bool GodotBridge::wire_to_member(const vh_value &p_wire, const SidecarMemberType
 			return false;
 		}
 		*slot = make_int(heap, wire_int(p_wire));
-		object->created[size_t(slot - object->field_values.data())] = true;
+		object->created.set(size_t(slot - object->field_values.data()));
 		r_value = Value::from_cell(object);
 		return true;
 	}

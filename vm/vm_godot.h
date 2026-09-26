@@ -218,10 +218,12 @@ private:
 	std::unordered_map<std::string, const EnumerationCell *> enumerations;
 	std::unordered_map<std::string, const ClassCell *> classes_by_path;
 	std::unordered_map<std::string, Value> definitions;
-	std::unordered_map<std::string, const SidecarMethodTypes *> types_by_method;
+	std::unordered_map<std::string, const SidecarMethodTypes *, TextHash, std::equal_to<>> types_by_method;
 	std::unordered_map<int64_t, const ClassCell *> handle_classes;
 	std::map<std::pair<const void *, std::string>, int32_t> slot_cache;
 	int32_t variant_slots[23] = {};
+	// Strings compare by content, so every variant with no text can hold this one immutable cell.
+	Value empty_text;
 
 	int64_t next_id = 1;
 	std::unordered_map<int64_t, SignalBinding> bindings;

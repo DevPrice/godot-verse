@@ -365,14 +365,17 @@ private:
 	Step not_yet(const std::string &p_what);
 	void capture_frames(const NativeProcedureCell *p_native);
 
-	Step call(Value p_callee, Value p_self, bool p_with_self, std::vector<Value> &r_arguments,
+	// A call's positional arguments are p_count Values at p_arguments, which the callee only reads.
+	Step call(Value p_callee, Value p_self, bool p_with_self, const Value *p_arguments, uint32_t p_count,
 			const std::vector<NamedArgument> &p_named, uint32_t p_dest);
-	Step call_native(const NativeProcedureCell *p_native, Value p_self, std::vector<Value> &r_arguments, uint32_t p_dest);
-	Step make_frame(const FunctionCell *p_function, Value p_self, std::vector<Value> &r_arguments,
+	Step call_native(const NativeProcedureCell *p_native, Value p_self, const Value *p_arguments, uint32_t p_count, uint32_t p_dest);
+	Step make_frame(const FunctionCell *p_function, Value p_self, const Value *p_arguments, uint32_t p_count,
 			const std::vector<NamedArgument> &p_named, FrameCell *&r_frame);
-	Step enter(const FunctionCell *p_function, Value p_self, std::vector<Value> &r_arguments,
+	Step enter(const FunctionCell *p_function, Value p_self, const Value *p_arguments, uint32_t p_count,
 			const std::vector<NamedArgument> &p_named, FrameCell *p_caller, uint32_t p_return_pc, uint32_t p_return_register);
-	Step adapt(std::vector<Value> &r_arguments, uint32_t p_count);
+	// spec/calls.md §3: points r_arguments and r_count at the arguments reconciled with p_parameters,
+	// which are the given ones or, when they had to be spread or packed, r_spill's.
+	Step adapt(const Value *&r_arguments, uint32_t &r_count, uint32_t p_parameters, std::vector<Value> &r_spill);
 
 	Step type_test(Value p_type, Value p_value, bool &r_admits);
 	Step load_field(Value p_object, const NameCell *p_name, Value &r_result);

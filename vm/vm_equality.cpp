@@ -70,8 +70,9 @@ uint64_t hash_int(const BigInt &p_value) {
 
 // What p_object holds for p_name: its slot, or else its layout's constant.
 bool field_value(const ObjectCell *p_object, const NameCell *p_name, Value &r_value) {
-	for (size_t i = 0; i < p_object->field_names.size(); ++i) {
-		if (p_object->field_names[i] == p_name) {
+	const std::vector<const NameCell *> &names = object_field_names(p_object);
+	for (size_t i = 0; i < names.size(); ++i) {
+		if (names[i] == p_name) {
 			r_value = read_slot(p_object->field_values[i]);
 			return true;
 		}
@@ -87,8 +88,20 @@ bool field_value(const ObjectCell *p_object, const NameCell *p_name, Value &r_va
 // spec/objects.md §10.2: field by field and by name, whether each side holds the field in a slot or
 // as its class's constant. A name neither side stores is a constant of the one class both share.
 Equality struct_equal(const ObjectCell *p_left, const ObjectCell *p_right, PlaceholderMeeter *p_meeter) {
+	// Two objects laid out alike hold the same names in the same slots, so the walk below would
+	// compare slot i with slot i, twice.
+	if (p_left->layout != nullptr && p_left->layout == p_right->layout && p_left->field_names.empty() && p_right->field_names.empty() &&
+			p_left->field_values.size() == p_right->field_values.size()) {
+		for (size_t i = 0; i < p_left->field_values.size(); ++i) {
+			const Equality field = values_equal(read_slot(p_left->field_values[i]), read_slot(p_right->field_values[i]), p_meeter);
+			if (field != Equality::Eq) {
+				return field;
+			}
+		}
+		return Equality::Eq;
+	}
 	for (const ObjectCell *named : { p_left, p_right }) {
-		for (const NameCell *name : named->field_names) {
+		for (const NameCell *name : object_field_names(named)) {
 			Value left;
 			Value right;
 			if (!field_value(p_left, name, left) || !field_value(p_right, name, right)) {
@@ -312,8 +325,9 @@ uint64_t hash_key(Value p_value) {
 			}
 			// A sum, so field order -- which differs between layouts of one struct -- does not matter.
 			uint64_t fields = 0;
-			for (size_t i = 0; i < object->field_names.size(); ++i) {
-				fields += combine(uint64_t(reinterpret_cast<uintptr_t>(object->field_names[i])), hash_key(object->field_values[i]));
+			const std::vector<const NameCell *> &names = object_field_names(object);
+			for (size_t i = 0; i < names.size(); ++i) {
+				fields += combine(uint64_t(reinterpret_cast<uintptr_t>(names[i])), hash_key(object->field_values[i]));
 			}
 			return combine(combine(SEED_STRUCT, uint64_t(reinterpret_cast<uintptr_t>(object->object_class))), fields);
 		}

@@ -78,17 +78,98 @@ Heap::~Heap() {
 	Cell *cell = first_allocated;
 	while (cell != nullptr) {
 		Cell *next = cell->next_allocated;
-		delete cell;
+		release(cell);
 		cell = next;
+	}
+	for (Slab &slab : slabs) {
+		::operator delete(slab.memory);
+	}
+}
+
+void Heap::new_slab() {
+	uint32_t id;
+	if (!spare_slabs.empty()) {
+		id = spare_slabs.back();
+		spare_slabs.pop_back();
+	} else {
+		id = uint32_t(slabs.size());
+		slabs.emplace_back();
+	}
+	slabs[id].memory = static_cast<char *>(::operator new(kSlabBytes));
+	carve_slab = id;
+	carve_used = 0;
+}
+
+void Heap::release(Cell *p_cell) {
+	const uint32_t id = p_cell->slab;
+	const uint8_t size_class = p_cell->size_class;
+	p_cell->~Cell();
+	if (id == Cell::kUnpooled) {
+		::operator delete(p_cell);
+		return;
+	}
+	--slabs[id].live;
+	Pool &pool = pools[size_class];
+	FreeBlock *block = reinterpret_cast<FreeBlock *>(p_cell);
+	block->next = pool.free;
+	block->slab = id;
+	pool.free = block;
+	++pool.cached;
+}
+
+void Heap::trim_pools() {
+	size_t cached_bytes = 0;
+	size_t demand_bytes = 0;
+	for (size_t index = 0; index < kPooledClasses; ++index) {
+		cached_bytes += pools[index].cached * (index + 1) * kGrain;
+		demand_bytes += pools[index].demand * (index + 1) * kGrain;
+		pools[index].demand = 0;
+	}
+	// Unlinking a slab's blocks walks every free list, so it is done only when there is well over
+	// what the next cycle is likely to want, and only when an eighth of it or more goes back.
+	if (cached_bytes < 2 * demand_bytes + kReleaseFloorBytes) {
+		return;
+	}
+	size_t released_bytes = 0;
+	std::vector<uint32_t> released;
+	for (uint32_t id = 0; id < slabs.size(); ++id) {
+		const Slab &slab = slabs[id];
+		if (slab.memory == nullptr || slab.live != 0 || id == carve_slab || cached_bytes - released_bytes - slab.carved < demand_bytes) {
+			continue;
+		}
+		released_bytes += slab.carved;
+		released.push_back(id);
+	}
+	if (released_bytes < kReleaseFloorBytes || released_bytes * 8 < cached_bytes) {
+		return;
+	}
+	for (uint32_t id : released) {
+		slabs[id].releasing = true;
+	}
+	for (Pool &pool : pools) {
+		FreeBlock **link = &pool.free;
+		while (*link != nullptr) {
+			if (slabs[(*link)->slab].releasing) {
+				*link = (*link)->next;
+				--pool.cached;
+			} else {
+				link = &(*link)->next;
+			}
+		}
+	}
+	for (uint32_t id : released) {
+		::operator delete(slabs[id].memory);
+		slabs[id] = Slab();
+		spare_slabs.push_back(id);
 	}
 }
 
 const NameCell *Heap::intern(std::string_view p_text) {
-	std::string key(p_text);
-	auto found = interned.find(key);
+	const auto found = interned.find(p_text);
 	if (found != interned.end()) {
 		return found->second;
 	}
+	std::string key(p_text);
 	const NameCell *name = make<NameCell>(key);
 	interned.emplace(std::move(key), name);
 	untenured_names.push_back(name);
@@ -96,7 +177,7 @@ const NameCell *Heap::intern(std::string_view p_text) {
 }
 
 const NameCell *Heap::find_interned(std::string_view p_text) const {
-	const auto found = interned.find(std::string(p_text));
+	const auto found = interned.find(p_text);
 	return found == interned.end() ? nullptr : found->second;
 }
 
@@ -157,10 +238,11 @@ size_t Heap::collect() {
 			link = &cell->next_allocated;
 		} else {
 			*link = cell->next_allocated;
-			delete cell;
+			release(cell);
 			++freed;
 		}
 	}
+	trim_pools();
 	cell_count -= freed;
 	live_after_collect = cell_count - tenured_count;
 	allocated_since_collect = 0;

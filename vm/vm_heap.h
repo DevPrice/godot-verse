@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstddef>
+#include <functional>
+#include <new>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -12,6 +14,13 @@
 #include "vm_value.h"
 
 namespace vm {
+
+// For a std::string-keyed unordered_map with std::equal_to<>: looked up by a string_view or a C
+// string without building a std::string.
+struct TextHash {
+	using is_transparent = void;
+	size_t operator()(std::string_view p_text) const { return std::hash<std::string_view>{}(p_text); }
+};
 
 // Something outside the heap that holds cells: its roots are visited at every collection, and what
 // it holds weakly it settles between marking and freeing, while an unreached cell is still intact.
@@ -39,13 +48,18 @@ public:
 
 	template <typename T, typename... Args>
 	T *make(Args &&...p_args) {
-		T *cell = new T(std::forward<Args>(p_args)...);
-		cell->next_allocated = first_allocated;
-		first_allocated = cell;
-		++cell_count;
-		++allocated_since_collect;
-		return cell;
+		return place<T>(sizeof(T), std::forward<Args>(p_args)...);
 	}
+
+	// A cell followed by room for p_values Values, which room_of finds: storage that lives exactly as
+	// long as the cell, for its ValueArray to use.
+	template <typename T, typename... Args>
+	T *make_with_room(size_t p_values, Args &&...p_args) {
+		static_assert(sizeof(T) % alignof(Value) == 0);
+		return place<T>(sizeof(T) + p_values * sizeof(Value), std::forward<Args>(p_args)...);
+	}
+	template <typename T>
+	static Value *room_of(T *p_cell) { return reinterpret_cast<Value *>(p_cell + 1); }
 
 	Value false_value() const { return Value::from_cell(false_cell); }
 	Value true_value() const { return Value::from_cell(true_cell); }
@@ -108,8 +122,96 @@ public:
 	size_t collection_count() const { return collections; }
 	// Whether p_cell is a live cell of this heap. Walks every cell: for tests and assertions.
 	bool owns(const Cell *p_cell) const;
+	// The memory held in slabs, live cells and free blocks alike.
+	size_t slab_bytes() const { return (slabs.size() - spare_slabs.size()) * kSlabBytes; }
 
 private:
+	// Cell memory is carved in allocation order from slabs of kSlabBytes, in blocks rounded up to
+	// kGrain; anything over kPooledClasses grains goes to the system heap. Cells made together sit
+	// together, which is most of what a sweep costs: it walks the cells in allocation order, and
+	// blocks the system heap hands out one at a time are scattered (Windows' low-fragmentation heap
+	// randomizes them, and serves requests up to 16 KB, hence slabs above that), which makes every
+	// step of the walk a cache miss. A freed block waits on its size's free list for the next cell
+	// of that size.
+	// After a collection that leaves far more free than was allocated since the one before, slabs
+	// with no live cell go back to the system while what stays free still covers that, so a burst's
+	// memory is returned rather than kept for good.
+	static constexpr size_t kGrain = 16;
+	static constexpr size_t kPooledClasses = 64;
+	static constexpr size_t kSlabBytes = 32768;
+	static constexpr size_t kReleaseFloorBytes = 32 * kSlabBytes;
+	// Laid over a freed cell, `slab` where Cell::slab was.
+	struct FreeBlock {
+		FreeBlock *next;
+		uint32_t untouched;
+		uint32_t slab;
+	};
+	struct Slab {
+		char *memory = nullptr;
+		uint32_t carved = 0;
+		uint32_t live = 0;
+		bool releasing = false;
+	};
+	struct Pool {
+		FreeBlock *free = nullptr;
+		size_t cached = 0;
+		size_t demand = 0;
+	};
+	Pool pools[kPooledClasses];
+	// Indexed by Cell::slab. An entry whose memory went back is null and reused by the next slab.
+	std::vector<Slab> slabs;
+	std::vector<uint32_t> spare_slabs;
+	uint32_t carve_slab = Cell::kUnpooled;
+	uint32_t carve_used = 0;
+
+	void *allocate(size_t p_size, uint32_t &r_slab, uint8_t &r_class) {
+		if (p_size > kGrain * kPooledClasses) {
+			r_slab = Cell::kUnpooled;
+			return ::operator new(p_size);
+		}
+		const size_t index = (p_size - 1) / kGrain;
+		r_class = uint8_t(index);
+		Pool &pool = pools[index];
+		++pool.demand;
+		if (pool.free != nullptr) {
+			FreeBlock *block = pool.free;
+			pool.free = block->next;
+			--pool.cached;
+			r_slab = block->slab;
+			++slabs[r_slab].live;
+			return block;
+		}
+		const uint32_t bytes = uint32_t((index + 1) * kGrain);
+		if (carve_slab == Cell::kUnpooled || carve_used + bytes > kSlabBytes) {
+			new_slab();
+		}
+		Slab &slab = slabs[carve_slab];
+		void *block = slab.memory + carve_used;
+		carve_used += bytes;
+		slab.carved += bytes;
+		++slab.live;
+		r_slab = carve_slab;
+		return block;
+	}
+	void new_slab();
+	void release(Cell *p_cell);
+	void trim_pools();
+
+	template <typename T, typename... Args>
+	T *place(size_t p_size, Args &&...p_args) {
+		uint32_t slab = 0;
+		uint8_t size_class = 0;
+		void *memory = allocate(p_size, slab, size_class);
+		T *cell = new (memory) T(std::forward<Args>(p_args)...);
+		cell->slab = slab;
+		cell->size_class = size_class;
+		cell->next_allocated = first_allocated;
+		first_allocated = cell;
+		++cell_count;
+		++allocated_since_collect;
+		return cell;
+	}
+
 	// Cells are listed newest first, so the tenured ones are the list's tail from first_tenured on.
 	Cell *first_allocated = nullptr;
 	Cell *first_tenured = nullptr;
@@ -122,7 +224,7 @@ private:
 	std::vector<RootSource *> root_sources;
 	LogicCell *false_cell = nullptr;
 	LogicCell *true_cell = nullptr;
-	std::unordered_map<std::string, const NameCell *> interned;
+	std::unordered_map<std::string, const NameCell *, TextHash, std::equal_to<>> interned;
 	// The names interned since the last tenure: only these need marking.
 	std::vector<const NameCell *> untenured_names;
 	std::vector<const Value *> root_slots;
