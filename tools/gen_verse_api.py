@@ -367,6 +367,18 @@ def pascal_member_name(godot_name: str) -> str:
     return "".join(p[0].upper() + p[1:] for p in parts)
 
 
+def constant_verse_name(godot_name: str) -> str:
+    """SCREAMING_SNAKE to PascalCase: `NOTIFICATION_ENTER_TREE` -> `NotificationEnterTree`, `UP` ->
+    `Up`. Unlike `pascal_member_name`, every character but the first of each word comes down,
+    because the whole Godot name is shouting -- right for a constant, wrong for `get_max`.
+
+    `src/verse_bindings.cpp`'s `verse_binding_constant_name` is this rule exactly, and
+    `verse_binding_enumerator_names` uses it too, for the same reason: an enumerator's name is a
+    constant's.
+    """
+    return "".join(part.capitalize() for part in godot_name.split("_") if part)
+
+
 def verse_method_name(godot_name: str) -> str:
     return pascal_member_name(godot_name)
 
@@ -708,7 +720,7 @@ def _common_prefix_words(names: list) -> list:
 
 
 def _pascal_enumerator(name: str) -> str:
-    return "".join(w[0].upper() + w[1:].lower() for w in name.split("_") if w)
+    return constant_verse_name(name)
 
 
 def enumerator_names(godot_names: list) -> tuple:
@@ -2191,10 +2203,7 @@ def emit_statics_module(godot_class: str, constants: list, resolver: TypeResolve
     """
     lines = []
     for constant in constants:
-        # SCREAMING_SNAKE to PascalCase: `NOTIFICATION_ENTER_TREE` is `NotificationEnterTree`, `UP`
-        # is `Up`. verse_method_name keeps the tail of each part as it found it, which is right for
-        # `get_max` and wrong for a constant, where the whole name is shouting.
-        name = "".join(part.capitalize() for part in constant["name"].split("_") if part)
+        name = constant_verse_name(constant["name"])
         # `Vector2i.MIN` would be data named `Min`, which is ambiguous with /Verse.org/Verse's
         # function of that name -- data has no signature to be told apart by. The same rename a
         # property in that position gets, and recorded the same way so either spelling is answered.
@@ -4184,6 +4193,146 @@ def render_convert_header(api: dict, emit_order: list, coverage: "Coverage", enu
 RESERVED_WORDS = set()
 
 
+# --- Shared naming-rule test vectors (docs/architecture-review.md item 1 step 6) -----------------
+#
+# `src/verse_bindings.cpp` ports five of this file's naming rules to C++ so a generated-bindings
+# package can name things the mirror's own way, with no JSON parser and no godot-cpp on that side --
+# which is also why nothing has ever compared the two (`docs/generated-bindings.md` §10.9). This
+# writes one flat, tab-separated line per case to a committed vectors file, which
+# `tests/verse_bindings`'s `verse_bindings_test` reads and runs through the matching C++ function.
+# It goes stale the way every other generated file does: CI's `generated` job runs this generator
+# and then `git diff --exit-code`.
+NAMING_VECTORS_PATH = "tests/verse_bindings/naming_vectors.txt"
+
+# Enum cases no real Godot enum happens to exercise, kept beside the dump's own so a rule this file
+# gets right and `verse_bindings.cpp` does not still has a line asserting it.
+#
+# `MODE_MIN`/`MODE_MAX` is GDScript's own convention for a sentinel pair -- an addon or a plain
+# script both write it -- and it is what found the missing VERSE_STDLIB_NAMES guard on the C++
+# side: stripped to the shared prefix, `Min`/`Max` collide with two of Verse's own math functions,
+# so the whole enum has to keep its prefix instead (`ModeMin`, `ModeMax`).
+#
+# `KIND_WIDGET`/`KIND_SELF` is the RESERVED_WORDS half of the same guard. A PascalCase enumerator
+# can only ever collide with a reserved word that is itself capitalized -- Verse's keywords are
+# lowercase (`class`, `if`, ...) and cannot equal a name that starts with an uppercase letter -- and
+# `Self` is the one entry in `src/verse_keywords.h` that is.
+HAND_WRITTEN_ENUM_CASES = [
+    ("Thing", "Mode", ["MODE_MIN", "MODE_MAX"]),
+    ("Widget", "Kind", ["KIND_WIDGET", "KIND_SELF"]),
+]
+
+
+def binding_predicate_expected(godot_name: str, sibling_names: set) -> bool:
+    """What `verse_binding_is_predicate` decides: `is_predicate_method` minus `PREDICATE_EXTRA`,
+    `PREDICATE_EXCLUDE` and the `is_virtual` branch -- none of which a bound ClassDB method can
+    reach, since `verse_bindings_gen.cpp` never asks about a virtual or an underscore-prefixed
+    method at all, and `PREDICATE_EXTRA`/`PREDICATE_EXCLUDE` are keyed by a *mirrored* class name,
+    which a bound one never is (`src/verse_bindings.h`'s own docstring).
+    """
+    if setter_twin_names(godot_name) & set(sibling_names):
+        return False
+    return bool(PREDICATE_NAME_RE.search(godot_name))
+
+
+def property_is_member_expected(verse_type: str) -> bool:
+    """What `verse_binding_property_is_member` decides: not one of `CONTAINER_PROPERTY_TYPES`."""
+    return verse_type not in CONTAINER_PROPERTY_TYPES
+
+
+def naming_vector_lines(api: dict) -> list:
+    """Every case `write_naming_vectors` turns into a line, grouped by rule."""
+    lines = []
+
+    for name in sorted({c["name"] for c in api["classes"]}):
+        lines.append(f"class_name\t{name}\t{verse_class_name(name)}")
+
+    member_names = set()
+    constant_names = set()
+    for c in api["classes"]:
+        for m in c.get("methods", []) or []:
+            member_names.add(m["name"])
+        for p in c.get("properties", []) or []:
+            member_names.add(p["name"])
+        for s in c.get("signals", []) or []:
+            member_names.add(s["name"])
+        for k in c.get("constants", []) or []:
+            constant_names.add(k["name"])
+    for k in api.get("global_constants", []) or []:
+        constant_names.add(k["name"])
+
+    for name in sorted(member_names):
+        lines.append(f"member_name\t{name}\t{pascal_member_name(name)}")
+    for name in sorted(constant_names):
+        lines.append(f"constant_name\t{name}\t{constant_verse_name(name)}")
+
+    # enum_name and enumerator_names, from every class-owned enum a bound ClassDB class could
+    # declare -- a global enum has no owner, which `verse_binding_enum_name` has no spelling for,
+    # so it is left out of both. Unfiltered, unlike `collect_enums`'s own `kept` list: a bound
+    # ClassDB enum is read with `class_get_enum_constants`, which strips neither a `_MAX` sentinel
+    # nor an alias, so the shared rule has to agree on the raw list too.
+    enum_sources = [(c["name"], e) for c in api["classes"] for e in c.get("enums", []) or []]
+    enum_sources += [(owner, {"name": enum_name, "values": [{"name": n} for n in names]})
+                     for owner, enum_name, names in HAND_WRITTEN_ENUM_CASES]
+
+    seen_enum_names = set()
+    for owner, godot_enum in enum_sources:
+        enum_name = godot_enum["name"]
+        raw_names = [v["name"] for v in godot_enum.get("values", []) or []]
+        if not raw_names:
+            continue
+        if "." not in owner and "." not in enum_name and (owner, enum_name) not in seen_enum_names:
+            seen_enum_names.add((owner, enum_name))
+            lines.append(f"enum_name\t{owner}\t{enum_name}\t{enum_verse_name(owner, enum_name)}")
+        verse_names, _ = enumerator_names(raw_names)
+        lines.append("enumerator_names\t{}.{}\t{}\t{}".format(
+            owner, enum_name, ",".join(raw_names), ",".join(verse_names)))
+
+    # property_is_member, over every type both sides can build and read a property from. The
+    # array-shaped packed and typed arrays are left out: a bound property is never one, because
+    # `verse_type_for` (`verse_bindings_gen.cpp`) maps Godot's Array to `godot_array` flatly and has
+    # no case that answers `[]int`.
+    property_types = sorted({info.verse_type for info in SCALAR_TYPES.values()
+                             if not info.verse_type.startswith("[]")})
+    for verse_type in property_types:
+        expected = "true" if property_is_member_expected(verse_type) else "false"
+        lines.append(f"property_is_member\t{verse_type}\t{expected}")
+
+    # predicate, over every non-virtual, non-underscore method name a ClassDB class could declare --
+    # `verse_bindings_gen.cpp` filters both out before ever asking. Twice per name: once with no
+    # sibling that could be its setter twin, and once with exactly that sibling present, which is
+    # what tells a property's read half from an outcome of the same shape.
+    predicate_names = sorted({m["name"] for c in api["classes"] for m in c.get("methods", []) or []
+                              if m.get("name") and not m["name"].startswith("_")
+                              and not m.get("is_virtual")})
+    for name in predicate_names:
+        base = "true" if binding_predicate_expected(name, set()) else "false"
+        lines.append(f"predicate\t{name}\t\t{base}")
+        twins = setter_twin_names(name)
+        if twins:
+            twin = sorted(twins)[0]
+            twinned = "true" if binding_predicate_expected(name, {twin}) else "false"
+            lines.append(f"predicate\t{name}\t{twin}\t{twinned}")
+
+    return lines
+
+
+def write_naming_vectors(path: Path, api: dict) -> None:
+    lines = naming_vector_lines(api)
+    header = (
+        "# Generated by tools/gen_verse_api.py. Do not edit by hand.\n"
+        "#\n"
+        "# One line per case, tab-separated: rule, input field(s), expected output. Read by\n"
+        "# tests/verse_bindings/verse_bindings_test.cpp, which runs each through the matching\n"
+        "# src/verse_bindings.cpp function and prints a line that disagrees. A list-valued field\n"
+        "# (enumerator_names's two name lists) is comma-joined; predicate's sibling field is empty\n"
+        "# for no sibling. A `#` line and a blank line are both comments.\n"
+        "#\n"
+        "# docs/generated-bindings.md §4 and §10.9; docs/architecture-review.md item 1 step 6.\n"
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(header + "\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--api", default=EXTENSION_API, help="Path to extension_api.json")
@@ -4203,6 +4352,8 @@ def main() -> int:
                         help="The hand-written math file whose definitions decide what is *not* skipped")
     parser.add_argument("--convert-header", default=CONVERT_HEADER_PATH,
                         help="Where to write the GDScript converter's table")
+    parser.add_argument("--naming-vectors", default=NAMING_VECTORS_PATH,
+                        help="Where to write the naming-rule differential test vectors")
     parser.add_argument("--report", default=None, help="Write the coverage report here instead of stdout")
     parser.add_argument("--keywords", default=KEYWORDS_HEADER)
     args = parser.parse_args()
@@ -4283,6 +4434,8 @@ def main() -> int:
         render_convert_header(api, emit_order, coverage, enums, member_names,
                               resolve(root, args.math_source)),
         encoding="utf-8", newline="\n")
+
+    write_naming_vectors(resolve(root, args.naming_vectors), api)
 
     report = format_report(coverage, len(class_blocks))
     if args.report:
