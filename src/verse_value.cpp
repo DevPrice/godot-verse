@@ -583,8 +583,14 @@ Variant vh_to_variant(const vh_value &p_value) {
 		return found != nullptr ? *found : Variant();
 	}
 
-	switch (p_value.VariantTag) {
+	switch ((vh_variant_tag)p_value.VariantTag) {
 		case VH_VARIANT_NIL:
+		// Carried by vh_type directly -- Type is never REF for these, so the switch below reads
+		// VH_TYPE_LOGIC/INT/FLOAT/STRING off it without help from the tag.
+		case VH_VARIANT_BOOL:
+		case VH_VARIANT_INT:
+		case VH_VARIANT_FLOAT:
+		case VH_VARIANT_STRING:
 			break; // fall through to the vh_type-driven path below
 
 		case VH_VARIANT_STRING_NAME:
@@ -631,11 +637,16 @@ Variant vh_to_variant(const vh_value &p_value) {
 		case VH_VARIANT_PACKED_VECTOR4_ARRAY:
 			return packed_variant(p_value.VariantTag, p_value);
 
-		default:
+		// Handled by variant_to_vh's own VH_TYPE_REF check above, before this function is entered.
+		case VH_VARIANT_CALLABLE:
+		case VH_VARIANT_SIGNAL:
+		case VH_VARIANT_DICTIONARY:
+		case VH_VARIANT_ARRAY:
+		case VH_VARIANT_MAX:
 			break;
 	}
 
-	switch (p_value.Type) {
+	switch ((vh_type)p_value.Type) {
 		case VH_TYPE_VOID:
 			return Variant();
 
@@ -684,16 +695,22 @@ Variant vh_to_variant(const vh_value &p_value) {
 			}
 			return Variant();
 
-		default:
+		// VH_TYPE_VARIANT is a declaration type and never a payload (verse_host_abi.h). VH_TYPE_CHAR
+		// and VH_TYPE_OPTION are not read at this level; unchanged from what the prior `default:`
+		// answered for both.
+		case VH_TYPE_CHAR:
+		case VH_TYPE_OPTION:
+		case VH_TYPE_VARIANT:
 			return Variant();
 	}
+	return Variant();
 }
 
 Variant::Type variant_type_for(int32_t p_type, int32_t p_variant_tag) {
 	if (p_variant_tag > VH_VARIANT_NIL && p_variant_tag < VH_VARIANT_MAX) {
 		return (Variant::Type)p_variant_tag;
 	}
-	switch (p_type) {
+	switch ((vh_type)p_type) {
 		case VH_TYPE_LOGIC:
 			return Variant::BOOL;
 		case VH_TYPE_INT:
@@ -720,9 +737,12 @@ Variant::Type variant_type_for(int32_t p_type, int32_t p_variant_tag) {
 		// which NIL means "must be null" and Godot refuses every call before it reaches the VM.
 		case VH_TYPE_VARIANT:
 			return Variant::NIL;
-		default:
+		case VH_TYPE_VOID:
+		case VH_TYPE_OPTION:
+		case VH_TYPE_REF:
 			return Variant::NIL;
 	}
+	return Variant::NIL;
 }
 
 bool array_to_vh_seq(const Array &p_values, vh_arena *p_arena, vh_value &r_out) {

@@ -75,7 +75,7 @@ void VerseCallable::call(const Variant **p_arguments, int p_argcount, Variant &r
 	}
 
 	const int32_t status = runtime->invoke_callback(callback_id, p_arguments, p_argcount, r_return_value);
-	switch (status) {
+	switch ((vh_status)status) {
 		case VH_OK:
 			return;
 
@@ -91,7 +91,16 @@ void VerseCallable::call(const Variant **p_arguments, int p_argcount, Variant &r
 		// The script raised, or the frame is halted behind an earlier raise, or the node has gone.
 		// Each has already been reported where it happened; making it a call error too would turn
 		// one script's mistake into a second error against whoever emitted the signal.
-		default:
+		case VH_ERR_ABI:
+		case VH_ERR_STATE:
+		case VH_ERR_INIT:
+		case VH_ERR_COMPILE:
+		case VH_ERR_NOT_FOUND:
+		case VH_ERR_RUNTIME:
+		case VH_ERR_HALTED:
+		case VH_ERR_THREAD:
+		case VH_ERR_STOPPED:
+		case VH_ERR_UNSUPPORTED:
 			return;
 	}
 }

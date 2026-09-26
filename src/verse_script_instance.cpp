@@ -405,7 +405,7 @@ void call_func(GDExtensionScriptInstanceDataPtr p_self, GDExtensionConstStringNa
 	const bool decides_virtual = method->can_fail && !method->returns_value
 			&& method->godot_virtual != StringName();
 
-	switch (status) {
+	switch ((vh_status)status) {
 		case VH_OK:
 			*reinterpret_cast<Variant *>(r_return) = decides_virtual ? Variant(true) : result;
 			r_error->error = GDEXTENSION_CALL_OK;
@@ -450,7 +450,13 @@ void call_func(GDExtensionScriptInstanceDataPtr p_self, GDExtensionConstStringNa
 		// A raise in this call. It has already been reported with its file, line and Verse stack
 		// through the runtime error callback, so saying anything more here would only duplicate it
 		// -- and the call did happen, so it is not a call error either.
-		default:
+		case VH_ERR_ABI:
+		case VH_ERR_STATE:
+		case VH_ERR_INIT:
+		case VH_ERR_COMPILE:
+		case VH_ERR_RUNTIME:
+		case VH_ERR_STOPPED:
+		case VH_ERR_UNSUPPORTED:
 			r_error->error = GDEXTENSION_CALL_OK;
 			return;
 	}

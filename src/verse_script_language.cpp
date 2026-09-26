@@ -1525,7 +1525,7 @@ static String call_hint_for(const Dictionary &p_signature, int64_t p_argument, b
 
 // Godot's kind for a definition, so the completion box draws the right icon beside it.
 static int64_t completion_kind_for(int64_t p_lookup_kind) {
-	switch (p_lookup_kind) {
+	switch ((vh_lookup_kind)p_lookup_kind) {
 		case VH_LOOKUP_FUNCTION:
 			return ScriptLanguageExtension::CODE_COMPLETION_KIND_FUNCTION;
 		case VH_LOOKUP_CLASS:
@@ -1535,9 +1535,11 @@ static int64_t completion_kind_for(int64_t p_lookup_kind) {
 			return ScriptLanguageExtension::CODE_COMPLETION_KIND_ENUM;
 		case VH_LOOKUP_MODULE:
 			return ScriptLanguageExtension::CODE_COMPLETION_KIND_FILE_PATH;
-		default:
+		case VH_LOOKUP_UNKNOWN:
+		case VH_LOOKUP_DATA:
 			return ScriptLanguageExtension::CODE_COMPLETION_KIND_MEMBER;
 	}
+	return ScriptLanguageExtension::CODE_COMPLETION_KIND_MEMBER;
 }
 
 // Whether a call to a function has to be written with brackets rather than parentheses: Verse
@@ -4879,7 +4881,7 @@ String VerseScriptLanguage::publish_api_method(const String &p_receiver_type, co
 // alone, because vh_export_desc has no room to carry the spelling and adding one would be a layout
 // change -- so this is the one place the mapping is written down on the consumer's side.
 static String export_hint_attribute_name(const Dictionary &p_entry) {
-	switch ((int64_t)p_entry["hint"]) {
+	switch ((vh_export_hint)(int64_t)p_entry["hint"]) {
 		case VH_EXPORT_HINT_FILE:
 			return String("`@export_file`");
 		case VH_EXPORT_HINT_DIR:
@@ -4890,15 +4892,22 @@ static String export_hint_attribute_name(const Dictionary &p_entry) {
 			return String("`@export_flags`");
 		case VH_EXPORT_HINT_NODE_PATH:
 			return String("`@export_node_path`");
-		default:
+		// Only called for VH_EXPORT_HINT_WRONG_TYPE, which is refused only for the five attribute
+		// hints above -- these five are type-driven and never reach this function rejected this way.
+		case VH_EXPORT_HINT_NONE:
+		case VH_EXPORT_HINT_RANGE:
+		case VH_EXPORT_HINT_ENUM:
+		case VH_EXPORT_HINT_CLASS:
+		case VH_EXPORT_HINT_SCRIPT_CLASS:
 			return String("an inspector hint");
 	}
+	return String("an inspector hint");
 }
 
 static String export_rejection_message(const Dictionary &p_entry) {
 	const String name = p_entry["name"];
 	const String class_name = p_entry["hint_string"];
-	switch ((int64_t)p_entry["reject"]) {
+	switch ((vh_export_reject)(int64_t)p_entry["reject"]) {
 		case VH_EXPORT_OBJECT_NOT_OPTIONAL:
 			return name + String(" is a ") + class_name
 					+ String(", and the inspector may leave that slot empty. Declare it `?") + class_name
@@ -4939,13 +4948,15 @@ static String export_rejection_message(const Dictionary &p_entry) {
 					+ String("class reached through a generated binding yet.")
 					+ (native_class.is_empty() ? String() : String(" Export its native base class `") + native_class + String("` instead."));
 		}
-		default:
+		case VH_EXPORT_OK:
+		case VH_EXPORT_UNSUPPORTED_TYPE:
 			return name + String(" has a type godot-verse cannot carry to the inspector yet, so it is not exported.");
 	}
+	return name + String(" has a type godot-verse cannot carry to the inspector yet, so it is not exported.");
 }
 
 static String export_rejection_code(int64_t p_reject) {
-	switch (p_reject) {
+	switch ((vh_export_reject)p_reject) {
 		case VH_EXPORT_OBJECT_NOT_OPTIONAL:
 			return String("OBJECT_EXPORT_NOT_OPTIONAL");
 		case VH_EXPORT_OPTION_NOT_OBJECT:
@@ -4956,9 +4967,11 @@ static String export_rejection_code(int64_t p_reject) {
 			return String("EXPORT_HINT_WRONG_TYPE");
 		case VH_EXPORT_BINDING_CLASS_UNSUPPORTED:
 			return String("EXPORT_BINDING_CLASS_UNSUPPORTED");
-		default:
+		case VH_EXPORT_OK:
+		case VH_EXPORT_UNSUPPORTED_TYPE:
 			return String("EXPORT_TYPE_UNSUPPORTED");
 	}
+	return String("EXPORT_TYPE_UNSUPPORTED");
 }
 
 // What a refused signal has to say for itself, at the line that declared it.
@@ -4968,7 +4981,7 @@ static String export_rejection_code(int64_t p_reject) {
 // emission or never. So each sentence names the rule and the edit that satisfies it.
 static String signal_rejection_message(const VerseSignalInfo &p_signal) {
 	const String name = String(p_signal.name);
-	switch (p_signal.reject) {
+	switch ((vh_signal_reject)p_signal.reject) {
 		case VH_SIGNAL_IS_VAR:
 			return name + String(" is a `var`, and a signal is an identity rather than a value. Its ")
 					+ String("binding is made once against the object the member was built on, so ")
@@ -4999,9 +5012,10 @@ static String signal_rejection_message(const VerseSignalInfo &p_signal) {
 					+ String("GDScript. The attribute is what registers a member, the way `@export` ")
 					+ String("is what sends one to the inspector. Write `@export_signal` on the line ")
 					+ String("above `") + name + String("`.");
-		default:
+		case VH_SIGNAL_OK:
 			return name + String(" cannot be registered with Godot, so nothing can connect to it.");
 	}
+	return name + String(" cannot be registered with Godot, so nothing can connect to it.");
 }
 
 // What a refused `@rpc` has to say for itself, at the line that declared the method.
@@ -5012,7 +5026,7 @@ static String signal_rejection_message(const VerseSignalInfo &p_signal) {
 // of them lists the seven words because guessing which one was meant is not this bridge's job.
 static String rpc_rejection_message(const VerseRpcInfo &p_rpc) {
 	const String name = String(p_rpc.name);
-	switch (p_rpc.reject) {
+	switch ((vh_rpc_reject)p_rpc.reject) {
 		case VH_RPC_UNKNOWN_ARGUMENT:
 			return name + String(": `") + p_rpc.reject_detail
 					+ String("` is not an @rpc word. It must be one of \"call_local\"/\"call_remote\" ")
@@ -5021,25 +5035,29 @@ static String rpc_rejection_message(const VerseRpcInfo &p_rpc) {
 		case VH_RPC_DUPLICATE_CATEGORY:
 			return name + String(": ") + p_rpc.reject_detail
 					+ String(" is given twice. Each of the three may be said no more than once.");
-		default:
+		case VH_RPC_OK:
+		case VH_RPC_BAD_ARGUMENT_TYPE:
 			return name + String(": @rpc wants ") + p_rpc.reject_detail
 					+ String(" in this position.");
 	}
+	return name + String(": @rpc wants ") + p_rpc.reject_detail + String(" in this position.");
 }
 
 static String rpc_rejection_code(int32_t p_reject) {
-	switch (p_reject) {
+	switch ((vh_rpc_reject)p_reject) {
 		case VH_RPC_UNKNOWN_ARGUMENT:
 			return String("RPC_UNKNOWN_ARGUMENT");
 		case VH_RPC_DUPLICATE_CATEGORY:
 			return String("RPC_DUPLICATE_CATEGORY");
-		default:
+		case VH_RPC_OK:
+		case VH_RPC_BAD_ARGUMENT_TYPE:
 			return String("RPC_BAD_ARGUMENT_TYPE");
 	}
+	return String("RPC_BAD_ARGUMENT_TYPE");
 }
 
 static String signal_rejection_code(int32_t p_reject) {
-	switch (p_reject) {
+	switch ((vh_signal_reject)p_reject) {
 		case VH_SIGNAL_IS_VAR:
 			return String("SIGNAL_IS_VAR");
 		case VH_SIGNAL_NOT_PUBLIC:
@@ -5050,9 +5068,11 @@ static String signal_rejection_code(int32_t p_reject) {
 			return String("SIGNAL_PAYLOAD_NESTED_STRUCT");
 		case VH_SIGNAL_NEEDS_ATTRIBUTE:
 			return String("SIGNAL_NEEDS_ATTRIBUTE");
-		default:
+		case VH_SIGNAL_OK:
+		case VH_SIGNAL_PAYLOAD_UNSUPPORTED:
 			return String("SIGNAL_PAYLOAD_UNSUPPORTED");
 	}
+	return String("SIGNAL_PAYLOAD_UNSUPPORTED");
 }
 
 // Whether an `@export` that Godot *will* draw is one whose value cannot survive a save.

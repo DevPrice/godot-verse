@@ -940,14 +940,17 @@ static String range_hint_for(const Dictionary &p_entry, Variant::Type p_type) {
 
 // Godot's three nesting depths, which are three usage flags rather than a depth number.
 PropertyUsageFlags usage_for_group(int64_t p_kind) {
-	switch (p_kind) {
+	switch ((vh_export_group)p_kind) {
 		case VH_EXPORT_GROUP_CATEGORY:
 			return PROPERTY_USAGE_CATEGORY;
 		case VH_EXPORT_GROUP_SUBGROUP:
 			return PROPERTY_USAGE_SUBGROUP;
-		default:
+		// Only called with entry_kind != VH_EXPORT_GROUP_NONE, so NONE never actually reaches here.
+		case VH_EXPORT_GROUP_GROUP:
+		case VH_EXPORT_GROUP_NONE:
 			return PROPERTY_USAGE_GROUP;
 	}
+	return PROPERTY_USAGE_GROUP;
 }
 
 // The name an export's reference slot is filtered by. An export says which kind of class it names
@@ -965,7 +968,7 @@ Dictionary property_for(const Dictionary &p_entry, Variant::Type p_type) {
 	property["name"] = p_entry["name"];
 	property["type"] = (int64_t)p_type;
 
-	switch ((int64_t)p_entry["hint"]) {
+	switch ((vh_export_hint)(int64_t)p_entry["hint"]) {
 		case VH_EXPORT_HINT_RANGE:
 			property["hint"] = (int64_t)PROPERTY_HINT_RANGE;
 			property["hint_string"] = range_hint_for(p_entry, p_type);
@@ -1033,7 +1036,6 @@ Dictionary property_for(const Dictionary &p_entry, Variant::Type p_type) {
 			property["hint_string"] = p_entry["hint_string"];
 			break;
 		case VH_EXPORT_HINT_NONE:
-		default:
 			// An untyped Array is the one property that needs a hint nothing asked for. Godot's
 			// packed arrays say what they hold in their own type, but a plain Array does not, and an
 			// editor that was not told offers the author a row of whatever they like -- which the
