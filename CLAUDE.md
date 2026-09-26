@@ -373,7 +373,8 @@ reviewed files of `docs/web-vm/spec/` alone. Keep it that way — do not bring V
   runs no Verse (`web-vm/spec/modules.md` §2).
 - `vm/` is godot-cpp-free and implements the runtime `vh_*` subset itself, so it builds two ways:
   `bin/verse_vm.dll`, a drop-in for `verse_host_runtime.dll`, and statically into the GDExtension
-  (`scons verse_vm=yes`; a Windows release build and every web build carry it). `src/` fills
+  (`scons verse_vm=yes`; every template and every non-Windows build carry it, so only a Windows
+  editor lacks it). `src/` fills
   `VerseHostLibrary` from it with `load_static` and hands it a file reader over `FileAccess`.
 - **`verse/runtime/backend`** (`host` or `vm`) picks it in an exported game; an editor session always
   uses the host. Its `.web` feature override defaults to `vm`, the way Godot defaults
@@ -409,7 +410,7 @@ reviewed files of `docs/web-vm/spec/` alone. Keep it that way — do not bring V
     python tools/build_module_map_test.py # module-map test binary
     python tools/build_doc_markup_test.py # doc-markup converter test binary
     python tools/build_signature_test.py  # signature parser test binary
-    python tools/build_gd_convert_test.py # GDScript converter test binary (MSVC, or g++/clang elsewhere)
+    python tools/build_gd_convert_test.py # GDScript converter test binary
     python tools/build_bench.py           # host benchmark (timings, not pass/fail)
     python tools/build_verse_probe.py     # the Verse probe (asks the compiler a question)
     python tools/build_cooked_probe.py    # the cooked probe (asks a runtime host what an export sees)
@@ -446,7 +447,9 @@ executable. If a future engine drop provides one, that script finds and execs it
     python tools/run_tests.py --build            # rebuild the test binaries first
 
 **units** — lexer, class-declaration scanner, module map, doc-markup converter, signature parser,
-the GDScript converter, generator, and `vm/`'s own cases (`verse_vm_test`). No Godot, no UE. The
+the GDScript converter, generator, and `vm/`'s own cases (`verse_vm_test`). No Godot, no UE. Every
+`build_*_test.py` compiles through `tools/unit_build.py`: MSVC on Windows, `$CXX`, g++ or clang++
+elsewhere, and the binary is named `.exe` everywhere because that is what `run_tests.py` runs. The
 converter's goldens are whole files (`tests/verse_gd_convert/fixtures/*.expected`);
 `bin/verse_gd_convert_test.exe --update` rewrites them, and the diff is the review.
 
@@ -517,10 +520,16 @@ an export log. **A pack stores paths with `res://` trimmed off** (`editor_export
 A layer whose prerequisites are absent is **skipped and said to be skipped**, never counted as a
 pass; `--fail-on-skip` makes a skip fail the run, which is what CI passes.
 
-**CI** (`.github/workflows/ci.yml`, hosted Windows runners) runs only what needs neither a UE
-checkout nor a cook, because a public runner can hold neither: the units layer, `vm/` built native
-and as wasm, and the GDExtension's four builds (editor, template_release, web with and without
-threads). Everything else in `run_tests.py`, the conformance harness included, is local. `UE_ROOT` names the Unreal checkout and `GODOT` the Godot binary; both are guessed when unset.
+**CI** (`.github/workflows/ci.yml`, hosted runners) runs only what needs neither a UE checkout nor
+a cook, because a public runner can hold neither: the units layer on Windows (MSVC), Ubuntu (GCC)
+and macOS (Apple Clang); `vm/` built as `bin/verse_vm.dll` and as wasm; and the GDExtension for
+every platform godot-cpp builds — both templates for Linux x86_64/x86_32, Windows
+x86_64/x86_32/arm64, macOS universal, Android x86_64/x86_32/arm64/arm32, iOS arm64 and web with and
+without threads, and the editor for Windows x86_64/arm64, Linux x86_64 and macOS. **That is compile
+coverage and nothing more: only Windows x86_64 and web are supported and runtime-tested.** Every
+other platform is vm-only the way web is (SConstruct implies `verse_vm` there), and an editor on
+one has no backend that can compile Verse. Everything else in `run_tests.py`, the conformance
+harness included, is local. `UE_ROOT` names the Unreal checkout and `GODOT` the Godot binary; both are guessed when unset.
 
 `tests/integration` is a real Godot project, and three things in it are generated rather than
 committed: `run_tests.py` copies the built GDExtension into its `addons/`, generates its
@@ -1445,7 +1454,9 @@ it is not in `run_tests.py`.
   `by-hand-findings.md` rather than retired. `tests/host_smoke/debug_probe.verse`'s line numbers are
   part of it — a member declared above line 22 moves an armed breakpoint.
 
-Out by decision, so that a gap does not read as an oversight: Linux, `dlopen`, macOS, the
+Out by decision, so that a gap does not read as an oversight: Linux, macOS, Android and iOS as
+supported platforms — CI compiles them, and only Windows x86_64 and web are supported and
+runtime-tested — `dlopen`, the
 Shipping-per-template split (an export ships the Development host), and the debugger in an exported
 game. `docs/roadmap.md`'s closing section records the rest of the deliberate omissions, including
 that a release process needs a decision before Phase 8.

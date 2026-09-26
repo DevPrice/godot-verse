@@ -188,13 +188,13 @@ bool TestFileStemPicksTheClass()
 	// promised. Modules make it matter: a file may declare any number of top-level names and only
 	// the one named after the file is the script.
 	const char* Source =
-		"using { /Godot.org/Godot }\n"
-		"\n"
-		"helper := class(object):\n"
-		"    X<public>:int = 1\n"
-		"\n"
-		"player := class(node2d):\n"
-		"    Speed<public>:float = 1.0\n";
+		"using { /Godot.org/Godot }\n"
+		"\n"
+		"helper := class(object):\n"
+		"    X<public>:int = 1\n"
+		"\n"
+		"player := class(node2d):\n"
+		"    Speed<public>:float = 1.0\n";
 	const VerseClassDecl Decl = verse_scan_class_decl(Source, "player");
 	return Step("the class named after the file is the one reported",
 				Decl.name == "player" && Decl.base == "node2d")
@@ -212,10 +212,10 @@ bool TestAttributeBindsToTheNamedClass()
 {
 	// The attribute above a class that is *not* the file's must not carry over to the one that is.
 	const char* Source =
-		"@global_class\n"
-		"helper := class(object):\n"
-		"\n"
-		"player := class(node2d):\n";
+		"@global_class\n"
+		"helper := class(object):\n"
+		"\n"
+		"player := class(node2d):\n";
 	const VerseClassDecl Decl = verse_scan_class_decl(Source, "player");
 	return Step("an attribute above another class does not reach this one",
 				Decl.name == "player" && !Decl.is_global);
@@ -224,10 +224,10 @@ bool TestAttributeBindsToTheNamedClass()
 bool TestAttributeOnTheNamedClassStillBinds()
 {
 	const char* Source =
-		"helper := class(object):\n"
-		"\n"
-		"@global_class\n"
-		"player := class(node2d):\n";
+		"helper := class(object):\n"
+		"\n"
+		"@global_class\n"
+		"player := class(node2d):\n";
 	const VerseClassDecl Decl = verse_scan_class_decl(Source, "player");
 	return Step("and its own attribute still does", Decl.name == "player" && Decl.is_global);
 }
