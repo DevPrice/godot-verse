@@ -1691,7 +1691,7 @@ int64_t VerseRuntime::api_retain_ref(void *p_ctx, int64_t p_ref) {
 }
 
 int64_t VerseRuntime::api_new_ref(void *p_ctx, int32_t p_variant_tag) {
-	switch (p_variant_tag) {
+	switch ((vh_variant_tag)p_variant_tag) {
 		case VH_VARIANT_ARRAY:
 			return verse_ref_table().mint(Array());
 		case VH_VARIANT_DICTIONARY:
@@ -1716,11 +1716,40 @@ int64_t VerseRuntime::api_new_ref(void *p_ctx, int32_t p_variant_tag) {
 			return verse_ref_table().mint(PackedColorArray());
 		case VH_VARIANT_PACKED_VECTOR4_ARRAY:
 			return verse_ref_table().mint(PackedVector4Array());
-		default:
-			// A Callable or a Signal cannot be made from nothing -- both name something to call --
-			// and no other tag is a reference type at all.
+		// A Callable or a Signal cannot be made from nothing -- both name something to call -- and no
+		// other tag names a reference type at all. Listed rather than defaulted so a future reference
+		// tag (another packed array Godot adds) has to be placed in one group or the other by hand.
+		case VH_VARIANT_NIL:
+		case VH_VARIANT_BOOL:
+		case VH_VARIANT_INT:
+		case VH_VARIANT_FLOAT:
+		case VH_VARIANT_STRING:
+		case VH_VARIANT_VECTOR2:
+		case VH_VARIANT_VECTOR2I:
+		case VH_VARIANT_RECT2:
+		case VH_VARIANT_RECT2I:
+		case VH_VARIANT_VECTOR3:
+		case VH_VARIANT_VECTOR3I:
+		case VH_VARIANT_TRANSFORM2D:
+		case VH_VARIANT_VECTOR4:
+		case VH_VARIANT_VECTOR4I:
+		case VH_VARIANT_PLANE:
+		case VH_VARIANT_QUATERNION:
+		case VH_VARIANT_AABB:
+		case VH_VARIANT_BASIS:
+		case VH_VARIANT_TRANSFORM3D:
+		case VH_VARIANT_PROJECTION:
+		case VH_VARIANT_COLOR:
+		case VH_VARIANT_STRING_NAME:
+		case VH_VARIANT_NODE_PATH:
+		case VH_VARIANT_RID:
+		case VH_VARIANT_OBJECT:
+		case VH_VARIANT_CALLABLE:
+		case VH_VARIANT_SIGNAL:
+		case VH_VARIANT_MAX:
 			return 0;
 	}
+	return 0;
 }
 
 int32_t VerseRuntime::api_ref_get(void *p_ctx, int64_t p_ref, const vh_value *p_key, vh_arena *p_arena, vh_value *r_value) {
