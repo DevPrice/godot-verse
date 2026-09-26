@@ -161,6 +161,8 @@ def run_units(results: Results, do_build: bool) -> None:
     generator = REPO / "tests" / "verse_api_gen" / "test_gen_verse_api.py"
     if generator.is_file():
         run("test_gen_verse_api.py", [sys.executable, str(generator)], results)
+    else:
+        results.skip("test_gen_verse_api.py", f"{generator} is missing")
 
 
 def run_abi(results: Results, engine: Path | None, do_build: bool) -> None:
@@ -1658,6 +1660,9 @@ def main() -> None:
     parser.add_argument("--build", action="store_true", help="rebuild the test binaries first")
     parser.add_argument("--engine", help="the Unreal checkout (default: UE_ROOT, then ../UnrealEngine)")
     parser.add_argument("--godot", help="the Godot binary (default: GODOT, then PATH)")
+    parser.add_argument("--fail-on-skip", action="store_true",
+                        help="exit non-zero if anything was skipped, for a run whose prerequisites "
+                             "are all meant to be present")
     args = parser.parse_args()
 
     engine = find_engine(args.engine)
@@ -1691,7 +1696,9 @@ def main() -> None:
     print(f"[run_tests] {results.passed} passed, {results.failed} failed, {len(results.skipped)} skipped")
     for skipped in results.skipped:
         print(f"[run_tests]   skipped: {skipped}")
-    sys.exit(1 if results.failed else 0)
+    if args.fail_on_skip and results.skipped:
+        print("[run_tests] --fail-on-skip: a skip is a failure in this run")
+    sys.exit(1 if results.failed or (args.fail_on_skip and results.skipped) else 0)
 
 
 if __name__ == "__main__":

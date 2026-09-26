@@ -515,7 +515,12 @@ an export log. **A pack stores paths with `res://` trimmed off** (`editor_export
 `read_pck` puts it back.
 
 A layer whose prerequisites are absent is **skipped and said to be skipped**, never counted as a
-pass. `UE_ROOT` names the Unreal checkout and `GODOT` the Godot binary; both are guessed when unset.
+pass; `--fail-on-skip` makes a skip fail the run, which is what CI passes.
+
+**CI** (`.github/workflows/ci.yml`, hosted Windows runners) runs only what needs neither a UE
+checkout nor a cook, because a public runner can hold neither: the units layer, `vm/` built native
+and as wasm, and the GDExtension's four builds (editor, template_release, web with and without
+threads). Everything else in `run_tests.py`, the conformance harness included, is local. `UE_ROOT` names the Unreal checkout and `GODOT` the Godot binary; both are guessed when unset.
 
 `tests/integration` is a real Godot project, and three things in it are generated rather than
 committed: `run_tests.py` copies the built GDExtension into its `addons/`, generates its
