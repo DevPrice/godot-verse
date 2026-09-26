@@ -156,16 +156,20 @@ std::string wire_text(const vh_value &p_wire) {
 // §8.4's three sentences, by the status Godot answered.
 std::string call_sentence(const char *p_verb, const std::string &p_member, int64_t p_handle, int32_t p_status) {
 	const std::string head = std::string(p_verb) + " `" + p_member + "` on Godot object " + std::to_string(p_handle);
-	switch (p_status) {
+	switch ((vh_call_status)p_status) {
 		case VH_CALL_DEAD_OBJECT:
 			return head + ", which Godot has already freed. Test IsInstanceValid[...] before reaching through a reference the scene may have dropped.";
 		case VH_CALL_BAD_VALUE:
 			return head + ", and the value has no representation on the Verse bridge. This is a gap in the type table in tools/gen_verse_api.py.";
 		case VH_CALL_BAD_ARITY:
 			return head + " with the wrong number of arguments. The generated Verse mirror and this build of Godot disagree; regenerate with tools/gen_verse_api.py.";
-		default:
+		// Only called with a non-OK status; VH_CALL_OK falls back to the same sentence NO_SUCH_MEMBER
+		// gets, matching what the prior `default:` answered for both.
+		case VH_CALL_OK:
+		case VH_CALL_NO_SUCH_MEMBER:
 			return head + ", which has no such member. The generated Verse mirror and this build of Godot disagree; regenerate with tools/gen_verse_api.py.";
 	}
+	return head + ", which has no such member. The generated Verse mirror and this build of Godot disagree; regenerate with tools/gen_verse_api.py.";
 }
 
 // §8.31's two sentences.
@@ -179,7 +183,7 @@ std::string reference_sentence(const char *p_verb, int64_t p_ref) {
 
 // The clause a vh_signal_reject reads as (include/verse_host_abi.h's comments on each code).
 std::string reject_reason(int32_t p_reject, const std::string &p_detail) {
-	switch (p_reject) {
+	switch ((vh_signal_reject)p_reject) {
 		case VH_SIGNAL_IS_VAR:
 			return "it is declared `var`, and a signal is an identity rather than a value";
 		case VH_SIGNAL_NOT_PUBLIC:
@@ -192,9 +196,10 @@ std::string reject_reason(int32_t p_reject, const std::string &p_detail) {
 			return "its payload field `" + p_detail + "` is itself a struct, and a struct payload decomposes one level only";
 		case VH_SIGNAL_NEEDS_ATTRIBUTE:
 			return "it carries no `@export_signal`";
-		default:
+		case VH_SIGNAL_OK:
 			return "it was refused when the class was analysed";
 	}
+	return "it was refused when the class was analysed";
 }
 
 // The arenas of the Godot calls in flight, one per nesting level and kept once made, so a call
