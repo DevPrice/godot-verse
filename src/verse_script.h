@@ -6,6 +6,8 @@
 
 #include "verse_runtime.h"
 
+#include <atomic>
+#include <cstdint>
 #include <vector>
 #include <godot_cpp/classes/script_language.hpp>
 #include <godot_cpp/templates/hash_map.hpp>
@@ -100,9 +102,10 @@ public:
 	godot::String verse_class_name() const;
 
 	// Whether the documentation Godot holds for this script was described from the text and the
-	// analysis it has now. False until _get_documentation answers on the editor's thread, and
-	// again whenever an analysis or a generation lands, since either can change what a member
-	// is. What acts on it is VerseScriptLanguage::ensure_script_doc_published.
+	// analysis it has now: doc_epoch compared against the language's current description_epoch_
+	// value(), which reads false until _get_documentation answers on the editor's thread, and
+	// again once an analysis or a generation lands, since either can change what a member is.
+	// What acts on it is VerseScriptLanguage::ensure_script_doc_published.
 	bool doc_is_current() const;
 
 	vh_instance *make_instance(int64_t p_object_id) const;
@@ -213,14 +216,17 @@ private:
 	// of the scene on the next save.
 	mutable godot::TypedArray<godot::Dictionary> exports_cache;
 
-	// Whether exports_cache describes the analysis the host currently holds. Cleared at the three
-	// moments the answer can change -- an analysis landing, a generation being published, and
-	// Godot asking for an update -- and set by the rebuild.
-	mutable bool exports_current = false;
+	// The VerseScriptLanguage::description_epoch_value() exports_cache was last filled at, read by
+	// refresh_exports instead of being told to clear a flag at every place the answer could change.
+	// 0 never matches a real epoch, so a freshly
+	// constructed script and _update_exports's forced recompute both read as already stale.
+	mutable uint64_t exports_epoch = 0;
 
-	// See doc_is_current. Cleared beside exports_current, set by a _get_documentation that
-	// answered rather than declined.
-	mutable bool doc_current = false;
+	// See doc_is_current. The epoch a _get_documentation that answered (rather than declined) was
+	// answered against. Atomic: _get_documentation can run off the editor's thread (B20), and both
+	// the write here and the read in doc_is_current have to be safe without any other lock between
+	// the two threads that touch it.
+	mutable std::atomic<uint64_t> doc_epoch{ 0 };
 
 	// The method table from the same analysis as exports_cache, and refreshed with it. Cached
 	// rather than re-asked because Godot calls _has_method on paths that run per frame, and each

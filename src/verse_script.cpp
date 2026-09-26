@@ -174,15 +174,12 @@ bool VerseScript::analysis_landed() {
 		return false;
 	}
 
-	// Every landed analysis, not only the one this script asked for. refresh_exports believes the
-	// project's diagnostics rather than this file's, so an edit to a file this script never heard
-	// of can be the reason its list has to give way to the placeholder's. The rebuild itself waits
-	// for the next ask, which is what stops the inspector paying for it on every redraw. The
-	// documentation is the same shape: described from the analysis, re-registered on the next
-	// hover that wants it.
-	exports_current = false;
-	doc_current = false;
-
+	// Every landed (non-completion-buffer) analysis has already moved
+	// language->description_epoch_value() by the time this runs -- poll_check advances it before
+	// calling here -- so exports_epoch and doc_epoch read stale on the next ask even for a script
+	// that is not the one below, the same way refresh_exports believes the project's diagnostics
+	// rather than this file's: an edit to a file this script never heard of can be the reason its
+	// list has to give way to the placeholder's. Nothing has to be cleared here for that to hold.
 	if (!awaiting_analysis) {
 		return false;
 	}
@@ -216,10 +213,11 @@ void VerseScript::refresh_from_analysis() {
 		return;
 	}
 
-	// What lets update_placeholders below actually rebuild the list: a new generation changes the
-	// declared defaults even when the analysis behind the shape has not moved.
-	exports_current = false;
-	doc_current = false;
+	// update_placeholders below rebuilds the list off the epoch language holds now: whichever of
+	// poll_check or build_project called here (through analysis_landed or generation_published)
+	// already advanced description_epoch past whatever exports_epoch was last stamped with --
+	// including a generation with no new analysis behind it, since a build changes declared
+	// defaults even when the shape has not moved.
 
 	// A file is valid when the project built and this file is not one of the reasons it might not
 	// have. Attachability is the separate question below: a `.verse` holding only module-level
@@ -323,7 +321,9 @@ bool VerseScript::is_compiled() const {
 }
 
 bool VerseScript::doc_is_current() const {
-	return doc_current;
+	VerseScriptLanguage *language = VerseScriptLanguage::singleton();
+	return language != nullptr
+			&& doc_epoch.load(std::memory_order_relaxed) == language->description_epoch_value();
 }
 
 bool VerseScript::_editor_can_reload_from_file() {
@@ -391,16 +391,22 @@ TypedArray<Dictionary> VerseScript::_get_documentation() const {
 	const String class_name = verse_class_name();
 
 	// has_class separates "not described yet" from "described, and has no members": both answer
-	// an empty list, and only the first is worth asking again about.
+	// an empty list, and only the first is worth asking again about. 0 never equals a real epoch
+	// (VerseEpochCounter starts at 1), so this reads as stale without a separate flag to keep in
+	// step with it.
 	if (!on_verse_thread || class_name.is_empty() || runtime == nullptr || !runtime->is_host_loaded()
 			|| !runtime->has_class(class_name)) {
-		doc_current = false;
+		doc_epoch.store(0, std::memory_order_relaxed);
 		if (language != nullptr) {
 			language->note_script_docs_deferred();
 		}
 		return docs;
 	}
-	doc_current = true;
+	// Stamped with the epoch this description is about to be read against, before the scan below
+	// rather than after: this call can run off the editor's thread (B20), so the epoch has to come
+	// from one atomic load rather than from whatever description_epoch_value() answers after the
+	// scan, which a build landing concurrently on the editor's thread could move out from under it.
+	doc_epoch.store(language != nullptr ? language->description_epoch_value() : 0, std::memory_order_relaxed);
 
 	const TypedArray<Dictionary> members = runtime->class_members(class_name);
 
@@ -793,7 +799,12 @@ Variant VerseScript::_get_property_default_value(const StringName &p_property) c
 }
 
 void VerseScript::_update_exports() {
-	exports_current = false;
+	// Godot's own request to recompute now, which is a different reason than the epoch answers:
+	// nothing about the analyzed program need have changed for Godot to ask this (a placeholder
+	// just created still needs its export list). exports_epoch never legitimately holds 0 once a
+	// real epoch has filled it, so this reads as unconditionally stale without needing a second,
+	// forced-recompute flag beside the epoch.
+	exports_epoch = 0;
 	update_placeholders();
 }
 
@@ -1094,10 +1105,12 @@ Dictionary VerseScript::class_header() const {
 // the build instead would empty the properties for as long as the file is broken, which is exactly
 // when the author wants to see them.
 void VerseScript::refresh_exports() const {
-	if (exports_current) {
+	VerseScriptLanguage *language = VerseScriptLanguage::singleton();
+	const uint64_t epoch = language != nullptr ? language->description_epoch_value() : 0;
+	if (exports_epoch == epoch) {
 		return;
 	}
-	exports_current = true;
+	exports_epoch = epoch;
 
 	// Fallback belongs to a placeholder with no last-good list to serve, which is only the case
 	// before the first successful build. After one, exports_cache and last_good_defaults hold the
@@ -1105,7 +1118,6 @@ void VerseScript::refresh_exports() const {
 	// export this build cannot evaluate reads its last good default rather than a null the scene
 	// saver would write over the real value (B39).
 	VerseRuntime *runtime = get_runtime();
-	VerseScriptLanguage *language = VerseScriptLanguage::singleton();
 	if (runtime == nullptr || language == nullptr) {
 		placeholder_fallback_enabled = !had_successful_exports;
 		return;

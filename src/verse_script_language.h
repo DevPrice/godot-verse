@@ -18,6 +18,7 @@
 #include <godot_cpp/variant/typed_array.hpp>
 
 #include <atomic>
+#include <cstdint>
 #include <map>
 #include <string>
 #include <unordered_map>
@@ -70,6 +71,27 @@ godot::StringName verse_godot_class_name(const godot::String &p_verse_class, int
 // the library, with is_editor_hint() false, which is where the errors actually showed up.
 godot::EditorInterface *verse_editor_interface();
 #endif
+
+// A monotonically increasing counter, advanced whenever something a cache might describe changes.
+// A cache stores the value this returned when it was filled, and a read compares against current()
+// instead of being cleared by hand at every place that could invalidate it.
+//
+// VerseScriptLanguage holds two instances, for two different questions -- see analysis_epoch and
+// description_epoch there, and poll_check for where each actually advances.
+//
+// Atomic: VerseScript::_get_documentation can run off the editor's thread (B20), and it still has
+// to read the current epoch to know whether its own answer is fresh. Relaxed ordering is enough --
+// this is a bare "did anything change" counter, not a fence for any other memory.
+class VerseEpochCounter {
+public:
+	uint64_t current() const { return value.load(std::memory_order_relaxed); }
+	void advance() { value.fetch_add(1, std::memory_order_relaxed); }
+
+private:
+	// Starts at 1, not 0, so a default-constructed cache field reads as already stale against the
+	// first real epoch with no separate "never filled" sentinel to carry alongside it.
+	std::atomic<uint64_t> value{ 1 };
+};
 
 // The "Verse" ScriptLanguage. One instance, created and handed to
 // Engine::register_script_language by register_types.cpp, so singleton() is valid for the life
@@ -341,6 +363,14 @@ public:
 	// caller that waits for a better one waits forever.
 	bool analysis_is_current(const godot::String &p_path, const godot::String &p_source) const;
 
+	// The epoch a VerseScript compares its own description caches (exports, methods, signals,
+	// rpcs, documentation) against, instead of being told to invalidate them by hand. It advances
+	// at exactly the two points analysis_landed()/generation_published() used to be called from: a
+	// published generation, and an *ordinary* analysis landing -- not a completion buffer's, which
+	// describes a line the author has not finished typing and must not be read as the file's own
+	// shape (see poll_check).
+	uint64_t description_epoch_value() const { return description_epoch.current(); }
+
 	// Queues p_source as p_path's text for analysis and returns. _frame is what hands it to the
 	// host, and a later one is where the result lands and every script awaiting it is told.
 	// Nothing starts on this thread: an analysis blocks the VM for its whole length, so one begun
@@ -484,14 +514,30 @@ private:
 	mutable godot::String completion_refresh_source;
 	mutable bool completion_refresh_pending = false;
 
-	// The completion buffer the last vh_complete_symbol answered for, with its position, mode and
-	// answer. Godot re-asks on every keystroke while the popup is open, and each ask costs a
-	// whole-project analysis; normalizing the half-typed identifier out of the buffer is what
-	// makes the whole of one prefix the same question, and this is what makes it free to repeat.
+	// Two counters that answer "has the analyzed program changed since this cache was filled".
+	// They are not one counter because they answer different questions. analysis_epoch tracks
+	// whatever whole-project snapshot the host currently holds and moves on *every* landed
+	// analysis, completion buffer included -- because vh_complete_symbol and vh_signature_at read
+	// that snapshot regardless of which file's buffer produced it, so a byte-identical completion
+	// query for file A can be stale because of an edit to file B. description_epoch
+	// tracks what a *script* may honestly describe itself as, and skips a completion buffer's
+	// landing on purpose: that landing describes a line the author has not finished typing, and
+	// letting it move description_epoch would flicker a script's own export list and documentation
+	// mid-keystroke, the same reason poll_check already runs the per-script analysis_landed() loop
+	// only in the non-completion branch. See poll_check and build_project for where each advances.
+	mutable VerseEpochCounter analysis_epoch;
+	mutable VerseEpochCounter description_epoch;
+
+	// The completion buffer the last vh_complete_symbol answered for, with its position, mode, the
+	// analysis_epoch it was answered at, and the answer. Godot re-asks on every keystroke while the
+	// popup is open, and each ask costs a whole-project analysis; normalizing the half-typed
+	// identifier out of the buffer is what makes the whole of one prefix the same question, and the
+	// epoch is what makes it safe to answer from cache rather than merely cheap.
 	mutable godot::String completion_cache_source;
 	mutable int32_t completion_cache_line = -1;
 	mutable int32_t completion_cache_column = -1;
 	mutable int32_t completion_cache_mode = -1;
+	mutable uint64_t completion_cache_epoch = 0;
 	mutable godot::TypedArray<godot::Dictionary> completion_cache_options;
 
 	// The same, for the argument hint. Kept apart because the two are asked about different
@@ -500,15 +546,8 @@ private:
 	mutable godot::String signature_cache_source;
 	mutable int32_t signature_cache_line = -1;
 	mutable int32_t signature_cache_column = -1;
+	mutable uint64_t signature_cache_epoch = 0;
 	mutable godot::Dictionary signature_cache;
-
-	// Both caches are keyed on buffer text and caret alone, with no generation of the semantic
-	// program in the key -- so a build or an analysis that changes a class declared in another
-	// file leaves a byte-identical buffer answering from before either ran. Called wherever
-	// analyzed_source_by_path is written (poll_check, flush_pending_check) and wherever a build
-	// publishes a generation (build_project). A later step keys the cache on a generation epoch
-	// instead of clearing it by hand at every writer.
-	void invalidate_completion_caches() const;
 
 	// Queues p_path's buffer for analysis in the slot p_is_completion picks: see
 	// has_pending_completion_check.

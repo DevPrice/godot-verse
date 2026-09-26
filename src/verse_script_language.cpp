@@ -2349,7 +2349,8 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 
 			bool have_signature = signature_cache_source == source
 					&& signature_cache_line == (int32_t)line
-					&& signature_cache_column == (int32_t)column;
+					&& signature_cache_column == (int32_t)column
+					&& signature_cache_epoch == analysis_epoch.current();
 			if (!have_signature) {
 				const String globalized = ProjectSettings::get_singleton()->globalize_path(p_path);
 				bool not_ready = false;
@@ -2364,6 +2365,7 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 					signature_cache_source = source;
 					signature_cache_line = (int32_t)line;
 					signature_cache_column = (int32_t)column;
+					signature_cache_epoch = analysis_epoch.current();
 					have_signature = true;
 				}
 			}
@@ -2440,7 +2442,8 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 		position_of(position, line, column);
 
 		bool have_options = completion_cache_source == source && completion_cache_line == (int32_t)line
-				&& completion_cache_column == (int32_t)column && completion_cache_mode == mode;
+				&& completion_cache_column == (int32_t)column && completion_cache_mode == mode
+				&& completion_cache_epoch == analysis_epoch.current();
 		if (!have_options) {
 			const String globalized = ProjectSettings::get_singleton()->globalize_path(p_path);
 			bool not_ready = false;
@@ -2457,6 +2460,7 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 				completion_cache_line = (int32_t)line;
 				completion_cache_column = (int32_t)column;
 				completion_cache_mode = mode;
+				completion_cache_epoch = analysis_epoch.current();
 				have_options = true;
 			}
 		}
@@ -4391,11 +4395,13 @@ Error VerseScriptLanguage::build_project() {
 
 	// A new generation means new classes, new method tables and new declared defaults -- exactly
 	// what a byte-identical buffer's cached completion or signature answer could have been
-	// describing before this build. Every script has to re-read them off the program that now
-	// exists too, and the inspector has to be told, which is R-ITER-3. Snapshotted because
+	// describing before this build, and what every script's own description caches now read
+	// stale against. Both epochs move together here: a build is a moment both kinds of cache
+	// have to give way. The inspector has to be told too, which is R-ITER-3. Snapshotted because
 	// refreshing a script republishes its export list, and Godot is free to drop a script while
 	// that runs.
-	invalidate_completion_caches();
+	analysis_epoch.advance();
+	description_epoch.advance();
 	const std::vector<VerseScript *> scripts = live_scripts;
 	for (VerseScript *script : scripts) {
 		script->generation_published();
@@ -4570,19 +4576,6 @@ void VerseScriptLanguage::start_pending_check() const {
 	}
 }
 
-void VerseScriptLanguage::invalidate_completion_caches() const {
-	completion_cache_source = String();
-	completion_cache_line = -1;
-	completion_cache_column = -1;
-	completion_cache_mode = -1;
-	completion_cache_options = TypedArray<Dictionary>();
-
-	signature_cache_source = String();
-	signature_cache_line = -1;
-	signature_cache_column = -1;
-	signature_cache = Dictionary();
-}
-
 void VerseScriptLanguage::flush_pending_check() const {
 	if (!has_pending_check && !has_pending_completion_check) {
 		return;
@@ -4613,7 +4606,11 @@ void VerseScriptLanguage::flush_pending_check() const {
 	runtime->check_project(ProjectSettings::get_singleton()->globalize_path(path), source, &errors_by_globalized);
 
 	analyzed_source_by_path[path] = source;
-	invalidate_completion_caches();
+	// The snapshot the host now holds changed, whether or not this buffer was a completion one --
+	// see analysis_epoch. This never touches description_epoch: a probe_hover/probe_complete flush
+	// has no live scripts of its own to describe, which matches poll_check never doing so here
+	// either (only its non-completion branch does).
+	analysis_epoch.advance();
 	record_diagnostics(errors_by_globalized);
 }
 
@@ -4631,17 +4628,28 @@ void VerseScriptLanguage::poll_check() const {
 		// queues the ordinary analysis that puts the diagnostics back, and a hover declines in the
 		// meantime rather than trusting loci measured against a spliced-in placeholder.
 		analyzed_source_by_path[in_flight_path] = in_flight_source;
-		invalidate_completion_caches();
+		// The whole-project snapshot the host holds moved, whichever buffer produced it -- see
+		// analysis_epoch.
+		analysis_epoch.advance();
 
 		if (in_flight_is_completion) {
 			// Everything below describes the author's file to the author. This analysis was of a
 			// line they are halfway through typing -- the placeholder resolves to nothing, so its
 			// diagnostics are an unknown identifier they did not write -- and drawing that would
 			// be worse than drawing nothing. The answer it was asked for is the program it left
-			// behind, which vh_complete_symbol reads on the way back through.
+			// behind, which vh_complete_symbol reads on the way back through. description_epoch does
+			// not move here either, for the same reason: a script's exports and documentation must
+			// not be re-derived from a line nobody finished writing.
 			completion_refresh_pending = completion_refresh_path == in_flight_path
 					&& completion_refresh_source == in_flight_source;
 		} else {
+			// The program every script may honestly describe itself against moved, ahead of the
+			// per-script loop below so each one's own comparison against description_epoch_value()
+			// already reads stale -- which is what lets analysis_landed() skip a script this landing
+			// was not for and still have that script's exports and documentation catch up next time
+			// they are asked for, without this loop having to reach it directly (B13, B26, B39).
+			description_epoch.advance();
+
 			editor_refresh_pending = record_diagnostics(errors_by_globalized) || editor_refresh_pending;
 			refresh_script_warnings(in_flight_path);
 
