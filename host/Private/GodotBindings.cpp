@@ -854,6 +854,10 @@ void VhCallStatic(verse::string const& Class,
     FHostState& Host = GetHost();
     if (!Host.Godot.CallStatic)
     {
+        RAISE_VERSE_RUNTIME_ERROR_FORMAT(
+            Verse::ERuntimeDiagnostic::ErrRuntime_NativeInternal,
+            TEXT("Called a static Godot method through a host with no CallStatic callback wired -- "
+                 "the GDExtension consumer never set the Verse host's static-call callback."));
         return;
     }
 
@@ -889,6 +893,10 @@ void VhCallUtility(verse::string const& Name, TArray<FGodotValue> const& Args, F
     FHostState& Host = GetHost();
     if (!Host.Godot.CallUtility)
     {
+        RAISE_VERSE_RUNTIME_ERROR_FORMAT(
+            Verse::ERuntimeDiagnostic::ErrRuntime_NativeInternal,
+            TEXT("Called a Godot utility function through a host with no CallUtility callback wired "
+                 "-- the GDExtension consumer never set the Verse host's utility-call callback."));
         return;
     }
 
