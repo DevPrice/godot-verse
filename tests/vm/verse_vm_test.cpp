@@ -1239,6 +1239,17 @@ void JsonCases(Cases &r_cases) {
 					value.items[7].number == 0.0 && std::signbit(value.items[7].number) && value.items[8].number == 100.0 && value.items[9].number == 0.5);
 	r_cases.check("json: a number past binary64's largest reads as infinity of its sign",
 			Parses("[1e309, -1.7976931348623159e308]", value) && value.items[0].number == HUGE_VAL && value.items[1].number == -HUGE_VAL);
+	r_cases.check("json: a number past binary64's range either way reads as zero or infinity of its sign",
+			Parses("[1e-400, -1e-400, 1e400, -1e400, 0.0000001e-320, 100000e-330, 0.001e-99999999999]", value) &&
+					value.items[0].number == 0.0 && !std::signbit(value.items[0].number) &&
+					value.items[1].number == 0.0 && std::signbit(value.items[1].number) &&
+					value.items[2].number == HUGE_VAL && value.items[3].number == -HUGE_VAL &&
+					value.items[4].number == 0.0 && value.items[5].number == 0.0 && value.items[6].number == 0.0);
+	r_cases.check("json: the smallest subnormal and the largest lexeme rounding to it still read exactly",
+			Parses("[4.9406564584124654e-324, -4.9406564584124654e-324, 7.4e-324]", value) &&
+					value.items[0].number == std::numeric_limits<double>::denorm_min() &&
+					value.items[1].number == -std::numeric_limits<double>::denorm_min() &&
+					value.items[2].number == std::numeric_limits<double>::denorm_min());
 	{
 		const std::string previous = setlocale(LC_ALL, nullptr);
 		const bool comma = setlocale(LC_ALL, "de-DE") != nullptr || setlocale(LC_ALL, "de_DE.UTF-8") != nullptr || setlocale(LC_ALL, "fr_FR.UTF-8") != nullptr;

@@ -1,6 +1,5 @@
 #include "vm_json.h"
 
-#include <cerrno>
 #include <charconv>
 #include <clocale>
 #include <cmath>
@@ -26,12 +25,41 @@ constexpr int kMaxDepth = 256;
 
 #if !defined(VM_JSON_STRTOD)
 
-// A magnitude past binary64 is result_out_of_range; the lexeme is kept either way.
+// result_out_of_range leaves the value untouched, so which way it fell is read off the lexeme, which
+// the parser has already held to JSON's grammar: a magnitude below one underflowed.
+bool magnitude_below_one(const std::string &p_lexeme) {
+	size_t at = p_lexeme[0] == '-' ? 1 : 0;
+	long long integer_digits = 0;
+	long long leading_zeros = 0;
+	bool nonzero = false;
+	bool fraction = false;
+	for (; at < p_lexeme.size() && p_lexeme[at] != 'e' && p_lexeme[at] != 'E'; ++at) {
+		if (p_lexeme[at] == '.') {
+			fraction = true;
+			continue;
+		}
+		integer_digits += fraction ? 0 : 1;
+		nonzero = nonzero || p_lexeme[at] != '0';
+		leading_zeros += nonzero ? 0 : 1;
+	}
+	long long exponent = 0;
+	if (at < p_lexeme.size()) {
+		++at;
+		const bool negative = p_lexeme[at] == '-';
+		at += p_lexeme[at] == '-' || p_lexeme[at] == '+' ? 1 : 0;
+		for (; at < p_lexeme.size() && exponent < 1000000000; ++at) {
+			exponent = exponent * 10 + (p_lexeme[at] - '0');
+		}
+		exponent = negative ? -exponent : exponent;
+	}
+	return integer_digits - 1 - leading_zeros + exponent < 0;
+}
+
 bool parse_double(const std::string &p_lexeme, double &r_value) {
 	const char *end = p_lexeme.data() + p_lexeme.size();
 	const std::from_chars_result result = std::from_chars(p_lexeme.data(), end, r_value);
 	if (result.ec == std::errc::result_out_of_range) {
-		r_value = p_lexeme[0] == '-' ? -HUGE_VAL : HUGE_VAL;
+		r_value = std::copysign(magnitude_below_one(p_lexeme) ? 0.0 : HUGE_VAL, p_lexeme[0] == '-' ? -1.0 : 1.0);
 		return true;
 	}
 	return result.ec == std::errc() && result.ptr == end;
@@ -51,14 +79,13 @@ double strtod_c(const char *p_text, char **r_end) {
 #endif
 }
 
-// from_chars's result_out_of_range is a nonzero lexeme rounding to zero or infinity; strtod may also
-// flag a subnormal it returned, which from_chars accepts.
+// strtod already answers an underflow with a zero and an overflow with HUGE_VAL, but C does not
+// promise the zero's sign.
 bool parse_double(const std::string &p_lexeme, double &r_value) {
 	char *end = nullptr;
-	errno = 0;
 	r_value = strtod_c(p_lexeme.c_str(), &end);
-	if (errno == ERANGE && (r_value == 0.0 || std::isinf(r_value))) {
-		r_value = p_lexeme[0] == '-' ? -HUGE_VAL : HUGE_VAL;
+	if (r_value == 0.0) {
+		r_value = std::copysign(0.0, p_lexeme[0] == '-' ? -1.0 : 1.0);
 	}
 	return end == p_lexeme.data() + p_lexeme.size();
 }
