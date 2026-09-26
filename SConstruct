@@ -44,6 +44,16 @@ else:
     env["CXXFLAGS"].remove("-std=c++17")
     env["CXXFLAGS"].insert(0, "-std=c++20")
 
+# architecture-review.md item 1 step 1: a switch over an ABI enum with no case for one of its
+# enumerators is an error, so a new one added to include/verse_host_abi.h fails the build at every
+# switch meant to be exhaustive over it rather than silently falling into a `default:`. Applied
+# only to our own sources -- godot-cpp already finished compiling against the env this was cloned
+# from, above, so appending here does not reach its object files.
+if env.get("is_msvc", False):
+    env.Append(CXXFLAGS=["/we4062"])
+else:
+    env.Append(CXXFLAGS=["-Werror=switch"])
+
 env.Append(CPPPATH=["src/", "include/"])
 sources = Glob("src/*.cpp")
 # "Convert to Verse" is editor-only and carries a 3 MB table of the mirror (verse_gd_api.gen.h), so

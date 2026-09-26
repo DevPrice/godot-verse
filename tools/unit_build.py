@@ -47,7 +47,7 @@ def build(tag: str, sources: list[str], includes: list[str], exe_name: str, *,
         if vcvars64 is None:
             print("error: no Visual Studio installation found", file=sys.stderr)
             sys.exit(1)
-        flags = ["/std:c++20", "/EHsc", "/Zi", *(["/O2", "/DNDEBUG"] if release else []), *msvc_flags]
+        flags = ["/std:c++20", "/EHsc", "/Zi", "/we4062", *(["/O2", "/DNDEBUG"] if release else []), *msvc_flags]
         includes_arg = " ".join(f'/I"{REPO / i}"' for i in includes)
         files = " ".join(f'"{s}"' for s in source_paths)
         command = (f'call "{vcvars64}" && cl {" ".join(flags)} {includes_arg} {files} '
@@ -59,7 +59,7 @@ def build(tag: str, sources: list[str], includes: list[str], exe_name: str, *,
         if not compiler:
             print("error: no C++ compiler found (set CXX)", file=sys.stderr)
             sys.exit(1)
-        command = [compiler, "-std=c++20", "-g", *(["-O2", "-DNDEBUG"] if release else []), *gcc_flags,
+        command = [compiler, "-std=c++20", "-g", "-Werror=switch", *(["-O2", "-DNDEBUG"] if release else []), *gcc_flags,
                    *(f"-I{REPO / i}" for i in includes), *map(str, source_paths), "-o", str(out_exe)]
         print(f"[{tag}] running: {' '.join(command)}")
         result = subprocess.run(command, cwd=str(REPO))

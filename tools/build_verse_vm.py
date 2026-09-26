@@ -74,7 +74,7 @@ def build_dll(repo: Path) -> int:
 
     cl_cmd = (
         f'call "{vcvars64}" && '
-        f'cl /std:c++20 /EHs-c- /GR- /O2 /DNDEBUG /Zi /D VERSE_HOST_IMPLEMENTATION '
+        f'cl /std:c++20 /EHs-c- /GR- /O2 /DNDEBUG /Zi /we4062 /D VERSE_HOST_IMPLEMENTATION '
         f'/I"{include_dir}" /I"{vm_dir}" {source_args} '
         f'/LD /Fe"{out_dll}" /Fo"{out_dir}\\\\" /Fd"{out_dir / "verse_vm_objects.pdb"}" '
         f'/link /DEBUG /OPT:REF /OPT:ICF'
@@ -113,6 +113,7 @@ def build_wasm(repo: Path) -> int:
             "-O3",
             "-fno-exceptions",
             "-fno-rtti",
+            "-Werror=switch",
             f"-I{include_dir}",
             f"-I{vm_dir}",
             "-c",
