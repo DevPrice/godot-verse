@@ -153,7 +153,10 @@ std::string verse_binding_enum_name(const std::string &p_owner, const std::strin
 /// stripped rather than the enum's name, because Godot's prefixing is only half consistent --
 /// `TIMER_PROCESS_PHYSICS` and `TIMER_PROCESS_IDLE` share `TIMER_PROCESS_` where the enum is called
 /// `TimerProcessCallback`. Stripping is all or nothing per enum, abandoned when a stripped name
-/// would start with a digit or collide with another in the same enum, so one enum reads one way.
+/// would start with a digit, collide with another in the same enum, or read as a reserved word or
+/// a name Verse's stdlib or the mirror's generated code already claims at module scope -- a
+/// GDScript `MODE_MIN, MODE_MAX` stripped to `Min`/`Max` would collide with two of Verse's own
+/// math functions -- so one enum reads one way.
 std::vector<std::string> verse_binding_enumerator_names(const std::vector<std::string> &p_godot_names);
 
 /// Whether a Verse type can be a property at all.
@@ -171,6 +174,12 @@ bool verse_binding_can_be_property(const std::string &p_type);
 /// 403 of them, which is R-INT-9's own "except where a nested struct or a container forces a
 /// getter/setter pair"; there it leaves Godot's own accessors standing as methods, and here, for a
 /// GDScript `var` that has none, the pair is generated.
+///
+/// `gen_verse_api.py`'s `CONTAINER_PROPERTY_TYPES` also carries `callable` and `signal_ref`,
+/// because both cross as a reference id rather than a decomposable value, the same as
+/// `godot_array` and `dictionary`. This function agrees, though nothing can exercise it today:
+/// `verse_binding_can_be_property` never answers true for either, since the generator has no
+/// reader for them yet.
 bool verse_binding_property_is_member(const std::string &p_type);
 
 /// Whether a `bool`-returning Godot method is a test rather than a value.

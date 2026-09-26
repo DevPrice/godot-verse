@@ -1,5 +1,8 @@
 #include "verse_bindings.h"
 
+#include "verse_gd_api.gen.h"
+#include "verse_keywords.h"
+
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
@@ -43,6 +46,23 @@ std::string lower(const std::string &p_text) {
 
 /// `thing_state` -> `ThingState`, which is `gen_verse_api.py`'s `enum_converter_stem`: the name the
 /// variant-to-enum converter is spelled from.
+/// Whether `p_name` -- already PascalCase -- is a reserved word or a name Verse's own stdlib or
+/// the mirror's generated code claims at module scope, either of which a bound enumerator must
+/// not collide with (`gen_verse_api.py`'s `VERSE_STDLIB_NAMES`/`RESERVED_WORDS` guard, ported).
+bool ambiguous_at_module_scope(const std::string &p_name) {
+	for (const char *const reserved : verse_keywords::reserved_words) {
+		if (p_name == reserved) {
+			return true;
+		}
+	}
+	for (const char *const stdlib_name : verse_gd_api::module_scope_names) {
+		if (p_name == stdlib_name) {
+			return true;
+		}
+	}
+	return false;
+}
+
 std::string enum_stem(const std::string &p_verse_enum) {
 	std::string out;
 	bool at_start = true;
@@ -470,9 +490,12 @@ std::vector<std::string> verse_binding_enumerator_names(const std::vector<std::s
 			name += verse_binding_constant_name(words[i]);
 		}
 		// Abandoned all or nothing, so one enum reads one way: a `Bool` beside a `TypeInt` would be
-		// worse than either. An identifier may not start with a digit, and two enumerators may not
-		// come out the same.
-		if (name.empty() || std::isdigit((unsigned char)name[0]) || !distinct.insert(name).second) {
+		// worse than either. An identifier may not start with a digit, two enumerators may not come
+		// out the same, and one may not read as a name Verse or the mirror already claims at module
+		// scope -- `MODE_MIN`/`MODE_MAX` stripped to `Min`/`Max` is `gen_verse_api.py`'s own guard,
+		// ported.
+		if (name.empty() || std::isdigit((unsigned char)name[0]) || !distinct.insert(name).second ||
+				ambiguous_at_module_scope(name)) {
 			return full;
 		}
 		shortened.push_back(name);
@@ -485,7 +508,14 @@ bool verse_binding_can_be_property(const std::string &p_type) {
 }
 
 bool verse_binding_property_is_member(const std::string &p_type) {
-	return p_type != "string" && p_type != "godot_array" && p_type != "dictionary";
+	// `callable` and `signal_ref` cross the wire as a reference id, exactly as `godot_array` and
+	// `dictionary` do (`src/verse_ref_table.h`) rather than as a decomposable value, so
+	// `gen_verse_api.py`'s `CONTAINER_PROPERTY_TYPES` groups them with the containers. Unreachable
+	// today -- `verse_type_for` (`verse_bindings_gen.cpp`) has no case that answers either type for
+	// a property, so a GDScript `var` of one is left out of a binding entirely rather than reaching
+	// this function -- but the shared rule should still agree if that ever changes.
+	return p_type != "string" && p_type != "godot_array" && p_type != "dictionary" &&
+			p_type != "callable" && p_type != "signal_ref";
 }
 
 bool verse_binding_is_predicate(const std::string &p_godot_name, const std::set<std::string> &p_sibling_names) {
