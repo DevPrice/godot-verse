@@ -502,6 +502,14 @@ private:
 	mutable int32_t signature_cache_column = -1;
 	mutable godot::Dictionary signature_cache;
 
+	// Both caches are keyed on buffer text and caret alone, with no generation of the semantic
+	// program in the key -- so a build or an analysis that changes a class declared in another
+	// file leaves a byte-identical buffer answering from before either ran. Called wherever
+	// analyzed_source_by_path is written (poll_check, flush_pending_check) and wherever a build
+	// publishes a generation (build_project). A later step keys the cache on a generation epoch
+	// instead of clearing it by hand at every writer.
+	void invalidate_completion_caches() const;
+
 	// Queues p_path's buffer for analysis in the slot p_is_completion picks: see
 	// has_pending_completion_check.
 	void request_check(const godot::String &p_path, const godot::String &p_normalized_source, bool p_is_completion = false) const;

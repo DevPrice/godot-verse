@@ -4387,10 +4387,13 @@ Error VerseScriptLanguage::build_project() {
 		return status;
 	}
 
-	// A new generation means new classes, new method tables and new declared defaults. Every
-	// script has to re-read them off the program that now exists, and the inspector has to be
-	// told, which is R-ITER-3. Snapshotted because refreshing a script republishes its export
-	// list, and Godot is free to drop a script while that runs.
+	// A new generation means new classes, new method tables and new declared defaults -- exactly
+	// what a byte-identical buffer's cached completion or signature answer could have been
+	// describing before this build. Every script has to re-read them off the program that now
+	// exists too, and the inspector has to be told, which is R-ITER-3. Snapshotted because
+	// refreshing a script republishes its export list, and Godot is free to drop a script while
+	// that runs.
+	invalidate_completion_caches();
 	const std::vector<VerseScript *> scripts = live_scripts;
 	for (VerseScript *script : scripts) {
 		script->generation_published();
@@ -4565,6 +4568,19 @@ void VerseScriptLanguage::start_pending_check() const {
 	}
 }
 
+void VerseScriptLanguage::invalidate_completion_caches() const {
+	completion_cache_source = String();
+	completion_cache_line = -1;
+	completion_cache_column = -1;
+	completion_cache_mode = -1;
+	completion_cache_options = TypedArray<Dictionary>();
+
+	signature_cache_source = String();
+	signature_cache_line = -1;
+	signature_cache_column = -1;
+	signature_cache = Dictionary();
+}
+
 void VerseScriptLanguage::flush_pending_check() const {
 	if (!has_pending_check && !has_pending_completion_check) {
 		return;
@@ -4595,6 +4611,7 @@ void VerseScriptLanguage::flush_pending_check() const {
 	runtime->check_project(ProjectSettings::get_singleton()->globalize_path(path), source, &errors_by_globalized);
 
 	analyzed_source_by_path[path] = source;
+	invalidate_completion_caches();
 	record_diagnostics(errors_by_globalized);
 }
 
@@ -4612,6 +4629,7 @@ void VerseScriptLanguage::poll_check() const {
 		// queues the ordinary analysis that puts the diagnostics back, and a hover declines in the
 		// meantime rather than trusting loci measured against a spliced-in placeholder.
 		analyzed_source_by_path[in_flight_path] = in_flight_source;
+		invalidate_completion_caches();
 
 		if (in_flight_is_completion) {
 			// Everything below describes the author's file to the author. This analysis was of a
