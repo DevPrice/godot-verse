@@ -128,12 +128,15 @@ def generate(engine_root: Path) -> tuple[str, str]:
     parsed_count, identifiers = parse_reserved_symbols(reserved_path)
     grammar_parsed_count, grammar_keywords = parse_grammar_keywords(grammar_path)
 
+    # Two separate counts, not one "extras merged": the grammar table supplies most of what used
+    # to be EXTRA_KEYWORDS, so folding both into a single tally would have kept exactly the
+    # misleading reading this function used to invite -- a run reporting "N extras merged" while
+    # EXTRA_KEYWORDS is empty, which looks like a bug until you notice the N is the grammar table's.
     words = set(identifiers)
-    extras_merged = 0
-    for kw in EXTRA_KEYWORDS + sorted(grammar_keywords):
-        if kw not in words:
-            words.add(kw)
-            extras_merged += 1
+    grammar_words_new = len(set(grammar_keywords) - words)
+    words |= set(grammar_keywords)
+    extra_words_new = len(set(EXTRA_KEYWORDS) - words)
+    words |= set(EXTRA_KEYWORDS)
 
     final_words = sorted(words)
 
@@ -145,8 +148,10 @@ def generate(engine_root: Path) -> tuple[str, str]:
     summary = (
         f"parsed {parsed_count} DECLARE_RESERVED_SYMBOL entries, {len(identifiers)} survived "
         f"the identifier/reservation filter, {grammar_parsed_count} grammar-table entries seen, "
-        f"{len(grammar_keywords)} plain-identifier grammar keywords, "
-        f"{extras_merged} extras merged, {len(final_words)} final reserved words"
+        f"{len(grammar_keywords)} plain-identifier grammar keywords "
+        f"({grammar_words_new} not already in ReservedSymbols.inl), "
+        f"{extra_words_new} from EXTRA_KEYWORDS not covered by either source, "
+        f"{len(final_words)} final reserved words"
     )
     return header, summary
 

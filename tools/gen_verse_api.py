@@ -384,6 +384,13 @@ def verse_method_name(godot_name: str) -> str:
     return pascal_member_name(godot_name)
 
 
+def constant_verse_name(godot_name: str) -> str:
+    """SCREAMING_SNAKE to PascalCase: `NOTIFICATION_ENTER_TREE` is `NotificationEnterTree`, `UP` is
+    `Up`. Unlike pascal_member_name, `.capitalize()` also lowercases the rest of each part, which
+    is right for a constant's shouting case and wrong for `get_max`."""
+    return "".join(part.capitalize() for part in godot_name.split("_") if part)
+
+
 def verse_virtual_name(godot_name: str) -> str:
     """`_ready` -> `_Ready`. Godot's own leading underscore is kept, and it is load-bearing.
 
@@ -1867,6 +1874,34 @@ def check_hand_tables(api: dict) -> list[str]:
         if name not in all_property_names and name not in all_method_names:
             problems.append(
                 f"VERSE_AMBIGUOUS_MEMBER_NAMES: no Godot member maps to '{name}' any more")
+
+    # The `@GlobalScope` utility tables, all four keyed on the raw name in utility_functions --
+    # unlike the class-scoped tables above, a utility has no owning class to look one up on.
+    utility_names = {u["name"] for u in api.get("utility_functions", [])}
+    for table_name, keys in (
+        ("UTILITY_RENAMES", UTILITY_RENAMES),
+        ("DISPATCHED_UTILITIES", DISPATCHED_UTILITIES),
+        ("UTILITY_VERSE_SPELLINGS", UTILITY_VERSE_SPELLINGS),
+        ("UTILITY_VARIANT_ONLY", UTILITY_VARIANT_ONLY),
+    ):
+        for name in sorted(keys):
+            if name not in utility_names:
+                problems.append(f"{table_name}: {name} is not a utility function in the API")
+
+    # CONSTANT_RENAMES is keyed the way PROPERTY_RENAMES is: on the Verse-computed name a class
+    # constant would otherwise take, across every class emit_statics_modules reads constants from
+    # -- a mirrored class's own `constants` and a math builtin's (`Color.TAN`, this table's one row).
+    all_constant_names = set()
+    for c in api["classes"]:
+        all_constant_names |= {constant_verse_name(k["name"]) for k in (c.get("constants") or [])}
+    for b in api.get("builtin_classes", []):
+        if b["name"] not in MATH_TYPES:
+            continue
+        all_constant_names |= {constant_verse_name(k["name"]) for k in (b.get("constants") or [])}
+
+    for name in sorted(CONSTANT_RENAMES):
+        if name not in all_constant_names:
+            problems.append(f"CONSTANT_RENAMES: no Godot constant maps to '{name}' any more")
 
     return problems
 

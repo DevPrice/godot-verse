@@ -1572,11 +1572,13 @@ def test_fmod_keeps_its_own_spelling():
 
 def test_hand_tables_report_a_row_that_matches_nothing():
     """check_hand_tables is what would say a CONST_OVERRIDES, PREDICATE_EXTRA, METHOD_RENAMES,
-    METHOD_DISPLACED, PREDICATE_EXCLUDE, FREE_FUNCTION_REPLACEMENTS, PROPERTY_RENAMES or
-    VERSE_AMBIGUOUS_MEMBER_NAMES row had stopped naming anything real, the way a renamed or removed
-    Godot class would leave it (docs/architecture-review.md item 4 step 5). Plants one bogus row,
-    confirms it is reported, then restores the module's real table so nothing else in this process
-    sees the plant.
+    METHOD_DISPLACED, PREDICATE_EXCLUDE, FREE_FUNCTION_REPLACEMENTS, PROPERTY_RENAMES,
+    VERSE_AMBIGUOUS_MEMBER_NAMES, UTILITY_RENAMES, CONSTANT_RENAMES, DISPATCHED_UTILITIES,
+    UTILITY_VERSE_SPELLINGS or UTILITY_VARIANT_ONLY row had stopped naming anything real, the way
+    a renamed or removed Godot class or `@GlobalScope` utility would leave it
+    (docs/architecture-review.md item 4 step 5). Plants one bogus row per table shape, confirms
+    each is reported, then restores the module's real tables so nothing else in this process sees
+    the plant.
     """
     import json
 
@@ -1603,6 +1605,24 @@ def test_hand_tables_report_a_row_that_matches_nothing():
                    any("PROPERTY_RENAMES" in p and "NoSuchProperty" in p for p in problems))
     finally:
         g.PROPERTY_RENAMES = original
+
+    original = g.UTILITY_RENAMES
+    try:
+        g.UTILITY_RENAMES = dict(original, no_such_utility="NoSuchUtility")
+        problems = g.check_hand_tables(api)
+        check_true("a planted utility-table row naming nothing real is reported",
+                   any(p.startswith("UTILITY_RENAMES: no_such_utility") for p in problems))
+    finally:
+        g.UTILITY_RENAMES = original
+
+    original = g.CONSTANT_RENAMES
+    try:
+        g.CONSTANT_RENAMES = dict(original, NoSuchConstant="Whatever")
+        problems = g.check_hand_tables(api)
+        check_true("a planted CONSTANT_RENAMES row naming nothing real is reported",
+                   any("CONSTANT_RENAMES" in p and "NoSuchConstant" in p for p in problems))
+    finally:
+        g.CONSTANT_RENAMES = original
 
     check_true("restoring the real tables leaves nothing reported", g.check_hand_tables(api) == [])
 
