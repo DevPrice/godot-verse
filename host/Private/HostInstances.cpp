@@ -664,15 +664,13 @@ AUTORTFM_DISABLE bool GodotVerse::ReadClassDefaultField(FUtf8StringView ClassNam
 {
     OutValue.Reset();
 
-    if (GetAnalysisSnapshot())
+    if (const TResult<const FAnalysisSnapshot::FClass*> Found = FindSnapshotClass(ClassName))
     {
-        if (const FAnalysisSnapshot::FClass* const Found = GetAnalysisSnapshot()->Classes.Find(FUtf8String(ClassName)))
+        if (const TSharedPtr<const FFieldValue>* const Cached =
+                Found.GetValue()->Defaults.Find(FUtf8String(FieldName)))
         {
-            if (const TSharedPtr<const FFieldValue>* const Cached = Found->Defaults.Find(FUtf8String(FieldName)))
-            {
-                OutValue = *Cached;
-                return OutValue.IsValid();
-            }
+            OutValue = *Cached;
+            return OutValue.IsValid();
         }
     }
 
@@ -1061,14 +1059,14 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceToString(FInstance* Instance,
     // From the snapshot, so this costs no analysis and never waits -- Godot asks for an object's
     // text from the remote inspector and from `print`, neither of which is a moment to block on.
     const FUtf8String ClassName = QualifiedClassName(Instance->Object->GetClass());
-    const FAnalysisSnapshot::FClass* const Found =
-        GetAnalysisSnapshot() ? GetAnalysisSnapshot()->Classes.Find(ClassName) : nullptr;
-    if (!Found || Found->ToStringDecorated.IsEmpty())
+    const TResult<const FAnalysisSnapshot::FClass*> Found = FindSnapshotClass(ClassName);
+    if (!Found || Found.GetValue()->ToStringDecorated.IsEmpty())
     {
         return StatusFor(EHostFailure::NoSuchMethod);
     }
 
-    Verse::VFunction* const Function = FindVFunctionByDecoratedName(FUtf8StringView(Found->ToStringDecorated));
+    Verse::VFunction* const Function =
+        FindVFunctionByDecoratedName(FUtf8StringView(Found.GetValue()->ToStringDecorated));
     if (!Function)
     {
         return StatusFor(EHostFailure::NoSuchMethod);

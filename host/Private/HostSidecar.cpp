@@ -972,6 +972,13 @@ AUTORTFM_DISABLE bool GodotVerse::WriteClassSidecar(const FString& Path,
         OutError = UTF8TEXT("there is no analysis snapshot to write; nothing was compiled");
         return false;
     }
+    // A carried description is the editor's stand-in for a class it could not re-read, and a cook
+    // is the one reader that must never ship one: nothing after it can re-read the class either.
+    if (Snapshot->Stale.IsSet())
+    {
+        OutError = UTF8TEXT("the project does not parse, so its analysis described no class to write");
+        return false;
+    }
 
     TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
     Root->SetNumberField(TEXT("version"), SidecarVersion);

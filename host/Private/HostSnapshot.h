@@ -7,7 +7,9 @@
 #include "Containers/Map.h"
 #include "Containers/UnrealString.h"
 #include "HostScript.h"
+#include "HostResult.h"
 #include "HostTypeModel.h"
+#include "Misc/Optional.h"
 #include "Templates/SharedPointer.h"
 
 /// The analysis snapshot: what the last analysis to land said about every class the project
@@ -35,6 +37,15 @@ struct FDeclaredTypes
     TMap<FUtf8String, FMethodSignatureTypes> Methods;
     /// Signal member name -> what its payload decomposes into.
     TMap<FUtf8String, FPayloadShape> Signals;
+};
+
+/// Why a description in the snapshot is the last good analysis's rather than the latest one's.
+enum class EStaleReason : uint8
+{
+    /// The analysis never reached semantic analysis, which is what a syntax error in *any* file of
+    /// the project does: uLang analyses nothing once a parse has failed (Toolchain.cpp,
+    /// CToolchain::BuildProject), so the program it leaves declares no class at all.
+    DidNotParse,
 };
 
 /// Everything the class-describing entry points answer, extracted once per analysis.
@@ -101,12 +112,21 @@ struct FAnalysisSnapshot
         /// had one. A runtime host has no semantic program and can never build one
         /// (`MakeDevEnvironment` is one of the four ISolarisModule members WITH_VERSE_COMPILER=0
         /// takes away), so the analysis records them here and the sidecar carries them across.
-        ///
         TSharedPtr<FDeclaredTypes> Types;
+
+        /// Unset when the analysis that left this snapshot described the class. Set when that
+        /// analysis could describe nothing, and this is the last description one could: every read
+        /// answers from it as it would from a fresh one, because a class whose file is half-typed
+        /// has not stopped existing. The VM half is still read afresh at every publish.
+        TOptional<EStaleReason> Stale;
     };
 
     /// Module-qualified, exactly as every ClassNameUtf8 in the ABI is: `player`, `gameplay/player`.
     TMap<FUtf8String, FClass> Classes;
+
+    /// Set when the analysis this snapshot was taken from described nothing, in which case every
+    /// class above is the last good snapshot's, carried and marked with the same reason.
+    TOptional<EStaleReason> Stale;
 
     /// A generated binding's own members, keyed by the binding's class name.
     ///
@@ -130,9 +150,16 @@ struct FAnalysisSnapshot
 
 /// The snapshot every class-describing entry point answers from. Null before the first analysis.
 ///
-/// Exposed for the sidecar (HostSidecar.cpp), which is the *only* other thing that touches it: the
-/// cooker writes this out and a runtime host, which can never take one of its own, reads one back.
+/// Exposed for the sidecar (HostSidecar.cpp): the cooker writes this out and a runtime host, which
+/// can never take one of its own, reads one back. A reader asking about one class asks
+/// FindSnapshotClass instead.
 AUTORTFM_DISABLE const TSharedPtr<const FAnalysisSnapshot>& GetAnalysisSnapshot();
+
+/// The snapshot's description of one of the project's classes: NotAnalysed before any snapshot,
+/// NoSuchClass when the last analysis to describe anything did not declare it. A class the latest
+/// analysis could not describe is found, with FClass::Stale saying why. Valid until the next
+/// publish.
+AUTORTFM_DISABLE TResult<const FAnalysisSnapshot::FClass*> FindSnapshotClass(FUtf8StringView ClassName);
 
 /// Makes one current, for a host with no compiler to publish what it loaded from disk. Game thread
 /// only, like the swap TakeAnalysisSnapshot's publish does.

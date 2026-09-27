@@ -1664,18 +1664,19 @@ AUTORTFM_DISABLE bool ClassOverrideCandidatesLive(FUtf8StringView ClassName,
 
 AUTORTFM_DISABLE TResult<TArray<FCompleteItem>> ClassMembers(FUtf8StringView ClassName)
 {
-    const TSharedPtr<const FAnalysisSnapshot>& Snapshot = GetAnalysisSnapshot();
-    if (!Snapshot)
+    const TResult<const FAnalysisSnapshot::FClass*> Found = FindSnapshotClass(ClassName);
+    if (Found)
     {
-        return EHostFailure::NotAnalysed;
+        return Found.GetValue()->Members;
     }
-    if (const FAnalysisSnapshot::FClass* const Found = Snapshot->Classes.Find(FUtf8String(ClassName)))
+    if (Found.GetFailure() != EHostFailure::NoSuchClass)
     {
-        return Found->Members;
+        return Found.GetFailure();
     }
     // A generated binding. Asked second because the two are different namespaces and a name in
     // both is the author's own class rather than the one generated from their GDScript.
-    if (const TArray<FCompleteItem>* const Binding = Snapshot->BindingMembers.Find(FUtf8String(ClassName)))
+    if (const TArray<FCompleteItem>* const Binding =
+            GetAnalysisSnapshot()->BindingMembers.Find(FUtf8String(ClassName)))
     {
         return *Binding;
     }
@@ -1684,17 +1685,12 @@ AUTORTFM_DISABLE TResult<TArray<FCompleteItem>> ClassMembers(FUtf8StringView Cla
 
 AUTORTFM_DISABLE TResult<TArray<FCompleteItem>> ClassOverrideCandidates(FUtf8StringView ClassName)
 {
-    const TSharedPtr<const FAnalysisSnapshot>& Snapshot = GetAnalysisSnapshot();
-    if (!Snapshot)
-    {
-        return EHostFailure::NotAnalysed;
-    }
-    const FAnalysisSnapshot::FClass* const Found = Snapshot->Classes.Find(FUtf8String(ClassName));
+    const TResult<const FAnalysisSnapshot::FClass*> Found = FindSnapshotClass(ClassName);
     if (!Found)
     {
-        return EHostFailure::NoSuchClass;
+        return Found.GetFailure();
     }
-    return Found->OverrideCandidates;
+    return Found.GetValue()->OverrideCandidates;
 }
 
 AUTORTFM_DISABLE TResult<FSignatureDesc> SignatureAt(FUtf8StringView Path,

@@ -222,12 +222,9 @@ AUTORTFM_DISABLE bool GodotVerse::ResolveUnknownName(FUtf8StringView Name, TArra
 
 AUTORTFM_DISABLE bool GodotVerse::HasClass(FUtf8StringView ClassName)
 {
-    if (GSnapshot)
+    if (const TResult<const FAnalysisSnapshot::FClass*> Found = FindSnapshotClass(ClassName))
     {
-        if (const FAnalysisSnapshot::FClass* const Found = GSnapshot->Classes.Find(FUtf8String(ClassName)))
-        {
-            return Found->bInPublishedProgram;
-        }
+        return Found.GetValue()->bInPublishedProgram;
     }
 
     // A name the last analysis did not declare is not the same as one the published generation does
@@ -644,8 +641,8 @@ AUTORTFM_DISABLE bool GetClassExportsLive(FUtf8StringView ClassName, TArray<Godo
 AUTORTFM_DISABLE bool GodotVerse::GetClassMethods(FUtf8StringView ClassName, TArray<FMethodDesc>& OutMethods)
 {
     OutMethods.Reset();
-    const FAnalysisSnapshot::FClass* const Found =
-        GSnapshot ? GSnapshot->Classes.Find(FUtf8String(ClassName)) : nullptr;
+    const TResult<const FAnalysisSnapshot::FClass*> Described = FindSnapshotClass(ClassName);
+    const FAnalysisSnapshot::FClass* const Found = Described ? Described.GetValue() : nullptr;
     if (!Found)
     {
         return false;
@@ -657,8 +654,8 @@ AUTORTFM_DISABLE bool GodotVerse::GetClassMethods(FUtf8StringView ClassName, TAr
 AUTORTFM_DISABLE bool GodotVerse::GetClassExports(FUtf8StringView ClassName, TArray<FExportDesc>& OutExports)
 {
     OutExports.Reset();
-    const FAnalysisSnapshot::FClass* const Found =
-        GSnapshot ? GSnapshot->Classes.Find(FUtf8String(ClassName)) : nullptr;
+    const TResult<const FAnalysisSnapshot::FClass*> Described = FindSnapshotClass(ClassName);
+    const FAnalysisSnapshot::FClass* const Found = Described ? Described.GetValue() : nullptr;
     if (!Found || !Found->bExportsHarvested)
     {
         return false;
@@ -715,10 +712,25 @@ AUTORTFM_DISABLE void GodotVerse::SetAnalysisSnapshot(TSharedRef<const GodotVers
     GSnapshot = Snapshot;
 }
 
+AUTORTFM_DISABLE GodotVerse::TResult<const GodotVerse::FAnalysisSnapshot::FClass*> GodotVerse::FindSnapshotClass(
+    FUtf8StringView ClassName)
+{
+    if (!GSnapshot)
+    {
+        return EHostFailure::NotAnalysed;
+    }
+    const FAnalysisSnapshot::FClass* const Found = GSnapshot->Classes.Find(FUtf8String(ClassName));
+    if (!Found)
+    {
+        return EHostFailure::NoSuchClass;
+    }
+    return Found;
+}
+
 AUTORTFM_DISABLE bool GodotVerse::IsClassAbstract(FUtf8StringView ClassName)
 {
-    const FAnalysisSnapshot::FClass* const Found =
-        GSnapshot ? GSnapshot->Classes.Find(FUtf8String(ClassName)) : nullptr;
+    const TResult<const FAnalysisSnapshot::FClass*> Described = FindSnapshotClass(ClassName);
+    const FAnalysisSnapshot::FClass* const Found = Described ? Described.GetValue() : nullptr;
     return Found != nullptr && Found->bAbstract;
 }
 
@@ -1062,8 +1074,8 @@ AUTORTFM_DISABLE bool GetClassSignalsLive(FUtf8StringView ClassName, TArray<Godo
 AUTORTFM_DISABLE bool GodotVerse::GetClassStatics(FUtf8StringView ClassName, TSharedPtr<const FClassStatics>& OutStatics)
 {
     OutStatics.Reset();
-    const FAnalysisSnapshot::FClass* const Found =
-        GSnapshot ? GSnapshot->Classes.Find(FUtf8String(ClassName)) : nullptr;
+    const TResult<const FAnalysisSnapshot::FClass*> Described = FindSnapshotClass(ClassName);
+    const FAnalysisSnapshot::FClass* const Found = Described ? Described.GetValue() : nullptr;
     if (!Found || !Found->Statics)
     {
         return false;
@@ -1272,8 +1284,8 @@ AUTORTFM_DISABLE bool GetClassRpcsLive(FUtf8StringView ClassName, TArray<GodotVe
 AUTORTFM_DISABLE bool GodotVerse::GetClassRpcs(FUtf8StringView ClassName, TArray<FRpcDesc>& OutRpcs)
 {
     OutRpcs.Reset();
-    const FAnalysisSnapshot::FClass* const Found =
-        GSnapshot ? GSnapshot->Classes.Find(FUtf8String(ClassName)) : nullptr;
+    const TResult<const FAnalysisSnapshot::FClass*> Described = FindSnapshotClass(ClassName);
+    const FAnalysisSnapshot::FClass* const Found = Described ? Described.GetValue() : nullptr;
     if (!Found)
     {
         return false;
@@ -1285,8 +1297,8 @@ AUTORTFM_DISABLE bool GodotVerse::GetClassRpcs(FUtf8StringView ClassName, TArray
 AUTORTFM_DISABLE bool GodotVerse::GetClassSignals(FUtf8StringView ClassName, TArray<FSignalDesc>& OutSignals)
 {
     OutSignals.Reset();
-    const FAnalysisSnapshot::FClass* const Found =
-        GSnapshot ? GSnapshot->Classes.Find(FUtf8String(ClassName)) : nullptr;
+    const TResult<const FAnalysisSnapshot::FClass*> Described = FindSnapshotClass(ClassName);
+    const FAnalysisSnapshot::FClass* const Found = Described ? Described.GetValue() : nullptr;
     if (!Found)
     {
         return false;
@@ -1506,12 +1518,42 @@ AUTORTFM_DISABLE void CollectDeclaredTypes(FUtf8StringView ClassName, GodotVerse
 
 AUTORTFM_DISABLE const GodotVerse::FDeclaredTypes* RecordedTypes(FUtf8StringView ClassName)
 {
-    if (!GSnapshot)
+    const GodotVerse::TResult<const GodotVerse::FAnalysisSnapshot::FClass*> Entry =
+        GodotVerse::FindSnapshotClass(ClassName);
+    return Entry ? Entry.GetValue()->Types.Get() : nullptr;
+}
+
+/// Carries every class LastGood describes into Pending, whose analysis described nothing, marked
+/// with Pending's reason; answers how many. Without it a buffer that does not parse answered "no
+/// such class" for every class in the project until the author finished the line: live instances
+/// lost their methods, completion its override candidates, and every hover its documentation.
+///
+/// The statics a carried class holds stay as they were, because reading them needs the program
+/// this analysis did not produce; its defaults and bInPublishedProgram are the VM's, and are read
+/// again like any other class's.
+AUTORTFM_DISABLE int32 CarryLastGoodDescriptions(const FAnalysisSnapshot& LastGood, FAnalysisSnapshot& Pending)
+{
+    const GodotVerse::EStaleReason Reason = Pending.Stale.GetValue();
+    int32 Carried = 0;
+    for (const TPair<FUtf8String, FAnalysisSnapshot::FClass>& Pair : LastGood.Classes)
     {
-        return nullptr;
+        if (Pending.Classes.Contains(Pair.Key))
+        {
+            continue;
+        }
+        Pending.Classes.Add(Pair.Key, Pair.Value).Stale = Reason;
+        ++Carried;
     }
-    const GodotVerse::FAnalysisSnapshot::FClass* const Entry = GSnapshot->Classes.Find(FUtf8String(ClassName));
-    return Entry ? Entry->Types.Get() : nullptr;
+    if (Pending.BindingMembers.IsEmpty())
+    {
+        Pending.BindingMembers = LastGood.BindingMembers;
+    }
+    if (!Pending.bAstAvailable)
+    {
+        Pending.ModulesDeclaring = LastGood.ModulesDeclaring;
+        Pending.bAstAvailable = LastGood.bAstAvailable;
+    }
+    return Carried;
 }
 
 } // namespace
@@ -1531,6 +1573,13 @@ AUTORTFM_DISABLE void GodotVerse::TakeAnalysisSnapshot()
     }
 
     const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
+
+    // A program the semantic analyzer never saw has no AST project: the analyzer's first act is to
+    // desugar one, and CProgramBuildManager::Build starts every build from a new program.
+    if (!Program->_AstProject)
+    {
+        Snapshot->Stale = EStaleReason::DidNotParse;
+    }
 
     TArray<FUtf8String> ClassNames;
     if (const uLang::CModule* const Root = Program->FindDefinitionByVersePath<uLang::CModule>(ScriptVersePath))
@@ -1637,9 +1686,15 @@ AUTORTFM_DISABLE void GodotVerse::PublishAnalysisSnapshot()
     int32 Defaults = 0;
     int32 Constants = 0;
 
+    const int32 Carried = GPendingSnapshot->Stale.IsSet() && GSnapshot
+        ? CarryLastGoodDescriptions(*GSnapshot, *GPendingSnapshot)
+        : 0;
+
     for (TPair<FUtf8String, FAnalysisSnapshot::FClass>& Pair : GPendingSnapshot->Classes)
     {
         FAnalysisSnapshot::FClass& Entry = Pair.Value;
+        // A carried entry's defaults are the last publish's, and a build may have published since.
+        Entry.Defaults.Reset();
 
         // The published generation's view, which is not the analysis's: a class the buffer has
         // renamed is in one and not the other, and an inspector default is generated code and so
@@ -1671,9 +1726,11 @@ AUTORTFM_DISABLE void GodotVerse::PublishAnalysisSnapshot()
     if (AnalysisTraceEnabled())
     {
         fprintf(stderr,
-                "[vh-trace]   snapshot: %d default(s), %d static(s), %.2f ms vm\n",
+                "[vh-trace]   snapshot: %d default(s), %d static(s), %d class(es) carried stale,"
+                " %.2f ms vm\n",
                 Defaults,
                 Constants,
+                Carried,
                 (FPlatformTime::Seconds() - Started) * 1000.0);
         fflush(stderr);
     }
