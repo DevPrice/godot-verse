@@ -65,11 +65,11 @@ String verse_paths::arch_tag(const PackedStringArray &p_features) {
 const char *verse_paths::DATA_DIR_NAME = "verse_data";
 
 String verse_paths::cache_dir_name(const String &p_app, const String &p_platform, const String &p_arch) {
-	String name = String("verse_") + safe_dir_name(p_app) + String("_") + p_platform;
+	String target = p_platform;
 	if (!p_arch.is_empty()) {
-		name += String("_") + p_arch;
+		target += String("_") + p_arch;
 	}
-	return name;
+	return safe_dir_name(p_app).path_join(target);
 }
 
 String verse_paths::data_dir_for_this_build() {

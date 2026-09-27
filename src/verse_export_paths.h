@@ -35,9 +35,10 @@ godot::String arch_tag(const godot::PackedStringArray &p_features);
 // What the shipped directory is called, and so also the leaf the cooker writes into.
 extern const char *DATA_DIR_NAME;
 
-// `verse_<app>_<platform>_<arch>` -- the per-project, per-platform directory under the user's
-// cache that holds one cook. p_app is the project name; it is sanitised here the way
-// OS::get_safe_dir_name would, since that is not bound for extensions.
+// `<app>/<platform>_<arch>` -- the per-project, per-platform directory under the user's
+// `verse_cook` cache that holds one cook, relative so the caller joins it on. p_app is the project
+// name; it is sanitised here the way OS::get_safe_dir_name would, since that is not bound for
+// extensions.
 godot::String cache_dir_name(const godot::String &p_app, const godot::String &p_platform, const godot::String &p_arch);
 
 // Where this build's verse_data is, or "" outside an exported build. Beside the running
