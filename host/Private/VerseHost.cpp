@@ -24,7 +24,17 @@
 #include "VerseString.h"
 #include "VerseVM/VVMSocketDebugger.h"
 
+#include <type_traits>
+
 IMPLEMENT_APPLICATION(VerseHost, "verse_host");
+
+// Each extern "C" definition below must have exactly its row's FnType -- the same shape of check
+// vm/vm_abi.cpp makes for the interpreter -- so a signature that drifts from VH_ENTRY_POINTS fails
+// here rather than only when VerseHostLibrary resolves it and calls through the wrong prototype.
+#define VH_STATIC_ASSERT_ENTRY_TYPE(Member, Symbol, FnType, Presence, Role) \
+    static_assert(std::is_same_v<decltype(&Symbol), FnType>, #Symbol " must have exactly " #FnType "'s declared type");
+VH_ENTRY_POINTS(VH_STATIC_ASSERT_ENTRY_TYPE)
+#undef VH_STATIC_ASSERT_ENTRY_TYPE
 
 namespace {
 
