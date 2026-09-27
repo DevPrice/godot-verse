@@ -32,13 +32,11 @@ failed.
 
 ## What is still checked by hand
 
-`docs/editor-test-audit.md` found that most of what this document used to send a person to check —
-a headless editor has placeholders, a real `CodeEdit`, its completion popup and hover tooltip, the
-inspector, the docks and Play — and its implementation plan's steps 2 through 8 built the `editor`,
-`debug-wire` and `multiplayer` layers over almost all of it; step 9 is retiring the prose below to
-say so. Every finding and every "What is still open" item below now names the layer and the case
-that covers it, where one exists. This is what is left, and why each one still needs a person or a
-window rather than a headless run:
+A headless editor has placeholders, a real `CodeEdit` with its completion popup and hover tooltip,
+the inspector, the docks and Play, so almost every check this document used to send a person to
+make is now a case in the opt-in `editor`, `debug-wire` or `multiplayer` layer
+(`docs/editor-test-audit.md`). Every finding below names the layer and case that covers it, where
+one exists. This is what is left, and why each one still needs a person or a window:
 
 1. **Rendering, once per Godot version bump.** Whether the hover tooltip's BBCode actually draws
    bold as bold, a code span in the code font with a background, and a copy button on the sample
