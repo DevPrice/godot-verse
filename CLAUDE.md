@@ -68,8 +68,10 @@ Three documents are not phase records and are the ones to read before adding a f
   Seven of the eight are down; the table says which, and §"After Phase 4"/§"After Phase 5" say what
   each diff came to. The one standing is the `<transacts>` trap (wall 8), narrowed twice and not
   removed.
-- **`docs/by-hand-findings.md`** — what the by-hand editor sessions found, because everything from
-  `EngineDebugger` and the editor UI inward has no automated test and never will. B1–B9, B15–B18,
+- **`docs/by-hand-findings.md`** — what the by-hand editor sessions found. Most of what `EngineDebugger`
+  and the editor UI inward used to have no automated test for is now covered by the `editor`,
+  `debug-wire` and `multiplayer` layers (`docs/editor-test-audit.md`); its own "What is still
+  checked by hand" section is the residual list. B1–B9, B15–B18,
   B20, B22–B35, B37 and B39–B42 are defects, all fixed, and B36 is reported rather than closed; B12 is a Verse fact; B13 a latency finding; B14 the
   sandboxed export run. **B30 is the one to read before calling `ResourceLoader` from anything a
   resource load can reach**: Godot answers a cyclic load `ERR_BUSY` and a null `Ref` silently
@@ -192,7 +194,7 @@ Three documents are not phase records and are the ones to read before adding a f
   has shut down, so it reads as a whole suite failing with nothing in the log. **B20 is the one to
   read before touching `_get_documentation`**: Godot asks for a
   script's documentation once per session and off the game thread, where every ABI read is refused.
-  Its "What is still open" section is where the remaining by-hand checks live.
+  Its "What is still checked by hand" section is where the residual by-hand checks live.
 
 **`docs/gdscript-conversion.md`** is "Convert to Verse" (R-TOOL-13): the requirements as the owner
 settled them, every GDScript construct and what it becomes, and the five Verse spellings the
@@ -624,8 +626,11 @@ twice, and `log_script_warnings`, which is the general form — it re-runs
 `refresh_script_warnings` once per build and pushes everything the gutter would have drawn, so the
 export rejections (R-EXP-2), the signal rejections (R-SIG-1) and B19 Stage C's "cannot be saved" are
 assertable in the integration layer. It refreshes the map before reading it, because a session that
-has only built has never called `_validate` and the map is empty. **The gutter itself is still
-by-hand** — the build copy proves the sentence and the line, not that the editor draws either.
+has only built has never called `_validate` and the map is empty. **The gutter itself is now
+covered by the `editor` layer** (`_warnings_panel` cases: R-EXP-8's `Mismatched`, a signal
+rejection, Stage C's cannot-be-saved and Stage B's inert `@global_class`, each on its member's line
+and clearing once fixed) — the build copy proves the sentence and the line, the editor layer proves
+the panel draws both.
 
 **export-vm** and **web** are the same `tests/integration` on the interpreter, each from a
 throwaway copy of the project (a committed `project.godot` is never touched; `override.cfg` is
@@ -1076,11 +1081,11 @@ layer, and is skipped there when `../godot` is absent.
   (**68 ms** when an analysis has landed since the last edit),
   and reads that cost 1.7 s during an analysis cost 0.0 ms. The four commits `dcd517e`, `40d72f4`,
   `8bbba32` and `1469dc1` are the record — that work has no design document, by decision.
-- **Adding `@tool` to an existing script needs the scene reloaded.** Editing a live `@tool` script
-  takes effect on save; giving one `@tool` for the first time does not, because the node is holding
-  a *placeholder* and the swap to a real instance does not happen. Known, small, and not fixed —
-  `by-hand-findings.md` B8 has what is ruled out. Nothing automated can see it: a placeholder only
-  exists under `is_editor_hint()`.
+- **Adding `@tool` to an existing script no longer needs the scene reloaded.** Editing a live
+  `@tool` script takes effect on save, and so does adding `@tool` to a script that did not have it
+  — `by-hand-findings.md` B8, automated by the `editor` layer's `_b8` cases, which read a
+  notification only a real instance runs. The old reload workaround still works too and is
+  asserted beside it.
 
 ### Transactions, effects and raising
 
@@ -1667,20 +1672,29 @@ layer, and is skipped there when `../godot` is absent.
 
 ## What cannot be tested from here
 
-- **`_make_function`** is a `ScriptLanguageExtension` virtual with no ClassDB entry, and
-  `Script.get_language()` is not in the public API, so GDScript can reach neither — the editor's own
-  C++ is its only caller.
-- **`_get_class_icon_path`** is the same shape: `Script::get_class_icon_path` is a pure virtual with
-  no ClassDB entry and one caller, `EditorData::get_script_icon_path`. R-EXP-8's `@icon` is
-  therefore asserted in the **units** layer, against `verse_scan_class_decl`, which is where the
-  reading actually happens — and whether Godot *draws* it is a by-hand check.
+`docs/editor-test-audit.md` found that a headless editor (`godot --headless --editor`) reaches
+almost everything below that used to need a person or a window, and the `editor`, `debug-wire` and
+`multiplayer` layers (`by-hand-findings.md`'s "What is still checked by hand") are what runs it
+now. What is left:
+
 - **`_CanDropData`** is the one Godot virtual that has never been exercised. (`_HasPoint` was in the
   same category and is now a case in `tests/integration`, because the engine asks it unprompted as
-  soon as `Input.parse_input_event` supplies a click.)
-- **Everything from `EngineDebugger` and the editor UI inward.** Everything from the ABI inward has
-  `host_smoke` cases; the consumer half's only test is the by-hand session, whose steps are kept in
-  `by-hand-findings.md` rather than retired. `tests/host_smoke/debug_probe.verse`'s line numbers are
-  part of it — a member declared above line 22 moves an armed breakpoint.
+  soon as `Input.parse_input_event` supplies a click.) Not visual, but unreachable headless: a
+  native window's mouse-enter event is what sets the drag target, and a headless display server
+  never sends one.
+- **The tooltip's and the class page's rendering, and the script editor's colour tiers read side by
+  side.** Every string and colour value behind these is asserted (`editor` layer's
+  `_tooltips`/`_class_page`/`_colours` cases); a glance per Godot version bump is what is left, at
+  Godot's own renderer rather than at the bridge.
+- **B38's regeneration race in a fresh windowed editor**, which needs `EditorHelp`'s script-doc
+  regeneration — skipped headless by `cmdline_mode`.
+- **A clean machine for R-DIST-10 (B14)** — Phase 8's to arrange.
+
+Everything from the ABI inward still has `host_smoke` cases, whose `debug_probe.verse` line numbers
+are part of the test — a member declared above line 22 moves an armed breakpoint. The consumer half
+— `EngineDebugger` and the editor UI — is `_make_function`, `_get_class_icon_path`, the debugger and
+profiler panels, the inspector, the docks and Play, and none of those are on this list any more:
+they are the `editor` and `debug-wire` layers' own cases, named in `by-hand-findings.md`.
 
 Out by decision, so that a gap does not read as an oversight: Linux, macOS, Android and iOS as
 supported platforms — CI compiles them, and only Windows x86_64 and web are supported and

@@ -4,9 +4,10 @@
 what was `docs/by-hand-checklist.md`, and of the work that closed what they found. **The checklist is
 deleted**: all twenty-two of its entries were watched happen, and what is worth keeping is what they
 found rather than the list. §"What is still open" at the bottom carries the three things that
-outlived it. **Every entry below is fixed**, except the two that are not defects: B11 is a
-measurement, and B8 is fixed for the half a headless run can reach and re-checkable by hand for the
-other. `tools/run_tests.py` is 9/9 with **431** integration cases.
+outlived it — most of what has accumulated there since is now automated too; see
+[What is still checked by hand](#what-is-still-checked-by-hand) just below. **Every entry below is
+fixed**, except B11, which is a measurement, not a defect. `tools/run_tests.py` is 9/9 with **431**
+integration cases, a count from before the `editor`, `debug-wire` and `multiplayer` layers existed.
 
 Four kinds of entry are below. **B1–B9** are what the session saw go wrong, each traced to the code
 that causes it rather than left as a symptom. **B10–B11** are what the session learned about the
@@ -26,6 +27,34 @@ failed.
 **Companion to:** [`phase-4-gaps.md`](phase-4-gaps.md) (G19, which B10 partly retires),
 [`phase-4.5-design.md`](phase-4.5-design.md) §11 and [`phase-5-design.md`](phase-5-design.md) §14
 (where B6 and B7 change what those phases built).
+
+---
+
+## What is still checked by hand
+
+`docs/editor-test-audit.md` found that most of what this document used to send a person to check —
+a headless editor has placeholders, a real `CodeEdit`, its completion popup and hover tooltip, the
+inspector, the docks and Play — and its implementation plan's steps 2 through 8 built the `editor`,
+`debug-wire` and `multiplayer` layers over almost all of it; step 9 is retiring the prose below to
+say so. Every finding and every "What is still open" item below now names the layer and the case
+that covers it, where one exists. This is what is left, and why each one still needs a person or a
+window rather than a headless run:
+
+1. **Rendering, once per Godot version bump.** Whether the hover tooltip's BBCode actually draws
+   bold as bold, a code span in the code font with a background, and a copy button on the sample
+   code block; whether the class reference page renders the same text; and the script editor's
+   colour tiers read well side by side. Every string, colour and structural fact behind these is
+   asserted beforehand (`editor` layer's `_tooltips`/`_class_page`/`_colours` cases); this is a
+   glance at Godot's own renderer, not at the bridge.
+2. **`_CanDropData` (B11).** Not visual, but unreachable headless: a native window's mouse-enter
+   event is what sets the drag target, and a headless display server never sends one.
+3. **B38's regeneration race in a fresh windowed editor.** Not visual either: it needs
+   `EditorHelp`'s script-doc regeneration, which `cmdline_mode` skips headless.
+4. **A clean machine for R-DIST-10 (B14).** Not visual: it needs a machine that has never built
+   anything, which is Phase 8's to arrange.
+
+Items 2 and 3 need a display server, not a person's judgement — an unattended windowed run would
+close both automatically. Item 4 needs a second machine.
 
 ---
 
@@ -106,7 +135,7 @@ followed by an indented `{}`. The second keeps the shape GDScript writes, so:
 matching the wording B6 adopts for the template. The `<transacts>` stays: `Subscribe` fixes its
 callback at that effect and a specifier-less handler is wall 8 on the author's first generated line.
 
-## B4. A connected handler gets no gutter icon, and there are two reasons · **fixed, re-check by hand**
+## B4. A connected handler gets no gutter icon, and there are two reasons · **fixed, automated**
 
 GDScript draws a Slot icon in the gutter beside a method a persistent connection targets. A Verse
 handler gets none.
@@ -124,7 +153,9 @@ matches each connection's method name against `functions`, the `"functions"` key
    script under a `.vmodule` marker therefore has no method outline either, which is the same bug
    seen from the other side.
 
-Fix both, then re-check by hand: the gutter is drawn by the editor and no headless run sees it.
+Automated: `editor` layer, `_connection_gutter` cases (`B4: the connected %s in %s gets the gutter
+icon`, `B4: whose metadata names the method in %s`), for a root-module script and one under a
+`.vmodule`.
 
 ## B5. "No suitable template", on a dialog that then writes a template · **fixed**
 
@@ -210,7 +241,7 @@ at *which* effect was refused, so every `suspends` refusal from a Godot signal t
 not: it is confident, it is about a rule the appender does not actually check, and it survived a
 phase.
 
-## B8. A `@tool` script only takes effect after an editor restart · **fixed; half of it testable**
+## B8. A `@tool` script only takes effect after an editor restart · **fixed**
 
 Adding `@tool` to a script already attached to a node, and editing the body of a `@tool` script
 already running in the editor, both do nothing until the editor is restarted. Build Verse does not
@@ -232,20 +263,13 @@ The bridge cannot do that yet, because **`VerseScript` does not track its owners
 work — record the owning object in `_placeholder_instance_create` and in `VerseScriptInstance`
 first, then the save / `set_script` / restore pass over them.
 
-**Checked by hand afterwards, and one half of it is still open.** Editing the body of a `@tool`
-script that is already running in the editor now takes effect on save, and so does editing an
-ordinary one. **Adding `@tool` to a script that did not have it still needs the scene reloaded** —
-the node keeps the placeholder it was given until then.
-
-That is the transition `reload_instances` was written to cover and the one no automated layer can
-reach, because a placeholder only exists under `is_editor_hint()`. What is known: the re-attach
-itself works, since the integration case proves a reload replaces a real instance and carries its
-exported values; and `_can_instantiate` is `is_compiled() && (_is_tool() || !editor_hint)`, with
-`_is_tool` read from the text, so by the time the saver calls `_reload` the answer should already
-have flipped. What is not known is whether `_reload` is reached at all on that save, or whether
-`set_script(Variant())` / `set_script(self)` declines somewhere in between. Left open deliberately;
-the workaround is one scene reload. **Where to look next:** a print in `reload_instances` and one
-windowed session says which of the two it is.
+**Automated, and the answer changed.** Editing the body of a `@tool` script that is already running
+in the editor takes effect on save, and so does editing an ordinary one — and the editor layer now
+shows that **adding `@tool` to a script that did not have it takes effect on the same save, with no
+scene reload**: `editor` layer, `_b8` cases (`B8: the save alone gives the node a real instance`,
+read off a notification only a real instance runs). The old workaround still works too and is
+asserted beside it (`B8: after a scene reload the node holds a real instance`); a GDScript control
+still needs the reload, which is Godot's own behaviour and is skipped rather than failed.
 
 ## B9. A runtime error's `ERROR:` line runs four fields together · **fixed**
 
@@ -367,9 +391,11 @@ class, the inherited members a subclass could still declare with `<override>`, d
 `CollectClassAndSupers` + `DescribeCompletion` that answers scope completion, with the class itself
 as the access scope — so an item from `vh_class_override_candidates` formats identically to one from
 the refined answer and the full list replaces the partial one without anything moving. 0.8 ms per
-class and 0.2% of the analysis it rides on. **To re-check it by hand:** open a script, type a bare
-identifier on its own line inside the class body, and the `_Ready`/`_Process` declarations must be
-in the *first* popup rather than appearing in it a second later.
+class and 0.2% of the analysis it rides on. Automated: `integration` layer's editor-only override-completion cases (`the first popup in a class
+body offers the _Ready declaration`, `and the _Process declaration`), asked through
+`probe_complete_code` exactly as the script editor does — no build, no flush — so the first answer
+is genuinely first. The `editor` layer's own `_completion_popup`/`_argument_hint` groups exercise
+the same popup through the real `CodeEdit`.
 
 ---
 
@@ -944,7 +970,7 @@ a member behind four lines of `@editable` the host's answer is empty where re-re
 
 ---
 
-## B26. Saving a `.verse` erased its own exported values, and B8's re-attach is what did it · **fixed, by-hand check owed**
+## B26. Saving a `.verse` erased its own exported values, and B8's re-attach is what did it · **fixed, automated**
 
 Reported rather than watched: an `@export`'s value in the inspector kept going to null while a
 script was mid-edit and not compiling. Traced through the engine sources rather than in a session,
@@ -993,26 +1019,28 @@ erases only the values whose names are absent from the list it is given
 (`core/object/script_language.cpp:723`), and an empty values dictionary overwrites none of them, so
 every placeholder that already holds that list is left exactly as it was and a new one gets a shape.
 
-**Nothing automated can see any of this**, for B8's reason: a placeholder only exists under
-`is_editor_hint()`. All four layers stay green, which says only that nothing else moved.
-
-**To check it:** attach a script with an `int` export and a `node2d` export to a node, set both in
-the inspector, and save the scene. Then (1) break the script — delete a closing paren — save it, and
-confirm both values still show; (2) fix the script, save, and confirm both survived and the node
-runs the new code; (3) repeat (1) with the break in a *different* `.verse` file, which is the case
-where the fallback never engages and the value used to be dropped outright. Step (3) failed before
-this with a perfectly valid script in front of you, and the `node2d` export in step (1) failed on
-every save whether or not anything was broken.
+Automated: `editor` layer, `_b26`/`_check_b26_values`/`_check_b26_scene` cases, over the throwaway
+copy of `tests/integration`: an `int` and a `node2d` export set through the placeholder survive a
+broken save (1), the fix (2), and a break in a *different* `.verse` file (3) — the case where the
+fallback never used to engage — both in `node.get()` and in the `.tscn` saved after each, and Play
+then shows the fixed code running with the value the inspector set. A GDScript control takes the
+same steps; where it does not hold, the case records what stock GDScript did instead, as a skip
+rather than a failure.
 
 ---
 
-## B27. The argument hint went missing after a failable call, and after a race · **fixed, two causes, by-hand check owed**
+## B27. The argument hint went missing after a failable call, and after a race · **fixed, two causes, automated**
 
 Reported rather than watched: the parameter tooltip that stands above the caret while a call is
 open *sometimes* does not appear after completing a function. Two independent causes, one
-deterministic and one a race, and the second is why the first read as intermittent. Both are argued
-from the sources the way B26 was and neither has been seen in a window; the steps are in
-§"What is still open".
+deterministic and one a race, and the second is why the first read as intermittent. Both were
+argued from the sources the way B26 was, and are now automated: `integration` layer's editor-only
+completion cases (cause 1, `completion_probe.verse`'s failable calls) and `editor` layer's
+`_argument_hint` cases — confirming `GetNode[` re-asks for completion once and the re-ask draws
+GetNode's hint, and the same after Play, with and without a save behind it (cause 2's race). The
+automation also found a defect neither cause explains, kept as a named skip rather than fixed:
+after a Play, a call completed in the editor settles on an empty argument hint even though the
+re-ask arrives.
 
 **Godot asks for the hint only when the inserted text ends in a trigger character.**
 `CodeEdit::confirm_code_completion` ends with `if (code_completion_prefixes.has(
@@ -1625,7 +1653,7 @@ causes it (B20). §"The tooltip's rendering of a converted description" below ca
 
 ---
 
-## B39. An exported value was rewritten as `null` while a `.verse` was edited · **fixed, by-hand check owed**
+## B39. An exported value was rewritten as `null` while a `.verse` was edited · **fixed, automated**
 
 Reported from a working tree: `dodge-the-creeps/main.tscn` had grown a line, `Speed = null`, under
 the Player node — an instance of `player.tscn`, whose script is `player.verse` with `var Speed:float
@@ -1662,19 +1690,16 @@ placeholder has nothing to serve. The cache warms on every good build through th
 This also closes B26's step 3 properly: a break in a *different* file left `has_own_class` false and
 dropped the default to null even though this file was fine, which the cache now covers.
 
-**Nothing automated can see it**, for B26's and B8's reason: a placeholder exists only under
-`is_editor_hint()`. All four layers stay green, which says only that nothing else moved.
-
-**To check it:** attach a script with a plain `int` or `float` export to a node, set nothing (leave
-it at its default), and instance that node into a *second* scene. Save the second scene, then (1)
-break the script — delete a closing paren — and save it, and confirm the second scene's `.tscn` does
-not grow a `= null` line for the export; (2) repeat with the break in a *third*, unrelated `.verse`
-file, which is B26's step 3; (3) override the value in the second scene, break the script, save, and
-confirm the override survives. Step (1) is what wrote `Speed = null` here.
+Automated: `editor` layer, `_b39`/`_check_b39_scene` cases, over an instanced scene: an un-overridden
+export is not written as `= null` after a broken save (1) or a bystander's, in a *third*, unrelated
+`.verse` file (2) — B26's step 3, from the instancing side — and an override in the instancing scene
+survives a break and a save (3). A GDScript control takes the same steps; stock GDScript does write
+`count = null` for the inherited export after a broken save, every run, which is the shape of this
+finding in Godot itself and is recorded as a skip naming it rather than a failure.
 
 ---
 
-## B40. An extension method on a Verse type hovered as a "Local Constant" · **fixed, render by hand**
+## B40. An extension method on a Verse type hovered as a "Local Constant" · **fixed, automated**
 
 Reported from a hover: `Emit` in `Hit.Emit(())` drew as a **Local Constant** whose type was the
 whole function type, `type{_(:event(t),:t where t)<transacts>:void}`. The same shape hit every
@@ -1697,17 +1722,13 @@ registers it under the receiver's own name (`event`), and answers `CLASS_METHOD`
 same shape whether or not an editor is present, so the lookup is testable headless; the registration
 runs only with a script editor, which a headless run has none of.
 
-**What is tested and what is by hand.** `tests/integration` asserts the lookup answers
+**What is tested and what is no longer only by hand.** `tests/integration` asserts the lookup answers
 `CLASS_METHOD` under receiver `event` for `event(t).Emit` (`hover_probe.verse`'s `Fires`). Whether
-the editor *draws* the page -- the method signature and the comment beneath it -- is by hand, because
-the registration needs the script editor a headless run does not have, and because the tooltip is
-Godot's own C++.
-
-**To check it:** open a `.verse` file that calls an event's `Emit` (dodge-the-creeps' `player.verse`
-has `Hit.Emit(())`) and hover `Emit`. It must draw as a method -- `event.Emit` with its argument and
-`-> void` -- with the comment from `GodotApi.native.verse` beneath, not as a "Local Constant" whose
-type is the function type. Then hover `Subscribe` and `Await` on an event or a `signal_ref` for the
-same.
+the editor *draws* the page is now automated too: `editor` layer, `_tooltips` cases (`B40:
+event.Emit draws as a method of event`, `B40: with its argument and -> void`), which read the real
+`EditorHelpBitTooltip` raised by hovering `hover_probe.verse`'s `Emit`. `Subscribe` and `Await` on a
+`signal_ref` are a known defect rather than fixed, kept as a named skip: both still hover as Local
+Constants, because `event`'s page registers but `signal_ref`'s does not.
 
 **A limitation, recorded:** the declared type carries no parameter *names*, only types, so the drawn
 signature is `Emit(: t) -> void`. Names would need the host to carry the spelled signature in the
@@ -1891,208 +1912,76 @@ report, which only a Play session can reach -- see "A host fatal error during Pl
 ## What is still open
 
 The checklist itself is gone — every entry on it was watched happen, and a list of twenty-two ticks
-is not worth keeping. Eleven things stand open, all of them things no automated layer can reach.
-Phase 6's session has since been run and is recorded below with what it found, because the steps
-are worth keeping: its half of the debugger has no other test.
+is not worth keeping. `docs/editor-test-audit.md` then built the `editor`, `debug-wire` and
+`multiplayer` layers over most of what stood here; [What is still checked by
+hand](#what-is-still-checked-by-hand), near the top of this document, is the residual list those
+layers do not reach. This section keeps a one-line pointer for each item that is now automated, and
+the full procedure only for what is still genuinely by hand.
 
-### The script editor's colours, after B23 and the three type tiers
+### The script editor's colours, after B23 and the three type tiers · **automated, one case blocked**
 
-**To check it:** open a `.verse` file in Godot's script editor with a line naming one of each --
-`Cell:vector2i`, `Nothing:variant`, `Mode:node_internal_mode`, `Greeting:[]char`, `Hit:event(int)`
--- and read the colours. None of them may be the plain text colour a local gets. The names to
-watch are the ones from each of the four groups: a mirrored class, a mirrored enum, a value type,
-an exported type, and one of Verse's own.
+`editor` layer, `_colours` cases: none of `vector2i`, `variant`, `node_internal_mode`, `[]char` or
+`event(int)` draws as the plain text colour, and the three tiers hold against the theme's own
+settings — `node2d`/`node_internal_mode` engine-coloured, `vector2i`/`variant` base-coloured, and
+the file's own second class, struct and enum, plus the `mob` binding, user-coloured on their
+declaration lines as well as on every use. **Still blocked:** a binding for a class a
+**GDExtension** registered belongs with `node2d`, and checking that needs a project with a real
+addon in it, which nothing here has.
 
-**Then read the three tiers against each other**, which is GDScript's arrangement and is what a
-Godot author's eye is already trained on: `node2d` and `node_internal_mode` in the engine-type
-colour, `vector2i` and `variant` in the base-type colour, and the project's own class -- plus any
-binding generated for a GDScript `class_name` -- in the user-type colour. A binding for a class a
-**GDExtension** registered belongs with `node2d`, and checking that one takes a project with a real
-addon in it; nothing in this repository has one.
+### The completion popup, where Godot decides whether to open one · after B24 · **automated**
 
-**And a second class in the file**, which is the one that was missed: only the class a file is
-named after reaches `script_class_names`, so `test := class(main_script)` beside `mover := class
-(node2d)` drew as plain text while its own base drew as a type. Declare a second class, a `struct`
-and an `enum` at top level and read all three; the name being declared is user-coloured on the
-declaration line itself as well as wherever it is used below.
+`editor` layer, `_completion_popup`/`_argument_hint` cases: an unforced `request_code_completion()`
+opens the popup by itself at `vector2{}` with exactly `X` and `Y`, and at a bare `?` with the
+callee's named parameter; no option in an ordinary member popup ends in `Getter` or `Setter`. The
+argument hint stands at the caret the instant a call or a failable call (`GetNode[`) completes, and
+again after Play, with or without a save behind it (B27's two causes).
 
-Nothing automated sees this. The tables behind it are checked in the units layer, which is the part
-that drifted; that the highlighter reads them and the editor draws the result is what the eye is
-for.
+### The Node panel, for a signal that is not `<public>` · **automated**
 
-### The completion popup, where Godot decides whether to open one · after B24
-
-**To check it:** in the script editor, type `vector2{` and stop. The popup must open by itself, with
-`X` and `Y` in it and nothing else. Then type `Input.IsActionPressed("ui_accept", ?` and stop: the
-popup must open with the callee's named parameters. Both were answering correctly before and being
-closed before they drew, so what is being read here is the *trigger*, and nothing headless can reach
-it — `CodeEdit` decides it from a table no answer from the language passes through.
-
-Then check the same `.` popup an ordinary member completion opens and read the list for a name
-ending in `Getter` or `Setter`. There must be none; `probe_complete.py`'s C1 rule is the automated
-half, and it counts them, but only the eye sees what the list actually looks like to someone
-reading it.
-
-**And the argument hint, which B27 owes.** Complete a call with parentheses — `Input.
-IsActionPressed(` — and the hint must be standing above the caret the instant the option lands,
-with the first parameter between the markers. Then complete a *failable* one, `GetNode[`, and watch
-for the same thing: that is B27's first cause, and `[` in the prefix table is the whole of the fix,
-so a hint that appears only once an argument character is typed means it did not take. Then press
-**Play**, let the game come up, come back and complete another call straight away: that is the
-window where the host is refusing positions and the queued analysis is what puts the hint there, so
-the hint may be a beat late but it must arrive without a further keystroke. Do that last one twice
-with a save in between, which is what puts a `_validate` behind the completion and is B27's second
-cause.
-
-### The Node panel, for a signal that is not `<public>`
-
-`@export_signal` registers a member whatever its access level — the access check is gone, and
-R-SIG-1 says why. The integration layer asserts the registration, the connection and the delivery in
-both directions, which is everything a headless run can see. What it cannot see is the panel.
-
-**To check it:** put a script on a node with `Own<private>:event(int)` and `@export_signal` above it,
-open the **Node** dock, and connect `Own` to a method through the dialog. It must appear in the list
-beside the `<public>` ones, with the same payload row, and the connection must save into the scene
-and fire at runtime. There is nothing in the drawing path that reads an access level, which is
-exactly why this is an eye check rather than a suspicion.
+`editor` layer, `_node_dock` cases: a script's `Own<private>:event(int)` with `@export_signal` is
+listed in the **Node** dock beside the `<public>` signals, with the same payload row; the
+persisted connection saves into the scene and fires at runtime.
 
 ### `_CanDropData` has never been exercised
 
 The one entry that was never ticked, and §B11 above is the measurement that says why no headless run
-can reach it. It is a `Control` virtual Godot asks only from the drag path.
+can reach it — it is [the residual list](#what-is-still-checked-by-hand)'s item 2. `phase-4-gaps.md`
+G19 carries the same note against the gap it came from.
 
-**To check it:** give a Control a `_CanDropData<override>(AtPosition:vector2, Data:variant)<decides>:void`
-whose body succeeds and a `_DropData<override>` that prints, put it in a windowed scene beside another
-Control, start a drag with `force_drag` and drop it on the first. The cursor must accept the drop
-and `_DropData` must run. A wrong default is a script that works and an engine that behaves
-differently, with nothing printed. `phase-4-gaps.md` G19 carries the same note against the gap it
-came from.
+### R-EXP-6's editor half: the custom Resource round-trip · **automated**
 
-### Adding `@tool` to an existing script needs the scene reloaded
+`editor` layer, `_settings_resource`/`_create_dialog_lists`/`_play_saved` cases, over
+`tests/integration/scripts/settings_resource.verse`: the Create New Resource dialog lists
+`SettingsResource` under `Resource`; a new one shows the declared defaults (`untitled`, `3`, `1.5`);
+edits survive a save and a `CACHE_MODE_IGNORE` reload; the reopened `.tres` carries
+`script_class="SettingsResource"`; and a played scene's `Describe()` answers the edited values.
 
-Editing a live `@tool` script takes effect on save; giving a script `@tool` for the first time does
-not, because the node is holding a *placeholder* and the swap to a real instance does not happen.
-§B8 has what is ruled out and where to look. Small enough to live with — the workaround is one
-scene reload — and invisible to every automated layer, because a placeholder only exists under
-`is_editor_hint()`.
+### R-EXP-8's `@icon`, and the five inspector hints · **automated, two known defects**
 
-### R-EXP-6's editor half: the custom Resource round-trip · **owed**
+`editor` layer, `_inspector_hints`/`_class_icons` cases, over `tests/integration/scripts/hints.verse`:
+`Portrait`'s browse button opens a file dialog filtered to `.png`/`.jpg`; `SaveFolder`'s browses to
+a directory; `Notes` is a multi-line box; `Elements` is three checkboxes named Fire, Water and
+Earth, and ticking Fire then Earth stores 5; `Target` offers a node picker that refuses a plain
+`Node`; `Mismatched` is absent from the inspector, with the sentence in the warnings panel; and the
+scene dock and create dialog show `icon.svg`, falling back once the file is deleted.
 
-Phase 4b's stage 3 built and tested the *runtime* half — a `Resource` with a Verse script attached,
-its exported values written and read, saved to `.tres`, loaded back with its values and its methods
-intact, in the editor run and in an exported game both. What that cannot reach is the editor's own
-UI, which is where the roadmap's exit clause for 4b actually lives, so these five steps stay here
-rather than being claimed.
+Two known defects found rather than fixed, kept as named skips: `@export_node_path` on a `string`
+reaches Godot as `TYPE_STRING` with `PROPERTY_HINT_NODE_PATH_VALID_TYPES`, and the inspector builds
+`EditorPropertyNodePath` only for a `NodePath`, so `Target` draws as a plain text field with no
+picker (`NODE_PATH_DEFECT`); and a `@global_class` script's icon is read from the class registry,
+which `_get_global_class_name` never fills with one, so Godot draws the base class's icon instead
+and never asks `_get_class_icon_path` (`GLOBAL_ICON_DEFECT`).
 
-`tests/integration/scripts/settings_resource.verse` is the fixture — a `@global_class` on a
-`class(resource)` with three `@export` members — and
-`tests/integration/resources/shipped_settings.tres` is one saved from it.
+### R-EXP-9's other half: an RPC that arrives at a second peer · **automated**
 
-**To check it**, in a *copy* of `tests/integration` — opening it in the editor rewrites its
-committed, editor-owned `project.godot`, and the session is for clicking around in:
-
-1. **FileSystem dock → Create New → Resource.** The dialog lists the global class registry; typing
-   `SettingsResource` must find it and must file it under `Resource`. This is what
-   `_get_global_class_name` and its `base_type` are for, and the one step that says the registry
-   half works.
-2. **Save it as a `.tres`.** The three exported members must be in the inspector with their declared
-   defaults — `untitled`, `3`, `1.5`.
-3. **Edit all three and save again.** A non-`@tool` script is a **placeholder** in the editor, and
-   deliberately: GDScript does exactly the same (`ScriptServer::is_scripting_enabled()` is false
-   under the editor, which is what `_can_instantiate`'s `is_editor_hint()` stands in for). The
-   values must survive the save, which is the placeholder's own storage being written out.
-4. **Reopen the file.** The edited values must come back, and the `.tres` on disk must carry
-   `script_class="SettingsResource"` beside them.
-5. **Play the scene with it loaded.** Outside the editor it is a real instance, so `Describe()` must
-   answer the edited values rather than the declared ones.
-
-**What a failure would look like, and where to look.** An empty inspector is the export list not
-reaching the placeholder (`VerseScript::update_placeholders`). Values that revert on save are
-`_get_property_default_value` answering the edited value rather than the declared one. A class the
-dialog cannot find is `_get_global_class_name`'s `base_type`, which comes from `base_types_for`.
-
-### R-EXP-8's `@icon`, and the five inspector hints · **owed**
-
-Stage 7 built both and neither is fully visible from a headless run, for two different reasons.
-
-**The five hints** (`@export_file`, `@export_dir`, `@export_multiline`, `@export_flags`,
-`@export_node_path`) are asserted as far as they can be: `get_script_property_list()` reports each
-one's `hint` and `hint_string`, and twelve cases check that every one is Godot's own constant with
-Godot's own spelling beside it. What that does *not* say is that the editor draws the right
-control -- a `PROPERTY_HINT_FILE` on a member Godot will not draw looks identical from a script.
-
-**`@icon` is worse**: `Script::get_class_icon_path` is a pure virtual with no ClassDB entry, so
-GDScript cannot call it at all. The units layer asserts `verse_scan_class_decl`, which is where
-the attribute is read, and nothing above that is reachable.
-
-`tests/integration/scripts/hints.verse` is the fixture -- six exports, five hinted, one
-deliberately mispaired -- and it carries `@icon("res://icon.svg")`.
-
-**To check it**, in a *copy* of `tests/integration`, with an `icon.svg` beside `project.godot`:
-
-1. **Select a node carrying `hints.verse`.** `Portrait` must be a file field with a browse button,
-   and the dialog it opens must filter to `.png` and `.jpg`.
-2. **`SaveFolder`** must browse to a directory rather than a file.
-3. **`Notes`** must be a multi-line box that grows, not a one-line field.
-4. **`Elements`** must be three checkboxes named Fire, Water and Earth, and ticking Fire then
-   Earth must store 5.
-5. **`Target`** must offer a node picker that refuses anything that is not a Node2D.
-6. **`Mismatched` must be absent**, with the bridge's sentence in the warnings panel and on its
-   line in the gutter -- the one case here whose *text* the integration layer already asserts, so
-   what is being checked is that the gutter draws it.
-7. **The scene tree and the create-node dialog must show `icon.svg`** for the class, rather than
-   Node2D's own icon. Then delete the file and reopen: Godot must fall back rather than draw
-   nothing, because an `@icon` naming a file that is not there is an author's typo and not a
-   thing this bridge validates.
-
-**What a failure would look like, and where to look.** A plain field where a picker belongs is the
-hint not arriving -- print `get_script_property_list()` first, because that separates the host's
-half from the editor's. A picker with the wrong filter is `hint_string`, which passes through
-untranslated and so is exactly what the attribute said. No icon at all is `verse_scan_class_decl`,
-which the units layer already covers, or `_get_class_icon_path` not being asked -- Godot asks it of
-the *base* script when a scene node has none of its own.
-
-### R-EXP-9's other half: an RPC that arrives at a second peer · **owed**
-
-Phase 4b's stage 6 built and tested everything a single process can see. `Script.get_rpc_config()`
-is bound in ClassDB, so the whole *receiving* configuration is assertable from GDScript: which
-methods are keys, what each one's `rpc_mode`, `call_local`, `transfer_mode` and `channel` are, that
-Godot's defaults are applied to a partial `@rpc`, and that a refused one is absent rather than
-half-registered. `tests/integration/scripts/rpcs.verse` is the fixture and there are fifteen cases
-on it, in the editor run and in an exported game both.
-
-**What no single-process run can see is the call arriving.** The sending half leaves Verse and comes
-back as one of Godot's Error ordinals -- which is asserted -- but *which* ordinal differs between the
-two runs for reasons that are Godot's rather than this bridge's: the editor-side driver's SceneTree
-has no MultiplayerAPI at all and stops at `Node::rpcp`, while an exported game has one whose default
-offline peer reports itself connected, so the call reaches `SceneRPCInterface`, finds the method in
-the config, and sends it to nobody. Neither says anything about whether a peer would have run it.
-
-**To check it**, two processes against a copy of `tests/integration`:
-
-1. **Host.** A scene with a `rpcs.verse` node, a GDScript autoload that makes an
-   `ENetMultiplayerPeer`, calls `create_server(port)`, and assigns it to
-   `get_tree().get_multiplayer().multiplayer_peer`.
-2. **Client.** The same scene, `create_client("127.0.0.1", port)`, and the *same node path* -- the
-   RPC is addressed by path, so a node at a different path is the commonest way for this to look
-   broken when it is not.
-3. **From the client, call `SendTakeDamage(5)`.** `TakeDamage` is `@rpc("authority")`, so this must
-   be *refused*: only the node's authority may call it, and the client is not. That refusal is the
-   permission field doing its job and is worth seeing before the success.
-4. **From the host, call it.** `ReadDamage()` on the *client* must answer 5, and on the host 0 --
-   `authority` does not imply `call_local`.
-5. **From either, call `Nudge(5)`**, which is `@rpc("unreliable_ordered any_peer call_local 3")`.
-   Both sides' `ReadDamage()` must move, because `call_local` is what makes the caller run it too.
-6. **Check `Ordinary()` is not callable remotely at all** -- it carries no `@rpc`, so it must be
-   absent from the config and refused with Godot's own "not marked for RPCs in the local script".
-
-**What a failure would look like, and where to look.** A method Godot says is not marked is
-`_get_rpc_config` answering without it: check `vh_class_rpc_list` first in the editor, where
-`Script.get_rpc_config()` can be printed, and then in an export, where the config comes from the
-**sidecar** rather than from an analysis -- that half was absent for a version and every `@rpc` in a
-shipped game was silently not one. A call that arrives but runs on the wrong side is `call_local`.
-A call refused for permission when it should not be is the mode, which is the one field whose
-default is not zero.
+The `multiplayer` layer (`tools/run_multiplayer.py`), 38 cases:
+`tests/integration/multiplayer/peer.tscn` as an ENet host and a client, walking all six by-hand
+steps on `rpcs.verse` — the
+client's `SendTakeDamage(5)` refused for `authority`, the host's own answering `OK` and reaching the
+client's `ReadDamage()` but not its own, `Nudge(5)` running on both sides for `any_peer call_local`,
+and `Ordinary()` refused at the caller with Godot's own "not marked for RPCs" sentence — with each
+of Godot's refusal sentences asserted from the process that printed it, and the transfer mode and
+channel each call arrived with recorded through `multiplayer/logging_peer.gd`.
 
 ### Phase 6's editor session has been run · **one defect, fixed**
 
@@ -2112,42 +2001,38 @@ Everything else in the session — the breakpoint gutter, both arming paths, the
 stack and locals and members, stepping, *Skip Breakpoints*, toggling a breakpoint mid-run, and the
 profiler panel — behaved.
 
-### What the session covered, and what stays uncovered
+### What the session covered, and what stays uncovered · **now repeated by two layers**
 
 Everything from the ABI inward is covered end to end by `tests/host_smoke` — a breakpoint stops
 once rather than once per op, the stack's depth and name and path and line, locals and members
 (including the `vector2`), stepping, attach and detach, and the profiler's counts and self time and
-signature shape. Everything from `EngineDebugger` inward is not, and cannot be: `ScriptLanguage`
-exposes nothing a script can ask, and Godot's debugger UI is the only caller of the virtuals that
-half consists of. **So this session is what has to be repeated whenever that half changes**, and
-the steps are kept for that rather than as an outstanding task.
+signature shape. Everything from `EngineDebugger` inward used to have only this session as its
+test; it is now repeated by two automated layers built exactly to that shape
+(`phase-6-design.md` §2's S-6), so a Godot bump that breaks one still shows the other's line:
 
-**To repeat it** — `phase-6-design.md` §2's S-6, verbatim:
+- **`editor` layer**, `_debugger_and_profiler`/`_debug_session`/`_profiler_panel` cases: a gutter
+  breakpoint through both arming paths (`--breakpoints` at launch and the live message), the Stack
+  Frames panel, Stack Variables (`self` under **members**, a `vector2` local crossing as a
+  `Vector2`), Step Into/Over/Out, Continue, Skip Breakpoints, a breakpoint toggled while the game
+  runs, and the Profiler tab's Start/Stop and its rows.
+- **`debug-wire` layer** (`tools/debug_wire.py`), the same steps over Godot's own remote-debug
+  protocol with no editor at all, plus `servers:profile_total`'s accumulated table — the
+  `ProfilingInfo` stride trap measured rather than reasoned about, which the Profiler tab never
+  draws after Stop.
 
-1. Open a `.verse` script in Godot's script editor and click the breakpoint gutter.
-   `ScriptTextEditor` is language-agnostic on paper — `_breakpoint_toggled` sends
-   `edited_res->get_path()` and the row — and this is the confirmation that it is in fact.
-2. Run the project. The editor passes the current list as `--breakpoints` at launch *and* sends
-   each one again on connect; confirm both paths arm.
-3. Confirm the Debugger panel populates: stack frames, the locals list, the members list. `self`
-   appears under **members**, not as its own row, and that is permanent (D8).
-4. Step in, step over, step out, continue; toggle *Skip Breakpoints*.
-5. Toggle a breakpoint **while the game is running** and confirm it arms.
+Two known defects found by both layers and kept as named skips rather than fixed: a breakpoint in
+the main scene's `_Ready` never fires, because the Verse debugger attaches from `_frame` and
+`_Ready` runs before the first one; and a line holding a call or a construction reports its
+location twice, so a breakpoint there stops twice per arrival — Continue stops on the same line
+again.
 
-Plus a profiler session: turn it on in the Debugger panel, run `dodge-the-creeps`, and confirm
-Verse rows appear beside Godot's own with plausible numbers. Watch that one especially — the array
-Godot hands `_profiling_get_accumulated_data` is laid out differently from what godot-cpp declares
-(`phase-6-design.md` §13.3), and the stride the bridge uses instead is reasoned from the engine's
-version rather than measured. More than one row appearing, with sane signatures, is the evidence
-that the reasoning was right.
-
-**Recorded and not taken:** Godot's `LocalDebugger` is drivable headless —
+**Recorded and not taken:** Godot's `LocalDebugger` is drivable headless too —
 `godot --headless --debug --breakpoints res://scripts/x.verse:N` reads `bt`, `lv`, `mv`, `c` from
 stdin and prints frames, locals and members — which `run_tests.py` could pipe and assert on in the
-same shape as `tests/coverage_diagnostic`. It is written down so that if this check proves too
-costly to repeat, the automated route is a known quantity rather than a rediscovery.
+same shape as `tests/coverage_diagnostic`. It is written down as a fallback route in case the panel
+walk or the wire client ever prove too brittle to keep.
 
-### `refresh_script_warnings` reaches the log now · **taken**
+### `refresh_script_warnings` reaches the log now · **taken, gutter automated**
 
 Left here as the record, because the gap was real and the fix is a pattern worth reusing. **Nothing
 `refresh_script_warnings` produced was asserted anywhere** — the export rejections (R-EXP-2), the
@@ -2170,72 +2055,39 @@ announces itself:
   member's is **`^?stowaway`** — a reference around an option. Stage C's test stripped the `?` and
   not the `^`, and the warning was silent with no other symptom.
 
-**What is still owed is the gutter**, which no automated layer can reach: that each of these appears
-at its own member's line, in the warnings panel, and clears as the author fixes it. The build copy
-proves the sentence and the line number; it cannot prove the editor draws either.
+Automated: `editor` layer, `_warnings_panel` cases — R-EXP-8's `Mismatched`, a signal rejection,
+Stage C's cannot-be-saved and Stage B's inert `@global_class` each appear at their own member's
+line in the warnings panel and clear once fixed in the buffer.
 
-### Stage B's warning in the script editor, as opposed to in the log · **owed**
+### Stage B's warning in the script editor, as opposed to in the log · **automated**
 
-B19's Stage B writes one sentence through two reporters, and only one of them is testable.
-`report_name_collisions` prints it once per build, which is what `tests/coverage_diagnostic`
-asserts; `_validate` returns it to the editor's own C++ for the gutter and the warnings panel, and
-**a `_validate` warning reaches no log**, so nothing headless can see it. That half is the half an
-author actually meets.
+B19's Stage B writes one sentence through two reporters. `report_name_collisions` prints it once
+per build, which is what `tests/coverage_diagnostic` asserts; `_validate` returns it to the
+editor's own C++ for the gutter and the warnings panel, and that half is now the `editor` layer's
+`_warnings_panel` case for `inert_global.verse`/`settings_resource.verse`: the sentence is on the
+**attribute's** row, not the class's, clears as the attribute is deleted and comes back as it is
+retyped, and only one of a file's two `@global_class` attributes is flagged.
 
-**To check it:** open a `.verse` file declaring a class named after the file plus a second
-top-level class, and write `@global_class` above the second one.
-`tests/coverage_diagnostic/scripts/inert_global.verse` is exactly that file, and
-`tests/integration/scripts/settings_resource.verse` is the same shape with the member to go with it.
-The warning must appear in the warnings panel **on the attribute's row, not the class's**, and it
-must clear as the attribute is deleted and come back as it is retyped — that liveness is the whole
-reason it is read from the buffer rather than from the last analysis. Check it on a file whose own
-class carries `@global_class` too, where exactly one of the two attributes should be flagged.
+### R-EXP-7's two editor-side halves · **automated, one known defect**
 
-A wrong answer here is quiet in the usual way: the sentence still reaches the log once per build, so
-the request is not silently ignored, and only the line the editor points at is wrong.
+`editor` layer, `_autoloads` cases: adding `settings_resource.verse` (a `Resource`) as an autoload
+through `EditorAutoloadSettings.autoload_add` is refused with Godot's own sentence and makes no
+node, while `game_state.verse` is accepted; a `@tool` autoload is instantiated in the editor and
+answers a method from the last built generation. Known defect, named skip
+(`TOOL_AUTOLOAD_DEFECT`): the `@tool` autoload actually holds a **placeholder** rather than a real
+instance, because `tool_probe.verse` answers `can_instantiate()` false even after the session's own
+builds — `VerseScript::_can_instantiate` is `is_compiled() && is_tool()`, and it is `is_compiled()`
+that is false — so a call on it answers "Attempt to call a method on a placeholder instance" and
+its `_Ready` never runs.
 
-### R-EXP-7's two editor-side halves · **owed**
-
-Stage 4 is done in a running game and asserted there. Neither of these can be:
-
-**The autoload dialog refusing a non-Node class.** `_create_autoload` tests
-`ClassDB::is_parent_class(get_instance_base_type(), "Node")`
-(`editor_autoload_settings.cpp:354-355`) and refuses with its own message. The integration suite
-asserts the *predicate* -- `settings_resource` reports `Resource`, which the test rejects -- because
-naming a bad autoload in `project.godot` would stop the project rather than test it. What is owed is
-the dialog itself.
-
-**To check it:** Project > Project Settings > Globals, add `res://scripts/settings_resource.verse`.
-Godot must refuse it with its own sentence and no crash. Then add
-`res://scripts/game_state.verse`, which must be accepted.
-
-**A `@tool` autoload in the editor.** `in_editor` is `scr.is_valid() && scr->is_tool()`
-(`:390`, and again at `:527` and `:590`), so a `@tool` Verse autoload is instantiated in the editor
-too and a plain one is not. `is_editor_hint()` is false in every headless run, so no automated layer
-can see either case.
-
-**To check it:** give `game_state.verse` `@tool`, reopen the project, and confirm a `@tool`
-autoload answers from a `@tool` script in the editor. The bargain it makes is the one `@tool`
-already documents -- it runs the **last built** generation -- so an editor session that has never
-built runs an autoload with no class behind it, and the honest behaviour there is a script that
-reports and carries on rather than a silent no-op. That is the thing to watch for.
-
-### The named-argument popup, and when it opens · **owed**
+### The named-argument popup, and when it opens · **automated**
 
 A `?` at the head of an argument completes to the callee's named parameters —
-`Input.IsActionPressed("jump", ?ExactMatch := true)`. The half that can be asserted is asserted:
-`host_smoke` proves `vh_signature_at` recovers the `?` off the function type, and that the buffer
-the editor sends the instant a `?` is typed — the argument replaced by the placeholder, which past a
-`?` reads as an option *type* — does not cost the call its signature. What no headless run can read
-is the popup itself, for the reason every completion case here cannot: `ScriptLanguage` exposes
-nothing a script can ask.
-
-**To check it:** in the script editor, type `Input.IsActionPressed("ui_accept", ?E`. The popup must
-offer `ExactMatch:logic`, accepting it must leave `?ExactMatch := ` with the `?` the author typed
-still there, and the hint above the caret must read `IsActionPressed(Action:string,
-?ExactMatch:logic):logic` with the `?`. Then check the two spellings of `?` that must **not** open
-it: `if (Target?` and a member declared `:?node2d`, both of which are ordinary code and neither of
-which has a set of names to offer.
+`Input.IsActionPressed("jump", ?ExactMatch := true)`. `host_smoke` proves `vh_signature_at`
+recovers the `?` off the function type, and the popup itself is now the `editor` layer's
+`_completion_popup` cases: `Input.IsActionPressed("ui_accept", ?E` offers `ExactMatch:logic`,
+confirming it leaves `?ExactMatch := ` with the `?` the author typed still there, and the hint
+above the caret keeps the `?`; `if (Target?` and a member declared `:?node2d` open nothing.
 
 **The popup opens on the bare `?` now, and the first diagnosis of why it did not was wrong.** There
 is no `_get_code_completion_prefixes` on `ScriptLanguageExtension` — the trigger characters are the
@@ -2252,40 +2104,31 @@ Only those two: a type after `:` and a
 specifier after `<` decline an empty prefix inside `_complete_code` itself, so putting them in the
 list would raise a popup with nothing to draw.
 
-### The tooltip's rendering of a converted description · **owed**
+### The tooltip's rendering of a converted description · **automated text, rendering by hand**
 
 A description reaches Godot as doc BBCode now (`src/verse_doc_markup.{h,cpp}`, spec R-TOOL-4):
 lines joined into paragraphs, backticks as `[code]`, an indented sample as `[codeblock
 lang=verse]`, every other bracket escaped. The string is asserted whole in `tests/integration`
-against `hover_probe.verse`'s `Prose` member, and the rules one by one in the units layer. What no
-headless run can read is what `_add_text_to_rt` then draws with it.
+against `hover_probe.verse`'s `Prose` member, and the rules one by one in the units layer. What
+`_add_text_to_rt` then draws with it is now read too: `editor` layer, `_tooltips`/`_class_page`
+cases — `Prose`'s tooltip shows two paragraphs and not five, `Floor[X]` with its brackets, no
+markup left undrawn, and the sample's second line indented under its first; `Blocked` and
+`Indented` each show one paragraph; `RootConstant` says "Method" and carries "From helpers.verse";
+and the class reference page for `hover_probe` renders the same text, with the brief as the
+comment's first paragraph alone. What is left is
+[the residual list](#what-is-still-checked-by-hand)'s rendering glance — that bold is bold, a code
+span has the code font and background, and the sample code block has a copy button — which is
+Godot's own BBCode renderer and not this bridge's text, plus B38's timing cause, which only a fresh
+editor with no save behind it shows (see B38 above).
 
-**To check it:** open `tests/integration` in the editor, open
-`tests/integration/scripts/hover_probe.verse` in the script editor, and **without saving anything**
-hover `Prose`. The tooltip must carry the comment at all — that is B38's timing cause, which only a
-fresh editor shows — and show two paragraphs and not five, `span` in the code font with a
-background, `word` in bold, `Floor[X]` with its brackets, and the sample as one code block with
-`Nested := 1` indented under `Result := Floor[X]` and a copy button beside it. Hover `Blocked` and
-`Indented` two members down: each must show its comment as one paragraph, with no `>` and no missing
-second line. Then open `widgets/left/widget.verse` and hover `RootConstant`: the tooltip must say
-"Method" and carry "From helpers.verse". Then open the class reference for `hover_probe` (**Search
-Help**, or ctrl+click the class name): the same text must render the same way under the member, and
-the class's brief under its name must be the comment's first paragraph alone. A `[b]` written in a
-comment must render bold, and `Items[i]` in a sentence must render as written rather than in
-italics.
+### A host fatal error during Play · **automated**
 
-### A host fatal error during Play · **owed**
-
-B43's record is asserted headless: the file is written, and the next start reports and removes it.
-What no headless run can reach is the editor noticing that its Play session ended, which is
-`VerseEditorPlugin::_process` watching `EditorInterface::is_playing_scene()`.
-
-**To check it:** set `VERSE_HOST_TEST_FATAL=check` in the environment the editor is started from, open
-`demo/`, and press **Play**. The game must close at once, and the editor's Output panel must show
-"The game ended in a Verse host fatal error:" with the failed check's message and a stack naming
-`GodotVerse::FireTestFatal()`. Press **Play** again without the variable set, and nothing about the
-fatal error may print a second time. The variable reaches the game because the editor passes its own
-environment to the process it starts.
+`editor` layer's second session (`_host_fatal_during_play`), started with
+`VERSE_HOST_TEST_FATAL=check` in the editor's own environment: Play dies at once, the game's host
+writes `user://logs/verse_crash.log` before the process ends, the editor's Output panel shows "The
+game ended in a Verse host fatal error:" with the failed check's message and a stack naming
+`GodotVerse::FireTestFatal()` when Play ends, and removes the record; a Play without the variable
+repeats nothing, and a game whose host crashes natively leaves no record for the editor to report.
 
 ### And when one of these is looked at again
 

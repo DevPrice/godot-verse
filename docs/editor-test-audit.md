@@ -1,9 +1,10 @@
 # Editor test audit
 
-**Status:** 2026-09-26 · an audit and a plan, nothing built. It classifies every by-hand check in
+**Status:** 2026-09-26 audit and plan, 2026-09-27 built — see [Status](#status) at the bottom for
+the nine steps and what each shipped. It classifies every by-hand check in
 [`by-hand-findings.md`](by-hand-findings.md) and in the checklist for
-[`architecture-review.md`](architecture-review.md) item 6, and proposes how to automate every check
-that doesn't need a person looking at the screen.
+[`architecture-review.md`](architecture-review.md) item 6, and the body below is the plan as it was
+proposed, kept for *why* each layer is shaped the way it is.
 
 By-hand checks are rarely run, so a check that stays by hand is effectively untested. The goal is
 to keep by hand only what needs a person to judge what Godot draws.
@@ -511,3 +512,40 @@ EditorInterface.play_custom_scene("res://main.tscn")
 `find_all(node, class_name)` in the probe is a recursive walk over `get_children(true)` testing
 `is_class()`, which works for editor classes that aren't exposed to ClassDB, because `GDCLASS`
 still answers `get_class()`.
+
+## Status
+
+All nine steps of the plan are done, and `docs/by-hand-findings.md` and `CLAUDE.md` are retired
+down to [the residual list](by-hand-findings.md#what-is-still-checked-by-hand):
+
+| step | what it built | commit |
+| --- | --- | --- |
+| 1 | the existing completion seams turned into integration cases (B13, B22, B24, B27 cause 1, the named-argument popup); the export layer's launch scrubbed to B14's environment | `8d5ebc3` |
+| 2 | the `editor` layer itself: the driver plugin, `run_tests.py --only editor`, the harness's first eighteen cases | `4e716e8` (isolated from Devin's real profile in `2016dfd`) |
+| 3 | placeholders and saving: B26, B39, B8, R-EXP-6 steps 1–5 | `3e4ef82` |
+| 4 | the code editor: the completion popup, B27's re-request, the hover tooltip, the class page, B29, the colour tiers, B4's gutter, the warnings panel | `27fbdce` |
+| 5 | the debugger and profiler through Play, in the editor layer and over the wire | `5c16373` (editor), `66fedcb` (the `debug-wire` layer) |
+| 6–8 | the inspector, docks and dialogs; B43's host-fatal session; the `multiplayer` layer for R-EXP-9 | `26aca64` |
+| 9 | this commit: retiring the prose in `by-hand-findings.md` and `CLAUDE.md` |  |
+
+**Final case counts** (2026-09-27): `editor` 217/0/24 plus its host-fatal session 16/0/0,
+`debug-wire` 38/0/2, `multiplayer` 38/0/0, `integration` 611/0/5.
+
+**`known defect:` skips**, read off the case sources rather than fixed — ten, across the three
+layers:
+
+- **`editor_cases.gd`**: after a Play, a call completed in the editor settles on an empty argument
+  hint although the re-ask arrives; after B27's Plays and the unfinished calls typed behind them,
+  every `hover_probe.verse` member hovers with no description; `signal_ref.Await`/`.Subscribe`
+  still hover as a Local Constant; B40's registered page (`event.Emit`, `signal_ref`'s members) has
+  an empty description, because `publish_api_method` is handed the host's own empty doc;
+  `READY_DEFECT` (a breakpoint in the main scene's `_Ready` never fires — the Verse debugger
+  attaches from `_frame`, after `_Ready` runs) and `TWICE_DEFECT` (a line holding a call reports
+  its location twice, so a breakpoint there stops twice per arrival); `NODE_PATH_DEFECT`
+  (`@export_node_path` on a `string` draws a plain text field, not a node picker);
+  `TOOL_AUTOLOAD_DEFECT` (a `@tool` Verse autoload holds a placeholder rather than a real
+  instance); `GLOBAL_ICON_DEFECT` (a `@global_class` script's `@icon` never reaches the scene dock
+  or create dialog); and Make Function's stub not compiling (`Int:?` — the dialog's `name: Type`
+  spelling, with its leading space, is handed to `verse_type_for_godot_type` unstripped).
+- **`debug_wire.py`**: `READY_DEFECT` and `TWICE_DEFECT` again, in the same words, over the wire
+  rather than the panel.
