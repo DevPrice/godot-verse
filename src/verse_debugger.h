@@ -71,6 +71,10 @@ private:
 	godot::String break_reason;
 	godot::String stopped_source;
 	int32_t stopped_line = 0;
+	// Whether every location reported since the last stop has been that stop's own line again or
+	// inside a call made from it. The breakpoint's half of the rule above: Continue from a line
+	// holding a call must not stop on it again when the result lands.
+	bool repeat_of_stop = false;
 
 	// res:// path per absolute host path. The host asks once per distinct location per frame and
 	// hands back the path it was given at build time, separators and all; localizing it is a

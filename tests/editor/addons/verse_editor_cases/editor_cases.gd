@@ -1141,14 +1141,11 @@ func _panel_text(code: CodeEdit) -> String:
 # Debugger panel: breakpoints set in the gutter reach the game, the stack panel and Stack Variables
 # read the stop, the panel's own buttons step, and the Profiler tab's tree names Verse functions.
 # res://debugger/debug_play.tscn runs a GDScript control first and scripts/debug_play.verse after
-# it; tools/debug_wire.py drives the same scene over the wire with no editor, and names the two
-# known defects below in the same words.
+# it; tools/debug_wire.py drives the same scene over the wire with no editor.
 
 const DEBUG_SCENE := "res://debugger/debug_play.tscn"
 const DEBUG_VERSE := "res://scripts/debug_play.verse"
 const DEBUG_CONTROL := "res://debugger/debug_control.gd"
-const READY_DEFECT := "known defect: the Verse debugger attaches from the language's _frame (VerseDebugger::sync_attachment), and a main scene's _Ready runs before the first one, so a breakpoint there never fires"
-const TWICE_DEFECT := "known defect: a line holding a call reports its location again when the result lands, and should_break asks is_breakpoint of both, so a breakpoint there stops twice per arrival -- Continue stops on the same line once more"
 const STACK_ROW := "^(\\d+) - (.*):(\\d+) - at function: (.*)$"
 
 
@@ -1301,9 +1298,6 @@ func _debug_session(verse_code: CodeEdit) -> void:
 	var again := await _press_and_stop("Continue", visited, 2000)
 	if again.is_empty():
 		check("and Continue from it does not stop there again when the result lands", true)
-	elif _frame_of(again, 0).slice(0, 2) == [DEBUG_VERSE, at.call("again")]:
-		skip("and Continue from it does not stop there again when the result lands", TWICE_DEFECT)
-		await _press_and_stop("Continue", visited, 1000)
 	else:
 		check("and Continue from it does not stop there again when the result lands", false)
 		await _press_and_stop("Continue", visited, 1000)
@@ -1601,14 +1595,14 @@ func _inspector_hints() -> void:
 		for index in [0, 2]:
 			boxes[index].button_pressed = true
 			boxes[index].pressed.emit()
-		# The dialog's tree fills a frame or more after it is shown.
-		await wait_until(func() -> bool: return _tree_item_in(picker, "Mark") != null and _tree_item_in(picker, "Bystander") != null, 5000)
 			await frames(1)
 		check_eq("R-EXP-8 (4): ticking Fire then Earth stores 5", root.get("Elements"), 5)
 
 	var picker := await _browse(properties.get("Target"), "Assign Node", "SceneTreeDialog")
 	check("R-EXP-8 (5): Target's button opens a node picker", picker != null)
 	if picker != null:
+		# The dialog's tree fills a frame or more after it is shown.
+		await wait_until(func() -> bool: return _tree_item_in(picker, "Mark") != null and _tree_item_in(picker, "Bystander") != null, 5000)
 		var mark := _tree_item_in(picker, "Mark")
 		var bystander := _tree_item_in(picker, "Bystander")
 		check("R-EXP-8 (5): which offers the Node2D child", mark != null and mark.is_selectable(0))
@@ -1836,42 +1830,42 @@ func _make_function() -> void:
 	var editor_node: Node = EditorInterface.get_base_control().get_parent()
 	if root == null or root.get_script() != script or editor_node == null or not editor_node.is_class("EditorNode"):
 		check("B3: the node dock's scene is still open under EditorNode", false)
-	# The last row is not a signal of signals.verse: it is the dialog's own spelling for a payload
-	# the fixture has no signal for, and its `position` is the name that meets node2d's inherited
-	# Position, which a stub has to step around.
 		return
 	var code := await code_edit_for(script)
 	if code == null:
 		check("B3: signals.verse opens in the script editor", false)
 		return
 	var original := code.text
+	# The last row is not a signal of signals.verse: it is the dialog's own spelling for a payload
+	# the fixture has no signal for, and its `position` is the name that meets node2d's inherited
+	# Position, which a stub has to step around.
 	for row in [["Hit", "_on_signals_hit", "a signal with no payload"],
 			["Own", "_on_signals_own", "a signal with an int payload"],
 			["Touched", "_on_signals_touched", "a signal with a class payload"],
 			["Reported", "_on_signals_reported", "a signal with int, String and Vector2 payloads"],
 			["Carried", "_on_signals_carried", "a signal with a Variant payload"],
 			["Rendered", "_on_signals_rendered", "a signal with a RID payload"],
-		# ScriptEditor saves the stub itself only while the file on disk is the one it last read:
-		# after this case's own ResourceSaver restore it asks to reload instead and saves nothing.
-		if not FileAccess.get_file_as_string(SIGNALS).contains(row[1]):
-			script.source_code = code.text
-			ResourceSaver.save(script)
 			[PackedStringArray(["ratio: float", "position: Vector2", "node: Node"]), "_on_made_up",
 				"a float, a Vector2 named position and a Node named node"]]:
 		_mark("B3: the stub Make Function writes for %s" % row[2])
 		var args: PackedStringArray = row[0] if row[0] is PackedStringArray else _dialog_args(root, row[0])
 		editor_node.emit_signal("script_add_function_request", root, row[1], args)
 		await frames(1)
+		# ScriptEditor saves the stub itself only while the file on disk is the one it last read:
+		# after this case's own ResourceSaver restore it asks to reload instead and saves nothing.
+		if not FileAccess.get_file_as_string(SIGNALS).contains(row[1]):
+			script.source_code = code.text
+			ResourceSaver.save(script)
 		var at := code.text.find("\t%s<public>(" % row[1])
-		if row[1] == "_on_made_up":
-			check_eq("B3: the dialog's `name: Type` pairs become PascalCase parameters of their Verse types, a clash with a member suffixed",
-					stub.get_slice(")", 0), "\t_on_made_up<public>(Ratio:float, PositionValue:vector2, Node:?node")
 		var stub := code.text.substr(at) if at >= 0 else ""
 		var placeholder := ")<transacts>:void =\n\t\t{} # Replace with function body.\n"
 		if stub.ends_with(placeholder):
 			check("B3: for %s, Make Function writes a stub ending in Godot's own placeholder" % row[2], true)
 		else:
 			check_eq("B3: for %s, Make Function writes a stub ending in Godot's own placeholder" % row[2], stub, "... " + placeholder)
+		if row[1] == "_on_made_up":
+			check_eq("B3: the dialog's `name: Type` pairs become PascalCase parameters of their Verse types, a clash with a member suffixed",
+					stub.get_slice(")", 0), "\t_on_made_up<public>(Ratio:float, PositionValue:vector2, Node:?node")
 		# A broken file empties the method list, so the stub either joins it or takes EmitOwn out.
 		var outcome := {}
 		await wait_until(func() -> bool:
@@ -1933,6 +1927,7 @@ func _autoloads() -> void:
 	autoloads.call("autoload_remove", "SettingsProbe")
 	await frames(2)
 
+	before = editor_log_text()
 	answered = autoloads.call("autoload_add", "GameStateProbe", "res://scripts/game_state.verse")
 	await frames(2)
 	said = editor_log_text().substr(before.length())
@@ -1941,13 +1936,12 @@ func _autoloads() -> void:
 	check("R-EXP-7: and, with no @tool, is not instantiated in the editor",
 			tree_root.get_node_or_null("GameStateProbe") == null and tree_root.get_node_or_null("GameState") == null)
 	autoloads.call("autoload_remove", "GameStateProbe")
-	var tool_script: Script = load("res://scripts/tool_probe.verse")
 	await frames(2)
 
-	before = editor_log_text()
 	autoloads.call("autoload_add", "ToolProbe", "res://scripts/tool_probe.verse")
 	var added := await wait_until(func() -> bool: return tree_root.get_node_or_null("ToolProbe") != null, 10000)
 	check("R-EXP-7: a @tool Verse autoload is instantiated in the editor", added)
+	var tool_script: Script = load("res://scripts/tool_probe.verse")
 	if added:
 		var probe := tree_root.get_node("ToolProbe")
 		var script: Script = probe.get_script()
@@ -1957,6 +1951,12 @@ func _autoloads() -> void:
 		check("R-EXP-7: holding a real instance", _holds_real_tool_probe(probe))
 		if _holds_real_tool_probe(probe):
 			check_eq("R-EXP-7: and answers a method from the last built generation", probe.call("Which"), "tool")
+			# Asked of the node rather than read off the Output panel, which trims its oldest lines.
+			check_eq("R-EXP-7: its _Ready ran in the editor", probe.call("ReadyCount"), 1)
+	autoloads.call("autoload_remove", "ToolProbe")
+	check("R-EXP-7: and removing it takes the node out of the editor",
+			await wait_until(func() -> bool: return tree_root.get_node_or_null("ToolProbe") == null, 10000))
+
 	# A @tool script given to a node while its file does not compile is a placeholder, which is
 	# right; fixing the file has to replace it, and Godot will not -- set_script is what picks the
 	# kind of instance, and nothing calls it again. (Godot makes no autoload node at all for a
@@ -1976,12 +1976,6 @@ func _autoloads() -> void:
 
 func _holds_real_tool_probe(node: Node) -> bool:
 	return node.get("Readied") != null
-
-			# Asked of the node rather than read off the Output panel, which trims its oldest lines.
-			check_eq("R-EXP-7: its _Ready ran in the editor", probe.call("ReadyCount"), 1)
-	autoloads.call("autoload_remove", "ToolProbe")
-	check("R-EXP-7: and removing it takes the node out of the editor",
-			await wait_until(func() -> bool: return tree_root.get_node_or_null("ToolProbe") == null, 10000))
 
 
 # --- a host fatal error during Play (docs/editor-test-audit.md step 7) ---------------------------

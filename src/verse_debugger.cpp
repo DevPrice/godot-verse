@@ -151,7 +151,15 @@ bool VerseDebugger::should_break(const String &p_path, int32_t p_line, int32_t p
 			}
 		}
 	}
-	if (debugger->is_breakpoint(p_line, source)) {
+	// The same arrival reported again is not a second arrival. A line holding a call reports its
+	// location before the call and again when the result lands, with the callee's own locations
+	// (DEEPER) between the two; anything else in this frame, or leaving it, is a new arrival, which
+	// is what keeps a loop coming back to the line stopping every time round.
+	const bool same_arrival = p_relation == VH_DEBUG_FRAME_DEEPER
+			|| (p_relation == VH_DEBUG_FRAME_SAME && p_line == stopped_line && source == stopped_source);
+	repeat_of_stop = repeat_of_stop && same_arrival;
+	const bool repeated = repeat_of_stop && p_relation == VH_DEBUG_FRAME_SAME;
+	if (!repeated && debugger->is_breakpoint(p_line, source)) {
 		do_break = true;
 		break_reason = "Breakpoint";
 	}
@@ -160,6 +168,7 @@ bool VerseDebugger::should_break(const String &p_path, int32_t p_line, int32_t p
 	if (do_break) {
 		stopped_source = source;
 		stopped_line = p_line;
+		repeat_of_stop = true;
 	}
 	return do_break;
 }

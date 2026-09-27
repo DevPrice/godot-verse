@@ -2035,11 +2035,14 @@ test; it is now repeated by two automated layers built exactly to that shape
   `ProfilingInfo` stride trap measured rather than reasoned about, which the Profiler tab never
   draws after Stop.
 
-Two known defects found by both layers and kept as named skips rather than fixed: a breakpoint in
-the main scene's `_Ready` never fires, because the Verse debugger attaches from `_frame` and
-`_Ready` runs before the first one; and a line holding a call or a construction reports its
-location twice, so a breakpoint there stops twice per arrival — Continue stops on the same line
-again.
+Two defects both layers found, both fixed. A breakpoint in the main scene's `_Ready` never fired,
+because the Verse debugger attached from `_frame` and `_Ready` runs before the first one; it is
+attached before every instance is made now as well, which is the one entry into Verse ahead of the
+first frame. And a line holding a call or a construction reports its location twice, so a
+breakpoint there stopped twice per arrival — Continue stopped on the same line again; a report of the
+stopped line in the same frame, with nothing but the call's own (deeper) locations since the stop, is
+the same arrival and no longer a breakpoint hit, while any other location in the frame ends it, so a
+loop coming back to the line still stops each time round.
 
 **Recorded and not taken:** Godot's `LocalDebugger` is drivable headless too —
 `godot --headless --debug --breakpoints res://scripts/x.verse:N` reads `bt`, `lv`, `mv`, `c` from

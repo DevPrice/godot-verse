@@ -325,13 +325,6 @@ class Cases:
 VERSE = "res://scripts/debug_play.verse"
 CONTROL = "res://debugger/debug_control.gd"
 SCENE = "res://debugger/debug_play.tscn"
-# The two known defects, in the words tests/editor's editor_cases.gd records them under.
-READY_DEFECT = ("known defect: the Verse debugger attaches from the language's _frame "
-                "(VerseDebugger::sync_attachment), and a main scene's _Ready runs before the first "
-                "one, so a breakpoint there never fires")
-TWICE_DEFECT = ("known defect: a line holding a call reports its location again when the result "
-                "lands, and should_break asks is_breakpoint of both, so a breakpoint there stops twice "
-                "per arrival -- Continue stops on the same line once more")
 
 
 def where(stop: "Stop | None") -> "tuple[str, int, str] | None":
@@ -451,9 +444,6 @@ def drive(cases: Cases, wire: Wire, lines: dict[str, int]) -> None:
     again = arrive(2)
     if again is None:
         cases.check("and Continue from it does not stop there again when the result lands", True)
-    elif where(again)[:2] == (VERSE, lines["again"]) and again.reason == "Breakpoint":
-        cases.skip("and Continue from it does not stop there again when the result lands", TWICE_DEFECT)
-        again.resume("continue")
     else:
         cases.check("and Continue from it does not stop there again when the result lands", False,
                     f"it stopped at {where(again)}")
