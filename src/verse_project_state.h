@@ -1,5 +1,7 @@
 #pragma once
 
+#include "verse_diagnostic_prose.h"
+
 #include <godot_cpp/classes/global_constants.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/string.hpp>
@@ -33,10 +35,6 @@ private:
 	// first real epoch with no separate "never filled" sentinel to carry alongside it.
 	std::atomic<uint64_t> value{ 1 };
 };
-
-// One diagnostic as the output log prints it, which is also what tells one analysis' results from
-// the next: Dictionary's own == is reference equality.
-godot::String verse_formatted_diagnostic(const godot::Dictionary &p_error);
 
 // The editor side's build-and-analysis pump: publishing a generation, queueing and reaping the
 // background analyses, and the diagnostics and analysed text each of those leaves behind.

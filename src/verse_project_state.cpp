@@ -21,24 +21,7 @@ VerseRuntime *get_runtime() {
 	return Object::cast_to<VerseRuntime>(Engine::get_singleton()->get_singleton("VerseRuntime"));
 }
 
-PackedStringArray flattened_diagnostics(const Dictionary &p_errors_by_path) {
-	PackedStringArray flattened;
-	const Array paths = p_errors_by_path.keys();
-	for (int64_t i = 0; i < paths.size(); i++) {
-		const TypedArray<Dictionary> errors = p_errors_by_path[paths[i]];
-		for (int64_t e = 0; e < errors.size(); e++) {
-			flattened.push_back(verse_formatted_diagnostic(errors[e]));
-		}
-	}
-	return flattened;
-}
-
 } // namespace
-
-String verse_formatted_diagnostic(const Dictionary &p_error) {
-	return String(p_error["path"]) + ":" + String::num_int64((int64_t)p_error["line"]) + ":"
-			+ String::num_int64((int64_t)p_error["column"]) + ": " + String(p_error["message"]);
-}
 
 Error VerseProjectState::ensure_project_built() {
 	if (is_built()) {
@@ -437,8 +420,8 @@ bool VerseProjectState::take_completion_refresh() {
 }
 
 bool VerseProjectState::record_diagnostics(const Dictionary &p_diagnostics_by_globalized) {
-	PackedStringArray previous = flattened_diagnostics(diagnostics_by_path);
-	previous.append_array(flattened_diagnostics(compiler_warnings_by_path));
+	PackedStringArray previous = verse_flattened_diagnostics(diagnostics_by_path);
+	previous.append_array(verse_flattened_diagnostics(compiler_warnings_by_path));
 
 	diagnostics_by_path.clear();
 	compiler_warnings_by_path.clear();
@@ -477,8 +460,8 @@ bool VerseProjectState::record_diagnostics(const Dictionary &p_diagnostics_by_gl
 		}
 	}
 
-	PackedStringArray current = flattened_diagnostics(diagnostics_by_path);
-	current.append_array(flattened_diagnostics(compiler_warnings_by_path));
+	PackedStringArray current = verse_flattened_diagnostics(diagnostics_by_path);
+	current.append_array(verse_flattened_diagnostics(compiler_warnings_by_path));
 	return current != previous;
 }
 

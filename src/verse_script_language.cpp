@@ -4,6 +4,7 @@
 #include "verse_api_lookup.h"
 #include "verse_bindings_gen.h"
 #include "verse_api_skipped.h"
+#include "verse_diagnostic_prose.h"
 #include "verse_class_decl.h"
 #include "verse_doc_markup.h"
 #include "verse_keywords.h"
@@ -3945,209 +3946,6 @@ String VerseScriptLanguage::publish_api_method(const String &p_receiver_type, co
 	return doc_class;
 }
 
-// What a rejected export has to say for itself, at the line that declared it.
-//
-// The two rules read as instructions because they have a fix the author can apply. The third does
-// not: it is the bridge's own coverage, and saying so plainly is better than a suggestion that
-// would not work.
-// The attribute an author wrote, named back to them. R-EXP-1's five are told apart by the hint
-// alone, because vh_export_desc has no room to carry the spelling and adding one would be a layout
-// change -- so this is the one place the mapping is written down on the consumer's side.
-static String export_hint_attribute_name(const Dictionary &p_entry) {
-	switch ((vh_export_hint)(int64_t)p_entry["hint"]) {
-		case VH_EXPORT_HINT_FILE:
-			return String("`@export_file`");
-		case VH_EXPORT_HINT_DIR:
-			return String("`@export_dir`");
-		case VH_EXPORT_HINT_MULTILINE:
-			return String("`@export_multiline`");
-		case VH_EXPORT_HINT_FLAGS:
-			return String("`@export_flags`");
-		case VH_EXPORT_HINT_NODE_PATH:
-			return String("`@export_node_path`");
-		// Only called for VH_EXPORT_HINT_WRONG_TYPE, which is refused only for the five attribute
-		// hints above -- these five are type-driven and never reach this function rejected this way.
-		case VH_EXPORT_HINT_NONE:
-		case VH_EXPORT_HINT_RANGE:
-		case VH_EXPORT_HINT_ENUM:
-		case VH_EXPORT_HINT_CLASS:
-		case VH_EXPORT_HINT_SCRIPT_CLASS:
-			return String("an inspector hint");
-	}
-	return String("an inspector hint");
-}
-
-static String export_rejection_message(const Dictionary &p_entry) {
-	const String name = p_entry["name"];
-	const String class_name = p_entry["hint_string"];
-	switch ((vh_export_reject)(int64_t)p_entry["reject"]) {
-		case VH_EXPORT_OBJECT_NOT_OPTIONAL:
-			return name + String(" is a ") + class_name
-					+ String(", and the inspector may leave that slot empty. Declare it `?") + class_name
-					+ String("` so the member can hold the empty case.");
-		case VH_EXPORT_OPTION_NOT_OBJECT:
-			return name + String(" is an option around a value the inspector has no empty slot for. ")
-					+ String("Only a node or a resource can be left unassigned.");
-		case VH_EXPORT_HINT_WRONG_TYPE: {
-			// R-EXP-1's five exist *because* the type says nothing, so the author is the only one
-			// who can pair them -- and a mispairing is silent otherwise: the attribute compiles and
-			// Godot draws a plain field, which is also what no attribute at all draws.
-			const char *wants = (int64_t)p_entry["hint"] == VH_EXPORT_HINT_FLAGS ? "an `int`" : "a `string`";
-			return name + String(" carries ") + export_hint_attribute_name(p_entry)
-					+ String(", which describes ") + String(wants)
-					+ String(" -- and this member is not one. The attribute exists because the ")
-					+ String("declared type cannot say what a value is for, so the two have to be ")
-					+ String("written to agree.");
-		}
-		case VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL:
-			// Narrow since B19: a class with no registered Godot name is exported anyway, filtered
-			// by its nearest mirrored ancestor. What is left here is the case with no such ancestor
-			// either -- a class whose chain reaches `object` without passing a mirrored one -- so
-			// there is nothing to filter a slot by at all.
-			return name + String(" refers to ") + class_name
-					+ String(", which is neither a node nor a resource, so the inspector has nothing ")
-					+ String("to draw for it. Derive ") + class_name
-					+ String(" from a Godot class the inspector can pick one of.");
-		case VH_EXPORT_BINDING_CLASS_UNSUPPORTED: {
-			// Refused on purpose rather than folded into the generic sentence below: this member's
-			// type is a GDScript class, reached through a generated binding rather than through the
-			// mirror or the project's own @global_class, and @export cannot carry one of those yet
-			// (docs/generated-bindings.md). NativeClassOf has already walked the binding's own
-			// superclass chain for the nearest class the inspector *can* draw, so name it when there
-			// is one to name.
-			const String native_class = p_entry["native_class"];
-			return name + String(" refers to ") + class_name
-					+ String(", which is a GDScript class, and `@export` cannot carry a GDScript ")
-					+ String("class reached through a generated binding yet.")
-					+ (native_class.is_empty() ? String() : String(" Export its native base class `") + native_class + String("` instead."));
-		}
-		case VH_EXPORT_OK:
-		case VH_EXPORT_UNSUPPORTED_TYPE:
-			return name + String(" has a type godot-verse cannot carry to the inspector yet, so it is not exported.");
-	}
-	return name + String(" has a type godot-verse cannot carry to the inspector yet, so it is not exported.");
-}
-
-static String export_rejection_code(int64_t p_reject) {
-	switch ((vh_export_reject)p_reject) {
-		case VH_EXPORT_OBJECT_NOT_OPTIONAL:
-			return String("OBJECT_EXPORT_NOT_OPTIONAL");
-		case VH_EXPORT_OPTION_NOT_OBJECT:
-			return String("OPTION_EXPORT_NOT_OBJECT");
-		case VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL:
-			return String("SCRIPT_CLASS_EXPORT_NOT_GLOBAL");
-		case VH_EXPORT_HINT_WRONG_TYPE:
-			return String("EXPORT_HINT_WRONG_TYPE");
-		case VH_EXPORT_BINDING_CLASS_UNSUPPORTED:
-			return String("EXPORT_BINDING_CLASS_UNSUPPORTED");
-		case VH_EXPORT_OK:
-		case VH_EXPORT_UNSUPPORTED_TYPE:
-			return String("EXPORT_TYPE_UNSUPPORTED");
-	}
-	return String("EXPORT_TYPE_UNSUPPORTED");
-}
-
-// What a refused signal has to say for itself, at the line that declared it.
-//
-// Every one of these was a runtime surprise before it was a warning, and three of them were silent:
-// the member compiled, the signal was absent from Godot, and the author found out at the first
-// emission or never. So each sentence names the rule and the edit that satisfies it.
-static String signal_rejection_message(const VerseSignalInfo &p_signal) {
-	const String name = String(p_signal.name);
-	switch ((vh_signal_reject)p_signal.reject) {
-		case VH_SIGNAL_IS_VAR:
-			return name + String(" is a `var`, and a signal is an identity rather than a value. Its ")
-					+ String("binding is made once against the object the member was built on, so ")
-					+ String("reassigning it leaves the name pointing at nothing. Drop the `var`.");
-		// Retired with the enumerator: the host does not test a member's access level, so this is
-		// unreachable from a host built against this header. Kept for as long as the value is.
-		case VH_SIGNAL_NOT_PUBLIC:
-			return name + String(" is not `<public>`, so nothing outside the class can connect to it ")
-					+ String("-- which is the only thing connecting ever is. Declare it `")
-					+ name + String("<public>`.");
-		case VH_SIGNAL_NO_GODOT_OWNER:
-			return name + String(" is on a class that does not derive from `object`, so Godot never ")
-					+ String("gives it an object to register the signal on. Unlike GDScript, where ")
-					+ String("every class is an Object with a signal table of its own, a plain Verse ")
-					+ String("class has no Godot counterpart at all.");
-		case VH_SIGNAL_PAYLOAD_NESTED_STRUCT:
-			return name + String(" has a payload whose field `") + p_signal.reject_detail
-					+ String("` is itself a struct. A struct payload becomes one Godot argument per ")
-					+ String("top-level field, and Godot has no argument shape for a struct, so there ")
-					+ String("is no second level to flatten into. Flatten the field, or carry it as ")
-					+ String("one of the mirrored math types.");
-		case VH_SIGNAL_PAYLOAD_UNSUPPORTED:
-			return name + String(" has a payload argument `") + p_signal.reject_detail
-					+ String("` with no Godot type, so an emission would have nothing to carry it in.");
-		case VH_SIGNAL_NEEDS_ATTRIBUTE:
-			return name + String(" carries no `@export_signal`, so Godot is never told about it: it ")
-					+ String("cannot be connected in the Node panel, emitted to, or seen from ")
-					+ String("GDScript. The attribute is what registers a member, the way `@export` ")
-					+ String("is what sends one to the inspector. Write `@export_signal` on the line ")
-					+ String("above `") + name + String("`.");
-		case VH_SIGNAL_OK:
-			return name + String(" cannot be registered with Godot, so nothing can connect to it.");
-	}
-	return name + String(" cannot be registered with Godot, so nothing can connect to it.");
-}
-
-// What a refused `@rpc` has to say for itself, at the line that declared the method.
-//
-// Every one of these is silent otherwise: the attribute compiles -- its constructor only has to
-// typecheck -- and the method is simply not in the config Godot reads, so the author finds out at
-// the first call that goes nowhere, or never. GDScript's own messages are the model, and the first
-// of them lists the seven words because guessing which one was meant is not this bridge's job.
-static String rpc_rejection_message(const VerseRpcInfo &p_rpc) {
-	const String name = String(p_rpc.name);
-	switch ((vh_rpc_reject)p_rpc.reject) {
-		case VH_RPC_UNKNOWN_ARGUMENT:
-			return name + String(": `") + p_rpc.reject_detail
-					+ String("` is not an @rpc word. It must be one of \"call_local\"/\"call_remote\" ")
-					+ String("(local calls), \"any_peer\"/\"authority\" (permission), or ")
-					+ String("\"reliable\"/\"unreliable\"/\"unreliable_ordered\" (transfer mode).");
-		case VH_RPC_DUPLICATE_CATEGORY:
-			return name + String(": ") + p_rpc.reject_detail
-					+ String(" is given twice. Each of the three may be said no more than once.");
-		case VH_RPC_OK:
-		case VH_RPC_BAD_ARGUMENT_TYPE:
-			return name + String(": @rpc wants ") + p_rpc.reject_detail
-					+ String(" in this position.");
-	}
-	return name + String(": @rpc wants ") + p_rpc.reject_detail + String(" in this position.");
-}
-
-static String rpc_rejection_code(int32_t p_reject) {
-	switch ((vh_rpc_reject)p_reject) {
-		case VH_RPC_UNKNOWN_ARGUMENT:
-			return String("RPC_UNKNOWN_ARGUMENT");
-		case VH_RPC_DUPLICATE_CATEGORY:
-			return String("RPC_DUPLICATE_CATEGORY");
-		case VH_RPC_OK:
-		case VH_RPC_BAD_ARGUMENT_TYPE:
-			return String("RPC_BAD_ARGUMENT_TYPE");
-	}
-	return String("RPC_BAD_ARGUMENT_TYPE");
-}
-
-static String signal_rejection_code(int32_t p_reject) {
-	switch ((vh_signal_reject)p_reject) {
-		case VH_SIGNAL_IS_VAR:
-			return String("SIGNAL_IS_VAR");
-		case VH_SIGNAL_NOT_PUBLIC:
-			return String("SIGNAL_NOT_PUBLIC");
-		case VH_SIGNAL_NO_GODOT_OWNER:
-			return String("SIGNAL_NO_GODOT_OWNER");
-		case VH_SIGNAL_PAYLOAD_NESTED_STRUCT:
-			return String("SIGNAL_PAYLOAD_NESTED_STRUCT");
-		case VH_SIGNAL_NEEDS_ATTRIBUTE:
-			return String("SIGNAL_NEEDS_ATTRIBUTE");
-		case VH_SIGNAL_OK:
-		case VH_SIGNAL_PAYLOAD_UNSUPPORTED:
-			return String("SIGNAL_PAYLOAD_UNSUPPORTED");
-	}
-	return String("SIGNAL_PAYLOAD_UNSUPPORTED");
-}
-
 // Whether an `@export` that Godot *will* draw is one whose value cannot survive a save.
 //
 // B19 Stage C. The class a second-class member holds has no script -- only the class named after
@@ -4234,7 +4032,8 @@ void VerseScriptLanguage::refresh_script_warnings(const String &p_path) const {
 		warning["rightmost_column"] = (int64_t)entry["column"] + 1;
 		warning["code"] = reject;
 		warning["string_code"] = export_rejection_code(reject);
-		warning["message"] = export_rejection_message(entry);
+		warning["message"] = export_rejection_message((vh_export_reject)reject, (vh_export_hint)(int64_t)entry["hint"],
+				entry["name"], entry["hint_string"], entry["native_class"]);
 		warnings.push_back(warning);
 	}
 
@@ -4287,7 +4086,7 @@ void VerseScriptLanguage::refresh_script_warnings(const String &p_path) const {
 		warning["rightmost_column"] = (int64_t)signal.column + 1;
 		warning["code"] = (int64_t)signal.reject;
 		warning["string_code"] = signal_rejection_code(signal.reject);
-		warning["message"] = signal_rejection_message(signal);
+		warning["message"] = signal_rejection_message(String(signal.name), signal.reject, signal.reject_detail);
 		warnings.push_back(warning);
 	}
 
@@ -4307,7 +4106,7 @@ void VerseScriptLanguage::refresh_script_warnings(const String &p_path) const {
 		warning["rightmost_column"] = (int64_t)rpc.column + 1;
 		warning["code"] = (int64_t)rpc.reject;
 		warning["string_code"] = rpc_rejection_code(rpc.reject);
-		warning["message"] = rpc_rejection_message(rpc);
+		warning["message"] = rpc_rejection_message(String(rpc.name), rpc.reject, rpc.reject_detail);
 		warnings.push_back(warning);
 	}
 
