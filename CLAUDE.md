@@ -326,9 +326,17 @@ Adding an override you do not implement changes behaviour.
 | `VerseHostRuntime.Target.cs` | `verse_host_runtime.dll` | what an exported game ships; `WITH_VERSE_COMPILER=0` |
 | `VerseHostCooker.Target.cs` | `verse_cook.exe` | an **executable** the export plugin runs as a subprocess |
 
-`Private/` is the ABI implementation. `VerseHost.cpp` is the entry surface; `HostRuntime`,
-`HostScript` and `HostEventLoop` are compile/analyse/run, class shape, and the task pump;
-`HostTypeModel` is what kind of type a declaration names, which package declares a class, and what
+`Private/` is the ABI implementation. `VerseHost.cpp` is the entry surface; `HostRuntime` is the
+host state, the diagnostic channel and the call arena, and `HostEventLoop` the task pump;
+`HostBuild` is the build and generation lifecycle -- the IDE and its caching parser, the
+attribute, bindings and generation packages, `CompileProject` and the held-program reuse, the
+analysis and the background check, the binding roster, and the published generation's class
+finders; `HostSnapshot` is the analysis snapshot (`FAnalysisSnapshot`), the describers that read
+the live program into it, and every read that answers from it, through `FindSnapshotClass`
+(`NotAnalysed`, `NoSuchClass`, or the class -- possibly `Stale`, carried from the last analysis
+that parsed); `HostScript` is what is left, the project's content scope and the entries that run
+Verse outside an instance (`RunMain`, `TickScripts`); `HostTypeModel` is what kind of type a
+declaration names, which package declares a class, and what
 the inspector and the wire make of a declared type (`DescribeType`, `DescribeExportType`,
 `FMemberType`); `HostMarshal` is the converters between a Verse value and a `vh_value`
 (`ValueToWire`, `WireToValue`), which answer a `TResult` naming why a value could not cross;
@@ -347,17 +355,18 @@ construction of a `vh_object`, `AdoptOrMintPeer` and `ReleaseMintedPeer`, `Objec
 the handle-to-class caches -- split from `HostInstances` because the natives reach it for objects
 that are not script instances at all, and a collected object's `BeginDestroy` reaches it with no
 instance in sight; the public halves of both are declared in `HostScript.h`;
-`HostVerseEntry.h` is the one `EnterVerse`; `HostScriptState.h` is the accessors the split-out
-units read HostScript.cpp's state through (`CurrentSemanticProgram`, `DescribeMemberType`,
-`RecordedSignalShapes`, `RecordedMethodTypes`, `ContentScopeOuter`, the binding roster and the
-class finders);
+`HostVerseEntry.h` is the one `EnterVerse`; `HostScriptState.h` and `HostBuild.h` are the
+accessors every other unit reads that state through (`CurrentSemanticProgram`, `IdeBuildManager`,
+`DescribeMemberType`, `RecordedSignalShapes`, `RecordedMethodTypes`, `ContentScopeOuter`, the
+binding roster and the class finders);
 `HostDebug` is the `Verse::FDebugger` and the profiler's accumulators, and nothing else in the host
 knows either exists; `HostFatal` records a fatal error before the process ends; `GodotBindings`
 and `GodotClasses` are the native Verse surface. The cooked
 path is `HostCook`/`HostCookWriter` (cooker only, behind `VH_HOST_KIND == VH_HOST_KIND_COOKER`),
 `CookMain.cpp` (the cooker's `main`), `HostCooked` (mount points and load, in the runtime host) and
-`HostSidecar` (the analysis snapshot serialised, which is what a host with no semantic program reads
-instead of sources). `Verse/*.native.verse` is the `/Godot.org/Godot` package.
+`HostSidecar` (the analysis snapshot serialised, declared types included, which is what a host with
+no semantic program reads instead of sources). `Verse/*.native.verse` is the `/Godot.org/Godot`
+package.
 
 `GodotClasses.h` holds every C++ shadow a `<native>` Verse declaration needs, and there are three:
 `vh_object` (a UObject, so a script's class has one to be instantiated and called through), `variant`
@@ -992,7 +1001,8 @@ layer, and is skipped there when `../godot` is absent.
 - **No call on the editor's thread may wait for an analysis.** Every read keyed by a class name —
   `vh_has_class`, the method, signal, static and member lists, abstractness, the export list with
   its Reject reasons and every export's declared default — answers from the **snapshot** the last
-  analysis left, and 0.0 ms during one is the whole point: ~22 of these used to begin with a
+  analysis left (`FindSnapshotClass`; a buffer that does not parse leaves the last good description
+  in place, marked `Stale`), and 0.0 ms during one is the whole point: ~22 of these used to begin with a
   `std::thread::join` and cost the main thread 1.7 s apiece. The three that resolve a *position*
   cannot be snapshotted, because a position resolves against the AST the worker is rebuilding:
   `vh_lookup_symbol`, `vh_complete_symbol` and `vh_signature_at` answer `VH_ERR_NOT_ANALYSED` while
@@ -1031,10 +1041,10 @@ layer, and is skipped there when `../godot` is absent.
   as `VH_ERR_NOT_FOUND`, and `Control.get_minimum_size()` answered Godot's own default with nothing
   said anywhere. Declared types come from the snapshot (`RecordedTypes`), which is the same table a
   runtime host reads out of the cook.
-- **A consumer that begins an analysis must poll it to completion.** Nothing else reaps one: until
-  `vh_check_project_poll` says finished, the next `vh_check_project_begin` is refused and `vh_tick`
-  stays a no-op. The bench relied on a later wait to do the reaping and refused forever once the
-  waits were gone.
+- **A consumer that begins an analysis must poll it to completion.** Nothing else reaps one:
+  `BeginBackgroundCheck` answers `AnalysisNotReaped` (`VH_ERR_STATE`) until `vh_check_project_poll`
+  has delivered the last one, and a wait that joins the worker does not deliver it. The bench relied
+  on a later wait to do the reaping and refused forever once the waits were gone.
 - **The mirror is read from its digest after the first successful build**, which is half the
   per-keystroke cost, and a digest drops exactly two things: every definition's **file and line**
   (a digest is one synthetic snippet at a path no file is ever written to) and
