@@ -908,21 +908,36 @@ AUTORTFM_DISABLE bool GetClassStaticsLive(FUtf8StringView ClassName,
                 + UTF8TEXT(":)") + FUtf8String(Member->AsNameCString());
 
             const FMemberType Declared = DescribeType(Member->GetType(), *Program);
+            TOptional<GodotVerse::EHostFailure>& Failure = OutStatics[Slot].ValueFailure;
             Verse::FRunningContext Context = Verse::FRunningContextPromise{};
             EnterVerse(Context, [&] {
                 Verse::VPackage* const Package =
                     Verse::GlobalProgram ? Verse::GlobalProgram->LookupPackage(PublishedScriptPackageName()) : nullptr;
                 if (!Package)
                 {
+                    Failure = GodotVerse::EHostFailure::NotBuilt;
                     return;
                 }
                 const Verse::VValue Value = Package->LookupDefinition(FUtf8StringView(Decorated));
                 if (Value.IsUninitialized())
                 {
+                    Failure = GodotVerse::EHostFailure::Unset;
                     return;
                 }
-                ValueToWire(Context, Value, Declared, OutStorage[Slot], OutValues[Slot]);
+                const GodotVerse::TResult<void> Crossed = ValueToWire(Context, Value, Declared, OutStorage[Slot], OutValues[Slot]);
+                if (!Crossed)
+                {
+                    Failure = Crossed.GetFailure();
+                }
             });
+            // The first two are the ordinary state of an analysis before the first build, which every
+            // probe transcript would carry; a value with no lane is a constant Godot will be told is
+            // null, and nothing else says so.
+            if (Failure.IsSet() && Failure.GetValue() != GodotVerse::EHostFailure::NotBuilt
+                && Failure.GetValue() != GodotVerse::EHostFailure::Unset)
+            {
+                VH_UNREPORTED("GetClassStaticsLive: a statics constant has no wire value");
+            }
         }
     }
     return true;

@@ -323,6 +323,11 @@ struct FStaticDesc
     bool bIsFunction{false};
     int32 Line{0};
     int32 Column{0};
+    /// Why a constant's wire value is empty: NotBuilt before the first build has published the
+    /// package it is read from, or ValueToWire's reason for a value with no lane. Unset for a
+    /// function and for a constant that crossed. Host-side only -- vh_static_desc has no field for
+    /// it -- and not carried by the sidecar, which a cook writes after its own build.
+    TOptional<EHostFailure> ValueFailure;
 };
 
 /// One class's statics, the three arrays running parallel: see FClassStatics below.

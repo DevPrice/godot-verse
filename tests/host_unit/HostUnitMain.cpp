@@ -866,6 +866,37 @@ AUTORTFM_DISABLE void TestSidecar(int32 Generation)
 	}
 }
 
+AUTORTFM_DISABLE void TestStatics()
+{
+	TSharedPtr<const FClassStatics> Statics;
+	Case(TEXT("statics of unit_probe"), GetClassStatics(UTF8TEXTVIEW("unit_probe"), Statics) && Statics.IsValid());
+	if (!Statics.IsValid())
+	{
+		return;
+	}
+	const auto Find = [&Statics](const TCHAR* Name) {
+		for (int32 Index = 0; Index < Statics->Statics.Num(); ++Index)
+		{
+			if (Str(Statics->Statics[Index].Name) == Name)
+			{
+				return Index;
+			}
+		}
+		return (int32)INDEX_NONE;
+	};
+
+	const int32 Limit = Find(TEXT("Limit"));
+	Case(TEXT("statics Limit crosses"),
+	     Limit != INDEX_NONE && !Statics->Statics[Limit].ValueFailure.IsSet() && Statics->Values[Limit].Type == VH_TYPE_INT
+	         && Statics->Values[Limit].Int == 7);
+
+	const int32 Names = Find(TEXT("Names"));
+	Expect(TEXT("statics Names says why it has no value"),
+	       Names != INDEX_NONE && Statics->Statics[Names].ValueFailure.IsSet() ? FailureName(Statics->Statics[Names].ValueFailure.GetValue())
+	                                                                             : FString(TEXT("no reason")),
+	       TEXT("Unconvertible"));
+}
+
 const uLang::CClass* MirroredClass(const uLang::CSemanticProgram& Program, const char* Name)
 {
 	const FUtf8String Path = FUtf8String(GodotVersePath) + UTF8TEXT("/") + FUtf8String(Name);
@@ -1083,6 +1114,7 @@ const char* const BindingsSource =
 		TestDescribers(*Probe, *Program);
 		TestMarshal(*Probe, *Program);
 		TestAdapters(*Probe, *Program);
+		TestStatics();
 		TestSidecar(Generation);
 	}
 

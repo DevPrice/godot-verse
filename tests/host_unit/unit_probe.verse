@@ -59,3 +59,9 @@ unit_probe := class(node2d):
 	Take<public>(Count:int, Where:vector2, Who:?node2d):string = ""
 
 (Probe:unit_probe).ToString()<transacts>:string = "unit_probe"
+
+# One constant that crosses and one that has no lane, for what GetClassStatics says about each.
+@statics("unit_probe")
+unit_probe_statics<public> := module:
+	Limit<public>:int = 7
+	Names<public>:[int]string = map{1 => "one"}
