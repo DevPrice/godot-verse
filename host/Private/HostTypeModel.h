@@ -191,7 +191,9 @@ struct FMemberType
     /// `node2d` -- what FindMirroredClass takes. Empty for a type that is not a reference, and the
     /// test for "is this a reference" everywhere the pointer is not available.
     FUtf8String ReferenceName;
-    /// `/Godot.org/Godot/node2d` -- what FindGodotClass takes for a script class.
+    /// QualifiedNameOf the class: `node2d` for a mirrored one, `unit_helper` or `gameplay/player`
+    /// for a script's -- the module-qualified name every ClassNameUtf8 carries, and what
+    /// FindGodotClass takes for a script class. Never a verse path.
     FUtf8String ReferenceQualifiedName;
     EClassOrigin ReferenceOrigin = EClassOrigin::Other;
     /// Whether it was declared `?node2d` rather than `node2d`. An *exported member* must be optional
