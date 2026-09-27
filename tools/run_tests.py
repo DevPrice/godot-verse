@@ -12,15 +12,17 @@ R-QUAL-3. The three layers R-QUAL-1 names, in the order a failure is cheapest to
   web          a Web export on the vm backend (nothreads), run in headless Chrome
   web-threads  the same with the threads library and template, served with COOP/COEP
   editor       tests/integration in a headless editor, driven by tests/editor's plugin (opt-in)
+  debug-wire   a headless game of tests/integration driven over the remote-debug protocol by tools/debug_wire.py (opt-in)
 
 Each layer is skipped rather than failed when what it needs is absent -- a contributor without a UE
 checkout still gets the unit layer -- and a skip is reported as a skip, never as a pass.
 
-The editor layer is opt-in: a run with no --only runs every other layer, and only a --only naming
-`editor` runs it (docs/editor-test-audit.md).
+The editor and debug-wire layers are opt-in: a run with no --only runs every other layer, and only a
+--only naming one runs it (docs/editor-test-audit.md).
 
-  python tools/run_tests.py                 # everything that can run here but the editor layer
+  python tools/run_tests.py                 # everything that can run here but the two opt-in layers
   python tools/run_tests.py --only editor   # the editor layer
+  python tools/run_tests.py --only debug-wire  # the debugger and profiler over the wire
   python tools/run_tests.py --only export   # one layer
   python tools/run_tests.py --only units,abi  # or several
   python tools/run_tests.py --build         # rebuild the test binaries first
@@ -1942,9 +1944,39 @@ def run_editor(results: Results, engine: Path | None, godot: Path | None) -> Non
         shutil.rmtree(project.parent, ignore_errors=True)
 
 
-LAYERS = ["units", "abi", "contract", "integration", "export", "web", "web-threads", "editor"]
-# What a run with no --only runs. The editor layer is left out on purpose: it is opt-in.
-DEFAULT_LAYERS = [layer for layer in LAYERS if layer != "editor"]
+def run_debug_wire(results: Results, engine: Path | None, godot: Path | None) -> None:
+    """docs/editor-test-audit.md step 5's wire half: tools/debug_wire.py stands where the editor's
+    debugger would, and a headless game of tests/integration's debugger/debug_play.tscn connects
+    to it.
+
+    A layer of its own rather than part of `editor`, because the point of it is to share nothing
+    with that layer: no editor process, no walk of the Debugger panel's nodes, no Play. When a
+    Godot bump moves the panel, the editor layer's debugger cases fail and these do not, which is
+    what says the bridge is still right. Opt-in like `editor`, because Godot's wire format is as
+    much a foreign contract as the panel is and is re-read on a bump rather than on every run.
+    In place, like the integration layer, so it needs that layer's one import scan and no other.
+    """
+    project = REPO / "tests" / "integration"
+    if godot is None:
+        results.skip("debug-wire", "no Godot binary -- set GODOT or pass --godot")
+        return
+    if engine is None:
+        results.skip("debug-wire", "no Unreal checkout -- set UE_ROOT or pass --engine")
+        return
+    why = stage_extension(project)
+    if why is not None:
+        results.skip("debug-wire", why)
+        return
+    run("debug-wire", [sys.executable, str(REPO / "tools" / "debug_wire.py"),
+                       "--godot", str(godot), "--project", str(project)],
+        results, require_line="passed, ", cases="debug-wire")
+
+
+LAYERS = ["units", "abi", "contract", "integration", "export", "web", "web-threads", "editor",
+          "debug-wire"]
+# What a run with no --only runs. The editor and debug-wire layers are left out on purpose: both
+# are opt-in.
+DEFAULT_LAYERS = [layer for layer in LAYERS if layer not in ("editor", "debug-wire")]
 
 
 def _layer_list(text: str) -> list[str]:
@@ -2025,7 +2057,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--only", type=_layer_list,
                         help=f"run these layers, comma-separated: {', '.join(LAYERS)} "
-                             f"(default: all but editor)")
+                             f"(default: all but editor and debug-wire)")
     parser.add_argument("--build", action="store_true", help="rebuild the test binaries first")
     parser.add_argument("--engine", help="the Unreal checkout (default: UE_ROOT, then ../UnrealEngine)")
     parser.add_argument("--godot", help="the Godot binary (default: GODOT, then PATH)")
@@ -2079,6 +2111,9 @@ def main() -> None:
     if "editor" in only:
         results.layer = "editor"
         run_editor(results, engine, godot)
+    if "debug-wire" in only:
+        results.layer = "debug-wire"
+        run_debug_wire(results, engine, godot)
 
     cases = [record for record in results.records if record.kind == "case"]
     failing = [record for record in results.records

@@ -483,8 +483,8 @@ executable. If a future engine drop provides one, that script finds and execs it
 
 ### Tests
 
-    python tools/run_tests.py                    # every layer but editor; the one command (R-QUAL-3)
-    python tools/run_tests.py --only units       # or units / abi / contract / integration / export / web / web-threads / editor
+    python tools/run_tests.py                    # every layer but editor and debug-wire; the one command (R-QUAL-3)
+    python tools/run_tests.py --only units       # or units / abi / contract / integration / export / web / web-threads / editor / debug-wire
     python tools/run_tests.py --only units,abi   # or several, comma-separated
     python tools/run_tests.py --build            # rebuild the test binaries first
 
@@ -680,7 +680,23 @@ fails the run by the step's name rather than hanging. **A case that presses Play
 `play_scene`**, which refuses unless `main_run_args` carries `--headless` — Godot forwards none of
 its own command line to the game. A new group of cases is a function in `editor_cases.gd` awaited from
 `run()`; `run_tests.py` needs no edit. It loads the host, so it runs under the host token like
-integration. (Observed at 2026-09: 157 cases, 148 passed and 9 skipped, about 35 s including the import pass.)
+integration. Its last group plays `tests/integration/debugger/debug_play.tscn` and drives Godot's
+own Debugger panel: gutter breakpoints, the stack panel, Stack Variables, the step buttons, Skip
+Breakpoints, a live toggle and the Profiler tab, on `scripts/debug_play.verse` beside a GDScript
+control. A lambda captures a local **by value**, so a `wait_until` condition gathers into an array
+or a dictionary it mutates rather than assigning one. (Observed at 2026-09: 193 cases, 181 passed
+and 12 skipped, about 52 s including the import pass.)
+
+**debug-wire** — opt-in the same way. `tools/debug_wire.py` is the editor's end of Godot's
+remote-debug protocol (the framing, `encode_variant`, the message shapes, all read from 4.7.2), and
+a headless game of `debugger/debug_play.tscn` in `tests/integration` connects to it: `--breakpoints`
+alone, the live `breakpoint` message, `set_skip_breakpoints`, the stack, the frame variables, the
+three steps, and `profiler:servers` through to `servers:profile_total` -- the accumulated table and
+so the path through the `ProfilingInfo` stride trap, which the Profiler tab never draws after Stop,
+for GDScript either. A layer of its own rather than part of `editor` because it shares nothing with
+it -- no editor, no walk of the panel's nodes -- so a Godot bump that moves the panel fails one and
+not the other. Both find every line they arm by its text, so the fixture's line numbers are free
+to move. (Observed at 2026-09: 40 cases, 38 passed and 2 skipped, about 10 s.)
 
 A layer whose prerequisites are absent is **skipped and said to be skipped**, never counted as a
 pass; `--fail-on-skip` makes a skip fail the run, which is what CI passes.
