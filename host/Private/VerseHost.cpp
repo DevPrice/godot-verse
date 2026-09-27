@@ -190,6 +190,28 @@ VH_ATTR int32_t InitHost(const vh_init_desc* Desc, bool bEngineAlreadyBooted)
         return VH_ERR_ABI;
     }
 
+    // 12.3: LayoutDigest is memory the consumer never wrote below its own minor, the same reason
+    // CookedDirUtf8 and the rest are each read behind a StructSize check.
+    if (Desc->AbiVersion % 1000 >= 3
+        && Desc->StructSize >= static_cast<int32_t>(offsetof(vh_init_desc, LayoutDigest) + sizeof(uint32_t))
+        && Desc->LayoutDigest != VH_LAYOUT_DIGEST)
+    {
+        if (Desc->OnDiagnostic)
+        {
+            const FUtf8String Message = FUtf8String::Printf(
+                UTF8TEXT("godot-verse and the Verse host were built with different layouts of the "
+                         "ABI's array structs (godot-verse 0x%08x, the Verse host 0x%08x). Rebuild "
+                         "both from one include/verse_host_abi.h."),
+                static_cast<uint32>(Desc->LayoutDigest), static_cast<uint32>(VH_LAYOUT_DIGEST));
+            vh_diagnostic Diagnostic{};
+            Diagnostic.Severity = VH_SEVERITY_ERROR;
+            Diagnostic.MessageUtf8 = reinterpret_cast<const char*>(Message.GetData());
+            Diagnostic.MessageLen = Message.Len();
+            Desc->OnDiagnostic(Desc->DiagnosticCtx, &Diagnostic);
+        }
+        return VH_ERR_ABI;
+    }
+
     GodotVerse::FHostState& Host = GetHost();
     if (Host.bInitialized)
     {
