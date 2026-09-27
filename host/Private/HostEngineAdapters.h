@@ -5,6 +5,7 @@
 #include "AutoRTFM.h"
 #include "Containers/StringView.h"
 #include "Containers/UnrealString.h"
+#include "Containers/Utf8String.h"
 
 namespace uLang {
 class CClass;

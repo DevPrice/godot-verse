@@ -6,6 +6,7 @@
 #include "Containers/Array.h"
 #include "Containers/StringView.h"
 #include "Containers/UnrealString.h"
+#include "Containers/Utf8String.h"
 #include "HostResult.h"
 #include "verse_host_abi.h"
 
