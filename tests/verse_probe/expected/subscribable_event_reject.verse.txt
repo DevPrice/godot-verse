@@ -1,0 +1,5 @@
+[probe] <repo>\tests\verse_probe\subscribable_event_reject.verse:17:41: error 3506: Unknown identifier `subscribable_event`.
+Used inside class /user@localhost/subscribable_event_reject.
+
+[probe] compile: status 4, generation <gen>, 1 error(s)
+[probe_contract] exit code: 1

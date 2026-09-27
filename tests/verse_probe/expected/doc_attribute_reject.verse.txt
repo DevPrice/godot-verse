@@ -1,0 +1,5 @@
+[probe] <repo>\tests\verse_probe\doc_attribute_reject.verse:17:3: error 3506: Unknown identifier `doc`.
+Used inside module /user@localhost.
+ Did you forget to specify using { /Verse.org/Native }
+[probe] compile: status 4, generation <gen>, 1 error(s)
+[probe_contract] exit code: 1
