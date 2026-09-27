@@ -190,7 +190,7 @@ def do_record(engine: Path, only: str | None) -> int:
         returncode, transcript = run_cooked_probe(runtime_host, COOK_CACHE_DIR, class_name)
         _, blocks = parse_transcript(transcript)
         total_methods += len(blocks)
-        (EXPECTED_DIR / f"{class_name}.txt").write_text(transcript, encoding="utf-8")
+        (EXPECTED_DIR / f"{class_name}.txt").write_text(transcript, encoding="utf-8", newline="\n")
         print(f"[run_vm_conformance] recorded {class_name}: {len(blocks)} method(s), "
               f"probe exit {returncode}")
 
